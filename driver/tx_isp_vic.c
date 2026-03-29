@@ -3174,6 +3174,20 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);
 
+	/* CRITICAL FIX: Deferred VIC MDMA enable.
+	 * The OEM enables MDMA via event 0x3000003 (VIDIOC_STREAMON on frame
+	 * channel).  In our flow libimp never sends STREAMON to the frame channel
+	 * — it uses link_stream instead.  So MDMA never gets armed and the ISP
+	 * core writes frames without proper bank rotation → frame tearing.
+	 *
+	 * Trigger MDMA enable on the first QBUF when buffers are available.
+	 */
+	if (vic_dev->stream_state == 0 && vic_dev->active_buffer_count >= 3) {
+		pr_info("*** VIC QBUF: DEFERRED MDMA ENABLE - %u banks ready, arming MDMA now ***\n",
+			vic_dev->active_buffer_count);
+		ispvic_frame_channel_s_stream(vic_dev, 1);
+	}
+
 	return 0;
 }
 

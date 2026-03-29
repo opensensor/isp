@@ -2880,6 +2880,21 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             if (!tisp_initialized) {
                 tisp_fill_boot_sensor_info(isp_dev, sensor_attr, &sensor_info);
+
+                /* OEM CRITICAL: Store sensor width/height into globals BEFORE
+                 * calling tisp_init.  The OEM sets tispinfo/data_b2f34 before
+                 * calling tiziano_*_init functions (ae_init, awb_init, etc.)
+                 * which may read these globals internally.  Our tisp_init calls
+                 * those functions, so the globals must be populated first.
+                 */
+                {
+                    uint32_t w = sensor_info.width;
+                    memcpy(tispinfo, &w, sizeof(w));
+                    data_b2f34 = sensor_info.height;
+                    pr_info("*** ispcore_core_ops_init: stored ISP dims BEFORE tisp_init: tispinfo=%u data_b2f34=%u ***\n",
+                            w, data_b2f34);
+                }
+
                 pr_info("*** ispcore_core_ops_init: Calling tisp_init width=%u height=%u fps=%u mode=%u ***\n",
                         sensor_info.width, sensor_info.height, sensor_info.fps, sensor_info.mode);
 
@@ -2890,21 +2905,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 tisp_initialized = true;
-
-                /* OEM CRITICAL: Store sensor width/height into globals used by
-                 * tisp_channel_attr_set, tisp_channel_start, etc.  Without this,
-                 * MSCA output strides/geometry are all zero → garbled image.
-                 *   tispinfo[0..3] = sensor width
-                 *   data_b2f34     = sensor height
-                 */
-                {
-                    uint32_t w = sensor_info.width;
-                    memcpy(tispinfo, &w, sizeof(w));
-                    data_b2f34 = sensor_info.height;
-                    pr_info("*** ispcore_core_ops_init: stored ISP dims into globals: tispinfo=%u data_b2f34=%u ***\n",
-                            w, data_b2f34);
-                }
-
                 pr_info("*** ispcore_core_ops_init: tisp_init completed successfully ***\n");
             } else {
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
