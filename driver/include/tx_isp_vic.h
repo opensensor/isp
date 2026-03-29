@@ -70,12 +70,12 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum);
 int vic_snapnv12(struct tx_isp_subdev *sd, unsigned int savenum);
 
 struct vic_buffer_entry {
-	struct list_head list;
-	u32 reserved;
-	u32 buffer_addr;
-	u32 buffer_index;
-	u32 channel;
-	u32 buffer_length;
+	struct list_head list;    /* 0x00 (8 bytes on 32-bit) */
+	u32 buffer_addr;          /* 0x08 — OEM reads *(entry + 8) / entry[2] */
+	u32 reserved;             /* 0x0c */
+	u32 buffer_index;         /* 0x10 — OEM reads entry[4] */
+	u32 channel;              /* 0x14 */
+	u32 buffer_length;        /* 0x18 */
 };
 
 

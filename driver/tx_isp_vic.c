@@ -951,6 +951,18 @@ static void vic_free_buffer_list(struct list_head *head)
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
+/* OEM global raw_pipe — persists between tx_isp_subdev_pipo and vic_mdma_irq_function.
+ * Populated during pipo init; the IRQ handler reads raw_pipe[1] (dqbuf callback)
+ * and raw_pipe[4] (sd argument).
+ */
+static void *raw_pipe_global[6];
+
+/* OEM global DMA buffer index / sub-get counters for non-streaming MDMA cycling */
+static u32 vic_mdma_ch0_set_buff_index;
+static u32 vic_mdma_ch0_sub_get_num;
+static u32 vic_mdma_ch1_set_buff_index;
+static u32 vic_mdma_ch1_sub_get_num;
+
 /* GPIO info and state for vic_framedone_irq_function - matching reference driver */
 static volatile int gpio_switch_state = 0;
 static struct {
@@ -1017,12 +1029,7 @@ static u32 vic_irq_counter;
                 if (vic_regs) {
                     u32 current_frame_addr = readl(vic_regs + 0x380);
                     /* SAFE: Extract buffer address from list entry */
-                    /* Assuming buffer structure has address at offset 8 from list_head */
-                    struct vic_buffer_entry {
-                        struct list_head list;
-                        u32 reserved;
-                        u32 buffer_addr;
-                    } *entry = container_of(pos, struct vic_buffer_entry, list);
+                    struct vic_buffer_entry *entry = container_of(pos, struct vic_buffer_entry, list);
 
                     if (entry->buffer_addr == current_frame_addr) {
 
@@ -1163,29 +1170,159 @@ label_123f4:
 /* vic_mdma_irq_function - OEM HLIL: handles MDMA DMA completion per channel.
  *
  * OEM has two paths:
- *   stream_state == 0 (non-streaming/calibration): cycle DMA buffers, complete()
- *   stream_state != 0 (streaming): pop buffer from done FIFO, deliver frame
- *
- * For now we handle the non-streaming path (complete()) and log the streaming
- * path for debugging.  The VIC PIPO DMA needs the MDMA done acknowledgement
- * to release the buffer and continue to the next frame.
+ *   processing == 0 (non-streaming/calibration): cycle DMA buffer indices, complete()
+ *   processing != 0 (streaming): pop done buffer, deliver frame via raw_pipe,
+ *                                 rotate next queued buffer into VIC DMA slot.
  */
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
-    pr_info_ratelimited("vic_mdma_irq: ch=%d stream_state=%d frame_count=%u\n",
-                        channel, vic_dev->stream_state, vic_dev->frame_count);
+	void __iomem *vic_base;
+	u32 frame_size;
 
-    if (vic_dev->stream_state == 0) {
-        /* OEM non-streaming path: private_complete(arg1 + 0x148) */
-        complete(&vic_dev->frame_complete);
-    } else {
-        /* OEM streaming path: pop_buffer_fifo → deliver frame via raw_pipe callback.
-         * For now, just signal completion so frame_channel waiters unblock.
-         */
-        complete(&vic_dev->frame_complete);
-    }
+	vic_base = vic_raw_regs_get(vic_dev);
 
-    return 0;
+	if (vic_dev->processing == 0) {
+		/* --- OEM non-streaming path: calibration buffer cycling --- */
+		frame_size = vic_dev->width * vic_dev->height * 2;
+
+		if (channel == 0 && vic_mdma_ch0_sub_get_num > 0) {
+			u32 cur_idx = vic_mdma_ch0_set_buff_index;
+			u32 next_idx = (cur_idx + 1) % 5;
+			u32 next_addr;
+
+			if (vic_base) {
+				next_addr = readl(vic_base + ((cur_idx + 0xc6) << 2)) + frame_size;
+				vic_mdma_ch0_set_buff_index = next_idx;
+				writel(next_addr, vic_base + ((next_idx + 0xc6) << 2));
+			}
+			vic_mdma_ch0_sub_get_num--;
+
+			/* OEM: when sub_get_num wraps to 7 (underflow), disable MDMA sub-get */
+			if (vic_mdma_ch0_sub_get_num == 7 && vic_base)
+				writel(readl(vic_base + 0x300) & 0xfff0ffff, vic_base + 0x300);
+		} else if (channel == 1 && vic_mdma_ch1_sub_get_num > 0) {
+			u32 cur_idx = vic_mdma_ch1_set_buff_index;
+			u32 next_idx = (cur_idx + 1) % 5;
+			u32 next_addr;
+
+			if (vic_base) {
+				next_addr = readl(vic_base + ((cur_idx + 0xc6) << 2)) + frame_size;
+				vic_mdma_ch1_set_buff_index = next_idx;
+				writel(next_addr, vic_base + ((next_idx + 0xc6) << 2));
+			}
+			vic_mdma_ch1_sub_get_num--;
+		}
+
+		/* OEM: complete() only when BOTH channels' sub_get_nums are 0 */
+		if (vic_mdma_ch0_sub_get_num == 0 && vic_mdma_ch1_sub_get_num == 0)
+			complete(&vic_dev->frame_complete);
+
+	} else {
+		/* --- OEM streaming path: buffer rotation + frame delivery --- */
+		u32 current_dma_addr = 0;
+		struct vic_buffer_entry *done_buf;
+		int (*dqbuf_fn)(void *, void *);
+		void *dqbuf_arg;
+		int i;
+
+		if (vic_base)
+			current_dma_addr = readl(vic_base + 0x380);
+
+		/* Pop completed buffer from done_head */
+		if (list_empty(&vic_dev->done_head)) {
+			pr_info_ratelimited("busy_buf null; busy_buf_count= %d\n",
+					    vic_dev->active_buffer_count);
+			goto mdma_irq_refill;
+		}
+
+		done_buf = list_first_entry(&vic_dev->done_head,
+					    struct vic_buffer_entry, list);
+		list_del(&done_buf->list);
+		vic_dev->active_buffer_count--;
+
+		/* Deliver frame to downstream via raw_pipe[1](raw_pipe[4], buffer) */
+		dqbuf_fn = (int (*)(void *, void *))raw_pipe_global[1];
+		dqbuf_arg = raw_pipe_global[4];
+		if (dqbuf_fn)
+			dqbuf_fn(dqbuf_arg, done_buf);
+
+		/* Move completed buffer to free_head */
+		list_add_tail(&done_buf->list, &vic_dev->free_head);
+
+		/* OEM: check if done_buf's DMA addr matches current HW addr */
+		if (done_buf->buffer_addr != current_dma_addr) {
+			/* DMA address mismatch — drain done_head until match */
+			for (i = 0; i < (int)vic_dev->active_buffer_count; i++) {
+				struct vic_buffer_entry *extra;
+
+				if (list_empty(&vic_dev->done_head)) {
+					pr_info_ratelimited("line = %d, i=%d ;num = %d;busy_buf_count %d\n",
+							    __LINE__, i, i,
+							    vic_dev->active_buffer_count);
+					continue;
+				}
+
+				extra = list_first_entry(&vic_dev->done_head,
+							 struct vic_buffer_entry, list);
+				list_del(&extra->list);
+				vic_dev->active_buffer_count--;
+
+				pr_debug_ratelimited("line : %d; bank_addr:0x%x; addr:0x%x\n",
+						     __LINE__, extra->buffer_addr,
+						     current_dma_addr);
+
+				/* Deliver this buffer too */
+				if (dqbuf_fn)
+					dqbuf_fn(dqbuf_arg, extra);
+
+				list_add_tail(&extra->list, &vic_dev->free_head);
+
+				if (extra->buffer_addr == current_dma_addr)
+					break;
+			}
+
+			if (i >= (int)vic_dev->active_buffer_count) {
+				pr_info_ratelimited("function: %s ; vic dma addrrss error!!!\n",
+						    __func__);
+				if (vic_base)
+					pr_info_ratelimited("VIC_ADDR_DMA_CONTROL : 0x%x\n",
+							    readl(vic_base + 0x300));
+			}
+		}
+
+mdma_irq_refill:
+		/* OEM: refill — move next queued buffer into a free bank slot */
+		if (!list_empty(&vic_dev->free_head) &&
+		    !list_empty(&vic_dev->queue_head)) {
+			struct vic_buffer_entry *q_buf, *f_buf;
+
+			/* Pop from queue_head */
+			q_buf = list_first_entry(&vic_dev->queue_head,
+						 struct vic_buffer_entry, list);
+			list_del(&q_buf->list);
+
+			/* Pop a free bank */
+			f_buf = list_first_entry(&vic_dev->free_head,
+						 struct vic_buffer_entry, list);
+			list_del(&f_buf->list);
+
+			/* Transfer address to the bank entry */
+			f_buf->buffer_addr = q_buf->buffer_addr;
+
+			/* Program VIC DMA slot register */
+			if (vic_base)
+				writel(f_buf->buffer_addr,
+				       vic_base + ((f_buf->buffer_index + 0xc6) << 2));
+
+			/* Move bank to done (active) list */
+			list_add_tail(&f_buf->list, &vic_dev->done_head);
+			vic_dev->active_buffer_count++;
+
+			kfree(q_buf);
+		}
+	}
+
+	return 0;
 }
 
 /* Probe-time VIC init stays out of the OEM IRQ route/mask path. */
@@ -3150,15 +3287,21 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
         pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
 
-        /* SAFE: Set function pointers using proper array indexing */
+        /* SAFE: Set function pointers using proper array indexing.
+         * raw_pipe[1] is the DQBUF callback set by the DOWNSTREAM consumer
+         * (libimp frame channel) — preserve whatever the caller already put there.
+         */
         raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
         raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
         raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
 
-        pr_info("tx_isp_subdev_pipo: set function pointers - qbuf=%p, clearbuf=%p, s_stream=%p, sd=%p\n",
-                ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf,
-                ispvic_frame_channel_s_stream, sd);
+        /* Persist into the global so vic_mdma_irq_function can deliver frames */
+        memcpy(raw_pipe_global, raw_pipe, sizeof(raw_pipe_global));
+
+        pr_info("tx_isp_subdev_pipo: set function pointers - qbuf=%p, dqbuf=%p, clearbuf=%p, s_stream=%p, sd=%p\n",
+                raw_pipe_global[0], raw_pipe_global[1],
+                raw_pipe_global[2], raw_pipe_global[3], raw_pipe_global[4]);
 
 		vic_dev->active_buffer_count = 0;
 

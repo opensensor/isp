@@ -2890,6 +2890,21 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 tisp_initialized = true;
+
+                /* OEM CRITICAL: Store sensor width/height into globals used by
+                 * tisp_channel_attr_set, tisp_channel_start, etc.  Without this,
+                 * MSCA output strides/geometry are all zero → garbled image.
+                 *   tispinfo[0..3] = sensor width
+                 *   data_b2f34     = sensor height
+                 */
+                {
+                    uint32_t w = sensor_info.width;
+                    memcpy(tispinfo, &w, sizeof(w));
+                    data_b2f34 = sensor_info.height;
+                    pr_info("*** ispcore_core_ops_init: stored ISP dims into globals: tispinfo=%u data_b2f34=%u ***\n",
+                            w, data_b2f34);
+                }
+
                 pr_info("*** ispcore_core_ops_init: tisp_init completed successfully ***\n");
             } else {
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
@@ -3534,7 +3549,8 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
     extern uint32_t data_b2f34;  /* Frame height */
     extern uint32_t data_b2e04, data_b2e08, data_b2e0c, data_b2e10, data_b2e14;
 
-    int32_t tispinfo_1 = (int32_t)tispinfo;
+    int32_t tispinfo_1;
+    memcpy(&tispinfo_1, tispinfo, sizeof(tispinfo_1)); /* OEM: read *(int32_t*)tispinfo = ISP width */
     int32_t var_34 = arg2[2];
     int32_t var_38 = arg2[1];
     int32_t var_3c = *arg2;
@@ -3809,7 +3825,8 @@ int tisp_g_fcrop_control(char* arg1)
     if (v1 != 1) {
         *arg1 = 0;
         extern uint8_t tispinfo[];
-        int32_t tispinfo_1 = (int32_t)tispinfo;
+        int32_t tispinfo_1;
+        memcpy(&tispinfo_1, tispinfo, sizeof(tispinfo_1)); /* OEM: read ISP width */
         *(arg1 + 4) = 0;
         extern uint32_t data_b2f34;
         result = data_b2f34;

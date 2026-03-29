@@ -2615,6 +2615,11 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
 
+    /* NOTE: tispinfo and data_b2f34 are populated in ispcore_core_ops_init
+     * (tx_isp_core.c) right after this function returns, since those globals
+     * are static to tx_isp_core.c.
+     */
+
     /* Binary Ninja: Handle different sensor modes - simplified version */
     switch (sensor_params.mode) {
         case 0: case 1: case 2: case 3:
