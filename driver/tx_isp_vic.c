@@ -2065,8 +2065,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
     struct tx_isp_vic_device *vic_dev;
-    u32 width = 0;
-    u32 height = 0;
+    u32 actual_width, actual_height, stride;
+    size_t sensor_attr_bytes = 0x4c;
 
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
 
@@ -2084,22 +2084,28 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
     if (attr == NULL) {
         /* Clear sensor attribute */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        vic_raw_sensor_attr_sync(vic_dev, NULL);
+        memset(&vic_dev->sensor_attr, 0, sensor_attr_bytes);
         pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
     } else {
         /* Copy sensor attribute */
-        memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-        vic_raw_sensor_attr_sync(vic_dev, attr);
+        memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
+        actual_width = attr->mipi.image_twidth ? attr->mipi.image_twidth : attr->total_width;
+        actual_height = attr->mipi.image_theight ? attr->mipi.image_theight : attr->total_height;
+        if (!actual_width)
+            actual_width = vic_dev->width ? vic_dev->width : 1920;
+        if (!actual_height)
+            actual_height = vic_dev->height ? vic_dev->height : 1080;
 
-        width = attr->mipi.image_twidth ? attr->mipi.image_twidth : attr->total_width;
-        height = attr->mipi.image_theight ? attr->mipi.image_theight : attr->total_height;
-        if (width && height) {
-            vic_dev->width = width;
-            vic_dev->height = height;
-            vic_raw_dims_set(vic_dev, width, height);
-        }
+        vic_raw_dims_set(vic_dev, actual_width, actual_height);
 
+        if (vic_dev->pixel_format == 0 || vic_pixfmt_is_semiplanar_420(vic_dev->pixel_format))
+            stride = actual_width;
+        else
+            stride = actual_width << 1;
+        vic_dev->stride = stride;
+
+        pr_info("vic_sensor_ops_sync_sensor_attr: refreshed dims=%ux%u stride=%u pixfmt=0x%x\n",
+                actual_width, actual_height, stride, vic_dev->pixel_format);
         pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
     }
 
@@ -2119,17 +2125,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     int (*callback_func)(void);  /* Changed to int return type */
 
     pr_info("vic_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
-
-    /* CRITICAL FIX: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR specifically */
-    if (cmd == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
-        pr_info("*** CRITICAL FIX: TX_ISP_EVENT_SYNC_SENSOR_ATTR event received ***\n");
-
-        /* Call the sensor sync function which will return -515 */
-        result = vic_sensor_ops_sync_sensor_attr(sd, (struct tx_isp_sensor_attribute *)arg);
-
-        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR handled successfully, returning %d ***\n", result);
-        return result;
-    }
 
     if (cmd == 0x1000001) {
         result = -ENOTSUPP;

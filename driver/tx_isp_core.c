@@ -2301,6 +2301,8 @@ static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 /* Configure format propagation through the pipeline */
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 {
+    u32 stride;
+
     pr_info("Configuring format propagation\n");
 
     /* Ensure format compatibility between pipeline stages */
@@ -2317,7 +2319,13 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
         if (isp->vic_dev) {
             isp->vic_dev->width = isp->sensor_width;
             isp->vic_dev->height = isp->sensor_height;
-            isp->vic_dev->stride = isp->sensor_width * 2; /* Assume 16-bit per pixel */
+            if (isp->vic_dev->pixel_format == 0 ||
+                isp->vic_dev->pixel_format == V4L2_PIX_FMT_NV12 ||
+                isp->vic_dev->pixel_format == V4L2_PIX_FMT_NV21)
+                stride = isp->sensor_width;
+            else
+                stride = isp->sensor_width << 1;
+            isp->vic_dev->stride = stride;
             pr_info("VIC configured for %dx%d, stride=%d\n",
                     isp->vic_dev->width, isp->vic_dev->height, isp->vic_dev->stride);
         }
@@ -4331,6 +4339,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
     isp_dev->sd.isp = isp_dev;  /* Set back-reference */
     isp_dev->sd.ops = &core_subdev_ops;  /* Set operations to the properly configured structure */
     isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
+    tx_isp_set_subdevdata(&isp_dev->sd, isp_dev);
+    tx_isp_set_subdev_hostdata(&isp_dev->sd, isp_dev);
 
     /* Initialize subdev synchronization */
     mutex_init(&isp_dev->sd.lock);
@@ -4347,6 +4357,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
+        tx_isp_set_subdevdata(&isp_dev->sd, isp_dev);
+        tx_isp_set_subdev_hostdata(&isp_dev->sd, isp_dev);
 
         /* SAFE: Channel configuration using proper struct access */
         channel_count = ISP_MAX_CHAN;  /* Use constant instead of dangerous offset access */
@@ -4834,25 +4846,79 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     struct tx_isp_sensor_attribute *stored_attr;
     uint32_t integration_time, again, dgain;
     uint16_t fps, calculated_fps;
+    u32 actual_width, actual_height, stride;
+    size_t sensor_attr_bytes = 0x4c;
 
     pr_info("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
 
-    isp_dev = ourISPdev;
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("The parameter is invalid!\n");
+        return -EINVAL;
+    }
 
-    /* Get VIC device */
-    vic_dev = isp_dev->vic_dev;
+    /* Sync can be entered via core or VIC subdevs. For VIC callers, dev_priv is
+     * the VIC device, not the ISP core, so resolve the ISP via sd->isp first.
+     */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if ((!isp_dev || (unsigned long)isp_dev >= 0xfffff001) &&
+        tx_isp_get_subdevdata(sd) == ourISPdev)
+        isp_dev = ourISPdev;
+    if ((!isp_dev || (unsigned long)isp_dev >= 0xfffff001) && ourISPdev)
+        isp_dev = ourISPdev;
+    if (!isp_dev || (unsigned long)isp_dev >= 0xfffff001) {
+        pr_err("The parameter is invalid!\n");
+        return -EINVAL;
+    }
+
+    /* VIC callers keep vic_dev in sd->dev_priv; core callers must follow
+     * isp_dev->vic_dev.
+     */
+    if (sd == &isp_dev->sd)
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    else
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+
+    if ((!vic_dev || (unsigned long)vic_dev >= 0xfffff001) && isp_dev->vic_dev)
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("The parameter is invalid!\n");
+        return -EINVAL;
+    }
 
 
     /* Binary Ninja: if (arg2 == 0) */
     if (attr == NULL) {
         /* Binary Ninja: memset($s0_1 + 0xec, arg2, 0x4c) */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+        memset(&vic_dev->sensor_attr, 0, sensor_attr_bytes);
         pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
         return 0;
     }
 
     /* Binary Ninja: memcpy($s0_1 + 0xec, arg2, 0x4c) */
-    memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
+    memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
+
+    actual_width = attr->mipi.image_twidth ? attr->mipi.image_twidth : attr->total_width;
+    actual_height = attr->mipi.image_theight ? attr->mipi.image_theight : attr->total_height;
+    if (!actual_width)
+        actual_width = vic_dev->width ? vic_dev->width : 1920;
+    if (!actual_height)
+        actual_height = vic_dev->height ? vic_dev->height : 1080;
+
+    vic_dev->width = actual_width;
+    vic_dev->height = actual_height;
+    isp_dev->sensor_width = actual_width;
+    isp_dev->sensor_height = actual_height;
+
+    if (vic_dev->pixel_format == 0 ||
+        vic_dev->pixel_format == V4L2_PIX_FMT_NV12 ||
+        vic_dev->pixel_format == V4L2_PIX_FMT_NV21)
+        stride = actual_width;
+    else
+        stride = actual_width << 1;
+    vic_dev->stride = stride;
+
+    pr_info("ispcore_sync_sensor_attr: refreshed VIC geometry dims=%ux%u stride=%u pixfmt=0x%x\n",
+            actual_width, actual_height, stride, vic_dev->pixel_format);
 
     /* Binary Ninja: Complex sensor attribute processing */
     stored_attr = &vic_dev->sensor_attr;

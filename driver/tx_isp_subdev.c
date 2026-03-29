@@ -580,6 +580,17 @@ int tx_isp_notify(struct tx_isp_module *module, unsigned int notification, void 
 	if (!ourISPdev)
 		return 0;
 
+	if (notification == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
+		struct tx_isp_video_in *video = (struct tx_isp_video_in *)data;
+		extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd,
+							       struct tx_isp_sensor_attribute *attr);
+
+		if (!video || !video->attr)
+			return -EINVAL;
+
+		return tx_isp_handle_sync_sensor_attr_event(&ourISPdev->sd, video->attr);
+	}
+
 	for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
 		struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
 		int call_result = -ENOIOCTLCMD;
