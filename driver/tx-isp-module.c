@@ -6062,6 +6062,24 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
 
+    /* RACE CONDITION FIX: tx_isp_create_subdev_graph() calls
+     * tx_isp_setup_pipeline() which sets isp_dev->state = 1.
+     * But tx_isp_detect_and_register_sensors() (line 5998) already tried
+     * to activate the ISP when state was still 0, so it returned early.
+     * Now that state == 1, retry the full activation sequence so the
+     * ISP reaches state 3 (needed for ispcore_video_s_stream to enable
+     * interrupts).  Without this, interrupts stay at 0 on first boot.
+     */
+    if (ourISPdev->state == 1 && ourISPdev->sensor) {
+        pr_info("*** RACE FIX: Retrying ISP activation now that state==1 ***\n");
+        ret = tx_isp_ispcore_activate_module_complete(ourISPdev);
+        if (ret != 0 && ret != -ENOIOCTLCMD)
+            pr_warn("*** RACE FIX: deferred activation returned %d ***\n", ret);
+        else
+            pr_info("*** RACE FIX: ISP activation complete, state=%d ***\n",
+                    ourISPdev->state);
+    }
+
     pr_info("*** V4L2 VIDEO DEVICES DISABLED - skipping /dev/videoX registration ***\n");
 
     /* Initialize netlink channel (optional, non-fatal on error) */
@@ -7862,6 +7880,25 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     }
 
     mutex_unlock(&sensor_register_mutex);
+
+    /* RACE CONDITION FIX: If the sensor module loads AFTER the ISP module,
+     * the ISP probe already ran tx_isp_create_subdev_graph() which set
+     * isp_dev->state = 1, but the activation attempt during probe failed
+     * because there was no sensor.  Now that a sensor has been registered,
+     * retry the activation so the ISP reaches state 3.
+     */
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->state >= 1 && ourISPdev->state < 3) {
+        pr_info("*** SENSOR REG RACE FIX: sensor registered, ISP state=%d, retrying activation ***\n",
+                ourISPdev->state);
+        ret = tx_isp_ispcore_activate_module_complete(ourISPdev);
+        if (ret != 0 && ret != -ENOIOCTLCMD)
+            pr_warn("*** SENSOR REG RACE FIX: deferred activation returned %d ***\n", ret);
+        else
+            pr_info("*** SENSOR REG RACE FIX: ISP now at state=%d ***\n",
+                    ourISPdev->state);
+    }
+
     return 0;
 
 err_cleanup_graph:

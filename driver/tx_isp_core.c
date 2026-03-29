@@ -459,6 +459,76 @@ extern struct tx_isp_dev *ourISPdev;
 static struct tx_isp_dev *g_ispcore = NULL;
 uint32_t system_reg_read(u32 reg);
 
+/*
+ * Stock binary ISR state variables (Binary Ninja HLIL reference):
+ * - first_into: starts at 1, cleared after first ISR calls tisp_top_sel()
+ * - bayer_write_pending: mirrors $s0+0x11c, set to 1 when stream starts,
+ *   cleared after mbus_to_bayer_write() is called once
+ */
+static uint32_t first_into = 1;
+static uint32_t bayer_write_pending = 1;
+
+/*
+ * mbus_to_bayer_write - EXACT stock binary implementation (BN HLIL 0x696d8)
+ *
+ * Maps V4L2 mbus format codes to Bayer pattern indices and programs
+ * ISP register 8 with the result.  Without this call the ISP demosaic
+ * engine does not know the sensor's CFA layout and produces garbled colours.
+ *
+ * Stock jump-table (offset from 0x3001):
+ *   +0x34 → 1 : 0x3001,0x3003-0x3008,0x300b
+ *   +0x50 → 2 : 0x3002,0x3009,0x300a,0x3011
+ *   +0x3c → 3 : 0x300c,0x300e,0x3010,0x3013
+ *   +0x58 → 0 : 0x300d,0x300f,0x3012,0x3014
+ */
+void mbus_to_bayer_write(u32 mbus_code)
+{
+	u32 bayer_mode;
+
+	if ((mbus_code - 0x3001) >= 0x14) {
+		pr_err("%s[%d] the format(0x%08x) of input couldn't be handled!\n",
+		       __func__, __LINE__, mbus_code);
+		return;
+	}
+
+	switch (mbus_code) {
+	case 0x3001: case 0x3003: case 0x3004: case 0x3005:
+	case 0x3006: case 0x3007: case 0x3008: case 0x300b:
+		bayer_mode = 1;
+		break;
+	case 0x3002: case 0x3009: case 0x300a: case 0x3011:
+		bayer_mode = 2;
+		break;
+	case 0x300c: case 0x300e: case 0x3010: case 0x3013:
+		bayer_mode = 3;
+		break;
+	case 0x300d: case 0x300f: case 0x3012: case 0x3014:
+		bayer_mode = 0;
+		break;
+	default:
+		bayer_mode = 0;
+		break;
+	}
+
+	system_reg_write(8, bayer_mode);
+	pr_info("mbus_to_bayer_write: mbus=0x%x -> bayer_mode=%u\n",
+		mbus_code, bayer_mode);
+}
+
+/*
+ * tisp_top_sel - Enable ISP top-level processing (BN HLIL 0x69770)
+ *
+ * Sets bit 31 of ISP register 0xc.  Called exactly once on the first
+ * interrupt after stream-on.
+ */
+void tisp_top_sel(void)
+{
+	u32 reg_val = system_reg_read(0xc);
+
+	system_reg_write(0xc, reg_val | 0x80000000);
+	pr_info("tisp_top_sel: reg[0xc] 0x%08x -> 0x%08x\n",
+		reg_val, reg_val | 0x80000000);
+}
 
 /* Core subdev operations implementations */
 int tx_isp_core_start(struct tx_isp_subdev *sd)
@@ -1503,6 +1573,32 @@ acknowledge_interrupt:
     if (interrupt_status & 0x2000) {  /* Additional interrupt type */
         pr_info("ISP CORE: Additional interrupt type\n");
         /* Binary Ninja: Additional interrupt processing */
+    }
+
+    /*
+     * Stock BN HLIL 0x69b30-0x69b80: Bayer pattern + ISP top-select on first frames.
+     *
+     * mbus_to_bayer_write programs ISP reg 8 with the sensor's CFA (colour
+     * filter array) layout so the demosaic engine produces correct colours.
+     * tisp_top_sel sets bit-31 of ISP reg 0xc to enable top-level processing.
+     * Both are one-shot: they fire on the first interrupt and are then
+     * inhibited by their respective guard variables.
+     */
+    if (bayer_write_pending) {
+        u32 mbus_code = 0;
+
+        if (isp_dev && isp_dev->sensor)
+            mbus_code = isp_dev->sensor->video.mbus.code;
+
+        if (mbus_code != 0) {
+            mbus_to_bayer_write(mbus_code);
+            bayer_write_pending = 0;
+        }
+    }
+
+    if (first_into == 1) {
+        tisp_top_sel();
+        first_into = 0;
     }
 
     /* *** CRITICAL: CHANNEL 0 FRAME COMPLETION PROCESSING *** */
