@@ -1405,131 +1405,28 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     int vic_is_streaming = 0;  /* C89 compatible: use int instead of bool */
     struct tx_isp_vic_device *vic = NULL;
 
-    pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
-
     /* CRITICAL: Validate ourISPdev pointer before ANY access */
-    if (!ourISPdev) {
-        pr_err("*** ISP FRAME SYNC WORK: CRITICAL - ourISPdev is NULL! ***\n");
+    if (!ourISPdev || (unsigned long)ourISPdev < 0x80000000 ||
+        (unsigned long)ourISPdev >= 0xfffff000)
         return;
-    }
-
-    /* CRITICAL: Validate pointer is in kernel memory range */
-    if ((unsigned long)ourISPdev < 0x80000000 || (unsigned long)ourISPdev >= 0xfffff000) {
-        pr_err("*** ISP FRAME SYNC WORK: CRITICAL - ourISPdev has invalid address: %p ***\n", ourISPdev);
-        return;
-    }
 
     isp_dev = ourISPdev;
-    pr_info("*** ISP FRAME SYNC WORK: isp_dev validated: %p ***\n", isp_dev);
 
-    /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
-    pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
-
-    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware with full validation */
-    if (isp_dev->vic_dev) {
-        /* Validate vic_dev pointer before dereferencing */
-        if ((unsigned long)isp_dev->vic_dev < 0x80000000 || (unsigned long)isp_dev->vic_dev >= 0xfffff000) {
-            pr_err("*** ISP FRAME SYNC WORK: CRITICAL - vic_dev has invalid address: %p ***\n", isp_dev->vic_dev);
-            return;
-        }
-
+    /* Auto-detect streaming state from VIC hardware */
+    if (isp_dev->vic_dev &&
+        (unsigned long)isp_dev->vic_dev >= 0x80000000 &&
+        (unsigned long)isp_dev->vic_dev < 0xfffff000) {
         vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        vic_is_streaming = (vic->stream_state == 1);  /* VIC stream_state = 1 means streaming */
+        vic_is_streaming = (vic->stream_state == 1);
 
-        /* Auto-set streaming_enabled if VIC is streaming but flag is false */
-        if (vic_is_streaming && !isp_dev->streaming_enabled) {
-            pr_info("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
+        if (vic_is_streaming && !isp_dev->streaming_enabled)
             isp_dev->streaming_enabled = true;
-        }
     }
 
-    /* Check if sensor is available and streaming is active */
-    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
-            isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
+    /* Reference driver: per-frame sensor AE/AGC/AWB operations
+     * Currently skipping sensor I2C per user request */
 
-    /* CRITICAL FIX: Frame sync work SHOULD call sensor operations like reference driver! */
-    /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
-    pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
-
-    /* One-shot VIC diagnostics to verify NV12 programming and UV plane activity */
-    do {
-        static int debug_dump_done = 0;
-        if (!debug_dump_done && vic_is_streaming && isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_local;
-            void __iomem *regs;
-
-            /* Validate vic_dev pointer again before use */
-            if ((unsigned long)isp_dev->vic_dev < 0x80000000 || (unsigned long)isp_dev->vic_dev >= 0xfffff000) {
-                pr_err("*** FS DEBUG: vic_dev pointer invalid: %p ***\n", isp_dev->vic_dev);
-                break;
-            }
-
-            vic_local = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            regs = vic_local->vic_regs;
-
-            /* Validate register pointer before any readl() */
-            if (!regs || (unsigned long)regs < 0x80000000) {
-                pr_err("*** FS DEBUG: vic_regs pointer invalid: %p ***\n", regs);
-                break;
-            }
-
-            if (regs) {
-                u32 ctrl = readl(regs + 0x300);
-                u32 dims = readl(regs + 0x304);
-                u32 strideY = readl(regs + 0x310);
-                u32 strideUV = readl(regs + 0x314);
-                u32 count = (ctrl >> 16) & 0xF;
-                pr_info("*** FS DEBUG: VIC[300]=0x%08x (fmt_ok=%d) dims=%ux%u strideY=%u strideUV=%u slots=%u ***\n",
-                        ctrl, ((ctrl & 0x80000027) == 0x80000027), dims >> 16, dims & 0xFFFF, strideY, strideUV, count);
-
-                /* Dump Y/UV base for active slots */
-                if (count == 0 || count > 5) count = 2;
-                {
-                    u32 i;  /* C89: declare before loop */
-                    for (i = 0; i < count; ++i) {
-                        u32 yb = readl(regs + (0x318 + i*4));
-                        u32 uvb = readl(regs + (0x340 + i*4));
-                        pr_info("*** FS DEBUG: slot%u Y=0x%08x UV=0x%08x (UV=Y+%u*H=%u) ***\n",
-                                i, yb, uvb, strideY, strideY * vic_local->height);
-                    }
-                }
-
-                /* Optional: peek UV bytes of slot 0 to detect all-zero chroma */
-                {
-                    u32 uv0 = readl(regs + 0x340);
-                    if (uv0) {
-                        phys_addr_t p = (phys_addr_t)uv0 & ~0xFFF;
-                        void __iomem *v = ioremap_nocache(p, 0x1000);
-                        if (v) {
-                            u32 off = uv0 & 0xFFF;
-                            u8 sample[16] = {0};
-                            int k;  /* C89: declare before loop */
-                            for (k = 0; k < 16 && (off + k) < 0x1000; ++k)
-                                sample[k] = readb(v + off + k);
-                            pr_info("*** FS DEBUG: UV[0] first 16 bytes: %*ph ***\n", 16, sample);
-                            iounmap(v);
-                        } else {
-                            pr_info("*** FS DEBUG: ioremap_nocache failed for UV base 0x%08x ***\n", uv0);
-                        }
-                    }
-                }
-            }
-            debug_dump_done = 1;
-        }
-    } while (0);
-
-    if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        /* Per user request: do NOT trigger sensor IOCTL (FPS or any I2C) on frame events */
-        pr_info("*** ISP FRAME SYNC WORK: Skipping per-frame sensor I2C/FPS ioctl ***\n");
-    } else {
-        pr_info("*** ISP FRAME SYNC WORK: No sensor/not streaming - nothing to do ***\n");
-    }
-
-    pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
-
-    /* CRITICAL: Ensure work completion is visible to prevent queue backup */
     sensor_call_counter++;
-    pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
 }
 
 

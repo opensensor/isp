@@ -1474,8 +1474,8 @@ int tisp_get_frame_drop(u32 channel_id, u32 *enable, u32 *period, u32 *mask)
         *period = 0;
     }
 
-    pr_info("tisp_get_frame_drop: ch=%u -> enable=%u period=%u mask=0x%x (base=0x%x)\n",
-            channel_id, *enable, *period, *mask, base);
+    pr_debug("tisp_get_frame_drop: ch=%u -> enable=%u period=%u mask=0x%x (base=0x%x)\n",
+             channel_id, *enable, *period, *mask, base);
     return 0;
 }
 EXPORT_SYMBOL_GPL(tisp_get_frame_drop);
@@ -1490,7 +1490,6 @@ int frame_chan_event(void *priv, int event, void *data)
 
     switch (event) {
     case TX_ISP_EVENT_FRAME_DQBUF: { /* 0x3000006 */
-        unsigned long flags;
         struct tx_isp_channel_state *state = &fcd->state;
         u32 enable = 0, period = 0, mask = 0;
         bool drop = false;
@@ -1508,54 +1507,25 @@ int frame_chan_event(void *priv, int event, void *data)
             return 0;
         }
 
-        /* Make frame deliverable only if a queued buffer exists */
-        {
-            struct queued_node *qnode = NULL;
-            struct completed_node *cnode = NULL;
+        /* OEM-aligned: do NOT pop from queued_buffers here.
+         * The VIC MDMA hardware cycles through pre-programmed bank addresses
+         * automatically. We just signal that a new frame is available.
+         * Buffer lifecycle is managed by the VIC bank engine, not by
+         * draining the queue on every interrupt.
+         */
+        atomic_inc(&state->frame_ready_count);
+        state->sequence++;
 
-            spin_lock_irqsave(&state->queue_lock, flags);
-            if (!list_empty(&state->queued_buffers)) {
-                struct list_head *head = state->queued_buffers.next;
-                list_del(head);
-                state->queued_count--;
-                qnode = list_entry(head, struct queued_node, list);
-            }
-            spin_unlock_irqrestore(&state->queue_lock, flags);
+        /* Signal completion for 0x400456bf (OEM: complete($s0 + 0x2d4)) */
+        complete(&state->frame_done);
 
-            if (!qnode) {
-                /* No queued buffer -> cannot deliver; OEM would not wake */
-                pr_debug("[FRM] ch%d complete: no queued buffer, suppress wake\n", fcd->channel_num);
-                return 0;
-            }
+        /* Also wake waiters on frame_wait for DQBUF compatibility */
+        wake_up_interruptible(&state->frame_wait);
 
-            /* Prefer completed_buffers; fallback to pre-dequeue */
-            cnode = kmalloc(sizeof(*cnode), GFP_ATOMIC);
-            if (cnode) {
-                cnode->seq = state->sequence++;
-                cnode->index = qnode->index;
-                fill_timeval_mono(&cnode->ts);
-                spin_lock_irqsave(&state->queue_lock, flags);
-                list_add_tail(&cnode->list, &state->completed_buffers);
-                state->completed_count++;
-                spin_unlock_irqrestore(&state->queue_lock, flags);
-                pr_debug("[FRM] ch%d complete->done idx=%u seq=%u\n", fcd->channel_num, cnode->index, cnode->seq);
-                kfree(qnode);
-                wake_up_interruptible(&state->frame_wait);
-                return 0;
-            }
-
-            /* Allocation failed: use pre-dequeue path carrying the popped index */
-            spin_lock_irqsave(&state->queue_lock, flags);
-            state->pre_dequeue_index = qnode->index;
-            state->pre_dequeue_seq = state->sequence++;
-            fill_timeval_mono(&state->pre_dequeue_ts);
-            state->pre_dequeue_ready = true;
-            spin_unlock_irqrestore(&state->queue_lock, flags);
-            pr_debug("[FRM] ch%d complete->pre idx=%u seq=%u\n", fcd->channel_num, state->pre_dequeue_index, state->pre_dequeue_seq);
-            kfree(qnode);
-            wake_up_interruptible(&state->frame_wait);
-            return 0;
-        }
+        pr_debug("[FRM] ch%d frame_ready count=%d seq=%u\n",
+                 fcd->channel_num, atomic_read(&state->frame_ready_count),
+                 state->sequence);
+        return 0;
     }
     case TX_ISP_EVENT_FRAME_QBUF: /* 0x3000008 */
         /* Optionally track queued buffers; no-op for now */
@@ -2231,6 +2201,8 @@ int frame_channel_open(struct inode *inode, struct file *file)
 
 
     init_waitqueue_head(&fcd->state.frame_wait);
+    init_completion(&fcd->state.frame_done);
+    atomic_set(&fcd->state.frame_ready_count, 0);
 
     /* Set default format based on channel if not already set */
     if (fcd->state.width == 0) {
@@ -3053,7 +3025,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* OEM HLIL: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
         if (v1_7 || v1_10)
-            pr_info_ratelimited("VIC ISR: v1_7=0x%x v1_10=0x%x\n", v1_7, v1_10);
+            pr_debug("VIC ISR: v1_7=0x%x v1_10=0x%x\n", v1_7, v1_10);
 
         /* OEM HLIL: if (($v1_7 & 1) != 0) → frame_done */
         if ((v1_7 & 1) != 0) {
@@ -3061,7 +3033,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             vic_dev->frame_count++;
             isp_dev->frame_count++;
 
-            /* OEM HLIL: vic_framedone_irq_function($s0) */
+            /* OEM HLIL: vic_framedone_irq_function($s0)
+             * OEM does NOT deliver frames here — only updates DMA
+             * control register bank count and handles GPIO.
+             * Frame delivery happens exclusively in vic_mdma_irq_function
+             * triggered by v1_10 (MDMA completion).
+             */
             vic_framedone_irq_function(vic_dev);
         }
 
@@ -3893,24 +3870,11 @@ EXPORT_SYMBOL(tx_isp_get_vic_primary_regs);
 /* Real hardware frame completion detection - SDK compatible */
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
 {
-
-	pr_info("tx_isp_hardware_frame_done_handler: channel=%d\n", channel);
-    if (!isp_dev || channel < 0 || channel >= num_channels) {
+    if (!isp_dev || channel < 0 || channel >= num_channels)
         return;
-    }
-
-    pr_debug("Hardware frame completion detected on channel %d\n", channel);
 
     /* Wake up frame waiters with real hardware completion */
     frame_channel_wakeup_waiters(&frame_channels[channel]);
-
-    /* Update frame count for statistics */
-    isp_dev->frame_count++;
-
-    /* Complete frame operation if completion is available */
-//    if (isp_dev->frame_complete.done == 0) {
-//        complete(&isp_dev->frame_complete);
-//    }
 }
 
 /* Frame channel implementations removed - handled by FS probe instead */
@@ -4418,59 +4382,34 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* OEM-aligned DQBUF: wait until a deliverable buffer is available or streaming stops */
+        /* OEM-aligned DQBUF: wait for frame_ready_count > 0 or streaming stop */
         ret = wait_event_interruptible(state->frame_wait,
-                                       !list_empty(&state->completed_buffers) ||
-                                       state->pre_dequeue_ready ||
+                                       atomic_read(&state->frame_ready_count) > 0 ||
                                        !state->streaming);
         if (ret < 0)
-            return ret; /* -ERESTARTSYS, etc. */
+            return ret; /* -ERESTARTSYS */
         if (!state->streaming)
             return -EINVAL;
 
-        /* consume deliverable: pop completed node or consume pre-dequeue */
-        {
-            bool consumed_pre = false;
-            struct completed_node *cnode = NULL;
-            struct frame_buffer *tracked = NULL;
-            u32 delivered_idx = 0;
-            u32 delivered_seq = 0;
-            struct timeval delivered_ts = {0};
-            spin_lock_irqsave(&state->queue_lock, flags);
-            if (!list_empty(&state->completed_buffers)) {
-                struct list_head *head = state->completed_buffers.next;
-                list_del(head);
-                state->completed_count--;
-                cnode = list_entry(head, struct completed_node, list);
-            } else if (state->pre_dequeue_ready) {
-                state->pre_dequeue_ready = false;
-                consumed_pre = true;
-                delivered_idx = state->pre_dequeue_index;
-                delivered_seq = state->pre_dequeue_seq;
-                delivered_ts = state->pre_dequeue_ts;
-            }
-            spin_unlock_irqrestore(&state->queue_lock, flags);
-            if (cnode) {
-                delivered_idx = cnode->index;
-                delivered_seq = cnode->seq;
-                delivered_ts = cnode->ts;
-                kfree(cnode);
-            } else if (!consumed_pre) {
-                /* Spurious wake; no deliverable */
-                return -EAGAIN;
-            }
+        /* Consume one frame-ready signal */
+        atomic_dec_if_positive(&state->frame_ready_count);
 
-            /* Fill buffer with delivered idx/seq */
+        {
+            struct frame_buffer *tracked = NULL;
+            u32 delivered_seq = state->sequence;
+            struct timeval delivered_ts;
+            /* Rotating buffer index: cycle through tracked buffers */
+            u32 delivered_idx = delivered_seq % (state->buffer_count ? state->buffer_count : 3);
+
+            fill_timeval_mono(&delivered_ts);
+
+            /* Look up the tracked buffer from QBUF to get correct userptr */
             tracked = frame_channel_get_tracked_buffer(fcd, delivered_idx);
+
             spin_lock_irqsave(&state->buffer_lock, flags);
             buffer.index = delivered_idx;
-            buffer.type = tracked ? tracked->type :
-                         (state->current_buffer.type ? state->current_buffer.type : V4L2_BUF_TYPE_VIDEO_CAPTURE);
-            /* Use stride-aligned sizeimage if available */
-            if (!state->bytesperline)
-                state->bytesperline = frame_channel_format_bytesperline(
-                    frame_channel_export_pixfmt(channel, state->format),
-                    state->width);
+            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
             if (!state->sizeimage)
                 state->sizeimage = frame_channel_format_sizeimage(
                     frame_channel_export_pixfmt(channel, state->format),
@@ -4483,10 +4422,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             buffer.sequence = delivered_seq;
             buffer.memory = tracked ? tracked->memory :
                            (state->current_buffer.memory ? state->current_buffer.memory : V4L2_MEMORY_MMAP);
-            buffer.length = tracked && tracked->length ? tracked->length :
-                            (state->current_buffer.length ? state->current_buffer.length : state->sizeimage);
+            buffer.length = tracked && tracked->length ? tracked->length : state->sizeimage;
 
-            /* Binary Ninja/OEM-style flags */
+            /* OEM-style flags */
             buffer.flags = V4L2_BUF_FLAG_DONE;
             if (buffer.memory == V4L2_MEMORY_MMAP)
                 buffer.flags |= V4L2_BUF_FLAG_MAPPED;
@@ -4494,54 +4432,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             buffer.flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 #endif
 
-
+            /* Return REAL physical address from tracked buffer (set during QBUF) */
             if (buffer.memory == V4L2_MEMORY_USERPTR)
                 buffer.m.userptr = tracked ? tracked->m.userptr : state->current_buffer.m.userptr;
             else
                 buffer.m.offset = (tracked && tracked->memory == V4L2_MEMORY_MMAP && tracked->m.offset) ?
                                   tracked->m.offset : (delivered_idx * state->sizeimage);
+            spin_unlock_irqrestore(&state->buffer_lock, flags);
+
+            /* DMA sync barrier */
+            wmb();
         }
 
-        /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
-        if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-
-            /* Update VIC buffer tracking for this dequeue like Binary Ninja */
-            if (vic_dev && vic_dev->vic_regs && buffer.index < 8) {
-	                u32 buffer_w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
-	                u32 buffer_h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
-	                u32 buffer_size = state->sizeimage ?
-	                                  state->sizeimage :
-	                                  frame_channel_format_sizeimage(
-	                                      frame_channel_export_pixfmt(channel, state->format),
-	                                      buffer_w, buffer_h);
-	                u32 buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-
-                pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
-                        channel, buffer.index, buffer_phys_addr);
-
-                /* Sync DMA for buffer completion like Binary Ninja reference */
-                // In real implementation: dma_sync_single_for_device()
-                wmb(); // Memory barrier for DMA completion
-
-            } else {
-                pr_info("*** Channel %d: DQBUF - No VIC device or invalid buffer index ***\n", channel);
-            }
-        }
-
-        /* release fill lock */
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
-
-        pr_info("*** Channel %d: DQBUF complete - buffer[%d] seq=%d flags=0x%x ***\n",
-                channel, buffer.index, buffer.sequence, buffer.flags);
-        pr_info("*** Channel %d: DQBUF return memory=%u userptr=0x%lx offset=0x%x length=%u bytesused=%u ***\n",
-                channel, buffer.memory,
+        pr_debug("Channel %d: DQBUF idx=%u seq=%u memory=%u userptr=0x%lx len=%u\n",
+                channel, buffer.index, buffer.sequence, buffer.memory,
                 (unsigned long)((buffer.memory == V4L2_MEMORY_USERPTR) ? buffer.m.userptr : 0),
-                (buffer.memory == V4L2_MEMORY_MMAP) ? buffer.m.offset : 0,
-                buffer.length, buffer.bytesused);
-        pr_debug("[DQBUF] ch%d delivered idx=%u seq=%u ts=%ld.%06ld\n",
-                 channel, buffer.index, buffer.sequence,
-                 (long)buffer.timestamp.tv_sec, (long)buffer.timestamp.tv_usec);
+                buffer.length);
 
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
@@ -4580,6 +4486,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->streaming = true;
         state->flags |= 1U;
         fcd->streaming_flags |= 1;
+
+        /* Reset OEM-aligned frame signaling for fresh stream start */
+        init_completion(&state->frame_done);
+        atomic_set(&state->frame_ready_count, 0);
 
         vic_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
         if (!vic_sd) {
@@ -4639,6 +4549,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->state = 3;
         state->flags &= ~1U;
         fcd->streaming_flags &= ~1;
+
+        /* Wake any waiters so they can exit cleanly */
+        complete_all(&state->frame_done);
+        wake_up_interruptible(&state->frame_wait);
 
         // *** CRITICAL: STOP ISP CHANNEL CONTROL (writes to register 0x9804 and waits for 0x9808) ***
         pr_info("*** Channel %d: CALLING tisp_channel_stop to disable ISP channel control ***\n", channel);
@@ -4754,41 +4668,35 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         return 0;
     }
-    case 0x400456bf: { // Frame completion wait
+    case 0x400456bf: { /* OEM frame completion wait — EXACT Binary Ninja match:
+                       * wait_for_completion_interruptible($s0 + 0x2d4)
+                       * result = *($s0 + 0x2d4) + 1   (on success)
+                       * result = error                 (on signal)
+                       */
         uint32_t result;
-        unsigned long flags;
         int ret;
 
-        pr_info("*** Channel %d: Frame completion wait ***\n", channel);
+        pr_debug("Channel %d: 0x400456bf frame completion wait\n", channel);
 
-        // Auto-start streaming if needed
+        /* Auto-start streaming if needed */
         if (!state->streaming) {
-            pr_info("Channel %d: Auto-starting streaming for frame wait\n", channel);
             state->streaming = true;
             state->enabled = true;
         }
 
-        // Wait for frame with a short timeout
-        pr_info("*** Channel %d: Waiting for frame (timeout=100ms) ***\n", channel);
-        ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             !list_empty(&state->completed_buffers) ||
-                                             state->pre_dequeue_ready ||
-                                             !state->streaming,
-                                             msecs_to_jiffies(100));
+        /* OEM: private_wait_for_completion_interruptible($s0 + 0x2d4) */
+        ret = wait_for_completion_interruptible(&state->frame_done);
 
-        pr_info("*** Channel %d: Frame wait returned %d ***\n", channel, ret);
-
-        if (ret < 0)
-            return ret;
-
-        spin_lock_irqsave(&state->queue_lock, flags);
-        result = (!list_empty(&state->completed_buffers) || state->pre_dequeue_ready) ? 1U : 0U;
-        spin_unlock_irqrestore(&state->queue_lock, flags);
-
-        if (result)
-            pr_info("*** Channel %d: Frame wait observed a real deliverable frame ***\n", channel);
-        else
-            pr_info("*** Channel %d: Frame wait timeout/no deliverable frame ***\n", channel);
+        if (ret >= 0) {
+            /* OEM: var_78 = *($s0 + 0x2d4) + 1 — return frame count */
+            result = (uint32_t)atomic_read(&state->frame_ready_count);
+            if (result == 0)
+                result = 1; /* At least 1 frame is ready since completion fired */
+            /* Consume one frame-ready signal */
+            atomic_dec_if_positive(&state->frame_ready_count);
+        } else {
+            result = (uint32_t)ret; /* Error code */
+        }
 
         if (copy_to_user(argp, &result, sizeof(result)))
             return -EFAULT;
@@ -6835,43 +6743,58 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
         vic_base = vic_dev->vic_regs;
 
     if (!vic_dev->processing) {
-        int frame_words;
-
-        frame_words = vic_dev->width * vic_dev->height * 2;
-        pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
-
-        if (channel == 0 && vic_mdma_ch0_sub_get_num != 0 && vic_base) {
-            u32 next_bank = (vic_mdma_ch0_set_buff_index + 1) % 5;
-            u32 buffer_reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;
-            u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
-            u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
-
-            vic_mdma_ch0_set_buff_index = next_bank;
-            writel(next_addr, vic_base + new_buffer_reg_offset);
-            wmb();
-
-            vic_mdma_ch0_sub_get_num -= 1;
-            if (vic_mdma_ch0_sub_get_num == 7) {
-                u32 reg_300 = readl(vic_base + 0x300);
-                reg_300 = (reg_300 & 0xfff0ffff) | 0x70000;
-                writel(reg_300, vic_base + 0x300);
-                wmb();
-            }
-        } else if (channel == 1 && vic_mdma_ch1_sub_get_num != 0 && vic_base) {
-            u32 next_bank = (vic_mdma_ch1_set_buff_index + 1) % 5;
-            u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
-            u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
-            u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
-
-            vic_mdma_ch1_set_buff_index = next_bank;
-            writel(next_addr, vic_base + new_buffer_reg_offset);
-            wmb();
-
-            vic_mdma_ch1_sub_get_num -= 1;
+        /* OEM non-streaming path: calibration buffer cycling.
+         *
+         * During active streaming (stream_state == 1), the VIC hardware
+         * automatically cycles through the 5 pre-programmed bank addresses.
+         * We only need to deliver the completed frame to userspace — NO bank
+         * address manipulation is needed.  The OEM delivers frames exclusively
+         * from MDMA completion (v1_10), never from VIC frame_done (v1_7).
+         */
+        if (vic_dev->stream_state == 1) {
+            /* Deliver completed frame to userspace */
+            if (ourISPdev)
+                tx_isp_hardware_frame_done_handler(ourISPdev, channel);
+            return;
         }
 
-        if (vic_mdma_ch1_sub_get_num == 0)
-            complete(&vic_dev->frame_complete);
+        /* Original calibration path: sequential bank address cycling */
+        {
+            int frame_words = vic_dev->width * vic_dev->height * 2;
+
+            if (channel == 0 && vic_mdma_ch0_sub_get_num != 0 && vic_base) {
+                u32 next_bank = (vic_mdma_ch0_set_buff_index + 1) % 5;
+                u32 buffer_reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;
+                u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
+                u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
+
+                vic_mdma_ch0_set_buff_index = next_bank;
+                writel(next_addr, vic_base + new_buffer_reg_offset);
+                wmb();
+
+                vic_mdma_ch0_sub_get_num -= 1;
+                if (vic_mdma_ch0_sub_get_num == 7) {
+                    u32 reg_300 = readl(vic_base + 0x300);
+                    reg_300 = (reg_300 & 0xfff0ffff) | 0x70000;
+                    writel(reg_300, vic_base + 0x300);
+                    wmb();
+                }
+            } else if (channel == 1 && vic_mdma_ch1_sub_get_num != 0 && vic_base) {
+                u32 next_bank = (vic_mdma_ch1_set_buff_index + 1) % 5;
+                u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
+                u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
+                u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
+
+                vic_mdma_ch1_set_buff_index = next_bank;
+                writel(next_addr, vic_base + new_buffer_reg_offset);
+                wmb();
+
+                vic_mdma_ch1_sub_get_num -= 1;
+            }
+
+            if (vic_mdma_ch0_sub_get_num == 0 && vic_mdma_ch1_sub_get_num == 0)
+                complete(&vic_dev->frame_complete);
+        }
 
         return;
     }

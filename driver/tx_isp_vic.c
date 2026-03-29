@@ -1003,66 +1003,21 @@ static u32 vic_irq_counter;
         result = (void *)(uintptr_t)vic_dev->stream_state;
 
         if (vic_dev->stream_state != 0) {
-            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8)
-             * Follow the live raw-slot/hot-path resolver here so framedone
-             * handling observes the same bank the OEM stream/QBUF path uses.
-             */
             vic_regs = vic_stream_regs_resolve(vic_dev);
 
-            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
-            /* SAFE: Use done_head list instead of offset 0x204 */
-            struct list_head *pos;
-            int buffer_index = 0;    /* $a1_1 = 0 */
-            int high_bits = 0;       /* $v1_1 = 0 */
-            int match_found = 0;     /* $v0 = 0 */
-
-            /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            /* SAFE: Iterate through done_head list instead of manual pointer walking */
-            list_for_each(pos, &vic_dev->done_head) {
-                /* Binary Ninja: $v1_1 += 0 u< $v0 ? 1 : 0 */
-                high_bits += (0 < match_found) ? 1 : 0;
-                /* Binary Ninja: $a1_1 += 1 */
-                buffer_index += 1;
-
-                /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* Check if buffer address matches current frame register */
-                if (vic_regs) {
-                    u32 current_frame_addr = readl(vic_regs + 0x380);
-                    /* SAFE: Extract buffer address from list entry */
-                    struct vic_buffer_entry *entry = container_of(pos, struct vic_buffer_entry, list);
-
-                    if (entry->buffer_addr == current_frame_addr) {
-
-                        match_found = 1;  /* $v0 = 1 */
-                    }
-                }
-            }
-
-            /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
-            int shifted_value = high_bits << 0x10;
-
-            /* Binary Ninja: if ($v0 == 0) */
-            if (match_found == 0) {
-                /* $v1_2 = $a1_1 << 0x10 */
-                shifted_value = buffer_index << 0x10;
-            }
-
-            /* OEM framedone always updates only the bank-count/index bits in
-             * VIC_ADDR_DMA_CONTROL, even when the computed value is zero.
-             * Zero is valid here: it means the current DMA address matched the
-             * last active bank in the done list.
+            /* OEM framedone updates the bank-count bits [19:16] in
+             * VIC_ADDR_DMA_CONTROL (0x300) based on the busy_head list
+             * count (offset 0x218 in OEM driver).
+             *
+             * The OEM maintains busy/done/free lists of bank nodes.
+             * Our simplified streaming path doesn't use these lists —
+             * the VIC hardware cycles through its pre-programmed banks
+             * automatically.  We must NOT zero the bank count here or
+             * the MDMA engine will stop.
+             *
+             * Skip the bank count update entirely; the value programmed
+             * during vic_pipo_mdma_enable remains valid.
              */
-            if (vic_regs) {
-                u32 reg_val = readl(vic_regs + 0x300);
-
-                reg_val = (reg_val & 0xfff0ffff) | shifted_value;
-                writel(reg_val, vic_regs + 0x300);
-
-                pr_debug_ratelimited("vic_irq: VIC[0x300]=0x%x (idx updated)\n",
-                        reg_val);
-                pr_debug_ratelimited("vic_irq: ctrl=0x%x idx=%d match=%d shift=0x%x\n",
-                         reg_val, buffer_index, match_found, shifted_value);
-            }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
             {
                 u32 ctrl = 0, stride = 0, y0 = 0, uv0 = 0, uvsh0 = 0;
