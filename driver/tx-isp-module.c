@@ -7670,10 +7670,40 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     pr_info("Sensor: %s (subdev=%p)\n",
             (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)", sd);
 
-	    pr_info("Sensor subdev ops preserved: core=%p, video=%p, sensor=%p\n",
-	            sd->ops ? sd->ops->core : NULL,
-	            sd->ops ? sd->ops->video : NULL,
-	            sd->ops ? sd->ops->sensor : NULL);
+	/* Restore the delegated sensor wrapper used by VIN init / stream-on.
+	 * g_chip_ident has already completed by the time we enter registration, so
+	 * it is safe to preserve the real sensor ops and then install the wrapper.
+	 */
+	if (sd->ops == &sensor_subdev_ops) {
+		pr_info("*** SENSOR SUBDEV ALREADY WRAPPED - SKIPPING OPS REWRITE ***\n");
+		if (!stored_sensor_ops.sensor_sd)
+			stored_sensor_ops.sensor_sd = sd;
+	} else if (sd->ops) {
+		stored_sensor_ops.original_ops = sd->ops;
+		stored_sensor_ops.sensor_sd = sd;
+		pr_info("*** STORED ORIGINAL SENSOR OPS FOR DELEGATION ***\n");
+		pr_info("*** DEBUG: original_ops=%p ***\n", stored_sensor_ops.original_ops);
+		pr_info("*** DEBUG: original_ops->core=%p ***\n", stored_sensor_ops.original_ops->core);
+		pr_info("*** DEBUG: original_ops->video=%p ***\n", stored_sensor_ops.original_ops->video);
+		pr_info("*** DEBUG: original_ops->sensor=%p ***\n", stored_sensor_ops.original_ops->sensor);
+		if (stored_sensor_ops.original_ops->sensor) {
+			pr_info("*** DEBUG: original_ops->sensor->ioctl=%p ***\n",
+				stored_sensor_ops.original_ops->sensor->ioctl);
+		}
+	}
+
+	if (sd->ops != &sensor_subdev_ops) {
+		pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
+		sd->ops = &sensor_subdev_ops;
+	}
+	pr_info("Sensor subdev ops setup: core=%p, video=%p, s_stream=%p\n",
+		sd->ops->core, sd->ops->video,
+		sd->ops->video ? sd->ops->video->s_stream : NULL);
+
+	pr_info("Sensor subdev ops active: core=%p, video=%p, sensor=%p\n",
+		sd->ops ? sd->ops->core : NULL,
+		sd->ops ? sd->ops->video : NULL,
+		sd->ops ? sd->ops->sensor : NULL);
 
     /* *** CRITICAL FIX: IMMEDIATELY CONNECT SENSOR TO ISP DEVICE *** */
     if (ourISPdev) {

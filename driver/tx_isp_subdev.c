@@ -143,23 +143,47 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
  */
 static void *sd_event_callback(struct tx_isp_subdev *sd)
 {
-    if (!sd || !sd->dev_priv)
+    u32 i;
+
+    if (!sd)
         return NULL;
+
     /* VIC subdev stores vic_dev in dev_priv; vic_dev has event_callback_struct */
     if (ourISPdev && ourISPdev->vic_dev &&
         sd == &ourISPdev->vic_dev->sd) {
         return ourISPdev->vic_dev->event_callback_struct;
     }
+
+    if (ourISPdev) {
+        for (i = 0; i < ISP_MAX_CHAN; i++) {
+            if (sd == &ourISPdev->channels[i].subdev)
+                return ourISPdev->channels[i].event_hdlr;
+        }
+    }
+
     return NULL;
 }
 
 static void sd_set_event_callback(struct tx_isp_subdev *sd, void *cb)
 {
+    u32 i;
+
     if (!sd)
         return;
+
     if (ourISPdev && ourISPdev->vic_dev &&
         sd == &ourISPdev->vic_dev->sd) {
         ourISPdev->vic_dev->event_callback_struct = cb;
+        return;
+    }
+
+    if (ourISPdev) {
+        for (i = 0; i < ISP_MAX_CHAN; i++) {
+            if (sd == &ourISPdev->channels[i].subdev) {
+                ourISPdev->channels[i].event_hdlr = cb;
+                return;
+            }
+        }
     }
 }
 
