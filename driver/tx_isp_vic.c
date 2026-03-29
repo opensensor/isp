@@ -545,12 +545,6 @@ static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
 static int vic_enabled = 0;
 
-/* Track whether MDMA auto-enable has fired for the current streaming session.
- * Must be reset when streaming stops so that the next stream-on cycle
- * re-triggers MDMA enable.  Module-level so it can be cleared from both
- * ispvic_frame_channel_s_stream (streamoff) and clearbuf paths. */
-static int mdma_auto_enabled = 0;
-
 /* NOTE: deferred_vic_run removed — OEM issues VIC RUN immediately in
  * tx_isp_vic_start.  MDMA enable is a separate, independent step. */
 
@@ -2490,19 +2484,21 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
         vic_dev->stream_state = 0;
         vic_dev->streaming = 0;
-        /* Reset flags so next stream-on cycle re-triggers properly */
-        mdma_auto_enabled = 0;
-    } else {
+	    } else {
+	        u32 active_banks;
+
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
-	        /* Ensure at least 5 active banks for OEM-compatible PIPO rotation */
-	        if (vic_dev->active_buffer_count < 5)
-	            vic_dev->active_buffer_count = 5;
-		        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
+	        active_banks = vic_dev->active_buffer_count;
+	        if (active_banks > 5)
+	            active_banks = 5;
+	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
 	         * No format bits in [2:0]. The OEM uses 0x80000020 unconditionally.
-	         * Offset 0x218 in the OEM struct is the bank count. */
+	         * Offset 0x218 in the OEM struct is the number of programmed banks,
+	         * not an unconditional 5-bank default.
+	         */
 	        {
-	            u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
+	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
@@ -2961,7 +2957,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	retry_qbuf:
 	private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
 
-	if (list_empty(&vic_dev->free_head)) {
+	if (list_empty(&vic_dev->free_head) && list_empty(&vic_dev->done_head) &&
+	    list_empty(&vic_dev->queue_head)) {
 		private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 		if (!attempted_bootstrap) {
 			attempted_bootstrap = true;
@@ -2969,15 +2966,21 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 			tx_isp_subdev_pipo(sd, raw_pipe);
 			goto retry_qbuf;
 		}
-		pr_info("ispvic_frame_channel_qbuf: bank no free\n");
-		return 0;
 	}
 
-	if (incoming)
+	if (incoming) {
 		list_add_tail(&incoming->list, &vic_dev->queue_head);
+		incoming = NULL;
+	}
 
 	if (list_empty(&vic_dev->queue_head)) {
 		pr_info("ispvic_frame_channel_qbuf: qbuffer null\n");
+		private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+		return 0;
+	}
+
+	if (list_empty(&vic_dev->free_head)) {
+		pr_info("ispvic_frame_channel_qbuf: bank no free\n");
 		private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 		return 0;
 	}
@@ -3013,26 +3016,6 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);
-
-	/* Auto-enable MDMA once enough banks are filled.
-	 * The 0x3000003 STREAMON event doesn't fire in our pipeline,
-	 * so trigger MDMA enable here after 3 banks have valid addresses.
-	 * ispvic_frame_channel_s_stream has an idempotency guard
-	 * (stream_state check) so subsequent calls are no-ops.
-	 */
-	/* Auto-enable MDMA once enough banks are filled.
-	 * Use the module-level mdma_auto_enabled flag (reset on streamoff)
-	 * since vic_dev->stream_state may be corrupted by vic_raw_state_set
-	 * writing to OEM offset 0x128.
-	 */
-	if (vic_dev->active_buffer_count >= 3 && !mdma_auto_enabled) {
-		pr_info("*** VIC QBUF: auto-enabling MDMA (active=%u) ***\n",
-			vic_dev->active_buffer_count);
-		mdma_auto_enabled = 1;
-		ispvic_frame_channel_s_stream(vic_dev, 1);
-		/* VIC RUN was already issued by tx_isp_vic_start (OEM-correct).
-		 * No deferred VIC RUN needed. */
-	}
 
 	return 0;
 }
@@ -3095,8 +3078,6 @@ static int ispvic_frame_channel_clearbuf(void)
         }
         wmb();
     }
-    /* Reset flags so next streaming session re-triggers */
-    mdma_auto_enabled = 0;
     pr_info("ispvic_frame_channel_clearbuf: drained lists, cleared slots, mdma reset\n");
     return 0;
 }

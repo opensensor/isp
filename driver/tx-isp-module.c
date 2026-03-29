@@ -2846,20 +2846,12 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
 
         /* OEM HLIL: if (($v1_10 & 1) != 0) → MDMA ch0 done */
-        if ((v1_10 & 1) != 0) {
-            /* The complex vic_mdma_irq_function (tx-isp-module.c) requires
-             * fully initialized buffer queues that userspace hasn't set up.
-             * Use the simple complete() path from tx_isp_vic.c instead —
-             * this is what the green-stream commit (5df077b7) used.
-             */
-            vic_dev->frame_count++;
-            complete(&vic_dev->frame_complete);
-        }
+        if ((v1_10 & 1) != 0)
+            vic_mdma_irq_function(vic_dev, 0);
 
         /* OEM HLIL: if (($v1_10 & 2) != 0) → MDMA ch1 done */
-        if ((v1_10 & 2) != 0) {
-            complete(&vic_dev->frame_complete);
-        }
+        if ((v1_10 & 2) != 0)
+            vic_mdma_irq_function(vic_dev, 1);
 
         if ((v1_10 & 4) != 0) {
             pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
@@ -2901,12 +2893,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             wmb();
         }
 
-        /* Wake up frame channels for all interrupt types */
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[i]);
-            }
-        }
+        /* Do not fabricate frame completion from generic/error IRQs.
+         * Deliverable frames must come from a real frame-done/MDMA-retire path.
+         */
 
     } else {
         pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
@@ -6725,217 +6714,135 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* vic_mdma_irq_function - COMPLETE Binary Ninja exact implementation */
+/* vic_mdma_irq_function - live MDMA retirement/recycle path aligned with OEM
+ * list semantics used by tx_isp_vic.c:
+ *   queue_head = pending userspace buffers waiting for a free bank
+ *   free_head  = recyclable bank descriptors
+ *   done_head  = active/programmed bank descriptors
+ */
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
-    int s0_2, s0_3, s0_4, s0_5;
-    u32 hi_1, hi_2;
-    void *a2_8, *a2_9;
-    void *a0_16;
-    void *v0_2;
-    int a2_1;
-    u32 raw_pipe_1, raw_pipe_2;
-    int v0_5, v0_8;
-    void *v0_7, *v0_11, *v0_15;
-    void *a1_2;
-    int s2_2, s5_1;
-    void **a0_7;
-    void *v1_1;
+    if (!vic_dev)
+        return;
 
-    if (!vic_dev) {
+    if (!vic_dev->processing) {
+        int frame_words;
+
+        frame_words = vic_dev->width * vic_dev->height * 2;
+        pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
+
+        if (channel == 0 && vic_mdma_ch0_sub_get_num != 0 && vic_dev->vic_regs) {
+            u32 next_bank = (vic_mdma_ch0_set_buff_index + 1) % 5;
+            u32 buffer_reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;
+            u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
+            u32 next_addr = frame_words + readl(vic_dev->vic_regs + buffer_reg_offset);
+
+            vic_mdma_ch0_set_buff_index = next_bank;
+            writel(next_addr, vic_dev->vic_regs + new_buffer_reg_offset);
+            wmb();
+
+            vic_mdma_ch0_sub_get_num -= 1;
+            if (vic_mdma_ch0_sub_get_num == 7) {
+                u32 reg_300 = readl(vic_dev->vic_regs + 0x300);
+                reg_300 = (reg_300 & 0xfff0ffff) | 0x70000;
+                writel(reg_300, vic_dev->vic_regs + 0x300);
+                wmb();
+            }
+        } else if (channel == 1 && vic_mdma_ch1_sub_get_num != 0 && vic_dev->vic_regs) {
+            u32 next_bank = (vic_mdma_ch1_set_buff_index + 1) % 5;
+            u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
+            u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
+            u32 next_addr = frame_words + readl(vic_dev->vic_regs + buffer_reg_offset);
+
+            vic_mdma_ch1_set_buff_index = next_bank;
+            writel(next_addr, vic_dev->vic_regs + new_buffer_reg_offset);
+            wmb();
+
+            vic_mdma_ch1_sub_get_num -= 1;
+        }
+
+        if (vic_mdma_ch1_sub_get_num == 0)
+            complete(&vic_dev->frame_complete);
+
         return;
     }
 
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
-    if (vic_dev->streaming == 0) {
-        /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
-        s0_2 = vic_dev->width * vic_dev->height;
+    if (vic_dev->stream_state != 0) {
+        struct vic_buffer_entry *active_bank = NULL;
+        struct vic_buffer_entry *queued_buffer = NULL;
+        struct vic_buffer_entry *recycled_bank = NULL;
+        unsigned long irq_flags;
+        void __iomem *vic_base = vic_dev->vic_regs;
+        u32 current_dma_addr;
+        u32 recycled_reg_offset = 0;
+        u32 dma_ctrl = 0;
+        int active_limit;
+        bool matched_current = false;
 
-        pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
-
-        /* Binary Ninja: int32_t $s0_3 = $s0_2 << 1 */
-        s0_3 = s0_2 << 1;
-
-        if (channel != 0) {
-            if (channel != 1) {
-                goto label_12898;
-            }
-
-            /* Channel 1 processing */
-            if (vic_mdma_ch1_sub_get_num != 0) {
-                /* Binary Ninja: uint32_t $hi_2 = (vic_mdma_ch1_set_buff_index_1 + 1) u% 5 */
-                hi_2 = (vic_mdma_ch1_set_buff_index + 1) % 5;
-
-                /* Binary Ninja: void* $a2_9 = *(arg1 + 0xb8) */
-                a2_9 = vic_dev->vic_regs;
-
-                if (a2_9) {
-                    /* Binary Ninja: int32_t $s0_5 = $s0_3 + *($a2_9 + ((vic_mdma_ch1_set_buff_index_1 + 0xc6) << 2)) */
-                    u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
-                    s0_5 = s0_3 + readl((void __iomem*)a2_9 + buffer_reg_offset);
-
-                    /* Binary Ninja: vic_mdma_ch1_set_buff_index = $hi_2 */
-                    vic_mdma_ch1_set_buff_index = hi_2;
-
-                    /* Binary Ninja: *($a2_9 + (($hi_2 + 0xc6) << 2)) = $s0_5 */
-                    u32 new_buffer_reg_offset = (hi_2 + 0xc6) << 2;
-                    writel(s0_5, (void __iomem*)a2_9 + new_buffer_reg_offset);
-                    wmb();
-
-                    /* Binary Ninja: vic_mdma_ch1_sub_get_num -= 1 */
-                    vic_mdma_ch1_sub_get_num -= 1;
-                }
-            }
-
-label_12898:
-            /* Continue processing */
-
-        } else if (vic_mdma_ch0_sub_get_num != 0) {
-            /* Channel 0 processing */
-            /* Binary Ninja: uint32_t $hi_1 = (vic_mdma_ch0_set_buff_index_1 + 1) u% 5 */
-            hi_1 = (vic_mdma_ch0_set_buff_index + 1) % 5;
-
-            /* Binary Ninja: void* $a2_8 = *(arg1 + 0xb8) */
-            a2_8 = vic_dev->vic_regs;
-
-            if (a2_8) {
-                /* Binary Ninja: int32_t $s0_4 = $s0_3 + *($a2_8 + ((vic_mdma_ch0_set_buff_index_1 + 0xc6) << 2)) */
-                u32 buffer_reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;
-                s0_4 = s0_3 + readl((void __iomem*)a2_8 + buffer_reg_offset);
-
-                /* Binary Ninja: vic_mdma_ch0_set_buff_index = $hi_1 */
-                vic_mdma_ch0_set_buff_index = hi_1;
-
-                /* Binary Ninja: *($a2_8 + (($hi_1 + 0xc6) << 2)) = $s0_4 */
-                u32 new_buffer_reg_offset = (hi_1 + 0xc6) << 2;
-                writel(s0_4, (void __iomem*)a2_8 + new_buffer_reg_offset);
-                wmb();
-
-                /* Binary Ninja: uint32_t $v0_28 = vic_mdma_ch0_sub_get_num - 1 */
-                vic_mdma_ch0_sub_get_num = vic_mdma_ch0_sub_get_num - 1;
-
-                /* Binary Ninja: if ($v0_28 != 7) goto label_12898 */
-                if (vic_mdma_ch0_sub_get_num != 7) {
-                    goto label_12898;
-                }
-
-                /* Binary Ninja: void* $a0_16 = *(arg1 + 0xb8) */
-                a0_16 = vic_dev->vic_regs;
-                if (a0_16) {
-                    /* Binary Ninja: vic_mdma_ch1_sub_get_num_1 = (*($a0_16 + 0x300) & 0xfff0ffff) | 0x70000 */
-                    u32 reg_300 = readl((void __iomem*)a0_16 + 0x300);
-                    reg_300 = (reg_300 & 0xfff0ffff) | 0x70000;
-                    writel(reg_300, (void __iomem*)a0_16 + 0x300);
-                    wmb();
-                }
-            }
-        }
-
-        /* Binary Ninja: if (vic_mdma_ch1_sub_get_num_1 == 0) return private_complete(arg1 + 0x148) */
-        if (vic_mdma_ch1_sub_get_num == 0) {
-            complete(&vic_dev->frame_complete);
+        if (!vic_base)
             return;
-        }
 
-    } else {
-        /* Binary Ninja: Complex buffer management for streaming mode */
-        if (vic_dev->streaming != 0) {
-            /* Binary Ninja: int32_t $s5_1 = *(*(arg1 + 0xb8) + 0x380) */
-            s5_1 = vic_dev->vic_regs ? readl(vic_dev->vic_regs + 0x380) : 0;
+        current_dma_addr = readl(vic_base + 0x380);
 
-            /* Binary Ninja: int32_t* $v0_2 = pop_buffer_fifo(arg1 + 0x204) */
-            struct vic_buffer_entry *buffer_entry = pop_buffer_fifo(&vic_dev->queue_head);
+        spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
 
-            /* Binary Ninja: int32_t $a2_1 = *(arg1 + 0x218) */
-            a2_1 = vic_dev->frame_count;  /* Use frame_count as busy buffer count */
+        active_limit = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
+        if (list_empty(&vic_dev->done_head)) {
+            pr_info("busy_buf null; busy_buf_count= %u\n", vic_dev->active_buffer_count);
+        } else {
+            while (!list_empty(&vic_dev->done_head) && active_limit-- > 0) {
+                active_bank = list_first_entry(&vic_dev->done_head,
+                                               struct vic_buffer_entry, list);
+                list_del(&active_bank->list);
+                if (vic_dev->active_buffer_count > 0)
+                    vic_dev->active_buffer_count--;
+                list_add_tail(&active_bank->list, &vic_dev->free_head);
 
-            if (buffer_entry == NULL) {
-                pr_info("busy_buf null; busy_buf_count= %d\n", a2_1);
-            } else {
-                /* Binary Ninja: *(arg1 + 0x218) = $a2_1 - 1 */
-                vic_dev->frame_count = a2_1 - 1;
-
-                /* Binary Ninja: (*(raw_pipe_1 + 4))(*(raw_pipe_1 + 0x14), $v0_2) */
-                /* This would call buffer completion callback */
-                pr_debug("vic_mdma_irq_function: Buffer completion callback\n");
-
-                /* Binary Ninja: Buffer list management */
-                /* Move buffer from busy to done list */
-                spin_lock(&vic_dev->buffer_lock);
-                list_add_tail(&buffer_entry->list, &vic_dev->done_head);
-                spin_unlock(&vic_dev->buffer_lock);
-
-                /* Binary Ninja: if ($v0_2[2] == $s5_1) */
-                if (buffer_entry->buffer_addr == s5_1) {
-                    /* Buffer address matches - processing complete */
-                    pr_debug("vic_mdma_irq_function: Buffer address match\n");
-                } else {
-                    /* Binary Ninja: Complex multi-buffer processing loop */
-                    s2_2 = 0;
-                    v0_5 = vic_dev->frame_count;
-
-                    while (true) {
-                        if (s2_2 == v0_5) {
-                            pr_err("function: %s ; vic dma addrrss error!!!\n", "vic_mdma_irq_function");
-                            if (vic_dev->vic_regs) {
-                                u32 dma_ctrl = readl(vic_dev->vic_regs + 0x300);
-                                pr_err("VIC_ADDR_DMA_CONTROL : 0x%x\n", dma_ctrl);
-                            }
-                            break;
-                        }
-
-                        /* Binary Ninja: Pop next buffer from FIFO */
-                        struct vic_buffer_entry *next_buffer = pop_buffer_fifo(&vic_dev->queue_head);
-                        v0_8 = vic_dev->frame_count;
-
-                        if (next_buffer == NULL) {
-                            pr_info("line = %d, i=%d ;num = %d;busy_buf_count %d\n", 0x29c, s2_2, v0_5, v0_8);
-                            s2_2 += 1;
-                        } else {
-                            vic_dev->frame_count = v0_8 - 1;
-
-                            pr_info("line : %d; bank_addr:0x%x; addr:0x%x\n", 0x296,
-                                   next_buffer->buffer_addr, next_buffer->buffer_addr);
-
-                            /* Binary Ninja: Buffer completion processing */
-                            spin_lock(&vic_dev->buffer_lock);
-                            list_add_tail(&next_buffer->list, &vic_dev->done_head);
-                            spin_unlock(&vic_dev->buffer_lock);
-
-                            /* Binary Ninja: if ($v0_7[2] == $s5_1) break */
-                            if (next_buffer->buffer_addr == s5_1) {
-                                break;
-                            }
-
-                            s2_2 += 1;
-                        }
-                    }
-
-                    /* Binary Ninja: Final buffer queue management */
-                    if (!list_empty(&vic_dev->done_head)) {
-                        struct vic_buffer_entry *done_buffer = pop_buffer_fifo(&vic_dev->done_head);
-                        struct vic_buffer_entry *free_buffer = pop_buffer_fifo(&vic_dev->free_head);
-
-                        if (done_buffer && free_buffer) {
-                            /* Binary Ninja: Buffer recycling logic */
-                            free_buffer->buffer_addr = done_buffer->buffer_addr;
-
-                            spin_lock(&vic_dev->buffer_lock);
-                            list_add_tail(&free_buffer->list, &vic_dev->queue_head);
-                            vic_dev->frame_count += 1;
-                            spin_unlock(&vic_dev->buffer_lock);
-
-                            /* Binary Ninja: Update VIC buffer register */
-                            if (vic_dev->vic_regs) {
-                                u32 buffer_reg_offset = (free_buffer->buffer_index + 0xc6) << 2;
-                                writel(free_buffer->buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
-                                wmb();
-                            }
-                        }
-                    }
+                if (active_bank->buffer_addr == current_dma_addr) {
+                    matched_current = true;
+                    break;
                 }
+
+                pr_info("line : %d; bank_addr:0x%x; addr:0x%x\n", 0x296,
+                        active_bank->buffer_addr, current_dma_addr);
             }
         }
+
+        if (!list_empty(&vic_dev->queue_head) && !list_empty(&vic_dev->free_head)) {
+            queued_buffer = list_first_entry(&vic_dev->queue_head,
+                                             struct vic_buffer_entry, list);
+            list_del(&queued_buffer->list);
+
+            recycled_bank = list_first_entry(&vic_dev->free_head,
+                                             struct vic_buffer_entry, list);
+            list_del(&recycled_bank->list);
+
+            recycled_bank->buffer_addr = queued_buffer->buffer_addr;
+            recycled_bank->channel = queued_buffer->channel;
+            recycled_bank->buffer_length = queued_buffer->buffer_length;
+            recycled_reg_offset = (recycled_bank->buffer_index + 0xc6) << 2;
+
+            list_add_tail(&recycled_bank->list, &vic_dev->done_head);
+            vic_dev->active_buffer_count++;
+        }
+
+        spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+
+        if (!matched_current && active_bank && current_dma_addr != 0) {
+            dma_ctrl = readl(vic_base + 0x300);
+            pr_err("function: %s ; vic dma addrrss error!!!\n", "vic_mdma_irq_function");
+            pr_err("VIC_ADDR_DMA_CONTROL : 0x%x\n", dma_ctrl);
+        }
+
+        if (recycled_bank && queued_buffer) {
+            writel(recycled_bank->buffer_addr, vic_base + recycled_reg_offset);
+            wmb();
+        }
+
+        if (ourISPdev)
+            tx_isp_hardware_frame_done_handler(ourISPdev, channel);
+
+        kfree(queued_buffer);
     }
 
     pr_debug("vic_mdma_irq_function: Channel %d MDMA interrupt processing complete\n", channel);
@@ -7471,76 +7378,37 @@ void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
         pr_debug("Channel %d: Frame completion delivered\n", fcd->channel_num);
 }
 
-/* Public function to wake up all streaming frame channels - for tuning system */
+/* Public function to wake up all streaming frame channels.
+ * Do not synthesize completions here; only poke waiters so control paths can
+ * re-check state without manufacturing a deliverable frame.
+ */
 void tx_isp_wakeup_frame_channels(void)
 {
     int i;
 
-    pr_debug("*** Waking up all streaming frame channels ***\n");
+    pr_debug("*** Poking streaming frame channels without synthetic completion ***\n");
 
     for (i = 0; i < num_channels; i++) {
         struct frame_channel_device *fcd = &frame_channels[i];
         if (fcd && fcd->state.streaming) {
-            frame_channel_wakeup_waiters(fcd);
-            pr_debug("*** Woke up channel %d for frame processing ***\n", i);
+            wake_up_interruptible(&fcd->state.frame_wait);
+            pr_debug("*** Poked channel %d waiters ***\n", i);
         }
     }
 }
 
-/* Simulate frame completion for testing - in real hardware this comes from interrupts */
+/* Synthetic frame completion is intentionally disabled.
+ * Userspace-visible completion must track real hardware retirement.
+ */
 static void simulate_frame_completion(void)
 {
-    struct tx_isp_sensor *sensor = NULL;
-    int i;
-
-    /* Check if we have an active sensor that should be generating frames */
-    if (ourISPdev && ourISPdev->sensor) {
-        sensor = ourISPdev->sensor;
-        if (sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
-            /* Sensor is running - generate proper frame data */
-            pr_debug("Generating frame from active sensor %s\n", sensor->info.name);
-        }
-    }
-
-    /* CRITICAL: Increment ISP frame counter for video drop detection */
-    if (ourISPdev) {
-        ourISPdev->frame_count++;
-        pr_debug("Simulated frame: frame_count=%u\n", ourISPdev->frame_count);
-    }
-
-    /* Trigger frame completion on all active channels */
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].state.streaming) {
-            frame_channel_wakeup_waiters(&frame_channels[i]);
-        }
-    }
+    pr_debug("simulate_frame_completion: disabled\n");
 }
 
 /* VIC frame generation work function */
 static void vic_frame_work_function(struct work_struct *work)
 {
-    struct tx_isp_vic_device *vic_dev;
-
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        return;
-    }
-
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-    // Simple frame generation without recursion
-    if (vic_dev && vic_dev->state == 2 && vic_dev->streaming) {
-        int i;
-
-        // Wake up waiting channels
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[i]);
-            }
-        }
-
-        // Schedule next frame
-        schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
-    }
+    pr_debug("vic_frame_work_function: synthetic frame generation disabled\n");
 }
 
 
