@@ -50,6 +50,7 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
+struct tx_isp_dev *tx_isp_get_device(void);
 int tisp_init(void *sensor_info, char *param_name);
 void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 int tisp_deinit(void);
@@ -60,6 +61,116 @@ static u32 tisp_channel_attr_word(const uint8_t *attr_bytes, size_t word_index);
 static u32 tisp_channel_sensor_width(struct tx_isp_dev *isp_dev);
 static u32 tisp_channel_sensor_height(struct tx_isp_dev *isp_dev);
 static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3);
+
+static struct frame_image_format frame_channel_format_store[ISP_MAX_CHAN];
+
+static bool ispcore_valid_channel_id(int channel_id)
+{
+    return channel_id >= 0 && channel_id < ISP_MAX_CHAN;
+}
+
+static void ispcore_frame_format_to_attr_words(const struct frame_image_format *fmt,
+                                               u32 attr_words[0x34 / sizeof(u32)])
+{
+    memset(attr_words, 0, 0x34);
+    if (!fmt)
+        return;
+
+    attr_words[0] = fmt->scaler_enable ? 1 : 0;
+    attr_words[1] = fmt->scaler_out_width;
+    attr_words[2] = fmt->scaler_out_height;
+    attr_words[3] = fmt->crop_enable ? 1 : 0;
+    attr_words[4] = fmt->crop_left;
+    attr_words[5] = fmt->crop_top;
+    attr_words[6] = fmt->crop_width;
+    attr_words[7] = fmt->crop_height;
+    attr_words[8] = fmt->fcrop_enable ? 1 : 0;
+    attr_words[9] = fmt->fcrop_left;
+    attr_words[10] = fmt->fcrop_top;
+    attr_words[11] = fmt->fcrop_width;
+    attr_words[12] = fmt->fcrop_height;
+}
+
+static void ispcore_store_channel_format(int channel_id,
+                                         const struct frame_image_format *fmt)
+{
+    struct tx_isp_dev *isp_dev;
+    struct isp_channel *channel;
+
+    if (!fmt || !ispcore_valid_channel_id(channel_id))
+        return;
+
+    frame_channel_format_store[channel_id] = *fmt;
+
+    isp_dev = tx_isp_get_device();
+    if (!isp_dev)
+        return;
+
+    channel = &isp_dev->channels[channel_id];
+    channel->width = fmt->pix.width;
+    channel->height = fmt->pix.height;
+    channel->fmt = fmt->pix.pixelformat;
+    if (fmt->pix.bytesperline)
+        channel->stride = fmt->pix.bytesperline;
+    if (fmt->pix.sizeimage)
+        channel->required_size = fmt->pix.sizeimage;
+
+    channel->attr.enable = 1;
+    channel->attr.width = fmt->pix.width;
+    channel->attr.height = fmt->pix.height;
+    channel->attr.format = fmt->pix.pixelformat;
+    channel->attr.crop_enable = fmt->crop_enable ? 1 : 0;
+    channel->attr.crop.x = fmt->crop_left;
+    channel->attr.crop.y = fmt->crop_top;
+    channel->attr.crop.width = fmt->crop_width;
+    channel->attr.crop.height = fmt->crop_height;
+    channel->attr.scaler_enable = fmt->scaler_enable ? 1 : 0;
+    channel->attr.scaler_outwidth = fmt->scaler_out_width;
+    channel->attr.scaler_outheight = fmt->scaler_out_height;
+    channel->attr.picwidth = fmt->pix.width;
+    channel->attr.picheight = fmt->pix.height;
+
+    if (channel_id < ARRAY_SIZE(frame_channels)) {
+        frame_channels[channel_id].state.width = fmt->pix.width;
+        frame_channels[channel_id].state.height = fmt->pix.height;
+        frame_channels[channel_id].state.format = fmt->pix.pixelformat;
+        if (fmt->pix.bytesperline)
+            frame_channels[channel_id].state.bytesperline = fmt->pix.bytesperline;
+        if (fmt->pix.sizeimage)
+            frame_channels[channel_id].state.sizeimage = fmt->pix.sizeimage;
+        frame_channels[channel_id].field = fmt->pix.field;
+    }
+}
+
+static void ispcore_get_channel_format(int channel_id, struct frame_image_format *fmt)
+{
+    struct tx_isp_dev *isp_dev;
+
+    if (!fmt)
+        return;
+
+    memset(fmt, 0, sizeof(*fmt));
+    fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    if (!ispcore_valid_channel_id(channel_id))
+        return;
+
+    if (frame_channel_format_store[channel_id].type != 0) {
+        *fmt = frame_channel_format_store[channel_id];
+        return;
+    }
+
+    isp_dev = tx_isp_get_device();
+    if (!isp_dev)
+        return;
+
+    fmt->pix.width = isp_dev->channels[channel_id].width;
+    fmt->pix.height = isp_dev->channels[channel_id].height;
+    fmt->pix.pixelformat = isp_dev->channels[channel_id].fmt;
+    fmt->pix.bytesperline = isp_dev->channels[channel_id].stride;
+    fmt->pix.sizeimage = isp_dev->channels[channel_id].required_size;
+    fmt->pix.field = V4L2_FIELD_NONE;
+}
 
 extern struct tx_isp_fs_device *dump_fsd;
 
@@ -3141,12 +3252,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
  */
 static int frame_channel_vidioc_set_fmt(void *channel_dev, void __user *arg)
 {
-    char format_buf[0x70]; /* 112 bytes format buffer */
+    struct frame_channel_device *fcd = channel_dev;
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_subdev *remote_sd;
+    struct frame_image_format format;
+    int event_ret;
     int ret;
     uint32_t format_type;
 
-    if (!channel_dev) {
+    if (!fcd) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Invalid channel device\n");
+        return -EINVAL;
+    }
+
+    if (fcd->magic != FRAME_CHANNEL_MAGIC || !ispcore_valid_channel_id(fcd->channel_num)) {
+        ISP_ERROR("frame_channel_vidioc_set_fmt: Invalid frame channel slot %d\n",
+                  fcd->channel_num);
         return -EINVAL;
     }
 
@@ -3155,15 +3276,17 @@ static int frame_channel_vidioc_set_fmt(void *channel_dev, void __user *arg)
         return -EINVAL;
     }
 
+    memset(&format, 0, sizeof(format));
+
     /* Binary Ninja: private_copy_from_user(&var_80, arg2, 0x70) */
-    ret = copy_from_user(format_buf, arg, 0x70);
+    ret = copy_from_user(&format, arg, sizeof(format));
     if (ret != 0) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to copy from user\n");
         return -EFAULT;
     }
 
     /* Extract format type from buffer - this is the first field in V4L2 format structure */
-    format_type = *(uint32_t *)&format_buf[0x00];    /* var_80 from Binary Ninja */
+    format_type = format.type;
 
     ISP_INFO("frame_channel_vidioc_set_fmt: format_type=%d (V4L2_BUF_TYPE_*)\n", format_type);
 
@@ -3174,27 +3297,33 @@ static int frame_channel_vidioc_set_fmt(void *channel_dev, void __user *arg)
         /* Don't fail - just log and continue as the Binary Ninja reference might be more permissive */
     }
 
-    /* Binary Ninja: tx_isp_send_event_to_remote(*(arg1 + 0x2bc), 0x3000002, &var_80) */
-    /* For now, simulate successful format setting - in full implementation this would
-     * send the SET_FORMAT event to the ISP core */
-    ISP_INFO("frame_channel_vidioc_set_fmt: Setting video format (simulated)\n");
-    ret = 0; /* Simulate success */
+    isp_dev = tx_isp_get_device();
+    if (!isp_dev || !ispcore_valid_channel_id(fcd->channel_num)) {
+        ISP_ERROR("frame_channel_vidioc_set_fmt: ISP device/channel unavailable\n");
+        return -ENODEV;
+    }
 
-    if (ret != 0 && ret != 0xfffffdfd) {
-        ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to set format: %d\n", ret);
-        return ret;
+    remote_sd = &isp_dev->channels[fcd->channel_num].subdev;
+
+    /* Binary Ninja: tx_isp_send_event_to_remote(*(arg1 + 0x2bc), 0x3000002, &var_80) */
+    ISP_INFO("frame_channel_vidioc_set_fmt: Forwarding set format to core channel %d\n",
+             fcd->channel_num);
+    event_ret = tx_isp_send_event_to_remote(remote_sd, 0x3000002, &format);
+
+    if (event_ret != 0 && event_ret != 0xfffffdfd) {
+        ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to set format: %d\n", event_ret);
+        return event_ret;
     }
 
     /* Binary Ninja: private_copy_to_user(arg2, &var_80, 0x70) */
-    ret = copy_to_user(arg, format_buf, 0x70);
+    ret = copy_to_user(arg, &format, sizeof(format));
     if (ret != 0) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to copy to user\n");
         return -EFAULT;
     }
 
-    /* Binary Ninja: memcpy(arg1 + 0x23c, &var_80, 0x70) - Store format in channel */
-    /* For now, just log this step - in full implementation would store in channel structure */
-    ISP_INFO("frame_channel_vidioc_set_fmt: Format stored in channel (simulated)\n");
+    if (event_ret == 0xfffffdfd)
+        ispcore_store_channel_format(fcd->channel_num, &format);
 
     ISP_INFO("frame_channel_vidioc_set_fmt: SUCCESS - Video format set\n");
     return 0;
@@ -3206,25 +3335,26 @@ static int frame_channel_vidioc_set_fmt(void *channel_dev, void __user *arg)
  */
 static int frame_channel_vidioc_get_fmt(void *channel_dev, void __user *arg)
 {
-    char format_buf[0x70]; /* 112 bytes format buffer */
+    struct frame_channel_device *fcd = channel_dev;
+    struct frame_image_format format;
     int ret;
 
-    if (!channel_dev || !arg) {
+    if (!fcd || !arg) {
         return -EINVAL;
     }
 
-    /* Return default format for now */
-    memset(format_buf, 0, 0x70);
-    *(uint32_t *)&format_buf[0x00] = 1; /* Format type */
-    *(uint32_t *)&format_buf[0x04] = 4; /* Pixel format */
-    *(uint32_t *)&format_buf[0x08] = 8; /* Data size */
+    if (fcd->magic != FRAME_CHANNEL_MAGIC || !ispcore_valid_channel_id(fcd->channel_num))
+        return -EINVAL;
 
-    ret = copy_to_user(arg, format_buf, 0x70);
+    ispcore_get_channel_format(fcd->channel_num, &format);
+
+    ret = copy_to_user(arg, &format, sizeof(format));
     if (ret != 0) {
         return -EFAULT;
     }
 
-    ISP_INFO("frame_channel_vidioc_get_fmt: SUCCESS - Returned default format\n");
+    ISP_INFO("frame_channel_vidioc_get_fmt: SUCCESS - Returned channel %d format\n",
+             fcd->channel_num);
     return 0;
 }
 
@@ -3662,115 +3792,52 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
         switch (arg2) {
         case 0x3000001: {
             /* Get format */
-            void* a1_3 = dispatch->event_priv;
             result = 0;
 
-            ISP_INFO("ispcore_pad_event_handle: case 0x3000001 (get format), a1_3=%p, arg3=%p", a1_3, arg3);
+            ISP_INFO("ispcore_pad_event_handle: case 0x3000001 (get format), ch=%u arg3=%p",
+                     dispatch->channel_id, arg3);
 
-            if (arg3 != 0 && a1_3 != 0) {
-                void* v0_38 = (void*)(*((uint32_t*)a1_3 + 0x1f)); /* a1_3 + 0x7c */
-                if (!ispcore_bypass_enabled(isp_dev)) { /* *(*(a1_3 + 0x7c) + 0x15c) != 1 */
-                    memcpy(arg3, a1_3, 0x70);
-                    ISP_INFO("ispcore_pad_event_handle: copied format data (0x70 bytes)");
-                    return 0;
-                }
+            if (!arg3 || !ispcore_valid_channel_id(dispatch->channel_id))
+                break;
 
-                *((uint32_t*)arg3 + 1) = *((uint32_t*)a1_3 + 1);        /* *(arg3 + 4) = *(a1_3 + 4) */
-                *((uint32_t*)arg3 + 2) = *((uint32_t*)a1_3 + 2);        /* *(arg3 + 8) = *(a1_3 + 8) */
-                __builtin_strncpy((char*)arg3 + 0xc, "RG12", 4);
-
-                int32_t v0_6 = *((uint32_t*)a1_3 + 1);
-                int32_t v1_2 = *((uint32_t*)a1_3 + 2);
-                *((uint32_t*)arg3 + 0xd) = 0;    /* *(arg3 + 0x34) = 0 */
-                *((uint32_t*)arg3 + 0x12) = 0;   /* *(arg3 + 0x48) = 0 */
-                *((uint32_t*)arg3 + 6) = (v0_6 * v1_2) << 1; /* *(arg3 + 0x18) = (v0_6 * v1_2) << 1 */
-
-                ISP_INFO("ispcore_pad_event_handle: format configured %dx%d, size=%d", v0_6, v1_2, (v0_6 * v1_2) << 1);
-            }
-            break;
+            ispcore_get_channel_format(dispatch->channel_id, arg3);
+            return 0;
         }
 
         case 0x3000002: {
+            struct frame_image_format *format = arg3;
+            struct isp_channel *channel = dispatch->event_priv;
+            u32 attr_words[0x34 / sizeof(u32)];
+
             /* Set format */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000002 (set format)");
             result = 0xffffffea; /* -EINVAL */
 
-            if (arg1 != 0 && (uintptr_t)arg1 < 0xfffff001) {
-                void* v0_10 = (void*)*arg1;
+            if (!format || !channel || !ispcore_valid_channel_id(dispatch->channel_id))
+                break;
 
-                if (v0_10 != 0) {
-                    if ((uintptr_t)v0_10 >= 0xfffff001)
-                        return 0xffffffea;
+            ispcore_frame_format_to_attr_words(format, attr_words);
 
-                    void* s4_1 = (void*)(*((uint32_t*)v0_10 + 0x35)); /* *(v0_10 + 0xd4) */
-
-                    if (s4_1 != 0 && (uintptr_t)s4_1 < 0xfffff001) {
-                        void* s3_1 = dispatch->event_priv;
-                        void* s2 = (char*)v0_10 + 0x38;
-
-                        if (ispcore_bypass_enabled(isp_dev)) { /* *(s4_1 + 0x15c) == 1 */
-                            memset((char*)s4_1 + 0x1c0, 0, 0x18);
-                            *((void**)((char*)s4_1 + 0x1d4)) = arg1;
-                            *((void**)((char*)s4_1 + 0x1c4)) = ispcore_frame_channel_dqbuf;
-
-                            /* Complex loop for channel processing */
-                            void* a0_3 = *((void**)s2);
-                            while (true) {
-                                if (a0_3 != 0) {
-                                    void* v0_38 = *((void**)((char*)a0_3 + 0xc4));
-                                    if (v0_38 == 0) {
-                                        s2 = (char*)s2 + 4;
-                                    } else {
-                                        int32_t v0_39 = *((uint32_t*)v0_38 + 7); /* *(v0_38 + 0x1c) */
-                                        if (v0_39 == 0) {
-                                            s2 = (char*)s2 + 4;
-                                        } else {
-                                            /* Call function pointer */
-                                            int32_t v0_40 = 0; /* Would call v0_39() */
-                                            if (v0_40 == 0) {
-                                                s2 = (char*)s2 + 4;
-                                            } else {
-                                                if (v0_40 != 0xfffffdfd)
-                                                    return 0;
-                                                s2 = (char*)s2 + 4;
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    s2 = (char*)s2 + 4;
-                                }
-
-                                if ((char*)v0_10 + 0x78 == s2)
-                                    break;
-
-                                a0_3 = *((void**)s2);
-                            }
-
-                            ISP_INFO("ispcore_pad_event_handle: channel processing loop completed");
-                            return 0;
-                        }
-
-                        /* Format processing logic */
-                        ISP_INFO("ispcore_pad_event_handle: processing format configuration");
-
-                        /* Call tisp_channel_attr_set */
-                        uint32_t a0_25 = dispatch->channel_id;
-
-                        /* Prepare channel attributes structure */
-                        memset(&var_58, 0, 0x34);
-                        /* Complex attribute setup would go here */
-
-                        if (tisp_channel_attr_set(a0_25, &var_58) != 0) {
-                            isp_printf(2, "Err [VIC_INT] : dma syfifo ovf!!!\n");
-                            return 0;
-                        }
-
-                        memcpy(s3_1, arg3, 0x70);
-                        ISP_INFO("ispcore_pad_event_handle: format set successfully");
-                        return 0;
-                    }
-                }
+            if (format->fcrop_enable) {
+                tisp_s_fcrop_control(1,
+                                     format->fcrop_left,
+                                     format->fcrop_top,
+                                     format->fcrop_width,
+                                     format->fcrop_height);
+            } else {
+                data_b2e04 = 0;
             }
+
+            if (!ispcore_bypass_enabled(isp_dev) &&
+                tisp_channel_attr_set(dispatch->channel_id, attr_words) != 0) {
+                isp_printf(2, "Err [VIC_INT] : dma syfifo ovf!!!\n");
+                return 0;
+            }
+
+            ispcore_store_channel_format(dispatch->channel_id, format);
+            ISP_INFO("ispcore_pad_event_handle: format set successfully");
+            return 0;
+
             break;
         }
 
