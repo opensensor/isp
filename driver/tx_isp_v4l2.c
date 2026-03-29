@@ -47,6 +47,77 @@ static int num_v4l2_devices = 2; /* Default 2 channels like reference */
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
 
+static u32 tx_isp_v4l2_format_depth(u32 pixfmt)
+{
+    switch (pixfmt) {
+    case V4L2_PIX_FMT_NV12:
+    case V4L2_PIX_FMT_NV21:
+        return 12;
+    case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
+    case V4L2_PIX_FMT_RGB565:
+    case V4L2_PIX_FMT_SBGGR12:
+    case V4L2_PIX_FMT_SGBRG12:
+    case V4L2_PIX_FMT_SGRBG12:
+    case V4L2_PIX_FMT_SRGGB12:
+        return 16;
+    case V4L2_PIX_FMT_BGR24:
+        return 24;
+    case V4L2_PIX_FMT_YUV444:
+    case V4L2_PIX_FMT_BGR32:
+    case V4L2_PIX_FMT_RGB32:
+    case V4L2_PIX_FMT_RGB310:
+        return 32;
+    default:
+        return 0;
+    }
+}
+
+static void tx_isp_v4l2_normalize_frame_format(struct frame_image_format *format)
+{
+    u32 depth;
+
+    if (!format)
+        return;
+
+    if (format->type == 0)
+        format->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    format->pix.field = V4L2_FIELD_NONE;
+    if (!format->pix.colorspace)
+        format->pix.colorspace = V4L2_COLORSPACE_REC709;
+
+    depth = tx_isp_v4l2_format_depth(format->pix.pixelformat);
+    if (!depth || !format->pix.width || !format->pix.height)
+        return;
+
+    format->pix.bytesperline = (format->pix.width * depth) / 8;
+    switch (format->pix.pixelformat) {
+    case V4L2_PIX_FMT_NV12:
+    case V4L2_PIX_FMT_NV21:
+        format->pix.sizeimage = format->pix.bytesperline * ALIGN(format->pix.height, 16);
+        break;
+    default:
+        format->pix.sizeimage = format->pix.bytesperline * format->pix.height;
+        break;
+    }
+}
+
+static void tx_isp_v4l2_export_format(struct v4l2_format *dst,
+                                      const struct frame_image_format *src)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->type = src->type ? src->type : V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    dst->fmt.pix = src->pix;
+}
+
+static void tx_isp_v4l2_import_format(struct frame_image_format *dst,
+                                      const struct v4l2_format *src)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->type = src->type;
+    dst->pix = src->fmt.pix;
+}
+
 /* V4L2 buffer structure */
 struct tx_isp_v4l2_buffer {
     struct vb2_buffer vb2_buf;
@@ -61,7 +132,9 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
                                      struct v4l2_format *f)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
-    u32 requested_colorspace;
+    struct frame_image_format format;
+    struct tx_isp_subdev *remote_sd = NULL;
+    int ret = 0;
     
     if (!dev) {
         pr_err("tx_isp_v4l2_s_fmt_vid_cap: Invalid device\n");
@@ -85,8 +158,6 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
 
-    requested_colorspace = f->fmt.pix.colorspace;
-    
     /* Validate pixel format */
     if (f->fmt.pix.pixelformat != V4L2_PIX_FMT_NV12 && 
         f->fmt.pix.pixelformat != V4L2_PIX_FMT_YUYV &&
@@ -96,32 +167,28 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
         f->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
     }
     
-    /* Set format parameters based on channel */
-    if (dev->channel_num == 0) {
-        /* Main channel - full resolution */
-        f->fmt.pix.width = min_t(u32, f->fmt.pix.width, 1920);
-        f->fmt.pix.height = min_t(u32, f->fmt.pix.height, 1080);
-    } else {
-        /* Sub channel - smaller resolution */
-        f->fmt.pix.width = min_t(u32, f->fmt.pix.width, 640);
-        f->fmt.pix.height = min_t(u32, f->fmt.pix.height, 360);
-    }
-    
-    /* Calculate stride and image size */
-    f->fmt.pix.bytesperline = f->fmt.pix.width;
-    if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
-        f->fmt.pix.bytesperline *= 2;
-        f->fmt.pix.sizeimage = f->fmt.pix.bytesperline * f->fmt.pix.height;
-    } else {
-        /* NV12 format */
-        f->fmt.pix.sizeimage = f->fmt.pix.width * f->fmt.pix.height * 3 / 2;
-    }
-    
-    f->fmt.pix.field = V4L2_FIELD_NONE;
-    f->fmt.pix.colorspace = requested_colorspace ? requested_colorspace :
-                            (dev->format.fmt.pix.colorspace ?
-                             dev->format.fmt.pix.colorspace :
-                             V4L2_COLORSPACE_REC709);
+    tx_isp_v4l2_import_format(&format, f);
+    if (!format.pix.colorspace)
+        format.pix.colorspace = dev->format.fmt.pix.colorspace ?
+                                dev->format.fmt.pix.colorspace :
+                                V4L2_COLORSPACE_REC709;
+    tx_isp_v4l2_normalize_frame_format(&format);
+
+    if (ourISPdev && dev->channel_num >= 0 && dev->channel_num < ISP_MAX_CHAN)
+        remote_sd = &ourISPdev->channels[dev->channel_num].subdev;
+
+    if (remote_sd)
+        ret = tx_isp_send_event_to_remote(remote_sd, 0x3000002, &format);
+    else
+        ret = 0xfffffdfd;
+
+    if (ret != 0 && ret != 0xfffffdfd)
+        return ret;
+
+    if (ret == 0xfffffdfd)
+        tx_isp_v4l2_normalize_frame_format(&format);
+
+    tx_isp_v4l2_export_format(f, &format);
     
     /* Store the format */
     mutex_lock(&dev->lock);
@@ -139,15 +206,40 @@ static int tx_isp_v4l2_g_fmt_vid_cap(struct file *file, void *priv,
                                      struct v4l2_format *f)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    struct frame_image_format format;
+    struct tx_isp_subdev *remote_sd = NULL;
+    int ret;
     
     if (!dev) {
         return -EINVAL;
     }
     
     pr_info("Channel %d: VIDIOC_G_FMT\n", dev->channel_num);
-    
+
+    memset(&format, 0, sizeof(format));
+    if (ourISPdev && dev->channel_num >= 0 && dev->channel_num < ISP_MAX_CHAN)
+        remote_sd = &ourISPdev->channels[dev->channel_num].subdev;
+
+    if (remote_sd)
+        ret = tx_isp_send_event_to_remote(remote_sd, 0x3000001, &format);
+    else
+        ret = 0xfffffdfd;
+
+    if (ret != 0 && ret != 0xfffffdfd)
+        return ret;
+
+    if (ret == 0xfffffdfd) {
+        mutex_lock(&dev->lock);
+        *f = dev->format;
+        mutex_unlock(&dev->lock);
+        return 0;
+    }
+
+    tx_isp_v4l2_normalize_frame_format(&format);
+    tx_isp_v4l2_export_format(f, &format);
+
     mutex_lock(&dev->lock);
-    *f = dev->format;
+    dev->format = *f;
     mutex_unlock(&dev->lock);
     
     return 0;
@@ -741,9 +833,9 @@ static int tx_isp_create_v4l2_device(int channel)
     }
     dev->format.fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
     dev->format.fmt.pix.field = V4L2_FIELD_NONE;
-    dev->format.fmt.pix.bytesperline = dev->format.fmt.pix.width;
-    dev->format.fmt.pix.sizeimage = dev->format.fmt.pix.width * 
-                                   dev->format.fmt.pix.height * 3 / 2;
+    dev->format.fmt.pix.bytesperline = (dev->format.fmt.pix.width * 12) / 8;
+    dev->format.fmt.pix.sizeimage = dev->format.fmt.pix.bytesperline *
+                                   ALIGN(dev->format.fmt.pix.height, 16);
     dev->format.fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
     
     /* Initialize V4L2 device - use ISP device as parent if available */

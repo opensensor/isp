@@ -1208,6 +1208,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
+void __iomem *tx_isp_get_vic_primary_regs(void);
 extern int tx_isp_tuning_notify(struct tx_isp_dev *dev, uint32_t event);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
@@ -1380,6 +1381,55 @@ static inline u32 frame_channel_export_pixfmt(unsigned int channel, u32 pixfmt)
         return V4L2_PIX_FMT_NV12;
 
     return pixfmt;
+}
+
+static inline u32 frame_channel_format_depth(u32 pixfmt)
+{
+    switch (pixfmt) {
+    case V4L2_PIX_FMT_NV12:
+    case V4L2_PIX_FMT_NV21:
+        return 12;
+    case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
+    case V4L2_PIX_FMT_RGB565:
+    case V4L2_PIX_FMT_SBGGR12:
+    case V4L2_PIX_FMT_SGBRG12:
+    case V4L2_PIX_FMT_SGRBG12:
+    case V4L2_PIX_FMT_SRGGB12:
+        return 16;
+    case V4L2_PIX_FMT_BGR24:
+        return 24;
+    case V4L2_PIX_FMT_YUV444:
+    case V4L2_PIX_FMT_BGR32:
+    case V4L2_PIX_FMT_RGB32:
+    case V4L2_PIX_FMT_RGB310:
+        return 32;
+    default:
+        return 0;
+    }
+}
+
+static inline u32 frame_channel_format_bytesperline(u32 pixfmt, u32 width)
+{
+    u32 depth = frame_channel_format_depth(pixfmt);
+
+    if (depth == 0)
+        return nv12_stride(width);
+
+    return (width * depth) / 8;
+}
+
+static inline u32 frame_channel_format_sizeimage(u32 pixfmt, u32 width, u32 height)
+{
+    u32 bytesperline = frame_channel_format_bytesperline(pixfmt, width);
+
+    switch (pixfmt) {
+    case V4L2_PIX_FMT_NV12:
+    case V4L2_PIX_FMT_NV21:
+        return bytesperline * ALIGN(height, 16);
+    default:
+        return bytesperline * height;
+    }
 }
 
 /* Monotonic timestamp helper: fill timeval from CLOCK_MONOTONIC with kernel-version fallback */
@@ -2207,8 +2257,12 @@ int frame_channel_open(struct inode *inode, struct file *file)
         pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
     /* Initialize geometry from defaults */
-    fcd->state.bytesperline = nv12_stride(fcd->state.width);
-    fcd->state.sizeimage = nv12_sizeimage(fcd->state.width, fcd->state.height);
+    fcd->state.bytesperline = frame_channel_format_bytesperline(
+        frame_channel_export_pixfmt(fcd->channel_num, fcd->state.format),
+        fcd->state.width);
+    fcd->state.sizeimage = frame_channel_format_sizeimage(
+        frame_channel_export_pixfmt(fcd->channel_num, fcd->state.format),
+        fcd->state.width, fcd->state.height);
 
 
     file->private_data = fcd;
@@ -2974,8 +3028,14 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return IRQ_HANDLED;
 
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-    vic_regs = isp_dev->vic_regs ? isp_dev->vic_regs : vic_dev->vic_regs;
+    /* OEM uses one canonical +(0xb8) VIC register window for IRQ status/ack and
+     * the MDMA bookkeeping that follows.  Do not prefer isp_dev->vic_regs here:
+     * that field can drift to the control/secondary window while vic_dev keeps
+     * the primary streaming bank.
+     */
+    vic_regs = tx_isp_get_vic_primary_regs();
+    if (!vic_regs)
+        vic_regs = vic_dev->vic_regs;
     if (!vic_regs)
         return IRQ_HANDLED;
 
@@ -4012,7 +4072,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             {
                 u32 w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
                 u32 h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
-                buffer_size = nv12_sizeimage(w, h);
+                buffer_size = state->sizeimage ?
+                              state->sizeimage :
+                              frame_channel_format_sizeimage(
+                                  frame_channel_export_pixfmt(channel, state->format),
+                                  w, h);
             }
 
             /* Limit buffer count based on memory type and available memory */
@@ -4172,15 +4236,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * V4L2_MEMORY_USERPTR: buffer.m.userptr contains the physical address.
          * Fallback: compute from rmem base + index * size.
          */
-        int buffer_size = state->width * state->height * 3 / 2;
+	        u32 buffer_w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
+	        u32 buffer_h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
+	        u32 buffer_size = state->sizeimage ?
+	                          state->sizeimage :
+	                          frame_channel_format_sizeimage(
+	                              frame_channel_export_pixfmt(channel, state->format),
+	                              buffer_w, buffer_h);
         uint32_t buffer_phys_addr;
+	        if (!buffer.length)
+	            buffer.length = buffer_size;
         if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
             buffer_phys_addr = (uint32_t)buffer.m.userptr;
         } else {
             buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
         }
 
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size(NV12)=%d, memory=%d, userptr=0x%lx ***\n",
+	        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, sizeimage=%u, memory=%d, userptr=0x%lx ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size, buffer.memory, buffer.m.userptr);
 
         if (frame_channel_track_buffer(fcd, &buffer) == 0) {
@@ -4395,8 +4467,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             buffer.type = tracked ? tracked->type :
                          (state->current_buffer.type ? state->current_buffer.type : V4L2_BUF_TYPE_VIDEO_CAPTURE);
             /* Use stride-aligned sizeimage if available */
-            if (!state->bytesperline) state->bytesperline = nv12_stride(state->width);
-            if (!state->sizeimage) state->sizeimage = nv12_sizeimage(state->width, state->height);
+            if (!state->bytesperline)
+                state->bytesperline = frame_channel_format_bytesperline(
+                    frame_channel_export_pixfmt(channel, state->format),
+                    state->width);
+            if (!state->sizeimage)
+                state->sizeimage = frame_channel_format_sizeimage(
+                    frame_channel_export_pixfmt(channel, state->format),
+                    state->width, state->height);
             buffer.bytesused = state->sizeimage;
             if (tracked && tracked->length && buffer.bytesused > tracked->length)
                 buffer.bytesused = tracked->length;
@@ -4430,7 +4508,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buffer.index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buffer.index * (state->width * state->height * 3 / 2));
+	                u32 buffer_w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
+	                u32 buffer_h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
+	                u32 buffer_size = state->sizeimage ?
+	                                  state->sizeimage :
+	                                  frame_channel_format_sizeimage(
+	                                      frame_channel_export_pixfmt(channel, state->format),
+	                                      buffer_w, buffer_h);
+	                u32 buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
 
                 pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
                         channel, buffer.index, buffer_phys_addr);
@@ -4574,38 +4659,43 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
     }
-    case 0x407056c4: { // VIDIOC_G_FMT - Get format
-        struct v4l2_format {
-            uint32_t type;
-            union {
-                struct {
-                    uint32_t width;
-                    uint32_t height;
-                    uint32_t pixelformat;
-                    uint32_t field;
-                    uint32_t bytesperline;
-                    uint32_t sizeimage;
-                    uint32_t colorspace;
-                    uint32_t priv;
-                } pix;
-                uint8_t raw_data[200];
-            } fmt;
-        } format;
+    case 0x407056c4: { // VIDIOC_GET_FRAME_FORMAT
+        struct frame_image_format format;
+        struct tx_isp_subdev *remote_sd = NULL;
+        int ret;
 
+        memset(&format, 0, sizeof(format));
+        if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
+            remote_sd = &ourISPdev->channels[channel].subdev;
 
-        if (copy_from_user(&format, argp, sizeof(format)))
-            return -EFAULT;
+        if (remote_sd)
+            ret = tx_isp_send_event_to_remote(remote_sd, 0x3000001, &format);
+        else
+            ret = 0xfffffdfd;
 
-        pr_info("Channel %d: Get format, type=%d\n", channel, format.type);
+        if (ret != 0 && ret != 0xfffffdfd)
+            return ret;
 
-        // Report current format based on state
-        format.fmt.pix.width = state->width ? state->width : 1920;
-        format.fmt.pix.height = state->height ? state->height : 1080;
-        format.fmt.pix.pixelformat = frame_channel_export_pixfmt(channel, state->format);
-        format.fmt.pix.field = 1; // V4L2_FIELD_NONE
-        format.fmt.pix.bytesperline = state->bytesperline ? state->bytesperline : nv12_stride(format.fmt.pix.width);
-        format.fmt.pix.sizeimage = state->sizeimage ? state->sizeimage : nv12_sizeimage(format.fmt.pix.width, format.fmt.pix.height);
-        format.fmt.pix.colorspace = (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace)) ?
+        if (ret == 0xfffffdfd) {
+            format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            format.pix.width = state->width ? state->width : 1920;
+            format.pix.height = state->height ? state->height : 1080;
+            format.pix.pixelformat = frame_channel_export_pixfmt(channel, state->format);
+            format.pix.bytesperline = state->bytesperline ?
+                                      state->bytesperline :
+                                      frame_channel_format_bytesperline(format.pix.pixelformat,
+                                                                        format.pix.width);
+            format.pix.sizeimage = state->sizeimage ?
+                                   state->sizeimage :
+                                   frame_channel_format_sizeimage(format.pix.pixelformat,
+                                                                  format.pix.width,
+                                                                  format.pix.height);
+        }
+
+        format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        format.pix.field = V4L2_FIELD_NONE;
+        if (!format.pix.colorspace)
+            format.pix.colorspace = (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace)) ?
                                     frame_channel_colorspace[channel] :
                                     V4L2_COLORSPACE_REC709;
 
@@ -4614,66 +4704,52 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0xc07056c3: { // VIDIOC_S_FMT - Set format
-        struct v4l2_format {
-            uint32_t type;
-            union {
-                struct {
-                    uint32_t width;
-                    uint32_t height;
-                    uint32_t pixelformat;
-                    uint32_t field;
-                    uint32_t bytesperline;
-                    uint32_t sizeimage;
-                    uint32_t colorspace;
-                    uint32_t priv;
-                } pix;
-                uint8_t raw_data[200];
-            } fmt;
-        } format;
+    case 0xc07056c3: { // VIDIOC_SET_FRAME_FORMAT
+        struct frame_image_format format;
+        struct tx_isp_subdev *remote_sd = NULL;
+        int ret;
 
         if (copy_from_user(&format, argp, sizeof(format)))
             return -EFAULT;
 
         pr_info("Channel %d: Set format %dx%d pixfmt=0x%x\n",
-                channel, format.fmt.pix.width, format.fmt.pix.height, format.fmt.pix.pixelformat);
+                channel, format.pix.width, format.pix.height, format.pix.pixelformat);
 
-        /* Persist format into channel state so REQBUFS/QBUF use correct dimensions */
-        state->width = format.fmt.pix.width;
-        state->height = format.fmt.pix.height;
-        state->format = frame_channel_export_pixfmt(channel, format.fmt.pix.pixelformat);
+        format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        format.pix.pixelformat = frame_channel_export_pixfmt(channel, format.pix.pixelformat);
+        format.pix.field = V4L2_FIELD_NONE;
+        if (!format.pix.colorspace)
+            format.pix.colorspace = (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace)) ?
+                                    frame_channel_colorspace[channel] :
+                                    V4L2_COLORSPACE_REC709;
+
+        if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
+            remote_sd = &ourISPdev->channels[channel].subdev;
+
+        if (remote_sd)
+            ret = tx_isp_send_event_to_remote(remote_sd, 0x3000002, &format);
+        else
+            ret = 0xfffffdfd;
+
+        if (ret != 0 && ret != 0xfffffdfd)
+            return ret;
+
+        if (ret == 0xfffffdfd) {
+            format.pix.bytesperline = frame_channel_format_bytesperline(format.pix.pixelformat,
+                                                                        format.pix.width);
+            format.pix.sizeimage = frame_channel_format_sizeimage(format.pix.pixelformat,
+                                                                  format.pix.width,
+                                                                  format.pix.height);
+        }
+
+        state->width = format.pix.width;
+        state->height = format.pix.height;
+        state->format = format.pix.pixelformat;
+        state->bytesperline = format.pix.bytesperline;
+        state->sizeimage = format.pix.sizeimage;
         if (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace))
-            frame_channel_colorspace[channel] = format.fmt.pix.colorspace ?
-                                               format.fmt.pix.colorspace :
-                                               V4L2_COLORSPACE_REC709;
-        state->bytesperline = nv12_stride(state->width);
-        state->sizeimage = nv12_sizeimage(state->width, state->height);
-        pr_debug("[FMT] ch%d bpl=%u sizeimage=%u\n", channel, state->bytesperline, state->sizeimage);
+            frame_channel_colorspace[channel] = format.pix.colorspace;
 
-        /* Mirror into VIC device so pre-STREAMON QBUFs compute correct UV base
-         * Only for Channel 0 (VIC capture channel). Sub-streams (chn1) should not
-         * change VIC capture dimensions.
-         */
-	        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-	            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-	            vic->width = state->width;
-	            vic->height = state->height;
-	            vic->stride = state->bytesperline;
-	            vic->pixel_format = state->format;
-	            pr_info("*** VIC dimensions primed from S_FMT (chn0 only): %ux%u stride=%u fmt=0x%x ***\n",
-	                    vic->width, vic->height, vic->stride, vic->pixel_format);
-	        }
-
-        /* Reflect adjusted geometry back to userspace per V4L2 S_FMT contract */
-        format.fmt.pix.width       = state->width;
-        format.fmt.pix.height      = state->height;
-        format.fmt.pix.pixelformat = state->format;
-        format.fmt.pix.field       = 1; /* V4L2_FIELD_NONE */
-        format.fmt.pix.bytesperline= state->bytesperline;
-        format.fmt.pix.sizeimage   = state->sizeimage;
-        format.fmt.pix.colorspace  = (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace)) ?
-                                     frame_channel_colorspace[channel] :
-                                     V4L2_COLORSPACE_REC709;
         if (copy_to_user(argp, &format, sizeof(format)))
             return -EFAULT;
         return 0;
@@ -6749,8 +6825,14 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
  */
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
+    void __iomem *vic_base;
+
     if (!vic_dev)
         return;
+
+    vic_base = tx_isp_get_vic_primary_regs();
+    if (!vic_base)
+        vic_base = vic_dev->vic_regs;
 
     if (!vic_dev->processing) {
         int frame_words;
@@ -6758,31 +6840,31 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
         frame_words = vic_dev->width * vic_dev->height * 2;
         pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
 
-        if (channel == 0 && vic_mdma_ch0_sub_get_num != 0 && vic_dev->vic_regs) {
+        if (channel == 0 && vic_mdma_ch0_sub_get_num != 0 && vic_base) {
             u32 next_bank = (vic_mdma_ch0_set_buff_index + 1) % 5;
             u32 buffer_reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;
             u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
-            u32 next_addr = frame_words + readl(vic_dev->vic_regs + buffer_reg_offset);
+            u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
 
             vic_mdma_ch0_set_buff_index = next_bank;
-            writel(next_addr, vic_dev->vic_regs + new_buffer_reg_offset);
+            writel(next_addr, vic_base + new_buffer_reg_offset);
             wmb();
 
             vic_mdma_ch0_sub_get_num -= 1;
             if (vic_mdma_ch0_sub_get_num == 7) {
-                u32 reg_300 = readl(vic_dev->vic_regs + 0x300);
+                u32 reg_300 = readl(vic_base + 0x300);
                 reg_300 = (reg_300 & 0xfff0ffff) | 0x70000;
-                writel(reg_300, vic_dev->vic_regs + 0x300);
+                writel(reg_300, vic_base + 0x300);
                 wmb();
             }
-        } else if (channel == 1 && vic_mdma_ch1_sub_get_num != 0 && vic_dev->vic_regs) {
+        } else if (channel == 1 && vic_mdma_ch1_sub_get_num != 0 && vic_base) {
             u32 next_bank = (vic_mdma_ch1_set_buff_index + 1) % 5;
             u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
             u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
-            u32 next_addr = frame_words + readl(vic_dev->vic_regs + buffer_reg_offset);
+            u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
 
             vic_mdma_ch1_set_buff_index = next_bank;
-            writel(next_addr, vic_dev->vic_regs + new_buffer_reg_offset);
+            writel(next_addr, vic_base + new_buffer_reg_offset);
             wmb();
 
             vic_mdma_ch1_sub_get_num -= 1;
@@ -6799,7 +6881,6 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
         struct vic_buffer_entry *queued_buffer = NULL;
         struct vic_buffer_entry *recycled_bank = NULL;
         unsigned long irq_flags;
-        void __iomem *vic_base = vic_dev->vic_regs;
         u32 current_dma_addr;
         u32 recycled_reg_offset = 0;
         u32 dma_ctrl = 0;

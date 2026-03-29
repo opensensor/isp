@@ -69,6 +69,66 @@ static bool ispcore_valid_channel_id(int channel_id)
     return channel_id >= 0 && channel_id < ISP_MAX_CHAN;
 }
 
+static u32 ispcore_frame_format_depth(u32 pixelformat)
+{
+    switch (pixelformat) {
+    case V4L2_PIX_FMT_NV12:
+    case V4L2_PIX_FMT_NV21:
+        return 12;
+    case V4L2_PIX_FMT_YUYV:
+    case V4L2_PIX_FMT_UYVY:
+    case V4L2_PIX_FMT_RGB565:
+    case V4L2_PIX_FMT_SBGGR12:
+    case V4L2_PIX_FMT_SGBRG12:
+    case V4L2_PIX_FMT_SGRBG12:
+    case V4L2_PIX_FMT_SRGGB12:
+        return 16;
+    case V4L2_PIX_FMT_BGR24:
+        return 24;
+    case V4L2_PIX_FMT_YUV444:
+    case V4L2_PIX_FMT_BGR32:
+    case V4L2_PIX_FMT_RGB32:
+    case V4L2_PIX_FMT_RGB310:
+        return 32;
+    default:
+        return 0;
+    }
+}
+
+static int ispcore_normalize_channel_format(struct frame_image_format *fmt)
+{
+    u32 depth;
+
+    if (!fmt)
+        return -EINVAL;
+
+    depth = ispcore_frame_format_depth(fmt->pix.pixelformat);
+    if (!depth)
+        return -EINVAL;
+
+    fmt->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt->pix.field = V4L2_FIELD_NONE;
+    if (!fmt->pix.colorspace)
+        fmt->pix.colorspace = V4L2_COLORSPACE_REC709;
+
+    if (!fmt->pix.width || !fmt->pix.height)
+        return 0;
+
+    fmt->pix.bytesperline = (fmt->pix.width * depth) / 8;
+
+    switch (fmt->pix.pixelformat) {
+    case V4L2_PIX_FMT_NV12:
+    case V4L2_PIX_FMT_NV21:
+        fmt->pix.sizeimage = fmt->pix.bytesperline * ALIGN(fmt->pix.height, 16);
+        break;
+    default:
+        fmt->pix.sizeimage = fmt->pix.bytesperline * fmt->pix.height;
+        break;
+    }
+
+    return 0;
+}
+
 static void ispcore_frame_format_to_attr_words(const struct frame_image_format *fmt,
                                                u32 attr_words[0x34 / sizeof(u32)])
 {
@@ -170,6 +230,14 @@ static void ispcore_get_channel_format(int channel_id, struct frame_image_format
     fmt->pix.bytesperline = isp_dev->channels[channel_id].stride;
     fmt->pix.sizeimage = isp_dev->channels[channel_id].required_size;
     fmt->pix.field = V4L2_FIELD_NONE;
+    if (ispcore_normalize_channel_format(fmt) == 0) {
+        fmt->pix.bytesperline = isp_dev->channels[channel_id].stride ?
+                                isp_dev->channels[channel_id].stride :
+                                fmt->pix.bytesperline;
+        fmt->pix.sizeimage = isp_dev->channels[channel_id].required_size ?
+                             isp_dev->channels[channel_id].required_size :
+                             fmt->pix.sizeimage;
+    }
 }
 
 extern struct tx_isp_fs_device *dump_fsd;
@@ -3823,6 +3891,12 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             if (!format || !channel || !ispcore_valid_channel_id(dispatch->channel_id))
                 break;
 
+            if (ispcore_normalize_channel_format(format) != 0) {
+                ISP_ERROR("ispcore_pad_event_handle: unsupported pixelformat 0x%x",
+                          format->pix.pixelformat);
+                break;
+            }
+
             ispcore_frame_format_to_attr_words(format, attr_words);
 
             if (format->fcrop_enable) {
@@ -4852,9 +4926,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     struct tx_isp_dev *isp_dev;
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_sensor_attribute *stored_attr;
-    uint32_t integration_time, again, dgain;
-    uint16_t fps, calculated_fps;
-    u32 actual_width, actual_height, stride;
+    uint32_t again, dgain;
     size_t sensor_attr_bytes = 0x4c;
 
     pr_info("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
@@ -4898,41 +4970,20 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     if (attr == NULL) {
         /* Binary Ninja: memset($s0_1 + 0xec, arg2, 0x4c) */
         memset(&vic_dev->sensor_attr, 0, sensor_attr_bytes);
+        vic_dev->sensor_attr_ptr = NULL;
         pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
         return 0;
     }
 
     /* Binary Ninja: memcpy($s0_1 + 0xec, arg2, 0x4c) */
     memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
-
-    actual_width = attr->mipi.image_twidth ? attr->mipi.image_twidth : attr->total_width;
-    actual_height = attr->mipi.image_theight ? attr->mipi.image_theight : attr->total_height;
-    if (!actual_width)
-        actual_width = vic_dev->width ? vic_dev->width : 1920;
-    if (!actual_height)
-        actual_height = vic_dev->height ? vic_dev->height : 1080;
-
-    vic_dev->width = actual_width;
-    vic_dev->height = actual_height;
-    isp_dev->sensor_width = actual_width;
-    isp_dev->sensor_height = actual_height;
-
-    if (vic_dev->pixel_format == 0 ||
-        vic_dev->pixel_format == V4L2_PIX_FMT_NV12 ||
-        vic_dev->pixel_format == V4L2_PIX_FMT_NV21)
-        stride = actual_width;
-    else
-        stride = actual_width << 1;
-    vic_dev->stride = stride;
-
-    pr_info("ispcore_sync_sensor_attr: refreshed VIC geometry dims=%ux%u stride=%u pixfmt=0x%x\n",
-            actual_width, actual_height, stride, vic_dev->pixel_format);
+    /* OEM: store pointer to FULL sensor_attr for tx_isp_vic_start */
+    vic_dev->sensor_attr_ptr = attr;
 
     /* Binary Ninja: Complex sensor attribute processing */
     stored_attr = &vic_dev->sensor_attr;
 
     /* Binary Ninja: Extract and process sensor timing parameters */
-    integration_time = stored_attr->integration_time;
     again = stored_attr->again;
     dgain = stored_attr->dgain;
     /* fps is in tx_isp_video_in, not sensor_attribute — skip fps calc */
@@ -4944,10 +4995,6 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     /* Binary Ninja: tiziano_sync_sensor_attr(&var_68) */
     pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
-	    first_into = 1;
-	    bayer_write_pending = 1;
-	    if (tisp_dmsc_reprogram_sensor_cfa() != 0)
-	        pr_warn("ispcore_sync_sensor_attr: failed to reprogram DMSC CFA\n");
 
     pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
     return 0;  /* Return success directly - no need for the quirky -515 pattern */

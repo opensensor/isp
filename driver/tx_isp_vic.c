@@ -58,6 +58,31 @@ static inline u32 vic_mdma_stride_resolve(struct tx_isp_vic_device *vic_dev,
     return min_stride;
 }
 
+static inline u32 vic_mdma_uv_offset_resolve(struct tx_isp_vic_device *vic_dev,
+					     const struct vic_buffer_entry *buffer,
+					     u32 pixfmt)
+{
+	u32 buffer_length = buffer ? buffer->buffer_length : 0;
+	u32 width;
+	u32 height;
+
+	if (!(pixfmt == 0 || vic_pixfmt_is_semiplanar_420(pixfmt)))
+		return 0;
+
+	if (buffer_length >= 3)
+		return (buffer_length * 2) / 3;
+
+	if (!vic_dev)
+		return 0;
+
+	width = vic_dev->width;
+	height = vic_dev->height;
+	if (!width || !height)
+		return 0;
+
+	return width * ALIGN(height, 16);
+}
+
 static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
 {
     int irq = 0;
@@ -465,10 +490,13 @@ static inline struct tx_isp_sensor_attribute *vic_raw_sensor_attr_get(struct tx_
     if (!vic_dev)
         return NULL;
 
-    /* OEM stores an inline sensor_attr cache at +0x110, but in our rebuilt
-     * layout that raw region overlaps live VIC state (for example, mipi.mode
-     * would alias the state word at +0x128). Use the safe named cache instead.
+    /* OEM tx_isp_vic_start dereferences a POINTER to the FULL sensor_attr
+     * (set during sync_sensor_attr).  Prefer that over the 76-byte cache,
+     * which lacks mipi_sc fields beyond hcomp_en.
      */
+    if (vic_dev->sensor_attr_ptr)
+        return vic_dev->sensor_attr_ptr;
+
     return &vic_dev->sensor_attr;
 }
 
@@ -1012,26 +1040,21 @@ static u32 vic_irq_counter;
                 shifted_value = buffer_index << 0x10;
             }
 
-            /* CRITICAL FIX: Preserve EXACT control bits 0x80000020 when updating buffer index */
-            /* The reference driver preserves control bits, we were clearing them! */
+            /* OEM framedone always updates only the bank-count/index bits in
+             * VIC_ADDR_DMA_CONTROL, even when the computed value is zero.
+             * Zero is valid here: it means the current DMA address matched the
+             * last active bank in the done list.
+             */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                /* If control is 0 or no valid index computed, do not touch control. */
-                if (reg_val == 0 || shifted_value == 0) {
-                    pr_debug_ratelimited("vic_irq: skip idx update (ctrl=0x%x, shift=0x%x, idx=%d, match=%d)\n",
-                            reg_val, shifted_value, buffer_index, match_found);
-                } else {
-                    /* Preserve control bits for NV12 (0x80000020 | format=7) and only update buffer index (bits 16-19) */
-                    reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
 
-                    /* Reference: only update index bits [16..19], preserve other control/format bits */
-                    writel(reg_val, vic_regs + 0x300);
+                reg_val = (reg_val & 0xfff0ffff) | shifted_value;
+                writel(reg_val, vic_regs + 0x300);
 
-                    pr_debug_ratelimited("vic_irq: VIC[0x300]=0x%x (idx updated)\n",
-                            reg_val);
-                    pr_debug_ratelimited("vic_irq: ctrl=0x%x idx=%d match=%d\n",
-                             reg_val, buffer_index, match_found);
-                }
+                pr_debug_ratelimited("vic_irq: VIC[0x300]=0x%x (idx updated)\n",
+                        reg_val);
+                pr_debug_ratelimited("vic_irq: ctrl=0x%x idx=%d match=%d shift=0x%x\n",
+                         reg_val, buffer_index, match_found, shifted_value);
             }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
             {
@@ -2054,7 +2077,6 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
     struct tx_isp_vic_device *vic_dev;
-    u32 actual_width, actual_height, stride;
     size_t sensor_attr_bytes = 0x4c;
 
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
@@ -2074,34 +2096,13 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     if (attr == NULL) {
         /* Clear sensor attribute */
         memset(&vic_dev->sensor_attr, 0, sensor_attr_bytes);
-        pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
+        vic_dev->sensor_attr_ptr = NULL;
     } else {
-        /* Copy sensor attribute */
+        /* Copy first 0x4c bytes (OEM partial cache) */
         memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
-        actual_width = attr->mipi.image_twidth ? attr->mipi.image_twidth : attr->total_width;
-        actual_height = attr->mipi.image_theight ? attr->mipi.image_theight : attr->total_height;
-        if (!actual_width)
-            actual_width = vic_dev->width ? vic_dev->width : 1920;
-        if (!actual_height)
-            actual_height = vic_dev->height ? vic_dev->height : 1080;
-
-        vic_raw_dims_set(vic_dev, actual_width, actual_height);
-
-        if (vic_dev->pixel_format == 0 || vic_pixfmt_is_semiplanar_420(vic_dev->pixel_format))
-            stride = actual_width;
-        else
-            stride = actual_width << 1;
-        vic_dev->stride = stride;
-
-        pr_info("vic_sensor_ops_sync_sensor_attr: refreshed dims=%ux%u stride=%u pixfmt=0x%x\n",
-                actual_width, actual_height, stride, vic_dev->pixel_format);
-        pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
+        /* OEM: store pointer to the FULL sensor_attr for tx_isp_vic_start */
+        vic_dev->sensor_attr_ptr = attr;
     }
-
-    vic_stream_regs_resolve(vic_dev);
-    pr_info("vic_sensor_ops_sync_sensor_attr: OEM slots regs=%p dims=%ux%u raw_attr=%p\n",
-            vic_raw_regs_get(vic_dev), vic_raw_width_get(vic_dev),
-            vic_raw_height_get(vic_dev), vic_raw_sensor_attr_get(vic_dev));
 
     return 0;
 }
@@ -3017,9 +3018,9 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
-	/* OEM BN qbuf hot path only writes the selected bank slot register through
-	 * the canonical raw +0xb8 VIC pointer. Companion plane/shadow registers are
-	 * not touched here.
+	/* OEM BN: program exactly one slot base address at (bank + 0xc6) << 2.
+	 * The VIC/MDMA path handles the contiguous output layout; QBUF does not
+	 * program separate UV/shadow plane registers.
 	 */
 	writel(buffer_addr, vic_base + reg_offset);
 	wmb();
@@ -3027,9 +3028,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 	vic_dev->active_buffer_count += 1;
 
-	pr_info("*** VIC QBUF: bank=%u addr=0x%x len=%u reg_off=0x%x active=%u ***\n",
-		buffer_index, buffer_addr, bank_buffer->buffer_length,
-		reg_offset, vic_dev->active_buffer_count);
+	pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
+		buffer_index, buffer_addr,
+		bank_buffer->buffer_length,
+		reg_offset,
+		vic_dev->active_buffer_count);
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);

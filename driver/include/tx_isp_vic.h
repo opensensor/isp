@@ -118,7 +118,14 @@ struct tx_isp_vic_device {
     uint32_t pixel_format;                      /* Pixel format */
 
     /* CRITICAL: Sensor attributes with proper alignment */
-    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4))); /* Sensor attributes */
+    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4))); /* Partial 0x4c-byte cache (OEM ispcore_sync_sensor_attr) */
+
+    /* OEM: *(arg1 + 0x110) in tx_isp_vic_start dereferences a POINTER to the
+     * FULL sensor_attribute (in the sensor driver), not the 76-byte cache above.
+     * Fields beyond 0x4c (mipi_sc crop, sensor_csi_fmt, sensor_frame_mode, etc.)
+     * are only accessible through this pointer.
+     */
+    struct tx_isp_sensor_attribute *sensor_attr_ptr;  /* Pointer to full sensor attrs */
 
     /* CRITICAL: Synchronization primitives with proper alignment */
     spinlock_t lock __attribute__((aligned(4)));                    /* General spinlock */
