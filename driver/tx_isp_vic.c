@@ -48,6 +48,20 @@ static inline bool vic_pixfmt_is_semiplanar_420(u32 pixfmt)
     return pixfmt == V4L2_PIX_FMT_NV12 || pixfmt == V4L2_PIX_FMT_NV21;
 }
 
+static inline u32 vic_mdma_stride_resolve(struct tx_isp_vic_device *vic_dev,
+                                         u32 width, u32 pixfmt)
+{
+    u32 stride = vic_dev ? vic_dev->stride : 0;
+
+    if (stride >= width)
+        return stride;
+
+    if (pixfmt == 0 || vic_pixfmt_is_semiplanar_420(pixfmt))
+        return width;
+
+    return width << 1;
+}
+
 static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
 {
     int irq = 0;
@@ -649,6 +663,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
     vic_dev->width = 1920;  /* GC2053 actual output width */
     vic_dev->height = 1080; /* GC2053 actual output height */
+    vic_dev->stride = vic_dev->width;
+    vic_dev->pixel_format = V4L2_PIX_FMT_NV12;
     vic_raw_dims_set(vic_dev, vic_dev->width, vic_dev->height);
 
     /* Set up VIC subdev structure.
@@ -2413,22 +2429,26 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    width = vic_raw_width_get(vic_dev);
-    height = vic_raw_height_get(vic_dev);
+    width = vic_dev->width ? vic_dev->width : vic_raw_width_get(vic_dev);
+    height = vic_dev->height ? vic_dev->height : vic_raw_height_get(vic_dev);
     if (width == 0 || height == 0) {
-        width = vic_dev->width ? vic_dev->width : 1920;
-        height = vic_dev->height ? vic_dev->height : 1080;
+        width = vic_raw_width_get(vic_dev);
+        height = vic_raw_height_get(vic_dev);
+    }
+    if (width == 0 || height == 0) {
+        width = width ? width : 1920;
+        height = height ? height : 1080;
     }
 
     pixfmt = vic_dev->pixel_format;
-    /* OEM BN EXACT: $v1_1 = $v1 << 1   (unconditional)
-     * The stride registers (0x310/0x314) control the MDMA read side
-     * from the ISP pipeline, which outputs YUV422 at 2 bytes/pixel.
-     * stride = width * 2, regardless of the DRAM output format. */
-    stride = width << 1;  /* OEM: width * 2 = 3840 for 1920 wide */
+    /* Match the exported capture layout, not just the ISP-internal bus width.
+     * Channel 0 is currently exported as single-plane NV12, so its DRAM stride
+     * must stay at the luma bytes-per-line rather than an unconditional width*2.
+     */
+    stride = vic_mdma_stride_resolve(vic_dev, width, pixfmt);
 
-    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x\n",
-            vic_base, width, height, stride, pixfmt);
+    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x cached_stride=%u\n",
+            vic_base, width, height, stride, pixfmt, vic_dev->stride);
 
     /* OEM HLIL: MDMA config registers — stride/size/enable only */
     writel(1, vic_base + 0x308);                           /* MDMA enable */
