@@ -1745,10 +1745,13 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 /* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
+    struct tx_isp_dev *isp_dev;
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
     u32 actual_width, actual_height;
+    u32 stride;
+    int ret;
 
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
     if (!vic_dev)
@@ -1766,6 +1769,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_regs = vic_stream_regs_resolve(vic_dev);
     if (!vic_regs)
         return -EINVAL;
+
+    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
+    ret = tx_isp_core_prepare_prestream(isp_dev, "tx_isp_vic_start");
+    if (ret < 0) {
+        pr_err("tx_isp_vic_start: pre-stream core IRQ prepare failed: %d\n", ret);
+        return ret;
+    }
 
     /* Binary Ninja: Branch on interface type at 00010250 */
     /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
@@ -1959,8 +1969,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     else
         pr_info("%s:%d::linear mode\n", "tx_isp_vic_start", __LINE__);
 
+    stride = vic_mdma_stride_resolve(vic_dev, actual_width, vic_dev->pixel_format);
+    vic_reassert_core_irq_route(vic_dev, actual_width, actual_height, stride,
+                                "tx_isp_vic_start");
+    vic_program_irq_registers(vic_dev, "tx_isp_vic_start");
+
     /* Binary Ninja: 00010b84 - Set vic_start_ok */
-    vic_start_ok = 1;
+    debug_vic_start_ok_change(1, __func__, __LINE__);
 
     return 0;
 }

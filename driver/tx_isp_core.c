@@ -3820,8 +3820,8 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 
             if (format->fcrop_enable) {
                 tisp_s_fcrop_control(1,
-                                     format->fcrop_left,
                                      format->fcrop_top,
+                                     format->fcrop_left,
                                      format->fcrop_width,
                                      format->fcrop_height);
             } else {

@@ -982,6 +982,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct sign
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 extern int tx_isp_core_ensure_powered(struct tx_isp_dev *isp_dev, const char *origin);
+extern int tx_isp_core_prepare_prestream(struct tx_isp_dev *isp_dev, const char *origin);
 extern struct tx_isp_vic_device *dump_vsd;
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq);
@@ -2149,8 +2150,8 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         return 0;
     }
 
-    ret = tx_isp_core_ensure_powered(isp_dev,
-                                     "tx_isp_ispcore_activate_module_complete");
+    ret = tx_isp_core_prepare_prestream(isp_dev,
+                                        "tx_isp_ispcore_activate_module_complete");
     if (ret < 0) {
         pr_warn("*** tx_isp_ispcore_activate_module_complete: core power prep failed: %d ***\n",
                 ret);
