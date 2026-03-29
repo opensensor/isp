@@ -997,6 +997,7 @@ static int tisp_adr_build_lut_payload(uint32_t *out_words, int out_cap)
 static void *tparams_day = NULL;
 static void *tparams_night = NULL;
 static void *tparams_cust = NULL;
+static bool tuning_bin_loaded = false;
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
 static void *sensor_info_ptr = NULL;
 static uint32_t data_b2e1c = 1080; /* Sensor height */
@@ -1146,6 +1147,7 @@ static int tiziano_load_parameters(const char *param_name)
 	if (ret)
 		pr_info("tiziano_load_parameters: no cust bin at %s\n", cust_path);
 
+	tuning_bin_loaded = true;
 	pr_info("tiziano_load_parameters: loaded %s\n", std_bin_path);
 	return 0;
 }
@@ -1158,6 +1160,16 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 
 	if (!params)
 		goto apply_force_mask;
+
+	/* Only apply per-block bypass from params if a tuning bin was loaded.
+	 * Without a bin file, params are all zeros which would clear ALL bypass
+	 * bits, enabling every ISP block without configuration → garbage output.
+	 * Keep the conservative initial value 0x8077efff (most blocks bypassed). */
+	if (!tuning_bin_loaded) {
+		pr_info("tisp_compute_top_bypass: no bin file, using conservative bypass 0x%x\n",
+			bypass_val);
+		goto apply_force_mask;
+	}
 
 	for (i = 0; i < 32; i++) {
 		u32 bit = 1U << i;
