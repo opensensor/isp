@@ -551,6 +551,9 @@ static int vic_enabled = 0;
  * ispvic_frame_channel_s_stream (streamoff) and clearbuf paths. */
 static int mdma_auto_enabled = 0;
 
+/* NOTE: deferred_vic_run removed — OEM issues VIC RUN immediately in
+ * tx_isp_vic_start.  MDMA enable is a separate, independent step. */
+
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
 /* Forward declarations for PIPO callbacks used before definitions */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
@@ -1857,7 +1860,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         writel((mipi_sc->mipi_crop_start1y << 16) | mipi_sc->mipi_crop_start0y, vic_regs + 0x104);
         writel((mipi_sc->mipi_crop_start3y << 16) | mipi_sc->mipi_crop_start2y, vic_regs + 0x108);
+        /* OEM BN EXACT: VIC RUN issued immediately in tx_isp_vic_start.
+         * MDMA enable (reg 0x300/0x308) is a SEPARATE step done later by
+         * ispvic_frame_channel_s_stream.  VIC RUN starts the input engine
+         * (sensor→VIC FIFO), MDMA enable starts the output engine
+         * (VIC FIFO→DRAM).  They are independent. */
         writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: MIPI config done, VIC RUN issued (reg 0x0 = 1)\n");
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */
@@ -1889,10 +1899,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1ac);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
 
-        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
-        writel(2, vic_regs + 0x0);
-        wmb();
+        /* OEM BN: VIC RUN issued immediately */
         writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: BT601 config done, VIC RUN issued\n");
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
@@ -1907,10 +1917,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x200, vic_regs + 0x1d0);
         writel(0x200, vic_regs + 0x1d4);
 
-        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
-        writel(2, vic_regs + 0x0);
-        wmb();
+        /* OEM BN: VIC RUN issued immediately */
         writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: BT656 config done, VIC RUN issued\n");
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
@@ -1923,10 +1933,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
 
-        /* CRITICAL FIX: Complete unlock sequence matching reference driver */
-        writel(2, vic_regs + 0x0);
-        wmb();
+        /* OEM BN: VIC RUN issued immediately */
         writel(1, vic_regs + 0x0);
+        wmb();
+        pr_info("tx_isp_vic_start: BT1120 config done, VIC RUN issued\n");
 
     } else {
         pr_info("Unsupported interface type %d\n", interface_type);
@@ -2417,12 +2427,11 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
 
     pixfmt = vic_dev->pixel_format;
-    if (vic_pixfmt_is_semiplanar_420(pixfmt)) {
-        stride = vic_dev->stride ? vic_dev->stride : width;
-    } else {
-        /* OEM/Binary Ninja fallback for non-semiplanar paths. */
-        stride = width << 1;
-    }
+    /* OEM BN EXACT: $v1_1 = $v1 << 1   (unconditional)
+     * The stride registers (0x310/0x314) control the MDMA read side
+     * from the ISP pipeline, which outputs YUV422 at 2 bytes/pixel.
+     * stride = width * 2, regardless of the DRAM output format. */
+    stride = width << 1;  /* OEM: width * 2 = 3840 for 1920 wide */
 
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x\n",
             vic_base, width, height, stride, pixfmt);
@@ -2499,7 +2508,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
         vic_dev->stream_state = 0;
         vic_dev->streaming = 0;
-        /* Reset MDMA auto-enable flag so next stream-on cycle re-triggers it */
+        /* Reset flags so next stream-on cycle re-triggers properly */
         mdma_auto_enabled = 0;
     } else {
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
@@ -2507,20 +2516,16 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        /* Ensure at least 5 active banks for OEM-compatible PIPO rotation */
 	        if (vic_dev->active_buffer_count < 5)
 	            vic_dev->active_buffer_count = 5;
-		        /* Keep the OEM control bits, but include semiplanar format=7 when the
-		         * negotiated V4L2 format is NV12/NV21 so the PIPO path interprets the
-	         * programmed Y/UV banks as semiplanar chroma rather than a RAW-like
-	         * packed layout.
-	         */
+		        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
+	         * No format bits in [2:0]. The OEM uses 0x80000020 unconditionally.
+	         * Offset 0x218 in the OEM struct is the bank count. */
 	        {
 	            u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
-		            if (vic_pixfmt_is_semiplanar_420(vic_dev->pixel_format))
-	                ctrl |= 0x7;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
-	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p pixfmt=0x%x\n",
-	                    ctrl, readl(vic_base + 0x300), vic_base, vic_dev->pixel_format);
+	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
+	                    ctrl, readl(vic_base + 0x300), vic_base);
 	        }
         /* OEM HLIL: *($s0 + 0x210) = 1, *($s0 + 0x214) = 1 */
         vic_dev->stream_state = 1;
@@ -3032,9 +3037,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 			width = vic_dev->width ? vic_dev->width : 1920;
 			height = vic_dev->height ? vic_dev->height : 1080;
 		}
-		stride = vic_dev->stride ? vic_dev->stride : width;
-		if (stride < width)
-			stride = width;
+		/* NV12 DRAM layout: Y plane is width bytes per line, UV is also
+		 * width bytes per line.  Do NOT use the ISP stride (width*2)
+		 * here — that controls the MDMA read side, not the DRAM write. */
+		stride = width;
 		y_plane_bytes = stride * height;
 		uv_addr = buffer_addr + y_plane_bytes;
 		writel(uv_addr, vic_base + reg_offset + 0x14);  /* 0x32c..0x33c */
@@ -3071,6 +3077,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 			vic_dev->active_buffer_count);
 		mdma_auto_enabled = 1;
 		ispvic_frame_channel_s_stream(vic_dev, 1);
+		/* VIC RUN was already issued by tx_isp_vic_start (OEM-correct).
+		 * No deferred VIC RUN needed. */
 	}
 
 	return 0;
@@ -3134,7 +3142,7 @@ static int ispvic_frame_channel_clearbuf(void)
         }
         wmb();
     }
-    /* Reset MDMA auto-enable flag so next streaming session re-triggers */
+    /* Reset flags so next streaming session re-triggers */
     mdma_auto_enabled = 0;
     pr_info("ispvic_frame_channel_clearbuf: drained lists, cleared slots, mdma reset\n");
     return 0;

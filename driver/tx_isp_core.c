@@ -1006,16 +1006,15 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 frame_chan->streaming_flags = 0;
             }
 
-            /* Binary Ninja: *($s0 + 0xe8) = 3
-             * Also set vic_dev->state = 3 so vic_core_s_stream can track
-             * its own state transitions properly.
-             */
+            /* Binary Ninja: *($s0 + 0xe8) = 3 */
             isp_dev->state = 3;
-            /* Do NOT touch vic_dev->state here — vic_core_s_stream
-             * manages its own state transitions. Setting it here
-             * prevents VIC hardware from being armed on the next
-             * enable=1 call.
-             */
+
+            /* Reset VIC MDMA state so the next stream-on cycle can
+             * re-trigger auto-enable.  Without this, the
+             * ispvic_frame_channel_s_stream idempotency guard
+             * (stream_state check) blocks re-configuration. */
+            if (vic_dev)
+                ispvic_frame_channel_s_stream(vic_dev, 0);
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
