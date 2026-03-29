@@ -545,6 +545,12 @@ static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
 static int vic_enabled = 0;
 
+/* Track whether MDMA auto-enable has fired for the current streaming session.
+ * Must be reset when streaming stops so that the next stream-on cycle
+ * re-triggers MDMA enable.  Module-level so it can be cleared from both
+ * ispvic_frame_channel_s_stream (streamoff) and clearbuf paths. */
+static int mdma_auto_enabled = 0;
+
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
 /* Forward declarations for PIPO callbacks used before definitions */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
@@ -2493,6 +2499,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
         vic_dev->stream_state = 0;
         vic_dev->streaming = 0;
+        /* Reset MDMA auto-enable flag so next stream-on cycle re-triggers it */
+        mdma_auto_enabled = 0;
     } else {
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
@@ -3054,17 +3062,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	 * (stream_state check) so subsequent calls are no-ops.
 	 */
 	/* Auto-enable MDMA once enough banks are filled.
-	 * Use a static flag since vic_dev->stream_state may be corrupted
-	 * by vic_raw_state_set writing to OEM offset 0x128.
+	 * Use the module-level mdma_auto_enabled flag (reset on streamoff)
+	 * since vic_dev->stream_state may be corrupted by vic_raw_state_set
+	 * writing to OEM offset 0x128.
 	 */
-	{
-		static int mdma_enabled = 0;
-		if (vic_dev->active_buffer_count >= 3 && !mdma_enabled) {
-			pr_info("*** VIC QBUF: auto-enabling MDMA (active=%u) ***\n",
-				vic_dev->active_buffer_count);
-			mdma_enabled = 1;
-			ispvic_frame_channel_s_stream(vic_dev, 1);
-		}
+	if (vic_dev->active_buffer_count >= 3 && !mdma_auto_enabled) {
+		pr_info("*** VIC QBUF: auto-enabling MDMA (active=%u) ***\n",
+			vic_dev->active_buffer_count);
+		mdma_auto_enabled = 1;
+		ispvic_frame_channel_s_stream(vic_dev, 1);
 	}
 
 	return 0;
@@ -3128,7 +3134,9 @@ static int ispvic_frame_channel_clearbuf(void)
         }
         wmb();
     }
-    pr_info("ispvic_frame_channel_clearbuf: drained lists, cleared slots\n");
+    /* Reset MDMA auto-enable flag so next streaming session re-triggers */
+    mdma_auto_enabled = 0;
+    pr_info("ispvic_frame_channel_clearbuf: drained lists, cleared slots, mdma reset\n");
     return 0;
 }
 
