@@ -1193,13 +1193,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
              * (stream_state check) blocks re-configuration. */
             if (vic_dev)
                 ispvic_frame_channel_s_stream(vic_dev, 0);
-
-            /* NOTE: dispatch->state stays at 4 after streamoff.
-             * This means the second STREAMON's event dispatch won't
-             * reach tisp_channel_start.  That's OK because
-             * ispvic_frame_channel_s_stream(vic_dev, 1) is called
-             * explicitly at the end of the enable path below.
-             */
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
@@ -1328,20 +1321,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         tx_isp_enable_irq(isp_dev);
     }
 
-    /* CRITICAL: Explicitly call ispvic_frame_channel_s_stream on
-     * enable.  The 0x3000003 event dispatch CANNOT reach the VIC
-     * because the streamoff path unlinks the pad graph
-     * (isp-w01[0]->isp-w02[0]).  The pipo init calls it once at
-     * boot, but after streamoff disables MDMA, the second STREAMON's
-     * event dispatch silently fails and MDMA stays disabled — no
-     * v1_10 interrupts, no frames.
-     *
-     * The streamoff path already calls the symmetric
-     * ispvic_frame_channel_s_stream(vic_dev, 0).  The idempotency
-     * guard (enable == stream_state → return 0) makes this safe.
+    /* MDMA enable is handled by the 0x3000003 (STREAM_START) event
+     * dispatch or by pipo initialization.
      */
-    if (enable && vic_dev)
-        ispvic_frame_channel_s_stream(vic_dev, 1);
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -ENOIOCTLCMD) {

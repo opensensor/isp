@@ -1069,18 +1069,6 @@ static u32 vic_irq_counter;
                     u32 ctrl_val;
                     if (banks > 5)
                         banks = 5;
-                    /* OEM writes the dynamic bank count to bits [19:16].
-                     * In the OEM, the MDMA handler actively pops/refills
-                     * done_head, keeping it small (1-2 entries), so
-                     * banks is typically 1 and v1_10 fires every frame.
-                     *
-                     * In our driver, done_head stays at 5 entries because
-                     * queue_head is empty (no new QBUFs until DQBUF returns).
-                     * Write 1 to force v1_10 every frame, matching the OEM's
-                     * steady-state behavior.
-                     */
-                    if (banks > 1)
-                        banks = 1;
                     ctrl_val = readl(vic_regs + 0x300);
                     ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
                     writel(ctrl_val, vic_regs + 0x300);
@@ -1343,25 +1331,6 @@ mdma_irq_refill:
 			vic_dev->active_buffer_count++;
 
 			kfree(q_buf);
-		} else if (!list_empty(&vic_dev->free_head) &&
-			   list_empty(&vic_dev->queue_head)) {
-			/* No queued buffers from userspace yet — recycle
-			 * free banks back to done_head with their existing
-			 * addresses.  The DMA slot register already has the
-			 * address programmed so no register write needed.
-			 * Without this, done_head drains to empty, the bank
-			 * count in reg 0x300 bits [19:16] goes to 0, and
-			 * the MDMA engine stalls permanently.
-			 */
-			struct vic_buffer_entry *f_buf;
-
-			while (!list_empty(&vic_dev->free_head)) {
-				f_buf = list_first_entry(&vic_dev->free_head,
-							 struct vic_buffer_entry, list);
-				list_del(&f_buf->list);
-				list_add_tail(&f_buf->list, &vic_dev->done_head);
-				vic_dev->active_buffer_count++;
-			}
 		}
 	}
 
@@ -2696,23 +2665,14 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        active_banks = vic_dev->active_buffer_count;
 	        if (active_banks > 5)
 	            active_banks = 5;
-	        /* OEM BN writes active_buffer_count to bits [19:16].  However,
-	         * with N banks the hardware cycles through all N before firing
-	         * v1_10 (MDMA completion).  With 3 banks that's ~100ms — too
-	         * slow for prudynt's ~150ms timeout on first DQBUF.
-	         *
-	         * Write 1 here so v1_10 fires after just 1 frame (~33ms).
-	         * vic_framedone_irq_function also clamps to 1 on every
-	         * frame_done, keeping it consistent.
-	         */
+	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
 	        {
-	            u32 initial_banks = 1;
-	            u32 ctrl = (initial_banks << 16) | 0x80000020;
+	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
-	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p active=%u\n",
-	                    ctrl, readl(vic_base + 0x300), vic_base, active_banks);
+	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
+	                    ctrl, readl(vic_base + 0x300), vic_base);
 	        }
         /* Save the initial bank count for reference */
         vic_dev->programmed_bank_count = active_banks;
