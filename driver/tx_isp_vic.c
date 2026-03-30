@@ -794,7 +794,7 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 
 /* Forward declarations for interrupt functions */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
-static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
 static void vic_program_irq_registers(struct tx_isp_vic_device *vic_dev,
                                       const char *origin)
@@ -1141,9 +1141,43 @@ label_123f4:
  *   processing == 0 (non-streaming/calibration): cycle DMA buffer indices, complete()
  *   processing != 0 (streaming): pop done buffer, deliver frame via raw_pipe,
  *                                 rotate next queued buffer into VIC DMA slot.
+ *
+ * Additionally, when stream_state == 1 and frame channels are streaming,
+ * take a shortcut: signal frame completion to all streaming channels and
+ * return immediately, bypassing the OEM bank management that causes
+ * "busy_buf null" errors.
  */
-static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
+int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
+	/* Frame channel shortcut: when actively streaming, deliver completed
+	 * frame to userspace and return immediately.  The VIC hardware
+	 * automatically cycles through pre-programmed bank addresses and
+	 * vic_framedone_irq_function refreshes the bank count in register 0x300.
+	 *
+	 * This runs BEFORE the processing flag check so it works regardless
+	 * of whether processing is 0 or 1.
+	 */
+	if (vic_dev->stream_state == 1 && ourISPdev) {
+		extern struct frame_channel_device frame_channels[];
+		extern int num_channels;
+		extern void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *, int);
+		int i;
+		static unsigned int mdma_signal_count;
+
+		mdma_signal_count++;
+		if ((mdma_signal_count % 30) == 1)
+			pr_info("MDMA shortcut[%u]: ch=%d streaming=[%d,%d]\n",
+				mdma_signal_count, channel,
+				frame_channels[0].state.streaming,
+				frame_channels[1].state.streaming);
+
+		for (i = 0; i < num_channels; i++) {
+			if (frame_channels[i].state.streaming)
+				tx_isp_hardware_frame_done_handler(ourISPdev, i);
+		}
+		return 0;
+	}
+
 	void __iomem *vic_base;
 	u32 frame_size;
 
@@ -1292,6 +1326,7 @@ mdma_irq_refill:
 
 	return 0;
 }
+EXPORT_SYMBOL(vic_mdma_irq_function);
 
 /* Probe-time VIC init stays out of the OEM IRQ route/mask path. */
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)

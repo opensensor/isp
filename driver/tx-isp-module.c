@@ -1199,14 +1199,14 @@ struct platform_device tx_isp_core_platform_device = {
 struct frame_channel_device; /* Forward declare struct */
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
-static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 static int tx_isp_send_event_to_remote_local(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
-static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
+void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 void __iomem *tx_isp_get_vic_primary_regs(void);
 extern int tx_isp_tuning_notify(struct tx_isp_dev *dev, uint32_t event);
@@ -3024,8 +3024,14 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* OEM HLIL: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        if (v1_7 || v1_10)
-            pr_debug("VIC ISR: v1_7=0x%x v1_10=0x%x\n", v1_7, v1_10);
+        /* DIAG: print every ~30 IRQs to avoid log flood */
+        if (v1_7 || v1_10) {
+            static unsigned int vic_isr_count;
+            if ((vic_isr_count++ % 30) == 0)
+                pr_info("VIC ISR[%u]: v1_7=0x%x v1_10=0x%x stream_state=%d\n",
+                        vic_isr_count, v1_7, v1_10,
+                        vic_dev->stream_state);
+        }
 
         /* OEM HLIL: if (($v1_7 & 1) != 0) → frame_done */
         if ((v1_7 & 1) != 0) {
@@ -3868,7 +3874,7 @@ void __iomem *tx_isp_get_vic_primary_regs(void)
 EXPORT_SYMBOL(tx_isp_get_vic_primary_regs);
 
 /* Real hardware frame completion detection - SDK compatible */
-static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
+void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
 {
     if (!isp_dev || channel < 0 || channel >= num_channels)
         return;
@@ -3876,6 +3882,7 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
     /* Wake up frame waiters with real hardware completion */
     frame_channel_wakeup_waiters(&frame_channels[channel]);
 }
+EXPORT_SYMBOL(tx_isp_hardware_frame_done_handler);
 
 /* Frame channel implementations removed - handled by FS probe instead */
 
@@ -6726,170 +6733,9 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-/* vic_mdma_irq_function - live MDMA retirement/recycle path aligned with OEM
- * list semantics used by tx_isp_vic.c:
- *   queue_head = pending userspace buffers waiting for a free bank
- *   free_head  = recyclable bank descriptors
- *   done_head  = active/programmed bank descriptors
+/* vic_mdma_irq_function is now in tx_isp_vic.c (single non-static definition).
+ * Forward declaration is at line 1210.
  */
-static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
-{
-    void __iomem *vic_base;
-
-    if (!vic_dev)
-        return;
-
-    vic_base = tx_isp_get_vic_primary_regs();
-    if (!vic_base)
-        vic_base = vic_dev->vic_regs;
-
-    /* During active streaming, deliver completed frame to userspace and
-     * return immediately.  No bank list management needed — the VIC hardware
-     * automatically cycles through the pre-programmed bank addresses and
-     * vic_framedone_irq_function refreshes the bank count in register 0x300.
-     *
-     * This check runs BEFORE the processing flag check so it works
-     * regardless of whether processing is 0 or 1.  The OEM's complex
-     * bank management path (processing==1, lines below) drains done_head
-     * to empty and causes "busy_buf null" errors.
-     */
-    if (vic_dev->stream_state == 1) {
-        /* The T31 VIC shares one MDMA engine across both channels.
-         * Only v1_10 bit 0 (ch0) fires — bit 1 (ch1) is never set.
-         * Signal ALL streaming channels on each MDMA completion so
-         * channel 1's frame_pooling_thread also gets woken up.
-         */
-        if (ourISPdev) {
-            int i;
-            for (i = 0; i < num_channels; i++) {
-                if (frame_channels[i].state.streaming)
-                    tx_isp_hardware_frame_done_handler(ourISPdev, i);
-            }
-        }
-        return;
-    }
-
-    if (!vic_dev->processing) {
-        /* Original calibration path: sequential bank address cycling */
-        {
-            int frame_words = vic_dev->width * vic_dev->height * 2;
-
-            if (channel == 0 && vic_mdma_ch0_sub_get_num != 0 && vic_base) {
-                u32 next_bank = (vic_mdma_ch0_set_buff_index + 1) % 5;
-                u32 buffer_reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;
-                u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
-                u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
-
-                vic_mdma_ch0_set_buff_index = next_bank;
-                writel(next_addr, vic_base + new_buffer_reg_offset);
-                wmb();
-
-                vic_mdma_ch0_sub_get_num -= 1;
-                if (vic_mdma_ch0_sub_get_num == 7) {
-                    u32 reg_300 = readl(vic_base + 0x300);
-                    reg_300 = (reg_300 & 0xfff0ffff) | 0x70000;
-                    writel(reg_300, vic_base + 0x300);
-                    wmb();
-                }
-            } else if (channel == 1 && vic_mdma_ch1_sub_get_num != 0 && vic_base) {
-                u32 next_bank = (vic_mdma_ch1_set_buff_index + 1) % 5;
-                u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
-                u32 new_buffer_reg_offset = (next_bank + 0xc6) << 2;
-                u32 next_addr = frame_words + readl(vic_base + buffer_reg_offset);
-
-                vic_mdma_ch1_set_buff_index = next_bank;
-                writel(next_addr, vic_base + new_buffer_reg_offset);
-                wmb();
-
-                vic_mdma_ch1_sub_get_num -= 1;
-            }
-
-            if (vic_mdma_ch0_sub_get_num == 0 && vic_mdma_ch1_sub_get_num == 0)
-                complete(&vic_dev->frame_complete);
-        }
-
-        return;
-    }
-
-    if (vic_dev->stream_state != 0) {
-        struct vic_buffer_entry *active_bank = NULL;
-        struct vic_buffer_entry *queued_buffer = NULL;
-        struct vic_buffer_entry *recycled_bank = NULL;
-        unsigned long irq_flags;
-        u32 current_dma_addr;
-        u32 recycled_reg_offset = 0;
-        u32 dma_ctrl = 0;
-        int active_limit;
-        bool matched_current = false;
-
-        if (!vic_base)
-            return;
-
-        current_dma_addr = readl(vic_base + 0x380);
-
-        spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
-
-        active_limit = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
-        if (list_empty(&vic_dev->done_head)) {
-            pr_info("busy_buf null; busy_buf_count= %u\n", vic_dev->active_buffer_count);
-        } else {
-            while (!list_empty(&vic_dev->done_head) && active_limit-- > 0) {
-                active_bank = list_first_entry(&vic_dev->done_head,
-                                               struct vic_buffer_entry, list);
-                list_del(&active_bank->list);
-                if (vic_dev->active_buffer_count > 0)
-                    vic_dev->active_buffer_count--;
-                list_add_tail(&active_bank->list, &vic_dev->free_head);
-
-                if (active_bank->buffer_addr == current_dma_addr) {
-                    matched_current = true;
-                    break;
-                }
-
-                pr_info("line : %d; bank_addr:0x%x; addr:0x%x\n", 0x296,
-                        active_bank->buffer_addr, current_dma_addr);
-            }
-        }
-
-        if (!list_empty(&vic_dev->queue_head) && !list_empty(&vic_dev->free_head)) {
-            queued_buffer = list_first_entry(&vic_dev->queue_head,
-                                             struct vic_buffer_entry, list);
-            list_del(&queued_buffer->list);
-
-            recycled_bank = list_first_entry(&vic_dev->free_head,
-                                             struct vic_buffer_entry, list);
-            list_del(&recycled_bank->list);
-
-            recycled_bank->buffer_addr = queued_buffer->buffer_addr;
-            recycled_bank->channel = queued_buffer->channel;
-            recycled_bank->buffer_length = queued_buffer->buffer_length;
-            recycled_reg_offset = (recycled_bank->buffer_index + 0xc6) << 2;
-
-            list_add_tail(&recycled_bank->list, &vic_dev->done_head);
-            vic_dev->active_buffer_count++;
-        }
-
-        spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
-
-        if (!matched_current && active_bank && current_dma_addr != 0) {
-            dma_ctrl = readl(vic_base + 0x300);
-            pr_err("function: %s ; vic dma addrrss error!!!\n", "vic_mdma_irq_function");
-            pr_err("VIC_ADDR_DMA_CONTROL : 0x%x\n", dma_ctrl);
-        }
-
-        if (recycled_bank && queued_buffer) {
-            writel(recycled_bank->buffer_addr, vic_base + recycled_reg_offset);
-            wmb();
-        }
-
-        if (ourISPdev)
-            tx_isp_hardware_frame_done_handler(ourISPdev, channel);
-
-        kfree(queued_buffer);
-    }
-
-    pr_debug("vic_mdma_irq_function: Channel %d MDMA interrupt processing complete\n", channel);
-}
 
 /* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt (renamed local to avoid SDK symbol clash) */
 static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)

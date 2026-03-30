@@ -56,26 +56,7 @@ extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration *
 static uint32_t gpio_switch_state = 0;
 static uint8_t gpio_info[20] = {0xff}; /* GPIO configuration array */
 
-int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel);
-
-
-/**
- * vic_mdma_irq_function - Handle VIC MDMA interrupts
- */
-int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel)
-{
-    pr_debug("*** vic_mdma_irq_function: MDMA channel %d interrupt ***\n", channel);
-    
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    /* Process MDMA completion for the specified channel */
-    /* This would handle DMA transfer completion and buffer management */
-    
-    return 0;
-}
-EXPORT_SYMBOL(vic_mdma_irq_function);
+/* vic_mdma_irq_function is now in tx_isp_vic.c (single canonical definition) */
 
 /**
  * tx_isp_vic_start_streaming - Start VIC streaming with proper initialization
