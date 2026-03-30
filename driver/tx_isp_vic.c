@@ -1011,15 +1011,11 @@ static u32 vic_irq_counter;
         return 0;
     }
 
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
-    /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
-//    if (vic_dev->processing == 0) {
-//        /* goto label_123f4 - GPIO handling section */
-//        pr_info("vic_framedone_irq_function: Processing not active, skipping frame handling\n");
-//        goto label_123f4;
-//    } else {
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) goto GPIO handling */
+    if (vic_dev->processing == 0) {
+        goto label_123f4;
+    } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
-        /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
         pr_debug_ratelimited("vic_irq: stream_state=%d\n", vic_dev->stream_state);
         result = (void *)(uintptr_t)vic_dev->stream_state;
 
