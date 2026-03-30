@@ -4259,34 +4259,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* CRITICAL FIX: Write Y/UV addresses to MSCA DMA FIFO registers.
-         * OEM ispcore_pad_event_handle case 0x3000005 writes buffer addresses
-         * to the MSCA scaler DMA FIFO so the hardware knows WHERE to write
-         * each completed frame.  Without this, MSCA has no output addresses
-         * and frames are corrupted.
+        /* NOTE: Do NOT write to MSCA DMA FIFO registers (0x996c/0x9984) here.
+         * The VIC MDMA writes raw sensor data to bank buffers (0x318+).
+         * The ISP core internally reads from VIC MDMA output and writes
+         * ISP-processed NV12 via MSCA to the same bank addresses.
+         * Writing to MSCA FIFO AND VIC MDMA with the same addresses
+         * caused dual-write corruption (raw overwriting processed frames).
          *
-         * Register layout per channel (channel_offset = channel * 0x100):
-         *   ISP + 0x996c + channel_offset : Y DMA address FIFO (push)
-         *   ISP + 0x9984 + channel_offset : UV DMA address FIFO (push)
-         *
-         * UV address = Y address + ALIGN(height, 16) * width  (NV12 layout)
+         * The OEM flow: userspace buffers go to VIC MDMA banks only.
+         * The ISP core+MSCA pipeline reads VIC MDMA output internally
+         * and writes processed frames to the VIC MDMA destination buffers.
          */
-        if (ourISPdev && ourISPdev->core_regs && channel < 3) {
-            void __iomem *isp_regs = ourISPdev->core_regs;
-            u32 ch_width = state->width;
-            u32 ch_height = state->height;
-            u32 aligned_h = (ch_height + 0xf) & ~0xf;
-            u32 y_addr = buffer_phys_addr;
-            u32 uv_addr = y_addr + aligned_h * ch_width;
-            u32 ch_off = channel * 0x100;
-
-            writel(y_addr,  isp_regs + 0x996c + ch_off);
-            writel(uv_addr, isp_regs + 0x9984 + ch_off);
-            wmb();
-
-            pr_info("*** Channel %d: MSCA DMA FIFO push Y=0x%x UV=0x%x (w=%u h=%u align_h=%u) ***\n",
-                    channel, y_addr, uv_addr, ch_width, ch_height, aligned_h);
-        }
 
         /* CRITICAL: Dispatch 0x3000005 (BUFFER_ENQUEUE) to VIC so that
          * ispvic_frame_channel_qbuf properly:
