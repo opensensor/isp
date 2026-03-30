@@ -2657,19 +2657,26 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        if (active_banks > 5)
 	            active_banks = 5;
 	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
-	         * No format bits in [2:0]. The OEM uses 0x80000020 unconditionally.
-	         * Offset 0x218 in the OEM struct is the number of programmed banks,
-	         * not an unconditional 5-bank default.
+	         * Offset 0x218 is the programmed bank count.
+	         *
+	         * CRITICAL: Write 1 here (not active_banks) so the hardware
+	         * fires the first MDMA completion (v1_10) after just 1 bank
+	         * transfer. This bootstraps the streaming loop — once
+	         * vic_mdma_irq_function runs, it consumes/refills banks,
+	         * and vic_framedone_irq_function dynamically adjusts the
+	         * count from done_head. Without this, the hardware waits
+	         * for all N banks to complete before the first v1_10,
+	         * which takes ~N*33ms and prudynt times out.
 	         */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x80000020;
+	            u32 ctrl = (1 << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
-	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
-	                    ctrl, readl(vic_base + 0x300), vic_base);
+	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p active=%u\n",
+	                    ctrl, readl(vic_base + 0x300), vic_base, active_banks);
 	        }
-        /* Save the initial bank count — used by framedone IRQ to refresh 0x300 */
+        /* Save the initial bank count for reference */
         vic_dev->programmed_bank_count = active_banks;
         /* OEM HLIL: *($s0 + 0x210) = 1, *($s0 + 0x214) = 1 */
         vic_dev->stream_state = 1;
