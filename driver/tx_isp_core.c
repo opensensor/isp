@@ -1193,6 +1193,37 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
              * (stream_state check) blocks re-configuration. */
             if (vic_dev)
                 ispvic_frame_channel_s_stream(vic_dev, 0);
+
+            /* CRITICAL: Reset dispatch->state AND channel internal state
+             * to 3 so the next STREAMON can re-dispatch the 0x3000003
+             * event.  The OEM does this via the 0x3000004 (STREAM_STOP)
+             * event → ispcore_frame_channel_streamoff, but our streamoff
+             * path bypasses that event.  Without this reset:
+             *   - dispatch->state stays at 4 → dispatch returns early
+             *   - *(channel + 0x74) stays at 4 → pad_event_handle skips
+             *     tisp_channel_start → stream_state stays 0
+             */
+            {
+                extern struct tx_isp_fs_device *dump_fsd;
+                struct tx_isp_fs_device *fs_dev = dump_fsd;
+                if (fs_dev && fs_dev->channel_configs && fs_dev->channel_count > 0) {
+                    struct tx_isp_channel_config *configs =
+                        (struct tx_isp_channel_config *)fs_dev->channel_configs;
+                    int ci;
+                    for (ci = 0; ci < fs_dev->channel_count; ci++) {
+                        configs[ci].state = 3;
+                        /* Also reset the channel's internal state at
+                         * offset 0x74 (word 0x1d) which the
+                         * ispcore_pad_event_handle STREAMON case checks
+                         * before calling tisp_channel_start.
+                         */
+                        if (configs[ci].event_priv) {
+                            uint32_t *chan_ptr = (uint32_t *)configs[ci].event_priv;
+                            chan_ptr[0x1d] = 3; /* *(channel + 0x74) = 3 */
+                        }
+                    }
+                }
+            }
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
@@ -3753,7 +3784,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                         dispatch->channel_id);
                 ISP_INFO("ispcore_pad_event_handle: channel started successfully");
             } else {
-                arch_local_irq_restore(var_58);
+                private_spin_unlock_irqrestore((char*)s2_1 + 0x9c, var_58);
                 /* Preemption handling */
                 result = 0;
                 ISP_INFO("ispcore_pad_event_handle: channel already started");
