@@ -4288,30 +4288,32 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     channel, y_addr, uv_addr, ch_width, ch_height, aligned_h);
         }
 
-        /* CRITICAL: Also increment VIC active_buffer_count so that
-         * ispvic_frame_channel_s_stream doesn't defer STREAMON.
-         * The VIC MDMA needs to know buffers exist (even if MSCA handles the
-         * actual DMA) because stream_state must transition to 1 for the VIC
-         * ISR framedone handler to process frames.
+        /* CRITICAL: Dispatch 0x3000005 (BUFFER_ENQUEUE) to VIC so that
+         * ispvic_frame_channel_qbuf properly:
+         *   1) Programs VIC MDMA bank registers (0x318+)
+         *   2) Adds buffer to done_head list
+         *   3) Increments active_buffer_count
+         * Without this, vic_framedone_irq_function finds done_head empty,
+         * writes 0 banks to reg 0x300, and MDMA never fires v1_10.
          */
         if (ourISPdev && ourISPdev->vic_dev && channel == 0) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
-            void __iomem *vic_base = vic->vic_regs;
+            struct vic_buffer_entry *qbuf_node;
 
-            /* Also program VIC MDMA bank registers with this buffer address.
-             * Without bank addresses, the MDMA engine can't generate v1_10
-             * (frame done) interrupts, and the ISR never processes frames.
-             * Bank register layout: 0x318 + bank_index * 4
-             */
-            if (vic_base && vic->active_buffer_count < 5) {
-                u32 bank_idx = vic->active_buffer_count;
-                u32 reg_off = 0x318 + bank_idx * 4;
-                writel(buffer_phys_addr, vic_base + reg_off);
-                wmb();
-                pr_info("*** Channel %d: VIC bank[%u] = 0x%x (reg 0x%x) ***\n",
-                        channel, bank_idx, buffer_phys_addr, reg_off);
-                vic->active_buffer_count++;
+            qbuf_node = kzalloc(sizeof(*qbuf_node), GFP_KERNEL);
+            if (qbuf_node) {
+                qbuf_node->buffer_addr = buffer_phys_addr;
+                qbuf_node->buffer_index = buffer.index;
+                qbuf_node->channel = channel;
+                qbuf_node->buffer_length = buffer.length;
+                INIT_LIST_HEAD(&qbuf_node->list);
+
+                /* Dispatch through VIC's proper QBUF handler */
+                vic_core_ops_ioctl(&vic->sd, 0x3000005, qbuf_node);
+                pr_info("*** Channel %d: VIC QBUF dispatched phys=0x%x idx=%u active=%u ***\n",
+                        channel, buffer_phys_addr, buffer.index,
+                        vic->active_buffer_count);
             }
 
             /* If streaming was requested but deferred (stream_state==0),
