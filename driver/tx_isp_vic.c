@@ -2922,22 +2922,37 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
 
     pixfmt = vic_dev->pixel_format;
-    /* OEM BN/HLIL programs both MDMA stride registers with width<<1 even when
-     * the userspace-visible format is NV12. Keep any larger cached bytesperline,
-     * but never go below the OEM 16bpp-style stride.
-     */
-    stride = vic_mdma_stride_resolve(vic_dev, width, pixfmt);
 
-    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x cached_stride=%u\n",
-            vic_base, width, height, stride, pixfmt, vic_dev->stride);
-
-    /* OEM BN/HLIL: VIC MDMA stride is always width<<1 (2 bytes/pixel).
-     * The ISP core + MSCA output uses 16-bit per pixel format even when
-     * the final userspace format is NV12.  The MSCA/encoder handles the
-     * pixel-format conversion internally.
+    /* OEM vic_mdma_enable:
+     *   stride = width;
+     *   if (fmt != 7) stride <<= 1;
+     *
+     * fmt=7 is NV12:  stride = width      (1 byte/pixel Y plane)
+     * fmt=0 is RAW:   stride = width << 1 (2 bytes/pixel)
+     *
+     * When ISP bypass is OFF, the ISP pipeline outputs NV12-format data.
+     * libimp allocates NV12-sized buffers (width * height * 1.5).
+     * VIC MDMA must use NV12-compatible stride (width) or the DMA will
+     * overflow the buffer and produce a corrupted/partial image.
      */
     {
-        u32 mdma_stride = width << 1;   /* OEM: always 2 bytes/pixel */
+        int is_nv12 = 0;
+        u32 mdma_stride;
+
+        /* Detect NV12 mode: bypass off means ISP pipeline produces NV12 */
+        if (ourISPdev && !ourISPdev->bypass_enabled)
+            is_nv12 = 1;
+
+        if (is_nv12)
+            mdma_stride = width;           /* NV12: stride = width */
+        else
+            mdma_stride = width << 1;      /* RAW:  stride = width * 2 */
+
+        stride = mdma_stride;
+
+        pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u fmt=%s pixfmt=0x%x\n",
+                vic_base, width, height, stride, is_nv12 ? "NV12" : "RAW", pixfmt);
+
         writel(1, vic_base + 0x308);                           /* MDMA enable */
         writel((width << 16) | height, vic_base + 0x304);      /* frame size */
         writel(mdma_stride, vic_base + 0x310);                 /* Y stride */
@@ -3028,11 +3043,15 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
-	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
+	        /* OEM BN: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 | fmt
 	         * Bit 31 = MDMA master enable (always on for frame delivery).
+	         * OEM vic_mdma_enable: ctrl = banks<<16 | 0x80000020 | fmt
+	         *   fmt=0 for RAW, fmt=7 for NV12.
 	         */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x80000020;
+	            int is_nv12 = (ourISPdev && !ourISPdev->bypass_enabled) ? 1 : 0;
+	            u32 fmt = is_nv12 ? 7 : 0;
+	            u32 ctrl = (active_banks << 16) | 0x80000020 | fmt;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
@@ -3544,24 +3563,28 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	if (queued_buffer->channel == 0) {
-		/* Write Y address to VIC MDMA bank register.
-		 * VIC MDMA handles Y plane DMA and v1_10 frame delivery.
-		 * Also push UV address to MSCA reg 0x9984 so MSCA writes
-		 * the chrominance plane at the offset libimp expects:
-		 * UV_addr = Y_addr + stride * ALIGN(height, 16).
-		 */
+		/* OEM: Write Y address to VIC MDMA bank register at 0x318 + idx*4 */
 		writel(buffer_addr, vic_base + reg_offset);
 
-		/* No MSCA address push — MSCA DMA is managed by tisp_g_frame
-		 * in the ISP core blob. Manual writes to 0x9984/0x996c interfere
-		 * with MSCA's internal state and cause image offset/shift.
+		/* OEM vic_mdma_enable: For NV12 (fmt=7), also program UV bank
+		 * address at 0x32c + bank_idx*4.
+		 * UV offset = width * ALIGN(height, 16) for NV12.
 		 */
+		if (ourISPdev && !ourISPdev->bypass_enabled) {
+			u32 w = vic_dev->width ? vic_dev->width : 1920;
+			u32 h = vic_dev->height ? vic_dev->height : 1080;
+			u32 aligned_h = (h + 15) & ~15;  /* ALIGN(height, 16) */
+			u32 uv_offset = w * aligned_h;
+			u32 uv_addr = buffer_addr + uv_offset;
+			u32 uv_reg = 0x32c + (buffer_index * 4);
+			writel(uv_addr, vic_base + uv_reg);
+		}
 		wmb();
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 		vic_dev->active_buffer_count += 1;
 
-		pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
+		pr_info("*** VIC QBUF: bank=%u Y=0x%x len=%u reg_off=0x%x active=%u ***\n",
 			buffer_index, buffer_addr,
 			bank_buffer->buffer_length,
 			reg_offset,
