@@ -2695,9 +2695,18 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        active_banks = vic_dev->active_buffer_count;
 	        if (active_banks > 5)
 	            active_banks = 5;
-	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
+	        /* OEM BN writes active_buffer_count to bits [19:16].  However,
+	         * with N banks the hardware cycles through all N before firing
+	         * v1_10 (MDMA completion).  With 3 banks that's ~100ms — too
+	         * slow for prudynt's ~150ms timeout on first DQBUF.
+	         *
+	         * Write 1 here so v1_10 fires after just 1 frame (~33ms).
+	         * vic_framedone_irq_function also clamps to 1 on every
+	         * frame_done, keeping it consistent.
+	         */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x80000020;
+	            u32 initial_banks = 1;
+	            u32 ctrl = (initial_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
