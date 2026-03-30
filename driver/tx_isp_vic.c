@@ -2659,20 +2659,33 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	    } else {
 	        u32 active_banks;
 
-	        /* OEM BN: vic_pipo_mdma_enable($s0) */
-	        vic_pipo_mdma_enable(vic_dev);
-		    vic_program_irq_registers(vic_dev, "ispvic_frame_channel_s_stream");
 	        active_banks = vic_dev->active_buffer_count;
 	        if (active_banks > 5)
 	            active_banks = 5;
+
+	        /* Guard: if no buffers have been queued yet, defer the real
+	         * enable until the next STREAM_START which will arrive after
+	         * QBUFs.  Without this, the premature STREAMON (before QBUFs)
+	         * sets stream_state=1 with zero banks, and the real STREAMON
+	         * (after QBUFs) is skipped by the idempotency check.
+	         */
+	        if (active_banks == 0) {
+	            pr_info("ispvic_frame_channel_s_stream: deferred — no buffers queued yet\n");
+	            private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+	            return 0;
+	        }
+
+	        /* OEM BN: vic_pipo_mdma_enable($s0) */
+	        vic_pipo_mdma_enable(vic_dev);
+		    vic_program_irq_registers(vic_dev, "ispvic_frame_channel_s_stream");
 	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
 	        {
 	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
-	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
-	                    ctrl, readl(vic_base + 0x300), vic_base);
+	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p banks=%u\n",
+	                    ctrl, readl(vic_base + 0x300), vic_base, active_banks);
 	        }
         /* Save the initial bank count for reference */
         vic_dev->programmed_bank_count = active_banks;
