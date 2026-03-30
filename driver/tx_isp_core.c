@@ -1596,19 +1596,33 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
+        extern struct tx_isp_vic_device *dump_vsd;
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* Channel 0: drain MSCA FIFO — OEM pattern.
-         * Pop Y address from FIFO, fire 0x3000006 event (which
-         * increments frame_ready_count and wakes DQBUF waiters).
-         * Actual frame buffer delivery is via VIC MDMA done (v1_10)
-         * in the VIC ISR, NOT here.
+        /* Channel 0: drain MSCA FIFO and deliver frames.
+         * VIC MDMA is disabled — MSCA is the NV12 output DMA.
+         * For each drained frame:
+         * 1. Pop Y address from MSCA FIFO (0x9974)
+         * 2. Recycle one VIC done_head entry → free_head
+         *    (prevents bank slot exhaustion since v1_10 won't fire)
+         * 3. Fire 0x3000006 event → frame_ready_count++ → wake DQBUF
          */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
             (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
+
+            /* Recycle one VIC bank slot: done_head → free_head */
+            if (dump_vsd && !list_empty(&dump_vsd->done_head)) {
+                struct vic_buffer_entry *done_buf;
+                done_buf = list_first_entry(&dump_vsd->done_head,
+                                            struct vic_buffer_entry, list);
+                list_del(&done_buf->list);
+                dump_vsd->active_buffer_count--;
+                list_add_tail(&done_buf->list, &dump_vsd->free_head);
+            }
+
             frame_chan_event(&frame_channels[0], 0x3000006, NULL);
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
