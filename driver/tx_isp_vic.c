@@ -2587,8 +2587,12 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x cached_stride=%u\n",
             vic_base, width, height, stride, pixfmt, vic_dev->stride);
 
-    /* OEM EXACT: MDMA config registers — stride/size/enable */
-    writel(1, vic_base + 0x308);                           /* MDMA enable */
+    /* MDMA DISABLED: With bypass forced off, the MSCA outputs NV12
+     * frames.  VIC MDMA writes raw Bayer (stride=width*2) which
+     * overwrites MSCA NV12 output and corrupts the image.
+     * Keep size/stride programmed but disable the DMA engine.
+     */
+    writel(0, vic_base + 0x308);                           /* MDMA disabled */
     writel((width << 16) | height, vic_base + 0x304);      /* frame size */
     writel(stride, vic_base + 0x310);                      /* Y stride */
     writel(stride, vic_base + 0x314);                      /* UV stride */
@@ -2668,11 +2672,16 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
-	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
+	        /* Bypass forced off: clear bit 31 (MDMA master enable) so VIC
+	         * does NOT DMA raw Bayer into the NV12 frame buffers.
+	         * MSCA handles NV12 output instead.  Bank count preserved
+	         * for framedone tracking.
+	         */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x80000020;
+	            u32 ctrl = (active_banks << 16) | 0x00000020;
 
 	            writel(ctrl, vic_base + 0x300);
+	            writel(0, vic_base + 0x308);  /* ensure MDMA off */
 	            wmb();
 	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x mdma308=0x%x base=%p banks=%u\n",
 	                    readl(vic_base + 0x300), readl(vic_base + 0x308),
