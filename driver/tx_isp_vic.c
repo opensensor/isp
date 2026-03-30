@@ -2675,15 +2675,19 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
 	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
-	         * Keep the bank count in 0x300 for framedone tracking, but ensure
-	         * MDMA stays disabled (0x308=0) so raw Bayer doesn't overwrite
-	         * the MSCA's NV12 output.
+	         *
+	         * MDMA DISABLE FIX: Bit 31 (0x80000000) of reg 0x300 is the
+	         * MDMA master enable.  The OEM sets it for raw capture.
+	         * We clear it so the VIC does NOT DMA raw Bayer into the
+	         * NV12 frame buffers.  Frame output goes through MSCA instead.
+	         * Bank count (bits 16-19) preserved for framedone tracking.
+	         * Bit 5 (0x20) preserved (ping-pong mode control).
 	         */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x80000020;
+	            u32 ctrl = (active_banks << 16) | 0x00000020;
 
 	            writel(ctrl, vic_base + 0x300);
-	            writel(0, vic_base + 0x308);  /* Re-confirm MDMA off */
+	            writel(0, vic_base + 0x308);
 	            wmb();
 	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x mdma308=0x%x base=%p banks=%u\n",
 	                    readl(vic_base + 0x300), readl(vic_base + 0x308),
