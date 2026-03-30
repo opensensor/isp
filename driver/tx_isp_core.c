@@ -252,6 +252,7 @@ struct tisp_boot_sensor_info {
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+extern void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
 
 /* Forward declaration for VIN device creation from tx_isp_vin.c */
 extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
@@ -1319,11 +1320,21 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         tx_isp_disable_irq(isp_dev);
     } else {
         tx_isp_enable_irq(isp_dev);
-    }
 
-    /* MDMA enable is handled by the 0x3000003 (STREAM_START) event
-     * dispatch or by pipo initialization.
-     */
+        /* The STREAM_START (0x3000003) event cannot reach the VIC
+         * after STREAMOFF because the pad links are broken.  The OEM
+         * calls vic_core_s_stream which does:
+         *   tx_vic_enable_irq()   → re-enables VIC IRQ 38
+         *   ispvic_frame_channel_s_stream(1) → re-enables MDMA
+         * Since neither fires on the second STREAMON, call them
+         * explicitly.  Both have idempotency guards so redundant
+         * calls on the first STREAMON are harmless.
+         */
+        if (vic_dev) {
+            tx_vic_enable_irq(vic_dev);
+            ispvic_frame_channel_s_stream(vic_dev, 1);
+        }
+    }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -ENOIOCTLCMD) {

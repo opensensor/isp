@@ -2789,11 +2789,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     current_state = vic_dev->state;
 
     if (enable == 0) {
-        /* Do NOT reset vic_dev->state to 3 here.
-         * VIC hardware stays running across the OEM stop-start cycle.
-         * Resetting to 3 causes the second enable=1 call to re-arm
-         * VIC, which always times out because hardware is already running.
-         */
+        /* OEM BN EXACT: if (state == 4) state = 3 */
+        if (current_state == 4)
+            vic_dev->state = 3;
         return 0;
     }
 
