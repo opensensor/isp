@@ -177,6 +177,14 @@ struct tx_isp_vic_device {
     /* CRITICAL FIX: Hardware interrupt enable flag (replaces unsafe offset 0x13c access) */
     int hw_irq_enabled __attribute__((aligned(4)));                 /* Hardware interrupt enable flag - SAFE replacement for offset 0x13c */
 
+    /* OEM offset 0x140/0x144: Snapshot capture buffer (snapraw/saveraw).
+     * capture_buf_phys is the physical address stored by vic_mdma_enable;
+     * capture_buf_virt is derived as KSEG0(phys) for vfs_write.
+     */
+    uint32_t capture_buf_phys __attribute__((aligned(4)));  /* 0x140 */
+    void *capture_buf_virt __attribute__((aligned(4)));      /* 0x144 */
+    uint32_t capture_buf_size __attribute__((aligned(4)));   /* total allocated size */
+
     /* Moved from tx_isp_subdev private fields (ABI fix) */
     struct tx_isp_irq_info sd_irq_info;  /* VIC IRQ info (was sd.irq_info) */
     struct mutex vic_frame_end_lock __attribute__((aligned(4)));
