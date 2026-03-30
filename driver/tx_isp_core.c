@@ -47,6 +47,7 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
+void system_reg_write(u32 reg, u32 value);
 static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
@@ -151,6 +152,52 @@ static void ispcore_frame_format_to_attr_words(const struct frame_image_format *
     attr_words[12] = fmt->fcrop_height;
 }
 
+static int ispcore_msca_out_fmt_from_pixelformat(u32 pixelformat, u32 *out_fmt)
+{
+    if (!out_fmt)
+        return -EINVAL;
+
+    switch (pixelformat) {
+    case V4L2_PIX_FMT_NV12:
+        *out_fmt = 0x0;
+        return 0;
+    case V4L2_PIX_FMT_NV21:
+        *out_fmt = 0x1;
+        return 0;
+    case V4L2_PIX_FMT_RGB565:
+        *out_fmt = 0x1f;
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
+static void ispcore_sync_output_format(struct tx_isp_dev *isp_dev,
+                                       int channel_id,
+                                       const struct frame_image_format *fmt)
+{
+    struct tx_isp_vic_device *vic_dev;
+    u32 out_fmt;
+
+    if (!isp_dev || !fmt || !ispcore_valid_channel_id(channel_id))
+        return;
+
+    if (channel_id == 0 && isp_dev->vic_dev) {
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        vic_dev->width = fmt->pix.width;
+        vic_dev->height = fmt->pix.height;
+        vic_dev->pixel_format = fmt->pix.pixelformat;
+        vic_dev->stride = fmt->pix.bytesperline ? fmt->pix.bytesperline : fmt->pix.width;
+    }
+
+    if (ispcore_msca_out_fmt_from_pixelformat(fmt->pix.pixelformat, &out_fmt) != 0)
+        return;
+
+    system_reg_write((((u32)channel_id + 0x99) << 8) + 0x68, out_fmt);
+    pr_info("ispcore_sync_output_format: ch=%d pixfmt=0x%x -> out_fmt=0x%x\n",
+            channel_id, fmt->pix.pixelformat, out_fmt);
+}
+
 static void ispcore_store_channel_format(int channel_id,
                                          const struct frame_image_format *fmt)
 {
@@ -200,6 +247,8 @@ static void ispcore_store_channel_format(int channel_id,
             frame_channels[channel_id].state.sizeimage = fmt->pix.sizeimage;
         frame_channels[channel_id].field = fmt->pix.field;
     }
+
+    ispcore_sync_output_format(isp_dev, channel_id, fmt);
 }
 
 static void ispcore_get_channel_format(int channel_id, struct frame_image_format *fmt)
@@ -572,7 +621,6 @@ void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
-void system_reg_write(u32 reg, u32 value);
 int tisp_lsc_write_lut_datas(void);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
@@ -687,6 +735,12 @@ void mbus_to_bayer_write(u32 mbus_code)
 	default:
 		bayer_mode = 0;
 		break;
+	}
+
+	if (tisp_cfa_idx_override >= 0 && tisp_cfa_idx_override <= 3) {
+		pr_info("mbus_to_bayer_write: overriding bayer_mode %u -> %d\n",
+			bayer_mode, tisp_cfa_idx_override);
+		bayer_mode = (u32)tisp_cfa_idx_override;
 	}
 
 	system_reg_write(8, bayer_mode);

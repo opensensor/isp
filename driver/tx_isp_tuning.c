@@ -60,6 +60,11 @@ extern const char *tx_isp_get_default_bin_path(void);
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
 
+int tisp_cfa_idx_override = -1;
+module_param_named(cfa_idx_override, tisp_cfa_idx_override, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(cfa_idx_override,
+		 "Force Bayer CFA index (-1 auto, 0 RGGB, 1 GRBG, 2 GBRG, 3 BGGR)");
+
 static int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
 {
 	if (!dev)
@@ -11441,6 +11446,7 @@ static int tisp_dmsc_program_sensor_cfa(void)
 	u32 mbus_code = 0;
 	unsigned int shvflip = 0;
 	u32 idx;
+	bool forced = false;
 	u32 out_opt;
 
 	if (ourISPdev)
@@ -11454,15 +11460,20 @@ static int tisp_dmsc_program_sensor_cfa(void)
 	}
 
 	idx = tisp_dmsc_apply_flip_to_cfa(tisp_dmsc_cfa_base_from_mbus(mbus_code), shvflip);
+	if (tisp_cfa_idx_override >= 0 && tisp_cfa_idx_override <= 3) {
+		idx = (u32)tisp_cfa_idx_override;
+		forced = true;
+	}
 	out_opt = system_reg_read(0x4800);
 	out_opt = (out_opt & ~0x3u) | idx;
 
 	system_reg_write(0x4800, out_opt);
 	system_reg_write(0x499c, 1);
 
-	pr_info("tiziano_dmsc_init: programmed CFA idx=%u mbus=0x%x shvflip=0x%x out_opt=0x%08x%s\n",
+	pr_info("tiziano_dmsc_init: programmed CFA idx=%u mbus=0x%x shvflip=0x%x out_opt=0x%08x%s%s\n",
 		idx, mbus_code, shvflip, out_opt,
-		tisp_dmsc_wdr_enabled ? " (WDR)" : "");
+		tisp_dmsc_wdr_enabled ? " (WDR)" : "",
+		forced ? " (override)" : "");
 	return 0;
 }
 
