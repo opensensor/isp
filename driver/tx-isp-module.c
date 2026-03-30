@@ -7379,8 +7379,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
             vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
 
         if (enable) {
-            if (vin_device && isp_dev->vin_state == TX_ISP_MODULE_RUNNING &&
-                vin_device->state >= TX_ISP_MODULE_RUNNING) {
+            if (vin_device && vin_device->state >= TX_ISP_MODULE_RUNNING) {
                 pr_info("*** SENSOR/VIN ALREADY STREAMING (vin_dev->state=%d global=%d) - SKIPPING DUPLICATE ENABLE ***\n",
                         vin_device->state, isp_dev->vin_state);
                 return 0;
@@ -7389,8 +7388,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
             /* CRITICAL FIX: Initialize VIN if not already initialized - WITH RECURSION PROTECTION */
             if (vin_device && !vin_init_in_progress) {
                 if (vin_device->state != TX_ISP_MODULE_INIT &&
-                    vin_device->state != TX_ISP_MODULE_RUNNING &&
-                    vin_device->state != 5) {
+                    vin_device->state != TX_ISP_MODULE_RUNNING) {
                     pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
 
                     /* CRITICAL: Set flag to prevent infinite recursion */

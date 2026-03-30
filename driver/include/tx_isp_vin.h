@@ -4,6 +4,8 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 
+#include "tx-isp-device.h"
+
 /* Forward declarations */
 struct tx_isp_subdev;
 struct tx_isp_sensor;
@@ -44,12 +46,12 @@ struct tx_isp_vin_device {
 
 #define sd_to_vin_device(sd) (container_of(sd, struct tx_isp_vin_device, sd))
 
-/* VIN Module States - Based on T30/T31 analysis */
-#define TX_ISP_MODULE_SLAKE         1   /* Module inactive */
-#define TX_ISP_MODULE_ACTIVATE      2   /* Module activated */
-#define TX_ISP_MODULE_INIT          3   /* Module initialized */
-#define TX_ISP_MODULE_DEINIT        4   /* Module deinitialized */
-#define TX_ISP_MODULE_RUNNING       5   /* Module streaming */
+/* VIN shares the common module-state enum from tx-isp-device.h:
+ *   SLAKE=1, ACTIVATE=2, INIT=3, RUNNING=4.
+ * Keep a compatibility alias for legacy notes that refer to DEINIT,
+ * but do not invent a separate state 5 for RUNNING.
+ */
+#define TX_ISP_MODULE_DEINIT        TX_ISP_MODULE_ACTIVATE
 
 /* VIN Functions */
 int tx_isp_vin_probe(struct platform_device *pdev);
