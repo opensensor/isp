@@ -1352,12 +1352,20 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         tx_isp_enable_irq(isp_dev);
     }
 
-    /* MDMA enable is handled by the 0x3000003 (STREAM_START) event
-     * which fires AFTER userspace has queued buffers via QBUF.
-     * Do NOT call ispvic_frame_channel_s_stream here — it would
-     * enable MDMA before QBUF has programmed correct DMA addresses,
-     * causing writes to wrong memory and corrupting libimp state.
+    /* CRITICAL: Explicitly call ispvic_frame_channel_s_stream on
+     * enable.  The 0x3000003 event dispatch CANNOT reach the VIC
+     * because the streamoff path unlinks the pad graph
+     * (isp-w01[0]->isp-w02[0]).  The pipo init calls it once at
+     * boot, but after streamoff disables MDMA, the second STREAMON's
+     * event dispatch silently fails and MDMA stays disabled — no
+     * v1_10 interrupts, no frames.
+     *
+     * The streamoff path already calls the symmetric
+     * ispvic_frame_channel_s_stream(vic_dev, 0).  The idempotency
+     * guard (enable == stream_state → return 0) makes this safe.
      */
+    if (enable && vic_dev)
+        ispvic_frame_channel_s_stream(vic_dev, 1);
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -ENOIOCTLCMD) {

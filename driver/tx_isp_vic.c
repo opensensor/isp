@@ -1206,6 +1206,7 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 
 	if (vic_dev->processing == 0) {
 		/* --- OEM non-streaming path: calibration buffer cycling --- */
+		pr_info_ratelimited("vic_mdma_irq: NON-STREAMING path ch=%d processing=0\n", channel);
 		frame_size = vic_dev->width * vic_dev->height * 2;
 
 		if (channel == 0 && vic_mdma_ch0_sub_get_num > 0) {
