@@ -1194,24 +1194,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             if (vic_dev)
                 ispvic_frame_channel_s_stream(vic_dev, 0);
 
-            /* Reset dispatch->state to 3 so the next STREAMON can
-             * re-dispatch the 0x3000003 event.  The OEM does this via
-             * the 0x3000004 (STREAM_STOP) event, but our streamoff
-             * path bypasses that.  Note: we no longer need the dispatch
-             * to reach the VIC (ispvic_frame_channel_s_stream is called
-             * explicitly below), but tisp_channel_start still needs it.
+            /* NOTE: dispatch->state stays at 4 after streamoff.
+             * This means the second STREAMON's event dispatch won't
+             * reach tisp_channel_start.  That's OK because
+             * ispvic_frame_channel_s_stream(vic_dev, 1) is called
+             * explicitly at the end of the enable path below.
              */
-            {
-                extern struct tx_isp_fs_device *dump_fsd;
-                struct tx_isp_fs_device *fs_dev = dump_fsd;
-                if (fs_dev && fs_dev->channel_configs && fs_dev->channel_count > 0) {
-                    struct tx_isp_channel_config *configs =
-                        (struct tx_isp_channel_config *)fs_dev->channel_configs;
-                    int ci;
-                    for (ci = 0; ci < fs_dev->channel_count; ci++)
-                        configs[ci].state = 3;
-                }
-            }
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
@@ -3780,7 +3768,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                         dispatch->channel_id);
                 ISP_INFO("ispcore_pad_event_handle: channel started successfully");
             } else {
-                private_spin_unlock_irqrestore((char*)s2_1 + 0x9c, var_58);
+                arch_local_irq_restore(var_58);
                 /* Preemption handling */
                 result = 0;
                 ISP_INFO("ispcore_pad_event_handle: channel already started");
