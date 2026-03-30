@@ -1013,13 +1013,14 @@ static u32 vic_irq_counter;
 
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) goto GPIO handling
      *
-     * NOTE: The OEM gates bank-count refresh on processing != 0.
-     * However, the bank-count MUST be refreshed on every frame_done
-     * regardless of processing state, otherwise the MDMA engine
-     * starves and v1_10 fires too slowly for prudynt.
-     * This was confirmed working in commit c405af37.
+     * CRITICAL: The processing gate MUST remain.  Writing to reg 0x300
+     * (MDMA control) before MDMA is initialized causes a T31 bus
+     * lockup — hard system hang with no recovery.  The OEM gates
+     * bank-count refresh on processing != 0 for exactly this reason.
      */
-    {
+    if (vic_dev->processing == 0) {
+        goto label_123f4;
+    } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         pr_debug_ratelimited("vic_irq: stream_state=%d\n", vic_dev->stream_state);
         result = (void *)(uintptr_t)vic_dev->stream_state;
@@ -1206,7 +1207,6 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 
 	if (vic_dev->processing == 0) {
 		/* --- OEM non-streaming path: calibration buffer cycling --- */
-		pr_info_ratelimited("vic_mdma_irq: NON-STREAMING path ch=%d processing=0\n", channel);
 		frame_size = vic_dev->width * vic_dev->height * 2;
 
 		if (channel == 0 && vic_mdma_ch0_sub_get_num > 0) {
