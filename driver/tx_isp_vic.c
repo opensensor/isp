@@ -2651,9 +2651,13 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     if (enable == 0) {
         /* OEM HLIL: *(*($s0 + 0xb8) + 0x300) = 0 */
         writel(0, vic_base + 0x300);
-        /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
+        /* OEM HLIL EXACT: *($s0 + 0x210) = 0
+         * NOTE: The OEM does NOT clear processing (0x214) here!
+         * Processing is set during pipo init and stays set.
+         * Clearing it prevents vic_framedone_irq_function from
+         * refreshing bank counts, starving the MDMA engine.
+         */
         vic_dev->stream_state = 0;
-        vic_dev->processing = 0;
         vic_dev->programmed_bank_count = 0;
         vic_dev->streaming = 0;
 	    } else {
@@ -2677,7 +2681,6 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
-		    vic_program_irq_registers(vic_dev, "ispvic_frame_channel_s_stream");
 	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
 	        {
 	            u32 ctrl = (active_banks << 16) | 0x80000020;
