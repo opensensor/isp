@@ -76,6 +76,7 @@ static u32 tx_isp_v4l2_format_depth(u32 pixfmt)
 static void tx_isp_v4l2_normalize_frame_format(struct frame_image_format *format)
 {
     u32 depth;
+    u32 aligned_height;
 
     if (!format)
         return;
@@ -90,13 +91,16 @@ static void tx_isp_v4l2_normalize_frame_format(struct frame_image_format *format
     if (!depth || !format->pix.width || !format->pix.height)
         return;
 
-    format->pix.bytesperline = (format->pix.width * depth) / 8;
+    aligned_height = ALIGN(format->pix.height, 16);
+
     switch (format->pix.pixelformat) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV21:
-        format->pix.sizeimage = format->pix.bytesperline * ALIGN(format->pix.height, 16);
+        format->pix.bytesperline = format->pix.width;
+        format->pix.sizeimage = format->pix.bytesperline * aligned_height * 3 / 2;
         break;
     default:
+        format->pix.bytesperline = (format->pix.width * depth) / 8;
         format->pix.sizeimage = format->pix.bytesperline * format->pix.height;
         break;
     }

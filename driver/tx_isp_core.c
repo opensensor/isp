@@ -133,6 +133,121 @@ static int ispcore_normalize_channel_format(struct frame_image_format *fmt)
     return 0;
 }
 
+static void ispcore_disable_crop_rect(bool *enable,
+                                      u32 *left,
+                                      u32 *top,
+                                      u32 *width,
+                                      u32 *height)
+{
+    if (enable)
+        *enable = false;
+    if (left)
+        *left = 0;
+    if (top)
+        *top = 0;
+    if (width)
+        *width = 0;
+    if (height)
+        *height = 0;
+}
+
+static void ispcore_sanitize_crop_rect(bool *enable,
+                                       u32 *left,
+                                       u32 *top,
+                                       u32 *width,
+                                       u32 *height,
+                                       u32 full_width,
+                                       u32 full_height)
+{
+    u32 max_width;
+    u32 max_height;
+
+    if (!enable || !left || !top || !width || !height)
+        return;
+
+    if (!*enable) {
+        ispcore_disable_crop_rect(enable, left, top, width, height);
+        return;
+    }
+
+    if (!full_width || !full_height || *left >= full_width || *top >= full_height) {
+        ispcore_disable_crop_rect(enable, left, top, width, height);
+        return;
+    }
+
+    max_width = full_width - *left;
+    max_height = full_height - *top;
+
+    if (*width == 0 || *width > max_width)
+        *width = max_width;
+    if (*height == 0 || *height > max_height)
+        *height = max_height;
+
+    if (*width == 0 || *height == 0) {
+        ispcore_disable_crop_rect(enable, left, top, width, height);
+        return;
+    }
+
+    if (*left == 0 && *top == 0 && *width == full_width && *height == full_height)
+        ispcore_disable_crop_rect(enable, left, top, width, height);
+}
+
+static void ispcore_sanitize_channel_geometry(struct frame_image_format *fmt)
+{
+    u32 source_width;
+    u32 source_height;
+
+    if (!fmt)
+        return;
+
+    if (!fmt->pix.width || !fmt->pix.height) {
+        fmt->scaler_enable = false;
+        fmt->scaler_out_width = 0;
+        fmt->scaler_out_height = 0;
+        ispcore_disable_crop_rect(&fmt->crop_enable,
+                                  &fmt->crop_left,
+                                  &fmt->crop_top,
+                                  &fmt->crop_width,
+                                  &fmt->crop_height);
+        ispcore_disable_crop_rect(&fmt->fcrop_enable,
+                                  &fmt->fcrop_left,
+                                  &fmt->fcrop_top,
+                                  &fmt->fcrop_width,
+                                  &fmt->fcrop_height);
+        return;
+    }
+
+    ispcore_sanitize_crop_rect(&fmt->fcrop_enable,
+                               &fmt->fcrop_left,
+                               &fmt->fcrop_top,
+                               &fmt->fcrop_width,
+                               &fmt->fcrop_height,
+                               fmt->pix.width,
+                               fmt->pix.height);
+
+    source_width = fmt->fcrop_enable ? fmt->fcrop_width : fmt->pix.width;
+    source_height = fmt->fcrop_enable ? fmt->fcrop_height : fmt->pix.height;
+
+    if (!fmt->scaler_enable) {
+        fmt->scaler_out_width = 0;
+        fmt->scaler_out_height = 0;
+    } else if (!fmt->scaler_out_width || !fmt->scaler_out_height ||
+               (fmt->scaler_out_width == source_width &&
+                fmt->scaler_out_height == source_height)) {
+        fmt->scaler_enable = false;
+        fmt->scaler_out_width = 0;
+        fmt->scaler_out_height = 0;
+    }
+
+    ispcore_sanitize_crop_rect(&fmt->crop_enable,
+                               &fmt->crop_left,
+                               &fmt->crop_top,
+                               &fmt->crop_width,
+                               &fmt->crop_height,
+                               fmt->scaler_enable ? fmt->scaler_out_width : source_width,
+                               fmt->scaler_enable ? fmt->scaler_out_height : source_height);
+}
+
 static void ispcore_frame_format_to_attr_words(const struct frame_image_format *fmt,
                                                u32 attr_words[0x34 / sizeof(u32)])
 {
@@ -3745,6 +3860,8 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                           format->pix.pixelformat);
                 break;
             }
+
+            ispcore_sanitize_channel_geometry(format);
 
             ispcore_frame_format_to_attr_words(format, attr_words);
 
