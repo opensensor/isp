@@ -1031,22 +1031,43 @@ static u32 vic_irq_counter;
              * MDMA engine will run out of banks and stop after N frames.
              */
             if (vic_regs) {
-                /* Use programmed_bank_count (set at STREAMON, never decremented)
-                 * NOT active_buffer_count (decremented by MDMA IRQ handler).
-                 * The VIC HW needs to know how many bank SLOTS exist, not
-                 * how many are currently in the software done_head list.
+                /* OEM: walk done_head (offset 0x204), count entries,
+                 * find which entry matches current DMA address (reg 0x380),
+                 * then write count of entries AFTER that match position
+                 * into bits [19:16] of reg 0x300.
+                 *
+                 * This tells the hardware how many banks are AHEAD of
+                 * its current DMA position — critical for v1_10 (MDMA
+                 * completion) to fire once per frame instead of once
+                 * per full bank cycle.
                  */
-                u32 banks = vic_dev->programmed_bank_count;
-                u32 ctrl_val;
-                if (banks == 0)
-                    banks = vic_dev->active_buffer_count;
-                if (banks > 5)
-                    banks = 5;
-                if (banks == 0)
-                    banks = 3; /* safe fallback */
-                ctrl_val = (banks << 16) | 0x80000020;
-                writel(ctrl_val, vic_regs + 0x300);
-                wmb();
+                u32 current_dma_addr = readl(vic_regs + 0x380);
+                u32 total_count = 0;
+                u32 after_match = 0;
+                int found_match = 0;
+                struct vic_buffer_entry *entry;
+                unsigned long flags;
+
+                spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
+                list_for_each_entry(entry, &vic_dev->done_head, list) {
+                    total_count++;
+                    if (found_match)
+                        after_match++;
+                    if (entry->buffer_addr == current_dma_addr)
+                        found_match = 1;
+                }
+                spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+
+                {
+                    u32 banks = found_match ? after_match : total_count;
+                    u32 ctrl_val;
+                    if (banks > 5)
+                        banks = 5;
+                    ctrl_val = readl(vic_regs + 0x300);
+                    ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
+                    writel(ctrl_val, vic_regs + 0x300);
+                    wmb();
+                }
             }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
             {
