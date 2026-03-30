@@ -6026,33 +6026,16 @@ static int tx_isp_init(void)
         vic_dev->sd_irq_info.irq = vic_dev->sd.irqdev.irq;
         ourISPdev->isp_irq2 = vic_dev->sd_irq_info.irq;
         if (ourISPdev->isp_irq2 > 0) {
-            int irq2_ret;
-
             tx_vic_seed_irq_slots(vic_dev, ourISPdev->isp_irq2);
-
-            /* OEM: tx_isp_subdev_init calls tx_isp_request_irq for EACH
-             * subdev, registering isp_irq_handle for both IRQ 37 (isp-m0)
-             * and IRQ 38 (isp-w02).  We must do the same — without a
-             * registered handler, enable_irq(38) sees a spurious interrupt
-             * and the kernel immediately masks it again.
+            /* tx_isp_subdev_init already called tx_isp_request_irq() for
+             * isp-w02, which registered isp_irq_handle for IRQ 38 and
+             * left it disabled (depth=1).  Do NOT register again — a
+             * duplicate request_threaded_irq pushes the disable depth
+             * to 2, and tx_vic_enable_irq only does one enable_irq(),
+             * leaving IRQ 38 permanently masked.
              */
-            irq2_ret = request_threaded_irq(ourISPdev->isp_irq2,
-                                            isp_irq_handle,
-                                            isp_irq_thread_handle,
-                                            IRQF_SHARED,
-                                            "isp-w02",
-                                            ourISPdev);
-            if (irq2_ret == 0) {
-                /* Match OEM: leave IRQ disabled (depth=1) until
-                 * tx_vic_enable_irq() is called during streaming.
-                 */
-                disable_irq(ourISPdev->isp_irq2);
-                pr_info("*** REGISTERED IRQ %d (isp-w02) — disabled until stream start ***\n",
-                        ourISPdev->isp_irq2);
-            } else {
-                pr_err("*** FAILED to register IRQ %d (isp-w02): %d ***\n",
-                       ourISPdev->isp_irq2, irq2_ret);
-            }
+            pr_info("*** ADOPTED EXISTING IRQ %d (isp-w02) — already registered by tx_isp_subdev_init (depth=1) ***\n",
+                    ourISPdev->isp_irq2);
         } else {
             pr_warn("*** NO EARLY VIC IRQ FOUND TO ADOPT FOR isp-w02 ***\n");
         }
@@ -6161,11 +6144,11 @@ static void tx_isp_exit(void)
         /* Clean up I2C infrastructure */
         cleanup_i2c_infrastructure(ourISPdev);
 
-        /* Free hardware interrupts if initialized */
-        if (ourISPdev->isp_irq2 > 0) {
-            free_irq(ourISPdev->isp_irq2, ourISPdev);
-            pr_info("Hardware interrupt %d (isp-w02) freed\n", ourISPdev->isp_irq2);
-        }
+        /* Free hardware interrupts if initialized.
+         * IRQ 38 (isp-w02) is freed by tx_isp_free_irq(&irq_info) during
+         * subdev deinit — the dev_id must match the registration, which
+         * used &sd.irqdev (irq_info), not ourISPdev.
+         */
         if (ourISPdev->isp_irq > 0) {
             free_irq(ourISPdev->isp_irq, ourISPdev);
             pr_info("Hardware interrupt %d (isp-m0) freed\n", ourISPdev->isp_irq);
