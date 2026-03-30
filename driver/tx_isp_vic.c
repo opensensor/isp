@@ -2595,18 +2595,13 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x cached_stride=%u\n",
             vic_base, width, height, stride, pixfmt, vic_dev->stride);
 
-    /* MDMA ENABLED: with bypass off, ISP core processes raw Bayer to NV12.
-     * VIC MDMA writes Y plane using bank addresses and NV12 stride.
-     * Keep height=actual (1080) so VIC MDMA completes at frame boundary.
-     * MSCA handles UV plane output separately via reg 0x9984 in QBUF.
+    /* OEM BN/HLIL: VIC MDMA stride is always width<<1 (2 bytes/pixel).
+     * The ISP core + MSCA output uses 16-bit per pixel format even when
+     * the final userspace format is NV12.  The MSCA/encoder handles the
+     * pixel-format conversion internally.
      */
     {
-        u32 mdma_stride = stride;
-        if (ourISPdev && !ourISPdev->bypass_enabled) {
-            mdma_stride = width;  /* NV12: Y stride = width */
-            pr_info("vic_pipo_mdma_enable: bypass OFF → NV12 stride=%u (was %u)\n",
-                    mdma_stride, stride);
-        }
+        u32 mdma_stride = width << 1;   /* OEM: always 2 bytes/pixel */
         writel(1, vic_base + 0x308);                           /* MDMA enable */
         writel((width << 16) | height, vic_base + 0x304);      /* frame size */
         writel(mdma_stride, vic_base + 0x310);                 /* Y stride */
