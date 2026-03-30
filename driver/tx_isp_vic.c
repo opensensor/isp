@@ -2595,12 +2595,11 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x cached_stride=%u\n",
             vic_base, width, height, stride, pixfmt, vic_dev->stride);
 
-    /* MDMA DISABLED: With bypass forced off, the MSCA outputs NV12
-     * frames.  VIC MDMA writes raw Bayer (stride=width*2) which
-     * overwrites MSCA NV12 output and corrupts the image.
-     * Keep size/stride programmed but disable the DMA engine.
+    /* OEM EXACT: MDMA always enabled — part of ISP pipeline DMA.
+     * With bypass forced off, the ISP core processes to NV12 and
+     * VIC MDMA writes the processed output to frame buffers.
      */
-    writel(0, vic_base + 0x308);                           /* MDMA disabled */
+    writel(1, vic_base + 0x308);                           /* MDMA enable */
     writel((width << 16) | height, vic_base + 0x304);      /* frame size */
     writel(stride, vic_base + 0x310);                      /* Y stride */
     writel(stride, vic_base + 0x314);                      /* UV stride */
@@ -2680,16 +2679,13 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
-	        /* Bypass forced off: clear bit 31 (MDMA master enable) so VIC
-	         * does NOT DMA raw Bayer into the NV12 frame buffers.
-	         * MSCA handles NV12 output instead.  Bank count preserved
-	         * for framedone tracking.
+	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
+	         * Bit 31 = MDMA master enable, always on.
 	         */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x00000020;
+	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
-	            writel(0, vic_base + 0x308);  /* ensure MDMA off */
 	            wmb();
 	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x mdma308=0x%x base=%p banks=%u\n",
 	                    readl(vic_base + 0x300), readl(vic_base + 0x308),
@@ -3199,28 +3195,13 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	if (queued_buffer->channel == 0) {
-		/* Always write to VIC MDMA bank registers for framedone tracking */
+		/* OEM: write buffer address to VIC MDMA bank register.
+		 * VIC MDMA is always enabled and is the sole DMA path
+		 * for writing frame data to memory (both bypass and
+		 * non-bypass modes).  v1_10 interrupt signals completion.
+		 */
 		writel(buffer_addr, vic_base + reg_offset);
 		wmb();
-
-		/* When bypass is OFF, also push buffer addresses to MSCA FIFO
-		 * so the ISP core's scaler can DMA NV12 output into them.
-		 * MSCA CH0: Y addr = 0x996c, UV addr = 0x9984
-		 * UV plane offset = ((height+15)&~15) * width (NV12 layout)
-		 */
-		if (ourISPdev && !ourISPdev->bypass_enabled && ourISPdev->core_regs) {
-			u32 width  = vic_dev->width  ? vic_dev->width  : 1920;
-			u32 height = vic_dev->height ? vic_dev->height : 1080;
-			u32 uv_offset = ((height + 15) & ~15) * width;
-
-			/* OEM order: UV first, then Y (Y write pushes the FIFO entry) */
-			writel(buffer_addr + uv_offset, ourISPdev->core_regs + 0x9984);
-			writel(buffer_addr, ourISPdev->core_regs + 0x996c);
-			wmb();
-
-			pr_info_ratelimited("*** MSCA QBUF: Y=0x%x UV=0x%x (off=0x%x) ***\n",
-				buffer_addr, buffer_addr + uv_offset, uv_offset);
-		}
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 		vic_dev->active_buffer_count += 1;
