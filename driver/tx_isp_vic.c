@@ -1219,13 +1219,16 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 	} else {
 		/* --- OEM streaming path: buffer rotation + frame delivery --- */
 		u32 current_dma_addr = 0;
+		u32 mdma_enabled = 0;
 		struct vic_buffer_entry *done_buf;
 		int (*dqbuf_fn)(void *, void *);
 		void *dqbuf_arg;
 		int i;
 
-		if (vic_base)
+		if (vic_base) {
 			current_dma_addr = readl(vic_base + 0x380);
+			mdma_enabled = readl(vic_base + 0x300) & 0x80000000;
+		}
 
 		/* Pop completed buffer from done_head */
 		if (list_empty(&vic_dev->done_head)) {
@@ -1248,8 +1251,13 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 		/* Move completed buffer to free_head */
 		list_add_tail(&done_buf->list, &vic_dev->free_head);
 
-		/* OEM: check if done_buf's DMA addr matches current HW addr */
-		if (done_buf->buffer_addr != current_dma_addr) {
+		/* OEM: check if done_buf's DMA addr matches current HW addr.
+		 * Only valid when MDMA is enabled (bit 31 of reg 0x300).
+		 * When MDMA is disabled (MSCA path), reg 0x380 is stale —
+		 * skip the address matching to deliver exactly one buffer
+		 * per call instead of draining the entire done_head.
+		 */
+		if (mdma_enabled && done_buf->buffer_addr != current_dma_addr) {
 			/* DMA address mismatch — drain done_head until match */
 			for (i = 0; i < (int)vic_dev->active_buffer_count; i++) {
 				struct vic_buffer_entry *extra;
@@ -3190,14 +3198,29 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
-	/* Channel 0 buffers go into VIC MDMA bank registers.
-	 * In bypass mode, VIC MDMA is the only frame delivery path.
-	 * When ISP processing is active (non-bypass), the MSCA FIFO push
-	 * happens in ispcore_pad_event_handle case 0x3000005.
-	 */
 	if (queued_buffer->channel == 0) {
+		/* Always write to VIC MDMA bank registers for framedone tracking */
 		writel(buffer_addr, vic_base + reg_offset);
 		wmb();
+
+		/* When bypass is OFF, also push buffer addresses to MSCA FIFO
+		 * so the ISP core's scaler can DMA NV12 output into them.
+		 * MSCA CH0: Y addr = 0x996c, UV addr = 0x9984
+		 * UV plane offset = ((height+15)&~15) * width (NV12 layout)
+		 */
+		if (ourISPdev && !ourISPdev->bypass_enabled && ourISPdev->core_regs) {
+			u32 width  = vic_dev->width  ? vic_dev->width  : 1920;
+			u32 height = vic_dev->height ? vic_dev->height : 1080;
+			u32 uv_offset = ((height + 15) & ~15) * width;
+
+			/* OEM order: UV first, then Y (Y write pushes the FIFO entry) */
+			writel(buffer_addr + uv_offset, ourISPdev->core_regs + 0x9984);
+			writel(buffer_addr, ourISPdev->core_regs + 0x996c);
+			wmb();
+
+			pr_info_ratelimited("*** MSCA QBUF: Y=0x%x UV=0x%x (off=0x%x) ***\n",
+				buffer_addr, buffer_addr + uv_offset, uv_offset);
+		}
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 		vic_dev->active_buffer_count += 1;

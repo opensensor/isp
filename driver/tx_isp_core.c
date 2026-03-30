@@ -1596,15 +1596,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
+        extern struct tx_isp_vic_device *dump_vsd;
+        extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* Channel 0 */
+        /* Channel 0: drain MSCA FIFO and deliver frames via VIC buffer mgmt */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
             (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
-            frame_chan_event(&frame_channels[0], 0x3000006, NULL);
+            /* Deliver completed frame through vic_mdma_irq_function.
+             * This pops a buffer from done_head, calls the dqbuf callback
+             * (vic_raw_pipe_dqbuf → tx_isp_hardware_frame_done_handler),
+             * and recycles the buffer — matching the v1_10 MDMA path.
+             */
+            if (dump_vsd)
+                vic_mdma_irq_function(dump_vsd, 0);
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
