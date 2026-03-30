@@ -4688,12 +4688,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         ret = wait_for_completion_interruptible(&state->frame_done);
 
         if (ret >= 0) {
-            /* OEM: var_78 = *($s0 + 0x2d4) + 1 — return frame count */
+            /* OEM: var_78 = *($s0 + 0x2d4) + 1 — return frame count.
+             * Do NOT consume frame_ready_count here — only DQBUF should
+             * decrement it.  This ioctl just tells userspace "a frame is
+             * ready, go dequeue."  If we decrement here, DQBUF's
+             * wait_event(frame_ready_count > 0) never sees the signal.
+             */
             result = (uint32_t)atomic_read(&state->frame_ready_count);
             if (result == 0)
                 result = 1; /* At least 1 frame is ready since completion fired */
-            /* Consume one frame-ready signal */
-            atomic_dec_if_positive(&state->frame_ready_count);
         } else {
             result = (uint32_t)ret; /* Error code */
         }
