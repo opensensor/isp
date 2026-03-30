@@ -1488,7 +1488,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     void __iomem *isp_regs;
     void __iomem *vic_regs;
     u32 interrupt_status;
-    u32 status_legacy, status_new;  /* Moved outside block for later reference */
     u32 error_check;
     int i;
 
@@ -1504,37 +1503,28 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: void* $v0 = *(arg1 + 0xb8); void* $s0 = *(arg1 + 0xd4) */
     vic_regs = vic_dev->vic_regs;
-    isp_regs = vic_regs - 0x9a00;  /* ISP base from VIC base */
 
-    /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
-    /* Prefer direct core_regs mapping; fall back to VIC-relative if needed */
+    /* isp_regs = ISP core base for MSCA FIFO access at +0x9xxx */
     if (isp_dev->core_regs) {
         isp_regs = isp_dev->core_regs;
-    } else if (vic_dev && vic_dev->vic_regs) {
-        isp_regs = vic_dev->vic_regs - 0x9a00;
     } else {
-        return IRQ_NONE;
+        isp_regs = vic_regs - 0xe0000;
     }
-    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
-    {
-        status_legacy = readl(isp_regs + 0xb4);
-        status_new    = readl(isp_regs + 0x98b4);
-        interrupt_status  = status_legacy ? status_legacy : status_new;
-        /* Clear pending in the corresponding bank(s) */
-        if (status_legacy)
-            writel(status_legacy, isp_regs + 0xb8);
-        if (status_new)
-            writel(status_new, isp_regs + 0x98b8);
+
+    /* Read ISP core interrupt status register.
+     * On every IRQ 37, also check MSCA FIFO unconditionally — the MSCA
+     * frame-done may be signalled through a shared interrupt line without
+     * a dedicated status bit in the ISP core status register.
+     */
+    interrupt_status = readl(isp_regs + 0xb4);
+    if (interrupt_status) {
+        writel(interrupt_status, isp_regs + 0xb8);
         wmb();
-        if (interrupt_status != 0) {
-            pr_debug("ISP CORE IRQ: status=0x%08x (legacy=0x%08x new=0x%08x)\n",
-                    interrupt_status, status_legacy, status_new);
-        } else if (isp_force_core_isr) {
-            interrupt_status = 1; /* Force Channel 0 frame-done path */
-        } else {
-            return IRQ_HANDLED; /* No interrupt to process */
-        }
     }
+    /* Always process MSCA FIFO drain regardless of interrupt_status bits,
+     * since MSCA completion shares IRQ 37 and may not set bits at +0xb4.
+     */
+    interrupt_status |= 1;  /* Force CH0 path on every ISR call */
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
@@ -1599,44 +1589,39 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* *** CHANNEL 0 FRAME COMPLETION PROCESSING *** */
-    /* OEM ISR: drain MSCA output FIFO, then deliver each completed frame
-     * to the frame channel via event 0x3000006 (TX_ISP_EVENT_FRAME_DQBUF).
-     * Register 0x997c bit 0 = FIFO empty flag.
+    /* Drain MSCA output FIFO and deliver completed frames.
+     * Safety-bounded: max 8 entries per ISR call to prevent lockup.
+     * Register 0x997c bit 0 = 1 means FIFO empty.
      */
-    if (interrupt_status & 1) {  /* Channel 0 frame done */
+    {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
+        int drain_count;
 
-        if (isp_dev)
-            isp_dev->frame_count++;
-
-        while ((readl(isp_regs + 0x997c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9974); /* drain FIFO entry */
-
-            /* Deliver completed frame to frame channel 0 */
+        /* Channel 0 */
+        drain_count = 0;
+        while (drain_count < 8 && (readl(isp_regs + 0x997c) & 1) == 0) {
+            (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
             frame_chan_event(&frame_channels[0], 0x3000006, NULL);
+            drain_count++;
         }
-    }
+        if (drain_count > 0 && isp_dev)
+            isp_dev->frame_count += drain_count;
 
-    /* *** CHANNEL 1 FRAME COMPLETION PROCESSING *** */
-    if (interrupt_status & 2) {  /* Channel 1 frame done */
-        extern struct frame_channel_device frame_channels[];
-        extern int frame_chan_event(void *priv, int event, void *data);
-
-        while ((readl(isp_regs + 0x9a7c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9a74); /* drain FIFO entry */
+        /* Channel 1 */
+        drain_count = 0;
+        while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
+            (void)readl(isp_regs + 0x9a74);
             frame_chan_event(&frame_channels[1], 0x3000006, NULL);
+            drain_count++;
         }
-    }
 
-    /* *** CHANNEL 2 FRAME COMPLETION PROCESSING *** */
-    if (interrupt_status & 4) {
-        extern struct frame_channel_device frame_channels[];
-        extern int frame_chan_event(void *priv, int event, void *data);
-
-        while ((readl(isp_regs + 0x9b7c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9b74); /* drain FIFO entry */
+        /* Channel 2 */
+        drain_count = 0;
+        while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
+            (void)readl(isp_regs + 0x9b74);
             frame_chan_event(&frame_channels[2], 0x3000006, NULL);
+            drain_count++;
         }
     }
 
