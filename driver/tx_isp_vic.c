@@ -1082,32 +1082,13 @@ static u32 vic_irq_counter;
             }
 
 
-            /* Signal frame completion to all streaming channels on every
-             * frame_done (v1_7 bit 0).  The MDMA completion (v1_10) only
-             * fires once per full bank cycle (~1/second with 3 banks at
-             * 30fps), which is far too slow for prudynt's polling timeout.
-             * frame_done fires once per frame at sensor fps — the right
-             * cadence for userspace DQBUF.
-             */
-            {
-                extern void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *, int);
-                extern struct frame_channel_device frame_channels[];
-                extern int num_channels;
-                if (ourISPdev) {
-                    int i;
-                    for (i = 0; i < num_channels; i++) {
-                        if (frame_channels[i].state.streaming)
-                            tx_isp_hardware_frame_done_handler(ourISPdev, i);
-                    }
-                }
-            }
             pr_debug_ratelimited("vic_irq: frame processing complete\n");
         }
 
-//        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
-//        result = &data_b0000;
-//        goto label_123f4;
-//    }
+        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
+        result = &data_b0000;
+        goto label_123f4;
+    }
 
 label_123f4:
     /* Binary Ninja: GPIO handling section */
