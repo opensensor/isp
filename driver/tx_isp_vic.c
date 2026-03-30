@@ -2596,14 +2596,14 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             vic_base, width, height, stride, pixfmt, vic_dev->stride);
 
     /* MDMA ENABLED: with bypass off, ISP core processes raw Bayer to NV12.
-     * VIC MDMA writes the ISP-processed output to frame buffers.
-     * Override stride to NV12 format (width, not width*2) when bypass is off.
+     * VIC MDMA writes Y plane using bank addresses and NV12 stride.
+     * Keep height=actual (1080) so VIC MDMA completes at frame boundary.
+     * MSCA handles UV plane output separately via reg 0x9984 in QBUF.
      */
     {
         u32 mdma_stride = stride;
         if (ourISPdev && !ourISPdev->bypass_enabled) {
-            /* NV12: Y stride = width, UV stride = width */
-            mdma_stride = width;
+            mdma_stride = width;  /* NV12: Y stride = width */
             pr_info("vic_pipo_mdma_enable: bypass OFF → NV12 stride=%u (was %u)\n",
                     mdma_stride, stride);
         }
@@ -3204,11 +3204,20 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	if (queued_buffer->channel == 0) {
-		/* Write buffer address to VIC MDMA bank register.
-		 * VIC MDMA is always enabled — it handles frame DMA
-		 * and v1_10 interrupt-driven frame delivery.
+		/* Write Y address to VIC MDMA bank register.
+		 * VIC MDMA handles Y plane DMA and v1_10 frame delivery.
+		 * Also push UV address to MSCA reg 0x9984 so MSCA writes
+		 * the chrominance plane at the offset libimp expects:
+		 * UV_addr = Y_addr + stride * ALIGN(height, 16).
 		 */
 		writel(buffer_addr, vic_base + reg_offset);
+
+		if (ourISPdev && !ourISPdev->bypass_enabled && ourISPdev->core_regs) {
+			u32 w = vic_dev->width  ? vic_dev->width  : 1920;
+			u32 h = vic_dev->height ? vic_dev->height : 1080;
+			u32 uv_offset = w * ((h + 15) & ~15);
+			writel(buffer_addr + uv_offset, ourISPdev->core_regs + 0x9984);
+		}
 		wmb();
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
