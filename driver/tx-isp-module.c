@@ -4288,6 +4288,40 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     channel, y_addr, uv_addr, ch_width, ch_height, aligned_h);
         }
 
+        /* CRITICAL: Also increment VIC active_buffer_count so that
+         * ispvic_frame_channel_s_stream doesn't defer STREAMON.
+         * The VIC MDMA needs to know buffers exist (even if MSCA handles the
+         * actual DMA) because stream_state must transition to 1 for the VIC
+         * ISR framedone handler to process frames.
+         */
+        if (ourISPdev && ourISPdev->vic_dev && channel == 0) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+            void __iomem *vic_base = vic->vic_regs;
+
+            /* Also program VIC MDMA bank registers with this buffer address.
+             * Without bank addresses, the MDMA engine can't generate v1_10
+             * (frame done) interrupts, and the ISR never processes frames.
+             * Bank register layout: 0x318 + bank_index * 4
+             */
+            if (vic_base && vic->active_buffer_count < 5) {
+                u32 bank_idx = vic->active_buffer_count;
+                u32 reg_off = 0x318 + bank_idx * 4;
+                writel(buffer_phys_addr, vic_base + reg_off);
+                wmb();
+                pr_info("*** Channel %d: VIC bank[%u] = 0x%x (reg 0x%x) ***\n",
+                        channel, bank_idx, buffer_phys_addr, reg_off);
+                vic->active_buffer_count++;
+            }
+
+            /* If streaming was requested but deferred (stream_state==0),
+             * now that we have buffers, try to start it */
+            if (vic->stream_state == 0 && state->streaming) {
+                pr_info("*** Channel %d: QBUF triggering deferred STREAMON (active_bufs=%u) ***\n",
+                        channel, vic->active_buffer_count);
+                ispvic_frame_channel_s_stream(vic, 1);
+            }
+        }
 
         /* Copy buffer back to user space */
         if (copy_to_user(argp, &buffer, sizeof(buffer))) {
