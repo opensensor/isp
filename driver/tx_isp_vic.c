@@ -1011,10 +1011,15 @@ static u32 vic_irq_counter;
         return 0;
     }
 
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) goto GPIO handling */
-    if (vic_dev->processing == 0) {
-        goto label_123f4;
-    } else {
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) goto GPIO handling
+     *
+     * NOTE: The OEM gates bank-count refresh on processing != 0.
+     * However, the bank-count MUST be refreshed on every frame_done
+     * regardless of processing state, otherwise the MDMA engine
+     * starves and v1_10 fires too slowly for prudynt.
+     * This was confirmed working in commit c405af37.
+     */
+    {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         pr_debug_ratelimited("vic_irq: stream_state=%d\n", vic_dev->stream_state);
         result = (void *)(uintptr_t)vic_dev->stream_state;
@@ -1064,9 +1069,21 @@ static u32 vic_irq_counter;
                     if (banks > 5)
                         banks = 5;
                     ctrl_val = readl(vic_regs + 0x300);
-                    ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
-                    writel(ctrl_val, vic_regs + 0x300);
-                    wmb();
+                    /* CRITICAL: Do NOT write 0 to bank count bits [19:16].
+                     * Writing 0 tells the MDMA engine "no banks ahead" which
+                     * stalls DMA entirely.  Skip the update and preserve the
+                     * existing count — the MDMA handler will refill banks and
+                     * the next frame_done will write a valid count.
+                     * This guard was present in the working commit c405af37.
+                     */
+                    if (ctrl_val == 0 || banks == 0) {
+                        pr_debug_ratelimited("vic_irq: skip bank update (ctrl=0x%x, banks=%u)\n",
+                                ctrl_val, banks);
+                    } else {
+                        ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
+                        writel(ctrl_val, vic_regs + 0x300);
+                        wmb();
+                    }
                 }
             }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
@@ -1322,6 +1339,25 @@ mdma_irq_refill:
 			vic_dev->active_buffer_count++;
 
 			kfree(q_buf);
+		} else if (!list_empty(&vic_dev->free_head) &&
+			   list_empty(&vic_dev->queue_head)) {
+			/* No queued buffers from userspace yet — recycle
+			 * free banks back to done_head with their existing
+			 * addresses.  The DMA slot register already has the
+			 * address programmed so no register write needed.
+			 * Without this, done_head drains to empty, the bank
+			 * count in reg 0x300 bits [19:16] goes to 0, and
+			 * the MDMA engine stalls permanently.
+			 */
+			struct vic_buffer_entry *f_buf;
+
+			while (!list_empty(&vic_dev->free_head)) {
+				f_buf = list_first_entry(&vic_dev->free_head,
+							 struct vic_buffer_entry, list);
+				list_del(&f_buf->list);
+				list_add_tail(&f_buf->list, &vic_dev->done_head);
+				vic_dev->active_buffer_count++;
+			}
 		}
 	}
 
@@ -2656,20 +2692,9 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        active_banks = vic_dev->active_buffer_count;
 	        if (active_banks > 5)
 	            active_banks = 5;
-	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
-	         * Offset 0x218 is the programmed bank count.
-	         *
-	         * CRITICAL: Write 1 here (not active_banks) so the hardware
-	         * fires the first MDMA completion (v1_10) after just 1 bank
-	         * transfer. This bootstraps the streaming loop — once
-	         * vic_mdma_irq_function runs, it consumes/refills banks,
-	         * and vic_framedone_irq_function dynamically adjusts the
-	         * count from done_head. Without this, the hardware waits
-	         * for all N banks to complete before the first v1_10,
-	         * which takes ~N*33ms and prudynt times out.
-	         */
+	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
 	        {
-	            u32 ctrl = (1 << 16) | 0x80000020;
+	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
