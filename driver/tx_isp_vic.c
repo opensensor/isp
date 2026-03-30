@@ -1027,54 +1027,45 @@ static u32 vic_irq_counter;
 
         if (vic_dev->stream_state != 0) {
             vic_regs = vic_stream_regs_resolve(vic_dev);
+        } else {
+            vic_regs = NULL;
+        }
 
-            /* OEM framedone updates the bank-count bits [19:16] in
-             * VIC_ADDR_DMA_CONTROL (0x300) based on the active bank count
-             * (offset 0x218 in OEM driver).
-             *
-             * The VIC hardware CONSUMES the bank count as it DMA's frames.
-             * We MUST refresh it on every frame_done interrupt or the
-             * MDMA engine will run out of banks and stop after N frames.
-             */
-            if (vic_regs) {
-                /* OEM: walk done_head (offset 0x204), count entries,
-                 * find which entry matches current DMA address (reg 0x380),
-                 * then write count of entries AFTER that match position
-                 * into bits [19:16] of reg 0x300.
-                 *
-                 * This tells the hardware how many banks are AHEAD of
-                 * its current DMA position — critical for v1_10 (MDMA
-                 * completion) to fire once per frame instead of once
-                 * per full bank cycle.
-                 */
-                u32 current_dma_addr = readl(vic_regs + 0x380);
-                u32 total_count = 0;
-                u32 after_match = 0;
-                int found_match = 0;
-                struct vic_buffer_entry *entry;
-                unsigned long flags;
+        /* Bank refresh only when streaming — writing to reg 0x300
+         * while stream_state == 0 can clobber the ctrl register or
+         * hang the bus if the VIC/MDMA engine is not ready.
+         */
+        if (vic_regs) {
+            u32 current_dma_addr = readl(vic_regs + 0x380);
+            u32 total_count = 0;
+            u32 after_match = 0;
+            int found_match = 0;
+            struct vic_buffer_entry *entry;
+            unsigned long flags;
 
-                spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
-                list_for_each_entry(entry, &vic_dev->done_head, list) {
-                    total_count++;
-                    if (found_match)
-                        after_match++;
-                    if (entry->buffer_addr == current_dma_addr)
-                        found_match = 1;
-                }
-                spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
-
-                {
-                    u32 banks = found_match ? after_match : total_count;
-                    u32 ctrl_val;
-                    if (banks > 5)
-                        banks = 5;
-                    ctrl_val = readl(vic_regs + 0x300);
-                    ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
-                    writel(ctrl_val, vic_regs + 0x300);
-                    wmb();
-                }
+            spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
+            list_for_each_entry(entry, &vic_dev->done_head, list) {
+                total_count++;
+                if (found_match)
+                    after_match++;
+                if (entry->buffer_addr == current_dma_addr)
+                    found_match = 1;
             }
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+
+            {
+                u32 banks = found_match ? after_match : total_count;
+                u32 ctrl_val;
+                if (banks > 5)
+                    banks = 5;
+                ctrl_val = readl(vic_regs + 0x300);
+                ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
+                writel(ctrl_val, vic_regs + 0x300);
+                wmb();
+            }
+        }
+
+        if (vic_dev->stream_state != 0) {
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
             {
                 u32 ctrl = 0, stride = 0, y0 = 0, uv0 = 0, uvsh0 = 0;
@@ -1108,10 +1099,6 @@ static u32 vic_irq_counter;
                 }
             }
 
-
-            /* Frame delivery happens through raw_pipe[1] in
-             * vic_mdma_irq_function when v1_10 fires — matching OEM.
-             */
             pr_debug_ratelimited("vic_irq: frame processing complete\n");
         }
 
@@ -3193,21 +3180,32 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
-	/* OEM BN: program exactly one slot base address at (bank + 0xc6) << 2.
-	 * The VIC/MDMA path handles the contiguous output layout; QBUF does not
-	 * program separate UV/shadow plane registers.
+	/* Only channel 0 buffers go into the VIC MDMA bank registers.
+	 * The MDMA engine at 0x300 is configured for the primary channel
+	 * dimensions (e.g. 1920x1080).  Channel 1+ buffers are smaller
+	 * (e.g. 640x360) and writing them into the same bank slots would
+	 * cause the MDMA to DMA a full-size frame into an undersized
+	 * buffer, stalling the hardware.
 	 */
-	writel(buffer_addr, vic_base + reg_offset);
-	wmb();
+	if (queued_buffer->channel == 0) {
+		writel(buffer_addr, vic_base + reg_offset);
+		wmb();
 
-	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
-	vic_dev->active_buffer_count += 1;
+		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
+		vic_dev->active_buffer_count += 1;
 
-	pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
-		buffer_index, buffer_addr,
-		bank_buffer->buffer_length,
-		reg_offset,
-		vic_dev->active_buffer_count);
+		pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
+			buffer_index, buffer_addr,
+			bank_buffer->buffer_length,
+			reg_offset,
+			vic_dev->active_buffer_count);
+	} else {
+		/* Return the bank entry to free_head — ch1+ doesn't use VIC banks */
+		list_add_tail(&bank_buffer->list, &vic_dev->free_head);
+		pr_info("*** VIC QBUF: ch%u buffer queued (not banked) base=0x%x len=%u ***\n",
+			queued_buffer->channel, buffer_addr,
+			bank_buffer->buffer_length);
+	}
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);
