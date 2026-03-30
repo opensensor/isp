@@ -4652,19 +4652,50 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (ret != 0 && ret != 0xfffffdfd)
             return ret;
 
-        if (ret == 0xfffffdfd) {
-            format.pix.bytesperline = frame_channel_format_bytesperline(format.pix.pixelformat,
-                                                                        format.pix.width);
-            format.pix.sizeimage = frame_channel_format_sizeimage(format.pix.pixelformat,
-                                                                  format.pix.width,
-                                                                  format.pix.height);
-        }
+        format.pix.bytesperline = frame_channel_format_bytesperline(format.pix.pixelformat,
+                                                                    format.pix.width);
+        format.pix.sizeimage = frame_channel_format_sizeimage(format.pix.pixelformat,
+                                                              format.pix.width,
+                                                              format.pix.height);
 
         state->width = format.pix.width;
         state->height = format.pix.height;
         state->format = format.pix.pixelformat;
         state->bytesperline = format.pix.bytesperline;
         state->sizeimage = format.pix.sizeimage;
+
+        /* CRITICAL FIX: If the event dispatch returned -ENOIOCTLCMD, the
+         * MSCA stride/format registers were never programmed by
+         * ispcore_pad_event_handle.  Call tisp_channel_attr_set directly
+         * to configure MSCA DMA output stride, format, and crop.
+         * Without this, MSCA has no output configuration and the
+         * FIFO drain loop in the ISR never finds completed frames.
+         */
+        if (ret == 0xfffffdfd || ret == -ENOIOCTLCMD) {
+            extern int tisp_channel_attr_set(uint32_t channel_id, void *attr);
+            u32 attr_words[0x34 / sizeof(u32)];
+
+            memset(attr_words, 0, sizeof(attr_words));
+            /* OEM attr_words layout (from ispcore_frame_format_to_attr_words):
+             * [0] = format (NV12=0x3231564e)
+             * [1] = width
+             * [2] = height
+             * [3] = crop_x (0)
+             * [4] = crop_y (0)
+             * [5] = crop_width (0 = full)
+             * [6] = crop_height (0 = full)
+             * [7] = scaler output width (0 = no scale)
+             * [8] = scaler mode (0=normal, 1=alt source)
+             * [9..12] = reserved
+             */
+            attr_words[0] = format.pix.pixelformat;
+            attr_words[1] = format.pix.width;
+            attr_words[2] = format.pix.height;
+
+            pr_info("*** Channel %d: Direct tisp_channel_attr_set w=%u h=%u fmt=0x%x ***\n",
+                    channel, format.pix.width, format.pix.height, format.pix.pixelformat);
+            tisp_channel_attr_set(channel, attr_words);
+        }
         if (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace))
             frame_channel_colorspace[channel] = format.pix.colorspace;
 
