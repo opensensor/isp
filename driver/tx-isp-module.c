@@ -6752,9 +6752,19 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
          * from MDMA completion (v1_10), never from VIC frame_done (v1_7).
          */
         if (vic_dev->stream_state == 1) {
-            /* Deliver completed frame to userspace */
-            if (ourISPdev)
-                tx_isp_hardware_frame_done_handler(ourISPdev, channel);
+            /* Deliver completed frame to userspace.
+             * The T31 VIC shares one MDMA engine across both channels.
+             * Only v1_10 bit 0 (ch0) fires — bit 1 (ch1) is never set.
+             * Signal ALL streaming channels on each MDMA completion so
+             * channel 1's frame_pooling_thread also gets woken up.
+             */
+            if (ourISPdev) {
+                int i;
+                for (i = 0; i < num_channels; i++) {
+                    if (frame_channels[i].state.streaming)
+                        tx_isp_hardware_frame_done_handler(ourISPdev, i);
+                }
+            }
             return;
         }
 

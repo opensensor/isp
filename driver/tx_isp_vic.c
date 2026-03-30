@@ -2606,9 +2606,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     if (enable == 0) {
         /* OEM HLIL: *(*($s0 + 0xb8) + 0x300) = 0 */
         writel(0, vic_base + 0x300);
-        /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
+        /* OEM HLIL: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;
-        vic_dev->processing = 0;
         vic_dev->programmed_bank_count = 0;
         vic_dev->streaming = 0;
 	    } else {
@@ -2635,9 +2634,15 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	        }
         /* Save the initial bank count — used by framedone IRQ to refresh 0x300 */
         vic_dev->programmed_bank_count = active_banks;
-        /* OEM HLIL: *($s0 + 0x210) = 1, *($s0 + 0x214) = 1 */
+        /* OEM HLIL: *($s0 + 0x210) = 1
+         * Override processing = 0 (pipo init sets it to 1) so
+         * vic_mdma_irq_function takes the simpler !processing →
+         * stream_state==1 shortcut path which just delivers frames
+         * without the complex bank list management that drains
+         * done_head to empty.
+         */
+        vic_dev->processing = 0;
         vic_dev->stream_state = 1;
-        vic_dev->processing = 1;
         vic_dev->streaming = 1;
     }
 
