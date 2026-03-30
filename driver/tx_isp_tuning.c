@@ -3898,12 +3898,14 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            /* OEM: value is stored directly into *(isp_dev + 0x15c).
-             * value==1 means bypass ENABLED (ISP core skips processing,
-             * VIC MDMA is the only frame delivery path).
+            /* Force bypass DISABLED so the ISP core processes frames
+             * through the full pipeline (demosaic → color → MSCA → NV12).
+             * Without ISP processing, VIC MDMA writes raw Bayer (stride
+             * 3840) into NV12 buffers (stride 1920), causing overflow
+             * and image corruption.
              */
-            ourISPdev->bypass_enabled = (ctrl->value == 1) ? 1 : 0;
-            pr_info("Set control: ISP_CTRL_BYPASS value=%d -> bypass_enabled=%d\n",
+            ourISPdev->bypass_enabled = 0;
+            pr_info("Set control: ISP_CTRL_BYPASS value=%d -> bypass_enabled=%d (FORCED OFF)\n",
                     ctrl->value, ourISPdev->bypass_enabled);
             break;
 
