@@ -2587,14 +2587,8 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x cached_stride=%u\n",
             vic_base, width, height, stride, pixfmt, vic_dev->stride);
 
-    /* MDMA DISABLED: VIC MDMA writes raw Bayer at stride width*2 which
-     * overflows NV12 buffers (stride = width).  Frame output goes through
-     * the MSCA DMA path instead (addresses pushed in ispvic_frame_channel_qbuf,
-     * completion detected by ISP core ISR draining MSCA FIFO).
-     *
-     * Keep size/stride registers programmed for reference but set enable=0.
-     */
-    writel(0, vic_base + 0x308);                           /* MDMA DISABLED */
+    /* OEM EXACT: MDMA config registers — stride/size/enable */
+    writel(1, vic_base + 0x308);                           /* MDMA enable */
     writel((width << 16) | height, vic_base + 0x304);      /* frame size */
     writel(stride, vic_base + 0x310);                      /* Y stride */
     writel(stride, vic_base + 0x314);                      /* UV stride */
@@ -2674,20 +2668,11 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
-	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020
-	         *
-	         * MDMA DISABLE FIX: Bit 31 (0x80000000) of reg 0x300 is the
-	         * MDMA master enable.  The OEM sets it for raw capture.
-	         * We clear it so the VIC does NOT DMA raw Bayer into the
-	         * NV12 frame buffers.  Frame output goes through MSCA instead.
-	         * Bank count (bits 16-19) preserved for framedone tracking.
-	         * Bit 5 (0x20) preserved (ping-pong mode control).
-	         */
+	        /* OEM BN EXACT: *(regs + 0x300) = *(s0 + 0x218) << 16 | 0x80000020 */
 	        {
-	            u32 ctrl = (active_banks << 16) | 0x00000020;
+	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
-	            writel(0, vic_base + 0x308);
 	            wmb();
 	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x mdma308=0x%x base=%p banks=%u\n",
 	                    readl(vic_base + 0x300), readl(vic_base + 0x308),
@@ -3196,79 +3181,29 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
-	/*
-	 * Push buffer addresses to MSCA DMA output FIFO instead of VIC MDMA
-	 * bank registers.  The VIC MDMA writes raw Bayer (stride = width*2)
-	 * which overflows NV12 buffers (stride = width).  The MSCA writes
-	 * ISP-processed NV12 output with correct stride.
-	 *
-	 * MSCA channel registers (relative to ISP core base):
-	 *   CH0: Y addr = 0x996c, UV addr = 0x9984, FIFO status = 0x9970
-	 *   CH1: Y addr = 0x9a6c, UV addr = 0x9a84, FIFO status = 0x9a70
-	 *   CH2: Y addr = 0x9b6c, UV addr = 0x9b84, FIFO status = 0x9b70
-	 *
-	 * The UV plane offset = ((height + 15) & ~15) * width (NV12 layout).
+	/* Channel 0 buffers go into VIC MDMA bank registers.
+	 * In bypass mode, VIC MDMA is the only frame delivery path.
+	 * When ISP processing is active (non-bypass), the MSCA FIFO push
+	 * happens in ispcore_pad_event_handle case 0x3000005.
 	 */
-	{
-		void __iomem *isp_regs = ourISPdev ? ourISPdev->core_regs : NULL;
-		u32 ch = queued_buffer->channel;
-		u32 ch_offset = ch * 0x100;  /* 0x000 for ch0, 0x100 for ch1, etc. */
-
-		if (isp_regs && ch < 3) {
-			u32 width, height, uv_offset, fifo_status;
-			u32 y_reg  = 0x996c + ch_offset;
-			u32 uv_reg = 0x9984 + ch_offset;
-			u32 fifo_sta_reg = 0x9970 + ch_offset;
-
-			/* Get channel dimensions */
-			if (ch == 0) {
-				width  = vic_dev->width  ? vic_dev->width  : 1920;
-				height = vic_dev->height ? vic_dev->height : 1080;
-			} else {
-				/* Channel 1/2 use smaller dimensions — for now use
-				 * buffer_length to estimate, or fall back to defaults.
-				 */
-				width  = 640;
-				height = 360;
-			}
-
-			uv_offset = ((height + 15) & ~15) * width;
-
-			/* Check MSCA FIFO not full (bit 1 = full) */
-			fifo_status = readl(isp_regs + fifo_sta_reg);
-			if (fifo_status & 2) {
-				pr_warn_ratelimited("MSCA ch%u FIFO full, dropping qbuf 0x%x\n",
-						    ch, buffer_addr);
-			} else {
-				/* OEM order: write UV first, then Y (Y write pushes
-				 * the FIFO entry).
-				 */
-				writel(buffer_addr + uv_offset, isp_regs + uv_reg);
-				writel(buffer_addr, isp_regs + y_reg);
-				wmb();
-
-				pr_info("*** MSCA QBUF: ch%u Y=0x%x UV=0x%x (off=0x%x) fifo=0x%x ***\n",
-					ch, buffer_addr, buffer_addr + uv_offset,
-					uv_offset, fifo_status);
-			}
-		}
-
-		/* Also write to VIC MDMA bank register for ch0 to keep
-		 * the bank engine cycling (for v1_7 framedone tracking).
-		 * VIC MDMA is DISABLED (reg 0x308=0) so no actual DMA occurs.
-		 */
-		if (ch == 0) {
-			writel(buffer_addr, vic_base + reg_offset);
-			wmb();
-		}
+	if (queued_buffer->channel == 0) {
+		writel(buffer_addr, vic_base + reg_offset);
+		wmb();
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 		vic_dev->active_buffer_count += 1;
 
-		pr_info("*** QBUF: ch%u bank=%u base=0x%x len=%u active=%u ***\n",
-			ch, buffer_index, buffer_addr,
+		pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
+			buffer_index, buffer_addr,
 			bank_buffer->buffer_length,
+			reg_offset,
 			vic_dev->active_buffer_count);
+	} else {
+		/* Return the bank entry to free_head — ch1+ doesn't use VIC banks */
+		list_add_tail(&bank_buffer->list, &vic_dev->free_head);
+		pr_info("*** VIC QBUF: ch%u buffer queued (not banked) base=0x%x len=%u ***\n",
+			queued_buffer->channel, buffer_addr,
+			bank_buffer->buffer_length);
 	}
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);

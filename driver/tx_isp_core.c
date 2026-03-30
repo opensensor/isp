@@ -1597,16 +1597,29 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
+        u32 fifo_stat_ch0;
 
         /* Channel 0 */
         drain_count = 0;
-        while (drain_count < 8 && (readl(isp_regs + 0x997c) & 1) == 0) {
+        fifo_stat_ch0 = readl(isp_regs + 0x997c);
+        while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
             (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
             frame_chan_event(&frame_channels[0], 0x3000006, NULL);
             drain_count++;
+            fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
+
+        {
+            static unsigned int isr_log_counter;
+            if ((isr_log_counter++ % 300) == 0)
+                pr_info("ISP ISR[%u]: int=0x%x fifo_ch0=0x%x drained=%d fc=%u bypass=%d\n",
+                        isr_log_counter, interrupt_status, fifo_stat_ch0,
+                        drain_count,
+                        isp_dev ? isp_dev->frame_count : 0,
+                        isp_dev ? isp_dev->bypass_enabled : -1);
+        }
 
         /* Channel 1 */
         drain_count = 0;
