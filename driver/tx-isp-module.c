@@ -6687,20 +6687,26 @@ static struct tx_isp_dev *tx_isp_irq_resolve_isp_dev(void *dev_id,
  */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
+    irqreturn_t ret = IRQ_NONE;
+
     if (!ourISPdev) {
         pr_err("isp_irq_handle: ourISPdev is NULL\n");
         return IRQ_NONE;
     }
 
-    if (irq == ourISPdev->isp_irq) {
-        /* IRQ 37 — ISP core */
-        return ispcore_interrupt_service_routine(irq, ourISPdev);
-    } else if (irq == ourISPdev->isp_irq2) {
-        /* IRQ 38 — VIC */
-        return isp_vic_interrupt_service_routine(irq, ourISPdev);
-    }
+    /* The T31 ISP uses a single registered IRQ (37) for the entire ISP
+     * subsystem.  IRQ 38 (VIC) is enable_irq()'d but has NO registered
+     * handler — request_threaded_irq() was only called for IRQ 37.
+     *
+     * We MUST service BOTH the ISP core status registers AND the VIC
+     * status registers on every interrupt.  Each ISR checks its own
+     * hardware pending bits and is a no-op when nothing is pending,
+     * so calling both is always safe.
+     */
+    ret = ispcore_interrupt_service_routine(irq, ourISPdev);
+    isp_vic_interrupt_service_routine(irq, ourISPdev);
 
-    return IRQ_NONE;
+    return ret;
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
