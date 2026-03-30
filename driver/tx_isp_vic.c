@@ -2619,6 +2619,15 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             readl(vic_base + 0x308), readl(vic_base + 0x304),
             readl(vic_base + 0x310), readl(vic_base + 0x314),
             readl(vic_base + 0x318), readl(vic_base + 0x31c));
+
+    /* Dump MSCA CH0 output registers for diagnostics */
+    if (ourISPdev && ourISPdev->core_regs) {
+        void __iomem *isp = ourISPdev->core_regs;
+        pr_info("MSCA CH0 diag: outsize=0x%x Ybase=0x%x UVbase=0x%x Ystride=0x%x UVstride=0x%x crop=0x%x\n",
+                readl(isp + 0x9900), readl(isp + 0x996c),
+                readl(isp + 0x9984), readl(isp + 0x9980),
+                readl(isp + 0x9998), readl(isp + 0x992c));
+    }
 }
 
 /* ISPVIC Frame Channel S_Stream - OEM HLIL EXACT Implementation
@@ -3212,17 +3221,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 		 */
 		writel(buffer_addr, vic_base + reg_offset);
 
-		if (ourISPdev && !ourISPdev->bypass_enabled && ourISPdev->core_regs) {
-			u32 w = vic_dev->width  ? vic_dev->width  : 1920;
-			u32 h = vic_dev->height ? vic_dev->height : 1080;
-			u32 uv_offset = w * ((h + 15) & ~15);
-			/* Push both Y and UV addresses to MSCA CH0 output.
-			 * MSCA needs both to write NV12 correctly.
-			 * Order: UV first (0x9984), then Y (0x996c) to trigger.
-			 */
-			writel(buffer_addr + uv_offset, ourISPdev->core_regs + 0x9984);
-			writel(buffer_addr, ourISPdev->core_regs + 0x996c);
-		}
+		/* No MSCA address push — MSCA DMA is managed by tisp_g_frame
+		 * in the ISP core blob. Manual writes to 0x9984/0x996c interfere
+		 * with MSCA's internal state and cause image offset/shift.
+		 */
 		wmb();
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
