@@ -1599,63 +1599,44 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* *** CHANNEL 0 FRAME COMPLETION PROCESSING *** */
+    /* OEM ISR: drain MSCA output FIFO, then deliver each completed frame
+     * to the frame channel via event 0x3000006 (TX_ISP_EVENT_FRAME_DQBUF).
+     * Register 0x997c bit 0 = FIFO empty flag.
+     */
     if (interrupt_status & 1) {  /* Channel 0 frame done */
-        pr_info_ratelimited("*** ISP CORE: CH0 FRAME DONE ***\n");
+        extern struct frame_channel_device frame_channels[];
+        extern int frame_chan_event(void *priv, int event, void *data);
 
-        /* Binary Ninja: data_ca584 += 1 - increment frame counter */
-        if (isp_dev) {
+        if (isp_dev)
             isp_dev->frame_count++;
-        }
 
-        /* Binary Ninja: MSCA output FIFO drain loop.
-         * CRITICAL FIX: Use isp_regs (0x13300000, 64KB mapping) NOT vic_regs
-         * (0x133e0000, 4KB mapping).  MSCA registers live at ISP+0x9xxx which
-         * is within the 64KB core mapping but WAY outside the 4KB VIC window.
-         * Reading vic_regs+0x997c was accessing unmapped physical memory at
-         * 0x13479974, returning garbage that caused premature DQBUF wakeups
-         * and frame tearing.
-         *
-         * NOTE: Frame delivery to userspace is handled by the VIC MDMA
-         * interrupt path (vic_mdma_irq_function in tx-isp-module.c).
-         * The ISP core frame-done indicates ISP processing is complete but
-         * VIC MDMA may still be transferring data.  Do NOT wake DQBUF here.
-         */
         while ((readl(isp_regs + 0x997c) & 1) == 0) {
-            u32 frame_buffer_addr = readl(isp_regs + 0x9974);
-            u32 frame_info1 = readl(isp_regs + 0x998c);
-            u32 frame_info2 = readl(isp_regs + 0x9990);
+            (void)readl(isp_regs + 0x9974); /* drain FIFO entry */
 
-            pr_info_ratelimited("ISP CH0 MSCA done: addr=0x%x info1=0x%x info2=0x%x\n",
-                   frame_buffer_addr, frame_info1, frame_info2);
-
-            /* Do NOT call frame_channel_wakeup_waiters here.
-             * VIC MDMA interrupt handles frame delivery to userspace.
-             */
+            /* Deliver completed frame to frame channel 0 */
+            frame_chan_event(&frame_channels[0], 0x3000006, NULL);
         }
     }
 
     /* *** CHANNEL 1 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
-        pr_info_ratelimited("*** ISP CORE: CH1 FRAME DONE ***\n");
+        extern struct frame_channel_device frame_channels[];
+        extern int frame_chan_event(void *priv, int event, void *data);
 
-        /* CRITICAL FIX: Use isp_regs, not vic_regs (same OOB fix as CH0) */
         while ((readl(isp_regs + 0x9a7c) & 1) == 0) {
-            u32 frame_buffer_addr = readl(isp_regs + 0x9a74);
-            u32 frame_info1 = readl(isp_regs + 0x9a8c);
-            u32 frame_info2 = readl(isp_regs + 0x9a90);
-
-            pr_info_ratelimited("ISP CH1 MSCA done: addr=0x%x info1=0x%x info2=0x%x\n",
-                   frame_buffer_addr, frame_info1, frame_info2);
+            (void)readl(isp_regs + 0x9a74); /* drain FIFO entry */
+            frame_chan_event(&frame_channels[1], 0x3000006, NULL);
         }
     }
 
-    /* Binary Ninja: Channel 2 frame completion */
+    /* *** CHANNEL 2 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 4) {
-        pr_info_ratelimited("*** ISP CORE: CH2 FRAME DONE ***\n");
+        extern struct frame_channel_device frame_channels[];
+        extern int frame_chan_event(void *priv, int event, void *data);
 
-        /* CRITICAL FIX: Use isp_regs, not vic_regs (same OOB fix as CH0) */
         while ((readl(isp_regs + 0x9b7c) & 1) == 0) {
             (void)readl(isp_regs + 0x9b74); /* drain FIFO entry */
+            frame_chan_event(&frame_channels[2], 0x3000006, NULL);
         }
     }
 

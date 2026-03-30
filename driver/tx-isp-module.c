@@ -4259,36 +4259,33 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* Do not wake DQBUF on QBUF; OEM wakes on FRAME_DQBUF event */
-        /* Enqueue buffer via BUFFER_ENQUEUE (0x3000005) */
-        if (fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_subdev *remote_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
-				struct vic_buffer_entry *node = kzalloc(sizeof(*node), GFP_KERNEL);
+        /* CRITICAL FIX: Write Y/UV addresses to MSCA DMA FIFO registers.
+         * OEM ispcore_pad_event_handle case 0x3000005 writes buffer addresses
+         * to the MSCA scaler DMA FIFO so the hardware knows WHERE to write
+         * each completed frame.  Without this, MSCA has no output addresses
+         * and frames are corrupted.
+         *
+         * Register layout per channel (channel_offset = channel * 0x100):
+         *   ISP + 0x996c + channel_offset : Y DMA address FIFO (push)
+         *   ISP + 0x9984 + channel_offset : UV DMA address FIFO (push)
+         *
+         * UV address = Y address + ALIGN(height, 16) * width  (NV12 layout)
+         */
+        if (ourISPdev && ourISPdev->core_regs && channel < 3) {
+            void __iomem *isp_regs = ourISPdev->core_regs;
+            u32 ch_width = state->width;
+            u32 ch_height = state->height;
+            u32 aligned_h = (ch_height + 0xf) & ~0xf;
+            u32 y_addr = buffer_phys_addr;
+            u32 uv_addr = y_addr + aligned_h * ch_width;
+            u32 ch_off = channel * 0x100;
 
-				if (!node) {
-					pr_warn("*** Channel %d: BUFFER_ENQUEUE node alloc failed ***\n", channel);
-				} else {
-					node->buffer_addr = buffer_phys_addr;
-					node->buffer_index = buffer.index;
-					node->channel = channel;
-					node->buffer_length = buffer.length;
-					pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x user_idx=%u len=%u ***\n",
-						channel, buffer_phys_addr, node->buffer_index, node->buffer_length);
-					{
-						int event_result = tx_isp_send_event_to_remote(remote_sd, 0x3000005, node);
-						if (event_result == 0) {
-							pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
-						} else {
-							if (event_result == 0xfffffdfd) {
-								pr_info("*** Channel %d: BUFFER_ENQUEUE - No callback ***\n", channel);
-							} else {
-								pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n",
-									channel, event_result);
-							}
-							kfree(node);
-						}
-					}
-				}
+            writel(y_addr,  isp_regs + 0x996c + ch_off);
+            writel(uv_addr, isp_regs + 0x9984 + ch_off);
+            wmb();
+
+            pr_info("*** Channel %d: MSCA DMA FIFO push Y=0x%x UV=0x%x (w=%u h=%u align_h=%u) ***\n",
+                    channel, y_addr, uv_addr, ch_width, ch_height, aligned_h);
         }
 
 
@@ -7162,30 +7159,19 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
     return 0;
 }
 
-/* __enqueue_in_driver - EXACT Binary Ninja implementation */
+/* __enqueue_in_driver - Buffer enqueue stub.
+ * MSCA DMA FIFO writes are now done directly in the QBUF ioctl handler,
+ * so this function is a no-op placeholder for any remaining callers.
+ */
 static int __enqueue_in_driver(void *buffer_struct)
 {
-    int result;
-
-    if (!buffer_struct) {
+    if (!buffer_struct)
         return 0xfffffdfd;
-    }
 
-    /* Route directly to VIC subdev (synchronous call) */
-    if (ourISPdev && ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-        struct tx_isp_subdev *vic_sd = &vic_dev->sd;
-        void *event_data = buffer_struct;  /* Pass node pointer directly */
-        pr_info("__enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC\n");
-        result = tx_isp_send_event_to_remote(vic_sd, 0x3000005, event_data);
-        if (result != 0 && result != 0xfffffdfd) {
-            pr_err("__enqueue_in_driver: flags = 0x%08x\n", result);
-        }
-    } else {
-        result = 0xfffffdfd;
-    }
-
-    return result;
+    /* MSCA DMA FIFO writes are handled in frame_channel_unlocked_ioctl QBUF.
+     * VIC MDMA bank rotation is not used in the MSCA output path.
+     */
+    return 0;
 }
 
 
