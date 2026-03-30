@@ -6026,18 +6026,33 @@ static int tx_isp_init(void)
         vic_dev->sd_irq_info.irq = vic_dev->sd.irqdev.irq;
         ourISPdev->isp_irq2 = vic_dev->sd_irq_info.irq;
         if (ourISPdev->isp_irq2 > 0) {
+            int irq2_ret;
+
             tx_vic_seed_irq_slots(vic_dev, ourISPdev->isp_irq2);
-            /* NOTE: Do NOT call disable_irq() here — tx_isp_request_irq()
-             * already left IRQ 38 disabled (depth=1).  A second disable
-             * would push the depth to 2, requiring two enable_irq() calls
-             * to actually unmask the line.  tx_vic_enable_irq() only does
-             * one enable_irq(), so the extra disable here was causing
-             * IRQ 38 to stay permanently masked (0 interrupts).
+
+            /* OEM: tx_isp_subdev_init calls tx_isp_request_irq for EACH
+             * subdev, registering isp_irq_handle for both IRQ 37 (isp-m0)
+             * and IRQ 38 (isp-w02).  We must do the same — without a
+             * registered handler, enable_irq(38) sees a spurious interrupt
+             * and the kernel immediately masks it again.
              */
-            pr_info("*** ADOPTED EXISTING IRQ %d (isp-w02) FROM SUBDEV INIT ***\n",
-                    ourISPdev->isp_irq2);
-            pr_info("*** IRQ %d (isp-w02) ALREADY DISABLED BY tx_isp_request_irq ***\n",
-                    ourISPdev->isp_irq2);
+            irq2_ret = request_threaded_irq(ourISPdev->isp_irq2,
+                                            isp_irq_handle,
+                                            isp_irq_thread_handle,
+                                            IRQF_SHARED,
+                                            "isp-w02",
+                                            ourISPdev);
+            if (irq2_ret == 0) {
+                /* Match OEM: leave IRQ disabled (depth=1) until
+                 * tx_vic_enable_irq() is called during streaming.
+                 */
+                disable_irq(ourISPdev->isp_irq2);
+                pr_info("*** REGISTERED IRQ %d (isp-w02) — disabled until stream start ***\n",
+                        ourISPdev->isp_irq2);
+            } else {
+                pr_err("*** FAILED to register IRQ %d (isp-w02): %d ***\n",
+                       ourISPdev->isp_irq2, irq2_ret);
+            }
         } else {
             pr_warn("*** NO EARLY VIC IRQ FOUND TO ADOPT FOR isp-w02 ***\n");
         }
@@ -6147,9 +6162,13 @@ static void tx_isp_exit(void)
         cleanup_i2c_infrastructure(ourISPdev);
 
         /* Free hardware interrupts if initialized */
+        if (ourISPdev->isp_irq2 > 0) {
+            free_irq(ourISPdev->isp_irq2, ourISPdev);
+            pr_info("Hardware interrupt %d (isp-w02) freed\n", ourISPdev->isp_irq2);
+        }
         if (ourISPdev->isp_irq > 0) {
             free_irq(ourISPdev->isp_irq, ourISPdev);
-            pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
+            pr_info("Hardware interrupt %d (isp-m0) freed\n", ourISPdev->isp_irq);
         }
 
         /* Clean up VIC device directly */
@@ -6673,40 +6692,30 @@ static struct tx_isp_dev *tx_isp_irq_resolve_isp_dev(void *dev_id,
 }
 
 /* isp_irq_handle - dispatch by IRQ number to correct subsystem ISR.
- * Both IRQ 37 and IRQ 38 use this handler. We use the global ourISPdev
- * directly (bypassing the resolve function which can't match the dev_id
- * values from tx_isp_request_irq).
  *
- * IRQ 37 (isp_irq)  → ISP core ISR only
- * IRQ 38 (isp_irq2) → VIC ISR only
+ * OEM reference: tx_isp_subdev_init calls tx_isp_request_irq for EACH
+ * subdev, registering this handler for both IRQ 37 (isp-m0, ISP core)
+ * and IRQ 38 (isp-w02, VIC).  Each IRQ dispatches to its own ISR.
  *
- * The loop that called both ISRs for every interrupt caused the problem:
- * when ISP core interrupts were enabled, the core ISR ran during IRQ 38
- * events too, and the VIC ISR ran during IRQ 37 events, causing
- * cross-contamination that prevented one or the other from counting.
+ * IRQ 37 (isp_irq)  → ISP core ISR (reads ISP status at +0xb4/+0x98b4)
+ * IRQ 38 (isp_irq2) → VIC ISR (reads VIC status at +0x1e0/+0x1e4)
  */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    irqreturn_t ret = IRQ_NONE;
-
     if (!ourISPdev) {
         pr_err("isp_irq_handle: ourISPdev is NULL\n");
         return IRQ_NONE;
     }
 
-    /* The T31 ISP uses a single registered IRQ (37) for the entire ISP
-     * subsystem.  IRQ 38 (VIC) is enable_irq()'d but has NO registered
-     * handler — request_threaded_irq() was only called for IRQ 37.
-     *
-     * We MUST service BOTH the ISP core status registers AND the VIC
-     * status registers on every interrupt.  Each ISR checks its own
-     * hardware pending bits and is a no-op when nothing is pending,
-     * so calling both is always safe.
-     */
-    ret = ispcore_interrupt_service_routine(irq, ourISPdev);
-    isp_vic_interrupt_service_routine(irq, ourISPdev);
+    if (irq == ourISPdev->isp_irq) {
+        /* IRQ 37 — ISP core */
+        return ispcore_interrupt_service_routine(irq, ourISPdev);
+    } else if (irq == ourISPdev->isp_irq2) {
+        /* IRQ 38 — VIC */
+        return isp_vic_interrupt_service_routine(irq, ourISPdev);
+    }
 
-    return ret;
+    return IRQ_NONE;
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
