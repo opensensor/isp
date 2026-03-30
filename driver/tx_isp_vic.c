@@ -1068,22 +1068,22 @@ static u32 vic_irq_counter;
                     u32 ctrl_val;
                     if (banks > 5)
                         banks = 5;
-                    ctrl_val = readl(vic_regs + 0x300);
-                    /* CRITICAL: Do NOT write 0 to bank count bits [19:16].
-                     * Writing 0 tells the MDMA engine "no banks ahead" which
-                     * stalls DMA entirely.  Skip the update and preserve the
-                     * existing count — the MDMA handler will refill banks and
-                     * the next frame_done will write a valid count.
-                     * This guard was present in the working commit c405af37.
+                    /* OEM writes the dynamic bank count to bits [19:16].
+                     * In the OEM, the MDMA handler actively pops/refills
+                     * done_head, keeping it small (1-2 entries), so
+                     * banks is typically 1 and v1_10 fires every frame.
+                     *
+                     * In our driver, done_head stays at 5 entries because
+                     * queue_head is empty (no new QBUFs until DQBUF returns).
+                     * Write 1 to force v1_10 every frame, matching the OEM's
+                     * steady-state behavior.
                      */
-                    if (ctrl_val == 0 || banks == 0) {
-                        pr_debug_ratelimited("vic_irq: skip bank update (ctrl=0x%x, banks=%u)\n",
-                                ctrl_val, banks);
-                    } else {
-                        ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
-                        writel(ctrl_val, vic_regs + 0x300);
-                        wmb();
-                    }
+                    if (banks > 1)
+                        banks = 1;
+                    ctrl_val = readl(vic_regs + 0x300);
+                    ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
+                    writel(ctrl_val, vic_regs + 0x300);
+                    wmb();
                 }
             }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
@@ -1120,6 +1120,9 @@ static u32 vic_irq_counter;
             }
 
 
+            /* Frame delivery happens through raw_pipe[1] in
+             * vic_mdma_irq_function when v1_10 fires — matching OEM.
+             */
             pr_debug_ratelimited("vic_irq: frame processing complete\n");
         }
 
