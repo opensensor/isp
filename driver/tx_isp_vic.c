@@ -3216,7 +3216,12 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 			u32 w = vic_dev->width  ? vic_dev->width  : 1920;
 			u32 h = vic_dev->height ? vic_dev->height : 1080;
 			u32 uv_offset = w * ((h + 15) & ~15);
+			/* Push both Y and UV addresses to MSCA CH0 output.
+			 * MSCA needs both to write NV12 correctly.
+			 * Order: UV first (0x9984), then Y (0x996c) to trigger.
+			 */
 			writel(buffer_addr + uv_offset, ourISPdev->core_regs + 0x9984);
+			writel(buffer_addr, ourISPdev->core_regs + 0x996c);
 		}
 		wmb();
 
