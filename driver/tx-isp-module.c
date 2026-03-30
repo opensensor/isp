@@ -4683,38 +4683,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->bytesperline = format.pix.bytesperline;
         state->sizeimage = format.pix.sizeimage;
 
-        /* CRITICAL FIX: If the event dispatch returned -ENOIOCTLCMD, the
-         * MSCA stride/format registers were never programmed by
-         * ispcore_pad_event_handle.  Call tisp_channel_attr_set directly
-         * to configure MSCA DMA output stride, format, and crop.
-         * Without this, MSCA has no output configuration and the
-         * FIFO drain loop in the ISR never finds completed frames.
-         */
-        if (ret == 0xfffffdfd || ret == -ENOIOCTLCMD) {
-            extern int tisp_channel_attr_set(uint32_t channel_id, void *attr);
-            u32 attr_words[0x34 / sizeof(u32)];
+        if (ret == 0xfffffdfd || ret == -ENOIOCTLCMD)
+            pr_warn("*** Channel %d: SET_FMT remote handler missing (ret=%d); storing software format only, skipping non-OEM direct attr programming ***\n",
+                    channel, ret);
 
-            memset(attr_words, 0, sizeof(attr_words));
-            /* OEM attr_words layout (from ispcore_frame_format_to_attr_words):
-             * [0] = format (NV12=0x3231564e)
-             * [1] = width
-             * [2] = height
-             * [3] = crop_x (0)
-             * [4] = crop_y (0)
-             * [5] = crop_width (0 = full)
-             * [6] = crop_height (0 = full)
-             * [7] = scaler output width (0 = no scale)
-             * [8] = scaler mode (0=normal, 1=alt source)
-             * [9..12] = reserved
-             */
-            attr_words[0] = format.pix.pixelformat;
-            attr_words[1] = format.pix.width;
-            attr_words[2] = format.pix.height;
-
-            pr_info("*** Channel %d: Direct tisp_channel_attr_set w=%u h=%u fmt=0x%x ***\n",
-                    channel, format.pix.width, format.pix.height, format.pix.pixelformat);
-            tisp_channel_attr_set(channel, attr_words);
-        }
         if (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace))
             frame_channel_colorspace[channel] = format.pix.colorspace;
 
@@ -7033,31 +7005,9 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
         return ispvic_frame_channel_s_stream(vic_dev, 1);
     }
-    case 0x3000004: { /* TX_ISP_EVENT_SYNC_SENSOR_ATTR - Sync sensor attributes */
-        pr_info("*** VIC EVENT: SYNC_SENSOR_ATTR (0x3000004) - SYNCING SENSOR ATTRIBUTES ***\n");
-
-        /* Handle sensor attribute synchronization */
-        if (data && ourISPdev && ourISPdev->sensor) {
-            struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)data;
-            struct tx_isp_sensor *sensor = ourISPdev->sensor;
-
-            pr_info("*** SYNCING SENSOR ATTRIBUTES: %s (%dx%d) ***\n",
-                    sensor_attr->name ? sensor_attr->name : "(unnamed)",
-                    sensor_attr->total_width, sensor_attr->total_height);
-
-            /* Copy sensor attributes to device sensor */
-            if (sensor->video.attr) {
-                memcpy(sensor->video.attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
-                pr_info("*** SENSOR ATTRIBUTES SYNCED SUCCESSFULLY ***\n");
-                return 0; /* Success */
-            } else {
-                pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: No sensor attr structure ***\n");
-                return -EINVAL;
-            }
-        } else {
-            pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: Invalid parameters ***\n");
-            return -EINVAL;
-        }
+    case 0x3000004: { /* TX_ISP_EVENT_STREAM_CANCEL - Stop VIC streaming */
+        pr_info("*** VIC EVENT: STREAM_STOP/CANCEL (0x3000004) - DEACTIVATING VIC HARDWARE ***\n");
+        return ispvic_frame_channel_s_stream(vic_dev, 0);
     }
     case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
         pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");

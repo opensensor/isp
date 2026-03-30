@@ -3898,15 +3898,18 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            /* Force bypass DISABLED so the ISP core processes frames
-             * through the full pipeline (demosaic → color → MSCA → NV12).
-             * Without ISP processing, VIC MDMA writes raw Bayer (stride
-             * 3840) into NV12 buffers (stride 1920), causing overflow
-             * and image corruption.
-             */
-            ourISPdev->bypass_enabled = 0;
-            pr_info("Set control: ISP_CTRL_BYPASS value=%d -> bypass_enabled=%d (FORCED OFF)\n",
-                    ctrl->value, ourISPdev->bypass_enabled);
+	            /* OEM semantics from apical_isp_core_ops_s_ctrl:
+	             *   value == 1  -> bypass disabled
+	             *   value != 1  -> bypass enabled
+	             *
+	             * Prudynt commonly calls set_isp_bypass(1) during normal ISP
+	             * streaming setup, which means "use full ISP pipeline" rather
+	             * than "enable raw bypass".
+	             */
+	            ourISPdev->bypass_enabled = (ctrl->value != 1);
+	            pr_info("Set control: ISP_CTRL_BYPASS value=%d -> bypass_enabled=%d (%s)\n",
+	                    ctrl->value, ourISPdev->bypass_enabled,
+	                    ourISPdev->bypass_enabled ? "OEM bypass enable" : "OEM bypass disable");
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -9414,12 +9417,12 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
         pr_info("Cleared global tisp_par_ioctl reference\n");
     }
 
-    /* Use global device reference for any device operations */
-    if (ourISPdev && ourISPdev->tuning_enabled == 3) {
-        pr_info("Disabling tuning on release\n");
-        isp_core_tuning_release(ourISPdev);
-        ourISPdev->tuning_enabled = 0;
-    }
+    /* OEM release only tears down the ioctl buffer.  Do not deinit the live
+     * tuning core here: prudynt closes this fd while streaming is still active,
+     * and our non-OEM teardown was collapsing MSCA state mid-stream.
+     */
+    if (ourISPdev && ourISPdev->tuning_enabled == 3)
+        pr_info("Leaving tuning enabled across isp_m0 release (OEM-style)\n");
 
     pr_info("ISP M0 device released\n");
     return 0;

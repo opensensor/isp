@@ -3572,9 +3572,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 		writel(buffer_addr, vic_base + reg_offset);
 
 		if (ourISPdev && !ourISPdev->bypass_enabled) {
-			/* Non-bypass: also program MSCA DMA output.
-			 * The MSCA scaler reads ISP pipeline output and
-			 * writes NV12 to these buffer addresses. */
+			/* OEM non-bypass QBUF path: only program the MSCA output
+			 * destination addresses for this buffer. Channel enable/state,
+			 * size, stride, and crop registers are managed elsewhere by the
+			 * stock channel-start/format-control paths, not here. */
 			u32 w = vic_dev->width ? vic_dev->width : 1920;
 			u32 h = vic_dev->height ? vic_dev->height : 1080;
 			u32 aligned_h = (h + 15) & ~15;
@@ -3583,16 +3584,6 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
 			if (ourISPdev->core_regs) {
 				void __iomem *core = ourISPdev->core_regs;
-				u32 out_size = (w << 16) | h;
-				writel(out_size, core + 0x9860);
-				writel(out_size, core + 0x9864);
-				writel(out_size, core + 0x9900);
-				writel(0x02000200, core + 0x9904);
-				writel(out_size, core + 0x992c);
-				writel(1, core + 0x9934);
-				writel(w, core + 0x9980);
-				writel(w, core + 0x9998);
-				writel(0x000f0001, core + 0x9804);
 				writel(buffer_addr, core + 0x996c);
 				writel(uv_addr, core + 0x9984);
 				wmb();

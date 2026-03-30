@@ -1589,21 +1589,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* *** CHANNEL 0 FRAME COMPLETION PROCESSING *** */
-    /* Drain MSCA output FIFO and deliver completed frames.
-     * Safety-bounded: max 8 entries per ISR call to prevent lockup.
-     * Register 0x997c bit 0 = 1 means FIFO empty.
-     */
     {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* Channel 0: drain MSCA FIFO — OEM pattern.
-         * Pop Y address from FIFO, fire 0x3000006 event.
-         * Actual frame buffer delivery is via VIC MDMA done (v1_10)
-         * in the VIC ISR — the MSCA drain just clears the FIFO.
-         */
+        /* Try draining MSCA FIFO first (OEM pattern) */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
@@ -1612,6 +1604,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
+
+        /* NOTE: MSCA FIFO is always empty (0x997c bit0=1).
+         * The MSCA scaler hardware is not producing NV12 output
+         * despite all config registers being correct.
+         * Root cause is likely missing ISP→MSCA data path routing.
+         * Do NOT synthesize frame_chan_event here — it floods the
+         * pipeline with raw Bayer data causing encoder crashes. */
+
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
 
@@ -1633,6 +1633,17 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                 pr_info("MSCA diag: 0x9938=0x%x 0x993c=0x%x 0x9940=0x%x 0x9864=0x%x\n",
                         readl(isp_regs + 0x9938), readl(isp_regs + 0x993c),
                         readl(isp_regs + 0x9940), readl(isp_regs + 0x9864));
+                /* Module enable, interrupt mask, top bypass */
+                pr_info("ISP ctrl: 0x10=0x%x 0x30=0x%x 0xc=0x%x 0x8=0x%x\n",
+                        readl(isp_regs + 0x10), readl(isp_regs + 0x30),
+                        readl(isp_regs + 0xc), readl(isp_regs + 0x8));
+                /* VIC MDMA bank readback */
+                pr_info("VIC banks: 0x300=0x%x 0x308=0x%x 0x318=0x%x 0x31c=0x%x 0x320=0x%x\n",
+                        readl(ourISPdev->vic_regs + 0x300),
+                        readl(ourISPdev->vic_regs + 0x308),
+                        readl(ourISPdev->vic_regs + 0x318),
+                        readl(ourISPdev->vic_regs + 0x31c),
+                        readl(ourISPdev->vic_regs + 0x320));
             }
         }
 
