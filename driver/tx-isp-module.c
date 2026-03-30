@@ -6742,32 +6742,33 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
     if (!vic_base)
         vic_base = vic_dev->vic_regs;
 
-    if (!vic_dev->processing) {
-        /* OEM non-streaming path: calibration buffer cycling.
-         *
-         * During active streaming (stream_state == 1), the VIC hardware
-         * automatically cycles through the 5 pre-programmed bank addresses.
-         * We only need to deliver the completed frame to userspace — NO bank
-         * address manipulation is needed.  The OEM delivers frames exclusively
-         * from MDMA completion (v1_10), never from VIC frame_done (v1_7).
+    /* During active streaming, deliver completed frame to userspace and
+     * return immediately.  No bank list management needed — the VIC hardware
+     * automatically cycles through the pre-programmed bank addresses and
+     * vic_framedone_irq_function refreshes the bank count in register 0x300.
+     *
+     * This check runs BEFORE the processing flag check so it works
+     * regardless of whether processing is 0 or 1.  The OEM's complex
+     * bank management path (processing==1, lines below) drains done_head
+     * to empty and causes "busy_buf null" errors.
+     */
+    if (vic_dev->stream_state == 1) {
+        /* The T31 VIC shares one MDMA engine across both channels.
+         * Only v1_10 bit 0 (ch0) fires — bit 1 (ch1) is never set.
+         * Signal ALL streaming channels on each MDMA completion so
+         * channel 1's frame_pooling_thread also gets woken up.
          */
-        if (vic_dev->stream_state == 1) {
-            /* Deliver completed frame to userspace.
-             * The T31 VIC shares one MDMA engine across both channels.
-             * Only v1_10 bit 0 (ch0) fires — bit 1 (ch1) is never set.
-             * Signal ALL streaming channels on each MDMA completion so
-             * channel 1's frame_pooling_thread also gets woken up.
-             */
-            if (ourISPdev) {
-                int i;
-                for (i = 0; i < num_channels; i++) {
-                    if (frame_channels[i].state.streaming)
-                        tx_isp_hardware_frame_done_handler(ourISPdev, i);
-                }
+        if (ourISPdev) {
+            int i;
+            for (i = 0; i < num_channels; i++) {
+                if (frame_channels[i].state.streaming)
+                    tx_isp_hardware_frame_done_handler(ourISPdev, i);
             }
-            return;
         }
+        return;
+    }
 
+    if (!vic_dev->processing) {
         /* Original calibration path: sequential bank address cycling */
         {
             int frame_words = vic_dev->width * vic_dev->height * 2;
