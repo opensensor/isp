@@ -1617,12 +1617,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         {
             static unsigned int isr_log_counter;
-            if ((isr_log_counter++ % 300) == 0)
+            if ((isr_log_counter++ % 300) == 0) {
                 pr_info("ISP ISR[%u]: int=0x%x fifo_ch0=0x%x drained=%d fc=%u bypass=%d\n",
                         isr_log_counter, interrupt_status, fifo_stat_ch0,
                         drain_count,
                         isp_dev ? isp_dev->frame_count : 0,
                         isp_dev ? isp_dev->bypass_enabled : -1);
+                /* Dump key MSCA registers to diagnose configuration */
+                pr_info("MSCA diag: 0x9804=0x%x 0x9818=0x%x 0x9900=0x%x 0x9904=0x%x\n",
+                        readl(isp_regs + 0x9804), readl(isp_regs + 0x9818),
+                        readl(isp_regs + 0x9900), readl(isp_regs + 0x9904));
+                pr_info("MSCA diag: 0x996c=0x%x 0x9974=0x%x 0x997c=0x%x 0x9984=0x%x\n",
+                        readl(isp_regs + 0x996c), readl(isp_regs + 0x9974),
+                        readl(isp_regs + 0x997c), readl(isp_regs + 0x9984));
+                pr_info("MSCA diag: 0x9938=0x%x 0x993c=0x%x 0x9940=0x%x 0x9864=0x%x\n",
+                        readl(isp_regs + 0x9938), readl(isp_regs + 0x993c),
+                        readl(isp_regs + 0x9940), readl(isp_regs + 0x9864));
+            }
         }
 
         /* Channel 1 */

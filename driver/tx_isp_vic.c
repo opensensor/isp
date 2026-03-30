@@ -2936,27 +2936,19 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
      * overflow the buffer and produce a corrupted/partial image.
      */
     {
-        int is_nv12 = 0;
-        u32 mdma_stride;
+        /* OEM vic_pipo_mdma_enable ALWAYS uses raw stride (width*2).
+         * In pipo mode the VIC MDMA handles raw Bayer data internally.
+         * NV12 conversion is done by the MSCA scaler, not the VIC MDMA.
+         * OEM HLIL line 1483: $v1_1 = $v1 << 1 (stride = width * 2) */
+        stride = width << 1;
 
-        /* Detect NV12 mode: bypass off means ISP pipeline produces NV12 */
-        if (ourISPdev && !ourISPdev->bypass_enabled)
-            is_nv12 = 1;
-
-        if (is_nv12)
-            mdma_stride = width;           /* NV12: stride = width */
-        else
-            mdma_stride = width << 1;      /* RAW:  stride = width * 2 */
-
-        stride = mdma_stride;
-
-        pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u fmt=%s pixfmt=0x%x\n",
-                vic_base, width, height, stride, is_nv12 ? "NV12" : "RAW", pixfmt);
+        pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u (raw pipo mode)\n",
+                vic_base, width, height, stride);
 
         writel(1, vic_base + 0x308);                           /* MDMA enable */
         writel((width << 16) | height, vic_base + 0x304);      /* frame size */
-        writel(mdma_stride, vic_base + 0x310);                 /* Y stride */
-        writel(mdma_stride, vic_base + 0x314);                 /* UV stride */
+        writel(stride, vic_base + 0x310);                      /* Y stride */
+        writel(stride, vic_base + 0x314);                      /* UV stride */
     }
 
     wmb();
@@ -2973,6 +2965,16 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
                 readl(isp + 0x9900), readl(isp + 0x996c),
                 readl(isp + 0x9984), readl(isp + 0x9980),
                 readl(isp + 0x9998), readl(isp + 0x992c));
+        /* Scan MSCA CH0 register space to find DMA bank registers */
+        {
+            int i;
+            pr_info("MSCA CH0 regs 0x9900-0x993f:\n");
+            for (i = 0; i < 0x40; i += 4)
+                pr_info("  [0x%04x]=0x%08x\n", 0x9900 + i, readl(isp + 0x9900 + i));
+            pr_info("MSCA CH0 regs 0x9960-0x999f:\n");
+            for (i = 0; i < 0x40; i += 4)
+                pr_info("  [0x%04x]=0x%08x\n", 0x9960 + i, readl(isp + 0x9960 + i));
+        }
     }
 }
 
@@ -3049,9 +3051,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	         *   fmt=0 for RAW, fmt=7 for NV12.
 	         */
 	        {
-	            int is_nv12 = (ourISPdev && !ourISPdev->bypass_enabled) ? 1 : 0;
-	            u32 fmt = is_nv12 ? 7 : 0;
-	            u32 ctrl = (active_banks << 16) | 0x80000020 | fmt;
+	            /* OEM HLIL line 1521: *($s0+0xb8 + 0x300) = banks<<16 | 0x80000020
+	             * In pipo mode, VIC MDMA ALWAYS uses format=0 (raw).
+	             * NV12 conversion is done by MSCA, not VIC MDMA. */
+	            u32 ctrl = (active_banks << 16) | 0x80000020;
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
@@ -3563,29 +3566,46 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	if (queued_buffer->channel == 0) {
-		/* OEM: Write Y address to VIC MDMA bank register at 0x318 + idx*4 */
+		/* Always write Y address to VIC MDMA bank register.
+		 * Even in pipo mode, bank registers MUST have valid
+		 * addresses or the MDMA DMA engine hangs the bus. */
 		writel(buffer_addr, vic_base + reg_offset);
 
-		/* OEM vic_mdma_enable: For NV12 (fmt=7), also program UV bank
-		 * address at 0x32c + bank_idx*4.
-		 * UV offset = width * ALIGN(height, 16) for NV12.
-		 */
 		if (ourISPdev && !ourISPdev->bypass_enabled) {
+			/* Non-bypass: also program MSCA DMA output.
+			 * The MSCA scaler reads ISP pipeline output and
+			 * writes NV12 to these buffer addresses. */
 			u32 w = vic_dev->width ? vic_dev->width : 1920;
 			u32 h = vic_dev->height ? vic_dev->height : 1080;
-			u32 aligned_h = (h + 15) & ~15;  /* ALIGN(height, 16) */
+			u32 aligned_h = (h + 15) & ~15;
 			u32 uv_offset = w * aligned_h;
 			u32 uv_addr = buffer_addr + uv_offset;
-			u32 uv_reg = 0x32c + (buffer_index * 4);
-			writel(uv_addr, vic_base + uv_reg);
+
+			if (ourISPdev->core_regs) {
+				void __iomem *core = ourISPdev->core_regs;
+				u32 out_size = (w << 16) | h;
+				writel(out_size, core + 0x9860);
+				writel(out_size, core + 0x9864);
+				writel(out_size, core + 0x9900);
+				writel(0x02000200, core + 0x9904);
+				writel(out_size, core + 0x992c);
+				writel(1, core + 0x9934);
+				writel(w, core + 0x9980);
+				writel(w, core + 0x9998);
+				writel(0x000f0001, core + 0x9804);
+				writel(buffer_addr, core + 0x996c);
+				writel(uv_addr, core + 0x9984);
+				wmb();
+			}
 		}
 		wmb();
 
 		list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 		vic_dev->active_buffer_count += 1;
 
-		pr_info("*** VIC QBUF: bank=%u Y=0x%x len=%u reg_off=0x%x active=%u ***\n",
+		pr_info("*** VIC QBUF: bank=%u Y=0x%x UV=0x%x len=%u reg_off=0x%x active=%u ***\n",
 			buffer_index, buffer_addr,
+			buffer_addr + (vic_dev->width ? vic_dev->width : 1920) * (((vic_dev->height ? vic_dev->height : 1080) + 15) & ~15),
 			bank_buffer->buffer_length,
 			reg_offset,
 			vic_dev->active_buffer_count);
