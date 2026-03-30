@@ -4680,7 +4680,10 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_sensor_attribute *stored_attr;
     uint32_t again, dgain;
-    size_t sensor_attr_bytes = 0x4c;
+    /* CRITICAL FIX: OEM Binary Ninja showed 0x4c but that only covers fields up to
+     * inside the union — total_width/total_height are at offset 0x78+.
+     * Use full struct size to copy ALL fields including dimensions. */
+    size_t sensor_attr_bytes = sizeof(struct tx_isp_sensor_attribute);
 
     pr_info("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
 
@@ -4728,10 +4731,13 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
         return 0;
     }
 
-    /* Binary Ninja: memcpy($s0_1 + 0xec, arg2, 0x4c) */
+    /* Copy FULL sensor attributes (was 0x4c in OEM, but that missed total_width/height) */
     memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
     /* OEM: store pointer to FULL sensor_attr for tx_isp_vic_start */
     vic_dev->sensor_attr_ptr = attr;
+
+    pr_info("*** ispcore_sync_sensor_attr: copied %zu bytes, total_width=%u total_height=%u ***\n",
+            sensor_attr_bytes, attr->total_width, attr->total_height);
 
     /* Binary Ninja: Complex sensor attribute processing */
     stored_attr = &vic_dev->sensor_attr;
