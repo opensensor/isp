@@ -99,6 +99,7 @@ static u32 ispcore_frame_format_depth(u32 pixelformat)
 static int ispcore_normalize_channel_format(struct frame_image_format *fmt)
 {
     u32 depth;
+    u32 aligned_height;
 
     if (!fmt)
         return -EINVAL;
@@ -115,14 +116,16 @@ static int ispcore_normalize_channel_format(struct frame_image_format *fmt)
     if (!fmt->pix.width || !fmt->pix.height)
         return 0;
 
-    fmt->pix.bytesperline = (fmt->pix.width * depth) / 8;
+    aligned_height = ALIGN(fmt->pix.height, 16);
 
     switch (fmt->pix.pixelformat) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV21:
-        fmt->pix.sizeimage = fmt->pix.bytesperline * ALIGN(fmt->pix.height, 16);
+        fmt->pix.bytesperline = fmt->pix.width;
+        fmt->pix.sizeimage = fmt->pix.bytesperline * aligned_height * 3 / 2;
         break;
     default:
+        fmt->pix.bytesperline = (fmt->pix.width * depth) / 8;
         fmt->pix.sizeimage = fmt->pix.bytesperline * fmt->pix.height;
         break;
     }

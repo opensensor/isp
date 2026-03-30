@@ -48,9 +48,17 @@ static inline u32 vic_mdma_stride_resolve(struct tx_isp_vic_device *vic_dev,
                                          u32 width, u32 pixfmt)
 {
     u32 stride = vic_dev ? vic_dev->stride : 0;
-	u32 min_stride = width << 1;
+	u32 min_stride = vic_pixfmt_is_semiplanar_420(pixfmt) ? width : (width << 1);
 
-	(void)pixfmt;
+	if (vic_pixfmt_is_semiplanar_420(pixfmt)) {
+		if (stride < min_stride)
+			return min_stride;
+
+		/* Our QBUF/MSCA path assumes tightly packed NV12/NV21 planes.
+		 * Clamp semiplanar stride to width until padded-line handling is wired
+		 * consistently through UV offset and sizeimage calculations. */
+		return min_stride;
+	}
 
     if (stride >= min_stride)
         return stride;
@@ -2935,15 +2943,11 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
      * VIC MDMA must use NV12-compatible stride (width) or the DMA will
      * overflow the buffer and produce a corrupted/partial image.
      */
-    {
-        /* OEM vic_pipo_mdma_enable ALWAYS uses raw stride (width*2).
-         * In pipo mode the VIC MDMA handles raw Bayer data internally.
-         * NV12 conversion is done by the MSCA scaler, not the VIC MDMA.
-         * OEM HLIL line 1483: $v1_1 = $v1 << 1 (stride = width * 2) */
-        stride = width << 1;
+	    {
+	        stride = vic_mdma_stride_resolve(vic_dev, width, pixfmt);
 
-        pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u (raw pipo mode)\n",
-                vic_base, width, height, stride);
+	        pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x\n",
+	                vic_base, width, height, stride, pixfmt);
 
         writel(1, vic_base + 0x308);                           /* MDMA enable */
         writel((width << 16) | height, vic_base + 0x304);      /* frame size */

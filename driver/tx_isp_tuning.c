@@ -82,6 +82,7 @@ int tisp_ccm_ev_update(void);
 static int tiziano_awb_set_hardware_param(void);
 static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct);
 static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv);
+static int tiziano_bcsh_update(struct isp_tuning_data *tuning);
 
 /* External hardware register write functions from tx-isp-module.c */
 extern void system_reg_write(u32 reg, u32 value);
@@ -1002,10 +1003,27 @@ static int tisp_adr_build_lut_payload(uint32_t *out_words, int out_cap)
 static void *tparams_day = NULL;
 static void *tparams_night = NULL;
 static void *tparams_cust = NULL;
+static void *tparams_active = NULL;
+static uint8_t tispPollValue;
 static bool tuning_bin_loaded = false;
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
+#define TISP_DMSC_PARAM_FIRST 0x5f
+#define TISP_DMSC_PARAM_COUNT 0x4a
+#define TISP_DMSC_PARAM_MAX_SIZE 0x58
+static uint8_t tisp_dmsc_param_store[TISP_DMSC_PARAM_COUNT][TISP_DMSC_PARAM_MAX_SIZE];
+static const uint16_t tisp_dmsc_param_sizes[TISP_DMSC_PARAM_COUNT] = {
+	0x40, 0x20, 0x20, 0x20, 0x40, 0x58, 0x58, 0x58, 0x58, 0x04,
+	0x24, 0x24, 0x24, 0x24, 0x24, 0x24, 0x24, 0x24, 0x24, 0x10,
+	0x24, 0x24, 0x24, 0x24, 0x10, 0x24, 0x10, 0x24, 0x24, 0x24,
+	0x24, 0x24, 0x24, 0x24, 0x24, 0x2c, 0x24, 0x24, 0x24, 0x24,
+	0x24, 0x24, 0x24, 0x24, 0x24, 0x34, 0x28, 0x24, 0x08, 0x24,
+	0x24, 0x08, 0x24, 0x24, 0x24, 0x24, 0x24, 0x24, 0x24, 0x28,
+	0x08, 0x14, 0x24, 0x24, 0x24, 0x24, 0x08, 0x24, 0x24, 0x24,
+	0x24, 0x24, 0x24, 0x24, 0x24, 0x0c,
+};
 static void *sensor_info_ptr = NULL;
 static uint32_t data_b2e1c = 1080; /* Sensor height */
+static uint32_t data_b2e56;
 
 #define TISP_PARAM_BLOCK_SIZE 0x137f0
 #define TISP_PARAM_HEADER_SIZE 0x18
@@ -1160,7 +1178,7 @@ static int tiziano_load_parameters(const char *param_name)
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
 	u32 bypass_val = 0x8077efff;
-	u32 *params = (u32 *)tparams_day;
+	u32 *params = (u32 *)(tparams_active ? tparams_active : tparams_day);
 	int i;
 
 	if (!params)
@@ -1741,7 +1759,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev);
 void *isp_core_tuning_init(void *arg1);
 
 /* Forward declaration for tisp_init - Binary Ninja EXACT implementation */
-int tisp_init(void *sensor_info, char *param_name);
+int tisp_init(void *sensor_info_arg, char *param_name);
 
 
 /* OEM CSC preset 0 (first 0x3c bytes copied by tx-isp-t31.ko).
@@ -2575,17 +2593,12 @@ int tisp_ae0_process(void)
 EXPORT_SYMBOL(tisp_ae0_process);
 
 /* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
-int tisp_init(void *sensor_info, char *param_name)
+int tisp_init(void *sensor_info_arg, char *param_name)
 {
     extern struct tx_isp_dev *ourISPdev;
     int wdr_enable;
     int ret;
-    struct {
-        uint32_t width;
-        uint32_t height;
-        uint32_t fps;
-        uint32_t mode;
-    } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
+    struct sensor_info_struct sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
     pr_info("*** tisp_init: INITIALIZING ISP HARDWARE PIPELINE - Binary Ninja EXACT implementation ***\n");
 
@@ -2595,10 +2608,15 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
     /* Binary Ninja: Basic sensor parameter setup */
-    if (sensor_info) {
+    if (sensor_info_arg) {
         /* Use provided sensor info if available */
-        memcpy(&sensor_params, sensor_info, sizeof(sensor_params));
+        memcpy(&sensor_params, sensor_info_arg, sizeof(sensor_params));
     }
+
+    sensor_info = sensor_params;
+    sensor_info_ptr = &sensor_info;
+    data_b2e1c = sensor_params.height;
+    data_b2e56 = sensor_params.fps;
 
     pr_info("tisp_init: Using sensor parameters - %dx%d@%d, mode=%d\n",
             sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
@@ -2616,6 +2634,7 @@ int tisp_init(void *sensor_info, char *param_name)
 	if (ret)
 		pr_warn("tisp_init: no valid tuning bin loaded for '%s' (%d)\n",
 			param_name ? param_name : "", ret);
+	tparams_active = tparams_day;
 
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
@@ -3050,78 +3069,84 @@ static struct tiziano_dn_params {
     uint32_t night_params[0x20]; // Night mode params
 } dn_params;
 
+static uint32_t tisp_day_or_night_g_ctrl(void)
+{
+	if (ourISPdev)
+		return !!ourISPdev->day_night;
+
+	return tparams_active == tparams_night ? 1 : 0;
+}
+
 static int tisp_day_or_night_s_ctrl(uint32_t mode)
 {
-    //void __iomem *regs = ourISPdev->reg_base;
-    uint32_t bypass_val, top_ctrl;
+	uint32_t bypass_val;
+	uint32_t active_mode = mode ? 1 : 0;
+	uint32_t width = sensor_info.width;
+	uint32_t height = sensor_info.height;
+	uint32_t fps = sensor_info.fps;
+	void *selected = active_mode ? tparams_night : tparams_day;
 
-    if (mode > 1) {
-        pr_err("%s: Unsupported mode %d\n", __func__, mode);
-        return -EINVAL;
-    }
+	if (mode > 1) {
+		pr_err("%s: Unsupported mode %u\n", __func__, mode);
+		return -EINVAL;
+	}
 
-    // Copy appropriate parameter set // TODO
-//    if (mode == 0) {
-//        memcpy(&dn_params.day_params, day_mode_defaults, sizeof(dn_params.day_params));
-//        ourISPdev->day_night = 0;
-//    } else {
-//        memcpy(&dn_params.night_params, night_mode_defaults, sizeof(dn_params.night_params));
-//        ourISPdev->day_night = 1;
-//    }
-//
-//    // Read current top control register
-//    bypass_val = readl(regs + 0xC);
-//
-//    // Apply parameters to hardware
-//    for (int i = 0; i < 0x20; i++) {
-//        uint32_t *params = mode ? dn_params.night_params : dn_params.day_params;
-//        uint32_t val = ~(1 << i) & bypass_val;
-//        val |= params[i] << i;
-//        bypass_val = val;
-//    }
-//
-//    // Set appropriate bypass bits based on chip variant
-////    if (ourISPdev->chip_id == 0xa2ea4) { // TODO
-////        bypass_val &= 0xb577fffd;
-////        top_ctrl = 0x34000009;
-////    } else {
-//        bypass_val &= 0xa1fffff6;
-//        top_ctrl = 0x880002;
-//    //}
-//
-//    bypass_val |= top_ctrl;
-//
-//    pr_info("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
-//    writel(bypass_val, regs + 0xC);
+	if (tparams_day)
+		memcpy(dn_params.day_params, tparams_day, sizeof(dn_params.day_params));
+	if (tparams_night)
+		memcpy(dn_params.night_params, tparams_night, sizeof(dn_params.night_params));
 
-    // Refresh all pipeline stages for mode change
-//    tiziano_defog_refresh();
-//    tiziano_ae_refresh();
-//    tiziano_awb_refresh();
-//    tiziano_dmsc_refresh();
-//    tiziano_sharpen_refresh();
-//    tiziano_mdns_refresh();
-//    tiziano_sdns_refresh();
-//    tiziano_gib_refresh();
-//    tiziano_lsc_refresh();
-//    tiziano_ccm_refresh();
-//    tiziano_clm_refresh();
-//    tiziano_gamma_refresh();
-//    tiziano_adr_refresh();
-//    tiziano_dpc_refresh();
-//    tiziano_af_refresh();
-//    tiziano_bcsh_refresh();
-//    tiziano_rdns_refresh();
-//    tiziano_ydns_refresh();
+	if (!selected) {
+		selected = tparams_day ? tparams_day : tparams_night;
+		if (!selected) {
+			pr_err("%s: no day/night parameter blocks allocated\n", __func__);
+			return -ENODEV;
+		}
+		active_mode = selected == tparams_night ? 1 : 0;
+		pr_warn("%s: requested %s params unavailable, falling back to %s block\n",
+			__func__, mode ? "night" : "day", active_mode ? "night" : "day");
+	}
 
-    // Reset custom mode and update poll state
-//    ourISPdev->custom_mode = 0;
-//    ourISPdev->poll_state = ((mode & 0xFF) << 16) | 1;
-//
-//    // Wake up any waiters
-//    wake_up_interruptible(&ourISPdev->poll_wait);
+	tparams_active = selected;
+	bypass_val = tisp_compute_top_bypass_from_params(!!data_b2e74);
+	system_reg_write(0xc, bypass_val);
 
-    return 0;
+	pr_info("%s: applying %s mode, top_bypass=0x%08x wdr=%u\n",
+		__func__, active_mode ? "night" : "day", bypass_val, !!data_b2e74);
+
+	/* OEM DN order mapped onto the local apply hooks available in this tree. */
+	tiziano_defog_init(width, height);
+	tiziano_ae_init(height, width, fps);
+	tiziano_awb_init(height, width);
+	tiziano_dmsc_init();
+	tiziano_sharpen_init();
+	tiziano_mdns_init(width, height);
+	tiziano_sdns_init();
+	tiziano_gib_init();
+	tiziano_lsc_init();
+	tiziano_ccm_init();
+	tiziano_clm_init();
+	tiziano_gamma_init(width, height, fps);
+	tiziano_adr_init(width, height);
+	tiziano_dpc_init();
+	tiziano_af_init(height, width);
+	if (ourISPdev && ourISPdev->tuning_data)
+		tiziano_bcsh_update(ourISPdev->tuning_data);
+	else
+		tiziano_bcsh_init();
+	tiziano_rdns_init();
+	tiziano_ydns_init();
+	system_reg_write(0x800, 1);
+
+	if (ourISPdev) {
+		ourISPdev->day_night = active_mode;
+		ourISPdev->custom_mode = 0;
+		ourISPdev->poll_state = ((active_mode & 0xff) << 16) | 1;
+		wake_up_interruptible(&ourISPdev->poll_wait);
+	}
+
+	tispPollValue = 1;
+	return 0;
 }
 
 /* Additional tuning event definitions not yet in tx-libimp.h */
@@ -4219,6 +4244,7 @@ int tisp_wdr_param_array_set_extended(int param_id, void *in_buf, int *size_buf)
 int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_rdns_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_adr_param_array_set(int param_id, void *in_buf, int *size_buf);
+int tisp_ae_param_array_set(int param_id, void *in_buf, int *size_buf);
 
 int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf);
@@ -4257,6 +4283,7 @@ extern int jz_isp_ccm(void);
 
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_dmsc_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_gamma_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_defog_get_par_cfg(void *out_buf, void *size_buf);
@@ -4859,8 +4886,8 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                             case 7:  /* tisp_adr_get_par_cfg */
                                 ret = tisp_adr_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
-                            case 8:  /* tx_isp_vin_activate_subdev */
-                                ret = tx_isp_vin_activate_subdev(&param_ptr[3]);
+                            case 8:  /* tisp_dmsc_get_par_cfg */
+                                ret = tisp_dmsc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 9:  /* tisp_ccm_get_par_cfg */
                                 ret = tisp_ccm_get_par_cfg(&param_ptr[3], &param_ptr[1]);
@@ -7906,6 +7933,89 @@ int tisp_awb_param_array_set(int param_id, void *in_buf, int *size_buf)
 
 /* Implementation of the next batch of parameter functions */
 
+static int tisp_dmsc_param_array_info(int param_id, void **buf, int *size)
+{
+	int idx;
+
+	if (!buf || !size)
+		return -EINVAL;
+
+	idx = param_id - TISP_DMSC_PARAM_FIRST;
+	if ((unsigned int)idx >= TISP_DMSC_PARAM_COUNT) {
+		pr_err("tisp_dmsc_param_array_info: Invalid parameter ID 0x%x\n", param_id);
+		return -1;
+	}
+
+	*buf = tisp_dmsc_param_store[idx];
+	*size = tisp_dmsc_param_sizes[idx];
+	return 0;
+}
+
+int tisp_dmsc_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+	void *src = NULL;
+	int len = 0;
+	int ret;
+
+	if (!out_buf || !size_buf)
+		return -EINVAL;
+
+	ret = tisp_dmsc_param_array_info(param_id, &src, &len);
+	if (ret)
+		return ret;
+
+	memcpy(out_buf, src, len);
+	*size_buf = len;
+	return 0;
+}
+
+int tisp_dmsc_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+	void *dst = NULL;
+	int len = 0;
+	int ret;
+
+	if (!in_buf || !size_buf)
+		return -EINVAL;
+
+	ret = tisp_dmsc_param_array_info(param_id, &dst, &len);
+	if (ret)
+		return ret;
+
+	memcpy(dst, in_buf, len);
+	*size_buf = len;
+
+	if (param_id == 0xa4)
+		dmsc_sp_d_w_stren_wdr_array = dst;
+
+	return 0;
+}
+
+/* tisp_dmsc_get_par_cfg - Binary Ninja EXACT implementation */
+int tisp_dmsc_get_par_cfg(void *out_buf, void *size_buf)
+{
+	char *output_ptr = (char *)out_buf;
+	int total_size = 0;
+	int temp_size = 0;
+
+	if (!out_buf || !size_buf) {
+		pr_err("tisp_dmsc_get_par_cfg: NULL buffer pointers\n");
+		return -EINVAL;
+	}
+
+	*(int *)size_buf = 0;
+	for (int i = 0x5f; i < 0xa9; i++) {
+		if (tisp_dmsc_param_array_get(i, output_ptr, &temp_size) != 0)
+			return -EINVAL;
+		output_ptr += temp_size;
+		total_size += temp_size;
+	}
+
+	*(int *)size_buf = total_size;
+	pr_debug("tisp_dmsc_get_par_cfg: total=%d\n", total_size);
+	return 0;
+}
+
 /* tisp_rdns_get_par_cfg - Binary Ninja EXACT implementation */
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf)
 {
@@ -8348,14 +8458,25 @@ int tisp_hldc_get_par_cfg(void *out_buf, void *size_buf)
 /* tisp_ae_get_par_cfg - Binary Ninja implementation (stub for now) */
 int tisp_ae_get_par_cfg(void *out_buf, void *size_buf)
 {
+    char *output_ptr = (char *)out_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
     if (!out_buf || !size_buf) {
         pr_err("tisp_ae_get_par_cfg: NULL buffer pointers\n");
         return -EINVAL;
     }
 
-    /* Stub implementation - needs Binary Ninja decompilation */
     *(int *)size_buf = 0;
-    pr_debug("tisp_ae_get_par_cfg: Stub implementation\n");
+    for (int i = 1; i < 0x23; i++) {
+        if (tisp_ae_param_array_get(i, output_ptr, &temp_size) != 0)
+            return -EINVAL;
+        output_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    *(int *)size_buf = total_size;
+    pr_debug("tisp_ae_get_par_cfg: Total size=%d\n", total_size);
     return 0;
 }
 
@@ -8399,15 +8520,18 @@ int tisp_reg_map_get(int reg_addr, void *reg_val, void *size_buf)
 /* tisp_dn_mode_get - Binary Ninja implementation (stub for now) */
 int tisp_dn_mode_get(void *mode_buf, void *size_buf)
 {
-    if (!mode_buf || !size_buf) {
-        pr_err("tisp_dn_mode_get: NULL buffer pointers\n");
-        return -EINVAL;
-    }
+	uint32_t mode;
 
-    /* Stub implementation - needs Binary Ninja decompilation */
-    *(int *)size_buf = 0;
-    pr_debug("tisp_dn_mode_get: Stub implementation\n");
-    return 0;
+	if (!mode_buf || !size_buf) {
+		pr_err("tisp_dn_mode_get: NULL buffer pointers\n");
+		return -EINVAL;
+	}
+
+	mode = tisp_day_or_night_g_ctrl();
+	memcpy((uint8_t *)mode_buf + 0xc, &mode, sizeof(mode));
+	*(int *)size_buf = sizeof(mode);
+	pr_debug("tisp_dn_mode_get: mode=%u\n", mode);
+	return 0;
 }
 
 /* tisp_g_af_zone - Binary Ninja EXACT implementation */
@@ -8601,7 +8725,27 @@ int tisp_adr_set_par_cfg(void *in_buf)
     pr_debug("tisp_adr_set_par_cfg: total=%d\n", total);
     return 0;
 }
-int tisp_dmsc_set_par_cfg(void *in_buf) { return 0; }
+int tisp_dmsc_set_par_cfg(void *in_buf)
+{
+	char *input_ptr = (char *)in_buf;
+	int total_size = 0;
+	int temp_size = 0;
+
+	if (!in_buf) {
+		pr_err("tisp_dmsc_set_par_cfg: NULL input buffer\n");
+		return -EINVAL;
+	}
+
+	for (int i = 0x5f; i < 0xa9; i++) {
+		if (tisp_dmsc_param_array_set(i, input_ptr, &temp_size) != 0)
+			return -EINVAL;
+		input_ptr += temp_size;
+		total_size += temp_size;
+	}
+
+	pr_debug("tisp_dmsc_set_par_cfg: total=%d\n", total_size);
+	return 0;
+}
 int tisp_ccm_set_par_cfg(void *in_buf)
 {
     int total = 0, sz = 0; char *p = (char *)in_buf;
@@ -8765,7 +8909,27 @@ int tisp_sdns_set_par_cfg(void *in_buf)
 
 int tisp_af_set_par_cfg(void *in_buf) { return 0; }
 int tisp_hldc_set_par_cfg(void *in_buf) { return 0; }
-int tisp_ae_set_par_cfg(void *in_buf) { return 0; }
+int tisp_ae_set_par_cfg(void *in_buf)
+{
+    char *input_ptr = (char *)in_buf;
+    int total_size = 0;
+    int temp_size = 0;
+
+    if (!in_buf) {
+        pr_err("tisp_ae_set_par_cfg: NULL input buffer\n");
+        return -EINVAL;
+    }
+
+    for (int i = 1; i < 0x23; i++) {
+        if (tisp_ae_param_array_set(i, input_ptr, &temp_size) != 0)
+            return -EINVAL;
+        input_ptr += temp_size;
+        total_size += temp_size;
+    }
+
+    pr_debug("tisp_ae_set_par_cfg: total=%d\n", total_size);
+    return 0;
+}
 int tisp_awb_set_par_cfg(void *in_buf)
 {
     if (!in_buf) return -EINVAL;
@@ -8933,7 +9097,27 @@ int tisp_reg_map_set(void *in_buf)
     return 0;
 }
 EXPORT_SYMBOL(tisp_reg_map_set);
-int tisp_dn_mode_set(void *in_buf) { return 0; }
+int tisp_dn_mode_set(void *in_buf)
+{
+	int32_t req_mode;
+	uint32_t mode = 0;
+
+	if (!in_buf) {
+		pr_err("tisp_dn_mode_set: NULL input buffer\n");
+		return -EINVAL;
+	}
+
+	memcpy(&req_mode, (uint8_t *)in_buf + 0xc, sizeof(req_mode));
+	if (req_mode != 0) {
+		mode = 1;
+		if (req_mode != 1) {
+			pr_warn("%s: unsupported mode %d, forcing day mode\n", __func__, req_mode);
+			mode = 0;
+		}
+	}
+
+	return tisp_day_or_night_s_ctrl(mode);
+}
 
 int tisp_get_ae_info(void *out_buf)
 {
@@ -9169,159 +9353,207 @@ int tisp_g_ae_hist(void *buffer)
 }
 
 /* tisp_ae_param_array_get - EXACT Binary Ninja reference implementation */
-int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
+static int tisp_ae_param_array_info(int param_type, void **param_ptr, int *param_size)
 {
-    /* Binary Ninja: if (arg1 - 1 u>= 0x22) return error */
-    if ((param_type - 1) >= 0x22) {
-        pr_err("tisp_ae_param_array_get: Invalid parameter type %d\n", param_type);
-        return -1;  /* Binary Ninja returns 0xffffffff */
+    if (!param_ptr || !param_size)
+        return -EINVAL;
+
+    if (param_type < 1 || param_type > 0x22) {
+        pr_err("tisp_ae_param_array_info: Invalid parameter type %d\n", param_type);
+        return -1;
     }
 
-    void *source_ptr = NULL;
-    int data_size = 0;
+    *param_ptr = NULL;
+    *param_size = 0;
 
-    /* Binary Ninja: Large switch statement for all parameter types */
     switch (param_type) {
-        case 1:   /* _ae_parameter */
-            source_ptr = &_ae_parameter;
-            data_size = 0xa8;
+        case 1:
+            *param_ptr = &_ae_parameter;
+            *param_size = sizeof(_ae_parameter);
             break;
-        case 2:   /* ae_exp_th */
-            source_ptr = &ae_exp_th;
-            data_size = 0x50;
+        case 2:
+            *param_ptr = &ae_exp_th;
+            *param_size = sizeof(ae_exp_th);
             break;
-        case 3:   /* _AePointPos */
-            source_ptr = &_AePointPos;
-            data_size = 8;
+        case 3:
+            *param_ptr = &_AePointPos;
+            *param_size = sizeof(_AePointPos);
             break;
-        case 4:   /* _exp_parameter */
-            source_ptr = &_exp_parameter;
-            data_size = 0x2c;
+        case 4:
+            *param_ptr = &_exp_parameter;
+            *param_size = sizeof(_exp_parameter);
             break;
-        case 5:   /* ae_ev_step */
-            source_ptr = &ae_ev_step;
-            data_size = 0x14;
+        case 5:
+            *param_ptr = &ae_ev_step;
+            *param_size = sizeof(ae_ev_step);
             break;
-        case 6:   /* ae_stable_tol */
-            source_ptr = &ae_stable_tol;
-            data_size = 0x10;
+        case 6:
+            *param_ptr = &ae_stable_tol;
+            *param_size = sizeof(ae_stable_tol);
             break;
-        case 7:   /* ae0_ev_list */
-            source_ptr = &ae0_ev_list;
-            data_size = 0x28;
+        case 7:
+            *param_ptr = &ae0_ev_list;
+            *param_size = sizeof(ae0_ev_list);
             break;
-        case 8:   /* _lum_list */
-            source_ptr = &_lum_list;
-            data_size = 0x28;
+        case 8:
+            *param_ptr = &_lum_list;
+            *param_size = sizeof(_lum_list);
             break;
-        case 0xa: /* _deflicker_para */
-            source_ptr = &_deflicker_para;
-            data_size = 0xc;
+        case 9:
             break;
-        case 0xb: /* _flicker_t */
-            source_ptr = &_flicker_t;
-            data_size = 0x18;
+        case 0xa:
+            *param_ptr = &_deflicker_para;
+            *param_size = sizeof(_deflicker_para);
             break;
-        case 0xc: /* _scene_para */
-            source_ptr = &_scene_para;
-            data_size = 0x2c;
+        case 0xb:
+            *param_ptr = &_flicker_t;
+            *param_size = sizeof(_flicker_t);
             break;
-        case 0xd: /* ae_scene_mode_th */
-            source_ptr = &ae_scene_mode_th;
-            data_size = 0x10;
+        case 0xc:
+            *param_ptr = &_scene_para;
+            *param_size = sizeof(_scene_para);
             break;
-        case 0xe: /* _log2_lut */
-            source_ptr = &_log2_lut;
-            data_size = 0x50;
+        case 0xd:
+            *param_ptr = &ae_scene_mode_th;
+            *param_size = sizeof(ae_scene_mode_th);
             break;
-        case 0xf: /* _weight_lut */
-            source_ptr = &_weight_lut;
-            data_size = 0x50;
+        case 0xe:
+            *param_ptr = &_log2_lut;
+            *param_size = sizeof(_log2_lut);
             break;
-        case 0x10: /* _ae_zone_weight - CRITICAL for aezone_weight */
-            source_ptr = &_ae_zone_weight;
-            data_size = 0x384;
+        case 0xf:
+            *param_ptr = &_weight_lut;
+            *param_size = sizeof(_weight_lut);
             break;
-        case 0x11: /* _scene_roui_weight */
-            source_ptr = &_scene_roui_weight;
-            data_size = 0x384;
+        case 0x10:
+            *param_ptr = &_ae_zone_weight;
+            *param_size = sizeof(_ae_zone_weight);
             break;
-        case 0x12: /* _scene_roi_weight - CRITICAL for aeroi_weight */
-            source_ptr = &_scene_roi_weight;
-            data_size = 0x384;
+        case 0x11:
+            *param_ptr = &_scene_roui_weight;
+            *param_size = sizeof(_scene_roui_weight);
             break;
-        case 0x13: /* _ae_result */
-            source_ptr = &_ae_result;
-            data_size = 0x18;
+        case 0x12:
+            *param_ptr = &_scene_roi_weight;
+            *param_size = sizeof(_scene_roi_weight);
             break;
-        case 0x14: /* _ae_stat */
-            source_ptr = &_ae_stat;
-            data_size = 0x14;
+        case 0x13:
+            *param_ptr = &_ae_result;
+            *param_size = sizeof(_ae_result);
             break;
-        case 0x15: /* _ae_wm_q */
-            source_ptr = &_ae_wm_q;
-            data_size = 0x3c;
+        case 0x14:
+            *param_ptr = &_ae_stat;
+            *param_size = sizeof(_ae_stat);
             break;
-        case 0x16: /* ae_comp_param */
-
-
-            source_ptr = &ae_comp_param;
-            data_size = 0x18;
+        case 0x15:
+            *param_ptr = &_ae_wm_q;
+            *param_size = sizeof(_ae_wm_q);
             break;
-        case 0x17: /* ae_comp_ev_list */
-            source_ptr = &ae_comp_ev_list;
-            data_size = 0x28;
+        case 0x16:
+            *param_ptr = &ae_comp_param;
+            *param_size = sizeof(ae_comp_param);
             break;
-        case 0x19: /* ae_extra_at_list */
-            source_ptr = &ae_extra_at_list;
-            data_size = 0x28;
+        case 0x17:
+            *param_ptr = &ae_comp_ev_list;
+            *param_size = sizeof(ae_comp_ev_list);
             break;
-        case 0x1a: /* ae1_ev_list */
-            source_ptr = &ae1_ev_list;
-            data_size = 0x28;
+        case 0x18:
             break;
-        case 0x1b: /* ae0_ev_list_wdr */
-            source_ptr = &ae0_ev_list_wdr;
-            data_size = 0x28;
+        case 0x19:
+            *param_ptr = &ae_extra_at_list;
+            *param_size = sizeof(ae_extra_at_list);
             break;
-        case 0x1c: /* _lum_list_wdr */
-            source_ptr = &_lum_list_wdr;
-            data_size = 0x28;
+        case 0x1a:
+            *param_ptr = &ae1_ev_list;
+            *param_size = sizeof(ae1_ev_list);
             break;
-        case 0x1e: /* _scene_para_wdr */
-            source_ptr = &_scene_para_wdr;
-            data_size = 0x2c;
+        case 0x1b:
+            *param_ptr = &ae0_ev_list_wdr;
+            *param_size = sizeof(ae0_ev_list_wdr);
             break;
-        case 0x1f: /* ae_scene_mode_th_wdr */
-            source_ptr = &ae_scene_mode_th_wdr;
-            data_size = 0x10;
+        case 0x1c:
+            *param_ptr = &_lum_list_wdr;
+            *param_size = sizeof(_lum_list_wdr);
             break;
-        case 0x20: /* ae_comp_param_wdr */
-            source_ptr = &ae_comp_param_wdr;
-            data_size = 0x18;
+        case 0x1d:
             break;
-        case 0x21: /* ae_extra_at_list_wdr */
-            source_ptr = &ae_extra_at_list_wdr;
-            data_size = 0x28;
+        case 0x1e:
+            *param_ptr = &_scene_para_wdr;
+            *param_size = sizeof(_scene_para_wdr);
             break;
-        case 0x22: /* ae1_comp_ev_list */
-            source_ptr = &ae1_comp_ev_list;
-            data_size = 0x28;
+        case 0x1f:
+            *param_ptr = &ae_scene_mode_th_wdr;
+            *param_size = sizeof(ae_scene_mode_th_wdr);
+            break;
+        case 0x20:
+            *param_ptr = &ae_comp_param_wdr;
+            *param_size = sizeof(ae_comp_param_wdr);
+            break;
+        case 0x21:
+            *param_ptr = &ae_extra_at_list_wdr;
+            *param_size = sizeof(ae_extra_at_list_wdr);
+            break;
+        case 0x22:
+            *param_ptr = &ae1_comp_ev_list;
+            *param_size = sizeof(ae1_comp_ev_list);
             break;
         default:
-            pr_err("tisp_ae_param_array_get: Unhandled parameter type %d\n", param_type);
             return -1;
     }
 
-    if (source_ptr && buffer && size) {
-        /* Binary Ninja: memcpy(arg2, $a1_1, $s1_1); *arg3 = $s1_1 */
-        memcpy(buffer, source_ptr, data_size);
-        *size = data_size;
-        pr_debug("tisp_ae_param_array_get: type=%d, size=%d\n", param_type, data_size);
+    return 0;
+}
+
+int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
+{
+    void *source_ptr = NULL;
+    int data_size = 0;
+    int ret;
+
+    if (!buffer || !size) {
+        pr_err("tisp_ae_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    ret = tisp_ae_param_array_info(param_type, &source_ptr, &data_size);
+    if (ret)
+        return ret;
+
+    if (data_size == 0) {
+        *size = 0;
         return 0;
     }
 
-    return -1;
+    memcpy(buffer, source_ptr, data_size);
+    *size = data_size;
+    pr_debug("tisp_ae_param_array_get: type=%d, size=%d\n", param_type, data_size);
+    return 0;
+}
+
+int tisp_ae_param_array_set(int param_type, void *buffer, int *size)
+{
+    void *dest_ptr = NULL;
+    int data_size = 0;
+    int ret;
+
+    if (!buffer || !size) {
+        pr_err("tisp_ae_param_array_set: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    ret = tisp_ae_param_array_info(param_type, &dest_ptr, &data_size);
+    if (ret)
+        return ret;
+
+    if (data_size == 0) {
+        *size = 0;
+        return 0;
+    }
+
+    memcpy(dest_ptr, buffer, data_size);
+    *size = data_size;
+    pr_debug("tisp_ae_param_array_set: type=%d, size=%d\n", param_type, data_size);
+    return 0;
 }
 
 /* Binary Ninja reference implementations */
