@@ -1056,10 +1056,32 @@ static u32 vic_irq_counter;
 
             spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
 
-            /* Pop completed buffer from done_head, deliver frame, free bank */
-            if (!list_empty(&vic_dev->done_head)) {
-                done_buf = list_first_entry(&vic_dev->done_head,
-                            struct vic_buffer_entry, list);
+            /* Find which buffer the MSCA just wrote to by reading 0x996c.
+             * Multiple QBUFs may have overwritten 0x996c, so we can't just
+             * pop the first done_head entry — we must find the one matching
+             * the actual MSCA output address. */
+            {
+                u32 msca_y_addr = 0;
+                if (ourISPdev && ourISPdev->core_regs)
+                    msca_y_addr = readl(ourISPdev->core_regs + 0x996c);
+
+                done_buf = NULL;
+                if (msca_y_addr && !list_empty(&vic_dev->done_head)) {
+                    struct vic_buffer_entry *entry;
+                    list_for_each_entry(entry, &vic_dev->done_head, list) {
+                        if (entry->buffer_addr == msca_y_addr) {
+                            done_buf = entry;
+                            break;
+                        }
+                    }
+                }
+                /* Fallback: if no match, pop first entry */
+                if (!done_buf && !list_empty(&vic_dev->done_head))
+                    done_buf = list_first_entry(&vic_dev->done_head,
+                                struct vic_buffer_entry, list);
+            }
+
+            if (done_buf) {
                 list_del(&done_buf->list);
                 vic_dev->active_buffer_count--;
 
@@ -1073,7 +1095,8 @@ static u32 vic_irq_counter;
                 list_add_tail(&done_buf->list, &vic_dev->free_head);
             }
 
-            /* Refill: move next queued buffer into a free bank slot */
+            /* Refill: move next queued buffer into a free bank slot
+             * and set MSCA to write to it for the NEXT frame. */
             if (!list_empty(&vic_dev->free_head) &&
                 !list_empty(&vic_dev->queue_head)) {
                 q_buf = list_first_entry(&vic_dev->queue_head,
@@ -1087,7 +1110,7 @@ static u32 vic_irq_counter;
                 writel(f_buf->buffer_addr,
                        vic_regs + ((f_buf->buffer_index + 0xc6) << 2));
 
-                /* Also update MSCA output addresses for the new buffer */
+                /* Update MSCA to write NEXT frame to this new buffer */
                 if (ourISPdev && ourISPdev->core_regs) {
                     u32 w = vic_dev->width ? vic_dev->width : 1920;
                     u32 h = vic_dev->height ? vic_dev->height : 1080;
