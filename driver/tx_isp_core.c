@@ -1444,10 +1444,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: *($s0 + 0xe8) = 3 */
             isp_dev->state = 3;
 
-            /* Reset VIC MDMA state so the next stream-on cycle can
-             * re-trigger auto-enable.  Without this, the
-             * ispvic_frame_channel_s_stream idempotency guard
-             * (stream_state check) blocks re-configuration. */
+            /* Reset VIC MDMA stream_state so the next frame channel STREAMON
+             * can re-enable with the correct active_buffer_count.
+             * Without this, the idempotency guard blocks re-configuration. */
             if (vic_dev)
                 ispvic_frame_channel_s_stream(vic_dev, 0);
         }
@@ -1577,19 +1576,14 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         tx_isp_enable_irq(isp_dev);
 
-        /* The STREAM_START (0x3000003) event cannot reach the VIC
-         * after STREAMOFF because the pad links are broken.  The OEM
-         * calls vic_core_s_stream which does:
-         *   tx_vic_enable_irq()   → re-enables VIC IRQ 38
-         *   ispvic_frame_channel_s_stream(1) → re-enables MDMA
-         * Since neither fires on the second STREAMON, call them
-         * explicitly.  Both have idempotency guards so redundant
-         * calls on the first STREAMON are harmless.
+        /* OEM: VIC IRQ 38 is enabled by vic_core_s_stream → tx_isp_vic_start
+         * during the subdev walk above. ispvic_frame_channel_s_stream(1)
+         * is called from the frame channel STREAMON event dispatch to VIC
+         * (with the correct active_buffer_count). Do NOT call it here
+         * before QBUFs have programmed bank addresses.
          */
-        if (vic_dev) {
+        if (vic_dev)
             tx_vic_enable_irq(vic_dev);
-            ispvic_frame_channel_s_stream(vic_dev, 1);
-        }
     }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */

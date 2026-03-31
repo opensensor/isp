@@ -4540,6 +4540,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -ENODEV;
         }
 
+        /* OEM: ISP core channel dispatch FIRST (tisp_channel_start → 0x9804 = 0xf0001).
+         * In the OEM, event 0x3000003 goes through the pad chain:
+         *   ispcore_pad_event_handle → tisp_channel_start (MSCA channel enable)
+         *   vic_pad_event_handler → ispvic_frame_channel_s_stream (VIC MDMA enable)
+         * We must dispatch to ISP core BEFORE VIC to match this ordering.
+         */
+        if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
+            tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, 0x3000003, NULL);
+
+        /* OEM: VIC dispatch (ispvic_frame_channel_s_stream → MDMA enable) */
         ret = tx_isp_send_event_to_remote(vic_sd, 0x3000003, NULL);
         if (ret != 0 && ret != 0xfffffdfd) {
             pr_err("streamon: driver refused to start streaming\n");
@@ -4594,20 +4604,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         complete_all(&state->frame_done);
         wake_up_interruptible(&state->frame_wait);
 
-        // *** CRITICAL: STOP ISP CHANNEL CONTROL (writes to register 0x9804 and waits for 0x9808) ***
-        pr_info("*** Channel %d: CALLING tisp_channel_stop to disable ISP channel control ***\n", channel);
-        ret = tisp_channel_stop(channel);
+        /* OEM: ISP core channel dispatch (tisp_channel_stop + dispatch state reset).
+         * In the OEM, event 0x3000004 goes through the pad chain:
+         *   ispcore_pad_event_handle → ispcore_frame_channel_streamoff
+         *     → tisp_channel_stop, dispatch->state = 3, memset channel struct
+         *   vic_pad_event_handler → ispvic_frame_channel_s_stream(0)
+         *     → VIC MDMA disable
+         * The OEM does NOT call tx_isp_video_s_stream here.
+         */
+        if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
+            tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, 0x3000004, NULL);
 
-        if (ret) {
-            pr_warn("Channel %d: tisp_channel_stop returned %d (continuing anyway)\n", channel, ret);
-        } else {
-            pr_info("*** Channel %d: tisp_channel_stop SUCCESS - ISP channel disabled ***\n", channel);
-        }
-
-        /* Delegate device stop ordering to video orchestrator (strict source->sink) */
-        if (ourISPdev) {
-            pr_info("*** Delegating STREAMOFF to tx_isp_video_s_stream (source->sink) ***\n");
-            (void)tx_isp_video_s_stream(ourISPdev, 0);
+        /* OEM: VIC dispatch (ispvic_frame_channel_s_stream → MDMA disable) */
+        {
+            struct tx_isp_subdev *vic_sd_off = (struct tx_isp_subdev *)fcd->vic_subdev;
+            if (vic_sd_off)
+                tx_isp_send_event_to_remote(vic_sd_off, 0x3000004, NULL);
         }
 
         pr_info("Channel %d: Streaming stopped\n", channel);
