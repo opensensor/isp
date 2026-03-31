@@ -69,15 +69,15 @@ MODULE_PARM_DESC(cfa_idx_override,
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 1;
+static int tisp_force_bypass_adr = 0;
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
-			 "Debug isolate FOV issues by forcing ADR bypass (default: 1)");
+			 "Debug isolate FOV issues by forcing ADR bypass (default: 0)");
 
-static int tisp_force_bypass_defog = 1;
+static int tisp_force_bypass_defog = 0;
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_defog,
-			 "Debug isolate FOV issues by forcing Defog bypass (default: 1)");
+			 "Debug isolate FOV issues by forcing Defog bypass (default: 0)");
 
 static u32 tisp_apply_debug_top_bypass_overrides(u32 bypass_val, const char *reason)
 {

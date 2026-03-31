@@ -1040,38 +1040,82 @@ static u32 vic_irq_counter;
             vic_regs = NULL;
         }
 
-        /* Bank refresh only when streaming — writing to reg 0x300
-         * while stream_state == 0 can clobber the ctrl register or
-         * hang the bus if the VIC/MDMA engine is not ready.
+        /* When MSCA output addresses are explicitly programmed (non-bypass
+         * mode), the VIC MDMA completion IRQs don't fire because MSCA
+         * writes directly to its register-programmed addresses, bypassing
+         * the VIC MDMA bank DMA path.  In this case, frame delivery and
+         * buffer recycling must happen HERE in the framedone handler
+         * instead of in vic_mdma_irq_function.
          */
         if (vic_regs) {
-            u32 current_dma_addr = readl(vic_regs + 0x380);
-            u32 total_count = 0;
-            u32 after_match = 0;
-            int found_match = 0;
-            struct vic_buffer_entry *entry;
+            struct vic_buffer_entry *done_buf;
+            struct vic_buffer_entry *q_buf, *f_buf;
+            int (*dqbuf_fn)(void *, void *);
+            void *dqbuf_arg;
             unsigned long flags;
 
             spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
-            list_for_each_entry(entry, &vic_dev->done_head, list) {
-                total_count++;
-                if (found_match)
-                    after_match++;
-                if (entry->buffer_addr == current_dma_addr)
-                    found_match = 1;
-            }
-            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
 
+            /* Pop completed buffer from done_head, deliver frame, free bank */
+            if (!list_empty(&vic_dev->done_head)) {
+                done_buf = list_first_entry(&vic_dev->done_head,
+                            struct vic_buffer_entry, list);
+                list_del(&done_buf->list);
+                vic_dev->active_buffer_count--;
+
+                /* Deliver frame via raw_pipe callback */
+                dqbuf_fn = (int (*)(void *, void *))raw_pipe_global[1];
+                dqbuf_arg = raw_pipe_global[4];
+                if (dqbuf_fn)
+                    dqbuf_fn(dqbuf_arg, done_buf);
+
+                /* Move to free_head */
+                list_add_tail(&done_buf->list, &vic_dev->free_head);
+            }
+
+            /* Refill: move next queued buffer into a free bank slot */
+            if (!list_empty(&vic_dev->free_head) &&
+                !list_empty(&vic_dev->queue_head)) {
+                q_buf = list_first_entry(&vic_dev->queue_head,
+                            struct vic_buffer_entry, list);
+                list_del(&q_buf->list);
+                f_buf = list_first_entry(&vic_dev->free_head,
+                            struct vic_buffer_entry, list);
+                list_del(&f_buf->list);
+                f_buf->buffer_addr = q_buf->buffer_addr;
+                f_buf->buffer_length = q_buf->buffer_length;
+                writel(f_buf->buffer_addr,
+                       vic_regs + ((f_buf->buffer_index + 0xc6) << 2));
+
+                /* Also update MSCA output addresses for the new buffer */
+                if (ourISPdev && ourISPdev->core_regs) {
+                    u32 w = vic_dev->width ? vic_dev->width : 1920;
+                    u32 h = vic_dev->height ? vic_dev->height : 1080;
+                    u32 uv_off = w * ((h + 15) & ~15);
+                    writel(f_buf->buffer_addr,
+                           ourISPdev->core_regs + 0x996c);
+                    writel(f_buf->buffer_addr + uv_off,
+                           ourISPdev->core_regs + 0x9984);
+                }
+
+                list_add_tail(&f_buf->list, &vic_dev->done_head);
+                vic_dev->active_buffer_count++;
+                kfree(q_buf);
+            }
+
+            /* Update bank count in MDMA control register */
             {
-                u32 banks = found_match ? after_match : total_count;
+                u32 banks = vic_dev->active_buffer_count;
                 u32 ctrl_val;
                 if (banks > 5)
                     banks = 5;
                 ctrl_val = readl(vic_regs + 0x300);
                 ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
                 writel(ctrl_val, vic_regs + 0x300);
-                wmb();
             }
+
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+            wmb();
         }
 
         if (vic_dev->stream_state != 0) {
@@ -1226,116 +1270,12 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 			complete(&vic_dev->frame_complete);
 
 	} else {
-		/* --- OEM streaming path: buffer rotation + frame delivery --- */
-		u32 current_dma_addr = 0;
-		u32 mdma_enabled = 0;
-		struct vic_buffer_entry *done_buf;
-		int (*dqbuf_fn)(void *, void *);
-		void *dqbuf_arg;
-		int i;
-
-		if (vic_base) {
-			current_dma_addr = readl(vic_base + 0x380);
-			mdma_enabled = readl(vic_base + 0x300) & 0x80000000;
-		}
-
-		/* Pop completed buffer from done_head */
-		if (list_empty(&vic_dev->done_head)) {
-			pr_info_ratelimited("busy_buf null; busy_buf_count= %d\n",
-					    vic_dev->active_buffer_count);
-			goto mdma_irq_refill;
-		}
-
-		done_buf = list_first_entry(&vic_dev->done_head,
-					    struct vic_buffer_entry, list);
-		list_del(&done_buf->list);
-		vic_dev->active_buffer_count--;
-
-		/* Deliver frame to downstream via raw_pipe[1](raw_pipe[4], buffer) */
-		dqbuf_fn = (int (*)(void *, void *))raw_pipe_global[1];
-		dqbuf_arg = raw_pipe_global[4];
-		if (dqbuf_fn)
-			dqbuf_fn(dqbuf_arg, done_buf);
-
-		/* Move completed buffer to free_head */
-		list_add_tail(&done_buf->list, &vic_dev->free_head);
-
-		/* OEM: check if done_buf's DMA addr matches current HW addr.
-		 * Only valid when MDMA is enabled (bit 31 of reg 0x300).
-		 * When MDMA is disabled (MSCA path), reg 0x380 is stale —
-		 * skip the address matching to deliver exactly one buffer
-		 * per call instead of draining the entire done_head.
-		 */
-		if (mdma_enabled && done_buf->buffer_addr != current_dma_addr) {
-			/* DMA address mismatch — drain done_head until match */
-			for (i = 0; i < (int)vic_dev->active_buffer_count; i++) {
-				struct vic_buffer_entry *extra;
-
-				if (list_empty(&vic_dev->done_head)) {
-					pr_info_ratelimited("line = %d, i=%d ;num = %d;busy_buf_count %d\n",
-							    __LINE__, i, i,
-							    vic_dev->active_buffer_count);
-					continue;
-				}
-
-				extra = list_first_entry(&vic_dev->done_head,
-							 struct vic_buffer_entry, list);
-				list_del(&extra->list);
-				vic_dev->active_buffer_count--;
-
-				pr_debug_ratelimited("line : %d; bank_addr:0x%x; addr:0x%x\n",
-						     __LINE__, extra->buffer_addr,
-						     current_dma_addr);
-
-				/* Deliver this buffer too */
-				if (dqbuf_fn)
-					dqbuf_fn(dqbuf_arg, extra);
-
-				list_add_tail(&extra->list, &vic_dev->free_head);
-
-				if (extra->buffer_addr == current_dma_addr)
-					break;
-			}
-
-			if (i >= (int)vic_dev->active_buffer_count) {
-				pr_info_ratelimited("function: %s ; vic dma addrrss error!!!\n",
-						    __func__);
-				if (vic_base)
-					pr_info_ratelimited("VIC_ADDR_DMA_CONTROL : 0x%x\n",
-							    readl(vic_base + 0x300));
-			}
-		}
-
-mdma_irq_refill:
-		/* OEM: refill — move next queued buffer into a free bank slot */
-		if (!list_empty(&vic_dev->free_head) &&
-		    !list_empty(&vic_dev->queue_head)) {
-			struct vic_buffer_entry *q_buf, *f_buf;
-
-			/* Pop from queue_head */
-			q_buf = list_first_entry(&vic_dev->queue_head,
-						 struct vic_buffer_entry, list);
-			list_del(&q_buf->list);
-
-			/* Pop a free bank */
-			f_buf = list_first_entry(&vic_dev->free_head,
-						 struct vic_buffer_entry, list);
-			list_del(&f_buf->list);
-
-			/* Transfer address to the bank entry */
-			f_buf->buffer_addr = q_buf->buffer_addr;
-
-			/* Program VIC DMA slot register */
-			if (vic_base)
-				writel(f_buf->buffer_addr,
-				       vic_base + ((f_buf->buffer_index + 0xc6) << 2));
-
-			/* Move bank to done (active) list */
-			list_add_tail(&f_buf->list, &vic_dev->done_head);
-			vic_dev->active_buffer_count++;
-
-			kfree(q_buf);
-		}
+		/* Streaming path: buffer rotation and frame delivery are handled
+		 * by vic_framedone_irq_function (v1_7 bit 0) instead.  When MSCA
+		 * output registers are explicitly programmed, MDMA completion
+		 * IRQs fire sporadically and cannot be relied upon.  The framedone
+		 * handler runs every frame and manages the full buffer lifecycle.
+		 * Nothing to do here — just return. */
 	}
 
 	return 0;
@@ -1916,7 +1856,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
     u32 actual_width, actual_height;
-    u32 stride;
     int ret;
 
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
@@ -2135,9 +2074,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     else
         pr_info("%s:%d::linear mode\n", "tx_isp_vic_start", __LINE__);
 
-    stride = vic_mdma_stride_resolve(vic_dev, actual_width, vic_dev->pixel_format);
-    vic_reassert_core_irq_route(vic_dev, actual_width, actual_height, stride,
-                                "tx_isp_vic_start");
+    /* OEM: vic_start_ok = 1; return result
+     * No additional geometry or IRQ register writes here. */
     vic_program_irq_registers(vic_dev, "tx_isp_vic_start");
 
     /* Binary Ninja: 00010b84 - Set vic_start_ok */
@@ -2900,7 +2838,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
-    u32 width, height, stride, pixfmt;
+    u32 width, height, stride;
 
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
@@ -2926,31 +2864,21 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         height = height ? height : 1080;
     }
 
-    pixfmt = vic_dev->pixel_format;
-
-    /* OEM vic_mdma_enable:
-     *   stride = width;
-     *   if (fmt != 7) stride <<= 1;
+    /* OEM vic_pipo_mdma_enable EXACT:
+     *   stride = width << 1  (always, unconditionally)
      *
-     * fmt=7 is NV12:  stride = width      (1 byte/pixel Y plane)
-     * fmt=0 is RAW:   stride = width << 1 (2 bytes/pixel)
-     *
-     * When ISP bypass is OFF, the ISP pipeline outputs NV12-format data.
-     * libimp allocates NV12-sized buffers (width * height * 1.5).
-     * VIC MDMA must use NV12-compatible stride (width) or the DMA will
-     * overflow the buffer and produce a corrupted/partial image.
+     * VIC MDMA in pipo mode always handles raw Bayer data (2 bytes/pixel).
+     * NV12 conversion is done downstream by MSCA, not by VIC MDMA.
      */
-	    {
-	        stride = vic_mdma_stride_resolve(vic_dev, width, pixfmt);
+    stride = width << 1;
 
-	        pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x\n",
-	                vic_base, width, height, stride, pixfmt);
+    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u\n",
+            vic_base, width, height, stride);
 
-        writel(1, vic_base + 0x308);                           /* MDMA enable */
-        writel((width << 16) | height, vic_base + 0x304);      /* frame size */
-        writel(stride, vic_base + 0x310);                      /* Y stride */
-        writel(stride, vic_base + 0x314);                      /* UV stride */
-    }
+    writel(1, vic_base + 0x308);                           /* MDMA enable */
+    writel((width << 16) | height, vic_base + 0x304);      /* frame size */
+    writel(stride, vic_base + 0x310);                      /* Y stride */
+    writel(stride, vic_base + 0x314);                      /* UV stride */
 
     wmb();
 
@@ -3059,6 +2987,26 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	            writel(ctrl, vic_base + 0x300);
 	            wmb();
+
+	            /* Seed MSCA output addresses with the FIRST buffer in done_head.
+	             * This ensures the ISP writes the very first frame to a known
+	             * buffer. Subsequent frames get their addresses from the
+	             * vic_framedone_irq_function refill path. */
+	            if (!list_empty(&vic_dev->done_head) &&
+	                ourISPdev && ourISPdev->core_regs) {
+	                struct vic_buffer_entry *first_buf;
+	                u32 w = vic_dev->width ? vic_dev->width : 1920;
+	                u32 h = vic_dev->height ? vic_dev->height : 1080;
+	                u32 uv_off = w * ((h + 15) & ~15);
+	                first_buf = list_first_entry(&vic_dev->done_head,
+	                            struct vic_buffer_entry, list);
+	                writel(first_buf->buffer_addr,
+	                       ourISPdev->core_regs + 0x996c);
+	                writel(first_buf->buffer_addr + uv_off,
+	                       ourISPdev->core_regs + 0x9984);
+	                wmb();
+	            }
+
 	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x mdma308=0x%x base=%p banks=%u\n",
 	                    readl(vic_base + 0x300), readl(vic_base + 0x308),
 	                    vic_base, active_banks);
@@ -3567,28 +3515,18 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	if (queued_buffer->channel == 0) {
-		/* Always write Y address to VIC MDMA bank register.
-		 * Even in pipo mode, bank registers MUST have valid
-		 * addresses or the MDMA DMA engine hangs the bus. */
+		/* Write buffer address to VIC MDMA bank register (for DMA
+		 * completion tracking and bank rotation). */
 		writel(buffer_addr, vic_base + reg_offset);
 
-		if (ourISPdev && !ourISPdev->bypass_enabled) {
-			/* OEM non-bypass QBUF path: only program the MSCA output
-			 * destination addresses for this buffer. Channel enable/state,
-			 * size, stride, and crop registers are managed elsewhere by the
-			 * stock channel-start/format-control paths, not here. */
+		/* Program MSCA CH0 output DMA addresses so the ISP pipeline
+		 * writes processed NV12 data to the buffer. */
+		if (ourISPdev && ourISPdev->core_regs) {
 			u32 w = vic_dev->width ? vic_dev->width : 1920;
 			u32 h = vic_dev->height ? vic_dev->height : 1080;
-			u32 aligned_h = (h + 15) & ~15;
-			u32 uv_offset = w * aligned_h;
-			u32 uv_addr = buffer_addr + uv_offset;
-
-			if (ourISPdev->core_regs) {
-				void __iomem *core = ourISPdev->core_regs;
-				writel(buffer_addr, core + 0x996c);
-				writel(uv_addr, core + 0x9984);
-				wmb();
-			}
+			u32 uv_offset = w * ((h + 15) & ~15);
+			writel(buffer_addr, ourISPdev->core_regs + 0x996c);
+			writel(buffer_addr + uv_offset, ourISPdev->core_regs + 0x9984);
 		}
 		wmb();
 
