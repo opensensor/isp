@@ -3984,6 +3984,11 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 return 0;
             }
 
+            /* OEM: tisp_channel_attr_set may modify msca_ch_en.
+             * Always restore 0xf0000 DMA output bits and write to 0x9804. */
+            msca_ch_en = 0xf0000 | msca_ch_en;
+            system_reg_write(0x9804, msca_ch_en);
+
             ispcore_store_channel_format(dispatch->channel_id, format);
             ISP_INFO("ispcore_pad_event_handle: format set successfully");
             return 0;
