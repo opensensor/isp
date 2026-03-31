@@ -1571,13 +1571,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 	                    cfa_ret);
 	    }
 
-    /* Channel dispatch — starts ISP processing pipeline (tisp_channel_start).
-     * OEM does this from a different layer, but our architecture requires it here
-     * to kick the ISP core into generating interrupts.
+    /* OEM: tisp_channel_start is called from the frame channel STREAMON event
+     * (ispcore_pad_event_handle case 0x3000003), which runs AFTER SET_FORMAT
+     * has configured MSCA geometry via tisp_channel_attr_set.  Do NOT call it
+     * here — writing 0x9804 before tisp_channel_attr_set causes the hardware
+     * to clear the 0xf0000 DMA output bits when MSCA config registers change.
      */
-    if (enable != 0 && (result == 0 || result == -ENOIOCTLCMD)) {
-        ispcore_dispatch_primary_channel_event(isp_dev, ISP_EVENT_STREAM_START);
-    }
     /* OEM BN: *(*(arg1 + 0xb8) + 0xb0) = mask; then tx_isp_[en|dis]able_irq(arg1)
      * arg1 = sd (core subdev), *(arg1 + 0xb8) = sd->base = ISP core register base.
      * Register 0xb0 = ISP core hardware interrupt mask.
