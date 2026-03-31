@@ -409,13 +409,6 @@ static void ispcore_get_channel_format(int channel_id, struct frame_image_format
 
 extern struct tx_isp_fs_device *dump_fsd;
 
-struct tisp_boot_sensor_info {
-    u32 width;
-    u32 height;
-    u32 fps;
-    u32 mode;
-};
-
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
@@ -431,58 +424,149 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int enable);
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
 
-static u32 tisp_boot_fps_from_sensor(struct tx_isp_dev *isp_dev,
-                                     struct tx_isp_sensor_attribute *sensor_attr)
+static u32 tisp_raw_fps_from_sensor(struct tx_isp_dev *isp_dev,
+                                    struct tx_isp_sensor_attribute *sensor_attr)
 {
-    u32 fps = 25;
+    u32 fps = 25 << 16 | 1;
+
+    (void)sensor_attr;
 
     if (isp_dev && isp_dev->sensor) {
         u32 raw_fps = isp_dev->sensor->video.fps;
-        u32 num = raw_fps >> 16;
-        u32 den = raw_fps & 0xffff;
 
-        if (num != 0) {
-            if (den == 0)
-                fps = num;
-            else
-                fps = (num + (den / 2)) / den;
-        }
+        if ((raw_fps >> 16) != 0)
+            fps = raw_fps;
     }
 
     /* fps is not in tx_isp_sensor_attribute in stock - fallback only */
 
-    return fps ? fps : 25;
+    return fps;
 }
 
-static void tisp_fill_boot_sensor_info(struct tx_isp_dev *isp_dev,
-                                       struct tx_isp_sensor_attribute *sensor_attr,
-                                       struct tisp_boot_sensor_info *info)
+static u32 tisp_fps_from_raw(u32 raw_fps)
 {
+    u32 num = raw_fps >> 16;
+    u32 den = raw_fps & 0xffff;
+
+    if (num == 0)
+        return 25;
+    if (den == 0)
+        return num;
+
+    return (num + (den / 2)) / den;
+}
+
+static u32 tisp_cfa_base_from_mbus(u32 mbus_code)
+{
+    switch (mbus_code) {
+    case 0x300d: case 0x300f: case 0x3012: case 0x3014:
+        return 0;
+    case 0x3001: case 0x3003: case 0x3004: case 0x3005:
+    case 0x3006: case 0x3007: case 0x3008: case 0x300b:
+        return 1;
+    case 0x3002: case 0x3009: case 0x300a: case 0x3011:
+        return 2;
+    case 0x300c: case 0x300e: case 0x3010: case 0x3013:
+        return 3;
+    default:
+        return 0;
+    }
+}
+
+static u32 tisp_cfa_apply_flip(u32 idx, unsigned int shvflip)
+{
+    static const u8 hmap[4] = {1, 0, 3, 2};
+    static const u8 vmap[4] = {2, 3, 0, 1};
+
+    idx &= 0x3;
+    if (shvflip & 0x1)
+        idx = hmap[idx];
+    if (shvflip & 0x2)
+        idx = vmap[idx];
+
+    return idx;
+}
+
+static u32 tisp_bayer_from_sensor(struct tx_isp_dev *isp_dev)
+{
+    if (isp_dev && isp_dev->sensor)
+        return tisp_cfa_apply_flip(
+            tisp_cfa_base_from_mbus(isp_dev->sensor->video.mbus.code),
+            isp_dev->sensor->video.shvflip);
+
+    return 0;
+}
+
+static void tisp_fill_sensor_info_blob(struct tx_isp_dev *isp_dev,
+                                       struct tx_isp_sensor_attribute *sensor_attr,
+                                       struct tisp_sensor_info_blob *info)
+{
+    u32 active_width = 1920;
+    u32 active_height = 1080;
+
+    BUILD_BUG_ON(sizeof(*info) != TISP_SENSOR_INFO_SIZE);
     memset(info, 0, sizeof(*info));
 
-    info->width = 1920;
-    info->height = 1080;
-    info->fps = tisp_boot_fps_from_sensor(isp_dev, sensor_attr);
-    info->mode = 0;
+    tisp_si_set_word(info, TISP_SI_WORD_WIDTH, active_width);
+    tisp_si_set_word(info, TISP_SI_WORD_HEIGHT, active_height);
+    tisp_si_set_word(info, TISP_SI_WORD_FPS,
+                     tisp_raw_fps_from_sensor(isp_dev, sensor_attr));
+    tisp_si_set_word(info, TISP_SI_WORD_BAYER, tisp_bayer_from_sensor(isp_dev));
 
     if (isp_dev && isp_dev->sensor) {
         if (isp_dev->sensor->video.mbus.width)
-            info->width = isp_dev->sensor->video.mbus.width;
+            active_width = isp_dev->sensor->video.mbus.width;
         if (isp_dev->sensor->video.mbus.height)
-            info->height = isp_dev->sensor->video.mbus.height;
+            active_height = isp_dev->sensor->video.mbus.height;
     }
 
     if (sensor_attr) {
-        if ((info->width == 0 || info->height == 0) &&
-            sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+        if (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
             if (sensor_attr->mipi.image_twidth)
-                info->width = sensor_attr->mipi.image_twidth;
+                active_width = sensor_attr->mipi.image_twidth;
             if (sensor_attr->mipi.image_theight)
-                info->height = sensor_attr->mipi.image_theight;
+                active_height = sensor_attr->mipi.image_theight;
         }
+    }
 
-        if (sensor_attr->data_type != TX_SENSOR_DATA_TYPE_LINEAR)
-            info->mode = 4;
+    tisp_si_set_word(info, TISP_SI_WORD_WIDTH, active_width);
+    tisp_si_set_word(info, TISP_SI_WORD_HEIGHT, active_height);
+
+    if (sensor_attr) {
+        u32 total_width = sensor_attr->total_width ? sensor_attr->total_width : active_width;
+        u32 total_height = sensor_attr->total_height ? sensor_attr->total_height : active_height;
+        u32 line_time_us = sensor_attr->one_line_expr_in_us ? sensor_attr->one_line_expr_in_us : 1;
+        u32 max_again_limit = sensor_attr->max_again_short ? sensor_attr->max_again_short : sensor_attr->max_again;
+
+        tisp_si_set_word(info, TISP_SI_WORD_INTEGRATION_TIME,
+                         sensor_attr->integration_time);
+        tisp_si_set_word(info, TISP_SI_WORD_AGAIN, sensor_attr->again);
+        tisp_si_set_word(info, TISP_SI_WORD_DGAIN, sensor_attr->dgain);
+        tisp_si_set_word(info, TISP_SI_WORD_MAX_AGAIN, sensor_attr->max_again);
+        tisp_si_set_word(info, TISP_SI_WORD_MAX_DGAIN, sensor_attr->max_dgain);
+        tisp_si_set_word(info, TISP_SI_WORD_LINE_TIME,
+                         tisp_si_pack_u16(1, line_time_us));
+        tisp_si_set_word(info, TISP_SI_WORD_MIN_IT,
+                         tisp_si_pack_u16(sensor_attr->min_integration_time, 0));
+        tisp_si_set_word(info, TISP_SI_WORD_IT_LIMITS,
+                         tisp_si_pack_u16(sensor_attr->integration_time_limit,
+                                          sensor_attr->max_integration_time_native));
+        tisp_si_set_word(info, TISP_SI_WORD_TOTAL_SIZE,
+                         tisp_si_pack_u16(total_width, total_height));
+        tisp_si_set_word(info, TISP_SI_WORD_MAX_IT,
+                         tisp_si_pack_u16(sensor_attr->max_integration_time,
+                                          sensor_attr->wdr_cache));
+        tisp_si_set_word(info, TISP_SI_WORD_SHORT_IT,
+                         tisp_si_pack_u16(sensor_attr->integration_time_short, 0));
+        tisp_si_set_word(info, TISP_SI_WORD_SHORT_MISC,
+                         tisp_si_pack_u16(sensor_attr->again_short,
+                                          sensor_attr->min_integration_time_short));
+        tisp_si_set_word(info, TISP_SI_WORD_MAX_IT_SHORT,
+                         tisp_si_pack_u16(sensor_attr->max_integration_time_short, 0));
+        tisp_si_set_word(info, TISP_SI_WORD_MAX_AGAIN_LIMIT, max_again_limit);
+        tisp_si_set_word(info, TISP_SI_WORD_MODE,
+                         (sensor_attr->data_type != TX_SENSOR_DATA_TYPE_LINEAR) ? 1 : 0);
+        tisp_si_set_word(info, TISP_SI_WORD_FLAGS, sensor_attr->data_type);
     }
 }
 
@@ -2821,12 +2905,12 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
             struct tx_isp_subdev *init_sensor = isp_dev->sensor;
-            struct tisp_boot_sensor_info sensor_info;
+            struct tisp_sensor_info_blob sensor_info;
 
             (void)init_sensor;
 
             if (!tisp_initialized) {
-                tisp_fill_boot_sensor_info(isp_dev, sensor_attr, &sensor_info);
+                tisp_fill_sensor_info_blob(isp_dev, sensor_attr, &sensor_info);
 
                 /* OEM CRITICAL: Store sensor width/height into globals BEFORE
                  * calling tisp_init.  The OEM sets tispinfo/data_b2f34 before
@@ -2835,15 +2919,17 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                  * those functions, so the globals must be populated first.
                  */
                 {
-                    uint32_t w = sensor_info.width;
+                    uint32_t w = tisp_si_width(&sensor_info);
                     memcpy(tispinfo, &w, sizeof(w));
-                    data_b2f34 = sensor_info.height;
+                    data_b2f34 = tisp_si_height(&sensor_info);
                     pr_info("*** ispcore_core_ops_init: stored ISP dims BEFORE tisp_init: tispinfo=%u data_b2f34=%u ***\n",
                             w, data_b2f34);
                 }
 
-                pr_info("*** ispcore_core_ops_init: Calling tisp_init width=%u height=%u fps=%u mode=%u ***\n",
-                        sensor_info.width, sensor_info.height, sensor_info.fps, sensor_info.mode);
+                pr_info("*** ispcore_core_ops_init: Calling tisp_init width=%u height=%u fps=%u bayer=%u mode=%u ***\n",
+                        tisp_si_width(&sensor_info), tisp_si_height(&sensor_info),
+                        tisp_fps_from_raw(tisp_si_fps(&sensor_info)),
+                        tisp_si_bayer(&sensor_info), tisp_si_mode(&sensor_info));
 
                 ret = tisp_init(&sensor_info, isp_dev->sensor_name);
                 if (ret) {
@@ -4939,21 +5025,23 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     if (attr == NULL) {
         /* Binary Ninja: memset($s0_1 + 0xec, arg2, 0x4c) */
         memset(&vic_dev->sensor_attr, 0, sensor_attr_bytes);
-        vic_dev->sensor_attr_ptr = NULL;
+        vic_dev->sensor_attr_ptr = &vic_dev->sensor_attr;
         pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
         return 0;
     }
 
     /* Copy FULL sensor attributes (was 0x4c in OEM, but that missed total_width/height) */
     memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
-    /* OEM: store pointer to FULL sensor_attr for tx_isp_vic_start */
-    vic_dev->sensor_attr_ptr = attr;
+    stored_attr = &vic_dev->sensor_attr;
+    /* Keep tx_isp_vic_start() on a stable full-attribute copy. Some wrapper
+     * paths pass temporary attrs during activation/sync, so retaining the
+     * caller pointer here can turn MIPI crop/control fields into garbage by
+     * the time VIC start dereferences +(0x110).
+     */
+    vic_dev->sensor_attr_ptr = stored_attr;
 
     pr_info("*** ispcore_sync_sensor_attr: copied %zu bytes, total_width=%u total_height=%u ***\n",
             sensor_attr_bytes, attr->total_width, attr->total_height);
-
-    /* Binary Ninja: Complex sensor attribute processing */
-    stored_attr = &vic_dev->sensor_attr;
 
     /* Binary Ninja: Extract and process sensor timing parameters */
     again = stored_attr->again;
@@ -4966,7 +5054,12 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
 
     /* Binary Ninja: tiziano_sync_sensor_attr(&var_68) */
     pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
-    tiziano_sync_sensor_attr(stored_attr);
+    {
+        struct tisp_sensor_info_blob sync_info;
+
+        tisp_fill_sensor_info_blob(isp_dev, stored_attr, &sync_info);
+        tiziano_sync_sensor_attr(&sync_info);
+    }
 
     pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
     return 0;  /* Return success directly - no need for the quirky -515 pattern */
@@ -4996,19 +5089,10 @@ uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base)
     return (val << shift) / base;
 }
 
-/* tiziano_sync_sensor_attr - EXACT Binary Ninja implementation */
-int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
+/* tiziano_sync_sensor_attr - sync packed OEM-style sensor info blob */
+int tiziano_sync_sensor_attr(const struct tisp_sensor_info_blob *attr)
 {
-    uint32_t data_b2e1c, data_b2e34, data_b2e38, data_b2e44;
-    uint16_t data_b2e48, data_b2e62, data_b2e64;
-    uint16_t data_b2e4a, data_b2e4c, data_b2e4e;
-    uint16_t data_b2e54, data_b2e56, data_b2e58, data_b2e5a, data_b2e5c, data_b2e5e, data_b2e60;
-    uint32_t data_b2e6c;
     static uint32_t data_c46c0 = 0, data_c46c4 = 0, data_c46fc = 0, data_c4700 = 0, data_c4730 = 0, data_c46c8 = 0;
-    uint32_t dmsc_sp_d_ud_ns_opt;
-    uint32_t data_b2e9c, data_b2ed0, data_b2ea0, data_b2ea4, data_b2eb6, data_b2ea8;
-    uint8_t data_b2eb7, data_b2eb8;
-    uint32_t data_b2ecc, data_b2ed4;
     uint32_t again_val, dgain_val, exp2_result1, exp2_result2, cached_gain;
 
     if (!attr) {
@@ -5016,86 +5100,33 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
         return -EINVAL;
     }
 
-    pr_info("*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
+    BUILD_BUG_ON(sizeof(*attr) != TISP_SENSOR_INFO_SIZE);
+    tisp_sensor_info_update(attr);
 
-    /* Binary Ninja: int32_t $a0 = arg1[7] */
-    again_val = attr->again;
-
-    /* Binary Ninja: data_b2e1c = arg1[1] */
-    data_b2e1c = attr->integration_time;
-
-    /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2($a0, 0x10, 0xa) */
+    again_val = tisp_si_again(attr);
+    dgain_val = tisp_si_dgain(attr);
     exp2_result1 = tisp_math_exp2(again_val, 0x10, 0xa);
-
-    /* Binary Ninja: int32_t $a0_1 = arg1[8] */
-    dgain_val = attr->dgain;
-
-    /* Binary Ninja: data_b2e34 = $v0_2 */
-    data_b2e34 = exp2_result1;
-
-    /* Binary Ninja: data_b2e38 = tisp_math_exp2($a0_1, 0x10, 0xa) */
-    data_b2e38 = tisp_math_exp2(dgain_val, 0x10, 0xa);
-
-    /* Binary Ninja: Store various sensor parameters */
-    data_b2e44 = attr->total_width;
-    data_b2e48 = attr->total_height;
-    data_b2e62 = 0; /* fps is in tx_isp_video_in, not sensor_attribute */
-    data_b2e64 = attr->wdr_cache;
-
-    /* Binary Ninja: Process timing parameters */
-    data_b2e4a = attr->integration_time_apply_delay;
-    data_b2e4c = attr->again_apply_delay;
-    data_b2e4e = attr->dgain_apply_delay;
-
-    /* Binary Ninja: Store additional parameters */
-    data_b2e54 = attr->data_type;
-    data_b2e56 = attr->dbus_type;
-    data_b2e58 = attr->max_integration_time;
-    data_b2e5a = attr->integration_time_limit;
-    data_b2e5c = attr->max_again;
-    data_b2e5e = 0;
-    data_b2e60 = attr->max_dgain;
-    data_b2e62 = 0;
-    data_b2e64 = 0;
-
-    /* Binary Ninja: uint32_t $v0_20 = tisp_math_exp2(arg1[0x15], 0x10, 0xa) */
-    exp2_result2 = tisp_math_exp2(attr->max_dgain, 0x10, 0xa);
-    data_b2e6c = exp2_result2;
-
-    /* Binary Ninja: int32_t $a0_3 = data_c46c0 */
+    exp2_result2 = tisp_math_exp2(dgain_val, 0x10, 0xa);
     cached_gain = data_c46c0;
 
-    /* Binary Ninja: if ($a0_3 == 0 || $a0_3 == data_b2e34) */
-    if (cached_gain == 0 || cached_gain == data_b2e34) {
-        data_c46c0 = data_b2e34;
-    } else {
+    if (cached_gain == 0 || cached_gain == exp2_result1)
+        data_c46c0 = exp2_result1;
+    else
         data_c46c0 = cached_gain;
-    }
 
-    /* Binary Ninja: Store processed values in global cache */
-    data_c46c4 = data_b2e38;
-    data_c46fc = exp2_result2;
-    data_c4700 = data_b2e64;
-    dmsc_sp_d_ud_ns_opt = data_b2e48;
-    data_c4730 = data_b2e62;
-    data_c46c8 = data_b2e58;
+    data_c46c4 = exp2_result2;
+    data_c46fc = tisp_math_exp2(tisp_si_max_again_limit(attr), 0x10, 0xa);
+    data_c4700 = tisp_si_max_integration_time_short(attr);
+    data_c4730 = tisp_si_min_integration_time(attr);
+    data_c46c8 = tisp_si_max_integration_time(attr);
 
-    /* Binary Ninja: Store additional processed values */
-    data_b2e9c = again_val;
-    data_b2ea0 = dgain_val;
-    data_b2ed0 = data_b2e64;
-    data_b2ea4 = data_b2e48;
-    data_b2eb6 = (uint8_t)data_b2e5a;
-    data_b2ea8 = data_b2e58;
-    data_b2eb7 = (uint8_t)data_b2e5c;
-    data_b2eb8 = (uint8_t)data_b2e5e;
-    data_b2ecc = data_b2e62;
-    data_b2ed4 = attr->max_dgain;
-
-    pr_info("*** tiziano_sync_sensor_attr: Sensor attributes synchronized successfully ***\n");
-    pr_info("***   - Again: 0x%x -> 0x%x ***\n", again_val, data_b2e34);
-    pr_info("***   - Dgain: 0x%x -> 0x%x ***\n", dgain_val, data_b2e38);
-    pr_info("***   - Dimensions: %dx%d ***\n", data_b2e44, data_b2e48);
+    pr_info("*** tiziano_sync_sensor_attr: synced blob active=%ux%u total=%ux%u fps=%u bayer=%u mode=%u ***\n",
+            tisp_si_width(attr), tisp_si_height(attr),
+            tisp_si_total_width(attr), tisp_si_total_height(attr),
+            tisp_fps_from_raw(tisp_si_fps(attr)), tisp_si_bayer(attr),
+            tisp_si_mode(attr));
+    pr_info("***   - Again: 0x%x -> 0x%x, Dgain: 0x%x -> 0x%x ***\n",
+            again_val, exp2_result1, dgain_val, exp2_result2);
 
     return 0;
 }

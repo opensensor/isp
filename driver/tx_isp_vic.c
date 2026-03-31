@@ -726,6 +726,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+    vic_dev->sensor_attr_ptr = &vic_dev->sensor_attr;
     vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
     vic_dev->sensor_attr.total_width = 1920;
     vic_dev->sensor_attr.total_height = 1080;
@@ -2230,7 +2231,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
     struct tx_isp_vic_device *vic_dev;
-    size_t sensor_attr_bytes = 0x4c;
+    size_t sensor_attr_bytes = sizeof(struct tx_isp_sensor_attribute);
 
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
 
@@ -2245,16 +2246,12 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         return -EINVAL;
     }
 
-    /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
     if (attr == NULL) {
-        /* Clear sensor attribute */
         memset(&vic_dev->sensor_attr, 0, sensor_attr_bytes);
-        vic_dev->sensor_attr_ptr = NULL;
+        vic_dev->sensor_attr_ptr = &vic_dev->sensor_attr;
     } else {
-        /* Copy first 0x4c bytes (OEM partial cache) */
         memcpy(&vic_dev->sensor_attr, attr, sensor_attr_bytes);
-        /* OEM: store pointer to the FULL sensor_attr for tx_isp_vic_start */
-        vic_dev->sensor_attr_ptr = attr;
+        vic_dev->sensor_attr_ptr = &vic_dev->sensor_attr;
     }
 
     return 0;

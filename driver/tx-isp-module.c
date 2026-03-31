@@ -1206,6 +1206,13 @@ static int tx_isp_send_event_to_remote_local(void *subdev, int event_type, void 
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
+
+void tx_isp_arm_day_night_drop_window(unsigned int running_mode)
+{
+	/* Stub -- day/night frame drop recycling not yet wired up */
+	pr_debug("[DAYNIGHT] arm drop window: running_mode=%u (stub)\n", running_mode);
+}
+EXPORT_SYMBOL_GPL(tx_isp_arm_day_night_drop_window);
 void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 void __iomem *tx_isp_get_vic_primary_regs(void);
@@ -2482,6 +2489,7 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
     struct tx_isp_sensor *sensor;
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_sensor_attribute *stable_attr;
     int (*csi_sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg) = NULL;
     unsigned int actual_width;
     unsigned int actual_height;
@@ -2506,16 +2514,18 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
     else if (sensor->video.attr != sensor_attr)
         memcpy(sensor->video.attr, sensor_attr, sizeof(*sensor_attr));
 
-    if (sensor_attr->name) {
-        strncpy(isp_dev->sensor_name, sensor_attr->name,
+    stable_attr = sensor->video.attr ? sensor->video.attr : &sensor->attr;
+
+    if (stable_attr->name) {
+        strncpy(isp_dev->sensor_name, stable_attr->name,
                 sizeof(isp_dev->sensor_name) - 1);
         isp_dev->sensor_name[sizeof(isp_dev->sensor_name) - 1] = '\0';
     }
 
-    actual_width = sensor_attr->mipi.image_twidth ?
-                   sensor_attr->mipi.image_twidth : sensor_attr->total_width;
-    actual_height = sensor_attr->mipi.image_theight ?
-                    sensor_attr->mipi.image_theight : sensor_attr->total_height;
+    actual_width = stable_attr->mipi.image_twidth ?
+                   stable_attr->mipi.image_twidth : stable_attr->total_width;
+    actual_height = stable_attr->mipi.image_theight ?
+                    stable_attr->mipi.image_theight : stable_attr->total_height;
     if (!actual_width)
         actual_width = 1920;
     if (!actual_height)
@@ -2524,13 +2534,13 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
     isp_dev->sensor_width = actual_width;
     isp_dev->sensor_height = actual_height;
     pr_info("*** tx_isp_sync_sensor_attr: synced %s dbus=%u lanes=%u dims=%ux%u ***\n",
-            sensor_attr->name ? sensor_attr->name : "(unnamed)",
-            sensor_attr->dbus_type, sensor_attr->mipi.lans,
+            stable_attr->name ? stable_attr->name : "(unnamed)",
+            stable_attr->dbus_type, stable_attr->mipi.lans,
             actual_width, actual_height);
 
     vic_dev = isp_dev->vic_dev;
     if (vic_dev) {
-        ret = tx_isp_handle_sync_sensor_attr_event(&vic_dev->sd, sensor_attr);
+        ret = tx_isp_handle_sync_sensor_attr_event(&vic_dev->sd, stable_attr);
         if (ret) {
             pr_warn("*** tx_isp_sync_sensor_attr: VIC cache refresh failed: %d ***\n",
                     ret);
@@ -2549,7 +2559,7 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
         }
 
         if (csi_sync_sensor_attr) {
-            csi_ret = csi_sync_sensor_attr(&csi_dev->sd, sensor_attr);
+            csi_ret = csi_sync_sensor_attr(&csi_dev->sd, stable_attr);
             if (csi_ret) {
                 pr_warn("*** tx_isp_sync_sensor_attr: CSI cache refresh failed: %d ***\n",
                         csi_ret);
@@ -2831,22 +2841,21 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
         }
     }
 
-    // Sync sensor attributes to ISP core
+    // Sync sensor attributes to ISP core using real sensor-owned attributes
     if (isp_dev->sensor) {
-        // Create sensor attributes for pipeline activation
-        struct tx_isp_sensor_attribute sensor_attr = {0};
-        sensor_attr.name = sensor_name;
-        sensor_attr.chip_id = 0x2053; // GC2053 ID
-        sensor_attr.total_width = 1920;
-        sensor_attr.total_height = 1080;
-        sensor_attr.integration_time = 1000; // Default integration time
-        sensor_attr.max_again = 0x40000; // Default gain (format .16)
+        struct tx_isp_sensor_attribute *sensor_attr;
 
-        ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
-        if (ret) {
-            pr_warn("Failed to sync %s sensor attributes: %d\n", sensor_name, ret);
+        sensor_attr = (isp_dev->sensor->video.attr) ?
+                      isp_dev->sensor->video.attr : NULL;
+        if (sensor_attr) {
+            ret = tx_isp_sync_sensor_attr(isp_dev, sensor_attr);
+            if (ret) {
+                pr_warn("Failed to sync %s sensor attributes: %d\n", sensor_name, ret);
+            } else {
+                pr_info("Synced %s sensor attributes to ISP core\n", sensor_name);
+            }
         } else {
-            pr_info("Synced %s sensor attributes to ISP core\n", sensor_name);
+            pr_warn("Activation skipped synthetic sensor attrs; waiting for real sensor-owned attributes\n");
         }
     }
 
@@ -4506,13 +4515,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         state->enabled = true;
-        state->streaming = true;
         state->flags |= 1U;
         fcd->streaming_flags |= 1;
 
-        /* Reset OEM-aligned frame signaling for fresh stream start */
+        /* Reset frame signaling BEFORE setting streaming=true.
+         * The ISR's frame_chan_event path gates on state->streaming,
+         * so init_completion must finish before the ISR can race with
+         * complete(&state->frame_done).
+         */
         init_completion(&state->frame_done);
         atomic_set(&state->frame_ready_count, 0);
+        wmb();
+        state->streaming = true;
 
         vic_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
         if (!vic_sd) {

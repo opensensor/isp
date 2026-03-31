@@ -39,6 +39,7 @@
 #include <asm/cacheflush.h>
 #include <asm/page.h>
 #include "include/tx_isp.h"
+#include "include/tx_isp_tuning.h"
 #include "include/tx_isp_core.h"
 #include "include/tx-isp-debug.h"
 #include "include/tx_isp_sysfs.h"
@@ -64,6 +65,43 @@ int tisp_cfa_idx_override = -1;
 module_param_named(cfa_idx_override, tisp_cfa_idx_override, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(cfa_idx_override,
 		 "Force Bayer CFA index (-1 auto, 0 RGGB, 1 GRBG, 2 GBRG, 3 BGGR)");
+
+#define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
+#define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
+
+static int tisp_force_bypass_adr = 1;
+module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_bypass_adr,
+			 "Debug isolate FOV issues by forcing ADR bypass (default: 1)");
+
+static int tisp_force_bypass_defog = 1;
+module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_bypass_defog,
+			 "Debug isolate FOV issues by forcing Defog bypass (default: 1)");
+
+static u32 tisp_apply_debug_top_bypass_overrides(u32 bypass_val, const char *reason)
+{
+	u32 force_mask = 0;
+
+	if (tisp_force_bypass_adr)
+		force_mask |= TISP_TOP_BYPASS_ADR_BIT;
+	if (tisp_force_bypass_defog)
+		force_mask |= TISP_TOP_BYPASS_DEFOG_BIT;
+
+	if (force_mask) {
+		u32 new_val = bypass_val | force_mask;
+
+		pr_info("%s: debug force-bypass mask=0x%08x -> top_bypass=0x%08x (ADR=%s Defog=%s)\n",
+			reason ? reason : "tisp",
+			force_mask,
+			new_val,
+			tisp_force_bypass_adr ? "off" : "on",
+			tisp_force_bypass_defog ? "off" : "on");
+		return new_val;
+	}
+
+	return bypass_val;
+}
 
 static int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
 {
@@ -1023,11 +1061,41 @@ static const uint16_t tisp_dmsc_param_sizes[TISP_DMSC_PARAM_COUNT] = {
 };
 static void *sensor_info_ptr = NULL;
 static uint32_t data_b2e1c = 1080; /* Sensor height */
+static uint32_t data_b2e54;
 static uint32_t data_b2e56;
 
 #define TISP_PARAM_BLOCK_SIZE 0x137f0
 #define TISP_PARAM_HEADER_SIZE 0x18
 #define TISP_PARAM_NIGHT_OFFSET (TISP_PARAM_HEADER_SIZE + TISP_PARAM_BLOCK_SIZE)
+#define TISP_PARAM_HLDC_CON_PAR_OFFSET 0x2db4
+#define TISP_PARAM_HLDC_CON_PAR_SIZE 0x48
+
+struct tisp_hldc_con_par {
+	u32 reserved0;
+	u32 reserved1;
+	u32 reg9000_lo;
+	u32 reg9000_hi;
+	u32 reg9004_lo;
+	u32 reg9004_hi;
+	u32 reg900c;
+	u32 reg9014;
+	u32 reg901c_lo;
+	u32 reg901c_hi;
+	u32 reg9024;
+	u32 reg9008_lo;
+	u32 reg9008_hi;
+	u32 reg9010;
+	u32 reg9020_lo;
+	u32 reg9018;
+	u32 reg9020_hi;
+	u32 reg9028;
+};
+
+static struct tisp_hldc_con_par hldc_con_par_array;
+
+static int tisp_hldc_con_par_cfg(void);
+static int tisp_hldc_apply_par_array(void);
+static int tiziano_hldc_params_refresh(void);
 
 static int tisp_alloc_param_block(void **dst, const char *name)
 {
@@ -1202,9 +1270,11 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 
 apply_force_mask:
 	if (wdr_enable)
-		return (bypass_val & 0xa1ffdf76) | 0x00880002;
+		bypass_val = (bypass_val & 0xa1ffdf76) | 0x00880002;
+	else
+		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
 
-	return (bypass_val & 0xb577fffd) | 0x34000009;
+	return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 }
 /* OEM register map self-checks for ADR and YDNS (addresses and counts only).
  * These do not program hardware; they log the expected word counts per HLIL. */
@@ -2103,17 +2173,107 @@ static uint32_t data_d301c[256];
 static uint32_t data_d33a0[256];
 
 /* Sensor info structure */
-struct sensor_info_struct {
-    uint32_t width;
-    uint32_t height;
-    uint32_t fps;
-    uint32_t mode;
+static struct tisp_sensor_info_blob sensor_info = {
+    .words = {
+        [TISP_SI_WORD_WIDTH] = 1920,
+        [TISP_SI_WORD_HEIGHT] = 1080,
+        [TISP_SI_WORD_BAYER] = 0,
+        [TISP_SI_WORD_FPS] = (25 << 16) | 1,
+        [TISP_SI_WORD_LINE_TIME] = (28 << 16) | 1,
+        [TISP_SI_WORD_TOTAL_SIZE] = (1080 << 16) | 1920,
+        [TISP_SI_WORD_MODE] = 0,
+    },
 };
-
-static struct sensor_info_struct sensor_info = {1920, 1080, 25, 0};
 static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
 static uint32_t data_b0d4c = 4;  /* Sensor height divisor */
 static uint32_t data_b0df8 = 0;    /* Initialization flag */
+
+static u32 tisp_sensor_fps_from_raw(u32 raw_fps)
+{
+    u32 num = raw_fps >> 16;
+    u32 den = raw_fps & 0xffff;
+
+    if (num == 0)
+        return 25;
+    if (den == 0)
+        return num;
+
+    return (num + (den / 2)) / den;
+}
+
+static void tisp_sensor_split_raw_fps(u32 raw_fps, u32 *num, u32 *den)
+{
+    u32 fps_num = raw_fps >> 16;
+    u32 fps_den = raw_fps & 0xffff;
+
+    if (fps_num == 0)
+        fps_num = 25;
+    if (fps_den == 0)
+        fps_den = 1;
+
+    if (num)
+        *num = fps_num;
+    if (den)
+        *den = fps_den;
+}
+
+static u32 tisp_sensor_program_bayer(u32 bayer)
+{
+    bool deir = false;
+    u32 reg8 = 0;
+
+    switch (bayer) {
+    case 0: reg8 = 0; break;
+    case 1: reg8 = 1; break;
+    case 2: reg8 = 2; break;
+    case 3: reg8 = 3; break;
+    case 4: reg8 = 8; deir = true; break;
+    case 5: reg8 = 9; deir = true; break;
+    case 6: reg8 = 0xa; deir = true; break;
+    case 7: reg8 = 0xb; deir = true; break;
+    case 8: reg8 = 0xc; deir = true; break;
+    case 9: reg8 = 0xd; deir = true; break;
+    case 0xa: reg8 = 0xe; deir = true; break;
+    case 0xb: reg8 = 0xf; deir = true; break;
+    case 0xc: reg8 = 0x10; deir = true; break;
+    case 0xd: reg8 = 0x11; deir = true; break;
+    case 0xe: reg8 = 0x12; deir = true; break;
+    case 0xf: reg8 = 0x13; deir = true; break;
+    case 0x10: reg8 = 0x14; deir = true; break;
+    case 0x11: reg8 = 0x15; deir = true; break;
+    case 0x12: reg8 = 0x16; deir = true; break;
+    case 0x13: reg8 = 0x17; deir = true; break;
+    case 0x14: deir = true; break;
+    default:
+        pr_warn("tisp_init: unsupported bayer idx %u, defaulting to 0\n", bayer);
+        break;
+    }
+
+    if (bayer != 0x14)
+        system_reg_write(0x8, reg8);
+
+    return deir ? 0x10003f00 : 0x3f00;
+}
+
+int tisp_sensor_info_update(const struct tisp_sensor_info_blob *info)
+{
+    u32 fps_num;
+    u32 fps_den;
+
+    if (!info)
+        return -EINVAL;
+
+    BUILD_BUG_ON(sizeof(*info) != TISP_SENSOR_INFO_SIZE);
+    sensor_info = *info;
+    sensor_info_ptr = &sensor_info;
+    data_b2e1c = tisp_si_height(&sensor_info);
+    tisp_sensor_split_raw_fps(tisp_si_fps(&sensor_info), &fps_num, &fps_den);
+    data_b2e56 = fps_num;
+    data_b2e54 = fps_den;
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_sensor_info_update);
 
 /* GB (Green Balance) parameter arrays - Binary Ninja reference */
 static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
@@ -2598,7 +2758,19 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     extern struct tx_isp_dev *ourISPdev;
     int wdr_enable;
     int ret;
-    struct sensor_info_struct sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
+    u32 fps_num, fps_den;
+    u32 reg_1c;
+    struct tisp_sensor_info_blob sensor_params = {
+        .words = {
+            [TISP_SI_WORD_WIDTH] = 1920,
+            [TISP_SI_WORD_HEIGHT] = 1080,
+            [TISP_SI_WORD_BAYER] = 0,
+            [TISP_SI_WORD_FPS] = (25 << 16) | 1,
+            [TISP_SI_WORD_LINE_TIME] = (28 << 16) | 1,
+            [TISP_SI_WORD_TOTAL_SIZE] = (1080 << 16) | 1920,
+            [TISP_SI_WORD_MODE] = 0,
+        },
+    };
 
     pr_info("*** tisp_init: INITIALIZING ISP HARDWARE PIPELINE - Binary Ninja EXACT implementation ***\n");
 
@@ -2613,15 +2785,15 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         memcpy(&sensor_params, sensor_info_arg, sizeof(sensor_params));
     }
 
-    sensor_info = sensor_params;
-    sensor_info_ptr = &sensor_info;
-    data_b2e1c = sensor_params.height;
-    data_b2e56 = sensor_params.fps;
+    tisp_sensor_info_update(&sensor_params);
+    tisp_sensor_split_raw_fps(tisp_si_fps(&sensor_params), &fps_num, &fps_den);
 
-    pr_info("tisp_init: Using sensor parameters - %dx%d@%d, mode=%d\n",
-            sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
+    pr_info("tisp_init: Using sensor parameters - %dx%d@%u/%u (~%u fps), bayer=%u mode=%u\n",
+            tisp_si_width(&sensor_params), tisp_si_height(&sensor_params),
+            fps_num, fps_den, tisp_sensor_fps_from_raw(tisp_si_fps(&sensor_params)),
+            tisp_si_bayer(&sensor_params), tisp_si_mode(&sensor_params));
 
-    wdr_enable = (sensor_params.mode == 1) || (sensor_params.mode >= 4);
+    wdr_enable = tisp_si_mode(&sensor_params) ? 1 : 0;
 
 	ret = tisp_alloc_param_block(&tparams_day, "day params");
 	if (ret)
@@ -2637,25 +2809,16 @@ int tisp_init(void *sensor_info_arg, char *param_name)
 	tparams_active = tparams_day;
 
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
-    system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
+    system_reg_write(0x4, (tisp_si_width(&sensor_params) << 16) |
+                         tisp_si_height(&sensor_params));
 
     /* NOTE: tispinfo and data_b2f34 are populated in ispcore_core_ops_init
      * (tx_isp_core.c) right after this function returns, since those globals
      * are static to tx_isp_core.c.
      */
 
-    /* Binary Ninja: Handle different sensor modes - simplified version */
-    switch (sensor_params.mode) {
-        case 0: case 1: case 2: case 3:
-            system_reg_write(0x8, sensor_params.mode);
-            break;
-        default:
-            system_reg_write(0x8, 0); /* Default mode */
-            break;
-    }
-
-    /* Binary Ninja: system_reg_write(0x1c, $a1_7) - Control register */
-    system_reg_write(0x1c, 0x3f00);
+    reg_1c = tisp_sensor_program_bayer(tisp_si_bayer(&sensor_params));
+    system_reg_write(0x1c, reg_1c);
 
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
@@ -2680,7 +2843,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     system_reg_write(0x30, 0xffffffff);
 
     /* Binary Ninja: system_reg_write(0x10, $a1_9) - Main ISP enable */
-    system_reg_write(0x10, 0x133);
+    system_reg_write(0x10, wdr_enable ? 0x33f : 0x133);
 
     /* Binary Ninja OEM ORDER: Allocate ALL DMA buffers FIRST, then init sub-modules */
     pr_info("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
@@ -2784,22 +2947,24 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     /* Binary Ninja OEM ORDER: Initialize all ISP sub-modules AFTER buffers, BEFORE reg 0x800=1 */
     pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES (OEM order: after buffers) ***\n");
 
-    tiziano_ae_init(sensor_params.height, sensor_params.width, sensor_params.fps);
-    tiziano_awb_init(sensor_params.height, sensor_params.width);
-    tiziano_gamma_init(sensor_params.width, sensor_params.height, sensor_params.fps);
+    tiziano_ae_init(tisp_si_height(&sensor_params), tisp_si_width(&sensor_params),
+                    tisp_si_min_integration_time(&sensor_params));
+    tiziano_awb_init(tisp_si_height(&sensor_params), tisp_si_width(&sensor_params));
+    tiziano_gamma_init(tisp_si_width(&sensor_params), tisp_si_height(&sensor_params),
+                       tisp_si_fps(&sensor_params));
     tiziano_gib_init();
     tiziano_lsc_init();
     tiziano_ccm_init();
     tiziano_dmsc_init();
     tiziano_sharpen_init();
     tiziano_sdns_init();
-    tiziano_mdns_init(sensor_params.width, sensor_params.height);
+    tiziano_mdns_init(tisp_si_width(&sensor_params), tisp_si_height(&sensor_params));
     tiziano_clm_init();
     tiziano_dpc_init();
     tiziano_hldc_init();
-    tiziano_defog_init(sensor_params.width, sensor_params.height);
-    tiziano_adr_init(sensor_params.width, sensor_params.height);
-    tiziano_af_init(sensor_params.height, sensor_params.width);
+    tiziano_defog_init(tisp_si_width(&sensor_params), tisp_si_height(&sensor_params));
+    tiziano_adr_init(tisp_si_width(&sensor_params), tisp_si_height(&sensor_params));
+    tiziano_af_init(tisp_si_height(&sensor_params), tisp_si_width(&sensor_params));
     tiziano_bcsh_init();
     tiziano_ydns_init();
     tiziano_rdns_init();
@@ -2807,7 +2972,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     /* Binary Ninja: WDR initialization if enabled */
     if (wdr_enable) {
         pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
-        tiziano_wdr_init(sensor_params.width, sensor_params.height);
+        tiziano_wdr_init(tisp_si_width(&sensor_params), tisp_si_height(&sensor_params));
         tisp_gb_init();
         tisp_dpc_wdr_en(1);
         tisp_lsc_wdr_en(1);
@@ -3081,9 +3246,9 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 {
 	uint32_t bypass_val;
 	uint32_t active_mode = mode ? 1 : 0;
-	uint32_t width = sensor_info.width;
-	uint32_t height = sensor_info.height;
-	uint32_t fps = sensor_info.fps;
+	uint32_t width = tisp_si_width(&sensor_info);
+	uint32_t height = tisp_si_height(&sensor_info);
+	uint32_t fps = tisp_sensor_fps_from_raw(tisp_si_fps(&sensor_info));
 	void *selected = active_mode ? tparams_night : tparams_day;
 
 	if (mode > 1) {
@@ -3129,6 +3294,7 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 	tiziano_gamma_init(width, height, fps);
 	tiziano_adr_init(width, height);
 	tiziano_dpc_init();
+		tiziano_hldc_init();
 	tiziano_af_init(height, width);
 	if (ourISPdev && ourISPdev->tuning_data)
 		tiziano_bcsh_update(ourISPdev->tuning_data);
@@ -4092,7 +4258,11 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
         }
         case 0x80000e1: { // ISP Running Mode
+            uint32_t prev_running_mode = tuning->running_mode;
+
             tuning->running_mode = ctrl->value;
+            if (prev_running_mode != ctrl->value)
+                tx_isp_arm_day_night_drop_window(ctrl->value);
             // From decompiled: This affects day/night mode
             // is_isp_day = (ctrl->value < 1) ? 1 : 0;
             //set_framesource_changewait_cnt();
@@ -4245,6 +4415,7 @@ int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_rdns_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_adr_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_ae_param_array_set(int param_id, void *in_buf, int *size_buf);
+int tisp_hldc_param_array_set(int param_id, void *in_buf, int *size_buf);
 
 int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf);
@@ -7699,11 +7870,32 @@ int tisp_af_param_array_get(int param_id, void *out_buf, int *size_buf)
 
 int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_hldc_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (param_id != 0x3ac) {
+        pr_err("tisp_hldc_param_array_get: unsupported param id 0x%x\n", param_id);
+        return -1;
     }
+
+    if (!out_buf || !size_buf)
+        return -EINVAL;
+
+    memcpy(out_buf, &hldc_con_par_array, sizeof(hldc_con_par_array));
+    *size_buf = sizeof(hldc_con_par_array);
     return 0;
+}
+
+int tisp_hldc_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (param_id != 0x3ac) {
+        pr_err("tisp_hldc_param_array_set: unsupported param id 0x%x\n", param_id);
+        return -1;
+    }
+
+    if (!in_buf || !size_buf)
+        return -EINVAL;
+
+    memcpy(&hldc_con_par_array, in_buf, sizeof(hldc_con_par_array));
+    *size_buf = sizeof(hldc_con_par_array);
+    return tisp_hldc_apply_par_array();
 }
 
 /* AWB state and parameter storage matching vendor binary (opaque blocks) */
@@ -8444,14 +8636,19 @@ int tisp_af_get_par_cfg(void *out_buf, void *size_buf)
 /* tisp_hldc_get_par_cfg - Binary Ninja implementation (stub for now) */
 int tisp_hldc_get_par_cfg(void *out_buf, void *size_buf)
 {
+    int temp_size = 0;
+
     if (!out_buf || !size_buf) {
         pr_err("tisp_hldc_get_par_cfg: NULL buffer pointers\n");
         return -EINVAL;
     }
 
-    /* Stub implementation - needs Binary Ninja decompilation */
     *(int *)size_buf = 0;
-    pr_debug("tisp_hldc_get_par_cfg: Stub implementation\n");
+
+    if (tisp_hldc_param_array_get(0x3ac, out_buf, &temp_size) != 0)
+        return -EINVAL;
+
+    *(int *)size_buf += temp_size;
     return 0;
 }
 
@@ -8908,7 +9105,15 @@ int tisp_sdns_set_par_cfg(void *in_buf)
 }
 
 int tisp_af_set_par_cfg(void *in_buf) { return 0; }
-int tisp_hldc_set_par_cfg(void *in_buf) { return 0; }
+int tisp_hldc_set_par_cfg(void *in_buf)
+{
+    int temp_size = 0;
+
+    if (!in_buf)
+        return -EINVAL;
+
+    return tisp_hldc_param_array_set(0x3ac, in_buf, &temp_size);
+}
 int tisp_ae_set_par_cfg(void *in_buf)
 {
     char *input_ptr = (char *)in_buf;
@@ -12281,15 +12486,66 @@ int tiziano_dpc_init(void)
 }
 
 /* tiziano_hldc_init - HLDC initialization */
+static int tiziano_hldc_params_refresh(void)
+{
+    const u8 *params = tparams_active ? tparams_active : tparams_day;
+
+    if (!params)
+        return -ENODEV;
+
+    memcpy(&hldc_con_par_array,
+           params + TISP_PARAM_HLDC_CON_PAR_OFFSET,
+           TISP_PARAM_HLDC_CON_PAR_SIZE);
+    return 0;
+}
+
+static int tisp_hldc_con_par_cfg(void)
+{
+    const struct tisp_hldc_con_par *cfg = &hldc_con_par_array;
+
+    system_reg_write(0x9000, (cfg->reg9000_hi << 16) | cfg->reg9000_lo);
+    system_reg_write(0x9004, (cfg->reg9004_hi << 16) | cfg->reg9004_lo);
+    system_reg_write(0x9008, (cfg->reg9008_hi << 16) | cfg->reg9008_lo);
+    system_reg_write(0x900c, cfg->reg900c);
+    system_reg_write(0x9010, cfg->reg9010);
+    system_reg_write(0x9014, cfg->reg9014);
+    system_reg_write(0x9018, cfg->reg9018);
+    system_reg_write(0x901c, (cfg->reg901c_hi << 16) | cfg->reg901c_lo);
+    system_reg_write(0x9020, (cfg->reg9020_hi << 16) | cfg->reg9020_lo);
+    system_reg_write(0x9024, cfg->reg9024);
+    system_reg_write(0x9028, cfg->reg9028);
+    return 0;
+}
+
+static int tisp_hldc_apply_par_array(void)
+{
+    tisp_hldc_con_par_cfg();
+    system_reg_write(0x9044, 3);
+    return 0;
+}
+
 int tiziano_hldc_init(void)
 {
+    int ret;
+
     pr_info("tiziano_hldc_init: Initializing HLDC processing\n");
-    return 0;
+
+    ret = tiziano_hldc_params_refresh();
+    if (ret)
+        pr_warn("tiziano_hldc_init: no HLDC param block available (%d), using cached values\n", ret);
+
+    return tisp_hldc_apply_par_array();
 }
 
 /* tiziano_defog_init - Defog initialization */
 int tiziano_defog_init(uint32_t width, uint32_t height)
 {
+    if (tisp_force_bypass_defog) {
+        pr_warn("tiziano_defog_init: skipping Defog init because bypass isolation is active (%ux%u)\n",
+                width, height);
+        return 0;
+    }
+
     pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
     tisp_defog_set_frame_geometry(width, height);
     tisp_defog_all_reg_refresh();
@@ -12520,6 +12776,12 @@ int tiziano_adr_interrupt_static(void)
 /* tiziano_adr_init - Binary Ninja SIMPLIFIED implementation */
 int tiziano_adr_init(uint32_t width, uint32_t height)
 {
+    if (tisp_force_bypass_adr) {
+        pr_warn("tiziano_adr_init: skipping ADR init because bypass isolation is active (%ux%u)\n",
+                width, height);
+        return 0;
+    }
+
     pr_info("tiziano_adr_init: Initializing ADR processing (%dx%d)\n", width, height);
 
     /* Binary Ninja: Store resolution parameters */
@@ -12720,6 +12982,8 @@ int tisp_s_wdr_en(int enable)
         reg_0c = (reg_0c & 0xb577ff7d) | 0x34000009;
     }
 
+    reg_0c = tisp_apply_debug_top_bypass_overrides(reg_0c, __func__);
+
     system_reg_write(0xc, reg_0c);
 
     tisp_dpc_wdr_en(enable);
@@ -12845,6 +13109,11 @@ int tisp_rdns_wdr_en(int enable)
 
 int tisp_adr_wdr_en(int enable)
 {
+    if (enable && tisp_force_bypass_adr) {
+        pr_warn("tisp_adr_wdr_en: ADR WDR request ignored because ADR bypass isolation is active\n");
+        return 0;
+    }
+
     pr_info("tisp_adr_wdr_en: %s ADR WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
@@ -12852,6 +13121,12 @@ int tisp_adr_wdr_en(int enable)
 static int defog_wdr_en = 0;
 int tisp_defog_wdr_en(int enable)
 {
+    if (enable && tisp_force_bypass_defog) {
+        pr_warn("tisp_defog_wdr_en: Defog WDR request ignored because Defog bypass isolation is active\n");
+        defog_wdr_en = 0;
+        return 0;
+    }
+
     pr_info("tisp_defog_wdr_en: %s Defog WDR mode\n", enable ? "Enable" : "Disable");
     defog_wdr_en = enable ? 1 : 0;
 
@@ -13070,25 +13345,13 @@ int tisp_event_process(void)
 {
     int ret;
 
-    pr_info("tisp_event_process: Starting event processing loop\n");
-
-    /* CRITICAL FIX: Reinitialize completion before waiting to prevent deadlock
-     * Kernel 3.10 uses INIT_COMPLETION instead of reinit_completion
-     * Completion is initialized once in tisp_event_init() */
     INIT_COMPLETION(tevent_info);
 
-    /* Wait for event notification */
     ret = wait_for_completion_interruptible(&tevent_info);
     if (ret < 0) {
         pr_debug("tisp_event_process: Wait interrupted: %d\n", ret);
         return ret;
     }
-
-    pr_debug("tisp_event_process: Event received, processing callbacks\n");
-
-    /* Process all registered event callbacks */
-    /* The callbacks (tisp_tgain_update, tisp_again_update, etc.) will be called
-     * by the interrupt handlers via isp_event_dispatcher when events occur */
 
     return 0;
 }
@@ -14052,6 +14315,11 @@ int tisp_s_adr_enable(int enable)
 {
     uint32_t reg_val;
 
+    if (enable == 1 && tisp_force_bypass_adr) {
+        pr_warn("tisp_s_adr_enable: forcing ADR to remain bypassed during FOV isolation\n");
+        enable = 0;
+    }
+
     pr_info("tisp_s_adr_enable: %s ADR\n", enable ? "Enabling" : "Disabling");
 
     /* Binary Ninja implementation:
@@ -14704,8 +14972,8 @@ int tiziano_ae_params_refresh(void)
     memset(&ae1_comp_ev_list, 0, sizeof(ae1_comp_ev_list));
 
     /* Binary Ninja: Calculate sensor divisors */
-    uint32_t sensor_width_div = sensor_info.width / 2;
-    uint32_t sensor_height_div = sensor_info.height / 2;
+    uint32_t sensor_width_div = tisp_si_width(&sensor_info) / 2;
+    uint32_t sensor_height_div = tisp_si_height(&sensor_info) / 2;
 
     /* Binary Ninja: Update parameter arrays with calculated values */
     for (int i = 0; i < data_b0d54 && i < (sizeof(_ae_parameter) / sizeof(uint32_t)); i++) {
