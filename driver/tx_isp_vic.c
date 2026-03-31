@@ -1048,6 +1048,10 @@ static u32 vic_irq_counter;
          * instead of in vic_mdma_irq_function.
          */
         if (vic_regs) {
+            /* OEM non-bypass frame delivery: read MSCA Y addr to find
+             * which buffer the ISP just wrote to, deliver it, then
+             * refill from queue with MSCA address update for next frame.
+             * VIC MDMA banks are NOT used in non-bypass mode. */
             struct vic_buffer_entry *done_buf;
             struct vic_buffer_entry *q_buf, *f_buf;
             int (*dqbuf_fn)(void *, void *);
@@ -1056,10 +1060,7 @@ static u32 vic_irq_counter;
 
             spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
 
-            /* Find which buffer the MSCA just wrote to by reading 0x996c.
-             * Multiple QBUFs may have overwritten 0x996c, so we can't just
-             * pop the first done_head entry — we must find the one matching
-             * the actual MSCA output address. */
+            /* Find buffer matching current MSCA Y output address */
             {
                 u32 msca_y_addr = 0;
                 if (ourISPdev && ourISPdev->core_regs)
@@ -1075,7 +1076,6 @@ static u32 vic_irq_counter;
                         }
                     }
                 }
-                /* Fallback: if no match, pop first entry */
                 if (!done_buf && !list_empty(&vic_dev->done_head))
                     done_buf = list_first_entry(&vic_dev->done_head,
                                 struct vic_buffer_entry, list);
@@ -1085,18 +1085,17 @@ static u32 vic_irq_counter;
                 list_del(&done_buf->list);
                 vic_dev->active_buffer_count--;
 
-                /* Deliver frame via raw_pipe callback */
                 dqbuf_fn = (int (*)(void *, void *))raw_pipe_global[1];
                 dqbuf_arg = raw_pipe_global[4];
                 if (dqbuf_fn)
                     dqbuf_fn(dqbuf_arg, done_buf);
 
-                /* Move to free_head */
                 list_add_tail(&done_buf->list, &vic_dev->free_head);
             }
 
-            /* Refill: move next queued buffer into a free bank slot
-             * and set MSCA to write to it for the NEXT frame. */
+            /* Refill: set MSCA to write NEXT frame to a new buffer.
+             * This is the non-bypass equivalent of the OEM's QBUF path
+             * through ispcore_pad_event_handle. */
             if (!list_empty(&vic_dev->free_head) &&
                 !list_empty(&vic_dev->queue_head)) {
                 q_buf = list_first_entry(&vic_dev->queue_head,
@@ -1107,10 +1106,8 @@ static u32 vic_irq_counter;
                 list_del(&f_buf->list);
                 f_buf->buffer_addr = q_buf->buffer_addr;
                 f_buf->buffer_length = q_buf->buffer_length;
-                writel(f_buf->buffer_addr,
-                       vic_regs + ((f_buf->buffer_index + 0xc6) << 2));
 
-                /* Update MSCA to write NEXT frame to this new buffer */
+                /* Program MSCA for next frame output */
                 if (ourISPdev && ourISPdev->core_regs) {
                     u32 w = vic_dev->width ? vic_dev->width : 1920;
                     u32 h = vic_dev->height ? vic_dev->height : 1080;
@@ -1124,17 +1121,6 @@ static u32 vic_irq_counter;
                 list_add_tail(&f_buf->list, &vic_dev->done_head);
                 vic_dev->active_buffer_count++;
                 kfree(q_buf);
-            }
-
-            /* Update bank count in MDMA control register */
-            {
-                u32 banks = vic_dev->active_buffer_count;
-                u32 ctrl_val;
-                if (banks > 5)
-                    banks = 5;
-                ctrl_val = readl(vic_regs + 0x300);
-                ctrl_val = (ctrl_val & 0xfff0ffff) | (banks << 16);
-                writel(ctrl_val, vic_regs + 0x300);
             }
 
             spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
@@ -3538,12 +3524,13 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	if (queued_buffer->channel == 0) {
-		/* Write buffer address to VIC MDMA bank register (for DMA
-		 * completion tracking and bank rotation). */
+		/* Write VIC MDMA bank register — required even in non-bypass mode
+		 * because vic_pipo_mdma_enable programs the MDMA engine during
+		 * STREAMON and it will bus-lockup if bank addresses are zero. */
 		writel(buffer_addr, vic_base + reg_offset);
 
-		/* Program MSCA CH0 output DMA addresses so the ISP pipeline
-		 * writes processed NV12 data to the buffer. */
+		/* OEM non-bypass: write MSCA output addresses (from
+		 * ispcore_pad_event_handle case 0x3000005) */
 		if (ourISPdev && ourISPdev->core_regs) {
 			u32 w = vic_dev->width ? vic_dev->width : 1920;
 			u32 h = vic_dev->height ? vic_dev->height : 1080;
