@@ -1444,6 +1444,29 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: *($s0 + 0xe8) = 3 */
             isp_dev->state = 3;
 
+            /* Reset channel dispatch states so next STREAMON cycle can call
+             * tisp_channel_start (writes 0xf0001 to 0x9804). Without this,
+             * dispatch->state stays at 4 and tisp_channel_start is skipped,
+             * leaving MSCA CH0 disabled and the output FIFO empty. */
+            {
+                struct tx_isp_fs_device *fs_dev_reset = dump_fsd;
+                if (fs_dev_reset && fs_dev_reset->channel_configs) {
+                    struct tx_isp_channel_config *cfgs =
+                        (struct tx_isp_channel_config *)fs_dev_reset->channel_configs;
+                    int ch;
+                    for (ch = 0; ch < fs_dev_reset->channel_count && ch < ISP_MAX_CHAN; ch++) {
+                        if (cfgs[ch].state == 4) {
+                            cfgs[ch].state = 3;
+                            /* Also reset *(event_priv + 0x74) — the channel
+                             * internal state checked by ispcore_pad_event_handle
+                             * before calling tisp_channel_start. */
+                            if (cfgs[ch].event_priv)
+                                *((uint32_t*)((char*)cfgs[ch].event_priv + 0x74)) = 3;
+                        }
+                    }
+                }
+            }
+
             /* Reset VIC MDMA stream_state so the next frame channel STREAMON
              * can re-enable with the correct active_buffer_count.
              * Without this, the idempotency guard blocks re-configuration. */
