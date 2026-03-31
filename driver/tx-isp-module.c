@@ -4280,19 +4280,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * and writes processed frames to the VIC MDMA destination buffers.
          */
 
-        /* CRITICAL: Dispatch 0x3000005 (BUFFER_ENQUEUE) to VIC so that
-         * ispvic_frame_channel_qbuf properly:
-         *   1) Programs VIC MDMA bank registers (0x318+)
-         *   2) Adds buffer to done_head list
-         *   3) Increments active_buffer_count
-         * Without this, vic_framedone_irq_function finds done_head empty,
-         * writes 0 banks to reg 0x300, and MDMA never fires v1_10.
+        /* OEM EXACT: Two-phase QBUF dispatch.
+         * Phase 1 (ispcore_pad_event_handle): Write MSCA output addresses
+         * Phase 2 (ispvic_frame_channel_qbuf): Write VIC MDMA bank register
+         * The OEM does these in separate event handlers at different levels.
          */
         if (ourISPdev && ourISPdev->vic_dev && channel == 0) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
             struct vic_buffer_entry *qbuf_node;
 
+            /* Phase 1: OEM ispcore_pad_event_handle case 0x3000005
+             * Write MSCA CH0 output DMA addresses for NV12 output. */
+            if (ourISPdev->core_regs) {
+                u32 w = vic->width ? vic->width : 1920;
+                u32 h = vic->height ? vic->height : 1080;
+                u32 uv_offset = w * ((h + 15) & ~15);
+                writel(buffer_phys_addr,
+                       ourISPdev->core_regs + 0x996c);
+                writel(buffer_phys_addr + uv_offset,
+                       ourISPdev->core_regs + 0x9984);
+            }
+
+            /* Phase 2: Dispatch to VIC QBUF handler for bank register */
             qbuf_node = kzalloc(sizeof(*qbuf_node), GFP_KERNEL);
             if (qbuf_node) {
                 qbuf_node->buffer_addr = buffer_phys_addr;
@@ -4301,18 +4311,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 qbuf_node->buffer_length = buffer.length;
                 INIT_LIST_HEAD(&qbuf_node->list);
 
-                /* Dispatch through VIC's proper QBUF handler */
                 vic_core_ops_ioctl(&vic->sd, 0x3000005, qbuf_node);
-                pr_info("*** Channel %d: VIC QBUF dispatched phys=0x%x idx=%u active=%u ***\n",
-                        channel, buffer_phys_addr, buffer.index,
-                        vic->active_buffer_count);
             }
 
-            /* If streaming was requested but deferred (stream_state==0),
-             * now that we have buffers, try to start it */
+            /* OEM: if stream not started yet but should be, start now */
             if (vic->stream_state == 0 && state->streaming) {
-                pr_info("*** Channel %d: QBUF triggering deferred STREAMON (active_bufs=%u) ***\n",
-                        channel, vic->active_buffer_count);
                 ispvic_frame_channel_s_stream(vic, 1);
             }
         }
