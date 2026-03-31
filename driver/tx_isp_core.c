@@ -1867,6 +1867,18 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         int drain_count;
         u32 fifo_stat_ch0;
 
+        /* Guard: detect and fix msca_ch_en losing 0xf0000 DMA output bits.
+         * Something periodic strips these bits. Log when it happens to
+         * identify the culprit, then restore them to keep FIFO filling. */
+        if ((msca_ch_en & 0xf0000) != 0xf0000 && (msca_ch_en & 0x1)) {
+            static int ch_en_warn_count;
+            if (ch_en_warn_count++ < 5)
+                pr_warn("ISR: msca_ch_en=0x%x lost 0xf0000! reg=0x%x Restoring.\n",
+                        msca_ch_en, readl(isp_regs + 0x9804));
+            msca_ch_en |= 0xf0000;
+            system_reg_write(0x9804, msca_ch_en);
+        }
+
         /* Try draining MSCA FIFO first (OEM pattern) */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
