@@ -12247,66 +12247,36 @@ void tiziano_ccm_params_refresh(void)
         ccm_ctrl.params[0]);
 }
 
-/* tisp_ccm_ct_update - OEM-like CT update: force jz_isp_ccm with current CT */
+/* tisp_ccm_ct_update - OEM-like CT threshold check using cached global CT */
 int tisp_ccm_ct_update(void)
 {
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->tuning_data)
-        return 0;
+	uint32_t current_ct = data_9a450;
+	uint32_t ct_diff = (data_c52f4 >= current_ct) ?
+		(data_c52f4 - current_ct) : (current_ct - data_c52f4);
 
-    int32_t current_ct = ourISPdev->tuning_data->wb_temp;
-    data_c52f4 = current_ct;   /* cache CT */
-    ccm_real.real = 1;         /* force update in jz_isp_ccm path */
+	if (data_c52f8 < ct_diff) {
+		int ret = jz_isp_ccm();
+		data_c52f4 = current_ct;
+		return ret;
+	}
 
-    return jz_isp_ccm();
+	return 0;
 }
 
-/* tisp_ccm_ev_update - Update CCM based on exposure value - SAFE VERSION */
+/* tisp_ccm_ev_update - OEM-like EV threshold check using cached global EV */
 int tisp_ccm_ev_update(void)
 {
-    pr_debug("tisp_ccm_ev_update: Updating CCM for exposure value changes (safe version)\n");
+	uint32_t current_ev = data_9a454 >> 10;
+	uint32_t ev_diff = (data_c52ec >= current_ev) ?
+		(data_c52ec - current_ev) : (current_ev - data_c52ec);
 
-    /* SAFE: Use global ISP device for EV access */
-    extern struct tx_isp_dev *ourISPdev;
+	if (data_c52f0 < ev_diff) {
+		int ret = jz_isp_ccm();
+		data_c52ec = current_ev;
+		return ret;
+	}
 
-    if (!ourISPdev || !ourISPdev->tuning_data) {
-        pr_debug("tisp_ccm_ev_update: No ISP device or tuning data available\n");
-        return 0;
-    }
-
-    /* Get current EV value from tuning data */
-    uint32_t current_ev = ourISPdev->tuning_data->exposure >> 10;
-
-    /* Check if EV has changed significantly */
-    uint32_t ev_diff = (data_c52ec >= current_ev) ?
-                      (data_c52ec - current_ev) : (current_ev - data_c52ec);
-
-    if (ev_diff > data_c52f0) {  /* EV threshold check */
-        pr_debug("tisp_ccm_ev_update: Significant EV change detected (%u -> %u)\n",
-                 data_c52ec, current_ev);
-
-        /* Update EV cache */
-        data_c52ec = current_ev;
-
-        /* Adjust saturation based on EV - higher EV = more saturation */
-        if (current_ev > 0x2000) {
-            data_c52fc = 0x120;  /* High saturation for bright scenes */
-        } else if (current_ev < 0x800) {
-            data_c52fc = 0xE0;   /* Lower saturation for dark scenes */
-        } else {
-            data_c52fc = 0x100;  /* Normal saturation */
-        }
-
-        /* Simple hardware update instead of complex CCM operations */
-        if (ourISPdev->core_regs) {
-            writel(data_c52fc, ourISPdev->core_regs + 0x2808);  /* Saturation register */
-            writel(current_ev, ourISPdev->core_regs + 0x280c);  /* EV register */
-        }
-
-        return 1;  /* EV updated */
-    }
-
-    return 0;  /* No EV update needed */
+	return 0;
 }
 
 /* jz_isp_ccm - Binary Ninja EXACT implementation */
@@ -14358,7 +14328,23 @@ int tisp_sharpen_wdr_en(int enable)
 
 int tisp_ccm_wdr_en(int enable)
 {
-    pr_info("tisp_ccm_wdr_en: %s CCM WDR mode\n", enable ? "Enable" : "Disable");
+	ccm_wdr_en = enable;
+
+	if (enable != 1) {
+		tiziano_ccm_a_now = tiziano_ccm_a_linear;
+		tiziano_ccm_t_now = tiziano_ccm_t_linear;
+		tiziano_ccm_d_now = tiziano_ccm_d_linear;
+		cm_ev_list_now = cm_ev_list;
+		cm_sat_list_now = cm_sat_list;
+	} else {
+		tiziano_ccm_a_now = tiziano_ccm_a_wdr;
+		tiziano_ccm_t_now = tiziano_ccm_t_wdr;
+		tiziano_ccm_d_now = tiziano_ccm_d_wdr;
+		cm_ev_list_now = cm_ev_list_wdr;
+		cm_sat_list_now = cm_sat_list_wdr;
+	}
+
+	pr_info("tisp_ccm_wdr_en: %s CCM WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
@@ -14875,31 +14861,26 @@ int tisp_ev_update(void)
 
 int tisp_ct_update(void)
 {
-    pr_debug("tisp_ct_update: Updating color temperature\n");
+	uint32_t reg_0c;
+	uint32_t ct;
 
-    /* Update color temperature - SAFE VERSION without CCM calls */
-    extern struct tx_isp_dev *ourISPdev;
+	if (!ourISPdev || !ourISPdev->tuning_data)
+		return 0;
 
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+	ct = ourISPdev->tuning_data->wb_temp;
+	data_9a450 = ct;
+	reg_0c = system_reg_read(0xc);
 
-        /* Update global CT cache for other modules */
-        data_9a450 = tuning->wb_temp;
-        tisp_lsc_ct_update(tuning->wb_temp);
+	if ((reg_0c & 0x200) == 0)
+		tisp_ccm_ct_update();
 
-        /* Update hardware WB registers directly instead of calling problematic CCM functions */
-        if (ourISPdev->core_regs) {
-            writel(tuning->wb_gains.r, ourISPdev->core_regs + 0x1100);  /* R gain */
-            writel(tuning->wb_gains.g, ourISPdev->core_regs + 0x1104);  /* G gain */
-            writel(tuning->wb_gains.b, ourISPdev->core_regs + 0x1108);  /* B gain */
-            writel(tuning->wb_temp, ourISPdev->core_regs + 0x110c);     /* Color temp */
-        }
+	if ((reg_0c & 0x40) == 0)
+		tisp_lsc_ct_update(ct);
 
-        pr_debug("tisp_ct_update: Color temperature updated to %dK (R:%x G:%x B:%x)\n",
-                 tuning->wb_temp, tuning->wb_gains.r, tuning->wb_gains.g, tuning->wb_gains.b);
-    }
+	if ((reg_0c & 0x10000) == 0)
+		tisp_bcsh_ct_update(ct);
 
-    return 0;
+	return 0;
 }
 
 int tisp_ae_ir_update(void)
