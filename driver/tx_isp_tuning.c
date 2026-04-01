@@ -125,6 +125,7 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning);
 /* External hardware register write functions from tx-isp-module.c */
 extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
+extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
 
 /* Sharpening parameter arrays - declared early for use in tisp_sharpen_set_par_cfg */
 static uint32_t y_sp_uu_thres_array[16] = {0x8, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78, 0x80};
@@ -146,7 +147,7 @@ static uint32_t y_sp_b_sl_stren_1_wdr_array[16] = {0xc, 0x12, 0x18, 0x1e, 0x24, 
 static uint32_t y_sp_b_sl_stren_2_wdr_array[16] = {0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x20, 0x24, 0x28, 0x2c, 0x30, 0x34, 0x38, 0x3c, 0x40, 0x44};
 static uint32_t y_sp_b_sl_stren_3_wdr_array[16] = {0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22};
 
-/* Sharpening current pointers */
+/* Sharpening current pointers (selected by WDR mode) */
 static uint32_t *y_sp_uu_thres_array_now = NULL;
 static uint32_t *y_sp_w_sl_stren_0_array_now = NULL;
 static uint32_t *y_sp_w_sl_stren_1_array_now = NULL;
@@ -162,6 +163,72 @@ static int sharpen_wdr_en = 0;
 static uint32_t ysp_enable = 1;
 static uint32_t ysp_mode = 0x7;
 static uint32_t ysp_global_strength = 0x80;
+
+/* OEM sharpening arrays loaded from tuning bin by tiziano_sharpen_params_refresh */
+static uint32_t y_sp_out_opt_array = 0;
+static uint32_t y_sp_sl_exp_thres_array[9] = {0};
+static uint32_t y_sp_sl_exp_num_array[9] = {0};
+static uint32_t y_sp_std_cfg_array[2] = {0};
+static uint32_t y_sp_uu_min_stren_array[9] = {0};
+static uint32_t y_sp_uu_min_thres_array[9] = {0};
+static uint32_t y_sp_mv_uu_thres_array[9] = {0};
+static uint32_t y_sp_mv_uu_stren_array[9] = {0};
+static uint32_t y_sp_uu_stren_array[9] = {0};
+static uint32_t y_sp_uu_par_cfg_array[4] = {0};
+static uint32_t y_sp_fl_std_thres_array[9] = {0};
+static uint32_t y_sp_mv_fl_std_thres_array[9] = {0};
+static uint32_t y_sp_fl_thres_array[9] = {0};
+static uint32_t y_sp_fl_min_thres_array[9] = {0};
+static uint32_t y_sp_mv_fl_thres_array[9] = {0};
+static uint32_t y_sp_mv_fl_min_thres_array[9] = {0};
+static uint32_t y_sp_fl_par_cfg_array[2] = {0};
+static uint32_t y_sp_v2_win5_thres_array[9] = {0};
+static uint32_t y_sp_v1_v2_coef_par_cfg_array[12] = {0};
+static uint32_t y_sp_w_b_ll_par_cfg_array[9] = {0};
+static uint32_t y_sp_uu_np_array[16] = {0};
+static uint32_t y_sp_w_wei_np_array[16] = {0};
+static uint32_t y_sp_b_wei_np_array[16] = {0};
+static uint32_t y_sp_uu_sl_0_array[9] = {0};
+static uint32_t y_sp_uu_sl_1_array[9] = {0};
+static uint32_t y_sp_uu_sl_2_array[9] = {0};
+static uint32_t y_sp_uu_sl_3_array[9] = {0};
+static uint32_t y_sp_fl_sl_0_array[9] = {0};
+static uint32_t y_sp_fl_sl_1_array[9] = {0};
+static uint32_t y_sp_fl_sl_2_array[9] = {0};
+static uint32_t y_sp_fl_sl_3_array[9] = {0};
+
+/* OEM sharpening interpolated values (computed by tisp_sharpen_intp) */
+static uint32_t y_sp_sl_exp_thres_intp = 0;
+static uint32_t y_sp_sl_exp_num_intp = 0;
+static uint32_t y_sp_uu_min_stren_intp = 0;
+static uint32_t y_sp_uu_min_thres_intp = 0;
+static uint32_t y_sp_uu_thres_intp = 0;
+static uint32_t y_sp_mv_uu_thres_intp = 0;
+static uint32_t y_sp_mv_uu_stren_intp = 0;
+static uint32_t y_sp_uu_stren_intp = 0;
+static uint32_t y_sp_fl_std_thres_intp = 0;
+static uint32_t y_sp_mv_fl_std_thres_intp = 0;
+static uint32_t y_sp_fl_thres_intp = 0;
+static uint32_t y_sp_fl_min_thres_intp = 0;
+static uint32_t y_sp_mv_fl_thres_intp = 0;
+static uint32_t y_sp_mv_fl_min_thres_intp = 0;
+static uint32_t y_sp_v2_win5_thres_intp = 0;
+static uint32_t y_sp_w_sl_stren_0_intp = 0;
+static uint32_t y_sp_w_sl_stren_1_intp = 0;
+static uint32_t y_sp_w_sl_stren_2_intp = 0;
+static uint32_t y_sp_w_sl_stren_3_intp = 0;
+static uint32_t y_sp_b_sl_stren_0_intp = 0;
+static uint32_t y_sp_b_sl_stren_1_intp = 0;
+static uint32_t y_sp_b_sl_stren_2_intp = 0;
+static uint32_t y_sp_b_sl_stren_3_intp = 0;
+static uint32_t y_sp_uu_sl_0_array_intp = 0;
+static uint32_t y_sp_uu_sl_1_array_intp = 0;
+static uint32_t y_sp_uu_sl_2_array_intp = 0;
+static uint32_t y_sp_uu_sl_3_array_intp = 0;
+static uint32_t y_sp_fl_sl_0_array_intp = 0;
+static uint32_t y_sp_fl_sl_1_array_intp = 0;
+static uint32_t y_sp_fl_sl_2_array_intp = 0;
+static uint32_t y_sp_fl_sl_3_array_intp = 0;
 
 /* SDNS parameter arrays - declared early for use in tisp_sdns functions */
 static uint32_t sdns_h_mv_wei[16] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x100};
@@ -1267,6 +1334,7 @@ module_param(isp_bypass_override, uint, 0644);
  *   0x100 = bit 8  DMSC (demosaic — critical for color)
  *   0x400 = bit 10 Gamma
  *   0x800 = bit 11 Defog
+ *  0x1000 = bit 12 CLM  (color luminance mapping / BCSH)
  *  0x4000 = bit 14 Sharpen
  *  0x8000 = bit 15 SDNS (spatial denoise)
  * 0x10000 = bit 16 MDNS (motion denoise)
@@ -1274,16 +1342,19 @@ module_param(isp_bypass_override, uint, 0644);
  *
  * Example: isp_block_enable=0x100 enables DMSC only (should give color)
  *          isp_block_enable=0x500 enables DMSC + Gamma
- *          isp_block_enable=0x3CDB4 enables all OEM blocks at once
+ *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
-static uint isp_block_enable = 0x1d10;  /* AWB(4)+DMSC(8)+Gamma(10)+CCM(11)+BCSH(12) — color pipeline */
+static uint isp_block_enable = 0x4D10;  /* LSC(4)+DMSC(8)+Gamma(10)+Defog(11)+Sharp(14) — CLM(12) removed: stub init */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
 
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
-	u32 bypass_val = 0x8077efff;
+	u32 bypass_val = 0x8077ffff;  /* Start all non-force-masked blocks bypassed;
+				       * 0x8077efff had bit 12 (CLM) = 0 (enabled) but
+				       * our CLM init is a stub → rainbow artifacts.
+				       * Set bit 12 to bypass CLM until properly implemented. */
 	u32 *params = (u32 *)(tparams_active ? tparams_active : tparams_day);
 	int i;
 
@@ -1841,6 +1912,9 @@ int tiziano_sharpen_init(void);
 int tiziano_sdns_init(void);
 int tiziano_mdns_init(uint32_t width, uint32_t height);
 int tiziano_clm_init(void);
+static int tiziano_set_parameter_clm(void);
+int tiziano_clm_dn_params_refresh(void);
+int tisp_clm_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tiziano_dpc_init(void);
 int tiziano_hldc_init(void);
 int tiziano_defog_init(uint32_t width, uint32_t height);
@@ -7831,10 +7905,32 @@ int tisp_bcsh_param_array_set(int param_id, void *in_buf, int *size_buf)
 
 int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_clm_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    const void *src;
+    int len;
+
+    switch (param_id) {
+    case 0x357:
+        src = tiziano_clm_h_lut;
+        len = CLM_H_LUT_SIZE;
+        break;
+    case 0x358:
+        src = tiziano_clm_s_lut;
+        len = CLM_S_LUT_SIZE;
+        break;
+    case 0x359:
+        src = &tiziano_clm_lut_shift;
+        len = CLM_LUT_SHIFT_SIZE;
+        break;
+    default:
+        pr_err("%s,%d: clm not support param id %d\n",
+               "tisp_clm_param_array_get", __LINE__, param_id);
+        return -1;
     }
+
+    if (out_buf)
+        memcpy(out_buf, src, len);
+    if (size_buf)
+        *size_buf = len;
     return 0;
 }
 
@@ -9121,7 +9217,53 @@ int tisp_bcsh_set_par_cfg(void *in_buf)
     return 0;
 }
 
-int tisp_clm_set_par_cfg(void *in_buf) { return 0; }
+/* tisp_clm_param_array_set — OEM EXACT: set CLM LUT data by param ID */
+int tisp_clm_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    int len;
+
+    switch (param_id) {
+    case 0x357:
+        memcpy(tiziano_clm_h_lut, in_buf, CLM_H_LUT_SIZE);
+        len = CLM_H_LUT_SIZE;
+        break;
+    case 0x358:
+        memcpy(tiziano_clm_s_lut, in_buf, CLM_S_LUT_SIZE);
+        len = CLM_S_LUT_SIZE;
+        break;
+    case 0x359:
+        memcpy(&tiziano_clm_lut_shift, in_buf, CLM_LUT_SHIFT_SIZE);
+        /* OEM: writing lut_shift triggers a full parameter apply */
+        tiziano_set_parameter_clm();
+        len = CLM_LUT_SHIFT_SIZE;
+        break;
+    default:
+        pr_err("%s,%d: clm not support param id %d\n",
+               "tisp_clm_param_array_set", __LINE__, param_id);
+        return -1;
+    }
+
+    if (size_buf)
+        *size_buf = len;
+    return 0;
+}
+
+/* tisp_clm_set_par_cfg — OEM EXACT: iterates param IDs 0x357-0x359 */
+int tisp_clm_set_par_cfg(void *in_buf)
+{
+    uint8_t *p = (uint8_t *)in_buf;
+    int temp_size = 0;
+    int i;
+
+    if (!in_buf) return -EINVAL;
+
+    for (i = 0x357; i < 0x35a; i++) {
+        tisp_clm_param_array_set(i, p, &temp_size);
+        p += temp_size;
+    }
+
+    return 0;
+}
 int tisp_ysp_set_par_cfg(void *in_buf)
 {
     if (!in_buf) return -EINVAL;
@@ -11580,60 +11722,49 @@ int tisp_ccm_is_initialized(void)
     return (tiziano_ccm_a_now != NULL && cm_ev_list_now != NULL && cm_sat_list_now != NULL);
 }
 
-/* tiziano_ccm_lut_parameter - Binary Ninja EXACT implementation */
+/* tiziano_ccm_lut_parameter - OEM EXACT: uses system_reg_write like BN decompilation */
 static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
 {
-    void __iomem *base_reg = ioremap(0x13305000, 0x1000); /* CCM register base */
-
-    if (!base_reg) {
-        pr_err("tiziano_ccm_lut_parameter: Failed to map CCM registers\n");
-        return -ENOMEM;
-    }
+    int32_t i;
+    int32_t *ptr = ccm_data + 1;  /* OEM: $s4 = arg1 + 4 */
 
     pr_info("tiziano_ccm_lut_parameter: Writing CCM matrix to registers\n");
 
-    /* Binary Ninja: Enable CCM processing */
-    writel(1, base_reg);
-
-    /* Binary Ninja: Write CCM matrix values */
-    for (int32_t i = 0; i < 10; i += 2) {
-        uint32_t reg_addr;
+    for (i = 0; i != 0xa; i += 2, ptr += 2) {
         uint32_t val;
 
         if (i != 8) {
-            /* Combine two 16-bit values into 32-bit register */
-            val = (ccm_data[i + 1] << 16) | (ccm_data[i] & 0xFFFF);
+            /* OEM: *$s4 << 16 | *($s4 - 4) — pack two 16-bit coefficients */
+            val = ((uint32_t)(*ptr) << 16) | ((uint32_t)(*(ptr - 1)) & 0xFFFF);
         } else {
-            /* Last register gets single value */
-            val = ccm_data[8];
+            /* OEM: *(arg1 + 0x20) — last coefficient standalone */
+            val = (uint32_t)ccm_data[8];
         }
 
-        /* Binary Ninja: Register address calculation (i + 0x2802) << 1 */
-        reg_addr = (i + 0x2802) << 1;
-        writel(val, base_reg + reg_addr - 0x5000);
+        /* OEM: writes enable INSIDE the loop before each coefficient */
+        system_reg_write(0x5000, 1);
+        system_reg_write((uint32_t)(i + 0x2802) << 1, val);
     }
 
-    /* Binary Ninja: Additional CCM configuration registers */
+    /* OEM: additional DP configuration when ccm_real == 1 */
     if (ccm_real.real == 1) {
-        uint32_t dp_cfg = (data_aa470 << 16) | (tiziano_ccm_dp_cfg << 12) | data_aa474;
-        writel(dp_cfg, base_reg + 0x18);
+        system_reg_write(0x5018,
+            (data_aa470 << 16) | (tiziano_ccm_dp_cfg << 12) | data_aa474);
 
         uint32_t dp_step;
         if (data_aa470 != data_aa474) {
-            if (data_aa474 >= data_aa470) {
+            if (data_aa474 >= data_aa470)
                 dp_step = 0x20 / (data_aa474 - data_aa470);
-            } else {
+            else
                 dp_step = 0x20 / (data_aa470 - data_aa474);
-            }
         } else {
             dp_step = 1;
         }
 
-        writel(dp_step, base_reg + 0x1c);
-        writel((data_aa47c << 16) | data_aa478, base_reg + 0x20);
+        system_reg_write(0x501c, dp_step);
+        system_reg_write(0x5020, (data_aa47c << 16) | data_aa478);
     }
 
-    iounmap(base_reg);
     pr_info("tiziano_ccm_lut_parameter: CCM matrix written to hardware\n");
     return 0;
 }
@@ -12151,74 +12282,286 @@ int tiziano_dmsc_init(void)
 	return 0;
 }
 
+/* Forward declaration for tisp_simple_intp (defined later, needed by sharpen) */
+static uint32_t tisp_simple_intp(int gain_hi, int gain_lo, const uint32_t *array);
+
 /* Sharpening state cache - Binary Ninja reference */
 static uint32_t data_9a920 = 0xFFFFFFFF;
 
-/* tiziano_sharpen_params_refresh - Refresh sharpening parameters - Simple version for init */
+/* OEM EXACT: tiziano_sharpen_params_refresh — load sharpen arrays from tuning bin.
+ * Sharpening tuning data starts at offset 0x9D58 in the parameter block.
+ * Computed: OEM abs 0x8e868 - tparams_base 0x84B10 = 0x9D58. */
 void tiziano_sharpen_params_refresh(void)
 {
-    pr_debug("tiziano_sharpen_params_refresh: Refreshing sharpening parameters (simple version)\n");
-    /* This is the simple version called from init - the enhanced version is elsewhere */
+    const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    if (!params) return;
+
+    memcpy(&y_sp_out_opt_array,           params + 0x9D58, 4);
+    memcpy(y_sp_sl_exp_thres_array,       params + 0x9D5C, 0x24);
+    memcpy(y_sp_sl_exp_num_array,         params + 0x9D80, 0x24);
+    memcpy(y_sp_std_cfg_array,            params + 0x9DA4, 8);
+    memcpy(y_sp_uu_min_stren_array,       params + 0x9DAC, 0x24);
+    memcpy(y_sp_uu_min_thres_array,       params + 0x9DD0, 0x24);
+    memcpy(y_sp_uu_thres_array,           params + 0x9DF4, 0x24);
+    memcpy(y_sp_mv_uu_thres_array,        params + 0x9E18, 0x24);
+    memcpy(y_sp_mv_uu_stren_array,        params + 0x9E3C, 0x24);
+    memcpy(y_sp_uu_stren_array,           params + 0x9E60, 0x24);
+    memcpy(y_sp_uu_par_cfg_array,         params + 0x9E84, 0x10);
+    memcpy(y_sp_fl_std_thres_array,       params + 0x9E94, 0x24);
+    memcpy(y_sp_mv_fl_std_thres_array,    params + 0x9EB8, 0x24);
+    memcpy(y_sp_fl_thres_array,           params + 0x9EDC, 0x24);
+    memcpy(y_sp_fl_min_thres_array,       params + 0x9F00, 0x24);
+    memcpy(y_sp_mv_fl_thres_array,        params + 0x9F24, 0x24);
+    memcpy(y_sp_mv_fl_min_thres_array,    params + 0x9F48, 0x24);
+    memcpy(y_sp_fl_par_cfg_array,         params + 0x9F6C, 8);
+    memcpy(y_sp_v2_win5_thres_array,      params + 0x9F74, 0x24);
+    memcpy(y_sp_v1_v2_coef_par_cfg_array, params + 0x9F98, 0x30);
+    memcpy(y_sp_w_b_ll_par_cfg_array,     params + 0x9FC8, 0x24);
+    memcpy(y_sp_uu_np_array,              params + 0x9FEC, 0x40);
+    memcpy(y_sp_w_wei_np_array,           params + 0xA02C, 0x40);
+    memcpy(y_sp_b_wei_np_array,           params + 0xA06C, 0x40);
+    memcpy(y_sp_w_sl_stren_0_array,       params + 0xA0AC, 0x24);
+    memcpy(y_sp_w_sl_stren_1_array,       params + 0xA0D0, 0x24);
+    memcpy(y_sp_w_sl_stren_2_array,       params + 0xA0F4, 0x24);
+    memcpy(y_sp_w_sl_stren_3_array,       params + 0xA118, 0x24);
+    memcpy(y_sp_b_sl_stren_0_array,       params + 0xA13C, 0x24);
+    memcpy(y_sp_b_sl_stren_1_array,       params + 0xA160, 0x24);
+    memcpy(y_sp_b_sl_stren_2_array,       params + 0xA184, 0x24);
+    memcpy(y_sp_b_sl_stren_3_array,       params + 0xA1A8, 0x24);
+    memcpy(y_sp_uu_sl_0_array,            params + 0xA1CC, 0x24);
+    memcpy(y_sp_uu_sl_1_array,            params + 0xA1F0, 0x24);
+    memcpy(y_sp_uu_sl_2_array,            params + 0xA214, 0x24);
+    memcpy(y_sp_uu_sl_3_array,            params + 0xA238, 0x24);
+    memcpy(y_sp_fl_sl_0_array,            params + 0xA25C, 0x24);
+    memcpy(y_sp_fl_sl_1_array,            params + 0xA280, 0x24);
+    memcpy(y_sp_fl_sl_2_array,            params + 0xA2A4, 0x24);
+    memcpy(y_sp_uu_thres_wdr_array,       params + 0xA2C8, 0x24);
+    memcpy(y_sp_w_sl_stren_0_wdr_array,   params + 0xA2EC, 0x24);
+    memcpy(y_sp_w_sl_stren_1_wdr_array,   params + 0xA310, 0x24);
+    memcpy(y_sp_w_sl_stren_2_wdr_array,   params + 0xA334, 0x24);
+    memcpy(y_sp_w_sl_stren_3_wdr_array,   params + 0xA358, 0x24);
+    memcpy(y_sp_b_sl_stren_0_wdr_array,   params + 0xA37C, 0x24);
+    memcpy(y_sp_b_sl_stren_1_wdr_array,   params + 0xA3A0, 0x24);
+    memcpy(y_sp_b_sl_stren_2_wdr_array,   params + 0xA3C4, 0x24);
+    memcpy(y_sp_b_sl_stren_3_wdr_array,   params + 0xA3E8, 0x24);
+    memcpy(y_sp_fl_sl_3_array,            params + 0xA40C, 0x24);
 }
 
-/* tisp_sharpen_all_reg_refresh - Write all sharpening registers to hardware */
-static int tisp_sharpen_all_reg_refresh(void)
+/* OEM EXACT: tisp_sharpen_intp — interpolate all sharpen arrays based on gain value.
+ * arg1 encodes gain_hi in upper 16 bits, gain_lo in lower 16 bits. */
+static int tisp_sharpen_intp(uint32_t arg1)
 {
-    void __iomem *base_reg = ioremap(0x1330B000, 0x1000); /* Sharpening register base */
+    int gain_hi = arg1 >> 16;
+    int gain_lo = arg1 & 0xffff;
 
-    if (!base_reg) {
-        pr_err("tisp_sharpen_all_reg_refresh: Failed to map sharpening registers\n");
-        return -ENOMEM;
-    }
-
-    pr_info("tisp_sharpen_all_reg_refresh: Writing sharpening parameters to registers\n");
-
-    /* Write sharpening arrays to hardware */
-    for (int i = 0; i < 16; i++) {
-        writel(y_sp_uu_thres_array_now[i], base_reg + 0x100 + (i * 4));      /* UU threshold */
-        writel(y_sp_w_sl_stren_0_array_now[i], base_reg + 0x140 + (i * 4));  /* W strength 0 */
-        writel(y_sp_w_sl_stren_1_array_now[i], base_reg + 0x180 + (i * 4));  /* W strength 1 */
-        writel(y_sp_w_sl_stren_2_array_now[i], base_reg + 0x1c0 + (i * 4));  /* W strength 2 */
-        writel(y_sp_w_sl_stren_3_array_now[i], base_reg + 0x200 + (i * 4));  /* W strength 3 */
-        writel(y_sp_b_sl_stren_0_array_now[i], base_reg + 0x240 + (i * 4));  /* B strength 0 */
-        writel(y_sp_b_sl_stren_1_array_now[i], base_reg + 0x280 + (i * 4));  /* B strength 1 */
-        writel(y_sp_b_sl_stren_2_array_now[i], base_reg + 0x2c0 + (i * 4));  /* B strength 2 */
-        writel(y_sp_b_sl_stren_3_array_now[i], base_reg + 0x300 + (i * 4));  /* B strength 3 */
-    }
-
-    /* Enable sharpening processing */
-    writel(ysp_enable, base_reg + 0x00);       /* Enable sharpening */
-    writel(ysp_mode, base_reg + 0x04);         /* Sharpening mode */
-    writel(ysp_global_strength, base_reg + 0x08); /* Sharpening global strength */
-
-    iounmap(base_reg);
-    pr_info("tisp_sharpen_all_reg_refresh: Sharpening registers written to hardware\n");
+    y_sp_sl_exp_thres_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_sl_exp_thres_array);
+    y_sp_sl_exp_num_intp      = tisp_simple_intp(gain_hi, gain_lo, y_sp_sl_exp_num_array);
+    y_sp_uu_min_stren_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_min_stren_array);
+    y_sp_uu_min_thres_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_min_thres_array);
+    y_sp_uu_thres_intp        = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_thres_array_now);
+    y_sp_mv_uu_thres_intp     = tisp_simple_intp(gain_hi, gain_lo, y_sp_mv_uu_thres_array);
+    y_sp_mv_uu_stren_intp     = tisp_simple_intp(gain_hi, gain_lo, y_sp_mv_uu_stren_array);
+    y_sp_uu_stren_intp        = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_stren_array);
+    y_sp_fl_std_thres_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_std_thres_array);
+    y_sp_mv_fl_std_thres_intp = tisp_simple_intp(gain_hi, gain_lo, y_sp_mv_fl_std_thres_array);
+    y_sp_fl_thres_intp        = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_thres_array);
+    y_sp_fl_min_thres_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_min_thres_array);
+    y_sp_mv_fl_thres_intp     = tisp_simple_intp(gain_hi, gain_lo, y_sp_mv_fl_thres_array);
+    y_sp_mv_fl_min_thres_intp = tisp_simple_intp(gain_hi, gain_lo, y_sp_mv_fl_min_thres_array);
+    y_sp_v2_win5_thres_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_v2_win5_thres_array);
+    y_sp_w_sl_stren_0_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_w_sl_stren_0_array_now);
+    y_sp_w_sl_stren_1_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_w_sl_stren_1_array_now);
+    y_sp_w_sl_stren_2_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_w_sl_stren_2_array_now);
+    y_sp_w_sl_stren_3_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_w_sl_stren_3_array_now);
+    y_sp_b_sl_stren_0_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_b_sl_stren_0_array_now);
+    y_sp_b_sl_stren_1_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_b_sl_stren_1_array_now);
+    y_sp_b_sl_stren_2_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_b_sl_stren_2_array_now);
+    y_sp_b_sl_stren_3_intp    = tisp_simple_intp(gain_hi, gain_lo, y_sp_b_sl_stren_3_array_now);
+    y_sp_uu_sl_0_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_sl_0_array);
+    y_sp_uu_sl_1_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_sl_1_array);
+    y_sp_uu_sl_2_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_sl_2_array);
+    y_sp_uu_sl_3_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_uu_sl_3_array);
+    y_sp_fl_sl_0_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_sl_0_array);
+    y_sp_fl_sl_1_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_sl_1_array);
+    y_sp_fl_sl_2_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_sl_2_array);
+    y_sp_fl_sl_3_array_intp   = tisp_simple_intp(gain_hi, gain_lo, y_sp_fl_sl_3_array);
     return 0;
 }
 
-/* tisp_sharpen_par_refresh - Binary Ninja EXACT implementation */
+/* OEM EXACT: tisp_y_sp_sl_exp_cfg — reg 0x7000 */
+static int tisp_y_sp_sl_exp_cfg(void)
+{
+    system_reg_write(0x7000, (y_sp_sl_exp_num_intp << 16) | y_sp_sl_exp_thres_intp);
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_std_scope_cfg — reg 0x7004 */
+static int tisp_y_sp_std_scope_cfg(void)
+{
+    system_reg_write(0x7004, (y_sp_std_cfg_array[1] << 16) | y_sp_std_cfg_array[0]);
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_uu_cfg — regs 0x7008-0x7010 */
+static int tisp_y_sp_uu_cfg(void)
+{
+    system_reg_write(0x7008, (y_sp_uu_min_stren_intp << 16) |
+                    y_sp_uu_par_cfg_array[0] | (y_sp_uu_par_cfg_array[1] << 8));
+    system_reg_write(0x700c, (y_sp_mv_uu_thres_intp << 24) |
+                    (y_sp_uu_thres_intp << 8) | y_sp_uu_min_thres_intp |
+                    (y_sp_uu_par_cfg_array[2] << 16));
+    system_reg_write(0x7010, (y_sp_out_opt_array << 28) |
+                    (y_sp_uu_par_cfg_array[3] << 24) |
+                    (y_sp_uu_stren_intp << 8) | y_sp_mv_uu_stren_intp);
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_fl_thres_cfg — regs 0x7014-0x701c */
+static int tisp_y_sp_fl_thres_cfg(void)
+{
+    system_reg_write(0x7014, (y_sp_mv_fl_std_thres_intp << 8) | y_sp_fl_std_thres_intp);
+    system_reg_write(0x7018, (y_sp_fl_thres_intp << 16) | y_sp_fl_par_cfg_array[0] |
+                    (y_sp_fl_min_thres_intp << 24));
+    system_reg_write(0x701c, (y_sp_mv_fl_thres_intp << 16) | y_sp_fl_par_cfg_array[1] |
+                    (y_sp_mv_fl_min_thres_intp << 24));
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_v1_v2_coef_cfg — regs 0x7020-0x7028 */
+static int tisp_y_sp_v1_v2_coef_cfg(void)
+{
+    system_reg_write(0x7020, (y_sp_v2_win5_thres_intp << 8) |
+                    y_sp_v1_v2_coef_par_cfg_array[0] |
+                    (y_sp_v1_v2_coef_par_cfg_array[1] << 16));
+    system_reg_write(0x7024, y_sp_v1_v2_coef_par_cfg_array[2] |
+                    (y_sp_v1_v2_coef_par_cfg_array[3] << 4) |
+                    (y_sp_v1_v2_coef_par_cfg_array[4] << 8) |
+                    (y_sp_v1_v2_coef_par_cfg_array[5] << 12) |
+                    (y_sp_v1_v2_coef_par_cfg_array[6] << 16) |
+                    (y_sp_v1_v2_coef_par_cfg_array[7] << 20));
+    system_reg_write(0x7028, y_sp_v1_v2_coef_par_cfg_array[8] |
+                    (y_sp_v1_v2_coef_par_cfg_array[9] << 8) |
+                    (y_sp_v1_v2_coef_par_cfg_array[10] << 16) |
+                    (y_sp_v1_v2_coef_par_cfg_array[11] << 24));
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_w_b_ll_cfg — regs 0x702c-0x7034 */
+static int tisp_y_sp_w_b_ll_cfg(void)
+{
+    system_reg_write(0x702c, y_sp_w_b_ll_par_cfg_array[0] |
+                    (y_sp_w_b_ll_par_cfg_array[1] << 8) |
+                    (y_sp_w_b_ll_par_cfg_array[2] << 16) |
+                    (y_sp_w_b_ll_par_cfg_array[3] << 24));
+    system_reg_write(0x7030, y_sp_w_b_ll_par_cfg_array[4] |
+                    (y_sp_w_b_ll_par_cfg_array[5] << 8) |
+                    (y_sp_w_b_ll_par_cfg_array[6] << 16));
+    system_reg_write(0x7034, y_sp_w_b_ll_par_cfg_array[7] |
+                    (y_sp_w_b_ll_par_cfg_array[8] << 16));
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_uu_w_b_wei_cfg — regs 0x7038-0x7064
+ * Packs uu_np, w_wei_np, b_wei_np arrays 4 bytes per register */
+static int tisp_y_sp_uu_w_b_wei_cfg(void)
+{
+    /* y_sp_uu_np_array — 16 elements packed into 4 registers */
+    system_reg_write(0x7038, y_sp_uu_np_array[0] | (y_sp_uu_np_array[1] << 8) |
+                    (y_sp_uu_np_array[2] << 16) | (y_sp_uu_np_array[3] << 24));
+    system_reg_write(0x703c, y_sp_uu_np_array[4] | (y_sp_uu_np_array[5] << 8) |
+                    (y_sp_uu_np_array[6] << 16) | (y_sp_uu_np_array[7] << 24));
+    system_reg_write(0x7040, y_sp_uu_np_array[8] | (y_sp_uu_np_array[9] << 8) |
+                    (y_sp_uu_np_array[10] << 16) | (y_sp_uu_np_array[11] << 24));
+    system_reg_write(0x7044, y_sp_uu_np_array[12] | (y_sp_uu_np_array[13] << 8) |
+                    (y_sp_uu_np_array[14] << 16) | (y_sp_uu_np_array[15] << 24));
+    /* y_sp_w_wei_np_array — 16 elements packed into 4 registers */
+    system_reg_write(0x7048, y_sp_w_wei_np_array[0] | (y_sp_w_wei_np_array[1] << 8) |
+                    (y_sp_w_wei_np_array[2] << 16) | (y_sp_w_wei_np_array[3] << 24));
+    system_reg_write(0x704c, y_sp_w_wei_np_array[4] | (y_sp_w_wei_np_array[5] << 8) |
+                    (y_sp_w_wei_np_array[6] << 16) | (y_sp_w_wei_np_array[7] << 24));
+    system_reg_write(0x7050, y_sp_w_wei_np_array[8] | (y_sp_w_wei_np_array[9] << 8) |
+                    (y_sp_w_wei_np_array[10] << 16) | (y_sp_w_wei_np_array[11] << 24));
+    system_reg_write(0x7054, y_sp_w_wei_np_array[12] | (y_sp_w_wei_np_array[13] << 8) |
+                    (y_sp_w_wei_np_array[14] << 16) | (y_sp_w_wei_np_array[15] << 24));
+    /* y_sp_b_wei_np_array — 16 elements packed into 4 registers */
+    system_reg_write(0x7058, y_sp_b_wei_np_array[0] | (y_sp_b_wei_np_array[1] << 8) |
+                    (y_sp_b_wei_np_array[2] << 16) | (y_sp_b_wei_np_array[3] << 24));
+    system_reg_write(0x705c, y_sp_b_wei_np_array[4] | (y_sp_b_wei_np_array[5] << 8) |
+                    (y_sp_b_wei_np_array[6] << 16) | (y_sp_b_wei_np_array[7] << 24));
+    system_reg_write(0x7060, y_sp_b_wei_np_array[8] | (y_sp_b_wei_np_array[9] << 8) |
+                    (y_sp_b_wei_np_array[10] << 16) | (y_sp_b_wei_np_array[11] << 24));
+    system_reg_write(0x7064, y_sp_b_wei_np_array[12] | (y_sp_b_wei_np_array[13] << 8) |
+                    (y_sp_b_wei_np_array[14] << 16) | (y_sp_b_wei_np_array[15] << 24));
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_w_b_sl_cfg — regs 0x7068-0x7074 */
+static int tisp_y_sp_w_b_sl_cfg(void)
+{
+    system_reg_write(0x7068, y_sp_w_sl_stren_0_intp | (y_sp_w_sl_stren_1_intp << 16));
+    system_reg_write(0x706c, y_sp_w_sl_stren_2_intp | (y_sp_w_sl_stren_3_intp << 16));
+    system_reg_write(0x7070, y_sp_b_sl_stren_0_intp | (y_sp_b_sl_stren_1_intp << 16));
+    system_reg_write(0x7074, y_sp_b_sl_stren_2_intp | (y_sp_b_sl_stren_3_intp << 16));
+    return 0;
+}
+
+/* OEM EXACT: tisp_y_sp_uu_fl_sl_cfg — regs 0x7078-0x707c */
+static int tisp_y_sp_uu_fl_sl_cfg(void)
+{
+    system_reg_write(0x7078, y_sp_uu_sl_0_array_intp | (y_sp_uu_sl_1_array_intp << 8) |
+                    (y_sp_uu_sl_2_array_intp << 16) | (y_sp_uu_sl_3_array_intp << 24));
+    system_reg_write(0x707c, y_sp_fl_sl_0_array_intp | (y_sp_fl_sl_1_array_intp << 8) |
+                    (y_sp_fl_sl_2_array_intp << 16) | (y_sp_fl_sl_3_array_intp << 24));
+    return 0;
+}
+
+/* OEM EXACT: tisp_sharpen_all_reg_refresh — full register write, called on first use */
+static int tisp_sharpen_all_reg_refresh(void)
+{
+    tisp_sharpen_intp(data_9a920);
+    tisp_y_sp_sl_exp_cfg();
+    tisp_y_sp_std_scope_cfg();
+    tisp_y_sp_uu_cfg();
+    tisp_y_sp_fl_thres_cfg();
+    tisp_y_sp_v1_v2_coef_cfg();
+    tisp_y_sp_w_b_ll_cfg();
+    tisp_y_sp_uu_w_b_wei_cfg();
+    tisp_y_sp_w_b_sl_cfg();
+    tisp_y_sp_uu_fl_sl_cfg();
+    system_reg_write(0x7090, 1);
+    return 0;
+}
+
+/* OEM EXACT: tisp_sharpen_intp_reg_refresh — partial register write on small changes */
+static int tisp_sharpen_intp_reg_refresh(void)
+{
+    tisp_sharpen_intp(data_9a920);
+    tisp_y_sp_sl_exp_cfg();
+    tisp_y_sp_uu_cfg();
+    tisp_y_sp_fl_thres_cfg();
+    tisp_y_sp_v1_v2_coef_cfg();
+    tisp_y_sp_w_b_sl_cfg();
+    return 0;
+}
+
+/* OEM EXACT: tisp_sharpen_par_refresh */
 int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9a920;
 
-    pr_debug("tisp_sharpen_par_refresh: EV=%u, threshold=%u, enable=%d\n", ev_value, threshold, enable_write);
-
     if (prev_value != 0xFFFFFFFF) {
         uint32_t diff = (prev_value >= ev_value) ? (prev_value - ev_value) : (ev_value - prev_value);
-
         if (diff >= threshold) {
             data_9a920 = ev_value;
-            tisp_sharpen_all_reg_refresh();
+            tisp_sharpen_intp_reg_refresh();
         }
     } else {
         data_9a920 = ev_value;
         tisp_sharpen_all_reg_refresh();
     }
 
-    if (enable_write == 1) {
-        /* Enable sharpening with register write */
-        system_reg_write(0xb000 + 0x400, 1);  /* Enable sharpening processing */
-    }
+    if (enable_write == 1)
+        system_reg_write(0x7090, 1);
 
     return 0;
 }
@@ -12460,11 +12803,156 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
     return 0;
 }
 
-/* tiziano_clm_init - CLM initialization */
+/*
+ * CLM (Color Luminance Mapping) — full OEM-equivalent implementation
+ *
+ * Register map:
+ *   0x6800        CLM enable (write 1)
+ *   0x6804        CLM LUT shift
+ *   0x60000-0x6068c  S bank 0  (0x1A4 words)
+ *   0x68000-0x6868c  H bank 0
+ *   0x70000-0x7068c  S bank 1  (mirror)
+ *   0x78000-0x7868c  H bank 1  (mirror)
+ *
+ * LUT layout in tparams:
+ *   offset 0xFB84  H LUT   0x41A bytes (1050 × uint8_t,  7-bit values)
+ *   offset 0xFF9E  S LUT   0x834 bytes (1050 × int16_t, 9-bit values)
+ *   offset 0x107D4 LUT shift 4 bytes (uint32_t)
+ *
+ * Data flow:
+ *   tparams → clm_h_lut / clm_s_lut / clm_lut_shift
+ *           → clm_lut2reg packs into clm_s_reg / clm_h_reg
+ *           → tiziano_set_parameter_clm writes to ISP registers
+ */
+
+#define CLM_H_LUT_SIZE    0x41A   /* 1050 bytes */
+#define CLM_S_LUT_SIZE    0x834   /* 2100 bytes = 1050 × int16_t */
+#define CLM_LUT_SHIFT_SIZE  4
+#define CLM_REG_SIZE      0x690   /* 0x1A4 words × 4 bytes */
+#define CLM_ENTRIES       1050    /* 30 groups × 35 entries */
+#define CLM_GROUP_ENTRIES 35      /* entries per outer group */
+#define CLM_INNER_STEP    5       /* entries per inner iteration */
+
+#define CLM_TPARAMS_H_LUT_OFF    0xFB84
+#define CLM_TPARAMS_S_LUT_OFF    0xFF9E
+#define CLM_TPARAMS_LUT_SHIFT_OFF 0x107D4
+
+/* CLM data arrays */
+static uint8_t  tiziano_clm_h_lut[CLM_H_LUT_SIZE];
+static int16_t  tiziano_clm_s_lut[CLM_S_LUT_SIZE / 2];   /* 1050 entries */
+static uint32_t tiziano_clm_lut_shift;
+static uint32_t tiziano_clm_s_reg[CLM_REG_SIZE / 4];      /* 420 words */
+static uint32_t tiziano_clm_h_reg[CLM_REG_SIZE / 4];      /* 420 words */
+
+/*
+ * clm_lut2reg — pack S (9-bit) and H (7-bit) LUT entries into 32-bit register words.
+ *
+ * OEM packing (per 5-entry group):
+ *   S word 0: s[0][8:0] | s[1][8:0]<<9 | s[2][8:0]<<18 | s[3][4:0]<<27
+ *   S word 1: s[3][8:5]>>5 | s[4][8:0]<<4
+ *   H word 0: h[0][6:0] | h[1][6:0]<<7 | h[2][6:0]<<14 | h[3][6:0]<<21 | h[4][3:0]<<28
+ *   H word 1: h[4][6:4]>>4
+ *
+ * 30 outer groups × 7 inner iterations = 210 × 2 words = 420 words = 0x690 bytes.
+ */
+static void clm_lut2reg(const int16_t *s_lut, const uint8_t *h_lut,
+			 uint32_t *s_reg, uint32_t *h_reg)
+{
+	int g, k;
+	int si = 0, ri = 0;
+
+	for (g = 0; g < 30; g++) {
+		for (k = 0; k < 7; k++) {
+			uint32_t s0 = (uint32_t)(uint16_t)s_lut[si]     & 0x1ff;
+			uint32_t s1 = (uint32_t)(uint16_t)s_lut[si + 1] & 0x1ff;
+			uint32_t s2 = (uint32_t)(uint16_t)s_lut[si + 2] & 0x1ff;
+			uint32_t s3 = (uint32_t)(uint16_t)s_lut[si + 3] & 0x1ff;
+			uint32_t s4 = (uint32_t)(uint16_t)s_lut[si + 4] & 0x1ff;
+
+			s_reg[ri]     = s0 | (s1 << 9) | (s2 << 18) | ((s3 & 0x1f) << 27);
+			s_reg[ri + 1] = (s3 >> 5) | (s4 << 4);
+
+			uint32_t h0 = h_lut[si]     & 0x7f;
+			uint32_t h1 = h_lut[si + 1] & 0x7f;
+			uint32_t h2 = h_lut[si + 2] & 0x7f;
+			uint32_t h3 = h_lut[si + 3] & 0x7f;
+			uint32_t h4 = h_lut[si + 4] & 0x7f;
+
+			h_reg[ri]     = h0 | (h1 << 7) | (h2 << 14) | (h3 << 21) | ((h4 & 0xf) << 28);
+			h_reg[ri + 1] = (h4 >> 4) & 0x7;
+
+			si += 5;
+			ri += 2;
+		}
+	}
+}
+
+/* tiziano_set_parameter_clm — convert LUTs and write to all CLM register banks */
+static int tiziano_set_parameter_clm(void)
+{
+	int i;
+	int nwords = CLM_REG_SIZE / 4;  /* 420 */
+
+	clm_lut2reg(tiziano_clm_s_lut, tiziano_clm_h_lut,
+		    tiziano_clm_s_reg, tiziano_clm_h_reg);
+
+	/* Enable CLM block and write LUT shift */
+	system_reg_write_clm(1, 0x6804, tiziano_clm_lut_shift);
+
+	/* Bank 0: S regs at 0x60000, H regs at 0x68000 */
+	for (i = 0; i < nwords; i++) {
+		system_reg_write(0x60000 + i * 4, tiziano_clm_s_reg[i]);
+	}
+	for (i = 0; i < nwords; i++) {
+		system_reg_write(0x68000 + i * 4, tiziano_clm_h_reg[i]);
+	}
+
+	/* Bank 1 (mirror): S regs at 0x70000, H regs at 0x78000 */
+	for (i = 0; i < nwords; i++) {
+		system_reg_write(0x70000 + i * 4, tiziano_clm_s_reg[i]);
+	}
+	for (i = 0; i < nwords; i++) {
+		system_reg_write(0x78000 + i * 4, tiziano_clm_h_reg[i]);
+	}
+
+	return 0;
+}
+
+/* tiziano_clm_params_refresh — load CLM LUTs from tuning parameter blob */
+static int tiziano_clm_params_refresh(void)
+{
+	const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+
+	if (!params) {
+		/* No tuning data — zero out LUTs (passthrough) */
+		memset(tiziano_clm_h_lut, 0, CLM_H_LUT_SIZE);
+		memset(tiziano_clm_s_lut, 0, CLM_S_LUT_SIZE);
+		tiziano_clm_lut_shift = 0;
+		return 0;
+	}
+
+	memcpy(tiziano_clm_h_lut,    params + CLM_TPARAMS_H_LUT_OFF,    CLM_H_LUT_SIZE);
+	memcpy(tiziano_clm_s_lut,    params + CLM_TPARAMS_S_LUT_OFF,    CLM_S_LUT_SIZE);
+	memcpy(&tiziano_clm_lut_shift, params + CLM_TPARAMS_LUT_SHIFT_OFF, CLM_LUT_SHIFT_SIZE);
+
+	return 0;
+}
+
+/* tiziano_clm_dn_params_refresh — day/night refresh (same as init) */
+int tiziano_clm_dn_params_refresh(void)
+{
+	tiziano_clm_params_refresh();
+	tiziano_set_parameter_clm();
+	return 0;
+}
+
+/* tiziano_clm_init — OEM: params_refresh + set_parameter */
 int tiziano_clm_init(void)
 {
-    pr_info("tiziano_clm_init: Initializing CLM processing\n");
-    return 0;
+	pr_info("tiziano_clm_init: Initializing CLM processing\n");
+	tiziano_clm_params_refresh();
+	tiziano_set_parameter_clm();
+	return 0;
 }
 
 /* DPC parameter arrays - Binary Ninja reference */
