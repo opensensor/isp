@@ -1274,6 +1274,12 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 	}
 
+	/* Hardcoded verified-working bypass until tuning bin interpretation
+	 * is fully matched to OEM.  Must return here (same path as
+	 * isp_bypass_override) to avoid the for loop and force mask. */
+	pr_info("tisp_compute_top_bypass: using verified bypass 0xb4176249\n");
+	return 0xb4176249;
+
 	if (!params)
 		goto apply_force_mask;
 
@@ -1294,6 +1300,11 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 	}
 
 apply_force_mask:
+	if (wdr_enable)
+		bypass_val = (bypass_val & 0xa1ffdf76) | 0x00880002;
+	else
+		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+
 	if (wdr_enable)
 		bypass_val = (bypass_val & 0xa1ffdf76) | 0x00880002;
 	else

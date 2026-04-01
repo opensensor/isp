@@ -1598,12 +1598,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         tx_isp_enable_irq(isp_dev);
 
-        /* OEM: VIC IRQ 38 is enabled by vic_core_s_stream → tx_isp_vic_start
-         * during the subdev walk above. ispvic_frame_channel_s_stream(1)
-         * is called from the frame channel STREAMON event dispatch to VIC
-         * (with the correct active_buffer_count). Do NOT call it here
-         * before QBUFs have programmed bank addresses.
-         */
+        /* VIC IRQ enable only.  Do NOT call ispvic_frame_channel_s_stream(1)
+         * here — it starts MDMA before QBUF has programmed bank addresses,
+         * causing writes to addr 0 and triggering MSCA DMA auto-disable.
+         * The frame channel STREAMON event dispatch calls it after QBUF. */
         if (vic_dev)
             tx_vic_enable_irq(vic_dev);
     }
@@ -1825,14 +1823,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             queue_work_on(0, fs_workqueue, &fs_work);
     }
 
-    /* Binary Ninja: Error interrupt processing */
-    if (interrupt_status & 0x200) {
-        /* Pipeline configuration error - clear error registers */
-        if (isp_regs) {
-            u32 error_status = readl(isp_regs + 0xc);
-            writel(error_status, isp_regs + 0xc);
-            wmb();
-        }
+    /* OEM: for non-WDR, error bits 0x200 and 0x100 just increment counters.
+     * Do NOT read/write register 0xc here — that's the bypass register
+     * and touching it corrupts processing block configuration. */
+    {
+        static u32 isp_err_200_count, isp_err_100_count;
+        if (interrupt_status & 0x200)
+            isp_err_200_count++;
+        if (interrupt_status & 0x100)
+            isp_err_100_count++;
     }
 
     /*
@@ -1879,37 +1878,19 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* *** CHANNEL 0/1/2 FRAME COMPLETION PROCESSING ***
-     * OEM ISR pops FIFO entry (Y addr), reads additional regs,
-     * builds a data struct, and sends via tx_isp_send_event_to_remote.
-     * The data struct at offset +8 contains the Y buffer physical address
-     * which frame_chan_event uses to match completed buffers. */
+     * Matches commit 2e55bf65 drain pattern that successfully delivered frames. */
     {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* OEM event data: 7 words at offsets 0x00-0x18 from data pointer.
-         * frame_chan_event reads *(data+8) as the Y buffer address. */
-        struct {
-            u32 pad0;       /* +0x00 */
-            u32 pad1;       /* +0x04 */
-            u32 y_addr;     /* +0x08 — Y buffer phys addr from FIFO pop */
-            u32 uv_addr;    /* +0x0c — UV buffer phys addr */
-            u32 pad4;       /* +0x10 */
-            u32 pad5;       /* +0x14 */
-            u32 frame_info; /* +0x18 */
-        } evt_data;
-
         /* CH0 drain */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
-            u32 fifo_y = readl(isp_regs + 0x9974); /* pop FIFO entry */
-            memset(&evt_data, 0, sizeof(evt_data));
-            evt_data.y_addr = fifo_y;
-            evt_data.uv_addr = readl(isp_regs + 0x998c);
-            frame_chan_event(&frame_channels[0], 0x3000006, &evt_data);
+            (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
+            frame_chan_event(&frame_channels[0], 0x3000006, NULL);
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
@@ -1920,20 +1901,16 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* CH1 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
-            u32 fifo_y = readl(isp_regs + 0x9a74);
-            memset(&evt_data, 0, sizeof(evt_data));
-            evt_data.y_addr = fifo_y;
-            frame_chan_event(&frame_channels[1], 0x3000006, &evt_data);
+            (void)readl(isp_regs + 0x9a74);
+            frame_chan_event(&frame_channels[1], 0x3000006, NULL);
             drain_count++;
         }
 
         /* CH2 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
-            u32 fifo_y = readl(isp_regs + 0x9b74);
-            memset(&evt_data, 0, sizeof(evt_data));
-            evt_data.y_addr = fifo_y;
-            frame_chan_event(&frame_channels[2], 0x3000006, &evt_data);
+            (void)readl(isp_regs + 0x9b74);
+            frame_chan_event(&frame_channels[2], 0x3000006, NULL);
             drain_count++;
         }
     }
