@@ -1734,16 +1734,11 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     uint32_t reg_val = system_reg_read(0xc);
 
     if ((reg_val & 0x40) == 0) {
-        /* CRITICAL FIX: Don't call tuning functions during VIC streaming */
-        /* This was causing CSI PHY register corruption every ~70ms */
-        extern uint32_t vic_start_ok;
-        if (vic_start_ok == 1) {
-            pr_debug("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
-        } else {
-            /* Binary Ninja: tisp_lsc_write_lut_datas() */
-            tisp_lsc_write_lut_datas();
-            pr_debug("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
-        }
+        /* OEM EXACT: Always call tisp_lsc_write_lut_datas when bit 6 is clear.
+         * The OEM does NOT gate this on vic_start_ok or any streaming flag.
+         * Previous code skipped this during streaming which broke per-frame
+         * LSC LUT updates that the pipeline may depend on. */
+        tisp_lsc_write_lut_datas();
     }
 
     pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
@@ -1755,7 +1750,12 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
 /* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    /* CRITICAL FIX: dev_id is &ourISPdev->sd_irq_info (offset 0x2f8c),
+     * NOT ourISPdev itself.  Casting dev_id to tx_isp_dev* gave wrong
+     * field offsets for core_regs, vic_dev, sensor, etc — reading garbage.
+     * Use the global ourISPdev directly, which is what the OEM does
+     * (ispcore_sd is a global in the OEM). */
+    struct tx_isp_dev *isp_dev = ourISPdev;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *isp_regs;
     void __iomem *vic_regs;
@@ -1763,13 +1763,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     u32 error_check;
     int i;
 
-    if (!isp_dev || !isp_dev->vic_regs) {
-        pr_info("ispcore_interrupt_service_routine: Invalid device\n");
+    if (!isp_dev) {
         return IRQ_NONE;
     }
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    if (!vic_dev) {
+    if (!vic_dev || !vic_dev->vic_regs) {
         return IRQ_NONE;
     }
 
@@ -1793,10 +1792,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         writel(interrupt_status, isp_regs + 0xb8);
         wmb();
     }
-    /* Always process MSCA FIFO drain regardless of interrupt_status bits,
-     * since MSCA completion shares IRQ 37 and may not set bits at +0xb4.
-     */
-    interrupt_status |= 1;  /* Force CH0 path on every ISR call */
+    /* OEM: does NOT force bit 0.  The hardware sets bit 0 when MSCA CH0
+     * frame processing completes.  Forcing it masked whether the pipeline
+     * was actually completing frames.  Match OEM exactly. */
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
@@ -1843,43 +1841,32 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
      * Both are one-shot: they fire on the first interrupt and are then
      * inhibited by their respective guard variables.
      */
-    if (bayer_write_pending) {
-        u32 mbus_code = 0;
-
-        if (isp_dev && isp_dev->sensor)
-            mbus_code = isp_dev->sensor->video.mbus.code;
-
-        if (mbus_code != 0) {
-            mbus_to_bayer_write(mbus_code);
-            bayer_write_pending = 0;
+    /* Guard: detect and fix HARDWARE 0x9804 losing 0xf0000 DMA output bits.
+     * Check the actual hardware register, not just the software variable,
+     * because the hardware can clear these bits independently.
+     * MUST run on every ISR — 0xf0000 must be present for MSCA to produce
+     * output, which is what causes bit 0x1 in interrupt_status. */
+    if (msca_ch_en & 0x1) {
+        u32 hw_9804 = readl(isp_regs + 0x9804);
+        if ((hw_9804 & 0xf0000) != 0xf0000) {
+            static int ch_en_warn_count;
+            if (ch_en_warn_count++ < 20)
+                pr_warn("ISR: hw_9804=0x%x sw_msca_ch_en=0x%x — DMA bits stripped! Writing 0x%x\n",
+                        hw_9804, msca_ch_en, msca_ch_en | 0xf0000);
+            msca_ch_en |= 0xf0000;
+            system_reg_write(0x9804, msca_ch_en);
         }
     }
 
-    if (first_into == 1) {
-        tisp_top_sel();
-        first_into = 0;
-    }
-
-    /* *** CHANNEL 0 FRAME COMPLETION PROCESSING *** */
-    {
+    /* OEM: bit 0x1 gates CH0 frame completion, bayer write, and tisp_top_sel.
+     * All of these run INSIDE the if ($s1 & 1) block in the OEM ISR. */
+    if (interrupt_status & 0x1) {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* Guard: detect and fix msca_ch_en losing 0xf0000 DMA output bits.
-         * Something periodic strips these bits. Log when it happens to
-         * identify the culprit, then restore them to keep FIFO filling. */
-        if ((msca_ch_en & 0xf0000) != 0xf0000 && (msca_ch_en & 0x1)) {
-            static int ch_en_warn_count;
-            if (ch_en_warn_count++ < 5)
-                pr_warn("ISR: msca_ch_en=0x%x lost 0xf0000! reg=0x%x Restoring.\n",
-                        msca_ch_en, readl(isp_regs + 0x9804));
-            msca_ch_en |= 0xf0000;
-            system_reg_write(0x9804, msca_ch_en);
-        }
-
-        /* Try draining MSCA FIFO first (OEM pattern) */
+        /* OEM: drain MSCA CH0 FIFO — bit 0 of 0x997c = 1 means empty */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
@@ -1889,62 +1876,76 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
 
-        /* NOTE: MSCA FIFO is always empty (0x997c bit0=1).
-         * The MSCA scaler hardware is not producing NV12 output
-         * despite all config registers being correct.
-         * Root cause is likely missing ISP→MSCA data path routing.
-         * Do NOT synthesize frame_chan_event here — it floods the
-         * pipeline with raw Bayer data causing encoder crashes. */
-
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
 
-        {
-            static unsigned int isr_log_counter;
-            if ((isr_log_counter++ % 300) == 0) {
-                pr_info("ISP ISR[%u]: int=0x%x fifo_ch0=0x%x drained=%d fc=%u bypass=%d\n",
-                        isr_log_counter, interrupt_status, fifo_stat_ch0,
-                        drain_count,
-                        isp_dev ? isp_dev->frame_count : 0,
-                        isp_dev ? isp_dev->bypass_enabled : -1);
-                /* Dump key MSCA registers to diagnose configuration */
-                pr_info("MSCA diag: 0x9804=0x%x 0x9818=0x%x 0x9900=0x%x 0x9904=0x%x\n",
-                        readl(isp_regs + 0x9804), readl(isp_regs + 0x9818),
-                        readl(isp_regs + 0x9900), readl(isp_regs + 0x9904));
-                pr_info("MSCA diag: 0x996c=0x%x 0x9974=0x%x 0x997c=0x%x 0x9984=0x%x\n",
-                        readl(isp_regs + 0x996c), readl(isp_regs + 0x9974),
-                        readl(isp_regs + 0x997c), readl(isp_regs + 0x9984));
-                pr_info("MSCA diag: 0x9938=0x%x 0x993c=0x%x 0x9940=0x%x 0x9864=0x%x\n",
-                        readl(isp_regs + 0x9938), readl(isp_regs + 0x993c),
-                        readl(isp_regs + 0x9940), readl(isp_regs + 0x9864));
-                /* Module enable, interrupt mask, top bypass */
-                pr_info("ISP ctrl: 0x10=0x%x 0x30=0x%x 0xc=0x%x 0x8=0x%x\n",
-                        readl(isp_regs + 0x10), readl(isp_regs + 0x30),
-                        readl(isp_regs + 0xc), readl(isp_regs + 0x8));
-                /* VIC MDMA bank readback */
-                pr_info("VIC banks: 0x300=0x%x 0x308=0x%x 0x318=0x%x 0x31c=0x%x 0x320=0x%x\n",
-                        readl(ourISPdev->vic_regs + 0x300),
-                        readl(ourISPdev->vic_regs + 0x308),
-                        readl(ourISPdev->vic_regs + 0x318),
-                        readl(ourISPdev->vic_regs + 0x31c),
-                        readl(ourISPdev->vic_regs + 0x320));
+        /* OEM: bayer write and tisp_top_sel are inside the bit 0x1 block */
+        if (bayer_write_pending) {
+            u32 mbus_code = 0;
+            if (isp_dev && isp_dev->sensor)
+                mbus_code = isp_dev->sensor->video.mbus.code;
+            if (mbus_code != 0) {
+                mbus_to_bayer_write(mbus_code);
+                bayer_write_pending = 0;
             }
         }
 
-        /* Channel 1 */
-        drain_count = 0;
+        if (first_into == 1) {
+            tisp_top_sel();
+            first_into = 0;
+        }
+    }
+
+    /* OEM: bit 0x2 gates CH1 FIFO drain */
+    if (interrupt_status & 0x2) {
+        extern struct frame_channel_device frame_channels[];
+        extern int frame_chan_event(void *priv, int event, void *data);
+        int drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
             (void)readl(isp_regs + 0x9a74);
             frame_chan_event(&frame_channels[1], 0x3000006, NULL);
             drain_count++;
         }
+    }
 
-        /* Channel 2 */
-        drain_count = 0;
+    /* OEM: bit 0x4 gates CH2 FIFO drain */
+    if (interrupt_status & 0x4) {
+        extern struct frame_channel_device frame_channels[];
+        extern int frame_chan_event(void *priv, int event, void *data);
+        int drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
             (void)readl(isp_regs + 0x9b74);
             frame_chan_event(&frame_channels[2], 0x3000006, NULL);
             drain_count++;
+        }
+    }
+
+    /* Periodic diagnostic — raw interrupt_status (no |= 1 contamination) */
+    {
+        static unsigned int isr_log_counter;
+        isr_log_counter++;
+        if (isr_log_counter <= 5 || (isr_log_counter % 60) == 0) {
+            u32 fifo_diag = readl(isp_regs + 0x997c);
+            pr_info("ISP ISR[%u]: int=0x%x fifo_ch0=0x%x fc=%u bypass=%d\n",
+                    isr_log_counter, interrupt_status, fifo_diag,
+                    isp_dev ? isp_dev->frame_count : 0,
+                    isp_dev ? isp_dev->bypass_enabled : -1);
+            pr_info("MSCA diag: 0x9804=0x%x 0x9818=0x%x 0x9900=0x%x 0x9904=0x%x\n",
+                    readl(isp_regs + 0x9804), readl(isp_regs + 0x9818),
+                    readl(isp_regs + 0x9900), readl(isp_regs + 0x9904));
+            /* NOTE: Do NOT read 0x9974 here — it's the FIFO POP register,
+             * reading it consumes entries! */
+            pr_info("MSCA diag: 0x996c=0x%x 0x997c=0x%x 0x9984=0x%x 0x9968=0x%x\n",
+                    readl(isp_regs + 0x996c),
+                    readl(isp_regs + 0x997c), readl(isp_regs + 0x9984),
+                    readl(isp_regs + 0x9968));
+            /* ISP pipeline state: 0xc=bypass 0x20/0x24/0x28=processing state */
+            pr_info("ISP ctrl: 0x10=0x%x 0xc=0x%x 0x800=0x%x 0x804=0x%x\n",
+                    readl(isp_regs + 0x10), readl(isp_regs + 0xc),
+                    readl(isp_regs + 0x800), readl(isp_regs + 0x804));
+            pr_info("ISP pipe: 0x20=0x%x 0x24=0x%x 0x28=0x%x 0xb0=0x%x\n",
+                    readl(isp_regs + 0x20), readl(isp_regs + 0x24),
+                    readl(isp_regs + 0x28), readl(isp_regs + 0xb0));
         }
     }
 
@@ -3995,10 +3996,11 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 return 0;
             }
 
-            /* OEM: tisp_channel_attr_set may modify msca_ch_en.
-             * Always restore 0xf0000 DMA output bits and write to 0x9804. */
-            msca_ch_en = 0xf0000 | msca_ch_en;
-            system_reg_write(0x9804, msca_ch_en);
+            /* OEM: tisp_channel_attr_set does NOT write 0x9804.
+             * The only place 0x9804 is written is tisp_channel_start
+             * (case 0x3000003 STREAMON).  Removed the incorrect 0x9804
+             * write here — it was writing with potentially uninitialized
+             * msca_ch_en which could strip the 0xf0000 DMA output bits. */
 
             ispcore_store_channel_format(dispatch->channel_id, format);
             ISP_INFO("ispcore_pad_event_handle: format set successfully");

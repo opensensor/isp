@@ -1243,18 +1243,43 @@ static int tiziano_load_parameters(const char *param_name)
 	return 0;
 }
 
+/* Module parameter: set to 1 to force all ISP processing blocks bypassed. */
+static int isp_bypass_all = 0;
+module_param(isp_bypass_all, int, 0644);
+
+/* Module parameter: override specific bypass bits.  Format: 0xVVVVVVVV
+ * When non-zero, this value is used AS the bypass register instead of
+ * computing from tuning params.  Combine with isp_bypass_all=0.
+ * Example: insmod tx-isp-t31.ko isp_bypass_override=0xb4000009 */
+static uint isp_bypass_override = 0;
+module_param(isp_bypass_override, uint, 0644);
+
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
 	u32 bypass_val = 0x8077efff;
 	u32 *params = (u32 *)(tparams_active ? tparams_active : tparams_day);
 	int i;
 
+	/* Debug: direct bypass override from module parameter */
+	if (isp_bypass_override) {
+		pr_info("tisp_compute_top_bypass: OVERRIDE mode — bypass=0x%08x\n",
+			isp_bypass_override);
+		return isp_bypass_override;
+	}
+
+	/* Debug: bypass all processing blocks to test raw pipeline throughput */
+	if (isp_bypass_all) {
+		bypass_val = 0xb4000009;  /* Force-mask bits only, all blocks bypassed */
+		pr_info("tisp_compute_top_bypass: BYPASS_ALL mode — raw pipeline test\n");
+		return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
+	}
+
 	if (!params)
 		goto apply_force_mask;
 
 	/* Only apply per-block bypass from params if a tuning bin was loaded.
 	 * Without a bin file, params are all zeros which would clear ALL bypass
-	 * bits, enabling every ISP block without configuration → garbage output.
+	 * bits, enabling every ISP block without configuration -> garbage output.
 	 * Keep the conservative initial value 0x8077efff (most blocks bypassed). */
 	if (!tuning_bin_loaded) {
 		pr_info("tisp_compute_top_bypass: no bin file, using conservative bypass 0x%x\n",
@@ -2941,8 +2966,13 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         pr_info("*** tisp_init: ISP LUT buffer allocated at 0x%08x ***\n", (uint32_t)lut_phys);
     }
 
-    /* Binary Ninja: mode/WDR path performs the core release toggle first */
-    tisp_s_wdr_en(wdr_enable);
+    /* OEM: tisp_s_wdr_en is NOT called from tisp_init.
+     * The OEM only calls tisp_s_wdr_en from the WDR ioctl handler (0x800456d8).
+     * Calling it here was wrong because:
+     *  1. It does a core release toggle (regs 0x24/0x28/0x20) at the wrong time
+     *  2. It modifies reg 0xc with mask 0xb577ff7d which differs from the
+     *     compute function's mask 0xb577fffd, corrupting bit 7 of the bypass
+     * Removed to match OEM tisp_init sequence exactly. */
 
     /* Binary Ninja OEM ORDER: Initialize all ISP sub-modules AFTER buffers, BEFORE reg 0x800=1 */
     pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES (OEM order: after buffers) ***\n");
@@ -12904,32 +12934,118 @@ int tiziano_bcsh_init(void)
     return 0;
 }
 
-/* tisp_ydns_param_cfg - Program YDNS regs (0x7af0..0x7afc) with packed fields
- * Placeholder mapping; refine per HLIL. Use s_ydns_hw_apply to gate writes. */
+/* YDNS interpolated parameter values — written to hardware registers */
+static uint32_t ydns_mv_thres0_intp;
+static uint32_t ydns_mv_thres1_intp;
+static uint32_t ydns_mv_thres2_intp;
+static uint32_t ydns_fus_level_intp;
+static uint32_t ydns_fus_min_thres_intp;
+static uint32_t ydns_fus_max_thres_intp;
+static uint32_t ydns_fus_sswei_intp;
+static uint32_t ydns_fus_sewei_intp;
+static uint32_t ydns_fus_mswei_intp;
+static uint32_t ydns_fus_mewei_intp;
+static uint32_t ydns_fus_uvwei_intp;
+static uint32_t ydns_edge_wei_intp;
+static uint32_t ydns_edge_div_intp;
+static uint32_t ydns_edge_thres_intp;
+static uint32_t ydns_gain_old = 0xffffffff;
+
+/* OEM EXACT: tisp_ydns_param_cfg — pack interpolated values into 4 YDNS regs.
+ * Register packing uses 8-bit fields, NOT 16-bit pairs. */
 static void tisp_ydns_param_cfg(void)
 {
-    uint32_t r0 = PACK16_U32(ydns_mv_thres0_array[0] & 0xFFFF, ydns_mv_thres1_array[0] & 0xFFFF);
-    uint32_t r1 = PACK16_U32(ydns_fus_level_array[0] & 0xFFFF, ydns_fus_min_thres_array[0] & 0xFFFF);
-    uint32_t r2 = PACK16_U32(ydns_edge_wei_array[0] & 0xFFFF, ydns_edge_thres_array[0] & 0xFFFF);
-    uint32_t r3 = PACK16_U32(ydns_edge_div_array[0] & 0xFFFF, ydns_edge_out_array & 0xFFFF);
-
-    if (!s_ydns_hw_apply) {
-        pr_info("tisp_ydns_param_cfg: HW apply disabled; R0=%#x R1=%#x R2=%#x R3=%#x\n", r0, r1, r2, r3);
-        return;
-    }
-
-    system_reg_write(YDNS_REG_START + 0x0, r0);
-    system_reg_write(YDNS_REG_START + 0x4, r1);
-    system_reg_write(YDNS_REG_START + 0x8, r2);
-    system_reg_write(YDNS_REG_START + 0xC, r3);
+    system_reg_write(0x7af0,
+        (ydns_mv_thres0_intp & 0xff) |
+        ((ydns_mv_thres1_intp & 0xff) << 8) |
+        ((ydns_mv_thres2_intp & 0xff) << 16));
+    system_reg_write(0x7af4,
+        (ydns_fus_min_thres_intp & 0xff) |
+        ((ydns_fus_max_thres_intp & 0xff) << 8) |
+        ((ydns_fus_level_intp & 0xff) << 16));
+    system_reg_write(0x7af8,
+        (ydns_fus_sswei_intp & 0xf) |
+        ((ydns_fus_sewei_intp & 0xf) << 4) |
+        ((ydns_fus_mswei_intp & 0xf) << 8) |
+        ((ydns_fus_mewei_intp & 0xf) << 12) |
+        ((ydns_fus_uvwei_intp & 0xff) << 16));
+    system_reg_write(0x7afc,
+        (ydns_edge_wei_intp & 0xf) |
+        ((ydns_edge_div_intp & 0xf) << 4) |
+        ((ydns_edge_thres_intp & 0xff) << 8) |
+        ((ydns_edge_out_array & 0xff) << 16));
 }
 
-/* tiziano_ydns_init - YDNS initialization */
+/* OEM EXACT: tisp_simple_intp — simple gain-based interpolation across 9-entry array.
+ * gain_hi selects the array index, gain_lo interpolates between entries. */
+static uint32_t tisp_simple_intp(int gain_hi, int gain_lo, const uint32_t *array)
+{
+    uint32_t val;
+    if (gain_hi < 0) gain_hi = 0;
+    if (gain_hi >= 8) return array[8];
+    val = array[gain_hi];
+    if (gain_lo != 0 && gain_hi < 8) {
+        int next = array[gain_hi + 1];
+        val = val + (((next - (int)val) * gain_lo) >> 16);
+    }
+    return val;
+}
+
+/* OEM EXACT: tisp_ydns_intp — interpolate all YDNS arrays based on gain */
+static void tisp_ydns_intp(uint32_t gain)
+{
+    int gain_hi = gain >> 16;
+    int gain_lo = gain & 0xffff;
+    ydns_mv_thres0_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_mv_thres0_array);
+    ydns_mv_thres1_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_mv_thres1_array);
+    ydns_mv_thres2_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_mv_thres2_array);
+    ydns_fus_level_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_level_array);
+    ydns_fus_min_thres_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_min_thres_array);
+    ydns_fus_max_thres_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_max_thres_array);
+    ydns_fus_sswei_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_sswei_array);
+    ydns_fus_sewei_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_sewei_array);
+    ydns_fus_mswei_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_mswei_array);
+    ydns_fus_mewei_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_mewei_array);
+    ydns_fus_uvwei_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_fus_uvwei_array);
+    ydns_edge_wei_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_edge_wei_array);
+    ydns_edge_div_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_edge_div_array);
+    ydns_edge_thres_intp = tisp_simple_intp(gain_hi, gain_lo, ydns_edge_thres_array);
+}
+
+/* OEM EXACT: tiziano_ydns_params_refresh — load YDNS arrays from tuning data.
+ * YDNS tuning data starts at offset 0x12600 in the parameter block. */
+static void tiziano_ydns_params_refresh(void)
+{
+    const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    if (!params) return;
+    memcpy(&ydns_edge_out_array, params + 0x12600, 4);
+    memcpy(ydns_mv_thres0_array, params + 0x12604, 0x24);
+    memcpy(ydns_mv_thres1_array, params + 0x12628, 0x24);
+    memcpy(ydns_mv_thres2_array, params + 0x1264c, 0x24);
+    memcpy(ydns_fus_level_array, params + 0x12670, 0x24);
+    memcpy(ydns_fus_min_thres_array, params + 0x12694, 0x24);
+    memcpy(ydns_fus_max_thres_array, params + 0x126b8, 0x24);
+    memcpy(ydns_fus_sswei_array, params + 0x126dc, 0x24);
+    memcpy(ydns_fus_sewei_array, params + 0x12700, 0x24);
+    memcpy(ydns_fus_mswei_array, params + 0x12724, 0x24);
+    memcpy(ydns_fus_mewei_array, params + 0x12748, 0x24);
+    memcpy(ydns_fus_uvwei_array, params + 0x1276c, 0x24);
+    memcpy(ydns_edge_wei_array, params + 0x12790, 0x24);
+    memcpy(ydns_edge_div_array, params + 0x127b4, 0x24);
+    memcpy(ydns_edge_thres_array, params + 0x127d8, 0x24);
+}
+
+/* OEM EXACT: tiziano_ydns_init — matches Binary Ninja decompilation */
 int tiziano_ydns_init(void)
 {
-    pr_info("tiziano_ydns_init: Initializing YDNS processing\n");
-    tisp_ydns_regmap_selfcheck();
+    pr_info("tiziano_ydns_init: Initializing YDNS processing (OEM EXACT)\n");
+    ydns_gain_old = 0xffffffff;
+    tiziano_ydns_params_refresh();
+    /* OEM calls tisp_ydns_par_refresh(0x10000) which, since ydns_gain_old
+     * is 0xffffffff, unconditionally calls tisp_ydns_intp + tisp_ydns_param_cfg */
+    tisp_ydns_intp(0x10000);
     tisp_ydns_param_cfg();
+    ydns_gain_old = 0x10000;
     return 0;
 }
 
