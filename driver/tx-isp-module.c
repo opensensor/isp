@@ -1433,7 +1433,10 @@ static inline u32 frame_channel_format_sizeimage(u32 pixfmt, u32 width, u32 heig
     switch (pixfmt) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV21:
-        return bytesperline * ALIGN(height, 16);
+        /* NV12: Y plane = stride * aligned_height,
+         * UV plane = stride * aligned_height / 2.
+         * Total = stride * aligned_height * 3 / 2 */
+        return (bytesperline * ALIGN(height, 16) * 3) / 2;
     default:
         return bytesperline * height;
     }
