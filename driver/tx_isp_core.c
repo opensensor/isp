@@ -1878,19 +1878,38 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         first_into = 0;
     }
 
-    /* *** CHANNEL 0 FRAME COMPLETION PROCESSING *** */
+    /* *** CHANNEL 0/1/2 FRAME COMPLETION PROCESSING ***
+     * OEM ISR pops FIFO entry (Y addr), reads additional regs,
+     * builds a data struct, and sends via tx_isp_send_event_to_remote.
+     * The data struct at offset +8 contains the Y buffer physical address
+     * which frame_chan_event uses to match completed buffers. */
     {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* Drain MSCA CH0 FIFO — bit 0 of 0x997c = 1 means empty */
+        /* OEM event data: 7 words at offsets 0x00-0x18 from data pointer.
+         * frame_chan_event reads *(data+8) as the Y buffer address. */
+        struct {
+            u32 pad0;       /* +0x00 */
+            u32 pad1;       /* +0x04 */
+            u32 y_addr;     /* +0x08 — Y buffer phys addr from FIFO pop */
+            u32 uv_addr;    /* +0x0c — UV buffer phys addr */
+            u32 pad4;       /* +0x10 */
+            u32 pad5;       /* +0x14 */
+            u32 frame_info; /* +0x18 */
+        } evt_data;
+
+        /* CH0 drain */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
-            (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
-            frame_chan_event(&frame_channels[0], 0x3000006, NULL);
+            u32 fifo_y = readl(isp_regs + 0x9974); /* pop FIFO entry */
+            memset(&evt_data, 0, sizeof(evt_data));
+            evt_data.y_addr = fifo_y;
+            evt_data.uv_addr = readl(isp_regs + 0x998c);
+            frame_chan_event(&frame_channels[0], 0x3000006, &evt_data);
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
@@ -1898,19 +1917,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
 
-        /* Channel 1 */
+        /* CH1 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9a74);
-            frame_chan_event(&frame_channels[1], 0x3000006, NULL);
+            u32 fifo_y = readl(isp_regs + 0x9a74);
+            memset(&evt_data, 0, sizeof(evt_data));
+            evt_data.y_addr = fifo_y;
+            frame_chan_event(&frame_channels[1], 0x3000006, &evt_data);
             drain_count++;
         }
 
-        /* Channel 2 */
+        /* CH2 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9b74);
-            frame_chan_event(&frame_channels[2], 0x3000006, NULL);
+            u32 fifo_y = readl(isp_regs + 0x9b74);
+            memset(&evt_data, 0, sizeof(evt_data));
+            evt_data.y_addr = fifo_y;
+            frame_chan_event(&frame_channels[2], 0x3000006, &evt_data);
             drain_count++;
         }
     }
@@ -3533,50 +3556,48 @@ void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
 void ispcore_frame_channel_streamoff(int32_t* arg1)
 {
     struct tx_isp_channel_config *dispatch = (struct tx_isp_channel_config *)arg1;
-    void* v0 = (void*)(uintptr_t)(*arg1);  /* Cast to avoid type mismatch */
-    void* s0 = NULL;
-    struct tx_isp_dev *isp_dev;
-
-    if (v0 != 0 && (uintptr_t)v0 < 0xfffff001) {
-        s0 = *((void**)((char*)v0 + 0xd4));  /* *(v0 + 0xd4) */
-    }
-
-    isp_dev = (struct tx_isp_dev *)s0;
-    int32_t v1_2 = ispcore_bypass_enabled(isp_dev);  /* *(s0 + 0x15c) */
-    void* s2 = dispatch ? dispatch->event_priv : NULL;
-    void* s3 = *((void**)((char*)s0 + 0x120));  /* *(s0 + 0x120) */
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    void *s2, *s3;
+    int32_t v1_2;
     int32_t var_28 = 0;
+    uint32_t s5_1;
+    int32_t a1_2;
+    extern int tisp_channel_stop(uint32_t channel_id);
+
+    if (!isp_dev || !dispatch)
+        return;
+
+    v1_2 = ispcore_bypass_enabled(isp_dev);
+    s2 = dispatch->event_priv;
+    s3 = isp_dev->sensor ? (void *)isp_dev->sensor : NULL;
 
     if (v1_2 != 1) {
-        uint32_t s5_1 = dispatch ? dispatch->state : 0;
+        s5_1 = dispatch->state;
 
-        if (s5_1 == 4) {
+        if (s5_1 == 4 && s2) {
             __private_spin_lock_irqsave((char*)s2 + 0x9c, &var_28);
-            int32_t a1_2 = var_28;
+            a1_2 = var_28;
 
-            if (*((int32_t*)((char*)s2 + 0x74)) == s5_1) {  /* *(s2 + 0x74) == s5_1 */
+            if (*((int32_t*)((char*)s2 + 0x74)) == (int32_t)s5_1) {
                 private_spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
-                extern int tisp_channel_stop(uint32_t channel_id);
-                tisp_channel_stop(dispatch ? dispatch->channel_id : 0);
-                *((int32_t*)((char*)s2 + 0x74)) = 3;  /* *(s2 + 0x74) = 3 */
-                if (dispatch)
-                    dispatch->state = 3;
+                tisp_channel_stop(dispatch->channel_id);
+                *((int32_t*)((char*)s2 + 0x74)) = 3;
+                dispatch->state = 3;
                 memset(s2, 0, 0x70);
-                *((int32_t*)((char*)s3 + 0x9c)) = 0;  /* *(s3 + 0x9c) = 0 */
-                *((int32_t*)((char*)s3 + 0xac)) = 0;  /* *(s3 + 0xac) = 0 */
-                *((int32_t*)((char*)s0 + 0x17c)) = 0; /* *(s0 + 0x17c) = 0 */
+                if (s3) {
+                    *((int32_t*)((char*)s3 + 0x9c)) = 0;
+                    *((int32_t*)((char*)s3 + 0xac)) = 0;
+                }
+                *((int32_t*)((char*)isp_dev + 0x17c)) = 0;
             } else {
                 private_spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
             }
         }
     } else {
-        int32_t v0_1 = *((int32_t*)((char*)s0 + 0x1cc));  /* *(s0 + 0x1cc) */
-
+        /* Bypass mode callback — OEM reads *(isp_private + 0x1cc) */
+        int32_t v0_1 = *((int32_t*)((char*)isp_dev + 0x1cc));
         if (v0_1 != 0) {
-            /* Call function pointer v0_1(*(s0 + 0x1d0), 0) */
-            void* callback_data = *((void**)((char*)s0 + 0x1d0));
-            /* Function call would happen here */
-            ISP_INFO("ispcore_frame_channel_streamoff: calling callback v0_1");
+            ISP_INFO("ispcore_frame_channel_streamoff: bypass callback");
         }
     }
 }
