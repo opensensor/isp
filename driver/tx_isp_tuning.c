@@ -6643,12 +6643,13 @@ int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf)
 
     switch (param_id) {
         case 0xa9: {
-            /* Assemble 0x14-byte DP cfg blob from discrete fields */
-            static uint8_t blob[0x14];
-            memset(blob, 0, sizeof(blob));
-            memcpy(&blob[0], &tiziano_ccm_dp_cfg, sizeof(tiziano_ccm_dp_cfg));
-            memcpy(&blob[4], &data_aa470, sizeof(data_aa470));
-            memcpy(&blob[8], &data_aa474, sizeof(data_aa474));
+            uint32_t blob[5] = {
+                tiziano_ccm_dp_cfg,
+                data_aa470,
+                data_aa474,
+                data_aa47c,
+                data_aa478,
+            };
             src = blob; len = 0x14; break;
         }
         case 0xaa: src = tiziano_ccm_a_linear; len = 0x24; break;
@@ -6685,13 +6686,15 @@ int tisp_ccm_param_array_set(int param_id, void *in_buf, int *size_buf)
 
     switch (param_id) {
         case 0xa9: {
-            /* Accept 0x14-byte blob; pluck fields we use */
-            uint8_t blob[0x14];
+            uint32_t blob[5];
             memcpy(blob, in_buf, sizeof(blob));
-            memcpy(&tiziano_ccm_dp_cfg, &blob[0], sizeof(tiziano_ccm_dp_cfg));
-            memcpy(&data_aa470,         &blob[4], sizeof(data_aa470));
-            memcpy(&data_aa474,         &blob[8], sizeof(data_aa474));
+            tiziano_ccm_dp_cfg = blob[0];
+            data_aa470 = blob[1];
+            data_aa474 = blob[2];
+            data_aa47c = blob[3];
+            data_aa478 = blob[4];
             *size_buf = sizeof(blob);
+            ccm_real.real = 1;
             jz_isp_ccm();
             return 0;
         }
@@ -6710,6 +6713,7 @@ int tisp_ccm_param_array_set(int param_id, void *in_buf, int *size_buf)
 
     memcpy(dst, in_buf, len);
     *size_buf = len;
+    ccm_real.real = 1;
     jz_isp_ccm();
     return 0;
 }
@@ -11983,22 +11987,34 @@ int tiziano_lsc_init(void)
     return 0;
 }
 
-/* CCM parameter arrays - Binary Ninja reference */
-int32_t tiziano_ccm_a_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100}; /* Identity matrix */
-int32_t tiziano_ccm_t_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100};
-int32_t tiziano_ccm_d_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100};
-int32_t tiziano_ccm_a_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120}; /* WDR enhanced */
-int32_t tiziano_ccm_t_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120};
-int32_t tiziano_ccm_d_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120};
+/* CCM tables from OEM tx-isp-t31.ko static data (0x8e6e4..0x8e860). */
+static const uint32_t oem_ccm_dp_blob[5] = {0x0, 0x8, 0x50, 0x100, 0x100};
+static const int32_t oem_ccm_a_linear[9] = {0x060f, 0x3ee6, 0x3f0b, 0x3d8f, 0x0738, 0x3f39, 0x3e9a, 0x3a2e, 0x0b37};
+static const int32_t oem_ccm_t_linear[9] = {0x05ee, 0x3f98, 0x3e7b, 0x3ce6, 0x08e6, 0x3e34, 0x3f5f, 0x3bf7, 0x08aa};
+static const int32_t oem_ccm_d_linear[9] = {0x0611, 0x3f65, 0x3e8a, 0x3c7b, 0x0b1f, 0x3c66, 0x3f45, 0x3bb9, 0x0900};
+static const uint32_t oem_cm_ev_list[9] = {0x64, 0x1f4, 0x0bb8, 0x1f40, 0x2328, 0x2af8, 0x3640, 0x88b8, 0xb3b0};
+static const uint32_t oem_cm_sat_list[9] = {0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c};
+static const int32_t oem_ccm_a_wdr[9] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x3ed1, 0x3edb, 0x3a6b, 0x0ab9};
+static const int32_t oem_ccm_t_wdr[9] = {0x05e9, 0x3dda, 0x003d, 0x3e6f, 0x06e8, 0x3ea9, 0x3f42, 0x3bcc, 0x08f1};
+static const int32_t oem_ccm_d_wdr[9] = {0x0, 0x0, 0x0, 0x3f45, 0x0637, 0x3e84, 0x0082, 0x3c81, 0x06fc};
+static const uint32_t oem_cm_sat_list_wdr[9] = {0x0, 0x0, 0x0, 0x100, 0xdc, 0xd2, 0xc8, 0xc8, 0x96};
+static const uint32_t oem_cm_awb_list[2] = {0x1324, 0x0c1c};
 
-uint32_t cm_ev_list[9] = {0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000};
-uint32_t cm_sat_list[9] = {0x80, 0x90, 0x100, 0x110, 0x120, 0x130, 0x140, 0x150, 0x160};
-uint32_t cm_ev_list_wdr[9] = {0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000};
-uint32_t cm_sat_list_wdr[9] = {0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0};
+int32_t tiziano_ccm_a_linear[9] = {0x060f, 0x3ee6, 0x3f0b, 0x3d8f, 0x0738, 0x3f39, 0x3e9a, 0x3a2e, 0x0b37};
+int32_t tiziano_ccm_t_linear[9] = {0x05ee, 0x3f98, 0x3e7b, 0x3ce6, 0x08e6, 0x3e34, 0x3f5f, 0x3bf7, 0x08aa};
+int32_t tiziano_ccm_d_linear[9] = {0x0611, 0x3f65, 0x3e8a, 0x3c7b, 0x0b1f, 0x3c66, 0x3f45, 0x3bb9, 0x0900};
+int32_t tiziano_ccm_a_wdr[9] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x3ed1, 0x3edb, 0x3a6b, 0x0ab9};
+int32_t tiziano_ccm_t_wdr[9] = {0x05e9, 0x3dda, 0x003d, 0x3e6f, 0x06e8, 0x3ea9, 0x3f42, 0x3bcc, 0x08f1};
+int32_t tiziano_ccm_d_wdr[9] = {0x0, 0x0, 0x0, 0x3f45, 0x0637, 0x3e84, 0x0082, 0x3c81, 0x06fc};
+
+uint32_t cm_ev_list[9] = {0x64, 0x1f4, 0x0bb8, 0x1f40, 0x2328, 0x2af8, 0x3640, 0x88b8, 0xb3b0};
+uint32_t cm_sat_list[9] = {0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c, 0x12c};
+uint32_t cm_ev_list_wdr[9] = {0x64, 0x1f4, 0x0bb8, 0x1f40, 0x2328, 0x2af8, 0x3640, 0x88b8, 0xb3b0};
+uint32_t cm_sat_list_wdr[9] = {0x0, 0x0, 0x0, 0x100, 0xdc, 0xd2, 0xc8, 0xc8, 0x96};
 
 
 /* BN: AWB 2-entry list used by CCM param_id 0xb4 (size 8) */
-uint32_t cm_awb_list[2] = {0, 0};
+uint32_t cm_awb_list[2] = {0x1324, 0x0c1c};
 
 /* CCM control structures - Binary Ninja reference */
 static struct {
@@ -12031,11 +12047,11 @@ static uint32_t data_c52f4 = 0;         /* Previous CT */
 static uint32_t data_c52fc = 0x100;     /* Saturation value */
 static uint32_t data_c52f8 = 0x64;      /* CT threshold */
 static uint32_t data_c52f0 = 0x28;      /* EV threshold */
-uint32_t tiziano_ccm_dp_cfg = 0; /* DP config */
-uint32_t data_aa470 = 0x1000;    /* DP value 1 */
-uint32_t data_aa474 = 0x1000;    /* DP value 2 */
-static uint32_t data_aa47c = 0x1000;    /* DP value 3 */
-static uint32_t data_aa478 = 0x1000;    /* DP value 4 */
+uint32_t tiziano_ccm_dp_cfg = 0x0; /* DP config */
+uint32_t data_aa470 = 0x8;         /* DP value 1 */
+uint32_t data_aa474 = 0x50;        /* DP value 2 */
+static uint32_t data_aa47c = 0x100;/* DP value 3 */
+static uint32_t data_aa478 = 0x100;/* DP value 4 */
 
 static int ccm_wdr_en = 0;
 
@@ -12184,45 +12200,34 @@ static void jz_isp_ccm_para2reg(void *reg_data, void *param_data)
     memcpy(reg_data, param_data, 0x24);
 }
 
-/* tiziano_ccm_params_refresh - OEM EXACT: load CCM matrices from tuning data.
- * CCM tuning data starts at offset 0x9BD4 in the parameter block. */
+/* tiziano_ccm_params_refresh - OEM static CCM payload from tx-isp-t31.ko.
+ * BN decomp shows fixed memcpy() sources at 0x8e6e4..0x8e860, not tuning-bin
+ * offsets. Matrix/saturation tables are only refreshed while ccm_ctrl[0] == 0;
+ * DP config, EV lists, and AWB thresholds are always copied. */
 void tiziano_ccm_params_refresh(void)
 {
-    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
-
-    /* OEM reads CCM matrices from tparams.  When no tuning bin is loaded,
-     * tparams is all-zeros which would OVERWRITE our identity-matrix defaults
-     * (tiziano_ccm_{a,t,d}_linear = {0x100,0,0, 0,0x100,0, 0,0,0x100})
-     * with zeros → all-zero CCM → solid green output.
-     * Guard the memcpy with tuning_bin_loaded so defaults survive. */
-    if (p && tuning_bin_loaded && (ccm_ctrl.params[0] == 0)) {
-        memcpy(tiziano_ccm_a_linear, p + 0x9BE8, 0x24);
-        memcpy(tiziano_ccm_t_linear, p + 0x9C0C, 0x24);
-        memcpy(tiziano_ccm_d_linear, p + 0x9C30, 0x24);
-        memcpy(cm_sat_list,          p + 0x9C78, 0x24);
-        memcpy(tiziano_ccm_a_wdr,    p + 0x9C9C, 0x24);
-        memcpy(tiziano_ccm_t_wdr,    p + 0x9CC0, 0x24);
-        memcpy(tiziano_ccm_d_wdr,    p + 0x9CE4, 0x24);
-        memcpy(cm_sat_list_wdr,      p + 0x9D2C, 0x24);
-        pr_info("tiziano_ccm_params_refresh: LOADED from bin - "
-            "ccm_d[0..2]=%d,%d,%d ccm_d[3..5]=%d,%d,%d ccm_d[6..8]=%d,%d,%d\n",
-            tiziano_ccm_d_linear[0], tiziano_ccm_d_linear[1], tiziano_ccm_d_linear[2],
-            tiziano_ccm_d_linear[3], tiziano_ccm_d_linear[4], tiziano_ccm_d_linear[5],
-            tiziano_ccm_d_linear[6], tiziano_ccm_d_linear[7], tiziano_ccm_d_linear[8]);
-    } else {
-        pr_info("tiziano_ccm_params_refresh: SKIPPED bin load - "
-            "p=%p bin_loaded=%d ctrl0=%d\n",
-            p, tuning_bin_loaded, ccm_ctrl.params[0]);
+    if (ccm_ctrl.params[0] == 0) {
+        memcpy(tiziano_ccm_a_linear, oem_ccm_a_linear, sizeof(tiziano_ccm_a_linear));
+        memcpy(tiziano_ccm_t_linear, oem_ccm_t_linear, sizeof(tiziano_ccm_t_linear));
+        memcpy(tiziano_ccm_d_linear, oem_ccm_d_linear, sizeof(tiziano_ccm_d_linear));
+        memcpy(cm_sat_list, oem_cm_sat_list, sizeof(cm_sat_list));
+        memcpy(tiziano_ccm_a_wdr, oem_ccm_a_wdr, sizeof(tiziano_ccm_a_wdr));
+        memcpy(tiziano_ccm_t_wdr, oem_ccm_t_wdr, sizeof(tiziano_ccm_t_wdr));
+        memcpy(tiziano_ccm_d_wdr, oem_ccm_d_wdr, sizeof(tiziano_ccm_d_wdr));
+        memcpy(cm_sat_list_wdr, oem_cm_sat_list_wdr, sizeof(cm_sat_list_wdr));
     }
 
-    if (p && tuning_bin_loaded) {
-        memcpy(cm_ev_list,         p + 0x9C54, 0x24);
-        memcpy(cm_ev_list_wdr,     p + 0x9D08, 0x24);
-        memcpy(cm_awb_list,        p + 0x9D50, 8);
-    }
+    tiziano_ccm_dp_cfg = oem_ccm_dp_blob[0];
+    data_aa470 = oem_ccm_dp_blob[1];
+    data_aa474 = oem_ccm_dp_blob[2];
+    data_aa47c = oem_ccm_dp_blob[3];
+    data_aa478 = oem_ccm_dp_blob[4];
+    memcpy(cm_ev_list, oem_cm_ev_list, sizeof(cm_ev_list));
+    memcpy(cm_ev_list_wdr, oem_cm_ev_list, sizeof(cm_ev_list_wdr));
+    memcpy(cm_awb_list, oem_cm_awb_list, sizeof(cm_awb_list));
 
-    data_c52ec = data_9a454 >> 10;
-    data_c52f4 = data_9a450;
+    pr_info("tiziano_ccm_params_refresh: OEM static CCM payload applied (ctrl0=%u)\n",
+        ccm_ctrl.params[0]);
 }
 
 /* tisp_ccm_ct_update - OEM-like CT update: force jz_isp_ccm with current CT */
