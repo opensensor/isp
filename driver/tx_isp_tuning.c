@@ -4589,6 +4589,9 @@ int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf);
 extern uint32_t tiziano_ccm_dp_cfg;
 extern uint32_t data_aa470;
 extern uint32_t data_aa474;
+static void tisp_ccm_dp_blob_get(uint32_t blob[5]);
+static void tisp_ccm_dp_blob_set(const uint32_t blob[5]);
+static void tisp_ccm_force_update(void);
 extern int32_t tiziano_ccm_a_linear[9];
 extern int32_t tiziano_ccm_t_linear[9];
 extern int32_t tiziano_ccm_d_linear[9];
@@ -6643,13 +6646,8 @@ int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf)
 
     switch (param_id) {
         case 0xa9: {
-            uint32_t blob[5] = {
-                tiziano_ccm_dp_cfg,
-                data_aa470,
-                data_aa474,
-                data_aa47c,
-                data_aa478,
-            };
+            uint32_t blob[5] = {0, 0, 0, 0, 0};
+            tisp_ccm_dp_blob_get(blob);
             src = blob; len = 0x14; break;
         }
         case 0xaa: src = tiziano_ccm_a_linear; len = 0x24; break;
@@ -6688,13 +6686,9 @@ int tisp_ccm_param_array_set(int param_id, void *in_buf, int *size_buf)
         case 0xa9: {
             uint32_t blob[5];
             memcpy(blob, in_buf, sizeof(blob));
-            tiziano_ccm_dp_cfg = blob[0];
-            data_aa470 = blob[1];
-            data_aa474 = blob[2];
-            data_aa47c = blob[3];
-            data_aa478 = blob[4];
+            tisp_ccm_dp_blob_set(blob);
             *size_buf = sizeof(blob);
-            ccm_real.real = 1;
+            tisp_ccm_force_update();
             jz_isp_ccm();
             return 0;
         }
@@ -6713,7 +6707,7 @@ int tisp_ccm_param_array_set(int param_id, void *in_buf, int *size_buf)
 
     memcpy(dst, in_buf, len);
     *size_buf = len;
-    ccm_real.real = 1;
+    tisp_ccm_force_update();
     jz_isp_ccm();
     return 0;
 }
@@ -12054,6 +12048,29 @@ static uint32_t data_aa47c = 0x100;/* DP value 3 */
 static uint32_t data_aa478 = 0x100;/* DP value 4 */
 
 static int ccm_wdr_en = 0;
+
+static void tisp_ccm_dp_blob_get(uint32_t blob[5])
+{
+	blob[0] = tiziano_ccm_dp_cfg;
+	blob[1] = data_aa470;
+	blob[2] = data_aa474;
+	blob[3] = data_aa47c;
+	blob[4] = data_aa478;
+}
+
+static void tisp_ccm_dp_blob_set(const uint32_t blob[5])
+{
+	tiziano_ccm_dp_cfg = blob[0];
+	data_aa470 = blob[1];
+	data_aa474 = blob[2];
+	data_aa47c = blob[3];
+	data_aa478 = blob[4];
+}
+
+static void tisp_ccm_force_update(void)
+{
+	ccm_real.real = 1;
+}
 
 /* tisp_ccm_is_initialized - Check if CCM system is ready */
 int tisp_ccm_is_initialized(void)
