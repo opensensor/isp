@@ -2042,13 +2042,17 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
 {
     pr_info("Initializing ISP memory mappings\n");
 
-    /* Map ISP Core registers */
-    isp->core_regs = ioremap(0x13300000, 0x10000);
+    /* Map ISP Core registers — must cover the full ISP register space
+     * including the LSC LUT area at offset 0x28000..0x2A8FF.
+     * OEM system_reg_write() writes to offsets up to ~0x2A8xx.
+     * Previous 0x10000 (64KB) mapping silently dropped all LSC writes,
+     * causing the colored-blob artifacts. */
+    isp->core_regs = ioremap(0x13300000, 0x30000);
     if (!isp->core_regs) {
         pr_err("Failed to map ISP core registers\n");
         return -ENOMEM;
     }
-    pr_info("ISP core registers mapped at 0x13300000\n");
+    pr_info("ISP core registers mapped at 0x13300000 size 0x30000\n");
 
     /* Set global ISP register base for tuning subsystem */
     extern void __iomem *isp_reg_base;

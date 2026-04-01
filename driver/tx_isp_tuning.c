@@ -1359,7 +1359,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
-static uint isp_block_enable = 0x4D10;  /* LSC(4)+DMSC(8)+Gamma(10)+Defog(11)+Sharp(14) — CLM(12) removed: stub init */
+static uint isp_block_enable = 0x4A8A5F16;  /* BLC(1)+DPC(2)+LSC(4)+DMSC(8)+CCM(9)+Gamma(10)+Defog(11)+CLM(12)+Sharp(14)+YDNS(17)+arch(19,23,25,27,30) — GIB(5)/ADR(7)/SDNS(15)/MDNS(16) need OEM init */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -1389,27 +1389,18 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		goto apply_force_mask;
 	}
 
-	/* OEM per-bit loop: compute what OEM would set (for diagnostics).
-	 * Each u32 in tparams[0..31] is 0 (bypass) or non-zero (enable). */
+	/* OEM EXACT per-bit loop: each u32 in tparams[0..31] is 0 (bypass)
+	 * or non-zero (enable).  The OEM uses params[i] << i directly, which
+	 * sets bit i if the param is non-zero. */
 	for (i = 0; i < 32; i++) {
 		u32 bit = 1U << i;
 		u32 val = params[i] ? 1U : 0U;
 		oem_computed = (oem_computed & ~bit) | (val << i);
 	}
 
-	/* Log what the tuning bin specifies vs what we're using */
-	{
-		u32 bin_enables = 0;
-		for (i = 0; i < 32; i++)
-			if (params[i]) bin_enables |= (1U << i);
-		pr_info("tisp_compute_top_bypass: tuning_bin enables=0x%08x "
-			"oem_loop_result=0x%08x manual_enable=0x%08x\n",
-			bin_enables, oem_computed, isp_block_enable);
-	}
+	bypass_val = oem_computed;
 
-	/* Use manual block enable — selectively enable ISP blocks.
-	 * The OEM per-bit loop result is logged above for comparison. */
-	bypass_val &= ~isp_block_enable;
+	pr_info("tisp_compute_top_bypass: oem_loop=0x%08x\n", oem_computed);
 
 apply_force_mask:
 	/* OEM EXACT: apply force AND-mask then OR-mask. */
@@ -1418,7 +1409,18 @@ apply_force_mask:
 	else
 		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
 
-	pr_info("tisp_compute_top_bypass: block_enable=0x%08x final=0x%08x "
+	/* Re-bypass blocks we haven't fully implemented.
+	 * bypass register: bit=0 → block ENABLED, bit=1 → block BYPASSED.
+	 * For blocks that are currently enabled (bit=0) but NOT in our
+	 * isp_block_enable whitelist, set bit=1 to bypass them.
+	 */
+	{
+		u32 currently_enabled = ~bypass_val;  /* bit=1 where block is on */
+		u32 not_whitelisted = currently_enabled & ~isp_block_enable;
+		bypass_val |= not_whitelisted;   /* re-bypass those */
+	}
+
+	pr_info("tisp_compute_top_bypass: allow=0x%08x final=0x%08x "
 		"(OEM target=0x%08x)\n",
 		isp_block_enable, bypass_val, 0xb5742249);
 
@@ -11640,61 +11642,84 @@ int tisp_lsc_write_lut_datas(void)
             }
         }
 
-        /* Binary Ninja: Calculate base strength based on mesh scale */
-        uint32_t base_strength = 0x800;
-        if (lsc_mesh_scale == 0) {
-            base_strength = 0x800;
-        } else if (lsc_mesh_scale == 1) {
-            base_strength = 0x400;
-        } else if (lsc_mesh_scale == 2) {
-            base_strength = 0x200;
-        } else {
+    }
+
+    /* OEM: base_strength depends on mesh_scale — computed before the write loop.
+     * This is OUTSIDE the ct/api block; the write loop has its own condition. */
+    uint32_t base_strength = 0x800;
+    if (lsc_mesh_scale != 0) {
+        base_strength = 0x400;
+        if (lsc_mesh_scale != 1) {
             base_strength = 0x100;
+            if (lsc_mesh_scale == 2)
+                base_strength = 0x200;
+        }
+    }
+
+    /* OEM: The hardware write loop fires on ANY of the four update flags.
+     * Previous code only checked three and missed lsc_gain_update_flag.
+     * Also: the OEM uses system_reg_write(offset + 0x28000, val) which goes
+     * through the pre-mapped ISP core base.  Our old code did ioremap() on
+     * every call — illegal in IRQ context (this function is called from the
+     * frame-done interrupt handler). */
+    if (lsc_gain_update_flag == 1 || lsc_ct_update_flag == 1 ||
+        data_9a400 == 1 || lsc_api_flag == 1) {
+        uint32_t *src = lsc_final_lut;
+
+        /* OEM: while ($fp_1 * 3 u< data_8a418) — i.e. iterate mesh points */
+        for (int i = 0; (uint32_t)(i * 3) < data_9a418; i++) {
+            uint32_t r_val = src[0];
+            uint32_t g_val = src[1];
+            uint32_t b_val = src[2];
+            uint32_t str = lsc_curr_str;
+
+            /* Apply strength scaling — OEM exact order */
+            int32_t r_low  = base_strength + ((((int32_t)(r_val & 0xfff) - (int32_t)base_strength) * (int32_t)str) >> 12);
+            int32_t r_high = base_strength + ((((int32_t)(r_val >> 12)   - (int32_t)base_strength) * (int32_t)str) >> 12);
+            int32_t b_high = base_strength + ((((int32_t)(b_val >> 12)   - (int32_t)base_strength) * (int32_t)str) >> 12);
+
+            if (r_low < 0) r_low = 0;
+
+            int32_t g_low  = base_strength + ((((int32_t)(g_val & 0xfff) - (int32_t)base_strength) * (int32_t)str) >> 12);
+
+            if (b_high < 0) b_high = 0;
+            if (r_high < 0) r_high = 0;
+
+            int32_t b_low  = base_strength + ((((int32_t)(b_val & 0xfff) - (int32_t)base_strength) * (int32_t)str) >> 12);
+
+            if (g_low < 0) g_low = 0;
+
+            int32_t g_high = base_strength + ((((int32_t)(g_val >> 12)   - (int32_t)base_strength) * (int32_t)str) >> 12);
+
+            if (b_low < 0) b_low = 0;
+            if (r_high >= 0x1000) r_high = 0xfff;
+            if (r_low  >= 0x1000) r_low  = 0xfff;
+            if (g_high < 0) g_high = 0;
+
+            uint32_t reg_off = (uint32_t)i << 4;
+            system_reg_write(reg_off + 0x28000, (uint32_t)(r_high << 12) | (uint32_t)r_low);
+
+            if (g_high >= 0x1000) g_high = 0xfff;
+            if (g_low  >= 0x1000) g_low  = 0xfff;
+
+            system_reg_write(reg_off + 0x28004, (uint32_t)(g_high << 12) | (uint32_t)g_low);
+
+            if (b_high >= 0x1000) b_high = 0xfff;
+            if (b_low  >= 0x1000) b_low  = 0xfff;
+
+            system_reg_write(reg_off + 0x28008, (uint32_t)(b_high << 12) | (uint32_t)b_low);
+            src += 3;
         }
 
-        /* Binary Ninja: Write LUT data to hardware registers */
-        void __iomem *lsc_reg = ioremap(0x13328000, 0x10000);
-        if (lsc_reg) {
-            /* OEM: while ($fp_1 * 3 u< data_8a418) */
-            for (int i = 0; i * 3 < lsc_lut_count; i++) {
-                uint32_t r_val = lsc_final_lut[i * 3];
-                uint32_t g_val = lsc_final_lut[i * 3 + 1];
-                uint32_t b_val = lsc_final_lut[i * 3 + 2];
+        /* OEM: system_reg_write(0x2800c, 0) — commit/trigger the LUT */
+        system_reg_write(0x2800c, 0);
+    }
 
-                /* Apply strength scaling */
-                int32_t r_low = base_strength + (((r_val & 0xfff) - base_strength) * lsc_curr_str >> 12);
-                int32_t r_high = base_strength + (((r_val >> 12) - base_strength) * lsc_curr_str >> 12);
-                int32_t g_low = base_strength + (((g_val & 0xfff) - base_strength) * lsc_curr_str >> 12);
-                int32_t g_high = base_strength + (((g_val >> 12) - base_strength) * lsc_curr_str >> 12);
-                int32_t b_low = base_strength + (((b_val & 0xfff) - base_strength) * lsc_curr_str >> 12);
-                int32_t b_high = base_strength + (((b_val >> 12) - base_strength) * lsc_curr_str >> 12);
-
-                /* Clamp all values */
-                if (r_low < 0) r_low = 0; if (r_low >= 0x1000) r_low = 0xfff;
-                if (r_high < 0) r_high = 0; if (r_high >= 0x1000) r_high = 0xfff;
-                if (g_low < 0) g_low = 0; if (g_low >= 0x1000) g_low = 0xfff;
-                if (g_high < 0) g_high = 0; if (g_high >= 0x1000) g_high = 0xfff;
-                if (b_low < 0) b_low = 0; if (b_low >= 0x1000) b_low = 0xfff;
-                if (b_high < 0) b_high = 0; if (b_high >= 0x1000) b_high = 0xfff;
-
-                /* Write to hardware registers */
-                uint32_t reg_offset = i << 4;
-                writel((r_high << 12) | r_low, lsc_reg + reg_offset);
-                writel((g_high << 12) | g_low, lsc_reg + reg_offset + 4);
-                writel((b_high << 12) | b_low, lsc_reg + reg_offset + 8);
-            }
-
-            /* Final LSC configuration register */
-            writel(0, lsc_reg + 0xc);
-            iounmap(lsc_reg);
-        }
-
-        /* Reset update flags */
-        if (lsc_api_flag == 0) {
-            lsc_ct_update_flag = 0;
-            lsc_gain_update_flag = 0;
-            data_9a400 = 0;
-        }
+    /* Reset update flags when not in API mode */
+    if (lsc_api_flag == 0) {
+        lsc_ct_update_flag = 0;
+        lsc_gain_update_flag = 0;
+        data_9a400 = 0;
     }
 
     return 0;
