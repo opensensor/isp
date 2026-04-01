@@ -7384,11 +7384,10 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_dev *isp_dev = ourISPdev;
     struct tx_isp_vin_device *vin_device = NULL;
     int ret = 0;
-    static int vin_init_in_progress = 0; /* CRITICAL: Prevent infinite recursion */
+    static int vin_init_in_progress = 0;
 
     pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
 
-    /* STEP 1: Do the ISP's own sensor management work */
     sensor = isp_dev->sensor;
     if (sensor) {
         pr_info("*** ISP: Setting up ISP-side for sensor %s streaming=%d ***\n",
@@ -7404,20 +7403,17 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 return 0;
             }
 
-            /* CRITICAL FIX: Initialize VIN if not already initialized - WITH RECURSION PROTECTION */
             if (vin_device && !vin_init_in_progress) {
                 if (vin_device->state != TX_ISP_MODULE_INIT &&
                     vin_device->state != TX_ISP_MODULE_RUNNING) {
-                    pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
+                    pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n",
+                            vin_device->state);
 
-                    /* CRITICAL: Set flag to prevent infinite recursion */
                     vin_init_in_progress = 1;
 
-                    /* CRITICAL FIX: Call the EXACT Binary Ninja VIN init function */
                     extern int tx_isp_vin_init(void* arg1, int32_t arg2);
                     ret = tx_isp_vin_init(vin_device, 1);
 
-                    /* CRITICAL: Clear flag after init attempt */
                     vin_init_in_progress = 0;
 
                     if (ret && ret != 0xffffffff) {
@@ -7432,14 +7428,11 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIN INITIALIZATION ALREADY IN PROGRESS - SKIPPING TO PREVENT RECURSION ***\n");
             }
 
-            /* Any ISP-specific sensor configuration */
             if (sensor->video.attr) {
-                if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
+                if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
                     pr_info("ISP: Configuring for MIPI interface\n");
-                    /* MIPI-specific ISP setup */
-                } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 */
+                } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {
                     pr_info("ISP: Configuring for DVP interface\n");
-                    /* DVP-specific ISP setup */
                 }
             }
         } else {
@@ -7447,7 +7440,6 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* STEP 2: Now delegate to the actual sensor driver */
     pr_info("*** ISP DELEGATING TO REAL SENSOR_S_STREAM: enable=%d ***\n", enable);
 
     if (stored_sensor_ops.original_ops &&
@@ -7460,47 +7452,38 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
 
-        /* CRITICAL: Only update VIN state AFTER sensor streaming succeeds (T30 pattern) */
         if (ret == 0 || ret == -0x203) {
             if (enable) {
-                /* CRITICAL: Mark wrapper/global sensor path as RUNNING. */
                 ourISPdev->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO RUNNING (4) ***\n");
 
-                /* CRITICAL FIX: SIMPLIFIED VIN S_STREAM CALL - NO RECURSION */
                 pr_info("*** CRITICAL: NOW CALLING VIN_S_STREAM - THIS SHOULD TRANSITION STATE TO 4! ***\n");
 
-                int vin_ret = -ENODEV;
+                {
+                    int vin_ret = -ENODEV;
 
-                /* CRITICAL FIX: Direct VIN streaming call without complex recursion */
-                if (vin_device) {
-                    /* Keep wrapper-side bookkeeping aligned with tx_isp_vin.c,
-                     * which uses state 4 as the active streaming state.
-                     */
-                    if (vin_device->state == TX_ISP_MODULE_INIT) {
-                        vin_device->state = TX_ISP_MODULE_RUNNING;
-                        pr_info("*** VIN STATE DIRECTLY SET TO STREAMING (4) ***\n");
-                        vin_ret = 0;
+                    if (vin_device) {
+                        if (vin_device->state == TX_ISP_MODULE_INIT) {
+                            vin_device->state = TX_ISP_MODULE_RUNNING;
+                            pr_info("*** VIN STATE DIRECTLY SET TO STREAMING (4) ***\n");
+                            vin_ret = 0;
+                        } else {
+                            pr_info("*** VIN STATE ALREADY AT %d - NO CHANGE NEEDED ***\n", vin_device->state);
+                            vin_ret = 0;
+                        }
                     } else {
-                        pr_info("*** VIN STATE ALREADY AT %d - NO CHANGE NEEDED ***\n", vin_device->state);
-                        vin_ret = 0;
+                        pr_err("*** ERROR: ISP device or VIN not available ***\n");
                     }
-                } else {
-                    pr_err("*** ERROR: ISP device or VIN not available ***\n");
+
+                    pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
+                    pr_info("*** CRITICAL: VIN STATE SHOULD NOW BE 4 (RUNNING) ***\n");
                 }
-
-                pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
-                pr_info("*** CRITICAL: VIN STATE SHOULD NOW BE 4 (RUNNING) ***\n");
-
             } else {
-                /* ISP's work when disabling streaming */
                 ourISPdev->vin_state = TX_ISP_MODULE_INIT;
 
-                /* CRITICAL FIX: Simplified VIN streaming stop */
                 pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
 
                 if (vin_device) {
-                    /* SIMPLIFIED: Just set VIN to non-streaming state directly */
                     if (vin_device->state >= TX_ISP_MODULE_RUNNING) {
                         vin_device->state = TX_ISP_MODULE_INIT;
                         pr_info("*** VIN STATE SET BACK TO INITIALIZED (3) ***\n");
@@ -7510,7 +7493,6 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIN STREAMING STOP COMPLETED ***\n");
             }
 
-            /* Force success if sensor returned -0x203 */
             ret = 0;
         } else if (ret < 0 && enable) {
             pr_err("*** Sensor streaming failed, VIN state remains at INIT ***\n");

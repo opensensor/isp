@@ -132,6 +132,7 @@ extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
 #define CLM_S_LUT_SIZE      0x834   /* 2100 bytes = 1050 × int16_t */
 #define CLM_LUT_SHIFT_SIZE  4
 #define CLM_REG_SIZE         0x690   /* 0x1A4 words × 4 bytes */
+#define MDNS_TPARAMS_OFFSET  0xBB30  /* OEM MDNS blob starts at 0x90640 - 0x84B10 */
 #define CLM_TPARAMS_H_LUT_OFF     0xFB84
 #define CLM_TPARAMS_S_LUT_OFF     0xFF9E
 #define CLM_TPARAMS_LUT_SHIFT_OFF 0x107D4
@@ -1359,7 +1360,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
-static uint isp_block_enable = 0x4A8BDFB6;  /* Current whitelist enables the OEM-matched MDNS block (bit 16) now that MDNS init/refresh and chroma tables are implemented. */
+ static uint isp_block_enable = 0x4A8A5F16;  /* Restore the last known streaming-safe whitelist: keep GIB(5), ADR(7), SDNS(15), and MDNS(16) bypassed until their OEM bring-up is validated end-to-end. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -1473,6 +1474,8 @@ static uint32_t sdns_ave_base_values[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0
 static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
+static int mdns_bulk_loading;
+static int mdns_runtime_parked = 1;    /* Keep OEM-reversed MDNS tables/helpers in-tree, but park runtime MMIO until the bring-up sequence is proven not to wedge hardware. */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -7353,8 +7356,10 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x18f: memcpy(&mdns_psn_max_num_array, in_buf, 4); *size_buf = 4; return 0;
     case 0x190:
         memcpy(&mdns_ref_wei_byps_array, in_buf, 4); *size_buf = 4;
-        tisp_mdns_all_reg_refresh(data_9a9d0);
-        tisp_mdns_reg_trigger();
+        if (!mdns_bulk_loading) {
+            tisp_mdns_all_reg_refresh(data_9a9d0);
+            tisp_mdns_reg_trigger();
+        }
         return 0;
     case 0x191: memcpy(&mdns_y_sad_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x192: memcpy(&mdns_y_sad_ave_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
@@ -7482,8 +7487,10 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
 
     case 0x208:
         memcpy(&mdns_y_ref_wei_b_min_wdr_array, in_buf, 0x24); *size_buf = 0x24;
-        tisp_mdns_all_reg_refresh(data_9a9d0);
-        tisp_mdns_reg_trigger();
+        if (!mdns_bulk_loading) {
+            tisp_mdns_all_reg_refresh(data_9a9d0);
+            tisp_mdns_reg_trigger();
+        }
         return 0;
     case 0x209: memcpy(&mdns_y_pspa_cur_median_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x20a: memcpy(&mdns_y_pspa_cur_bi_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
@@ -7610,8 +7617,10 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x27c:
         memcpy(&mdns_y_fiir_fus_wei8_wdr_array, in_buf, 0x24);
         *size_buf = 0x24;
-        tisp_mdns_all_reg_refresh(data_9a9d0);
-        tisp_mdns_reg_trigger();
+        if (!mdns_bulk_loading) {
+            tisp_mdns_all_reg_refresh(data_9a9d0);
+            tisp_mdns_reg_trigger();
+        }
         return 0;
     case 0x27d: memcpy(&mdns_c_sad_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x27e: memcpy(&mdns_c_sad_ave_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
@@ -7698,8 +7707,10 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x2cf:
         memcpy(&mdns_c_ref_wei_b_min_wdr_array, in_buf, 0x24);
         *size_buf = 0x24;
-        tisp_mdns_all_reg_refresh(data_9a9d0);
-        tisp_mdns_reg_trigger();
+        if (!mdns_bulk_loading) {
+            tisp_mdns_all_reg_refresh(data_9a9d0);
+            tisp_mdns_reg_trigger();
+        }
         return 0;
     case 0x2d0: memcpy(&mdns_c_median_smj_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x2d1: memcpy(&mdns_c_median_edg_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
@@ -7837,8 +7848,10 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x355:
         memcpy(&mdns_c_fiir_fus_wei8_wdr_array, in_buf, 0x24);
         *size_buf = 0x24;
-        tisp_mdns_all_reg_refresh(data_9a9d0);
-        tisp_mdns_reg_trigger();
+        if (!mdns_bulk_loading) {
+            tisp_mdns_all_reg_refresh(data_9a9d0);
+            tisp_mdns_reg_trigger();
+        }
         return 0;
     case 0x356: memcpy(&mdns_c_sat_nml_stren_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     default:
@@ -9391,9 +9404,13 @@ int tisp_mdns_set_par_cfg(void *in_buf)
         p += sz; total += sz;
     }
     pr_debug("tisp_mdns_set_par_cfg: total=%d (with fallback advance)\n", total);
-    /* Apply to hardware after param blob set */
-    tisp_mdns_all_reg_refresh(data_9a9d0);
-    return tisp_mdns_reg_trigger();
+    /* Apply to hardware after param blob set unless OEM-style bulk init is in progress. */
+    if (!mdns_bulk_loading) {
+        tisp_mdns_all_reg_refresh(data_9a9d0);
+        return tisp_mdns_reg_trigger();
+    }
+
+    return 0;
 }
 
 int tisp_ydns_set_par_cfg(void *in_buf)
@@ -13164,9 +13181,39 @@ static void tisp_mdns_select_now_tables(int wdr_enable)
     }
 }
 
+/* tiziano_mdns_params_refresh - OEM-style bulk MDNS parameter load */
+static int tiziano_mdns_params_refresh(void)
+{
+	const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+	const u8 *cursor;
+
+	if (!params || !tuning_bin_loaded) {
+		pr_debug("tiziano_mdns_params_refresh: no tuning bin, keeping current MDNS defaults\n");
+		return 0;
+	}
+
+	cursor = params + MDNS_TPARAMS_OFFSET;
+
+#define MDNS_REFRESH_ENTRY(_name, _size) \
+	do { \
+		memcpy(&(_name), cursor, (_size)); \
+		cursor += (_size); \
+	} while (0);
+#include "tx_isp_tuning_mdns_refresh.inc"
+#undef MDNS_REFRESH_ENTRY
+
+	if (data_9ab00 != 0x80)
+		return tisp_s_mdns_ratio(data_9ab00);
+
+	return 0;
+}
+
 /* tiziano_mdns_init - MDNS initialization */
 int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
+	int ret;
+	int prev_bulk_loading;
+
     pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
 
     mdns_frame_width = width;
@@ -13178,6 +13225,18 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 
     data_9a9d0 = 0x10000;
     mdns_last_refresh_key = 0xffffffff;
+	prev_bulk_loading = mdns_bulk_loading;
+	mdns_bulk_loading = 1;
+	ret = tiziano_mdns_params_refresh();
+	mdns_bulk_loading = prev_bulk_loading;
+	if (ret)
+		return ret;
+
+	if (mdns_runtime_parked) {
+		mdns_last_refresh_key = data_9a9d0;
+		pr_info("tiziano_mdns_init: MDNS runtime programming parked; keeping tables/ratios in RAM and leaving top-level MDNS bypassed for streaming bring-up\n");
+		return 0;
+	}
 
     tisp_mdns_par_refresh(data_9a9d0, 0x10000);
     tisp_mdns_bypass(0);
@@ -14364,6 +14423,12 @@ int tisp_mdns_wdr_en(int enable)
     mdns_wdr_en = enable ? 1 : 0;
 
     tisp_mdns_select_now_tables(mdns_wdr_en);
+
+	if (mdns_runtime_parked) {
+		pr_info("tisp_mdns_wdr_en: MDNS runtime programming parked; updated table selection only\n");
+		return 0;
+	}
+
     return tisp_s_mdns_ratio(data_9ab00 ? data_9ab00 : 0x80);
 }
 
@@ -15355,6 +15420,11 @@ int tisp_s_mdns_ratio(int ratio)
         }
     }
 
+    if (mdns_runtime_parked) {
+        pr_info("tisp_s_mdns_ratio: MDNS runtime programming parked; updated cached ratios/tables only\n");
+        return 0;
+    }
+
     /* Refresh MDNS registers and trigger update */
     tisp_mdns_all_reg_refresh(data_9a9d0);
     return tisp_mdns_reg_trigger();
@@ -16082,6 +16152,12 @@ static int tisp_mdns_top_func_refresh(void)
 
 static int tisp_mdns_bypass(int bypass)
 {
+	if (mdns_runtime_parked) {
+		pr_info("tisp_mdns_bypass: MDNS runtime programming parked; skip bypass register update (%d)\n",
+			bypass);
+		return 0;
+	}
+
     tisp_mdns_top_func_cfg(bypass ? 0 : 1);
     tisp_mdns_top_func_refresh();
     tisp_mdns_reg_trigger();
@@ -16091,6 +16167,14 @@ static int tisp_mdns_bypass(int bypass)
 static int tisp_mdns_par_refresh(uint32_t interp_key, uint32_t threshold)
 {
     u32 diff;
+
+	if (mdns_runtime_parked) {
+		mdns_last_refresh_key = interp_key;
+		data_9a9d0 = interp_key;
+		pr_info("tisp_mdns_par_refresh: MDNS runtime programming parked; cached interp_key=0x%x threshold=0x%x\n",
+			interp_key, threshold);
+		return 0;
+	}
 
     if (mdns_last_refresh_key == 0xffffffff) {
         mdns_last_refresh_key = interp_key;
@@ -16120,6 +16204,12 @@ static int tisp_mdns_all_reg_refresh(uint32_t interp_key)
 {
     data_9a9d0 = interp_key;
 
+	if (mdns_runtime_parked) {
+		pr_info("tisp_mdns_all_reg_refresh: MDNS runtime programming parked; skip hardware refresh for interp_key=0x%x\n",
+			interp_key);
+		return 0;
+	}
+
     pr_info("tisp_mdns_all_reg_refresh: Refreshing MDNS registers for interp_key=0x%x\n", interp_key);
 
     tisp_mdns_intp_reg_refresh(interp_key);
@@ -16131,6 +16221,11 @@ static int tisp_mdns_all_reg_refresh(uint32_t interp_key)
 /* tisp_mdns_reg_trigger - Binary Ninja EXACT implementation */
 static int tisp_mdns_reg_trigger(void)
 {
+	if (mdns_runtime_parked) {
+		pr_info("tisp_mdns_reg_trigger: MDNS runtime programming parked; skip trigger write\n");
+		return 0;
+	}
+
     pr_info("tisp_mdns_reg_trigger: Triggering MDNS register update\n");
 
     /* Binary Ninja: system_reg_write(0x7804, 0x111); */

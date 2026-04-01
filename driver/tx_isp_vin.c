@@ -554,6 +554,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     extern struct tx_isp_dev *ourISPdev;
     int ret = 0;
     u32 ctrl_val;
+    int32_t vin_state;
 
     mcp_log_info("vin_s_stream: called", enable);
 
@@ -573,93 +574,66 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     mcp_log_info("vin_s_stream: VIN device from global ISP", (u32)vin);
     mcp_log_info("vin_s_stream: current VIN state", vin->state);
 
-    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xf4) */
-    int32_t vin_state = vin->state;
-    
-    /* Binary Ninja: if (arg2 != 0) */
+    vin_state = vin->state;
+
     if (enable != 0) {
-        /* CRITICAL FIX: VIN can transition from state 3 to 4 for streaming */
-        /* The init function sets state to 3, then streaming sets it to 4 */
-        /* Binary Ninja: if ($v1 != 4) goto label_132e4 */
         if (vin_state < 3) {
-            /* Defer early generic stream walks until the later sensor-owned
-             * path initializes VIN. tx_isp_video_s_stream() treats
-             * -ENOIOCTLCMD as non-fatal and will continue to later subdevs.
-             */
             mcp_log_info("vin_s_stream: deferring stream enable until VIN init path runs", vin_state);
             mcp_log_info("vin_s_stream: returning -ENOIOCTLCMD for pre-init VIN state", vin_state);
             return -ENOIOCTLCMD;
         }
-        /* Allow streaming from state 3 (after init) or state 4 (already streaming) */
+
         mcp_log_info("vin_s_stream: VIN streaming enable from state", vin_state);
     } else {
-        /* Binary Ninja: else if ($v1 == 4) */
         if (vin_state == 4) {
-            /* Streaming disable from state 4 is allowed */
             mcp_log_info("vin_s_stream: VIN streamoff from state 4", vin_state);
         } else {
             mcp_log_info("vin_s_stream: VIN not in streaming state", vin_state);
-            return 0;  /* Already stopped */
+            return 0;
         }
     }
 
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* SAFE: Get active sensor from global ISP device */
     sensor = ourISPdev->sensor;
     if (!sensor || !is_valid_kernel_pointer(sensor)) {
-        /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
         mcp_log_error("vin_s_stream: no active sensor in global ISP", (u32)sensor);
         goto label_132f4;
     }
 
-    /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
-    /* SAFE: Call sensor streaming with validation */
     if (sensor->sd.ops && is_valid_kernel_pointer(sensor->sd.ops) &&
         sensor->sd.ops->video && is_valid_kernel_pointer(sensor->sd.ops->video) &&
         sensor->sd.ops->video->s_stream && is_valid_kernel_pointer(sensor->sd.ops->video->s_stream)) {
         extern int tx_isp_configure_clocks(struct tx_isp_dev *isp);
+
         mcp_log_info("vin_s_stream: Initializing ISP clocks before VIN streaming", 0);
         ret = tx_isp_configure_clocks(ourISPdev);
         if (ret != 0) {
             mcp_log_error("vin_s_stream: Clock initialization failed", ret);
             return ret;
         }
+
         mcp_log_info("vin_s_stream: ISP clocks initialized successfully", 0);
-        /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
-        /* Binary Ninja: result = $v1_1($a0, arg2) */
         mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
         ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
-        
-        /* Binary Ninja: if (result == 0) goto label_132f4 */
-        if (ret == 0) {
+
+        if (ret == 0)
             goto label_132f4;
-        }
-        
-        /* Binary Ninja: return result */
-        if (ret != -0x203) {  /* Ignore specific error code */
+
+        if (ret != -0x203) {
             mcp_log_error("vin_s_stream: sensor streaming failed", ret);
             return ret;
         }
-        
-        /* Treat -0x203 as success and continue */
+
         ret = 0;
     } else {
-        /* Binary Ninja: if ($v0_2 == 0) return 0xfffffdfd */
         mcp_log_error("vin_s_stream: sensor has no valid s_stream function", 0);
-        return -0x203;  /* Return specific error code like reference */
+        return -0x203;
     }
 
 label_132f4:
-    /* CRITICAL FIX: Binary Ninja shows int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
-    /* This was the root cause of the infinite loop! */
-    /* Binary Ninja: int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
-    /* Binary Ninja: *($s0_1 + 0xf4) = $v0 */
     if (enable) {
-        /* CRITICAL FIX: Set state to 4 for active streaming (not 5!) */
         vin->state = 4;
         mcp_log_info("vin_s_stream: *** VIN STATE SET TO 4 (ACTIVE STREAMING) ***", vin->state);
-        
-        /* Start VIN hardware */
+
         if (vin->base && is_valid_kernel_pointer(vin->base)) {
             ctrl_val = readl(vin->base + VIN_CTRL);
             ctrl_val |= VIN_CTRL_START;
@@ -667,30 +641,25 @@ label_132f4:
             mcp_log_info("vin_s_stream: VIN hardware started", ctrl_val);
         }
     } else {
-        /* Set state to 3 for streaming disable */
+        int timeout = 1000;
+
         vin->state = 3;
         mcp_log_info("vin_s_stream: *** VIN STATE SET TO 3 (NON-STREAMING) ***", vin->state);
-        
-        /* Stop VIN hardware */
+
         if (vin->base && is_valid_kernel_pointer(vin->base)) {
             ctrl_val = readl(vin->base + VIN_CTRL);
             ctrl_val &= ~VIN_CTRL_START;
             ctrl_val |= VIN_CTRL_STOP;
             writel(ctrl_val, vin->base + VIN_CTRL);
-            
-            /* Wait for stop to complete */
-            int timeout = 1000;
-            while ((readl(vin->base + VIN_STATUS) & STATUS_BUSY) && timeout-- > 0) {
+
+            while ((readl(vin->base + VIN_STATUS) & STATUS_BUSY) && timeout-- > 0)
                 udelay(10);
-            }
+
             mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
         }
     }
 
-    /* Binary Ninja: return 0 */
     mcp_log_info("vin_s_stream: final VIN state", vin->state);
-    
-    /* CRITICAL: Prevent infinite recursion by returning immediately after state change */
     return 0;
 }
 
