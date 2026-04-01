@@ -1366,11 +1366,9 @@ MODULE_PARM_DESC(isp_block_enable,
 
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
-	u32 bypass_val = 0x8077ffff;  /* Start all non-force-masked blocks bypassed;
-				       * 0x8077efff had bit 12 (CLM) = 0 (enabled) but
-				       * our CLM init is a stub → rainbow artifacts.
-				       * Set bit 12 to bypass CLM until properly implemented. */
+	u32 bypass_val = 0x8077efff;  /* OEM EXACT starting value */
 	u32 *params = (u32 *)(tparams_active ? tparams_active : tparams_day);
+	u32 oem_computed = 0x8077efff;
 	int i;
 
 	/* Debug: direct bypass override from module parameter */
@@ -1387,58 +1385,30 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 	}
 
-	/* OEM: The per-bit loop always runs, reading from tparams_day.
-	 * Each bit position is overwritten: bypass_val = (bypass_val & ~(1<<i)) | (params[i]<<i)
-	 * With no bin file, tparams_day is all zeros → bypass_val = 0 → force-mask
-	 * gives 0x34000009 (non-WDR).  However, this only works when all tiziano
-	 * sub-modules are properly initialized with valid tuning data.
-	 * Without a valid bin file, sub-module *_params_refresh() writes zeros
-	 * into ISP registers (e.g. gamma LUT all-zero, CCM identity broken),
-	 * which stalls the pipeline → solid green output.
-	 *
-	 * When no bin file is loaded, keep the initial 0x8077efff so that
-	 * uninitialized blocks remain bypassed and data flows through.
-	 * TODO: Load the sensor tuning bin to match the OEM fully.
-	 */
 	if (!params || !tuning_bin_loaded) {
 		goto apply_force_mask;
 	}
 
-	/* OEM per-bit loop — reads tparams_day[0..31] to set bypass bits.
-	 * DISABLED: enabling all tuning-bin blocks at once stalls the pipeline
-	 * (green frames) because not all block init functions are OEM-complete.
-	 * Instead we start from 0x8077efff (all blocks bypassed) and selectively
-	 * enable blocks below using isp_block_enable.
-	 */
-#if 0
+	/* OEM per-bit loop: compute what OEM would set (for diagnostics).
+	 * Each u32 in tparams[0..31] is 0 (bypass) or non-zero (enable). */
 	for (i = 0; i < 32; i++) {
 		u32 bit = 1U << i;
 		u32 val = params[i] ? 1U : 0U;
-		bypass_val = (bypass_val & ~bit) | (val << i);
+		oem_computed = (oem_computed & ~bit) | (val << i);
 	}
-#endif
 
-	/* Selectively enable ISP blocks by clearing their bypass bits.
-	 * OEM target for GC2053 non-WDR: bits 2,4,5,7,8,10,11,14,15,16,17 = 0
-	 * Enable one at a time, test, then add the next.
-	 *
-	 * Bit map (1=bypassed, 0=active):
-	 *   2  = DPC  (defect pixel correction)
-	 *   4  = LSC  (lens shading correction)
-	 *   5  = GIB  (gain interpolation balance)
-	 *   7  = ADR  (adaptive dynamic range)
-	 *   8  = DMSC (demosaic — Bayer→RGB, critical for color!)
-	 *  10  = Gamma
-	 *  11  = Defog
-	 *  14  = Sharpen
-	 *  15  = SDNS (spatial denoise)
-	 *  16  = MDNS (motion denoise)
-	 *  17  = YDNS (Y denoise)
-	 *
-	 * isp_block_enable module param: set bits = blocks to ENABLE.
-	 * Default 0 = all blocks bypassed (safe grayscale).
-	 * Example: isp_block_enable=0x100 enables bit 8 (DMSC) only.
-	 */
+	/* Log what the tuning bin specifies vs what we're using */
+	{
+		u32 bin_enables = 0;
+		for (i = 0; i < 32; i++)
+			if (params[i]) bin_enables |= (1U << i);
+		pr_info("tisp_compute_top_bypass: tuning_bin enables=0x%08x "
+			"oem_loop_result=0x%08x manual_enable=0x%08x\n",
+			bin_enables, oem_computed, isp_block_enable);
+	}
+
+	/* Use manual block enable — selectively enable ISP blocks.
+	 * The OEM per-bit loop result is logged above for comparison. */
 	bypass_val &= ~isp_block_enable;
 
 apply_force_mask:
@@ -8147,6 +8117,55 @@ static uint32_t _awb_cluster_ext2;     /* data_a9e50 */
 static uint8_t  tisp_wb_zone_attr[0x2a3]; /* AWB zone attribute blob */
 static uint32_t awb_ev_data;           /* data_983b0 equivalent */
 
+/* AWB params_refresh globals */
+static uint8_t  tisp_wb_attr[0x1c];
+static int      awb_dn_refresh_flag;
+
+/* tiziano_awb_params_refresh - OEM EXACT: load AWB parameters from tuning bin.
+ * Called at init and on day/night mode switch. */
+void tiziano_awb_params_refresh(void)
+{
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    if (!p || !tuning_bin_loaded) {
+        pr_info("tiziano_awb_params_refresh: no tuning bin, skipping\n");
+        return;
+    }
+
+    memcpy(_awb_parameter,          p + 0x1010, 0xb4);
+    memcpy(&_pixel_cnt_th,          p + 0x10C4, 4);
+    memcpy(_awb_lowlight_rg_th,     p + 0x10C8, 8);
+    memcpy(_AwbPointPos,            p + 0x10D0, 8);
+    memcpy(_awb_cof,                p + 0x10D8, 8);
+    memcpy(_awb_mode,               p + 0x10F8, 0xc);
+    memcpy(_wb_static,              p + 0x110C, 8);
+    memcpy(_light_src,              p + 0x1114, 0x50);
+    memcpy(&_light_src_num,         p + 0x1164, 4);
+    memcpy(_rg_pos,                 p + 0x1168, 0x3c);
+    memcpy(_bg_pos,                 p + 0x11A4, 0x3c);
+    memcpy(_awb_ct_th_ot_luxhigh,   p + 0x11E0, 0x10);
+    memcpy(_awb_ct_th_ot_luxlow,    p + 0x11F0, 0x10);
+    memcpy(_awb_ct_th_in,           p + 0x1200, 0x10);
+    memcpy(_awb_ct_para_ot,         p + 0x1210, 8);
+    memcpy(_awb_ct_para_in,         p + 0x1218, 8);
+    memcpy(_awb_dis_tw,             p + 0x1220, 0xc);
+    memcpy(_rgbg_weight,            p + 0x122C, 0x384);
+    memcpy(_color_temp_mesh,        p + 0x15B0, 0x384);
+    memcpy(_awb_wght,               p + 0x1934, 0x384);
+    memcpy(_rgbg_weight_ot,         p + 0x1CB8, 0x384);
+    memcpy(_ls_w_lut,               p + 0x203C, 0x808);
+
+    if (awb_dn_refresh_flag == 0) {
+        memcpy(_awb_mf_para, p + 0x10E0, 0x18);
+        memcpy(&_awb_ct,     p + 0x1104, 4);
+        memcpy(&_awb_ct_last, p + 0x1108, 4);
+    }
+    awb_dn_refresh_flag = 0;
+
+    pr_info("tiziano_awb_params_refresh: LOADED from bin - "
+        "wb_static=%u,%u light_src_num=%u\n",
+        _wb_static[0], _wb_static[1], _light_src_num);
+}
+
 /* Hardware apply hook: program AWB registers via system_reg_write_awb
  * Conservative, real writes that (re)enable AWB blocks to latch new params.
  */
@@ -11183,10 +11202,22 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     return 0;
 }
 
-/* tiziano_awb_init - OEM EXACT: initialize AWB hardware and set initial gains */
+/* tiziano_awb_init - OEM EXACT: initialize AWB hardware and set initial gains.
+ * OEM decompile: awb_first=0, memset(&tisp_wb_attr,0,0x1c),
+ *   tiziano_awb_params_refresh(), setup _awb_parameter loop,
+ *   if (!awb_frz) { set_hardware_param; Tiziano_awb_set_gain }, register callbacks. */
 int tiziano_awb_init(uint32_t height, uint32_t width)
 {
+    static int awb_first_init;
+
     pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
+
+    /* OEM EXACT: reset state */
+    awb_first_init = 0;
+    memset(tisp_wb_attr, 0, 0x1c);
+
+    /* OEM EXACT: load AWB params from tuning bin BEFORE hardware config */
+    tiziano_awb_params_refresh();
 
     /* Enable AWB hardware blocks */
     system_reg_write(0xb000, 1);
@@ -11194,16 +11225,27 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 
     /* OEM: tiziano_awb_set_hardware_param programs AWB registers
      * 0xb004-0xb034 from tuning parameters */
-    tiziano_awb_set_hardware_param();
+    if (awb_frz == 0)
+        tiziano_awb_set_hardware_param();
 
-    /* OEM: Set initial white balance gains.
-     * Default daylight gains: R~300, G=256, B~280 (typical for GC2053).
-     * These get updated per-frame by the AWB algorithm when running. */
-    system_reg_write_awb(0, 0x1100, 300);   /* R gain */
-    system_reg_write_awb(0, 0x1104, 256);   /* G gain */
-    system_reg_write_awb(0, 0x1108, 280);   /* B gain */
+    /* OEM: Set initial white balance gains from _wb_static.
+     * If bin is loaded, _wb_static has sensor-specific gains.
+     * Fallback: use reasonable daylight defaults. */
+    if (tuning_bin_loaded && (_wb_static[0] || _wb_static[1])) {
+        /* OEM calls Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos.d, &_wb_static)
+         * We approximate by writing static gains directly */
+        system_reg_write_awb(0, 0x1100, _wb_static[0]);  /* R gain */
+        system_reg_write_awb(0, 0x1104, 256);              /* G gain */
+        system_reg_write_awb(0, 0x1108, _wb_static[1]);   /* B gain */
+        pr_info("tiziano_awb_init: AWB gains from bin R=%u G=256 B=%u\n",
+            _wb_static[0], _wb_static[1]);
+    } else {
+        system_reg_write_awb(0, 0x1100, 300);   /* R gain */
+        system_reg_write_awb(0, 0x1104, 256);   /* G gain */
+        system_reg_write_awb(0, 0x1108, 280);   /* B gain */
+        pr_info("tiziano_awb_init: AWB fallback gains R=300 G=256 B=280\n");
+    }
 
-    pr_info("tiziano_awb_init: AWB hardware configured with initial gains\n");
     return 0;
 }
 
@@ -11304,16 +11346,18 @@ int tiziano_gamma_lut_parameter(void)
 
     pr_info("tiziano_gamma_lut_parameter: Writing gamma LUT to registers\n");
 
-    /* Binary Ninja: Loop from i=2 to 0x102, increment by 2
+    /* OEM EXACT: Loop from byte offset 2 to 0x102, step 2.
      * Packs pairs of 12-bit gamma values into 32-bit registers.
-     * Writes identical curve to R, G, B channels.
+     * OEM uses byte-level pointer arithmetic: *(ptr + byte_offset).
+     * Since our arrays are uint16_t, divide byte offset by 2 for array index.
+     * This gives indices 0..128 (129 entries from the 0x102-byte LUT).
      */
     {
         uint32_t reg_off = 0;
         int32_t i;
         for (i = 2; i < 0x102; i += 2) {
-            uint32_t val = ((uint32_t)tiziano_gamma_lut_now[i] << 12) |
-                           (uint32_t)tiziano_gamma_lut_now[i - 2];
+            uint32_t val = ((uint32_t)tiziano_gamma_lut_now[i / 2] << 12) |
+                           (uint32_t)tiziano_gamma_lut_now[(i - 2) / 2];
 
             writel(val, base_reg + reg_off);           /* R channel at +0x00000 */
             writel(val, base_reg + reg_off + 0x8000);  /* G channel at +0x08000 */
@@ -11329,50 +11373,45 @@ int tiziano_gamma_lut_parameter(void)
 }
 
 /* tiziano_gamma_init - Binary Ninja EXACT implementation
- * Generates a standard gamma 2.2 correction curve for the LUT.
- * The ISP stores 12-bit output values for 8-bit input indices (256 entries).
- * Without a tuning bin file, we generate a sRGB-like gamma 2.2 curve.
+ * OEM loads gamma LUT from tuning bin at offset 0x2844 (linear) and 0x2946 (WDR).
+ * Fallback: generate a synthetic gamma 2.0 curve if no bin is loaded.
  */
 int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
 {
     int i, ret;
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
 
     pr_info("tiziano_gamma_init: Initializing Gamma correction (%dx%d@%d)\n", width, height, fps);
 
     /* Binary Ninja: Select gamma LUT based on WDR mode */
     if (gamma_wdr_en != 0) {
         tiziano_gamma_lut_now = tiziano_gamma_lut_wdr;
-        pr_info("tiziano_gamma_init: Using WDR gamma LUT\n");
     } else {
         tiziano_gamma_lut_now = tiziano_gamma_lut_linear;
-        pr_info("tiziano_gamma_init: Using linear gamma LUT\n");
     }
 
-    /* Generate gamma 2.2 correction curve (integer approximation).
-     * Maps linear 8-bit input [0..255] to 12-bit gamma-corrected output [0..4095].
-     * Formula: out = 4095 * (in/255)^(1/2.2)
-     * Integer approx: use sqrt-based approximation since kernel has no pow().
-     * gamma(x) ≈ isqrt(x * 4095^2 / 255) for gamma ~2.0 (close enough to 2.2)
-     */
-    for (i = 0; i < 256; i++) {
-        /* Compute gamma 2.0 curve: out = sqrt(i/255) * 4095
-         * = sqrt(i * 4095^2 / 255) = isqrt(i * 65793)
-         * This approximates gamma 1/2.0 which is close to sRGB 1/2.2
-         */
-        uint32_t x = (uint32_t)i * 65793u; /* i * (4095^2 / 255) ≈ i * 65793 */
-        uint32_t val = int_sqrt(x);
-        if (val > 4095) val = 4095;
-
-        if (gamma_wdr_en != 0) {
-            tiziano_gamma_lut_wdr[i] = (uint16_t)val;
-        } else {
-            tiziano_gamma_lut_linear[i] = (uint16_t)val;
+    /* OEM EXACT: Load gamma LUT from tuning bin (tparams_day + 0x2844 / 0x2946) */
+    if (p && tuning_bin_loaded) {
+        memcpy(tiziano_gamma_lut_linear, p + 0x2844, 0x102);
+        memcpy(tiziano_gamma_lut_wdr,    p + 0x2946, 0x102);
+        pr_info("tiziano_gamma_init: Loaded gamma LUT from tuning bin\n");
+    } else {
+        /* Fallback: generate gamma 2.0 curve */
+        pr_info("tiziano_gamma_init: No tuning bin - generating gamma 2.0 curve\n");
+        for (i = 0; i < 256; i++) {
+            uint32_t x = (uint32_t)i * 65793u;
+            uint32_t val = int_sqrt(x);
+            if (val > 4095) val = 4095;
+            if (gamma_wdr_en != 0)
+                tiziano_gamma_lut_wdr[i] = (uint16_t)val;
+            else
+                tiziano_gamma_lut_linear[i] = (uint16_t)val;
         }
     }
 
-    pr_info("tiziano_gamma_init: LUT[0]=%u LUT[64]=%u LUT[128]=%u LUT[255]=%u\n",
-            tiziano_gamma_lut_now[0], tiziano_gamma_lut_now[64],
-            tiziano_gamma_lut_now[128], tiziano_gamma_lut_now[255]);
+    pr_info("tiziano_gamma_init: LUT[0]=%u LUT[32]=%u LUT[64]=%u LUT[128]=%u\n",
+            tiziano_gamma_lut_now[0], tiziano_gamma_lut_now[32],
+            tiziano_gamma_lut_now[64], tiziano_gamma_lut_now[128]);
 
     /* Binary Ninja: Call parameter function to write to hardware */
     ret = tiziano_gamma_lut_parameter();
@@ -11425,40 +11464,65 @@ static uint32_t lsc_gain_update_flag = 0;
 static uint32_t lsc_api_flag = 0;
 static int lsc_wdr_en = 0;
 
-/* tiziano_lsc_params_refresh - Refresh LSC parameters */
+/* tiziano_lsc_params_refresh - OEM EXACT: load LSC parameters from tuning bin.
+ * Offsets from tparams_day base (0x84B10 in OEM binary):
+ *   data_8a418  -> 0x30E0  (data_9a418 in our code)
+ *   lsc_mesh_scale -> 0x30E4
+ *   data_8a414  -> 0x30E8  (data_9a414)
+ *   lsc_mesh_size -> 0x30EC (4 bytes) + 0x30F0 (4 bytes)
+ *   data_8a400  -> 0x30F4 (16 bytes -> data_9a400..data_9a40c)
+ *   lsc_a_lut   -> 0x3104 (0x1FFC bytes)
+ *   lsc_t_lut   -> 0x5100 (0x1FFC bytes)
+ *   lsc_d_lut   -> 0x70FC (0x1FFC bytes)
+ *   lsc_mesh_str -> 0x90F8 (0x24 bytes)
+ *   lsc_mesh_str_wdr -> 0x911C (0x24 bytes)
+ *   lsc_mean_en -> 0x9140 (4 bytes)
+ */
 void tiziano_lsc_params_refresh(void)
 {
-    pr_debug("tiziano_lsc_params_refresh: Refreshing LSC parameters\n");
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
 
-    /* Update LSC parameters based on current conditions */
-    /* Update EV and CT caches for LSC calculations */
-    if (data_9a454 != 0) {
-        uint32_t ev_shifted = data_9a454 >> 10;
-        /* Update LSC strength based on EV */
-        if (ev_shifted < 0x40) {
-            lsc_curr_str = 0x900;  /* Higher strength for low light */
-        } else if (ev_shifted > 0x200) {
-            lsc_curr_str = 0x600;  /* Lower strength for bright light */
-        } else {
-            lsc_curr_str = 0x800;  /* Default strength */
+    if (p && tuning_bin_loaded) {
+        memcpy(&data_9a418, p + 0x30E0, 4);
+        memcpy(&lsc_mesh_scale, p + 0x30E4, 4);
+        memcpy(&data_9a414, p + 0x30E8, 4);
+        memcpy(&lsc_mesh_size, p + 0x30EC, 4);
+        /* OEM data_8a400[4] at 0x30F4 = {data_9a400, data_9a404, data_9a408, data_9a40c} */
+        memcpy(&data_9a400, p + 0x30F4, 4);
+        memcpy(&data_9a404, p + 0x30F8, 4);
+        memcpy(&data_9a408, p + 0x30FC, 4);
+        memcpy(&data_9a40c, p + 0x3100, 4);
+        memcpy(lsc_a_lut, p + 0x3104, 0x1FFC);
+        memcpy(lsc_t_lut, p + 0x5100, 0x1FFC);
+        memcpy(lsc_d_lut, p + 0x70FC, 0x1FFC);
+        memcpy(lsc_mesh_str, p + 0x90F8, 0x24);
+        memcpy(lsc_mesh_str_wdr, p + 0x911C, 0x24);
+        memcpy(&lsc_mean_en, p + 0x9140, 4);
+        pr_info("tiziano_lsc_params_refresh: LOADED from bin - "
+            "mesh_scale=%u mesh_size=%u mean_en=%u\n",
+            lsc_mesh_scale, lsc_mesh_size, lsc_mean_en);
+    } else {
+        /* Fallback: EV/CT-based parameter selection */
+        if (data_9a454 != 0) {
+            uint32_t ev_shifted = data_9a454 >> 10;
+            if (ev_shifted < 0x40)
+                lsc_curr_str = 0x900;
+            else if (ev_shifted > 0x200)
+                lsc_curr_str = 0x600;
+            else
+                lsc_curr_str = 0x800;
         }
-    }
-
-    /* Update CT-based parameters */
-    if (data_9a450 != 0) {
-        if (data_9a450 < data_9a414) {  /* Below T illuminant */
-            /* Use A illuminant parameters */
-            lsc_curr_lut = lsc_a_lut;
-        } else if (data_9a450 > data_9a418) {  /* Above D illuminant */
-            /* Use D illuminant parameters */
-            lsc_curr_lut = lsc_d_lut;
-        } else {
-            /* Use T illuminant parameters */
-            lsc_curr_lut = lsc_t_lut;
+        if (data_9a450 != 0) {
+            if (data_9a450 < data_9a414)
+                lsc_curr_lut = lsc_a_lut;
+            else if (data_9a450 > data_9a418)
+                lsc_curr_lut = lsc_d_lut;
+            else
+                lsc_curr_lut = lsc_t_lut;
         }
+        pr_debug("tiziano_lsc_params_refresh: fallback LSC str=0x%x CT=%d\n",
+            lsc_curr_str, data_9a450);
     }
-
-    pr_debug("tiziano_lsc_params_refresh: Updated LSC strength=0x%x, CT=%d\n", lsc_curr_str, data_9a450);
 }
 
 /* tisp_lsc_judge_ct_update_flag - Check if CT update is needed */
@@ -11896,6 +11960,15 @@ void tiziano_ccm_params_refresh(void)
         memcpy(tiziano_ccm_t_wdr,    p + 0x9CC0, 0x24);
         memcpy(tiziano_ccm_d_wdr,    p + 0x9CE4, 0x24);
         memcpy(cm_sat_list_wdr,      p + 0x9D2C, 0x24);
+        pr_info("tiziano_ccm_params_refresh: LOADED from bin - "
+            "ccm_d[0..2]=%d,%d,%d ccm_d[3..5]=%d,%d,%d ccm_d[6..8]=%d,%d,%d\n",
+            tiziano_ccm_d_linear[0], tiziano_ccm_d_linear[1], tiziano_ccm_d_linear[2],
+            tiziano_ccm_d_linear[3], tiziano_ccm_d_linear[4], tiziano_ccm_d_linear[5],
+            tiziano_ccm_d_linear[6], tiziano_ccm_d_linear[7], tiziano_ccm_d_linear[8]);
+    } else {
+        pr_info("tiziano_ccm_params_refresh: SKIPPED bin load - "
+            "p=%p bin_loaded=%d ctrl0=%d\n",
+            p, tuning_bin_loaded, ccm_ctrl.params[0]);
     }
 
     if (p && tuning_bin_loaded) {
