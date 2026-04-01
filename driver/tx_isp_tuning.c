@@ -4555,7 +4555,7 @@ extern uint32_t lsc_d_lut[2047];
 extern uint32_t data_9a428;
 extern uint32_t lsc_mesh_scale;
 extern uint32_t data_9a424;
-extern uint32_t lsc_mesh_size;
+extern uint32_t lsc_mesh_size[2];
 extern uint32_t data_9a410;
 extern uint32_t lsc_mean_en;
 
@@ -11450,7 +11450,7 @@ uint32_t data_9a424 = 0x10;     /* LSC configuration */
 static uint32_t data_9a404 = 5;        /* LSC update counter */
 static uint32_t lsc_last_str = 0;      /* Last strength value */
 static uint32_t data_9a400 = 1;        /* LSC force update flag */
-uint32_t lsc_mesh_size = 0x11;  /* 17x17 mesh */
+uint32_t lsc_mesh_size[2] = {0x11, 0x11};  /* 17x17 mesh [width, height] */
 uint32_t lsc_mesh_scale = 2;    /* Mesh scaling factor */
 uint32_t lsc_mean_en = 1;       /* Mean enable flag */
 static uint32_t data_9a408 = 0;        /* LSC mode */
@@ -11488,7 +11488,7 @@ void tiziano_lsc_params_refresh(void)
         memcpy(&data_9a418, p + 0x30E0, 4);
         memcpy(&lsc_mesh_scale, p + 0x30E4, 4);
         memcpy(&data_9a414, p + 0x30E8, 4);
-        memcpy(&lsc_mesh_size, p + 0x30EC, 4);
+        memcpy(lsc_mesh_size, p + 0x30EC, 8);  /* OEM loads 8 bytes: two u32s */
         /* OEM data_8a400[4] at 0x30F4 = {data_9a400, data_9a404, data_9a408, data_9a40c} */
         memcpy(&data_9a400, p + 0x30F4, 4);
         memcpy(&data_9a404, p + 0x30F8, 4);
@@ -11503,7 +11503,7 @@ void tiziano_lsc_params_refresh(void)
         pr_info("tiziano_lsc_params_refresh: LOADED from bin - "
             "lut_count(data_9a418)=%u mesh_scale=%u mesh_size=%u mean_en=%u "
             "data_9a414=%u data_9a424=%u\n",
-            data_9a418, lsc_mesh_scale, lsc_mesh_size, lsc_mean_en,
+            data_9a418, lsc_mesh_scale, lsc_mesh_size[0], lsc_mean_en,
             data_9a414, data_9a424);
     } else {
         /* Fallback: EV/CT-based parameter selection */
@@ -11730,17 +11730,6 @@ int tiziano_lsc_init(void)
 {
     pr_info("tiziano_lsc_init: Initializing Lens Shading Correction\n");
 
-    /* Initialize LSC LUTs with default values */
-    for (int i = 0; i < 2047; i++) {
-        /* Simple radial falloff model for initialization */
-        uint32_t center_dist = (i % 17) * (i % 17) + (i / 17) * (i / 17);
-        uint32_t falloff = 0x800 + (center_dist * 0x100 / 289); /* Radial falloff */
-
-        lsc_a_lut[i] = (falloff << 12) | falloff;      /* R/G or G/B packed */
-        lsc_t_lut[i] = ((falloff + 0x50) << 12) | (falloff + 0x30); /* Warmer */
-        lsc_d_lut[i] = ((falloff - 0x30) << 12) | (falloff - 0x50); /* Cooler */
-    }
-
     /* Binary Ninja: Select mesh strength based on WDR mode */
     if (lsc_wdr_en != 0) {
         data_9a420 = lsc_mesh_str_wdr;
@@ -11757,10 +11746,10 @@ int tiziano_lsc_init(void)
      * OEM: system_reg_write(0x3800, lsc_mesh_size:4 << 16 | lsc_mesh_size.d)
      * OEM: system_reg_write(0x3804, data_8a414 << 16 | lsc_mean_en << 15 | lsc_mesh_scale)
      * data_8a414 = our data_9a414 (loaded from bin offset 0x30E8) */
-    system_reg_write(0x3800, (lsc_mesh_size << 16) | lsc_mesh_size);
+    system_reg_write(0x3800, (lsc_mesh_size[1] << 16) | lsc_mesh_size[0]);
     system_reg_write(0x3804, (data_9a414 << 16) | (lsc_mean_en << 15) | lsc_mesh_scale);
     pr_info("tiziano_lsc_init: reg 0x3800=0x%08x reg 0x3804=0x%08x\n",
-        (lsc_mesh_size << 16) | lsc_mesh_size,
+        (lsc_mesh_size[1] << 16) | lsc_mesh_size[0],
         (data_9a414 << 16) | (lsc_mean_en << 15) | lsc_mesh_scale);
 
     /* Binary Ninja: Set initial state */
