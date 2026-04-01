@@ -12415,107 +12415,13 @@ int tiziano_ccm_init(void)
     return 0;
 }
 
-static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
-{
-	switch (mbus_code) {
-#ifdef V4L2_MBUS_FMT_SRGGB8_1X8
-	case V4L2_MBUS_FMT_SRGGB8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SRGGB10_1X10
-	case V4L2_MBUS_FMT_SRGGB10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SRGGB12_1X12
-	case V4L2_MBUS_FMT_SRGGB12_1X12:
-#endif
-		return 0; /* RGGB */
-#ifdef V4L2_MBUS_FMT_SGRBG8_1X8
-	case V4L2_MBUS_FMT_SGRBG8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SGRBG10_1X10
-	case V4L2_MBUS_FMT_SGRBG10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SGRBG12_1X12
-	case V4L2_MBUS_FMT_SGRBG12_1X12:
-#endif
-		return 1; /* GRBG */
-#ifdef V4L2_MBUS_FMT_SGBRG8_1X8
-	case V4L2_MBUS_FMT_SGBRG8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SGBRG10_1X10
-	case V4L2_MBUS_FMT_SGBRG10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SGBRG12_1X12
-	case V4L2_MBUS_FMT_SGBRG12_1X12:
-#endif
-		return 2; /* GBRG */
-#ifdef V4L2_MBUS_FMT_SBGGR8_1X8
-	case V4L2_MBUS_FMT_SBGGR8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SBGGR10_1X10
-	case V4L2_MBUS_FMT_SBGGR10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SBGGR12_1X12
-	case V4L2_MBUS_FMT_SBGGR12_1X12:
-#endif
-		return 3; /* BGGR */
-	default:
-		return 0; /* Conservative default: GC2053 stock path is RGGB */
-	}
-}
-
-static u32 tisp_dmsc_apply_flip_to_cfa(u32 idx, unsigned int shvflip)
-{
-	static const u8 hmap[4] = {1, 0, 3, 2};
-	static const u8 vmap[4] = {2, 3, 0, 1};
-
-	if (shvflip & 0x1)
-		idx = hmap[idx & 0x3];
-	if (shvflip & 0x2)
-		idx = vmap[idx & 0x3];
-
-	return idx & 0x3;
-}
-
-static int tisp_dmsc_program_sensor_cfa(void)
-{
-	struct tx_isp_sensor *sensor = NULL;
-	u32 mbus_code = 0;
-	unsigned int shvflip = 0;
-	u32 idx;
-	bool forced = false;
-	u32 out_opt;
-
-	if (ourISPdev)
-		sensor = ourISPdev->sensor;
-
-	if (sensor) {
-		mbus_code = sensor->video.mbus.code;
-		shvflip = sensor->video.shvflip;
-	} else {
-		pr_warn("tiziano_dmsc_init: sensor metadata unavailable, defaulting CFA to RGGB\n");
-	}
-
-	idx = tisp_dmsc_apply_flip_to_cfa(tisp_dmsc_cfa_base_from_mbus(mbus_code), shvflip);
-	if (tisp_cfa_idx_override >= 0 && tisp_cfa_idx_override <= 3) {
-		idx = (u32)tisp_cfa_idx_override;
-		forced = true;
-	}
-	out_opt = system_reg_read(0x4800);
-	out_opt = (out_opt & ~0x3u) | idx;
-
-	system_reg_write(0x4800, out_opt);
-	system_reg_write(0x499c, 1);
-
-	pr_info("tiziano_dmsc_init: programmed CFA idx=%u mbus=0x%x shvflip=0x%x out_opt=0x%08x%s%s\n",
-		idx, mbus_code, shvflip, out_opt,
-		tisp_dmsc_wdr_enabled ? " (WDR)" : "",
-		forced ? " (override)" : "");
-	return 0;
-}
-
+/* OEM alignment: DMSC output configuration comes from the DMSC tuning state
+ * (`dmsc_out_opt` / `tisp_dmsc_out_opt_cfg`). Do not synthesize a second,
+ * sensor-derived CFA rewrite into 0x4800 here.
+ */
 int tisp_dmsc_reprogram_sensor_cfa(void)
 {
-	return tisp_dmsc_program_sensor_cfa();
+	return 0;
 }
 EXPORT_SYMBOL(tisp_dmsc_reprogram_sensor_cfa);
 
@@ -12613,7 +12519,6 @@ static void tisp_dmsc_write_default_regs(void)
 int tiziano_dmsc_init(void)
 {
 	pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
-	tisp_dmsc_program_sensor_cfa();
 	tisp_dmsc_write_default_regs();
 	return 0;
 }

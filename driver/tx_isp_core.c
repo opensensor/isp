@@ -1563,14 +1563,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-	    if (enable != 0 && (result == 0 || result == -ENOIOCTLCMD)) {
-	        int cfa_ret = tisp_dmsc_reprogram_sensor_cfa();
-
-	        if (cfa_ret)
-	            pr_warn("ispcore_video_s_stream: DMSC CFA reprogram failed: %d\n",
-	                    cfa_ret);
-	    }
-
     /* OEM: tisp_channel_start is called from the frame channel STREAMON event
      * (ispcore_pad_event_handle case 0x3000003), which runs AFTER SET_FORMAT
      * has configured MSCA geometry via tisp_channel_attr_set.  Do NOT call it
