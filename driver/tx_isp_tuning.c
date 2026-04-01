@@ -1254,6 +1254,33 @@ module_param(isp_bypass_all, int, 0644);
 static uint isp_bypass_override = 0;
 module_param(isp_bypass_override, uint, 0644);
 
+/* Module parameter: bitmask of ISP blocks to enable (clear bypass bit).
+ * Each set bit in this mask clears the corresponding bypass register bit,
+ * enabling that processing block.  Start with 0 (all bypassed = safe
+ * grayscale), then set bits to enable blocks one at a time.
+ *
+ * Bit assignments for GC2053/T31:
+ *   0x004 = bit 2  DPC  (defect pixel correction)
+ *   0x010 = bit 4  LSC  (lens shading correction)
+ *   0x020 = bit 5  GIB  (gain interpolation balance)
+ *   0x080 = bit 7  ADR  (adaptive dynamic range)
+ *   0x100 = bit 8  DMSC (demosaic — critical for color)
+ *   0x400 = bit 10 Gamma
+ *   0x800 = bit 11 Defog
+ *  0x4000 = bit 14 Sharpen
+ *  0x8000 = bit 15 SDNS (spatial denoise)
+ * 0x10000 = bit 16 MDNS (motion denoise)
+ * 0x20000 = bit 17 YDNS (Y denoise)
+ *
+ * Example: isp_block_enable=0x100 enables DMSC only (should give color)
+ *          isp_block_enable=0x500 enables DMSC + Gamma
+ *          isp_block_enable=0x3CDB4 enables all OEM blocks at once
+ */
+static uint isp_block_enable = 0x1900;  /* DMSC(8)+CCM(11)+BCSH(12) — color pipeline */
+module_param(isp_block_enable, uint, 0644);
+MODULE_PARM_DESC(isp_block_enable,
+		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
+
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
 	u32 bypass_val = 0x8077efff;
@@ -1291,12 +1318,11 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		goto apply_force_mask;
 	}
 
-	/* OEM: loop over first 32 u32 words of tparams to build bypass.
-	 * DISABLED: Our tiziano sub-module init functions are incomplete —
-	 * enabling blocks whose parameters aren't fully programmed stalls
-	 * the ISP pipeline → solid green output.  Keep 0x8077efff (most
-	 * blocks bypassed) until init functions are OEM-equivalent.
-	 * TODO: Re-enable once all *_init() and *_params_refresh() match OEM.
+	/* OEM per-bit loop — reads tparams_day[0..31] to set bypass bits.
+	 * DISABLED: enabling all tuning-bin blocks at once stalls the pipeline
+	 * (green frames) because not all block init functions are OEM-complete.
+	 * Instead we start from 0x8077efff (all blocks bypassed) and selectively
+	 * enable blocks below using isp_block_enable.
 	 */
 #if 0
 	for (i = 0; i < 32; i++) {
@@ -1306,13 +1332,39 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 	}
 #endif
 
+	/* Selectively enable ISP blocks by clearing their bypass bits.
+	 * OEM target for GC2053 non-WDR: bits 2,4,5,7,8,10,11,14,15,16,17 = 0
+	 * Enable one at a time, test, then add the next.
+	 *
+	 * Bit map (1=bypassed, 0=active):
+	 *   2  = DPC  (defect pixel correction)
+	 *   4  = LSC  (lens shading correction)
+	 *   5  = GIB  (gain interpolation balance)
+	 *   7  = ADR  (adaptive dynamic range)
+	 *   8  = DMSC (demosaic — Bayer→RGB, critical for color!)
+	 *  10  = Gamma
+	 *  11  = Defog
+	 *  14  = Sharpen
+	 *  15  = SDNS (spatial denoise)
+	 *  16  = MDNS (motion denoise)
+	 *  17  = YDNS (Y denoise)
+	 *
+	 * isp_block_enable module param: set bits = blocks to ENABLE.
+	 * Default 0 = all blocks bypassed (safe grayscale).
+	 * Example: isp_block_enable=0x100 enables bit 8 (DMSC) only.
+	 */
+	bypass_val &= ~isp_block_enable;
+
 apply_force_mask:
-	/* OEM EXACT: apply force AND-mask then OR-mask.
-	 * No additional bit overrides — match the OEM binary exactly. */
+	/* OEM EXACT: apply force AND-mask then OR-mask. */
 	if (wdr_enable)
 		bypass_val = (bypass_val & 0xa1ffdf76) | 0x00880002;
 	else
 		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+
+	pr_info("tisp_compute_top_bypass: block_enable=0x%08x final=0x%08x "
+		"(OEM target=0x%08x)\n",
+		isp_block_enable, bypass_val, 0xb5742249);
 
 	return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 }
@@ -12979,6 +13031,14 @@ int tiziano_bcsh_init(void)
             tuning->bcsh_au32SmaxListM_now[i] = bcsh_SmaxListM[i];
         }
         mutex_unlock(&tuning->mutex);
+
+        /* OEM: tiziano_bcsh_init calls tiziano_bcsh_update() to program
+         * the RGB→YUV conversion matrix into registers 0x8000-0x8070.
+         * Without this call, the BCSH block has uninitialized registers
+         * which produces wrong colors even though bit 12 (BCSH) is
+         * already enabled in the bypass register. */
+        tiziano_bcsh_update(tuning);
+        pr_info("tiziano_bcsh_init: BCSH registers programmed via update\n");
     }
 
     return 0;
