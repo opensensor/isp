@@ -1067,7 +1067,7 @@ static uint32_t data_b2e56;
 #define TISP_PARAM_BLOCK_SIZE 0x137f0
 #define TISP_PARAM_HEADER_SIZE 0x18
 #define TISP_PARAM_NIGHT_OFFSET (TISP_PARAM_HEADER_SIZE + TISP_PARAM_BLOCK_SIZE)
-#define TISP_PARAM_HLDC_CON_PAR_OFFSET 0x2db4
+#define TISP_PARAM_HLDC_CON_PAR_OFFSET 0x11BF4  /* OEM: 0x96704 - 0x84b10 */
 #define TISP_PARAM_HLDC_CON_PAR_SIZE 0x48
 
 struct tisp_hldc_con_par {
@@ -1299,12 +1299,11 @@ apply_force_mask:
 	else
 		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
 
-	/* Force-enable blocks required for data flow (bits 14,16,17,18)
-	 * and force-disable blocks with broken init (bits 21,22,24).
-	 * Binary search confirmed: 14,16,17,18 must be ON for pipeline,
-	 * 21,22,24 stall MSCA DMA when enabled. */
+	/* Force-enable blocks required for data flow (bits 14,16,17,18).
+	 * Force-disable CLM (bit 22) — needs 800+ LUT register writes not yet implemented.
+	 * Bits 20 (YDNS), 21 (RDNS), 24 (HLDC) now have OEM-matched init. */
 	bypass_val |= (1U << 14) | (1U << 16) | (1U << 17) | (1U << 18);
-	bypass_val &= ~((1U << 21) | (1U << 22) | (1U << 24));
+	bypass_val &= ~(1U << 22);
 
 	return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 }
@@ -13056,10 +13055,128 @@ int tiziano_ydns_init(void)
     return 0;
 }
 
-/* tiziano_rdns_init - RDNS initialization */
+/* ===== RDNS (Raw Denoise) — OEM EXACT implementation ===== */
+static uint32_t rdns_oe_num_intp;
+static uint32_t rdns_gray_stren_intp;
+static uint32_t rdns_gray_std_thres_intp;
+static uint32_t rdns_text_base_thres_intp;
+static uint32_t rdns_filter_sat_thres_intp;
+static uint32_t rdns_oe_thres_intp;
+static uint32_t rdns_flat_g_thres_intp;
+static uint32_t rdns_text_g_thres_intp;
+static uint32_t rdns_flat_rb_thres_intp;
+static uint32_t rdns_text_rb_thres_intp;
+static uint32_t rdns_mv_text_thres_intp;
+static uint32_t rdns_gain_old = 0xffffffff;
+static uint8_t *rdns_text_base_thres_array_now;
+
+/* OEM: load RDNS arrays from tuning data at offset 0x3528 */
+static void tiziano_rdns_params_refresh(void)
+{
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    if (!p) return;
+    memcpy(rdns_out_opt_array,              p + 0x3528, 4);
+    memcpy(rdns_awb_gain_par_cfg_array,     p + 0x352c, 0x10);
+    memcpy(rdns_oe_num_array,               p + 0x353c, 0x24);
+    memcpy(rdns_opt_cfg_array,              p + 0x3560, 0x14);
+    memcpy(rdns_gray_stren_array,           p + 0x3574, 0x24);
+    memcpy(rdns_slope_par_cfg_array,        p + 0x3598, 8);
+    memcpy(rdns_gray_std_thres_array,       p + 0x35a0, 0x24);
+    memcpy(rdns_text_base_thres_array,      p + 0x35c4, 0x24);
+    memcpy(rdns_filter_sat_thres_array,     p + 0x35e8, 0x24);
+    memcpy(rdns_oe_thres_array,             p + 0x360c, 0x24);
+    memcpy(rdns_flat_g_thres_array,         p + 0x3630, 0x24);
+    memcpy(rdns_text_g_thres_array,         p + 0x3654, 0x24);
+    memcpy(rdns_flat_rb_thres_array,        p + 0x3678, 0x24);
+    memcpy(rdns_text_rb_thres_array,        p + 0x369c, 0x24);
+    memcpy(rdns_gray_np_array,              p + 0x36c0, 0x20);
+    memcpy(rdns_text_np_array,              p + 0x36e0, 0x40);
+    memcpy(rdns_lum_np_array,               p + 0x3720, 0x40);
+    memcpy(rdns_std_np_array,               p + 0x3760, 0x40);
+    memcpy(rdns_mv_text_thres_array,        p + 0x37a0, 0x24);
+    memcpy(rdns_text_base_thres_wdr_array,  p + 0x37c4, 0x24);
+    memcpy(rdns_sl_par_cfg,                 p + 0x37e8, 8);
+}
+
+/* OEM: interpolate RDNS arrays based on gain */
+static void tisp_rdns_intp(uint32_t gain)
+{
+    int hi = gain >> 16;
+    int lo = gain & 0xffff;
+    rdns_oe_num_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_oe_num_array);
+    rdns_gray_stren_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_gray_stren_array);
+    rdns_gray_std_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_gray_std_thres_array);
+    rdns_text_base_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_text_base_thres_array_now);
+    rdns_filter_sat_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_filter_sat_thres_array);
+    rdns_oe_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_oe_thres_array);
+    rdns_flat_g_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_flat_g_thres_array);
+    rdns_text_g_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_text_g_thres_array);
+    rdns_flat_rb_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_flat_rb_thres_array);
+    rdns_text_rb_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_text_rb_thres_array);
+    rdns_mv_text_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_mv_text_thres_array);
+}
+
+/* OEM: write RDNS registers */
+static void tisp_rdns_all_reg_refresh(void)
+{
+    const u32 *awb = (const u32 *)rdns_awb_gain_par_cfg_array;
+    const u32 *opt = (const u32 *)rdns_opt_cfg_array;
+    const u32 *slope = (const u32 *)rdns_slope_par_cfg_array;
+    const u32 *gnp = (const u32 *)rdns_gray_np_array;
+    const u32 *sl = (const u32 *)rdns_sl_par_cfg;
+    int i;
+
+    /* AWB gain config: 0x3000-0x3004 */
+    system_reg_write(0x3000, (awb[1] << 16) | (awb[0] & 0xffff));
+    system_reg_write(0x3004, (awb[3] << 16) | (awb[2] & 0xffff));
+
+    /* Opt config: 0x3008 */
+    system_reg_write(0x3008, (opt[0] & 0x3) | ((opt[1] & 0x3) << 2) |
+                     ((opt[2] & 0x3) << 4) | ((opt[3] & 0x3) << 6) |
+                     ((opt[4] & 0x3) << 8) | (rdns_oe_num_intp << 16));
+
+    /* Slope + out opt: 0x300c-0x3010 */
+    system_reg_write(0x300c, ((rdns_out_opt_array[0] & 0xffff) << 16) |
+                     (rdns_gray_stren_intp & 0xffff));
+    system_reg_write(0x3010, (slope[1] << 16) | (slope[0] & 0xffff));
+
+    /* Thresholds: 0x3014-0x3024 */
+    system_reg_write(0x3014, rdns_gray_std_thres_intp);
+    system_reg_write(0x3018, rdns_text_base_thres_intp);
+    system_reg_write(0x301c, (rdns_oe_thres_intp << 16) | (rdns_filter_sat_thres_intp & 0xffff));
+    system_reg_write(0x3020, (rdns_text_g_thres_intp << 16) | (rdns_flat_g_thres_intp & 0xffff));
+    system_reg_write(0x3024, (rdns_text_rb_thres_intp << 16) | (rdns_flat_rb_thres_intp & 0xffff));
+
+    /* Gray noise profile: 0x3028-0x3034 (4 regs, packed u16 pairs) */
+    for (i = 0; i < 4; i++)
+        system_reg_write(0x3028 + i * 4, (gnp[i*2+1] << 16) | (gnp[i*2] & 0xffff));
+
+    /* Text noise profile: 0x3038-0x3074 (16 regs from text_np_array) */
+    for (i = 0; i < 16; i++)
+        system_reg_write(0x3038 + i * 4, ((const u32 *)rdns_text_np_array)[i]);
+
+    /* Lum noise profile: 0x3078-0x30a4 (16 regs from lum_np_array) */
+    for (i = 0; i < 16; i++)
+        system_reg_write(0x3078 + i * 4, ((const u32 *)rdns_lum_np_array)[i]);
+
+    /* SL params: 0x30a8 */
+    system_reg_write(0x30a8, (sl[0] & 0x3f) | ((sl[1] & 0x3f) << 6) |
+                     (rdns_mv_text_thres_intp << 16));
+
+    /* Commit: 0x30ac */
+    system_reg_write(0x30ac, 1);
+}
+
+/* OEM EXACT: tiziano_rdns_init */
 int tiziano_rdns_init(void)
 {
-    pr_info("tiziano_rdns_init: Initializing RDNS processing\n");
+    pr_info("tiziano_rdns_init: Initializing RDNS processing (OEM EXACT)\n");
+    rdns_text_base_thres_array_now = rdns_text_base_thres_array;
+    rdns_gain_old = 0xffffffff;
+    tiziano_rdns_params_refresh();
+    tisp_rdns_intp(0x10000);
+    tisp_rdns_all_reg_refresh();
+    rdns_gain_old = 0x10000;
     return 0;
 }
 

@@ -1790,10 +1790,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         writel(interrupt_status, isp_regs + 0xb8);
         wmb();
     }
-    /* OEM does NOT force bit 0.  Now that the register 0xc corruption
-     * is fixed (0x200 handler no longer writes bypass register), DMA
-     * bits stick and the hardware should produce reliable bit 0x1
-     * on MSCA frame completion. */
+    /* Force bit 0 for reliable FIFO drain.  Hardware bit 0x1 does fire
+     * (confirmed at ISR[120]: int=0x1) but throughput is ~7fps due to
+     * bypass blocks.  Forced drain catches frames with less latency. */
+    interrupt_status |= 1;
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
