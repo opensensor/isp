@@ -2621,15 +2621,17 @@ static int tisp_ae0_process_impl(void)
     return 0;
 }
 
+/* Simple event ID storage for single-event dispatch.
+ * The OEM uses a full queue but single-event is sufficient for AE. */
+static volatile int pending_event_id = -1;
+
 static int tisp_event_push(void *event)
 {
-    /* Event push implementation - adds event to ISP event queue */
-    if (!event) {
+    if (!event)
         return -EINVAL;
-    }
 
-    /* Signal event completion - completion is initialized in tisp_event_init() */
-    pr_debug("Event pushed\n");
+    /* The event struct has event_id at offset 8 (third u32 word) */
+    pending_event_id = ((uint32_t *)event)[2];
     complete(&tevent_info);
     return 0;
 }
@@ -13582,17 +13584,25 @@ int isp_trigger_event(int event_id)
 }
 EXPORT_SYMBOL(isp_trigger_event);
 
-/* tisp_event_process - Main event processing function that waits for events */
+/* tisp_event_process - OEM-matched: wait for event, dispatch callback */
 int tisp_event_process(void)
 {
     int ret;
+    int evt_id;
 
+    ret = wait_for_completion_interruptible_timeout(&tevent_info, msecs_to_jiffies(200));
+    if (ret < 0)
+        return ret;  /* -ERESTARTSYS */
+    if (ret == 0)
+        return 0;    /* timeout, no event */
+
+    /* Dequeue pending event and dispatch to registered callback */
+    evt_id = pending_event_id;
+    pending_event_id = -1;
     INIT_COMPLETION(tevent_info);
 
-    ret = wait_for_completion_interruptible(&tevent_info);
-    if (ret < 0) {
-        pr_debug("tisp_event_process: Wait interrupted: %d\n", ret);
-        return ret;
+    if (evt_id >= 0 && evt_id < 32 && cb[evt_id]) {
+        cb[evt_id]();
     }
 
     return 0;
