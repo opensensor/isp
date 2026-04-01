@@ -1433,9 +1433,8 @@ static inline u32 frame_channel_format_sizeimage(u32 pixfmt, u32 width, u32 heig
     switch (pixfmt) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV21:
-        /* NV12: Y plane = stride * aligned_height,
-         * UV plane = stride * aligned_height / 2.
-         * Total = stride * aligned_height * 3 / 2 */
+        /* NV12: Y = stride * align16(height), UV = stride * align16(height)/2.
+         * MSCA hardware requires 16-line aligned UV offset. */
         return (bytesperline * ALIGN(height, 16) * 3) / 2;
     default:
         return bytesperline * height;

@@ -1701,9 +1701,6 @@ static void ispcore_irq_fs_work(struct work_struct *work)
             isp_dev->streaming_enabled = true;
     }
 
-    /* Reference driver: per-frame sensor AE/AGC/AWB operations
-     * Currently skipping sensor I2C per user request */
-
     sensor_call_counter++;
 }
 
