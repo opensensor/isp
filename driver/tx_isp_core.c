@@ -1792,9 +1792,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         writel(interrupt_status, isp_regs + 0xb8);
         wmb();
     }
-    /* OEM: does NOT force bit 0.  The hardware sets bit 0 when MSCA CH0
-     * frame processing completes.  Forcing it masked whether the pipeline
-     * was actually completing frames.  Match OEM exactly. */
+    /* Force bit 0 so the FIFO drain loop runs on every ISR.  The OEM gets
+     * reliable bit 0x1 from hardware because its pipeline is fully matched.
+     * Ours still has processing blocks that don't fire bit 0x1 reliably,
+     * so force-drain to catch completed frames.  This was present in
+     * commit 2e55bf65 which successfully delivered frames. */
+    interrupt_status |= 1;
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
@@ -1858,15 +1861,31 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         }
     }
 
-    /* OEM: bit 0x1 gates CH0 frame completion, bayer write, and tisp_top_sel.
-     * All of these run INSIDE the if ($s1 & 1) block in the OEM ISR. */
-    if (interrupt_status & 0x1) {
+    /* One-shot bayer write and top_sel — must fire on first interrupt,
+     * not gated by bit 0x1 which may not fire reliably yet. */
+    if (bayer_write_pending) {
+        u32 mbus_code = 0;
+        if (isp_dev && isp_dev->sensor)
+            mbus_code = isp_dev->sensor->video.mbus.code;
+        if (mbus_code != 0) {
+            mbus_to_bayer_write(mbus_code);
+            bayer_write_pending = 0;
+        }
+    }
+
+    if (first_into == 1) {
+        tisp_top_sel();
+        first_into = 0;
+    }
+
+    /* *** CHANNEL 0 FRAME COMPLETION PROCESSING *** */
+    {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         u32 fifo_stat_ch0;
 
-        /* OEM: drain MSCA CH0 FIFO — bit 0 of 0x997c = 1 means empty */
+        /* Drain MSCA CH0 FIFO — bit 0 of 0x997c = 1 means empty */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
@@ -1879,40 +1898,16 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
 
-        /* OEM: bayer write and tisp_top_sel are inside the bit 0x1 block */
-        if (bayer_write_pending) {
-            u32 mbus_code = 0;
-            if (isp_dev && isp_dev->sensor)
-                mbus_code = isp_dev->sensor->video.mbus.code;
-            if (mbus_code != 0) {
-                mbus_to_bayer_write(mbus_code);
-                bayer_write_pending = 0;
-            }
-        }
-
-        if (first_into == 1) {
-            tisp_top_sel();
-            first_into = 0;
-        }
-    }
-
-    /* OEM: bit 0x2 gates CH1 FIFO drain */
-    if (interrupt_status & 0x2) {
-        extern struct frame_channel_device frame_channels[];
-        extern int frame_chan_event(void *priv, int event, void *data);
-        int drain_count = 0;
+        /* Channel 1 */
+        drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
             (void)readl(isp_regs + 0x9a74);
             frame_chan_event(&frame_channels[1], 0x3000006, NULL);
             drain_count++;
         }
-    }
 
-    /* OEM: bit 0x4 gates CH2 FIFO drain */
-    if (interrupt_status & 0x4) {
-        extern struct frame_channel_device frame_channels[];
-        extern int frame_chan_event(void *priv, int event, void *data);
-        int drain_count = 0;
+        /* Channel 2 */
+        drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
             (void)readl(isp_regs + 0x9b74);
             frame_chan_event(&frame_channels[2], 0x3000006, NULL);
