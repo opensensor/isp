@@ -1276,7 +1276,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3CDB4 enables all OEM blocks at once
  */
-static uint isp_block_enable = 0x1900;  /* DMSC(8)+CCM(11)+BCSH(12) — color pipeline */
+static uint isp_block_enable = 0x1d10;  /* AWB(4)+DMSC(8)+Gamma(10)+CCM(11)+BCSH(12) — color pipeline */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -4718,7 +4718,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     if (magic == 0x56) {
         struct isp_core_ctrl ctrl;
 
-        pr_info("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
+        pr_debug("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
 
         switch (cmd) {
             case 0xc008561c: /* ISP_CORE_S_CTRL - Set control */
@@ -4774,13 +4774,13 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     return -EFAULT;
                 }
 
-                pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
+                pr_debug("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
                 if (enable && ourISPdev->tuning_enabled == 3) {
                     /* CRITICAL: VIC-SAFE TUNING OPERATION SEQUENCING */
                     /* The key insight is that tuning operations must be synchronized with VIC hardware state */
-                    pr_info("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
+                    pr_debug("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
 
                     /* CRITICAL FIX: Check VIC hardware state before any register operations */
                     extern uint32_t vic_start_ok;
@@ -4811,7 +4811,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     if (tisp_par_ioctl) {
                         /* Mark tuning system as active for parameter processing */
                         *((uint32_t *)tisp_par_ioctl) = 0x12345678;  /* Magic marker */
-                        pr_info("*** CRITICAL: Tuning parameter system activated ***\n");
+                        pr_debug("*** CRITICAL: Tuning parameter system activated ***\n");
                     }
 
                     /* OEM parity: tuning enable must not synthesize a frame-done.
@@ -4961,7 +4961,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                 /* CRITICAL: Ignore disable commands when auto-initialized to prevent init/release cycle */
                 if (!enable && auto_init_done) {
-                    pr_info("isp_core_tunning_unlocked_ioctl: Ignoring disable command - tuning was auto-initialized\n");
+                    pr_debug("isp_core_tunning_unlocked_ioctl: Ignoring disable command - tuning was auto-initialized\n");
                     ret = 0;  /* Return success but don't actually disable */
                     break;
                 }
