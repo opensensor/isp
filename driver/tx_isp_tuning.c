@@ -127,6 +127,21 @@ extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
 
+/* CLM (Color Luminance Mapping) constants and data — declared early for param_array_set/get */
+#define CLM_H_LUT_SIZE      0x41A   /* 1050 bytes */
+#define CLM_S_LUT_SIZE      0x834   /* 2100 bytes = 1050 × int16_t */
+#define CLM_LUT_SHIFT_SIZE  4
+#define CLM_REG_SIZE         0x690   /* 0x1A4 words × 4 bytes */
+#define CLM_TPARAMS_H_LUT_OFF     0xFB84
+#define CLM_TPARAMS_S_LUT_OFF     0xFF9E
+#define CLM_TPARAMS_LUT_SHIFT_OFF 0x107D4
+
+static uint8_t  tiziano_clm_h_lut[CLM_H_LUT_SIZE];
+static int16_t  tiziano_clm_s_lut[CLM_S_LUT_SIZE / 2];
+static uint32_t tiziano_clm_lut_shift;
+static uint32_t tiziano_clm_s_reg[CLM_REG_SIZE / 4];
+static uint32_t tiziano_clm_h_reg[CLM_REG_SIZE / 4];
+
 /* Sharpening parameter arrays - declared early for use in tisp_sharpen_set_par_cfg */
 static uint32_t y_sp_uu_thres_array[16] = {0x8, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78, 0x80};
 static uint32_t y_sp_uu_thres_wdr_array[16] = {0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50, 0x58, 0x60, 0x68, 0x70, 0x78, 0x80, 0x88};
@@ -12825,24 +12840,7 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
  *           → tiziano_set_parameter_clm writes to ISP registers
  */
 
-#define CLM_H_LUT_SIZE    0x41A   /* 1050 bytes */
-#define CLM_S_LUT_SIZE    0x834   /* 2100 bytes = 1050 × int16_t */
-#define CLM_LUT_SHIFT_SIZE  4
-#define CLM_REG_SIZE      0x690   /* 0x1A4 words × 4 bytes */
-#define CLM_ENTRIES       1050    /* 30 groups × 35 entries */
-#define CLM_GROUP_ENTRIES 35      /* entries per outer group */
-#define CLM_INNER_STEP    5       /* entries per inner iteration */
-
-#define CLM_TPARAMS_H_LUT_OFF    0xFB84
-#define CLM_TPARAMS_S_LUT_OFF    0xFF9E
-#define CLM_TPARAMS_LUT_SHIFT_OFF 0x107D4
-
-/* CLM data arrays */
-static uint8_t  tiziano_clm_h_lut[CLM_H_LUT_SIZE];
-static int16_t  tiziano_clm_s_lut[CLM_S_LUT_SIZE / 2];   /* 1050 entries */
-static uint32_t tiziano_clm_lut_shift;
-static uint32_t tiziano_clm_s_reg[CLM_REG_SIZE / 4];      /* 420 words */
-static uint32_t tiziano_clm_h_reg[CLM_REG_SIZE / 4];      /* 420 words */
+/* CLM defines and data arrays are declared near top of file (line ~130) */
 
 /*
  * clm_lut2reg — pack S (9-bit) and H (7-bit) LUT entries into 32-bit register words.
@@ -12907,12 +12905,12 @@ static int tiziano_set_parameter_clm(void)
 		system_reg_write(0x68000 + i * 4, tiziano_clm_h_reg[i]);
 	}
 
-	/* Bank 1 (mirror): S regs at 0x70000, H regs at 0x78000 */
+	/* Bank 1 (mirror): H regs at 0x70000, S regs at 0x78000 (OEM order) */
 	for (i = 0; i < nwords; i++) {
-		system_reg_write(0x70000 + i * 4, tiziano_clm_s_reg[i]);
+		system_reg_write(0x70000 + i * 4, tiziano_clm_h_reg[i]);
 	}
 	for (i = 0; i < nwords; i++) {
-		system_reg_write(0x78000 + i * 4, tiziano_clm_h_reg[i]);
+		system_reg_write(0x78000 + i * 4, tiziano_clm_s_reg[i]);
 	}
 
 	return 0;
