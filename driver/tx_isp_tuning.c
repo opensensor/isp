@@ -11231,19 +11231,19 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
     /* OEM: Set initial white balance gains from _wb_static.
      * If bin is loaded, _wb_static has sensor-specific gains.
      * Fallback: use reasonable daylight defaults. */
-    if (tuning_bin_loaded && (_wb_static[0] || _wb_static[1])) {
-        /* OEM calls Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos.d, &_wb_static)
-         * We approximate by writing static gains directly */
-        system_reg_write_awb(0, 0x1100, _wb_static[0]);  /* R gain */
-        system_reg_write_awb(0, 0x1104, 256);              /* G gain */
-        system_reg_write_awb(0, 0x1108, _wb_static[1]);   /* B gain */
-        pr_info("tiziano_awb_init: AWB gains from bin R=%u G=256 B=%u\n",
-            _wb_static[0], _wb_static[1]);
-    } else {
+    /* OEM calls Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos.d, &_wb_static)
+     * which does complex fixed-point math with _awb_mf_para offsets 0x10/0x14,
+     * shifts by _AwbPointPos, and multiplies by _wb_static.
+     * _wb_static values (e.g. 1840, 2018) are NOT raw gains - they are scaling
+     * factors used in the fixed-point multiplication chain.
+     * Using them directly as gains causes massive 7x+ amplification.
+     * Use reasonable defaults until Tiziano_awb_set_gain is fully implemented. */
+    {
         system_reg_write_awb(0, 0x1100, 300);   /* R gain */
         system_reg_write_awb(0, 0x1104, 256);   /* G gain */
         system_reg_write_awb(0, 0x1108, 280);   /* B gain */
-        pr_info("tiziano_awb_init: AWB fallback gains R=300 G=256 B=280\n");
+        pr_info("tiziano_awb_init: AWB gains R=300 G=256 B=280 (wb_static=%u,%u saved for later)\n",
+            _wb_static[0], _wb_static[1]);
     }
 
     return 0;
@@ -11499,8 +11499,10 @@ void tiziano_lsc_params_refresh(void)
         memcpy(lsc_mesh_str_wdr, p + 0x911C, 0x24);
         memcpy(&lsc_mean_en, p + 0x9140, 4);
         pr_info("tiziano_lsc_params_refresh: LOADED from bin - "
-            "mesh_scale=%u mesh_size=%u mean_en=%u\n",
-            lsc_mesh_scale, lsc_mesh_size, lsc_mean_en);
+            "lut_count(data_9a418)=%u mesh_scale=%u mesh_size=%u mean_en=%u "
+            "data_9a414=%u data_9a424=%u\n",
+            data_9a418, lsc_mesh_scale, lsc_mesh_size, lsc_mean_en,
+            data_9a414, data_9a424);
     } else {
         /* Fallback: EV/CT-based parameter selection */
         if (data_9a454 != 0) {
@@ -11571,6 +11573,12 @@ int tisp_lsc_write_lut_datas(void)
     /* Binary Ninja: Process LUT data if update needed */
     if (lsc_ct_update_flag == 1 || data_9a400 == 1 || lsc_api_flag == 1) {
         uint32_t mode = data_9a408;
+        /* OEM uses data_8a418 (= our data_9a418, loaded from bin offset 0x30E0)
+         * as the total LUT entry count for both interpolation and write loops.
+         * Bound to array size for safety. */
+        uint32_t lsc_lut_count = data_9a418;
+        if (lsc_lut_count > 2047)
+            lsc_lut_count = 2047;
 
         if (mode == 0) {
             /* Use A illuminant LUT */
@@ -11579,7 +11587,7 @@ int tisp_lsc_write_lut_datas(void)
             /* Interpolate between A and T illuminants */
             uint32_t weight = ((data_9a40c - data_9a410) << 12) / (data_9a414 - data_9a410);
 
-            for (int i = 0; i < data_9a428; i++) {
+            for (int i = 0; i < lsc_lut_count; i++) {
                 uint32_t a_val = lsc_a_lut[i];
                 uint32_t t_val = lsc_t_lut[i];
 
@@ -11609,7 +11617,7 @@ int tisp_lsc_write_lut_datas(void)
             } else {
                 uint32_t weight = ((data_9a40c - data_9a418) << 12) / (data_9a41c - data_9a418);
 
-                for (int i = 0; i < data_9a428; i++) {
+                for (int i = 0; i < lsc_lut_count; i++) {
                     uint32_t t_val = lsc_t_lut[i];
                     uint32_t d_val = lsc_d_lut[i];
 
@@ -11647,7 +11655,8 @@ int tisp_lsc_write_lut_datas(void)
         /* Binary Ninja: Write LUT data to hardware registers */
         void __iomem *lsc_reg = ioremap(0x13328000, 0x10000);
         if (lsc_reg) {
-            for (int i = 0; i < (data_9a428 / 3); i++) {
+            /* OEM: while ($fp_1 * 3 u< data_8a418) */
+            for (int i = 0; i * 3 < lsc_lut_count; i++) {
                 uint32_t r_val = lsc_final_lut[i * 3];
                 uint32_t g_val = lsc_final_lut[i * 3 + 1];
                 uint32_t b_val = lsc_final_lut[i * 3 + 2];
@@ -11719,9 +11728,15 @@ int tiziano_lsc_init(void)
     /* Binary Ninja: Refresh parameters */
     tiziano_lsc_params_refresh();
 
-    /* Binary Ninja: Configure LSC hardware registers */
+    /* Binary Ninja: Configure LSC hardware registers
+     * OEM: system_reg_write(0x3800, lsc_mesh_size:4 << 16 | lsc_mesh_size.d)
+     * OEM: system_reg_write(0x3804, data_8a414 << 16 | lsc_mean_en << 15 | lsc_mesh_scale)
+     * data_8a414 = our data_9a414 (loaded from bin offset 0x30E8) */
     system_reg_write(0x3800, (lsc_mesh_size << 16) | lsc_mesh_size);
-    system_reg_write(0x3804, (data_9a424 << 16) | (lsc_mean_en << 15) | lsc_mesh_scale);
+    system_reg_write(0x3804, (data_9a414 << 16) | (lsc_mean_en << 15) | lsc_mesh_scale);
+    pr_info("tiziano_lsc_init: reg 0x3800=0x%08x reg 0x3804=0x%08x\n",
+        (lsc_mesh_size << 16) | lsc_mesh_size,
+        (data_9a414 << 16) | (lsc_mean_en << 15) | lsc_mesh_scale);
 
     /* Binary Ninja: Set initial state */
     data_9a404 = 5;
