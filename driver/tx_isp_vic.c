@@ -2199,15 +2199,14 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                     channel_id, vic_dev->active_buffer_count);
         }
         return 0;
-    } else if (cmd == 0x3000005) {  /* BUFFER_ENQUEUE: program provided node */
-        if (sd) {
-            (void) ispvic_frame_channel_qbuf(sd, arg);
-            result = 0;
-        } else {
-            result = -EINVAL;
-        }
-        return result;
     } else if (cmd == 0x3000009) {
+        /* OEM: vic_core_ops_ioctl does NOT handle 0x3000005 (QBUF).
+         * QBUF is handled entirely by ispcore_pad_event_handle which
+         * writes MSCA output DMA addresses only.  VIC MDMA bank registers
+         * are managed internally by the pipo/IRQ mechanism.
+         * Writing user buffer addresses to VIC MDMA banks causes raw
+         * sensor data to overwrite MSCA-processed NV12 → color corruption.
+         */
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
     } else if (cmd == 0x1000000) {
@@ -2770,8 +2769,9 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 /* VIC PIPO MDMA Enable function - OEM HLIL: uses *(arg1 + 0xb8) for all writes.
  *
  * OEM vic_pipo_mdma_enable only sets stride/size/enable config registers.
- * Buffer addresses are programmed by ispvic_frame_channel_qbuf (0x3000005 events)
- * BEFORE this function is called via the 0x3000003 STREAMON event.
+ * VIC MDMA bank addresses (0x318+) are initialized to 0 during pipo init
+ * and managed internally by the VIC IRQ handler / pipo mechanism.
+ * User buffer addresses go to MSCA output registers (0x996c/0x9984) only.
  */
 /* OEM EXACT: vic_pipo_mdma_enable
  * Just programs 4 MDMA config registers. stride = width << 1 always.
@@ -2891,8 +2891,12 @@ static int vic_pad_event_handler(void *priv, unsigned int cmd, void *data)
             ret = ispvic_frame_channel_s_stream(vic_dev, 0);
             break;
         case 0x3000005:
-            pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) via dispatch ***\n");
-            ret = data ? vic_core_ops_ioctl(sd, cmd, data) : -EINVAL;
+            /* OEM: QBUF (0x3000005) is NOT dispatched to VIC.
+             * MSCA output DMA addresses are written by ispcore_pad_event_handle.
+             * VIC MDMA bank registers are managed by pipo/IRQ internally.
+             */
+            pr_debug("VIC EVENT: 0x3000005 ignored (QBUF handled by ISP core MSCA)\n");
+            ret = 0;
             break;
         case 0x3000008:
             pr_info("*** VIC EVENT: REQBUFS (0x3000008) via dispatch ***\n");
@@ -3264,11 +3268,11 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     return 0;
 }
 
-/* OEM BN: queue incoming node, consume one free bank, program one slot, move bank to active list. */
 /* OEM EXACT: ispvic_frame_channel_qbuf
- * Only writes VIC MDMA bank register. NO MSCA writes here.
- * MSCA 0x996c/0x9984 are written by the ISP core event handler
- * (ispcore_pad_event_handle case 0x3000005) at the frame channel level.
+ * Manages VIC internal MDMA bank buffer rotation (queue → free → done lists).
+ * Writes VIC MDMA bank register at offset ((bank_index + 0xc6) << 2).
+ * This is called ONLY through the pipo raw_pipe[0] mechanism, NOT from
+ * the QBUF ioctl path. The QBUF ioctl writes MSCA registers only.
  */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {

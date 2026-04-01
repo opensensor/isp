@@ -4260,56 +4260,35 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* NOTE: Do NOT write to MSCA DMA FIFO registers (0x996c/0x9984) here.
-         * The VIC MDMA writes raw sensor data to bank buffers (0x318+).
-         * The ISP core internally reads from VIC MDMA output and writes
-         * ISP-processed NV12 via MSCA to the same bank addresses.
-         * Writing to MSCA FIFO AND VIC MDMA with the same addresses
-         * caused dual-write corruption (raw overwriting processed frames).
+        /* OEM EXACT: ispcore_pad_event_handle case 0x3000005.
+         * __enqueue_in_driver → tx_isp_send_event_to_remote(sd, 0x3000005, buf)
+         * → ispcore_pad_event_handle writes ONLY MSCA output DMA addresses.
          *
-         * The OEM flow: userspace buffers go to VIC MDMA banks only.
-         * The ISP core+MSCA pipeline reads VIC MDMA output internally
-         * and writes processed frames to the VIC MDMA destination buffers.
+         * OEM does NOT write VIC MDMA bank registers (0x318+) here.
+         * VIC MDMA banks are programmed during pipo init and managed by the
+         * VIC IRQ handler (vic_mdma_irq_function) internally.
+         * Writing user buffer addresses to VIC MDMA banks causes raw sensor
+         * data to overwrite ISP-processed NV12 output → color corruption.
          */
+        if (ourISPdev && ourISPdev->core_regs && channel >= 0 && channel < 3) {
+            struct tx_isp_vic_device *vic = ourISPdev->vic_dev ?
+                (struct tx_isp_vic_device *)ourISPdev->vic_dev : NULL;
+            u32 w = (vic && vic->width) ? vic->width : (state->width ? state->width : 1920);
+            u32 h = (vic && vic->height) ? vic->height : (state->height ? state->height : 1080);
+            u32 aligned_h = (h + 0xf) & ~0xf;
+            u32 uv_addr = buffer_phys_addr + w * aligned_h;
 
-        /* OEM EXACT: Two-phase QBUF dispatch.
-         * Phase 1 (ispcore_pad_event_handle): Write MSCA output addresses
-         * Phase 2 (ispvic_frame_channel_qbuf): Write VIC MDMA bank register
-         * The OEM does these in separate event handlers at different levels.
-         */
-        if (ourISPdev && ourISPdev->vic_dev && channel == 0) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
-            struct vic_buffer_entry *qbuf_node;
+            /* OEM: *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x996c) = Y addr
+             *      *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x9984) = UV addr
+             * channel_id << 8 selects the MSCA channel register bank.
+             */
+            writel(buffer_phys_addr,
+                   ourISPdev->core_regs + (channel << 8) + 0x996c);
+            writel(uv_addr,
+                   ourISPdev->core_regs + (channel << 8) + 0x9984);
 
-            /* Phase 1: OEM ispcore_pad_event_handle case 0x3000005
-             * Write MSCA CH0 output DMA addresses for NV12 output. */
-            if (ourISPdev->core_regs) {
-                u32 w = vic->width ? vic->width : 1920;
-                u32 h = vic->height ? vic->height : 1080;
-                u32 uv_offset = w * ((h + 15) & ~15);
-                writel(buffer_phys_addr,
-                       ourISPdev->core_regs + 0x996c);
-                writel(buffer_phys_addr + uv_offset,
-                       ourISPdev->core_regs + 0x9984);
-            }
-
-            /* Phase 2: Dispatch to VIC QBUF handler for bank register */
-            qbuf_node = kzalloc(sizeof(*qbuf_node), GFP_KERNEL);
-            if (qbuf_node) {
-                qbuf_node->buffer_addr = buffer_phys_addr;
-                qbuf_node->buffer_index = buffer.index;
-                qbuf_node->channel = channel;
-                qbuf_node->buffer_length = buffer.length;
-                INIT_LIST_HEAD(&qbuf_node->list);
-
-                vic_core_ops_ioctl(&vic->sd, 0x3000005, qbuf_node);
-            }
-
-            /* OEM: if stream not started yet but should be, start now */
-            if (vic->stream_state == 0 && state->streaming) {
-                ispvic_frame_channel_s_stream(vic, 1);
-            }
+            pr_debug("QBUF ch%d: MSCA Y=0x%x UV=0x%x (w=%u h=%u aligned_h=%u)\n",
+                     channel, buffer_phys_addr, uv_addr, w, h, aligned_h);
         }
 
         /* Copy buffer back to user space */

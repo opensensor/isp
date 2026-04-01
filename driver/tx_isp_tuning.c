@@ -11670,14 +11670,33 @@ static void jz_isp_ccm_para2reg(void *reg_data, void *param_data)
     memcpy(reg_data, param_data, 0x24);
 }
 
-/* tiziano_ccm_params_refresh - Refresh CCM parameters */
+/* tiziano_ccm_params_refresh - OEM EXACT: load CCM matrices from tuning data.
+ * CCM tuning data starts at offset 0x9BD4 in the parameter block. */
 void tiziano_ccm_params_refresh(void)
 {
-    pr_debug("tiziano_ccm_params_refresh: Refreshing CCM parameters\n");
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
 
-    /* Update CCM parameters based on current conditions */
-    data_c52ec = data_9a454 >> 10;  /* Update EV cache */
-    data_c52f4 = data_9a450;        /* Update CT cache */
+    if (p && (ccm_ctrl.params[0] == 0)) {
+        memcpy(tiziano_ccm_a_linear, p + 0x9BE8, 0x24);
+        memcpy(tiziano_ccm_t_linear, p + 0x9C0C, 0x24);
+        memcpy(tiziano_ccm_d_linear, p + 0x9C30, 0x24);
+        memcpy(cm_sat_list,          p + 0x9C78, 0x24);
+        memcpy(tiziano_ccm_a_wdr,    p + 0x9C9C, 0x24);
+        memcpy(tiziano_ccm_t_wdr,    p + 0x9CC0, 0x24);
+        memcpy(tiziano_ccm_d_wdr,    p + 0x9CE4, 0x24);
+        memcpy(cm_sat_list_wdr,      p + 0x9D2C, 0x24);
+    }
+
+    if (p) {
+        /* Skip tiziano_ccm_dp_cfg — declared as single u32 but OEM
+         * copies 0x14 bytes. Needs struct refactor to fix safely. */
+        memcpy(cm_ev_list,         p + 0x9C54, 0x24);
+        memcpy(cm_ev_list_wdr,     p + 0x9D08, 0x24);
+        memcpy(cm_awb_list,        p + 0x9D50, 8);
+    }
+
+    data_c52ec = data_9a454 >> 10;
+    data_c52f4 = data_9a450;
 }
 
 /* tisp_ccm_ct_update - OEM-like CT update: force jz_isp_ccm with current CT */
