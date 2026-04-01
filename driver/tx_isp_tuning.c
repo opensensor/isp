@@ -133,10 +133,6 @@ extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
 #define CLM_LUT_SHIFT_SIZE  4
 #define CLM_REG_SIZE         0x690   /* 0x1A4 words × 4 bytes */
 #define MDNS_TPARAMS_OFFSET  0xBB30  /* OEM MDNS blob starts at 0x90640 - 0x84B10 */
-#define CLM_TPARAMS_H_LUT_OFF     0xFB84
-#define CLM_TPARAMS_S_LUT_OFF     0xFF9E
-#define CLM_TPARAMS_LUT_SHIFT_OFF 0x107D4
-
 static uint8_t  tiziano_clm_h_lut[CLM_H_LUT_SIZE];
 static int16_t  tiziano_clm_s_lut[CLM_S_LUT_SIZE / 2];
 static uint32_t tiziano_clm_lut_shift;
@@ -13248,22 +13244,21 @@ static int tiziano_set_parameter_clm(void)
 	return 0;
 }
 
-/* tiziano_clm_params_refresh — load CLM LUTs from tuning parameter blob */
+/* tiziano_clm_params_refresh — OEM uses fixed static CLM payloads, not tparams.
+ * BN decomp of tx-isp-t31.ko shows:
+ *   memcpy(clm_h_lut, 0x94694, 0x41a)
+ *   memcpy(clm_s_lut, 0x94aae, 0x834)
+ *   memcpy(&clm_lut_shift, 0x952e4, 4)
+ * The HLIL dump for those regions is all-zero, so the OEM CLM payload is a
+ * zeroed passthrough table with shift 0.  Do not source CLM from the tuning
+ * blob here; that produces non-OEM color remapping.
+ */
 static int tiziano_clm_params_refresh(void)
 {
-	const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
-
-	if (!params) {
-		/* No tuning data — zero out LUTs (passthrough) */
-		memset(tiziano_clm_h_lut, 0, CLM_H_LUT_SIZE);
-		memset(tiziano_clm_s_lut, 0, CLM_S_LUT_SIZE);
-		tiziano_clm_lut_shift = 0;
-		return 0;
-	}
-
-	memcpy(tiziano_clm_h_lut,    params + CLM_TPARAMS_H_LUT_OFF,    CLM_H_LUT_SIZE);
-	memcpy(tiziano_clm_s_lut,    params + CLM_TPARAMS_S_LUT_OFF,    CLM_S_LUT_SIZE);
-	memcpy(&tiziano_clm_lut_shift, params + CLM_TPARAMS_LUT_SHIFT_OFF, CLM_LUT_SHIFT_SIZE);
+	memset(tiziano_clm_h_lut, 0, CLM_H_LUT_SIZE);
+	memset(tiziano_clm_s_lut, 0, CLM_S_LUT_SIZE);
+	tiziano_clm_lut_shift = 0;
+	pr_info("tiziano_clm_params_refresh: OEM static CLM payload applied (zero LUTs, shift=0)\n");
 
 	return 0;
 }
