@@ -1288,16 +1288,23 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 	 * TODO: Load the sensor tuning bin to match the OEM fully.
 	 */
 	if (!params || !tuning_bin_loaded) {
-		/* No tuning bin loaded — keep 0x8077efff so uninitialized
-		 * ISP blocks stay bypassed and data flows through. */
 		goto apply_force_mask;
 	}
 
+	/* OEM: loop over first 32 u32 words of tparams to build bypass.
+	 * DISABLED: Our tiziano sub-module init functions are incomplete —
+	 * enabling blocks whose parameters aren't fully programmed stalls
+	 * the ISP pipeline → solid green output.  Keep 0x8077efff (most
+	 * blocks bypassed) until init functions are OEM-equivalent.
+	 * TODO: Re-enable once all *_init() and *_params_refresh() match OEM.
+	 */
+#if 0
 	for (i = 0; i < 32; i++) {
 		u32 bit = 1U << i;
 		u32 val = params[i] ? 1U : 0U;
 		bypass_val = (bypass_val & ~bit) | (val << i);
 	}
+#endif
 
 apply_force_mask:
 	/* OEM EXACT: apply force AND-mask then OR-mask.
