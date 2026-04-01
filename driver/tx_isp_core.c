@@ -1790,12 +1790,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         writel(interrupt_status, isp_regs + 0xb8);
         wmb();
     }
-    /* Force bit 0 so the FIFO drain loop runs on every ISR.  The OEM gets
-     * reliable bit 0x1 from hardware because its pipeline is fully matched.
-     * Ours still has processing blocks that don't fire bit 0x1 reliably,
-     * so force-drain to catch completed frames.  This was present in
-     * commit 2e55bf65 which successfully delivered frames. */
-    interrupt_status |= 1;
+    /* OEM does NOT force bit 0.  Now that the register 0xc corruption
+     * is fixed (0x200 handler no longer writes bypass register), DMA
+     * bits stick and the hardware should produce reliable bit 0x1
+     * on MSCA frame completion. */
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
@@ -1843,18 +1841,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
      * Both are one-shot: they fire on the first interrupt and are then
      * inhibited by their respective guard variables.
      */
-    /* Guard: detect and fix HARDWARE 0x9804 losing 0xf0000 DMA output bits.
-     * Check the actual hardware register, not just the software variable,
-     * because the hardware can clear these bits independently.
-     * MUST run on every ISR — 0xf0000 must be present for MSCA to produce
-     * output, which is what causes bit 0x1 in interrupt_status. */
+    /* Guard: restore MSCA DMA output bits ONLY when a valid buffer
+     * address is programmed.  Writing 0xf0000 to 0x9804 when 0x996c=0
+     * causes MSCA to attempt DMA to address 0, which fails and makes
+     * the hardware auto-disable DMA (stripping 0xf0000 immediately). */
     if (msca_ch_en & 0x1) {
         u32 hw_9804 = readl(isp_regs + 0x9804);
-        if ((hw_9804 & 0xf0000) != 0xf0000) {
-            static int ch_en_warn_count;
-            if (ch_en_warn_count++ < 20)
-                pr_warn("ISR: hw_9804=0x%x sw_msca_ch_en=0x%x — DMA bits stripped! Writing 0x%x\n",
-                        hw_9804, msca_ch_en, msca_ch_en | 0xf0000);
+        u32 buf_addr = readl(isp_regs + 0x996c);
+        if ((hw_9804 & 0xf0000) != 0xf0000 && buf_addr != 0) {
             msca_ch_en |= 0xf0000;
             system_reg_write(0x9804, msca_ch_en);
         }

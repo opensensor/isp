@@ -1274,12 +1274,6 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 	}
 
-	/* Hardcoded verified-working bypass until tuning bin interpretation
-	 * is fully matched to OEM.  Must return here (same path as
-	 * isp_bypass_override) to avoid the for loop and force mask. */
-	pr_info("tisp_compute_top_bypass: using verified bypass 0xb4176249\n");
-	return 0xb4176249;
-
 	if (!params)
 		goto apply_force_mask;
 
@@ -1305,10 +1299,12 @@ apply_force_mask:
 	else
 		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
 
-	if (wdr_enable)
-		bypass_val = (bypass_val & 0xa1ffdf76) | 0x00880002;
-	else
-		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+	/* Force-enable blocks required for data flow (bits 14,16,17,18)
+	 * and force-disable blocks with broken init (bits 21,22,24).
+	 * Binary search confirmed: 14,16,17,18 must be ON for pipeline,
+	 * 21,22,24 stall MSCA DMA when enabled. */
+	bypass_val |= (1U << 14) | (1U << 16) | (1U << 17) | (1U << 18);
+	bypass_val &= ~((1U << 21) | (1U << 22) | (1U << 24));
 
 	return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 }
