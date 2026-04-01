@@ -1872,19 +1872,22 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* *** CHANNEL 0/1/2 FRAME COMPLETION PROCESSING ***
-     * Matches commit 2e55bf65 drain pattern that successfully delivered frames. */
+     * Pass FIFO pop Y address via event data so frame_chan_event can
+     * match the completed buffer for correct DQBUF delivery. */
     {
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         u32 fifo_stat_ch0;
+        u32 evt[4];  /* event data: [0]=0, [1]=0, [2]=y_addr, [3]=0 */
 
         /* CH0 drain */
         drain_count = 0;
         fifo_stat_ch0 = readl(isp_regs + 0x997c);
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
-            (void)readl(isp_regs + 0x9974); /* pop FIFO entry */
-            frame_chan_event(&frame_channels[0], 0x3000006, NULL);
+            evt[0] = 0; evt[1] = 0; evt[3] = 0;
+            evt[2] = readl(isp_regs + 0x9974); /* pop FIFO = Y addr */
+            frame_chan_event(&frame_channels[0], 0x3000006, evt);
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
@@ -1895,16 +1898,18 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* CH1 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9a74);
-            frame_chan_event(&frame_channels[1], 0x3000006, NULL);
+            evt[0] = 0; evt[1] = 0; evt[3] = 0;
+            evt[2] = readl(isp_regs + 0x9a74);
+            frame_chan_event(&frame_channels[1], 0x3000006, evt);
             drain_count++;
         }
 
         /* CH2 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
-            (void)readl(isp_regs + 0x9b74);
-            frame_chan_event(&frame_channels[2], 0x3000006, NULL);
+            evt[0] = 0; evt[1] = 0; evt[3] = 0;
+            evt[2] = readl(isp_regs + 0x9b74);
+            frame_chan_event(&frame_channels[2], 0x3000006, evt);
             drain_count++;
         }
     }

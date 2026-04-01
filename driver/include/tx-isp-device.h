@@ -605,6 +605,7 @@ struct tx_isp_channel_state {
     /* OEM-aligned completion for 0x400456bf polling (offset 0x2d4) */
     struct completion frame_done;          /* ISR signals, frame_pooling_thread waits */
     atomic_t frame_ready_count;            /* Frames ready but not yet consumed */
+    u32 last_done_phys;                    /* Y phys addr from last MSCA FIFO pop */
 
     /* Legacy fields for compatibility */
     struct frame_buffer current_buffer;     /* Current active buffer */

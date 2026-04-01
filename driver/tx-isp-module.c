@@ -1506,36 +1506,26 @@ int frame_chan_event(void *priv, int event, void *data)
         if (enable && period) {
             u32 pos = state->drop_counter++ % period;
             drop = ((mask >> pos) & 0x1) != 0;
-            pr_debug("[DROP] ch%d enable=%u period=%u mask=0x%x pos=%u drop=%d\n",
-                     fcd->channel_num, enable, period, mask, pos, drop);
         }
-        if (drop) {
-            /* In a drop window: do not make a frame deliverable */
+        if (drop)
             return 0;
+
+        /* Store the Y buffer address from the FIFO pop so DQBUF can
+         * return the correct buffer instead of a rotating index.
+         * The ISR passes data=NULL (legacy) or a struct with Y addr at +8. */
+        if (data) {
+            u32 y_addr = ((u32 *)data)[2]; /* offset +8 = Y phys addr */
+            if (y_addr)
+                state->last_done_phys = y_addr;
         }
 
-        /* OEM-aligned: do NOT pop from queued_buffers here.
-         * The VIC MDMA hardware cycles through pre-programmed bank addresses
-         * automatically. We just signal that a new frame is available.
-         * Buffer lifecycle is managed by the VIC bank engine, not by
-         * draining the queue on every interrupt.
-         */
         atomic_inc(&state->frame_ready_count);
         state->sequence++;
-
-        /* Signal completion for 0x400456bf (OEM: complete($s0 + 0x2d4)) */
         complete(&state->frame_done);
-
-        /* Also wake waiters on frame_wait for DQBUF compatibility */
         wake_up_interruptible(&state->frame_wait);
-
-        pr_debug("[FRM] ch%d frame_ready count=%d seq=%u\n",
-                 fcd->channel_num, atomic_read(&state->frame_ready_count),
-                 state->sequence);
         return 0;
     }
     case TX_ISP_EVENT_FRAME_QBUF: /* 0x3000008 */
-        /* Optionally track queued buffers; no-op for now */
         return 0;
     default:
         return -ENOIOCTLCMD;
@@ -4433,8 +4423,27 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             struct frame_buffer *tracked = NULL;
             u32 delivered_seq = state->sequence;
             struct timeval delivered_ts;
-            /* Rotating buffer index: cycle through tracked buffers */
-            u32 delivered_idx = delivered_seq % (state->buffer_count ? state->buffer_count : 3);
+            u32 delivered_idx;
+            u32 done_phys = state->last_done_phys;
+            int match_found = 0;
+
+            /* Match completed buffer by Y physical address from FIFO pop.
+             * The OEM matches buffers this way — the rotating index was
+             * returning wrong buffers causing corrupted/stale frame data. */
+            if (done_phys) {
+                int bi;
+                int bc = state->buffer_count ? state->buffer_count : 3;
+                for (bi = 0; bi < bc; bi++) {
+                    struct frame_buffer *tb = frame_channel_get_tracked_buffer(fcd, bi);
+                    if (tb && (tb->m.userptr & ~0xfff) == (done_phys & ~0xfff)) {
+                        delivered_idx = bi;
+                        match_found = 1;
+                        break;
+                    }
+                }
+            }
+            if (!match_found)
+                delivered_idx = delivered_seq % (state->buffer_count ? state->buffer_count : 3);
 
             fill_timeval_mono(&delivered_ts);
 
