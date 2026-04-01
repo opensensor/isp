@@ -1359,7 +1359,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
-static uint isp_block_enable = 0x4A8ADFB6;  /* Current safe whitelist: previous whitelist + GIB(5) + ADR(7) + SDNS(15); keep MDNS(16) bypassed until OEM MDNS init/refresh behavior is implemented */
+static uint isp_block_enable = 0x4A8BDFB6;  /* Current whitelist enables the OEM-matched MDNS block (bit 16) now that MDNS init/refresh and chroma tables are implemented. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -13182,7 +13182,7 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
     tisp_mdns_par_refresh(data_9a9d0, 0x10000);
     tisp_mdns_bypass(0);
 
-    pr_info("tiziano_mdns_init: MDNS initialized via OEM-style refresh path (MDNS still globally bypassed by default)\n");
+	pr_info("tiziano_mdns_init: MDNS initialized via OEM-style refresh path (MDNS enabled in top-level whitelist)\n");
     return 0;
 }
 
