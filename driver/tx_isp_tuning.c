@@ -1299,11 +1299,13 @@ apply_force_mask:
 	else
 		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
 
-	/* Force-enable blocks required for data flow (bits 14,16,17,18).
-	 * Force-disable CLM (bit 22) — needs 800+ LUT register writes not yet implemented.
-	 * Bits 20 (YDNS), 21 (RDNS), 24 (HLDC) now have OEM-matched init. */
-	bypass_val |= (1U << 14) | (1U << 16) | (1U << 17) | (1U << 18);
-	bypass_val &= ~(1U << 22);
+	/* Enable ALL processing blocks except CLM (bit 22) which needs
+	 * 800+ LUT register writes not yet implemented.
+	 * Bits 20 (YDNS), 21 (RDNS), 24 (HLDC) have OEM-matched init.
+	 * The tuning bin bypasses some blocks but the OEM enables them
+	 * through a mechanism we haven't fully matched yet. */
+	bypass_val = 0xFFBFFFFF;  /* all bits except 22 */
+	bypass_val |= 0x34000009; /* ensure force-mask bits are set */
 
 	return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 }
