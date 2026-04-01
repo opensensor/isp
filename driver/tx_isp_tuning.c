@@ -1274,16 +1274,22 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 	}
 
-	if (!params)
-		goto apply_force_mask;
-
-	/* Only apply per-block bypass from params if a tuning bin was loaded.
-	 * Without a bin file, params are all zeros which would clear ALL bypass
-	 * bits, enabling every ISP block without configuration -> garbage output.
-	 * Keep the conservative initial value 0x8077efff (most blocks bypassed). */
-	if (!tuning_bin_loaded) {
-		pr_info("tisp_compute_top_bypass: no bin file, using conservative bypass 0x%x\n",
-			bypass_val);
+	/* OEM: The per-bit loop always runs, reading from tparams_day.
+	 * Each bit position is overwritten: bypass_val = (bypass_val & ~(1<<i)) | (params[i]<<i)
+	 * With no bin file, tparams_day is all zeros → bypass_val = 0 → force-mask
+	 * gives 0x34000009 (non-WDR).  However, this only works when all tiziano
+	 * sub-modules are properly initialized with valid tuning data.
+	 * Without a valid bin file, sub-module *_params_refresh() writes zeros
+	 * into ISP registers (e.g. gamma LUT all-zero, CCM identity broken),
+	 * which stalls the pipeline → solid green output.
+	 *
+	 * When no bin file is loaded, keep the initial 0x8077efff so that
+	 * uninitialized blocks remain bypassed and data flows through.
+	 * TODO: Load the sensor tuning bin to match the OEM fully.
+	 */
+	if (!params || !tuning_bin_loaded) {
+		/* No tuning bin loaded — keep 0x8077efff so uninitialized
+		 * ISP blocks stay bypassed and data flows through. */
 		goto apply_force_mask;
 	}
 
@@ -1294,17 +1300,12 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 	}
 
 apply_force_mask:
+	/* OEM EXACT: apply force AND-mask then OR-mask.
+	 * No additional bit overrides — match the OEM binary exactly. */
 	if (wdr_enable)
 		bypass_val = (bypass_val & 0xa1ffdf76) | 0x00880002;
 	else
 		bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
-
-	/* Use tuning-computed bypass with corrections:
-	 * - Force-enable bits 14,16,17,18 (required for pipeline data flow)
-	 * - Force-disable bit 22 (CLM, needs 800+ LUT writes)
-	 * Bits 20 (YDNS), 21 (RDNS), 24 (HLDC) have OEM-matched init. */
-	bypass_val |= (1U << 14) | (1U << 16) | (1U << 17) | (1U << 18);
-	bypass_val &= ~(1U << 22);
 
 	return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 }
@@ -11676,7 +11677,12 @@ void tiziano_ccm_params_refresh(void)
 {
     const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
 
-    if (p && (ccm_ctrl.params[0] == 0)) {
+    /* OEM reads CCM matrices from tparams.  When no tuning bin is loaded,
+     * tparams is all-zeros which would OVERWRITE our identity-matrix defaults
+     * (tiziano_ccm_{a,t,d}_linear = {0x100,0,0, 0,0x100,0, 0,0,0x100})
+     * with zeros → all-zero CCM → solid green output.
+     * Guard the memcpy with tuning_bin_loaded so defaults survive. */
+    if (p && tuning_bin_loaded && (ccm_ctrl.params[0] == 0)) {
         memcpy(tiziano_ccm_a_linear, p + 0x9BE8, 0x24);
         memcpy(tiziano_ccm_t_linear, p + 0x9C0C, 0x24);
         memcpy(tiziano_ccm_d_linear, p + 0x9C30, 0x24);
@@ -11687,9 +11693,7 @@ void tiziano_ccm_params_refresh(void)
         memcpy(cm_sat_list_wdr,      p + 0x9D2C, 0x24);
     }
 
-    if (p) {
-        /* Skip tiziano_ccm_dp_cfg — declared as single u32 but OEM
-         * copies 0x14 bytes. Needs struct refactor to fix safely. */
+    if (p && tuning_bin_loaded) {
         memcpy(cm_ev_list,         p + 0x9C54, 0x24);
         memcpy(cm_ev_list_wdr,     p + 0x9D08, 0x24);
         memcpy(cm_awb_list,        p + 0x9D50, 8);
@@ -13107,7 +13111,7 @@ static uint8_t *rdns_text_base_thres_array_now;
 static void tiziano_rdns_params_refresh(void)
 {
     const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
-    if (!p) return;
+    if (!p || !tuning_bin_loaded) return;
     memcpy(rdns_out_opt_array,              p + 0x3528, 4);
     memcpy(rdns_awb_gain_par_cfg_array,     p + 0x352c, 0x10);
     memcpy(rdns_oe_num_array,               p + 0x353c, 0x24);
