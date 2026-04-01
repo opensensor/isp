@@ -11389,6 +11389,101 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
  * OEM decompile: awb_first=0, memset(&tisp_wb_attr,0,0x1c),
  *   tiziano_awb_params_refresh(), setup _awb_parameter loop,
  *   if (!awb_frz) { set_hardware_param; Tiziano_awb_set_gain }, register callbacks. */
+static void JZ_Isp_Awb_Awbg2reg(const uint32_t gains[2], uint32_t regs[2])
+{
+	u32 gr = gains[0] << 2;
+	u32 gb = gains[1] << 2;
+
+	if (gr >= 0x4000)
+		gr = 0x3fff;
+	if (gb >= 0x4000)
+		gb = 0x3fff;
+
+	regs[0] = 0x04000000 | gr;
+	regs[1] = 0x04000000 | gb;
+}
+
+static void tisp_rdns_awb_gain_updata(uint32_t gain_gr, uint32_t gain_gb)
+{
+	u32 gr = gain_gr >> 4;
+	u32 gb = gain_gb >> 4;
+	u32 inv_gr = fix_point_div_32(6, 1, gr ? gr : 1);
+	u32 inv_gb = fix_point_div_32(6, 1, gb ? gb : 1);
+
+	memcpy(rdns_awb_gain_par_cfg_array + 0x0, &gr, sizeof(gr));
+	memcpy(rdns_awb_gain_par_cfg_array + 0x4, &gb, sizeof(gb));
+	memcpy(rdns_awb_gain_par_cfg_array + 0x8, &inv_gr, sizeof(inv_gr));
+	memcpy(rdns_awb_gain_par_cfg_array + 0xc, &inv_gb, sizeof(inv_gb));
+
+	system_reg_write(0x3000, (gb << 16) | (gr & 0xffff));
+	system_reg_write(0x3004, (inv_gb << 16) | (inv_gr & 0xffff));
+	system_reg_write(0x30ac, 1);
+}
+
+static void tisp_dmsc_awb_gain_par_cfg(uint32_t gain)
+{
+	uint8_t *blob = tisp_dmsc_param_store[0xa8 - TISP_DMSC_PARAM_FIRST];
+	u32 dmsc_awb_gain = gain & 0xffff;
+	u32 data_b470c = 0;
+	u32 data_b4710 = 0;
+
+	memcpy(blob + 0x0, &dmsc_awb_gain, sizeof(dmsc_awb_gain));
+	memcpy(&data_b470c, blob + 0x4, sizeof(data_b470c));
+	memcpy(&data_b4710, blob + 0x8, sizeof(data_b4710));
+
+	system_reg_write(0x4984,
+		((data_b4710 & 0xf) << 28) |
+		((data_b470c & 0xfff) << 16) |
+		dmsc_awb_gain);
+}
+
+static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_t *wb_static)
+{
+	const uint32_t *mf_words = (const uint32_t *)mf_para;
+	u32 q = point_pos & 0x1f;
+	u32 rounding = point_pos ? (1u << ((point_pos - 1) & 0x1f)) : 0;
+	u32 gain_pair[2];
+	u32 reg_pair[2];
+	u32 wb_gr = wb_static ? wb_static[0] : 0x100;
+	u32 wb_gb = wb_static ? wb_static[1] : 0x100;
+	u32 mf_gr = mf_words[4];
+	u32 mf_gb = mf_words[5];
+	u32 gain_gr_q;
+	u32 gain_gb_q;
+
+	gain_gr_q = fix_point_mult2_32(point_pos, mf_gr << q, wb_gr);
+	gain_gb_q = fix_point_mult2_32(point_pos, mf_gb << q, wb_gb);
+	gain_pair[0] = (gain_gr_q + rounding) >> q;
+	gain_pair[1] = (gain_gb_q + rounding) >> q;
+
+	JZ_Isp_Awb_Awbg2reg(gain_pair, reg_pair);
+
+	if (ourISPdev && ourISPdev->tuning_data) {
+		struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+
+		mutex_lock(&tuning->mutex);
+		tuning->wb_gains.r = reg_pair[0] & 0xffff;
+		tuning->wb_gains.g = 0x400;
+		tuning->wb_gains.b = reg_pair[1] & 0xffff;
+		mutex_unlock(&tuning->mutex);
+	}
+
+	if (awb_frz == 0) {
+		system_reg_write_awb(2, 0x183c, reg_pair[0]);
+		system_reg_write_awb(2, 0x1840, reg_pair[1]);
+		system_reg_write_awb(2, 0x1844, reg_pair[0]);
+		system_reg_write_awb(2, 0x1810, reg_pair[1]);
+		tisp_rdns_awb_gain_updata(reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
+		tisp_dmsc_awb_gain_par_cfg((reg_pair[0] & 0xffff) >> 4);
+		system_reg_write(0x499c, 1);
+	}
+
+	awb_moa = 0;
+	pr_info("Tiziano_awb_set_gain: wb_static=%u,%u -> awb_gain=%u,%u\n",
+		wb_gr, wb_gb, reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
+	return 0;
+}
+
 int tiziano_awb_init(uint32_t height, uint32_t width)
 {
     static int awb_first_init;
@@ -11411,23 +11506,7 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
     if (awb_frz == 0)
         tiziano_awb_set_hardware_param();
 
-    /* OEM: Set initial white balance gains from _wb_static.
-     * If bin is loaded, _wb_static has sensor-specific gains.
-     * Fallback: use reasonable daylight defaults. */
-    /* OEM calls Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos.d, &_wb_static)
-     * which does complex fixed-point math with _awb_mf_para offsets 0x10/0x14,
-     * shifts by _AwbPointPos, and multiplies by _wb_static.
-     * _wb_static values (e.g. 1840, 2018) are NOT raw gains - they are scaling
-     * factors used in the fixed-point multiplication chain.
-     * Using them directly as gains causes massive 7x+ amplification.
-     * Use reasonable defaults until Tiziano_awb_set_gain is fully implemented. */
-    {
-        system_reg_write_awb(0, 0x1100, 300);   /* R gain */
-        system_reg_write_awb(0, 0x1104, 256);   /* G gain */
-        system_reg_write_awb(0, 0x1108, 280);   /* B gain */
-        pr_info("tiziano_awb_init: AWB gains R=300 G=256 B=280 (wb_static=%u,%u saved for later)\n",
-            _wb_static[0], _wb_static[1]);
-    }
+    Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
 
     return 0;
 }
