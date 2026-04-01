@@ -849,7 +849,7 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
     u32 *HLSP = bcsh_wdr_enabled ? bcsh_HLSP_wdr : bcsh_HLSP;
     u32 *Sth  = bcsh_wdr_enabled ? bcsh_Sthres_wdr : bcsh_Sthres;
     u32 *RGB  = bcsh_wdr_enabled ? bcsh_OffsetRGB_wdr : bcsh_OffsetRGB;
-    u32 *Carr = bcsh_wdr_enabled ? bcsh_C_wdr : bcsh_C;
+    u32 *Carr = bcsh_C; /* OEM uses shared C[] across linear/WDR */
 
     /* Build HMatrix and compute slopes (Cslope0/1/2, HDPslope, HBPslope) */
     int32_t H[9];
@@ -13811,45 +13811,161 @@ int tiziano_af_init(uint32_t height, uint32_t width)
     return 0;
 }
 
-/* tiziano_bcsh_init - BCSH initialization */
-int tiziano_bcsh_init(void)
+/* OEM BCSH tuning blob offsets (tparams base 0x84B10 in OEM binary). */
+#define BCSH_TPARAMS_CCM_D_OFF          0x12220
+#define BCSH_TPARAMS_CCM_T_OFF          0x12244
+#define BCSH_TPARAMS_CCM_A_OFF          0x12268
+#define BCSH_TPARAMS_HDP_OFF            0x1228c
+#define BCSH_TPARAMS_HBP_OFF            0x12298
+#define BCSH_TPARAMS_HLSP_OFF           0x122a4
+#define BCSH_TPARAMS_STHRES_OFF         0x122b0
+#define BCSH_TPARAMS_EVLIST_OFF         0x122bc
+#define BCSH_TPARAMS_SMINS_OFF          0x122e0
+#define BCSH_TPARAMS_SMAXS_OFF          0x12304
+#define BCSH_TPARAMS_SMINM_OFF          0x12328
+#define BCSH_TPARAMS_SMAXM_OFF          0x1234c
+#define BCSH_TPARAMS_C_OFF              0x12370
+#define BCSH_TPARAMS_CXL_OFF            0x12384
+#define BCSH_TPARAMS_CXH_OFF            0x123a8
+#define BCSH_TPARAMS_CYL_OFF            0x123cc
+#define BCSH_TPARAMS_CYH_OFF            0x123f0
+#define BCSH_TPARAMS_B_OFF              0x12414
+#define BCSH_TPARAMS_OFFSETRGB_OFF      0x12418
+#define BCSH_TPARAMS_OFFSETYUVY_OFF     0x12424
+#define BCSH_TPARAMS_CLIP0_OFF          0x1242c
+#define BCSH_TPARAMS_CLIP1_OFF          0x1243c
+#define BCSH_TPARAMS_CCM_D_WDR_OFF      0x1244c
+#define BCSH_TPARAMS_CCM_T_WDR_OFF      0x12470
+#define BCSH_TPARAMS_CCM_A_WDR_OFF      0x12494
+#define BCSH_TPARAMS_HDP_WDR_OFF        0x124b8
+#define BCSH_TPARAMS_HBP_WDR_OFF        0x124c4
+#define BCSH_TPARAMS_HLSP_WDR_OFF       0x124d0
+#define BCSH_TPARAMS_STHRES_WDR_OFF     0x124dc
+#define BCSH_TPARAMS_EVLIST_WDR_OFF     0x124e8
+#define BCSH_TPARAMS_SMINS_WDR_OFF      0x1250c
+#define BCSH_TPARAMS_SMAXS_WDR_OFF      0x12530
+#define BCSH_TPARAMS_SMINM_WDR_OFF      0x12554
+#define BCSH_TPARAMS_SMAXM_WDR_OFF      0x12578
+#define BCSH_TPARAMS_OFFSETRGB_WDR_OFF  0x1259c
+#define BCSH_TPARAMS_MMATRIX_OFF        0x125a8
+#define BCSH_TPARAMS_MINVMATRIX_OFF     0x125cc
+#define BCSH_TPARAMS_CLIP2_OFF          0x125f0
+
+static void tiziano_bcsh_seed_fallback_defaults(void)
 {
     int i;
-    pr_info("tiziano_bcsh_init: Initializing BCSH processing\n");
 
-    /* Initialize normal and WDR banks to sane defaults matching tuning_data init */
     for (i = 0; i < 9; ++i) {
         bcsh_EvList[i]       = 0x1000 * (i + 1);
         bcsh_SminListS[i]    = 0x80  + (i * 0x10);
         bcsh_SmaxListS[i]    = 0x100 + (i * 0x10);
         bcsh_SminListM[i]    = 0x80  + (i * 0x08);
         bcsh_SmaxListM[i]    = 0x100 + (i * 0x08);
-        /* WDR mirrors normal by default */
         bcsh_EvList_wdr[i]    = bcsh_EvList[i];
         bcsh_SminListS_wdr[i] = bcsh_SminListS[i];
         bcsh_SmaxListS_wdr[i] = bcsh_SmaxListS[i];
         bcsh_SminListM_wdr[i] = bcsh_SminListM[i];
         bcsh_SmaxListM_wdr[i] = bcsh_SmaxListM[i];
     }
+
     bcsh_OffsetRGB[0] = bcsh_OffsetRGB[1] = bcsh_OffsetRGB[2] = 0;
     bcsh_OffsetRGB_wdr[0] = bcsh_OffsetRGB_wdr[1] = bcsh_OffsetRGB_wdr[2] = 0;
+}
 
-    bcsh_wdr_enabled = 0;
+static void tiziano_bcsh_sync_active_bank(struct isp_tuning_data *tuning)
+{
+    const uint32_t *ev;
+    const uint32_t *smin_s;
+    const uint32_t *smax_s;
+    const uint32_t *smin_m;
+    const uint32_t *smax_m;
+    int i;
+
+    if (!tuning)
+        return;
+
+    ev = bcsh_wdr_enabled ? bcsh_EvList_wdr : bcsh_EvList;
+    smin_s = bcsh_wdr_enabled ? bcsh_SminListS_wdr : bcsh_SminListS;
+    smax_s = bcsh_wdr_enabled ? bcsh_SmaxListS_wdr : bcsh_SmaxListS;
+    smin_m = bcsh_wdr_enabled ? bcsh_SminListM_wdr : bcsh_SminListM;
+    smax_m = bcsh_wdr_enabled ? bcsh_SmaxListM_wdr : bcsh_SmaxListM;
+
+    mutex_lock(&tuning->mutex);
+    for (i = 0; i < 9; ++i) {
+        tuning->bcsh_au32EvList_now[i]    = ev[i];
+        tuning->bcsh_au32SminListS_now[i] = smin_s[i];
+        tuning->bcsh_au32SmaxListS_now[i] = smax_s[i];
+        tuning->bcsh_au32SminListM_now[i] = smin_m[i];
+        tuning->bcsh_au32SmaxListM_now[i] = smax_m[i];
+    }
+    mutex_unlock(&tuning->mutex);
+}
+
+static void tiziano_bcsh_params_refresh(void)
+{
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+
+    if (!p || !tuning_bin_loaded) {
+        pr_info("tiziano_bcsh_params_refresh: no tuning bin, keeping fallback defaults\n");
+        return;
+    }
+
+    memcpy(bcsh_CCM_d,         p + BCSH_TPARAMS_CCM_D_OFF,         0x24);
+    memcpy(bcsh_CCM_t,         p + BCSH_TPARAMS_CCM_T_OFF,         0x24);
+    memcpy(bcsh_CCM_a,         p + BCSH_TPARAMS_CCM_A_OFF,         0x24);
+    memcpy(bcsh_HDP,           p + BCSH_TPARAMS_HDP_OFF,           0x0c);
+    memcpy(bcsh_HBP,           p + BCSH_TPARAMS_HBP_OFF,           0x0c);
+    memcpy(bcsh_HLSP,          p + BCSH_TPARAMS_HLSP_OFF,          0x0c);
+    memcpy(bcsh_Sthres,        p + BCSH_TPARAMS_STHRES_OFF,        0x0c);
+    memcpy(bcsh_EvList,        p + BCSH_TPARAMS_EVLIST_OFF,        0x24);
+    memcpy(bcsh_SminListS,     p + BCSH_TPARAMS_SMINS_OFF,         0x24);
+    memcpy(bcsh_SmaxListS,     p + BCSH_TPARAMS_SMAXS_OFF,         0x24);
+    memcpy(bcsh_SminListM,     p + BCSH_TPARAMS_SMINM_OFF,         0x24);
+    memcpy(bcsh_SmaxListM,     p + BCSH_TPARAMS_SMAXM_OFF,         0x24);
+    memcpy(bcsh_C,             p + BCSH_TPARAMS_C_OFF,             0x14);
+    memcpy(bcsh_Cxl,           p + BCSH_TPARAMS_CXL_OFF,           0x24);
+    memcpy(bcsh_Cxh,           p + BCSH_TPARAMS_CXH_OFF,           0x24);
+    memcpy(bcsh_Cyl,           p + BCSH_TPARAMS_CYL_OFF,           0x24);
+    memcpy(bcsh_Cyh,           p + BCSH_TPARAMS_CYH_OFF,           0x24);
+    memcpy(&bcsh_B,            p + BCSH_TPARAMS_B_OFF,             4);
+    memcpy(bcsh_OffsetRGB,     p + BCSH_TPARAMS_OFFSETRGB_OFF,     0x0c);
+    memcpy(bcsh_OffsetYUVy,    p + BCSH_TPARAMS_OFFSETYUVY_OFF,    8);
+    memcpy(bcsh_clip0,         p + BCSH_TPARAMS_CLIP0_OFF,         0x10);
+    memcpy(bcsh_clip1,         p + BCSH_TPARAMS_CLIP1_OFF,         0x10);
+
+    memcpy(bcsh_CCM_d_wdr,     p + BCSH_TPARAMS_CCM_D_WDR_OFF,     0x24);
+    memcpy(bcsh_CCM_t_wdr,     p + BCSH_TPARAMS_CCM_T_WDR_OFF,     0x24);
+    memcpy(bcsh_CCM_a_wdr,     p + BCSH_TPARAMS_CCM_A_WDR_OFF,     0x24);
+    memcpy(bcsh_HDP_wdr,       p + BCSH_TPARAMS_HDP_WDR_OFF,       0x0c);
+    memcpy(bcsh_HBP_wdr,       p + BCSH_TPARAMS_HBP_WDR_OFF,       0x0c);
+    memcpy(bcsh_HLSP_wdr,      p + BCSH_TPARAMS_HLSP_WDR_OFF,      0x0c);
+    memcpy(bcsh_Sthres_wdr,    p + BCSH_TPARAMS_STHRES_WDR_OFF,    0x0c);
+    memcpy(bcsh_EvList_wdr,    p + BCSH_TPARAMS_EVLIST_WDR_OFF,    0x24);
+    memcpy(bcsh_SminListS_wdr, p + BCSH_TPARAMS_SMINS_WDR_OFF,     0x24);
+    memcpy(bcsh_SmaxListS_wdr, p + BCSH_TPARAMS_SMAXS_WDR_OFF,     0x24);
+    memcpy(bcsh_SminListM_wdr, p + BCSH_TPARAMS_SMINM_WDR_OFF,     0x24);
+    memcpy(bcsh_SmaxListM_wdr, p + BCSH_TPARAMS_SMAXM_WDR_OFF,     0x24);
+    memcpy(bcsh_OffsetRGB_wdr, p + BCSH_TPARAMS_OFFSETRGB_WDR_OFF, 0x0c);
+
+    memcpy(tiziano_MMatrix,    p + BCSH_TPARAMS_MMATRIX_OFF,       0x24);
+    memcpy(tiziano_MinvMatrix, p + BCSH_TPARAMS_MINVMATRIX_OFF,    0x24);
+    memcpy(bcsh_clip2,         p + BCSH_TPARAMS_CLIP2_OFF,         0x10);
+}
+
+/* tiziano_bcsh_init - BCSH initialization */
+int tiziano_bcsh_init(void)
+{
+    struct isp_tuning_data *tuning = ourISPdev ? ourISPdev->tuning_data : NULL;
+
+    pr_info("tiziano_bcsh_init: Initializing BCSH processing\n");
+
+    /* Preserve a safe fallback when no tuning blob is present, then overlay OEM data. */
+    tiziano_bcsh_seed_fallback_defaults();
+    tiziano_bcsh_params_refresh();
     BCSH_real = 1;
 
-    /* Seed the runtime "now" arrays from the current bank */
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-        mutex_lock(&tuning->mutex);
-        for (i = 0; i < 9; ++i) {
-            tuning->bcsh_au32EvList_now[i]    = bcsh_EvList[i];
-            tuning->bcsh_au32SminListS_now[i] = bcsh_SminListS[i];
-            tuning->bcsh_au32SmaxListS_now[i] = bcsh_SmaxListS[i];
-            tuning->bcsh_au32SminListM_now[i] = bcsh_SminListM[i];
-            tuning->bcsh_au32SmaxListM_now[i] = bcsh_SmaxListM[i];
-        }
-        mutex_unlock(&tuning->mutex);
-
+    if (tuning) {
+        tiziano_bcsh_sync_active_bank(tuning);
         /* OEM: tiziano_bcsh_init calls tiziano_bcsh_update() to program
          * the RGB→YUV conversion matrix into registers 0x8000-0x8070.
          * Without this call, the BCSH block has uninitialized registers
@@ -14231,39 +14347,19 @@ int tisp_ccm_wdr_en(int enable)
 
 int tisp_bcsh_wdr_en(int enable)
 {
-    int i;
+    struct isp_tuning_data *tuning;
+
     bcsh_wdr_enabled = !!enable;
 
     pr_info("tisp_bcsh_wdr_en: %s BCSH WDR mode\n", bcsh_wdr_enabled ? "Enable" : "Disable");
 
-    if (!ourISPdev || !ourISPdev->tuning_data)
+    tuning = ourISPdev ? ourISPdev->tuning_data : NULL;
+    if (!tuning)
         return 0;  /* Defer until tuning_data exists */
 
-    /* Switch the active "now" arrays by copying from selected bank */
-    {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-        mutex_lock(&tuning->mutex);
-        if (bcsh_wdr_enabled) {
-            for (i = 0; i < 9; ++i) {
-                tuning->bcsh_au32EvList_now[i]    = bcsh_EvList_wdr[i];
-                tuning->bcsh_au32SminListS_now[i] = bcsh_SminListS_wdr[i];
-                tuning->bcsh_au32SmaxListS_now[i] = bcsh_SmaxListS_wdr[i];
-                tuning->bcsh_au32SminListM_now[i] = bcsh_SminListM_wdr[i];
-                tuning->bcsh_au32SmaxListM_now[i] = bcsh_SmaxListM_wdr[i];
-            }
-        } else {
-            for (i = 0; i < 9; ++i) {
-                tuning->bcsh_au32EvList_now[i]    = bcsh_EvList[i];
-                tuning->bcsh_au32SminListS_now[i] = bcsh_SminListS[i];
-                tuning->bcsh_au32SmaxListS_now[i] = bcsh_SmaxListS[i];
-                tuning->bcsh_au32SminListM_now[i] = bcsh_SminListM[i];
-                tuning->bcsh_au32SmaxListM_now[i] = bcsh_SmaxListM[i];
-            }
-        }
-        mutex_unlock(&tuning->mutex);
-        BCSH_real = 1;
-        return tiziano_bcsh_update(tuning);
-    }
+    tiziano_bcsh_sync_active_bank(tuning);
+    BCSH_real = 1;
+    return tiziano_bcsh_update(tuning);
 }
 
 int tisp_rdns_wdr_en(int enable)
