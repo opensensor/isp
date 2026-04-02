@@ -15480,30 +15480,15 @@ static int tiziano_set_parameter_clm(void)
 	return 0;
 }
 
-/* tiziano_clm_params_refresh — OEM loads CLM LUTs from tuning bin:
- *   memcpy(clm_h_lut, tparams + 0xFB84, 0x41a)
- *   memcpy(clm_s_lut, tparams + 0xFF9E, 0x834)
- *   memcpy(&clm_lut_shift, tparams + 0x107D4, 4)
- * Previous code assumed these were all-zero (HLIL showed uninitialized data),
- * but the actual tuning bin contains real CLM calibration data.
- * Zero LUTs caused static color blobs when the CLM block was enabled. */
+/* tiziano_clm_params_refresh — OEM CLM ROM data is all-zero (confirmed by
+ * binary extraction from OEM .data section at 0x94694/0x94aae/0x952e4).
+ * Zero = passthrough intent, but writing packed zeros to HW creates blobs.
+ * tiziano_clm_init gates the register write on shift != 0. */
 static int tiziano_clm_params_refresh(void)
 {
-	const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
-
-	if (p && tuning_bin_loaded) {
-		memcpy(tiziano_clm_h_lut, p + 0xFB84, CLM_H_LUT_SIZE);
-		memcpy(tiziano_clm_s_lut, p + 0xFF9E, CLM_S_LUT_SIZE);
-		memcpy(&tiziano_clm_lut_shift, p + 0x107D4, 4);
-		pr_info("tiziano_clm_params_refresh: loaded from tuning bin (shift=%u)\n",
-			tiziano_clm_lut_shift);
-	} else {
-		memset(tiziano_clm_h_lut, 0, CLM_H_LUT_SIZE);
-		memset(tiziano_clm_s_lut, 0, CLM_S_LUT_SIZE);
-		tiziano_clm_lut_shift = 0;
-		pr_info("tiziano_clm_params_refresh: no tuning bin, using zero LUTs\n");
-	}
-
+	memset(tiziano_clm_h_lut, 0, CLM_H_LUT_SIZE);
+	memset(tiziano_clm_s_lut, 0, CLM_S_LUT_SIZE);
+	tiziano_clm_lut_shift = 0;
 	return 0;
 }
 
@@ -15518,12 +15503,22 @@ int tiziano_clm_dn_params_refresh(void)
 /* tiziano_clm_init — OEM: params_refresh + set_parameter */
 int tiziano_clm_init(void)
 {
-	pr_info("tiziano_clm_init: CLM register writes DISABLED for bit-11 isolation test\n");
-	/* Deliberately skip CLM register writes to test if bit 11 = CLM:
-	 * tiziano_clm_params_refresh();
-	 * tiziano_set_parameter_clm();
-	 * If blobs persist with bit 11 enabled but CLM writes skipped,
-	 * then bit 11 is NOT CLM. */
+	pr_info("tiziano_clm_init: Initializing CLM processing\n");
+	tiziano_clm_params_refresh();
+
+	/* Only write CLM registers if LUTs have non-zero data.
+	 * The OEM CLM data is all-zero (confirmed from binary extraction).
+	 * Writing all-zero packed registers to hardware does NOT produce
+	 * passthrough — it creates color blob artifacts. The hardware
+	 * power-on default IS passthrough, so skip the write. */
+	if (tiziano_clm_lut_shift != 0) {
+		tiziano_set_parameter_clm();
+		pr_info("tiziano_clm_init: CLM registers programmed (shift=%u)\n",
+			tiziano_clm_lut_shift);
+	} else {
+		pr_info("tiziano_clm_init: CLM data is zero, using hardware default passthrough\n");
+	}
+
 	return 0;
 }
 
