@@ -12789,6 +12789,11 @@ int tiziano_gib_init(void)
 
     pr_err("tiziano_gib_init: GIB initialized (deir_en=%d, day_night=%d, DEIR_EN=%d)\n",
             deir_en, ourISPdev->day_night, GIB_CFG_DEIR_EN);
+    pr_err("gib_init: deir_r_m[0..3]={%u,%u,%u,%u} deir_g_m[0..3]={%u,%u,%u,%u}\n",
+            tiziano_gib_deir_r_m[0], tiziano_gib_deir_r_m[1],
+            tiziano_gib_deir_r_m[2], tiziano_gib_deir_r_m[3],
+            tiziano_gib_deir_g_m[0], tiziano_gib_deir_g_m[1],
+            tiziano_gib_deir_g_m[2], tiziano_gib_deir_g_m[3]);
     return 0;
 }
 
