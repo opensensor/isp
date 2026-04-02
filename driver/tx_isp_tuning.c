@@ -8322,6 +8322,16 @@ static uint8_t  _color_temp_mesh[0x384];
 static uint8_t  _awb_wght[0x384];
 static uint8_t  _rgbg_weight_ot[0x384];
 static uint8_t  _ls_w_lut[0x808];
+static uint32_t awb_zone_rg[AWB_STATS_ZONES];
+static uint32_t awb_zone_bg[AWB_STATS_ZONES];
+static uint32_t awb_zone_rg_last[AWB_STATS_ZONES];
+static uint32_t awb_zone_bg_last[AWB_STATS_ZONES];
+static uint32_t awb_zone_pix_cnt[AWB_STATS_ZONES];
+static uint32_t awb_zone_rg_global;
+static uint32_t awb_zone_bg_global;
+static uint32_t awb_gain_track[2] = { 0x100, 0x100 };
+static uint8_t *awb_rgbg_weight_active = _rgbg_weight;
+static uint32_t awb_zone_cache_valid;
 
 /* Additional AWB globals observed in binary */
 /* awb_frz moved to top of file */
@@ -11518,6 +11528,168 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	return 0;
 }
 
+static uint32_t ISPAWBInterpolation1(uint32_t q, uint32_t x,
+				       uint32_t x0, uint32_t x1,
+				       uint32_t y0, uint32_t y1)
+{
+	u32 y0_q = y0 << (q & 0x1f);
+	u32 x0_q = x0 << (q & 0x1f);
+	u32 denom = (x1 - x0) << (q & 0x1f);
+
+	if (denom == 0)
+		return y0_q;
+
+	if (y1 < y0)
+		return y0_q - fix_point_div_32(q,
+			fix_point_mult2_32(q, (y0 - y1) << (q & 0x1f), x - x0_q),
+			denom);
+
+	return y0_q + fix_point_div_32(q,
+		fix_point_mult2_32(q, (y1 - y0) << (q & 0x1f), x - x0_q),
+		denom);
+}
+
+static uint32_t ISPAWBInterpolation2(uint32_t q, uint32_t x,
+				       uint32_t x0, uint32_t x1,
+				       uint32_t y0, uint32_t y1)
+{
+	u32 denom = (x1 - x0) << (q & 0x1f);
+	u32 x_delta;
+
+	if (denom == 0)
+		return y0;
+
+	x_delta = x - (x0 << (q & 0x1f));
+	if (y1 < y0)
+		return y0 - fix_point_div_32(q,
+			fix_point_mult2_32(q, y0 - y1, x_delta), denom);
+
+	return y0 + fix_point_div_32(q,
+		fix_point_mult2_32(q, y1 - y0, x_delta), denom);
+}
+
+static uint32_t awb_ratio_u8(uint32_t numer, uint32_t denom)
+{
+	if (denom == 0)
+		return 0;
+
+	return (uint32_t)div_u64((uint64_t)numer * 0x100 + (denom >> 1), denom);
+}
+
+static uint8_t awb_zone_mean_u8(uint32_t numer, uint32_t denom)
+{
+	uint32_t mean;
+
+	if (denom == 0)
+		return 0;
+
+	mean = (uint32_t)div_u64((uint64_t)numer + (denom >> 1), denom);
+	if (mean > 0xff)
+		mean = 0xff;
+
+	return (uint8_t)mean;
+}
+
+static int Tiziano_awb_fpga(const uint32_t *stats_r,
+			    const uint32_t *stats_g,
+			    const uint32_t *stats_b,
+			    const uint32_t *stats_p)
+{
+	const uint8_t *weight_bank = awb_rgbg_weight_active;
+	u64 rg_sum = 0;
+	u64 bg_sum = 0;
+	u64 diff_sum = 0;
+	u32 weight_sum = 0;
+	u32 active_zones = 0;
+	u32 idx;
+	u32 diff_threshold = _AwbPointPos[1];
+	bool force_recalc = !awb_zone_cache_valid || awb_moa || tisp_wb_attr[0] != 0;
+	u32 target_gr;
+	u32 target_gb;
+
+	if (!stats_r || !stats_g || !stats_b || !stats_p)
+		return -EINVAL;
+
+	for (idx = 0; idx < AWB_STATS_ZONES; ++idx) {
+		u32 g = stats_g[idx];
+		u32 pix = stats_p[idx];
+		u32 rg = 0;
+		u32 bg = 0;
+		u32 w = weight_bank ? weight_bank[idx] : 1;
+
+		awb_zone_pix_cnt[idx] = pix;
+		tisp_wb_zone_attr[idx] = awb_zone_mean_u8(stats_r[idx], pix);
+		tisp_wb_zone_attr[idx + AWB_STATS_ZONES] = awb_zone_mean_u8(g, pix);
+		tisp_wb_zone_attr[idx + (AWB_STATS_ZONES * 2)] =
+			awb_zone_mean_u8(stats_b[idx], pix);
+
+		if (g != 0) {
+			rg = awb_ratio_u8(stats_r[idx], g);
+			bg = awb_ratio_u8(stats_b[idx], g);
+		}
+
+		if (pix < _pixel_cnt_th || w == 0 || rg == 0 || bg == 0) {
+			awb_zone_rg[idx] = 0;
+			awb_zone_bg[idx] = 0;
+			continue;
+		}
+
+		awb_zone_rg[idx] = rg;
+		awb_zone_bg[idx] = bg;
+		rg_sum += (u64)rg * w;
+		bg_sum += (u64)bg * w;
+		weight_sum += w;
+		active_zones++;
+
+		if (awb_zone_cache_valid) {
+			u32 rg_diff = (awb_zone_rg_last[idx] > rg) ?
+				(awb_zone_rg_last[idx] - rg) : (rg - awb_zone_rg_last[idx]);
+			u32 bg_diff = (awb_zone_bg_last[idx] > bg) ?
+				(awb_zone_bg_last[idx] - bg) : (bg - awb_zone_bg_last[idx]);
+
+			diff_sum += rg_diff + bg_diff;
+		}
+	}
+
+	if (active_zones == 0 || weight_sum == 0)
+		return 0;
+
+	if (!force_recalc) {
+		u32 avg_diff = (uint32_t)div_u64(diff_sum + (active_zones >> 1), active_zones);
+
+		if (avg_diff < diff_threshold)
+			return awb_moa;
+	}
+
+	memcpy(awb_zone_rg_last, awb_zone_rg, sizeof(awb_zone_rg));
+	memcpy(awb_zone_bg_last, awb_zone_bg, sizeof(awb_zone_bg));
+	awb_zone_cache_valid = 1;
+
+	awb_zone_rg_global = (uint32_t)div_u64(rg_sum + (weight_sum >> 1), weight_sum);
+	awb_zone_bg_global = (uint32_t)div_u64(bg_sum + (weight_sum >> 1), weight_sum);
+	if (awb_zone_rg_global == 0)
+		awb_zone_rg_global = 0x100;
+	if (awb_zone_bg_global == 0)
+		awb_zone_bg_global = 0x100;
+
+	target_gr = (uint32_t)div_u64(0x10000ULL + (awb_zone_rg_global >> 1),
+					     awb_zone_rg_global);
+	target_gb = (uint32_t)div_u64(0x10000ULL + (awb_zone_bg_global >> 1),
+					     awb_zone_bg_global);
+
+	if (awb_gain_track[0] != 0)
+		target_gr = (awb_gain_track[0] * 3 + target_gr + 2) >> 2;
+	if (awb_gain_track[1] != 0)
+		target_gb = (awb_gain_track[1] * 3 + target_gb + 2) >> 2;
+
+	awb_gain_track[0] = target_gr;
+	awb_gain_track[1] = target_gb;
+	_wb_static[0] = target_gr;
+	_wb_static[1] = target_gb;
+
+	return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+}
+
 static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags)
 {
 	u32 cols = flags >> 28;
@@ -11615,6 +11787,8 @@ static int JZ_Isp_Awb(void)
 	uint32_t wb_attr_mode = 0;
 	u32 normal_rg = (AWB_NORMAL_RG_TH_HIGH << 16) | AWB_NORMAL_RG_TH_LOW;
 	u32 normal_bg = (AWB_NORMAL_BG_TH_HIGH << 16) | AWB_NORMAL_BG_TH_LOW;
+	u32 ev_low = _awb_mode[0] << 10;
+	u32 ev_high = _awb_mode[1] << 10;
 	u32 lowlight_rg = ((_awb_lowlight_rg_th[1] & 0x0fff) << 16) |
 		(_awb_lowlight_rg_th[0] & 0x0fff);
 	u32 switch_ev = _awb_mode[2] << 10;
@@ -11625,6 +11799,17 @@ static int JZ_Isp_Awb(void)
 	} event_data = {0};
 
 	_awb_ct_last = _awb_ct;
+	if (awb_algo_mode == 1) {
+		awb_rgbg_weight_active = _rgbg_weight;
+	} else if (awb_ev_data < ev_low) {
+		awb_rgbg_weight_active = _rgbg_weight_ot;
+	} else if (awb_ev_data >= ev_high) {
+		awb_rgbg_weight_active = _rgbg_weight;
+	} else {
+		awb_rgbg_weight_active = _rgbg_weight_ot;
+	}
+
+	Tiziano_awb_fpga(awb_array_r, awb_array_g, awb_array_b, awb_array_p);
 	memcpy(&wb_attr_mode, tisp_wb_attr, sizeof(wb_attr_mode));
 
 	if (wb_attr_mode == 1) {
