@@ -3041,16 +3041,19 @@ int ae0_interrupt_static(void)
     /* Binary Ninja: DMA cache sync */
     tisp_dma_cache_sync_helper(0, buffer_addr, 0x1000, 0);
 
-    /* Binary Ninja: Get AE0 statistics */
-    tisp_ae0_get_statistics(buffer_addr, 0xf001f001);
-
-    /* Populate ae_zone_data so tisp_ae_get_y_zone returns real stats to libimp.
-     * The OEM stores stats in a global array that ae_get_y_zone reads directly;
-     * our ae_zone_data struct was never being updated. */
+    /* OEM: tisp_ae0_get_statistics parses the DMA buffer — each zone occupies
+     * 4 words, and the first word's lower 21 bits is the Y luminance sum.
+     * arg2 = 0xf001f001 → 15 cols (>>28) × 15 rows ((>>12)&0xf) = 225 zones.
+     * Parse Y values and bridge to ae_zone_data for libimp's AE algorithm. */
     {
         extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
-        uint32_t *stats = (uint32_t *)buffer_addr;
-        tisp_ae_update_zone_data(stats, 225 * sizeof(uint32_t));
+        uint32_t zones[225];
+        uint32_t *dma = (uint32_t *)buffer_addr;
+        int i;
+        for (i = 0; i < 225; i++) {
+            zones[i] = dma[i * 4] & 0x1fffff;  /* 21-bit Y luminance per zone */
+        }
+        tisp_ae_update_zone_data(zones, sizeof(zones));
     }
 
     /* Binary Ninja: Handle DMSC interrupt flag */
