@@ -1484,7 +1484,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A88DD26;  /* All OEM blocks except DPC(4), ADR(7), MDNS(16). GIB(5) re-enabled for AWB. */
+ static uint isp_block_enable = 0x4A88DD06;  /* All OEM blocks except DPC(4), GIB(5), ADR(7), MDNS(16) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
