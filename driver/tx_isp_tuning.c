@@ -1484,7 +1484,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A88DD06;  /* All OEM blocks except DPC(4), GIB(5), ADR(7), MDNS(16) */
+ static uint isp_block_enable = 0x4A88DD26;  /* All OEM blocks except DPC(4), ADR(7), MDNS(16). GIB(5) enabled with zero BLC. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -12961,10 +12961,22 @@ int tiziano_gib_dn_params_refresh(void)
 EXPORT_SYMBOL(tiziano_gib_dn_params_refresh);
 
 /* OEM EXACT: tiziano_gib_init — full GIB initialization.
- * Loads params, configures DEIR enable, programs LUT and DEIR coefficient registers. */
+ * Loads params, configures DEIR enable, programs LUT and DEIR coefficient registers.
+ *
+ * NOTE: BLC values from tuning bin (257 per channel) cause extreme contrast
+ * when GIB is enabled without the full OEM pipeline (DPC, ADR, etc).
+ * Force BLC to 0 (passthrough) until the full pipeline is operational.
+ * GIB must be enabled in the bypass register for AWB DMA to collect stats. */
 int tiziano_gib_init(void)
 {
     tiziano_gib_params_refresh();
+
+    /* Zero BLC arrays to make GIB passthrough — keeps block active for AWB */
+    memset(tiziano_gib_deirm_blc_r_linear, 0, sizeof(tiziano_gib_deirm_blc_r_linear));
+    memset(tiziano_gib_deirm_blc_gr_linear, 0, sizeof(tiziano_gib_deirm_blc_gr_linear));
+    memset(tiziano_gib_deirm_blc_gb_linear, 0, sizeof(tiziano_gib_deirm_blc_gb_linear));
+    memset(tiziano_gib_deirm_blc_b_linear, 0, sizeof(tiziano_gib_deirm_blc_b_linear));
+    memset(tiziano_gib_deirm_blc_ir_linear, 0, sizeof(tiziano_gib_deirm_blc_ir_linear));
 
     if (deir_en != 1)
         GIB_CFG_DEIR_EN = 0;
