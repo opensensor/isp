@@ -11215,10 +11215,7 @@ static void tisp_set_ae1_ag(uint32_t ag_q10, uint32_t dg_q10);
 static void tisp_ae1_process(void)
 {
     extern int tisp_ae_get_y_zone(void *buffer);
-    extern int tisp_set_sensor_integration_time(uint32_t val);
-    extern int tisp_set_sensor_analog_gain(uint32_t val);
     static uint32_t cur_expo = 0x300;   /* integration lines (start moderate) */
-    static uint32_t cur_gain = 0x10;    /* analog gain index */
     uint32_t zones[225];
     uint64_t sum = 0;
     uint32_t mean;
@@ -11227,7 +11224,6 @@ static void tisp_ae1_process(void)
     /* Target: ae_mean ~ 80-120 (mid-brightness on zone scale) */
     const uint32_t TARGET = 100;
     const uint32_t MAX_EXPO = 0x4e2;  /* gc2053 max ~1250 lines for 30fps */
-    const uint32_t MAX_GAIN = 0xff;   /* gc2053 analog gain max */
 
     tisp_ae_get_y_zone(zones);
     for (i = 0; i < 225; i++)
@@ -11237,32 +11233,24 @@ static void tisp_ae1_process(void)
     if (mean == 0)
         return; /* No data yet */
 
-    /* Simple proportional control with clamping */
+    /* Simple proportional control: adjust exposure only */
     if (mean < TARGET - 10) {
-        /* Too dark: increase exposure first, then gain */
-        if (cur_expo < MAX_EXPO)
-            cur_expo += (cur_expo >> 3) + 1; /* ~12% increase */
-        else if (cur_gain < MAX_GAIN)
-            cur_gain += (cur_gain >> 3) + 1;
+        cur_expo += (cur_expo >> 3) + 1; /* ~12% increase */
     } else if (mean > TARGET + 10) {
-        /* Too bright: decrease gain first, then exposure */
-        if (cur_gain > 0x10)
-            cur_gain -= (cur_gain >> 4) + 1;
-        else if (cur_expo > 0x20)
-            cur_expo -= (cur_expo >> 4) + 1;
+        cur_expo -= (cur_expo >> 4) + 1; /* ~6% decrease */
     }
 
+    if (cur_expo < 0x20) cur_expo = 0x20;
     if (cur_expo > MAX_EXPO) cur_expo = MAX_EXPO;
-    if (cur_gain > MAX_GAIN) cur_gain = MAX_GAIN;
 
+    /* tisp_set_sensor_integration_time: void(uint32_t) — writes to sensor I2C */
     tisp_set_sensor_integration_time(cur_expo);
-    tisp_set_sensor_analog_gain(cur_gain);
 
     {
         static int ae_log;
         if (ae_log < 10 || (ae_log % 300) == 0) {
-            pr_info("AE_CTRL[%d]: mean=%u expo=0x%x gain=0x%x\n",
-                    ae_log, mean, cur_expo, cur_gain);
+            pr_info("AE_CTRL[%d]: mean=%u expo=0x%x\n",
+                    ae_log, mean, cur_expo);
         }
         ae_log++;
     }
