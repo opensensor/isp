@@ -1727,12 +1727,6 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
          * Previous code skipped this during streaming which broke per-frame
          * LSC LUT updates that the pipeline may depend on. */
         tisp_lsc_write_lut_datas();
-
-        /* Driver-side fallback: AWB IRQ bit 30 is currently silent in runtime
-         * logs, so the OEM awb_interrupt_static() path never runs. Poll the
-         * AWB stats page from the reliable IP-done path so JZ_Isp_Awb() can
-         * still feed CT updates back into CCM/LSC. */
-        awb_interrupt_static();
     }
 
     pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
@@ -1874,6 +1868,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
+        int tuning_frame_done = 0;
         u32 fifo_stat_ch0;
         u32 evt[4];  /* event data: [0]=0, [1]=0, [2]=y_addr, [3]=0 */
 
@@ -1890,6 +1885,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
+        if (drain_count > 0)
+            tuning_frame_done = 1;
 
         /* CH1 drain */
         drain_count = 0;
@@ -1899,6 +1896,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             frame_chan_event(&frame_channels[1], 0x3000006, evt);
             drain_count++;
         }
+        if (drain_count > 0)
+            tuning_frame_done = 1;
 
         /* CH2 drain */
         drain_count = 0;
@@ -1907,6 +1906,17 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             evt[2] = readl(isp_regs + 0x9b74);
             frame_chan_event(&frame_channels[2], 0x3000006, evt);
             drain_count++;
+        }
+        if (drain_count > 0)
+            tuning_frame_done = 1;
+
+        if (tuning_frame_done && (readl(isp_regs + 0xc) & 0x40) == 0) {
+            /* Driver-side fallback: the dedicated AWB IRQ path is still silent
+             * in runtime logs, but FIFO drain proves a frame completed. Reuse
+             * that reliable point to run the existing AWB stats -> CT -> LSC
+             * chain during active streaming. */
+            tisp_lsc_write_lut_datas();
+            awb_interrupt_static();
         }
     }
 
