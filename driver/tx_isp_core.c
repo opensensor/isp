@@ -2064,12 +2064,14 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
      * OEM system_reg_write() writes to offsets up to ~0x2A8xx.
      * Previous 0x10000 (64KB) mapping silently dropped all LSC writes,
      * causing the colored-blob artifacts. */
-    isp->core_regs = ioremap(0x13300000, 0x30000);
+    /* OEM system_reg_write() writes to offsets up to 0x80180 (DEIR coefficient LUTs).
+     * Map 0x90000 (576KB) to cover all ISP register space including DEIR. */
+    isp->core_regs = ioremap(0x13300000, 0x90000);
     if (!isp->core_regs) {
         pr_err("Failed to map ISP core registers\n");
         return -ENOMEM;
     }
-    pr_info("ISP core registers mapped at 0x13300000 size 0x30000\n");
+    pr_info("ISP core registers mapped at 0x13300000 size 0x90000\n");
 
     /* Set global ISP register base for tuning subsystem */
     extern void __iomem *isp_reg_base;

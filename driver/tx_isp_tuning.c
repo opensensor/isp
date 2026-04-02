@@ -1408,7 +1408,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A8BDFB6;  /* OEM-matching whitelist: enables GIB(5), ADR(7), SDNS(15), MDNS(16). Produces OEM-exact bypass 0xb5742249. */
+ static uint isp_block_enable = 0x4A8ADFB6;  /* Enable GIB(5) but NOT MDNS(16) — isolate GIB testing. MDNS is stubbed. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
