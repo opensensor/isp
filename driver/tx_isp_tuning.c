@@ -1484,7 +1484,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A88D506;  /* All OEM blocks EXCEPT DPC(4), GIB(5), ADR(7), bit11(blobs), MDNS(16) */
+ static uint isp_block_enable = 0x4A88DD06;  /* Re-enable bit 11, but skip CLM register writes to isolate */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -15518,9 +15518,12 @@ int tiziano_clm_dn_params_refresh(void)
 /* tiziano_clm_init — OEM: params_refresh + set_parameter */
 int tiziano_clm_init(void)
 {
-	pr_info("tiziano_clm_init: Initializing CLM processing\n");
-	tiziano_clm_params_refresh();
-	tiziano_set_parameter_clm();
+	pr_info("tiziano_clm_init: CLM register writes DISABLED for bit-11 isolation test\n");
+	/* Deliberately skip CLM register writes to test if bit 11 = CLM:
+	 * tiziano_clm_params_refresh();
+	 * tiziano_set_parameter_clm();
+	 * If blobs persist with bit 11 enabled but CLM writes skipped,
+	 * then bit 11 is NOT CLM. */
 	return 0;
 }
 
