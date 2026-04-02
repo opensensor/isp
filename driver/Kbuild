@@ -18,8 +18,5 @@ tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
                $(DIR)/tx_isp_subdev_mgmt.o \
                $(DIR)/tx_isp_vin.o
 
-# ISP trace module objects  
-tx-isp-trace-objs := $(DIR)/tx-isp-trace.o
-
 # Build both modules - changed tx-isp.o to tx-isp-t31.o
-obj-m := tx-isp-t31.o tx-isp-trace.o
+obj-m := tx-isp-t31.o
