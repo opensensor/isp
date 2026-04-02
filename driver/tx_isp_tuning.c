@@ -2054,6 +2054,11 @@ int ae0_interrupt_hist(void);
 int ae0_interrupt_static(void);
 int ae1_interrupt_hist(void);
 int ae1_interrupt_static(void);
+int awb_interrupt_static(void);
+
+static int JZ_Isp_Awb(void);
+static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags);
+static int tiziano_awb_set_lum_th_freq(void);
 
 /* AE interrupt wrapper functions to convert signatures from int function(void) to irqreturn_t function(int, void*) */
 irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
@@ -2076,6 +2081,12 @@ irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id) {
     return IRQ_HANDLED;
 }
 
+irqreturn_t awb_interrupt_static_wrapper(int irq, void *dev_id)
+{
+    awb_interrupt_static();
+    return IRQ_HANDLED;
+}
+
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
 /* Global AE data structures - from Binary Ninja analysis */
@@ -2083,6 +2094,7 @@ static uint32_t data_b2f3c = 0;  /* AE statistics buffer base */
 static uint32_t data_b2f48 = 0;  /* AE histogram buffer base */
 static uint32_t data_b2f54 = 0;  /* AE1 statistics buffer base */
 static uint32_t data_b2f60 = 0;  /* AE1 histogram buffer base */
+static uint32_t data_a2f5c = 0;  /* AWB statistics buffer base */
 static uint32_t data_b0e00 = 0;  /* AE0 interrupt flag */
 static uint32_t data_b0e10 = 0;  /* AE histogram flag */
 static uint32_t data_b0dfc = 0;  /* AE1 interrupt flag */
@@ -2994,6 +3006,8 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     void *ae0_buffer = kmalloc(0x6000, GFP_KERNEL);
     if (ae0_buffer != NULL) {
         dma_addr_t ae0_phys = virt_to_phys(ae0_buffer);
+        data_b2f3c = (uint32_t)(unsigned long)ae0_buffer;
+        data_b2f48 = data_b2f3c + 0x4000;
         system_reg_write(0xa02c, ae0_phys);
         system_reg_write(0xa030, ae0_phys + 0x1000);
         system_reg_write(0xa034, ae0_phys + 0x2000);
@@ -3010,6 +3024,8 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     void *ae1_buffer = kmalloc(0x6000, GFP_KERNEL);
     if (ae1_buffer != NULL) {
         dma_addr_t ae1_phys = virt_to_phys(ae1_buffer);
+        data_b2f54 = (uint32_t)(unsigned long)ae1_buffer;
+        data_b2f60 = data_b2f54 + 0x4000;
         system_reg_write(0xa82c, ae1_phys);
         system_reg_write(0xa830, ae1_phys + 0x1000);
         system_reg_write(0xa834, ae1_phys + 0x2000);
@@ -3026,6 +3042,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     void *awb_buffer = kmalloc(0x4000, GFP_KERNEL);
     if (awb_buffer != NULL) {
         dma_addr_t awb_phys = virt_to_phys(awb_buffer);
+        data_a2f5c = (uint32_t)(unsigned long)awb_buffer;
         system_reg_write(0xb03c, awb_phys);
         system_reg_write(0xb040, awb_phys + 0x1000);
         system_reg_write(0xb044, awb_phys + 0x2000);
@@ -8252,6 +8269,16 @@ int tisp_hldc_param_array_set(int param_id, void *in_buf, int *size_buf)
 }
 
 /* AWB state and parameter storage matching vendor binary (opaque blocks) */
+#define AWB_STATS_COLS   15
+#define AWB_STATS_ROWS   15
+#define AWB_STATS_ZONES  (AWB_STATS_COLS * AWB_STATS_ROWS)
+
+static uint32_t awb_array_r[AWB_STATS_ZONES];
+static uint32_t awb_array_g[AWB_STATS_ZONES];
+static uint32_t awb_array_b[AWB_STATS_ZONES];
+static uint32_t awb_array_ir[AWB_STATS_ZONES];
+static uint32_t awb_array_p[AWB_STATS_ZONES];
+
 static uint8_t _awb_parameter[0xb4];
 static uint32_t _pixel_cnt_th;
 static uint32_t _awb_lowlight_rg_th[2];
@@ -11484,6 +11511,84 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	return 0;
 }
 
+static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags)
+{
+	u32 cols = flags >> 28;
+	u32 rows = (flags >> 12) & 0xf;
+	u32 *src = buffer;
+	u32 row;
+
+	if (!buffer || !cols || !rows || cols * rows > AWB_STATS_ZONES)
+		return -EINVAL;
+
+	for (row = 0; row < rows; row++) {
+		u32 col;
+
+		for (col = 0; col < cols; col++) {
+			u32 idx = row * cols + col;
+			u32 w0 = src[0];
+			u32 w1 = src[1];
+			u32 w2 = src[2];
+			u32 w3 = src[3];
+
+			awb_array_r[idx] = w0 & 0x1fffff;
+			awb_array_g[idx] = ((w1 & 0x3ff) << 11) | (w0 >> 21);
+			awb_array_b[idx] = (w1 & 0x7ffffc00) >> 10;
+			awb_array_ir[idx] = ((w2 & 0xfffff) << 1) | (w1 >> 31);
+			awb_array_p[idx] = ((w3 & 1) << 12) | (w2 >> 20);
+			src += 4;
+		}
+	}
+
+	return 0;
+}
+
+static int tiziano_awb_set_lum_th_freq(void)
+{
+	/* OEM updates 0xb038 from AE mean statistics here.
+	 * The local AE-mean helper/state is still missing, so keep the existing
+	 * threshold/frequency configuration unchanged for now. */
+	return 0;
+}
+
+static int JZ_Isp_Awb(void)
+{
+	struct {
+		uint32_t pad1[2];
+		uint32_t event_id;
+		uint32_t pad2[8];
+	} event_data = {0};
+
+	_awb_ct_last = _awb_ct;
+	event_data.event_id = 9;
+	tisp_event_push(&event_data);
+	return 0;
+}
+
+int awb_interrupt_static(void)
+{
+	struct {
+		uint32_t pad1[2];
+		uint32_t event_id;
+		uint32_t pad2[8];
+	} event_data = {0};
+	uint32_t awb_status;
+	void *buffer_addr;
+
+	if (data_a2f5c == 0)
+		return 0;
+
+	awb_status = system_reg_read(0xb050);
+	buffer_addr = (void *)(unsigned long)(data_a2f5c + (awb_status << 12));
+	private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
+	JZ_Isp_Get_Awb_Statistics(buffer_addr, 0xf001f001);
+	tiziano_awb_set_lum_th_freq();
+
+	event_data.event_id = 0xa;
+	tisp_event_push(&event_data);
+	return 1;
+}
+
 int tiziano_awb_init(uint32_t height, uint32_t width)
 {
     static int awb_first_init;
@@ -11507,6 +11612,8 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
         tiziano_awb_set_hardware_param();
 
     Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+	tisp_event_set_cb(0xa, JZ_Isp_Awb);
+	system_irq_func_set(0x1e, awb_interrupt_static_wrapper);
 
     return 0;
 }
@@ -12492,6 +12599,186 @@ int tisp_dmsc_reprogram_sensor_cfa(void)
 }
 EXPORT_SYMBOL(tisp_dmsc_reprogram_sensor_cfa);
 
+#define TISP_DMSC_TUNING_OFFSET 0x9144
+#define TISP_DMSC_CURVE_WORDS (0x24 / 4)
+
+static u32 dmsc_out_opt_word;
+static u32 dmsc_gain_last = 0xffffffff;
+static u32 dmsc_gain_curr = 0x10000;
+static u32 dmsc_sharpness = 0x80;
+
+static u32 dmsc_hv_thres_1_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_hv_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_aa_thres_1_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_aa_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_hvaa_thres_1_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_hvaa_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_uu_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_uu_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_alias_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_alias_thres_1_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_alias_thres_2_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_alias_dir_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_nor_alias_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_w_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_b_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_brig_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_dark_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_v2_win5_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_flat_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_flat_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_oe_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_w_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_b_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_brig_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_dark_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_std_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_std_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_flat_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_flat_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_oe_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_alias_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_rgb_dir_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_rgb_alias_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_alias_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_t1_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_t1_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_t2_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_t3_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_lum_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_fc_lum_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_deir_fusion_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_deir_fusion_stren_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_ns_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_ns_thres_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_uu_thres_wdr_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_uu_stren_wdr_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_w_stren_wdr_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_d_b_stren_wdr_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_w_stren_wdr_curve[TISP_DMSC_CURVE_WORDS];
+static u32 dmsc_sp_ud_b_stren_wdr_curve[TISP_DMSC_CURVE_WORDS];
+
+static u32 *dmsc_uu_thres_curve_now = dmsc_uu_thres_curve;
+static u32 *dmsc_uu_stren_curve_now = dmsc_uu_stren_curve;
+static u32 *dmsc_sp_d_w_stren_curve_now = dmsc_sp_d_w_stren_curve;
+static u32 *dmsc_sp_d_b_stren_curve_now = dmsc_sp_d_b_stren_curve;
+static u32 *dmsc_sp_ud_w_stren_curve_now = dmsc_sp_ud_w_stren_curve;
+static u32 *dmsc_sp_ud_b_stren_curve_now = dmsc_sp_ud_b_stren_curve;
+
+static u32 dmsc_hv_thres_1_val;
+static u32 dmsc_hv_stren_val;
+static u32 dmsc_aa_thres_1_val;
+static u32 dmsc_aa_stren_val;
+static u32 dmsc_hvaa_thres_1_val;
+static u32 dmsc_hvaa_stren_val;
+static u32 dmsc_uu_thres_val;
+static u32 dmsc_uu_stren_val;
+static u32 dmsc_alias_stren_val;
+static u32 dmsc_alias_thres_1_val;
+static u32 dmsc_alias_thres_2_val;
+static u32 dmsc_alias_dir_thres_val;
+static u32 dmsc_nor_alias_thres_val;
+static u32 dmsc_sp_d_w_stren_val;
+static u32 dmsc_sp_d_b_stren_val;
+static u32 dmsc_sp_d_brig_thres_val;
+static u32 dmsc_sp_d_dark_thres_val;
+static u32 dmsc_sp_d_v2_win5_thres_val;
+static u32 dmsc_sp_d_flat_stren_val;
+static u32 dmsc_sp_d_flat_thres_val;
+static u32 dmsc_sp_d_oe_stren_val;
+static u32 dmsc_sp_ud_w_stren_val;
+static u32 dmsc_sp_ud_b_stren_val;
+static u32 dmsc_sp_ud_brig_thres_val;
+static u32 dmsc_sp_ud_dark_thres_val;
+static u32 dmsc_sp_ud_std_stren_val;
+static u32 dmsc_sp_ud_std_thres_val;
+static u32 dmsc_sp_ud_flat_thres_val;
+static u32 dmsc_sp_ud_flat_stren_val;
+static u32 dmsc_sp_ud_oe_stren_val;
+static u32 dmsc_sp_alias_thres_val;
+static u32 dmsc_rgb_dir_thres_val;
+static u32 dmsc_rgb_alias_stren_val;
+static u32 dmsc_fc_alias_stren_val;
+static u32 dmsc_fc_t1_thres_val;
+static u32 dmsc_fc_t1_stren_val;
+static u32 dmsc_fc_t2_stren_val;
+static u32 dmsc_fc_t3_stren_val;
+static u32 dmsc_fc_lum_stren_val;
+static u32 dmsc_fc_lum_thres_val;
+static u32 dmsc_deir_fusion_thres_val;
+static u32 dmsc_deir_fusion_stren_val;
+static u32 dmsc_sp_d_ns_thres_val;
+static u32 dmsc_sp_ud_ns_thres_val;
+
+static int tisp_dmsc_all_reg_refresh(u32 gain);
+
+static inline int dmsc_param_idx(int param_id)
+{
+	return param_id - TISP_DMSC_PARAM_FIRST;
+}
+
+static u32 dmsc_param_word(int param_id, unsigned int word_index)
+{
+	u32 value = 0;
+	int idx = dmsc_param_idx(param_id);
+	size_t off = word_index * sizeof(u32);
+
+	if ((unsigned int)idx >= TISP_DMSC_PARAM_COUNT)
+		return 0;
+	if (off + sizeof(value) > tisp_dmsc_param_sizes[idx])
+		return 0;
+
+	memcpy(&value, tisp_dmsc_param_store[idx] + off, sizeof(value));
+	return value;
+}
+
+static void dmsc_param_copy(int param_id, void *dst, size_t size, const u8 **cursor)
+{
+	int idx = dmsc_param_idx(param_id);
+
+	if ((unsigned int)idx >= TISP_DMSC_PARAM_COUNT)
+		return;
+
+	memcpy(tisp_dmsc_param_store[idx], *cursor, size);
+	if (dst)
+		memcpy(dst, *cursor, size);
+	*cursor += size;
+}
+
+static inline u32 dmsc_pack16(u32 low, u32 high)
+{
+	return ((high & 0xffff) << 16) | (low & 0xffff);
+}
+
+static inline u32 dmsc_pack5x6(int param_id, unsigned int base)
+{
+	return (dmsc_param_word(param_id, base + 4) << 24) |
+	       (dmsc_param_word(param_id, base + 3) << 18) |
+	       (dmsc_param_word(param_id, base + 2) << 12) |
+	       (dmsc_param_word(param_id, base + 1) << 6) |
+	       dmsc_param_word(param_id, base + 0);
+}
+
+static inline u32 dmsc_pack6x5(int param_id, unsigned int base)
+{
+	return (dmsc_param_word(param_id, base + 5) << 25) |
+	       (dmsc_param_word(param_id, base + 4) << 20) |
+	       (dmsc_param_word(param_id, base + 3) << 15) |
+	       (dmsc_param_word(param_id, base + 2) << 10) |
+	       (dmsc_param_word(param_id, base + 1) << 5) |
+	       dmsc_param_word(param_id, base + 0);
+}
+
+static void tisp_dmsc_select_curve_bank(int enable)
+{
+	dmsc_uu_thres_curve_now = enable ? dmsc_uu_thres_wdr_curve : dmsc_uu_thres_curve;
+	dmsc_uu_stren_curve_now = enable ? dmsc_uu_stren_wdr_curve : dmsc_uu_stren_curve;
+	dmsc_sp_d_w_stren_curve_now = enable ? dmsc_sp_d_w_stren_wdr_curve : dmsc_sp_d_w_stren_curve;
+	dmsc_sp_d_b_stren_curve_now = enable ? dmsc_sp_d_b_stren_wdr_curve : dmsc_sp_d_b_stren_curve;
+	dmsc_sp_ud_w_stren_curve_now = enable ? dmsc_sp_ud_w_stren_wdr_curve : dmsc_sp_ud_w_stren_curve;
+	dmsc_sp_ud_b_stren_curve_now = enable ? dmsc_sp_ud_b_stren_wdr_curve : dmsc_sp_ud_b_stren_curve;
+}
+
 /* tisp_dmsc_write_default_regs - Program DMSC hardware with sensible defaults.
  * Without a tuning bin file, all DMSC interpolation registers are zero which
  * completely disables demosaicing — producing visible Bayer noise and color
@@ -12582,11 +12869,588 @@ static void tisp_dmsc_write_default_regs(void)
 	pr_info("tisp_dmsc_write_default_regs: Programmed ~30 DMSC registers with defaults\n");
 }
 
+static int tisp_dmsc_out_opt_cfg(void)
+{
+	system_reg_write(0x4800, dmsc_out_opt_word);
+	return 0;
+}
+
+static int tisp_dmsc_uu_par_cfg(void)
+{
+	u32 cfg0 = dmsc_param_word(0x72, 0);
+	u32 cfg1 = dmsc_param_word(0x72, 1);
+	u32 cfg2 = dmsc_param_word(0x72, 2);
+	u32 cfg3 = dmsc_param_word(0x72, 3);
+
+	system_reg_write(0x4808, dmsc_pack16(dmsc_uu_stren_val, dmsc_uu_thres_val));
+	system_reg_write(0x4804, (cfg0 << 31) | (cfg1 << 10) | cfg3 | (cfg2 << 8));
+	return 0;
+}
+
+static int tisp_dmsc_alias_par_cfg(void)
+{
+	u32 cfg0 = dmsc_param_word(0x77, 0);
+	u32 cfg1 = dmsc_param_word(0x77, 1);
+	u32 cfg2 = dmsc_param_word(0x77, 2);
+	u32 cfg3 = dmsc_param_word(0x77, 3);
+
+	system_reg_write(0x480c,
+			dmsc_pack16(dmsc_alias_dir_thres_val,
+				dmsc_alias_dir_thres_val - cfg3));
+	system_reg_write(0x4834,
+			(dmsc_alias_stren_val << 18) | cfg0 | (cfg2 << 6) | (cfg1 << 10));
+	system_reg_write(0x4838,
+			dmsc_pack16(dmsc_alias_thres_1_val, dmsc_alias_thres_2_val));
+	return 0;
+}
+
+static int tisp_dmsc_uu_np_cfg(void)
+{
+	system_reg_write(0x48c8, dmsc_pack16(dmsc_param_word(0x5f, 0), dmsc_param_word(0x5f, 1)));
+	system_reg_write(0x48cc, dmsc_pack16(dmsc_param_word(0x5f, 2), dmsc_param_word(0x5f, 3)));
+	system_reg_write(0x48d0, dmsc_pack16(dmsc_param_word(0x5f, 4), dmsc_param_word(0x5f, 5)));
+	system_reg_write(0x48d4, dmsc_pack16(dmsc_param_word(0x5f, 6), dmsc_param_word(0x5f, 7)));
+	system_reg_write(0x48d8, dmsc_pack16(dmsc_param_word(0x5f, 8), dmsc_param_word(0x5f, 9)));
+	system_reg_write(0x48dc, dmsc_pack16(dmsc_param_word(0x5f, 10), dmsc_param_word(0x5f, 11)));
+	system_reg_write(0x48e0, dmsc_pack16(dmsc_param_word(0x5f, 12), dmsc_param_word(0x5f, 13)));
+	system_reg_write(0x48e4, dmsc_pack16(dmsc_param_word(0x5f, 14), dmsc_param_word(0x5f, 15)));
+	return 0;
+}
+
+static int tisp_dmsc_sp_d_sigma_3_np_cfg(void)
+{
+	system_reg_write(0x48e8, dmsc_pack6x5(0x63, 0));
+	system_reg_write(0x48ec, dmsc_pack6x5(0x63, 6));
+	system_reg_write(0x48f0,
+			(dmsc_param_word(0x63, 15) << 15) |
+			(dmsc_param_word(0x63, 14) << 10) |
+			(dmsc_param_word(0x63, 13) << 5) |
+			 dmsc_param_word(0x63, 12));
+	return 0;
+}
+
+static int tisp_dmsc_sp_d_w_wei_np_cfg(void)
+{
+	system_reg_write(0x48f4, dmsc_pack5x6(0x64, 0));
+	system_reg_write(0x48f8, dmsc_pack5x6(0x64, 5));
+	system_reg_write(0x48fc, dmsc_pack5x6(0x64, 10));
+	system_reg_write(0x4900, dmsc_pack5x6(0x64, 15));
+	system_reg_write(0x4904,
+			(dmsc_param_word(0x64, 21) << 6) |
+			 dmsc_param_word(0x64, 20));
+	return 0;
+}
+
+static int tisp_dmsc_sp_d_b_wei_np_cfg(void)
+{
+	system_reg_write(0x4908, dmsc_pack5x6(0x65, 0));
+	system_reg_write(0x490c, dmsc_pack5x6(0x65, 5));
+	system_reg_write(0x4910, dmsc_pack5x6(0x65, 10));
+	system_reg_write(0x4914, dmsc_pack5x6(0x65, 15));
+	system_reg_write(0x4918,
+			(dmsc_param_word(0x65, 21) << 6) |
+			 dmsc_param_word(0x65, 20));
+	return 0;
+}
+
+static int tisp_dmsc_sp_ud_w_wei_np_cfg(void)
+{
+	system_reg_write(0x491c, dmsc_pack5x6(0x66, 0));
+	system_reg_write(0x4920, dmsc_pack5x6(0x66, 5));
+	system_reg_write(0x4924, dmsc_pack5x6(0x66, 10));
+	system_reg_write(0x4928, dmsc_pack5x6(0x66, 15));
+	system_reg_write(0x492c,
+			(dmsc_param_word(0x66, 21) << 6) |
+			 dmsc_param_word(0x66, 20));
+	return 0;
+}
+
+static int tisp_dmsc_sp_ud_b_wei_np_cfg(void)
+{
+	system_reg_write(0x4930, dmsc_pack5x6(0x67, 0));
+	system_reg_write(0x4934, dmsc_pack5x6(0x67, 5));
+	system_reg_write(0x4938, dmsc_pack5x6(0x67, 10));
+	system_reg_write(0x493c, dmsc_pack5x6(0x67, 15));
+	system_reg_write(0x4940,
+			(dmsc_param_word(0x67, 21) << 6) |
+			 dmsc_param_word(0x67, 20));
+	return 0;
+}
+
+static int tisp_dmsc_dir_par_cfg(void)
+{
+	u32 cfg0 = dmsc_param_word(0x6f, 0);
+
+	system_reg_write(0x4810,
+			dmsc_pack16(dmsc_hv_thres_1_val - (dmsc_hv_thres_1_val >> 3),
+				cfg0 - (cfg0 >> 3)));
+	system_reg_write(0x4814, dmsc_pack16(dmsc_hv_thres_1_val, cfg0));
+	system_reg_write(0x4820,
+			(dmsc_param_word(0x6f, 2) << 16) |
+			(dmsc_param_word(0x6f, 1) << 24) |
+			 dmsc_hv_stren_val);
+	system_reg_write(0x4824, dmsc_pack16(dmsc_aa_thres_1_val, dmsc_param_word(0x6f, 3)));
+	system_reg_write(0x4828,
+			(dmsc_param_word(0x6f, 5) << 16) |
+			(dmsc_param_word(0x6f, 4) << 24) |
+			 dmsc_aa_stren_val);
+	system_reg_write(0x482c, dmsc_pack16(dmsc_hvaa_thres_1_val, dmsc_param_word(0x6f, 6)));
+	system_reg_write(0x4830,
+			(dmsc_param_word(0x6f, 8) << 16) |
+			(dmsc_param_word(0x6f, 7) << 24) |
+			 dmsc_hvaa_stren_val);
+	return 0;
+}
+
+static int tisp_dmsc_nor_par_cfg(void)
+{
+	system_reg_write(0x483c,
+			dmsc_pack16(dmsc_nor_alias_thres_val, dmsc_param_word(0x79, 0)));
+	system_reg_write(0x4840,
+			(dmsc_param_word(0x79, 1) << 16) |
+			(dmsc_param_word(0x79, 2) << 6) |
+			 dmsc_param_word(0x79, 3));
+	return 0;
+}
+
+static int tisp_dmsc_sp_d_par_cfg(void)
+{
+	u32 cfg2 = dmsc_param_word(0x82, 2);
+	u32 cfg3 = dmsc_param_word(0x82, 3);
+	u32 cfg8 = dmsc_param_word(0x82, 8);
+
+	system_reg_write(0x4844,
+			(dmsc_param_word(0x82, 0) << 17) |
+			(dmsc_param_word(0x82, 1) << 7) |
+			(cfg2 << 6) |
+			(cfg3 << 4) |
+			(cfg3 << 2) |
+			 cfg3);
+	system_reg_write(0x4848, dmsc_pack16(dmsc_sp_d_b_stren_val, dmsc_sp_d_w_stren_val));
+	system_reg_write(0x484c,
+			dmsc_pack16(dmsc_param_word(0x82, 5), dmsc_param_word(0x82, 4)));
+	system_reg_write(0x4850,
+			dmsc_pack16(dmsc_sp_d_dark_thres_val, dmsc_sp_d_brig_thres_val));
+	system_reg_write(0x4854, dmsc_param_word(0x82, 6));
+	system_reg_write(0x4858, dmsc_param_word(0x82, 7));
+	system_reg_write(0x48a4, dmsc_pack16(cfg8, dmsc_sp_d_v2_win5_thres_val));
+	system_reg_write(0x48a8,
+			(dmsc_sp_d_flat_thres_val << 20) |
+			(dmsc_param_word(0x82, 9) << 11) |
+			 dmsc_sp_d_flat_stren_val);
+	system_reg_write(0x48ac, dmsc_pack16(dmsc_sp_d_oe_stren_val, cfg8));
+	return 0;
+}
+
+static int tisp_dmsc_sp_ud_par_cfg(void)
+{
+	system_reg_write(0x485c,
+			(dmsc_param_word(0x8c, 0) << 16) |
+			(dmsc_param_word(0x8c, 1) << 12) |
+			(dmsc_param_word(0x8c, 2) << 8) |
+			(dmsc_param_word(0x8c, 3) << 4) |
+			(dmsc_param_word(0x8c, 4) << 2) |
+			 dmsc_param_word(0x8c, 4));
+	system_reg_write(0x4860, dmsc_pack16(dmsc_sp_ud_b_stren_val, dmsc_sp_ud_w_stren_val));
+	system_reg_write(0x4864,
+			dmsc_pack16(dmsc_param_word(0x8c, 6), dmsc_param_word(0x8c, 5)));
+	system_reg_write(0x4868,
+			dmsc_pack16(dmsc_sp_ud_dark_thres_val, dmsc_sp_ud_brig_thres_val));
+	system_reg_write(0x486c, dmsc_param_word(0x8c, 7));
+	system_reg_write(0x4870, dmsc_param_word(0x8c, 8));
+	system_reg_write(0x48b0,
+			(dmsc_param_word(0x8d, 0) << 27) |
+			(dmsc_param_word(0x8d, 1) << 15) |
+			(dmsc_param_word(0x8d, 2) << 8) |
+			 dmsc_param_word(0x8d, 3));
+	system_reg_write(0x48b4,
+			(dmsc_param_word(0x8d, 4) << 27) |
+			(dmsc_param_word(0x8d, 5) << 24) |
+			(dmsc_param_word(0x8d, 6) << 16) |
+			(dmsc_param_word(0x8d, 7) << 8) |
+			(dmsc_param_word(0x8d, 8) << 4) |
+			 dmsc_param_word(0x8d, 9));
+	system_reg_write(0x48b8,
+			(dmsc_sp_ud_std_thres_val << 16) |
+			(dmsc_param_word(0x8c, 9) << 8) |
+			 dmsc_sp_ud_std_stren_val);
+	system_reg_write(0x48bc,
+			dmsc_pack16(dmsc_param_word(0x8c, 10), dmsc_sp_ud_flat_stren_val));
+	system_reg_write(0x48c0, dmsc_sp_ud_flat_stren_val);
+	system_reg_write(0x48c4,
+			(dmsc_param_word(0x8c, 12) << 27) |
+			(dmsc_sp_ud_oe_stren_val << 8) |
+			 dmsc_param_word(0x8c, 11));
+	return 0;
+}
+
+static int tisp_dmsc_sp_alias_par_cfg(void)
+{
+	system_reg_write(0x4874,
+			(dmsc_sp_alias_thres_val << 16) |
+			 dmsc_param_word(0x8f, 1));
+	return 0;
+}
+
+static int tisp_dmsc_rgb_alias_par_cfg(void)
+{
+	system_reg_write(0x4878,
+			(dmsc_param_word(0x92, 1) << 16) |
+			 dmsc_rgb_dir_thres_val);
+	system_reg_write(0x487c,
+			(dmsc_param_word(0x8f, 0) << 16) |
+			(dmsc_rgb_alias_stren_val << 5) |
+			 dmsc_param_word(0x92, 0));
+	return 0;
+}
+
+static int tisp_dmsc_fc_par_cfg(void)
+{
+	u32 cfg4 = dmsc_param_word(0x9a, 4);
+	u32 cfg5 = dmsc_param_word(0x9a, 5);
+	u32 cfg6 = dmsc_param_word(0x9a, 6);
+	u32 cfg7 = dmsc_param_word(0x9a, 7);
+
+	system_reg_write(0x4880,
+			(dmsc_fc_alias_stren_val << 21) |
+			(dmsc_fc_t1_stren_val << 14) |
+			(dmsc_fc_t2_stren_val << 7) |
+			 dmsc_param_word(0x9a, 8));
+	system_reg_write(0x4884,
+			dmsc_pack16(dmsc_fc_t1_thres_val, dmsc_param_word(0x9a, 1)));
+	system_reg_write(0x4888,
+			dmsc_pack16(dmsc_param_word(0x9a, 3), dmsc_param_word(0x9a, 2)));
+	system_reg_write(0x488c,
+			((cfg4 + dmsc_fc_t1_thres_val) << 17) |
+			(cfg7 << 12) |
+			 dmsc_param_word(0x9a, 9));
+	system_reg_write(0x4890,
+			(dmsc_param_word(0x9a, 0) << 16) |
+			(dmsc_param_word(0x9a, 0) << 6) |
+			 dmsc_param_word(0x9a, 0));
+	system_reg_write(0x4894, dmsc_fc_t3_stren_val);
+	system_reg_write(0x4898,
+			(dmsc_param_word(0x9a, 0) << 16) |
+			(cfg4 + cfg5 + dmsc_fc_t1_thres_val));
+	system_reg_write(0x489c,
+			dmsc_pack16(cfg4 + dmsc_fc_t1_thres_val,
+				cfg4 + cfg5 + dmsc_fc_t1_thres_val));
+	system_reg_write(0x48a0,
+			min_t(u32, 0xfff, cfg4 + cfg5 + cfg6 + dmsc_fc_t1_thres_val));
+	system_reg_write(0x4980, dmsc_pack16(dmsc_fc_lum_stren_val, dmsc_fc_lum_thres_val));
+	return 0;
+}
+
+static int tisp_dmsc_deir_par_cfg(void)
+{
+	system_reg_write(0x4944,
+			(dmsc_param_word(0x9b, 1) << 8) |
+			 dmsc_param_word(0x9b, 0));
+	system_reg_write(0x4948,
+			dmsc_pack16(dmsc_param_word(0x9c, 1), dmsc_param_word(0x9c, 0)));
+	system_reg_write(0x494c,
+			dmsc_pack16(dmsc_param_word(0x9c, 3), dmsc_param_word(0x9c, 2)));
+	system_reg_write(0x4988,
+			(dmsc_deir_fusion_thres_val << 16) |
+			(dmsc_deir_fusion_stren_val << 8) |
+			 dmsc_param_word(0x9c, 4));
+	return 0;
+}
+
+static int tisp_dmsc_deir_rgb_par_cfg(void)
+{
+	system_reg_write(0x4950, dmsc_pack16(dmsc_param_word(0x60, 1), dmsc_param_word(0x60, 0)));
+	system_reg_write(0x4954, dmsc_pack16(dmsc_param_word(0x60, 3), dmsc_param_word(0x60, 2)));
+	system_reg_write(0x4958, dmsc_pack16(dmsc_param_word(0x60, 5), dmsc_param_word(0x60, 4)));
+	system_reg_write(0x495c, dmsc_pack16(dmsc_param_word(0x60, 7), dmsc_param_word(0x60, 6)));
+	system_reg_write(0x4960, dmsc_pack16(dmsc_param_word(0x61, 1), dmsc_param_word(0x61, 0)));
+	system_reg_write(0x4964, dmsc_pack16(dmsc_param_word(0x61, 3), dmsc_param_word(0x61, 2)));
+	system_reg_write(0x4968, dmsc_pack16(dmsc_param_word(0x61, 5), dmsc_param_word(0x61, 4)));
+	system_reg_write(0x496c, dmsc_pack16(dmsc_param_word(0x61, 7), dmsc_param_word(0x61, 6)));
+	system_reg_write(0x4970, dmsc_pack16(dmsc_param_word(0x62, 1), dmsc_param_word(0x62, 0)));
+	system_reg_write(0x4974, dmsc_pack16(dmsc_param_word(0x62, 3), dmsc_param_word(0x62, 2)));
+	system_reg_write(0x4978, dmsc_pack16(dmsc_param_word(0x62, 5), dmsc_param_word(0x62, 4)));
+	system_reg_write(0x497c, dmsc_pack16(dmsc_param_word(0x62, 7), dmsc_param_word(0x62, 6)));
+	return 0;
+}
+
+static int tisp_dmsc_d_ud_ns_par_cfg(void)
+{
+	system_reg_write(0x49a0,
+			(dmsc_param_word(0xa1, 1) << 16) |
+			 dmsc_sp_d_ns_thres_val);
+	system_reg_write(0x49a4,
+			(dmsc_param_word(0xa1, 0) << 16) |
+			 dmsc_sp_ud_ns_thres_val);
+	return 0;
+}
+
+static int tisp_dmsc_intp(u32 gain)
+{
+	int hi = gain >> 16;
+	int lo = gain & 0xffff;
+
+	dmsc_hv_thres_1_val = tisp_simple_intp(hi, lo, dmsc_hv_thres_1_curve);
+	dmsc_hv_stren_val = tisp_simple_intp(hi, lo, dmsc_hv_stren_curve);
+	dmsc_aa_thres_1_val = tisp_simple_intp(hi, lo, dmsc_aa_thres_1_curve);
+	dmsc_aa_stren_val = tisp_simple_intp(hi, lo, dmsc_aa_stren_curve);
+	dmsc_hvaa_thres_1_val = tisp_simple_intp(hi, lo, dmsc_hvaa_thres_1_curve);
+	dmsc_hvaa_stren_val = tisp_simple_intp(hi, lo, dmsc_hvaa_stren_curve);
+	dmsc_uu_thres_val = tisp_simple_intp(hi, lo, dmsc_uu_thres_curve_now);
+	dmsc_uu_stren_val = tisp_simple_intp(hi, lo, dmsc_uu_stren_curve_now);
+	dmsc_alias_stren_val = tisp_simple_intp(hi, lo, dmsc_alias_stren_curve);
+	dmsc_alias_thres_1_val = tisp_simple_intp(hi, lo, dmsc_alias_thres_1_curve);
+	dmsc_alias_thres_2_val = tisp_simple_intp(hi, lo, dmsc_alias_thres_2_curve);
+	dmsc_alias_dir_thres_val = tisp_simple_intp(hi, lo, dmsc_alias_dir_thres_curve);
+	dmsc_nor_alias_thres_val = tisp_simple_intp(hi, lo, dmsc_nor_alias_thres_curve);
+	dmsc_sp_d_w_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_d_w_stren_curve_now);
+	dmsc_sp_d_b_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_d_b_stren_curve_now);
+	dmsc_sp_d_brig_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_d_brig_thres_curve);
+	dmsc_sp_d_dark_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_d_dark_thres_curve);
+	dmsc_sp_ud_w_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_w_stren_curve_now);
+	dmsc_sp_ud_b_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_b_stren_curve_now);
+	dmsc_sp_ud_brig_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_brig_thres_curve);
+	dmsc_sp_ud_dark_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_dark_thres_curve);
+	dmsc_sp_alias_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_alias_thres_curve);
+	dmsc_rgb_dir_thres_val = tisp_simple_intp(hi, lo, dmsc_rgb_dir_thres_curve);
+	dmsc_rgb_alias_stren_val = tisp_simple_intp(hi, lo, dmsc_rgb_alias_stren_curve);
+	dmsc_fc_alias_stren_val = tisp_simple_intp(hi, lo, dmsc_fc_alias_stren_curve);
+	dmsc_fc_t1_thres_val = tisp_simple_intp(hi, lo, dmsc_fc_t1_thres_curve);
+	dmsc_fc_t1_stren_val = tisp_simple_intp(hi, lo, dmsc_fc_t1_stren_curve);
+	dmsc_fc_t2_stren_val = tisp_simple_intp(hi, lo, dmsc_fc_t2_stren_curve);
+	dmsc_fc_t3_stren_val = tisp_simple_intp(hi, lo, dmsc_fc_t3_stren_curve);
+	dmsc_deir_fusion_thres_val = tisp_simple_intp(hi, lo, dmsc_deir_fusion_thres_curve);
+	dmsc_deir_fusion_stren_val = tisp_simple_intp(hi, lo, dmsc_deir_fusion_stren_curve);
+	dmsc_sp_d_v2_win5_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_d_v2_win5_thres_curve);
+	dmsc_sp_d_flat_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_d_flat_stren_curve);
+	dmsc_sp_d_flat_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_d_flat_thres_curve);
+	dmsc_sp_d_oe_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_d_oe_stren_curve);
+	dmsc_sp_ud_std_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_std_stren_curve);
+	dmsc_sp_ud_std_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_std_thres_curve);
+	dmsc_sp_ud_flat_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_flat_thres_curve);
+	dmsc_sp_ud_flat_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_flat_stren_curve);
+	dmsc_sp_ud_oe_stren_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_oe_stren_curve);
+	dmsc_fc_lum_stren_val = tisp_simple_intp(hi, lo, dmsc_fc_lum_stren_curve);
+	dmsc_fc_lum_thres_val = tisp_simple_intp(hi, lo, dmsc_fc_lum_thres_curve);
+	dmsc_sp_d_ns_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_d_ns_thres_curve);
+	dmsc_sp_ud_ns_thres_val = tisp_simple_intp(hi, lo, dmsc_sp_ud_ns_thres_curve);
+	return 0;
+}
+
+static int tisp_dmsc_intp_reg_refresh(u32 gain)
+{
+	tisp_dmsc_intp(gain);
+	tisp_dmsc_uu_par_cfg();
+	tisp_dmsc_alias_par_cfg();
+	tisp_dmsc_dir_par_cfg();
+	tisp_dmsc_nor_par_cfg();
+	tisp_dmsc_sp_d_par_cfg();
+	tisp_dmsc_sp_ud_par_cfg();
+	tisp_dmsc_sp_alias_par_cfg();
+	tisp_dmsc_rgb_alias_par_cfg();
+	tisp_dmsc_fc_par_cfg();
+	tisp_dmsc_deir_par_cfg();
+	tisp_dmsc_d_ud_ns_par_cfg();
+	return 0;
+}
+
+static int tisp_dmsc_all_reg_refresh(u32 gain)
+{
+	tisp_dmsc_intp(gain);
+	tisp_dmsc_out_opt_cfg();
+	tisp_dmsc_uu_par_cfg();
+	tisp_dmsc_alias_par_cfg();
+	tisp_dmsc_uu_np_cfg();
+	tisp_dmsc_sp_d_sigma_3_np_cfg();
+	tisp_dmsc_sp_d_w_wei_np_cfg();
+	tisp_dmsc_sp_d_b_wei_np_cfg();
+	tisp_dmsc_sp_ud_w_wei_np_cfg();
+	tisp_dmsc_sp_ud_b_wei_np_cfg();
+	tisp_dmsc_dir_par_cfg();
+	tisp_dmsc_nor_par_cfg();
+	tisp_dmsc_sp_d_par_cfg();
+	tisp_dmsc_sp_ud_par_cfg();
+	tisp_dmsc_sp_alias_par_cfg();
+	tisp_dmsc_rgb_alias_par_cfg();
+	tisp_dmsc_fc_par_cfg();
+	tisp_dmsc_deir_par_cfg();
+	tisp_dmsc_awb_gain_par_cfg(dmsc_param_word(0xa8, 0));
+	tisp_dmsc_deir_rgb_par_cfg();
+	tisp_dmsc_d_ud_ns_par_cfg();
+	system_reg_write(0x499c, 1);
+	return 0;
+}
+
+static int tisp_dmsc_sharpness_set(u32 value)
+{
+	unsigned int i;
+	u32 sharp = value & 0xff;
+
+	dmsc_sharpness = sharp;
+	for (i = 0; i < TISP_DMSC_CURVE_WORDS; ++i) {
+		u32 src_sp_d_w = dmsc_sp_d_w_stren_curve[i];
+		u32 src_sp_d_b = dmsc_sp_d_b_stren_curve[i];
+		u32 src_sp_ud_w = dmsc_sp_ud_w_stren_curve[i];
+		u32 src_sp_ud_b = dmsc_sp_ud_b_stren_curve[i];
+		u32 src_uu = dmsc_uu_stren_curve[i];
+
+		if (sharp >= 0x81) {
+			u32 scale = sharp - 0x80;
+
+			dmsc_sp_d_w_stren_curve[i] = (((0x258 - src_sp_d_w) * scale) >> 7) + src_sp_d_w;
+			dmsc_sp_d_b_stren_curve[i] = (((0x258 - src_sp_d_b) * scale) >> 7) + src_sp_d_b;
+			dmsc_sp_ud_w_stren_curve[i] = (((0x258 - src_sp_ud_w) * scale) >> 7) + src_sp_ud_w;
+			dmsc_sp_ud_b_stren_curve[i] = (((0x258 - src_sp_ud_b) * scale) >> 7) + src_sp_ud_b;
+			dmsc_uu_stren_curve[i] = (((0x320 - src_uu) * scale) >> 7) + src_uu;
+		} else {
+			dmsc_sp_d_w_stren_curve[i] = (sharp * src_sp_d_w) >> 7;
+			dmsc_sp_d_b_stren_curve[i] = (sharp * src_sp_d_b) >> 7;
+			dmsc_sp_ud_w_stren_curve[i] = (sharp * src_sp_ud_w) >> 7;
+			dmsc_sp_ud_b_stren_curve[i] = (sharp * src_sp_ud_b) >> 7;
+			dmsc_uu_stren_curve[i] = (sharp * src_uu) >> 7;
+		}
+	}
+
+	if (dmsc_gain_last != 0xffffffff)
+		return tisp_dmsc_all_reg_refresh(dmsc_gain_last);
+
+	return 0;
+}
+
+static int tiziano_dmsc_params_refresh(void)
+{
+	const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+	const u8 *cursor;
+
+	if (!params || !tuning_bin_loaded)
+		return -ENODATA;
+
+	cursor = params + TISP_DMSC_TUNING_OFFSET;
+
+#define DMSC_COPY_CURVE(id, dst) dmsc_param_copy((id), (dst), sizeof(dst), &cursor)
+#define DMSC_COPY_SCALAR(id, dst) dmsc_param_copy((id), &(dst), sizeof(dst), &cursor)
+#define DMSC_COPY_BLOB(id, size) dmsc_param_copy((id), NULL, (size), &cursor)
+	DMSC_COPY_BLOB(0x5f, 0x40);
+	DMSC_COPY_BLOB(0x60, 0x20);
+	DMSC_COPY_BLOB(0x61, 0x20);
+	DMSC_COPY_BLOB(0x62, 0x20);
+	DMSC_COPY_BLOB(0x63, 0x40);
+	DMSC_COPY_BLOB(0x64, 0x58);
+	DMSC_COPY_BLOB(0x65, 0x58);
+	DMSC_COPY_BLOB(0x66, 0x58);
+	DMSC_COPY_BLOB(0x67, 0x58);
+	DMSC_COPY_SCALAR(0x68, dmsc_out_opt_word);
+	DMSC_COPY_CURVE(0x69, dmsc_hv_thres_1_curve);
+	DMSC_COPY_CURVE(0x6a, dmsc_hv_stren_curve);
+	DMSC_COPY_CURVE(0x6b, dmsc_aa_thres_1_curve);
+	DMSC_COPY_CURVE(0x6c, dmsc_aa_stren_curve);
+	DMSC_COPY_CURVE(0x6d, dmsc_hvaa_thres_1_curve);
+	DMSC_COPY_CURVE(0x6e, dmsc_hvaa_stren_curve);
+	DMSC_COPY_BLOB(0x6f, 0x24);
+	DMSC_COPY_CURVE(0x70, dmsc_uu_thres_curve);
+	DMSC_COPY_CURVE(0x71, dmsc_uu_stren_curve);
+	DMSC_COPY_BLOB(0x72, 0x10);
+	DMSC_COPY_CURVE(0x73, dmsc_alias_stren_curve);
+	DMSC_COPY_CURVE(0x74, dmsc_alias_thres_1_curve);
+	DMSC_COPY_CURVE(0x75, dmsc_alias_thres_2_curve);
+	DMSC_COPY_CURVE(0x76, dmsc_alias_dir_thres_curve);
+	DMSC_COPY_BLOB(0x77, 0x10);
+	DMSC_COPY_CURVE(0x78, dmsc_nor_alias_thres_curve);
+	DMSC_COPY_BLOB(0x79, 0x10);
+	DMSC_COPY_CURVE(0x7a, dmsc_sp_d_w_stren_curve);
+	DMSC_COPY_CURVE(0x7b, dmsc_sp_d_b_stren_curve);
+	DMSC_COPY_CURVE(0x7c, dmsc_sp_d_brig_thres_curve);
+	DMSC_COPY_CURVE(0x7d, dmsc_sp_d_dark_thres_curve);
+	DMSC_COPY_CURVE(0x7e, dmsc_sp_d_v2_win5_thres_curve);
+	DMSC_COPY_CURVE(0x7f, dmsc_sp_d_flat_stren_curve);
+	DMSC_COPY_CURVE(0x80, dmsc_sp_d_flat_thres_curve);
+	DMSC_COPY_CURVE(0x81, dmsc_sp_d_oe_stren_curve);
+	DMSC_COPY_BLOB(0x82, 0x2c);
+	DMSC_COPY_CURVE(0x83, dmsc_sp_ud_w_stren_curve);
+	DMSC_COPY_CURVE(0x84, dmsc_sp_ud_b_stren_curve);
+	DMSC_COPY_CURVE(0x85, dmsc_sp_ud_brig_thres_curve);
+	DMSC_COPY_CURVE(0x86, dmsc_sp_ud_dark_thres_curve);
+	DMSC_COPY_CURVE(0x87, dmsc_sp_ud_std_stren_curve);
+	DMSC_COPY_CURVE(0x88, dmsc_sp_ud_std_thres_curve);
+	DMSC_COPY_CURVE(0x89, dmsc_sp_ud_flat_thres_curve);
+	DMSC_COPY_CURVE(0x8a, dmsc_sp_ud_flat_stren_curve);
+	DMSC_COPY_CURVE(0x8b, dmsc_sp_ud_oe_stren_curve);
+	DMSC_COPY_BLOB(0x8c, 0x34);
+	DMSC_COPY_BLOB(0x8d, 0x28);
+	DMSC_COPY_CURVE(0x8e, dmsc_sp_alias_thres_curve);
+	DMSC_COPY_BLOB(0x8f, 0x08);
+	DMSC_COPY_CURVE(0x90, dmsc_rgb_dir_thres_curve);
+	DMSC_COPY_CURVE(0x91, dmsc_rgb_alias_stren_curve);
+	DMSC_COPY_BLOB(0x92, 0x08);
+	DMSC_COPY_CURVE(0x93, dmsc_fc_alias_stren_curve);
+	DMSC_COPY_CURVE(0x94, dmsc_fc_t1_thres_curve);
+	DMSC_COPY_CURVE(0x95, dmsc_fc_t1_stren_curve);
+	DMSC_COPY_CURVE(0x96, dmsc_fc_t2_stren_curve);
+	DMSC_COPY_CURVE(0x97, dmsc_fc_t3_stren_curve);
+	DMSC_COPY_CURVE(0x98, dmsc_fc_lum_stren_curve);
+	DMSC_COPY_CURVE(0x99, dmsc_fc_lum_thres_curve);
+	DMSC_COPY_BLOB(0x9a, 0x28);
+	DMSC_COPY_BLOB(0x9b, 0x08);
+	DMSC_COPY_BLOB(0x9c, 0x14);
+	DMSC_COPY_CURVE(0x9d, dmsc_deir_fusion_thres_curve);
+	DMSC_COPY_CURVE(0x9e, dmsc_deir_fusion_stren_curve);
+	DMSC_COPY_CURVE(0x9f, dmsc_sp_d_ns_thres_curve);
+	DMSC_COPY_CURVE(0xa0, dmsc_sp_ud_ns_thres_curve);
+	DMSC_COPY_BLOB(0xa1, 0x08);
+	DMSC_COPY_CURVE(0xa2, dmsc_uu_thres_wdr_curve);
+	DMSC_COPY_CURVE(0xa3, dmsc_uu_stren_wdr_curve);
+	DMSC_COPY_CURVE(0xa4, dmsc_sp_d_w_stren_wdr_curve);
+	DMSC_COPY_CURVE(0xa5, dmsc_sp_d_b_stren_wdr_curve);
+	DMSC_COPY_CURVE(0xa6, dmsc_sp_ud_w_stren_wdr_curve);
+	DMSC_COPY_CURVE(0xa7, dmsc_sp_ud_b_stren_wdr_curve);
+	DMSC_COPY_BLOB(0xa8, 0x0c);
+#undef DMSC_COPY_CURVE
+#undef DMSC_COPY_SCALAR
+#undef DMSC_COPY_BLOB
+
+	if (dmsc_sharpness != 0x80 && dmsc_gain_last != 0xffffffff)
+		tisp_dmsc_sharpness_set(dmsc_sharpness);
+
+	return 0;
+}
+
+static int tisp_dmsc_par_refresh(u32 gain, u32 delta, int commit)
+{
+	u32 diff;
+
+	dmsc_gain_curr = gain;
+	if (dmsc_gain_last == 0xffffffff) {
+		dmsc_gain_last = gain;
+		tisp_dmsc_all_reg_refresh(gain);
+	} else {
+		diff = (gain >= dmsc_gain_last) ? (gain - dmsc_gain_last) : (dmsc_gain_last - gain);
+		if (diff >= delta) {
+			dmsc_gain_last = gain;
+			tisp_dmsc_intp_reg_refresh(gain);
+		}
+	}
+
+	if (commit == 1)
+		system_reg_write(0x499c, 1);
+
+	return 0;
+}
+
 /* tiziano_dmsc_init - DMSC initialization */
 int tiziano_dmsc_init(void)
 {
 	pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
-	tisp_dmsc_write_default_regs();
+	if (!tuning_bin_loaded) {
+		pr_warn("tiziano_dmsc_init: no tuning bin, falling back to synthetic DMSC defaults\n");
+		tisp_dmsc_write_default_regs();
+		return 0;
+	}
+
+	tisp_dmsc_select_curve_bank(tisp_dmsc_wdr_enabled);
+	dmsc_gain_last = 0xffffffff;
+	dmsc_gain_curr = 0x10000;
+	tiziano_dmsc_params_refresh();
+	tisp_dmsc_par_refresh(0x10000, 0x10000, 1);
 	return 0;
 }
 
@@ -14090,15 +14954,15 @@ static void tisp_ydns_param_cfg(void)
  * gain_hi selects the array index, gain_lo interpolates between entries. */
 static uint32_t tisp_simple_intp(int gain_hi, int gain_lo, const uint32_t *array)
 {
-    uint32_t val;
+	s64 val;
     if (gain_hi < 0) gain_hi = 0;
     if (gain_hi >= 8) return array[8];
-    val = array[gain_hi];
+	val = (s64)array[gain_hi] << 16;
     if (gain_lo != 0 && gain_hi < 8) {
-        int next = array[gain_hi + 1];
-        val = val + (((next - (int)val) * gain_lo) >> 16);
+		s64 next = (s64)array[gain_hi + 1] << 16;
+		val += ((next - val) * gain_lo) >> 16;
     }
-    return val;
+	return (u32)((val >> 16) + ((val & 0x8000) >> 15));
 }
 
 /* OEM EXACT: tisp_ydns_intp — interpolate all YDNS arrays based on gain */
@@ -14518,6 +15382,7 @@ int tisp_mdns_wdr_en(int enable)
 int tisp_dmsc_wdr_en(int enable)
 {
 	tisp_dmsc_wdr_enabled = enable ? 1 : 0;
+	tisp_dmsc_select_curve_bank(tisp_dmsc_wdr_enabled);
     pr_info("tisp_dmsc_wdr_en: %s DMSC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
