@@ -11228,7 +11228,8 @@ static void tisp_ae1_process(void)
     tisp_ae_get_y_zone(zones);
     for (i = 0; i < 225; i++)
         sum += zones[i];
-    mean = (uint32_t)(sum / 225);
+    do_div(sum, 225);
+    mean = (uint32_t)sum;
 
     if (mean == 0)
         return; /* No data yet */
