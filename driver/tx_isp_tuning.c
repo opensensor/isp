@@ -18347,9 +18347,18 @@ static int tisp_mdns_c_2d_param_cfg(void)
     return 0;
 }
 
-static int tisp_mdns_intp_reg_refresh(uint32_t interp_key)
+/* tisp_mdns_intp - OEM EXACT: pre-compute all interpolated values.
+ * Our param_cfg functions use tisp_mdns_intp_table() which reads data_9a9d0
+ * at call time, so this just ensures data_9a9d0 is set before register writes. */
+static void tisp_mdns_intp(uint32_t interp_key)
 {
     data_9a9d0 = interp_key;
+}
+
+static int tisp_mdns_intp_reg_refresh(uint32_t interp_key)
+{
+    /* OEM EXACT: tisp_mdns_intp(arg1) then register writes */
+    tisp_mdns_intp(interp_key);
     system_reg_write(0x7804, 0x110);
     tisp_mdns_y_3d_param_cfg();
     tisp_mdns_y_2d_param_cfg();
@@ -18429,12 +18438,16 @@ static int tisp_mdns_par_refresh(uint32_t interp_key, uint32_t threshold)
     return 0;
 }
 
-/* tisp_mdns_all_reg_refresh - OEM register ordering with current in-tree tables */
+/* tisp_mdns_all_reg_refresh - OEM EXACT call sequence */
 static int tisp_mdns_all_reg_refresh(uint32_t interp_key)
 {
-    data_9a9d0 = interp_key;
-
-    tisp_mdns_intp_reg_refresh(interp_key);
+    /* OEM EXACT: intp → 0x7804=0x110 → y_3d → y_2d → c_3d → c_2d → top_func_cfg(1) */
+    tisp_mdns_intp(interp_key);
+    system_reg_write(0x7804, 0x110);
+    tisp_mdns_y_3d_param_cfg();
+    tisp_mdns_y_2d_param_cfg();
+    tisp_mdns_c_3d_param_cfg();
+    tisp_mdns_c_2d_param_cfg();
     tisp_mdns_top_func_cfg(1);
 
     return 0;
