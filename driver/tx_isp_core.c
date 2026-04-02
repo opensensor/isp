@@ -1869,6 +1869,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
         int tuning_frame_done = 0;
+	    int tuning_awb_tick;
         u32 fifo_stat_ch0;
         u32 evt[4];  /* event data: [0]=0, [1]=0, [2]=y_addr, [3]=0 */
 
@@ -1910,14 +1911,17 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (drain_count > 0)
             tuning_frame_done = 1;
 
-        if (tuning_frame_done) {
-            /* Driver-side fallback: the dedicated AWB IRQ path is still silent
-             * in runtime logs, but FIFO drain proves a frame completed. Reuse
-             * that reliable point to run AWB stats during active streaming.
-             *
-             * Keep the LSC LUT write behind the OEM-style bit-0x40 gate, but
-             * do not incorrectly gate AWB on that same bit; live logs show
-             * reg[0xc] commonly has 0x40 set while frames are still draining. */
+	        tuning_awb_tick = tuning_frame_done || (interrupt_status & 0x1000);
+	        if (tuning_awb_tick) {
+	            /* Driver-side fallback: the dedicated AWB IRQ path is still silent
+	             * in runtime logs. FIFO drain is one proof of frame completion, but
+	             * newer captures show active stream/frame-sync IRQs without drain_count
+	             * becoming non-zero, which leaves runtime AWB dead.
+	             *
+	             * Reuse either confirmed FIFO drain OR the frame-sync interrupt bit
+	             * as the temporary AWB trigger during bring-up. Keep the LSC LUT
+	             * write behind the OEM-style bit-0x40 gate, but do not incorrectly
+	             * gate AWB on that same bit. */
             if ((readl(isp_regs + 0xc) & 0x40) == 0)
                 tisp_lsc_write_lut_datas();
             awb_interrupt_static();

@@ -11562,22 +11562,22 @@ static void tisp_dmsc_awb_gain_par_cfg(uint32_t gain)
 		dmsc_awb_gain);
 }
 
-static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_t *wb_static)
+static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_t *gain_base)
 {
 	const uint32_t *mf_words = (const uint32_t *)mf_para;
 	u32 q = point_pos & 0x1f;
 	u32 rounding = point_pos ? (1u << ((point_pos - 1) & 0x1f)) : 0;
 	u32 gain_pair[2];
 	u32 reg_pair[2];
-	u32 wb_gr = wb_static ? wb_static[0] : 0x100;
-	u32 wb_gb = wb_static ? wb_static[1] : 0x100;
+	u32 base_gr = gain_base ? gain_base[0] : 0x100;
+	u32 base_gb = gain_base ? gain_base[1] : 0x100;
 	u32 mf_gr = mf_words[4];
 	u32 mf_gb = mf_words[5];
 	u32 gain_gr_q;
 	u32 gain_gb_q;
 
-	gain_gr_q = fix_point_mult2_32(point_pos, mf_gr << q, wb_gr);
-	gain_gb_q = fix_point_mult2_32(point_pos, mf_gb << q, wb_gb);
+	gain_gr_q = fix_point_mult2_32(point_pos, mf_gr << q, base_gr);
+	gain_gb_q = fix_point_mult2_32(point_pos, mf_gb << q, base_gb);
 	gain_pair[0] = (gain_gr_q + rounding) >> q;
 	gain_pair[1] = (gain_gb_q + rounding) >> q;
 
@@ -11604,8 +11604,9 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	}
 
 	awb_moa = 0;
-	pr_info("Tiziano_awb_set_gain: wb_static=%u,%u -> awb_gain=%u,%u\n",
-		wb_gr, wb_gb, reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
+	pr_info("Tiziano_awb_set_gain: base=%u,%u mf=%u,%u -> awb_gain=%u,%u\n",
+		base_gr, base_gb, mf_gr, mf_gb,
+		reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
 	return 0;
 }
 
@@ -11803,12 +11804,26 @@ static void awb_history_average(uint32_t *gr, uint32_t *gb, uint32_t *ct)
 	*ct = (uint32_t)div_u64(ct_sum + (weight_sum >> 1), weight_sum);
 }
 
+static uint32_t awb_ratio_to_mf_gain(uint32_t point_pos, uint32_t ratio)
+{
+	u32 q = point_pos & 0x1f;
+	u32 rounding = point_pos ? (1u << ((point_pos - 1) & 0x1f)) : 0;
+	u32 gain_q;
+
+	if (ratio == 0)
+		return 0x100;
+
+	gain_q = fix_point_div_32(q, 0x10000, ratio);
+	return (gain_q + rounding) >> q;
+}
+
 static int Tiziano_awb_fpga(const uint32_t *stats_r,
 			    const uint32_t *stats_g,
 			    const uint32_t *stats_b,
 			    const uint32_t *stats_p)
 {
 	const uint8_t *weight_bank = awb_rgbg_weight_active;
+	u32 *mf_words = (u32 *)_awb_mf_para;
 	u64 rg_sum = 0;
 	u64 bg_sum = 0;
 	u64 diff_sum = 0;
@@ -11817,8 +11832,10 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	u32 idx;
 	u32 diff_threshold = _AwbPointPos[1];
 	bool force_recalc = !awb_zone_cache_valid || awb_moa || tisp_wb_attr[0] != 0;
-	u32 target_gr;
-	u32 target_gb;
+	u32 target_rg;
+	u32 target_bg;
+	u32 live_gr;
+	u32 live_gb;
 	u32 target_ct;
 
 	if (!stats_r || !stats_g || !stats_b || !stats_p)
@@ -11886,30 +11903,36 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	if (awb_zone_bg_global == 0)
 		awb_zone_bg_global = 0x100;
 
-	target_gr = (uint32_t)div_u64(0x10000ULL + (awb_zone_rg_global >> 1),
-					     awb_zone_rg_global);
-	target_gb = (uint32_t)div_u64(0x10000ULL + (awb_zone_bg_global >> 1),
-					     awb_zone_bg_global);
-	target_ct = awb_estimate_ct(awb_zone_rg_global, awb_zone_bg_global);
+	target_rg = awb_zone_rg_global;
+	target_bg = awb_zone_bg_global;
+	target_ct = awb_estimate_ct(target_rg, target_bg);
 	if (target_ct == 0)
 		target_ct = 5000;
 
 	if (awb_history_reset || awb_history_count == 0)
-		awb_history_fill(target_gr, target_gb, target_ct);
+		awb_history_fill(target_rg, target_bg, target_ct);
 	else
-		awb_history_push(target_gr, target_gb, target_ct);
+		awb_history_push(target_rg, target_bg, target_ct);
 
-	awb_history_average(&target_gr, &target_gb, &target_ct);
+	awb_history_average(&target_rg, &target_bg, &target_ct);
+	live_gr = awb_ratio_to_mf_gain(_AwbPointPos[0], target_rg);
+	live_gb = awb_ratio_to_mf_gain(_AwbPointPos[0], target_bg);
 
-	awb_gain_track[0] = target_gr;
-	awb_gain_track[1] = target_gb;
-	awb_gain_original[0] = target_gr;
-	awb_gain_original[1] = target_gb;
-	_wb_static[0] = target_gr;
-	_wb_static[1] = target_gb;
+	awb_gain_track[0] = live_gr;
+	awb_gain_track[1] = live_gb;
+	awb_gain_original[0] = target_rg;
+	awb_gain_original[1] = target_bg;
 	_awb_ct = target_ct;
+	mf_words[2] = live_gr;
+	mf_words[3] = live_gb;
+	mf_words[4] = live_gr;
+	mf_words[5] = live_gb;
 
-	return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+		/* OEM HLIL shows _awb_cof is the tiny 1,4 coefficient pair while
+		 * init/start gain application uses the bin-loaded _wb_static base.
+		 * Using _awb_cof here collapses runtime gain programming exactly like
+		 * the live logs (base=1,4 -> awb_gain=0,28). */
+		return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
 }
 
 static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags)
@@ -12692,23 +12715,18 @@ uint32_t cm_sat_list_wdr[9] = {0x0, 0x0, 0x0, 0x100, 0xdc, 0xd2, 0xc8, 0xc8, 0x9
 /* BN: AWB 2-entry list used by CCM param_id 0xb4 (size 8) */
 uint32_t cm_awb_list[2] = {0x1324, 0x0c1c};
 
-/* CCM control structures - Binary Ninja reference */
-static struct {
-    int32_t matrix[9];  /* 3x3 CCM matrix */
-    uint32_t real;      /* Real update flag */
-} ccm_real;
+/* CCM control structures - OEM exact layout */
+static uint32_t ccm_real = 0;        /* Simple flag: 1 = force full update */
 
 static struct {
     uint32_t params[0x28/4]; /* CCM control parameters */
 } ccm_ctrl;
 
-static struct {
-    uint32_t data[0x24/4]; /* CCM parameter data */
-} ccm_parameter;
-
-static struct {
-    uint32_t data[0x24/4]; /* Default CCM parameters */
-} _ccm_d_parameter;
+/* OEM: 9-element signed int32 arrays (0x24 = 36 bytes each) */
+static int32_t ccm_parameter[9];     /* Active CCM coefficients (signed) */
+static int32_t _ccm_d_parameter[9];  /* D (daylight) sign-extended CCM */
+static int32_t _ccm_t_parameter[9];  /* T (tungsten) sign-extended CCM */
+static int32_t _ccm_a_parameter[9];  /* A (incandescent) sign-extended CCM */
 
 /* CCM pointer arrays - Binary Ninja reference */
 int32_t *tiziano_ccm_a_now = NULL;
@@ -12751,7 +12769,7 @@ static void tisp_ccm_dp_blob_set(const uint32_t blob[5])
 
 static void tisp_ccm_force_update(void)
 {
-	ccm_real.real = 1;
+	ccm_real = 1;
 }
 
 /* tisp_ccm_is_initialized - Check if CCM system is ready */
@@ -12785,7 +12803,7 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
     }
 
     /* OEM: additional DP configuration when ccm_real == 1 */
-    if (ccm_real.real == 1) {
+    if (ccm_real == 1) {
         system_reg_write(0x5018,
             (data_aa470 << 16) | (tiziano_ccm_dp_cfg << 12) | data_aa474);
 
@@ -12807,68 +12825,109 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
     return 0;
 }
 
-/* tiziano_ct_ccm_interpolation - OEM CT blending D/T/A into ccm_parameter */
+/* OEM: ct_flag hysteresis state (static locals in OEM) */
+static uint32_t ct_flag_cur  = 0;
+static uint32_t ct_flag_last = 0;
+
+/* tiziano_ct_ccm_interpolation - OEM EXACT CT region selection + interpolation.
+ *
+ * OEM decompilation shows dynamic thresholds derived from ct_threshold (arg2):
+ *   region 0 (D):      ct_value >= 0x1388 - ct_threshold
+ *   region 1 (D↔T):    ct_value >  ct_threshold + 0xed8
+ *   region 2 (T):      ct_value >  0xed8 - ct_threshold
+ *   region 3 (T↔A):    ct_value >  ct_threshold + 0xaf0
+ *   region 4 (A):      ct_value <= ct_threshold + 0xaf0
+ *
+ * Interpolation uses the SIGNED _ccm_{d,t,a}_parameter arrays filled by
+ * jz_isp_ccm_parameter_convert → jz_isp_ccm_reg2par.
+ */
 static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshold)
 {
-    /* OEM thresholds/pivots (same as BCSH HLIL, units match our wb_temp) */
-    const uint32_t CT_MAX_D = 0x1357;  /* >= -> D */
-    const uint32_t PIV_DT   = 0x0F0A;  /* pivot between D and T */
-    const uint32_t PIV_TA   = 0x0B22;  /* pivot between T and A */
-    const uint32_t DEN_DT   = 0x044C;  /* span for D<->T */
-    const uint32_t DEN_TA   = 0x0384;  /* span for T<->A */
+    /* ---- 1. Determine ct_flag from dynamic thresholds ---- */
+    uint32_t bound_d  = 0x1388 - ct_threshold;   /* D boundary */
+    uint32_t bound_dt = ct_threshold + 0xed8;     /* D↔T pivot */
+    uint32_t bound_t  = 0xed8 - ct_threshold;     /* T boundary (note: 0xed8 unsigned) */
+    uint32_t bound_ta = ct_threshold + 0xaf0;     /* T↔A pivot */
 
-    /* Choose result per CT region */
-    if (ct_value >= CT_MAX_D) {
-        for (int i = 0; i < 9; ++i) ccm_parameter.data[i] = tiziano_ccm_d_now[i];
-        return;
+    if (ct_value >= bound_d) {
+        ct_flag_cur = 0;               /* D zone */
+    } else if (ct_value > bound_dt) {
+        ct_flag_cur = 1;               /* D↔T interpolation */
+    } else if (ct_value > bound_t) {
+        ct_flag_cur = 2;               /* T zone */
+    } else if (ct_value > bound_ta) {
+        ct_flag_cur = 3;               /* T↔A interpolation */
+    } else {
+        ct_flag_cur = 4;               /* A zone */
     }
 
-    if (ct_value >= (PIV_DT + 1)) {
-        /* Interpolate D -> T with span DEN_DT around PIV_DT */
-        uint32_t w = (ct_value >= PIV_DT) ? (ct_value - PIV_DT) : (PIV_DT - ct_value);
-        if (w > DEN_DT) w = DEN_DT;
-        for (int i = 0; i < 9; ++i) {
-            int32_t d = tiziano_ccm_d_now[i];
-            int32_t t = tiziano_ccm_t_now[i];
-            int32_t v;
-            if (d >= t) {
-                int64_t tmp = (int64_t)(d - t) * w;
-                v = (int32_t)div64_s64(tmp, DEN_DT) + t;
-            } else {
-                int64_t tmp = (int64_t)(t - d) * w;
-                v = t - (int32_t)div64_s64(tmp, DEN_DT);
-            }
-            ccm_parameter.data[i] = (uint32_t)v;
+    /* ---- 2. Hysteresis: suppress minor oscillations ---- */
+    if (ccm_real != 0) {
+        /* First call (ccm_real==1): accept any flag */
+    } else {
+        /* Subsequent calls: apply hysteresis filter */
+        if (ct_flag_cur == 0) {
+            if (ct_flag_last == 0)
+                return;                /* No change, skip */
+        } else if (ct_flag_cur == 2 || ct_flag_cur == 4) {
+            if (ct_flag_last == ct_flag_cur)
+                return;                /* Plateau, skip if same */
         }
-        return;
+        /* Interpolation zones (1,3) always proceed */
     }
+    ct_flag_last = ct_flag_cur;
 
-    if (ct_value >= 0x0EA7) { /* copy T in plateau */
-        for (int i = 0; i < 9; ++i) ccm_parameter.data[i] = tiziano_ccm_t_now[i];
-        return;
-    }
+    /* ---- 3. Populate ccm_parameter[] per region ---- */
+    switch (ct_flag_cur) {
+    case 0: /* D */
+        memcpy(ccm_parameter, _ccm_d_parameter, 0x24);
+        break;
 
-    if (ct_value < 0x0B23) { /* copy A for warm */
-        for (int i = 0; i < 9; ++i) ccm_parameter.data[i] = tiziano_ccm_a_now[i];
-        return;
-    }
-
-    /* Interpolate T -> A in mid warm region */
-    uint32_t w = (ct_value >= PIV_TA) ? (ct_value - PIV_TA) : (PIV_TA - ct_value);
-    if (w > DEN_TA) w = DEN_TA;
-    for (int i = 0; i < 9; ++i) {
-        int32_t a = tiziano_ccm_a_now[i];
-        int32_t t = tiziano_ccm_t_now[i];
-        int32_t v;
-        if (t >= a) {
-            int64_t tmp = (int64_t)(t - a) * w;
-            v = (int32_t)div64_s64(tmp, DEN_TA) + a;
-        } else {
-            int64_t tmp = (int64_t)(a - t) * w;
-            v = a - (int32_t)div64_s64(tmp, DEN_TA);
+    case 1: { /* Interpolate D ↔ T */
+        uint32_t dist = (ct_value >= bound_dt) ?
+                        (ct_value - bound_dt) : (bound_dt - ct_value);
+        uint32_t span = (bound_d >= bound_dt) ?
+                        (bound_d - bound_dt) : (bound_dt - bound_d);
+        if (span == 0) span = 1;
+        for (int i = 0; i < 9; i++) {
+            int32_t t_val = _ccm_t_parameter[i];
+            int32_t d_val = _ccm_d_parameter[i];
+            if (d_val >= t_val)
+                ccm_parameter[i] = (int32_t)((uint32_t)(d_val - t_val) * dist / span) + t_val;
+            else
+                ccm_parameter[i] = t_val - (int32_t)((uint32_t)(t_val - d_val) * dist / span);
         }
-        ccm_parameter.data[i] = (uint32_t)v;
+        break;
     }
+
+    case 2: /* T */
+        memcpy(ccm_parameter, _ccm_t_parameter, 0x24);
+        break;
+
+    case 3: { /* Interpolate T ↔ A */
+        uint32_t dist = (ct_value >= bound_ta) ?
+                        (ct_value - bound_ta) : (bound_ta - ct_value);
+        uint32_t span = (bound_t >= bound_ta) ?
+                        (bound_t - bound_ta) : (bound_ta - bound_t);
+        if (span == 0) span = 1;
+        for (int i = 0; i < 9; i++) {
+            int32_t a_val = _ccm_a_parameter[i];
+            int32_t t_val = _ccm_t_parameter[i];
+            if (t_val >= a_val)
+                ccm_parameter[i] = (int32_t)((uint32_t)(t_val - a_val) * dist / span) + a_val;
+            else
+                ccm_parameter[i] = a_val - (int32_t)((uint32_t)(a_val - t_val) * dist / span);
+        }
+        break;
+    }
+
+    case 4: /* A */
+        memcpy(ccm_parameter, _ccm_a_parameter, 0x24);
+        break;
+    }
+
+    /* OEM tail: copy result to the persistent buffer at 0xb52f8 area */
+    /* (In our layout ccm_parameter IS the persistent buffer) */
 }
 
 /* cm_control - CCM control processing */
