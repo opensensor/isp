@@ -1031,7 +1031,7 @@ static uint32_t map_kneepoint_x[11] = {0};
 static uint32_t map_kneepoint_y_pre[264] = {0};
 /* ADR statistics arrays from DMA */
 static uint32_t adr_hist[512] = {0};
-static uint32_t adr_block_y[24] = {0};
+static uint32_t adr_block_y[192] = {0};  /* OEM: max index = (20+168)/4 = 47, need 48+ */
 static uint32_t adr_block_hist[720] = {0};
 static uint32_t adr_hist_512[512] = {0};
 static uint32_t block_mean_y[24] = {0};
@@ -15291,37 +15291,208 @@ static void tisp_adr_write_headers(void)
     system_reg_write(0x00004314, 0x0);
 }
 
-/* tiziano_adr_params_init - Initialize ADR parameters */
+/* Default kneepoint X positions for identity-like tone mapping */
+static const uint32_t default_kneepoint_x_11[11] = {
+    0, 0x199, 0x333, 0x4CC, 0x666, 0x800, 0x999, 0xB33, 0xCCC, 0xE66, 0xFFF
+};
+static const uint32_t default_ctc_kneepoint_x_9[9] = {
+    0, 0x200, 0x400, 0x600, 0x800, 0xA00, 0xC00, 0xE00, 0xFFF
+};
+
+/* tiziano_adr_params_init - Binary Ninja EXACT: set _now pointers + init kneepoint arrays */
 static void tiziano_adr_params_init(void)
 {
-    pr_debug("tiziano_adr_params_init: Initializing ADR parameter arrays\n");
+    int i, blk;
 
-    /* Initialize with basic tone mapping parameters */
-    for (int i = 0; i < 31; i++) {
-        param_adr_centre_w_dis_array[i] = 0x100 + (i * 8); /* Center weight distribution */
+    /* OEM: set _now pointers based on adr_wdr_en */
+    if (adr_wdr_en != 0) {
+        adr_ctc_map2cut_y_now = adr_ctc_map2cut_y_wdr;
+        adr_light_end_now = adr_light_end_wdr;
+        adr_map_mode_now = adr_map_mode_wdr;
+        adr_ev_list_now = adr_ev_list_wdr;
+        adr_ligb_list_now = adr_ligb_list_wdr;
+        adr_mapb1_list_now = adr_mapb1_list_wdr;
+        adr_mapb2_list_now = adr_mapb2_list_wdr;
+        adr_mapb3_list_now = adr_mapb3_list_wdr;
+        adr_mapb4_list_now = adr_mapb4_list_wdr;
+        adr_block_light_now = adr_block_light_wdr;
+        adr_blp2_list_now = adr_blp2_list_wdr;
+    } else {
+        adr_ctc_map2cut_y_now = adr_ctc_map2cut_y;
+        adr_light_end_now = adr_light_end;
+        adr_map_mode_now = adr_map_mode;
+        adr_ev_list_now = adr_ev_list;
+        adr_ligb_list_now = adr_ligb_list;
+        adr_mapb1_list_now = adr_mapb1_list;
+        adr_mapb2_list_now = adr_mapb2_list;
+        adr_mapb3_list_now = adr_mapb3_list;
+        adr_mapb4_list_now = adr_mapb4_list;
+        adr_block_light_now = adr_block_light;
+        adr_blp2_list_now = adr_blp2_list;
     }
 
-    for (int i = 0; i < 32; i++) {
-        param_adr_weight_20_lut_array[i] = 0x80 + (i * 4);
-        param_adr_weight_02_lut_array[i] = 0x70 + (i * 3);
-        param_adr_weight_12_lut_array[i] = 0x60 + (i * 2);
-        param_adr_weight_22_lut_array[i] = 0x50 + (i * 2);
-        param_adr_weight_21_lut_array[i] = 0x40 + (i * 1);
+    /* Initialize kneepoint X arrays with default breakpoints */
+    memcpy(min_kneepoint_x, default_kneepoint_x_11, sizeof(min_kneepoint_x));
+    memcpy(map_kneepoint_x, default_kneepoint_x_11, sizeof(map_kneepoint_x));
+    memcpy(ctc_kneepoint_x, default_ctc_kneepoint_x_9, sizeof(ctc_kneepoint_x));
+
+    /* Initialize kneepoint Y arrays to identity (y = x) for passthrough */
+    for (i = 0; i < 10; i++)
+        min_kneepoint_y[i] = default_kneepoint_x_11[i];
+    for (i = 0; i < 8; i++)
+        ctc_kneepoint_y[i] = default_ctc_kneepoint_x_9[i];
+    /* map_kneepoint_y: 24 blocks × 11 entries, each identity */
+    for (blk = 0; blk < 24; blk++)
+        for (i = 0; i < 11; i++)
+            map_kneepoint_y[blk * 11 + i] = default_kneepoint_x_11[i];
+    /* Copy to _pre for temporal smoothing */
+    memcpy(map_kneepoint_y_pre, map_kneepoint_y, sizeof(map_kneepoint_y_pre));
+
+    /* Signal algorithm to run on first interrupt */
+    ev_changed = 1;
+
+    pr_info("tiziano_adr_params_init: _now pointers set (wdr=%u), kneepoint identity init done\n",
+            adr_wdr_en);
+}
+
+/* tiziano_adr_get_data - Binary Ninja EXACT: Parse ADR DMA statistics buffer
+ * OEM: parses 0x1000 byte DMA buffer into adr_block_hist[], adr_block_y[], adr_hist[] */
+static void tiziano_adr_get_data(uint32_t *buf)
+{
+    int i, j;
+    uint32_t *t0 = buf;
+
+    /* Part 1: Parse block histogram (5 halfword entries) and block Y (28-bit word)
+     * OEM: outer i=0,4,8,12,16,20 (6 rows, step 4 bytes)
+     *       inner j=0,24,48,...,168 (8 cols, step 24 bytes)
+     *       Each iteration reads 4 input words (16 bytes) */
+    for (i = 0; i != 0x18; i += 4) {
+        uint16_t *a3 = (uint16_t *)t0;
+        uint16_t *v1 = (uint16_t *)t0;
+        uint32_t *bh = &adr_block_hist[(i / 4) * 5];  /* OEM: &adr_block_hist + i * 5 (byte offset) */
+
+        for (j = 0; j != 0xc0; j += 0x18) {
+            /* OEM reads 5 halfwords from the 16-byte DMA record */
+            /* $a3_1[2].w = halfword at byte offset 8 from a3 base */
+            bh[0] = a3[4];
+            /* *($a3_1 + 0xa) = halfword at byte offset 10 */
+            bh[1] = a3[5];
+            /* Advance both pointers by 4 words (8 halfwords) */
+            v1 += 8;
+            a3 += 8;
+            /* *($v1_1 - 4) = halfword at v1 - 4 bytes = v1[-2] */
+            bh[2] = v1[-2];
+            /* *($v1_1 - 2) = halfword at v1 - 2 bytes = v1[-1] */
+            bh[3] = v1[-1];
+            /* $v1_1[1].w = halfword at v1 + 4 bytes = v1[2] */
+            bh[4] = v1[2];
+            /* *$v1_1 & 0xfffffff = word at v1, masked to 28 bits */
+            adr_block_y[(i + j) / 4] = ((uint32_t *)v1)[0] & 0x0FFFFFFF;
+
+            bh += 30;  /* OEM: $v0_3 += 0x78 (120 bytes = 30 words) */
+        }
+        t0 += 0x20;  /* OEM: $t0 = &$t0[0x20] (advance by 32 words per row) */
+    }
+
+    /* Part 2: Parse histogram - 170 iterations, each reads 2 words → 3 entries (21-bit each) */
+    {
+        uint32_t *out = adr_hist;
+        uint32_t *in = &buf[0xc2];  /* OEM: &arg1[0xc2] */
+
+        do {
+            uint32_t w0 = in[0];
+            uint32_t w1 = in[1];
+            in += 2;
+
+            out[0] = w0 & 0x1FFFFF;
+            out[1] = ((w1 & 0x3FF) << 11) | (w0 >> 21);
+            out[2] = (w1 >> 10) & 0x1FFFFF;
+            out += 3;
+        } while (in != &buf[0x216]);
+
+        /* Last 2 values → separate globals (OEM: data_c00c8, data_c00cc) */
+        {
+            uint32_t v = buf[0x216];
+            data_c00c8 = v & 0x1FFFFF;
+            data_c00cc = ((buf[0x217] & 0x3FF) << 11) | (v >> 21);
+        }
     }
 }
 
-/* tisp_adr_process - ADR processing callback */
+/* tiziano_adr_algorithm - Simplified ADR algorithm
+ * OEM does complex EV-based interpolation across many parameter arrays,
+ * then calls Tiziano_adr_fpga() for tone-mapping curve generation.
+ * For now: maintain identity mapping until full Tiziano_adr_fpga is ported. */
+static int tiziano_adr_algorithm(void)
+{
+    if (ev_changed != 1)
+        return 0;
+
+    ev_changed = 0;
+
+    /* The OEM algorithm interpolates all kneepoint arrays based on ev_now
+     * relative to adr_ev_list_now[]. Without the full Tiziano_adr_fpga
+     * implementation, we keep the identity mapping initialized by
+     * tiziano_adr_params_init(). The feedback loop still runs (interrupt
+     * fires, data is parsed, params are written) but the tone curve
+     * stays at identity. This prevents artifacts from stale zero values. */
+
+    pr_debug("tiziano_adr_algorithm: ev_changed processed (ev_now=%u)\n", ev_now);
+    return 0;
+}
+
+/* tisp_adr_process - Binary Ninja EXACT: ADR processing callback (event 2) */
 int tisp_adr_process(void)
 {
-    pr_debug("tisp_adr_process: Processing ADR tone mapping\n");
+    tiziano_adr_algorithm();
     return 0;
 }
 
-/* tiziano_adr_interrupt_static - ADR interrupt handler */
+/* tiziano_adr_interrupt_static - Binary Ninja EXACT: ADR interrupt handler (IRQ 0x12)
+ * OEM flow: 1) write params to HW, 2) read DMA buffer index, 3) sync cache,
+ *           4) parse data, 5) push event 2 to trigger algorithm */
 int tiziano_adr_interrupt_static(void)
 {
-    pr_debug("tiziano_adr_interrupt_static: ADR interrupt received\n");
-    return 0;
+    uint32_t reg_val;
+    uint32_t phys_base;
+    struct {
+        uint32_t pad[2];
+        uint32_t event_id;
+    } event_data;
+
+    /* Step 1: Write current kneepoint params to hardware registers */
+    tisp_adr_set_params();
+
+    /* Step 2: Read which DMA buffer the hardware just wrote to */
+    reg_val = system_reg_read(0x44b0);
+    phys_base = adr_dma_phys;
+
+    if (adr_dma_virt == NULL || phys_base == 0)
+        goto push_event;
+
+    /* Step 3-4: Find matching buffer, sync cache, parse data
+     * OEM checks 4 buffers: phys, phys+0x1000, phys+0x2000, phys+0x3000 */
+    if (reg_val == phys_base) {
+        dma_cache_wback_inv((unsigned long)adr_dma_virt, 0x1000);
+        tiziano_adr_get_data((uint32_t *)adr_dma_virt);
+    } else if (reg_val == phys_base + 0x1000) {
+        dma_cache_wback_inv((unsigned long)adr_dma_virt + 0x1000, 0x1000);
+        tiziano_adr_get_data((uint32_t *)((char *)adr_dma_virt + 0x1000));
+    } else if (reg_val == phys_base + 0x2000) {
+        dma_cache_wback_inv((unsigned long)adr_dma_virt + 0x2000, 0x1000);
+        tiziano_adr_get_data((uint32_t *)((char *)adr_dma_virt + 0x2000));
+    } else if (reg_val == phys_base + 0x3000) {
+        dma_cache_wback_inv((unsigned long)adr_dma_virt + 0x3000, 0x1000);
+        tiziano_adr_get_data((uint32_t *)((char *)adr_dma_virt + 0x3000));
+    }
+
+push_event:
+    /* Step 5: Push event 2 to trigger tisp_adr_process via event queue */
+    memset(&event_data, 0, sizeof(event_data));
+    event_data.event_id = 2;
+    tisp_event_push(&event_data);
+
+    return 1;
 }
 
 /* tiziano_adr_init - Binary Ninja SIMPLIFIED implementation */
@@ -15397,8 +15568,8 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
         data_ace54 = (width_calc * 3 + 1) >> 1;
     }
 
-    /* Binary Ninja: Set up interrupt and event callbacks */
-    tisp_event_set_cb(0x12, tiziano_adr_interrupt_static);
+    /* Binary Ninja EXACT: OEM uses system_irq_func_set for IRQ, tisp_event_set_cb for event */
+    system_irq_func_set(0x12, tiziano_adr_interrupt_static);
     tisp_event_set_cb(2, tisp_adr_process);
 
     pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
