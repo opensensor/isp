@@ -12321,9 +12321,12 @@ int awb_interrupt_static(void)
 
 	/* AE interrupt (bits 26-29) never fires on this hardware revision.
 	 * Poll the AE DMA buffer from the AWB ISR instead, parse 21-bit Y
-	 * luminance per zone, and feed to ae_zone_data for libimp AE. */
+	 * luminance per zone, and feed to ae_zone_data for libimp AE.
+	 * Also push event 1 to trigger tisp_ae0_process (the AE algorithm)
+	 * which would normally be triggered by ae0_interrupt_static. */
 	if (data_b2f3c) {
 		extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
+		struct tisp_event_record ae_event = {0};
 		uint32_t ae_stat = system_reg_read(0xa050);
 		void *ae_buf = (void *)(unsigned long)(data_b2f3c + ((ae_stat << 8) & 0x3000));
 		uint32_t *ae_raw;
@@ -12335,6 +12338,10 @@ int awb_interrupt_static(void)
 		for (i = 0; i < 225; i++)
 			zones[i] = ae_raw[i * 4] & 0x1fffff;
 		tisp_ae_update_zone_data(zones, sizeof(zones));
+
+		/* Trigger AE processing (event 1 = tisp_ae0_process) */
+		ae_event.event_id = 1;
+		tisp_event_push(&ae_event);
 	}
 
 	tiziano_awb_set_lum_th_freq();
