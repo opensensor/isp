@@ -1484,7 +1484,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x500;  /* DMSC(8)+Gamma(10) only — isolate static color blob source */
+ static uint isp_block_enable = 0x1500;  /* DMSC(8)+Gamma(10)+BCSH(12) — test if BCSH causes color blobs */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
