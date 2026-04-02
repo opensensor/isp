@@ -12350,9 +12350,28 @@ int awb_interrupt_static(void)
 	if (data_a2f5c == 0)
 		return 0;
 
-	awb_status = system_reg_read(0xb050);
-	buffer_addr = (void *)(unsigned long)(data_a2f5c + (awb_status << 12));
-	private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
+	/* Scan all 4 AWB DMA buffers for non-zero data.
+	 * Register 0xb050 is stuck at 3 (same issue as AE: buffer index
+	 * doesn't cycle without interrupt acknowledgment). */
+	{
+		int bi, best = -1;
+		for (bi = 0; bi < 4; bi++) {
+			void *buf = (void *)(unsigned long)(data_a2f5c + (bi << 12));
+			uint32_t *raw;
+			private_dma_cache_sync(NULL, buf, 0x1000, 0);
+			raw = (uint32_t *)buf;
+			if (raw[0] != 0 || raw[4] != 0) {
+				best = bi;
+				break;
+			}
+		}
+		if (best >= 0)
+			buffer_addr = (void *)(unsigned long)(data_a2f5c + (best << 12));
+		else
+			buffer_addr = (void *)(unsigned long)(data_a2f5c); /* fallback: buf 0 */
+		private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
+	}
+	awb_status = 0; /* Not used beyond this point */
 	JZ_Isp_Get_Awb_Statistics(buffer_addr, 0xf001f001);
 
 	/* AE interrupt (bits 26-29) never fires on this hardware revision.
