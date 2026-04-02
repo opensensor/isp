@@ -1523,7 +1523,6 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 0;    /* MDNS fully implemented — unparked for OEM-matching operation. */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -1565,18 +1564,6 @@ static uint32_t *mdns_c_fiir_fus_wei5_array_now = NULL;
 static uint32_t *mdns_c_fiir_fus_wei6_array_now = NULL;
 static uint32_t *mdns_c_fiir_fus_wei7_array_now = NULL;
 static uint32_t *mdns_c_fiir_fus_wei8_array_now = NULL;
-
-/* MDNS base value arrays for different modes */
-static uint32_t mdns_wdr_sad_ave_base[9] = {0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0};
-static uint32_t mdns_wdr_sta_ave_base[9] = {0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0};
-static uint32_t mdns_wdr_sad_ass_base[9] = {0x35, 0x45, 0x55, 0x65, 0x75, 0x85, 0x95, 0xa5, 0xb5};
-static uint32_t mdns_wdr_sta_ass_base[9] = {0x25, 0x35, 0x45, 0x55, 0x65, 0x75, 0x85, 0x95, 0xa5};
-static uint32_t mdns_wdr_ref_wei_base[9] = {0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0};
-static uint32_t mdns_std_sad_ave_base[9] = {0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0};
-static uint32_t mdns_std_sta_ave_base[9] = {0x18, 0x28, 0x38, 0x48, 0x58, 0x68, 0x78, 0x88, 0x98};
-static uint32_t mdns_std_sad_ass_base[9] = {0x1c, 0x2c, 0x3c, 0x4c, 0x5c, 0x6c, 0x7c, 0x8c, 0x9c};
-static uint32_t mdns_std_sta_ass_base[9] = {0x15, 0x25, 0x35, 0x45, 0x55, 0x65, 0x75, 0x85, 0x95};
-static uint32_t mdns_std_ref_wei_base[9] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90};
 
 /* MDNS control flags (BN: 0x180..0x190 all size 4) */
 static uint32_t mdns_y_filter_en_array = 0;       /* 0x180 */
@@ -15162,45 +15149,32 @@ static int tiziano_mdns_params_refresh(void)
 	return 0;
 }
 
-/* tiziano_mdns_init - MDNS initialization */
+/* tiziano_mdns_init - OEM EXACT initialization sequence.
+ * OEM: select WDR tables, set width/height, set last_refresh_key=0xffffffff,
+ * call tiziano_mdns_params_refresh(), tisp_mdns_par_refresh(0x10000, 0x10000),
+ * tisp_mdns_bypass(0). */
 int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
-	int ret;
-	int prev_bulk_loading;
+	/* OEM EXACT: WDR table selection + store dimensions */
+	tisp_mdns_select_now_tables(mdns_wdr_en != 0);
+	mdns_frame_width = width;
+	mdns_frame_height = height;
 
-    pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
+	/* OEM EXACT: data_8a9c0 = 0xffffffff (force first-time all-register refresh) */
+	mdns_last_refresh_key = 0xffffffff;
 
-    mdns_frame_width = width;
-    mdns_frame_height = height;
-    tisp_mdns_select_now_tables(mdns_wdr_en != 0);
+	/* OEM EXACT: load arrays from tuning params + apply ratio if != 0x80 */
+	tiziano_mdns_params_refresh();
 
-    if (data_9ab00 == 0)
-        data_9ab00 = 0x80;
+	/* OEM EXACT: tisp_mdns_par_refresh(0x10000, 0x10000)
+	 * Since mdns_last_refresh_key == 0xffffffff, this takes the first-time
+	 * path: tisp_mdns_all_reg_refresh(0x10000) + top_func_refresh + trigger */
+	tisp_mdns_par_refresh(0x10000, 0x10000);
 
-    data_9a9d0 = 0x10000;
-    mdns_last_refresh_key = 0xffffffff;
-	prev_bulk_loading = mdns_bulk_loading;
-	mdns_bulk_loading = 1;
-	ret = tiziano_mdns_params_refresh();
-	mdns_bulk_loading = prev_bulk_loading;
-	if (ret)
-		return ret;
-
-	if (mdns_runtime_parked) {
-		mdns_last_refresh_key = data_9a9d0;
-		pr_info("tiziano_mdns_init: MDNS runtime programming parked\n");
-		return 0;
-	}
-
-	/* OEM EXACT: tisp_mdns_par_refresh(interp_key, threshold) followed by bypass(0).
-	 * With mdns_last_refresh_key == 0xffffffff, par_refresh takes the
-	 * first-time path which calls tisp_mdns_all_reg_refresh → full
-	 * register programming + top_func_refresh + trigger. */
-	tisp_mdns_par_refresh(data_9a9d0, data_9a9d0);
+	/* OEM EXACT: tisp_mdns_bypass(0) — enable MDNS processing */
 	tisp_mdns_bypass(0);
-	pr_info("tiziano_mdns_init: MDNS initialized via OEM par_refresh path\n");
 
-    return 0;
+	return 0;
 }
 
 /*
@@ -16648,17 +16622,10 @@ int tisp_defog_wdr_en(int enable)
 
 int tisp_mdns_wdr_en(int enable)
 {
-    pr_info("tisp_mdns_wdr_en: %s MDNS WDR mode\n", enable ? "Enable" : "Disable");
-    mdns_wdr_en = enable ? 1 : 0;
-
+    /* OEM EXACT: mdns_wdr_en = arg1, select tables, tisp_s_mdns_ratio(data_8aaf0) */
+    mdns_wdr_en = enable;
     tisp_mdns_select_now_tables(mdns_wdr_en);
-
-	if (mdns_runtime_parked) {
-		pr_info("tisp_mdns_wdr_en: MDNS runtime programming parked; updated table selection only\n");
-		return 0;
-	}
-
-    return tisp_s_mdns_ratio(data_9ab00 ? data_9ab00 : 0x80);
+    return tisp_s_mdns_ratio(data_9ab00);
 }
 
 int tisp_dmsc_wdr_en(int enable)
@@ -17538,139 +17505,108 @@ EXPORT_SYMBOL(tisp_s_2dns_ratio);
 int tisp_s_mdns_ratio(int ratio)
 {
     int i;
-    uint32_t temp_val;
-    int is_low_ratio = (ratio < 0x81) ? 1 : 0;
+    uint32_t v;
+    int is_low = (ratio < 0x81) ? 1 : 0;
 
-    pr_info("tisp_s_mdns_ratio: Setting motion DNS ratio to %d\n", ratio);
-
-    /* Binary Ninja shows complex array processing for motion denoising */
+    /* OEM EXACT: data_8aaf0 = arg1 */
     data_9ab00 = ratio;
 
-    /* Process all 9 array elements */
+    /* OEM EXACT: loop i=0..8 (9 elements), scaling 5 array pairs
+     * OEM reads base values from the original tuning arrays (WDR or standard),
+     * computes scaled values, and writes to the _now arrays. */
     for (i = 0; i < 9; i++) {
-        /* Update motion denoising arrays based on WDR enable state */
         if (mdns_wdr_en) {
-            /* WDR enabled path */
-            if (mdns_y_sad_ave_thres_array_now) {
-                int base_val = mdns_wdr_sad_ave_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sad_ave_thres_array_now[i] = temp_val;
+            /* WDR path: read from WDR tuning arrays */
+            v = mdns_y_sad_ave_thres_wdr_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sad_ave_thres_array_now[i] = v;
 
-            if (mdns_y_sta_ave_thres_array_now) {
-                int base_val = mdns_wdr_sta_ave_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sta_ave_thres_array_now[i] = temp_val;
+            v = mdns_y_sta_ave_thres_wdr_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sta_ave_thres_array_now[i] = v;
 
-            if (mdns_y_sad_ass_thres_array_now) {
-                int base_val = mdns_wdr_sad_ass_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sad_ass_thres_array_now[i] = temp_val;
+            v = mdns_y_sad_ass_thres_wdr_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sad_ass_thres_array_now[i] = v;
 
-            if (mdns_y_sta_ass_thres_array_now) {
-                int base_val = mdns_wdr_sta_ass_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sta_ass_thres_array_now[i] = temp_val;
+            v = mdns_y_sta_ass_thres_wdr_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sta_ass_thres_array_now[i] = v;
 
-            if (mdns_y_ref_wei_b_min_array_now) {
-                int base_val = mdns_wdr_ref_wei_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_ref_wei_b_min_array_now[i] = temp_val;
-            }
+            v = mdns_y_ref_wei_b_min_wdr_array[i];
         } else {
-            /* WDR disabled path - use standard base values */
-            if (mdns_y_sad_ave_thres_array_now) {
-                int base_val = mdns_std_sad_ave_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sad_ave_thres_array_now[i] = temp_val;
+            /* Non-WDR path: read from standard tuning arrays */
+            v = mdns_y_sad_ave_thres_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sad_ave_thres_array_now[i] = v;
 
-            if (mdns_y_sta_ave_thres_array_now) {
-                int base_val = mdns_std_sta_ave_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sta_ave_thres_array_now[i] = temp_val;
+            v = mdns_y_sta_ave_thres_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sta_ave_thres_array_now[i] = v;
 
-            if (mdns_y_sad_ass_thres_array_now) {
-                int base_val = mdns_std_sad_ass_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sad_ass_thres_array_now[i] = temp_val;
+            v = mdns_y_sad_ass_thres_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sad_ass_thres_array_now[i] = v;
 
-            if (mdns_y_sta_ass_thres_array_now) {
-                int base_val = mdns_std_sta_ass_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_sta_ass_thres_array_now[i] = temp_val;
+            v = mdns_y_sta_ass_thres_array[i];
+            if (is_low)
+                v = (ratio * v) >> 7;
+            else {
+                uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+                v = v + ((h * (ratio - 0x80)) >> 7);
             }
+            mdns_y_sta_ass_thres_array_now[i] = v;
 
-            if (mdns_y_ref_wei_b_min_array_now) {
-                int base_val = mdns_std_ref_wei_base[i];
-                if (is_low_ratio) {
-                    temp_val = (ratio * base_val) >> 7;
-                } else {
-                    int headroom = (base_val < 0xc8) ? (0xc8 - base_val) : 0;
-                    temp_val = base_val + ((headroom * (ratio - 0x80)) >> 7);
-                }
-                mdns_y_ref_wei_b_min_array_now[i] = temp_val;
-            }
+            v = mdns_y_ref_wei_b_min_array[i];
         }
+
+        /* OEM EXACT: ref_wei_b_min scaling is common to both paths */
+        if (is_low)
+            v = (ratio * v) >> 7;
+        else {
+            uint32_t h = (v < 0xc8) ? (0xc8 - v) : 0;
+            v = v + ((h * (ratio - 0x80)) >> 7);
+        }
+        mdns_y_ref_wei_b_min_array_now[i] = v;
     }
 
-    if (mdns_runtime_parked) {
-        pr_info("tisp_s_mdns_ratio: MDNS runtime programming parked; updated cached ratios/tables only\n");
-        return 0;
-    }
-
-    /* Refresh MDNS registers and trigger update */
-    tisp_mdns_all_reg_refresh(data_9a9d0);
+    /* OEM EXACT: tisp_mdns_all_reg_refresh(data_8a9c0) then tisp_mdns_reg_trigger() */
+    tisp_mdns_all_reg_refresh(mdns_last_refresh_key);
     return tisp_mdns_reg_trigger();
 }
 EXPORT_SYMBOL(tisp_s_mdns_ratio);
