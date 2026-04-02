@@ -1927,10 +1927,10 @@ int tisp_param_operate_init(void);
 
 
 /* Forward declarations for update functions */
-int tisp_tgain_update(void);
-int tisp_again_update(void);
-int tisp_ev_update(void);
-int tisp_ct_update(void);
+int tisp_tgain_update(uint32_t gain);
+int tisp_again_update(uint32_t gain);
+int tisp_ev_update(uint32_t ev, uint32_t aux_ev);
+int tisp_ct_update(uint32_t ct);
 int tisp_ae_ir_update(void);
 int tisp_lsc_write_lut_datas(void);
 static int tisp_lsc_ct_update(uint32_t ct);
@@ -2596,6 +2596,21 @@ static uint32_t data_b33b0[4];
 static uint32_t data_b33b4 = (uint32_t)&data_b33b0;
 static uint32_t data_b33b8 = (uint32_t)&data_b33b0;
 
+struct tisp_event_record {
+    uint32_t link[2];
+    uint32_t event_id;
+    uint32_t reserved;
+    uint32_t args[8];
+};
+
+#define TISP_EVENT_QUEUE_DEPTH 16
+
+static struct tisp_event_record tisp_event_queue[TISP_EVENT_QUEUE_DEPTH];
+static unsigned int tisp_event_head;
+static unsigned int tisp_event_tail;
+static unsigned int tisp_event_count;
+static spinlock_t tisp_event_lock;
+
 /* Helper functions - Forward declarations */
 /* private_dma_cache_sync declared in txx-funcs.h */
 void private_complete(struct completion *comp);
@@ -2744,17 +2759,31 @@ static int tisp_ae0_process_impl(void)
     return 0;
 }
 
-/* Simple event ID storage for single-event dispatch.
- * The OEM uses a full queue but single-event is sufficient for AE. */
-static volatile int pending_event_id = -1;
-
 static int tisp_event_push(void *event)
 {
-    if (!event)
+    const struct tisp_event_record *src = event;
+    unsigned long flags;
+    struct tisp_event_record *dst;
+
+    if (!src)
         return -EINVAL;
 
-    /* The event struct has event_id at offset 8 (third u32 word) */
-    pending_event_id = ((uint32_t *)event)[2];
+    spin_lock_irqsave(&tisp_event_lock, flags);
+
+    if (tisp_event_count >= TISP_EVENT_QUEUE_DEPTH) {
+        spin_unlock_irqrestore(&tisp_event_lock, flags);
+        pr_err_ratelimited("tisp_event_push: event queue full, dropping id=%u\n",
+                           src->event_id);
+        return -ENOMEM;
+    }
+
+    dst = &tisp_event_queue[tisp_event_tail];
+    dst->event_id = src->event_id;
+    memcpy(dst->args, src->args, sizeof(dst->args));
+    tisp_event_tail = (tisp_event_tail + 1) % TISP_EVENT_QUEUE_DEPTH;
+    tisp_event_count++;
+
+    spin_unlock_irqrestore(&tisp_event_lock, flags);
     complete(&tevent_info);
     return 0;
 }
@@ -4734,7 +4763,7 @@ struct af_zone_data af_zone_data = {
 
 
 /* Event callback function array - Binary Ninja reference */
-static int (*cb[32])(void) = {NULL};
+static int (*cb[32])() = {NULL};
 
 /* ISP event callback function array - Binary Ninja reference */
 void (*isp_event_func_cb[32])(void) = {NULL};
@@ -4903,25 +4932,30 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
                             pr_info("*** TUNING DEBUG: Starting AE updates ***");
-                            extern int tisp_tgain_update(void);
-                            extern int tisp_again_update(void);
-                            extern int tisp_ev_update(void);
+                            extern int tisp_tgain_update(uint32_t gain);
+                            extern int tisp_again_update(uint32_t gain);
+                            extern int tisp_ev_update(uint32_t ev, uint32_t aux_ev);
                             extern int tisp_ae_ir_update(void);
 
                             pr_info("*** TUNING DEBUG: About to call tisp_tgain_update ***");
                             int ae_ret = 0;
-                            if (tisp_tgain_update) ae_ret = tisp_tgain_update();
+                            if (tisp_tgain_update)
+                                ae_ret = tisp_tgain_update(ourISPdev && ourISPdev->tuning_data ?
+                                                           ourISPdev->tuning_data->total_gain : 0);
                             pr_info("*** TUNING DEBUG: tisp_tgain_update completed: %d ***", ae_ret);
 
                             if (ae_ret == 0 && tisp_again_update) {
                                 pr_info("*** TUNING DEBUG: About to call tisp_again_update ***");
-                                ae_ret = tisp_again_update();
+                                ae_ret = tisp_again_update(ourISPdev && ourISPdev->tuning_data ?
+                                                           ourISPdev->tuning_data->max_again : 0);
                                 pr_info("*** TUNING DEBUG: tisp_again_update completed: %d ***", ae_ret);
                             }
 
                             if (ae_ret == 0 && tisp_ev_update) {
                                 pr_info("*** TUNING DEBUG: About to call tisp_ev_update ***");
-                                ae_ret = tisp_ev_update();
+                                ae_ret = tisp_ev_update(ourISPdev && ourISPdev->tuning_data ?
+                                                        ourISPdev->tuning_data->exposure : 0,
+                                                        0);
                                 pr_info("*** TUNING DEBUG: tisp_ev_update completed: %d ***", ae_ret);
                             }
 
@@ -4934,12 +4968,13 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 2. AWB (Auto White Balance) Updates */
                             pr_info("*** TUNING DEBUG: Starting AWB updates ***");
-                            extern int tisp_ct_update(void);
+                            extern int tisp_ct_update(uint32_t ct);
                             extern int tisp_ccm_ct_update(void);
                             extern int tisp_ccm_ev_update(void);
 
                             pr_info("*** TUNING DEBUG: About to call tisp_ct_update ***");
-                            int awb_ret = tisp_ct_update();
+                            int awb_ret = tisp_ct_update(ourISPdev && ourISPdev->tuning_data ?
+                                                         ourISPdev->tuning_data->wb_temp : 0);
                             pr_info("*** TUNING DEBUG: tisp_ct_update completed: %d ***", awb_ret);
 
                             if (awb_ret == 0) {
@@ -9873,6 +9908,9 @@ int tisp_set_ae_info(void *in_buf)
     int32_t *param_ptr = (int32_t *)in_buf;
     uint32_t *data;
     size_t nwords;
+    uint32_t total_gain;
+    uint32_t exposure;
+    uint32_t again;
 
     if (!param_ptr)
         return -EINVAL;
@@ -9898,13 +9936,16 @@ int tisp_set_ae_info(void *in_buf)
         if (nwords > 4) tuning->ae_comp    = data[4];
         if (nwords > 5) tuning->fps_num    = data[5];
         if (nwords > 6) tuning->fps_den    = data[6];
+        total_gain = tuning->total_gain;
+        exposure = tuning->exposure;
+        again = tuning->max_again;
         mutex_unlock(&tuning->mutex);
     }
 
     /* Trigger AE-related updates to propagate changes */
-    if (tisp_tgain_update) tisp_tgain_update();
-    if (tisp_again_update) tisp_again_update();
-    if (tisp_ev_update)    tisp_ev_update();
+    if (tisp_tgain_update) tisp_tgain_update(total_gain);
+    if (tisp_again_update) tisp_again_update(again);
+    if (tisp_ev_update)    tisp_ev_update(exposure, 0);
     if (tisp_ae_ir_update) tisp_ae_ir_update();
 
     return 0;
@@ -9944,6 +9985,7 @@ int tisp_set_awb_info(void *in_buf)
     int32_t *param_ptr = (int32_t *)in_buf;
     uint32_t *data;
     size_t nwords;
+    uint32_t wb_temp;
 
     if (!param_ptr)
         return -EINVAL;
@@ -9965,11 +10007,12 @@ int tisp_set_awb_info(void *in_buf)
         if (nwords > 1) tuning->wb_gains.g = data[1];
         if (nwords > 2) tuning->wb_gains.b = data[2];
         if (nwords > 3) tuning->wb_temp    = data[3];
+        wb_temp = tuning->wb_temp;
         mutex_unlock(&tuning->mutex);
     }
 
     /* Trigger AWB/CCM updates to apply the new gains/CT */
-    if (tisp_ct_update)      tisp_ct_update();
+    if (tisp_ct_update)      tisp_ct_update(wb_temp);
     if (tisp_ccm_ct_update)  tisp_ccm_ct_update();
     if (tisp_ccm_ev_update)  tisp_ccm_ev_update();
 
@@ -11792,11 +11835,7 @@ static int JZ_Isp_Awb(void)
 	u32 lowlight_rg = ((_awb_lowlight_rg_th[1] & 0x0fff) << 16) |
 		(_awb_lowlight_rg_th[0] & 0x0fff);
 	u32 switch_ev = _awb_mode[2] << 10;
-	struct {
-		uint32_t pad1[2];
-		uint32_t event_id;
-		uint32_t pad2[8];
-	} event_data = {0};
+	struct tisp_event_record event_data = {0};
 
 	_awb_ct_last = _awb_ct;
 	if (awb_algo_mode == 1) {
@@ -11841,17 +11880,14 @@ static int JZ_Isp_Awb(void)
 	}
 
 	event_data.event_id = 9;
+	event_data.args[0] = _awb_ct;
 	tisp_event_push(&event_data);
 	return 0;
 }
 
 int awb_interrupt_static(void)
 {
-	struct {
-		uint32_t pad1[2];
-		uint32_t event_id;
-		uint32_t pad2[8];
-	} event_data = {0};
+	struct tisp_event_record event_data = {0};
 	uint32_t awb_status;
 	void *buffer_addr;
 
@@ -15724,7 +15760,7 @@ int tisp_event_set_cb(int event_id, void *callback)
     }
 
     /* Binary Ninja: *((arg1 << 2) + &cb) = arg2 */
-    cb[event_id] = (int (*)(void))callback;
+    cb[event_id] = (int (*)())callback;
 
     pr_info("tisp_event_set_cb: Event %d callback set to %p\n", event_id, callback);
     return 0;
@@ -15783,7 +15819,7 @@ static int isp_event_dispatcher(int event_id)
 
     if (cb[event_id]) {
         pr_debug("isp_event_dispatcher: Calling event callback %d\n", event_id);
-        return cb[event_id]();
+        return cb[event_id](0, 0, 0, 0, 0, 0, 0, 0);
     }
 
     return 0;
@@ -15802,6 +15838,11 @@ int tisp_event_init(void)
         spin_lock_init(&isp_irq_lock);
         isp_irq_initialized = true;
     }
+
+    spin_lock_init(&tisp_event_lock);
+    tisp_event_head = 0;
+    tisp_event_tail = 0;
+    tisp_event_count = 0;
 
     /* CRITICAL: Initialize event completion ONCE at system init */
     init_completion(&tevent_info);
@@ -15823,7 +15864,8 @@ EXPORT_SYMBOL(isp_trigger_event);
 int tisp_event_process(void)
 {
     int ret;
-    int evt_id;
+    unsigned long flags;
+    struct tisp_event_record event;
 
     ret = wait_for_completion_interruptible_timeout(&tevent_info, msecs_to_jiffies(200));
     if (ret < 0)
@@ -15831,13 +15873,22 @@ int tisp_event_process(void)
     if (ret == 0)
         return 0;    /* timeout, no event */
 
-    /* Dequeue pending event and dispatch to registered callback */
-    evt_id = pending_event_id;
-    pending_event_id = -1;
-    INIT_COMPLETION(tevent_info);
+    spin_lock_irqsave(&tisp_event_lock, flags);
 
-    if (evt_id >= 0 && evt_id < 32 && cb[evt_id]) {
-        cb[evt_id]();
+    if (tisp_event_count == 0) {
+        spin_unlock_irqrestore(&tisp_event_lock, flags);
+        return -ENOENT;
+    }
+
+    event = tisp_event_queue[tisp_event_head];
+    tisp_event_head = (tisp_event_head + 1) % TISP_EVENT_QUEUE_DEPTH;
+    tisp_event_count--;
+
+    spin_unlock_irqrestore(&tisp_event_lock, flags);
+
+    if (event.event_id < 32 && cb[event.event_id]) {
+        cb[event.event_id](event.args[0], event.args[1], event.args[2], event.args[3],
+                           event.args[4], event.args[5], event.args[6], event.args[7]);
     }
 
     return 0;
@@ -15998,7 +16049,7 @@ int tisp_param_operate_init(void)
 
 
 /* Update functions for event callbacks - Enhanced implementations */
-int tisp_tgain_update(void)
+int tisp_tgain_update(uint32_t gain)
 {
     pr_debug("tisp_tgain_update: Updating total gain\n");
 
@@ -16007,23 +16058,21 @@ int tisp_tgain_update(void)
     if (ourISPdev && ourISPdev->tuning_data) {
         struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
-        /* Calculate total gain from analog and digital components */
-        uint32_t total_gain = (tuning->max_again * tuning->max_dgain) >> 10;
-        tuning->total_gain = total_gain;
-        tisp_lsc_gain_update(total_gain);
+        tuning->total_gain = gain;
+        tisp_lsc_gain_update(gain);
 
         /* Update hardware gain registers */
         if (ourISPdev->core_regs) {
-            writel(total_gain, ourISPdev->core_regs + 0xa004);  /* Total gain register */
+            writel(gain, ourISPdev->core_regs + 0xa004);  /* Total gain register */
         }
 
-        pr_debug("tisp_tgain_update: Total gain updated to 0x%x\n", total_gain);
+        pr_debug("tisp_tgain_update: Total gain updated to 0x%x\n", gain);
     }
 
     return 0;
 }
 
-int tisp_again_update(void)
+int tisp_again_update(uint32_t gain)
 {
     pr_info("tisp_again_update: Updating analog gain with SENSOR I2C communication\n");
 
@@ -16034,14 +16083,14 @@ int tisp_again_update(void)
 
         /* Update hardware analog gain register */
         if (ourISPdev->core_regs) {
-            writel(tuning->max_again, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
+            writel(gain, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
         }
 
         /* CRITICAL: Send analog gain update to sensor via I2C */
         if (ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
             ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
 
-            int gain_value = tuning->max_again;
+            int gain_value = gain;
             int sensor_ret = ourISPdev->sensor->sd.ops->sensor->ioctl(
                 &ourISPdev->sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
 
@@ -16054,13 +16103,14 @@ int tisp_again_update(void)
             pr_warn("tisp_again_update: No sensor available for I2C communication\n");
         }
 
-        pr_info("tisp_again_update: Analog gain updated to 0x%x (ISP + sensor)\n", tuning->max_again);
+        tuning->max_again = gain;
+        pr_info("tisp_again_update: Analog gain updated to 0x%x (ISP + sensor)\n", gain);
     }
 
     return 0;
 }
 
-int tisp_ev_update(void)
+int tisp_ev_update(uint32_t ev, uint32_t aux_ev)
 {
     pr_debug("tisp_ev_update: Updating exposure value\n");
 
@@ -16071,28 +16121,32 @@ int tisp_ev_update(void)
         struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
         /* Update global EV cache for other modules */
-        data_9a454 = tuning->exposure;
+        data_9a454 = ev;
 
         /* Update hardware exposure register */
         if (ourISPdev->core_regs) {
-            writel(tuning->exposure, ourISPdev->core_regs + 0xa00c);  /* Exposure register */
+            writel(ev, ourISPdev->core_regs + 0xa00c);  /* Exposure register */
         }
 
-        pr_debug("tisp_ev_update: Exposure updated to 0x%x\n", tuning->exposure);
+        tuning->exposure = ev;
+        pr_debug("tisp_ev_update: Exposure updated to 0x%x aux=0x%x\n", ev, aux_ev);
     }
 
     return 0;
 }
 
-int tisp_ct_update(void)
+int tisp_ct_update(uint32_t ct)
 {
 	uint32_t reg_0c;
-	uint32_t ct;
 
 	if (!ourISPdev || !ourISPdev->tuning_data)
 		return 0;
 
-	ct = ourISPdev->tuning_data->wb_temp;
+	if (ct == 0)
+		ct = ourISPdev->tuning_data->wb_temp;
+	else
+		ourISPdev->tuning_data->wb_temp = ct;
+
 	data_9a450 = ct;
 	reg_0c = system_reg_read(0xc);
 
@@ -18001,11 +18055,7 @@ int ae0_interrupt_hist(void)
     tisp_ae0_get_hist(buffer_offset + hist_base, 1, hist_flag);
 
     /* Binary Ninja: Create and push event - int32_t var_38 = 1; tisp_event_push(&var_40) */
-    struct {
-        uint32_t pad1[2];      /* var_40 offset */
-        uint32_t event_id;     /* var_38 = 1 */
-        uint32_t pad2[8];      /* Additional event data */
-    } event_data = {0};
+    struct tisp_event_record event_data = {0};
 
     event_data.event_id = 1;
     tisp_event_push(&event_data);
@@ -18055,11 +18105,7 @@ int ae1_interrupt_hist(void)
     tisp_ae1_get_hist(buffer_addr);
 
     /* Binary Ninja: Create and push event - int32_t var_38 = 6; tisp_event_push(&var_40) */
-    struct {
-        uint32_t pad1[2];      /* var_40 offset */
-        uint32_t event_id;     /* var_38 = 6 */
-        uint32_t pad2[8];      /* Additional event data */
-    } event_data = {0};
+    struct tisp_event_record event_data = {0};
 
     event_data.event_id = 6;
     tisp_event_push(&event_data);
