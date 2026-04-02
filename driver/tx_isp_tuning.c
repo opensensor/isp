@@ -12463,6 +12463,18 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 	tisp_event_set_cb(0xa, JZ_Isp_Awb);
 	system_irq_func_set(0x1e, awb_interrupt_static_wrapper);
 
+	/* Diagnostic: dump AWB hardware config to verify setup */
+	pr_info("AWB_INIT: 0xb000=0x%x 0xb004=0x%x 0xb008=0x%x 0xb00c=0x%x\n",
+		system_reg_read(0xb000), system_reg_read(0xb004),
+		system_reg_read(0xb008), system_reg_read(0xb00c));
+	pr_info("AWB_INIT: 0xb03c=0x%x 0xb040=0x%x 0xb044=0x%x 0xb048=0x%x 0xb04c=0x%x\n",
+		system_reg_read(0xb03c), system_reg_read(0xb040),
+		system_reg_read(0xb044), system_reg_read(0xb048),
+		system_reg_read(0xb04c));
+	pr_info("AWB_INIT: 0x1800=0x%x 0x183c=0x%x 0x1840=0x%x 0x1810=0x%x\n",
+		system_reg_read(0x1800), system_reg_read(0x183c),
+		system_reg_read(0x1840), system_reg_read(0x1810));
+
     return 0;
 }
 
