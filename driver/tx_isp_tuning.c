@@ -12482,6 +12482,19 @@ static int tiziano_gib_params_refresh(void)
     memcpy(tiziano_gib_deir_matrix_h,     p + 0x302C, 0x3c);
     memcpy(tiziano_gib_deir_matrix_m,     p + 0x3068, 0x3c);
     memcpy(tiziano_gib_deir_matrix_l,     p + 0x30A4, 0x3c);
+
+    pr_err("gib_params_refresh: cfg={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u}\n",
+            tiziano_gib_config_line[0], tiziano_gib_config_line[1],
+            tiziano_gib_config_line[2], tiziano_gib_config_line[3],
+            tiziano_gib_config_line[4], tiziano_gib_config_line[5],
+            tiziano_gib_config_line[6], tiziano_gib_config_line[7],
+            tiziano_gib_config_line[8], tiziano_gib_config_line[9],
+            tiziano_gib_config_line[10], tiziano_gib_config_line[11]);
+    pr_err("gib_params_refresh: rg={%u,%u} bir={%u,%u} blc_r[0..2]={%u,%u,%u}\n",
+            tiziano_gib_r_g_linear[0], tiziano_gib_r_g_linear[1],
+            tiziano_gib_b_ir_linear[0], tiziano_gib_b_ir_linear[1],
+            tiziano_gib_deirm_blc_r_linear[0], tiziano_gib_deirm_blc_r_linear[1],
+            tiziano_gib_deirm_blc_r_linear[2]);
     return 0;
 }
 
@@ -12529,7 +12542,12 @@ static int tisp_gib_gain_interpolation(uint32_t gain)
         break;
     }
 
-    system_reg_write_gib(1, 0x1060, blc_r);
+    pr_err("gib_blc: gain=0x%x bayer=0x%x r=%u gr=%u gb=%u b=%u ir=%u\n",
+            gain, bayer, blc_r, blc_gr, blc_gb, blc_b, blc_ir);
+    pr_err("gib_blc: reg0x1060=0x%x reg0x1064=0x%x reg0x1068=0x%x\n",
+            ch0, (ch2 << 16) | ch1, (ch4 << 16) | ch3);
+
+    system_reg_write_gib(1, 0x1060, ch0);
     system_reg_write_gib(1, 0x1064, (ch2 << 16) | ch1);
     system_reg_write_gib(1, 0x1068, (ch4 << 16) | ch3);
     tisp_gib_blc_ag = gain;
@@ -12560,6 +12578,13 @@ static int tiziano_gib_lut_parameter(void)
         (GIB_CFG_DEIR_MODE << 3) |
         GIB_CFG_DEIR_STR);
 
+    pr_err("gib_lut: reg0x1038=0x%x reg0x103c=0x%x reg0x106c=0x%x\n",
+            (GIB_CFG_WGT_HI << 16) | GIB_CFG_WGT_LO,
+            (GIB_CFG_BLEND << 16) | (GIB_CFG_BLC_SHIFT << 14) |
+            (tiziano_gib_config_line[0] << 12) | (GIB_CFG_EN_BLC << 10) |
+            (GIB_CFG_GIB_MODE << 8) | (GIB_CFG_BLC_THR << 4) | (GIB_CFG_BLC_GAIN << 2),
+            (GIB_CFG_DEIR_EN << 16) | (GIB_CFG_DEIR_MODE << 3) | GIB_CFG_DEIR_STR);
+
     /* Interpolate BLC offsets based on current gain */
     tisp_gib_gain_interpolation(tisp_gib_blc_ag);
 
@@ -12569,6 +12594,9 @@ static int tiziano_gib_lut_parameter(void)
             (tiziano_gib_r_g_linear[1] << 16) | tiziano_gib_r_g_linear[0]);
         system_reg_write_gib(1, 0x1034,
             (tiziano_gib_b_ir_linear[1] << 16) | tiziano_gib_b_ir_linear[0]);
+        pr_err("gib_lut: reg0x1030=0x%x reg0x1034=0x%x\n",
+                (tiziano_gib_r_g_linear[1] << 16) | tiziano_gib_r_g_linear[0],
+                (tiziano_gib_b_ir_linear[1] << 16) | tiziano_gib_b_ir_linear[0]);
         gib_lut_init_done = 1;
     }
 
@@ -12759,7 +12787,7 @@ int tiziano_gib_init(void)
                           tiziano_gib_deir_g_m,
                           tiziano_gib_deir_b_m);
 
-    pr_info("tiziano_gib_init: GIB initialized (deir_en=%d, day_night=%d, DEIR_EN=%d)\n",
+    pr_err("tiziano_gib_init: GIB initialized (deir_en=%d, day_night=%d, DEIR_EN=%d)\n",
             deir_en, ourISPdev->day_night, GIB_CFG_DEIR_EN);
     return 0;
 }
