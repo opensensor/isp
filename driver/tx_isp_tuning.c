@@ -12610,9 +12610,10 @@ static void tiziano_gib_deir_interpolate(uint32_t *out,
     for (i = 0; i < 33; i++) {
         int64_t v_lo = (int64_t)coefs_lo[i];
         int64_t v_hi = (int64_t)coefs_hi[i];
-        int64_t result = v_lo * (int64_t)range +
-                         (v_hi - v_lo) * (int64_t)(ir_val - thresh_lo);
-        out[i] = (uint32_t)((uint64_t)result / range);
+        uint64_t result = (uint64_t)(v_lo * (int64_t)range +
+                         (v_hi - v_lo) * (int64_t)(ir_val - thresh_lo));
+        do_div(result, range);
+        out[i] = (uint32_t)result;
     }
 }
 
