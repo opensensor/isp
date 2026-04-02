@@ -12201,6 +12201,14 @@ static int tiziano_awb_set_lum_th_freq(void)
 	if (lum_freq == 0)
 		lum_freq = 1;
 
+	{
+		static int aediag;
+		if (aediag < 5) {
+			pr_info("AE_DIAG: ae_mean=%u scale=%d lum_freq=%u\n", mean, scale, lum_freq);
+			aediag++;
+		}
+	}
+
 	system_reg_write_awb(1, 0x0b038,
 		(AWB_LUM_FREQ_MODE << 16) | (AWB_LUM_FREQ_BASE << 8) | lum_freq);
 	return 0;
@@ -12323,12 +12331,8 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
     tiziano_awb_params_refresh();
 	tiziano_awb_fill_zone_geometry(height, width);
 
-    /* Enable AWB hardware blocks */
-    system_reg_write(0xb000, 1);
-    system_reg_write(0x1800, 1);
-
     /* OEM: tiziano_awb_set_hardware_param programs AWB registers
-     * 0xb004-0xb034 from tuning parameters */
+     * 0xb004-0xb034 and enables AWB via system_reg_write_awb(1/2,...) */
     if (awb_frz == 0)
         tiziano_awb_set_hardware_param();
 
