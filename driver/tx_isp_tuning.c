@@ -15192,10 +15192,41 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 		return 0;
 	}
 
-    tisp_mdns_par_refresh(data_9a9d0, 0x10000);
-    tisp_mdns_bypass(0);
+	/* Phased MDNS register programming with diagnostic logging.
+	 * Each step prints before/after so we can identify hangs on serial console. */
+	pr_info("MDNS_DIAG: Step 1 - writing trigger reg 0x7804=0x110...\n");
+	system_reg_write(0x7804, 0x110);
+	pr_info("MDNS_DIAG: Step 1 - OK\n");
 
-	pr_info("tiziano_mdns_init: MDNS initialized via OEM-style refresh path (MDNS enabled in top-level whitelist)\n");
+	pr_info("MDNS_DIAG: Step 2 - tisp_mdns_y_3d_param_cfg...\n");
+	tisp_mdns_y_3d_param_cfg();
+	pr_info("MDNS_DIAG: Step 2 - OK\n");
+
+	pr_info("MDNS_DIAG: Step 3 - tisp_mdns_y_2d_param_cfg...\n");
+	tisp_mdns_y_2d_param_cfg();
+	pr_info("MDNS_DIAG: Step 3 - OK\n");
+
+	pr_info("MDNS_DIAG: Step 4 - tisp_mdns_c_3d_param_cfg...\n");
+	tisp_mdns_c_3d_param_cfg();
+	pr_info("MDNS_DIAG: Step 4 - OK\n");
+
+	pr_info("MDNS_DIAG: Step 5 - tisp_mdns_c_2d_param_cfg...\n");
+	tisp_mdns_c_2d_param_cfg();
+	pr_info("MDNS_DIAG: Step 5 - OK\n");
+
+	pr_info("MDNS_DIAG: Step 6 - tisp_mdns_top_func_cfg(1)...\n");
+	tisp_mdns_top_func_cfg(1);
+	pr_info("MDNS_DIAG: Step 6 - OK\n");
+
+	pr_info("MDNS_DIAG: Step 7 - tisp_mdns_top_func_refresh + trigger...\n");
+	tisp_mdns_top_func_refresh();
+	tisp_mdns_reg_trigger();
+	pr_info("MDNS_DIAG: Step 7 - OK\n");
+
+	pr_info("MDNS_DIAG: Step 8 - tisp_mdns_bypass(0)...\n");
+	tisp_mdns_bypass(0);
+	pr_info("MDNS_DIAG: Step 8 - OK. MDNS fully initialized.\n");
+
     return 0;
 }
 
