@@ -126,6 +126,8 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning);
 extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
+extern void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3);
+extern uint32_t deir_en;
 
 /* CLM (Color Luminance Mapping) constants and data — declared early for param_array_set/get */
 #define CLM_H_LUT_SIZE      0x41A   /* 1050 bytes */
@@ -2565,29 +2567,52 @@ static uint8_t rdns_mv_text_thres_array[0x24] = {0};
 static uint8_t rdns_text_base_thres_wdr_array[0x24] = {0};
 static uint8_t rdns_sl_par_cfg[0x8] = {0};
 
-/* GIB parameter arrays - Binary Ninja reference */
-static uint8_t tiziano_gib_config_line[0x30] = {0};
-static uint8_t tiziano_gib_r_g_linear[0x8] = {0};
-static uint8_t tiziano_gib_b_ir_linear[0x8] = {0};
-static uint8_t tiziano_gib_deirm_blc_r_linear[0x24] = {0};
-static uint8_t tiziano_gib_deirm_blc_gr_linear[0x24] = {0};
-static uint8_t tiziano_gib_deirm_blc_gb_linear[0x24] = {0};
-static uint8_t tiziano_gib_deirm_blc_b_linear[0x24] = {0};
-static uint8_t tiziano_gib_deirm_blc_ir_linear[0x24] = {0};
-static uint8_t gib_ir_point[0x10] = {0};
-static uint8_t gib_ir_reser[0x3c] = {0};
-static uint8_t tiziano_gib_deir_r_h[0x84] = {0};
-static uint8_t tiziano_gib_deir_g_h[0x84] = {0};
-static uint8_t tiziano_gib_deir_b_h[0x84] = {0};
-static uint8_t tiziano_gib_deir_r_m[0x84] = {0};
-static uint8_t tiziano_gib_deir_g_m[0x84] = {0};
-static uint8_t tiziano_gib_deir_b_m[0x84] = {0};
-static uint8_t tiziano_gib_deir_r_l[0x84] = {0};
-static uint8_t tiziano_gib_deir_g_l[0x84] = {0};
-static uint8_t tiziano_gib_deir_b_l[0x84] = {0};
-static uint8_t tiziano_gib_deir_matrix_h[0x3c] = {0};
-static uint8_t tiziano_gib_deir_matrix_m[0x3c] = {0};
-static uint8_t tiziano_gib_deir_matrix_l[0x3c] = {0};
+/* GIB parameter arrays - Binary Ninja reference
+ * Config line: 12 x uint32_t control values (data_9a2e4..data_9a310)
+ * BLC arrays: 9-entry interpolation curves for tisp_simple_intp
+ * DEIR arrays: 33-entry coefficient LUTs for DEIR register programming
+ * DEIR matrices: 15-entry coefficient LUTs */
+static uint32_t tiziano_gib_config_line[12] = {0};  /* 0x30 bytes */
+static uint32_t tiziano_gib_r_g_linear[2] = {0};    /* 0x08 bytes */
+static uint32_t tiziano_gib_b_ir_linear[2] = {0};   /* 0x08 bytes */
+static uint32_t tiziano_gib_deirm_blc_r_linear[9] = {0};   /* 0x24 bytes */
+static uint32_t tiziano_gib_deirm_blc_gr_linear[9] = {0};  /* 0x24 bytes */
+static uint32_t tiziano_gib_deirm_blc_gb_linear[9] = {0};  /* 0x24 bytes */
+static uint32_t tiziano_gib_deirm_blc_b_linear[9] = {0};   /* 0x24 bytes */
+static uint32_t tiziano_gib_deirm_blc_ir_linear[9] = {0};  /* 0x24 bytes */
+static uint32_t gib_ir_point[4] = {0};     /* 0x10 bytes - IR thresholds */
+static uint32_t gib_ir_reser[15] = {0};    /* 0x3c bytes */
+static uint32_t tiziano_gib_deir_r_h[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_g_h[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_b_h[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_r_m[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_g_m[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_b_m[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_r_l[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_g_l[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_b_l[33] = {0};  /* 0x84 bytes */
+static uint32_t tiziano_gib_deir_matrix_h[15] = {0}; /* 0x3c bytes */
+static uint32_t tiziano_gib_deir_matrix_m[15] = {0}; /* 0x3c bytes */
+static uint32_t tiziano_gib_deir_matrix_l[15] = {0}; /* 0x3c bytes */
+
+/* GIB state variables */
+static uint32_t tisp_gib_blc_ag = 0;      /* Last BLC analog gain */
+static uint32_t gib_ir_mode[2] = {0};     /* [0]=current mode, [1]=threshold */
+static uint32_t gib_ir_value[2] = {0};    /* [0]=current value, [1]=last value */
+static uint32_t trig_set_deir = 0;        /* DEIR trigger flag */
+
+/* GIB config line accessor: tiziano_gib_config_line[n] maps to OEM data_9a2e4+n*4 */
+#define GIB_CFG_EN_BLC       tiziano_gib_config_line[0]   /* data_9a2e4 */
+#define GIB_CFG_DEIR_MODE    tiziano_gib_config_line[1]   /* data_9a2e8 */
+#define GIB_CFG_DEIR_EN      tiziano_gib_config_line[2]   /* data_9a2ec */
+#define GIB_CFG_BLC_SHIFT    tiziano_gib_config_line[3]   /* data_9a2f0 */
+#define GIB_CFG_DEIR_STR     tiziano_gib_config_line[4]   /* data_9a2f4 */
+#define GIB_CFG_GIB_MODE     tiziano_gib_config_line[5]   /* data_9a2f8 */
+#define GIB_CFG_BLEND        tiziano_gib_config_line[6]   /* data_9a2fc */
+#define GIB_CFG_BLC_GAIN     tiziano_gib_config_line[7]   /* data_9a300 */
+#define GIB_CFG_BLC_THR      tiziano_gib_config_line[8]   /* data_9a304 */
+#define GIB_CFG_WGT_LO       tiziano_gib_config_line[9]   /* data_9a308 */
+#define GIB_CFG_WGT_HI       tiziano_gib_config_line[10]  /* data_9a30c */
 
 static uint32_t param_motionThrPara_software_in_array[0x44/4] = {0};
 static uint32_t param_d_thr_normal_software_in_array[0x68/4] = {0};
@@ -12425,11 +12450,170 @@ int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
     return 0;
 }
 
-/* tiziano_gib_init - GIB initialization */
-int tiziano_gib_init(void)
+/* ===== GIB (Green Imbalance) — OEM EXACT implementations ===== */
+
+/* OEM EXACT: tiziano_gib_params_refresh — load GIB arrays from tuning bin.
+ * GIB tuning data starts at offset 0x2A48 in the parameter block.
+ * Computed: OEM abs 0x87558 - tparams_base 0x84B10 = 0x2A48. */
+static int tiziano_gib_params_refresh(void)
 {
-    pr_info("tiziano_gib_init: Initializing GIB processing\n");
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    if (!p) return -1;
+
+    memcpy(tiziano_gib_config_line,       p + 0x2A48, 0x30);
+    memcpy(tiziano_gib_r_g_linear,        p + 0x2A78, 0x08);
+    memcpy(tiziano_gib_b_ir_linear,       p + 0x2A80, 0x08);
+    memcpy(tiziano_gib_deirm_blc_r_linear,  p + 0x2A88, 0x24);
+    memcpy(tiziano_gib_deirm_blc_gr_linear, p + 0x2AAC, 0x24);
+    memcpy(tiziano_gib_deirm_blc_gb_linear, p + 0x2AD0, 0x24);
+    memcpy(tiziano_gib_deirm_blc_b_linear,  p + 0x2AF4, 0x24);
+    memcpy(tiziano_gib_deirm_blc_ir_linear, p + 0x2B18, 0x24);
+    memcpy(gib_ir_point,                  p + 0x2B3C, 0x10);
+    memcpy(gib_ir_reser,                  p + 0x2B4C, 0x3c);
+    memcpy(tiziano_gib_deir_r_h,          p + 0x2B88, 0x84);
+    memcpy(tiziano_gib_deir_g_h,          p + 0x2C0C, 0x84);
+    memcpy(tiziano_gib_deir_b_h,          p + 0x2C90, 0x84);
+    memcpy(tiziano_gib_deir_r_m,          p + 0x2D14, 0x84);
+    memcpy(tiziano_gib_deir_g_m,          p + 0x2D98, 0x84);
+    memcpy(tiziano_gib_deir_b_m,          p + 0x2E1C, 0x84);
+    memcpy(tiziano_gib_deir_r_l,          p + 0x2EA0, 0x84);
+    memcpy(tiziano_gib_deir_g_l,          p + 0x2F24, 0x84);
+    memcpy(tiziano_gib_deir_b_l,          p + 0x2FA8, 0x84);
+    memcpy(tiziano_gib_deir_matrix_h,     p + 0x302C, 0x3c);
+    memcpy(tiziano_gib_deir_matrix_m,     p + 0x3068, 0x3c);
+    memcpy(tiziano_gib_deir_matrix_l,     p + 0x30A4, 0x3c);
     return 0;
+}
+
+/* OEM EXACT: tisp_gib_gain_interpolation — interpolate BLC offsets per Bayer pattern.
+ * Reads register 0x8 to determine Bayer order, then remaps R/Gr/Gb/B/IR BLC
+ * values to the correct register channels. */
+static int tisp_gib_gain_interpolation(uint32_t gain)
+{
+    uint32_t hi = gain >> 16;
+    uint32_t lo = gain & 0xffff;
+    uint32_t blc_r  = tisp_simple_intp(hi, lo, tiziano_gib_deirm_blc_r_linear);
+    uint32_t blc_gr = tisp_simple_intp(hi, lo, tiziano_gib_deirm_blc_gr_linear);
+    uint32_t blc_gb = tisp_simple_intp(hi, lo, tiziano_gib_deirm_blc_gb_linear);
+    uint32_t blc_b  = tisp_simple_intp(hi, lo, tiziano_gib_deirm_blc_b_linear);
+    uint32_t blc_ir = tisp_simple_intp(hi, lo, tiziano_gib_deirm_blc_ir_linear);
+    uint32_t bayer = system_reg_read(8) & 0x1f;
+    uint32_t ch0, ch1, ch2, ch3, ch4;
+
+    /* OEM EXACT: remap channels based on Bayer pattern */
+    switch (bayer) {
+    case 0x00: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_ir; break;
+    case 0x01: ch0 = blc_b;  ch1 = blc_r;  ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_ir; break;
+    case 0x02: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_ir; break;
+    case 0x03: ch0 = blc_b;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_r;  ch4 = blc_ir; break;
+    case 0x08: ch0 = blc_gb; ch1 = blc_gr; ch2 = blc_ir; ch3 = blc_b;  ch4 = blc_r;  break;
+    case 0x09: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_ir; ch3 = blc_gb; ch4 = blc_b;  break;
+    case 0x0a: ch0 = blc_gr; ch1 = blc_b;  ch2 = blc_gb; ch3 = blc_ir; ch4 = blc_r;  break;
+    case 0x0b: ch0 = blc_gb; ch1 = blc_r;  ch2 = blc_gr; ch3 = blc_ir; ch4 = blc_b;  break;
+    case 0x0c: ch0 = blc_gb; ch1 = blc_ir; ch2 = blc_gb; ch3 = blc_r;  ch4 = blc_gr; break;
+    case 0x0d: ch0 = blc_gr; ch1 = blc_ir; ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_r;  break;
+    case 0x0e: ch0 = blc_gr; ch1 = blc_gb; ch2 = blc_b;  ch3 = blc_r;  ch4 = blc_ir; break;
+    case 0x0f: ch0 = blc_gb; ch1 = blc_gr; ch2 = blc_r;  ch3 = blc_b;  ch4 = blc_ir; break;
+    case 0x10: ch0 = blc_b;  ch1 = blc_ir; ch2 = blc_gb; ch3 = blc_gr; ch4 = blc_r;  break;
+    case 0x11: ch0 = blc_r;  ch1 = blc_ir; ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_b;  break;
+    case 0x12: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_ir; ch3 = blc_r;  ch4 = blc_gr; break;
+    case 0x13: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_ir; ch3 = blc_b;  ch4 = blc_gb; break;
+    case 0x14: ch0 = blc_b;  ch1 = blc_gr; ch2 = blc_r;  ch3 = blc_ir; ch4 = blc_gb; break;
+    case 0x15: ch0 = blc_r;  ch1 = blc_gb; ch2 = blc_b;  ch3 = blc_ir; ch4 = blc_gr; break;
+    case 0x16: ch0 = blc_b;  ch1 = blc_r;  ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_ir; break;
+    case 0x17: ch0 = blc_r;  ch1 = blc_b;  ch2 = blc_gb; ch3 = blc_gr; ch4 = blc_ir; break;
+    default:
+        pr_err("gib byper error!!!\n");
+        ch0 = ch1 = ch2 = ch3 = ch4 = 0;
+        blc_r = 0;
+        break;
+    }
+
+    system_reg_write_gib(1, 0x1060, blc_r);
+    system_reg_write_gib(1, 0x1064, (ch2 << 16) | ch1);
+    system_reg_write_gib(1, 0x1068, (ch4 << 16) | ch3);
+    tisp_gib_blc_ag = gain;
+    return 0;
+}
+
+/* OEM EXACT: tiziano_gib_lut_parameter — program GIB LUT registers */
+static int tiziano_gib_lut_parameter(void)
+{
+    static int gib_lut_init_done = 0;
+
+    /* Register 0x1038: weight config */
+    system_reg_write(0x1038, (GIB_CFG_WGT_HI << 16) | GIB_CFG_WGT_LO);
+
+    /* Register 0x103c: combined config word */
+    system_reg_write(0x103c,
+        (GIB_CFG_BLEND << 16) |
+        (GIB_CFG_BLC_SHIFT << 14) |
+        (tiziano_gib_config_line[0] << 12) |  /* config_line[0] = first byte */
+        (GIB_CFG_EN_BLC << 10) |
+        (GIB_CFG_GIB_MODE << 8) |
+        (GIB_CFG_BLC_THR << 4) |
+        (GIB_CFG_BLC_GAIN << 2));
+
+    /* Register 0x106c: DEIR enable/config */
+    system_reg_write_gib(1, 0x106c,
+        (GIB_CFG_DEIR_EN << 16) |
+        (GIB_CFG_DEIR_MODE << 3) |
+        GIB_CFG_DEIR_STR);
+
+    /* Interpolate BLC offsets based on current gain */
+    tisp_gib_gain_interpolation(tisp_gib_blc_ag);
+
+    /* First-time init: program R/G and B/IR linearization LUTs */
+    if (!gib_lut_init_done) {
+        system_reg_write_gib(1, 0x1030,
+            (tiziano_gib_r_g_linear[1] << 16) | tiziano_gib_r_g_linear[0]);
+        system_reg_write_gib(1, 0x1034,
+            (tiziano_gib_b_ir_linear[1] << 16) | tiziano_gib_b_ir_linear[0]);
+        gib_lut_init_done = 1;
+    }
+
+    return 0;
+}
+
+/* OEM EXACT: tiziano_gib_deir_reg — write DEIR coefficient LUTs to ISP registers.
+ * Programs 32 register pairs for R, G, B channels at offsets 0x80000, +0x80, +0x100.
+ * Each register packs two 12-bit coefficients: (coef[n+1] << 12) | coef[n]. */
+static int tiziano_gib_deir_reg(const uint32_t *r_coefs,
+                                 const uint32_t *g_coefs,
+                                 const uint32_t *b_coefs)
+{
+    u32 reg_addr;
+    int i;
+
+    for (i = 0; i < 32; i++) {
+        reg_addr = 0x80000 + (i * 4);
+        system_reg_write(reg_addr,        (r_coefs[i + 1] << 12) | r_coefs[i]);
+        system_reg_write(reg_addr + 0x80, (g_coefs[i + 1] << 12) | g_coefs[i]);
+        system_reg_write(reg_addr + 0x100,(b_coefs[i + 1] << 12) | b_coefs[i]);
+    }
+
+    return 0;
+}
+
+/* OEM EXACT: tiziano_gib_deir_interpolate — interpolate between two DEIR coefficient sets.
+ * Produces 33 output coefficients by linear interpolation based on IR value. */
+static void tiziano_gib_deir_interpolate(uint32_t *out,
+                                          uint32_t ir_val,
+                                          uint32_t thresh_hi,
+                                          uint32_t thresh_lo,
+                                          const uint32_t *coefs_hi,
+                                          const uint32_t *coefs_lo)
+{
+    uint32_t range = thresh_hi + ((thresh_hi ^ thresh_lo) < 1 ? 1 : 0) - thresh_lo;
+    int i;
+
+    for (i = 0; i < 33; i++) {
+        int64_t v_lo = (int64_t)coefs_lo[i];
+        int64_t v_hi = (int64_t)coefs_hi[i];
+        int64_t result = v_lo * (int64_t)range +
+                         (v_hi - v_lo) * (int64_t)(ir_val - thresh_lo);
+        out[i] = (uint32_t)((uint64_t)result / range);
+    }
 }
 
 /* LSC parameter arrays - Binary Ninja reference */

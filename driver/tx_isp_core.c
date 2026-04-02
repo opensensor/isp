@@ -2738,7 +2738,8 @@ static void *tparams_night = NULL;
 static void *tparams_cust = NULL;
 static uint32_t data_b2e74 = 0;  /* WDR mode flag */
 static uint32_t data_b2f34 = 0;  /* Frame height */
-static uint32_t deir_en = 0;     /* DEIR enable flag */
+uint32_t deir_en = 0;     /* DEIR enable flag */
+EXPORT_SYMBOL(deir_en);
 
 /* Missing global variables causing "Unknown symbol" errors */
 uint32_t data_b2e04 = 0;
