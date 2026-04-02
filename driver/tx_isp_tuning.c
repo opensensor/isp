@@ -292,6 +292,7 @@ static uint8_t  awb_frz = 0;
 static uint32_t awb_mode_flag;
 static uint32_t awb_algo_mode;
 static uint32_t awb_ct_manual;
+static uint32_t _awb_trend = 1;
 
 /* BCSH matrices and state - declared early for use in tiziano_bcsh functions */
 static int32_t tiziano_MMatrix[9] = {
@@ -8367,12 +8368,23 @@ static uint32_t awb_zone_bg_global;
 static uint32_t awb_gain_track[2] = { 0x100, 0x100 };
 static uint8_t *awb_rgbg_weight_active = _rgbg_weight;
 static uint32_t awb_zone_cache_valid;
+static uint32_t awb_gain_history_gr[15];
+static uint32_t awb_gain_history_gb[15];
+static uint32_t awb_ct_history[15];
+static uint32_t awb_history_count;
+static uint32_t awb_history_reset = 1;
+static uint32_t awb_gain_original[2];
+static uint32_t awb_gr_offset = 0x400;
+static uint32_t awb_gb_offset = 0x400;
+static uint32_t _awb_ct_last_offset;
 
 /* Additional AWB globals observed in binary */
 /* awb_frz moved to top of file */
 static int      tawb_custom_en;        /* AWB custom enable flag */
 static int      awb_moa;               /* modified-on-apply flag */
-static uint32_t awb_ct_trend[6];       /* 0x18 bytes trend buffer */
+static uint32_t awb_ct_trend[6] = {
+	0x400, 0x400, 0x400, 0x400, 0x400, 0x400,
+};
 static uint32_t _awb_cluster_head[3];  /* cluster heads */
 static uint32_t _awb_cluster_tail[7];  /* 0x1c bytes tail */
 static uint32_t _awb_cluster_ext1;     /* data_a9e4c */
@@ -8423,6 +8435,9 @@ void tiziano_awb_params_refresh(void)
         memcpy(&_awb_ct_last, p + 0x1108, 4);
     }
     awb_dn_refresh_flag = 0;
+	awb_history_reset = 1;
+	awb_history_count = 0;
+	awb_zone_cache_valid = 0;
 
     pr_info("tiziano_awb_params_refresh: LOADED from bin - "
         "wb_static=%u,%u light_src_num=%u\n",
@@ -11481,6 +11496,29 @@ static void JZ_Isp_Awb_Awbg2reg(const uint32_t gains[2], uint32_t regs[2])
 	u32 gr = gains[0] << 2;
 	u32 gb = gains[1] << 2;
 
+	if (_awb_trend == 1) {
+		u32 ct = _awb_ct;
+		u32 ct_diff = (_awb_ct_last_offset >= ct) ?
+			(_awb_ct_last_offset - ct) : (ct - _awb_ct_last_offset);
+
+		if (ct_diff >= 0xc8 || awb_moa == 1) {
+			_awb_ct_last_offset = ct;
+			if (ct >= 5000) {
+				awb_gr_offset = awb_ct_trend[0];
+				awb_gb_offset = awb_ct_trend[1];
+			} else if (ct >= 3001) {
+				awb_gr_offset = awb_ct_trend[2];
+				awb_gb_offset = awb_ct_trend[3];
+			} else {
+				awb_gr_offset = awb_ct_trend[4];
+				awb_gb_offset = awb_ct_trend[5];
+			}
+		}
+
+		gr += awb_gr_offset - 0x400;
+		gb += awb_gb_offset - 0x400;
+	}
+
 	if (gr >= 0x4000)
 		gr = 0x3fff;
 	if (gb >= 0x4000)
@@ -11633,6 +11671,138 @@ static uint8_t awb_zone_mean_u8(uint32_t numer, uint32_t denom)
 	return (uint8_t)mean;
 }
 
+static uint32_t awb_clamp_u32(uint32_t value, uint32_t lo, uint32_t hi)
+{
+	if (value < lo)
+		return lo;
+	if (value > hi)
+		return hi;
+	return value;
+}
+
+static uint32_t awb_find_mesh_index(const uint32_t *table, uint32_t value)
+{
+	uint32_t idx;
+
+	for (idx = 0; idx < 14; ++idx) {
+		if (value < table[idx + 1])
+			break;
+	}
+
+	return idx;
+}
+
+static uint32_t awb_estimate_ct(uint32_t rg, uint32_t bg)
+{
+	const uint32_t *rg_pos = (const uint32_t *)_rg_pos;
+	const uint32_t *bg_pos = (const uint32_t *)_bg_pos;
+	const uint32_t *ct_mesh = (const uint32_t *)_color_temp_mesh;
+	uint32_t q = _AwbPointPos[0] & 0x1f;
+	uint32_t rounding = q ? (1u << ((q - 1) & 0x1f)) : 0;
+	uint32_t rg_clamped;
+	uint32_t bg_clamped;
+	uint32_t rg_idx;
+	uint32_t bg_idx;
+	u32 mesh_q;
+	u64 ct_q;
+
+	if (!rg_pos || !bg_pos || !ct_mesh)
+		return 5000;
+
+	rg_clamped = awb_clamp_u32(rg, rg_pos[0], rg_pos[14]);
+	bg_clamped = awb_clamp_u32(bg, bg_pos[0], bg_pos[14]);
+	rg_idx = awb_find_mesh_index(rg_pos, rg_clamped);
+	bg_idx = awb_find_mesh_index(bg_pos, bg_clamped);
+
+	if (rg_idx >= 14)
+		rg_idx = 13;
+	if (bg_idx >= 14)
+		bg_idx = 13;
+
+	{
+		const uint32_t *row0 = ct_mesh + (bg_idx * 15);
+		const uint32_t *row1 = ct_mesh + ((bg_idx + 1) * 15);
+		u32 rg_q = rg_clamped << q;
+		u32 bg_q = bg_clamped << q;
+		u32 row0_q = ISPAWBInterpolation1(q, rg_q,
+			rg_pos[rg_idx], rg_pos[rg_idx + 1],
+			row0[rg_idx], row0[rg_idx + 1]);
+		u32 row1_q = ISPAWBInterpolation1(q, rg_q,
+			rg_pos[rg_idx], rg_pos[rg_idx + 1],
+			row1[rg_idx], row1[rg_idx + 1]);
+
+		mesh_q = ISPAWBInterpolation2(q, bg_q,
+			bg_pos[bg_idx], bg_pos[bg_idx + 1],
+			row0_q, row1_q);
+	}
+
+	if (mesh_q == 0)
+		return 5000;
+
+	ct_q = div_u64(((u64)1000000 << q), mesh_q);
+	return (uint32_t)((ct_q + rounding) >> q);
+}
+
+static void awb_history_fill(uint32_t gr, uint32_t gb, uint32_t ct)
+{
+	int i;
+
+	for (i = 0; i < 15; ++i) {
+		awb_gain_history_gr[i] = gr;
+		awb_gain_history_gb[i] = gb;
+		awb_ct_history[i] = ct;
+	}
+
+	awb_history_count = 1;
+	awb_history_reset = 0;
+}
+
+static void awb_history_push(uint32_t gr, uint32_t gb, uint32_t ct)
+{
+	memmove(awb_gain_history_gr, awb_gain_history_gr + 1,
+		(sizeof(awb_gain_history_gr[0]) * 14));
+	memmove(awb_gain_history_gb, awb_gain_history_gb + 1,
+		(sizeof(awb_gain_history_gb[0]) * 14));
+	memmove(awb_ct_history, awb_ct_history + 1,
+		(sizeof(awb_ct_history[0]) * 14));
+	awb_gain_history_gr[14] = gr;
+	awb_gain_history_gb[14] = gb;
+	awb_ct_history[14] = ct;
+	if (awb_history_count < 15)
+		awb_history_count++;
+}
+
+static void awb_history_average(uint32_t *gr, uint32_t *gb, uint32_t *ct)
+{
+	u64 gr_sum = 0;
+	u64 gb_sum = 0;
+	u64 ct_sum = 0;
+	u32 weight_sum = 0;
+	u32 start;
+	u32 weight;
+	int i;
+
+	if (!gr || !gb || !ct || awb_history_count == 0)
+		return;
+
+	start = 15 - awb_history_count;
+	weight = start;
+	for (i = start; i < 15; ++i) {
+		weight++;
+		gr_sum += (u64)weight * awb_gain_history_gr[i];
+		gb_sum += (u64)weight * awb_gain_history_gb[i];
+		ct_sum += (u64)weight * awb_ct_history[i];
+		weight_sum += weight;
+	}
+
+	if (weight_sum == 0)
+		return;
+
+	*gr = (uint32_t)div_u64(gr_sum + (weight_sum >> 1), weight_sum);
+	*gb = (uint32_t)div_u64(gb_sum + (weight_sum >> 1), weight_sum);
+	*ct = (uint32_t)div_u64(ct_sum + (weight_sum >> 1), weight_sum);
+}
+
 static int Tiziano_awb_fpga(const uint32_t *stats_r,
 			    const uint32_t *stats_g,
 			    const uint32_t *stats_b,
@@ -11649,6 +11819,7 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	bool force_recalc = !awb_zone_cache_valid || awb_moa || tisp_wb_attr[0] != 0;
 	u32 target_gr;
 	u32 target_gb;
+	u32 target_ct;
 
 	if (!stats_r || !stats_g || !stats_b || !stats_p)
 		return -EINVAL;
@@ -11719,16 +11890,24 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 					     awb_zone_rg_global);
 	target_gb = (uint32_t)div_u64(0x10000ULL + (awb_zone_bg_global >> 1),
 					     awb_zone_bg_global);
+	target_ct = awb_estimate_ct(awb_zone_rg_global, awb_zone_bg_global);
+	if (target_ct == 0)
+		target_ct = 5000;
 
-	if (awb_gain_track[0] != 0)
-		target_gr = (awb_gain_track[0] * 3 + target_gr + 2) >> 2;
-	if (awb_gain_track[1] != 0)
-		target_gb = (awb_gain_track[1] * 3 + target_gb + 2) >> 2;
+	if (awb_history_reset || awb_history_count == 0)
+		awb_history_fill(target_gr, target_gb, target_ct);
+	else
+		awb_history_push(target_gr, target_gb, target_ct);
+
+	awb_history_average(&target_gr, &target_gb, &target_ct);
 
 	awb_gain_track[0] = target_gr;
 	awb_gain_track[1] = target_gb;
+	awb_gain_original[0] = target_gr;
+	awb_gain_original[1] = target_gb;
 	_wb_static[0] = target_gr;
 	_wb_static[1] = target_gb;
+	_awb_ct = target_ct;
 
 	return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
 }
@@ -15830,9 +16009,10 @@ int tisp_event_init(void)
 {
     pr_info("tisp_event_init: Initializing ISP event system\n");
 
-    /* Clear all callback arrays */
-    memset(isp_event_func_cb, 0, sizeof(isp_event_func_cb));
-    memset(cb, 0, sizeof(cb));
+    /* OEM tisp_event_init() only resets the event queue / wait state.
+     * Do not clear registered callbacks here: AE/AWB/ADR register their
+     * handlers before the later event-system init in tisp_init(), and wiping
+     * cb[] here drops event 10 (JZ_Isp_Awb) plus the other early handlers. */
 
     if (!isp_irq_initialized) {
         spin_lock_init(&isp_irq_lock);

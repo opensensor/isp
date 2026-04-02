@@ -1910,12 +1910,16 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (drain_count > 0)
             tuning_frame_done = 1;
 
-        if (tuning_frame_done && (readl(isp_regs + 0xc) & 0x40) == 0) {
+        if (tuning_frame_done) {
             /* Driver-side fallback: the dedicated AWB IRQ path is still silent
              * in runtime logs, but FIFO drain proves a frame completed. Reuse
-             * that reliable point to run the existing AWB stats -> CT -> LSC
-             * chain during active streaming. */
-            tisp_lsc_write_lut_datas();
+             * that reliable point to run AWB stats during active streaming.
+             *
+             * Keep the LSC LUT write behind the OEM-style bit-0x40 gate, but
+             * do not incorrectly gate AWB on that same bit; live logs show
+             * reg[0xc] commonly has 0x40 set while frames are still draining. */
+            if ((readl(isp_regs + 0xc) & 0x40) == 0)
+                tisp_lsc_write_lut_datas();
             awb_interrupt_static();
         }
     }
