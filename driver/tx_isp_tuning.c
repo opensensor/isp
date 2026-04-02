@@ -289,6 +289,9 @@ static uint32_t *sdns_ave_thres_array_now = NULL;
 /* AWB globals - declared early for use in ioctl handlers */
 static uint32_t _awb_mode[3] = {0, 0, 0};
 static uint8_t  awb_frz = 0;
+static uint32_t awb_mode_flag;
+static uint32_t awb_algo_mode;
+static uint32_t awb_ct_manual;
 
 /* BCSH matrices and state - declared early for use in tiziano_bcsh functions */
 static int32_t tiziano_MMatrix[9] = {
@@ -2048,6 +2051,7 @@ extern void system_reg_write(u32 reg, u32 value);
 
 /* External system_irq_func_set from tx_isp_core.c */
 extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+extern int tisp_ae_get_y_zone(void *arg1);
 
 /* Forward declarations for AE interrupt functions */
 int ae0_interrupt_hist(void);
@@ -5529,23 +5533,22 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                     }
 
 
-                    case 0x2000740a: /* Set AWB ModeFlag and gating */
+                    case 0x2000740a: /* Set AWB ModeFlag and algo mode */
                     {
                         int32_t flags[2];
                         if (copy_from_user(flags, argp, sizeof(flags)))
                             return -EFAULT;
-                        /* Normalize to 0/1 */
-                        _awb_mode[0] = flags[0] ? 1 : 0; /* ModeFlag: 0=normal,1=lowlight */
-                        _awb_mode[1] = flags[1] ? 1 : 0; /* gating flag */
+                        awb_mode_flag = flags[0] ? 1 : 0;
+                        awb_algo_mode = (flags[1] == 1) ? 1 : 0;
                         /* Apply to hardware immediately */
                         return tiziano_awb_set_hardware_param();
                     }
 
-                    case 0x2000740b: /* Get AWB ModeFlag and gating */
+                    case 0x2000740b: /* Get AWB ModeFlag and algo mode */
                     {
                         int32_t flags[2];
-                        flags[0] = _awb_mode[0];
-                        flags[1] = _awb_mode[1];
+                        flags[0] = awb_mode_flag;
+                        flags[1] = awb_algo_mode;
                         if (copy_to_user(argp, flags, sizeof(flags)))
                             return -EFAULT;
                         return 0;
@@ -8290,6 +8293,9 @@ static uint32_t awb_array_p[AWB_STATS_ZONES];
 #define AWB_DEFAULT_POINTPOS_HIGH  0x0000u
 #define AWB_DEFAULT_COF_LOW        0x0100u
 #define AWB_DEFAULT_COF_HIGH       0x0fffu
+#define AWB_LUM_MEAN_LIMIT         0x0010u
+#define AWB_LUM_FREQ_BASE          0x00f0u
+#define AWB_LUM_FREQ_MODE          0x0001u
 
 static uint8_t _awb_parameter[0xb4];
 static uint32_t _pixel_cnt_th;
@@ -8426,19 +8432,15 @@ static int tiziano_awb_set_hardware_param(void)
         system_reg_write(0x0b024, val);
     }
 
-    /* Gating flag path and ModeFlag-based thresholds; also programs 0xb030/0xb034 */
+    /* OEM algo-mode path plus runtime ModeFlag thresholds. */
     {
-        u32 gating = _awb_mode[1];
-        if (gating) {
-            /* Vendor gating branch */
+        if (awb_algo_mode == 1) {
             system_reg_write_awb(1, 0x0b028, 0x0fff0001);
             system_reg_write_awb(1, 0x0b02c, 0x0fff0001);
             system_reg_write_awb(1, 0x0b030, 0x00000100);
             system_reg_write_awb(1, 0x0b034, 0xffff0100);
         } else {
-            /* OEM: normal thresholds are fixed defaults; low-light swaps only 0xb028/0xb02c. */
-            u32 mode = _awb_mode[0];
-            if (mode == 1) {
+            if (awb_mode_flag == 1) {
                 u32 rg_lo = (_awb_lowlight_rg_th[0] & 0x0FFF);
                 u32 rg_hi = (_awb_lowlight_rg_th[1] & 0x0FFF) << 16;
                 system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
@@ -8449,7 +8451,7 @@ static int tiziano_awb_set_hardware_param(void)
             }
             system_reg_write_awb(1, 0x0b030, awb_default_v30);
             system_reg_write_awb(1, 0x0b034, awb_default_v34);
-			tiziano_awb_set_lum_th_freq();
+            tiziano_awb_set_lum_th_freq();
         }
     }
 
@@ -9674,7 +9676,7 @@ int tisp_awb_get_ct_trend(void *out_buf)
 int tisp_awb_set_ct(void *in_buf)
 {
     if (!in_buf) return -EINVAL;
-    _awb_ct = *(uint32_t *)in_buf;
+    awb_ct_manual = *(uint32_t *)in_buf;
     return 0;
 }
 
@@ -11563,16 +11565,59 @@ static void tiziano_awb_fill_zone_geometry(uint32_t height, uint32_t width)
 		memcpy(&_awb_parameter[(19 + i) * sizeof(u32)], &cell_height, sizeof(cell_height));
 }
 
+static int tisp_ae_mean_update(uint32_t *mean, int32_t *scale)
+{
+	u32 zones[AWB_STATS_ZONES];
+	u64 sum = 0;
+	int ret;
+	int i;
+
+	if (!mean || !scale)
+		return -EINVAL;
+
+	ret = tisp_ae_get_y_zone(zones);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < ARRAY_SIZE(zones); ++i)
+		sum += zones[i];
+
+	*mean = div_u64(sum + (ARRAY_SIZE(zones) >> 1), ARRAY_SIZE(zones));
+	if (*scale == 0)
+		*scale = 0x400;
+
+	return 0;
+}
+
 static int tiziano_awb_set_lum_th_freq(void)
 {
-	/* OEM updates 0xb038 from AE mean statistics here.
-	 * The local AE-mean helper/state is still missing, so keep the existing
-	 * threshold/frequency configuration unchanged for now. */
+	uint32_t mean = 0;
+	int32_t scale = 0x400;
+	uint32_t lum_freq;
+
+	if (tisp_ae_mean_update(&mean, &scale) != 0)
+		mean = 0;
+
+	if (mean >= AWB_LUM_MEAN_LIMIT)
+		mean = AWB_LUM_MEAN_LIMIT;
+
+	lum_freq = (mean * scale) >> 10;
+	if (lum_freq == 0)
+		lum_freq = 1;
+
+	system_reg_write_awb(1, 0x0b038,
+		(AWB_LUM_FREQ_MODE << 16) | (AWB_LUM_FREQ_BASE << 8) | lum_freq);
 	return 0;
 }
 
 static int JZ_Isp_Awb(void)
 {
+	uint32_t wb_attr_mode = 0;
+	u32 normal_rg = (AWB_NORMAL_RG_TH_HIGH << 16) | AWB_NORMAL_RG_TH_LOW;
+	u32 normal_bg = (AWB_NORMAL_BG_TH_HIGH << 16) | AWB_NORMAL_BG_TH_LOW;
+	u32 lowlight_rg = ((_awb_lowlight_rg_th[1] & 0x0fff) << 16) |
+		(_awb_lowlight_rg_th[0] & 0x0fff);
+	u32 switch_ev = _awb_mode[2] << 10;
 	struct {
 		uint32_t pad1[2];
 		uint32_t event_id;
@@ -11580,6 +11625,36 @@ static int JZ_Isp_Awb(void)
 	} event_data = {0};
 
 	_awb_ct_last = _awb_ct;
+	memcpy(&wb_attr_mode, tisp_wb_attr, sizeof(wb_attr_mode));
+
+	if (wb_attr_mode == 1) {
+		u32 ct = awb_ct_manual;
+
+		if (ct == 0)
+			ct = _awb_ct;
+		_awb_ct = ct;
+	} else if (wb_attr_mode == 0) {
+		awb_ct_manual = _awb_ct;
+	}
+
+	if (awb_algo_mode == 0) {
+		if (awb_ev_data <= switch_ev) {
+			if (awb_mode_flag == 1) {
+				awb_mode_flag = 0;
+				if (awb_frz == 0) {
+					system_reg_write_awb(1, 0x0b028, normal_rg);
+					system_reg_write_awb(1, 0x0b02c, normal_bg);
+				}
+			}
+		} else if (awb_mode_flag == 0) {
+			awb_mode_flag = 1;
+			if (awb_frz == 0) {
+				system_reg_write_awb(1, 0x0b028, lowlight_rg);
+				system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
+			}
+		}
+	}
+
 	event_data.event_id = 9;
 	tisp_event_push(&event_data);
 	return 0;
