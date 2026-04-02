@@ -12339,8 +12339,10 @@ int awb_interrupt_static(void)
 			zones[i] = ae_raw[i * 4] & 0x1fffff;
 		tisp_ae_update_zone_data(zones, sizeof(zones));
 
-		/* Trigger AE processing (event 1 = tisp_ae0_process) */
-		ae_event.event_id = 1;
+		/* Trigger AE1 processing (event 6 = tisp_ae1_process).
+		 * Event 1 (tisp_ae0_process) is a stub that corrupts 0xa004.
+		 * Event 6 runs the real AE algorithm (tisp_ae1_expt). */
+		ae_event.event_id = 6;
 		tisp_event_push(&ae_event);
 	}
 
