@@ -69,10 +69,10 @@ MODULE_PARM_DESC(cfa_idx_override,
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 0;
+static int tisp_force_bypass_adr = 1; /* ADR bypassed until Tiziano_adr_fpga is ported */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
-			 "Debug isolate FOV issues by forcing ADR bypass (default: 0)");
+			 "Force ADR bypass (default: 1 until full ADR algorithm is ported)");
 
 static int tisp_force_bypass_defog = 0;
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
@@ -424,7 +424,24 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
     }
     tiziano_bcsh_build_active_ccm(active_ccm, ct);
 
+    pr_info("BCSH_DIAG: CT=%u CCM=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
+            ct, active_ccm[0], active_ccm[1], active_ccm[2],
+            active_ccm[3], active_ccm[4], active_ccm[5],
+            active_ccm[6], active_ccm[7], active_ccm[8]);
+    pr_info("BCSH_DIAG: M=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
+            tiziano_MMatrix[0], tiziano_MMatrix[1], tiziano_MMatrix[2],
+            tiziano_MMatrix[3], tiziano_MMatrix[4], tiziano_MMatrix[5],
+            tiziano_MMatrix[6], tiziano_MMatrix[7], tiziano_MMatrix[8]);
+    pr_info("BCSH_DIAG: Minv=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
+            tiziano_MinvMatrix[0], tiziano_MinvMatrix[1], tiziano_MinvMatrix[2],
+            tiziano_MinvMatrix[3], tiziano_MinvMatrix[4], tiziano_MinvMatrix[5],
+            tiziano_MinvMatrix[6], tiziano_MinvMatrix[7], tiziano_MinvMatrix[8]);
+
     tiziano_bcsh_Tccm_RGBYUV(tmp, tiziano_MMatrix, active_ccm, tiziano_MinvMatrix);
+
+    pr_info("BCSH_DIAG: HMatrix=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
+            tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5],
+            tmp[6], tmp[7], tmp[8]);
 
     for (int i = 0; i < 9; ++i)
         out[i] = tmp[i];
@@ -446,6 +463,20 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
     const uint32_t *D = bcsh_wdr_enabled ? bcsh_CCM_d_wdr : bcsh_CCM_d;
     const uint32_t *T = bcsh_wdr_enabled ? bcsh_CCM_t_wdr : bcsh_CCM_t;
     const uint32_t *A = bcsh_wdr_enabled ? bcsh_CCM_a_wdr : bcsh_CCM_a;
+
+    /* Log raw tuning bin values (first call only) */
+    {
+        static int logged;
+        if (!logged) {
+            pr_info("BCSH_DIAG: raw D=[0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x]\n",
+                    D[0], D[1], D[2], D[3], D[4], D[5], D[6], D[7], D[8]);
+            pr_info("BCSH_DIAG: raw T=[0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x]\n",
+                    T[0], T[1], T[2], T[3], T[4], T[5], T[6], T[7], T[8]);
+            pr_info("BCSH_DIAG: raw A=[0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x]\n",
+                    A[0], A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8]);
+            logged = 1;
+        }
+    }
 
     /* Convert from 14-bit register format to signed */
     int32_t Ds[9], Ts[9], As[9];
@@ -520,24 +551,16 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
 
 
 /* Multiply two Q16 3x3 matrices with sign-aware fixed-point math */
-/* Q16 fixed-point 3×3 matrix multiply — NO post-shift.
- * OEM applies >>6 only once at the very end of the RGBYUV chain,
- * not after each intermediate multiply. */
-static void tiziano_matmul3_q16_raw(const int32_t A[9], const int32_t B[9], int32_t O[9])
+/* Q16 fixed-point 3×3 matrix multiply using 64-bit products.
+ * The OEM's fused triple product uses <<6 pre-shift + final >>6 which cancel
+ * in a chained approach.  Only the Q16 >>16 per multiply is needed. */
+static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
             int64_t acc = 0;
-            for (int k = 0; k < 3; ++k) {
-                int32_t a = A[i * 3 + k];
-                int32_t b = B[k * 3 + j];
-                int sa = (a < 0) ? -1 : 1;
-                int sb = (b < 0) ? -1 : 1;
-                uint32_t aa = (a < 0) ? (uint32_t)(-a) : (uint32_t)a;
-                uint32_t bb = (b < 0) ? (uint32_t)(-b) : (uint32_t)b;
-                uint32_t prod = fix_point_mult2_32(16, aa, bb);
-                acc += (int64_t)(sa * sb) * (int64_t)prod;
-            }
+            for (int k = 0; k < 3; ++k)
+                acc += ((int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j]) >> 16;
             O[i * 3 + j] = (int32_t)acc;
         }
     }
@@ -590,24 +613,17 @@ static void tiziano_build_hue_rotation(int32_t R[9])
 }
 
 /* Full OEM-shaped chain: out = M * (CCM * R(hue) * Minv) */
-/* OEM chain: out = M * CCM * R(hue) * Minv, then >>6 once at the end.
- * Previous code applied >>6 after each of the 3 multiplies (total >>18),
- * which made the final matrix values ~4096x too small. */
 static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv)
 {
     int32_t R[9], T1[9], T2[9];
     tiziano_build_hue_rotation(R);
 
-    /* T1 = CCM * R (no shift) */
-    tiziano_matmul3_q16_raw(CCM, R, T1);
-    /* T2 = T1 * Minv (no shift) */
-    tiziano_matmul3_q16_raw(T1, Minv, T2);
-    /* out = M * T2 (no shift) */
-    tiziano_matmul3_q16_raw(M, T2, out);
-
-    /* OEM: apply >>6 once at the very end */
-    for (int i = 0; i < 9; ++i)
-        out[i] = out[i] >> 6;
+    /* T1 = CCM * R */
+    tiziano_matmul3_q16(CCM, R, T1);
+    /* T2 = T1 * Minv */
+    tiziano_matmul3_q16(T1, Minv, T2);
+    /* out = M * T2 */
+    tiziano_matmul3_q16(M, T2, out);
 }
 
 /* Compute piecewise slopes used by OEM for C and for HDP/HBP transitions. */
@@ -890,6 +906,19 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
         int32_t v = H[i_h];
         Hreg[i_h] = (v < 0) ? (v & 0x3fff) : v;
     }
+
+    {
+        static int hlog;
+        if (!hlog) {
+            pr_info("BCSH_DIAG: H_signed=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
+                    H[0], H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]);
+            pr_info("BCSH_DIAG: Hreg=[0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x]\n",
+                    Hreg[0], Hreg[1], Hreg[2], Hreg[3], Hreg[4], Hreg[5],
+                    Hreg[6], Hreg[7], Hreg[8]);
+            hlog = 1;
+        }
+    }
+
     tiziano_bcsh_compute_slopes(Sth, Carr, HDP, HBP, &cs0, &cs1, &cs2, &hdp_s, &hbp_s);
 
     /* Compose and write 0x8000..0x8070 block (best-effort OEM-aligned packing) */
@@ -904,6 +933,27 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
 
         tiziano_bcsh_compute_S_vectors(tuning, EvList, SminS, SmaxS, SminM, SmaxM,
                                        svec1, svec2, svec3);
+
+        {
+            static int slog;
+            if (!slog) {
+                pr_info("BCSH_DIAG: svec1=[%u,%u,%u,%u] svec2=[%u,%u,%u,%u] svec3=[%u,%u,%u,%u]\n",
+                        svec1[0], svec1[1], svec1[2], svec1[3],
+                        svec2[0], svec2[1], svec2[2], svec2[3],
+                        svec3[0], svec3[1], svec3[2], svec3[3]);
+                pr_info("BCSH_DIAG: B=%u C=[%u,%u,%u,%u,%u] Sthres=[%u,%u,%u]\n",
+                        bcsh_B, bcsh_C[0], bcsh_C[1], bcsh_C[2], bcsh_C[3], bcsh_C[4],
+                        bcsh_Sthres[0], bcsh_Sthres[1], bcsh_Sthres[2]);
+                pr_info("BCSH_DIAG: HDP=[%u,%u,%u] HBP=[%u,%u,%u] HLSP=[%u,%u,%u]\n",
+                        bcsh_HDP[0], bcsh_HDP[1], bcsh_HDP[2],
+                        bcsh_HBP[0], bcsh_HBP[1], bcsh_HBP[2],
+                        bcsh_HLSP[0], bcsh_HLSP[1], bcsh_HLSP[2]);
+                pr_info("BCSH_DIAG: clip0=[%u,%u,%u,%u] OffsetYUVy=[%u,%u]\n",
+                        bcsh_clip0[0], bcsh_clip0[1], bcsh_clip0[2], bcsh_clip0[3],
+                        bcsh_OffsetYUVy[0], bcsh_OffsetYUVy[1]);
+                slog = 1;
+            }
+        }
 
         system_reg_write(BASE + 0x0000, PACK16(svec1[0], svec1[1]));
         system_reg_write(BASE + 0x0004, PACK16(svec2[0], svec2[1]));
