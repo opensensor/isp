@@ -1523,6 +1523,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
+static int mdns_runtime_parked = 1;    /* MDNS has never streamed successfully — park runtime MMIO until bring-up is proven. */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -15155,23 +15156,33 @@ static int tiziano_mdns_params_refresh(void)
  * tisp_mdns_bypass(0). */
 int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
+	int prev_bulk_loading;
+
 	/* OEM EXACT: WDR table selection + store dimensions */
-	tisp_mdns_select_now_tables(mdns_wdr_en != 0);
 	mdns_frame_width = width;
 	mdns_frame_height = height;
+	tisp_mdns_select_now_tables(mdns_wdr_en != 0);
 
-	/* OEM EXACT: data_8a9c0 = 0xffffffff (force first-time all-register refresh) */
+	if (data_9ab00 == 0)
+		data_9ab00 = 0x80;
+
+	data_9a9d0 = 0x10000;
 	mdns_last_refresh_key = 0xffffffff;
 
-	/* OEM EXACT: load arrays from tuning params + apply ratio if != 0x80 */
+	/* Wrap bulk load so individual param handlers don't trigger hw refresh */
+	prev_bulk_loading = mdns_bulk_loading;
+	mdns_bulk_loading = 1;
 	tiziano_mdns_params_refresh();
+	mdns_bulk_loading = prev_bulk_loading;
 
-	/* OEM EXACT: tisp_mdns_par_refresh(0x10000, 0x10000)
-	 * Since mdns_last_refresh_key == 0xffffffff, this takes the first-time
-	 * path: tisp_mdns_all_reg_refresh(0x10000) + top_func_refresh + trigger */
-	tisp_mdns_par_refresh(0x10000, 0x10000);
+	if (mdns_runtime_parked) {
+		mdns_last_refresh_key = data_9a9d0;
+		pr_info("tiziano_mdns_init: MDNS runtime parked; tables loaded but hw bypassed\n");
+		return 0;
+	}
 
-	/* OEM EXACT: tisp_mdns_bypass(0) — enable MDNS processing */
+	/* OEM EXACT: tisp_mdns_par_refresh(0x10000, 0x10000) + bypass(0) */
+	tisp_mdns_par_refresh(data_9a9d0, 0x10000);
 	tisp_mdns_bypass(0);
 
 	return 0;
@@ -17604,6 +17615,9 @@ int tisp_s_mdns_ratio(int ratio)
         }
         mdns_y_ref_wei_b_min_array_now[i] = v;
     }
+
+    if (mdns_runtime_parked)
+        return 0;
 
     /* OEM EXACT: tisp_mdns_all_reg_refresh(data_8a9c0) then tisp_mdns_reg_trigger() */
     tisp_mdns_all_reg_refresh(mdns_last_refresh_key);
