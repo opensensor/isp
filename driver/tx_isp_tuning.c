@@ -11208,28 +11208,64 @@ static void JZ_Isp_Ae_Dg2reg(uint32_t pos, uint32_t *reg1, uint32_t dg_val, uint
 static int tisp_ae1_expt(void);
 static void tisp_set_ae1_ag(uint32_t ag_q10, uint32_t dg_q10);
 
-/* tisp_ae1_process - AE1 processing implementation */
+/* tisp_ae1_process - Simple proportional AE controller.
+ * The OEM's tisp_ae1_expt is a complex algorithm we haven't fully ported.
+ * This reads actual zone luminance and adjusts sensor exposure/gain
+ * to reach a target brightness. */
 static void tisp_ae1_process(void)
 {
-    pr_debug("tisp_ae1_process: start\n");
+    extern int tisp_ae_get_y_zone(void *buffer);
+    extern int tisp_set_sensor_integration_time(uint32_t val);
+    extern int tisp_set_sensor_analog_gain(uint32_t val);
+    static uint32_t cur_expo = 0x300;   /* integration lines (start moderate) */
+    static uint32_t cur_gain = 0x10;    /* analog gain index */
+    uint32_t zones[225];
+    uint64_t sum = 0;
+    uint32_t mean;
+    int i;
 
-    /* Compute AE1 exposure and gains (minimal implementation) */
-    if (tisp_ae1_expt() == 0) {
-        /* Short exposure is programmed via SENSOR_EXPO in tisp_set_ae1_ag (BN reference) */
+    /* Target: ae_mean ~ 80-120 (mid-brightness on zone scale) */
+    const uint32_t TARGET = 100;
+    const uint32_t MAX_EXPO = 0x4e2;  /* gc2053 max ~1250 lines for 30fps */
+    const uint32_t MAX_GAIN = 0xff;   /* gc2053 analog gain max */
 
-        /* Program AE1 DG regs derived via JZ_Isp_Ae_Dg2reg */
-        uint32_t q = _AePointPos.data[0] & 31; if (!q) q = 10;
-        uint32_t reg_100c, reg_1010;
-        JZ_Isp_Ae_Dg2reg(q, &reg_100c, ae1_dg_q10_cur, &reg_1010);
-        system_reg_write_ae(3, 0x100c, reg_100c);
-        system_reg_write_ae(3, 0x1010, reg_1010);
+    tisp_ae_get_y_zone(zones);
+    for (i = 0; i < 225; i++)
+        sum += zones[i];
+    mean = (uint32_t)(sum / 225);
+
+    if (mean == 0)
+        return; /* No data yet */
+
+    /* Simple proportional control with clamping */
+    if (mean < TARGET - 10) {
+        /* Too dark: increase exposure first, then gain */
+        if (cur_expo < MAX_EXPO)
+            cur_expo += (cur_expo >> 3) + 1; /* ~12% increase */
+        else if (cur_gain < MAX_GAIN)
+            cur_gain += (cur_gain >> 3) + 1;
+    } else if (mean > TARGET + 10) {
+        /* Too bright: decrease gain first, then exposure */
+        if (cur_gain > 0x10)
+            cur_gain -= (cur_gain >> 4) + 1;
+        else if (cur_expo > 0x20)
+            cur_expo -= (cur_expo >> 4) + 1;
     }
 
-    if (ta_custom_en == 1) {
-        private_complete(&ae_algo_comp);
-    }
+    if (cur_expo > MAX_EXPO) cur_expo = MAX_EXPO;
+    if (cur_gain > MAX_GAIN) cur_gain = MAX_GAIN;
 
-    pr_debug("tisp_ae1_process: done (exp=0x%x ag=0x%x)\n", data_afcd8, data_afce0);
+    tisp_set_sensor_integration_time(cur_expo);
+    tisp_set_sensor_analog_gain(cur_gain);
+
+    {
+        static int ae_log;
+        if (ae_log < 10 || (ae_log % 300) == 0) {
+            pr_info("AE_CTRL[%d]: mean=%u expo=0x%x gain=0x%x\n",
+                    ae_log, mean, cur_expo, cur_gain);
+        }
+        ae_log++;
+    }
 }
 
 /* Minimal port of tisp_ae1_expt based on BN/Ghidra structure
