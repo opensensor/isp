@@ -431,12 +431,29 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
 }
 /* BCSH CT override for CCM blending - moved to top of file */
 
-/* Build active CCM (as32CCMMatrix) per OEM CT rules from D/T/A sets */
+/* OEM reg2para: convert 14-bit unsigned register format to signed.
+ * Values >= 0x2000 are negative: val - 0x4000. */
+static inline int32_t bcsh_reg2para(uint32_t regval)
+{
+    return (regval >= 0x2000) ? ((int32_t)regval - 0x4000) : (int32_t)regval;
+}
+
+/* Build active CCM (as32CCMMatrix) per OEM CT rules from D/T/A sets.
+ * The tuning bin stores CCM coefficients in 14-bit register format;
+ * OEM calls tiziano_bcsh_reg2para() before interpolation. */
 static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
 {
     const uint32_t *D = bcsh_wdr_enabled ? bcsh_CCM_d_wdr : bcsh_CCM_d;
     const uint32_t *T = bcsh_wdr_enabled ? bcsh_CCM_t_wdr : bcsh_CCM_t;
     const uint32_t *A = bcsh_wdr_enabled ? bcsh_CCM_a_wdr : bcsh_CCM_a;
+
+    /* Convert from 14-bit register format to signed */
+    int32_t Ds[9], Ts[9], As[9];
+    for (int i = 0; i < 9; ++i) {
+        Ds[i] = bcsh_reg2para(D[i]);
+        Ts[i] = bcsh_reg2para(T[i]);
+        As[i] = bcsh_reg2para(A[i]);
+    }
 
     /* OEM thresholds/pivots from HLIL */
     const uint32_t CT_MAX_D   = 0x1357; /* >= -> D */
@@ -446,7 +463,7 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
     const uint32_t DEN_TA     = 0x0384; /* 900  */
 
     if (ct >= CT_MAX_D) {
-        for (int i = 0; i < 9; ++i) out[i] = (int32_t)D[i];
+        for (int i = 0; i < 9; ++i) out[i] = Ds[i];
         return;
     }
 
@@ -454,8 +471,8 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
         uint32_t w = (ct >= PIV_DT) ? (ct - PIV_DT) : (PIV_DT - ct);
         if (w > DEN_DT) w = DEN_DT;
         for (int i = 0; i < 9; ++i) {
-            int32_t d = (int32_t)D[i];
-            int32_t t = (int32_t)T[i];
+            int32_t d = Ds[i];
+            int32_t t = Ts[i];
             int32_t v;
             if (d >= t) {
                 int64_t tmp = (int64_t)(d - t) * w;
@@ -470,13 +487,13 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
     }
 
     if (ct >= 0x0EA7) { /* flag 2: copy T */
-        for (int i = 0; i < 9; ++i) out[i] = (int32_t)T[i];
+        for (int i = 0; i < 9; ++i) out[i] = Ts[i];
         return;
     }
 
     if (ct < (PIV_TA + 1)) { /* flag 4: copy A when ct < 0x0B23 */
         if (ct < 0x0B23) {
-            for (int i = 0; i < 9; ++i) out[i] = (int32_t)A[i];
+            for (int i = 0; i < 9; ++i) out[i] = As[i];
             return;
         }
     }
@@ -486,8 +503,8 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
         uint32_t w = (ct >= PIV_TA) ? (ct - PIV_TA) : (PIV_TA - ct);
         if (w > DEN_TA) w = DEN_TA;
         for (int i = 0; i < 9; ++i) {
-            int32_t a = (int32_t)A[i];
-            int32_t t = (int32_t)T[i];
+            int32_t a = As[i];
+            int32_t t = Ts[i];
             int32_t v;
             if (t >= a) {
                 int64_t tmp = (int64_t)(t - a) * w;
@@ -503,7 +520,10 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
 
 
 /* Multiply two Q16 3x3 matrices with sign-aware fixed-point math */
-static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
+/* Q16 fixed-point 3×3 matrix multiply — NO post-shift.
+ * OEM applies >>6 only once at the very end of the RGBYUV chain,
+ * not after each intermediate multiply. */
+static void tiziano_matmul3_q16_raw(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -518,8 +538,7 @@ static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t 
                 uint32_t prod = fix_point_mult2_32(16, aa, bb);
                 acc += (int64_t)(sa * sb) * (int64_t)prod;
             }
-            /* OEM applies >>6 post accumulation */
-            O[i * 3 + j] = (int32_t)(acc >> 6);
+            O[i * 3 + j] = (int32_t)acc;
         }
     }
 }
@@ -571,17 +590,24 @@ static void tiziano_build_hue_rotation(int32_t R[9])
 }
 
 /* Full OEM-shaped chain: out = M * (CCM * R(hue) * Minv) */
+/* OEM chain: out = M * CCM * R(hue) * Minv, then >>6 once at the end.
+ * Previous code applied >>6 after each of the 3 multiplies (total >>18),
+ * which made the final matrix values ~4096x too small. */
 static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv)
 {
     int32_t R[9], T1[9], T2[9];
     tiziano_build_hue_rotation(R);
 
-    /* T1 = CCM * R */
-    tiziano_matmul3_q16(CCM, R, T1);
-    /* T2 = T1 * Minv */
-    tiziano_matmul3_q16(T1, Minv, T2);
-    /* out = M * T2 */
-    tiziano_matmul3_q16(M, T2, out);
+    /* T1 = CCM * R (no shift) */
+    tiziano_matmul3_q16_raw(CCM, R, T1);
+    /* T2 = T1 * Minv (no shift) */
+    tiziano_matmul3_q16_raw(T1, Minv, T2);
+    /* out = M * T2 (no shift) */
+    tiziano_matmul3_q16_raw(M, T2, out);
+
+    /* OEM: apply >>6 once at the very end */
+    for (int i = 0; i < 9; ++i)
+        out[i] = out[i] >> 6;
 }
 
 /* Compute piecewise slopes used by OEM for C and for HDP/HBP transitions. */
@@ -15176,7 +15202,17 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 	mdns_bulk_loading = prev_bulk_loading;
 
 	if (mdns_runtime_parked) {
+		u32 bypass_reg;
 		mdns_last_refresh_key = data_9a9d0;
+		/* Explicitly set bit 16 in bypass register to disable MDNS hardware.
+		 * The OEM bypass value 0xb5742249 has MDNS enabled (bit 16=0), but
+		 * our MDNS init is incomplete so we must force-bypass. */
+		bypass_reg = system_reg_read(0xc);
+		if (!(bypass_reg & 0x10000)) {
+			system_reg_write(0xc, bypass_reg | 0x10000);
+			pr_info("tiziano_mdns_init: forced MDNS bypass bit 16 (0x%08x -> 0x%08x)\n",
+				bypass_reg, bypass_reg | 0x10000);
+		}
 		pr_info("tiziano_mdns_init: MDNS runtime parked; tables loaded but hw bypassed\n");
 		return 0;
 	}
