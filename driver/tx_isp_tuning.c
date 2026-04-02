@@ -12363,12 +12363,29 @@ int awb_interrupt_static(void)
 	if (data_b2f3c) {
 		extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
 		struct tisp_event_record ae_event = {0};
-		uint32_t ae_stat = system_reg_read(0xa050);
-		void *ae_buf = (void *)(unsigned long)(data_b2f3c + ((ae_stat << 8) & 0x3000));
+		/* Read all 4 AE buffers and use the one with highest sum (most recent).
+		 * The buffer index register 0xa050 is stale because AE interrupt
+		 * never fires to cycle it. */
+		void *ae_buf = (void *)(unsigned long)data_b2f3c;
 		uint32_t *ae_raw;
 		uint32_t zones[225];
-		int i;
-
+		int i, best_buf = 0;
+		uint64_t best_sum = 0;
+		for (i = 0; i < 4; i++) {
+			void *buf = (void *)(unsigned long)(data_b2f3c + i * 0x1000);
+			uint32_t *raw;
+			uint64_t s = 0;
+			int j;
+			private_dma_cache_sync(NULL, buf, 0x1000, 0);
+			raw = (uint32_t *)buf;
+			for (j = 0; j < 16; j++)
+				s += raw[j * 4] & 0x1fffff;
+			if (s != best_sum) { /* Different data = more recent */
+				best_sum = s;
+				best_buf = i;
+				ae_buf = buf;
+			}
+		}
 		private_dma_cache_sync(NULL, ae_buf, 0x1000, 0);
 		ae_raw = (uint32_t *)ae_buf;
 		for (i = 0; i < 225; i++)
