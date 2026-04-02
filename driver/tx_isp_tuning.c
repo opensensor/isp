@@ -11221,8 +11221,9 @@ static void tisp_ae1_process(void)
     uint32_t mean;
     int i;
 
-    /* Target: ae_mean ~ 80-120 (mid-brightness on zone scale) */
-    const uint32_t TARGET = 100;
+    /* Zone values are 21-bit luminance sums (~9216 pixels/zone).
+     * mean=142 is near-black. Target ~50000 for mid-brightness. */
+    const uint32_t TARGET = 50000;
     const uint32_t MAX_EXPO = 0x4e2;  /* gc2053 max ~1250 lines for 30fps */
 
     tisp_ae_get_y_zone(zones);
@@ -11235,9 +11236,9 @@ static void tisp_ae1_process(void)
         return; /* No data yet */
 
     /* Simple proportional control: adjust exposure only */
-    if (mean < TARGET - 10) {
+    if (mean < (TARGET - TARGET / 10)) {
         cur_expo += (cur_expo >> 3) + 1; /* ~12% increase */
-    } else if (mean > TARGET + 10) {
+    } else if (mean > (TARGET + TARGET / 10)) {
         cur_expo -= (cur_expo >> 4) + 1; /* ~6% decrease */
     }
 
