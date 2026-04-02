@@ -12930,32 +12930,80 @@ static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshol
     /* (In our layout ccm_parameter IS the persistent buffer) */
 }
 
-/* cm_control - CCM control processing */
-static void cm_control(void *ccm_param, uint32_t sat_value, void *output)
+/* cm_control - CCM saturation control.
+ *
+ * OEM does a full 3×3 matrix multiply with saturation-derived coefficients
+ * and fix_point_mult2_32.  For the default saturation 0x100 (= 1.0 in Q8.8)
+ * the saturation matrix is diagonal {0x10000,0x10000,0x10000} which is an
+ * identity pass-through.  We replicate the passthrough exactly for 0x100 and
+ * use a simplified linear scale for other values (matches OEM diagonal result).
+ *
+ * TODO: implement the full OEM off-diagonal saturation matrix when needed.
+ */
+static void cm_control(int32_t *ccm_param, uint32_t sat_value, int32_t *output)
 {
-    pr_debug("cm_control: saturation=%u\n", sat_value);
+    int i;
 
-    /* Apply saturation scaling to CCM matrix */
-    int32_t *matrix = (int32_t *)ccm_param;
-    int32_t *result = (int32_t *)output;
+    if (sat_value == 0x100) {
+        /* Identity / passthrough — most common case */
+        memcpy(output, ccm_param, 9 * sizeof(int32_t));
+        return;
+    }
 
-    for (int i = 0; i < 9; i++) {
-        result[i] = (matrix[i] * sat_value) >> 8;
+    /* Simplified saturation scaling (diagonal-only approximation) */
+    for (i = 0; i < 9; i++) {
+        int32_t v = ccm_param[i];
+        /* OEM does: sign-decompose, multiply, >>6.
+         * Simplified: scale by sat/256, preserving sign. */
+        if (v >= 0)
+            output[i] = (int32_t)((uint32_t)v * sat_value / 256);
+        else
+            output[i] = -(int32_t)((uint32_t)(-v) * sat_value / 256);
     }
 }
 
-/* jz_isp_ccm_parameter_convert - Convert CCM parameters */
-static int32_t jz_isp_ccm_parameter_convert(void)
+/* jz_isp_ccm_reg2par - OEM EXACT: convert unsigned 14-bit register values
+ * to signed parameters.  Values >= 0x2000 are negative: subtract 0x4000. */
+static void jz_isp_ccm_reg2par(int32_t *dst, const int32_t *src)
 {
-    /* Return current color temperature for processing */
-    return data_9a450;
+    int i;
+    for (i = 0; i < 9; i++) {
+        int32_t v = src[i];
+        if ((uint32_t)v >= 0x2000)
+            v -= 0x4000;
+        dst[i] = v;
+    }
 }
 
-/* jz_isp_ccm_para2reg - Convert parameters to register format */
-static void jz_isp_ccm_para2reg(void *reg_data, void *param_data)
+/* jz_isp_ccm_parameter_convert - OEM EXACT: sign-extend A/T/D raw CCM arrays
+ * into _ccm_{a,t,d}_parameter, then return current CT value.
+ *
+ * OEM decompilation:
+ *   jz_isp_ccm_reg2par(&_ccm_a_parameter, tiziano_ccm_a_now)
+ *   jz_isp_ccm_reg2par(&_ccm_t_parameter, tiziano_ccm_t_now)
+ *   jz_isp_ccm_reg2par(&_ccm_d_parameter, tiziano_ccm_d_now)
+ * The CT value (data_8a440 / our data_9a450) is preserved across this call
+ * in a saved register; the decompiler conflates it with the return value.
+ */
+static int32_t jz_isp_ccm_parameter_convert(void)
 {
-    /* Convert parameter format to register format */
-    memcpy(reg_data, param_data, 0x24);
+    jz_isp_ccm_reg2par(_ccm_a_parameter, tiziano_ccm_a_now);
+    jz_isp_ccm_reg2par(_ccm_t_parameter, tiziano_ccm_t_now);
+    jz_isp_ccm_reg2par(_ccm_d_parameter, tiziano_ccm_d_now);
+    return (int32_t)data_9a450;
+}
+
+/* jz_isp_ccm_para2reg - OEM EXACT: convert signed parameters back to
+ * unsigned 14-bit register format.  if (value < 0) value &= 0x3fff. */
+static void jz_isp_ccm_para2reg(int32_t *reg_data, const int32_t *param_data)
+{
+    int i;
+    for (i = 0; i < 9; i++) {
+        int32_t v = param_data[i];
+        if (v < 0)
+            v &= 0x3fff;
+        reg_data[i] = v;
+    }
 }
 
 /* tiziano_ccm_params_refresh - OEM static CCM payload from tx-isp-t31.ko.
@@ -13020,16 +13068,28 @@ int tisp_ccm_ev_update(void)
 	return 0;
 }
 
-/* jz_isp_ccm - Binary Ninja EXACT implementation */
+/* jz_isp_ccm - OEM EXACT implementation
+ *
+ * Flow:
+ * 1. jz_isp_ccm_parameter_convert(): sign-extend raw A/T/D arrays
+ * 2. EV-based saturation interpolation (OEM abs-diff math)
+ * 3. tiziano_ct_ccm_interpolation(): blend signed CCM by CT region
+ * 4. cm_control(): apply saturation matrix → final_matrix (signed)
+ * 5. jz_isp_ccm_para2reg(): convert signed → 14-bit unsigned
+ * 6. tiziano_ccm_lut_parameter(): write to hardware
+ */
 int jz_isp_ccm(void)
 {
     uint32_t ev_value = data_9a454 >> 10;  /* Current EV shifted */
+    data_c52f8 = 0x64;  /* OEM: reset CT threshold each call */
+
+    /* Step 1: sign-extend raw CCM arrays (critical side-effect) */
     int32_t ct_value = jz_isp_ccm_parameter_convert();
 
-    pr_debug("jz_isp_ccm: EV=%u, CT=%d\n", ev_value, ct_value);
+    pr_debug("jz_isp_ccm: EV=%u, CT=%d, ccm_real=%u\n", ev_value, ct_value, ccm_real);
 
-    /* Binary Ninja: Check if CCM update is needed */
-    if (ccm_real.real != 1) {
+    /* Check if CCM update is needed based on EV change */
+    if (ccm_real != 1) {
         uint32_t ev_diff = (data_c52ec >= ev_value) ?
                           (data_c52ec - ev_value) : (ev_value - data_c52ec);
 
@@ -13039,68 +13099,78 @@ int jz_isp_ccm(void)
         }
     }
 
-    /* Binary Ninja: EV-based saturation interpolation */
-    uint32_t sat_value = 0x100;  /* Default saturation */
+    /* Step 2: OEM EV-based saturation interpolation (handles unsigned abs-diff) */
+    {
+        uint32_t sat_result;
+        int i, found = 0;
 
-    for (int i = 0; i < 9; i++) {
-        if (cm_ev_list_now[i] >= ev_value) {
-            if (i != 0) {
-                /* Interpolate between two EV points */
-                uint32_t ev_low = cm_ev_list_now[i-1];
-                uint32_t ev_high = cm_ev_list_now[i];
-                uint32_t sat_low = cm_sat_list_now[i-1];
-                uint32_t sat_high = cm_sat_list_now[i];
+        for (i = 0; i < 9; i++) {
+            uint32_t ev_hi = cm_ev_list_now[i];
 
-                if (ev_high != ev_low) {
-                    uint32_t weight = (ev_value - ev_low) * 256 / (ev_high - ev_low);
-                    sat_value = sat_low + (((sat_high - sat_low) * weight) >> 8);
+            if (ev_hi >= ev_value) {
+                if (i != 0) {
+                    uint32_t ev_lo = cm_ev_list_now[i - 1];
+                    uint32_t sat_lo = cm_sat_list_now[i - 1];
+                    uint32_t sat_hi = cm_sat_list_now[i];
+
+                    if (ev_hi != ev_lo) {
+                        /* OEM abs-diff interpolation */
+                        uint32_t num = (ev_lo <= ev_value) ?
+                                       (ev_value - ev_lo) : (ev_lo - ev_value);
+                        uint32_t den = (ev_lo <= ev_hi) ?
+                                       (ev_hi - ev_lo) : (ev_lo - ev_hi);
+                        if (sat_hi >= sat_lo)
+                            sat_result = num * (sat_hi - sat_lo) / den + sat_lo;
+                        else
+                            sat_result = sat_lo - num * (sat_lo - sat_hi) / den;
+                    } else {
+                        sat_result = sat_hi;
+                    }
                 } else {
-                    sat_value = sat_high;
+                    sat_result = cm_sat_list_now[0];
                 }
-            } else {
-                sat_value = cm_sat_list_now[0];
+                found = 1;
+                break;
             }
-            break;
         }
 
-        if (i == 8) {
-            sat_value = cm_sat_list_now[8];  /* Use maximum value */
+        if (!found)
+            sat_result = cm_sat_list_now[8];
+
+        data_c52fc = sat_result;
+    }
+
+    /* Step 3: CT-based CCM interpolation */
+    {
+        uint32_t ct_diff = (data_c52f4 >= (uint32_t)ct_value) ?
+                          (data_c52f4 - ct_value) : (ct_value - data_c52f4);
+
+        if (ccm_real == 1 || data_c52f8 < ct_diff) {
+            tiziano_ct_ccm_interpolation(ct_value, data_c52f8);
         }
     }
 
-    data_c52fc = sat_value;
+    /* Step 4: apply saturation control → signed final matrix */
+    int32_t final_matrix[9];
+    cm_control(ccm_parameter, data_c52fc, final_matrix);
 
-    /* Binary Ninja: CT-based processing */
-    uint32_t ct_diff = (data_c52f4 >= ct_value) ?
-                      (data_c52f4 - ct_value) : (ct_value - data_c52f4);
-
-    if (ccm_real.real == 1 || data_c52f8 < ct_diff) {
-        tiziano_ct_ccm_interpolation(ct_value, data_c52f8);
-    }
-
-    /* Binary Ninja: Generate final CCM matrix */
-    uint32_t final_matrix[9];
-    cm_control(&ccm_parameter, data_c52fc, final_matrix);
-
-    /* Binary Ninja: Convert and write to registers */
-    uint32_t reg_data[9];
+    /* Step 5: convert signed → unsigned 14-bit register format */
+    int32_t reg_data[9];
     jz_isp_ccm_para2reg(reg_data, final_matrix);
 
-    int ret = tiziano_ccm_lut_parameter((int32_t *)reg_data);
-    if (ret) {
-        return ret;
-    }
+    /* Step 6: write to hardware */
+    int ret = tiziano_ccm_lut_parameter(reg_data);
 
-    ccm_real.real = 0;  /* Clear update flag */
-    return 0;
+    ccm_real = 0;  /* Clear update flag */
+    return ret;
 }
 
-/* tiziano_ccm_init - Binary Ninja EXACT implementation */
+/* tiziano_ccm_init - OEM EXACT implementation */
 int tiziano_ccm_init(void)
 {
     pr_info("tiziano_ccm_init: Initializing Color Correction Matrix\n");
 
-    /* Binary Ninja: Select CCM parameters based on WDR mode */
+    /* OEM: Select CCM parameters based on WDR mode */
     if (ccm_wdr_en != 1) {
         tiziano_ccm_a_now = tiziano_ccm_a_linear;
         tiziano_ccm_t_now = tiziano_ccm_t_linear;
@@ -13117,23 +13187,38 @@ int tiziano_ccm_init(void)
         pr_info("tiziano_ccm_init: Using WDR CCM parameters\n");
     }
 
-    /* Binary Ninja: Initialize control structures */
-    memset(&ccm_real, 0, sizeof(ccm_real));
+    /* OEM: memset(&ccm_real, 0, 0x18) clears ccm_real + next 5 adjacent vars.
+     * Since our vars are separate statics, zero them individually. */
+    ccm_real = 0;
+    data_c52ec = 0;
+    data_c52f0 = 0;
+    data_c52f4 = 0;
+    data_c52f8 = 0;
+    data_c52fc = 0;
     memset(&ccm_ctrl, 0, sizeof(ccm_ctrl));
 
-    /* Binary Ninja: Set initial state values */
+    /* OEM: reset hysteresis state */
+    ct_flag_cur = 0;
+    ct_flag_last = 0;
+
+    /* OEM: Set initial state values */
     data_c52ec = data_9a454 >> 10;
     data_c52f4 = data_9a450;
     data_c52fc = 0x100;
-    ccm_real.real = 1;
+    ccm_real = 1;
     data_c52f8 = 0x64;
     data_c52f0 = 0x28;
 
-    /* Binary Ninja: Refresh parameters and initialize defaults */
+    /* OEM: Refresh raw CCM tables from tuning blob */
     tiziano_ccm_params_refresh();
-    memcpy(&ccm_parameter, &_ccm_d_parameter, sizeof(ccm_parameter));
 
-    /* Binary Ninja: Apply initial CCM configuration */
+    /* OEM: memcpy(&ccm_parameter, &_ccm_d_parameter, 0x24)
+     * NOTE: _ccm_d_parameter is not yet sign-extended here — it gets
+     * properly populated inside jz_isp_ccm() via jz_isp_ccm_parameter_convert().
+     * The OEM copies the raw D values as initial state. */
+    memcpy(ccm_parameter, _ccm_d_parameter, sizeof(ccm_parameter));
+
+    /* OEM: Apply initial CCM configuration */
     int ret = jz_isp_ccm();
     if (ret) {
         pr_err("tiziano_ccm_init: Failed to initialize CCM: %d\n", ret);
