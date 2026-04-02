@@ -8279,6 +8279,18 @@ static uint32_t awb_array_b[AWB_STATS_ZONES];
 static uint32_t awb_array_ir[AWB_STATS_ZONES];
 static uint32_t awb_array_p[AWB_STATS_ZONES];
 
+#define AWB_ZONE_COLS              0x0f
+#define AWB_ZONE_ROWS              0x0f
+#define AWB_STATS_CFG_WORD         0xf001f001u
+#define AWB_NORMAL_RG_TH_LOW       0x0080u
+#define AWB_NORMAL_RG_TH_HIGH      0x0200u
+#define AWB_NORMAL_BG_TH_LOW       0x0080u
+#define AWB_NORMAL_BG_TH_HIGH      0x0200u
+#define AWB_DEFAULT_POINTPOS_LOW   0x0100u
+#define AWB_DEFAULT_POINTPOS_HIGH  0x0000u
+#define AWB_DEFAULT_COF_LOW        0x0100u
+#define AWB_DEFAULT_COF_HIGH       0x0fffu
+
 static uint8_t _awb_parameter[0xb4];
 static uint32_t _pixel_cnt_th;
 static uint32_t _awb_lowlight_rg_th[2];
@@ -8371,17 +8383,23 @@ void tiziano_awb_params_refresh(void)
  */
 static int tiziano_awb_set_hardware_param(void)
 {
+	static const u32 awb_default_v30 =
+		(AWB_DEFAULT_POINTPOS_HIGH << 16) | AWB_DEFAULT_POINTPOS_LOW;
+	static const u32 awb_default_v34 =
+		(AWB_DEFAULT_COF_HIGH << 16) | AWB_DEFAULT_COF_LOW;
+	static const u32 awb_default_rg =
+		(AWB_NORMAL_RG_TH_HIGH << 16) | AWB_NORMAL_RG_TH_LOW;
+	static const u32 awb_default_bg =
+		(AWB_NORMAL_BG_TH_HIGH << 16) | AWB_NORMAL_BG_TH_LOW;
+
     /* One-time pack of _awb_parameter into AWB registers (0xb008..0xb024) */
     static int awb_first;
     if (!awb_first) {
         awb_first = 1;
         const uint8_t *p = _awb_parameter;
         u32 val;
-        /* 0xb004: write control dword directly from _awb_parameter[0..3] (BN Reg2par mapping) */
-        {
-            u32 ctrl = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
-            system_reg_write(0x0b004, ctrl);
-        }
+        /* OEM: 0xb004 encodes AWB stats geometry/control as 0xf001f001. */
+        system_reg_write(0x0b004, AWB_STATS_CFG_WORD);
         /* 0xb008: p[0..3] */
         val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
         system_reg_write(0x0b008, val);
@@ -8418,7 +8436,7 @@ static int tiziano_awb_set_hardware_param(void)
             system_reg_write_awb(1, 0x0b030, 0x00000100);
             system_reg_write_awb(1, 0x0b034, 0xffff0100);
         } else {
-            /* 0xb028/0xb02c thresholds: select by ModeFlag (_awb_mode[0]) */
+            /* OEM: normal thresholds are fixed defaults; low-light swaps only 0xb028/0xb02c. */
             u32 mode = _awb_mode[0];
             if (mode == 1) {
                 u32 rg_lo = (_awb_lowlight_rg_th[0] & 0x0FFF);
@@ -8426,25 +8444,12 @@ static int tiziano_awb_set_hardware_param(void)
                 system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
                 system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
             } else {
-                const uint8_t *q = _awb_parameter;
-                u32 w22 = (u32)q[0x22*4] | ((u32)q[0x22*4+1] << 8) | ((u32)q[0x22*4+2] << 16) | ((u32)q[0x22*4+3] << 24);
-                u32 w23 = (u32)q[0x23*4] | ((u32)q[0x23*4+1] << 8) | ((u32)q[0x23*4+2] << 16) | ((u32)q[0x23*4+3] << 24);
-                u32 w24 = (u32)q[0x24*4] | ((u32)q[0x24*4+1] << 8) | ((u32)q[0x24*4+2] << 16) | ((u32)q[0x24*4+3] << 24);
-                u32 w25 = (u32)q[0x25*4] | ((u32)q[0x25*4+1] << 8) | ((u32)q[0x25*4+2] << 16) | ((u32)q[0x25*4+3] << 24);
-                u32 rg_lo = (w22 & 0x0FFF);
-                u32 rg_hi = (w23 & 0x0FFF) << 16;
-                u32 bg_lo = (w24 & 0x0FFF);
-                u32 bg_hi = (w25 & 0x0FFF) << 16;
-                system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
-                system_reg_write_awb(1, 0x0b02c, bg_hi | bg_lo);
+                system_reg_write_awb(1, 0x0b028, awb_default_rg);
+                system_reg_write_awb(1, 0x0b02c, awb_default_bg);
             }
-            /* Program 0xb030/0xb034 from mapped params when available; fallback to vendor defaults */
-            u32 p0 = _AwbPointPos[0], p1 = _AwbPointPos[1];
-            u32 c0 = _awb_cof[0],     c1 = _awb_cof[1];
-            u32 v30 = ((p0 | p1) == 0) ? 0x00000100 : (((p1 & 0xFFFF) << 16) | (p0 & 0xFFFF));
-            u32 v34 = ((c0 | c1) == 0) ? 0xffff0100 : (((c1 & 0xFFFF) << 16) | (c0 & 0xFFFF));
-            system_reg_write_awb(1, 0x0b030, v30);
-            system_reg_write_awb(1, 0x0b034, v34);
+            system_reg_write_awb(1, 0x0b030, awb_default_v30);
+            system_reg_write_awb(1, 0x0b034, awb_default_v34);
+			tiziano_awb_set_lum_th_freq();
         }
     }
 
@@ -11543,6 +11548,21 @@ static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags)
 	return 0;
 }
 
+static void tiziano_awb_fill_zone_geometry(uint32_t height, uint32_t width)
+{
+	u32 half_width = width >> 1;
+	u32 half_height = height >> 1;
+	u32 cell_width = half_width / AWB_ZONE_COLS;
+	u32 cell_height = half_height / AWB_ZONE_ROWS;
+	u32 i;
+
+	for (i = 0; i < AWB_ZONE_COLS; ++i)
+		memcpy(&_awb_parameter[(4 + i) * sizeof(u32)], &cell_width, sizeof(cell_width));
+
+	for (i = 0; i < AWB_ZONE_ROWS; ++i)
+		memcpy(&_awb_parameter[(19 + i) * sizeof(u32)], &cell_height, sizeof(cell_height));
+}
+
 static int tiziano_awb_set_lum_th_freq(void)
 {
 	/* OEM updates 0xb038 from AE mean statistics here.
@@ -11601,6 +11621,7 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 
     /* OEM EXACT: load AWB params from tuning bin BEFORE hardware config */
     tiziano_awb_params_refresh();
+	tiziano_awb_fill_zone_geometry(height, width);
 
     /* Enable AWB hardware blocks */
     system_reg_write(0xb000, 1);
