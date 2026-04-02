@@ -2138,6 +2138,12 @@ irqreturn_t awb_interrupt_static_wrapper(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+irqreturn_t adr_interrupt_static_wrapper(int irq, void *dev_id)
+{
+    tiziano_adr_interrupt_static();
+    return IRQ_HANDLED;
+}
+
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
 /* Global AE data structures - from Binary Ninja analysis */
@@ -15455,10 +15461,7 @@ int tiziano_adr_interrupt_static(void)
 {
     uint32_t reg_val;
     uint32_t phys_base;
-    struct {
-        uint32_t pad[2];
-        uint32_t event_id;
-    } event_data;
+    struct tisp_event_record event_data = {0};
 
     /* Step 1: Write current kneepoint params to hardware registers */
     tisp_adr_set_params();
@@ -15471,24 +15474,23 @@ int tiziano_adr_interrupt_static(void)
         goto push_event;
 
     /* Step 3-4: Find matching buffer, sync cache, parse data
-     * OEM checks 4 buffers: phys, phys+0x1000, phys+0x2000, phys+0x3000 */
+     * OEM: private_dma_cache_sync(0, virt+offset, 0x1000, 0) then tiziano_adr_get_data() */
     if (reg_val == phys_base) {
-        dma_cache_wback_inv((unsigned long)adr_dma_virt, 0x1000);
+        private_dma_cache_sync(NULL, adr_dma_virt, 0x1000, 0);
         tiziano_adr_get_data((uint32_t *)adr_dma_virt);
     } else if (reg_val == phys_base + 0x1000) {
-        dma_cache_wback_inv((unsigned long)adr_dma_virt + 0x1000, 0x1000);
+        private_dma_cache_sync(NULL, (char *)adr_dma_virt + 0x1000, 0x1000, 0);
         tiziano_adr_get_data((uint32_t *)((char *)adr_dma_virt + 0x1000));
     } else if (reg_val == phys_base + 0x2000) {
-        dma_cache_wback_inv((unsigned long)adr_dma_virt + 0x2000, 0x1000);
+        private_dma_cache_sync(NULL, (char *)adr_dma_virt + 0x2000, 0x1000, 0);
         tiziano_adr_get_data((uint32_t *)((char *)adr_dma_virt + 0x2000));
     } else if (reg_val == phys_base + 0x3000) {
-        dma_cache_wback_inv((unsigned long)adr_dma_virt + 0x3000, 0x1000);
+        private_dma_cache_sync(NULL, (char *)adr_dma_virt + 0x3000, 0x1000, 0);
         tiziano_adr_get_data((uint32_t *)((char *)adr_dma_virt + 0x3000));
     }
 
 push_event:
     /* Step 5: Push event 2 to trigger tisp_adr_process via event queue */
-    memset(&event_data, 0, sizeof(event_data));
     event_data.event_id = 2;
     tisp_event_push(&event_data);
 
@@ -15569,7 +15571,7 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     }
 
     /* Binary Ninja EXACT: OEM uses system_irq_func_set for IRQ, tisp_event_set_cb for event */
-    system_irq_func_set(0x12, tiziano_adr_interrupt_static);
+    system_irq_func_set(0x12, adr_interrupt_static_wrapper);
     tisp_event_set_cb(2, tisp_adr_process);
 
     pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
