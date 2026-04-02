@@ -1408,7 +1408,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A8BDFB6;  /* OEM-matching whitelist: enables GIB(5), ADR(7), SDNS(15), MDNS(16). Produces OEM-exact bypass 0xb5742249. */
+ static uint isp_block_enable = 0x4A8BDFB6;  /* GIB(5)+ADR(7)+SDNS(15)+MDNS(16) enabled. Matches OEM target bypass 0xb5742249. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -15188,44 +15188,17 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 
 	if (mdns_runtime_parked) {
 		mdns_last_refresh_key = data_9a9d0;
-		pr_info("tiziano_mdns_init: MDNS runtime programming parked; keeping tables/ratios in RAM and leaving top-level MDNS bypassed for streaming bring-up\n");
+		pr_info("tiziano_mdns_init: MDNS runtime programming parked\n");
 		return 0;
 	}
 
-	/* Phased MDNS register programming with diagnostic logging.
-	 * Each step prints before/after so we can identify hangs on serial console. */
-	pr_info("MDNS_DIAG: Step 1 - writing trigger reg 0x7804=0x110...\n");
-	system_reg_write(0x7804, 0x110);
-	pr_info("MDNS_DIAG: Step 1 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 2 - tisp_mdns_y_3d_param_cfg...\n");
-	tisp_mdns_y_3d_param_cfg();
-	pr_info("MDNS_DIAG: Step 2 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 3 - tisp_mdns_y_2d_param_cfg...\n");
-	tisp_mdns_y_2d_param_cfg();
-	pr_info("MDNS_DIAG: Step 3 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 4 - tisp_mdns_c_3d_param_cfg...\n");
-	tisp_mdns_c_3d_param_cfg();
-	pr_info("MDNS_DIAG: Step 4 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 5 - tisp_mdns_c_2d_param_cfg...\n");
-	tisp_mdns_c_2d_param_cfg();
-	pr_info("MDNS_DIAG: Step 5 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 6 - tisp_mdns_top_func_cfg(1)...\n");
-	tisp_mdns_top_func_cfg(1);
-	pr_info("MDNS_DIAG: Step 6 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 7 - tisp_mdns_top_func_refresh + trigger...\n");
-	tisp_mdns_top_func_refresh();
-	tisp_mdns_reg_trigger();
-	pr_info("MDNS_DIAG: Step 7 - OK\n");
-
-	pr_info("MDNS_DIAG: Step 8 - tisp_mdns_bypass(0)...\n");
+	/* OEM EXACT: tisp_mdns_par_refresh(interp_key, threshold) followed by bypass(0).
+	 * With mdns_last_refresh_key == 0xffffffff, par_refresh takes the
+	 * first-time path which calls tisp_mdns_all_reg_refresh → full
+	 * register programming + top_func_refresh + trigger. */
+	tisp_mdns_par_refresh(data_9a9d0, data_9a9d0);
 	tisp_mdns_bypass(0);
-	pr_info("MDNS_DIAG: Step 8 - OK. MDNS fully initialized.\n");
+	pr_info("tiziano_mdns_init: MDNS initialized via OEM par_refresh path\n");
 
     return 0;
 }
