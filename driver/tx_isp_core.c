@@ -824,6 +824,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 int tisp_lsc_write_lut_datas(void);
+int awb_interrupt_static(void);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
 /* Debug macro for sensor functions */
@@ -1726,6 +1727,12 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
          * Previous code skipped this during streaming which broke per-frame
          * LSC LUT updates that the pipeline may depend on. */
         tisp_lsc_write_lut_datas();
+
+        /* Driver-side fallback: AWB IRQ bit 30 is currently silent in runtime
+         * logs, so the OEM awb_interrupt_static() path never runs. Poll the
+         * AWB stats page from the reliable IP-done path so JZ_Isp_Awb() can
+         * still feed CT updates back into CCM/LSC. */
+        awb_interrupt_static();
     }
 
     pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
