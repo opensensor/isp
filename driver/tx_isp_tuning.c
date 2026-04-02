@@ -11245,8 +11245,18 @@ static void tisp_ae1_process(void)
     if (cur_expo < 0x20) cur_expo = 0x20;
     if (cur_expo > MAX_EXPO) cur_expo = MAX_EXPO;
 
-    /* tisp_set_sensor_integration_time: void(uint32_t) — writes to sensor I2C */
-    tisp_set_sensor_integration_time(cur_expo);
+    /* Write directly to sensor via TX_ISP_EVENT_SENSOR_EXPO.
+     * Format: (analog_gain_idx << 16) | integration_time.
+     * Use gain_idx=0 (default) and vary integration time only. */
+    {
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev && ourISPdev->sensor) {
+            struct tx_isp_sensor *sensor = ourISPdev->sensor;
+            int expo_val = (0 << 16) | (cur_expo & 0xffff);
+            tx_isp_send_event_to_remote(&sensor->sd,
+                TX_ISP_EVENT_SENSOR_EXPO, &expo_val);
+        }
+    }
 
     {
         static int ae_log;
