@@ -1408,7 +1408,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A8ADFB6;  /* Enable GIB(5) but NOT MDNS(16) — isolate GIB testing. MDNS is stubbed. */
+ static uint isp_block_enable = 0x4A8BDFB6;  /* OEM-matching whitelist: enables GIB(5), ADR(7), SDNS(15), MDNS(16). Produces OEM-exact bypass 0xb5742249. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -1523,7 +1523,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 1;    /* Keep OEM-reversed MDNS tables/helpers in-tree, but park runtime MMIO until the bring-up sequence is proven not to wedge hardware. */
+static int mdns_runtime_parked = 0;    /* MDNS fully implemented — unparked for OEM-matching operation. */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -18392,12 +18392,6 @@ static int tisp_mdns_top_func_refresh(void)
 
 static int tisp_mdns_bypass(int bypass)
 {
-	if (mdns_runtime_parked) {
-		pr_info("tisp_mdns_bypass: MDNS runtime programming parked; skip bypass register update (%d)\n",
-			bypass);
-		return 0;
-	}
-
     tisp_mdns_top_func_cfg(bypass ? 0 : 1);
     tisp_mdns_top_func_refresh();
     tisp_mdns_reg_trigger();
@@ -18407,14 +18401,6 @@ static int tisp_mdns_bypass(int bypass)
 static int tisp_mdns_par_refresh(uint32_t interp_key, uint32_t threshold)
 {
     u32 diff;
-
-	if (mdns_runtime_parked) {
-		mdns_last_refresh_key = interp_key;
-		data_9a9d0 = interp_key;
-		pr_info("tisp_mdns_par_refresh: MDNS runtime programming parked; cached interp_key=0x%x threshold=0x%x\n",
-			interp_key, threshold);
-		return 0;
-	}
 
     if (mdns_last_refresh_key == 0xffffffff) {
         mdns_last_refresh_key = interp_key;
@@ -18444,14 +18430,6 @@ static int tisp_mdns_all_reg_refresh(uint32_t interp_key)
 {
     data_9a9d0 = interp_key;
 
-	if (mdns_runtime_parked) {
-		pr_info("tisp_mdns_all_reg_refresh: MDNS runtime programming parked; skip hardware refresh for interp_key=0x%x\n",
-			interp_key);
-		return 0;
-	}
-
-    pr_info("tisp_mdns_all_reg_refresh: Refreshing MDNS registers for interp_key=0x%x\n", interp_key);
-
     tisp_mdns_intp_reg_refresh(interp_key);
     tisp_mdns_top_func_cfg(1);
 
@@ -18461,16 +18439,7 @@ static int tisp_mdns_all_reg_refresh(uint32_t interp_key)
 /* tisp_mdns_reg_trigger - Binary Ninja EXACT implementation */
 static int tisp_mdns_reg_trigger(void)
 {
-	if (mdns_runtime_parked) {
-		pr_info("tisp_mdns_reg_trigger: MDNS runtime programming parked; skip trigger write\n");
-		return 0;
-	}
-
-    pr_info("tisp_mdns_reg_trigger: Triggering MDNS register update\n");
-
-    /* Binary Ninja: system_reg_write(0x7804, 0x111); */
     system_reg_write(0x7804, 0x111);
-
     return 0;
 }
 
