@@ -1360,7 +1360,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A8A5F16;  /* Restore the last known streaming-safe whitelist: keep GIB(5), ADR(7), SDNS(15), and MDNS(16) bypassed until their OEM bring-up is validated end-to-end. */
+ static uint isp_block_enable = 0x4A8ADF96;  /* Enable ADR(7) and SDNS(15) — both have full implementations. Keep GIB(5) bypassed (stub init) and MDNS(16) bypassed (parked). */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
