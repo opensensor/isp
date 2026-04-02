@@ -12616,6 +12616,153 @@ static void tiziano_gib_deir_interpolate(uint32_t *out,
     }
 }
 
+/* OEM EXACT: tiziano_gib_deir_ir_interpolation — select DEIR zone and program registers.
+ * Thresholds: gib_ir_point[3] > [2] > [1] > [0] (high to low IR).
+ * Zones: 0=_h, 1=interp(_h,_m), 2=_m, 3=interp(_m,_l), 4=_l */
+static int tiziano_gib_deir_ir_interpolation(uint32_t ir_val)
+{
+    static uint32_t deir_flag = 0;
+    static uint32_t deir_flag_last = 0;
+    static uint32_t gib_deir_r[33];
+    static uint32_t gib_deir_g[33];
+    static uint32_t gib_deir_b[33];
+
+    /* Determine zone based on IR thresholds */
+    if (gib_ir_point[3] >= ir_val) {
+        if (gib_ir_point[2] < ir_val)
+            deir_flag = 1;  /* between _h and _m */
+        else if (gib_ir_point[1] < ir_val)
+            deir_flag = 2;  /* exactly _m */
+        else if (gib_ir_point[0] >= ir_val)
+            deir_flag = 4;  /* exactly _l */
+        else
+            deir_flag = 3;  /* between _m and _l */
+    } else {
+        deir_flag = 0;      /* above all thresholds: _h */
+    }
+
+    /* Hysteresis logic: only update when zone actually changes */
+    if (deir_flag != 0) {
+        if (deir_flag != 2 && deir_flag != 4) {
+            deir_flag_last = deir_flag;
+        } else if (deir_flag_last != deir_flag) {
+            deir_flag_last = deir_flag;
+        } else {
+            return deir_flag;
+        }
+    } else {
+        if (deir_flag_last != 0)
+            deir_flag_last = deir_flag;
+    }
+
+    if (deir_flag >= 5)
+        return deir_flag;
+
+    switch (deir_flag) {
+    case 0:  /* High IR: use _h arrays directly */
+        return tiziano_gib_deir_reg(tiziano_gib_deir_r_h,
+                                     tiziano_gib_deir_g_h,
+                                     tiziano_gib_deir_b_h);
+    case 1:  /* Interpolate between _h and _m */
+        tiziano_gib_deir_interpolate(gib_deir_r, ir_val,
+            gib_ir_point[3], gib_ir_point[2],
+            tiziano_gib_deir_r_h, tiziano_gib_deir_r_m);
+        tiziano_gib_deir_interpolate(gib_deir_g, ir_val,
+            gib_ir_point[3], gib_ir_point[2],
+            tiziano_gib_deir_g_h, tiziano_gib_deir_g_m);
+        tiziano_gib_deir_interpolate(gib_deir_b, ir_val,
+            gib_ir_point[3], gib_ir_point[2],
+            tiziano_gib_deir_b_h, tiziano_gib_deir_b_m);
+        return tiziano_gib_deir_reg(gib_deir_r, gib_deir_g, gib_deir_b);
+    case 2:  /* Medium IR: use _m arrays directly */
+        return tiziano_gib_deir_reg(tiziano_gib_deir_r_m,
+                                     tiziano_gib_deir_g_m,
+                                     tiziano_gib_deir_b_m);
+    case 3:  /* Interpolate between _m and _l */
+        tiziano_gib_deir_interpolate(gib_deir_r, ir_val,
+            gib_ir_point[1], gib_ir_point[0],
+            tiziano_gib_deir_r_m, tiziano_gib_deir_r_l);
+        tiziano_gib_deir_interpolate(gib_deir_g, ir_val,
+            gib_ir_point[1], gib_ir_point[0],
+            tiziano_gib_deir_g_m, tiziano_gib_deir_g_l);
+        tiziano_gib_deir_interpolate(gib_deir_b, ir_val,
+            gib_ir_point[1], gib_ir_point[0],
+            tiziano_gib_deir_b_m, tiziano_gib_deir_b_l);
+        return tiziano_gib_deir_reg(gib_deir_r, gib_deir_g, gib_deir_b);
+    case 4:  /* Low IR: use _l arrays directly */
+        return tiziano_gib_deir_reg(tiziano_gib_deir_r_l,
+                                     tiziano_gib_deir_g_l,
+                                     tiziano_gib_deir_b_l);
+    }
+
+    return deir_flag;
+}
+
+/* OEM EXACT: tisp_gib_deir_ir_update — runtime DEIR update callback.
+ * Called with current IR value; updates DEIR coefficients if delta exceeds threshold. */
+int tisp_gib_deir_ir_update(uint32_t ir_val)
+{
+    gib_ir_value[0] = ir_val;
+
+    if (GIB_CFG_DEIR_EN == 1 && gib_ir_mode[0] == 1) {
+        uint32_t delta;
+        if (gib_ir_value[1] >= ir_val)
+            delta = gib_ir_value[1] - ir_val;
+        else
+            delta = ir_val - gib_ir_value[1];
+
+        if (gib_ir_mode[1] < delta || trig_set_deir == 1) {
+            trig_set_deir = 0;
+            tiziano_gib_deir_ir_interpolation(ir_val);
+            gib_ir_value[1] = gib_ir_value[0];
+        }
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_gib_deir_ir_update);
+
+/* OEM EXACT: tiziano_gib_dn_params_refresh — Day/Night transition handler.
+ * Reloads GIB parameters and updates LUT, but does NOT reprogram DEIR coefficients. */
+int tiziano_gib_dn_params_refresh(void)
+{
+    tiziano_gib_params_refresh();
+
+    if (deir_en != 1)
+        GIB_CFG_DEIR_EN = 0;
+    else if (ourISPdev->day_night != 0)
+        GIB_CFG_DEIR_EN = 0;
+    else
+        GIB_CFG_DEIR_EN = deir_en;
+
+    tiziano_gib_lut_parameter();
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_gib_dn_params_refresh);
+
+/* OEM EXACT: tiziano_gib_init — full GIB initialization.
+ * Loads params, configures DEIR enable, programs LUT and DEIR coefficient registers. */
+int tiziano_gib_init(void)
+{
+    tiziano_gib_params_refresh();
+
+    if (deir_en != 1)
+        GIB_CFG_DEIR_EN = 0;
+    else if (ourISPdev->day_night != 0)
+        GIB_CFG_DEIR_EN = 0;
+    else
+        GIB_CFG_DEIR_EN = deir_en;
+
+    tiziano_gib_lut_parameter();
+    tiziano_gib_deir_reg(tiziano_gib_deir_r_m,
+                          tiziano_gib_deir_g_m,
+                          tiziano_gib_deir_b_m);
+
+    pr_info("tiziano_gib_init: GIB initialized (deir_en=%d, day_night=%d, DEIR_EN=%d)\n",
+            deir_en, ourISPdev->day_night, GIB_CFG_DEIR_EN);
+    return 0;
+}
+
 /* LSC parameter arrays - Binary Ninja reference */
 uint32_t lsc_mesh_str[64] = {0x800, 0x810, 0x820, 0x830, 0x840, 0x850, 0x860, 0x870, 0x880, 0x890, 0x8a0, 0x8b0, 0x8c0, 0x8d0, 0x8e0, 0x8f0};
 uint32_t lsc_mesh_str_wdr[64] = {0x900, 0x910, 0x920, 0x930, 0x940, 0x950, 0x960, 0x970, 0x980, 0x990, 0x9a0, 0x9b0, 0x9c0, 0x9d0, 0x9e0, 0x9f0};
