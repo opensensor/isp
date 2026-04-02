@@ -7800,7 +7800,7 @@ static void Tiziano_ae1_fpga(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32
 
 
 /* Guard to prevent per-frame sensor I2C writes; default off to match was-better */
-static bool live_sensor_sync = false;            /* set true to re-enable live AE writes */
+static bool live_sensor_sync = true;             /* Enable live AE sensor writes (exposure/gain) */
 static uint32_t last_integration_time_sent = 0xffffffff;
 static uint32_t last_gain_sent = 0xffffffff;
 
