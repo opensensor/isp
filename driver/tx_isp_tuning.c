@@ -15217,8 +15217,12 @@ void tiziano_adr_params_refresh(void)
     pr_debug("tiziano_adr_params_refresh: ADR ratio updated to 0x%x\n", adr_ratio);
 }
 
-/* tisp_adr_set_params - Binary Ninja EXACT implementation
- * OEM reads directly from min_kneepoint_y[], ctc_kneepoint_y[], map_kneepoint_y[]
+/* tisp_adr_set_params - Hybrid implementation
+ * Sections 1+2: OEM-exact kneepoint_y writes (min and ctc)
+ * Section 3: Use existing tisp_adr_build_lut_payload for LUT window (0x4084-0x4290)
+ *            until Tiziano_adr_fpga is fully ported to compute map_kneepoint_y.
+ *
+ * OEM structure:
  * 1) 0x4390..0x43a0: min_kneepoint_y pairs; 0x43a4: data_9f0a8
  * 2) 0x4354..0x4360: ctc_kneepoint_y pairs; 0x4364: data_9f0cc
  * 3) 0x4084..0x4290: map_kneepoint_y pairs (132 regs = 264 entries) */
@@ -15226,6 +15230,9 @@ static int tisp_adr_set_params(void)
 {
     uint32_t *s0;
     uint32_t i;
+
+    if (!s_adr_hw_apply)
+        return 0;
 
     /* 1) min_kneepoint_y → regs 0x4390..0x43a0 (5 regs, 10 entries as pairs) */
     s0 = min_kneepoint_y;
@@ -15243,11 +15250,17 @@ static int tisp_adr_set_params(void)
     }
     system_reg_write(0x4364, data_9f0cc);
 
-    /* 3) map_kneepoint_y → regs 0x4084..0x4290 (132 regs, 264 entries as pairs) */
-    s0 = map_kneepoint_y;
-    for (i = 0x4084; i != 0x4294; i += 4) {
-        system_reg_write(i, (s0[1] << 16) | (s0[0] & 0xFFFF));
-        s0 += 2;
+    /* 3) LUT window payload (0x4084..0x4290): use existing composite builder
+     * until Tiziano_adr_fpga computes proper map_kneepoint_y values */
+    {
+        uint32_t out_words[ADR_LUT_WORD_COUNT];
+        int w = tisp_adr_build_lut_payload(out_words, ADR_LUT_WORD_COUNT);
+
+        while (w < (int)ADR_LUT_WORD_COUNT) out_words[w++] = 0;
+
+        uint32_t addr = ADR_LUT_START;
+        for (i = 0; i < (int)ADR_LUT_WORD_COUNT; ++i, addr += 4)
+            system_reg_write(addr, out_words[i]);
     }
 
     return 0;
