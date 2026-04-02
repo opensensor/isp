@@ -1406,7 +1406,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  */
- static uint isp_block_enable = 0x4A8ADF96;  /* Enable ADR(7) and SDNS(15) — both have full implementations. Keep GIB(5) bypassed (stub init) and MDNS(16) bypassed (parked). */
+ static uint isp_block_enable = 0x4A8BDFB6;  /* OEM-matching whitelist: enables GIB(5), ADR(7), SDNS(15), MDNS(16). Produces OEM-exact bypass 0xb5742249. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -3125,7 +3125,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     }
 
     /* Binary Ninja: AWB statistics buffer (0x4000 bytes) → regs 0xb03c-0xb04c */
-    void *awb_buffer = kmalloc(0x4000, GFP_KERNEL);
+    void *awb_buffer = kzalloc(0x4000, GFP_KERNEL);
     if (awb_buffer != NULL) {
         dma_addr_t awb_phys = virt_to_phys(awb_buffer);
         data_a2f5c = (uint32_t)(unsigned long)awb_buffer;
@@ -11640,6 +11640,27 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 
 	JZ_Isp_Awb_Awbg2reg(gain_pair, reg_pair);
 
+	/* Sanity check: reject wildly out-of-range gains.
+	 * Normal AWB gains are in the range ~500-6000.  Values outside
+	 * ~100-10000 indicate bad AWB statistics (e.g. DMA buffer not
+	 * yet populated by hardware).  Skip hardware write to keep the
+	 * previous good gains intact. */
+	{
+		u32 gr_val = reg_pair[0] & 0xffff;
+		u32 gb_val = reg_pair[1] & 0xffff;
+
+		if (gr_val < 100 || gr_val > 10000 || gb_val < 100 || gb_val > 10000) {
+			static unsigned int awb_reject_count;
+			awb_reject_count++;
+			if (awb_reject_count <= 5 || (awb_reject_count % 300) == 0)
+				pr_info("Tiziano_awb_set_gain[%u]: REJECTED out-of-range "
+					"base=%u,%u mf=%u,%u -> awb_gain=%u,%u\n",
+					awb_reject_count, base_gr, base_gb,
+					mf_gr, mf_gb, gr_val, gb_val);
+			return 0;
+		}
+	}
+
 	if (ourISPdev && ourISPdev->tuning_data) {
 		struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
@@ -11939,14 +11960,26 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		}
 	}
 
-	if (active_zones == 0 || weight_sum == 0)
+	if (active_zones == 0 || weight_sum == 0) {
+		static unsigned int awb_no_zones_count;
+		awb_no_zones_count++;
+		if (awb_no_zones_count <= 3 || (awb_no_zones_count % 300) == 0)
+			pr_info("Tiziano_awb_fpga[%u]: NO active zones (all stats zero?)\n",
+				awb_no_zones_count);
 		return 0;
+	}
 
 	if (!force_recalc) {
 		u32 avg_diff = (uint32_t)div_u64(diff_sum + (active_zones >> 1), active_zones);
 
-		if (avg_diff < diff_threshold)
+		if (avg_diff < diff_threshold) {
+			static unsigned int awb_stable_count;
+			awb_stable_count++;
+			if (awb_stable_count <= 3 || (awb_stable_count % 300) == 0)
+				pr_info("Tiziano_awb_fpga[%u]: stable (diff=%u < thr=%u), skip update\n",
+					awb_stable_count, avg_diff, diff_threshold);
 			return awb_moa;
+		}
 	}
 
 	memcpy(awb_zone_rg_last, awb_zone_rg, sizeof(awb_zone_rg));
@@ -12095,6 +12128,12 @@ static int JZ_Isp_Awb(void)
 		(_awb_lowlight_rg_th[0] & 0x0fff);
 	u32 switch_ev = _awb_mode[2] << 10;
 	struct tisp_event_record event_data = {0};
+	static unsigned int awb_algo_count;
+
+	awb_algo_count++;
+	if (awb_algo_count <= 3 || (awb_algo_count % 300) == 0)
+		pr_info("JZ_Isp_Awb[%u]: ct=%u ev_data=%u algo_mode=%u\n",
+			awb_algo_count, _awb_ct, awb_ev_data, awb_algo_mode);
 
 	_awb_ct_last = _awb_ct;
 	if (awb_algo_mode == 1) {
@@ -12149,6 +12188,8 @@ int awb_interrupt_static(void)
 	struct tisp_event_record event_data = {0};
 	uint32_t awb_status;
 	void *buffer_addr;
+	static unsigned int awb_isr_count;
+	int push_ret;
 
 	if (data_a2f5c == 0)
 		return 0;
@@ -12160,7 +12201,22 @@ int awb_interrupt_static(void)
 	tiziano_awb_set_lum_th_freq();
 
 	event_data.event_id = 0xa;
-	tisp_event_push(&event_data);
+	push_ret = tisp_event_push(&event_data);
+
+	awb_isr_count++;
+	if (awb_isr_count <= 30 || (awb_isr_count % 300) == 0) {
+		u32 *raw = (u32 *)buffer_addr;
+		pr_info("awb_interrupt_static[%u]: status=0x%x buf=%p base=0x%x push=%d\n",
+			awb_isr_count, awb_status, buffer_addr, data_a2f5c, push_ret);
+		pr_info("  raw DMA[0..7]: %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]);
+		pr_info("  parsed: r[0]=%u g[0]=%u b[0]=%u ir[0]=%u p[0]=%u\n",
+			awb_array_r[0], awb_array_g[0], awb_array_b[0],
+			awb_array_ir[0], awb_array_p[0]);
+		pr_info("  AWB regs: 0xb000=0x%x 0xb004=0x%x 0xb03c=0x%x 0xb050=0x%x\n",
+			system_reg_read(0xb000), system_reg_read(0xb004),
+			system_reg_read(0xb03c), system_reg_read(0xb050));
+	}
 	return 1;
 }
 
