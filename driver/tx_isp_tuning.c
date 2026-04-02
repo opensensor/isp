@@ -1005,11 +1005,57 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
 static uint32_t adr_ratio = 0;
 static uint32_t adr_wdr_en = 0;
 static uint32_t ev_changed = 0;
+static uint32_t ev_now = 0;
 static uint32_t histSub_4096_diff[0x20/4] = {0};
 static uint32_t *adr_mapb1_list_now = NULL;
 static uint32_t *adr_mapb2_list_now = NULL;
 static uint32_t *adr_mapb3_list_now = NULL;
 static uint32_t *adr_mapb4_list_now = NULL;
+static uint32_t *adr_ev_list_now = NULL;
+static uint32_t *adr_map_mode_now = NULL;
+static uint32_t *adr_block_light_now = NULL;
+static uint32_t *adr_light_end_now = NULL;
+static uint32_t *adr_ctc_map2cut_y_now = NULL;
+static uint32_t *adr_ligb_list_now = NULL;
+static uint32_t *adr_blp2_list_now = NULL;
+/* ADR DMA buffer tracking (OEM: data_a2f68 / data_a2f6c) */
+static void *adr_dma_virt = NULL;
+static uint32_t adr_dma_phys = 0;
+/* ADR algorithm arrays - OEM: min/ctc/map kneepoint_y/x */
+static uint32_t min_kneepoint_y[10] = {0};
+static uint32_t min_kneepoint_x[11] = {0};
+static uint32_t ctc_kneepoint_y[8] = {0};
+static uint32_t ctc_kneepoint_x[9] = {0};
+static uint32_t map_kneepoint_y[264] = {0};  /* 24 blocks × 11 entries */
+static uint32_t map_kneepoint_x[11] = {0};
+static uint32_t map_kneepoint_y_pre[264] = {0};
+/* ADR statistics arrays from DMA */
+static uint32_t adr_hist[512] = {0};
+static uint32_t adr_block_y[24] = {0};
+static uint32_t adr_block_hist[720] = {0};
+static uint32_t adr_hist_512[512] = {0};
+static uint32_t block_mean_y[24] = {0};
+static uint32_t data_c00c8 = 0;
+static uint32_t data_c00cc = 0;
+static uint32_t data_980b0[512] = {0};  /* Normalized histogram */
+/* ADR algorithm control (OEM: data_9ce4c, data_9ce70, etc.) */
+static uint32_t data_9ce4c = 1;  /* CTC enable flag */
+static uint32_t data_9ce6c = 0;  /* Smoothing iteration count */
+static uint32_t data_9ce70 = 1;  /* Temporal smoothing enable */
+static uint32_t data_9ce74 = 0x100;  /* Smoothing step size */
+/* ADR constants for tisp_adr_set_params (OEM: data_9f0a8, data_9f0cc) */
+static uint32_t data_9f0a8 = 0x800;
+static uint32_t data_9f0cc = 0x400;
+/* OEM parameter data refs for tiziano_adr_algorithm */
+static uint32_t data_9f79c = 0;
+static uint32_t data_9f7bc = 0;
+static uint32_t data_9f7d0 = 0;
+static uint32_t data_9f7f0 = 0;
+/* ADR FPGA struct pointer (OEM: TizianoAdrFpgaStructMe) */
+static void *TizianoAdrFpgaStructMe = NULL;
+/* ADR param array def (used by algorithm for default init) */
+static uint32_t param_adr_min_kneepoint_array_def[0x5c/4] = {0};
+static uint8_t param_adr_gam_y_array_def[0x102] = {0};
 static uint32_t adr_base_values[9] = {0x100, 0x120, 0x140, 0x160, 0x180, 0x1a0, 0x1c0, 0x1e0, 0x200};
 static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x100};
 /* Debug gate: set to 1 to enable ADR/YDNS HW param writes */
@@ -3085,16 +3131,21 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         pr_info("*** tisp_init: AWB buffer allocated at 0x%08x ***\n", (uint32_t)awb_phys);
     }
 
-    /* Binary Ninja: AF buffer (0x4000 bytes) → regs 0x4494-0x44a4 */
-    void *af_buffer = kmalloc(0x4000, GFP_KERNEL);
-    if (af_buffer != NULL) {
-        dma_addr_t af_phys = virt_to_phys(af_buffer);
-        system_reg_write(0x4494, af_phys);
-        system_reg_write(0x4498, af_phys + 0x1000);
-        system_reg_write(0x449c, af_phys + 0x2000);
-        system_reg_write(0x44a0, af_phys + 0x3000);
+    /* Binary Ninja: ADR statistics DMA buffer (0x4000 bytes) → regs 0x4494-0x44a0
+     * OEM: data_a2f68 = virt, data_a2f6c = phys, written to ADR stat registers */
+    void *adr_buffer = kmalloc(0x4000, GFP_KERNEL);
+    if (adr_buffer != NULL) {
+        dma_addr_t adr_phys_addr = virt_to_phys(adr_buffer);
+        system_reg_write(0x4494, adr_phys_addr);
+        system_reg_write(0x4498, adr_phys_addr + 0x1000);
+        system_reg_write(0x449c, adr_phys_addr + 0x2000);
+        system_reg_write(0x44a0, adr_phys_addr + 0x3000);
         system_reg_write(0x44a4, 3);
-        pr_info("*** tisp_init: AF buffer allocated at 0x%08x ***\n", (uint32_t)af_phys);
+        /* Save for interrupt handler (OEM: data_a2f68/data_a2f6c) */
+        adr_dma_virt = adr_buffer;
+        adr_dma_phys = (uint32_t)adr_phys_addr;
+        pr_info("*** tisp_init: ADR DMA buffer virt=%p phys=0x%08x ***\n",
+                adr_buffer, (uint32_t)adr_phys_addr);
     }
 
     /* Binary Ninja: DPC buffer (0x4000 bytes) → regs 0x5b80-0x5b90 */
@@ -15160,57 +15211,37 @@ void tiziano_adr_params_refresh(void)
     pr_debug("tiziano_adr_params_refresh: ADR ratio updated to 0x%x\n", adr_ratio);
 }
 
-/* tisp_adr_set_params - Program ADR params per HLIL flow
- * 1) 0x4390..0x43a0: min_kneepoint_y pairs; 0x43a4: const
- * 2) 0x4354..0x4360: ctc_kneepoint_y pairs; 0x4364: const
- * 3) 0x4084..0x4290: LUT window payload (16:16 packed)
- * For (3), until we implement the full map_kneepoint_y builder, we fall back to the
- * existing composed payload to fill the exact 132 words. */
+/* tisp_adr_set_params - Binary Ninja EXACT implementation
+ * OEM reads directly from min_kneepoint_y[], ctc_kneepoint_y[], map_kneepoint_y[]
+ * 1) 0x4390..0x43a0: min_kneepoint_y pairs; 0x43a4: data_9f0a8
+ * 2) 0x4354..0x4360: ctc_kneepoint_y pairs; 0x4364: data_9f0cc
+ * 3) 0x4084..0x4290: map_kneepoint_y pairs (132 regs = 264 entries) */
 static int tisp_adr_set_params(void)
 {
-    if (!s_adr_hw_apply) {
-        pr_info("tisp_adr_set_params: HW apply disabled (skipping writes)\n");
-        return 0;
+    uint32_t *s0;
+    uint32_t i;
+
+    /* 1) min_kneepoint_y → regs 0x4390..0x43a0 (5 regs, 10 entries as pairs) */
+    s0 = min_kneepoint_y;
+    for (i = 0x4390; i != 0x43a4; i += 4) {
+        system_reg_write(i, (s0[1] << 16) | (s0[0] & 0xFFFF));
+        s0 += 2;
     }
+    system_reg_write(0x43a4, data_9f0a8);
 
-    /* 1) min_kneepoint_y: write 5 regs (10 entries as 5 pairs) starting at 0x4390 */
-    {
-        uint32_t base = 0x00004390;
-        /* Use first 10 entries from param_adr_min_kneepoint_array as proxy */
-        for (int k = 0; k < 10; k += 2, base += 4) {
-            uint32_t lo = param_adr_min_kneepoint_array[k] & 0xFFFF;
-            uint32_t hi = param_adr_min_kneepoint_array[k + 1] & 0xFFFF;
-            system_reg_write(base, PACK16_U32(hi, lo));
-        }
-        /* 0x43a4 constant per HLIL: data_af0b8 = 0x800 */
-        system_reg_write(0x000043a4, 0x800);
+    /* 2) ctc_kneepoint_y → regs 0x4354..0x4360 (4 regs, 8 entries as pairs) */
+    s0 = ctc_kneepoint_y;
+    for (i = 0x4354; i != 0x4364; i += 4) {
+        system_reg_write(i, (s0[1] << 16) | (s0[0] & 0xFFFF));
+        s0 += 2;
     }
+    system_reg_write(0x4364, data_9f0cc);
 
-    /* 2) ctc_kneepoint_y: write 4 regs (8 entries as 4 pairs) starting at 0x4354 */
-    {
-        uint32_t base = 0x00004354;
-        for (int k = 0; k < 8; k += 2, base += 4) {
-            uint32_t lo = param_adr_ctc_kneepoint_array[k] & 0xFFFF;
-            uint32_t hi = param_adr_ctc_kneepoint_array[k + 1] & 0xFFFF;
-            system_reg_write(base, PACK16_U32(hi, lo));
-        }
-        /* 0x4364 constant per HLIL: data_af0dc = 0x400 */
-        system_reg_write(0x00004364, 0x400);
-    }
-
-    /* 3) LUT window payload: reuse existing composed payload to fill 132 words */
-    {
-        uint32_t out_words[ADR_LUT_WORD_COUNT];
-        int w = tisp_adr_build_lut_payload(out_words, ADR_LUT_WORD_COUNT);
-
-        while (w < (int)ADR_LUT_WORD_COUNT) out_words[w++] = 0;
-        if (w > (int)ADR_LUT_WORD_COUNT) w = (int)ADR_LUT_WORD_COUNT;
-
-        uint32_t addr = ADR_LUT_START;
-        for (int i = 0; i < (int)ADR_LUT_WORD_COUNT; ++i, addr += 4)
-            system_reg_write(addr, out_words[i]);
-
-        pr_info("tisp_adr_set_params: Wrote %u ADR LUT words [%#x..%#x]\n", ADR_LUT_WORD_COUNT, ADR_LUT_START, ADR_LUT_END);
+    /* 3) map_kneepoint_y → regs 0x4084..0x4290 (132 regs, 264 entries as pairs) */
+    s0 = map_kneepoint_y;
+    for (i = 0x4084; i != 0x4294; i += 4) {
+        system_reg_write(i, (s0[1] << 16) | (s0[0] & 0xFFFF));
+        s0 += 2;
     }
 
     return 0;
