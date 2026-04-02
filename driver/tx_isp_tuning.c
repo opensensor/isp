@@ -12319,31 +12319,22 @@ int awb_interrupt_static(void)
 	private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
 	JZ_Isp_Get_Awb_Statistics(buffer_addr, 0xf001f001);
 
-	/* Check if AE DMA has data (AE interrupt never fires; check from AWB ISR) */
-	{
-		static int ae_check;
-		if (ae_check < 3 && data_b2f3c) {
-			uint32_t ae_stat = system_reg_read(0xa050);
-			void *ae_buf = (void *)(unsigned long)(data_b2f3c + ((ae_stat << 8) & 0x3000));
-			private_dma_cache_sync(NULL, ae_buf, 0x1000, 0);
-			uint32_t *ae_raw = (uint32_t *)ae_buf;
-			pr_info("AE0_CHECK[%d]: a050=0x%x base=0x%x raw[0..7]=%08x %08x %08x %08x %08x %08x %08x %08x\n",
-				ae_check, ae_stat, data_b2f3c,
-				ae_raw[0], ae_raw[1], ae_raw[2], ae_raw[3],
-				ae_raw[4], ae_raw[5], ae_raw[6], ae_raw[7]);
-			/* If data exists, parse and update AE zones */
-			if (ae_raw[0] != 0 || ae_raw[4] != 0) {
-				extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
-				uint32_t zones[225];
-				int i;
-				for (i = 0; i < 225; i++)
-					zones[i] = ae_raw[i * 4] & 0x1fffff;
-				tisp_ae_update_zone_data(zones, sizeof(zones));
-				pr_info("AE0_CHECK: populated zones! z[0]=%u z[112]=%u z[224]=%u\n",
-					zones[0], zones[112], zones[224]);
-			}
-			ae_check++;
-		}
+	/* AE interrupt (bits 26-29) never fires on this hardware revision.
+	 * Poll the AE DMA buffer from the AWB ISR instead, parse 21-bit Y
+	 * luminance per zone, and feed to ae_zone_data for libimp AE. */
+	if (data_b2f3c) {
+		extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
+		uint32_t ae_stat = system_reg_read(0xa050);
+		void *ae_buf = (void *)(unsigned long)(data_b2f3c + ((ae_stat << 8) & 0x3000));
+		uint32_t *ae_raw;
+		uint32_t zones[225];
+		int i;
+
+		private_dma_cache_sync(NULL, ae_buf, 0x1000, 0);
+		ae_raw = (uint32_t *)ae_buf;
+		for (i = 0; i < 225; i++)
+			zones[i] = ae_raw[i * 4] & 0x1fffff;
+		tisp_ae_update_zone_data(zones, sizeof(zones));
 	}
 
 	tiziano_awb_set_lum_th_freq();
