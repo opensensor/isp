@@ -2869,19 +2869,19 @@ static const uint32_t tiziano_gib_config_line_oem[12] = {
 static const uint32_t tiziano_gib_r_g_linear_oem[2] = {1024, 1024};
 static const uint32_t tiziano_gib_b_ir_linear_oem[2] = {1024, 1024};
 static const uint32_t tiziano_gib_deirm_blc_r_linear_oem[9] = {
-    253, 254, 256, 258, 258, 258, 258, 258, 258,
+    67, 68, 67, 67, 66, 66, 66, 66, 66,
 };
 static const uint32_t tiziano_gib_deirm_blc_gr_linear_oem[9] = {
-    253, 254, 256, 258, 259, 259, 259, 259, 259,
+    66, 68, 67, 67, 67, 67, 67, 67, 67,
 };
 static const uint32_t tiziano_gib_deirm_blc_gb_linear_oem[9] = {
-    253, 254, 254, 257, 257, 257, 257, 257, 257,
+    66, 68, 67, 66, 67, 67, 67, 67, 67,
 };
 static const uint32_t tiziano_gib_deirm_blc_b_linear_oem[9] = {
-    253, 254, 254, 257, 256, 256, 256, 256, 256,
+    66, 68, 68, 67, 67, 67, 67, 67, 67,
 };
 static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
-    65, 63, 67, 66, 63, 63, 63, 63, 63,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
 static const uint32_t tiziano_gib_deir_r_m_oem[33] = {
@@ -2928,8 +2928,8 @@ static uint32_t tiziano_gib_deir_matrix_l[15] = {0}; /* 0x3c bytes */
 
 /* GIB state variables */
 static uint32_t tisp_gib_blc_ag = 0;      /* Last BLC analog gain */
-static uint32_t gib_ir_mode[2] = {1, 0};  /* OEM default: enabled + zero delta threshold */
-static uint32_t gib_ir_value[2] = {45, 45};    /* OEM default current/last IR value */
+static uint32_t gib_ir_mode[2] = {0, 0};  /* BSS zero; runtime set by DEIR IR update */
+static uint32_t gib_ir_value[2] = {0, 0};      /* BSS zero; runtime set by DEIR IR update */
 static uint32_t trig_set_deir = 0;        /* DEIR trigger flag */
 
 /* GIB config line accessor — VERIFIED from MIPS disassembly of OEM tiziano_gib_lut_parameter.
