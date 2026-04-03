@@ -8847,6 +8847,8 @@ static int tiziano_awb_set_hardware_param(void)
 	            ((u32)p[2] << 16) | ((u32)p[3] << 24);
 	        stats_cfg = (AWB_ZONE_COLS << 28) | (1u << 16) |
 	            (AWB_ZONE_ROWS << 12) | param_word0;
+	        /* Latch AWB config bank before writing zone/param registers */
+	        system_reg_write(0xb000, 1);
 	        system_reg_write(0x0b004, stats_cfg);
         /* 0xb008: p[0..3] */
         val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
@@ -8872,6 +8874,9 @@ static int tiziano_awb_set_hardware_param(void)
         /* 0xb024: p[27..29] */
         val = (u32)p[27] | ((u32)p[28] << 8) | ((u32)p[29] << 16);
         system_reg_write(0x0b024, val);
+        /* Commit AWB zone/param configuration */
+        system_reg_write(0xb000, 1);
+        pr_info("AWB: zone cfg=0x%x params written to 0xb004-0xb024\n", stats_cfg);
     }
 
     /* OEM algo-mode path plus runtime ModeFlag thresholds. */
