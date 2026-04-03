@@ -3715,13 +3715,9 @@ int tisp_init(void *sensor_info_arg, char *param_name)
             tisp_dpc_par_refresh(0, 0, 1);
             pr_info("tisp_init: DPC activated\n");
         }
-        if (!mdns_params_received) {
-            mdns_params_received = 1;
-            tisp_mdns_par_refresh(data_9a9d0, 0x10000);
-            tisp_mdns_bypass(0);
-            { u32 bp = system_reg_read(0xc); system_reg_write(0xc, bp & ~0x10000); }
-            pr_info("tisp_init: MDNS activated (par_refresh before bypass)\n");
-        }
+        /* MDNS: par_refresh before bypass(0) is correct OEM order,
+         * but still hangs during streaming. The MDNS block may need
+         * frames flowing before activation — defer to future work. */
     }
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
