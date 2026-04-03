@@ -2838,11 +2838,51 @@ static uint8_t rdns_mv_text_thres_array[0x24] = {0};
 static uint8_t rdns_text_base_thres_wdr_array[0x24] = {0};
 static uint8_t rdns_sl_par_cfg[0x8] = {0};
 
-/* GIB parameter arrays - Binary Ninja reference
- * Config line: 12 x uint32_t control values (data_9a2e4..data_9a310)
+/* GIB parameter arrays - OEM-backed defaults recovered from OEM-tx-isp-t31.ko
+ * Config line: 12 x uint32_t control values (data_9a2e0..data_9a30c)
  * BLC arrays: 9-entry interpolation curves for tisp_simple_intp
  * DEIR arrays: 33-entry coefficient LUTs for DEIR register programming
  * DEIR matrices: 15-entry coefficient LUTs */
+static const uint32_t tiziano_gib_config_line_oem[12] = {
+    1, 1, 0, 0, 1, 0, 0, 0, 0, 3, 4095, 4095,
+};
+static const uint32_t tiziano_gib_r_g_linear_oem[2] = {1024, 1024};
+static const uint32_t tiziano_gib_b_ir_linear_oem[2] = {1024, 1024};
+static const uint32_t tiziano_gib_deirm_blc_r_linear_oem[9] = {
+    253, 254, 256, 258, 258, 258, 258, 258, 258,
+};
+static const uint32_t tiziano_gib_deirm_blc_gr_linear_oem[9] = {
+    253, 254, 256, 258, 259, 259, 259, 259, 259,
+};
+static const uint32_t tiziano_gib_deirm_blc_gb_linear_oem[9] = {
+    253, 254, 254, 257, 257, 257, 257, 257, 257,
+};
+static const uint32_t tiziano_gib_deirm_blc_b_linear_oem[9] = {
+    253, 254, 254, 257, 256, 256, 256, 256, 256,
+};
+static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
+    65, 63, 67, 66, 63, 63, 63, 63, 63,
+};
+static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
+static const uint32_t tiziano_gib_deir_r_m_oem[33] = {
+    0, 64, 128, 192, 256, 320, 384, 448, 512, 576, 640,
+    704, 768, 832, 896, 960, 1024, 1088, 1152, 1216, 1280,
+    1344, 1408, 1472, 1536, 1600, 1664, 1728, 1792, 1856,
+    1920, 1984, 2048,
+};
+static const uint32_t tiziano_gib_deir_g_m_oem[33] = {
+    0, 90, 179, 269, 358, 448, 538, 627, 717, 806, 896,
+    986, 1075, 1165, 1254, 1344, 1434, 1523, 1613, 1702, 1792,
+    1882, 1971, 2061, 2150, 2240, 2330, 2419, 2509, 2598,
+    2688, 2778, 2867,
+};
+static const uint32_t tiziano_gib_deir_b_m_oem[33] = {
+    0, 115, 230, 346, 461, 576, 691, 806, 922, 1037, 1152,
+    1267, 1382, 1498, 1613, 1728, 1843, 1958, 2074, 2189, 2304,
+    2419, 2534, 2650, 2765, 2880, 2995, 3110, 3226, 3341,
+    3456, 3571, 3686,
+};
+
 static uint32_t tiziano_gib_config_line[12] = {0};  /* 0x30 bytes */
 static uint32_t tiziano_gib_r_g_linear[2] = {0};    /* 0x08 bytes */
 static uint32_t tiziano_gib_b_ir_linear[2] = {0};   /* 0x08 bytes */
@@ -2868,8 +2908,8 @@ static uint32_t tiziano_gib_deir_matrix_l[15] = {0}; /* 0x3c bytes */
 
 /* GIB state variables */
 static uint32_t tisp_gib_blc_ag = 0;      /* Last BLC analog gain */
-static uint32_t gib_ir_mode[2] = {0};     /* [0]=current mode, [1]=threshold */
-static uint32_t gib_ir_value[2] = {0};    /* [0]=current value, [1]=last value */
+static uint32_t gib_ir_mode[2] = {1, 0};  /* OEM default: enabled + zero delta threshold */
+static uint32_t gib_ir_value[2] = {45, 45};    /* OEM default current/last IR value */
 static uint32_t trig_set_deir = 0;        /* DEIR trigger flag */
 
 /* GIB config line accessor — VERIFIED from MIPS disassembly of OEM tiziano_gib_lut_parameter.
@@ -12818,36 +12858,43 @@ int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
 
 /* ===== GIB (Green Imbalance) — OEM EXACT implementations ===== */
 
-/* OEM EXACT: tiziano_gib_params_refresh — load GIB arrays from tuning bin.
- * GIB tuning data starts at offset 0x2A48 in the parameter block.
- * Computed: OEM abs 0x87558 - tparams_base 0x84B10 = 0x2A48. */
+/* OEM EXACT: tiziano_gib_params_refresh — restore OEM GIB defaults.
+ * The OEM binary copies from embedded static data addresses, not from the
+ * day/night tuning blob. Runtime tuning updates later override the live banks
+ * through tisp_gib_param_array_set(). */
 static int tiziano_gib_params_refresh(void)
 {
-    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
-    if (!p) return -1;
+    memcpy(tiziano_gib_config_line,         tiziano_gib_config_line_oem,
+           sizeof(tiziano_gib_config_line));
+    memcpy(tiziano_gib_r_g_linear,          tiziano_gib_r_g_linear_oem,
+           sizeof(tiziano_gib_r_g_linear));
+    memcpy(tiziano_gib_b_ir_linear,         tiziano_gib_b_ir_linear_oem,
+           sizeof(tiziano_gib_b_ir_linear));
+    memcpy(tiziano_gib_deirm_blc_r_linear,  tiziano_gib_deirm_blc_r_linear_oem,
+           sizeof(tiziano_gib_deirm_blc_r_linear));
+    memcpy(tiziano_gib_deirm_blc_gr_linear, tiziano_gib_deirm_blc_gr_linear_oem,
+           sizeof(tiziano_gib_deirm_blc_gr_linear));
+    memcpy(tiziano_gib_deirm_blc_gb_linear, tiziano_gib_deirm_blc_gb_linear_oem,
+           sizeof(tiziano_gib_deirm_blc_gb_linear));
+    memcpy(tiziano_gib_deirm_blc_b_linear,  tiziano_gib_deirm_blc_b_linear_oem,
+           sizeof(tiziano_gib_deirm_blc_b_linear));
+    memcpy(tiziano_gib_deirm_blc_ir_linear, tiziano_gib_deirm_blc_ir_linear_oem,
+           sizeof(tiziano_gib_deirm_blc_ir_linear));
+    memcpy(gib_ir_point, gib_ir_point_oem, sizeof(gib_ir_point));
 
-    memcpy(tiziano_gib_config_line,       p + 0x2A48, 0x30);
-    memcpy(tiziano_gib_r_g_linear,        p + 0x2A78, 0x08);
-    memcpy(tiziano_gib_b_ir_linear,       p + 0x2A80, 0x08);
-    memcpy(tiziano_gib_deirm_blc_r_linear,  p + 0x2A88, 0x24);
-    memcpy(tiziano_gib_deirm_blc_gr_linear, p + 0x2AAC, 0x24);
-    memcpy(tiziano_gib_deirm_blc_gb_linear, p + 0x2AD0, 0x24);
-    memcpy(tiziano_gib_deirm_blc_b_linear,  p + 0x2AF4, 0x24);
-    memcpy(tiziano_gib_deirm_blc_ir_linear, p + 0x2B18, 0x24);
-    memcpy(gib_ir_point,                  p + 0x2B3C, 0x10);
-    memcpy(gib_ir_reser,                  p + 0x2B4C, 0x3c);
-    memcpy(tiziano_gib_deir_r_h,          p + 0x2B88, 0x84);
-    memcpy(tiziano_gib_deir_g_h,          p + 0x2C0C, 0x84);
-    memcpy(tiziano_gib_deir_b_h,          p + 0x2C90, 0x84);
-    memcpy(tiziano_gib_deir_r_m,          p + 0x2D14, 0x84);
-    memcpy(tiziano_gib_deir_g_m,          p + 0x2D98, 0x84);
-    memcpy(tiziano_gib_deir_b_m,          p + 0x2E1C, 0x84);
-    memcpy(tiziano_gib_deir_r_l,          p + 0x2EA0, 0x84);
-    memcpy(tiziano_gib_deir_g_l,          p + 0x2F24, 0x84);
-    memcpy(tiziano_gib_deir_b_l,          p + 0x2FA8, 0x84);
-    memcpy(tiziano_gib_deir_matrix_h,     p + 0x302C, 0x3c);
-    memcpy(tiziano_gib_deir_matrix_m,     p + 0x3068, 0x3c);
-    memcpy(tiziano_gib_deir_matrix_l,     p + 0x30A4, 0x3c);
+    memset(gib_ir_reser, 0, sizeof(gib_ir_reser));
+    memset(tiziano_gib_deir_r_h, 0, sizeof(tiziano_gib_deir_r_h));
+    memset(tiziano_gib_deir_g_h, 0, sizeof(tiziano_gib_deir_g_h));
+    memset(tiziano_gib_deir_b_h, 0, sizeof(tiziano_gib_deir_b_h));
+    memcpy(tiziano_gib_deir_r_m, tiziano_gib_deir_r_m_oem, sizeof(tiziano_gib_deir_r_m));
+    memcpy(tiziano_gib_deir_g_m, tiziano_gib_deir_g_m_oem, sizeof(tiziano_gib_deir_g_m));
+    memcpy(tiziano_gib_deir_b_m, tiziano_gib_deir_b_m_oem, sizeof(tiziano_gib_deir_b_m));
+    memset(tiziano_gib_deir_r_l, 0, sizeof(tiziano_gib_deir_r_l));
+    memset(tiziano_gib_deir_g_l, 0, sizeof(tiziano_gib_deir_g_l));
+    memset(tiziano_gib_deir_b_l, 0, sizeof(tiziano_gib_deir_b_l));
+    memset(tiziano_gib_deir_matrix_h, 0, sizeof(tiziano_gib_deir_matrix_h));
+    memset(tiziano_gib_deir_matrix_m, 0, sizeof(tiziano_gib_deir_matrix_m));
+    memset(tiziano_gib_deir_matrix_l, 0, sizeof(tiziano_gib_deir_matrix_l));
 
     pr_err("gib_params_refresh: cfg={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u}\n",
             tiziano_gib_config_line[0], tiziano_gib_config_line[1],

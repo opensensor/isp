@@ -4197,10 +4197,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL;
         }
 
-        /* Relax field check: log only; libimp may set field differently */
-        if (buffer.field != fcd->field) {
-            pr_warn("*** QBUF: Field mismatch: got %d, expected %d — accepting ***\n", buffer.field, fcd->field);
-        }
+        /* OEM does not validate buffer.field in QBUF — skip check */
 
         /* Defer forwarding to VIC until after we compute phys and populate buffer.m */
 
