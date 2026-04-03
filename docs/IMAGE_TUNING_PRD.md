@@ -240,3 +240,39 @@ This effort is complete when:
 - no persistent false-color blob artifacts remain
 - day/night and WDR transitions work without hangs or gross corruption
 - the main remaining differences vs OEM are minor, documented, and acceptable
+
+---
+
+## Progress Log
+
+### 2026-04-03: Phase 3 Data Extraction + Phase 2 Block Testing
+
+**Completed (Phase 3 data extraction):**
+
+1. **Gamma LUT** — Replaced 256-entry identity linear ramp with real OEM 129-entry gamma curves extracted from tx-isp-t31.ko tuning blob. Old data was `{0x000, 0x008, 0x010, ...}` (no gamma correction). OEM curve has proper shadow lift. However: tuning bin IS loaded at runtime and overrides these defaults, so the change is a fallback improvement.
+
+2. **AE tables** — Replaced ~30 all-zero AE parameter structs with OEM data: center-weighted 15x15 zone map, exposure thresholds, EV lists, log2/weight LUTs, flicker detection, scene parameters, WDR and AE1 variants. Same caveat: overridden by tuning bin at runtime.
+
+3. **BCSH/CCM** — Replaced zero-initialized BCSH arrays with OEM data: CCM matrices (d/t/a), hue-dependent parameters, saturation lists, clip parameters, and MMatrix/MinvMatrix color space transforms.
+
+4. **SDNS** — OEM data extracted but array sizes mismatch (OEM uses 4/9-element arrays, our driver has 16). Structural fix deferred.
+
+**Key finding:** The tuning bin IS loaded by libimp at runtime and overrides all initial values. The gamma, AE, and BCSH data we embedded serve as proper fallback defaults when the tuning bin is unavailable.
+
+**Tested (Phase 2 block enable):**
+
+- **GIB + LSC enabled together (0xDD34):** SEVERE REGRESSION — large color blobs spanning entire frame. Immediately reverted to 0xDD04.
+
+**Root cause analysis of GIB+LSC regression:**
+
+- LSC writes registers 0x28000-0x4A8A0 (651 iterations x 3 channels x 16-byte stride), a huge range
+- Runtime tuning data shows `mesh_size=48x36`, `mesh_scale=0`, `lut_count=1953` — these are real GC2053 data from libimp, NOT from .ko defaults
+- With `mesh_scale=0`, `base_strength=0x800` and `lsc_curr_str=0` at init, all LSC values collapse to 0x800 (flat) — but even flat writes to that register range may conflict with other ISP state
+- GIB alone has NOT been tested separately — registers are limited to 0x1030-0x1070 range, much smaller footprint
+
+**Next steps:**
+
+1. Test GIB alone (isp_block_enable=0xDD24) to isolate which block causes regression
+2. Investigate LSC mesh_scale=0 behavior — may need special handling
+3. Investigate whether the 0x28000+ register range overlaps with active ISP blocks
+4. Consider whether LSC needs lsc_curr_str > 0 before enabling (currently 0 = no correction)

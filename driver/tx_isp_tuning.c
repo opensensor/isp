@@ -1538,8 +1538,10 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  *          isp_block_enable=0xDD04 restores the effective f37c2886 crisp-image block set
+ *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
+ *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0xDD04;  /* f37c2886 effective block set: DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS */
+static uint isp_block_enable = 0xDD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS (proven stable) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -2819,18 +2821,24 @@ static uint32_t gib_ir_mode[2] = {0};     /* [0]=current mode, [1]=threshold */
 static uint32_t gib_ir_value[2] = {0};    /* [0]=current value, [1]=last value */
 static uint32_t trig_set_deir = 0;        /* DEIR trigger flag */
 
-/* GIB config line accessor: tiziano_gib_config_line[n] maps to OEM data_9a2e4+n*4 */
-#define GIB_CFG_EN_BLC       tiziano_gib_config_line[0]   /* data_9a2e4 */
-#define GIB_CFG_DEIR_MODE    tiziano_gib_config_line[1]   /* data_9a2e8 */
-#define GIB_CFG_DEIR_EN      tiziano_gib_config_line[2]   /* data_9a2ec */
-#define GIB_CFG_BLC_SHIFT    tiziano_gib_config_line[3]   /* data_9a2f0 */
-#define GIB_CFG_DEIR_STR     tiziano_gib_config_line[4]   /* data_9a2f4 */
-#define GIB_CFG_GIB_MODE     tiziano_gib_config_line[5]   /* data_9a2f8 */
-#define GIB_CFG_BLEND        tiziano_gib_config_line[6]   /* data_9a2fc */
-#define GIB_CFG_BLC_GAIN     tiziano_gib_config_line[7]   /* data_9a300 */
-#define GIB_CFG_BLC_THR      tiziano_gib_config_line[8]   /* data_9a304 */
-#define GIB_CFG_WGT_LO       tiziano_gib_config_line[9]   /* data_9a308 */
-#define GIB_CFG_WGT_HI       tiziano_gib_config_line[10]  /* data_9a30c */
+/* GIB config line accessor — VERIFIED from MIPS disassembly of OEM tiziano_gib_lut_parameter.
+ * config_line[0] is used directly at bit 12 of reg 0x103c (unnamed first-byte field).
+ * All other fields verified by tracing lw offsets from $r16 (config_line base):
+ *   reg 0x1038 = config_line[11] << 16 | config_line[10]
+ *   reg 0x103c = [7]<<16 | [4]<<14 | [0]<<12 | [1]<<10 | [6]<<8 | [9]<<4 | [8]<<2
+ *   reg 0x106c = [3]<<16 | [2]<<3 | [5]
+ */
+#define GIB_CFG_EN_BLC       tiziano_gib_config_line[1]   /* bit 10 of 0x103c */
+#define GIB_CFG_DEIR_MODE    tiziano_gib_config_line[2]   /* bit 3 of 0x106c */
+#define GIB_CFG_DEIR_EN      tiziano_gib_config_line[3]   /* bit 16 of 0x106c */
+#define GIB_CFG_BLC_SHIFT    tiziano_gib_config_line[4]   /* bit 14 of 0x103c */
+#define GIB_CFG_DEIR_STR     tiziano_gib_config_line[5]   /* bits 0-2 of 0x106c */
+#define GIB_CFG_GIB_MODE     tiziano_gib_config_line[6]   /* bit 8 of 0x103c */
+#define GIB_CFG_BLEND        tiziano_gib_config_line[7]   /* bits 16+ of 0x103c */
+#define GIB_CFG_BLC_GAIN     tiziano_gib_config_line[8]   /* bits 2-3 of 0x103c */
+#define GIB_CFG_BLC_THR      tiziano_gib_config_line[9]   /* bits 4-7 of 0x103c */
+#define GIB_CFG_WGT_LO       tiziano_gib_config_line[10]  /* bits 0-15 of 0x1038 */
+#define GIB_CFG_WGT_HI       tiziano_gib_config_line[11]  /* bits 16+ of 0x1038 */
 
 static uint32_t param_motionThrPara_software_in_array[0x44/4] = {0};
 static uint32_t param_d_thr_normal_software_in_array[0x68/4] = {0};
@@ -17514,7 +17522,12 @@ int tisp_ct_update(uint32_t ct)
 	if ((reg_0c & 0x40) == 0)
 		tisp_lsc_ct_update(ct);
 
-	if ((reg_0c & 0x10000) == 0)
+	/* OEM gates this on bit 16 (MDNS), which works because the OEM always
+	 * enables MDNS.  We bypass MDNS (parked due to hangs), so checking
+	 * bit 16 would permanently block BCSH color-temperature updates even
+	 * though CLM/BCSH (bit 12) IS enabled.  Gate on bit 12 instead so
+	 * the BCSH CCM adapts to the detected scene color temperature. */
+	if ((reg_0c & 0x1000) == 0)
 		tisp_bcsh_ct_update(ct);
 
 	return 0;
