@@ -3699,6 +3699,29 @@ int tisp_init(void *sensor_info_arg, char *param_name)
      * AWB converges do not carry the cold-green default (~9984 K). */
     tisp_ct_update(5000);
 
+    /* Activate MDNS and DPC now that tuning bin is loaded.
+     * libimp never opens the M0 tuning device, so deferred activation via
+     * tisp_*_set_par_cfg never triggers. Activate here with real tuning data.
+     * The sub-module inits (tiziano_mdns_init, tiziano_dpc_init) already ran
+     * but skipped HW writes because params weren't loaded yet. */
+    if (tparams_day || tparams_active) {
+        if (!dpc_params_received) {
+            dpc_params_received = 1;
+            tisp_dpc_par_refresh(0, 0, 1);
+            pr_info("tisp_init: DPC activated with tuning bin data\n");
+        }
+        if (!mdns_params_received) {
+            mdns_params_received = 1;
+            {
+                u32 bypass_reg = system_reg_read(0xc);
+                bypass_reg &= ~0x10000;  /* Clear MDNS bypass bit 16 */
+                system_reg_write(0xc, bypass_reg);
+            }
+            tisp_mdns_bypass(0);
+            pr_info("tisp_init: MDNS activated with tuning bin data\n");
+        }
+    }
+
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
 
