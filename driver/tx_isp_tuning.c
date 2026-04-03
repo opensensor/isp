@@ -8850,8 +8850,29 @@ void tiziano_awb_params_refresh(void)
 	awb_zone_cache_valid = 0;
 
     pr_info("tiziano_awb_params_refresh: LOADED from bin - "
-        "wb_static=%u,%u light_src_num=%u\n",
-        _wb_static[0], _wb_static[1], _light_src_num);
+        "wb_static=%u,%u light_src_num=%u "
+        "AwbPointPos[0]=%u(q=%u) AwbPointPos[1]=%u "
+        "awb_ct_seed=%u pixel_cnt_th=%u\n",
+        _wb_static[0], _wb_static[1], _light_src_num,
+        _AwbPointPos[0], _AwbPointPos[0] & 0x1f, _AwbPointPos[1],
+        _awb_ct, _pixel_cnt_th);
+    {
+        const uint32_t *rg_pos = (const uint32_t *)_rg_pos;
+        const uint32_t *bg_pos = (const uint32_t *)_bg_pos;
+        const uint32_t *ct_mesh = (const uint32_t *)_color_temp_mesh;
+        pr_info("tiziano_awb_params_refresh: rg_pos[0..4]=%u %u %u %u %u "
+            "rg_pos[14]=%u\n",
+            rg_pos[0], rg_pos[1], rg_pos[2], rg_pos[3], rg_pos[4],
+            rg_pos[14]);
+        pr_info("tiziano_awb_params_refresh: bg_pos[0..4]=%u %u %u %u %u "
+            "bg_pos[14]=%u\n",
+            bg_pos[0], bg_pos[1], bg_pos[2], bg_pos[3], bg_pos[4],
+            bg_pos[14]);
+        pr_info("tiziano_awb_params_refresh: ct_mesh[0..4]=%u %u %u %u %u "
+            "ct_mesh[224]=%u\n",
+            ct_mesh[0], ct_mesh[1], ct_mesh[2], ct_mesh[3], ct_mesh[4],
+            ct_mesh[224]);
+    }
 }
 
 /* Hardware apply hook: program AWB registers via system_reg_write_awb.
@@ -12340,6 +12361,7 @@ static uint32_t awb_estimate_ct(uint32_t rg, uint32_t bg)
 	uint32_t bg_idx;
 	u32 mesh_q;
 	u64 ct_q;
+	static unsigned int ct_diag_count;
 
 	if (!rg_pos || !bg_pos || !ct_mesh)
 		return 5000;
@@ -12369,12 +12391,54 @@ static uint32_t awb_estimate_ct(uint32_t rg, uint32_t bg)
 		mesh_q = ISPAWBInterpolation2(q, bg_q,
 			bg_pos[bg_idx], bg_pos[bg_idx + 1],
 			row0_q, row1_q);
+
+		ct_diag_count++;
+		if (ct_diag_count <= 5 || (ct_diag_count % 300) == 0) {
+			pr_info("AWB_CT_DIAG[%u]: rg=%u bg=%u q=%u "
+				"rg_pos[0]=%u rg_pos[14]=%u "
+				"bg_pos[0]=%u bg_pos[14]=%u "
+				"rg_clamped=%u bg_clamped=%u "
+				"rg_idx=%u bg_idx=%u\n",
+				ct_diag_count, rg, bg, q,
+				rg_pos[0], rg_pos[14],
+				bg_pos[0], bg_pos[14],
+				rg_clamped, bg_clamped,
+				rg_idx, bg_idx);
+			pr_info("AWB_CT_DIAG[%u]: row0[%u]=%u row0[%u]=%u "
+				"row1[%u]=%u row1[%u]=%u "
+				"rg_q=%u bg_q=%u row0_q=%u row1_q=%u mesh_q=%u\n",
+				ct_diag_count,
+				rg_idx, row0[rg_idx], rg_idx + 1, row0[rg_idx + 1],
+				rg_idx, row1[rg_idx], rg_idx + 1, row1[rg_idx + 1],
+				rg_q, bg_q, row0_q, row1_q, mesh_q);
+		}
 	}
 
 	if (mesh_q == 0)
 		return 5000;
 
-	ct_q = div_u64(((u64)1000000 << q), mesh_q);
+	/* OEM: fix_point_div_32(q, 0xf4240 << q, mesh_q) >> q
+	 * = ((1000000 << q) << q) / mesh_q >> q
+	 * = (1000000 << 2q) / mesh_q >> q
+	 * = (1000000 << q) / mesh_q
+	 *
+	 * mesh_q is in Q-format (actual_value << q), so final CT is:
+	 * (1000000 << q) / (actual_value << q) = 1000000 / actual_value
+	 *
+	 * Bug fix: previous code had (1000000 << q) / mesh_q >> q which
+	 * double-divided by 2^q, producing CT ~= 2 instead of ~5000.
+	 */
+	ct_q = div_u64((u64)1000000 << (q * 2u), mesh_q);
+
+	if (ct_diag_count <= 5 || (ct_diag_count % 300) == 0) {
+		u32 old_ct_q = (u32)div_u64((u64)1000000 << q, mesh_q);
+		pr_info("AWB_CT_DIAG[%u]: mesh_q=%u ct_q=%llu "
+			"result_ct=%u (old_buggy_ct=%u)\n",
+			ct_diag_count, mesh_q, ct_q,
+			(uint32_t)((ct_q + rounding) >> q),
+			q ? (old_ct_q >> q) : old_ct_q);
+	}
+
 	return (uint32_t)((ct_q + rounding) >> q);
 }
 
@@ -12548,6 +12612,24 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		awb_zone_rg_global = 0x100;
 	if (awb_zone_bg_global == 0)
 		awb_zone_bg_global = 0x100;
+
+	{
+		static unsigned int fpga_diag_count;
+		fpga_diag_count++;
+		if (fpga_diag_count <= 5 || (fpga_diag_count % 300) == 0) {
+			pr_info("AWB_FPGA_DIAG[%u]: active_zones=%u "
+				"weight_sum=%u rg_global=%u bg_global=%u "
+				"zone_rg[0]=%u zone_bg[0]=%u "
+				"zone_rg[112]=%u zone_bg[112]=%u "
+				"pixel_cnt_th=%u pix[0]=%u\n",
+				fpga_diag_count, active_zones,
+				weight_sum, awb_zone_rg_global,
+				awb_zone_bg_global,
+				awb_zone_rg[0], awb_zone_bg[0],
+				awb_zone_rg[112], awb_zone_bg[112],
+				_pixel_cnt_th, stats_p[0]);
+		}
+	}
 
 	target_rg = awb_zone_rg_global;
 	target_bg = awb_zone_bg_global;
@@ -12752,6 +12834,7 @@ int awb_interrupt_static(void)
 	struct tisp_event_record event_data = {0};
 	uint32_t awb_status;
 	void *buffer_addr;
+	static unsigned int awb_irq_count;
 
 	if (data_a2f5c == 0)
 		return 0;
@@ -12759,7 +12842,28 @@ int awb_interrupt_static(void)
 	awb_status = system_reg_read(0xb050);
 	buffer_addr = (void *)(unsigned long)(data_a2f5c + (awb_status << 12));
 	private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
+
+	awb_irq_count++;
+	if (awb_irq_count <= 3) {
+		u32 *raw = (u32 *)buffer_addr;
+		pr_info("AWB_DMA_DIAG[%u]: base=0x%08x status=0x%x "
+			"buf=0x%08lx raw[0..7]=%08x %08x %08x %08x %08x %08x %08x %08x\n",
+			awb_irq_count, data_a2f5c, awb_status, (unsigned long)buffer_addr,
+			raw[0], raw[1], raw[2], raw[3],
+			raw[4], raw[5], raw[6], raw[7]);
+	}
+
 	JZ_Isp_Get_Awb_Statistics(buffer_addr, 0xf001f001);
+
+	if (awb_irq_count <= 3) {
+		pr_info("AWB_STATS_DIAG[%u]: R[0]=%u G[0]=%u B[0]=%u "
+			"P[0]=%u R[1]=%u G[1]=%u B[1]=%u P[1]=%u\n",
+			awb_irq_count,
+			awb_array_r[0], awb_array_g[0],
+			awb_array_b[0], awb_array_p[0],
+			awb_array_r[1], awb_array_g[1],
+			awb_array_b[1], awb_array_p[1]);
+	}
 
 	tiziano_awb_set_lum_th_freq();
 

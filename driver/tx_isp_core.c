@@ -1723,12 +1723,25 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     }
 
     /* AE/AWB statistics interrupts (bits 26-30) never fire on this T31
-     * hardware revision. Poll the AWB statistics from ip_done (bit 13)
-     * which fires reliably on every frame. This triggers the AWB algorithm
-     * via the event system, producing CT updates for color correction. */
+     * hardware revision. Poll AE and AWB statistics from ip_done (bit 13)
+     * which fires reliably on every frame. This triggers the AE/AWB
+     * algorithms via the event system. */
     {
+        static unsigned int ae_poll_frame_count;
         extern int awb_interrupt_static(void);
+        extern int ae0_interrupt_static(void);
+        extern int ae1_interrupt_static(void);
+
         awb_interrupt_static();
+
+        /* AE0 every frame — handles primary auto-exposure zone stats */
+        ae0_interrupt_static();
+
+        /* AE1 every 4th frame — secondary AE, less critical cadence */
+        if ((ae_poll_frame_count & 3) == 0)
+            ae1_interrupt_static();
+
+        ae_poll_frame_count++;
     }
 
     /* Binary Ninja: return 2 */
