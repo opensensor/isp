@@ -899,7 +899,7 @@ static uint32_t first_into = 1;
 static uint32_t bayer_write_pending = 1;
 
 /*
- * mbus_to_bayer_write - EXACT stock binary implementation (BN HLIL 0x696d8)
+ * mbus_to_bayer_write - exact stock mbus->CFA programming plus local flip fixup
  *
  * Maps V4L2 mbus format codes to Bayer pattern indices and programs
  * ISP register 8 with the result.  Without this call the ISP demosaic
@@ -910,10 +910,17 @@ static uint32_t bayer_write_pending = 1;
  *   +0x50 → 2 : 0x3002,0x3009,0x300a,0x3011
  *   +0x3c → 3 : 0x300c,0x300e,0x3010,0x3013
  *   +0x58 → 0 : 0x300d,0x300f,0x3012,0x3014
+ *
+ * The raw jump-table only yields the base CFA index.  Our sensor layer also
+ * tracks horizontal/vertical flip in video.shvflip, which changes the live CFA
+ * phase.  Keep the stock base mapping, then apply the existing flip helper so
+ * register 8 matches the actual streamed sensor orientation.
  */
-void mbus_to_bayer_write(u32 mbus_code)
+void mbus_to_bayer_write(struct tx_isp_dev *isp_dev, u32 mbus_code)
 {
+	u32 base_bayer;
 	u32 bayer_mode;
+	unsigned int shvflip = 0;
 
 	if ((mbus_code - 0x3001) >= 0x14) {
 		pr_err("%s[%d] the format(0x%08x) of input couldn't be handled!\n",
@@ -921,24 +928,10 @@ void mbus_to_bayer_write(u32 mbus_code)
 		return;
 	}
 
-	switch (mbus_code) {
-	case 0x3001: case 0x3003: case 0x3004: case 0x3005:
-	case 0x3006: case 0x3007: case 0x3008: case 0x300b:
-		bayer_mode = 1;
-		break;
-	case 0x3002: case 0x3009: case 0x300a: case 0x3011:
-		bayer_mode = 2;
-		break;
-	case 0x300c: case 0x300e: case 0x3010: case 0x3013:
-		bayer_mode = 3;
-		break;
-	case 0x300d: case 0x300f: case 0x3012: case 0x3014:
-		bayer_mode = 0;
-		break;
-	default:
-		bayer_mode = 0;
-		break;
-	}
+	base_bayer = tisp_cfa_base_from_mbus(mbus_code);
+	if (isp_dev && isp_dev->sensor)
+		shvflip = isp_dev->sensor->video.shvflip;
+	bayer_mode = tisp_cfa_apply_flip(base_bayer, shvflip);
 
 	if (tisp_cfa_idx_override >= 0 && tisp_cfa_idx_override <= 3) {
 		pr_info("mbus_to_bayer_write: overriding bayer_mode %u -> %d\n",
@@ -947,8 +940,8 @@ void mbus_to_bayer_write(u32 mbus_code)
 	}
 
 	system_reg_write(8, bayer_mode);
-	pr_info("mbus_to_bayer_write: mbus=0x%x -> bayer_mode=%u\n",
-		mbus_code, bayer_mode);
+	pr_info("mbus_to_bayer_write: mbus=0x%x base=%u shvflip=0x%x -> bayer_mode=%u\n",
+			mbus_code, base_bayer, shvflip, bayer_mode);
 }
 
 /*
@@ -1846,15 +1839,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* One-shot bayer write and top_sel — must fire on first interrupt,
      * not gated by bit 0x1 which may not fire reliably yet. */
-    if (bayer_write_pending) {
-        u32 mbus_code = 0;
-        if (isp_dev && isp_dev->sensor)
-            mbus_code = isp_dev->sensor->video.mbus.code;
-        if (mbus_code != 0) {
-            mbus_to_bayer_write(mbus_code);
-            bayer_write_pending = 0;
-        }
-    }
+	    if (bayer_write_pending) {
+	        u32 mbus_code = 0;
+	        if (isp_dev && isp_dev->sensor)
+	            mbus_code = isp_dev->sensor->video.mbus.code;
+	        if (mbus_code != 0) {
+	            mbus_to_bayer_write(isp_dev, mbus_code);
+	            bayer_write_pending = 0;
+	        }
+	    }
 
     if (first_into == 1) {
         tisp_top_sel();
