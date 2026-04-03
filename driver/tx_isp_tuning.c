@@ -12802,8 +12802,18 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		awb_history_push(target_rg, target_bg, target_ct);
 
 	awb_history_average(&target_rg, &target_bg, &target_ct);
-	live_gr = awb_ratio_to_mf_gain(_AwbPointPos[0], target_rg);
-	live_gb = awb_ratio_to_mf_gain(_AwbPointPos[0], target_bg);
+	/* OEM Ct_Detect outputs targets in ~Q8 scale (256=neutral).
+	 * Our raw R/G,B/G averages are in Q(q) scale (1024=neutral for q=10).
+	 * Shift to Q8 before gain formula so 0x10000/target produces ~256 at neutral. */
+	{
+		u32 q_shift = (_AwbPointPos[0] & 0x1f) - 8;
+		u32 rg_q8 = target_rg >> q_shift;
+		u32 bg_q8 = target_bg >> q_shift;
+		if (rg_q8 == 0) rg_q8 = 0x100;
+		if (bg_q8 == 0) bg_q8 = 0x100;
+		live_gr = awb_ratio_to_mf_gain(_AwbPointPos[0], rg_q8);
+		live_gb = awb_ratio_to_mf_gain(_AwbPointPos[0], bg_q8);
+	}
 
 	awb_gain_track[0] = live_gr;
 	awb_gain_track[1] = live_gb;
