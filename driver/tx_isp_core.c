@@ -1722,7 +1722,14 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
         tisp_lsc_write_lut_datas();
     }
 
-    pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
+    /* AE/AWB statistics interrupts (bits 26-30) never fire on this T31
+     * hardware revision. Poll the AWB statistics from ip_done (bit 13)
+     * which fires reliably on every frame. This triggers the AWB algorithm
+     * via the event system, producing CT updates for color correction. */
+    {
+        extern int awb_interrupt_static(void);
+        awb_interrupt_static();
+    }
 
     /* Binary Ninja: return 2 */
     return IRQ_HANDLED; /* Convert to standard Linux return value */
