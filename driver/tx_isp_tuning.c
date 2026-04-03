@@ -453,10 +453,10 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
         0x00000401, /* 1025 */
         (int32_t)0xfffffe04, /* -508 */
         (int32_t)0xfffffef3, /* -269 */
-        (int32_t)0xffffffff, /* -1   */
+        (int32_t)0xfffffffe, /* -2 (OEM EXACT: verified at .ko offset 0x6b8b4) */
         0x00000905, /* 2309 */
         0x0000015f, /* 351  */
-        (int32_t)0xffffffff, /* -1   */
+        (int32_t)0xfffffffe, /* -2 (OEM EXACT: was -1, verified -2 from binary) */
         0x000002f1, /* 753  */
         0x00000a9b  /* 2715 */
     };
@@ -673,12 +673,15 @@ static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int
     int i;
     tiziano_build_hue_rotation(R);
 
-    /* T1 = CCM * R */
-    tiziano_matmul3_q16(CCM, R, T1);
-    /* T2 = T1 * Minv */
+    /* OEM order: (M × CCM) first, then × Minv, then hue rotation.
+     * Fixed-point Q16 multiplication is NOT associative due to rounding,
+     * so the order must match the OEM exactly. */
+    /* T1 = M * CCM */
+    tiziano_matmul3_q16(M, CCM, T1);
+    /* T2 = T1 * Minv = (M * CCM) * Minv */
     tiziano_matmul3_q16(T1, Minv, T2);
-    /* out = M * T2 */
-    tiziano_matmul3_q16(M, T2, out);
+    /* Apply hue rotation: out = T2 * R */
+    tiziano_matmul3_q16(T2, R, out);
 
     /* OEM EXACT: right-shift all output values by 6 for hardware scaling.
      * The OEM's RGBYUV applies this as the final step:
