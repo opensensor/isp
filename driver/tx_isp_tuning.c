@@ -1724,7 +1724,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 1;    /* Park MDNS until tisp_mdns_intp is fully ported */
+static int mdns_runtime_parked = 0;    /* MDNS unparked: block enabled in bypass reg, intp_table does inline interp */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -15854,73 +15854,295 @@ uint32_t *dpc_d_m3_fthres_array_now = NULL;
 static uint32_t data_9ab10 = 0xFFFFFFFF;  /* DPC state cache */
 static int dpc_wdr_en = 0;
 
-/* tiziano_dpc_params_refresh - Refresh DPC parameters */
+/* DPC interpolated value cache — populated by tisp_dpc_intp() */
+static uint32_t dpc_d_m1_fthres_intp;
+static uint32_t dpc_d_m1_dthres_intp;
+static uint32_t dpc_d_m2_level_intp;
+static uint32_t dpc_d_m2_hthres_intp;
+static uint32_t dpc_d_m2_lthres_intp;
+static uint32_t dpc_d_m2_p0_d1_thres_intp;
+static uint32_t dpc_d_m2_p1_d1_thres_intp;
+static uint32_t dpc_d_m2_p2_d1_thres_intp;
+static uint32_t dpc_d_m2_p3_d1_thres_intp;
+static uint32_t dpc_d_m2_p0_d2_thres_intp;
+static uint32_t dpc_d_m2_p1_d2_thres_intp;
+static uint32_t dpc_d_m2_p2_d2_thres_intp;
+static uint32_t dpc_d_m2_p3_d2_thres_intp;
+static uint32_t dpc_d_m3_fthres_intp;
+static uint32_t dpc_d_m3_dthres_intp;
+static uint32_t ctr_stren_intp;
+static uint32_t ctr_md_thres_intp;
+static uint32_t ctr_el_thres_intp;
+static uint32_t ctr_eh_thres_intp;
+
+/* DPC commit register — OEM: system_reg_write(0x2898, 1) */
+#define DPC_REG_COMMIT  0x2898
+
+/* OEM EXACT: tiziano_dpc_params_refresh — memcpy tuning arrays from param block.
+ * OEM copies from binary tuning data offsets into the global arrays.
+ * Computed: OEM base for DPC params is at tparams + 0xA430. */
 void tiziano_dpc_params_refresh(void)
 {
-    pr_debug("tiziano_dpc_params_refresh: Refreshing DPC parameters\n");
-
-    /* Update DPC parameters based on current conditions */
-    if (data_9a454 != 0) {
-        uint32_t ev_shifted = data_9a454 >> 10;
-
-        /* Adjust DPC thresholds based on exposure */
-        if (ev_shifted < 0x80) {
-            /* Low light - more aggressive DPC */
-            for (int i = 0; i < 16; i++) {
-                if (dpc_d_m1_dthres_array_now && i < 16) {
-                    dpc_d_m1_dthres_array_now[i] = dpc_d_m1_dthres_array[i] + 0x20;
-                }
-                if (dpc_d_m1_fthres_array_now && i < 16) {
-                    dpc_d_m1_fthres_array_now[i] = dpc_d_m1_fthres_array[i] + 0x10;
-                }
-            }
-        } else if (ev_shifted > 0x180) {
-            /* Bright light - less aggressive DPC */
-            for (int i = 0; i < 16; i++) {
-                if (dpc_d_m1_dthres_array_now && i < 16) {
-                    dpc_d_m1_dthres_array_now[i] = dpc_d_m1_dthres_array[i] - 0x10;
-                }
-                if (dpc_d_m1_fthres_array_now && i < 16) {
-                    dpc_d_m1_fthres_array_now[i] = dpc_d_m1_fthres_array[i] - 0x08;
-                }
-            }
-        }
+    const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    if (!params) {
+        pr_debug("tiziano_dpc_params_refresh: no tuning data available\n");
+        return;
     }
 
-    pr_debug("tiziano_dpc_params_refresh: DPC parameters updated based on EV\n");
+    /* OEM offset: 0x8ef40 - tparams_base 0x84B10 = 0xA430 */
+    memcpy(&ctr_md_np_array,           params + 0xA430, 0x40);
+    memcpy(&ctr_std_np_array,          params + 0xA470, 0x40);
+    memcpy(&dpc_s_con_par_array,       params + 0xA4B0, 0x14);
+    memcpy(&dpc_d_m1_fthres_array,     params + 0xA4C4, 0x24);
+    memcpy(&dpc_d_m1_dthres_array,     params + 0xA4E8, 0x24);
+    memcpy(&dpc_d_m1_con_par_array,    params + 0xA50C, 0x0c);
+    memcpy(&dpc_d_m2_level_array,      params + 0xA518, 0x24);
+    memcpy(&dpc_d_m2_hthres_array,     params + 0xA53C, 0x24);
+    memcpy(&dpc_d_m2_lthres_array,     params + 0xA560, 0x24);
+    memcpy(&dpc_d_m2_p0_d1_thres_array, params + 0xA584, 0x24);
+    memcpy(&dpc_d_m2_p1_d1_thres_array, params + 0xA5A8, 0x24);
+    memcpy(&dpc_d_m2_p2_d1_thres_array, params + 0xA5CC, 0x24);
+    memcpy(&dpc_d_m2_p3_d1_thres_array, params + 0xA5F0, 0x24);
+    memcpy(&dpc_d_m2_p0_d2_thres_array, params + 0xA614, 0x24);
+    memcpy(&dpc_d_m2_p1_d2_thres_array, params + 0xA638, 0x24);
+    memcpy(&dpc_d_m2_p2_d2_thres_array, params + 0xA65C, 0x24);
+    memcpy(&dpc_d_m2_p3_d2_thres_array, params + 0xA680, 0x24);
+    memcpy(&dpc_d_m2_con_par_array,    params + 0xA6A4, 0x14);
+    memcpy(&dpc_d_m3_fthres_array,     params + 0xA6B8, 0x24);
+    memcpy(&dpc_d_m3_dthres_array,     params + 0xA6DC, 0x24);
+    memcpy(&dpc_d_m3_con_par_array,    params + 0xA700, 0x10);
+    memcpy(&dpc_d_cor_par_array,       params + 0xA710, 0x2c);
+    memcpy(&ctr_stren_array,           params + 0xA73C, 0x24);
+    memcpy(&ctr_md_thres_array,        params + 0xA760, 0x24);
+    memcpy(&ctr_el_thres_array,        params + 0xA784, 0x24);
+    memcpy(&ctr_eh_thres_array,        params + 0xA7A8, 0x24);
+    memcpy(&dpc_d_m1_fthres_wdr_array, params + 0xA7CC, 0x24);
+    memcpy(&dpc_d_m1_dthres_wdr_array, params + 0xA7F0, 0x24);
+    memcpy(&dpc_d_m3_fthres_wdr_array, params + 0xA814, 0x24);
+    memcpy(&dpc_d_m3_dthres_wdr_array, params + 0xA838, 0x24);
+    memcpy(&ctr_con_par_array,         params + 0xA85C, 0x1c);
+
+    pr_debug("tiziano_dpc_params_refresh: DPC parameters loaded from tuning data\n");
 }
 
-/* tisp_dpc_all_reg_refresh - Write all DPC registers to hardware */
-static int tisp_dpc_all_reg_refresh(void)
+/* OEM EXACT: tisp_dpc_intp — interpolate all DPC/CTR arrays based on gain */
+static void tisp_dpc_intp(uint32_t gain)
 {
-    void __iomem *base_reg = ioremap(0x1330A000, 0x1000); /* DPC register base */
+    int hi = gain >> 16;
+    int lo = gain & 0xffff;
 
-    if (!base_reg) {
-        pr_err("tisp_dpc_all_reg_refresh: Failed to map DPC registers\n");
-        return -ENOMEM;
+    dpc_d_m1_fthres_intp       = tisp_simple_intp(hi, lo, dpc_d_m1_fthres_array_now);
+    dpc_d_m1_dthres_intp       = tisp_simple_intp(hi, lo, dpc_d_m1_dthres_array_now);
+    dpc_d_m2_level_intp        = tisp_simple_intp(hi, lo, dpc_d_m2_level_array);
+    dpc_d_m2_hthres_intp       = tisp_simple_intp(hi, lo, dpc_d_m2_hthres_array);
+    dpc_d_m2_lthres_intp       = tisp_simple_intp(hi, lo, dpc_d_m2_lthres_array);
+    dpc_d_m2_p0_d1_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p0_d1_thres_array);
+    dpc_d_m2_p1_d1_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p1_d1_thres_array);
+    dpc_d_m2_p2_d1_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p2_d1_thres_array);
+    dpc_d_m2_p3_d1_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p3_d1_thres_array);
+    dpc_d_m2_p0_d2_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p0_d2_thres_array);
+    dpc_d_m2_p1_d2_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p1_d2_thres_array);
+    dpc_d_m2_p2_d2_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p2_d2_thres_array);
+    dpc_d_m2_p3_d2_thres_intp  = tisp_simple_intp(hi, lo, dpc_d_m2_p3_d2_thres_array);
+    dpc_d_m3_fthres_intp       = tisp_simple_intp(hi, lo, dpc_d_m3_fthres_array_now);
+    dpc_d_m3_dthres_intp       = tisp_simple_intp(hi, lo, dpc_d_m3_dthres_array_now);
+    ctr_stren_intp             = tisp_simple_intp(hi, lo, ctr_stren_array);
+    ctr_md_thres_intp          = tisp_simple_intp(hi, lo, ctr_md_thres_array);
+    ctr_el_thres_intp          = tisp_simple_intp(hi, lo, ctr_el_thres_array);
+    ctr_eh_thres_intp          = tisp_simple_intp(hi, lo, ctr_eh_thres_array);
+}
+
+/* OEM EXACT: tisp_ctr_md_np_cfg — write CTR median NP registers (0x2864-0x2870) */
+static void tisp_ctr_md_np_cfg(void)
+{
+    system_reg_write(0x2864, ctr_md_np_array[1] << 8 | ctr_md_np_array[2] << 0x10
+                     | ctr_md_np_array[0] | ctr_md_np_array[3] << 0x18);
+    system_reg_write(0x2868, ctr_md_np_array[5] << 8 | ctr_md_np_array[6] << 0x10
+                     | ctr_md_np_array[4] | ctr_md_np_array[7] << 0x18);
+    system_reg_write(0x286c, ctr_md_np_array[9] << 8 | ctr_md_np_array[10] << 0x10
+                     | ctr_md_np_array[8] | ctr_md_np_array[11] << 0x18);
+    system_reg_write(0x2870, ctr_md_np_array[13] << 8 | ctr_md_np_array[14] << 0x10
+                     | ctr_md_np_array[12] | ctr_md_np_array[15] << 0x18);
+}
+
+/* OEM EXACT: tisp_ctr_std_np_cfg — write CTR standard NP registers (0x2874-0x2880) */
+static void tisp_ctr_std_np_cfg(void)
+{
+    system_reg_write(0x2874, ctr_std_np_array[1] << 8 | ctr_std_np_array[2] << 0x10
+                     | ctr_std_np_array[0] | ctr_std_np_array[3] << 0x18);
+    system_reg_write(0x2878, ctr_std_np_array[5] << 8 | ctr_std_np_array[6] << 0x10
+                     | ctr_std_np_array[4] | ctr_std_np_array[7] << 0x18);
+    system_reg_write(0x287c, ctr_std_np_array[9] << 8 | ctr_std_np_array[10] << 0x10
+                     | ctr_std_np_array[8] | ctr_std_np_array[11] << 0x18);
+    system_reg_write(0x2880, ctr_std_np_array[13] << 8 | ctr_std_np_array[14] << 0x10
+                     | ctr_std_np_array[12] | ctr_std_np_array[15] << 0x18);
+}
+
+/* OEM EXACT: tisp_dpc_s_par_cfg — write DPC static config register (0x2800) */
+static void tisp_dpc_s_par_cfg(void)
+{
+    system_reg_write(0x2800, dpc_s_con_par_array[2] << 8 | dpc_s_con_par_array[3] << 0xc
+                     | dpc_s_con_par_array[0] | dpc_s_con_par_array[4] << 0x10);
+}
+
+/* OEM EXACT: tisp_dpc_d_m1_par_cfg — write DPC method 1 registers */
+static void tisp_dpc_d_m1_par_cfg(void)
+{
+    int32_t margin = (int32_t)dpc_d_m1_con_par_array[2];
+
+    system_reg_write(0x2838, dpc_d_m1_dthres_intp << 0x10 | dpc_d_m1_fthres_intp);
+
+    int32_t d_clamped = (int32_t)dpc_d_m1_dthres_intp - margin;
+    int32_t f_clamped = (int32_t)dpc_d_m1_fthres_intp - margin;
+    /* OEM does not clamp to 0 for m1, just subtracts directly */
+    system_reg_write(0x281c, (uint32_t)d_clamped << 0x10 | (uint32_t)(f_clamped & 0xffff));
+}
+
+/* OEM EXACT: tisp_dpc_d_m2_par_cfg — write DPC method 2 registers */
+static void tisp_dpc_d_m2_par_cfg(void)
+{
+    uint32_t lvl = dpc_d_m2_level_intp;
+    uint32_t v0, a1, a3, t0;
+    uint32_t bit_field, reg_280c;
+    int32_t margin = (int32_t)dpc_d_m2_con_par_array[4];
+    int32_t d, f;
+
+    /* OEM: build 32-bit DPC method-2 enable bit field from level */
+    if (lvl == 0) {
+        a3 = 0; t0 = 0; a1 = 0; v0 = 0;
+    } else if (lvl == 1) {
+        a3 = 0; t0 = 0; a1 = 0; v0 = 1;
+    } else if (lvl == 2) {
+        a3 = 0; t0 = 0; a1 = 1; v0 = 1;
+    } else {
+        a3 = (lvl != 3) ? 1 : 0;
+        t0 = 1; a1 = 1; v0 = 1;
     }
 
-    pr_info("tisp_dpc_all_reg_refresh: Writing DPC parameters to registers\n");
+    bit_field = v0 | a1 << 1 | t0 << 2 | a3 << 3
+              | a1 << 4 | t0 << 5 | a3 << 6
+              | t0 << 8 | a3 << 9;
+    reg_280c = bit_field | a3 << 0xc
+             | v0 << 0x10 | a1 << 0x11 | t0 << 0x12
+             | a3 << 0x13 | a1 << 0x14 | t0 << 0x15 | a3 << 0x16
+             | t0 << 0x18 | a3 << 0x19 | a3 << 0x1c;
+    system_reg_write(0x280c, reg_280c);
 
-    /* Write DPC threshold arrays to hardware */
-    for (int i = 0; i < 16; i++) {
-        writel(dpc_d_m1_dthres_array_now[i], base_reg + 0x100 + (i * 4));  /* M1 dead threshold */
-        writel(dpc_d_m1_fthres_array_now[i], base_reg + 0x140 + (i * 4));  /* M1 false threshold */
-        writel(dpc_d_m3_dthres_array_now[i], base_reg + 0x180 + (i * 4));  /* M3 dead threshold */
-        writel(dpc_d_m3_fthres_array_now[i], base_reg + 0x1c0 + (i * 4));  /* M3 false threshold */
-    }
+    system_reg_write(0x283c, dpc_d_m2_hthres_intp << 0x10 | dpc_d_m2_lthres_intp);
+    d = (int32_t)dpc_d_m2_hthres_intp - margin;
+    f = (int32_t)dpc_d_m2_lthres_intp - margin;
+    if (d < 0) d = 0;
+    if (f < 0) f = 0;
+    system_reg_write(0x2820, (uint32_t)d << 0x10 | (uint32_t)f);
 
-    /* Enable DPC processing */
-    writel(1, base_reg + 0x00);     /* Enable DPC */
-    writel(0x3, base_reg + 0x04);   /* DPC mode: both methods enabled */
-    writel(0x10, base_reg + 0x08);  /* DPC strength */
+    system_reg_write(0x2840, dpc_d_m2_p1_d1_thres_intp << 0x10 | dpc_d_m2_p0_d1_thres_intp);
+    d = (int32_t)dpc_d_m2_p1_d1_thres_intp - margin;
+    f = (int32_t)dpc_d_m2_p0_d1_thres_intp - margin;
+    if (d < 0) d = 0;
+    if (f < 0) f = 0;
+    system_reg_write(0x2824, (uint32_t)d << 0x10 | (uint32_t)f);
 
-    iounmap(base_reg);
-    pr_info("tisp_dpc_all_reg_refresh: DPC registers written to hardware\n");
+    system_reg_write(0x2844, dpc_d_m2_p3_d1_thres_intp << 0x10 | dpc_d_m2_p2_d1_thres_intp);
+    d = (int32_t)dpc_d_m2_p3_d1_thres_intp - margin;
+    f = (int32_t)dpc_d_m2_p2_d1_thres_intp - margin;
+    if (d < 0) d = 0;
+    if (f < 0) f = 0;
+    system_reg_write(0x2828, (uint32_t)d << 0x10 | (uint32_t)f);
+
+    system_reg_write(0x2848, dpc_d_m2_p1_d2_thres_intp << 0x10 | dpc_d_m2_p0_d2_thres_intp);
+    d = (int32_t)dpc_d_m2_p1_d2_thres_intp - margin;
+    f = (int32_t)dpc_d_m2_p0_d2_thres_intp - margin;
+    if (d < 0) d = 0;
+    if (f < 0) f = 0;
+    system_reg_write(0x282c, (uint32_t)d << 0x10 | (uint32_t)f);
+
+    system_reg_write(0x284c, dpc_d_m2_p3_d2_thres_intp << 0x10 | dpc_d_m2_p2_d2_thres_intp);
+    d = (int32_t)dpc_d_m2_p3_d2_thres_intp - margin;
+    f = (int32_t)dpc_d_m2_p2_d2_thres_intp - margin;
+    if (d < 0) d = 0;
+    if (f < 0) f = 0;
+    system_reg_write(0x2830, (uint32_t)d << 0x10 | (uint32_t)f);
+
+    system_reg_write(0x2808, dpc_d_m2_con_par_array[0] << 8 | dpc_d_m3_con_par_array[0] << 0x10
+                     | dpc_d_m1_con_par_array[0] | dpc_d_m2_con_par_array[1] << 0x18);
+    system_reg_write(0x2818, dpc_d_m2_con_par_array[3] << 0x10 | dpc_d_m2_con_par_array[2]);
+}
+
+/* OEM EXACT: tisp_dpc_d_m3_par_cfg — write DPC method 3 registers */
+static void tisp_dpc_d_m3_par_cfg(void)
+{
+    int32_t margin = (int32_t)dpc_d_m3_con_par_array[3];
+
+    system_reg_write(0x2850, dpc_d_m3_dthres_intp << 0x10 | dpc_d_m3_fthres_intp);
+
+    int32_t d = (int32_t)dpc_d_m3_dthres_intp - margin;
+    int32_t f = (int32_t)dpc_d_m3_fthres_intp - margin;
+    if (d < 0) d = 0;
+    if (f < 0) f = 0;
+    system_reg_write(0x2834, (uint32_t)d << 0x10 | (uint32_t)f);
+
+    system_reg_write(0x2814, dpc_d_m3_con_par_array[1] << 0x10
+                     | dpc_d_m3_con_par_array[2] << 0x18 | dpc_d_m1_con_par_array[1]);
+}
+
+/* OEM EXACT: tisp_dpc_cor_par_cfg — write DPC correction registers */
+static void tisp_dpc_cor_par_cfg(void)
+{
+    system_reg_write(0x2810, dpc_d_cor_par_array[1] << 8 | dpc_d_cor_par_array[2] << 0x10
+                     | dpc_d_cor_par_array[0] | dpc_d_cor_par_array[3] << 0x14
+                     | dpc_d_cor_par_array[4] << 0x18);
+    system_reg_write(0x2804, dpc_d_cor_par_array[5] << 8 | dpc_d_cor_par_array[6] << 0x10
+                     | dpc_s_con_par_array[1] | dpc_d_cor_par_array[7] << 0x18);
+    system_reg_write(0x2884, dpc_d_cor_par_array[9] << 0xc
+                     | dpc_d_cor_par_array[10] << 0x18 | dpc_d_cor_par_array[8]);
+}
+
+/* OEM EXACT: tisp_ctr_par_cfg — write CTR (contrast) registers */
+static void tisp_ctr_par_cfg(void)
+{
+    system_reg_write(0x2854, ctr_stren_intp << 0x10 | ctr_con_par_array[0]);
+    system_reg_write(0x2858, ctr_con_par_array[2] << 8 | ctr_con_par_array[1]
+                     | ctr_md_thres_intp << 0x10);
+    system_reg_write(0x285c, ctr_con_par_array[5] << 8 | ctr_con_par_array[6] << 0x10
+                     | ctr_con_par_array[4]);
+    system_reg_write(0x2860, ctr_eh_thres_intp << 0x10 | ctr_el_thres_intp);
+}
+
+/* OEM EXACT: tisp_dpc_all_reg_refresh — full DPC register write via system_reg_write.
+ * Called on first EV update (data_9ab10 == 0xFFFFFFFF).
+ * Interpolates all arrays, writes all _cfg registers, then commits. */
+static int tisp_dpc_all_reg_refresh(uint32_t gain)
+{
+    tisp_dpc_intp(gain);
+    tisp_ctr_md_np_cfg();
+    tisp_ctr_std_np_cfg();
+    tisp_dpc_s_par_cfg();
+    tisp_dpc_d_m1_par_cfg();
+    tisp_dpc_d_m2_par_cfg();
+    tisp_dpc_d_m3_par_cfg();
+    tisp_dpc_cor_par_cfg();
+    tisp_ctr_par_cfg();
+    system_reg_write(DPC_REG_COMMIT, 1);
     return 0;
 }
 
-/* tisp_dpc_par_refresh - Binary Ninja EXACT implementation */
+/* OEM EXACT: tisp_dpc_intp_reg_refresh — partial DPC register write.
+ * Called on subsequent EV updates (when diff >= threshold).
+ * Skips NP, static, and correction configs; no commit write. */
+static int tisp_dpc_intp_reg_refresh(uint32_t gain)
+{
+    tisp_dpc_intp(gain);
+    tisp_dpc_d_m1_par_cfg();
+    tisp_dpc_d_m2_par_cfg();
+    tisp_dpc_d_m3_par_cfg();
+    tisp_ctr_par_cfg();
+    return 0;
+}
+
+/* OEM EXACT: tisp_dpc_par_refresh — decide full vs partial DPC register refresh.
+ * First call (prev == 0xFFFFFFFF) does full refresh via tisp_dpc_all_reg_refresh.
+ * Subsequent calls with sufficient delta do partial via tisp_dpc_intp_reg_refresh.
+ * When enable_write==1, writes the DPC commit register. */
 int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9ab10;
@@ -15932,16 +16154,15 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
 
         if (diff >= threshold) {
             data_9ab10 = ev_value;
-            tisp_dpc_all_reg_refresh();
+            tisp_dpc_intp_reg_refresh(ev_value);
         }
     } else {
         data_9ab10 = ev_value;
-        tisp_dpc_all_reg_refresh();
+        tisp_dpc_all_reg_refresh(ev_value);
     }
 
     if (enable_write == 1) {
-        /* Enable DPC with register write */
-        system_reg_write(0xa000 + 0x200, 1);  /* Enable DPC processing */
+        system_reg_write(DPC_REG_COMMIT, 1);
     }
 
     return 0;
@@ -17712,16 +17933,16 @@ int tisp_tgain_update(uint32_t gain)
      * Calls gated on block readiness to match last-known-working configuration.
      * Enable progressively as each block's init/config is verified. */
     tisp_gib_gain_interpolation(gain);
-    /* tisp_gb_blc_again_interp(gain, 0); — OEM calls this; enable after BLC init verified */
+    tisp_gb_blc_again_interp(gain, 0);
     if (dmsc_params_ready)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
     tisp_sdns_par_refresh(gain, 0x100, 1);
-    /* tisp_dpc_par_refresh(gain, 0x100, 1); — enable after DPC ioremap path verified */
+    tisp_dpc_par_refresh(gain, 0x100, 1);
     tisp_lsc_gain_update(gain);
     tisp_ydns_par_refresh(gain);
     tisp_rdns_par_refresh(gain, 0x100, 1);
-    /* tisp_mdns_par_refresh(gain, 0x100); — enable after tisp_mdns_intp fully ported */
+    tisp_mdns_par_refresh(gain, 0x100);
     return 0;
 }
 
