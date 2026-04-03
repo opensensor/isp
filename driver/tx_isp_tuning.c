@@ -3656,10 +3656,17 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         return param_init_ret;
     }
 
+    /* Arm AE/AWB statistics engines.  Our driver writes DMA buffers
+     * (0xa02c-0xa04c, 0xb03c-0xb04c) and AWB zone config (0xb004), but
+     * the AE zone config (0xa004-0xa028) is not yet implemented.
+     * Write the bank latches to start the statistics hardware with
+     * whatever default config the registers hold. */
+    system_reg_write(0xa000, 1);   /* AE0 bank latch — start AE0 stats */
+    system_reg_write(0xa800, 1);   /* AE1 bank latch — start AE1 stats */
+    system_reg_write(0xb000, 1);   /* AWB bank latch — start AWB stats */
+
     /* Seed BCSH with a neutral daylight CT (5000 K) so frames produced before
-     * AWB converges do not carry the cold-green default (~9984 K).  Once the
-     * AWB interrupt fires and JZ_Isp_Awb pushes event 9 with the real CT,
-     * tisp_ct_update will overwrite this seed automatically. */
+     * AWB converges do not carry the cold-green default (~9984 K). */
     tisp_ct_update(5000);
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
