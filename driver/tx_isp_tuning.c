@@ -12882,25 +12882,25 @@ static int tisp_gib_gain_interpolation(uint32_t gain)
     /* OEM EXACT: remap channels based on Bayer pattern */
     switch (bayer) {
     case 0x00: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_ir; break;
-    case 0x01: ch0 = blc_b;  ch1 = blc_r;  ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_ir; break;
-    case 0x02: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_ir; break;
-    case 0x03: ch0 = blc_b;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_r;  ch4 = blc_ir; break;
+    case 0x01: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_gr; ch3 = blc_r;  ch4 = blc_ir; break;
+    case 0x02: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_b;  ch3 = blc_gb; ch4 = blc_ir; break;
+    case 0x03: ch0 = blc_gb; ch1 = blc_b;  ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_ir; break;
     case 0x08: ch0 = blc_gb; ch1 = blc_gr; ch2 = blc_ir; ch3 = blc_b;  ch4 = blc_r;  break;
-    case 0x09: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_ir; ch3 = blc_gb; ch4 = blc_b;  break;
-    case 0x0a: ch0 = blc_gr; ch1 = blc_b;  ch2 = blc_gb; ch3 = blc_ir; ch4 = blc_r;  break;
-    case 0x0b: ch0 = blc_gb; ch1 = blc_r;  ch2 = blc_gr; ch3 = blc_ir; ch4 = blc_b;  break;
-    case 0x0c: ch0 = blc_gb; ch1 = blc_ir; ch2 = blc_gb; ch3 = blc_r;  ch4 = blc_gr; break;
-    case 0x0d: ch0 = blc_gr; ch1 = blc_ir; ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_r;  break;
-    case 0x0e: ch0 = blc_gr; ch1 = blc_gb; ch2 = blc_b;  ch3 = blc_r;  ch4 = blc_ir; break;
-    case 0x0f: ch0 = blc_gb; ch1 = blc_gr; ch2 = blc_r;  ch3 = blc_b;  ch4 = blc_ir; break;
-    case 0x10: ch0 = blc_b;  ch1 = blc_ir; ch2 = blc_gb; ch3 = blc_gr; ch4 = blc_r;  break;
-    case 0x11: ch0 = blc_r;  ch1 = blc_ir; ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_b;  break;
-    case 0x12: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_ir; ch3 = blc_r;  ch4 = blc_gr; break;
-    case 0x13: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_ir; ch3 = blc_b;  ch4 = blc_gb; break;
-    case 0x14: ch0 = blc_b;  ch1 = blc_gr; ch2 = blc_r;  ch3 = blc_ir; ch4 = blc_gb; break;
-    case 0x15: ch0 = blc_r;  ch1 = blc_gb; ch2 = blc_b;  ch3 = blc_ir; ch4 = blc_gr; break;
-    case 0x16: ch0 = blc_b;  ch1 = blc_r;  ch2 = blc_gr; ch3 = blc_gb; ch4 = blc_ir; break;
-    case 0x17: ch0 = blc_r;  ch1 = blc_b;  ch2 = blc_gb; ch3 = blc_gr; ch4 = blc_ir; break;
+    case 0x09: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_ir; ch3 = blc_r;  ch4 = blc_gr; break;
+    case 0x0a: ch0 = blc_r;  ch1 = blc_ir; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_gr; break;
+    case 0x0b: ch0 = blc_b;  ch1 = blc_ir; ch2 = blc_gr; ch3 = blc_r;  ch4 = blc_gb; break;
+    case 0x0c: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_b;  ch3 = blc_ir; ch4 = blc_gb; break;
+    case 0x0d: ch0 = blc_gb; ch1 = blc_b;  ch2 = blc_r;  ch3 = blc_ir; ch4 = blc_gr; break;
+    case 0x0e: ch0 = blc_ir; ch1 = blc_r;  ch2 = blc_b;  ch3 = blc_gb; ch4 = blc_gr; break;
+    case 0x0f: ch0 = blc_ir; ch1 = blc_b;  ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_gb; break;
+    case 0x10: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_ir; ch4 = blc_b;  break;
+    case 0x11: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_gr; ch3 = blc_ir; ch4 = blc_r;  break;
+    case 0x12: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_ir; ch3 = blc_gb; ch4 = blc_b;  break;
+    case 0x13: ch0 = blc_gb; ch1 = blc_b;  ch2 = blc_ir; ch3 = blc_gr; ch4 = blc_r;  break;
+    case 0x14: ch0 = blc_gb; ch1 = blc_ir; ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_b;  break;
+    case 0x15: ch0 = blc_gr; ch1 = blc_ir; ch2 = blc_b;  ch3 = blc_gb; ch4 = blc_r;  break;
+    case 0x16: ch0 = blc_ir; ch1 = blc_gb; ch2 = blc_gr; ch3 = blc_r;  ch4 = blc_b;  break;
+    case 0x17: ch0 = blc_ir; ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_r;  break;
     default:
         pr_err("gib byper error!!!\n");
         ch0 = ch1 = ch2 = ch3 = ch4 = 0;
@@ -20219,6 +20219,8 @@ int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf)
         case 0x53: dst = &tiziano_gib_deir_matrix_l; len = 0x3c; break;
     }
     memcpy(dst, in_buf, len);
+    tiziano_gib_lut_parameter();
+    trig_set_deir = 1;
     *size_buf = len;
     return 0;
 }
