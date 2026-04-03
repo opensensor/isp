@@ -69,10 +69,10 @@ MODULE_PARM_DESC(cfa_idx_override,
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 0; /* Debug override only; default matches OEM */
+static int tisp_force_bypass_adr = 1; /* Restore known-good image default: keep ADR bypassed */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
-			 "Force ADR bypass (debug override, default: 0 for OEM behavior)");
+			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
 
 static int tisp_force_bypass_defog = 0;
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
@@ -1601,12 +1601,20 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DDB4;  /* OEM default: DPC+LSC+GIB+ADR+DMSC+Gamma+Defog+CLM+Sharpen+SDNS+MDNS+YDNS */
+static uint isp_block_enable = 0xDD04;  /* Restore known-good image block set: DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
 
 #define TISP_TOP_BYPASS_BLOCK_MASK	0x0003DDB4
+
+static u32 tisp_apply_block_enable_whitelist(u32 bypass_val)
+{
+	u32 currently_enabled = (~bypass_val) & TISP_TOP_BYPASS_BLOCK_MASK;
+	u32 not_whitelisted = currently_enabled & ~isp_block_enable;
+
+	return bypass_val | not_whitelisted;
+}
 
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
@@ -1660,11 +1668,7 @@ apply_force_mask:
 	 * For blocks that are currently enabled (bit=0) but NOT in our
 	 * isp_block_enable whitelist, set bit=1 to bypass them.
 	 */
-	{
-		u32 currently_enabled = (~bypass_val) & TISP_TOP_BYPASS_BLOCK_MASK;
-		u32 not_whitelisted = currently_enabled & ~isp_block_enable;
-		bypass_val |= not_whitelisted;   /* re-bypass those */
-	}
+	bypass_val = tisp_apply_block_enable_whitelist(bypass_val);
 
 	pr_info("tisp_compute_top_bypass: allow=0x%08x final=0x%08x "
 		"(OEM target=0x%08x)\n",
@@ -3640,19 +3644,6 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     tisp_event_set_cb(9, tisp_ct_update);
     tisp_event_set_cb(8, tisp_ae_ir_update);
 
-    /* CRITICAL: Start event processing thread for sensor I2C communication */
-    pr_info("*** tisp_init: STARTING EVENT PROCESSING THREAD ***\n");
-    extern int tisp_event_process(void);
-
-    /* Create kernel thread to continuously process ISP events */
-    tisp_event_thread = kthread_run(tisp_event_process_thread, NULL, "tisp_events");
-    if (IS_ERR(tisp_event_thread)) {
-        pr_err("*** tisp_init: Failed to create event processing thread: %ld ***\n", PTR_ERR(tisp_event_thread));
-        tisp_event_thread = NULL;
-    } else {
-        pr_info("*** tisp_init: Event processing thread started successfully ***\n");
-    }
-
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
     extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
@@ -3669,35 +3660,6 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     if (param_init_ret != 0) {
         pr_err("tisp_init: tisp_param_operate_init failed: %d\n", param_init_ret);
         return param_init_ret;
-    }
-
-    /* Force initial CT update.  The AWB statistics interrupt (bit 30) doesn't
-     * fire in our driver yet, so the AWB algorithm never computes a color
-     * temperature and event 9 (tisp_ct_update) never triggers.  Without this,
-     * the BCSH CCM stays at the default CT=9984K (0x2700) which is far too
-     * cold for typical indoor lighting.  Force a D50 (5000K) CT update so the
-     * CCM interpolation starts in a reasonable range.  Once AWB interrupts are
-     * fixed, this can be removed. */
-    tisp_ct_update(5000);
-    pr_info("tisp_init: Forced initial CT update to 5000K (AWB stats IRQ not yet firing)\n");
-
-    /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
-    pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
-
-    if (ourISPdev->vic_dev) {
-        /* Create a dummy raw_pipe structure for the call */
-        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-
-        /* Call tx_isp_subdev_pipo with the VIC subdev and raw_pipe structure */
-        int pipo_ret = tx_isp_subdev_pipo(ourISPdev->vic_dev, raw_pipe);
-        if (pipo_ret == 0) {
-            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
-            pr_info("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
-        } else {
-            pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
-        }
-    } else {
-        pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo call ***\n");
     }
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
@@ -5006,6 +4968,7 @@ int tisp_blc_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_lsc_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_wdr_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf);
+int tisp_gib_get_par_cfg(void *out_buf, void *size_buf);
 
 /* Helper function declarations */
 int tisp_g_wdr_en(void *out_buf);
@@ -5014,6 +4977,7 @@ int tisp_lsc_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_wdr_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_wdr_param_array_get_extended(int param_id, void *out_buf, int *size_buf);
 int tisp_dpc_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_gib_param_array_get(int param_id, void *out_buf, int *size_buf);
 
 /* Missing AE/AF zone functions - Binary Ninja reference implementations needed */
 int tisp_g_ae_zone(void *buffer);
@@ -5687,8 +5651,8 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                             case 4:  /* tisp_dpc_get_par_cfg */
                                 ret = tisp_dpc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
-                            case 5:  /* tx_isp_subdev_pipo */
-                                ret = tx_isp_subdev_pipo((struct tx_isp_subdev *)&param_ptr[3], &param_ptr[1]);
+	                            case 5:  /* tisp_gib_get_par_cfg */
+	                                ret = tisp_gib_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 6:  /* tisp_rdns_get_par_cfg */
                                 ret = tisp_rdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
@@ -5747,10 +5711,9 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                             case 0x18: /* tisp_dn_mode_get */
                                 ret = tisp_dn_mode_get(param_ptr, &param_ptr[1]);
                                 break;
-                            default:
-                                pr_warn("tisp_code_tuning_ioctl: Unknown get parameter type %d\n", param_type);
-                                ret = -EINVAL;
-                                break;
+	                            default:
+	                                ret = 0;
+	                                break;
                         }
 
                         if (ret == 0) {
@@ -5786,9 +5749,10 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         pr_debug("tisp_code_tuning_ioctl: Set parameter type %d\n", param_type);
 
                         /* Binary Ninja: if ($a1_8 - 1 u>= 0x18) goto error */
-                        if ((param_type - 1) >= 0x18) {
-                            pr_err("tisp_code_tuning_ioctl: Invalid parameter type %d\n", param_type);
-                            return -EINVAL;
+	                        if ((param_type - 1) >= 0x18) {
+	                            pr_err("[ %s:%d ] Have no this ID(%d)\n",
+	                                   "tisp_set_par_process", __LINE__, param_type);
+	                            return 0;
                         }
 
                         /* Binary Ninja: Handle each parameter type for setting */
@@ -5856,20 +5820,20 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                             case 0x15: /* tisp_awb_set_par_cfg */
                                 ret = tisp_awb_set_par_cfg(&param_ptr[3]);
                                 break;
-                            case 0x16: /* Reserved */
-                                pr_err("tisp_code_tuning_ioctl: Reserved parameter type 0x16\n");
-                                ret = -EINVAL;
-                                break;
+	                            case 0x16: /* Reserved */
+	                                pr_err("[ %s:%d ] Have no this ID(%d)\n",
+	                                       "tisp_set_par_process", __LINE__, param_type);
+	                                return 0;
                             case 0x17: /* tisp_reg_map_set */
                                 ret = tisp_reg_map_set(param_ptr);
                                 break;
                             case 0x18: /* tisp_dn_mode_set */
                                 ret = tisp_dn_mode_set(param_ptr);
                                 break;
-                            default:
-                                pr_err("tisp_code_tuning_ioctl: Invalid set parameter type %d\n", param_type);
-                                ret = -EINVAL;
-                                break;
+	                            default:
+	                                pr_err("[ %s:%d ] Have no this ID(%d)\n",
+	                                       "tisp_set_par_process", __LINE__, param_type);
+	                                return 0;
                         }
 
                         return ret;
@@ -5958,7 +5922,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         param_ptr[1] = 0xb;
 
                         /* Binary Ninja: memcpy(tisp_par_ioctl_3 + 0xc, $a1_11, $a2_2) */
-                        memcpy(&param_ptr[3], "SONY mode", 0xb);
+	                        memcpy(&param_ptr[3], "V-20221024", 0xb);
 
                         if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
                             return -EFAULT;
@@ -5984,7 +5948,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         param_ptr[1] = 0xf;
 
                         /* Binary Ninja: memcpy with different string */
-                        memcpy(&param_ptr[3], "DVP mode", 0xf);
+	                        memcpy(&param_ptr[3], "V-T31-20221024", 0xf);
 
                         if (copy_to_user(argp, tisp_par_ioctl, 0x500c)) {
                             return -EFAULT;
@@ -5994,60 +5958,21 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                     }
 
 
-                    case 0x2000740a: /* Set AWB ModeFlag and algo mode */
-                    {
-                        int32_t flags[2];
-                        if (copy_from_user(flags, argp, sizeof(flags)))
-                            return -EFAULT;
-                        awb_mode_flag = flags[0] ? 1 : 0;
-	                        return tisp_s_awb_algo(flags[1]);
-                    }
-
-                    case 0x2000740b: /* Get AWB ModeFlag and algo mode */
-                    {
-                        int32_t flags[2];
-                        flags[0] = awb_mode_flag;
-                        flags[1] = awb_algo_mode;
-                        if (copy_to_user(argp, flags, sizeof(flags)))
-                            return -EFAULT;
-                        return 0;
-                    }
-
-
-                    case 0x2000740c: /* Set AWB freeze flag */
-                    {
-                        uint8_t frz;
-                        if (copy_from_user(&frz, argp, sizeof(frz)))
-                            return -EFAULT;
-	                        return tisp_s_wb_frz(&frz);
-                    }
-
-                    case 0x2000740d: /* Get AWB freeze flag */
-                    {
-	                        uint8_t frz = 0;
-	                        tisp_g_wb_frz(&frz);
-                        if (copy_to_user(argp, &frz, sizeof(frz)))
-                            return -EFAULT;
-                        return 0;
-                    }
-
-
                     default:
-                        pr_warn("tisp_code_tuning_ioctl: Unknown tuning command 0x%x\n", cmd);
-                        return -EINVAL;
+	                        return 0;
                 }
 
                 return 0;
             }
+
+	            return 0;
         }
 
-        /* Binary Ninja: Handle other command ranges */
-        pr_warn("tisp_code_tuning_ioctl: Command out of range: 0x%x\n", cmd);
-        return -EINVAL;
+	        pr_err("_IOC_NR error !!! cmd is %d\n", cmd);
+	        return -EINVAL;
     }
 
-    /* Binary Ninja: Handle non-0x74 commands */
-    pr_warn("tisp_code_tuning_ioctl: Invalid command family: 0x%x\n", cmd);
+	    pr_err("_IOC_TYPE error !!! cmd is %d\n", cmd);
     return -EINVAL;
 }
 EXPORT_SYMBOL(tisp_code_tuning_ioctl);
@@ -9398,6 +9323,24 @@ int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf)
     *(int *)size_buf = total_size;
     pr_debug("tisp_dpc_get_par_cfg: Total size=%d\n", total_size);
     return 0;
+}
+
+int tisp_gib_get_par_cfg(void *out_buf, void *size_buf)
+{
+	char *output_ptr = (char *)out_buf;
+	int total_size = 0;
+	int temp_size = 0;
+
+	*(int *)size_buf = 0;
+
+	for (int i = 0x3e; i < 0x54; i++) {
+		tisp_gib_param_array_get(i, output_ptr, &temp_size);
+		output_ptr += temp_size;
+		total_size += temp_size;
+	}
+
+	*(int *)size_buf = total_size;
+	return 0;
 }
 
 /* Implementation of the third batch of parameter functions */
@@ -17058,8 +17001,10 @@ int tisp_s_wdr_en(int enable)
         reg_0c = (reg_0c & 0xb577ff7d) | 0x34000009;
     }
 
-    reg_0c = tisp_apply_debug_top_bypass_overrides(reg_0c, __func__);
+	reg_0c = tisp_apply_block_enable_whitelist(reg_0c);
+	reg_0c = tisp_apply_debug_top_bypass_overrides(reg_0c, __func__);
 
+	system_reg_write(0x804, enable ? 0x10 : 0x1c);
     system_reg_write(0xc, reg_0c);
 
     tisp_dpc_wdr_en(enable);
@@ -19171,6 +19116,8 @@ int tisp_s_adr_enable(int enable)
         return -EINVAL;
     }
 
+	reg_val = tisp_apply_block_enable_whitelist(reg_val);
+	reg_val = tisp_apply_debug_top_bypass_overrides(reg_val, __func__);
     system_reg_write(0xc, reg_val);
     return 0;
 }
@@ -20279,6 +20226,47 @@ int tisp_wdr_param_array_set_extended(int param_id, void *in_buf, int *size_buf)
     *size_buf = data_size;
     pr_debug("tisp_wdr_param_array_set_extended: ID=0x%x, size=%d\n", param_id, data_size);
     return 0;
+}
+
+int tisp_gib_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+	const void *src = NULL;
+	int len = 0;
+
+	if ((param_id - 0x3e) >= 0x16) {
+		pr_err("%s,%d: gib not support param id %d\n",
+		       __func__, __LINE__, param_id);
+		return -1;
+	}
+
+	switch (param_id) {
+	case 0x3e: src = &tiziano_gib_config_line; len = 0x30; break;
+	case 0x3f: src = &tiziano_gib_r_g_linear; len = 0x8; break;
+	case 0x40: src = &tiziano_gib_b_ir_linear; len = 0x8; break;
+	case 0x41: src = &tiziano_gib_deirm_blc_r_linear; len = 0x24; break;
+	case 0x42: src = &tiziano_gib_deirm_blc_gr_linear; len = 0x24; break;
+	case 0x43: src = &tiziano_gib_deirm_blc_gb_linear; len = 0x24; break;
+	case 0x44: src = &tiziano_gib_deirm_blc_b_linear; len = 0x24; break;
+	case 0x45: src = &tiziano_gib_deirm_blc_ir_linear; len = 0x24; break;
+	case 0x46: src = &gib_ir_point; len = 0x10; break;
+	case 0x47: src = &gib_ir_reser; len = 0x3c; break;
+	case 0x48: src = &tiziano_gib_deir_r_h; len = 0x84; break;
+	case 0x49: src = &tiziano_gib_deir_g_h; len = 0x84; break;
+	case 0x4a: src = &tiziano_gib_deir_b_h; len = 0x84; break;
+	case 0x4b: src = &tiziano_gib_deir_r_m; len = 0x84; break;
+	case 0x4c: src = &tiziano_gib_deir_g_m; len = 0x84; break;
+	case 0x4d: src = &tiziano_gib_deir_b_m; len = 0x84; break;
+	case 0x4e: src = &tiziano_gib_deir_r_l; len = 0x84; break;
+	case 0x4f: src = &tiziano_gib_deir_g_l; len = 0x84; break;
+	case 0x50: src = &tiziano_gib_deir_b_l; len = 0x84; break;
+	case 0x51: src = &tiziano_gib_deir_matrix_h; len = 0x3c; break;
+	case 0x52: src = &tiziano_gib_deir_matrix_m; len = 0x3c; break;
+	case 0x53: src = &tiziano_gib_deir_matrix_l; len = 0x3c; break;
+	}
+
+	memcpy(out_buf, src, len);
+	*size_buf = len;
+	return 0;
 }
 
 int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf)
