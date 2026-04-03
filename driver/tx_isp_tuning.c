@@ -1724,7 +1724,8 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 1;    /* MDNS parked: init writes to bypassed regs cause hang despite block_enable */
+static int mdns_runtime_parked = 0;    /* MDNS enabled but deferred: no HW writes until tuning params arrive */
+static int mdns_params_received = 0;   /* Deferred init: set to 1 when libimp sends real MDNS tuning params */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -3653,6 +3654,12 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         pr_err("tisp_init: tisp_param_operate_init failed: %d\n", param_init_ret);
         return param_init_ret;
     }
+
+    /* Seed BCSH with a neutral daylight CT (5000 K) so frames produced before
+     * AWB converges do not carry the cold-green default (~9984 K).  Once the
+     * AWB interrupt fires and JZ_Isp_Awb pushes event 9 with the real CT,
+     * tisp_ct_update will overwrite this seed automatically. */
+    tisp_ct_update(5000);
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
@@ -9786,6 +9793,14 @@ int tisp_dpc_set_par_cfg(void *in_buf)
         p += sz; total += sz;
     }
     pr_debug("tisp_dpc_set_par_cfg: total=%d\n", total);
+
+    /* Deferred init: first time libimp sends real DPC params, do initial HW write */
+    if (!dpc_params_received) {
+        dpc_params_received = 1;
+        tisp_dpc_par_refresh(0, 0, 1);  /* NOW safe with real params */
+        pr_info("tisp_dpc_set_par_cfg: deferred DPC activation -- params received, block enabled\n");
+    }
+
     return 0;
 }
 int tisp_gib_set_par_cfg(void *in_buf)
@@ -9888,6 +9903,18 @@ int tisp_mdns_set_par_cfg(void *in_buf)
         p += sz; total += sz;
     }
     pr_debug("tisp_mdns_set_par_cfg: total=%d (with fallback advance)\n", total);
+
+    /* Deferred init: first time libimp sends real MDNS params, activate the block */
+    if (!mdns_params_received) {
+        u32 bypass;
+        mdns_params_received = 1;
+        bypass = system_reg_read(0xc);
+        bypass &= ~0x10000;  /* clear MDNS bypass bit 16 */
+        system_reg_write(0xc, bypass);
+        tisp_mdns_bypass(0);  /* NOW safe to enable MDNS with real params */
+        pr_info("tisp_mdns_set_par_cfg: deferred MDNS activation -- params received, block enabled\n");
+    }
+
     /* Apply to hardware after param blob set unless OEM-style bulk init is in progress. */
     if (!mdns_bulk_loading) {
         tisp_mdns_all_reg_refresh(data_9a9d0);
@@ -15658,10 +15685,11 @@ static int tiziano_mdns_params_refresh(void)
 	return 0;
 }
 
-/* tiziano_mdns_init - OEM EXACT initialization sequence.
- * OEM: select WDR tables, set width/height, set last_refresh_key=0xffffffff,
- * call tiziano_mdns_params_refresh(), tisp_mdns_par_refresh(0x10000, 0x10000),
- * tisp_mdns_bypass(0). */
+/* tiziano_mdns_init - Deferred initialization sequence.
+ * Loads MDNS parameter arrays into memory but does NOT write HW registers.
+ * HW register writes are deferred until libimp sends real tuning params
+ * via tisp_mdns_set_par_cfg, preventing zero-config register writes that
+ * stall the ISP pipeline. */
 int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
 	int prev_bulk_loading;
@@ -15683,23 +15711,14 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 	tiziano_mdns_params_refresh();
 	mdns_bulk_loading = prev_bulk_loading;
 
-	if (mdns_runtime_parked) {
-		u32 bypass_reg;
-		mdns_last_refresh_key = data_9a9d0;
-		bypass_reg = system_reg_read(0xc);
-		if (!(bypass_reg & 0x10000)) {
-			system_reg_write(0xc, bypass_reg | 0x10000);
-			pr_info("tiziano_mdns_init: forced MDNS bypass bit 16 (0x%08x -> 0x%08x)\n",
-				bypass_reg, bypass_reg | 0x10000);
-		}
-		pr_info("tiziano_mdns_init: MDNS runtime parked; tables loaded but hw bypassed\n");
-		return 0;
-	}
+	/* Deferred init: do NOT call tisp_mdns_par_refresh or tisp_mdns_bypass here.
+	 * Those would write MDNS registers (0x7800-0x7AEC) with zero/default config
+	 * before libimp has sent real tuning data, causing HW hangs.
+	 * MDNS bypass bit 16 stays SET (block bypassed) until
+	 * tisp_mdns_set_par_cfg activates it with real params. */
+	mdns_params_received = 0;
 
-	/* OEM EXACT: tisp_mdns_par_refresh(0x10000, 0x10000) + bypass(0) */
-	tisp_mdns_par_refresh(data_9a9d0, 0x10000);
-	tisp_mdns_bypass(0);
-
+	pr_info("tiziano_mdns_init: tables loaded, HW deferred until tuning params arrive\n");
 	return 0;
 }
 
@@ -15853,6 +15872,7 @@ uint32_t *dpc_d_m3_fthres_array_now = NULL;
 /* DPC state variables - Binary Ninja reference */
 static uint32_t data_9ab10 = 0xFFFFFFFF;  /* DPC state cache */
 static int dpc_wdr_en = 0;
+static int dpc_params_received = 0;   /* Deferred init: set to 1 when libimp sends real DPC tuning params */
 
 /* DPC interpolated value cache — populated by tisp_dpc_intp() */
 static uint32_t dpc_d_m1_fthres_intp;
@@ -16168,12 +16188,16 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
     return 0;
 }
 
-/* tiziano_dpc_init - Binary Ninja EXACT implementation */
+/* tiziano_dpc_init - Deferred initialization sequence.
+ * Loads DPC parameter arrays into memory but does NOT write HW registers.
+ * HW register writes are deferred until libimp sends real tuning params
+ * via tisp_dpc_set_par_cfg, preventing zero-config register writes to
+ * DPC registers (0x2800-0x2898) that stall the ISP during streaming. */
 int tiziano_dpc_init(void)
 {
-    pr_info("tiziano_dpc_init: Initializing DPC processing\n");
+    pr_info("tiziano_dpc_init: Initializing DPC processing (deferred)\n");
 
-    /* Binary Ninja: Select parameter arrays based on WDR mode */
+    /* Select parameter arrays based on WDR mode */
     if (dpc_wdr_en != 0) {
         dpc_d_m1_dthres_array_now = dpc_d_m1_dthres_wdr_array;
         dpc_d_m1_fthres_array_now = dpc_d_m1_fthres_wdr_array;
@@ -16188,18 +16212,17 @@ int tiziano_dpc_init(void)
         pr_info("tiziano_dpc_init: Using linear DPC parameters\n");
     }
 
-    /* Binary Ninja: Initialize state and refresh parameters */
+    /* Initialize state and load param arrays into memory */
     data_9ab10 = 0xFFFFFFFF;
     tiziano_dpc_params_refresh();
 
-    /* Binary Ninja: Initial parameter refresh with enable */
-    int ret = tisp_dpc_par_refresh(0, 0, 1);
-    if (ret) {
-        pr_err("tiziano_dpc_init: Failed to refresh DPC parameters: %d\n", ret);
-        return ret;
-    }
+    /* Deferred init: do NOT call tisp_dpc_par_refresh here.
+     * That would write DPC registers with zero/default config before
+     * libimp has sent real tuning data, causing streaming hangs.
+     * tisp_dpc_set_par_cfg will do the first HW write with real params. */
+    dpc_params_received = 0;
 
-    pr_info("tiziano_dpc_init: DPC processing initialized successfully\n");
+    pr_info("tiziano_dpc_init: tables loaded, HW deferred until tuning params arrive\n");
     return 0;
 }
 
@@ -17931,7 +17954,8 @@ int tisp_tgain_update(uint32_t gain)
 
     /* OEM order: GIB, GB_BLC, DMSC, Sharpen, SDNS, DPC, LSC, YDNS, RDNS, MDNS.
      * Calls gated on block readiness to match last-known-working configuration.
-     * Enable progressively as each block's init/config is verified. */
+     * DPC and MDNS are gated on deferred-init flags: only refresh after
+     * libimp has sent real tuning params via set_par_cfg. */
     /* GIB/BLC registers (0x1014-0x106c) require GIB block enabled (bit 5) */
     if (isp_block_enable & 0x20) {
         tisp_gib_gain_interpolation(gain);
@@ -17941,11 +17965,13 @@ int tisp_tgain_update(uint32_t gain)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
     tisp_sdns_par_refresh(gain, 0x100, 1);
-    /* tisp_dpc_par_refresh(gain, 0x100, 1); — DPC reg addresses (0x2800-0x2898) need runtime verification */
+    if (dpc_params_received)
+        tisp_dpc_par_refresh(gain, 0x100, 1);
     tisp_lsc_gain_update(gain);
     tisp_ydns_par_refresh(gain);
     tisp_rdns_par_refresh(gain, 0x100, 1);
-    tisp_mdns_par_refresh(gain, 0x100);
+    if (mdns_params_received)
+        tisp_mdns_par_refresh(gain, 0x100);
     return 0;
 }
 
@@ -17995,8 +18021,12 @@ int tisp_ct_update(uint32_t ct)
 	if ((reg_0c & 0x40) == 0)
 		tisp_lsc_ct_update(ct);
 
-	/* OEM gates the BCSH/CLM colour-temperature update on MDNS bypass bit 16. */
-	if ((reg_0c & 0x10000) == 0)
+	/* OEM gates the BCSH/CLM colour-temperature update on MDNS bypass bit 16.
+	 * When MDNS params have not yet been received (deferred init), bit 16
+	 * stays SET in the bypass register which would block BCSH CT updates,
+	 * locking colour temperature at the cold default (~9984 K) and producing
+	 * a persistent green cast. Bypass the gate until MDNS params arrive. */
+	if (!mdns_params_received || (reg_0c & 0x10000) == 0)
 		tisp_bcsh_ct_update(ct);
 
 	return 0;
@@ -18071,6 +18101,9 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
         pr_err("tisp_param_operate_init failed: %d\n", param_init_ret);
         return param_init_ret;
     }
+
+    /* Seed BCSH with neutral daylight CT before AWB converges */
+    tisp_ct_update(5000);
 
     pr_info("*** ALL TIZIANO ISP PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
     return 0;
@@ -18490,7 +18523,7 @@ int tisp_s_mdns_ratio(int ratio)
         mdns_y_ref_wei_b_min_array_now[i] = v;
     }
 
-    if (mdns_runtime_parked)
+    if (!mdns_params_received)
         return 0;
 
     /* OEM EXACT: tisp_mdns_all_reg_refresh(data_8a9c0) then tisp_mdns_reg_trigger() */
