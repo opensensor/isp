@@ -1489,6 +1489,8 @@ module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
 
+#define TISP_TOP_BYPASS_BLOCK_MASK	0x0003DDB4
+
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
 	u32 bypass_val = 0x8077efff;  /* OEM EXACT starting value */
@@ -1536,11 +1538,13 @@ apply_force_mask:
 
 	/* Re-bypass blocks we haven't fully implemented.
 	 * bypass register: bit=0 → block ENABLED, bit=1 → block BYPASSED.
+	 * Only touch the documented ISP processing-block bits here; preserve
+	 * all OEM control bits outside that mask exactly as computed.
 	 * For blocks that are currently enabled (bit=0) but NOT in our
 	 * isp_block_enable whitelist, set bit=1 to bypass them.
 	 */
 	{
-		u32 currently_enabled = ~bypass_val;  /* bit=1 where block is on */
+		u32 currently_enabled = (~bypass_val) & TISP_TOP_BYPASS_BLOCK_MASK;
 		u32 not_whitelisted = currently_enabled & ~isp_block_enable;
 		bypass_val |= not_whitelisted;   /* re-bypass those */
 	}
