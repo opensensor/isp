@@ -1557,7 +1557,10 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x2DD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS+YDNS */
+static uint isp_block_enable = 0xDD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS */
+/* YDNS requires MDNS co-enabled (OEM always enables both together).
+ * With MDNS parked, YDNS alone with zero fusion weights degrades image.
+ * Keep disabled until MDNS is fixed. */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
