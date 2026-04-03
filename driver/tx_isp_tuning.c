@@ -1557,7 +1557,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0xDD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS */
+static uint isp_block_enable = 0x2DD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS+YDNS */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -7031,22 +7031,24 @@ int tisp_adr_param_array_set(int param_id, void *in_buf, int *size_buf)
     return 0;
 }
 
-/* YDNS parameter arrays - BN reference sizes (0x24 bytes => 9 u32 entries) */
-static uint32_t ydns_edge_out_array = 0;              /* 0x3e6, size 4 */
-static uint32_t ydns_mv_thres0_array[0x24/4] = {0};   /* 0x3e7 */
-static uint32_t ydns_mv_thres1_array[0x24/4] = {0};   /* 0x3e8 */
-static uint32_t ydns_mv_thres2_array[0x24/4] = {0};   /* 0x3e9 */
-static uint32_t ydns_fus_level_array[0x24/4] = {0};   /* 0x3ea */
-static uint32_t ydns_fus_min_thres_array[0x24/4] = {0};
-static uint32_t ydns_fus_max_thres_array[0x24/4] = {0};
-static uint32_t ydns_fus_sswei_array[0x24/4] = {0};
-static uint32_t ydns_fus_sewei_array[0x24/4] = {0};
-static uint32_t ydns_fus_mswei_array[0x24/4] = {0};
-static uint32_t ydns_fus_mewei_array[0x24/4] = {0};
-static uint32_t ydns_fus_uvwei_array[0x24/4] = {0};
-static uint32_t ydns_edge_wei_array[0x24/4] = {0};
-static uint32_t ydns_edge_div_array[0x24/4] = {0};
-static uint32_t ydns_edge_thres_array[0x24/4] = {0};
+/* YDNS parameter arrays — OEM static defaults from tx-isp-t31.ko tuning blob.
+ * Runtime tuning bin from libimp may override. OEM data has non-zero fusion
+ * weights at low gain indices that are critical for YDNS to work correctly. */
+static uint32_t ydns_edge_out_array = 0;
+static uint32_t ydns_mv_thres0_array[9] = {1023, 0, 1023, 0, 180, 180, 180, 180, 180};
+static uint32_t ydns_mv_thres1_array[9] = {180, 180, 180, 180, 210, 210, 215, 215, 215};
+static uint32_t ydns_mv_thres2_array[9] = {215, 215, 215, 215, 220, 220, 232, 232, 232};
+static uint32_t ydns_fus_level_array[9] = {232, 232, 232, 232, 0, 0, 0, 0, 0};
+static uint32_t ydns_fus_min_thres_array[9] = {0, 0, 0, 0, 100, 100, 100, 100, 100};
+static uint32_t ydns_fus_max_thres_array[9] = {100, 100, 100, 100, 100, 100, 100, 100, 100};
+static uint32_t ydns_fus_sswei_array[9] = {100, 100, 100, 100, 0, 0, 0, 0, 0};
+static uint32_t ydns_fus_sewei_array[9] = {4, 4, 4, 4, 0, 0, 0, 0, 0};
+static uint32_t ydns_fus_mswei_array[9] = {4, 4, 4, 4, 0, 0, 2, 2, 2};
+static uint32_t ydns_fus_mewei_array[9] = {4, 4, 4, 4, 0, 0, 2, 2, 2};
+static uint32_t ydns_fus_uvwei_array[9] = {4, 4, 4, 4, 0, 0, 4, 4, 4};
+static uint32_t ydns_edge_wei_array[9] = {4, 4, 4, 4, 0, 0, 0, 0, 0};
+static uint32_t ydns_edge_div_array[9] = {0, 0, 0, 0, 1, 1, 1, 1, 1};
+static uint32_t ydns_edge_thres_array[9] = {1, 1, 1, 1, 20, 30, 40, 50, 50};
 
 
 int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf)
@@ -16735,6 +16737,21 @@ int tiziano_ydns_init(void)
     pr_info("tiziano_ydns_init: Initializing YDNS processing (OEM EXACT)\n");
     ydns_gain_old = 0xffffffff;
     tiziano_ydns_params_refresh();
+
+    /* Diagnostic: dump raw YDNS arrays loaded from tuning bin */
+    pr_info("YDNS_RAW: edge_out=%u mv0=[%u,%u,%u,%u] fus_level=[%u,%u,%u,%u]\n",
+        ydns_edge_out_array,
+        ydns_mv_thres0_array[0], ydns_mv_thres0_array[1],
+        ydns_mv_thres0_array[2], ydns_mv_thres0_array[3],
+        ydns_fus_level_array[0], ydns_fus_level_array[1],
+        ydns_fus_level_array[2], ydns_fus_level_array[3]);
+    pr_info("YDNS_RAW: sswei=[%u,%u,%u,%u] sewei=[%u,%u,%u,%u] edge_wei=[%u,%u,%u,%u]\n",
+        ydns_fus_sswei_array[0], ydns_fus_sswei_array[1],
+        ydns_fus_sswei_array[2], ydns_fus_sswei_array[3],
+        ydns_fus_sewei_array[0], ydns_fus_sewei_array[1],
+        ydns_fus_sewei_array[2], ydns_fus_sewei_array[3],
+        ydns_edge_wei_array[0], ydns_edge_wei_array[1],
+        ydns_edge_wei_array[2], ydns_edge_wei_array[3]);
     /* OEM calls tisp_ydns_par_refresh(0x10000) which, since ydns_gain_old
      * is 0xffffffff, unconditionally calls tisp_ydns_intp + tisp_ydns_param_cfg */
     tisp_ydns_intp(0x10000);
