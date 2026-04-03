@@ -69,10 +69,10 @@ MODULE_PARM_DESC(cfa_idx_override,
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 1; /* Restore known-good image default: keep ADR bypassed */
+static int tisp_force_bypass_adr = 0; /* OEM has ADR enabled (bypass reg bit 7 = 0) */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
-			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
+			 "Force ADR bypass (default: 0 to match OEM; set 1 to isolate ADR issues)");
 
 static int tisp_force_bypass_defog = 0;
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
@@ -1598,10 +1598,11 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  *          isp_block_enable=0xDD04 restores the effective f37c2886 crisp-image block set
  *          isp_block_enable=0xDD14 adds LSC while keeping GIB bypassed
+ *          isp_block_enable=0xDD94 adds LSC + ADR (adaptive dynamic range)
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD14;  /* Working blocks + LSC + MDNS/RDNS clocked (GIB needs binary-level debug) */
+static uint isp_block_enable = 0x3DD94;  /* Working blocks + LSC + ADR + MDNS/RDNS clocked (GIB needs binary-level debug) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -3705,14 +3706,21 @@ int tisp_init(void *sensor_info_arg, char *param_name)
      * tisp_*_set_par_cfg never triggers. Activate here with real tuning data.
      * The sub-module inits (tiziano_mdns_init, tiziano_dpc_init) already ran
      * but skipped HW writes because params weren't loaded yet. */
-    /* Activate DPC now that tuning bin is loaded.
-     * MDNS NOT activated here — causes HW hang even with tuning data.
-     * MDNS needs deeper investigation of its register init sequence. */
+    /* Activate DPC and MDNS now that tuning bin is loaded.
+     * OEM MDNS: par_refresh FIRST (loads ALL param regs), THEN bypass(0).
+     * Previous hang: bypass(0) before par_refresh → empty param regs. */
     if (tparams_day || tparams_active) {
         if (!dpc_params_received) {
             dpc_params_received = 1;
             tisp_dpc_par_refresh(0, 0, 1);
-            pr_info("tisp_init: DPC activated with tuning bin data\n");
+            pr_info("tisp_init: DPC activated\n");
+        }
+        if (!mdns_params_received) {
+            mdns_params_received = 1;
+            tisp_mdns_par_refresh(data_9a9d0, 0x10000);
+            tisp_mdns_bypass(0);
+            { u32 bp = system_reg_read(0xc); system_reg_write(0xc, bp & ~0x10000); }
+            pr_info("tisp_init: MDNS activated (par_refresh before bypass)\n");
         }
     }
 
@@ -17070,6 +17078,16 @@ int tisp_adr_process(void)
     return 0;
 }
 
+/* OEM EXACT: tisp_adr_ev_update — called from tisp_ev_update when ADR is active (bit 7 clear).
+ * Sets ev_now from the two EV arguments and flags ev_changed so the next
+ * tiziano_adr_algorithm() pass picks up the new exposure value. */
+int tisp_adr_ev_update(uint32_t ev, uint32_t aux_ev)
+{
+    ev_changed = 1;
+    ev_now = (aux_ev << 22) | (ev >> 10);
+    return 0;
+}
+
 /* tiziano_adr_interrupt_static - Binary Ninja EXACT: ADR interrupt handler (IRQ 0x12)
  * OEM flow: 1) write params to HW, 2) read DMA buffer index, 3) sync cache,
  *           4) parse data, 5) push event 2 to trigger algorithm */
@@ -18431,10 +18449,17 @@ int tisp_ev_update(uint32_t ev, uint32_t aux_ev)
     tisp_ccm_ev_update();
     tisp_bcsh_ev_update(ev);
 
-    /* OEM also calls these gated on bypass bits in reg 0xc — not yet implemented:
-     * if ((reg_0c & 0x80) == 0)  tisp_adr_ev_update(ev, aux_ev);
-     * if ((reg_0c & 0x800) == 0) tisp_defog_ev_update(ev, aux_ev);
-     * if ((reg_0c & 8) == 0)     tisp_wdr_ev_update(ev, aux_ev); */
+    /* OEM EXACT: gated EV updates — only call when the block is not bypassed */
+    {
+        uint32_t reg_0c = system_reg_read(0xc);
+
+        if ((reg_0c & 0x80) == 0)   /* ADR active (bit 7 clear) */
+            tisp_adr_ev_update(ev, aux_ev);
+
+        /* Defog and WDR EV updates — not yet implemented:
+         * if ((reg_0c & 0x800) == 0) tisp_defog_ev_update(ev, aux_ev);
+         * if ((reg_0c & 8) == 0)     tisp_wdr_ev_update(ev, aux_ev); */
+    }
 
     return 0;
 }
