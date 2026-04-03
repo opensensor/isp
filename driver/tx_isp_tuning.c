@@ -670,6 +670,7 @@ static void tiziano_build_hue_rotation(int32_t R[9])
 static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv)
 {
     int32_t R[9], T1[9], T2[9];
+    int i;
     tiziano_build_hue_rotation(R);
 
     /* T1 = CCM * R */
@@ -678,6 +679,18 @@ static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int
     tiziano_matmul3_q16(T1, Minv, T2);
     /* out = M * T2 */
     tiziano_matmul3_q16(M, T2, out);
+
+    /* OEM EXACT: right-shift all output values by 6 for hardware scaling.
+     * The OEM's RGBYUV applies this as the final step:
+     *   if (v < 0) v = -((-v) >> 6); else v = v >> 6;
+     * Without this, HMatrix values are 64x too large for BCSH registers. */
+    for (i = 0; i < 9; i++) {
+        int32_t v = out[i];
+        if (v < 0)
+            out[i] = -((-v) >> 6);
+        else
+            out[i] = v >> 6;
+    }
 }
 
 /* Compute piecewise slopes used by OEM for C and for HDP/HBP transitions. */
