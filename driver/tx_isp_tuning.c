@@ -8918,34 +8918,34 @@ static int tiziano_awb_set_hardware_param(void)
 	         * system_reg_write_awb() handles 0xb000 internally for
 	         * threshold registers 0xb028+. */
 	        system_reg_write(0x0b004, stats_cfg);
-        /* 0xb008: p[0..3] */
-        val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
-        system_reg_write(0x0b008, val);
-        /* 0xb00c: p[4..7] */
-        val = (u32)p[4] | ((u32)p[5] << 8) | ((u32)p[6] << 16) | ((u32)p[7] << 24);
-        system_reg_write(0x0b00c, val);
-        /* 0xb010: p[8..11] */
-        val = (u32)p[8] | ((u32)p[9] << 8) | ((u32)p[10] << 16) | ((u32)p[11] << 24);
-        system_reg_write(0x0b010, val);
-        /* 0xb014: p[12..14] */
-        val = (u32)p[12] | ((u32)p[13] << 8) | ((u32)p[14] << 16);
-        system_reg_write(0x0b014, val);
-        /* 0xb018: p[15..18] */
-        val = (u32)p[15] | ((u32)p[16] << 8) | ((u32)p[17] << 16) | ((u32)p[18] << 24);
-        system_reg_write(0x0b018, val);
-        /* 0xb01c: p[19..22] */
-        val = (u32)p[19] | ((u32)p[20] << 8) | ((u32)p[21] << 16) | ((u32)p[22] << 24);
-        system_reg_write(0x0b01c, val);
-        /* 0xb020: p[23..26] */
-        val = (u32)p[23] | ((u32)p[24] << 8) | ((u32)p[25] << 16) | ((u32)p[26] << 24);
-        system_reg_write(0x0b020, val);
-        /* 0xb024: p[27..29] */
-        val = (u32)p[27] | ((u32)p[28] << 8) | ((u32)p[29] << 16);
-        system_reg_write(0x0b024, val);
-        /* OEM: no explicit 0xb000 write after zone config.
-         * The subsequent system_reg_write_awb() calls latch 0xb000
-         * automatically when writing threshold registers. */
-        pr_info("AWB: zone cfg=0x%x params written to 0xb004-0xb024\n", stats_cfg);
+
+        /* OEM: 0xb008-0xb014 = zone WIDTHS packed as low bytes from _awb_parameter[4..18]
+         *       0xb018-0xb024 = zone HEIGHTS packed as low bytes from _awb_parameter[19..33]
+         * Layout: [0]=word0 [1]=rows [2]=enable [3]=cols [4..18]=widths [19..33]=heights
+         * BUG FIX: was packing from p[0..29] (config header), not zone dimensions! */
+        {
+            const uint32_t *wp = (const uint32_t *)_awb_parameter;
+            /* Zone widths: wp[4..18] → low byte of each, packed 4 per register */
+            val = (wp[4]&0xff)|((wp[5]&0xff)<<8)|((wp[6]&0xff)<<16)|((wp[7]&0xff)<<24);
+            system_reg_write(0x0b008, val);
+            val = (wp[8]&0xff)|((wp[9]&0xff)<<8)|((wp[10]&0xff)<<16)|((wp[11]&0xff)<<24);
+            system_reg_write(0x0b00c, val);
+            val = (wp[12]&0xff)|((wp[13]&0xff)<<8)|((wp[14]&0xff)<<16)|((wp[15]&0xff)<<24);
+            system_reg_write(0x0b010, val);
+            val = (wp[16]&0xff)|((wp[17]&0xff)<<8)|((wp[18]&0xff)<<16);
+            system_reg_write(0x0b014, val);
+            /* Zone heights: wp[19..33] → low byte of each, packed 4 per register */
+            val = (wp[19]&0xff)|((wp[20]&0xff)<<8)|((wp[21]&0xff)<<16)|((wp[22]&0xff)<<24);
+            system_reg_write(0x0b018, val);
+            val = (wp[23]&0xff)|((wp[24]&0xff)<<8)|((wp[25]&0xff)<<16)|((wp[26]&0xff)<<24);
+            system_reg_write(0x0b01c, val);
+            val = (wp[27]&0xff)|((wp[28]&0xff)<<8)|((wp[29]&0xff)<<16)|((wp[30]&0xff)<<24);
+            system_reg_write(0x0b020, val);
+            val = (wp[31]&0xff)|((wp[32]&0xff)<<8)|((wp[33]&0xff)<<16);
+            system_reg_write(0x0b024, val);
+            pr_info("AWB: zone cfg=0x%x w[0]=%u h[0]=%u written to 0xb004-0xb024\n",
+                    stats_cfg, wp[4], wp[19]);
+        }
     }
 
     /* OEM algo-mode path plus runtime ModeFlag thresholds. */
