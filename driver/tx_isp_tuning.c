@@ -68,6 +68,10 @@ MODULE_PARM_DESC(cfa_idx_override,
 
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
+#define TISP_BLOCK_DPC_ENABLE_MASK	BIT(2)
+#define TISP_BLOCK_GIB_ENABLE_MASK	BIT(5)
+#define TISP_BLOCK_ADR_ENABLE_MASK	BIT(7)
+#define TISP_BLOCK_MDNS_ENABLE_MASK	BIT(16)
 
 static int tisp_force_bypass_adr = 1; /* ADR bypassed until Tiziano_adr_fpga is ported */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
@@ -1488,6 +1492,11 @@ module_param(isp_bypass_override, uint, 0644);
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
+
+static inline int tisp_block_enabled(u32 block_mask)
+{
+	return (isp_block_enable & block_mask) != 0;
+}
 
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
@@ -12934,6 +12943,9 @@ static int tiziano_gib_deir_ir_interpolation(uint32_t ir_val)
  * Called with current IR value; updates DEIR coefficients if delta exceeds threshold. */
 int tisp_gib_deir_ir_update(uint32_t ir_val)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_GIB_ENABLE_MASK))
+		return 0;
+
     gib_ir_value[0] = ir_val;
 
     if (GIB_CFG_DEIR_EN == 1 && gib_ir_mode[0] == 1) {
@@ -12958,6 +12970,11 @@ EXPORT_SYMBOL(tisp_gib_deir_ir_update);
  * Reloads GIB parameters and updates LUT, but does NOT reprogram DEIR coefficients. */
 int tiziano_gib_dn_params_refresh(void)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_GIB_ENABLE_MASK)) {
+		pr_info("tiziano_gib_dn_params_refresh: GIB masked off by isp_block_enable; skipping refresh\n");
+		return 0;
+	}
+
     tiziano_gib_params_refresh();
 
     if (deir_en != 1)
@@ -12981,6 +12998,11 @@ EXPORT_SYMBOL(tiziano_gib_dn_params_refresh);
  * GIB must be enabled in the bypass register for AWB DMA to collect stats. */
 int tiziano_gib_init(void)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_GIB_ENABLE_MASK)) {
+		pr_info("tiziano_gib_init: GIB masked off by isp_block_enable; skipping hw init\n");
+		return 0;
+	}
+
     tiziano_gib_params_refresh();
 
     /* Zero BLC arrays to make GIB passthrough — keeps block active for AWB */
@@ -15385,6 +15407,11 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
 	int prev_bulk_loading;
 
+	if (!tisp_block_enabled(TISP_BLOCK_MDNS_ENABLE_MASK)) {
+		pr_info("tiziano_mdns_init: MDNS masked off by isp_block_enable; skipping init\n");
+		return 0;
+	}
+
 	/* OEM EXACT: WDR table selection + store dimensions */
 	mdns_frame_width = width;
 	mdns_frame_height = height;
@@ -15656,6 +15683,9 @@ static int tisp_dpc_all_reg_refresh(void)
 /* tisp_dpc_par_refresh - Binary Ninja EXACT implementation */
 int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_DPC_ENABLE_MASK))
+		return 0;
+
     uint32_t prev_value = data_9ab10;
 
     pr_debug("tisp_dpc_par_refresh: EV=%u, threshold=%u, enable=%d\n", ev_value, threshold, enable_write);
@@ -15683,6 +15713,11 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
 /* tiziano_dpc_init - Binary Ninja EXACT implementation */
 int tiziano_dpc_init(void)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_DPC_ENABLE_MASK)) {
+		pr_info("tiziano_dpc_init: DPC masked off by isp_block_enable; skipping hw init\n");
+		return 0;
+	}
+
     pr_info("tiziano_dpc_init: Initializing DPC processing\n");
 
     /* Binary Ninja: Select parameter arrays based on WDR mode */
@@ -16116,6 +16151,9 @@ static int tiziano_adr_algorithm(void)
 /* tisp_adr_process - Binary Ninja EXACT: ADR processing callback (event 2) */
 int tisp_adr_process(void)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_ADR_ENABLE_MASK) || tisp_force_bypass_adr)
+		return 0;
+
     tiziano_adr_algorithm();
     return 0;
 }
@@ -16166,6 +16204,12 @@ push_event:
 /* tiziano_adr_init - Binary Ninja SIMPLIFIED implementation */
 int tiziano_adr_init(uint32_t width, uint32_t height)
 {
+	if (!tisp_block_enabled(TISP_BLOCK_ADR_ENABLE_MASK)) {
+		pr_info("tiziano_adr_init: ADR masked off by isp_block_enable; skipping init (%ux%u)\n",
+			width, height);
+		return 0;
+	}
+
     if (tisp_force_bypass_adr) {
         pr_warn("tiziano_adr_init: skipping ADR init because bypass isolation is active (%ux%u)\n",
                 width, height);
@@ -17764,6 +17808,9 @@ int tisp_s_mdns_ratio(int ratio)
 
     /* OEM EXACT: data_8aaf0 = arg1 */
     data_9ab00 = ratio;
+
+	if (!tisp_block_enabled(TISP_BLOCK_MDNS_ENABLE_MASK))
+		return 0;
 
     /* OEM EXACT: loop i=0..8 (9 elements), scaling 5 array pairs
      * OEM reads base values from the original tuning arrays (WDR or standard),
