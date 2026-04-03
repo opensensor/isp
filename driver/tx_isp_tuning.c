@@ -17941,7 +17941,7 @@ int tisp_tgain_update(uint32_t gain)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
     tisp_sdns_par_refresh(gain, 0x100, 1);
-    tisp_dpc_par_refresh(gain, 0x100, 1);
+    /* tisp_dpc_par_refresh(gain, 0x100, 1); — DPC reg addresses (0x2800-0x2898) need runtime verification */
     tisp_lsc_gain_update(gain);
     tisp_ydns_par_refresh(gain);
     tisp_rdns_par_refresh(gain, 0x100, 1);
