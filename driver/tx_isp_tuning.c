@@ -3690,7 +3690,9 @@ int tisp_init(void *sensor_info_arg, char *param_name)
      * shortcut=0 writes all 10 registers; system_reg_write_ae() latches via 0xa000/0xa800. */
     tiziano_ae_set_hardware_param(0, _ae_parameter.data, 0);
     tiziano_ae_set_hardware_param(1, _ae_parameter.data, 0);
-    system_reg_write(0xb000, 1);          /* AWB re-latch after ISP start */
+    /* OEM does NOT write 0xb000 here — system_reg_write_awb() handles
+     * the 0xb000 latch internally when threshold registers are written.
+     * Spurious 0xb000 writes can disrupt AWB stats collection. */
     pr_info("tisp_init: AE zone/weight registers programmed via tiziano_ae_set_hardware_param\n");
 
     /* Seed BCSH with a neutral daylight CT (5000 K) so frames produced before
@@ -8851,11 +8853,19 @@ void tiziano_awb_params_refresh(void)
 
     pr_info("tiziano_awb_params_refresh: LOADED from bin - "
         "wb_static=%u,%u light_src_num=%u "
-        "AwbPointPos[0]=%u(q=%u) AwbPointPos[1]=%u "
-        "awb_ct_seed=%u pixel_cnt_th=%u\n",
+        "AwbPointPos[0]=0x%x(q=%u) AwbPointPos[1]=%u "
+        "awb_ct_seed=%u pixel_cnt_th=%u "
+        "awb_cof=%u,%u\n",
         _wb_static[0], _wb_static[1], _light_src_num,
         _AwbPointPos[0], _AwbPointPos[0] & 0x1f, _AwbPointPos[1],
-        _awb_ct, _pixel_cnt_th);
+        _awb_ct, _pixel_cnt_th,
+        _awb_cof[0], _awb_cof[1]);
+    {
+        const uint32_t *mf = (const uint32_t *)_awb_mf_para;
+        pr_info("tiziano_awb_params_refresh: "
+            "mf_para=[%u,%u,%u,%u,%u,%u]\n",
+            mf[0], mf[1], mf[2], mf[3], mf[4], mf[5]);
+    }
     {
         const uint32_t *rg_pos = (const uint32_t *)_rg_pos;
         const uint32_t *bg_pos = (const uint32_t *)_bg_pos;
@@ -8903,8 +8913,10 @@ static int tiziano_awb_set_hardware_param(void)
 	            ((u32)p[2] << 16) | ((u32)p[3] << 24);
 	        stats_cfg = (AWB_ZONE_COLS << 28) | (1u << 16) |
 	            (AWB_ZONE_ROWS << 12) | param_word0;
-	        /* Latch AWB config bank before writing zone/param registers */
-	        system_reg_write(0xb000, 1);
+	        /* OEM uses raw system_reg_write for zone config registers
+	         * (0xb004-0xb024) — no 0xb000 latch here.
+	         * system_reg_write_awb() handles 0xb000 internally for
+	         * threshold registers 0xb028+. */
 	        system_reg_write(0x0b004, stats_cfg);
         /* 0xb008: p[0..3] */
         val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
@@ -8930,8 +8942,9 @@ static int tiziano_awb_set_hardware_param(void)
         /* 0xb024: p[27..29] */
         val = (u32)p[27] | ((u32)p[28] << 8) | ((u32)p[29] << 16);
         system_reg_write(0x0b024, val);
-        /* Commit AWB zone/param configuration */
-        system_reg_write(0xb000, 1);
+        /* OEM: no explicit 0xb000 write after zone config.
+         * The subsequent system_reg_write_awb() calls latch 0xb000
+         * automatically when writing threshold registers. */
         pr_info("AWB: zone cfg=0x%x params written to 0xb004-0xb024\n", stats_cfg);
     }
 
@@ -12220,6 +12233,7 @@ static void tisp_dmsc_awb_gain_par_cfg(uint32_t gain)
 
 static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_t *gain_base)
 {
+	static unsigned int awb_gain_diag_count;
 	const uint32_t *mf_words = (const uint32_t *)mf_para;
 	u32 q = point_pos & 0x1f;
 	u32 rounding = 1u << ((point_pos - 1) & 0x1f);
@@ -12238,6 +12252,13 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	gain_gb_q = fix_point_mult2_32(point_pos, mf_gb << q, base_gb);
 	gain_pair[0] = (gain_gr_q + rounding) >> q;
 	gain_pair[1] = (gain_gb_q + rounding) >> q;
+
+	/* Guard against divide-by-zero if gain computation produced 0 */
+	if (gain_pair[0] == 0)
+		gain_pair[0] = 0x100;
+	if (gain_pair[1] == 0)
+		gain_pair[1] = 0x100;
+
 	wb_live_gain_gr_inv = 0x10000u / gain_pair[0];
 	wb_live_gain_gb_inv = 0x10000u / gain_pair[1];
 	apply_pair[0] = gain_pair[0];
@@ -12252,6 +12273,28 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	}
 
 	JZ_Isp_Awb_Awbg2reg(apply_pair, reg_pair);
+
+	awb_gain_diag_count++;
+	if (awb_gain_diag_count <= 10 || (awb_gain_diag_count % 300) == 0) {
+		pr_info("AWB_GAIN[%u]: base=%u,%u mf=%u,%u gain=%u,%u "
+			"apply=%u,%u reg=0x%x,0x%x frz=%d "
+			"pp=0x%x q=%u wb_mode=%u\n",
+			awb_gain_diag_count,
+			base_gr, base_gb, mf_gr, mf_gb,
+			gain_pair[0], gain_pair[1],
+			apply_pair[0], apply_pair[1],
+			reg_pair[0], reg_pair[1],
+			awb_frz, point_pos, q, wb_mode);
+		pr_info("AWB_GAIN[%u]: mf_all=[%u,%u,%u,%u,%u,%u] "
+			"gain_gr_q=0x%x gain_gb_q=0x%x rounding=0x%x "
+			"AwbPointPos=0x%x,0x%x wb_static=%u,%u\n",
+			awb_gain_diag_count,
+			mf_words[0], mf_words[1], mf_words[2],
+			mf_words[3], mf_words[4], mf_words[5],
+			gain_gr_q, gain_gb_q, rounding,
+			_AwbPointPos[0], _AwbPointPos[1],
+			_wb_static[0], _wb_static[1]);
+	}
 
 	if (awb_frz == 0) {
 		system_reg_write_awb(2, 0x183c, reg_pair[0]);
@@ -12305,7 +12348,7 @@ static uint32_t ISPAWBInterpolation2(uint32_t q, uint32_t x,
 		fix_point_mult2_32(q, y1 - y0, x_delta), denom);
 }
 
-static uint32_t awb_ratio_u8(uint32_t numer, uint32_t denom)
+static uint32_t __maybe_unused awb_ratio_u8(uint32_t numer, uint32_t denom)
 {
 	if (denom == 0)
 		return 0;
@@ -12515,18 +12558,37 @@ static uint32_t awb_ratio_to_mf_gain(uint32_t point_pos, uint32_t ratio)
 	return (gain_q + rounding) >> q;
 }
 
+/* OEM-matched Tiziano_awb_fpga: compute per-zone rg/bg ratios in Q-format
+ * with _awb_cof calibration coefficients, matching the OEM exactly.
+ *
+ * OEM zone ratio: zone_rg[i] = fix_point_mult2_32(pp, (R << q) / G, cof_rg_q)
+ *                 zone_bg[i] = fix_point_mult2_32(pp, (B << q) / G, cof_bg_q)
+ * where cof_rg_q = fix_point_mult2_32(pp, 0x100 << q, _awb_cof[0])
+ *
+ * OEM global: rg_global = fix_point_div(q, rg_pix_cnt, rg_sum) >> q
+ *
+ * Previous code used simple Q8 ratios (R*256/G) without _awb_cof calibration,
+ * and weighted-mean averaging instead of OEM reciprocal-average, producing
+ * wrong rg/bg values (e.g., bg_global=21 instead of ~200-300).
+ */
 static int Tiziano_awb_fpga(const uint32_t *stats_r,
 			    const uint32_t *stats_g,
 			    const uint32_t *stats_b,
 			    const uint32_t *stats_p)
 {
-	const uint8_t *weight_bank = awb_rgbg_weight_active;
 	u32 *mf_words = (u32 *)_awb_mf_para;
+	u32 pp = _AwbPointPos[0];
+	u32 q = pp & 0x1f;
+	u32 cof_rg = _awb_cof[0];
+	u32 cof_bg = _awb_cof[1];
+	u32 cof_rg_q, cof_bg_q;
 	u64 rg_sum = 0;
 	u64 bg_sum = 0;
-	u64 diff_sum = 0;
-	u32 weight_sum = 0;
-	u32 active_zones = 0;
+	u32 rg_pix_cnt;
+	u32 bg_pix_cnt;
+	u64 diff_rg_sum = 0;
+	u64 diff_bg_sum = 0;
+	u32 total_zones;
 	u32 idx;
 	u32 diff_threshold = _AwbPointPos[1];
 	bool force_recalc = !awb_zone_cache_valid || awb_moa || tisp_wb_attr[0] != 0;
@@ -12535,16 +12597,25 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	u32 live_gr;
 	u32 live_gb;
 	u32 target_ct;
+	static unsigned int fpga_diag_count;
 
 	if (!stats_r || !stats_g || !stats_b || !stats_p)
 		return -EINVAL;
+
+	/* OEM: pre-compute calibrated reference: cof_q = mult(pp, 0x100 << q, cof) */
+	cof_rg_q = fix_point_mult2_32(pp, 0x100u << q, cof_rg);
+	cof_bg_q = fix_point_mult2_32(pp, 0x100u << q, cof_bg);
+
+	/* OEM: total_zones = rows * cols; pix_cnt starts at total, decremented */
+	total_zones = AWB_STATS_ZONES;
+	rg_pix_cnt = total_zones;
+	bg_pix_cnt = total_zones;
 
 	for (idx = 0; idx < AWB_STATS_ZONES; ++idx) {
 		u32 g = stats_g[idx];
 		u32 pix = stats_p[idx];
 		u32 rg = 0;
 		u32 bg = 0;
-		u32 w = weight_bank ? weight_bank[idx] : 1;
 
 		awb_zone_pix_cnt[idx] = pix;
 		tisp_wb_zone_attr[idx] = awb_zone_mean_u8(stats_r[idx], pix);
@@ -12552,23 +12623,35 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		tisp_wb_zone_attr[idx + (AWB_STATS_ZONES * 2)] =
 			awb_zone_mean_u8(stats_b[idx], pix);
 
+		/* OEM: zone_rg = fix_point_mult2_32(pp, (R << q) / G, cof_rg_q)
+		 *      zone_bg = fix_point_mult2_32(pp, (B << q) / G, cof_bg_q) */
 		if (g != 0) {
-			rg = awb_ratio_u8(stats_r[idx], g);
-			bg = awb_ratio_u8(stats_b[idx], g);
+			u32 r_q = (stats_r[idx] << q) / g;
+			u32 b_q = (stats_b[idx] << q) / g;
+			rg = fix_point_mult2_32(pp, r_q, cof_rg_q);
+			bg = fix_point_mult2_32(pp, b_q, cof_bg_q);
 		}
 
-		if (pix < _pixel_cnt_th || w == 0 || rg == 0 || bg == 0) {
+		/* OEM: zero out zones below pixel threshold */
+		if (pix < _pixel_cnt_th) {
 			awb_zone_rg[idx] = 0;
 			awb_zone_bg[idx] = 0;
+			awb_zone_pix_cnt[idx] = 0;
+			rg_pix_cnt--;
+			bg_pix_cnt--;
 			continue;
 		}
 
 		awb_zone_rg[idx] = rg;
 		awb_zone_bg[idx] = bg;
-		rg_sum += (u64)rg * w;
-		bg_sum += (u64)bg * w;
-		weight_sum += w;
-		active_zones++;
+
+		/* OEM: accumulate sums; track zero zones separately */
+		rg_sum += rg;
+		bg_sum += bg;
+		if (rg == 0)
+			rg_pix_cnt--;
+		if (bg == 0)
+			bg_pix_cnt--;
 
 		if (awb_zone_cache_valid) {
 			u32 rg_diff = (awb_zone_rg_last[idx] > rg) ?
@@ -12576,21 +12659,28 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 			u32 bg_diff = (awb_zone_bg_last[idx] > bg) ?
 				(awb_zone_bg_last[idx] - bg) : (bg - awb_zone_bg_last[idx]);
 
-			diff_sum += rg_diff + bg_diff;
+			diff_rg_sum += rg_diff;
+			diff_bg_sum += bg_diff;
 		}
 	}
 
-	if (active_zones == 0 || weight_sum == 0) {
+	fpga_diag_count++;
+
+	if (rg_pix_cnt == 0 && bg_pix_cnt == 0) {
 		static unsigned int awb_no_zones_count;
 		awb_no_zones_count++;
 		if (awb_no_zones_count <= 3 || (awb_no_zones_count % 300) == 0)
-			pr_info("Tiziano_awb_fpga[%u]: NO active zones (all stats zero?)\n",
-				awb_no_zones_count);
+			pr_info("Tiziano_awb_fpga[%u]: NO active zones "
+				"(all stats zero? pix_thr=%u)\n",
+				awb_no_zones_count, _pixel_cnt_th);
 		return 0;
 	}
 
 	if (!force_recalc) {
-		u32 avg_diff = (uint32_t)div_u64(diff_sum + (active_zones >> 1), active_zones);
+		/* OEM: ((diff_rg_sum + diff_bg_sum) >> q) / total_zones >= threshold */
+		u64 total_diff = diff_rg_sum + diff_bg_sum;
+		u32 scaled_diff = (u32)(total_diff >> q);
+		u32 avg_diff = total_zones ? (scaled_diff / total_zones) : 0;
 
 		if (avg_diff < diff_threshold) {
 			static unsigned int awb_stable_count;
@@ -12606,29 +12696,36 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	memcpy(awb_zone_bg_last, awb_zone_bg, sizeof(awb_zone_bg));
 	awb_zone_cache_valid = 1;
 
-	awb_zone_rg_global = (uint32_t)div_u64(rg_sum + (weight_sum >> 1), weight_sum);
-	awb_zone_bg_global = (uint32_t)div_u64(bg_sum + (weight_sum >> 1), weight_sum);
-	if (awb_zone_rg_global == 0)
+	/* OEM: rg_global = fix_point_div(q, rg_pix_cnt, rg_sum) >> q
+	 * Combined: (pix_cnt << 2q) / rg_sum is the reciprocal average. */
+	if (rg_pix_cnt && rg_sum)
+		awb_zone_rg_global = (u32)div_u64(
+			(u64)rg_pix_cnt << (q * 2u), rg_sum);
+	else
 		awb_zone_rg_global = 0x100;
-	if (awb_zone_bg_global == 0)
+
+	if (bg_pix_cnt && bg_sum)
+		awb_zone_bg_global = (u32)div_u64(
+			(u64)bg_pix_cnt << (q * 2u), bg_sum);
+	else
 		awb_zone_bg_global = 0x100;
 
-	{
-		static unsigned int fpga_diag_count;
-		fpga_diag_count++;
-		if (fpga_diag_count <= 5 || (fpga_diag_count % 300) == 0) {
-			pr_info("AWB_FPGA_DIAG[%u]: active_zones=%u "
-				"weight_sum=%u rg_global=%u bg_global=%u "
-				"zone_rg[0]=%u zone_bg[0]=%u "
-				"zone_rg[112]=%u zone_bg[112]=%u "
-				"pixel_cnt_th=%u pix[0]=%u\n",
-				fpga_diag_count, active_zones,
-				weight_sum, awb_zone_rg_global,
-				awb_zone_bg_global,
-				awb_zone_rg[0], awb_zone_bg[0],
-				awb_zone_rg[112], awb_zone_bg[112],
-				_pixel_cnt_th, stats_p[0]);
-		}
+	if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0) {
+		pr_info("AWB_FPGA_DIAG[%u]: total_zones=%u "
+			"rg_pix_cnt=%u bg_pix_cnt=%u "
+			"rg_global=%u bg_global=%u "
+			"rg_sum=%llu bg_sum=%llu "
+			"cof=%u,%u cof_q=%u,%u "
+			"zone_rg[0]=%u zone_bg[0]=%u "
+			"pixel_cnt_th=%u pix[0]=%u q=%u pp=0x%x\n",
+			fpga_diag_count, total_zones,
+			rg_pix_cnt, bg_pix_cnt,
+			awb_zone_rg_global,
+			awb_zone_bg_global,
+			rg_sum, bg_sum,
+			cof_rg, cof_bg, cof_rg_q, cof_bg_q,
+			awb_zone_rg[0], awb_zone_bg[0],
+			_pixel_cnt_th, stats_p[0], q, pp);
 	}
 
 	target_rg = awb_zone_rg_global;
@@ -12656,11 +12753,13 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	mf_words[4] = live_gr;
 	mf_words[5] = live_gb;
 
-		/* OEM HLIL shows _awb_cof is the tiny 1,4 coefficient pair while
-		 * init/start gain application uses the bin-loaded _wb_static base.
-		 * Using _awb_cof here collapses runtime gain programming exactly like
-		 * the live logs (base=1,4 -> awb_gain=0,28). */
-		return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+	if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0)
+		pr_info("AWB_FPGA_GAIN[%u]: target_rg=%u target_bg=%u "
+			"live_gr=%u live_gb=%u ct=%u\n",
+			fpga_diag_count, target_rg, target_bg,
+			live_gr, live_gb, target_ct);
+
+	return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
 }
 
 static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags)
@@ -12702,6 +12801,12 @@ static void tiziano_awb_fill_zone_geometry(uint32_t height, uint32_t width)
 	u32 cell_width = half_width / AWB_ZONE_COLS;
 	u32 cell_height = half_height / AWB_ZONE_ROWS;
 	u32 i;
+
+	/* OEM: cell dimensions are computed on half-resolution (Bayer CFA)
+	 * For 1920x1080: half=960x540, cell=64x36 per zone (15x15 grid) */
+	pr_info("AWB_ZONE_GEOM: %ux%u -> half=%ux%u cell=%ux%u grid=%dx%d\n",
+		width, height, half_width, half_height,
+		cell_width, cell_height, AWB_ZONE_COLS, AWB_ZONE_ROWS);
 
 	for (i = 0; i < AWB_ZONE_COLS; ++i)
 		memcpy(&_awb_parameter[(4 + i) * sizeof(u32)], &cell_width, sizeof(cell_width));
@@ -12835,34 +12940,47 @@ int awb_interrupt_static(void)
 	uint32_t awb_status;
 	void *buffer_addr;
 	static unsigned int awb_irq_count;
+	static uint32_t awb_last_bank = 0xFFFFFFFF;
+	static unsigned int awb_bank_change_count;
 
 	if (data_a2f5c == 0)
 		return 0;
 
 	awb_status = system_reg_read(0xb050);
 	buffer_addr = (void *)(unsigned long)(data_a2f5c + (awb_status << 12));
+
+	/* OEM: private_dma_cache_sync(0, virt + (status << 12), 0x1000, 0)
+	 * Invalidate cache for the active DMA bank before reading stats */
 	private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
 
 	awb_irq_count++;
-	if (awb_irq_count <= 3) {
+
+	/* Track bank cycling — if bank index never changes, the AWB
+	 * hardware isn't completing stats collection properly */
+	if (awb_status != awb_last_bank) {
+		awb_bank_change_count++;
+		awb_last_bank = awb_status;
+	}
+
+	if (awb_irq_count <= 5 || (awb_irq_count % 300) == 0) {
 		u32 *raw = (u32 *)buffer_addr;
-		pr_info("AWB_DMA_DIAG[%u]: base=0x%08x status=0x%x "
-			"buf=0x%08lx raw[0..7]=%08x %08x %08x %08x %08x %08x %08x %08x\n",
-			awb_irq_count, data_a2f5c, awb_status, (unsigned long)buffer_addr,
-			raw[0], raw[1], raw[2], raw[3],
-			raw[4], raw[5], raw[6], raw[7]);
+		pr_info("AWB_BANK[%u]: bank=%u changes=%u/%u "
+			"raw[0..3]=%08x %08x %08x %08x\n",
+			awb_irq_count, awb_status,
+			awb_bank_change_count, awb_irq_count,
+			raw[0], raw[1], raw[2], raw[3]);
 	}
 
 	JZ_Isp_Get_Awb_Statistics(buffer_addr, 0xf001f001);
 
-	if (awb_irq_count <= 3) {
-		pr_info("AWB_STATS_DIAG[%u]: R[0]=%u G[0]=%u B[0]=%u "
-			"P[0]=%u R[1]=%u G[1]=%u B[1]=%u P[1]=%u\n",
+	if (awb_irq_count <= 5) {
+		pr_info("AWB_STATS[%u]: R[0]=%u G[0]=%u B[0]=%u "
+			"P[0]=%u | R[112]=%u G[112]=%u B[112]=%u P[112]=%u\n",
 			awb_irq_count,
 			awb_array_r[0], awb_array_g[0],
 			awb_array_b[0], awb_array_p[0],
-			awb_array_r[1], awb_array_g[1],
-			awb_array_b[1], awb_array_p[1]);
+			awb_array_r[112], awb_array_g[112],
+			awb_array_b[112], awb_array_p[112]);
 	}
 
 	tiziano_awb_set_lum_th_freq();
