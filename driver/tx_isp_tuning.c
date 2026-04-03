@@ -1601,7 +1601,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD04;  /* Working blocks + MDNS/RDNS clocked; GIB bypassed until tuning bin verified */
+static uint isp_block_enable = 0x3DD24;  /* Working blocks + GIB + MDNS/RDNS clocked */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -2884,24 +2884,9 @@ static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
-static const uint32_t tiziano_gib_deir_r_m_oem[33] = {
-    0, 64, 128, 192, 256, 320, 384, 448, 512, 576, 640,
-    704, 768, 832, 896, 960, 1024, 1088, 1152, 1216, 1280,
-    1344, 1408, 1472, 1536, 1600, 1664, 1728, 1792, 1856,
-    1920, 1984, 2048,
-};
-static const uint32_t tiziano_gib_deir_g_m_oem[33] = {
-    0, 90, 179, 269, 358, 448, 538, 627, 717, 806, 896,
-    986, 1075, 1165, 1254, 1344, 1434, 1523, 1613, 1702, 1792,
-    1882, 1971, 2061, 2150, 2240, 2330, 2419, 2509, 2598,
-    2688, 2778, 2867,
-};
-static const uint32_t tiziano_gib_deir_b_m_oem[33] = {
-    0, 115, 230, 346, 461, 576, 691, 806, 922, 1037, 1152,
-    1267, 1382, 1498, 1613, 1728, 1843, 1958, 2074, 2189, 2304,
-    2419, 2534, 2650, 2765, 2880, 2995, 3110, 3226, 3341,
-    3456, 3571, 3686,
-};
+static const uint32_t tiziano_gib_deir_r_m_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_g_m_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_b_m_oem[33] = {0};
 
 static uint32_t tiziano_gib_config_line[12] = {0};  /* 0x30 bytes */
 static uint32_t tiziano_gib_r_g_linear[2] = {0};    /* 0x08 bytes */
