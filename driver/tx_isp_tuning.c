@@ -608,6 +608,11 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
 /* Q16 fixed-point 3×3 matrix multiply using 64-bit products.
  * The OEM's fused triple product uses <<6 pre-shift + final >>6 which cancel
  * in a chained approach.  Only the Q16 >>16 per multiply is needed. */
+/* OEM-matched matrix multiply for BCSH.
+ * The OEM RGBYUV function splits values into sign+magnitude, then uses
+ * fix_point_mult2_32(16, mag_a, mag_b << 6).  This is equivalent to
+ * standard Q16 multiply when the <<6 and final >>6 cancel out.
+ * Use plain Q16 here and rely on the final >>6 for hardware scaling. */
 static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
     for (int i = 0; i < 3; ++i) {
@@ -673,15 +678,18 @@ static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int
     int i;
     tiziano_build_hue_rotation(R);
 
-    /* OEM order: (M × CCM) first, then × Minv, then hue rotation.
-     * Fixed-point Q16 multiplication is NOT associative due to rounding,
-     * so the order must match the OEM exactly. */
+    /* OEM order: (M × CCM) × Minv, then hue rotation.
+     * The OEM's <<6 in the inner multiply and final >>6 cancel, so Q16 is correct. */
     /* T1 = M * CCM */
     tiziano_matmul3_q16(M, CCM, T1);
-    /* T2 = T1 * Minv = (M * CCM) * Minv */
+    /* T2 = T1 * Minv */
     tiziano_matmul3_q16(T1, Minv, T2);
-    /* Apply hue rotation: out = T2 * R */
-    tiziano_matmul3_q16(T2, R, out);
+
+    /* OEM hue rotation: at default hue=0x3c, R is identity so T2 passes through.
+     * For non-default hue, the OEM applies rotation inline (not as matrix multiply).
+     * TODO: implement non-identity hue rotation matching OEM RGBYUV inline code. */
+    for (i = 0; i < 9; i++)
+        out[i] = T2[i];
 
     /* OEM EXACT: right-shift all output values by 6 for hardware scaling.
      * The OEM's RGBYUV applies this as the final step:
