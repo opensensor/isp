@@ -18409,11 +18409,13 @@ int tisp_tgain_update(uint32_t gain)
      * Calls gated on block readiness to match last-known-working configuration.
      * DPC and MDNS are gated on deferred-init flags: only refresh after
      * libimp has sent real tuning params via set_par_cfg. */
-    /* GIB/BLC registers (0x1014-0x106c) require GIB block enabled (bit 5) */
-    if (isp_block_enable & 0x20) {
+    /* OEM calls both unconditionally — no bypass gate.
+     * tisp_gib_gain_interpolation writes 0x1060-0x1068 (GIB block regs)
+     * tisp_gb_blc_again_interp writes 0x1014-0x102c (GB BLC regs — separate from GIB)
+     * GB BLC must ALWAYS be updated; GIB regs only when GIB enabled. */
+    if (isp_block_enable & 0x20)
         tisp_gib_gain_interpolation(gain);
-        tisp_gb_blc_again_interp(gain, 0);
-    }
+    tisp_gb_blc_again_interp(gain, 0);
     if (dmsc_params_ready)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
