@@ -625,76 +625,103 @@ static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t 
     }
 }
 
-/* Build a chroma-plane rotation matrix (Q16) from hue with OEM piecewise behavior */
-static void tiziano_build_hue_rotation(int32_t R[9])
-{
-    /* Defaults from HLIL */
-    const int32_t CosValue = 0x8000;     /* 32768 */
-    const int32_t SinValue = 0xddb4;       /* from HLIL */
-    const int32_t A = 0x10000;           /* data_aa710 */
-    const int32_t Z = 0x0000;            /* data_aa704 */
-    const int32_t P = 0x3c;              /* data_aa71c */
-    const int32_t Q = 0x78;              /* data_aa720 */
+/* Hue rotation is now applied inline inside tiziano_bcsh_Tccm_RGBYUV,
+ * matching the OEM's per-element approach rather than as a separate matrix. */
 
+/* OEM EXACT: tiziano_bcsh_Tccm_RGBYUV — full chain including inline hue rotation.
+ *
+ * Decompiled from OEM at 0x289f8. The function:
+ * 1. Splits M, CCM, Minv into sign+magnitude pairs
+ * 2. Computes T = M * CCM * Minv using fix_point_mult2_32(16, mag_a, mag_b << 6)
+ * 3. Splits T into sign+magnitude pairs
+ * 4. Applies inline hue rotation per row:
+ *    - Y row (i<3):  out = sign * mag  (passthrough)
+ *    - Cb row (3<=i<6): out = sign*fix_mult(s1,mag) + sgn*sign_next*fix_mult(s2,next_mag)
+ *    - Cr row (i>=6): out = -sgn*sign_prev*fix_mult(s2,prev_mag) + sign*fix_mult(s1,mag)
+ * 5. Right-shifts all values by 6
+ */
+static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv)
+{
+    int32_t T1[9], T2[9];
+    int32_t s1, s2, sgn;
+    int i;
     uint8_t hue = 0x3c;
+
+    /* OEM order: (M × CCM) × Minv */
+    tiziano_matmul3_q16(M, CCM, T1);
+    tiziano_matmul3_q16(T1, Minv, T2);
+
+    /* Compute hue rotation parameters (s1=cos, s2=sin, sgn=direction) */
     if (ourISPdev && ourISPdev->tuning_data)
         hue = ourISPdev->tuning_data->bcsh_hue;
 
-    /* Derive s1 (cos-like), s2 (sin-like), and sign flag sgn per HLIL */
-    int32_t s1, s2; int sgn;
-    if (hue == P) {
-        s1 = A; s2 = Z; sgn = 1;
-    } else if (hue < (uint8_t)(P + 1)) {
-        /* Interpolate between (CosValue,SinValue) and (A,Z) around P */
-        int32_t dx = (int32_t)P - (int32_t)hue;
-        /* linear blend over span P (best-effort match) */
-        int64_t tmp1 = (int64_t)(A - CosValue) * dx;
-        int64_t tmp2 = (int64_t)(Z - SinValue) * dx;
-        s1 = CosValue + (int32_t)div64_s64(tmp1, P);
-        s2 = SinValue + (int32_t)div64_s64(tmp2, P);
-        sgn = -1; /* matches HLIL s6_5 = 0xffffffff path */
-    } else {
-        /* Interpolate between (A,Z) and (CosValue,SinValue) up to Q */
-        int32_t dx = (int32_t)hue - (int32_t)P;
-        int32_t span = (int32_t)Q - (int32_t)P;
-        if (span <= 0) span = 1;
-        int64_t tmp1 = (int64_t)(CosValue - A) * dx;
-        int64_t tmp2 = (int64_t)(SinValue - Z) * dx;
-        s1 = A + (int32_t)div64_s64(tmp1, span);
-        s2 = Z + (int32_t)div64_s64(tmp2, span);
-        sgn = 1;
+    {
+        /* OEM constants from HLIL */
+        const int32_t CosValue = 0x8000;
+        const int32_t SinValue = (int32_t)0xddb4;
+        const int32_t A = 0x10000;
+        const int32_t Z = 0x0000;
+        const int32_t P = 0x3c;
+        const int32_t Q_val = 0x78;
+
+        if (hue == P) {
+            s1 = A; s2 = Z; sgn = 1;
+        } else if (hue < P) {
+            int32_t dx = P - (int32_t)hue;
+            int32_t span = P;
+            s1 = CosValue + (int32_t)div64_s64((int64_t)(A - CosValue) * dx, span);
+            s2 = SinValue + (int32_t)div64_s64((int64_t)(Z - SinValue) * dx, span);
+            sgn = -1;
+        } else {
+            int32_t dx = (int32_t)hue - P;
+            int32_t span = Q_val - P;
+            if (span <= 0) span = 1;
+            s1 = A + (int32_t)div64_s64((int64_t)(CosValue - A) * dx, span);
+            s2 = Z + (int32_t)div64_s64((int64_t)(SinValue - Z) * dx, span);
+            sgn = 1;
+        }
     }
 
-    /* Rotation in UV plane with sign per OEM */
-    R[0] = 1 << 16; R[1] = 0;       R[2] = 0;
-    R[3] = 0;       R[4] = s1;      R[5] = (sgn > 0) ? s2 : -s2;
-    R[6] = 0;       R[7] = (sgn > 0) ? -s2 : s2; R[8] = s1;
-}
+    /* OEM inline hue rotation per element.
+     * T2 is split into sign+magnitude pairs (T2_s[i], T2_m[i]).
+     * Row 0 (Y):  passthrough
+     * Row 1 (Cb): cos*val + sgn*sin*val_from_Cr_row
+     * Row 2 (Cr): -sgn*sin*val_from_Cb_row + cos*val */
+    {
+        int32_t T2_s[9], T2_m[9]; /* sign and magnitude */
+        for (i = 0; i < 9; i++) {
+            if (T2[i] < 0) {
+                T2_s[i] = -1;
+                T2_m[i] = -T2[i];
+            } else {
+                T2_s[i] = 1;
+                T2_m[i] = T2[i];
+            }
+        }
 
-/* Full OEM-shaped chain: out = M * (CCM * R(hue) * Minv) */
-static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv)
-{
-    int32_t R[9], T1[9], T2[9];
-    int i;
-    tiziano_build_hue_rotation(R);
+        for (i = 0; i < 9; i++) {
+            int32_t v;
+            if (i < 3) {
+                /* Y row: passthrough (sign * magnitude) */
+                v = T2_s[i] * T2_m[i];
+            } else if (i < 6) {
+                /* Cb row: cos*current + sgn*sin*Cr_counterpart
+                 * OEM: sign*fix_mult(s1,mag) + sgn*sign_Cr*fix_mult(s2,mag_Cr) */
+                int32_t cos_term = T2_s[i] * (int32_t)(((int64_t)s1 * T2_m[i]) >> 16);
+                int32_t sin_term = sgn * T2_s[i + 3] * (int32_t)(((int64_t)s2 * T2_m[i + 3]) >> 16);
+                v = cos_term + sin_term;
+            } else {
+                /* Cr row: -sgn*sin*Cb_counterpart + cos*current
+                 * OEM: -sgn*sign_Cb*fix_mult(s2,mag_Cb) + sign*fix_mult(s1,mag) */
+                int32_t sin_term = -sgn * T2_s[i - 3] * (int32_t)(((int64_t)s2 * T2_m[i - 3]) >> 16);
+                int32_t cos_term = T2_s[i] * (int32_t)(((int64_t)s1 * T2_m[i]) >> 16);
+                v = sin_term + cos_term;
+            }
+            out[i] = v;
+        }
+    }
 
-    /* OEM order: (M × CCM) × Minv, then hue rotation.
-     * The OEM's <<6 in the inner multiply and final >>6 cancel, so Q16 is correct. */
-    /* T1 = M * CCM */
-    tiziano_matmul3_q16(M, CCM, T1);
-    /* T2 = T1 * Minv */
-    tiziano_matmul3_q16(T1, Minv, T2);
-
-    /* OEM hue rotation: at default hue=0x3c, R is identity so T2 passes through.
-     * For non-default hue, the OEM applies rotation inline (not as matrix multiply).
-     * TODO: implement non-identity hue rotation matching OEM RGBYUV inline code. */
-    for (i = 0; i < 9; i++)
-        out[i] = T2[i];
-
-    /* OEM EXACT: right-shift all output values by 6 for hardware scaling.
-     * The OEM's RGBYUV applies this as the final step:
-     *   if (v < 0) v = -((-v) >> 6); else v = v >> 6;
-     * Without this, HMatrix values are 64x too large for BCSH registers. */
+    /* OEM EXACT: right-shift all output values by 6 for hardware scaling. */
     for (i = 0; i < 9; i++) {
         int32_t v = out[i];
         if (v < 0)
