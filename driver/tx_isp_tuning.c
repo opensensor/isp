@@ -298,12 +298,17 @@ static uint32_t _awb_trend = 1;
 
 /* BCSH matrices and state - declared early for use in tiziano_bcsh functions */
 static int32_t tiziano_MMatrix[9] = {
-	/* Default to identity-ish until set by tuning */
-	1 << 16, 0, 0,
-	0, 1 << 16, 0,
-	0, 0, 1 << 16,
+	/* OEM RGB->YUV transform matrix from tuning blob */
+	0x0400, 0x0000, 0x0400,
+	0x0400, 0x4a3d, (int32_t)0xffff9645,
+	0x1d2f, (int32_t)0xffffd4d1, (int32_t)0xffffab30,
 };
-static int32_t tiziano_MinvMatrix[9] = {0};
+static int32_t tiziano_MinvMatrix[9] = {
+	/* OEM inverse transform matrix from tuning blob */
+	(int32_t)0x8000, (int32_t)0x8000, (int32_t)0xffff94d1,
+	(int32_t)0xffffeb30, 0x10253, (int32_t)0xfffffffe,
+	0x16a2b, 0x10253, (int32_t)0xffffa7e9,
+};
 static uint32_t s_bcsh_ct_override = 0;
 static int s_bcsh_ct_override_valid = 0;
 
@@ -357,33 +362,82 @@ int tiziano_bcsh_Toffset_RGB2YUV(int32_t out[3], const int32_t in[3])
 	return 0;
 	}
 
-/* BCSH OEM-aligned minimal state and banks (normal + WDR) */
-static uint32_t bcsh_EvList[9], bcsh_EvList_wdr[9];
-static uint32_t bcsh_SminListS[9], bcsh_SminListS_wdr[9];
-static uint32_t bcsh_SmaxListS[9], bcsh_SmaxListS_wdr[9];
-static uint32_t bcsh_SminListM[9], bcsh_SminListM_wdr[9];
-static uint32_t bcsh_SmaxListM[9], bcsh_SmaxListM_wdr[9];
-static uint32_t bcsh_OffsetRGB[3], bcsh_OffsetRGB_wdr[3];
+/* BCSH OEM-aligned state and banks — OEM data from tx-isp-t31.ko tuning blob.
+ * Source: tiziano_bcsh_params_refresh() BN decompilation.
+ * These directly control color correction, saturation, and hue processing.
+ */
+static uint32_t bcsh_EvList[9] = {
+	0x0023, 0x0001, 0x0011, 0x001e, 0x003c, 0x01f4, 0x07d0, 0x0d2a, 0x2134
+};
+static uint32_t bcsh_EvList_wdr[9] = {
+	0x0018, 0x0001, 0x000a, 0x002a, 0x003c, 0x01f4, 0x07d0, 0x0ed8, 0x1770
+};
+static uint32_t bcsh_SminListS[9] = {
+	0x4e20, 0x9c40, 0x14050, 0x29810, 0x0500, 0x0500, 0x0500, 0x0500, 0x0400
+};
+static uint32_t bcsh_SminListS_wdr[9] = {
+	0x82aa, 0x8a7a, 0x9632, 0x9e02, 0x0000, 0x0400, 0x0400, 0x0400, 0x0400
+};
+static uint32_t bcsh_SmaxListS[9] = {
+	0x0352, 0x02bc, 0x0258, 0x01f4, 0x0640, 0x0600, 0x0600, 0x0578, 0x0500
+};
+static uint32_t bcsh_SmaxListS_wdr[9] = {
+	0x0400, 0x0400, 0x0400, 0x0400, 0x0000, 0x04b0, 0x04b0, 0x044c, 0x0400
+};
+static uint32_t bcsh_SminListM[9] = {
+	0x0400, 0x0400, 0x0384, 0x02bc, 0x0500, 0x0500, 0x0500, 0x0500, 0x0400
+};
+static uint32_t bcsh_SminListM_wdr[9] = {
+	0x0400, 0x0400, 0x0400, 0x0400, 0x0000, 0x0400, 0x0400, 0x0400, 0x0400
+};
+static uint32_t bcsh_SmaxListM[9] = {
+	0x0352, 0x02bc, 0x0258, 0x01f4, 0x0640, 0x0600, 0x0600, 0x0578, 0x0500
+};
+static uint32_t bcsh_SmaxListM_wdr[9] = {
+	0x0400, 0x0400, 0x0400, 0x0400, 0x0000, 0x04b0, 0x04b0, 0x044c, 0x0400
+};
+static uint32_t bcsh_OffsetRGB[3] = { 0x0384, 0x0384, 0x0384 };
+static uint32_t bcsh_OffsetRGB_wdr[3] = { 0x0400, 0x0400, 0x0400 };
 static int bcsh_wdr_enabled;        /* 0=normal, 1=WDR */
 static int BCSH_real;                /* trigger immediate update on next EV/CT change */
-/* Extended BCSH tables (normal + WDR) to mirror OEM param IDs */
-static uint32_t bcsh_CCM_d[9],    bcsh_CCM_t[9],    bcsh_CCM_a[9];
-static uint32_t bcsh_HDP[3],      bcsh_HBP[3],      bcsh_HLSP[3];
-static uint32_t bcsh_Sthres[3];
-static uint32_t bcsh_C[5];
-static uint32_t bcsh_Cxl[9],      bcsh_Cxh[9],      bcsh_Cyl[9],    bcsh_Cyh[9];
-static uint32_t bcsh_B;
-static uint32_t bcsh_OffsetYUVy[2];
-static uint32_t bcsh_clip0[4],    bcsh_clip1[4],    bcsh_clip2[4];
+/* Extended BCSH tables — OEM data */
+static uint32_t bcsh_CCM_d[9] = {
+	0x0001, 0x0001, 0x0001, 0x0001, 0x0564, 0x3f21, 0x3f7b, 0x3e3e, 0x0793
+};
+static uint32_t bcsh_CCM_t[9] = {
+	0x3e2d, 0x3f3f, 0x3b25, 0x098d, 0x05df, 0x3e08, 0x001a, 0x3e14, 0x06f5
+};
+static uint32_t bcsh_CCM_a[9] = {
+	0x3ef6, 0x3ed4, 0x3b03, 0x0a17, 0x04e0, 0x3f58, 0x3fbe, 0x3e11, 0x07ce
+};
+static uint32_t bcsh_HDP[3] = { 0x3e20, 0x3d8b, 0x3b73 };
+static uint32_t bcsh_HBP[3] = { 0x0acd, 0x0001, 0x000c };
+static uint32_t bcsh_HLSP[3] = { 0x0023, 0x0000, 0x0320 };
+static uint32_t bcsh_Sthres[3] = { 0x0360, 0x0001, 0x000f };
+static uint32_t bcsh_C[5] = { 0x0400, 0x0400, 0x0384, 0x02bc, 0x0001 };
+static uint32_t bcsh_Cxl[9] = { 0, 0x384, 0, 0x384, 0, 0, 0, 0, 0 };
+static uint32_t bcsh_Cxh[9] = { 0, 0, 0, 0, 0x384, 0x384, 0x384, 0x384, 0x384 };
+static uint32_t bcsh_Cyl[9] = { 0x384, 0x384, 0x384, 0x384, 0, 0, 0, 0, 0 };
+static uint32_t bcsh_Cyh[9] = { 0, 0, 0, 0, 0x384, 0x384, 0x384, 0x384, 0x384 };
+static uint32_t bcsh_B = 0x0384;
+static uint32_t bcsh_OffsetYUVy[2] = { 0x0400, 0x0406 };
+static uint32_t bcsh_clip0[4] = { 0x0406, 0x0400, 0x0400, 0x0400 };
+static uint32_t bcsh_clip1[4] = { 0x0000, 0x03ff, 0x0000, 0x03ff };
+static uint32_t bcsh_clip2[4] = { 0xffff4c73, 0x10253, 0x1c5a0, 0x0339 };
 
-static uint32_t bcsh_CCM_d_wdr[9],    bcsh_CCM_t_wdr[9],    bcsh_CCM_a_wdr[9];
-static uint32_t bcsh_HDP_wdr[3],      bcsh_HBP_wdr[3],      bcsh_HLSP_wdr[3];
-static uint32_t bcsh_Sthres_wdr[3];
+static uint32_t bcsh_CCM_d_wdr[9] = {
+	0x0000, 0x03ff, 0x0000, 0x03ff, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
+};
+static uint32_t bcsh_CCM_t_wdr[9], bcsh_CCM_a_wdr[9]; /* OEM zeros */
+static uint32_t bcsh_HDP_wdr[3]; /* OEM zeros */
+static uint32_t bcsh_HBP_wdr[3] = { 0x0000, 0x0000, 0x0018 };
+static uint32_t bcsh_HLSP_wdr[3] = { 0x0058, 0x0000, 0x0320 };
+static uint32_t bcsh_Sthres_wdr[3] = { 0x0360, 0x0001, 0x0008 };
 static uint32_t bcsh_C_wdr[5];
-static uint32_t bcsh_Cxl_wdr[9],      bcsh_Cxh_wdr[9],      bcsh_Cyl_wdr[9],    bcsh_Cyh_wdr[9];
+static uint32_t bcsh_Cxl_wdr[9], bcsh_Cxh_wdr[9], bcsh_Cyl_wdr[9], bcsh_Cyh_wdr[9];
 static uint32_t bcsh_B_wdr;
 static uint32_t bcsh_OffsetYUVy_wdr[2];
-static uint32_t bcsh_clip0_wdr[4],    bcsh_clip1_wdr[4],    bcsh_clip2_wdr[4];
+static uint32_t bcsh_clip0_wdr[4], bcsh_clip1_wdr[4], bcsh_clip2_wdr[4];
 
 /* Matrices exposed via param IDs 0x3e3/0x3e4 - moved to top of file */
 
