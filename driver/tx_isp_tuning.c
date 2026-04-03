@@ -5800,7 +5800,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         param_ptr = (int *)tisp_par_ioctl;
                         param_type = *param_ptr;
 
-                        pr_debug("tisp_code_tuning_ioctl: Set parameter type %d\n", param_type);
+                        pr_info("tisp_code_tuning_ioctl: Set parameter type %d\n", param_type);
 
                         /* Binary Ninja: if ($a1_8 - 1 u>= 0x18) goto error */
 	                        if ((param_type - 1) >= 0x18) {
@@ -9864,11 +9864,12 @@ int tisp_dpc_set_par_cfg(void *in_buf)
 {
     int total = 0, sz = 0;
     char *p = (char *)in_buf;
+    pr_info("tisp_dpc_set_par_cfg: CALLED (dpc_params_received=%d)\n", dpc_params_received);
     for (int i = 0xe6; i < 0x105; ++i) {
         if (tisp_dpc_param_array_set(i, p, &sz) != 0) return -EINVAL;
         p += sz; total += sz;
     }
-    pr_debug("tisp_dpc_set_par_cfg: total=%d\n", total);
+    pr_info("tisp_dpc_set_par_cfg: total=%d\n", total);
 
     /* Deferred init: first time libimp sends real DPC params, do initial HW write */
     if (!dpc_params_received) {
@@ -9969,6 +9970,7 @@ int tisp_defog_set_par_cfg(void *in_buf)
 int tisp_mdns_set_par_cfg(void *in_buf)
 {
     int total = 0, sz = 0; char *p = (char *)in_buf;
+    pr_info("tisp_mdns_set_par_cfg: CALLED (mdns_params_received=%d)\n", mdns_params_received);
     for (int i = 0x180; i < 0x357; ++i) {
         if (tisp_mdns_param_array_set(i, p, &sz) != 0) {
             int fsz = tisp_mdns_param_size(i);
@@ -9978,7 +9980,7 @@ int tisp_mdns_set_par_cfg(void *in_buf)
         }
         p += sz; total += sz;
     }
-    pr_debug("tisp_mdns_set_par_cfg: total=%d (with fallback advance)\n", total);
+    pr_info("tisp_mdns_set_par_cfg: total=%d (with fallback advance)\n", total);
 
     /* Deferred init: first time libimp sends real MDNS params, activate the block */
     if (!mdns_params_received) {
@@ -12696,40 +12698,65 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	memcpy(awb_zone_bg_last, awb_zone_bg, sizeof(awb_zone_bg));
 	awb_zone_cache_valid = 1;
 
-	/* OEM: rg_global = fix_point_div(q, rg_pix_cnt, rg_sum) >> q
-	 * Combined: (pix_cnt << 2q) / rg_sum is the reciprocal average. */
-	if (rg_pix_cnt && rg_sum)
-		awb_zone_rg_global = (u32)div_u64(
-			(u64)rg_pix_cnt << (q * 2u), rg_sum);
-	else
-		awb_zone_rg_global = 0x100;
+	/* OEM: rg_global = fix_point_div(q, rg_sum, _awb_cof[0]) >> q
+	 * = rg_sum / cof_rg (the raw zone-ratio sum divided by calibration).
+	 * Then data_a5a30 = rg_global / pix_cnt = per-zone average rg ratio.
+	 *
+	 * The OEM then feeds zone data into Tiziano_Awb_Ct_Detect which
+	 * computes a weighted/interpolated rg/bg target in ~0x100 scale.
+	 * Since we don't yet implement Ct_Detect, use the simple per-zone
+	 * average: rg_sum / (cof_rg * active_zones).  For neutral R=G with
+	 * cof_rg=1, each zone_rg ~ 256, so the average ~ 256 (= 0x100).
+	 *
+	 * Previous bug: used reciprocal-average (pix_cnt << 2q) / rg_sum
+	 * which gave values ~5000, producing mf gains of ~12 (green tint).
+	 */
+	{
+		u32 rg_avg, bg_avg;
+		u32 rg_denom, bg_denom;
 
-	if (bg_pix_cnt && bg_sum)
-		awb_zone_bg_global = (u32)div_u64(
-			(u64)bg_pix_cnt << (q * 2u), bg_sum);
-	else
-		awb_zone_bg_global = 0x100;
+		/* Per-zone average: sum / (cof * active_zones), rounded >> q */
+		rg_denom = (u64)cof_rg * rg_pix_cnt;
+		bg_denom = (u64)cof_bg * bg_pix_cnt;
 
-	if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0) {
-		pr_info("AWB_FPGA_DIAG[%u]: total_zones=%u "
-			"rg_pix_cnt=%u bg_pix_cnt=%u "
-			"rg_global=%u bg_global=%u "
-			"rg_sum=%llu bg_sum=%llu "
-			"cof=%u,%u cof_q=%u,%u "
-			"zone_rg[0]=%u zone_bg[0]=%u "
-			"pixel_cnt_th=%u pix[0]=%u q=%u pp=0x%x\n",
-			fpga_diag_count, total_zones,
-			rg_pix_cnt, bg_pix_cnt,
-			awb_zone_rg_global,
-			awb_zone_bg_global,
-			rg_sum, bg_sum,
-			cof_rg, cof_bg, cof_rg_q, cof_bg_q,
-			awb_zone_rg[0], awb_zone_bg[0],
-			_pixel_cnt_th, stats_p[0], q, pp);
+		if (rg_pix_cnt && rg_sum && rg_denom)
+			rg_avg = (u32)div_u64(rg_sum + (rg_denom >> 1),
+					      rg_denom);
+		else
+			rg_avg = 0x100;
+
+		if (bg_pix_cnt && bg_sum && bg_denom)
+			bg_avg = (u32)div_u64(bg_sum + (bg_denom >> 1),
+					      bg_denom);
+		else
+			bg_avg = 0x100;
+
+		/* Store the raw reciprocal-average for diagnostics, but
+		 * use per-zone average for actual gain computation */
+		awb_zone_rg_global = rg_avg;
+		awb_zone_bg_global = bg_avg;
+
+		if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0) {
+			pr_info("AWB_FPGA_DIAG[%u]: total_zones=%u "
+				"rg_pix_cnt=%u bg_pix_cnt=%u "
+				"rg_avg=%u bg_avg=%u "
+				"rg_sum=%llu bg_sum=%llu "
+				"cof=%u,%u cof_q=%u,%u "
+				"zone_rg[0]=%u zone_bg[0]=%u "
+				"pixel_cnt_th=%u pix[0]=%u q=%u pp=0x%x\n",
+				fpga_diag_count, total_zones,
+				rg_pix_cnt, bg_pix_cnt,
+				rg_avg, bg_avg,
+				rg_sum, bg_sum,
+				cof_rg, cof_bg, cof_rg_q, cof_bg_q,
+				awb_zone_rg[0], awb_zone_bg[0],
+				_pixel_cnt_th, stats_p[0], q, pp);
+		}
+
+		target_rg = rg_avg;
+		target_bg = bg_avg;
 	}
 
-	target_rg = awb_zone_rg_global;
-	target_bg = awb_zone_bg_global;
 	target_ct = awb_estimate_ct(target_rg, target_bg);
 	if (target_ct == 0)
 		target_ct = 5000;
@@ -12748,16 +12775,114 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	awb_gain_original[0] = target_rg;
 	awb_gain_original[1] = target_bg;
 	_awb_ct = target_ct;
-	mf_words[2] = live_gr;
-	mf_words[3] = live_gb;
-	mf_words[4] = live_gr;
-	mf_words[5] = live_gb;
+
+	/* OEM mf_para smooth ramp logic:
+	 *   mf[0] = convergence flag (0=idle, 1=converging)
+	 *   mf[1] = iteration counter
+	 *   mf[2] = stored target gr (what we're converging toward)
+	 *   mf[3] = stored target gb
+	 *   mf[4] = current applied mf gr (used by Tiziano_awb_set_gain)
+	 *   mf[5] = current applied mf gb
+	 *
+	 * The OEM compares the new gain against the current mf[4]/mf[5]
+	 * and ramps gradually using signed division by the remaining step
+	 * count, avoiding sudden jumps.
+	 */
+	{
+		u32 old_mf_gr = mf_words[4]; /* current applied gain */
+		u32 old_mf_gb = mf_words[5];
+		u32 tgt_gr = mf_words[2];    /* stored target from last convergence */
+		u32 tgt_gb = mf_words[3];
+		/* OEM: diff is between NEW gain and STORED target [2]/[3],
+		 * not the current applied [4]/[5] */
+		u32 diff_gr = (live_gr > tgt_gr) ?
+			(live_gr - tgt_gr) : (tgt_gr - live_gr);
+		u32 diff_gb = (live_gb > tgt_gb) ?
+			(live_gb - tgt_gb) : (tgt_gb - live_gb);
+		u32 total_diff = diff_gr + diff_gb;
+		u32 threshold;
+		/* OEM: step count ($s1) comes from _awb_mode[0], clamped 1-15.
+		 * First frame after reset uses 1. */
+		u32 step_count = (awb_history_reset || awb_history_count <= 1)
+			? 1 : _awb_mode[0];
+
+		if (step_count > 15)
+			step_count = 15;
+		if (step_count == 0)
+			step_count = 1;
+
+		/* OEM threshold for starting convergence ramp.
+		 * From decompilation: uses _awb_mode[1] as primary threshold;
+		 * falls through to _awb_parameter-based threshold if [1]==0.
+		 * Use _awb_mode[1] with sane default fallback. */
+		threshold = _awb_mode[1];
+		if (threshold == 0)
+			threshold = 8;
+
+		if (mf_words[0] != 0) {
+			/* Currently converging: snap when iter reaches
+			 * step_count-1, or when step_count==1 (immediate).
+			 * OEM: ($s1 == $a0_38 + 1 || $s1 == 1) */
+			if (step_count == mf_words[1] + 1 ||
+			    step_count == 1) {
+				/* Convergence done: snap to stored target */
+				mf_words[0] = 0;
+				mf_words[4] = mf_words[2];
+				mf_words[5] = mf_words[3];
+			} else {
+				/* Step toward new target */
+				s32 remaining = (s32)step_count - (s32)mf_words[1];
+				s32 step_gr, step_gb;
+				if (remaining <= 0)
+					remaining = 1;
+				mf_words[0] = 1;
+				step_gr = (s32)old_mf_gr +
+					((s32)live_gr - (s32)old_mf_gr) /
+					remaining;
+				step_gb = (s32)old_mf_gb +
+					((s32)live_gb - (s32)old_mf_gb) /
+					remaining;
+				mf_words[4] = (step_gr > 0) ? step_gr : 1;
+				mf_words[5] = (step_gb > 0) ? step_gb : 1;
+			}
+			mf_words[1] += 1;
+		} else {
+			/* Idle: check if new gain differs enough to start */
+			if (total_diff >= threshold) {
+				/* Start convergence ramp */
+				mf_words[0] = 1;
+				mf_words[1] = 1;
+				mf_words[2] = live_gr;
+				mf_words[3] = live_gb;
+				if (step_count > 1) {
+					s32 s_gr = (s32)old_mf_gr +
+						((s32)live_gr - (s32)old_mf_gr)
+						/ (s32)step_count;
+					s32 s_gb = (s32)old_mf_gb +
+						((s32)live_gb - (s32)old_mf_gb)
+						/ (s32)step_count;
+					mf_words[4] = (s_gr > 0) ? s_gr : 1;
+					mf_words[5] = (s_gb > 0) ? s_gb : 1;
+				} else {
+					mf_words[4] = live_gr;
+					mf_words[5] = live_gb;
+				}
+			} else {
+				/* Below threshold: keep current gains */
+				mf_words[0] = 0;
+				mf_words[1] = 0;
+			}
+		}
+	}
 
 	if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0)
 		pr_info("AWB_FPGA_GAIN[%u]: target_rg=%u target_bg=%u "
-			"live_gr=%u live_gb=%u ct=%u\n",
+			"live_gr=%u live_gb=%u ct=%u "
+			"mf=[%u,%u,%u,%u,%u,%u]\n",
 			fpga_diag_count, target_rg, target_bg,
-			live_gr, live_gb, target_ct);
+			live_gr, live_gb, target_ct,
+			mf_words[0], mf_words[1], mf_words[2],
+			mf_words[3], mf_words[4], mf_words[5]);
 
 	return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
 }
