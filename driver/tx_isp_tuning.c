@@ -1557,7 +1557,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0xDD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS (proven stable) */
+static uint isp_block_enable = 0xDD04;  /* DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -1676,7 +1676,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 1;    /* MDNS enable regressed to whole-device hangs; keep runtime MMIO parked until safe parity is proven. */
+static int mdns_runtime_parked = 1;    /* MDNS causes device hangs - needs OEM decompilation to fix */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -16656,6 +16656,18 @@ static void tisp_ydns_param_cfg(void)
         ((ydns_edge_div_intp & 0xf) << 4) |
         ((ydns_edge_thres_intp & 0xff) << 8) |
         ((ydns_edge_out_array & 0xff) << 16));
+
+    {
+        static int ydns_log_count;
+        if (ydns_log_count++ < 3)
+            pr_info("YDNS_DIAG: mv=[%u,%u,%u] fus=[%u,%u,%u] wei=[%u,%u,%u,%u,%u] edge=[%u,%u,%u,%u]\n",
+                ydns_mv_thres0_intp, ydns_mv_thres1_intp, ydns_mv_thres2_intp,
+                ydns_fus_min_thres_intp, ydns_fus_max_thres_intp, ydns_fus_level_intp,
+                ydns_fus_sswei_intp, ydns_fus_sewei_intp, ydns_fus_mswei_intp,
+                ydns_fus_mewei_intp, ydns_fus_uvwei_intp,
+                ydns_edge_wei_intp, ydns_edge_div_intp, ydns_edge_thres_intp,
+                ydns_edge_out_array);
+    }
 }
 
 /* OEM EXACT: tisp_simple_intp — simple gain-based interpolation across 9-entry array.
@@ -17436,31 +17448,45 @@ int tisp_param_operate_init(void)
 
 
 /* Update functions for event callbacks - Enhanced implementations */
+/* OEM EXACT: tisp_ydns_par_refresh — re-interpolate YDNS on gain change.
+ * Only updates if gain changed by >= 0x100 (OEM threshold). */
+static void tisp_ydns_par_refresh(uint32_t gain)
+{
+    uint32_t diff;
+    if (ydns_gain_old == 0xffffffff) {
+        ydns_gain_old = gain;
+        tisp_ydns_intp(gain);
+        tisp_ydns_param_cfg();
+        return;
+    }
+    diff = (gain >= ydns_gain_old) ? (gain - ydns_gain_old) : (ydns_gain_old - gain);
+    if (diff >= 0x100) {
+        ydns_gain_old = gain;
+        tisp_ydns_intp(gain);
+        tisp_ydns_param_cfg();
+    }
+}
+
+/* OEM EXACT: tisp_tgain_update — refreshes ALL gain-dependent ISP blocks.
+ * Decompiled from OEM at 0x14ba8. Previous code only called DMSC + LSC. */
 int tisp_tgain_update(uint32_t gain)
 {
-    pr_debug("tisp_tgain_update: Updating total gain\n");
-
-    /* Update total gain based on current sensor conditions */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->tuning_data)
+        ourISPdev->tuning_data->total_gain = gain;
 
-        tuning->total_gain = gain;
-
-		/* OEM HLIL 0x14ba8: tgain update refreshes DMSC before LSC. */
-		if (dmsc_params_ready)
-			tisp_dmsc_par_refresh(gain, 0x100, 1);
-
-        tisp_lsc_gain_update(gain);
-
-        /* Update hardware gain registers */
-        if (ourISPdev->core_regs) {
-            writel(gain, ourISPdev->core_regs + 0xa004);  /* Total gain register */
-        }
-
-        pr_debug("tisp_tgain_update: Total gain updated to 0x%x\n", gain);
-    }
-
+    /* OEM order: GIB, GB_BLC, DMSC, Sharpen, SDNS, DPC, LSC, YDNS, RDNS, MDNS */
+    tisp_gib_gain_interpolation(gain);
+    /* tisp_gb_blc_again_interp(gain, 0) — not yet implemented */
+    if (dmsc_params_ready)
+        tisp_dmsc_par_refresh(gain, 0x100, 1);
+    tisp_sharpen_par_refresh(gain, 0x100, 1);
+    tisp_sdns_par_refresh(gain, 0x100, 1);
+    /* tisp_dpc_refresh(gain) — not yet implemented */
+    tisp_lsc_gain_update(gain);
+    tisp_ydns_par_refresh(gain);
+    /* tisp_rdns_gain_update — RDNS param_cfg not yet separated, skipping */
+    /* tisp_mdns_refresh(gain) — parked, causes hangs */
     return 0;
 }
 
