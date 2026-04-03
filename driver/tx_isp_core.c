@@ -790,9 +790,9 @@ static int isp_core_enable_prestream_irqs(struct tx_isp_dev *isp_dev)
     writel(8, core + 0x1c);
     writel(0xffffffff, core + 0x30);
     writel(0x133, core + 0x10);
-    writel(0x3fff, core + 0xb0);
+    writel(0xffffffff, core + 0xb0);  /* Enable ALL ISP interrupt bits including AE/AWB (26-30) */
     writel(0x1000, core + 0xbc);
-    writel(0x3fff, core + 0x98b0);
+    writel(0xffffffff, core + 0x98b0);  /* Same for secondary interrupt bank */
     writel(0x1000, core + 0x98bc);
     wmb();
 
@@ -1664,7 +1664,6 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
-    extern int awb_interrupt_static(void);
     struct tx_isp_dev *isp_dev;
     static int sensor_call_counter = 0;
     int vic_is_streaming = 0;
@@ -1685,16 +1684,6 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         if (vic_is_streaming && !isp_dev->streaming_enabled)
             isp_dev->streaming_enabled = true;
     }
-
-    /* AE/AWB hardware interrupts (bits 26-30) never fire on this T31
-     * revision.  Poll the AWB statistics from the per-frame sync work
-     * instead.  awb_interrupt_static reads the DMA buffer, runs
-     * JZ_Isp_Awb (which computes color temperature), and pushes
-     * event 9 to trigger tisp_ct_update -> tisp_bcsh_ct_update.
-     * Without this, the BCSH color correction never adapts to the
-     * scene lighting, causing a persistent green color cast. */
-    if (vic_is_streaming)
-        awb_interrupt_static();
 
     sensor_call_counter++;
 }
