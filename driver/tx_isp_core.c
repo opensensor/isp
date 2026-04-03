@@ -3200,6 +3200,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
 {
     void __user *argp = (void __user *)arg;
     int param_type;
+    int ret;
 
     pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
 

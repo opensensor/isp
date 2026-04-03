@@ -118,6 +118,8 @@ static int tisp_sharpen_all_reg_refresh(void);
 int tisp_ccm_ct_update(void);
 int tisp_ccm_ev_update(void);
 static int tiziano_awb_set_hardware_param(void);
+static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos,
+			       const uint32_t *gain_base);
 static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct);
 static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv);
 static int tiziano_bcsh_update(struct isp_tuning_data *tuning);
