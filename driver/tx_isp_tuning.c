@@ -3656,14 +3656,20 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         return param_init_ret;
     }
 
-    /* Arm AE/AWB statistics engines.  Our driver writes DMA buffers
-     * (0xa02c-0xa04c, 0xb03c-0xb04c) and AWB zone config (0xb004), but
-     * the AE zone config (0xa004-0xa028) is not yet implemented.
-     * Write the bank latches to start the statistics hardware with
-     * whatever default config the registers hold. */
-    system_reg_write(0xa000, 1);   /* AE0 bank latch — start AE0 stats */
-    system_reg_write(0xa800, 1);   /* AE1 bank latch — start AE1 stats */
-    system_reg_write(0xb000, 1);   /* AWB bank latch — start AWB stats */
+    /* AE zone configuration — required for AE statistics engine to start.
+     * Without 0xa004 written, the AE hardware has no zone layout and never
+     * completes a statistics cycle, so bits 26-29 never fire.
+     * Format matches AWB 0xb004: (cols<<28)|(enable<<16)|(rows<<12)|param
+     * Use 15x15 zones matching AWB. */
+    {
+        u32 ae_zone_cfg = (0xFu << 28) | (1u << 16) | (0xFu << 12);
+        system_reg_write(0xa004, ae_zone_cfg);
+        system_reg_write_ae(1, 0xa028, 0);   /* AE0 commit with latch */
+        system_reg_write(0xa804, ae_zone_cfg);
+        system_reg_write_ae(2, 0xa828, 0);   /* AE1 commit with latch */
+        system_reg_write(0xb000, 1);          /* AWB re-latch after ISP start */
+        pr_info("tisp_init: AE zone cfg=0x%x written to 0xa004/0xa804\n", ae_zone_cfg);
+    }
 
     /* Seed BCSH with a neutral daylight CT (5000 K) so frames produced before
      * AWB converges do not carry the cold-green default (~9984 K). */
