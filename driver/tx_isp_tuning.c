@@ -12730,31 +12730,43 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	memcpy(awb_zone_bg_last, awb_zone_bg, sizeof(awb_zone_bg));
 	awb_zone_cache_valid = 1;
 
-	/* OEM EXACT: reciprocal-average divided by calibration coefficient.
-	 * Formula: fix_point_div(q, pix_cnt, rg_sum, 0, cof, 0) >> q
-	 * = ((pix_cnt << 2q) / rg_sum) / cof >> q
-	 * = (pix_cnt << q) / (rg_sum * cof)
+	/* Gain computation: use per-zone average WITHOUT _awb_cof scaling.
+	 * The OEM feeds the reciprocal-average through Tiziano_Awb_Ct_Detect
+	 * (600-line cluster analysis) before gain computation. Without that
+	 * function, neither reciprocal nor forward average works directly.
 	 *
-	 * This produces values that the gain formula 0x10000/target expects.
-	 * Forward-average was WRONG — it inverts the gain direction. */
+	 * Simple approach: raw R/G and B/G per-zone average (no cof).
+	 * For neutral grey (R=G=B): rg_avg = bg_avg = 0x100 (256 in Q8).
+	 * gain = 0x10000 / 256 = 256 = unity.
+	 * The _wb_static base gains provide sensor-specific correction.
+	 * The _awb_cof is only for CT estimation, not gain computation. */
 	{
 		u32 rg_avg, bg_avg;
+		u64 rg_raw_sum = 0, bg_raw_sum = 0;
+		u32 rg_raw_cnt = 0, bg_raw_cnt = 0;
+		int zi;
 
-		if (rg_pix_cnt && rg_sum) {
-			u64 num = (u64)rg_pix_cnt << (q * 2);
-			u64 recip = div_u64(num, rg_sum);
-			rg_avg = (u32)(div_u64(recip, cof_rg) >> q);
-		} else {
-			rg_avg = 0x100;
+		/* Compute raw R/G and B/G sums without cof multiplier */
+		for (zi = 0; zi < total_zones; zi++) {
+			if (stats_g[zi] != 0 && stats_p[zi] >= _pixel_cnt_th) {
+				u32 raw_rg = (u32)div_u64((u64)stats_r[zi] << q, stats_g[zi]);
+				u32 raw_bg = (u32)div_u64((u64)stats_b[zi] << q, stats_g[zi]);
+				rg_raw_sum += raw_rg;
+				bg_raw_sum += raw_bg;
+				rg_raw_cnt++;
+				bg_raw_cnt++;
+			}
 		}
 
-		if (bg_pix_cnt && bg_sum) {
-			u64 num = (u64)bg_pix_cnt << (q * 2);
-			u64 recip = div_u64(num, bg_sum);
-			bg_avg = (u32)(div_u64(recip, cof_bg) >> q);
-		} else {
-			bg_avg = 0x100;
-		}
+		if (rg_raw_cnt)
+			rg_avg = (u32)div_u64(rg_raw_sum, rg_raw_cnt);
+		else
+			rg_avg = 1u << q;  /* unity in Q(q) */
+
+		if (bg_raw_cnt)
+			bg_avg = (u32)div_u64(bg_raw_sum, bg_raw_cnt);
+		else
+			bg_avg = 1u << q;
 
 		awb_zone_rg_global = rg_avg;
 		awb_zone_bg_global = bg_avg;
