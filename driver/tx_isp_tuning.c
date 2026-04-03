@@ -2067,6 +2067,7 @@ static int tisp_mdns_top_func_cfg(int enable);
 static int tisp_mdns_top_func_refresh(void);
 static int tisp_mdns_bypass(int bypass);
 static int tisp_mdns_par_refresh(uint32_t interp_key, uint32_t threshold);
+int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
 static int tisp_mdns_all_reg_refresh(uint32_t interp_key);
 static int tisp_mdns_reg_trigger(void);
 
