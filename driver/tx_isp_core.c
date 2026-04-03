@@ -825,6 +825,8 @@ void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 int tisp_lsc_write_lut_datas(void);
 int awb_interrupt_static(void);
+int tisp_get_awb_info(void *out_buf);
+int tisp_set_awb_info(void *in_buf);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
 /* Debug macro for sensor functions */
@@ -3280,11 +3282,12 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                 case ISP_TUNING_GET_AWB_INFO: {
                     pr_info("ISP get AWB info\n");
 
-                    // Get AWB (Auto White Balance) information
-                    memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
-                    *(int*)isp_tuning_buffer = 1; // AWB enabled
+	                    memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
+	                    ret = tisp_get_awb_info(isp_tuning_buffer);
+	                    if (ret)
+	                        return ret;
 
-                    if (copy_to_user(argp, isp_tuning_buffer, sizeof(isp_tuning_buffer)))
+	                    if (copy_to_user(argp, isp_tuning_buffer, sizeof(isp_tuning_buffer)))
                         return -EFAULT;
 
                     return 0;
@@ -3295,8 +3298,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
                         return -EFAULT;
 
-                    // Process AWB settings
-                    return 0;
+	                    return tisp_set_awb_info(isp_tuning_buffer);
                 }
                 case ISP_TUNING_GET_STATS:
                 case ISP_TUNING_GET_STATS2: {

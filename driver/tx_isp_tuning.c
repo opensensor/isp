@@ -69,10 +69,10 @@ MODULE_PARM_DESC(cfa_idx_override,
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 1; /* ADR bypassed until Tiziano_adr_fpga is ported */
+static int tisp_force_bypass_adr = 0; /* Debug override only; default matches OEM */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
-			 "Force ADR bypass (default: 1 until full ADR algorithm is ported)");
+			 "Force ADR bypass (debug override, default: 0 for OEM behavior)");
 
 static int tisp_force_bypass_defog = 0;
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
@@ -1589,10 +1589,11 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0x500 enables DMSC + Gamma
  *          isp_block_enable=0x3DDB4 enables all OEM blocks (matches OEM bypass 0xb5742249)
  *          isp_block_enable=0xDD04 restores the effective f37c2886 crisp-image block set
+ *          isp_block_enable=0xDD14 adds LSC while keeping GIB bypassed
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0xDD24;  /* DPC+GIB+DMSC+Gamma+Defog+CLM+Sharpen+SDNS (GIB test with fixed indices) */
+static uint isp_block_enable = 0x3DDB4;  /* OEM default: DPC+LSC+GIB+ADR+DMSC+Gamma+Defog+CLM+Sharpen+SDNS+MDNS+YDNS */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -1711,7 +1712,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 1;    /* MDNS causes device hangs - needs OEM decompilation to fix */
+static int mdns_runtime_parked = 0;    /* Debug override only; default matches OEM */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -8806,6 +8807,10 @@ static uint32_t awb_zone_bg_global;
 static uint32_t awb_gain_track[2] = { 0x100, 0x100 };
 static uint8_t *awb_rgbg_weight_active = _rgbg_weight;
 static uint32_t awb_zone_cache_valid;
+static uint32_t awb_start_gain0;       /* OEM data_99f80 */
+static uint32_t awb_start_gain1;       /* OEM data_99f84 */
+static uint32_t awb_start_gain0_last;  /* OEM data_99f88 */
+static uint32_t awb_start_gain1_last;  /* OEM data_99f8c */
 static uint32_t awb_gain_history_gr[15];
 static uint32_t awb_gain_history_gb[15];
 static uint32_t awb_ct_history[15];
@@ -10233,6 +10238,43 @@ int tisp_awb_ev_update(uint32_t ev)
 {
     awb_ev_data = ev;
     return 0;
+}
+
+int tiziano_s_awb_start(uint32_t gain0, uint32_t gain1)
+{
+	if (tparams_day) {
+		memcpy((u8 *)tparams_day + 0x10e8, &gain0, sizeof(gain0));
+		memcpy((u8 *)tparams_day + 0x10ec, &gain1, sizeof(gain1));
+		memcpy((u8 *)tparams_day + 0x10f0, &gain0, sizeof(gain0));
+		memcpy((u8 *)tparams_day + 0x10f4, &gain1, sizeof(gain1));
+	}
+
+	awb_start_gain0 = gain0;
+	awb_start_gain1 = gain1;
+	awb_start_gain0_last = gain0;
+	awb_start_gain1_last = gain1;
+
+	return Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+}
+
+int tisp_s_awb_start(uint32_t gain0, uint32_t gain1)
+{
+	return tiziano_s_awb_start(gain0, gain1);
+}
+
+int tiziano_g_awb_start(uint32_t *gains)
+{
+	if (!gains)
+		return -EINVAL;
+
+	gains[0] = awb_start_gain0;
+	gains[1] = awb_start_gain1;
+	return awb_start_gain1;
+}
+
+int tisp_g_awb_start(uint32_t *gains)
+{
+	return tiziano_g_awb_start(gains);
 }
 
 int tisp_awb_deinit(void)
@@ -12626,8 +12668,6 @@ int awb_interrupt_static(void)
 	struct tisp_event_record event_data = {0};
 	uint32_t awb_status;
 	void *buffer_addr;
-	static unsigned int awb_isr_count;
-	int push_ret;
 
 	if (data_a2f5c == 0)
 		return 0;
@@ -12637,69 +12677,10 @@ int awb_interrupt_static(void)
 	private_dma_cache_sync(NULL, buffer_addr, 0x1000, 0);
 	JZ_Isp_Get_Awb_Statistics(buffer_addr, 0xf001f001);
 
-	/* AE interrupt (bits 26-29) never fires on this hardware revision.
-	 * Poll the AE DMA buffer from the AWB ISR instead, parse 21-bit Y
-	 * luminance per zone, and feed to ae_zone_data for libimp AE.
-	 * Also push event 1 to trigger tisp_ae0_process (the AE algorithm)
-	 * which would normally be triggered by ae0_interrupt_static. */
-	if (data_b2f3c) {
-		extern int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size);
-		struct tisp_event_record ae_event = {0};
-		/* Read all 4 AE buffers and use the one with highest sum (most recent).
-		 * The buffer index register 0xa050 is stale because AE interrupt
-		 * never fires to cycle it. */
-		void *ae_buf = (void *)(unsigned long)data_b2f3c;
-		uint32_t *ae_raw;
-		uint32_t zones[225];
-		int i, best_buf = 0;
-		uint64_t best_sum = 0;
-		for (i = 0; i < 4; i++) {
-			void *buf = (void *)(unsigned long)(data_b2f3c + i * 0x1000);
-			uint32_t *raw;
-			uint64_t s = 0;
-			int j;
-			private_dma_cache_sync(NULL, buf, 0x1000, 0);
-			raw = (uint32_t *)buf;
-			for (j = 0; j < 16; j++)
-				s += raw[j * 4] & 0x1fffff;
-			if (s != best_sum) { /* Different data = more recent */
-				best_sum = s;
-				best_buf = i;
-				ae_buf = buf;
-			}
-		}
-		private_dma_cache_sync(NULL, ae_buf, 0x1000, 0);
-		ae_raw = (uint32_t *)ae_buf;
-		for (i = 0; i < 225; i++)
-			zones[i] = ae_raw[i * 4] & 0x1fffff;
-		tisp_ae_update_zone_data(zones, sizeof(zones));
-
-		/* Trigger AE1 processing (event 6 = tisp_ae1_process).
-		 * Event 1 (tisp_ae0_process) is a stub that corrupts 0xa004.
-		 * Event 6 runs the real AE algorithm (tisp_ae1_expt). */
-		ae_event.event_id = 6;
-		tisp_event_push(&ae_event);
-	}
-
 	tiziano_awb_set_lum_th_freq();
 
 	event_data.event_id = 0xa;
-	push_ret = tisp_event_push(&event_data);
-
-	awb_isr_count++;
-	if (awb_isr_count <= 30 || (awb_isr_count % 300) == 0) {
-		u32 *raw = (u32 *)buffer_addr;
-		pr_info("awb_interrupt_static[%u]: status=0x%x buf=%p base=0x%x push=%d\n",
-			awb_isr_count, awb_status, buffer_addr, data_a2f5c, push_ret);
-		pr_info("  raw DMA[0..7]: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-			raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]);
-		pr_info("  parsed: r[0]=%u g[0]=%u b[0]=%u ir[0]=%u p[0]=%u\n",
-			awb_array_r[0], awb_array_g[0], awb_array_b[0],
-			awb_array_ir[0], awb_array_p[0]);
-		pr_info("  AWB regs: 0xb000=0x%x 0xb004=0x%x 0xb03c=0x%x 0xb050=0x%x\n",
-			system_reg_read(0xb000), system_reg_read(0xb004),
-			system_reg_read(0xb03c), system_reg_read(0xb050));
-	}
+	tisp_event_push(&event_data);
 	return 1;
 }
 
@@ -15805,10 +15786,9 @@ static int tiziano_set_parameter_clm(void)
 	return 0;
 }
 
-/* tiziano_clm_params_refresh — OEM CLM ROM data is all-zero (confirmed by
- * binary extraction from OEM .data section at 0x94694/0x94aae/0x952e4).
- * Zero = passthrough intent, but writing packed zeros to HW creates blobs.
- * tiziano_clm_init gates the register write on shift != 0. */
+/* tiziano_clm_params_refresh — current CLM payload model.
+ * OEM copies CLM tables from embedded static data and then always applies
+ * them through tiziano_set_parameter_clm() during init/refresh. */
 static int tiziano_clm_params_refresh(void)
 {
 	memset(tiziano_clm_h_lut, 0, CLM_H_LUT_SIZE);
@@ -15830,19 +15810,9 @@ int tiziano_clm_init(void)
 {
 	pr_info("tiziano_clm_init: Initializing CLM processing\n");
 	tiziano_clm_params_refresh();
-
-	/* Only write CLM registers if LUTs have non-zero data.
-	 * The OEM CLM data is all-zero (confirmed from binary extraction).
-	 * Writing all-zero packed registers to hardware does NOT produce
-	 * passthrough — it creates color blob artifacts. The hardware
-	 * power-on default IS passthrough, so skip the write. */
-	if (tiziano_clm_lut_shift != 0) {
-		tiziano_set_parameter_clm();
-		pr_info("tiziano_clm_init: CLM registers programmed (shift=%u)\n",
-			tiziano_clm_lut_shift);
-	} else {
-		pr_info("tiziano_clm_init: CLM data is zero, using hardware default passthrough\n");
-	}
+	tiziano_set_parameter_clm();
+	pr_info("tiziano_clm_init: CLM registers programmed (shift=%u)\n",
+		tiziano_clm_lut_shift);
 
 	return 0;
 }
@@ -16967,6 +16937,30 @@ int tiziano_rdns_init(void)
     return 0;
 }
 
+/* OEM EXACT: tisp_rdns_par_refresh(gain, threshold, enable_write) */
+static int tisp_rdns_par_refresh(uint32_t gain, uint32_t threshold, int enable_write)
+{
+	uint32_t diff;
+
+	if (rdns_gain_old == 0xffffffff) {
+		rdns_gain_old = gain;
+		tisp_rdns_intp(gain);
+		tisp_rdns_all_reg_refresh();
+	} else {
+		diff = (gain >= rdns_gain_old) ? (gain - rdns_gain_old) : (rdns_gain_old - gain);
+		if (diff >= threshold) {
+			rdns_gain_old = gain;
+			tisp_rdns_intp(gain);
+			tisp_rdns_all_reg_refresh();
+		}
+	}
+
+	if (enable_write == 1)
+		system_reg_write(0x30ac, 1);
+
+	return 0;
+}
+
 /* WDR-specific initialization functions */
 int tisp_gb_init(void)
 {
@@ -17581,11 +17575,11 @@ int tisp_tgain_update(uint32_t gain)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
     tisp_sdns_par_refresh(gain, 0x100, 1);
-    /* tisp_dpc_refresh(gain) — not yet implemented */
+    tisp_dpc_par_refresh(gain, 0x100, 1);
     tisp_lsc_gain_update(gain);
     tisp_ydns_par_refresh(gain);
-    /* tisp_rdns_gain_update — RDNS param_cfg not yet separated, skipping */
-    /* tisp_mdns_refresh(gain) — parked, causes hangs */
+    tisp_rdns_par_refresh(gain, 0x100, 1);
+    tisp_mdns_par_refresh(gain, 0x100);
     return 0;
 }
 
@@ -17673,12 +17667,8 @@ int tisp_ct_update(uint32_t ct)
 	if ((reg_0c & 0x40) == 0)
 		tisp_lsc_ct_update(ct);
 
-	/* OEM gates this on bit 16 (MDNS), which works because the OEM always
-	 * enables MDNS.  We bypass MDNS (parked due to hangs), so checking
-	 * bit 16 would permanently block BCSH color-temperature updates even
-	 * though CLM/BCSH (bit 12) IS enabled.  Gate on bit 12 instead so
-	 * the BCSH CCM adapts to the detected scene color temperature. */
-	if ((reg_0c & 0x1000) == 0)
+		/* OEM gates the BCSH/CLM colour-temperature update on MDNS bypass bit 16. */
+		if ((reg_0c & 0x10000) == 0)
 		tisp_bcsh_ct_update(ct);
 
 	return 0;
@@ -19116,7 +19106,7 @@ int tisp_s_adr_enable(int enable)
 
     if (enable == 1) {
         /* Enable ADR */
-        tiziano_adr_init(1920, 1080);  /* Use actual sensor dimensions */
+        tiziano_adr_init(tisp_si_width(&sensor_info), tisp_si_height(&sensor_info));
         reg_val &= 0xffffff7f;  /* Clear bit 7 */
     } else if (enable == 0) {
         /* Disable ADR */
