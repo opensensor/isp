@@ -134,6 +134,7 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning);
 extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
+extern void system_reg_write_gb(u32 arg1, u32 arg2, u32 arg3);
 extern void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3);
 extern uint32_t deir_en;
 
@@ -2774,14 +2775,17 @@ int tisp_sensor_info_update(const struct tisp_sensor_info_blob *info)
 }
 EXPORT_SYMBOL(tisp_sensor_info_update);
 
-/* GB (Green Balance) parameter arrays - Binary Ninja reference */
+/* GB (Green Balance) parameter arrays - Binary Ninja reference
+ * OEM BSS defaults: dgain arrays = 0x400 (unity), BLC arrays = 0.
+ * tisp_gb_params_refresh() loads real values from tuning bin. */
 static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
-static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x1000, 0x1000, 0x1000, 0x1000};
-static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x1000, 0x1000, 0x1000, 0x1000};
-static uint32_t tisp_gb_blc_offset[45] = {0};  /* 5 curves x 9 entries: R,Gr,Gb,B,IR */
+static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x400, 0x400, 0x400, 0x400};
+static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x400, 0x400, 0x400, 0x400};
+static uint32_t tisp_gb_blc_offset[45] = {0};  /* 5 curves x 9 entries: IR,B,GB,GR,R */
 static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
 static uint32_t tisp_gb_blc_min[9] = {0};     /* 9-entry BLC minimum curve */
 static uint32_t tisp_gb_blc_ag[2] = {0, 0};   /* last gain for channel 0/1 */
+static int tisp_gb_init_done = 0;              /* OEM init.31768 — first-call gate */
 
 /* LSC (Lens Shading Correction) parameter arrays - Binary Ninja reference */
 /* Note: LSC arrays are defined later in the file with actual values */
@@ -17730,11 +17734,115 @@ static int tisp_rdns_par_refresh(uint32_t gain, uint32_t threshold, int enable_w
 	return 0;
 }
 
-/* WDR-specific initialization functions */
+/* OEM EXACT: tisp_gb_params_refresh — load GB parameter arrays from tuning bin.
+ * Decompiled from OEM at 0x22b2c.
+ * Tuning bin base in OEM = 0x84B10; offsets computed as OEM_addr - 0x84B10.
+ *
+ * Tuning bin layout (source):
+ *   +0x127FC: dgain_shift    (8 bytes  = 2 x u32)
+ *   +0x12804: dgain_rgbir_l  (0x10 bytes = 4 x u32)
+ *   +0x12814: dgain_rgbir_s  (0x10 bytes = 4 x u32)
+ *   +0x12824: BLC_R          (0x24 bytes = 9 x u32)
+ *   +0x12848: BLC_GR         (0x24 bytes)
+ *   +0x1286C: BLC_GB         (0x24 bytes)
+ *   +0x12890: BLC_B          (0x24 bytes)
+ *   +0x128B4: BLC_IR         (0x24 bytes)
+ *   +0x128D8: BLC_MIN_EN     (8 bytes  = 2 x u32)
+ *   +0x128E0: BLC_MIN        (0x24 bytes = 9 x u32)
+ *
+ * BSS blc_offset[45] layout (destination):
+ *   [0..8]   = IR,  [9..17] = B,  [18..26] = GB,  [27..35] = GR,  [36..44] = R
+ * OEM reverses the channel order when loading from tuning bin. */
+static int tisp_gb_params_refresh(void)
+{
+	const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+
+	if (!p || !tuning_bin_loaded)
+		return 0;
+
+	/* dgain_shift: 2 x u32 from tuning offset 0x127FC */
+	memcpy(tisp_gb_dgain_shift, p + 0x127FC, 8);
+
+	/* dgain_rgbir_l: 4 x u32 from tuning offset 0x12804 */
+	memcpy(tisp_gb_dgain_rgbir_l, p + 0x12804, 0x10);
+
+	/* dgain_rgbir_s: 4 x u32 from tuning offset 0x12814 */
+	memcpy(tisp_gb_dgain_rgbir_s, p + 0x12814, 0x10);
+
+	/* BLC offset arrays — OEM loads tuning R/GR/GB/B/IR into BSS
+	 * slots [R(36), GR(27), GB(18), B(9), IR(0)] respectively. */
+	memcpy(&tisp_gb_blc_offset[36], p + 0x12824, 0x24);  /* tuning BLC_R  -> blc_offset[36] */
+	memcpy(&tisp_gb_blc_offset[27], p + 0x12848, 0x24);  /* tuning BLC_GR -> blc_offset[27] */
+	memcpy(&tisp_gb_blc_offset[18], p + 0x1286C, 0x24);  /* tuning BLC_GB -> blc_offset[18] */
+	memcpy(&tisp_gb_blc_offset[9],  p + 0x12890, 0x24);  /* tuning BLC_B  -> blc_offset[9]  */
+	memcpy(&tisp_gb_blc_offset[0],  p + 0x128B4, 0x24);  /* tuning BLC_IR -> blc_offset[0]  */
+
+	/* BLC min enable: 2 x u32 from tuning offset 0x128D8 */
+	memcpy(tisp_gb_blc_min_en, p + 0x128D8, 8);
+
+	/* BLC min curve: 9 x u32 from tuning offset 0x128E0 */
+	memcpy(tisp_gb_blc_min, p + 0x128E0, 0x24);
+
+	return 0;
+}
+
+/* Forward declaration — tisp_gb_blc_again_interp is defined later in file */
+static int tisp_gb_blc_again_interp(uint32_t gain, int channel);
+
+/* OEM EXACT: tisp_gb_init_reg — program GB digital gain and BLC registers.
+ * Decompiled from OEM at 0x22a10.
+ *
+ * Register map:
+ *   0x1008: dgain_shift  — (shift[1] << 2) | shift[0]
+ *   0x1000: dgain_rgbir_l packed — (l[1] << 16) | l[0]   (only on first call)
+ *   0x1004: dgain_rgbir_l packed — (l[3] << 16) | l[2]   (only on first call)
+ *   0x100c: dgain_rgbir_s packed — (s[1] << 16) | s[0]   (only on first call)
+ *   0x1010: dgain_rgbir_s packed — (s[3] << 16) | s[2]   (only on first call)
+ *
+ * Then runs BLC gain interpolation for both channels using last-known gain. */
+static int tisp_gb_init_reg(void)
+{
+	/* Always write dgain_shift register */
+	system_reg_write_gb(1, 0x1008,
+			    (tisp_gb_dgain_shift[1] << 2) | tisp_gb_dgain_shift[0]);
+
+	/* First call only: write dgain RGBIR long/short exposure registers */
+	if (tisp_gb_init_done == 0) {
+		system_reg_write_gb(1, 0x1000,
+				    (tisp_gb_dgain_rgbir_l[1] << 16) | tisp_gb_dgain_rgbir_l[0]);
+		system_reg_write_gb(1, 0x1004,
+				    (tisp_gb_dgain_rgbir_l[3] << 16) | tisp_gb_dgain_rgbir_l[2]);
+		system_reg_write_gb(1, 0x100c,
+				    (tisp_gb_dgain_rgbir_s[1] << 16) | tisp_gb_dgain_rgbir_s[0]);
+		system_reg_write_gb(1, 0x1010,
+				    (tisp_gb_dgain_rgbir_s[3] << 16) | tisp_gb_dgain_rgbir_s[2]);
+	}
+
+	/* Run BLC interpolation for both channels */
+	tisp_gb_blc_again_interp(tisp_gb_blc_ag[0], 0);
+	tisp_gb_blc_again_interp(tisp_gb_blc_ag[1], 1);
+
+	tisp_gb_init_done = 1;
+	return 0;
+}
+
+/* OEM EXACT: tisp_gb_dn_params_refresh — day/night parameter refresh for GB.
+ * Decompiled from OEM at 0x22c44. Identical to tisp_gb_init(). */
+int tisp_gb_dn_params_refresh(void)
+{
+	tisp_gb_params_refresh();
+	tisp_gb_init_reg();
+	return 0;
+}
+
+/* OEM EXACT: tisp_gb_init — GB (Green Balance) initialization.
+ * Decompiled from OEM at 0x22c7c.
+ * Loads GB parameter arrays from tuning bin, then programs initial register values. */
 int tisp_gb_init(void)
 {
-    pr_info("tisp_gb_init: Initializing GB processing for WDR\n");
-    return 0;
+	tisp_gb_params_refresh();
+	tisp_gb_init_reg();
+	return 0;
 }
 
 int tisp_s_wdr_en(int enable)
