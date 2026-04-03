@@ -3214,77 +3214,106 @@ static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value)
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - EXACT Binary Ninja Reference ===== */
 
-/* tiziano_ae_set_hardware_param - Binary Ninja EXACT implementation */
-int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_only)
+/* tiziano_ae_set_hardware_param - Binary Ninja EXACT implementation
+ * OEM address: 0x5373c
+ *
+ * Packs _ae_parameter uint32_t array elements into register words and writes
+ * them to AE0 (0xa004-0xa028) or AE1 (0xa804-0xa828).
+ *
+ * arg1 (ae_index): 0 = AE0, 1 = AE1
+ * arg2 (param):    pointer to uint32_t[42] ae_parameter array
+ * arg3 (shortcut): when != 0, only writes the final commit register (0xa028/0xa828)
+ *                  — used for threshold-only updates after AWB
+ */
+int tiziano_ae_set_hardware_param(int ae_index, uint32_t *param, int shortcut)
 {
-    if (!param_array) {
-        pr_err("tiziano_ae_set_hardware_param: NULL parameter array\n");
+    if (!param)
+        return -EINVAL;
+
+    /* Pack uint32_t array elements into 10 register words.
+     * OEM uses int32_t* arg2 — each index is a word offset into ae_parameter.data[].
+     *
+     * reg0 (0xa004): param[3]<<28 | param[2]<<16 | param[0] | param[1]<<12
+     * reg1 (0xa008): param[7]<<24 | param[6]<<16 | param[4] | param[5]<<8
+     * reg2 (0xa00c): param[0xb]<<24 | param[0xa]<<16 | param[8] | param[9]<<8
+     * reg3 (0xa010): param[0xf]<<24 | param[0xe]<<16 | param[0xc] | param[0xd]<<8
+     * reg4 (0xa014): param[0x12]<<16 | param[0x11]<<8 | param[0x10]
+     * reg5 (0xa018): param[0x16]<<24 | param[0x15]<<16 | param[0x13] | param[0x14]<<8
+     * reg6 (0xa01c): param[0x1a]<<24 | param[0x19]<<16 | param[0x17] | param[0x18]<<8
+     * reg7 (0xa020): param[0x1e]<<24 | param[0x1d]<<16 | param[0x1b] | param[0x1c]<<8
+     * reg8 (0xa024): param[0x21]<<16 | param[0x20]<<8 | param[0x1f]
+     * reg9 (0xa028): special computation from param[0x22]-param[0x25]
+     */
+    uint32_t reg0 = param[3] << 28 | param[2] << 16 | param[0] | param[1] << 12;
+    uint32_t reg1 = param[7] << 24 | param[6] << 16 | param[4] | param[5] << 8;
+    uint32_t reg2 = param[0xb] << 24 | param[0xa] << 16 | param[8] | param[9] << 8;
+    uint32_t reg3 = param[0xf] << 24 | param[0xe] << 16 | param[0xc] | param[0xd] << 8;
+    uint32_t reg4 = param[0x12] << 16 | param[0x11] << 8 | param[0x10];
+    uint32_t reg5 = param[0x16] << 24 | param[0x15] << 16 | param[0x13] | param[0x14] << 8;
+    uint32_t reg6 = param[0x1a] << 24 | param[0x19] << 16 | param[0x17] | param[0x18] << 8;
+    uint32_t reg7 = param[0x1e] << 24 | param[0x1d] << 16 | param[0x1b] | param[0x1c] << 8;
+    uint32_t reg8 = param[0x21] << 16 | param[0x20] << 8 | param[0x1f];
+
+    /* Final register (0xa028/0xa828) — special packing with threshold logic.
+     *
+     * OEM variables:
+     *   $v1_18 = param[0x23]           (AE threshold)
+     *   $a3_1  = param[0x25]<<20 | param[0x24]<<16  (upper config bits)
+     *   $a2_11 = param[0x22]           (lower config bits)
+     *
+     * if (threshold < 0xff):
+     *     $a3_1 |= $a2_11              (merge lower bits into upper word)
+     *     $v1_21 = ((threshold * 2) / 3) << 8
+     * else:
+     *     $v1_21 = threshold << 8 | $a2_11
+     *
+     * reg9 = $v1_21 | $a3_1
+     */
+    uint32_t threshold = param[0x23];
+    uint32_t upper_cfg = param[0x25] << 20 | param[0x24] << 16;
+    uint32_t lower_cfg = param[0x22];
+    uint32_t v1_21;
+
+    if (threshold < 0xff) {
+        upper_cfg |= lower_cfg;
+        v1_21 = (div_u64((uint64_t)(threshold << 1), 3)) << 8;
+    } else {
+        v1_21 = threshold << 8 | lower_cfg;
+    }
+
+    uint32_t reg9 = v1_21 | upper_cfg;
+
+    /* Write zone/weight registers, then commit via system_reg_write_ae */
+    if (ae_index == 0) {
+        if (!shortcut) {
+            system_reg_write(0xa004, reg0);
+            system_reg_write(0xa008, reg1);
+            system_reg_write(0xa00c, reg2);
+            system_reg_write(0xa010, reg3);
+            system_reg_write(0xa014, reg4);
+            system_reg_write(0xa018, reg5);
+            system_reg_write(0xa01c, reg6);
+            system_reg_write(0xa020, reg7);
+            system_reg_write(0xa024, reg8);
+        }
+        system_reg_write_ae(1, 0xa028, reg9);
+    } else if (ae_index == 1) {
+        if (!shortcut) {
+            system_reg_write(0xa804, reg0);
+            system_reg_write(0xa808, reg1);
+            system_reg_write(0xa80c, reg2);
+            system_reg_write(0xa810, reg3);
+            system_reg_write(0xa814, reg4);
+            system_reg_write(0xa818, reg5);
+            system_reg_write(0xa81c, reg6);
+            system_reg_write(0xa820, reg7);
+            system_reg_write(0xa824, reg8);
+        }
+        system_reg_write_ae(2, 0xa828, reg9);
+    } else {
         return -EINVAL;
     }
 
-    pr_debug("tiziano_ae_set_hardware_param: ae_id=%d, update_only=%d\n", ae_id, update_only);
-
-    /* Binary Ninja: Pack parameters from byte array into 32-bit values */
-    uint32_t param1 = param_array[3] << 28 | param_array[2] << 16 | param_array[0] | param_array[1] << 12;
-    uint32_t param2 = param_array[7] << 24 | param_array[6] << 16 | param_array[4] | param_array[5] << 8;
-    uint32_t param3 = param_array[11] << 24 | param_array[10] << 16 | param_array[8] | param_array[9] << 8;
-    uint32_t param4 = param_array[15] << 24 | param_array[14] << 16 | param_array[12] | param_array[13] << 8;
-    uint32_t param5 = param_array[18] << 16 | param_array[17] << 8 | param_array[16];
-    uint32_t param6 = param_array[22] << 24 | param_array[21] << 16 | param_array[19] | param_array[20] << 8;
-    uint32_t param7 = param_array[26] << 24 | param_array[25] << 16 | param_array[23] | param_array[24] << 8;
-    uint32_t param8 = param_array[30] << 24 | param_array[29] << 16 | param_array[27] | param_array[28] << 8;
-    uint32_t param9 = param_array[33] << 16 | param_array[32] << 8 | param_array[31];
-
-    /* Binary Ninja: Special parameter calculation */
-    uint32_t special_param;
-    uint32_t val_23 = param_array[35];
-    uint32_t val_25_24 = param_array[37] << 20 | param_array[36] << 16;
-    uint32_t val_22 = param_array[34];
-
-    if (val_23 < 0xff) {
-        special_param = val_25_24 | val_22;
-        special_param |= (div_u64((uint64_t)(val_23 << 1), 3)) << 8;
-    } else {
-        special_param = val_23 << 8 | val_22;
-    }
-    special_param |= val_25_24;
-
-    /* Binary Ninja: Write parameters based on AE ID */
-    uint32_t reg_base;
-    if (ae_id == 0) {
-        if (!update_only) {
-            system_reg_write(0xa004, param1);
-            system_reg_write(0xa008, param2);
-            system_reg_write(0xa00c, param3);
-            system_reg_write(0xa010, param4);
-            system_reg_write(0xa014, param5);
-            system_reg_write(0xa018, param6);
-            system_reg_write(0xa01c, param7);
-            system_reg_write(0xa020, param8);
-            system_reg_write(0xa024, param9);
-        }
-        reg_base = 0xa028;
-        system_reg_write_ae(1, reg_base, special_param);
-    } else if (ae_id == 1) {
-        if (!update_only) {
-            system_reg_write(0xa804, param1);
-            system_reg_write(0xa808, param2);
-            system_reg_write(0xa80c, param3);
-            system_reg_write(0xa810, param4);
-            system_reg_write(0xa814, param5);
-            system_reg_write(0xa818, param6);
-            system_reg_write(0xa81c, param7);
-            system_reg_write(0xa820, param8);
-            system_reg_write(0xa824, param9);
-        }
-        reg_base = 0xa828;
-        system_reg_write_ae(2, reg_base, special_param);
-    } else {
-        pr_err("tiziano_ae_set_hardware_param: Invalid AE ID %d\n", ae_id);
-        return -EINVAL;
-    }
-
-    pr_debug("tiziano_ae_set_hardware_param: Parameters written to AE%d\n", ae_id);
     return 0;
 }
 EXPORT_SYMBOL(tiziano_ae_set_hardware_param);
@@ -3656,20 +3685,13 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         return param_init_ret;
     }
 
-    /* AE zone configuration — required for AE statistics engine to start.
-     * Without 0xa004 written, the AE hardware has no zone layout and never
-     * completes a statistics cycle, so bits 26-29 never fire.
-     * Format matches AWB 0xb004: (cols<<28)|(enable<<16)|(rows<<12)|param
-     * Use 15x15 zones matching AWB. */
-    {
-        u32 ae_zone_cfg = (0xFu << 28) | (1u << 16) | (0xFu << 12);
-        system_reg_write(0xa004, ae_zone_cfg);
-        system_reg_write_ae(1, 0xa028, 0);   /* AE0 commit with latch */
-        system_reg_write(0xa804, ae_zone_cfg);
-        system_reg_write_ae(2, 0xa828, 0);   /* AE1 commit with latch */
-        system_reg_write(0xb000, 1);          /* AWB re-latch after ISP start */
-        pr_info("tisp_init: AE zone cfg=0x%x written to 0xa004/0xa804\n", ae_zone_cfg);
-    }
+    /* AE zone/weight register programming — uses OEM's tiziano_ae_set_hardware_param()
+     * to pack _ae_parameter[] into registers 0xa004-0xa028 (AE0) and 0xa804-0xa828 (AE1).
+     * shortcut=0 writes all 10 registers; system_reg_write_ae() latches via 0xa000/0xa800. */
+    tiziano_ae_set_hardware_param(0, _ae_parameter.data, 0);
+    tiziano_ae_set_hardware_param(1, _ae_parameter.data, 0);
+    system_reg_write(0xb000, 1);          /* AWB re-latch after ISP start */
+    pr_info("tisp_init: AE zone/weight registers programmed via tiziano_ae_set_hardware_param\n");
 
     /* Seed BCSH with a neutral daylight CT (5000 K) so frames produced before
      * AWB converges do not carry the cold-green default (~9984 K). */
