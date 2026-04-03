@@ -3237,7 +3237,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     }
 
     /* Binary Ninja: AWB statistics buffer (0x4000 bytes) → regs 0xb03c-0xb04c */
-    void *awb_buffer = kzalloc(0x4000, GFP_KERNEL);
+    void *awb_buffer = kmalloc(0x4000, GFP_KERNEL);
     if (awb_buffer != NULL) {
         dma_addr_t awb_phys = virt_to_phys(awb_buffer);
         data_a2f5c = (uint32_t)(unsigned long)awb_buffer;
@@ -8560,6 +8560,7 @@ static uint32_t _awb_cluster_ext1;     /* data_a9e4c */
 static uint32_t _awb_cluster_ext2;     /* data_a9e50 */
 static uint8_t  tisp_wb_zone_attr[0x2a3]; /* AWB zone attribute blob */
 static uint32_t awb_ev_data;           /* data_983b0 equivalent */
+static int      awb_first;             /* OEM awb_first gate for one-time HW param pack */
 
 /* AWB params_refresh globals */
 static uint8_t  tisp_wb_attr[0x1c];
@@ -8613,8 +8614,8 @@ void tiziano_awb_params_refresh(void)
         _wb_static[0], _wb_static[1], _light_src_num);
 }
 
-/* Hardware apply hook: program AWB registers via system_reg_write_awb
- * Conservative, real writes that (re)enable AWB blocks to latch new params.
+/* Hardware apply hook: program AWB registers via system_reg_write_awb.
+ * Keep this aligned with the OEM HLIL sequence.
  */
 static int tiziano_awb_set_hardware_param(void)
 {
@@ -8628,7 +8629,6 @@ static int tiziano_awb_set_hardware_param(void)
 		(AWB_NORMAL_BG_TH_HIGH << 16) | AWB_NORMAL_BG_TH_LOW;
 
     /* One-time pack of _awb_parameter into AWB registers (0xb008..0xb024) */
-    static int awb_first;
     if (!awb_first) {
         awb_first = 1;
         const uint8_t *p = _awb_parameter;
@@ -8684,9 +8684,6 @@ static int tiziano_awb_set_hardware_param(void)
         }
     }
 
-    /* Re-enable AWB block 1 and 2 to apply parameter changes */
-    system_reg_write_awb(1, 0x0b000, 1);
-    system_reg_write_awb(2, 0x01800, 1);
     return 0;
 }
 
@@ -12423,12 +12420,10 @@ int awb_interrupt_static(void)
 
 int tiziano_awb_init(uint32_t height, uint32_t width)
 {
-    static int awb_first_init;
-
     pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
 
     /* OEM EXACT: reset state */
-    awb_first_init = 0;
+    awb_first = 0;
     memset(tisp_wb_attr, 0, 0x1c);
 
     /* OEM EXACT: load AWB params from tuning bin BEFORE hardware config */
@@ -12436,7 +12431,7 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 	tiziano_awb_fill_zone_geometry(height, width);
 
     /* OEM: tiziano_awb_set_hardware_param programs AWB registers
-     * 0xb004-0xb034 and enables AWB via system_reg_write_awb(1/2,...) */
+     * 0xb004-0xb034 via system_reg_write_awb() threshold writes. */
     if (awb_frz == 0)
         tiziano_awb_set_hardware_param();
 
