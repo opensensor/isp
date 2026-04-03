@@ -1601,7 +1601,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD24;  /* Working blocks + GIB + MDNS/RDNS clocked */
+static uint isp_block_enable = 0x3DD14;  /* Working blocks + LSC + MDNS/RDNS clocked (GIB needs binary-level debug) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -17720,7 +17720,7 @@ int tisp_tgain_update(uint32_t gain)
     /* tisp_dpc_par_refresh(gain, 0x100, 1); — enable after DPC ioremap path verified */
     tisp_lsc_gain_update(gain);
     tisp_ydns_par_refresh(gain);
-    /* tisp_rdns_par_refresh(gain, 0x100, 1); — enable after RDNS init fully verified */
+    tisp_rdns_par_refresh(gain, 0x100, 1);
     /* tisp_mdns_par_refresh(gain, 0x100); — enable after tisp_mdns_intp fully ported */
     return 0;
 }
