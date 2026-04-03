@@ -1603,7 +1603,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 1;    /* MDNS has never streamed successfully — park runtime MMIO until bring-up is proven. */
+static int mdns_runtime_parked = 1;    /* MDNS enable regressed to whole-device hangs; keep runtime MMIO parked until safe parity is proven. */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -15383,9 +15383,6 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 	if (mdns_runtime_parked) {
 		u32 bypass_reg;
 		mdns_last_refresh_key = data_9a9d0;
-		/* Explicitly set bit 16 in bypass register to disable MDNS hardware.
-		 * The OEM bypass value 0xb5742249 has MDNS enabled (bit 16=0), but
-		 * our MDNS init is incomplete so we must force-bypass. */
 		bypass_reg = system_reg_read(0xc);
 		if (!(bypass_reg & 0x10000)) {
 			system_reg_write(0xc, bypass_reg | 0x10000);
