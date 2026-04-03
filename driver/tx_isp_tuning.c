@@ -3705,21 +3705,14 @@ int tisp_init(void *sensor_info_arg, char *param_name)
      * tisp_*_set_par_cfg never triggers. Activate here with real tuning data.
      * The sub-module inits (tiziano_mdns_init, tiziano_dpc_init) already ran
      * but skipped HW writes because params weren't loaded yet. */
+    /* Activate DPC now that tuning bin is loaded.
+     * MDNS NOT activated here — causes HW hang even with tuning data.
+     * MDNS needs deeper investigation of its register init sequence. */
     if (tparams_day || tparams_active) {
         if (!dpc_params_received) {
             dpc_params_received = 1;
             tisp_dpc_par_refresh(0, 0, 1);
             pr_info("tisp_init: DPC activated with tuning bin data\n");
-        }
-        if (!mdns_params_received) {
-            mdns_params_received = 1;
-            {
-                u32 bypass_reg = system_reg_read(0xc);
-                bypass_reg &= ~0x10000;  /* Clear MDNS bypass bit 16 */
-                system_reg_write(0xc, bypass_reg);
-            }
-            tisp_mdns_bypass(0);
-            pr_info("tisp_init: MDNS activated with tuning bin data\n");
         }
     }
 
