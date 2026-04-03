@@ -1726,6 +1726,7 @@ static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
 static int mdns_runtime_parked = 0;    /* MDNS enabled but deferred: no HW writes until tuning params arrive */
 static int mdns_params_received = 0;   /* Deferred init: set to 1 when libimp sends real MDNS tuning params */
+static int dpc_params_received = 0;    /* Deferred init: set to 1 when libimp sends real DPC tuning params */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -5048,6 +5049,7 @@ int tisp_rdns_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_adr_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_ae_param_array_set(int param_id, void *in_buf, int *size_buf);
 int tisp_hldc_param_array_set(int param_id, void *in_buf, int *size_buf);
+int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
 
 int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf);
@@ -15872,7 +15874,6 @@ uint32_t *dpc_d_m3_fthres_array_now = NULL;
 /* DPC state variables - Binary Ninja reference */
 static uint32_t data_9ab10 = 0xFFFFFFFF;  /* DPC state cache */
 static int dpc_wdr_en = 0;
-static int dpc_params_received = 0;   /* Deferred init: set to 1 when libimp sends real DPC tuning params */
 
 /* DPC interpolated value cache — populated by tisp_dpc_intp() */
 static uint32_t dpc_d_m1_fthres_intp;
