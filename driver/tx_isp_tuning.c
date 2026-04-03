@@ -3571,6 +3571,16 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         return param_init_ret;
     }
 
+    /* Force initial CT update.  The AWB statistics interrupt (bit 30) doesn't
+     * fire in our driver yet, so the AWB algorithm never computes a color
+     * temperature and event 9 (tisp_ct_update) never triggers.  Without this,
+     * the BCSH CCM stays at the default CT=9984K (0x2700) which is far too
+     * cold for typical indoor lighting.  Force a D50 (5000K) CT update so the
+     * CCM interpolation starts in a reasonable range.  Once AWB interrupts are
+     * fixed, this can be removed. */
+    tisp_ct_update(5000);
+    pr_info("tisp_init: Forced initial CT update to 5000K (AWB stats IRQ not yet firing)\n");
+
     /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
     pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
 

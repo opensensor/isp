@@ -1664,19 +1664,18 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
+    extern int awb_interrupt_static(void);
     struct tx_isp_dev *isp_dev;
     static int sensor_call_counter = 0;
-    int vic_is_streaming = 0;  /* C89 compatible: use int instead of bool */
+    int vic_is_streaming = 0;
     struct tx_isp_vic_device *vic = NULL;
 
-    /* CRITICAL: Validate ourISPdev pointer before ANY access */
     if (!ourISPdev || (unsigned long)ourISPdev < 0x80000000 ||
         (unsigned long)ourISPdev >= 0xfffff000)
         return;
 
     isp_dev = ourISPdev;
 
-    /* Auto-detect streaming state from VIC hardware */
     if (isp_dev->vic_dev &&
         (unsigned long)isp_dev->vic_dev >= 0x80000000 &&
         (unsigned long)isp_dev->vic_dev < 0xfffff000) {
@@ -1686,6 +1685,16 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         if (vic_is_streaming && !isp_dev->streaming_enabled)
             isp_dev->streaming_enabled = true;
     }
+
+    /* AE/AWB hardware interrupts (bits 26-30) never fire on this T31
+     * revision.  Poll the AWB statistics from the per-frame sync work
+     * instead.  awb_interrupt_static reads the DMA buffer, runs
+     * JZ_Isp_Awb (which computes color temperature), and pushes
+     * event 9 to trigger tisp_ct_update -> tisp_bcsh_ct_update.
+     * Without this, the BCSH color correction never adapts to the
+     * scene lighting, causing a persistent green color cast. */
+    if (vic_is_streaming)
+        awb_interrupt_static();
 
     sensor_call_counter++;
 }
