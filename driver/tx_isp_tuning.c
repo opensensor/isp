@@ -17932,8 +17932,11 @@ int tisp_tgain_update(uint32_t gain)
     /* OEM order: GIB, GB_BLC, DMSC, Sharpen, SDNS, DPC, LSC, YDNS, RDNS, MDNS.
      * Calls gated on block readiness to match last-known-working configuration.
      * Enable progressively as each block's init/config is verified. */
-    tisp_gib_gain_interpolation(gain);
-    tisp_gb_blc_again_interp(gain, 0);
+    /* GIB/BLC registers (0x1014-0x106c) require GIB block enabled (bit 5) */
+    if (isp_block_enable & 0x20) {
+        tisp_gib_gain_interpolation(gain);
+        tisp_gb_blc_again_interp(gain, 0);
+    }
     if (dmsc_params_ready)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
