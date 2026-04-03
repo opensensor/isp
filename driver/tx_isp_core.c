@@ -2954,13 +2954,27 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
             }
 
+            /* OEM EXACT: Start the ISP firmware event processing thread.
+             * This thread calls tisp_event_process() in a loop, dispatching
+             * events pushed by IRQ handlers (AWB, AE, etc.) to their
+             * registered callbacks (tisp_ct_update, tisp_tgain_update, etc.).
+             * Without this thread, ALL event-driven ISP algorithms are dead. */
+            {
+                extern int tisp_event_process_thread(void *data);
+                isp_dev->fw_thread = kthread_run(tisp_event_process_thread,
+                                                  NULL, "isp_fw_process");
+                if (IS_ERR(isp_dev->fw_thread)) {
+                    pr_err("ispcore_core_ops_init: Failed to create isp_fw_process thread: %ld\n",
+                           PTR_ERR(isp_dev->fw_thread));
+                    isp_dev->fw_thread = NULL;
+                } else {
+                    pr_info("ispcore_core_ops_init: isp_fw_process thread started\n");
+                }
+            }
+
             /* Binary Ninja: *($s0 + 0xe8) = 3 — sets isp_dev->state */
             isp_dev->state = 3;
             pr_info("*** ispcore_core_ops_init: ISP state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
-
-            /* REMOVED: Core device state management - ALL state management happens through VIC device */
-            /* Based on Binary Ninja MCP analysis, core device is stateless */
-            pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
 
             result = 0;
         }
