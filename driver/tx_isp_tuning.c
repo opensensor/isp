@@ -2217,7 +2217,9 @@ static uint32_t data_b2f3c = 0;  /* AE statistics buffer base */
 static uint32_t data_b2f48 = 0;  /* AE histogram buffer base */
 static uint32_t data_b2f54 = 0;  /* AE1 statistics buffer base */
 static uint32_t data_b2f60 = 0;  /* AE1 histogram buffer base */
+static uint32_t data_a2f58 = 0;  /* AWB DMA page count */
 static uint32_t data_a2f5c = 0;  /* AWB statistics buffer base */
+static uint32_t data_a2f60 = 0;  /* AWB statistics buffer phys */
 static uint32_t data_b0e00 = 0;  /* AE0 interrupt flag */
 static uint32_t data_b0e10 = 0;  /* AE histogram flag */
 static uint32_t data_b0dfc = 0;  /* AE1 interrupt flag */
@@ -3240,13 +3242,16 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     void *awb_buffer = kmalloc(0x4000, GFP_KERNEL);
     if (awb_buffer != NULL) {
         dma_addr_t awb_phys = virt_to_phys(awb_buffer);
+        data_a2f58 = 4;
         data_a2f5c = (uint32_t)(unsigned long)awb_buffer;
+        data_a2f60 = (uint32_t)awb_phys;
         system_reg_write(0xb03c, awb_phys);
         system_reg_write(0xb040, awb_phys + 0x1000);
         system_reg_write(0xb044, awb_phys + 0x2000);
         system_reg_write(0xb048, awb_phys + 0x3000);
         system_reg_write(0xb04c, 3);
-        pr_info("*** tisp_init: AWB buffer allocated at 0x%08x ***\n", (uint32_t)awb_phys);
+        pr_info("*** tisp_init: AWB DMA buffer virt=%p phys=0x%08x pages=%u ***\n",
+                awb_buffer, data_a2f60, data_a2f58);
     }
 
     /* Binary Ninja: ADR statistics DMA buffer (0x4000 bytes) → regs 0x4494-0x44a0
@@ -3359,6 +3364,8 @@ int tisp_init(void *sensor_info_arg, char *param_name)
 
     /* Binary Ninja: Final ISP configuration registers - AFTER inits, enables processing */
     uint32_t isp_mode = wdr_enable ? 0x10 : 0x1c;
+    if (tisp_si_bayer(&sensor_params) == 0x14)
+        isp_mode = wdr_enable ? 0x12 : 0x1e;
     system_reg_write(0x804, isp_mode);
     system_reg_write(0x1c, 8);
     system_reg_write(0x800, 1);  /* CRITICAL: This starts ISP processing */
@@ -8489,7 +8496,6 @@ static uint32_t awb_array_p[AWB_STATS_ZONES];
 
 #define AWB_ZONE_COLS              0x0f
 #define AWB_ZONE_ROWS              0x0f
-#define AWB_STATS_CFG_WORD         0xf001f001u
 #define AWB_NORMAL_RG_TH_LOW       0x0080u
 #define AWB_NORMAL_RG_TH_HIGH      0x0200u
 #define AWB_NORMAL_BG_TH_LOW       0x0080u
@@ -8632,9 +8638,17 @@ static int tiziano_awb_set_hardware_param(void)
     if (!awb_first) {
         awb_first = 1;
         const uint8_t *p = _awb_parameter;
+	        u32 stats_cfg;
+	        u32 param_word0;
         u32 val;
-        /* OEM: 0xb004 encodes AWB stats geometry/control as 0xf001f001. */
-        system_reg_write(0x0b004, AWB_STATS_CFG_WORD);
+	        /* OEM HLIL: 0xb004 packs cols/rows, a fixed enable bit, and
+	         * the first word of _awb_parameter rather than treating the
+	         * register as a pure magic constant. */
+	        param_word0 = (u32)p[0] | ((u32)p[1] << 8) |
+	            ((u32)p[2] << 16) | ((u32)p[3] << 24);
+	        stats_cfg = (AWB_ZONE_COLS << 28) | (1u << 16) |
+	            (AWB_ZONE_ROWS << 12) | param_word0;
+	        system_reg_write(0x0b004, stats_cfg);
         /* 0xb008: p[0..3] */
         val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
         system_reg_write(0x0b008, val);
@@ -8685,6 +8699,14 @@ static int tiziano_awb_set_hardware_param(void)
     }
 
     return 0;
+}
+
+int tiziano_awb_dn_params_refresh(void)
+{
+	awb_history_reset = 1;
+	awb_dn_refresh_flag = 1;
+	tiziano_awb_params_refresh();
+	return tiziano_awb_set_hardware_param();
 }
 
 int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf)
@@ -12432,10 +12454,10 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 
     /* OEM: tiziano_awb_set_hardware_param programs AWB registers
      * 0xb004-0xb034 via system_reg_write_awb() threshold writes. */
-    if (awb_frz == 0)
+	    if (awb_frz == 0) {
         tiziano_awb_set_hardware_param();
-
-    Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+	        Tiziano_awb_set_gain(_awb_mf_para, _AwbPointPos[0], _wb_static);
+	    }
 	tisp_event_set_cb(0xa, JZ_Isp_Awb);
 	system_irq_func_set(0x1e, awb_interrupt_static_wrapper);
 

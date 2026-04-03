@@ -1868,8 +1868,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         extern struct frame_channel_device frame_channels[];
         extern int frame_chan_event(void *priv, int event, void *data);
         int drain_count;
-        int tuning_frame_done = 0;
-	    int tuning_awb_tick;
         u32 fifo_stat_ch0;
         u32 evt[4];  /* event data: [0]=0, [1]=0, [2]=y_addr, [3]=0 */
 
@@ -1886,9 +1884,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         if (drain_count > 0 && isp_dev)
             isp_dev->frame_count += drain_count;
-        if (drain_count > 0)
-            tuning_frame_done = 1;
-
         /* CH1 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
@@ -1897,9 +1892,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             frame_chan_event(&frame_channels[1], 0x3000006, evt);
             drain_count++;
         }
-        if (drain_count > 0)
-            tuning_frame_done = 1;
-
         /* CH2 drain */
         drain_count = 0;
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
@@ -1907,24 +1899,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             evt[2] = readl(isp_regs + 0x9b74);
             frame_chan_event(&frame_channels[2], 0x3000006, evt);
             drain_count++;
-        }
-        if (drain_count > 0)
-            tuning_frame_done = 1;
-
-	        tuning_awb_tick = tuning_frame_done || (interrupt_status & 0x1000);
-	        if (tuning_awb_tick) {
-	            /* Driver-side fallback: the dedicated AWB IRQ path is still silent
-	             * in runtime logs. FIFO drain is one proof of frame completion, but
-	             * newer captures show active stream/frame-sync IRQs without drain_count
-	             * becoming non-zero, which leaves runtime AWB dead.
-	             *
-	             * Reuse either confirmed FIFO drain OR the frame-sync interrupt bit
-	             * as the temporary AWB trigger during bring-up. Keep the LSC LUT
-	             * write behind the OEM-style bit-0x40 gate, but do not incorrectly
-	             * gate AWB on that same bit. */
-            if ((readl(isp_regs + 0xc) & 0x40) == 0)
-                tisp_lsc_write_lut_datas();
-            awb_interrupt_static();
         }
     }
 
