@@ -118,6 +118,12 @@ static int tisp_sharpen_all_reg_refresh(void);
 int tisp_ccm_ct_update(void);
 int tisp_ccm_ev_update(void);
 static int tiziano_awb_set_hardware_param(void);
+static int tiziano_s_wb_algo(uint32_t mode);
+int tisp_s_awb_algo(uint32_t mode);
+int tisp_s_wb_frz(void *in_buf);
+int tisp_g_wb_frz(void *out_buf);
+static int tisp_s_wb_mode(uint32_t mode, uint32_t gain_gr, uint32_t gain_gb);
+static int tisp_g_wb_mode(void *out_buf);
 static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos,
 			       const uint32_t *gain_base);
 static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct);
@@ -5154,36 +5160,15 @@ extern int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
 extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 
-/* Vendor-accurate WB attribute setter: programs R/B gains; sets G to unity (256)
- * Using system_reg_write_awb with block=0 to avoid re-enabling here.
- */
+/* OEM-shaped WB attribute wrapper: setter only updates WB mode state. */
 int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
                    uint32_t p4, uint32_t p5, uint32_t p6)
 {
-    (void)p4; (void)p5; (void)p6;
-    if (mode != 1)
-        return 0;
-
-    /* Update tuning cache if available */
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-        mutex_lock(&tuning->mutex);
-        tuning->wb_gains.r = r_gain;
-        tuning->wb_gains.b = b_gain;
-        /* Keep G unity for neutral balance unless updated elsewhere */
-        tuning->wb_gains.g = 256;
-        mutex_unlock(&tuning->mutex);
-    }
-
-    /* Program hardware gains */
-    system_reg_write_awb(0, ISP_WB_R_GAIN, r_gain);
-    system_reg_write_awb(0, ISP_WB_G_GAIN, 256);
-    system_reg_write_awb(0, ISP_WB_B_GAIN, b_gain);
-
-    pr_debug("tisp_s_wb_attr: mode=%u r=%u g=%u b=%u\n", mode, r_gain, 256, b_gain);
-    return 0;
+    (void)p4;
+    (void)p5;
+    (void)p6;
+    return tisp_s_wb_mode(mode, r_gain, b_gain);
 }
-
 
 /* File operations structure - Binary Ninja reference */
 static const struct file_operations tisp_fops = {
@@ -6015,9 +6000,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         if (copy_from_user(flags, argp, sizeof(flags)))
                             return -EFAULT;
                         awb_mode_flag = flags[0] ? 1 : 0;
-                        awb_algo_mode = (flags[1] == 1) ? 1 : 0;
-                        /* Apply to hardware immediately */
-                        return tiziano_awb_set_hardware_param();
+	                        return tisp_s_awb_algo(flags[1]);
                     }
 
                     case 0x2000740b: /* Get AWB ModeFlag and algo mode */
@@ -6036,13 +6019,13 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         uint8_t frz;
                         if (copy_from_user(&frz, argp, sizeof(frz)))
                             return -EFAULT;
-                        awb_frz = frz ? 1 : 0;
-                        return 0;
+	                        return tisp_s_wb_frz(&frz);
                     }
 
                     case 0x2000740d: /* Get AWB freeze flag */
                     {
-                        uint8_t frz = awb_frz;
+	                        uint8_t frz = 0;
+	                        tisp_g_wb_frz(&frz);
                         if (copy_to_user(argp, &frz, sizeof(frz)))
                             return -EFAULT;
                         return 0;
@@ -8840,6 +8823,10 @@ static int      awb_first;             /* OEM awb_first gate for one-time HW par
 
 /* AWB params_refresh globals */
 static uint8_t  tisp_wb_attr[0x1c];
+static uint32_t wb_mode_gain_gr;       /* OEM data_a5a28 */
+static uint32_t wb_mode_gain_gb;       /* OEM data_a5a2c */
+static uint32_t wb_live_gain_gr_inv;   /* OEM data_a5a38 */
+static uint32_t wb_live_gain_gb_inv;   /* OEM data_a5a3c */
 static int      awb_dn_refresh_flag;
 
 /* tiziano_awb_params_refresh - OEM EXACT: load AWB parameters from tuning bin.
@@ -10191,6 +10178,39 @@ int tisp_awb_get_ct_trend(void *out_buf)
     return 0;
 }
 
+static int tiziano_s_wb_algo(uint32_t mode)
+{
+	if (mode == 1) {
+		awb_algo_mode = 1;
+	} else {
+		if (mode != 0 && mode != 2) {
+			pr_err("%s:%d::Can not support this awb algo mode!!!\n",
+			       __func__, __LINE__);
+			return -1;
+		}
+
+		awb_algo_mode = 0;
+	}
+
+	return tiziano_awb_set_hardware_param();
+}
+
+int tisp_s_awb_algo(uint32_t mode)
+{
+	tiziano_s_wb_algo(mode);
+	return 0;
+}
+
+int tisp_s_wb_frz(void *in_buf)
+{
+	return tisp_awb_set_frz(in_buf);
+}
+
+int tisp_g_wb_frz(void *out_buf)
+{
+	return tisp_awb_get_frz(out_buf);
+}
+
 int tisp_awb_set_ct(void *in_buf)
 {
     if (!in_buf) return -EINVAL;
@@ -10461,72 +10481,127 @@ int tisp_set_ae_info(void *in_buf)
     return 0;
 }
 
+static int tisp_g_wb_mode(void *out_buf)
+{
+	u32 *out = out_buf;
+
+	if (!out)
+		return -EINVAL;
+
+	memcpy(out, tisp_wb_attr, sizeof(tisp_wb_attr));
+	if (out[0] == 0) {
+		out[1] = 0x10000u / wb_live_gain_gr_inv;
+		out[2] = 0x10000u / wb_live_gain_gb_inv;
+	}
+
+	return 0;
+}
+
+int tisp_g_wb_attr(void *out_buf)
+{
+	return tisp_g_wb_mode(out_buf);
+}
+
+static int tisp_s_wb_mode(uint32_t mode, uint32_t gain_gr, uint32_t gain_gb)
+{
+	u32 *wb_attr = (u32 *)tisp_wb_attr;
+
+	if (mode >= 0xa) {
+		pr_err("%s:%d::Can not support this mode!!!\n", __func__, __LINE__);
+		return 0;
+	}
+
+	switch (mode) {
+	case 0:
+		wb_attr[0] = 0;
+		break;
+	case 1:
+		wb_attr[0] = 1;
+		wb_mode_gain_gr = gain_gr;
+		wb_mode_gain_gb = gain_gb;
+		break;
+	case 2:
+		wb_attr[0] = 2;
+		wb_mode_gain_gr = 0x180;
+		wb_mode_gain_gb = 0x180;
+		break;
+	case 3:
+		wb_attr[0] = 3;
+		wb_mode_gain_gr = 0x1b6;
+		wb_mode_gain_gb = 0x12f;
+		break;
+	case 4:
+		wb_attr[0] = 4;
+		wb_mode_gain_gr = 0x0db;
+		wb_mode_gain_gb = 0x2b2;
+		break;
+	case 5:
+		wb_attr[0] = 5;
+		wb_mode_gain_gr = 0x0f0;
+		wb_mode_gain_gb = 0x234;
+		break;
+	case 6:
+		wb_attr[0] = 6;
+		wb_mode_gain_gr = 0x13b;
+		wb_mode_gain_gb = 0x1cb;
+		break;
+	case 7:
+		wb_attr[0] = 7;
+		wb_mode_gain_gr = 0x1d4;
+		wb_mode_gain_gb = 0x117;
+		break;
+	case 8:
+		wb_attr[0] = 8;
+		wb_mode_gain_gr = 0x0f0;
+		wb_mode_gain_gb = 0x178;
+		break;
+	case 9:
+		wb_attr[0] = 9;
+		wb_mode_gain_gr = gain_gr;
+		wb_mode_gain_gb = gain_gb;
+		break;
+	}
+
+	if (mode != 0) {
+		wb_attr[1] = wb_mode_gain_gr;
+		wb_attr[2] = wb_mode_gain_gb;
+	}
+
+	awb_moa = 1;
+	return 0;
+}
+
 int tisp_get_awb_info(void *out_buf)
 {
-    int32_t *param_ptr = (int32_t *)out_buf;
-    uint32_t *data;
-    size_t n = 0;
+	int32_t *param_ptr = (int32_t *)out_buf;
+	uint8_t wb_attr[0x1c];
+	int ret;
 
-    if (!param_ptr)
+	if (!param_ptr)
         return -EINVAL;
 
-    data = (uint32_t *)&param_ptr[3];
+	ret = tisp_g_wb_attr(wb_attr);
+	if (ret)
+		return ret;
 
-    if (!ourISPdev || !ourISPdev->tuning_data) {
-        param_ptr[1] = 0;
-        return -ENODEV;
-    }
-
-    /* Read AWB-related fields from tuning_data safely */
-    {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-        data[n++] = tuning->wb_gains.r;
-        data[n++] = tuning->wb_gains.g;
-        data[n++] = tuning->wb_gains.b;
-        data[n++] = tuning->wb_temp;  /* color temperature */
-    }
-
-    param_ptr[1] = (int32_t)(n * sizeof(uint32_t));
+	param_ptr[1] = 0x1c;
+	memcpy((uint8_t *)out_buf + 0xc, wb_attr, sizeof(wb_attr));
     return 0;
 }
 
 int tisp_set_awb_info(void *in_buf)
 {
-    int32_t *param_ptr = (int32_t *)in_buf;
-    uint32_t *data;
-    size_t nwords;
-    uint32_t wb_temp;
+	int32_t *param_ptr = (int32_t *)in_buf;
+	uint32_t wb_attr[7];
 
     if (!param_ptr)
         return -EINVAL;
 
-    if (!ourISPdev || !ourISPdev->tuning_data)
-        return -ENODEV;
+	param_ptr[1] = 0x1c;
+	memcpy(wb_attr, (uint8_t *)in_buf + 0xc, sizeof(wb_attr));
 
-    data = (uint32_t *)&param_ptr[3];
-    nwords = (param_ptr[1] > 0) ? (param_ptr[1] / sizeof(uint32_t)) : 0;
-
-    if (nwords == 0)
-        return -EINVAL;
-
-    /* Update AWB fields */
-    {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-        mutex_lock(&tuning->mutex);
-        if (nwords > 0) tuning->wb_gains.r = data[0];
-        if (nwords > 1) tuning->wb_gains.g = data[1];
-        if (nwords > 2) tuning->wb_gains.b = data[2];
-        if (nwords > 3) tuning->wb_temp    = data[3];
-        wb_temp = tuning->wb_temp;
-        mutex_unlock(&tuning->mutex);
-    }
-
-    /* Trigger AWB/CCM updates to apply the new gains/CT */
-    if (tisp_ct_update)      tisp_ct_update(wb_temp);
-    if (tisp_ccm_ct_update)  tisp_ccm_ct_update();
-    if (tisp_ccm_ev_update)  tisp_ccm_ev_update();
-
-    return 0;
+	return tisp_s_wb_attr(wb_attr[0], wb_attr[1], wb_attr[2],
+			      wb_attr[3], wb_attr[4], wb_attr[5]);
 }
 
 /* tisp_g_aeroi_weight - EXACT Binary Ninja reference implementation */
@@ -12097,8 +12172,9 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 {
 	const uint32_t *mf_words = (const uint32_t *)mf_para;
 	u32 q = point_pos & 0x1f;
-	u32 rounding = point_pos ? (1u << ((point_pos - 1) & 0x1f)) : 0;
+	u32 rounding = 1u << ((point_pos - 1) & 0x1f);
 	u32 gain_pair[2];
+	u32 apply_pair[2];
 	u32 reg_pair[2];
 	u32 base_gr = gain_base ? gain_base[0] : 0x100;
 	u32 base_gb = gain_base ? gain_base[1] : 0x100;
@@ -12106,44 +12182,26 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	u32 mf_gb = mf_words[5];
 	u32 gain_gr_q;
 	u32 gain_gb_q;
+	u32 wb_mode = ((u32 *)tisp_wb_attr)[0];
 
 	gain_gr_q = fix_point_mult2_32(point_pos, mf_gr << q, base_gr);
 	gain_gb_q = fix_point_mult2_32(point_pos, mf_gb << q, base_gb);
 	gain_pair[0] = (gain_gr_q + rounding) >> q;
 	gain_pair[1] = (gain_gb_q + rounding) >> q;
+	wb_live_gain_gr_inv = 0x10000u / gain_pair[0];
+	wb_live_gain_gb_inv = 0x10000u / gain_pair[1];
+	apply_pair[0] = gain_pair[0];
+	apply_pair[1] = gain_pair[1];
 
-	JZ_Isp_Awb_Awbg2reg(gain_pair, reg_pair);
-
-	/* Sanity check: reject wildly out-of-range gains.
-	 * Normal AWB gains are in the range ~500-6000.  Values outside
-	 * ~100-10000 indicate bad AWB statistics (e.g. DMA buffer not
-	 * yet populated by hardware).  Skip hardware write to keep the
-	 * previous good gains intact. */
-	{
-		u32 gr_val = reg_pair[0] & 0xffff;
-		u32 gb_val = reg_pair[1] & 0xffff;
-
-		if (gr_val < 100 || gr_val > 10000 || gb_val < 100 || gb_val > 10000) {
-			static unsigned int awb_reject_count;
-			awb_reject_count++;
-			if (awb_reject_count <= 5 || (awb_reject_count % 300) == 0)
-				pr_info("Tiziano_awb_set_gain[%u]: REJECTED out-of-range "
-					"base=%u,%u mf=%u,%u -> awb_gain=%u,%u\n",
-					awb_reject_count, base_gr, base_gb,
-					mf_gr, mf_gb, gr_val, gb_val);
-			return 0;
-		}
+	if ((wb_mode - 1) < 8) {
+		apply_pair[0] = wb_mode_gain_gr;
+		apply_pair[1] = wb_mode_gain_gb;
+	} else if (wb_mode == 9) {
+		apply_pair[0] = ((wb_mode_gain_gr + 0x40) * gain_pair[0]) >> 6;
+		apply_pair[1] = ((wb_mode_gain_gb + 0x40) * gain_pair[1]) >> 6;
 	}
 
-	if (ourISPdev && ourISPdev->tuning_data) {
-		struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-
-		mutex_lock(&tuning->mutex);
-		tuning->wb_gains.r = reg_pair[0] & 0xffff;
-		tuning->wb_gains.g = 0x400;
-		tuning->wb_gains.b = reg_pair[1] & 0xffff;
-		mutex_unlock(&tuning->mutex);
-	}
+	JZ_Isp_Awb_Awbg2reg(apply_pair, reg_pair);
 
 	if (awb_frz == 0) {
 		system_reg_write_awb(2, 0x183c, reg_pair[0]);
@@ -12151,14 +12209,9 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 		system_reg_write_awb(2, 0x1844, reg_pair[0]);
 		system_reg_write_awb(2, 0x1810, reg_pair[1]);
 		tisp_rdns_awb_gain_updata(reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
-		tisp_dmsc_awb_gain_par_cfg((reg_pair[0] & 0xffff) >> 4);
-		system_reg_write(0x499c, 1);
 	}
 
 	awb_moa = 0;
-	pr_info("Tiziano_awb_set_gain: base=%u,%u mf=%u,%u -> awb_gain=%u,%u\n",
-		base_gr, base_gb, mf_gr, mf_gb,
-		reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
 	return 0;
 }
 
