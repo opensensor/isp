@@ -1724,7 +1724,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 0;    /* MDNS unparked: block enabled in bypass reg, intp_table does inline interp */
+static int mdns_runtime_parked = 1;    /* MDNS parked: init writes to bypassed regs cause hang despite block_enable */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
