@@ -12295,6 +12295,9 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 
 	awb_gain_diag_count++;
 	if (awb_gain_diag_count <= 10 || (awb_gain_diag_count % 300) == 0) {
+		u32 rdns_gr = (reg_pair[0] & 0xffff) >> 4;
+		u32 rdns_gb = (reg_pair[1] & 0xffff) >> 4;
+
 		pr_info("AWB_GAIN[%u]: base=%u,%u mf=%u,%u gain=%u,%u "
 			"apply=%u,%u reg=0x%x,0x%x frz=%d "
 			"pp=0x%x q=%u wb_mode=%u\n",
@@ -12313,6 +12316,18 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 			gain_gr_q, gain_gb_q, rounding,
 			_AwbPointPos[0], _AwbPointPos[1],
 			_wb_static[0], _wb_static[1]);
+		pr_info("AWB_GAIN[%u]: REG_WRITE: 0x183c=0x%08x(gr) "
+			"0x1840=0x%08x(gb) 0x1844=0x%08x(gr) "
+			"0x1810=0x%08x(gb) | RDNS 0x3000=0x%04x%04x "
+			"trend=%u ct=%u gr_off=0x%x gb_off=0x%x "
+			"inv_gr=%u inv_gb=%u\n",
+			awb_gain_diag_count,
+			reg_pair[0], reg_pair[1],
+			reg_pair[0], reg_pair[1],
+			rdns_gb, rdns_gr,
+			_awb_trend, _awb_ct,
+			awb_gr_offset, awb_gb_offset,
+			wb_live_gain_gr_inv, wb_live_gain_gb_inv);
 	}
 
 	if (awb_frz == 0) {
@@ -12715,41 +12730,32 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	memcpy(awb_zone_bg_last, awb_zone_bg, sizeof(awb_zone_bg));
 	awb_zone_cache_valid = 1;
 
-	/* OEM: rg_global = fix_point_div(q, rg_sum, _awb_cof[0]) >> q
-	 * = rg_sum / cof_rg (the raw zone-ratio sum divided by calibration).
-	 * Then data_a5a30 = rg_global / pix_cnt = per-zone average rg ratio.
+	/* OEM EXACT: reciprocal-average divided by calibration coefficient.
+	 * Formula: fix_point_div(q, pix_cnt, rg_sum, 0, cof, 0) >> q
+	 * = ((pix_cnt << 2q) / rg_sum) / cof >> q
+	 * = (pix_cnt << q) / (rg_sum * cof)
 	 *
-	 * The OEM then feeds zone data into Tiziano_Awb_Ct_Detect which
-	 * computes a weighted/interpolated rg/bg target in ~0x100 scale.
-	 * Since we don't yet implement Ct_Detect, use the simple per-zone
-	 * average: rg_sum / (cof_rg * active_zones).  For neutral R=G with
-	 * cof_rg=1, each zone_rg ~ 256, so the average ~ 256 (= 0x100).
-	 *
-	 * Previous bug: used reciprocal-average (pix_cnt << 2q) / rg_sum
-	 * which gave values ~5000, producing mf gains of ~12 (green tint).
-	 */
+	 * This produces values that the gain formula 0x10000/target expects.
+	 * Forward-average was WRONG — it inverts the gain direction. */
 	{
 		u32 rg_avg, bg_avg;
-		u32 rg_denom, bg_denom;
 
-		/* Per-zone average: sum / (cof * active_zones), rounded >> q */
-		rg_denom = (u64)cof_rg * rg_pix_cnt;
-		bg_denom = (u64)cof_bg * bg_pix_cnt;
-
-		if (rg_pix_cnt && rg_sum && rg_denom)
-			rg_avg = (u32)div_u64(rg_sum + (rg_denom >> 1),
-					      rg_denom);
-		else
+		if (rg_pix_cnt && rg_sum) {
+			u64 num = (u64)rg_pix_cnt << (q * 2);
+			u64 recip = div_u64(num, rg_sum);
+			rg_avg = (u32)(div_u64(recip, cof_rg) >> q);
+		} else {
 			rg_avg = 0x100;
+		}
 
-		if (bg_pix_cnt && bg_sum && bg_denom)
-			bg_avg = (u32)div_u64(bg_sum + (bg_denom >> 1),
-					      bg_denom);
-		else
+		if (bg_pix_cnt && bg_sum) {
+			u64 num = (u64)bg_pix_cnt << (q * 2);
+			u64 recip = div_u64(num, bg_sum);
+			bg_avg = (u32)(div_u64(recip, cof_bg) >> q);
+		} else {
 			bg_avg = 0x100;
+		}
 
-		/* Store the raw reciprocal-average for diagnostics, but
-		 * use per-zone average for actual gain computation */
 		awb_zone_rg_global = rg_avg;
 		awb_zone_bg_global = bg_avg;
 
