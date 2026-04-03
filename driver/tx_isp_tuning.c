@@ -1601,7 +1601,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0xDD04;  /* Restore known-good image block set: DPC+DMSC+Gamma+Defog+CLM+Sharpen+SDNS */
+static uint isp_block_enable = 0x3DD24;  /* Working blocks + GIB + MDNS/RDNS clocked for safety */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -1724,7 +1724,7 @@ static uint32_t data_9ab00 = 0x80;     /* OEM default MDNS ratio */
 static uint32_t data_9a9d0 = 0x10000;  /* OEM current MDNS interpolation key */
 static uint32_t mdns_last_refresh_key = 0xffffffff;
 static int mdns_bulk_loading;
-static int mdns_runtime_parked = 0;    /* Debug override only; default matches OEM */
+static int mdns_runtime_parked = 1;    /* Park MDNS until tisp_mdns_intp is fully ported */
 static uint32_t mdns_frame_width = 0;
 static uint32_t mdns_frame_height = 0;
 static uint32_t mdns_wdr_en = 0;
@@ -2169,7 +2169,7 @@ int tisp_tgain_update(uint32_t gain);
 int tisp_again_update(uint32_t gain);
 int tisp_ev_update(uint32_t ev, uint32_t aux_ev);
 int tisp_ct_update(uint32_t ct);
-int tisp_ae_ir_update(void);
+int tisp_ae_ir_update(uint32_t ir_val);
 int tisp_lsc_write_lut_datas(void);
 static int tisp_lsc_ct_update(uint32_t ct);
 static int tisp_lsc_gain_update(uint32_t gain);
@@ -2774,9 +2774,10 @@ EXPORT_SYMBOL(tisp_sensor_info_update);
 static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
 static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x1000, 0x1000, 0x1000, 0x1000};
 static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x1000, 0x1000, 0x1000, 0x1000};
-static uint32_t tisp_gb_blc_offset[0x48/4] = {0};  /* 0x48 bytes = 18 uint32_t values */
+static uint32_t tisp_gb_blc_offset[45] = {0};  /* 5 curves x 9 entries: R,Gr,Gb,B,IR */
 static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
-static uint32_t tisp_gb_blc_min[0x24/4] = {0};     /* 0x24 bytes = 9 uint32_t values */
+static uint32_t tisp_gb_blc_min[9] = {0};     /* 9-entry BLC minimum curve */
+static uint32_t tisp_gb_blc_ag[2] = {0, 0};   /* last gain for channel 0/1 */
 
 /* LSC (Lens Shading Correction) parameter arrays - Binary Ninja reference */
 /* Note: LSC arrays are defined later in the file with actual values */
@@ -2850,6 +2851,12 @@ static uint8_t rdns_std_np_array[0x40] = {0};
 static uint8_t rdns_mv_text_thres_array[0x24] = {0};
 static uint8_t rdns_text_base_thres_wdr_array[0x24] = {0};
 static uint8_t rdns_sl_par_cfg[0x8] = {0};
+static uint32_t rdns_gain_old = 0xffffffff;
+static uint8_t *rdns_text_base_thres_array_now;
+
+/* Forward declarations for RDNS functions used before definition */
+static void tisp_rdns_all_reg_refresh(uint32_t gain);
+static void tisp_rdns_intp_reg_refresh(uint32_t gain);
 
 /* GIB parameter arrays - OEM-backed defaults recovered from OEM-tx-isp-t31.ko
  * Config line: 12 x uint32_t control values (data_9a2e0..data_9a30c)
@@ -4421,6 +4428,9 @@ static int isp_get_af_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
     return 0;
 }
 
+/* Forward declarations needed by g_ctrl/s_ctrl before main declaration block */
+int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf);
+int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf);
 
 static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
@@ -4462,12 +4472,13 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 ret = apical_isp_ev_g_attr(dev, ctrl);
             break;
 
-        case 0x8000027: { // Total Gain
-                // TODO - NOT IMPLEMENTED
-                // Special case that uses tisp_g_ev_attr
+        case 0x8000027: { /* OEM: returns ev_buffer[7] = combined gain */
+                uint32_t ev_buf27[32] = {0};
+                if (ourISPdev && ourISPdev->tuning_data)
+                    tisp_g_ev_attr(ev_buf27, ourISPdev->tuning_data);
+                ctrl->value = ev_buf27[7];
                 break;
         }
-            break;
 
             case 0x8000028:  // Maximum Analog Gain - Binary Ninja: apical_isp_max_again_g_ctrl
                 ret = apical_isp_max_again_g_ctrl(dev, ctrl);
@@ -4629,6 +4640,15 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         case 0x80000e1:  // ISP Running Mode
             ctrl->value = tuning->running_mode;
             break;
+        case 0x80000e2: { /* OEM: tisp_g_module_control — read lower 19 bits + MDNS state */
+            int mdns_en = 0, mdns_sz = 0;
+            u32 result = system_reg_read(0xc) & 0x7ffff;
+            tisp_mdns_param_array_get(0x180, &mdns_en, &mdns_sz);
+            if (mdns_en == 0)
+                result |= 0x80000000;
+            ctrl->value = result;
+            break;
+        }
         case 0x80000e7:  // ISP Custom Mode
             ctrl->value = tuning->custom_mode;
             break;
@@ -4874,14 +4894,19 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             //set_framesource_changewait_cnt();
             break;
         }
-        case 0x80000e2:  // Module Control - CRITICAL for ISP pipeline
-            /* Binary Ninja: tisp_s_module_control(var_b0) */
-            pr_debug("apical_isp_core_ops_s_ctrl: Module control=%d (Binary Ninja reference)\n", ctrl->value);
-            /* This controls ISP pipeline modules - must not fail to prevent error interrupts */
-            /* Store in custom_mode field as a placeholder for module control state */
+        case 0x80000e2: { /* OEM: tisp_s_module_control — writes lower 19 bits of reg 0xc */
+            u32 reg_val = system_reg_read(0xc);
+            u32 new_bypass = (ctrl->value & 0x7ffff) | (reg_val & 0xfff80000);
+            int mdns_en = (ctrl->value >= 0) ? 1 : 0;
+            int mdns_sz = 0;
+            tisp_mdns_param_array_set(0x180, &mdns_en, &mdns_sz);
+            new_bypass = tisp_apply_block_enable_whitelist(new_bypass);
+            new_bypass = tisp_apply_debug_top_bypass_overrides(new_bypass, __func__);
+            system_reg_write(0xc, new_bypass);
             tuning->custom_mode = ctrl->value;
             ret = 0;
             break;
+        }
 
         case 0x80000e7:  // ISP Custom Mode
             tuning->custom_mode = ctrl->value;
@@ -5325,7 +5350,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             extern int tisp_tgain_update(uint32_t gain);
                             extern int tisp_again_update(uint32_t gain);
                             extern int tisp_ev_update(uint32_t ev, uint32_t aux_ev);
-                            extern int tisp_ae_ir_update(void);
+                            extern int tisp_ae_ir_update(uint32_t ir_val);
 
                             pr_info("*** TUNING DEBUG: About to call tisp_tgain_update ***");
                             int ae_ret = 0;
@@ -5349,10 +5374,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 pr_info("*** TUNING DEBUG: tisp_ev_update completed: %d ***", ae_ret);
                             }
 
-                            if (ae_ret == 0 && tisp_ae_ir_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ae_ir_update ***");
-                                ae_ret = tisp_ae_ir_update();
-                                pr_info("*** TUNING DEBUG: tisp_ae_ir_update completed: %d ***", ae_ret);
+                            if (ae_ret == 0) {
+                                ae_ret = tisp_ae_ir_update(0);
                             }
                             pr_debug("TUNING: AE updates completed: %d\n", ae_ret);
 
@@ -6870,7 +6893,7 @@ int tisp_rdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     memcpy(dst, in_buf, len);
     *size_buf = len;
     /* BN shows it refreshes regs after set */
-    /* tisp_rdns_all_reg_refresh(rdns_gain_old + 0x200); -- omitted (unknown symbol) */
+    tisp_rdns_all_reg_refresh(rdns_gain_old + 0x200);
     return 0;
 }
 
@@ -9584,17 +9607,17 @@ int tisp_awb_get_par_cfg(void *out_buf, void *size_buf)
     return 0;
 }
 
-/* tisp_reg_map_get - Binary Ninja implementation (stub for now) */
+/* OEM EXACT: tisp_reg_map_get — reads ISP register via system_reg_read.
+ * Output layout: buf+0xc = raw offset, buf+0x10 = value, *size = 8. */
 int tisp_reg_map_get(int reg_addr, void *reg_val, void *size_buf)
 {
-    if (!reg_val || !size_buf) {
-        pr_err("tisp_reg_map_get: NULL buffer pointers\n");
-        return -EINVAL;
-    }
+    uint32_t *out = (uint32_t *)reg_val;
+    uint32_t val;
 
-    /* Stub implementation - needs Binary Ninja decompilation */
-    *(int *)size_buf = 0;
-    pr_debug("tisp_reg_map_get: Stub implementation for addr=0x%x\n", reg_addr);
+    val = system_reg_read(reg_addr);
+    out[3] = reg_addr;   /* buf + 0xc: store the register offset */
+    out[4] = val;        /* buf + 0x10: store the read value */
+    *(int *)size_buf = 8;
     return 0;
 }
 
@@ -10419,7 +10442,7 @@ int tisp_set_ae_info(void *in_buf)
     if (tisp_tgain_update) tisp_tgain_update(total_gain);
     if (tisp_again_update) tisp_again_update(again);
     if (tisp_ev_update)    tisp_ev_update(exposure, 0);
-    if (tisp_ae_ir_update) tisp_ae_ir_update();
+    if (tisp_ae_ir_update) tisp_ae_ir_update(0);
 
     return 0;
 }
@@ -10503,11 +10526,6 @@ static int tisp_s_wb_mode(uint32_t mode, uint32_t gain_gr, uint32_t gain_gb)
 		wb_mode_gain_gr = gain_gr;
 		wb_mode_gain_gb = gain_gb;
 		break;
-	}
-
-	if (mode != 0) {
-		wb_attr[1] = wb_mode_gain_gr;
-		wb_attr[2] = wb_mode_gain_gb;
 	}
 
 	awb_moa = 1;
@@ -10843,17 +10861,31 @@ int tisp_get_ae_comp(uint32_t *value)
 
 
 
+/* OEM EXACT: returns ev_buffer[8] = log2 of max analog gain */
 int apical_isp_max_again_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
-    /* Binary Ninja reference - return max analog gain */
-    ctrl->value = 0;  // Placeholder
+    uint32_t ev_buffer[32] = {0};
+
+    if (!dev || !dev->tuning_data) {
+        ctrl->value = 0;
+        return 0;
+    }
+    tisp_g_ev_attr(ev_buffer, dev->tuning_data);
+    ctrl->value = ev_buffer[8];
     return 0;
 }
 
+/* OEM EXACT: returns ev_buffer[9] = log2 of max digital gain */
 int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
-    /* Binary Ninja reference - return max digital gain */
-    ctrl->value = 0;  // Placeholder
+    uint32_t ev_buffer[32] = {0};
+
+    if (!dev || !dev->tuning_data) {
+        ctrl->value = 0;
+        return 0;
+    }
+    tisp_g_ev_attr(ev_buffer, dev->tuning_data);
+    ctrl->value = ev_buffer[9];
     return 0;
 }
 
@@ -11504,7 +11536,7 @@ static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 /* REMOVED: Conflicting static declaration - use extern from tx_isp_core.c */
 void private_spin_lock_init(spinlock_t *lock);
 /* fix_point_mult3_32 is defined in tx_isp_fixpt.h */
-static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
+extern uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
 /* Sensor interface functions - Forward declarations */
 static int data_b2eec(uint32_t time, void **var_ptr);
@@ -16822,8 +16854,6 @@ static uint32_t rdns_text_g_thres_intp;
 static uint32_t rdns_flat_rb_thres_intp;
 static uint32_t rdns_text_rb_thres_intp;
 static uint32_t rdns_mv_text_thres_intp;
-static uint32_t rdns_gain_old = 0xffffffff;
-static uint8_t *rdns_text_base_thres_array_now;
 
 /* OEM: load RDNS arrays from tuning data at offset 0x3528 */
 static void tiziano_rdns_params_refresh(void)
@@ -16871,15 +16901,33 @@ static void tisp_rdns_intp(uint32_t gain)
     rdns_mv_text_thres_intp = tisp_simple_intp(hi, lo, (const u32 *)rdns_mv_text_thres_array);
 }
 
-/* OEM: write RDNS registers */
-static void tisp_rdns_all_reg_refresh(void)
+/* OEM EXACT: write RDNS registers.
+ * Register layout (verified from OEM decompilation):
+ *   0x3000-0x3004: AWB gain (2 regs)
+ *   0x3008:        Opt config
+ *   0x300c-0x3010: Slope + out opt
+ *   0x3014-0x3024: Thresholds (5 regs)
+ *   0x3028-0x3034: Gray NP (4 regs, u16-pair packed)
+ *   0x3038-0x3054: Text NP (8 regs, u16-pair packed)
+ *   0x3058-0x3074: Lum NP  (8 regs, u16-pair packed)
+ *   0x3078-0x3094: Std NP  (8 regs, u16-pair packed)
+ *   0x30a8:        SL params
+ *   0x30ac:        Commit trigger
+ */
+static void tisp_rdns_all_reg_refresh(uint32_t gain)
 {
     const u32 *awb = (const u32 *)rdns_awb_gain_par_cfg_array;
     const u32 *opt = (const u32 *)rdns_opt_cfg_array;
     const u32 *slope = (const u32 *)rdns_slope_par_cfg_array;
     const u32 *gnp = (const u32 *)rdns_gray_np_array;
+    const u32 *tnp = (const u32 *)rdns_text_np_array;
+    const u32 *lnp = (const u32 *)rdns_lum_np_array;
+    const u32 *snp = (const u32 *)rdns_std_np_array;
     const u32 *sl = (const u32 *)rdns_sl_par_cfg;
     int i;
+
+    /* OEM calls tisp_rdns_intp(gain) inside all_reg_refresh */
+    tisp_rdns_intp(gain);
 
     /* AWB gain config: 0x3000-0x3004 */
     system_reg_write(0x3000, (awb[1] << 16) | (awb[0] & 0xffff));
@@ -16902,17 +16950,21 @@ static void tisp_rdns_all_reg_refresh(void)
     system_reg_write(0x3020, (rdns_text_g_thres_intp << 16) | (rdns_flat_g_thres_intp & 0xffff));
     system_reg_write(0x3024, (rdns_text_rb_thres_intp << 16) | (rdns_flat_rb_thres_intp & 0xffff));
 
-    /* Gray noise profile: 0x3028-0x3034 (4 regs, packed u16 pairs) */
+    /* Gray noise profile: 0x3028-0x3034 (4 regs, u16-pair packed) */
     for (i = 0; i < 4; i++)
         system_reg_write(0x3028 + i * 4, (gnp[i*2+1] << 16) | (gnp[i*2] & 0xffff));
 
-    /* Text noise profile: 0x3038-0x3074 (16 regs from text_np_array) */
-    for (i = 0; i < 16; i++)
-        system_reg_write(0x3038 + i * 4, ((const u32 *)rdns_text_np_array)[i]);
+    /* Text noise profile: 0x3038-0x3054 (8 regs, u16-pair packed) */
+    for (i = 0; i < 8; i++)
+        system_reg_write(0x3038 + i * 4, (tnp[i*2+1] << 16) | (tnp[i*2] & 0xffff));
 
-    /* Lum noise profile: 0x3078-0x30a4 (16 regs from lum_np_array) */
-    for (i = 0; i < 16; i++)
-        system_reg_write(0x3078 + i * 4, ((const u32 *)rdns_lum_np_array)[i]);
+    /* Lum noise profile: 0x3058-0x3074 (8 regs, u16-pair packed) */
+    for (i = 0; i < 8; i++)
+        system_reg_write(0x3058 + i * 4, (lnp[i*2+1] << 16) | (lnp[i*2] & 0xffff));
+
+    /* Std noise profile: 0x3078-0x3094 (8 regs, u16-pair packed) */
+    for (i = 0; i < 8; i++)
+        system_reg_write(0x3078 + i * 4, (snp[i*2+1] << 16) | (snp[i*2] & 0xffff));
 
     /* SL params: 0x30a8 */
     system_reg_write(0x30a8, (sl[0] & 0x3f) | ((sl[1] & 0x3f) << 6) |
@@ -16922,34 +16974,71 @@ static void tisp_rdns_all_reg_refresh(void)
     system_reg_write(0x30ac, 1);
 }
 
+/* OEM EXACT: tisp_rdns_intp_reg_refresh — incremental refresh.
+ * Only updates interpolated thresholds/slopes, skips AWB/NP/commit.
+ * Used for subsequent gain changes (not first-time init). */
+static void tisp_rdns_intp_reg_refresh(uint32_t gain)
+{
+    const u32 *opt = (const u32 *)rdns_opt_cfg_array;
+    const u32 *slope = (const u32 *)rdns_slope_par_cfg_array;
+    const u32 *sl = (const u32 *)rdns_sl_par_cfg;
+
+    tisp_rdns_intp(gain);
+
+    /* opt_cfg: 0x3008 */
+    system_reg_write(0x3008, (opt[0] & 0x3) | ((opt[1] & 0x3) << 2) |
+                     ((opt[2] & 0x3) << 4) | ((opt[3] & 0x3) << 6) |
+                     ((opt[4] & 0x3) << 8) | (rdns_oe_num_intp << 16));
+
+    /* slope_cfg: 0x300c, 0x3010 */
+    system_reg_write(0x300c, ((rdns_out_opt_array[0] & 0xffff) << 16) |
+                     (rdns_gray_stren_intp & 0xffff));
+    system_reg_write(0x3010, (slope[1] << 16) | (slope[0] & 0xffff));
+
+    /* thres_par_cfg: 0x3014-0x3024 */
+    system_reg_write(0x3014, rdns_gray_std_thres_intp);
+    system_reg_write(0x3018, rdns_text_base_thres_intp);
+    system_reg_write(0x301c, (rdns_oe_thres_intp << 16) | (rdns_filter_sat_thres_intp & 0xffff));
+    system_reg_write(0x3020, (rdns_text_g_thres_intp << 16) | (rdns_flat_g_thres_intp & 0xffff));
+    system_reg_write(0x3024, (rdns_text_rb_thres_intp << 16) | (rdns_flat_rb_thres_intp & 0xffff));
+
+    /* sl_par_cfg: 0x30a8 */
+    system_reg_write(0x30a8, (sl[0] & 0x3f) | ((sl[1] & 0x3f) << 6) |
+                     (rdns_mv_text_thres_intp << 16));
+}
+
 /* OEM EXACT: tiziano_rdns_init */
 int tiziano_rdns_init(void)
 {
-    pr_info("tiziano_rdns_init: Initializing RDNS processing (OEM EXACT)\n");
+    pr_info("tiziano_rdns_init: Initializing RDNS processing\n");
     rdns_text_base_thres_array_now = rdns_text_base_thres_array;
     rdns_gain_old = 0xffffffff;
     tiziano_rdns_params_refresh();
-    tisp_rdns_intp(0x10000);
-    tisp_rdns_all_reg_refresh();
-    rdns_gain_old = 0x10000;
+
+    /* Only write RDNS registers if tuning params are actually loaded.
+     * Writing all-zero configs to active RDNS hardware can stall the ISP. */
+    if (tparams_day || tparams_active) {
+        tisp_rdns_all_reg_refresh(0x10000);
+        rdns_gain_old = 0x10000;
+    }
     return 0;
 }
 
-/* OEM EXACT: tisp_rdns_par_refresh(gain, threshold, enable_write) */
+/* OEM EXACT: tisp_rdns_par_refresh(gain, threshold, enable_write)
+ * First call (0xffffffff): full register load via all_reg_refresh.
+ * Subsequent: incremental via intp_reg_refresh (thresholds/slopes only). */
 static int tisp_rdns_par_refresh(uint32_t gain, uint32_t threshold, int enable_write)
 {
 	uint32_t diff;
 
 	if (rdns_gain_old == 0xffffffff) {
 		rdns_gain_old = gain;
-		tisp_rdns_intp(gain);
-		tisp_rdns_all_reg_refresh();
+		tisp_rdns_all_reg_refresh(gain);
 	} else {
 		diff = (gain >= rdns_gain_old) ? (gain - rdns_gain_old) : (rdns_gain_old - gain);
 		if (diff >= threshold) {
 			rdns_gain_old = gain;
-			tisp_rdns_intp(gain);
-			tisp_rdns_all_reg_refresh();
+			tisp_rdns_intp_reg_refresh(gain);
 		}
 	}
 
@@ -17123,9 +17212,11 @@ int tisp_bcsh_wdr_en(int enable)
     return tiziano_bcsh_update(tuning);
 }
 
+/* OEM EXACT: tisp_rdns_wdr_en sets WDR state and selects text_base_thres array */
 int tisp_rdns_wdr_en(int enable)
 {
-    pr_info("tisp_rdns_wdr_en: %s RDNS WDR mode\n", enable ? "Enable" : "Disable");
+    rdns_text_base_thres_array_now = enable ?
+        rdns_text_base_thres_wdr_array : rdns_text_base_thres_array;
     return 0;
 }
 
@@ -17560,88 +17651,116 @@ static void tisp_ydns_par_refresh(uint32_t gain)
     }
 }
 
+/* OEM EXACT: tisp_gb_blc_again_interp — BLC gain interpolation with Bayer permutation.
+ * Interpolates 5 channel BLC offsets + minimum, permutes by Bayer pattern, writes regs. */
+static int tisp_gb_blc_again_interp(uint32_t gain, int channel)
+{
+    uint32_t lo = gain & 0xffff;
+    uint32_t hi = gain >> 16;
+    uint32_t blc_r, blc_gr, blc_gb, blc_b, blc_ir, blc_min_val;
+    uint32_t fp, v1_out, s1_out, s2_out, s0_out;
+    u32 reg_a, reg_b, reg_c, bayer;
+
+    blc_r   = tisp_simple_intp(hi, lo, &tisp_gb_blc_offset[0]);
+    blc_gr  = tisp_simple_intp(hi, lo, &tisp_gb_blc_offset[9]);
+    blc_gb  = tisp_simple_intp(hi, lo, &tisp_gb_blc_offset[0x12]);
+    blc_b   = tisp_simple_intp(hi, lo, &tisp_gb_blc_offset[0x1b]);
+    blc_ir  = tisp_simple_intp(hi, lo, &tisp_gb_blc_offset[0x24]);
+    blc_min_val = tisp_simple_intp(hi, lo, tisp_gb_blc_min);
+
+    if (channel == 0) {
+        tisp_gb_blc_ag[0] = gain;
+        reg_a = 0x1018; reg_b = 0x101c; reg_c = 0x1020;
+    } else if (channel == 1) {
+        tisp_gb_blc_ag[1] = gain;
+        reg_a = 0x1024; reg_b = 0x1028; reg_c = 0x102c;
+    } else {
+        reg_a = 0x1018; reg_b = 0x101c; reg_c = 0x1020;
+    }
+
+    bayer = system_reg_read(8) & 0x1f;
+    s0_out = blc_ir;
+
+    switch (bayer) {
+    case 0x00: fp=blc_r;  s1_out=blc_gr; v1_out=blc_gb; s2_out=blc_b;  s0_out=blc_ir; break;
+    case 0x01: fp=blc_r;  s1_out=blc_ir; v1_out=blc_b;  s2_out=blc_gb; s0_out=blc_gr; break;
+    case 0x02: fp=blc_r;  s1_out=blc_gb; v1_out=blc_gr; s2_out=blc_ir; s0_out=blc_b;  break;
+    case 0x03: fp=blc_r;  s1_out=blc_b;  v1_out=blc_ir; s2_out=blc_gr; s0_out=blc_gb; break;
+    case 0x08: fp=blc_gb; s1_out=blc_gr; v1_out=blc_r;  s2_out=blc_b;  s0_out=blc_ir; break;
+    case 0x09: fp=blc_b;  s1_out=blc_ir; v1_out=blc_r;  s2_out=blc_gb; s0_out=blc_gr; break;
+    case 0x0a: fp=blc_b;  s1_out=blc_gr; v1_out=blc_gb; s2_out=blc_r;  s0_out=blc_ir; break;
+    case 0x0b: fp=blc_gb; s1_out=blc_ir; v1_out=blc_b;  s2_out=blc_r;  s0_out=blc_gr; break;
+    case 0x0c: fp=blc_gb; s1_out=blc_r;  v1_out=blc_gr; s2_out=blc_ir; s0_out=blc_b;  break;
+    case 0x0d: fp=blc_b;  s1_out=blc_r;  v1_out=blc_ir; s2_out=blc_gr; s0_out=blc_gb; break;
+    case 0x0e: fp=blc_b;  s1_out=blc_gb; v1_out=blc_gr; s2_out=blc_ir; s0_out=blc_r;  break;
+    case 0x0f: fp=blc_gb; s1_out=blc_b;  v1_out=blc_ir; s2_out=blc_gr; s0_out=blc_r;  break;
+    case 0x10: fp=blc_gr; s1_out=blc_r;  v1_out=blc_gb; s2_out=blc_b;  s0_out=blc_ir; break;
+    case 0x11: fp=blc_ir; s1_out=blc_r;  v1_out=blc_b;  s2_out=blc_gb; s0_out=blc_gr; break;
+    case 0x12: fp=blc_gr; s1_out=blc_gb; v1_out=blc_r;  s2_out=blc_ir; s0_out=blc_b;  break;
+    case 0x13: fp=blc_ir; s1_out=blc_b;  v1_out=blc_r;  s2_out=blc_gr; s0_out=blc_gb; break;
+    case 0x14: fp=blc_gr; s1_out=blc_b;  v1_out=blc_ir; s2_out=blc_r;  s0_out=blc_gb; break;
+    case 0x15: fp=blc_ir; s1_out=blc_gb; v1_out=blc_gr; s2_out=blc_r;  s0_out=blc_b;  break;
+    case 0x16: fp=blc_gr; s1_out=blc_ir; v1_out=blc_b;  s2_out=blc_gb; s0_out=blc_r;  break;
+    case 0x17: fp=blc_ir; s1_out=blc_gr; v1_out=blc_gb; s2_out=blc_b;  s0_out=blc_r;  break;
+    default:
+        pr_err("blc byper error!!!\n");
+        fp = 0; s1_out = 0; v1_out = 0; s2_out = 0; s0_out = 0;
+        break;
+    }
+
+    system_reg_write(0x1014, (tisp_gb_blc_min_en[1] << 16) | tisp_gb_blc_min_en[0]);
+    system_reg_write(reg_a, (s2_out << 16) | s0_out);
+    system_reg_write(reg_b, (s1_out << 16) | v1_out);
+    system_reg_write(reg_c, (blc_min_val << 16) | fp);
+    return 0;
+}
+
 /* OEM EXACT: tisp_tgain_update — refreshes ALL gain-dependent ISP blocks.
- * Decompiled from OEM at 0x14ba8. Previous code only called DMSC + LSC. */
+ * Decompiled from OEM at 0x14ba8. */
 int tisp_tgain_update(uint32_t gain)
 {
     extern struct tx_isp_dev *ourISPdev;
     if (ourISPdev && ourISPdev->tuning_data)
         ourISPdev->tuning_data->total_gain = gain;
 
-    /* OEM order: GIB, GB_BLC, DMSC, Sharpen, SDNS, DPC, LSC, YDNS, RDNS, MDNS */
+    /* OEM order: GIB, GB_BLC, DMSC, Sharpen, SDNS, DPC, LSC, YDNS, RDNS, MDNS.
+     * Calls gated on block readiness to match last-known-working configuration.
+     * Enable progressively as each block's init/config is verified. */
     tisp_gib_gain_interpolation(gain);
-    /* tisp_gb_blc_again_interp(gain, 0) — not yet implemented */
+    /* tisp_gb_blc_again_interp(gain, 0); — OEM calls this; enable after BLC init verified */
     if (dmsc_params_ready)
         tisp_dmsc_par_refresh(gain, 0x100, 1);
     tisp_sharpen_par_refresh(gain, 0x100, 1);
     tisp_sdns_par_refresh(gain, 0x100, 1);
-    tisp_dpc_par_refresh(gain, 0x100, 1);
+    /* tisp_dpc_par_refresh(gain, 0x100, 1); — enable after DPC ioremap path verified */
     tisp_lsc_gain_update(gain);
     tisp_ydns_par_refresh(gain);
-    tisp_rdns_par_refresh(gain, 0x100, 1);
-    tisp_mdns_par_refresh(gain, 0x100);
+    /* tisp_rdns_par_refresh(gain, 0x100, 1); — enable after RDNS init fully verified */
+    /* tisp_mdns_par_refresh(gain, 0x100); — enable after tisp_mdns_intp fully ported */
     return 0;
 }
 
+/* OEM EXACT: tisp_again_update is a pure stub that returns 0.
+ * The OEM does NOT do sensor I2C or register writes here. */
 int tisp_again_update(uint32_t gain)
 {
-    pr_info("tisp_again_update: Updating analog gain with SENSOR I2C communication\n");
-
-    /* Update analog gain based on AE calculations */
-    extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-
-        /* Update hardware analog gain register */
-        if (ourISPdev->core_regs) {
-            writel(gain, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
-        }
-
-        /* CRITICAL: Send analog gain update to sensor via I2C */
-        if (ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
-            ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
-
-            int gain_value = gain;
-            int sensor_ret = ourISPdev->sensor->sd.ops->sensor->ioctl(
-                &ourISPdev->sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
-
-            if (sensor_ret == 0) {
-                pr_info("tisp_again_update: Sensor I2C gain update SUCCESS (gain=0x%x)\n", gain_value);
-            } else {
-                pr_warn("tisp_again_update: Sensor I2C gain update FAILED: %d\n", sensor_ret);
-            }
-        } else {
-            pr_warn("tisp_again_update: No sensor available for I2C communication\n");
-        }
-
-        tuning->max_again = gain;
-        pr_info("tisp_again_update: Analog gain updated to 0x%x (ISP + sensor)\n", gain);
-    }
-
     return 0;
 }
 
+/* OEM EXACT: tisp_ev_update calls sub-module EV update functions.
+ * ADR (bit 7), defog (bit 11), WDR (bit 3) are gated on bypass register 0xc. */
 int tisp_ev_update(uint32_t ev, uint32_t aux_ev)
 {
-    pr_debug("tisp_ev_update: Updating exposure value\n");
+    data_9a454 = ev;
 
-    /* Update exposure value and trigger dependent updates */
-    extern struct tx_isp_dev *ourISPdev;
+    tisp_awb_ev_update(ev);
+    tisp_ccm_ev_update();
+    tisp_bcsh_ev_update(ev);
 
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-
-        /* Update global EV cache for other modules */
-        data_9a454 = ev;
-
-        /* Update hardware exposure register */
-        if (ourISPdev->core_regs) {
-            writel(ev, ourISPdev->core_regs + 0xa00c);  /* Exposure register */
-        }
-
-        tuning->exposure = ev;
-        pr_debug("tisp_ev_update: Exposure updated to 0x%x aux=0x%x\n", ev, aux_ev);
-    }
+    /* OEM also calls these gated on bypass bits in reg 0xc — not yet implemented:
+     * if ((reg_0c & 0x80) == 0)  tisp_adr_ev_update(ev, aux_ev);
+     * if ((reg_0c & 0x800) == 0) tisp_defog_ev_update(ev, aux_ev);
+     * if ((reg_0c & 8) == 0)     tisp_wdr_ev_update(ev, aux_ev); */
 
     return 0;
 }
@@ -17667,39 +17786,17 @@ int tisp_ct_update(uint32_t ct)
 	if ((reg_0c & 0x40) == 0)
 		tisp_lsc_ct_update(ct);
 
-		/* OEM gates the BCSH/CLM colour-temperature update on MDNS bypass bit 16. */
-		if ((reg_0c & 0x10000) == 0)
+	/* OEM gates the BCSH/CLM colour-temperature update on MDNS bypass bit 16. */
+	if ((reg_0c & 0x10000) == 0)
 		tisp_bcsh_ct_update(ct);
 
 	return 0;
 }
 
-int tisp_ae_ir_update(void)
+/* OEM EXACT: tisp_ae_ir_update delegates to GIB DEIR IR update */
+int tisp_ae_ir_update(uint32_t ir_val)
 {
-    pr_debug("tisp_ae_ir_update: Updating AE IR parameters\n");
-
-    /* Update AE IR (infrared) parameters for day/night transitions */
-    extern struct tx_isp_dev *ourISPdev;
-
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
-
-        /* Update IR cut filter based on light conditions */
-        if (tuning->exposure > 0x8000) {  /* Low light threshold */
-            /* Night mode - disable IR cut filter */
-            if (ourISPdev->core_regs) {
-                writel(0, ourISPdev->core_regs + 0xa010);  /* IR cut disable */
-            }
-            pr_debug("tisp_ae_ir_update: Night mode - IR cut disabled\n");
-        } else {
-            /* Day mode - enable IR cut filter */
-            if (ourISPdev->core_regs) {
-                writel(1, ourISPdev->core_regs + 0xa010);  /* IR cut enable */
-            }
-            pr_debug("tisp_ae_ir_update: Day mode - IR cut enabled\n");
-        }
-    }
-
+    tisp_gib_deir_ir_update(ir_val);
     return 0;
 }
 

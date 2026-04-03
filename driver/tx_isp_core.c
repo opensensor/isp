@@ -5098,12 +5098,46 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp
 }
 EXPORT_SYMBOL(tx_isp_handle_sync_sensor_attr_event);
 
-/* Stub implementation of tisp_math_exp2 for compilation */
+/* OEM EXACT: tisp_math_exp2 — fixed-point 2^x using 32-entry lookup table.
+ * val = input value, shift = fractional bit position, base = output shift.
+ * Returns 2^(val / 2^shift) >> (30 - base - integer_part). */
+static const uint32_t __pow2_lut[33] = {
+    0x40000000, 0x4166c34c, 0x42d561b4, 0x444c0740,
+    0x45cae0f2, 0x47521cc6, 0x48e1e9ba, 0x4a7a77d4,
+    0x4c1bf829, 0x4dc69cdd, 0x4f7a9930, 0x51382182,
+    0x52ff6b55, 0x54d0ad5a, 0x56ac1f75, 0x5891fac1,
+    0x5a82799a, 0x5c7dd7a4, 0x5e8451d0, 0x60962665,
+    0x62b39509, 0x64dcdec3, 0x6712460b, 0x69540ec9,
+    0x6ba27e65, 0x6dfddbcc, 0x70666f76, 0x72dc8374,
+    0x75606374, 0x77f25cce, 0x7a92be8b, 0x7d41d96e,
+    0x80000000,
+};
+
 uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base)
 {
-    /* Simple stub - in real implementation this would be a complex exponential calculation */
-    return (val << shift) / base;
+    uint32_t frac_mask = (1u << (shift & 0x1f)) - 1;
+    uint32_t frac = val & frac_mask;
+    uint32_t integer_part = val >> (shift & 0x1f);
+    uint32_t right_shift = 0x1e - base - integer_part;
+
+    if (shift < 6) {
+        uint32_t idx = frac << ((5 - shift) & 0x1f);
+        return __pow2_lut[idx] >> (right_shift & 0x1f);
+    }
+
+    {
+        uint32_t idx = frac >> ((shift - 5) & 0x1f);
+        uint32_t lut_lo = __pow2_lut[idx];
+        uint32_t lut_hi = __pow2_lut[idx + 1];
+        uint32_t sub_frac_mask = (1u << ((shift - 5) & 0x1f)) - 1;
+        uint32_t sub_frac = frac & sub_frac_mask;
+        uint64_t interp = (uint64_t)(lut_hi - lut_lo) * sub_frac;
+
+        return (lut_lo + (uint32_t)(interp >> ((shift - 5) & 0x1f)))
+                >> (right_shift & 0x1f);
+    }
 }
+EXPORT_SYMBOL(tisp_math_exp2);
 
 /* tiziano_sync_sensor_attr - sync packed OEM-style sensor info blob */
 int tiziano_sync_sensor_attr(const struct tisp_sensor_info_blob *attr)

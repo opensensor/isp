@@ -7770,11 +7770,8 @@ static uint32_t dg1_cache[16] = {0};
 static uint32_t EffectFrame = 0;
 static uint32_t EffectCount1 = 0;
 
-/* tisp_math_exp2 - Simple exponential approximation */
-static uint32_t tisp_math_exp2(uint32_t base, uint32_t shift, uint32_t scale)
-{
-    return (base << shift) / scale;
-}
+/* tisp_math_exp2 — defined in tx_isp_core.c with OEM LUT */
+extern uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
 
 /* fix_point_mult3_32 - Fixed point multiplication */
 static uint32_t fix_point_mult3_32(uint32_t pos, uint32_t val1, uint32_t val2)
