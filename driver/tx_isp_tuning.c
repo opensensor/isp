@@ -142,6 +142,7 @@ extern uint32_t deir_en;
 #define CLM_S_LUT_SIZE      0x834   /* 2100 bytes = 1050 × int16_t */
 #define CLM_LUT_SHIFT_SIZE  4
 #define CLM_REG_SIZE         0x690   /* 0x1A4 words × 4 bytes */
+#define SDNS_TPARAMS_OFFSET  0xA878  /* OEM SDNS blob starts at 0x8F388 - 0x84B10 */
 #define MDNS_TPARAMS_OFFSET  0xBB30  /* OEM MDNS blob starts at 0x90640 - 0x84B10 */
 static uint8_t  tiziano_clm_h_lut[CLM_H_LUT_SIZE];
 static int16_t  tiziano_clm_s_lut[CLM_S_LUT_SIZE / 2];
@@ -281,6 +282,106 @@ static uint32_t sdns_sp_mv_uu_stren_array[16] = {0x3, 0x6, 0x9, 0xc, 0xf, 0x12, 
 static uint32_t sdns_sp_mv_uu_stren_wdr_array[16] = {0x6, 0x9, 0xc, 0xf, 0x12, 0x15, 0x18, 0x1b, 0x1e, 0x21, 0x24, 0x27, 0x2a, 0x2d, 0x30, 0x33};
 static uint32_t sdns_ave_thres_array[16] = {0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20};
 static uint32_t sdns_ave_thres_wdr_array[16] = {0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22};
+
+/* SDNS arrays loaded from OEM tuning params (tiziano_sdns_params_refresh) */
+static uint32_t sdns_aa_mv_det_opt[7];       /* 0x1c bytes */
+static uint32_t sdns_mv_num_thr_5x5_array[9];
+static uint32_t sdns_mv_num_thr_7x7_array[9];
+static uint32_t sdns_mv_num_thr_9x9_array[9];
+static uint32_t sdns_mv_num_thr_11x11_array[9];
+static uint32_t sdns_r_s[15];                /* 0x3c bytes */
+static uint32_t sdns_r_mv[15];               /* 0x3c bytes */
+static uint32_t sdns_h_s_2_array[9];
+static uint32_t sdns_h_s_3_array[9];
+static uint32_t sdns_h_s_4_array[9];
+static uint32_t sdns_h_s_5_array[9];
+static uint32_t sdns_h_s_6_array[9];
+static uint32_t sdns_h_s_7_array[9];
+static uint32_t sdns_h_s_8_array[9];
+static uint32_t sdns_h_s_9_array[9];
+static uint32_t sdns_h_s_10_array[9];
+static uint32_t sdns_h_s_11_array[9];
+static uint32_t sdns_h_s_12_array[9];
+static uint32_t sdns_h_s_13_array[9];
+static uint32_t sdns_h_s_14_array[9];
+static uint32_t sdns_h_s_15_array[9];
+static uint32_t sdns_h_s_16_array[9];
+static uint32_t sdns_h_mv_1_array[9];
+static uint32_t sdns_h_mv_2_array[9];
+static uint32_t sdns_h_mv_3_array[9];
+static uint32_t sdns_h_mv_4_array[9];
+static uint32_t sdns_h_mv_5_array[9];
+static uint32_t sdns_h_mv_6_array[9];
+static uint32_t sdns_h_mv_7_array[9];
+static uint32_t sdns_h_mv_8_array[9];
+static uint32_t sdns_h_mv_9_array[9];
+static uint32_t sdns_h_mv_10_array[9];
+static uint32_t sdns_h_mv_11_array[9];
+static uint32_t sdns_h_mv_12_array[9];
+static uint32_t sdns_h_mv_13_array[9];
+static uint32_t sdns_h_mv_14_array[9];
+static uint32_t sdns_h_mv_15_array[9];
+static uint32_t sdns_h_mv_16_array[9];
+static uint32_t sdns_dark_thres_array[9];
+static uint32_t sdns_light_thres_array[9];
+static uint32_t sdns_h_val_max;              /* 4 bytes */
+static uint32_t sdns_d_s1_thr[15];           /* 0x3c bytes */
+static uint32_t sdns_w_thr[16];              /* 0x40 bytes */
+static uint32_t sdns_y[3];                   /* 0xc bytes */
+static uint32_t sdns_x_1xg_1x4[64];         /* 0x100 bytes */
+static uint32_t sdns_k_1xg_1x4[16];         /* 0x40 bytes */
+static uint32_t sdns_h_val[16];              /* 0x40 bytes */
+static uint32_t sdns_sharpen_g_std[2];       /* 8 bytes */
+static uint32_t sdns_sp_uu_par[3];           /* 0xc bytes */
+static uint32_t sdns_sp_mv_wei_uu_value[4];  /* 0x10 bytes */
+static uint32_t sdns_sp_d_v2_sigma_win5_slope[2]; /* 8 bytes */
+static uint32_t sdns_sp_d_v2_win5_thres_array[9];
+static uint32_t sdns_sp_d_wbhl_flat[9];
+static uint32_t sdns_sp_d_w_sp_stren_0_array[9];
+static uint32_t sdns_sp_d_w_sp_stren_1_array[9];
+static uint32_t sdns_sp_d_w_sp_stren_2_array[9];
+static uint32_t sdns_sp_d_w_sp_stren_3_array[9];
+static uint32_t sdns_sp_d_b_sp_stren_0_array[9];
+static uint32_t sdns_sp_d_b_sp_stren_1_array[9];
+static uint32_t sdns_sp_d_b_sp_stren_2_array[9];
+static uint32_t sdns_sp_d_b_sp_stren_3_array[9];
+static uint32_t sdns_sp_d_flat_thres_array[9];
+static uint32_t sdns_sp_d_flat_stren_array[9];
+static uint32_t sdns_sp_ud_v2_1_coef[8];    /* 0x20 bytes */
+static uint32_t sdns_sp_ud_w_sp_stren_0_array[9];
+static uint32_t sdns_sp_ud_w_sp_stren_1_array[9];
+static uint32_t sdns_sp_ud_w_sp_stren_2_array[9];
+static uint32_t sdns_sp_ud_w_sp_stren_3_array[9];
+static uint32_t sdns_sp_ud_b_sp_stren_0_array[9];
+static uint32_t sdns_sp_ud_b_sp_stren_1_array[9];
+static uint32_t sdns_sp_ud_b_sp_stren_2_array[9];
+static uint32_t sdns_sp_ud_b_sp_stren_3_array[9];
+static uint32_t sdns_sp_ud_std_thres_array[9];
+static uint32_t sdns_sp_ud_std_stren_array[9];
+static uint32_t sdns_sp_ud_flat_thres_array[9];
+static uint32_t sdns_sp_ud_flat_stren_array[9];
+static uint32_t sdns_sp_ud_wbhl_flat[11];    /* 0x2c bytes */
+static uint32_t sdns_sp_uu_np_array[16];     /* 0x40 bytes */
+static uint32_t sdns_sp_d_w_wei_np_array[22]; /* 0x58 bytes */
+static uint32_t sdns_sp_d_b_wei_np_array[22]; /* 0x58 bytes */
+static uint32_t sdns_sp_ud_w_wei_np_array[22]; /* 0x58 bytes */
+static uint32_t sdns_sp_ud_b_wei_np_array[22]; /* 0x58 bytes */
+/* SDNS WDR h_s/h_mv arrays loaded from tuning params (2-16 only; 1 + others already declared) */
+static uint32_t sdns_h_s_2_wdr_array[9];
+static uint32_t sdns_h_s_3_wdr_array[9];
+static uint32_t sdns_h_s_4_wdr_array[9];
+static uint32_t sdns_h_s_5_wdr_array[9];
+static uint32_t sdns_h_s_6_wdr_array[9];
+static uint32_t sdns_h_s_7_wdr_array[9];
+static uint32_t sdns_h_s_8_wdr_array[9];
+static uint32_t sdns_h_s_9_wdr_array[9];
+static uint32_t sdns_h_s_10_wdr_array[9];
+static uint32_t sdns_h_s_11_wdr_array[9];
+static uint32_t sdns_h_s_12_wdr_array[9];
+static uint32_t sdns_h_s_13_wdr_array[9];
+static uint32_t sdns_h_s_14_wdr_array[9];
+static uint32_t sdns_h_s_15_wdr_array[9];
+static uint32_t sdns_h_s_16_wdr_array[9];
 
 /* SDNS current pointers */
 static uint32_t *sdns_h_mv_wei_now = NULL;
@@ -1788,6 +1889,7 @@ static uint32_t *sdns_h_s_14_array_now = NULL;
 static uint32_t *sdns_h_s_15_array_now = NULL;
 static uint32_t *sdns_h_s_16_array_now = NULL;
 /* sdns_ave_thres_array_now already declared at top of file */
+int tisp_s_sdns_ratio(int ratio); /* forward declaration for tiziano_sdns_params_refresh */
 static uint32_t sdns_wdr_base_values[9] = {0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0};
 static uint32_t sdns_std_base_values[9] = {0x10, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50};
 static uint32_t sdns_ave_base_values[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x100};
@@ -2976,9 +3078,22 @@ static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
+static const uint32_t gib_ir_reser_oem[15] = {0};
+/* OEM DEIR coefficient LUTs — all zero in OEM binary (verified at addresses
+ * 0x87698..0x87bb4 in tx-isp-t31.ko).  These are the power-on defaults;
+ * libimp.so populates them at runtime via tisp_gib_param_array_set(). */
+static const uint32_t tiziano_gib_deir_r_h_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_g_h_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_b_h_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_r_m_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_g_m_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_b_m_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_r_l_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_g_l_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_b_l_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_matrix_h_oem[15] = {0};
+static const uint32_t tiziano_gib_deir_matrix_m_oem[15] = {0};
+static const uint32_t tiziano_gib_deir_matrix_l_oem[15] = {0};
 
 static uint32_t tiziano_gib_config_line[12] = {0};  /* 0x30 bytes */
 static uint32_t tiziano_gib_r_g_linear[2] = {0};    /* 0x08 bytes */
@@ -9114,25 +9229,68 @@ int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
+/* OEM EXACT: tisp_sharpen_param_array_get — param IDs 0xb5..0xe5 */
 int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
     if (!out_buf || !size_buf) return -EINVAL;
     const void *src = NULL; int len = 0;
 
-    /* OEM YSP block: implement core arrays and controls (0xb5..0xc0) */
+    if (param_id < 0xb5 || param_id > 0xe5) {
+        pr_warn("%s,%d: y sharpen not support param id %d\n",
+                "tisp_sharpen_param_array_get", __LINE__, param_id);
+        return -1;
+    }
+
     switch (param_id) {
-        case 0x0b5: src = y_sp_uu_thres_array_now;        len = 0x40; break;
-        case 0x0b6: src = y_sp_w_sl_stren_0_array_now;    len = 0x40; break;
-        case 0x0b7: src = y_sp_w_sl_stren_1_array_now;    len = 0x40; break;
-        case 0x0b8: src = y_sp_w_sl_stren_2_array_now;    len = 0x40; break;
-        case 0x0b9: src = y_sp_w_sl_stren_3_array_now;    len = 0x40; break;
-        case 0x0ba: src = y_sp_b_sl_stren_0_array_now;    len = 0x40; break;
-        case 0x0bb: src = y_sp_b_sl_stren_1_array_now;    len = 0x40; break;
-        case 0x0bc: src = y_sp_b_sl_stren_2_array_now;    len = 0x40; break;
-        case 0x0bd: src = y_sp_b_sl_stren_3_array_now;    len = 0x40; break;
-        case 0x0be: src = &ysp_enable;                    len = 4;    break;
-        case 0x0bf: src = &ysp_mode;                      len = 4;    break;
-        case 0x0c0: src = &ysp_global_strength;           len = 4;    break;
+        case 0xb5: src = &y_sp_out_opt_array;           len = 4;    break;
+        case 0xb6: src = y_sp_sl_exp_thres_array;       len = 0x24; break;
+        case 0xb7: src = y_sp_sl_exp_num_array;         len = 0x24; break;
+        case 0xb8: src = y_sp_std_cfg_array;            len = 8;    break;
+        case 0xb9: src = y_sp_uu_min_stren_array;       len = 0x24; break;
+        case 0xba: src = y_sp_uu_min_thres_array;       len = 0x24; break;
+        case 0xbb: src = y_sp_uu_thres_array;           len = 0x24; break;
+        case 0xbc: src = y_sp_mv_uu_thres_array;        len = 0x24; break;
+        case 0xbd: src = y_sp_mv_uu_stren_array;        len = 0x24; break;
+        case 0xbe: src = y_sp_uu_stren_array;           len = 0x24; break;
+        case 0xbf: src = y_sp_uu_par_cfg_array;         len = 0x10; break;
+        case 0xc0: src = y_sp_fl_std_thres_array;       len = 0x24; break;
+        case 0xc1: src = y_sp_mv_fl_std_thres_array;    len = 0x24; break;
+        case 0xc2: src = y_sp_fl_thres_array;           len = 0x24; break;
+        case 0xc3: src = y_sp_fl_min_thres_array;       len = 0x24; break;
+        case 0xc4: src = y_sp_mv_fl_thres_array;        len = 0x24; break;
+        case 0xc5: src = y_sp_mv_fl_min_thres_array;    len = 0x24; break;
+        case 0xc6: src = y_sp_fl_par_cfg_array;         len = 8;    break;
+        case 0xc7: src = y_sp_v2_win5_thres_array;      len = 0x24; break;
+        case 0xc8: src = y_sp_v1_v2_coef_par_cfg_array; len = 0x30; break;
+        case 0xc9: src = y_sp_w_b_ll_par_cfg_array;     len = 0x24; break;
+        case 0xca: src = y_sp_uu_np_array;              len = 0x40; break;
+        case 0xcb: src = y_sp_w_wei_np_array;           len = 0x40; break;
+        case 0xcc: src = y_sp_b_wei_np_array;           len = 0x40; break;
+        case 0xcd: src = y_sp_w_sl_stren_0_array;       len = 0x24; break;
+        case 0xce: src = y_sp_w_sl_stren_1_array;       len = 0x24; break;
+        case 0xcf: src = y_sp_w_sl_stren_2_array;       len = 0x24; break;
+        case 0xd0: src = y_sp_w_sl_stren_3_array;       len = 0x24; break;
+        case 0xd1: src = y_sp_b_sl_stren_0_array;       len = 0x24; break;
+        case 0xd2: src = y_sp_b_sl_stren_1_array;       len = 0x24; break;
+        case 0xd3: src = y_sp_b_sl_stren_2_array;       len = 0x24; break;
+        case 0xd4: src = y_sp_b_sl_stren_3_array;       len = 0x24; break;
+        case 0xd5: src = y_sp_uu_sl_0_array;            len = 0x24; break;
+        case 0xd6: src = y_sp_uu_sl_1_array;            len = 0x24; break;
+        case 0xd7: src = y_sp_uu_sl_2_array;            len = 0x24; break;
+        case 0xd8: src = y_sp_uu_sl_3_array;            len = 0x24; break;
+        case 0xd9: src = y_sp_fl_sl_0_array;            len = 0x24; break;
+        case 0xda: src = y_sp_fl_sl_1_array;            len = 0x24; break;
+        case 0xdb: src = y_sp_fl_sl_2_array;            len = 0x24; break;
+        case 0xdc: src = y_sp_uu_thres_wdr_array;       len = 0x24; break;
+        case 0xdd: src = y_sp_w_sl_stren_0_wdr_array;   len = 0x24; break;
+        case 0xde: src = y_sp_w_sl_stren_1_wdr_array;   len = 0x24; break;
+        case 0xdf: src = y_sp_w_sl_stren_2_wdr_array;   len = 0x24; break;
+        case 0xe0: src = y_sp_w_sl_stren_3_wdr_array;   len = 0x24; break;
+        case 0xe1: src = y_sp_b_sl_stren_0_wdr_array;   len = 0x24; break;
+        case 0xe2: src = y_sp_b_sl_stren_1_wdr_array;   len = 0x24; break;
+        case 0xe3: src = y_sp_b_sl_stren_2_wdr_array;   len = 0x24; break;
+        case 0xe4: src = y_sp_b_sl_stren_3_wdr_array;   len = 0x24; break;
+        case 0xe5: src = y_sp_fl_sl_3_array;            len = 0x24; break;
         default:
             *size_buf = 0;
             return 0;
@@ -9140,6 +9298,81 @@ int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf)
 
     memcpy(out_buf, src, len);
     *size_buf = len;
+    return 0;
+}
+
+/* OEM EXACT: tisp_sharpen_param_array_set — param IDs 0xb5..0xe5
+ * Copies data into the sharpen arrays and triggers a full register refresh. */
+static int tisp_sharpen_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) return -EINVAL;
+    void *dst = NULL; int len = 0;
+
+    if (param_id < 0xb5 || param_id > 0xe5) {
+        pr_warn("%s,%d: y sharpen not support param id %d\n",
+                "tisp_sharpen_param_array_set", __LINE__, param_id);
+        return -1;
+    }
+
+    switch (param_id) {
+        case 0xb5: dst = &y_sp_out_opt_array;           len = 4;    break;
+        case 0xb6: dst = y_sp_sl_exp_thres_array;       len = 0x24; break;
+        case 0xb7: dst = y_sp_sl_exp_num_array;         len = 0x24; break;
+        case 0xb8: dst = y_sp_std_cfg_array;            len = 8;    break;
+        case 0xb9: dst = y_sp_uu_min_stren_array;       len = 0x24; break;
+        case 0xba: dst = y_sp_uu_min_thres_array;       len = 0x24; break;
+        case 0xbb: dst = y_sp_uu_thres_array;           len = 0x24; break;
+        case 0xbc: dst = y_sp_mv_uu_thres_array;        len = 0x24; break;
+        case 0xbd: dst = y_sp_mv_uu_stren_array;        len = 0x24; break;
+        case 0xbe: dst = y_sp_uu_stren_array;           len = 0x24; break;
+        case 0xbf: dst = y_sp_uu_par_cfg_array;         len = 0x10; break;
+        case 0xc0: dst = y_sp_fl_std_thres_array;       len = 0x24; break;
+        case 0xc1: dst = y_sp_mv_fl_std_thres_array;    len = 0x24; break;
+        case 0xc2: dst = y_sp_fl_thres_array;           len = 0x24; break;
+        case 0xc3: dst = y_sp_fl_min_thres_array;       len = 0x24; break;
+        case 0xc4: dst = y_sp_mv_fl_thres_array;        len = 0x24; break;
+        case 0xc5: dst = y_sp_mv_fl_min_thres_array;    len = 0x24; break;
+        case 0xc6: dst = y_sp_fl_par_cfg_array;         len = 8;    break;
+        case 0xc7: dst = y_sp_v2_win5_thres_array;      len = 0x24; break;
+        case 0xc8: dst = y_sp_v1_v2_coef_par_cfg_array; len = 0x30; break;
+        case 0xc9: dst = y_sp_w_b_ll_par_cfg_array;     len = 0x24; break;
+        case 0xca: dst = y_sp_uu_np_array;              len = 0x40; break;
+        case 0xcb: dst = y_sp_w_wei_np_array;           len = 0x40; break;
+        case 0xcc: dst = y_sp_b_wei_np_array;           len = 0x40; break;
+        case 0xcd: dst = y_sp_w_sl_stren_0_array;       len = 0x24; break;
+        case 0xce: dst = y_sp_w_sl_stren_1_array;       len = 0x24; break;
+        case 0xcf: dst = y_sp_w_sl_stren_2_array;       len = 0x24; break;
+        case 0xd0: dst = y_sp_w_sl_stren_3_array;       len = 0x24; break;
+        case 0xd1: dst = y_sp_b_sl_stren_0_array;       len = 0x24; break;
+        case 0xd2: dst = y_sp_b_sl_stren_1_array;       len = 0x24; break;
+        case 0xd3: dst = y_sp_b_sl_stren_2_array;       len = 0x24; break;
+        case 0xd4: dst = y_sp_b_sl_stren_3_array;       len = 0x24; break;
+        case 0xd5: dst = y_sp_uu_sl_0_array;            len = 0x24; break;
+        case 0xd6: dst = y_sp_uu_sl_1_array;            len = 0x24; break;
+        case 0xd7: dst = y_sp_uu_sl_2_array;            len = 0x24; break;
+        case 0xd8: dst = y_sp_uu_sl_3_array;            len = 0x24; break;
+        case 0xd9: dst = y_sp_fl_sl_0_array;            len = 0x24; break;
+        case 0xda: dst = y_sp_fl_sl_1_array;            len = 0x24; break;
+        case 0xdb: dst = y_sp_fl_sl_2_array;            len = 0x24; break;
+        case 0xdc: dst = y_sp_uu_thres_wdr_array;       len = 0x24; break;
+        case 0xdd: dst = y_sp_w_sl_stren_0_wdr_array;   len = 0x24; break;
+        case 0xde: dst = y_sp_w_sl_stren_1_wdr_array;   len = 0x24; break;
+        case 0xdf: dst = y_sp_w_sl_stren_2_wdr_array;   len = 0x24; break;
+        case 0xe0: dst = y_sp_w_sl_stren_3_wdr_array;   len = 0x24; break;
+        case 0xe1: dst = y_sp_b_sl_stren_0_wdr_array;   len = 0x24; break;
+        case 0xe2: dst = y_sp_b_sl_stren_1_wdr_array;   len = 0x24; break;
+        case 0xe3: dst = y_sp_b_sl_stren_2_wdr_array;   len = 0x24; break;
+        case 0xe4: dst = y_sp_b_sl_stren_3_wdr_array;   len = 0x24; break;
+        case 0xe5: dst = y_sp_fl_sl_3_array;            len = 0x24; break;
+        default:
+            *size_buf = 0;
+            return 0;
+    }
+
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
+    /* OEM: triggers full register refresh after any array set */
+    tisp_sharpen_all_reg_refresh();
     return 0;
 }
 
@@ -10638,67 +10871,18 @@ int tisp_clm_set_par_cfg(void *in_buf)
 
     return 0;
 }
+/* OEM EXACT: tisp_ysp_set_par_cfg — loop 0xb5..0xe5 calling tisp_sharpen_param_array_set */
 int tisp_ysp_set_par_cfg(void *in_buf)
 {
     if (!in_buf) return -EINVAL;
-    const uint8_t *p = (const uint8_t *)in_buf;
+    char *p = (char *)in_buf;
+    int sz = 0;
 
-    /* Expect the same layout as returned by tisp_ysp_get_par_cfg: 0xb5..0xe5.
-       We will parse the first 9 blocks (0xb5..0xbd) that we implement and ignore the rest. */
-    int offset = 0;
-
-    /* Helper to select current bank arrays */
-    uint32_t *uu      = sharpen_wdr_en ? y_sp_uu_thres_wdr_array      : y_sp_uu_thres_array;
-    uint32_t *w0      = sharpen_wdr_en ? y_sp_w_sl_stren_0_wdr_array  : y_sp_w_sl_stren_0_array;
-    uint32_t *w1      = sharpen_wdr_en ? y_sp_w_sl_stren_1_wdr_array  : y_sp_w_sl_stren_1_array;
-    uint32_t *w2      = sharpen_wdr_en ? y_sp_w_sl_stren_2_wdr_array  : y_sp_w_sl_stren_2_array;
-    uint32_t *w3      = sharpen_wdr_en ? y_sp_w_sl_stren_3_wdr_array  : y_sp_w_sl_stren_3_array;
-    uint32_t *b0      = sharpen_wdr_en ? y_sp_b_sl_stren_0_wdr_array  : y_sp_b_sl_stren_0_array;
-    uint32_t *b1      = sharpen_wdr_en ? y_sp_b_sl_stren_1_wdr_array  : y_sp_b_sl_stren_1_array;
-    uint32_t *b2      = sharpen_wdr_en ? y_sp_b_sl_stren_2_wdr_array  : y_sp_b_sl_stren_2_array;
-    uint32_t *b3      = sharpen_wdr_en ? y_sp_b_sl_stren_3_wdr_array  : y_sp_b_sl_stren_3_array;
-
-    /* Each block is 16 u32 = 0x40 bytes */
-    memcpy(uu, p + offset, 0x40); offset += 0x40;  /* 0xb5 */
-    memcpy(w0, p + offset, 0x40); offset += 0x40;  /* 0xb6 */
-    memcpy(w1, p + offset, 0x40); offset += 0x40;  /* 0xb7 */
-    memcpy(w2, p + offset, 0x40); offset += 0x40;  /* 0xb8 */
-    memcpy(w3, p + offset, 0x40); offset += 0x40;  /* 0xb9 */
-    memcpy(b0, p + offset, 0x40); offset += 0x40;  /* 0xba */
-    memcpy(b1, p + offset, 0x40); offset += 0x40;  /* 0xbb */
-    memcpy(b2, p + offset, 0x40); offset += 0x40;  /* 0xbc */
-    memcpy(b3, p + offset, 0x40); offset += 0x40;  /* 0xbd */
-
-    /* Optional trailing controls if present: 0xbe..0xc0 */
-    memcpy(&ysp_enable, p + offset, 4); offset += 4;    /* 0xbe */
-    memcpy(&ysp_mode, p + offset, 4); offset += 4;      /* 0xbf */
-    memcpy(&ysp_global_strength, p + offset, 4); offset += 4; /* 0xc0 */
-
-    /* Update current pointers to reflect bank selection */
-    if (sharpen_wdr_en) {
-        y_sp_uu_thres_array_now = y_sp_uu_thres_wdr_array;
-        y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_wdr_array;
-        y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_wdr_array;
-        y_sp_w_sl_stren_2_array_now = y_sp_w_sl_stren_2_wdr_array;
-        y_sp_w_sl_stren_3_array_now = y_sp_w_sl_stren_3_wdr_array;
-        y_sp_b_sl_stren_0_array_now = y_sp_b_sl_stren_0_wdr_array;
-        y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_wdr_array;
-        y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_wdr_array;
-        y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_wdr_array;
-    } else {
-        y_sp_uu_thres_array_now = y_sp_uu_thres_array;
-        y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_array;
-        y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_array;
-        y_sp_w_sl_stren_2_array_now = y_sp_w_sl_stren_2_array;
-        y_sp_w_sl_stren_3_array_now = y_sp_w_sl_stren_3_array;
-        y_sp_b_sl_stren_0_array_now = y_sp_b_sl_stren_0_array;
-        y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_array;
-        y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_array;
-        y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_array;
+    for (int i = 0xb5; i != 0xe6; i++) {
+        tisp_sharpen_param_array_set(i, p, &sz);
+        p += sz;
     }
 
-    /* Apply to hardware immediately */
-    tisp_sharpen_all_reg_refresh();
     return 0;
 }
 
@@ -13855,20 +14039,31 @@ static int tiziano_gib_params_refresh(void)
     memcpy(tiziano_gib_deirm_blc_ir_linear, tiziano_gib_deirm_blc_ir_linear_oem,
            sizeof(tiziano_gib_deirm_blc_ir_linear));
     memcpy(gib_ir_point, gib_ir_point_oem, sizeof(gib_ir_point));
-
-    memset(gib_ir_reser, 0, sizeof(gib_ir_reser));
-    memset(tiziano_gib_deir_r_h, 0, sizeof(tiziano_gib_deir_r_h));
-    memset(tiziano_gib_deir_g_h, 0, sizeof(tiziano_gib_deir_g_h));
-    memset(tiziano_gib_deir_b_h, 0, sizeof(tiziano_gib_deir_b_h));
-    memcpy(tiziano_gib_deir_r_m, tiziano_gib_deir_r_m_oem, sizeof(tiziano_gib_deir_r_m));
-    memcpy(tiziano_gib_deir_g_m, tiziano_gib_deir_g_m_oem, sizeof(tiziano_gib_deir_g_m));
-    memcpy(tiziano_gib_deir_b_m, tiziano_gib_deir_b_m_oem, sizeof(tiziano_gib_deir_b_m));
-    memset(tiziano_gib_deir_r_l, 0, sizeof(tiziano_gib_deir_r_l));
-    memset(tiziano_gib_deir_g_l, 0, sizeof(tiziano_gib_deir_g_l));
-    memset(tiziano_gib_deir_b_l, 0, sizeof(tiziano_gib_deir_b_l));
-    memset(tiziano_gib_deir_matrix_h, 0, sizeof(tiziano_gib_deir_matrix_h));
-    memset(tiziano_gib_deir_matrix_m, 0, sizeof(tiziano_gib_deir_matrix_m));
-    memset(tiziano_gib_deir_matrix_l, 0, sizeof(tiziano_gib_deir_matrix_l));
+    memcpy(gib_ir_reser, gib_ir_reser_oem, sizeof(gib_ir_reser));
+    memcpy(tiziano_gib_deir_r_h, tiziano_gib_deir_r_h_oem,
+           sizeof(tiziano_gib_deir_r_h));
+    memcpy(tiziano_gib_deir_g_h, tiziano_gib_deir_g_h_oem,
+           sizeof(tiziano_gib_deir_g_h));
+    memcpy(tiziano_gib_deir_b_h, tiziano_gib_deir_b_h_oem,
+           sizeof(tiziano_gib_deir_b_h));
+    memcpy(tiziano_gib_deir_r_m, tiziano_gib_deir_r_m_oem,
+           sizeof(tiziano_gib_deir_r_m));
+    memcpy(tiziano_gib_deir_g_m, tiziano_gib_deir_g_m_oem,
+           sizeof(tiziano_gib_deir_g_m));
+    memcpy(tiziano_gib_deir_b_m, tiziano_gib_deir_b_m_oem,
+           sizeof(tiziano_gib_deir_b_m));
+    memcpy(tiziano_gib_deir_r_l, tiziano_gib_deir_r_l_oem,
+           sizeof(tiziano_gib_deir_r_l));
+    memcpy(tiziano_gib_deir_g_l, tiziano_gib_deir_g_l_oem,
+           sizeof(tiziano_gib_deir_g_l));
+    memcpy(tiziano_gib_deir_b_l, tiziano_gib_deir_b_l_oem,
+           sizeof(tiziano_gib_deir_b_l));
+    memcpy(tiziano_gib_deir_matrix_h, tiziano_gib_deir_matrix_h_oem,
+           sizeof(tiziano_gib_deir_matrix_h));
+    memcpy(tiziano_gib_deir_matrix_m, tiziano_gib_deir_matrix_m_oem,
+           sizeof(tiziano_gib_deir_matrix_m));
+    memcpy(tiziano_gib_deir_matrix_l, tiziano_gib_deir_matrix_l_oem,
+           sizeof(tiziano_gib_deir_matrix_l));
 
     pr_err("gib_params_refresh: cfg={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u}\n",
             tiziano_gib_config_line[0], tiziano_gib_config_line[1],
@@ -16376,14 +16571,49 @@ int tiziano_sharpen_init(void)
     return 0;
 }
 
+/* OEM EXACT: tisp_sharpen_refresh — simple wrapper, calls par_refresh with threshold=0x100 */
+int tisp_sharpen_refresh(uint32_t ev_value)
+{
+    tisp_sharpen_par_refresh(ev_value, 0x100, 1);
+    return 0;
+}
+
+/* OEM EXACT: tiziano_sharpen_dn_params_refresh — reload params from tuning bin and refresh regs */
+void tiziano_sharpen_dn_params_refresh(void)
+{
+    tiziano_sharpen_params_refresh();
+    tisp_sharpen_all_reg_refresh();
+}
+
 /* SDNS parameter arrays - moved to top of file to avoid forward reference issues */
 static uint32_t rgbg_dis[16] = {0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1};
 
-/* tiziano_sdns_params_refresh - Refresh SDNS parameters - Simple version for init */
+/* tiziano_sdns_params_refresh - OEM-style bulk SDNS parameter load from tuning bin.
+ * Loads all SDNS arrays sequentially from tparams_active at offset SDNS_TPARAMS_OFFSET.
+ * If no tuning bin is loaded, keeps current (compile-time) defaults.
+ * OEM ends with tisp_s_sdns_ratio(data_9a9c0) if ratio != 0x80. */
 void tiziano_sdns_params_refresh(void)
 {
-    pr_debug("tiziano_sdns_params_refresh: Refreshing SDNS parameters (simple version)\n");
-    /* This is the simple version called from init - the enhanced version is elsewhere */
+    const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    const u8 *cursor;
+
+    if (!params || !tuning_bin_loaded) {
+        pr_debug("tiziano_sdns_params_refresh: no tuning bin, keeping current SDNS defaults\n");
+        return;
+    }
+
+    cursor = params + SDNS_TPARAMS_OFFSET;
+
+#define SDNS_REFRESH_ENTRY(_name, _size) \
+    do { \
+        memcpy(&(_name), cursor, (_size)); \
+        cursor += (_size); \
+    } while (0);
+#include "tx_isp_tuning_sdns_refresh.inc"
+#undef SDNS_REFRESH_ENTRY
+
+    if (data_9a9c0 != 0x80)
+        tisp_s_sdns_ratio(data_9a9c0);
 }
 
 /* tisp_sdns_all_reg_refresh - Write all SDNS registers to hardware */
@@ -19145,13 +19375,13 @@ int tisp_gamma_wdr_en(int enable)
     return 0;
 }
 
+/* OEM EXACT: tisp_sharpen_wdr_en — select WDR or linear sharpen arrays.
+ * OEM does NOT call tisp_sharpen_all_reg_refresh here; just sets pointers. */
 int tisp_sharpen_wdr_en(int enable)
 {
-    pr_info("tisp_sharpen_wdr_en: %s Sharpen WDR mode\n", enable ? "Enable" : "Disable");
-    sharpen_wdr_en = enable ? 1 : 0;
+    sharpen_wdr_en = enable;
 
-    /* Reselect active parameter arrays */
-    if (sharpen_wdr_en) {
+    if (enable != 0) {
         y_sp_uu_thres_array_now = y_sp_uu_thres_wdr_array;
         y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_wdr_array;
         y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_wdr_array;
@@ -19173,8 +19403,6 @@ int tisp_sharpen_wdr_en(int enable)
         y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_array;
     }
 
-    /* Refresh sharpening registers to reflect new bank */
-    tisp_sharpen_all_reg_refresh();
     return 0;
 }
 
@@ -19952,6 +20180,8 @@ EXPORT_SYMBOL(tiziano_sdns_params_refresh);
 EXPORT_SYMBOL(tiziano_adr_params_refresh);
 EXPORT_SYMBOL(tisp_dpc_par_refresh);
 EXPORT_SYMBOL(tisp_sharpen_par_refresh);
+EXPORT_SYMBOL(tisp_sharpen_refresh);
+EXPORT_SYMBOL(tiziano_sharpen_dn_params_refresh);
 EXPORT_SYMBOL(tisp_sdns_par_refresh);
 
 /* Export global variables used across modules */
@@ -21511,7 +21741,7 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->wb_temp = 0x2700;
 
     /* Initialize BCSH specific fields */
-    tuning_data->bcsh_hue = 128;
+    tuning_data->bcsh_hue = 0x3c; /* neutral hue = 60 in scaled 0-120 range */
     tuning_data->bcsh_brightness = 128;
     tuning_data->bcsh_contrast = 128;
     tuning_data->bcsh_saturation = 128;
