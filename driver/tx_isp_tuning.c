@@ -8091,7 +8091,7 @@ static irqreturn_t tiziano_defog_interrupt_static(int irq, void *dev_id)
     }
 
     /* Push defog event (event ID 3) */
-    event_data.id = 3;
+    event_data.event_id = 3;
     tisp_event_push(&event_data);
     return IRQ_HANDLED;
 }
