@@ -588,8 +588,13 @@ static void tiziano_bcsh_Tccm_RGB2YUV(int32_t *out, const int32_t *ccm)
     for (i = 0; i < 9; i++)
         tmp[i] = oem_ccm_const[i];
 
-    /* Step 2: apply M * CCM * Minv transform */
-    tiziano_bcsh_Tccm_RGBYUV(tmp, tiziano_MMatrix, ccm, tiziano_MinvMatrix);
+    /* Step 2: apply M * CCM * Minv transform
+     * BYPASSED: The tiziano_bcsh_Tccm_RGBYUV matmul chain produces
+     * wrong values (tried >> 16, >> 13, >> 10, sign/magnitude — all fail).
+     * The OEM constant alone is a valid HMatrix that produces correct
+     * color. CCM adaptation via matmul needs deeper investigation.
+     * tiziano_bcsh_Tccm_RGBYUV(tmp, tiziano_MMatrix, ccm, tiziano_MinvMatrix);
+     */
 
     /* Step 3: convert signed -> 14-bit register format */
     tiziano_bcsh_para2reg(out, tmp);
@@ -13806,6 +13811,201 @@ static uint32_t ISPAWBInterpolation2(uint32_t q, uint32_t x,
 		fix_point_mult2_32(q, y1 - y0, x_delta), denom);
 }
 
+/* OEM func_zone_ct_weight: CT-dependent weight modulation per zone.
+ * Decompiled from OEM at 0x19da0. */
+static uint32_t func_zone_ct_weight(uint32_t ct_inv, const uint32_t *ls,
+	uint32_t strength, uint32_t q, uint32_t base_wt,
+	uint32_t slope_hi, uint32_t slope_lo)
+{
+	uint32_t ls_hi = ls[3], ls_lo = ls[0], ls_hi2 = ls[1], ls_lo2 = ls[2], mod;
+	if (ct_inv < ls_hi && ls_hi2 < ct_inv) {
+		if (ct_inv >= ls_lo) mod = 0x100u << (q & 0x1f);
+		else if (ct_inv > ls_lo2)
+			mod = (strength << (q & 0x1f)) + fix_point_mult2_32(q, (ls_hi - ct_inv) << (q & 0x1f), slope_hi);
+		else mod = (strength << (q & 0x1f)) + fix_point_mult2_32(q, (ct_inv - ls_hi2) << (q & 0x1f), slope_lo);
+	} else mod = strength << (q & 0x1f);
+	return fix_point_div_32(q, fix_point_mult2_32(q, base_wt, mod), 0x100u << (q & 0x1f));
+}
+
+/* OEM Tiziano_Awb_Ct_Detect: cluster-weighted AWB CT detection.
+ * Decompiled from OEM at 0x19e78.  ~600 line k-means cluster AWB. */
+static void Tiziano_Awb_Ct_Detect(
+	const uint32_t *zone_rg, const uint32_t *zpx,
+	const uint32_t *lsc, uint32_t lsn,
+	const uint32_t *lsrc, const uint32_t *amc,
+	const uint32_t *awght, uint32_t nc, uint32_t nr,
+	const uint32_t *rgp, const uint32_t *bgp,
+	const uint32_t *ctm, const uint32_t *lwl,
+	const uint32_t *ccfg, uint32_t *cto,
+	const uint32_t *lwd, const uint32_t *ppp,
+	const uint32_t *cpar, uint32_t *trgbg, uint32_t *sout)
+{
+	uint32_t q = *ppp, rnd = 1u << ((q-1) & 0x1f), total = nc * nr;
+	uint32_t den = ccfg[0], dhi = ccfg[1], dlo = ccfg[2];
+	uint32_t cwe = amc[0], cws = amc[1];
+	uint32_t cen = cpar[0], cdi = cpar[1], cmg = cpar[2];
+	uint32_t czn = cpar[3], ccv = cpar[4], cit = cpar[5];
+	uint32_t mpx, lc[20], shi = 0, slo = 0, r, c, i, j, ws;
+	const uint32_t *zbg = zone_rg + total;
+	memset(lc, 0, sizeof(lc));
+	for (i = 0; i < lsn * 2 && i < 20; i++) lc[i] = lsc[i] - 1;
+	if (cwe == 1) { uint32_t rq = (0x100u - cws) << (q & 0x1f);
+		shi = fix_point_div_32(q, rq, (lsrc[3]-lsrc[2])<<(q&0x1f));
+		slo = fix_point_div_32(q, rq, (lsrc[0]-lsrc[1])<<(q&0x1f)); }
+	mpx = zpx[0];
+	for (r = 0; r < nr; r++) for (c = 0; c < nc; c++) { uint32_t v = zpx[r*nc+c]; if (v > mpx) mpx = v; }
+	for (r = 0; r < nr; r++) for (c = 0; c < nc; c++) { uint32_t x = r*nc+c;
+		ct_zone_pix_wgh[x] = mpx ? fix_point_div_32(q, zpx[x]<<(q&0x1f), mpx<<(q&0x1f)) : 0; }
+	{ uint32_t rmn = rgp[0]<<(q&0x1f), rmx = rgp[14]<<(q&0x1f), bmn = bgp[0]<<(q&0x1f), bmx = bgp[14]<<(q&0x1f);
+	  uint32_t *rm = (uint32_t*)zone_rg, *bm = (uint32_t*)zbg;
+	  for (r = 0; r < nr; r++) for (c = 0; c < nc; c++) { uint32_t x = r*nc+c;
+		if (rm[x] > rmx) rm[x] = rmx; else if (rm[x] < rmn) rm[x] = rmn;
+		if (bm[x] > bmx) bm[x] = bmx; else if (bm[x] < bmn) bm[x] = bmn; } }
+	memset(ct_cluster_idx_num, 0, sizeof(ct_cluster_idx_num));
+	for (r = 0; r < nr; r++) for (c = 0; c < nc; c++) {
+		uint32_t x = r*nc+c, rv = zone_rg[x], bv = zbg[x], ri, bi, zw;
+		if (rv < (rgp[0]<<(q&0x1f))) ri = 0;
+		else if (rv >= (rgp[14]<<(q&0x1f))) ri = 15;
+		else { ri = 15; for (i = 0; i < 14; i++) if (rv >= (rgp[i]<<(q&0x1f)) && rv < (rgp[i+1]<<(q&0x1f))) { ri = i+1; break; } }
+		if (bv < (bgp[0]<<(q&0x1f))) bi = 0;
+		else if (bv >= (bgp[14]<<(q&0x1f))) bi = 15;
+		else { bi = 15; for (i = 0; i < 14; i++) if (bv >= (bgp[i]<<(q&0x1f)) && bv < (bgp[i+1]<<(q&0x1f))) { bi = i+1; break; } }
+		if (ri > 0 && ri <= 14 && bi > 0 && bi <= 14) ct_cluster_idx_num[(bi-1)*14+(ri-1)]++;
+		zw = 0;
+		if (bi == 0 || ri == 0) { ct_rgbg_wght[x] = 0; continue; }
+		if (ri >= 15 && bi >= 15) zw = awght[14*15+14]<<(q&0x1f);
+		else if (bi >= 15) zw = ISPAWBInterpolation1(q, rv, rgp[ri-1], rgp[ri>14?14:ri], awght[14*15+(ri>14?14:ri)-1], awght[14*15+(ri>14?14:ri)]);
+		else if (ri >= 15) zw = ISPAWBInterpolation1(q, bv, bgp[bi-1], bgp[bi], awght[(bi-1)*15+14], awght[bi*15+14]);
+		else { uint32_t mo = (bi-1)*15+(ri-1);
+			uint32_t r0 = ISPAWBInterpolation1(q, rv, rgp[ri-1], rgp[ri], awght[mo], awght[mo+1]);
+			uint32_t r1 = ISPAWBInterpolation1(q, rv, rgp[ri-1], rgp[ri], awght[mo+15], awght[mo+16]);
+			zw = ISPAWBInterpolation2(q, bv, bgp[bi-1], bgp[bi], r0, r1); }
+		if (cwe == 1) { uint32_t cv;
+			if (ri >= 15 && bi >= 15) cv = ctm[14*15+14];
+			else if (bi >= 15) cv = ISPAWBInterpolation1(q, rv, rgp[ri-1], rgp[ri>14?14:ri], ctm[14*15+(ri>14?14:ri)-1], ctm[14*15+(ri>14?14:ri)]);
+			else if (ri >= 15) cv = ISPAWBInterpolation1(q, bv, bgp[bi-1], bgp[bi], ctm[(bi-1)*15+14], ctm[bi*15+14]);
+			else { uint32_t mo = (bi-1)*15+(ri-1);
+				uint32_t cr0 = ISPAWBInterpolation1(q, rv, rgp[ri-1], rgp[ri], ctm[mo], ctm[mo+1]);
+				uint32_t cr1 = ISPAWBInterpolation1(q, rv, rgp[ri-1], rgp[ri], ctm[mo+15], ctm[mo+16]);
+				cv = ISPAWBInterpolation2(q, bv, bgp[bi-1], bgp[bi], cr0, cr1); }
+			{ uint32_t cs = cv >> (q & 0x1f);
+			  if (cs) zw = func_zone_ct_weight(1000000u/cs, lsrc, cws, q, zw, shi, slo); } }
+		ct_rgbg_wght[x] = zw;
+	}
+	for (i = 0; i < lsn && i < 10; i++) { uint32_t cr = lc[i*2], cb = lc[i*2+1];
+		for (r = 0; r < nr; r++) for (c = 0; c < nc; c++) { uint32_t x = r*nc+c;
+			uint32_t zr = (rnd+zone_rg[x])>>(q&0x1f), zb = (rnd+zbg[x])>>(q&0x1f);
+			uint32_t dr = (zr>=cr)?(zr-cr):(cr-zr), db = (zb>=cb)?(zb-cb):(cb-zb);
+			uint64_t ds = (uint64_t)dr*dr+(uint64_t)db*db; uint32_t dw = 0;
+			if (ds < 0x332) { dw=1; if (ds < 0x2a7) { dw=2; if (ds < 0x267) { dw=3;
+			if (ds < 0x23c) { dw=4; if (ds < 0x21c) { dw=5; if (ds < 0x202) dw=lwd[(uint32_t)ds]; }}}}}
+			dw <<= (q&0x1f); if (ct_rgbg_wght[x] < dw) ct_rgbg_wght[x] = dw; } }
+	if (cen == 1) { uint32_t k;
+		memset(ct_cluster_idx_max, 0, sizeof(ct_cluster_idx_max));
+		for (k = 0; k < 12; k++) { uint32_t bc=0,brg=0,bbg=0,b2,r2;
+			for (b2=0; b2<CT_BG_BINS; b2++) for (r2=0; r2<14; r2++) { uint32_t cn=ct_cluster_idx_num[b2*14+r2]; if (cn>bc){bc=cn;brg=r2;bbg=b2;} }
+			ct_cluster_idx_max[k]=brg; ct_cluster_idx_max[k+12]=bbg; ct_cluster_idx_max[k+24]=bc;
+			if (bc) ct_cluster_idx_num[bbg*14+brg]=0; }
+		memset(ct_cluster_val1, 0, sizeof(ct_cluster_val1));
+		for (k=0;k<12;k++) { uint32_t r2=ct_cluster_idx_max[k],b2=ct_cluster_idx_max[k+12],b=k*5;
+			if (r2>=14||b2>=14) continue;
+			ct_cluster_val1[b]=rgp[r2]; ct_cluster_val1[b+1]=rgp[r2]; ct_cluster_val1[b+2]=(rgp[r2]+1+rgp[r2+1])>>1;
+			ct_cluster_val1[b+3]=rgp[r2+1]; ct_cluster_val1[b+4]=rgp[r2+1];
+			ct_cluster_val1[b+CT_CLUSTERS]=bgp[b2]; ct_cluster_val1[b+CT_CLUSTERS+1]=bgp[b2+1];
+			ct_cluster_val1[b+CT_CLUSTERS+2]=(bgp[b2]+1+bgp[b2+1])>>1;
+			ct_cluster_val1[b+CT_CLUSTERS+3]=bgp[b2]; ct_cluster_val1[b+CT_CLUSTERS+4]=bgp[b2+1]; }
+		for (i=0;i<CT_CLUSTERS;i++) { if (!ct_cluster_val1[i]||!ct_cluster_val1[i+CT_CLUSTERS]) continue;
+			for (j=i+1;j<CT_CLUSTERS;j++) if (ct_cluster_val1[i]==ct_cluster_val1[j]&&ct_cluster_val1[i+CT_CLUSTERS]==ct_cluster_val1[j+CT_CLUSTERS])
+				{ ct_cluster_val1[j]=0; ct_cluster_val1[j+CT_CLUSTERS]=0; } }
+		for (i=0;i<CT_CLUSTERS;i++) { uint32_t it;
+			if (!ct_cluster_val1[i]||!ct_cluster_val1[i+CT_CLUSTERS]) continue;
+			for (it=0;it<cit;it++) { uint32_t sr=0,sb=0,mc=0,nrv,nbv;
+				for (r=0;r<nr;r++) for (c=0;c<nc;c++) { uint32_t zi=r*nc+c;
+					uint32_t zr=(rnd+zone_rg[zi])>>(q&0x1f), zb=(rnd+zbg[zi])>>(q&0x1f);
+					uint32_t d1=(zr>=ct_cluster_val1[i])?(zr-ct_cluster_val1[i]):(ct_cluster_val1[i]-zr);
+					uint32_t d2=(zb>=ct_cluster_val1[i+CT_CLUSTERS])?(zb-ct_cluster_val1[i+CT_CLUSTERS]):(ct_cluster_val1[i+CT_CLUSTERS]-zb);
+					uint64_t ds=(uint64_t)d1*d1+(uint64_t)d2*d2;
+					if (ds<=cdi){sr+=zone_rg[zi];sb+=zbg[zi];mc++;} }
+				if (!mc) break;
+				nrv=((sr+(mc>>1))/mc)>>(q&0x1f); nbv=((sb+(mc>>1))/mc)>>(q&0x1f);
+				{ uint32_t dd1=(nrv>=ct_cluster_val1[i])?(nrv-ct_cluster_val1[i]):(ct_cluster_val1[i]-nrv);
+				  uint32_t dd2=(nbv>=ct_cluster_val1[i+CT_CLUSTERS])?(nbv-ct_cluster_val1[i+CT_CLUSTERS]):(ct_cluster_val1[i+CT_CLUSTERS]-nbv);
+				  if (dd1<=ccv&&dd2<=ccv) break; }
+				ct_cluster_val1[i]=nrv; ct_cluster_val1[i+CT_CLUSTERS]=nbv; ct_cluster_val1[i+2*CT_CLUSTERS]=mc; } }
+		memset(ct_cluster_val2, 0, sizeof(ct_cluster_val2));
+		for (i=0;i<CT_CLUSTERS;i++) {
+			for (j=0;j<CT_CLUSTERS;j++) { uint32_t cn=ct_cluster_val1[j+2*CT_CLUSTERS];
+				if (cn>0&&cn>ct_cluster_val2[i+2*CT_CLUSTERS]) { ct_cluster_val2[i+2*CT_CLUSTERS]=cn;
+					ct_cluster_val2[i]=ct_cluster_val1[j]; ct_cluster_val2[i+CT_CLUSTERS]=ct_cluster_val1[j+CT_CLUSTERS]; } }
+			if (!ct_cluster_val2[i+2*CT_CLUSTERS]) break;
+			{ uint32_t wt=0,ra=0,ba=0;
+			  for (j=0;j<CT_CLUSTERS;j++) { uint32_t c2=ct_cluster_val1[j+2*CT_CLUSTERS],d1,d2; uint64_t d3;
+				if (!c2) continue;
+				d1=(ct_cluster_val2[i]>=ct_cluster_val1[j])?(ct_cluster_val2[i]-ct_cluster_val1[j]):(ct_cluster_val1[j]-ct_cluster_val2[i]);
+				d2=(ct_cluster_val2[i+CT_CLUSTERS]>=ct_cluster_val1[j+CT_CLUSTERS])?(ct_cluster_val2[i+CT_CLUSTERS]-ct_cluster_val1[j+CT_CLUSTERS]):(ct_cluster_val1[j+CT_CLUSTERS]-ct_cluster_val2[i+CT_CLUSTERS]);
+				d3=(uint64_t)d1*d1+(uint64_t)d2*d2; if (d3>cmg) continue;
+				wt+=c2; ra+=c2*ct_cluster_val1[j]; ba+=c2*ct_cluster_val1[j+CT_CLUSTERS]; ct_cluster_val1[j+2*CT_CLUSTERS]=0; }
+			  if (wt){ct_cluster_val2[i+2*CT_CLUSTERS]=0;ct_cluster_val2[i]=(ra+(wt>>1))/wt;ct_cluster_val2[i+CT_CLUSTERS]=(ba+(wt>>1))/wt;} } }
+		for (i=0;i<CT_CLUSTERS;i++) { uint32_t cr2=ct_cluster_val2[i],cb2=ct_cluster_val2[i+CT_CLUSTERS];
+			if (!cr2||!cb2) continue; ct_cluster_val2[i+2*CT_CLUSTERS]=0;
+			for (r=0;r<nr;r++) for (c=0;c<nc;c++) { uint32_t zi=r*nc+c,zw2=ct_rgbg_wght[zi];
+				uint32_t zr,zb,d1,d2; uint64_t ds; if (!zw2) continue;
+				zr=(rnd+zone_rg[zi])>>(q&0x1f); zb=(rnd+zbg[zi])>>(q&0x1f);
+				d1=(zr>=cr2)?(zr-cr2):(cr2-zr); d2=(zb>=cb2)?(zb-cb2):(cb2-zb);
+				ds=(uint64_t)d1*d1+(uint64_t)d2*d2; if (ds<=czn) ct_cluster_val2[i+2*CT_CLUSTERS]++; } }
+		{ uint32_t mx=0,hm; for (i=0;i<CT_CLUSTERS;i++){uint32_t w=ct_cluster_val2[i+2*CT_CLUSTERS];if(w>mx)mx=w;} hm=mx>>1;
+		  if (mx>0) for (r=0;r<nr;r++) for (c=0;c<nc;c++) { uint32_t zi=r*nc+c,bw=0;
+			uint32_t zr=(rnd+zone_rg[zi])>>(q&0x1f),zb=(rnd+zbg[zi])>>(q&0x1f);
+			for (j=0;j<CT_CLUSTERS;j++){uint32_t cr3=ct_cluster_val2[j],cb3=ct_cluster_val2[j+CT_CLUSTERS],cw3=ct_cluster_val2[j+2*CT_CLUSTERS];
+				uint32_t d1,d2;uint64_t ds;if(!cr3||!cb3)continue;
+				d1=(zr>=cr3)?(zr-cr3):(cr3-zr);d2=(zb>=cb3)?(zb-cb3):(cb3-zb);ds=(uint64_t)d1*d1+(uint64_t)d2*d2;
+				if(ds<=czn&&cw3>bw)bw=cw3;}
+			ct_rgbg_wght[zi]=bw?(bw*ct_rgbg_wght[zi]+hm)/mx:(hm+ct_rgbg_wght[zi])/mx; } }
+	}
+	ws=0; for(r=0;r<nr;r++) for(c=0;c<nc;c++) ws+=ct_rgbg_wght[r*nc+c];
+	if (!ws){*sout=1;*cto=5000;trgbg[0]=0x100;trgbg[1]=0x100;return;}
+	*sout=0;
+	{ uint64_t ra=0,ba=0,wa=0; uint32_t wrg,wbg;
+	  for(r=0;r<nr;r++) for(c=0;c<nc;c++){uint32_t zi=r*nc+c;
+		uint32_t cw=fix_point_mult3_32(q,ct_rgbg_wght[zi],ct_zone_pix_wgh[zi],lwl[zi]<<(q&0x1f));
+		ra+=(uint64_t)fix_point_mult2_32(q,zone_rg[zi],cw); ba+=(uint64_t)fix_point_mult2_32(q,zbg[zi],cw); wa+=cw;}
+	  if(!wa){*sout=1;*cto=5000;trgbg[0]=0x100;trgbg[1]=0x100;return;}
+	  wrg=(uint32_t)div_u64(ra,(uint32_t)wa); wbg=(uint32_t)div_u64(ba,(uint32_t)wa);
+	  if (den==1){ uint32_t md=0;
+		for(r=0;r<nr;r++) for(c=0;c<nc;c++){uint32_t zi=r*nc+c;
+			uint32_t dr=(wrg>=zone_rg[zi])?(wrg-zone_rg[zi]):(zone_rg[zi]-wrg);
+			uint32_t db=(wbg>=zbg[zi])?(wbg-zbg[zi]):(zbg[zi]-wbg);
+			ct_rgbg_dis[zi]=fix_point_mult2_32(q,dr,dr)+fix_point_mult2_32(q,db,db);
+			if(ct_rgbg_wght[zi]&&ct_zone_pix_wgh[zi]&&lwl[zi])
+				md+=fix_point_mult2_32(q,fix_point_mult3_32(q,ct_rgbg_dis[zi],ct_rgbg_wght[zi]),lwl[zi]<<(q&0x1f));}
+		if(wa>0)md=fix_point_div_32(q,md,(uint32_t)wa);
+		if(md){uint64_t rd=0,bd=0,dwa2=0;
+			for(r=0;r<nr;r++) for(c=0;c<nc;c++){uint32_t zi=r*nc+c,rel=fix_point_div_32(q,ct_rgbg_dis[zi],md);
+				if(rel>dhi)ct_rgbg_d_wght[zi]=0;
+				else if(rel>=dlo){uint32_t rng=dhi-dlo;
+					ct_rgbg_d_wght[zi]=rng?fix_point_mult2_32(q,ct_rgbg_wght[zi],(1u<<(q&0x1f))-fix_point_div_32(q,rel-dlo,rng)):ct_rgbg_wght[zi];}
+				else ct_rgbg_d_wght[zi]=ct_rgbg_wght[zi];}
+			for(r=0;r<nr;r++) for(c=0;c<nc;c++){uint32_t zi=r*nc+c;
+				uint32_t dw2=fix_point_mult2_32(q,ct_rgbg_d_wght[zi],ct_zone_pix_wgh[zi]);
+				rd+=fix_point_mult2_32(q,zone_rg[zi],dw2); bd+=fix_point_mult2_32(q,zbg[zi],dw2); dwa2+=dw2;}
+			if(dwa2>0){wrg=(uint32_t)div_u64(rd,(uint32_t)dwa2);wbg=(uint32_t)div_u64(bd,(uint32_t)dwa2);}} }
+	  { uint32_t rmx=rgp[14]<<(q&0x1f),rmn=rgp[0]<<(q&0x1f),bmx=bgp[14]<<(q&0x1f),bmn=bgp[0]<<(q&0x1f);
+		uint32_t frg=wrg,fbg=wbg,ri2,bi2,cti;
+		if(frg>rmx)frg=rmx;else if(frg<rmn)frg=rmn; if(fbg>bmx)fbg=bmx;else if(fbg<bmn)fbg=bmn;
+		ri2=15;if(frg!=rmx)for(i=0;i<14;i++)if(frg>=(rgp[i]<<(q&0x1f))&&frg<(rgp[i+1]<<(q&0x1f))){ri2=i+1;break;}
+		bi2=15;if(fbg!=bmx)for(i=0;i<14;i++)if(fbg>=(bgp[i]<<(q&0x1f))&&fbg<(bgp[i+1]<<(q&0x1f))){bi2=i+1;break;}
+		if(ri2>=15&&bi2>=15)cti=ISPAWBInterpolation1(q,fbg,bgp[13],bgp[14],ctm[13*15+14],ctm[14*15+14]);
+		else if(bi2>=15)cti=ISPAWBInterpolation1(q,frg,rgp[ri2-1],rgp[ri2],ctm[14*15+ri2-1],ctm[14*15+ri2]);
+		else if(ri2>=15)cti=ISPAWBInterpolation1(q,fbg,bgp[bi2-1],bgp[bi2],ctm[(bi2-1)*15+14],ctm[bi2*15+14]);
+		else{uint32_t mo=(bi2-1)*15+(ri2-1);
+			uint32_t cr0=ISPAWBInterpolation1(q,frg,rgp[ri2-1],rgp[ri2],ctm[mo],ctm[mo+1]);
+			uint32_t cr1=ISPAWBInterpolation1(q,frg,rgp[ri2-1],rgp[ri2],ctm[mo+15],ctm[mo+16]);
+			cti=ISPAWBInterpolation2(q,fbg,bgp[bi2-1],bgp[bi2],cr0,cr1);}
+		*cto=cti?(rnd+fix_point_div_32(q,1000000u<<(q&0x1f),cti))>>(q&0x1f):5000;
+		trgbg[0]=(frg+rnd)>>(q&0x1f); trgbg[1]=(fbg+rnd)>>(q&0x1f); }
+	}
+}
+
 static uint32_t __maybe_unused awb_ratio_u8(uint32_t numer, uint32_t denom)
 {
 	if (denom == 0)
@@ -14154,71 +14354,82 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	memcpy(awb_zone_bg_last, awb_zone_bg, sizeof(awb_zone_bg));
 	awb_zone_cache_valid = 1;
 
-	/* Gain computation: use per-zone average WITHOUT _awb_cof scaling.
-	 * The OEM feeds the reciprocal-average through Tiziano_Awb_Ct_Detect
-	 * (600-line cluster analysis) before gain computation. Without that
-	 * function, neither reciprocal nor forward average works directly.
-	 *
-	 * Simple approach: raw R/G and B/G per-zone average (no cof).
-	 * For neutral grey (R=G=B): rg_avg = bg_avg = 0x100 (256 in Q8).
-	 * gain = 0x10000 / 256 = 256 = unity.
-	 * The _wb_static base gains provide sensor-specific correction.
-	 * The _awb_cof is only for CT estimation, not gain computation. */
+	/* OEM: The zone rg/bg arrays (awb_zone_rg/bg) are laid out as
+	 * [rg_plane: rows*cols][bg_plane: rows*cols] for Ct_Detect.
+	 * We build a combined buffer and call Tiziano_Awb_Ct_Detect which
+	 * performs cluster-weighted analysis to produce target rg/bg/ct. */
 	{
-		u32 rg_avg, bg_avg;
-		u64 rg_raw_sum = 0, bg_raw_sum = 0;
-		u32 rg_raw_cnt = 0, bg_raw_cnt = 0;
+		/* Build combined rg+bg buffer for Ct_Detect (OEM zone_rgbg layout) */
+		static uint32_t ct_zone_rgbg[AWB_STATS_ZONES * 2];
+		uint32_t ct_tgt_rgbg[2] = { 0x100, 0x100 };
+		uint32_t ct_status = 1;
 		int zi;
 
-		/* Compute raw R/G and B/G sums without cof multiplier */
-		for (zi = 0; zi < total_zones; zi++) {
-			if (stats_g[zi] != 0 && stats_p[zi] >= _pixel_cnt_th) {
-				u32 raw_rg = (u32)div_u64((u64)stats_r[zi] << q, stats_g[zi]);
-				u32 raw_bg = (u32)div_u64((u64)stats_b[zi] << q, stats_g[zi]);
-				rg_raw_sum += raw_rg;
-				bg_raw_sum += raw_bg;
-				rg_raw_cnt++;
-				bg_raw_cnt++;
+		memcpy(ct_zone_rgbg, awb_zone_rg, sizeof(awb_zone_rg));
+		memcpy(ct_zone_rgbg + AWB_STATS_ZONES, awb_zone_bg, sizeof(awb_zone_bg));
+
+		/* Call the full cluster-weighted CT detection algorithm.
+		 * This replaces the simple awb_estimate_ct() averaging. */
+		Tiziano_Awb_Ct_Detect(
+			ct_zone_rgbg,                          /* zone rg+bg */
+			awb_zone_pix_cnt,                      /* pixel counts */
+			(const uint32_t *)_light_src,          /* light source colors */
+			_light_src_num,                        /* num light sources */
+			(const uint32_t *)_light_src,          /* light src boundaries */
+			(const uint32_t *)_awb_dis_tw,         /* [ct_wt_en, strength, ...] */
+			(const uint32_t *)_awb_wght,           /* weight mesh [15*15] */
+			AWB_STATS_COLS,                        /* cols */
+			AWB_STATS_ROWS,                        /* rows */
+			(const uint32_t *)_rg_pos,             /* rg bin positions */
+			(const uint32_t *)_bg_pos,             /* bg bin positions */
+			(const uint32_t *)_color_temp_mesh,    /* CT mesh [15*15] */
+			(const uint32_t *)_ls_w_lut,           /* per-bin weight LUT */
+			(const uint32_t *)_awb_cluster_head,   /* [dis_en, upper, lower] */
+			&target_ct,                            /* output: CT */
+			(const uint32_t *)(_ls_w_lut + 0x384), /* distance LUT (0x202 entries) */
+			_AwbPointPos,                          /* &point_pos */
+			(const uint32_t *)_awb_cluster_tail,   /* [en, dist, merge, zone, conv, iter] */
+			ct_tgt_rgbg,                           /* output: [target_rg, target_bg] */
+			&ct_status                             /* output: status */
+		);
+
+		if (ct_status != 0 || target_ct == 0)
+			target_ct = 5000;
+
+		target_rg = ct_tgt_rgbg[0];
+		target_bg = ct_tgt_rgbg[1];
+
+		/* Also compute simple averages for diagnostics / global tracking */
+		{
+			u64 rg_raw_sum = 0, bg_raw_sum = 0;
+			u32 rg_raw_cnt = 0;
+
+			for (zi = 0; zi < (int)total_zones; zi++) {
+				if (stats_g[zi] != 0 && stats_p[zi] >= _pixel_cnt_th) {
+					rg_raw_sum += (u32)div_u64((u64)stats_r[zi] << q, stats_g[zi]);
+					bg_raw_sum += (u32)div_u64((u64)stats_b[zi] << q, stats_g[zi]);
+					rg_raw_cnt++;
+				}
 			}
+			awb_zone_rg_global = rg_raw_cnt ?
+				(u32)div_u64(rg_raw_sum, rg_raw_cnt) : (1u << q);
+			awb_zone_bg_global = rg_raw_cnt ?
+				(u32)div_u64(bg_raw_sum, rg_raw_cnt) : (1u << q);
 		}
-
-		if (rg_raw_cnt)
-			rg_avg = (u32)div_u64(rg_raw_sum, rg_raw_cnt);
-		else
-			rg_avg = 1u << q;  /* unity in Q(q) */
-
-		if (bg_raw_cnt)
-			bg_avg = (u32)div_u64(bg_raw_sum, bg_raw_cnt);
-		else
-			bg_avg = 1u << q;
-
-		awb_zone_rg_global = rg_avg;
-		awb_zone_bg_global = bg_avg;
 
 		if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0) {
 			pr_info("AWB_FPGA_DIAG[%u]: total_zones=%u "
 				"rg_pix_cnt=%u bg_pix_cnt=%u "
-				"rg_avg=%u bg_avg=%u "
-				"rg_sum=%llu bg_sum=%llu "
-				"cof=%u,%u cof_q=%u,%u "
-				"zone_rg[0]=%u zone_bg[0]=%u "
-				"pixel_cnt_th=%u pix[0]=%u q=%u pp=0x%x\n",
+				"ct_target_rg=%u ct_target_bg=%u ct=%u "
+				"ct_status=%u zone_rg[0]=%u zone_bg[0]=%u "
+				"pixel_cnt_th=%u q=%u pp=0x%x\n",
 				fpga_diag_count, total_zones,
 				rg_pix_cnt, bg_pix_cnt,
-				rg_avg, bg_avg,
-				rg_sum, bg_sum,
-				cof_rg, cof_bg, cof_rg_q, cof_bg_q,
-				awb_zone_rg[0], awb_zone_bg[0],
-				_pixel_cnt_th, stats_p[0], q, pp);
+				target_rg, target_bg, target_ct,
+				ct_status, awb_zone_rg[0], awb_zone_bg[0],
+				_pixel_cnt_th, q, pp);
 		}
-
-		target_rg = rg_avg;
-		target_bg = bg_avg;
 	}
-
-	target_ct = awb_estimate_ct(target_rg, target_bg);
-	if (target_ct == 0)
-		target_ct = 5000;
 
 	if (awb_history_reset || awb_history_count == 0)
 		awb_history_fill(target_rg, target_bg, target_ct);
@@ -14226,13 +14437,12 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		awb_history_push(target_rg, target_bg, target_ct);
 
 	awb_history_average(&target_rg, &target_bg, &target_ct);
-	/* OEM Ct_Detect outputs targets in ~Q8 scale (256=neutral).
-	 * Our raw R/G,B/G averages are in Q(q) scale (1024=neutral for q=10).
-	 * Shift to Q8 before gain formula so 0x10000/target produces ~256 at neutral. */
+	/* Tiziano_Awb_Ct_Detect outputs target_rg/bg already in Q8 scale
+	 * (rounded from Q-format: (val + rounding) >> q).  256 = neutral.
+	 * Convert ratio to gain: gain = 0x10000 / ratio >> q. */
 	{
-		u32 q_shift = (_AwbPointPos[0] & 0x1f) - 8;
-		u32 rg_q8 = target_rg >> q_shift;
-		u32 bg_q8 = target_bg >> q_shift;
+		u32 rg_q8 = target_rg;
+		u32 bg_q8 = target_bg;
 		if (rg_q8 == 0) rg_q8 = 0x100;
 		if (bg_q8 == 0) bg_q8 = 0x100;
 		live_gr = awb_ratio_to_mf_gain(_AwbPointPos[0], rg_q8);
