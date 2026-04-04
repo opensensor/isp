@@ -4240,9 +4240,9 @@ static inline uint32_t bcsh_uinterp(uint32_t val_lo, uint32_t val_hi,
     if (!range)
         return val_lo;
     if (val_hi >= val_lo)
-        return val_lo + dist * (val_hi - val_lo) / range;
+        return val_lo + (u32)div_u64((u64)dist * (val_hi - val_lo), range);
     else
-        return val_lo - dist * (val_lo - val_hi) / range;
+        return val_lo - (u32)div_u64((u64)dist * (val_lo - val_hi), range);
 }
 
 static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
