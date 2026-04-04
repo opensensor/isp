@@ -797,18 +797,27 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
  * fix_point_mult2_32(16, mag_a, mag_b << 6).  This is equivalent to
  * standard Q16 multiply when the <<6 and final >>6 cancel out.
  * Use plain Q16 here and rely on the final >>6 for hardware scaling. */
-/* OEM uses fix_point_mult2_32(16, A, B << 6) per element which is
- * effectively (A * B) >> 10. Two matmuls = >> 20 total, then >> 6
- * in Tccm_RGBYUV = >> 26 total. Using >> 16 per matmul gave >> 38
- * total = 4096x too small (12 extra bits). Fix: >> 10 per matmul. */
+/* OEM EXACT: per-element sign/magnitude multiply matching
+ * fix_point_mult2_32(16, mag_a, mag_b << 6).
+ * Each product: split signs, multiply magnitudes with << 6 pre-shift,
+ * >> 16 post-shift = net >> 10 per product. Accumulate with sign. */
 static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
             int64_t acc = 0;
-            for (int k = 0; k < 3; ++k)
-                acc += (int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j];
-            O[i * 3 + j] = (int32_t)(acc >> 13);
+            for (int k = 0; k < 3; ++k) {
+                int32_t a = A[i * 3 + k];
+                int32_t b = B[k * 3 + j];
+                uint32_t mag_a = (a < 0) ? -a : a;
+                uint32_t mag_b = (b < 0) ? -b : b;
+                int sign = ((a < 0) ^ (b < 0)) ? -1 : 1;
+                /* OEM: fix_point_mult2_32(16, mag_a, mag_b << 6)
+                 * = (mag_a * (mag_b << 6)) >> 16 */
+                uint32_t prod = (uint32_t)(((uint64_t)mag_a * (mag_b << 6)) >> 16);
+                acc += sign * (int64_t)prod;
+            }
+            O[i * 3 + j] = (int32_t)acc;
         }
     }
 }
