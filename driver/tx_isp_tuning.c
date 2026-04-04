@@ -74,7 +74,7 @@ module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWU
 MODULE_PARM_DESC(force_bypass_adr,
 			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
 
-static int tisp_force_bypass_defog = 0;
+static int tisp_force_bypass_defog = 1; /* Defog not fully implemented — bypass by default */
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_defog,
 			 "Debug isolate FOV issues by forcing Defog bypass (default: 0)");
@@ -1651,7 +1651,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD14;  /* Working blocks + LSC + MDNS/RDNS clocked (GIB needs binary-level debug) */
+static uint isp_block_enable = 0xDD04;  /* Known-working crisp set: DPC+DMSC+Gamma+BCSH+Sharpen+SDNS (no GIB/Defog/MDNS/YDNS) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
