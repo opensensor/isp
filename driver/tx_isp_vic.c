@@ -1907,6 +1907,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
+        /* Ensure sensor is streaming BEFORE VIC unlock — VIC needs active MIPI
+         * data to complete the 2→4→0x1a0 unlock handshake. GC2053 starts MIPI
+         * during init, but SC2336 (and others) wait for s_stream. Call the
+         * sensor's s_stream here so MIPI data is flowing before we poll reg0. */
+        if (isp_dev && isp_dev->sensor) {
+            struct tx_isp_subdev *sensor_sd = &isp_dev->sensor->sd;
+            if (sensor_sd->ops && sensor_sd->ops->video &&
+                sensor_sd->ops->video->s_stream) {
+                pr_info("tx_isp_vic_start: starting sensor MIPI stream before VIC unlock\n");
+                sensor_sd->ops->video->s_stream(sensor_sd, 1);
+            }
+        }
+
         /* OEM BN: tight 2 -> 4 -> 1a0 write stream, no extra calls before arm */
         writel(2, vic_regs + 0x0);
         writel(4, vic_regs + 0x0);

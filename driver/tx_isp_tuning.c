@@ -65,7 +65,7 @@ extern void tx_isp_wakeup_frame_channels(void);
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 0; /* Match OEM: ADR not force-bypassed */
+static int tisp_force_bypass_adr = 1; /* ADR init corrupts pipeline; keep bypassed until fixed */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
 			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
@@ -1772,7 +1772,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DDB4;  /* Full OEM set: DPC+LSC+GIB+DMSC+Gamma+Defog+BCSH+Sharpen+SDNS+MDNS+YDNS */
+static uint isp_block_enable = 0x3DD14;  /* All blocks except GIB(5) and ADR(7) — GIB causes posterization (unsolved) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -14380,9 +14380,6 @@ int tiziano_gib_init(void)
                           tiziano_gib_deir_g_m,
                           tiziano_gib_deir_b_m);
 
-    /* Program GB digital gain and BLC registers — the OEM only does this
-     * from tisp_gb_init (WDR path), but we need it here to ensure registers
-     * 0x1000-0x1010 are initialized before GIB starts processing. */
     tisp_gb_params_refresh();
     tisp_gb_init_reg();
 
@@ -20051,7 +20048,6 @@ int tisp_tgain_update(uint32_t gain)
      * Calls gated on block readiness to match last-known-working configuration.
      * DPC and MDNS are gated on deferred-init flags: only refresh after
      * libimp has sent real tuning params via set_par_cfg. */
-    /* GIB/BLC registers (0x1014-0x106c) require GIB block enabled (bit 5) */
     if (isp_block_enable & 0x20) {
         tisp_gib_gain_interpolation(gain);
         tisp_gb_blc_again_interp(gain, 0);

@@ -5064,8 +5064,16 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
      */
     vic_dev->sensor_attr_ptr = stored_attr;
 
-    pr_info("*** ispcore_sync_sensor_attr: copied %zu bytes, total_width=%u total_height=%u ***\n",
-            sensor_attr_bytes, attr->total_width, attr->total_height);
+    /* Set VIC frame dimensions from sensor — used by vic_mdma_enable for
+     * stride/frame_size calculations. Without this, width=0 → broken DMA. */
+    if (isp_dev->sensor && isp_dev->sensor->video.mbus.width)
+        vic_dev->width = isp_dev->sensor->video.mbus.width;
+    if (isp_dev->sensor && isp_dev->sensor->video.mbus.height)
+        vic_dev->height = isp_dev->sensor->video.mbus.height;
+
+    pr_info("*** ispcore_sync_sensor_attr: copied %zu bytes, total_width=%u total_height=%u vic=%ux%u ***\n",
+            sensor_attr_bytes, attr->total_width, attr->total_height,
+            vic_dev->width, vic_dev->height);
 
     /* Binary Ninja: Extract and process sensor timing parameters */
     again = stored_attr->again;

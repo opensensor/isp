@@ -1790,31 +1790,27 @@ static int sensor_hw_reset_enable(void) {
 }
 
 static int sensor_alloc_analog_gain(int gain) {
-    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc0)
-     * int32_t var_10 = 0
-     * int32_t result = $v0_2(arg1, 0x10, &var_10)
-     * *arg2 = var_10.w
-     * return result */
+    unsigned int sensor_again = 0;
+    int ret;
 
-    if (!ourISPdev || !ourISPdev->sensor) {
-        return gain; /* Return input gain as fallback */
+    if (!ourISPdev || !ourISPdev->sensor)
+        return gain;
+
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again) {
+        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_again(gain, 0x10, &sensor_again);
+        return ret;
     }
-
-    /* This would call sensor-specific gain allocation function */
-    /* For now, return the allocated gain value */
-    pr_debug("sensor_alloc_analog_gain: gain=%d\n", gain);
     return gain;
 }
 
 static int sensor_alloc_analog_gain_short(int gain) {
-    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc4)
-     * int32_t var_10 = 0
-     * int32_t result = $v0_2(arg1, 0x10, &var_10)
-     * *(arg2 + 0xe) = var_10.w
-     * return result */
+    unsigned int sensor_again = 0;
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    if (!ourISPdev || !ourISPdev->sensor)
         return gain;
+
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short) {
+        return ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short(gain, 0x10, &sensor_again);
     }
 
     pr_debug("sensor_alloc_analog_gain_short: gain=%d\n", gain);
@@ -1832,38 +1828,33 @@ static int sensor_alloc_digital_gain(int gain) {
         return gain;
     }
 
-    pr_debug("sensor_alloc_digital_gain: gain=%d\n", gain);
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->sensor->attr.sensor_ctrl.alloc_dgain) {
+        unsigned int sensor_dgain = 0;
+        return ourISPdev->sensor->attr.sensor_ctrl.alloc_dgain(gain, 0x10, &sensor_dgain);
+    }
     return gain;
 }
 
 static int sensor_alloc_integration_time(int time) {
-    /* Binary Ninja: int32_t $v1_2 = *(*(g_ispcore + 0x120) + 0xd0)
-     * int32_t var_10 = 0
-     * int32_t result
-     * if ($v1_2 != 0)
-     *     result = $v1_2(arg1, 0, &var_10)
-     *     *(arg2 + 0x10) = var_10.w
-     * else
-     *     result = arg1
-     *     *(arg2 + 0x10) = arg1.w
-     * return result */
+    if (!ourISPdev || !ourISPdev->sensor)
+        return time;
 
-    if (!ourISPdev || !ourISPdev->sensor) {
-        return time; /* Return input time as fallback */
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time) {
+        unsigned int sensor_it = 0;
+        return ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time(time, 0, &sensor_it);
     }
-
-    pr_debug("sensor_alloc_integration_time: time=%d\n", time);
     return time;
 }
 
 static int sensor_alloc_integration_time_short(int time) {
-    /* Binary Ninja: Similar to above but uses offset 0xd4 and stores at arg2 + 0x12 */
-
-    if (!ourISPdev || !ourISPdev->sensor) {
+    if (!ourISPdev || !ourISPdev->sensor)
         return time;
-    }
 
-    pr_debug("sensor_alloc_integration_time_short: time=%d\n", time);
+    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short) {
+        unsigned int sensor_it = 0;
+        return ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short(time, 0, &sensor_it);
+    }
     return time;
 }
 
