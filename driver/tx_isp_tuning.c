@@ -623,11 +623,28 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
  * Use plain Q16 here and rely on the final >>6 for hardware scaling. */
 static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 3; ++j) {
+    int i, j, k;
+    for (i = 0; i < 3; ++i) {
+        for (j = 0; j < 3; ++j) {
             int64_t acc = 0;
-            for (int k = 0; k < 3; ++k)
+            for (k = 0; k < 3; ++k)
                 acc += ((int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j]) >> 16;
+            O[i * 3 + j] = (int32_t)acc;
+        }
+    }
+}
+
+/* OEM EXACT: first matmul uses fix_point_mult2_32(16, mag_a, mag_b << 6)
+ * which is equivalent to (A * B) >> 10.  The << 6 compensates for the CCM
+ * being in Q10 while M is in Q16, keeping the intermediate result in Q16. */
+static void tiziano_matmul3_q10(const int32_t A[9], const int32_t B[9], int32_t O[9])
+{
+    int i, j, k;
+    for (i = 0; i < 3; ++i) {
+        for (j = 0; j < 3; ++j) {
+            int64_t acc = 0;
+            for (k = 0; k < 3; ++k)
+                acc += ((int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j]) >> 10;
             O[i * 3 + j] = (int32_t)acc;
         }
     }
@@ -655,8 +672,10 @@ static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int
     int i;
     uint8_t hue = 0x3c;
 
-    /* OEM order: (M × CCM) × Minv */
-    tiziano_matmul3_q16(M, CCM, T1);
+    /* OEM order: (M × CCM) × Minv
+     * OEM first mul uses fix_point_mult2_32(16, mag, mag<<6) = effective >>10
+     * OEM second mul uses fix_point_mult2_32(16, mag, mag) = effective >>16 */
+    tiziano_matmul3_q10(M, CCM, T1);
     tiziano_matmul3_q16(T1, Minv, T2);
 
     /* Compute hue rotation parameters (s1=cos, s2=sin, sgn=direction) */
