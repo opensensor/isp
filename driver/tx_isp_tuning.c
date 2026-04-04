@@ -460,6 +460,18 @@ static uint32_t bcsh_clip0[4] = { 0x0000, 0x03ff, 0x0000, 0x03ff }; /* OEM: tisp
 static uint32_t bcsh_clip1[4] = { 0x0000, 0x036c, 0x0040, 0x03bc }; /* OEM: tisp_BCSH_au32clip1 */
 static uint32_t bcsh_clip2[4] = { 0x0040, 0x03ac, 0x0040, 0x03bc }; /* OEM: tisp_BCSH_au32clip2 */
 
+/* Signed CCM matrices (OEM: tisp_BCSH_as32CCMMatrix_d/t/a).
+ * These are the reg2para-converted (14-bit unsigned -> signed) versions of bcsh_CCM_d/t/a.
+ * Populated by tiziano_bcsh_Tccm_Comp2Orig(). */
+static int32_t bcsh_CCM_d_signed[9];
+static int32_t bcsh_CCM_t_signed[9];
+static int32_t bcsh_CCM_a_signed[9];
+/* Active CCM (OEM: tisp_BCSH_as32CCMMatrix) -- result of CT interpolation */
+static int32_t bcsh_as32CCMMatrix[9];
+/* CT hysteresis state for ct_bcsh_interpolation (OEM: ct_flag.31949 / ct_flag_last.31950) */
+static uint32_t bcsh_ct_flag_cur_interp;
+static uint32_t bcsh_ct_flag_last_interp;
+
 static uint32_t bcsh_CCM_d_wdr[9] = {
 	0x0000, 0x03ff, 0x0000, 0x03ff, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
 };
@@ -542,6 +554,108 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
 static inline int32_t bcsh_reg2para(uint32_t regval)
 {
     return (regval >= 0x2000) ? ((int32_t)regval - 0x4000) : (int32_t)regval;
+}
+
+/* OEM EXACT: tiziano_bcsh_Tccm_Comp2Orig -- convert all three CCM sets
+ * from 14-bit compressed (unsigned register) format to signed original format.
+ * HLIL @ 0x2873c: calls tiziano_bcsh_reg2para for D, T, and A matrices.
+ * Populates bcsh_CCM_d_signed, bcsh_CCM_t_signed, bcsh_CCM_a_signed. */
+static void tiziano_bcsh_Tccm_Comp2Orig(void)
+{
+    const uint32_t *D = bcsh_wdr_enabled ? bcsh_CCM_d_wdr : bcsh_CCM_d;
+    const uint32_t *T = bcsh_wdr_enabled ? bcsh_CCM_t_wdr : bcsh_CCM_t;
+    const uint32_t *A = bcsh_wdr_enabled ? bcsh_CCM_a_wdr : bcsh_CCM_a;
+    int i;
+
+    for (i = 0; i < 9; i++) {
+        bcsh_CCM_d_signed[i] = bcsh_reg2para(D[i]);
+        bcsh_CCM_t_signed[i] = bcsh_reg2para(T[i]);
+        bcsh_CCM_a_signed[i] = bcsh_reg2para(A[i]);
+    }
+}
+
+/* OEM EXACT: tiziano_ct_bcsh_interpolation -- CT-based CCM blending.
+ * HLIL @ 0x28790: determines ct_flag from CT value, applies hysteresis
+ * (skips update if flag unchanged for zones 0/2/4 unless BCSH_real),
+ * then either copies or interpolates between D/T/A signed CCM sets.
+ *
+ * CT zones (OEM thresholds):
+ *   ct >= 0x1357 -> flag=0 (D zone, copy D)
+ *   ct >= 0x0F0B -> flag=1 (D<->T interpolation, denominator 0x44C)
+ *   ct >= 0x0EA7 -> flag=2 (T zone, copy T)
+ *   ct >= 0x0B23 -> flag=3 (T<->A interpolation, denominator 0x384)
+ *   ct <  0x0B23 -> flag=4 (A zone, copy A)
+ *
+ * After blending, result is stored into bcsh_as32CCMMatrix. */
+static void tiziano_ct_bcsh_interpolation(uint32_t ct)
+{
+    uint32_t flag;
+    int i;
+
+    /* Determine CT zone flag */
+    if (ct >= 0x1357) {
+        flag = 0;
+    } else if (ct >= 0x0F0B) {
+        flag = 1;
+    } else if (ct >= 0x0EA7) {
+        flag = 2;
+    } else if (ct >= 0x0B23) {
+        flag = 3;
+    } else {
+        flag = 4;
+    }
+
+    bcsh_ct_flag_cur_interp = flag;
+
+    /* Hysteresis: skip update if flag unchanged (unless BCSH_real forces it) */
+    if (!BCSH_real) {
+        if (flag == 0 && bcsh_ct_flag_last_interp == 0)
+            return;
+        if ((flag == 2 || flag == 4) && bcsh_ct_flag_last_interp == flag)
+            return;
+    }
+
+    bcsh_ct_flag_last_interp = flag;
+
+    switch (flag) {
+    case 0: /* D zone: copy D */
+        memcpy(bcsh_as32CCMMatrix, bcsh_CCM_d_signed, 0x24);
+        break;
+
+    case 1: { /* D<->T interpolation */
+        uint32_t w = (ct >= 0x0F0A) ? (ct - 0x0F0A) : (0x0F0A - ct);
+        for (i = 0; i < 9; i++) {
+            int32_t t_val = bcsh_CCM_t_signed[i];
+            int32_t d_val = bcsh_CCM_d_signed[i];
+            if (d_val >= t_val)
+                bcsh_as32CCMMatrix[i] = (int32_t)((uint32_t)((d_val - t_val) * w) / 0x44C) + t_val;
+            else
+                bcsh_as32CCMMatrix[i] = t_val - (int32_t)((uint32_t)((t_val - d_val) * w) / 0x44C);
+        }
+        break;
+    }
+
+    case 2: /* T zone: copy T */
+        memcpy(bcsh_as32CCMMatrix, bcsh_CCM_t_signed, 0x24);
+        break;
+
+    case 3: { /* T<->A interpolation */
+        uint32_t w = (ct >= 0x0B22) ? (ct - 0x0B22) : (0x0B22 - ct);
+        for (i = 0; i < 9; i++) {
+            int32_t a_val = bcsh_CCM_a_signed[i];
+            int32_t t_val = bcsh_CCM_t_signed[i];
+            if (t_val >= a_val)
+                bcsh_as32CCMMatrix[i] = (int32_t)((uint32_t)((t_val - a_val) * w) / 0x384) + a_val;
+            else
+                bcsh_as32CCMMatrix[i] = a_val - (int32_t)((uint32_t)((a_val - t_val) * w) / 0x384);
+        }
+        break;
+    }
+
+    case 4: /* A zone: copy A */
+        memcpy(bcsh_as32CCMMatrix, bcsh_CCM_a_signed, 0x24);
+        break;
+    }
 }
 
 /* Build active CCM (as32CCMMatrix) per OEM CT rules from D/T/A sets.
@@ -4365,9 +4479,18 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
     rgb_in[2] = (int32_t)RGB[2];
     tiziano_bcsh_Toffset_RGB2YUV((int32_t *)bcsh_OffsetRGB2yuv, rgb_in);
 
-    /* TODO: OEM calls tiziano_ct_bcsh_interpolation(tiziano_bcsh_Tccm_Comp2Orig())
-     * here to do CT-based CCM interpolation (reg2para on CCM matrices), then
-     * tiziano_bcsh_Tccm_RGB2YUV before TransitParam. */
+    /* OEM EXACT: convert CCM matrices from compressed to signed, then interpolate
+     * based on CT, then transform into YUV domain for HMatrix.
+     * HLIL @ 0x2a52c: tiziano_ct_bcsh_interpolation(tiziano_bcsh_Tccm_Comp2Orig()) */
+    {
+        uint32_t ct = 0x1357; /* default to Daylight if CT unknown */
+        if (s_bcsh_ct_override_valid)
+            ct = s_bcsh_ct_override;
+        else if (tuning)
+            ct = tuning->wb_temp;
+        tiziano_bcsh_Tccm_Comp2Orig();
+        tiziano_ct_bcsh_interpolation(ct);
+    }
 
     /* Compute adjusted S-values, C-values, slopes, offsets from controls */
     tiziano_bcsh_TransitParam(tuning);
@@ -7772,6 +7895,229 @@ static void tiziano_defog_params_init(void)
     /* Control refresh and block grid write */
     tisp_defog_all_reg_refresh();
     tiziano_defog_set_reg_params();
+}
+
+/* OEM EXACT: tiziano_defog_params_refresh -- load defog parameters from tuning bin.
+ * HLIL @ 0x45050.  Loads weight LUTs, cent arrays, EV/TRSY lists, main para,
+ * color control, LC/CC arrays, dark arrays, block T arrays, FPGA para, WDR variants.
+ * If rgbra_list[0]==1, loads from tuning bin; if 0, uses _tmp defaults; else error.
+ *
+ * Tuning bin offsets computed from OEM absolute addresses minus base 0x84B10. */
+#define DEFOG_TPARAMS_WEIGHTLUT20_BIN    0x107D8
+#define DEFOG_TPARAMS_WEIGHTLUT02_BIN    0x10858
+#define DEFOG_TPARAMS_WEIGHTLUT12_BIN    0x108D8
+#define DEFOG_TPARAMS_WEIGHTLUT22_BIN    0x10958
+#define DEFOG_TPARAMS_WEIGHTLUT21_BIN    0x109D8
+#define DEFOG_TPARAMS_CENT3_W_DIS_BIN    0x10A90
+#define DEFOG_TPARAMS_CENT5_W_DIS_BIN    0x10AF0
+#define DEFOG_TPARAMS_EV_LIST            0x10B6C
+#define DEFOG_TPARAMS_TRSY0_LIST         0x10B90
+#define DEFOG_TPARAMS_TRSY1_LIST         0x10BB4
+#define DEFOG_TPARAMS_TRSY2_LIST         0x10BD8
+#define DEFOG_TPARAMS_TRSY3_LIST         0x10BFC
+#define DEFOG_TPARAMS_TRSY4_LIST         0x10C20
+#define DEFOG_TPARAMS_RGBRA_LIST         0x10C44
+#define DEFOG_TPARAMS_MAIN_PARA          0x10C68
+#define DEFOG_TPARAMS_COLOR_CONTROL      0x10C94
+#define DEFOG_TPARAMS_LC_S               0x10CCC
+#define DEFOG_TPARAMS_LC_V               0x10CF4
+#define DEFOG_TPARAMS_CC_S               0x10D1C
+#define DEFOG_TPARAMS_CC_V               0x10D3C
+#define DEFOG_TPARAMS_DARK_L1            0x10D60
+#define DEFOG_TPARAMS_DARK_L2            0x10D88
+#define DEFOG_TPARAMS_BLOCK_T_Y          0x10DB0
+#define DEFOG_TPARAMS_BLOCK_T_X          0x10DC4
+#define DEFOG_TPARAMS_T_PAR_LIST1        0x10DD8
+#define DEFOG_TPARAMS_T_PAR_LIST2        0x10E04
+#define DEFOG_TPARAMS_MANUAL_CTRL        0x10E78
+#define DEFOG_TPARAMS_EV_LIST_WDR        0x10E94
+#define DEFOG_TPARAMS_TRSY0_LIST_WDR     0x10EB8
+#define DEFOG_TPARAMS_TRSY1_LIST_WDR     0x10EDC
+#define DEFOG_TPARAMS_TRSY2_LIST_WDR     0x10F00
+#define DEFOG_TPARAMS_TRSY3_LIST_WDR     0x10F24
+#define DEFOG_TPARAMS_TRSY4_LIST_WDR     0x10F48
+#define DEFOG_TPARAMS_MAIN_PARA_WDR      0x10F6C
+#define DEFOG_TPARAMS_BLOCK_T_X_WDR      0x10F98
+#define DEFOG_TPARAMS_FPGA_PARA_WDR      0x10FAC
+#define DEFOG_TPARAMS_FPGA_PARA          0x10FEC
+
+static int tiziano_defog_params_refresh(void)
+{
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    int32_t rgbra_mode;
+
+    if (!p || !tuning_bin_loaded)
+        return 0;
+
+    /* Load rgbra_list from tuning bin */
+    memcpy(defog_rgbra_list, p + DEFOG_TPARAMS_RGBRA_LIST, 0x24);
+    rgbra_mode = (int32_t)le32_at(defog_rgbra_list);
+
+    if (rgbra_mode == 1) {
+        /* Load weight LUTs from tuning bin */
+        memcpy(defog_weightlut20,       p + DEFOG_TPARAMS_WEIGHTLUT20_BIN, 0x80);
+        memcpy(defog_weightlut02,       p + DEFOG_TPARAMS_WEIGHTLUT02_BIN, 0x80);
+        memcpy(defog_weightlut12,       p + DEFOG_TPARAMS_WEIGHTLUT12_BIN, 0x80);
+        memcpy(defog_weightlut22,       p + DEFOG_TPARAMS_WEIGHTLUT22_BIN, 0x80);
+        memcpy(defog_weightlut21,       p + DEFOG_TPARAMS_WEIGHTLUT21_BIN, 0x80);
+        memcpy(defog_cent3_w_dis_array, p + DEFOG_TPARAMS_CENT3_W_DIS_BIN, 0x60);
+        memcpy(defog_cent5_w_dis_array, p + DEFOG_TPARAMS_CENT5_W_DIS_BIN, 0x7c);
+    } else if (rgbra_mode == 0) {
+        /* Use built-in _tmp defaults */
+        memcpy(defog_weightlut20,       param_defog_weightlut20_tmp, 0x80);
+        memcpy(defog_weightlut02,       param_defog_weightlut02_tmp, 0x80);
+        memcpy(defog_weightlut12,       param_defog_weightlut12_tmp, 0x80);
+        memcpy(defog_weightlut22,       param_defog_weightlut22_tmp, 0x80);
+        memcpy(defog_weightlut21,       param_defog_weightlut21_tmp, 0x80);
+        memcpy(defog_cent3_w_dis_array, param_defog_cent3_w_dis_array_tmp, 0x60);
+        memcpy(defog_cent5_w_dis_array, param_defog_cent5_w_dis_array_tmp, 0x7c);
+    } else {
+        return -1;
+    }
+
+    /* Load t_par_list1, t_par_list2, manual_ctrl */
+    memcpy(defog_t_par_list1,  p + DEFOG_TPARAMS_T_PAR_LIST1,  0x2c);
+    memcpy(defog_t_par_list2,  p + DEFOG_TPARAMS_T_PAR_LIST2,  0x74);
+    memcpy(defog_manual_ctrl,  p + DEFOG_TPARAMS_MANUAL_CTRL,  0x1c);
+
+    /* Load EV and TRSY lists (non-WDR) */
+    memcpy(defog_ev_list,      p + DEFOG_TPARAMS_EV_LIST,      0x24);
+    memcpy(defog_trsy0_list,   p + DEFOG_TPARAMS_TRSY0_LIST,   0x24);
+    memcpy(defog_trsy1_list,   p + DEFOG_TPARAMS_TRSY1_LIST,   0x24);
+    memcpy(defog_trsy2_list,   p + DEFOG_TPARAMS_TRSY2_LIST,   0x24);
+    memcpy(defog_trsy3_list,   p + DEFOG_TPARAMS_TRSY3_LIST,   0x24);
+    memcpy(defog_trsy4_list,   p + DEFOG_TPARAMS_TRSY4_LIST,   0x24);
+
+    /* Load main para, color control, LC/CC, dark arrays */
+    memcpy(defog_main_para_array,     p + DEFOG_TPARAMS_MAIN_PARA,      0x2c);
+    memcpy(defog_color_control_array, p + DEFOG_TPARAMS_COLOR_CONTROL,  0x38);
+    memcpy(defog_lc_s_array,          p + DEFOG_TPARAMS_LC_S,           0x28);
+    memcpy(defog_lc_v_array,          p + DEFOG_TPARAMS_LC_V,           0x28);
+    memcpy(defog_cc_s_array,          p + DEFOG_TPARAMS_CC_S,           0x20);
+    memcpy(defog_cc_v_array,          p + DEFOG_TPARAMS_CC_V,           0x24);
+    memcpy(defog_dark_l1_array,       p + DEFOG_TPARAMS_DARK_L1,        0x28);
+    memcpy(defog_dark_l2_array,       p + DEFOG_TPARAMS_DARK_L2,        0x28);
+
+    /* Load block T arrays (non-WDR) */
+    memcpy(defog_block_t_y_array,     p + DEFOG_TPARAMS_BLOCK_T_Y,      0x14);
+    memcpy(defog_block_t_x_array,     p + DEFOG_TPARAMS_BLOCK_T_X,      0x14);
+
+    /* Load WDR variants */
+    memcpy(defog_ev_list_wdr,                p + DEFOG_TPARAMS_EV_LIST_WDR,    0x24);
+    memcpy(defog_trsy0_list_wdr,             p + DEFOG_TPARAMS_TRSY0_LIST_WDR, 0x24);
+    memcpy(defog_trsy1_list_wdr,             p + DEFOG_TPARAMS_TRSY1_LIST_WDR, 0x24);
+    memcpy(defog_trsy2_list_wdr,             p + DEFOG_TPARAMS_TRSY2_LIST_WDR, 0x24);
+    memcpy(defog_trsy3_list_wdr,             p + DEFOG_TPARAMS_TRSY3_LIST_WDR, 0x24);
+    memcpy(defog_trsy4_list_wdr,             p + DEFOG_TPARAMS_TRSY4_LIST_WDR, 0x24);
+    memcpy(param_defog_main_para_wdr_array,  p + DEFOG_TPARAMS_MAIN_PARA_WDR,  0x2c);
+    memcpy(param_defog_block_t_x_wdr_array,  p + DEFOG_TPARAMS_BLOCK_T_X_WDR,  0x14);
+    memcpy(param_defog_fpga_para_wdr_array,  p + DEFOG_TPARAMS_FPGA_PARA_WDR,  0x40);
+    memcpy(param_defog_fpga_para_array,      p + DEFOG_TPARAMS_FPGA_PARA,       0x40);
+
+    return 0;
+}
+
+/* OEM EXACT: tiziano_defog_dn_params_refresh -- day/night transition handler.
+ * HLIL @ 0x455f0: calls params_refresh, params_init, set_reg_params. */
+int tiziano_defog_dn_params_refresh(void)
+{
+    tiziano_defog_params_refresh();
+    tiziano_defog_params_init();
+    tiziano_defog_set_reg_params();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_defog_get_data -- extract per-block RGB sums and histogram
+ * from a DMA buffer page.
+ * HLIL @ 0x4237c: reads 4 words per block entry, unpacks 24-bit B, 24-bit G,
+ * 24-bit R sums, and 16-bit histogram values into static arrays. */
+static void tiziano_defog_get_data(const uint8_t *buf)
+{
+    const uint32_t *src = (const uint32_t *)(buf + 8);
+    uint32_t *hist = defog_block_hist_info;
+    int i;
+
+    for (i = 0; i < (0x2d0 / 4); i++) {
+        uint32_t w0 = src[0];
+        uint32_t w1 = src[1];
+        uint32_t w2 = src[2];
+        uint32_t w3 = src[3];
+
+        defog_sum_block_b[i] = w0 & 0xffffff;
+        defog_sum_block_g[i] = ((w1 & 0xffff) << 8) | (w0 >> 24);
+        defog_sum_block_r[i] = ((w3 >> 16) & 0xfff) << 12 | ((w1 >> 16) & 0xfff);
+
+        hist[0] = w2 & 0xffff;
+        hist[1] = w2 >> 16;
+        hist[2] = w3 & 0xffff;
+
+        src += 4;
+        hist += 3;
+    }
+}
+
+/* OEM EXACT: tiziano_defog_interrupt_static -- defog DMA interrupt handler.
+ * HLIL @ 0x4253c: reprograms block grid, reads DMA base from reg 0x5ba4,
+ * syncs each 0x1000-byte page and extracts stats with tiziano_defog_get_data,
+ * then pushes event 3. */
+static irqreturn_t tiziano_defog_interrupt_static(int irq, void *dev_id)
+{
+    uint32_t dma_status;
+    uint32_t dma_base;
+    struct tisp_event_record event_data = {0};
+
+    /* Re-program the block grid each interrupt */
+    tiziano_defog_set_reg_params();
+
+    /* Read current DMA write pointer */
+    dma_status = system_reg_read(0x5ba4);
+    dma_base = (uint32_t)(unsigned long)dev_id;
+
+    /* Process up to 4 DMA pages of 0x1000 bytes each.
+     * OEM checks dma_status against page boundaries and syncs each valid page. */
+    if (dma_base != 0) {
+        if (dma_status == dma_base)
+            tiziano_defog_get_data((const uint8_t *)(unsigned long)dma_base);
+        if (dma_status == dma_base + 0x1000)
+            tiziano_defog_get_data((const uint8_t *)(unsigned long)(dma_base + 0x1000));
+        if (dma_status == dma_base + 0x2000)
+            tiziano_defog_get_data((const uint8_t *)(unsigned long)(dma_base + 0x2000));
+        if (dma_status == dma_base + 0x3000)
+            tiziano_defog_get_data((const uint8_t *)(unsigned long)(dma_base + 0x3000));
+    }
+
+    /* Push defog event (event ID 3) */
+    event_data.id = 3;
+    tisp_event_push(&event_data);
+    return IRQ_HANDLED;
+}
+
+/* OEM EXACT: tiziano_defog_algorithm -- defog per-frame processing.
+ * HLIL @ 0x43ab8: manages frame counter and update flag.
+ * Without the proprietary tisp_defog_soft_process library we handle
+ * the frame accounting and let the block grid be maintained by the IRQ path. */
+static int tiziano_defog_algorithm(void)
+{
+    /* OEM: frames < 2 => no update; else update */
+    if (defog_frm_num < 2)
+        defog_update_paras = 0;
+    else
+        defog_update_paras = 1;
+
+    /* Increment frame counter, wrap at 0x10000 to 0x80 (OEM exact) */
+    defog_frm_num++;
+    if (defog_frm_num == 0x10000)
+        defog_frm_num = 0x80;
+
+    return 0;
+}
+
+/* OEM EXACT: tisp_defog_process -- event callback for defog.
+ * HLIL @ 0x43cf4: just calls tiziano_defog_algorithm. */
+static int tisp_defog_process(void)
+{
+    tiziano_defog_algorithm();
+    return 0;
 }
 
 /* Optional per-frame stats provider hook for Defog */
@@ -17175,7 +17521,9 @@ int tiziano_hldc_init(void)
     return tisp_hldc_apply_par_array();
 }
 
-/* tiziano_defog_init - Defog initialization */
+/* tiziano_defog_init - Defog initialization
+ * OEM HLIL @ 0x45f14: sets geometry, programs regs, loads params from tuning bin,
+ * registers IRQ handler (0x14) and event callback (3). */
 int tiziano_defog_init(uint32_t width, uint32_t height)
 {
     if (tisp_force_bypass_defog) {
@@ -17187,6 +17535,16 @@ int tiziano_defog_init(uint32_t width, uint32_t height)
     pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
     tisp_defog_set_frame_geometry(width, height);
     tisp_defog_all_reg_refresh();
+
+    /* OEM: load params from tuning bin, init registers, program block grid */
+    tiziano_defog_params_refresh();
+    tiziano_defog_params_init();
+    tiziano_defog_set_reg_params();
+
+    /* OEM: register defog DMA IRQ handler and event processing callback */
+    system_irq_func_set(0x14, tiziano_defog_interrupt_static);
+    tisp_event_set_cb(3, tisp_defog_process);
+
     return 0;
 }
 
@@ -19404,25 +19762,7 @@ int tiziano_rdns_dn_params_refresh(void)
     return 0;
 }
 
-/* OEM EXACT: tiziano_defog_params_refresh — reload defog arrays from tuning data.
- * The OEM version copies ~40 arrays from the parameter block. Since defog
- * parameters are currently set via ioctl (tisp_defog_set_par_cfg), this
- * stub is a placeholder until full tuning bin offsets are mapped. */
-static void tiziano_defog_params_refresh(void)
-{
-    /* TODO: implement full memcpy chain from tuning bin when offsets are mapped */
-    pr_debug("tiziano_defog_params_refresh: stub (defog uses ioctl-set params)\n");
-}
-
-/* OEM EXACT: tiziano_defog_dn_params_refresh — day/night defog transition.
- * Reloads defog params, re-inits cent arrays, then rewrites defog registers. */
-int tiziano_defog_dn_params_refresh(void)
-{
-    tiziano_defog_params_refresh();
-    tiziano_defog_params_init();
-    tiziano_defog_set_reg_params();
-    return 0;
-}
+/* Note: tiziano_defog_dn_params_refresh is defined earlier (near defog_init). */
 
 /* OEM EXACT: tiziano_adr_dn_params_refresh — day/night ADR transition.
  * Reloads ADR params, then re-inits ADR _now pointers and kneepoints. */
@@ -21329,6 +21669,17 @@ int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3,
     return 0;
 }
 EXPORT_SYMBOL(tiziano_deflicker_expt);
+
+/* OEM EXACT: tiziano_deflicker_expt_tune -- wrapper that calls tiziano_deflicker_expt
+ * with the global _deflick_lut and _nodes_num arrays.
+ * HLIL @ 0x5320c: tiziano_deflicker_expt(arg1, arg2, arg3, arg4, &_deflick_lut, &_nodes_num) */
+int tiziano_deflicker_expt_tune(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
+{
+    tiziano_deflicker_expt(arg1, arg2, arg3, arg4,
+                           _deflick_lut.data, (uint32_t *)&_nodes_num.data[0]);
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_deflicker_expt_tune);
 
 /* tiziano_ae_params_refresh - Binary Ninja EXACT implementation */
 int tiziano_ae_params_refresh(void)
