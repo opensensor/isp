@@ -767,7 +767,7 @@ static inline uint32_t tiziano_bcsh_StrenCal_part0(uint32_t a1, uint32_t a2, uin
     uint32_t d45 = (a4 >= a5) ? (a4 - a5) : (a5 - a4);
     if (d23 == 0) return a4;
     uint64_t num = (uint64_t)d21 * d45 + (uint64_t)d23 * a4;
-    return (uint32_t)(num / d23);
+    return (uint32_t)div_u64(num, d23);
 }
 
 static inline uint32_t tiziano_bcsh_StrenCal(uint32_t a1, uint32_t a2, uint32_t a3,
@@ -782,7 +782,7 @@ static inline uint32_t tiziano_bcsh_StrenCal(uint32_t a1, uint32_t a2, uint32_t 
     uint32_t d45 = (a4 >= a5) ? (a4 - a5) : (a5 - a4);
     if (d23 == 0) return a5;
     uint64_t num = (uint64_t)d31 * d45 + (uint64_t)d23 * a5;
-    return (uint32_t)(num / d23);
+    return (uint32_t)div_u64(num, d23);
 }
 
 /* MJPEG contrast control state -- declared here for use by TransitParam */
