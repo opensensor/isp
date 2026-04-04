@@ -1658,11 +1658,11 @@ void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3)
 /* Forward declarations for sensor control functions */
 static int sensor_hw_reset_disable(void);
 static int sensor_hw_reset_enable(void);
-static int sensor_alloc_analog_gain(int gain);
-static int sensor_alloc_analog_gain_short(int gain);
-static int sensor_alloc_digital_gain(int gain);
-static int sensor_alloc_integration_time(int time);
-static int sensor_alloc_integration_time_short(int time);
+static int sensor_alloc_analog_gain(int gain, void *arg2);
+static int sensor_alloc_analog_gain_short(int gain, void *arg2);
+static int sensor_alloc_digital_gain(int gain, void *arg2);
+static int sensor_alloc_integration_time(int time, void *arg2);
+static int sensor_alloc_integration_time_short(int time, void *arg2);
 static int sensor_set_integration_time(int time);
 static int sensor_set_integration_time_short(int time);
 static int sensor_start_changes(void);
@@ -1695,11 +1695,11 @@ int sensor_init(struct tx_isp_dev *isp_dev)
         /* Function pointers start at 0x5c */
         int (*hw_reset_disable)(void);           /* 0x5c */
         int (*hw_reset_enable)(void);            /* 0x60 */
-        int (*alloc_analog_gain)(int);           /* 0x64 */
-        int (*alloc_analog_gain_short)(int);     /* 0x68 */
-        int (*alloc_digital_gain)(int);          /* 0x6c */
-        int (*alloc_integration_time)(int);      /* 0x70 */
-        int (*alloc_integration_time_short)(int); /* 0x74 */
+        int (*alloc_analog_gain)(int, void*);           /* 0x64 */
+        int (*alloc_analog_gain_short)(int, void*);     /* 0x68 */
+        int (*alloc_digital_gain)(int, void*);          /* 0x6c */
+        int (*alloc_integration_time)(int, void*);      /* 0x70 */
+        int (*alloc_integration_time_short)(int, void*); /* 0x74 */
         int (*set_integration_time)(int);        /* 0x78 */
         int (*set_integration_time_short)(int);  /* 0x7c */
         int (*start_changes)(void);              /* 0x80 */
@@ -1789,61 +1789,98 @@ static int sensor_hw_reset_enable(void) {
     return 0;
 }
 
-static int sensor_alloc_analog_gain(int gain) {
-    if (!ourISPdev || !ourISPdev->sensor)
-        return gain;
-    pr_debug("sensor_alloc_analog_gain: gain=%d\n", gain);
-    return gain;
-}
+/* OEM EXACT: sensor_alloc_analog_gain(gain, result_ptr)
+ * Calls sensor's alloc_again(gain, 0x10, &out), stores (uint16_t)out at *result_ptr */
+static int sensor_alloc_analog_gain(int gain, void *arg2) {
+    unsigned int sensor_again = 0;
+    int ret = gain;
 
-static int sensor_alloc_analog_gain_short(int gain) {
-    if (!ourISPdev || !ourISPdev->sensor)
-        return gain;
-
-    pr_debug("sensor_alloc_analog_gain_short: gain=%d\n", gain);
-    return gain;
-}
-
-static int sensor_alloc_digital_gain(int gain) {
-    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc8)
-     * int32_t var_10 = 0
-     * int32_t result = $v0_2(arg1, 0x10, &var_10)
-     * *(arg2 + 2) = var_10.w
-     * return result */
-
-    if (!ourISPdev || !ourISPdev->sensor) {
-        return gain;
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->sensor->attr.sensor_ctrl.alloc_again) {
+        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_again(gain, 0x10, &sensor_again);
+    } else {
+        sensor_again = gain;
     }
-
-    pr_debug("sensor_alloc_digital_gain: gain=%d\n", gain);
-    return gain;
+    if (arg2)
+        *(uint16_t *)arg2 = (uint16_t)sensor_again;
+    return ret;
 }
 
-static int sensor_alloc_integration_time(int time) {
-    if (!ourISPdev || !ourISPdev->sensor)
-        return time;
-    pr_debug("sensor_alloc_integration_time: time=%d\n", time);
-    return time;
+static int sensor_alloc_analog_gain_short(int gain, void *arg2) {
+    unsigned int sensor_again = 0;
+    int ret = gain;
+
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short)
+        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short(gain, 0x10, &sensor_again);
+    else
+        sensor_again = gain;
+    if (arg2)
+        *(uint16_t *)((char *)arg2 + 0x0e) = (uint16_t)sensor_again;
+    return ret;
 }
 
-static int sensor_alloc_integration_time_short(int time) {
-    if (!ourISPdev || !ourISPdev->sensor)
-        return time;
-    pr_debug("sensor_alloc_integration_time_short: time=%d\n", time);
-    return time;
+/* OEM EXACT: stores result at *(arg2 + 2) as uint16_t */
+static int sensor_alloc_digital_gain(int gain, void *arg2) {
+    unsigned int sensor_dgain = 0;
+    int ret = gain;
+
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->sensor->attr.sensor_ctrl.alloc_dgain)
+        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_dgain(gain, 0x10, &sensor_dgain);
+    else
+        sensor_dgain = gain;
+    if (arg2)
+        *(uint16_t *)((char *)arg2 + 2) = (uint16_t)sensor_dgain;
+    return ret;
 }
 
+/* OEM EXACT: stores result at *(arg2 + 0x10) as uint16_t */
+static int sensor_alloc_integration_time(int time, void *arg2) {
+    unsigned int sensor_it = 0;
+    int ret = time;
+
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time) {
+        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time(time, 0, &sensor_it);
+    } else {
+        sensor_it = time;
+    }
+    if (arg2)
+        *(uint16_t *)((char *)arg2 + 0x10) = (uint16_t)sensor_it;
+    return ret;
+}
+
+static int sensor_alloc_integration_time_short(int time, void *arg2) {
+    unsigned int sensor_it = 0;
+    int ret = time;
+
+    if (ourISPdev && ourISPdev->sensor &&
+        ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short)
+        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short(time, 0, &sensor_it);
+    else
+        sensor_it = time;
+    if (arg2)
+        *(uint16_t *)((char *)arg2 + 0x12) = (uint16_t)sensor_it;
+    return ret;
+}
+
+/* Calls ORIGINAL sensor driver ioctl directly — bypasses our wrapper that
+ * re-syncs VIC dimensions. Uses packed (gain<<16 | it) format via cmd 0x200000d. */
 static int sensor_set_integration_time(int time) {
-    /* Binary Ninja shows this updates sensor timing and ISP flags */
+    if (!ourISPdev || !ourISPdev->sensor)
+        return 0;
 
-    if (!ourISPdev || !ourISPdev->sensor) {
-        return -ENODEV;
+    ourISPdev->sensor->attr.integration_time = (uint16_t)time;
+
+    /* Write packed (again << 16 | it) to real sensor driver */
+    if (stored_sensor_ops.original_ops &&
+        stored_sensor_ops.original_ops->sensor &&
+        stored_sensor_ops.original_ops->sensor->ioctl) {
+        u32 packed = ((u32)ourISPdev->sensor->attr.again << 16) | ((u32)time & 0xffff);
+        stored_sensor_ops.original_ops->sensor->ioctl(
+            stored_sensor_ops.sensor_sd, 0x200000d, &packed);
     }
-
-    /* This would update sensor integration time and set ISP change flags */
-    pr_debug("sensor_set_integration_time: time=%d\n", time);
-
-    /* Return success - the Binary Ninja return value was just a status indicator */
     return 0;
 }
 
@@ -1869,14 +1906,20 @@ static int sensor_end_changes(void) {
 }
 
 static int sensor_set_analog_gain(int gain) {
-    /* Binary Ninja shows this updates sensor gain and ISP control flags */
+    if (!ourISPdev || !ourISPdev->sensor)
+        return 0;
 
-    if (!ourISPdev || !ourISPdev->sensor) {
-        return -ENODEV;
+    ourISPdev->sensor->attr.again = gain;
+
+    /* Write packed (again << 16 | it) to real sensor driver */
+    if (stored_sensor_ops.original_ops &&
+        stored_sensor_ops.original_ops->sensor &&
+        stored_sensor_ops.original_ops->sensor->ioctl) {
+        u32 packed = ((u32)gain << 16) |
+                     ((u32)ourISPdev->sensor->attr.integration_time & 0xffff);
+        stored_sensor_ops.original_ops->sensor->ioctl(
+            stored_sensor_ops.sensor_sd, 0x200000d, &packed);
     }
-
-    /* This would set analog gain and update ISP change flags */
-    pr_debug("sensor_set_analog_gain: gain=%d\n", gain);
     return 0;
 }
 

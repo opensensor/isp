@@ -289,6 +289,14 @@ struct tx_isp_dev {
     /* Moved from tx_isp_subdev private fields (ABI fix) */
     int vin_state;
     struct tx_isp_irq_info sd_irq_info;  /* ISP core IRQ info (was sd.irq_info) */
+
+    /* Sensor parameter update flags — set by sensor_set_* callbacks,
+     * processed by ISR to write to sensor via I2C during frame blanking */
+    volatile uint32_t sensor_gain_pending;
+    uint32_t sensor_gain_value;
+    volatile uint32_t sensor_it_pending;
+    uint32_t sensor_it_value;
+    volatile uint32_t sensor_update_pending;
 } __attribute__((aligned(4)));
 
 
