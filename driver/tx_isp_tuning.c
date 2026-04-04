@@ -428,7 +428,24 @@ static uint32_t bcsh_Cxl[9] = { 0, 0x384, 0, 0x384, 0, 0, 0, 0, 0 };
 static uint32_t bcsh_Cxh[9] = { 0, 0, 0, 0, 0x384, 0x384, 0x384, 0x384, 0x384 };
 static uint32_t bcsh_Cyl[9] = { 0x384, 0x384, 0x384, 0x384, 0, 0, 0, 0, 0 };
 static uint32_t bcsh_Cyh[9] = { 0, 0, 0, 0, 0x384, 0x384, 0x384, 0x384, 0x384 };
+/* Interpolated chroma clip limits (OEM: data_9a7ac..data_9a7b8) */
+static uint32_t bcsh_Cxl_intp, bcsh_Cxh_intp, bcsh_Cyl_intp, bcsh_Cyh_intp;
+
+/* TransitParam output: adjusted S-values (OEM: tisp_BCSH_ai32Svalue + data_b5444..b544c) */
+static uint32_t bcsh_ai32Svalue[4];
+/* TransitParam output: adjusted C-values (OEM: tisp_BCSH_ai32C + data_b5454..b5460) */
+static uint32_t bcsh_ai32C[5];
+/* TransitParam output: brightness-adjusted Y offset */
+static uint32_t bcsh_brightness_offset;
+/* TransitParam output: C slopes (OEM: tisp_BCSH_u32Cslope0/1/2) */
+static uint32_t bcsh_Cslope[3];
+/* TransitParam output: S-step (OEM: tisp_BCSH_u32Sstep, 2 elements) */
+static uint32_t bcsh_Sstep[2];
+/* TransitParam output: HDP/HBP/HLSP slopes */
+static uint32_t bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope;
+
 static uint32_t bcsh_B = 0x0384;
+static uint32_t bcsh_OffsetRGB2yuv[3] = { 0x0400, 0x0400, 0x0400 }; /* OEM: tisp_BCSH_u32OffsetRGB2yuv */
 static uint32_t bcsh_OffsetYUVy[2] = { 0x0400, 0x0406 };
 static uint32_t bcsh_clip0[4] = { 0x0406, 0x0400, 0x0400, 0x0400 };
 static uint32_t bcsh_clip1[4] = { 0x0000, 0x03ff, 0x0000, 0x03ff };
@@ -740,30 +757,6 @@ static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int
     }
 }
 
-/* Compute piecewise slopes used by OEM for C and for HDP/HBP transitions. */
-static void tiziano_bcsh_compute_slopes(const uint32_t Sth[3], const uint32_t C[5],
-                                        const uint32_t HDP[3], const uint32_t HBP[3],
-                                        uint32_t *cs0, uint32_t *cs1, uint32_t *cs2,
-                                        uint32_t *hdp_s, uint32_t *hbp_s)
-{
-    /* Cslope0 across [Sth0..Sth1] for C0->C1 */
-    uint32_t d0 = (Sth[1] > Sth[0]) ? (Sth[1] - Sth[0]) : 0;
-    *cs0 = d0 ? ((uint32_t)(abs((int)C[1] - (int)C[0])) << 10) / d0 : 0;
-
-    /* Cslope1 across [Sth1..Sth2] for C1->C2 */
-    uint32_t d1 = (Sth[2] > Sth[1]) ? (Sth[2] - Sth[1]) : 0;
-    *cs1 = d1 ? ((uint32_t)(abs((int)C[2] - (int)C[1])) << 10) / d1 : 0;
-
-    /* Cslope2 across [Sth2..1023] for C2->C4 (use full range upper bound 0x3ff) */
-    uint32_t d2 = (1023 > Sth[2]) ? (1023 - Sth[2]) : 0;
-    *cs2 = d2 ? ((uint32_t)(abs((int)C[4] - (int)C[2])) << 10) / d2 : 0;
-
-    /* HDP/HBP slopes: OEM uses 0x400/(end-mid) when increasing, else 0 */
-    uint32_t dhdp = (HDP[2] > HDP[1]) ? (HDP[2] - HDP[1]) : 0;
-    uint32_t dhbp = (HBP[2] > HBP[1]) ? (HBP[2] - HBP[1]) : 0;
-    *hdp_s = dhdp ? (0x400u / dhdp) : 0;
-    *hbp_s = dhbp ? (0x400u / dhbp) : 0;
-}
 /* Exact OEM StrenCal equations (from BN) */
 static inline uint32_t tiziano_bcsh_StrenCal_part0(uint32_t a1, uint32_t a2, uint32_t a3,
                                                   uint32_t a4, uint32_t a5)
@@ -792,113 +785,220 @@ static inline uint32_t tiziano_bcsh_StrenCal(uint32_t a1, uint32_t a2, uint32_t 
     return (uint32_t)(num / d23);
 }
 
-/* Compute OEM-shaped S-vectors (StrenCal/TransitParam surrogate)
- * Output: three 4-element vectors to feed arg1..arg3 at 0x8000..0x8014.
- * We interpolate S-min/max lists by EV, then derive three segment vectors.
- * This mirrors BN structure (ai32Svalue and companions) and is safe to refine. */
-static void tiziano_bcsh_compute_S_vectors(const struct isp_tuning_data *tuning,
-                                           const uint32_t *EvList,
-                                           const uint32_t *SminS, const uint32_t *SmaxS,
-                                           const uint32_t *SminM, const uint32_t *SmaxM,
-                                           uint16_t out1[4], uint16_t out2[4], uint16_t out3[4])
-{
-    /* BN sequence emulation: derive four base scalars by EV interpolation,
-     * then apply StrenCal with two controls (data_9a91d, data_9a91f)
-     * exactly as: first pass (c1) with 0/0x80 or 0x80/0x100 endpoints based on sign,
-     * second pass (c2) with (0,0x80, 0, current) when c2 signed >= 0. */
-    uint32_t ev_shifted, ev_low, ev_high, range, dist, w8;
-    uint32_t sminS_now = 0, smaxS_now = 0, sminM_now = 0, smaxM_now = 0;
-    uint32_t base0[4], base1[4], base2[4], base3[4];
-    uint32_t arr0[4], arr1[4], arr2[4], arr3[4];
-    uint32_t c1, c2;
-    int i;
-
-    if (!tuning || !EvList || !SminS || !SmaxS || !SminM || !SmaxM || !out1 || !out2 || !out3)
-        return;
-
-    /* EV interpolation to produce baseline anchors */
-    ev_shifted = tuning->bcsh_ev >> 10;
-    if (ev_shifted <= EvList[0]) {
-        sminS_now = SminS[0]; smaxS_now = SmaxS[0];
-        sminM_now = SminM[0]; smaxM_now = SmaxM[0];
-    } else if (ev_shifted >= EvList[8]) {
-        sminS_now = SminS[8]; smaxS_now = SmaxS[8];
-        sminM_now = SminM[8]; smaxM_now = SmaxM[8];
-    } else {
-        for (i = 0; i < 8; ++i) {
-            ev_low = EvList[i]; ev_high = EvList[i+1];
-            if (ev_shifted >= ev_low && ev_shifted < ev_high) {
-                range = ev_high - ev_low;
-                dist  = ev_shifted - ev_low;
-                w8    = range ? (dist << 8) / range : 0; /* 8.8 weight */
-                sminS_now = SminS[i] + (((SminS[i+1] - SminS[i]) * w8) >> 8);
-                smaxS_now = SmaxS[i] + (((SmaxS[i+1] - SmaxS[i]) * w8) >> 8);
-                sminM_now = SminM[i] + (((SminM[i+1] - SminM[i]) * w8) >> 8);
-                smaxM_now = SmaxM[i] + (((SmaxM[i+1] - SmaxM[i]) * w8) >> 8);
-                break;
-            }
-        }
-    }
-
-    /* Construct four base 4-lane anchors exactly as OEM TransitParam prepares them:
-     *   au32Svalue  <- EV-interpolated SminListS (scalar replicated to 4 lanes)
-     *   aa688       <- EV-interpolated SmaxListS (scalar replicated)
-     *   aa68c       <- EV-interpolated SminListM (scalar replicated)
-     *   aa690       <- EV-interpolated SmaxListM (scalar replicated)
-     */
-    for (i = 0; i < 4; ++i) {
-        base0[i] = sminS_now; /* tisp_BCSH_au32Svalue */
-        base1[i] = smaxS_now; /* data_aa688 */
-        base2[i] = sminM_now; /* data_aa68c */
-        base3[i] = smaxM_now; /* data_aa690 */
-    }
-
-    c1 = tuning->bcsh_saturation;   /* maps to data_9a91d */
-    c2 = tuning->bcsh_brightness;   /* maps to data_9a91f */
-
-    /* First pass (c1). BN: if c1==0x80 -> memcpy; else if signed<0 use (0x80,0x100, base, 0x1800);
-     * else use (0,0x80, 0, base). Use StrenCal.part0 per BN for S arrays. */
-    if (c1 == 0x80) {
-        for (i = 0; i < 4; ++i) { arr0[i] = base0[i]; arr1[i] = base1[i]; arr2[i] = base2[i]; arr3[i] = base3[i]; }
-    } else if ((int8_t)c1 < 0) {
-        for (i = 0; i < 4; ++i) {
-            arr0[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base0[i], 0x1800);
-            arr1[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base1[i], 0x1800);
-            arr2[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base2[i], 0x1800);
-            arr3[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base3[i], 0x1800);
-        }
-    } else {
-        for (i = 0; i < 4; ++i) {
-            arr0[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base0[i]);
-            arr1[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base1[i]);
-            arr2[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base2[i]);
-            arr3[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base3[i]);
-        }
-    }
-
-    /* Second pass (c2). BN: if signed >= 0, apply part0(c2, 0, 0x80, 0, current). */
-    if ((int8_t)c2 >= 0) {
-        for (i = 0; i < 4; ++i) {
-            arr0[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr0[i]);
-            arr1[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr1[i]);
-            arr2[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr2[i]);
-            arr3[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr3[i]);
-        }
-    }
-
-    /* Provide first three arrays as arg1..arg3 to lut_parameter. */
-    for (i = 0; i < 4; ++i) {
-        out1[i] = (uint16_t)(arr0[i] & 0xFFFF);
-        out2[i] = (uint16_t)(arr1[i] & 0xFFFF);
-        out3[i] = (uint16_t)(arr2[i] & 0xFFFF);
-    }
-}
-
-
-/* MJPEG contrast control state */
+/* MJPEG contrast control state -- declared here for use by TransitParam */
 static uint32_t s_bcsh_mjpeg_mode;
 static uint32_t s_bcsh_mjpeg_y_range_low;
 static uint32_t s_bcsh_fixed_contrast;
+
+/* OEM tiziano_bcsh_TransitParam -- computes per-channel adjusted S-values,
+ * C-values, brightness offset, slopes, and steps from the EV-interpolated
+ * scalars and the saturation/brightness/contrast control bytes.
+ *
+ * Inputs (globals set by tiziano_bcsh_update's EV interpolation):
+ *   tuning->bcsh_saturation_value  = EV-interpolated SminListS scalar (OEM: tisp_BCSH_au32Svalue)
+ *   tuning->bcsh_saturation_max    = EV-interpolated SmaxListS scalar (OEM: data_9a678)
+ *   tuning->bcsh_saturation_min    = EV-interpolated SminListM scalar (OEM: data_9a67c)
+ *   tuning->bcsh_saturation_mult   = EV-interpolated SmaxListM scalar (OEM: data_9a680)
+ *   bcsh_Cxl_intp..bcsh_Cyh_intp   = EV-interpolated Cx/Cy scalars (OEM: data_9a7ac..9a7b8)
+ *   tuning->bcsh_saturation        = saturation control byte (OEM: data_8a90d)
+ *   tuning->bcsh_brightness        = brightness control byte (OEM: data_8a90f)
+ *   tuning->bcsh_contrast          = contrast control byte   (OEM: data_8a90e)
+ *
+ * Outputs (written to static globals):
+ *   bcsh_ai32Svalue[4]    -- adjusted S-values for register writes
+ *   bcsh_ai32C[5]         -- adjusted C-values for register writes
+ *   bcsh_brightness_offset -- brightness-scaled Y offset added to Offset1[0]
+ *   bcsh_Cslope[3]        -- C slopes
+ *   bcsh_Sstep[2]         -- S-step values
+ *   bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope -- HDP/HBP/HLSP slopes
+ */
+static void tiziano_bcsh_TransitParam(struct isp_tuning_data *tuning)
+{
+    uint32_t sat = tuning->bcsh_saturation;    /* OEM: data_8a90d */
+    uint32_t bri = tuning->bcsh_brightness;    /* OEM: data_8a90f */
+    uint32_t con = tuning->bcsh_contrast;      /* OEM: data_8a90e */
+
+    /* Base S-values from EV interpolation (scalars, not arrays) */
+    uint32_t Sv0 = tuning->bcsh_saturation_value; /* OEM: tisp_BCSH_au32Svalue */
+    uint32_t Sv1 = tuning->bcsh_saturation_max;   /* OEM: data_9a678 */
+    uint32_t Sv2 = tuning->bcsh_saturation_min;   /* OEM: data_9a67c */
+    uint32_t Sv3 = tuning->bcsh_saturation_mult;  /* OEM: data_9a680 */
+
+    /* Interpolated Cx/Cy thresholds */
+    uint32_t Cxl = bcsh_Cxl_intp; /* OEM: data_9a7ac */
+    uint32_t Cxh = bcsh_Cxh_intp; /* OEM: data_9a7b0 */
+    uint32_t Cyl = bcsh_Cyl_intp; /* OEM: data_9a7b4 */
+    uint32_t Cyh = bcsh_Cyh_intp; /* OEM: data_9a7b8 */
+
+    uint32_t *C     = bcsh_wdr_enabled ? bcsh_C_wdr : bcsh_C;
+    uint32_t B_val  = bcsh_wdr_enabled ? bcsh_B_wdr : bcsh_B;
+    uint32_t *Sth   = bcsh_wdr_enabled ? bcsh_Sthres_wdr : bcsh_Sthres;
+    uint32_t *HDP   = bcsh_wdr_enabled ? bcsh_HDP_wdr : bcsh_HDP;
+    uint32_t *HBP   = bcsh_wdr_enabled ? bcsh_HBP_wdr : bcsh_HBP;
+    uint32_t *HLSP  = bcsh_wdr_enabled ? bcsh_HLSP_wdr : bcsh_HLSP;
+    uint32_t *clip1 = bcsh_wdr_enabled ? bcsh_clip1_wdr : bcsh_clip1;
+
+    /* ---- Phase 1: Saturation control (data_8a90d) ---- */
+    if (sat != 0x80) {
+        if ((int8_t)sat < 0) {
+            /* Saturation > 0x80: interpolate toward 0x1800 upper bound */
+            bcsh_ai32Svalue[0] = tiziano_bcsh_StrenCal_part0(sat, 0x80, 0x100, Sv0, 0x1800);
+            bcsh_ai32Svalue[1] = tiziano_bcsh_StrenCal_part0(sat, 0x80, 0x100, Sv1, 0x1800);
+            bcsh_ai32Svalue[2] = tiziano_bcsh_StrenCal_part0(sat, 0x80, 0x100, Sv2, 0x1800);
+            bcsh_ai32Svalue[3] = tiziano_bcsh_StrenCal_part0(sat, 0x80, 0x100, Sv3, 0x1800);
+        } else {
+            /* Saturation < 0x80: interpolate toward 0 lower bound */
+            bcsh_ai32Svalue[0] = tiziano_bcsh_StrenCal_part0(sat, 0x00, 0x80, 0x00, Sv0);
+            bcsh_ai32Svalue[1] = tiziano_bcsh_StrenCal_part0(sat, 0x00, 0x80, 0x00, Sv1);
+            bcsh_ai32Svalue[2] = tiziano_bcsh_StrenCal_part0(sat, 0x00, 0x80, 0x00, Sv2);
+            bcsh_ai32Svalue[3] = tiziano_bcsh_StrenCal_part0(sat, 0x00, 0x80, 0x00, Sv3);
+        }
+    } else {
+        /* Saturation == 0x80 (neutral): copy base values through */
+        bcsh_ai32Svalue[0] = Sv0;
+        bcsh_ai32Svalue[1] = Sv1;
+        bcsh_ai32Svalue[2] = Sv2;
+        bcsh_ai32Svalue[3] = Sv3;
+    }
+
+    /* ---- Phase 2: Brightness control (data_8a90f) ---- */
+    {
+        uint32_t bri_scaled = (bri * B_val) >> 7; /* OEM: (data_8a90f * tisp_BCSH_u32B) u>> 7 */
+        if ((int32_t)bri_scaled >= 0x76d)
+            bri_scaled = 0x76c;
+        bcsh_brightness_offset = bri_scaled;
+
+        /* Brightness also adjusts S-values when bri < 0x80 (signed >= 0) */
+        if ((int8_t)bri >= 0) {
+            bcsh_ai32Svalue[0] = tiziano_bcsh_StrenCal_part0(bri, 0x00, 0x80, 0x00, bcsh_ai32Svalue[0]);
+            bcsh_ai32Svalue[1] = tiziano_bcsh_StrenCal_part0(bri, 0x00, 0x80, 0x00, bcsh_ai32Svalue[1]);
+            bcsh_ai32Svalue[2] = tiziano_bcsh_StrenCal_part0(bri, 0x00, 0x80, 0x00, bcsh_ai32Svalue[2]);
+            bcsh_ai32Svalue[3] = tiziano_bcsh_StrenCal_part0(bri, 0x00, 0x80, 0x00, bcsh_ai32Svalue[3]);
+        }
+    }
+
+    /* ---- Phase 3: Contrast control (data_8a90e) on C-values ---- */
+    if (C[0] != 0 && con != 0x80) {
+        bcsh_ai32C[0] = C[0]; /* First element always copied from base */
+
+        if ((int8_t)con < 0) {
+            /* Contrast > 0x80: interpolate Cx/Cy toward midpoints */
+            uint32_t diff_xhl = (Cxl >= Cxh) ? (Cxl - Cxh) : (Cxh - Cxl);
+            uint32_t mid_x = (diff_xhl >> 1) + Cxl;
+
+            bcsh_ai32C[1] = tiziano_bcsh_StrenCal_part0(con, 0x80, 0xff, Cxl, mid_x);
+            bcsh_ai32C[2] = tiziano_bcsh_StrenCal(con, 0x80, 0xff, Cxh, mid_x, 1);
+            bcsh_ai32C[3] = tiziano_bcsh_StrenCal(con, 0x80, 0xff, Cyl, 0, 1);
+            bcsh_ai32C[4] = tiziano_bcsh_StrenCal_part0(con, 0x80, 0xff, Cyh, 0x3ff);
+        } else {
+            /* Contrast < 0x80: interpolate toward defaults/boundaries */
+            uint32_t diff_yhl = (Cyh >= Cyl) ? (Cyh - Cyl) : (Cyl - Cyh);
+            uint32_t mid_y = (diff_yhl >> 1) + Cyl;
+
+            bcsh_ai32C[1] = tiziano_bcsh_StrenCal_part0(con, 0x00, 0x80, 0x00, Cxl);
+            bcsh_ai32C[2] = tiziano_bcsh_StrenCal(con, 0x00, 0x80, 0x3ff, Cxh, 1);
+            bcsh_ai32C[3] = tiziano_bcsh_StrenCal(con, 0x00, 0x80, mid_y, Cyl, 1);
+            bcsh_ai32C[4] = tiziano_bcsh_StrenCal_part0(con, 0x00, 0x80, mid_y, Cyh);
+
+            /* Contrast < 0x80 also reduces S-values */
+            bcsh_ai32Svalue[0] = tiziano_bcsh_StrenCal_part0(con, 0x00, 0x80, 0x00, bcsh_ai32Svalue[0]);
+            bcsh_ai32Svalue[1] = tiziano_bcsh_StrenCal_part0(con, 0x00, 0x80, 0x00, bcsh_ai32Svalue[1]);
+            bcsh_ai32Svalue[2] = tiziano_bcsh_StrenCal_part0(con, 0x00, 0x80, 0x00, bcsh_ai32Svalue[2]);
+            bcsh_ai32Svalue[3] = tiziano_bcsh_StrenCal_part0(con, 0x00, 0x80, 0x00, bcsh_ai32Svalue[3]);
+        }
+    } else {
+        /* C[0]==0 or contrast==0x80: copy base C values through */
+        bcsh_ai32C[0] = C[0];
+        bcsh_ai32C[1] = C[1];
+        bcsh_ai32C[2] = C[2];
+        bcsh_ai32C[3] = C[3];
+        bcsh_ai32C[4] = C[4];
+    }
+
+    /* ---- MJPEG mode override (OEM: s_bcsh_mjpeg_mode) ---- */
+    if (s_bcsh_mjpeg_mode == 1) {
+        bcsh_ai32C[0] = 1;
+        bcsh_ai32C[1] = s_bcsh_mjpeg_y_range_low << 2;
+        bcsh_ai32C[2] = (s_bcsh_fixed_contrast << 2) + 3;
+        bcsh_ai32C[3] = 0;
+        bcsh_ai32C[4] = 0x3ff;
+    }
+
+    /* ---- Compute C slopes (OEM: tisp_BCSH_u32Cslope0/1/2) ---- */
+    {
+        uint32_t c1_val = bcsh_ai32C[1]; /* adjusted threshold low */
+        uint32_t c2_val = bcsh_ai32C[2]; /* adjusted threshold high */
+        uint32_t c3_val = bcsh_ai32C[3]; /* adjusted Y low */
+        uint32_t c4_val = bcsh_ai32C[4]; /* adjusted Y high */
+        uint32_t clip1_1 = clip1[1];     /* OEM: data_9a6bc */
+
+        /* Cslope0: (c3 << 10) / c1,  or 0 if c1 == 0 */
+        bcsh_Cslope[0] = c1_val ? ((c3_val << 10) / c1_val) : 0;
+
+        /* Cslope1: |c3 - c4| << 10 / (c2 - c1), but clamp c1 to c2 if c1 >= c2 */
+        if (c1_val < c2_val) {
+            uint32_t diff_c = (c3_val >= c4_val) ? (c3_val - c4_val) : (c4_val - c3_val);
+            bcsh_Cslope[1] = (diff_c << 10) / (c2_val - c1_val);
+        } else {
+            bcsh_ai32C[1] = c2_val; /* OEM clamps c1 to c2 */
+            bcsh_Cslope[1] = 0;
+        }
+
+        /* Cslope2: |c4 - clip1_1| << 10 / (clip1_1 - c2), but clamp c2 if c2 >= clip1_1 */
+        if (c2_val < clip1_1) {
+            uint32_t diff_e = (c4_val >= clip1_1) ? (c4_val - clip1_1) : (clip1_1 - c4_val);
+            bcsh_Cslope[2] = (diff_e << 10) / (clip1_1 - c2_val);
+        } else {
+            bcsh_ai32C[2] = clip1_1; /* OEM clamps c2 to clip1_1 */
+            bcsh_Cslope[2] = 0;
+        }
+    }
+
+    /* ---- Compute S-step (OEM: tisp_BCSH_u32Sstep) ---- */
+    {
+        /* Sthres[1] and Sthres[2] define the S transition band */
+        uint32_t st_mid = Sth[1];
+        uint32_t st_end = Sth[2];
+
+        if (st_mid < st_end) {
+            uint32_t s_range = st_end - st_mid;
+            uint32_t diff01 = (bcsh_ai32Svalue[0] >= bcsh_ai32Svalue[1]) ?
+                              (bcsh_ai32Svalue[0] - bcsh_ai32Svalue[1]) :
+                              (bcsh_ai32Svalue[1] - bcsh_ai32Svalue[0]);
+            uint32_t diff23 = (bcsh_ai32Svalue[2] >= bcsh_ai32Svalue[3]) ?
+                              (bcsh_ai32Svalue[2] - bcsh_ai32Svalue[3]) :
+                              (bcsh_ai32Svalue[3] - bcsh_ai32Svalue[2]);
+            bcsh_Sstep[0] = diff01 / s_range;
+            bcsh_Sstep[1] = diff23 / s_range;
+        } else {
+            bcsh_Sstep[0] = 0;
+            bcsh_Sstep[1] = 0;
+        }
+    }
+
+    /* ---- Compute HDP/HBP/HLSP slopes (OEM: 0x400 / (end - mid)) ---- */
+    {
+        if (HDP[1] < HDP[2])
+            bcsh_HDPslope = 0x400 / (HDP[2] - HDP[1]);
+        else {
+            /* OEM clamps HDP[1] = HDP[2] when not increasing */
+            bcsh_HDPslope = 0;
+        }
+
+        if (HBP[1] < HBP[2])
+            bcsh_HBPslope = 0x400 / (HBP[2] - HBP[1]);
+        else {
+            bcsh_HBPslope = 0;
+        }
+
+        if (HLSP[1] < HLSP[2])
+            bcsh_HLSPslope = 0x400 / (HLSP[2] - HLSP[1]);
+        else {
+            bcsh_HLSPslope = 0;
+        }
+    }
+}
+
 
 /* Raw BCSH attr blob (0x28 bytes) as passed by OEM tooling) */
 static uint8_t bcsh_attr_blob[0x28];
@@ -992,7 +1092,10 @@ static uint32_t data_d7228 = 0;
 static void *TizianoWdrFpgaStructMe = NULL;
 static void *data_d94a8 = NULL;
 
-/* BCSH hardware apply: program registers if platform provides mapping */
+/* BCSH hardware apply: program registers using TransitParam outputs.
+ * TransitParam must have been called before this function to populate
+ * bcsh_ai32Svalue[], bcsh_ai32C[], bcsh_Cslope[], bcsh_brightness_offset,
+ * bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope. */
 static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
 {
     /* BCSH hardware writes enabled unconditionally (OEM-style). */
@@ -1006,13 +1109,11 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
     u32 *HBP  = bcsh_wdr_enabled ? bcsh_HBP_wdr  : bcsh_HBP;
     u32 *HLSP = bcsh_wdr_enabled ? bcsh_HLSP_wdr : bcsh_HLSP;
     u32 *Sth  = bcsh_wdr_enabled ? bcsh_Sthres_wdr : bcsh_Sthres;
-    u32 *RGB  = bcsh_wdr_enabled ? bcsh_OffsetRGB_wdr : bcsh_OffsetRGB;
-    u32 *Carr = bcsh_C; /* OEM uses shared C[] across linear/WDR */
+    u32 B_val = bcsh_wdr_enabled ? bcsh_B_wdr : bcsh_B;
 
-    /* Build HMatrix and compute slopes (Cslope0/1/2, HDPslope, HBPslope) */
+    /* Build HMatrix */
     int32_t H[9];
     int32_t Hreg[9];
-    uint32_t cs0 = 0, cs1 = 0, cs2 = 0, hdp_s = 0, hbp_s = 0;
     int i_h;
     tiziano_bcsh_build_HMatrix(H);
     /* Apply OEM para2reg sign/mask conversion: negative -> mask to 14-bit */
@@ -1033,54 +1134,62 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
         }
     }
 
-    tiziano_bcsh_compute_slopes(Sth, Carr, HDP, HBP, &cs0, &cs1, &cs2, &hdp_s, &hbp_s);
-
-    /* Compose and write 0x8000..0x8070 block (best-effort OEM-aligned packing) */
-    /* 0x8000..0x8014: Three 4-word S-vectors from StrenCal/TransitParam surrogate */
     {
-        uint16_t svec1[4] = {0}, svec2[4] = {0}, svec3[4] = {0};
-        uint32_t *EvList = bcsh_wdr_enabled ? bcsh_EvList_wdr : bcsh_EvList;
-        uint32_t *SminS  = bcsh_wdr_enabled ? bcsh_SminListS_wdr : bcsh_SminListS;
-        uint32_t *SmaxS  = bcsh_wdr_enabled ? bcsh_SmaxListS_wdr : bcsh_SmaxListS;
-        uint32_t *SminM  = bcsh_wdr_enabled ? bcsh_SminListM_wdr : bcsh_SminListM;
-        uint32_t *SmaxM  = bcsh_wdr_enabled ? bcsh_SmaxListM_wdr : bcsh_SmaxListM;
-
-        tiziano_bcsh_compute_S_vectors(tuning, EvList, SminS, SmaxS, SminM, SmaxM,
-                                       svec1, svec2, svec3);
-
-        {
-            static int slog;
-            if (!slog) {
-                pr_info("BCSH_DIAG: svec1=[%u,%u,%u,%u] svec2=[%u,%u,%u,%u] svec3=[%u,%u,%u,%u]\n",
-                        svec1[0], svec1[1], svec1[2], svec1[3],
-                        svec2[0], svec2[1], svec2[2], svec2[3],
-                        svec3[0], svec3[1], svec3[2], svec3[3]);
-                pr_info("BCSH_DIAG: B=%u C=[%u,%u,%u,%u,%u] Sthres=[%u,%u,%u]\n",
-                        bcsh_B, bcsh_C[0], bcsh_C[1], bcsh_C[2], bcsh_C[3], bcsh_C[4],
-                        bcsh_Sthres[0], bcsh_Sthres[1], bcsh_Sthres[2]);
-                pr_info("BCSH_DIAG: HDP=[%u,%u,%u] HBP=[%u,%u,%u] HLSP=[%u,%u,%u]\n",
-                        bcsh_HDP[0], bcsh_HDP[1], bcsh_HDP[2],
-                        bcsh_HBP[0], bcsh_HBP[1], bcsh_HBP[2],
-                        bcsh_HLSP[0], bcsh_HLSP[1], bcsh_HLSP[2]);
-                pr_info("BCSH_DIAG: clip0=[%u,%u,%u,%u] OffsetYUVy=[%u,%u]\n",
-                        bcsh_clip0[0], bcsh_clip0[1], bcsh_clip0[2], bcsh_clip0[3],
-                        bcsh_OffsetYUVy[0], bcsh_OffsetYUVy[1]);
-                slog = 1;
-            }
+        static int slog;
+        if (!slog) {
+            pr_info("BCSH_DIAG: Sval=[%u,%u,%u,%u] C=[%u,%u,%u,%u,%u]\n",
+                    bcsh_ai32Svalue[0], bcsh_ai32Svalue[1],
+                    bcsh_ai32Svalue[2], bcsh_ai32Svalue[3],
+                    bcsh_ai32C[0], bcsh_ai32C[1], bcsh_ai32C[2],
+                    bcsh_ai32C[3], bcsh_ai32C[4]);
+            pr_info("BCSH_DIAG: Cslope=[%u,%u,%u] Sstep=[%u,%u] bri_off=%u\n",
+                    bcsh_Cslope[0], bcsh_Cslope[1], bcsh_Cslope[2],
+                    bcsh_Sstep[0], bcsh_Sstep[1], bcsh_brightness_offset);
+            pr_info("BCSH_DIAG: B=%u Sthres=[%u,%u,%u]\n",
+                    B_val, Sth[0], Sth[1], Sth[2]);
+            pr_info("BCSH_DIAG: HDP=[%u,%u,%u] HBP=[%u,%u,%u] HLSP=[%u,%u,%u]\n",
+                    HDP[0], HDP[1], HDP[2],
+                    HBP[0], HBP[1], HBP[2],
+                    HLSP[0], HLSP[1], HLSP[2]);
+            pr_info("BCSH_DIAG: slopes HDP=%u HBP=%u HLSP=%u\n",
+                    bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope);
+            slog = 1;
         }
-
-        system_reg_write(BASE + 0x0000, PACK16(svec1[0], svec1[1]));
-        system_reg_write(BASE + 0x0004, PACK16(svec2[0], svec2[1]));
-        system_reg_write(BASE + 0x0008, PACK16(svec3[0], svec3[1]));
-        system_reg_write(BASE + 0x000c, PACK16(svec1[2], svec1[3]));
-        system_reg_write(BASE + 0x0010, PACK16(svec2[2], svec2[3]));
-        system_reg_write(BASE + 0x0014, PACK16(svec3[2], svec3[3]));
     }
 
-    /* 0x8018..0x0020: HDP and HBP paired per-index */
-    system_reg_write(BASE + 0x0018, PACK16(HDP[0], HBP[0]));
-    system_reg_write(BASE + 0x001c, PACK16(HDP[1], HBP[1]));
-    system_reg_write(BASE + 0x0020, PACK16(HDP[2], HBP[2]));
+    /* 0x8000..0x8014: clip0, clip1, clip2 (display clipping params) */
+    {
+        u32 *clip0 = bcsh_wdr_enabled ? bcsh_clip0_wdr : bcsh_clip0;
+        u32 *clip1 = bcsh_wdr_enabled ? bcsh_clip1_wdr : bcsh_clip1;
+        u32 *clip2 = bcsh_wdr_enabled ? bcsh_clip2_wdr : bcsh_clip2;
+        system_reg_write(BASE + 0x0000, PACK16(clip0[0], clip0[1]));
+        system_reg_write(BASE + 0x0004, PACK16(clip1[0], clip1[1]));
+        system_reg_write(BASE + 0x0008, PACK16(clip2[0], clip2[1]));
+        system_reg_write(BASE + 0x000c, PACK16(clip0[2], clip0[3]));
+        system_reg_write(BASE + 0x0010, PACK16(clip1[2], clip1[3]));
+        system_reg_write(BASE + 0x0014, PACK16(clip2[2], clip2[3]));
+    }
+
+    /* 0x8018..0x8020: Offset1[3] interleaved with Offset0[3]
+     * OEM TransitParam sets:
+     *   Offset1[0] = OffsetYUVy[1] + OffsetRGB2yuv[0] - 0x800 + brightness_offset
+     *   Offset1[1] = OffsetRGB2yuv[1]
+     *   Offset1[2] = OffsetRGB2yuv[2]
+     *   Offset0[0] = OffsetYUVy[0]
+     *   Offset0[1] = 0x400  (data_9a660)
+     *   Offset0[2] = 0x400  (data_9a664) */
+    {
+        u32 *offy = bcsh_wdr_enabled ? bcsh_OffsetYUVy_wdr : bcsh_OffsetYUVy;
+        u32 off1_0 = offy[1] + bcsh_OffsetRGB2yuv[0] - 0x0800 + bcsh_brightness_offset;
+        u32 off1_1 = bcsh_OffsetRGB2yuv[1];
+        u32 off1_2 = bcsh_OffsetRGB2yuv[2];
+        u32 off0_0 = offy[0];
+        u32 off0_1 = 0x400;
+        u32 off0_2 = 0x400;
+        system_reg_write(BASE + 0x0018, PACK16(off1_0, off0_0));
+        system_reg_write(BASE + 0x001c, PACK16(off1_1, off0_1));
+        system_reg_write(BASE + 0x0020, PACK16(off1_2, off0_2));
+    }
 
     /* 0x8024..0x8038: HMatrixReg (9 elements) in BN pattern */
     system_reg_write(BASE + 0x0024, PACK16((u32)Hreg[1], (u32)Hreg[0]));
@@ -1090,16 +1199,14 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
     system_reg_write(BASE + 0x0034, PACK16((u32)Hreg[7], (u32)Hreg[6]));
     system_reg_write(BASE + 0x0038, (u32)Hreg[8]);
 
-    /* 0x803C..0x8040: Cslope0 (hi) and Sthres */
-    system_reg_write(BASE + 0x003c, PACK16(cs0, Sth[0]));
-    system_reg_write(BASE + 0x0040, PACK16(Sth[2], Sth[1]));
-
-    /* 0x8044..0x0048: HBPslope (hi) and HBP pack */
-    system_reg_write(BASE + 0x0044, PACK16(hbp_s, HBP[0]));
+    /* 0x803C..0x8048: HDPslope:HDP, HBPslope:HBP (OEM layout from lut_parameter) */
+    system_reg_write(BASE + 0x003c, PACK16(bcsh_HDPslope, HDP[0]));
+    system_reg_write(BASE + 0x0040, PACK16(HDP[2], HDP[1]));
+    system_reg_write(BASE + 0x0044, PACK16(bcsh_HBPslope, HBP[0]));
     system_reg_write(BASE + 0x0048, PACK16(HBP[2], HBP[1]));
 
-    /* 0x804C: HDPslope (hi) with HLSP[0] (lo) per BN arg19/arg18 */
-    system_reg_write(BASE + 0x004c, PACK16(hdp_s, HLSP[0]));
+    /* 0x804C: HLSPslope:HLSP[0] */
+    system_reg_write(BASE + 0x004c, PACK16(bcsh_HLSPslope, HLSP[0]));
 
     /* 0x8050: EV/HLSP-gated mixed value (OEM-like). */
     {
@@ -1115,7 +1222,6 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
         if (bcsh_clip0[0] == 1) {
             u32 a0_48 = EvList[idxA - 1];
             if (ev10 < a0_48) {
-                /* BN branch: uses HLSP[1] and HLSP[2] with special boundary handling */
                 u32 v1_7 = (ev10 < 2) ? 1 : 0;
                 u32 v0_8 = bcsh_clip0[0] - ev10;
                 u32 a2_11 = ev10 - 1;
@@ -1129,8 +1235,7 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                 s1_3 = (hi << 16) | (lo & 0xFFFF);
             }
         } else {
-            /* BN alt branch when data_c53e8 == 1: approximate enable */
-            u32 v1_8 = EvList[8]; /* EvList[8] */
+            u32 v1_8 = EvList[8];
             if (ev10 < v1_8) {
                 u32 a0_50 = EvList[idxB - 1];
                 if (a0_50 < ev10) {
@@ -1158,39 +1263,32 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                     }
                     s1_3 = (hi_part << 16) | lo_part;
                 } else {
-                    s1_3 = 0; /* as per BN when ev >= EvList[idxB-1] */
+                    s1_3 = 0;
                 }
             } else {
-                s1_3 = 0; /* ev >= EvList[8] */
+                s1_3 = 0;
             }
         }
         system_reg_write(BASE + 0x0050, s1_3);
     }
 
-    /* 0x8054..0x8060: B and C[0..4] in BN pattern */
-    system_reg_write(BASE + 0x0054, PACK16(bcsh_B, bcsh_C[0]));
-    system_reg_write(BASE + 0x0058, PACK16(cs2, cs1)); /* arg9:arg8 now Cslope2:Cslope1 */
-    system_reg_write(BASE + 0x005c, PACK16(bcsh_C[2], bcsh_C[1]));
-    system_reg_write(BASE + 0x0060, PACK16(bcsh_C[4], bcsh_C[3]));
+    /* 0x8054..0x8060: Cslope0:C[0], Cslope2:Cslope1, C[2]:C[1], C[4]:C[3]
+     * Note: OEM puts Cslope0 (not B) in 0x8054 high word. */
+    system_reg_write(BASE + 0x0054, PACK16(bcsh_Cslope[0], bcsh_ai32C[0]));
+    system_reg_write(BASE + 0x0058, PACK16(bcsh_Cslope[2], bcsh_Cslope[1]));
+    system_reg_write(BASE + 0x005c, PACK16(bcsh_ai32C[2], bcsh_ai32C[1]));
+    system_reg_write(BASE + 0x0060, PACK16(bcsh_ai32C[4], bcsh_ai32C[3]));
 
-    /* 0x0064..0x0070: OffsetYUVy + clip0, then clip0[2:1], clip1[0..3] */
-    {
-        uint32_t off0 = bcsh_OffsetYUVy[0], off1 = bcsh_OffsetYUVy[1];
-        /* If not explicitly set, derive UV offsets from RGB via OEM Toffset chain */
-        if ((off0 | off1) == 0) {
-            int32_t rgb_in[3] = { (int32_t)RGB[0], (int32_t)RGB[1], (int32_t)RGB[2] };
-            int32_t yuv_out[3] = {0};
-            if (tiziano_bcsh_Toffset_RGB2YUV(yuv_out, rgb_in) == 0) {
-                /* Use U,V from yuv_out[1], yuv_out[2]; clamp to 13-bit before shift */
-                off0 = (uint32_t)(yuv_out[1] & 0x1FFF);
-                off1 = (uint32_t)(yuv_out[2] & 0xFFFF);
-            }
-        }
-        system_reg_write(BASE + 0x0064, PACK16(off1, ((off0 << 3) | (bcsh_clip0[0] & 0x7))));
-    }
-    system_reg_write(BASE + 0x0068, PACK16(bcsh_clip0[2], bcsh_clip0[1]));
-    system_reg_write(BASE + 0x006c, PACK16(bcsh_clip1[0], bcsh_clip1[1]));
-    system_reg_write(BASE + 0x0070, PACK16(bcsh_clip1[2], bcsh_clip1[3]));
+    /* 0x8064..0x8070: Sstep/Sthres, then S-values (OEM: arg12/arg10/arg11)
+     * 0x8064: Sstep[1] << 16 | (Sstep[0] << 3 | Sthres[0])
+     * 0x8068: Sthres[2] << 16 | Sthres[1]
+     * 0x806c: Svalue[0] << 16 | Svalue[1]
+     * 0x8070: Svalue[2] << 16 | Svalue[3] */
+    system_reg_write(BASE + 0x0064,
+        PACK16(bcsh_Sstep[1], ((bcsh_Sstep[0] << 3) | (Sth[0] & 0x7))));
+    system_reg_write(BASE + 0x0068, PACK16(Sth[2], Sth[1]));
+    system_reg_write(BASE + 0x006c, PACK16(bcsh_ai32Svalue[0], bcsh_ai32Svalue[1]));
+    system_reg_write(BASE + 0x0070, PACK16(bcsh_ai32Svalue[2], bcsh_ai32Svalue[3]));
 }
 
 /* ADR (Adaptive Dynamic Range) Variables */
@@ -4129,71 +4227,121 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 
 
 
+/*
+ * OEM-matched unsigned linear interpolation helper.
+ * Given two values (lo, hi) and unsigned distances, interpolates:
+ *   if hi >= lo: result = lo + dist * (hi - lo) / range
+ *   if hi <  lo: result = lo - dist * (lo - hi) / range
+ * This avoids uint32_t underflow that would occur with (hi - lo) when hi < lo.
+ */
+static inline uint32_t bcsh_uinterp(uint32_t val_lo, uint32_t val_hi,
+                                     uint32_t dist, uint32_t range)
+{
+    if (!range)
+        return val_lo;
+    if (val_hi >= val_lo)
+        return val_lo + dist * (val_hi - val_lo) / range;
+    else
+        return val_lo - dist * (val_lo - val_hi) / range;
+}
+
 static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
 {
     uint32_t ev_shifted = tuning->bcsh_ev >> 10;
-    uint32_t interp_values[8];
+    uint32_t *Cxl_arr, *Cxh_arr, *Cyl_arr, *Cyh_arr;
+    uint32_t *RGB;
+    int32_t rgb_in[3];
     int i;
 
-    // Check if EV is below min threshold
+    /* Select the active Cx/Cy arrays based on WDR mode */
+    Cxl_arr = bcsh_wdr_enabled ? bcsh_Cxl_wdr : bcsh_Cxl;
+    Cxh_arr = bcsh_wdr_enabled ? bcsh_Cxh_wdr : bcsh_Cxh;
+    Cyl_arr = bcsh_wdr_enabled ? bcsh_Cyl_wdr : bcsh_Cyl;
+    Cyh_arr = bcsh_wdr_enabled ? bcsh_Cyh_wdr : bcsh_Cyh;
+
+    /* OEM: check if EV is below min threshold */
     if (tuning->bcsh_au32EvList_now[0] > ev_shifted) {
-        // Use minimum values
+        /* Use index-0 values for all 8 arrays */
         tuning->bcsh_saturation_value = tuning->bcsh_au32SminListS_now[0];
-        tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[0];
-        tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[0];
-        tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[0];
-        /* Apply to hardware */
-        tiziano_bcsh_reg_apply(tuning);
-        return 0;
-    }
+        tuning->bcsh_saturation_max   = tuning->bcsh_au32SmaxListS_now[0];
+        tuning->bcsh_saturation_min   = tuning->bcsh_au32SminListM_now[0];
+        tuning->bcsh_saturation_mult  = tuning->bcsh_au32SmaxListM_now[0];
+        bcsh_Cxl_intp = Cxl_arr[0];
+        bcsh_Cxh_intp = Cxh_arr[0];
+        bcsh_Cyl_intp = Cyl_arr[0];
+        bcsh_Cyh_intp = Cyh_arr[0];
+    } else if (ev_shifted >= tuning->bcsh_au32EvList_now[8]) {
+        /* Use index-8 values for all 8 arrays */
+        tuning->bcsh_saturation_value = tuning->bcsh_au32SminListS_now[8];
+        tuning->bcsh_saturation_max   = tuning->bcsh_au32SmaxListS_now[8];
+        tuning->bcsh_saturation_min   = tuning->bcsh_au32SminListM_now[8];
+        tuning->bcsh_saturation_mult  = tuning->bcsh_au32SmaxListM_now[8];
+        bcsh_Cxl_intp = Cxl_arr[8];
+        bcsh_Cxh_intp = Cxh_arr[8];
+        bcsh_Cyl_intp = Cyl_arr[8];
+        bcsh_Cyh_intp = Cyh_arr[8];
+    } else {
+        /* Find interpolation interval and interpolate all 8 arrays */
+        for (i = 0; i < 8; i++) {
+            uint32_t ev_low  = tuning->bcsh_au32EvList_now[i];
+            uint32_t ev_high = tuning->bcsh_au32EvList_now[i + 1];
 
-    // Check if EV is above max threshold
-    if (ev_shifted >= tuning->bcsh_au32EvList_now[8]) {
-        // Use maximum values
-        tuning->bcsh_saturation_value  = tuning->bcsh_au32SminListS_now[8];
-        tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[8];
-        tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[8];
-        tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[8];
-        // Set other max values...
-        /* Apply to hardware */
-        tiziano_bcsh_reg_apply(tuning);
-        return 0;
-    }
+            if (ev_shifted >= ev_low && ev_shifted < ev_high) {
+                uint32_t dist  = (ev_shifted >= ev_low) ?
+                                 (ev_shifted - ev_low) : (ev_low - ev_shifted);
+                uint32_t range = (ev_high >= ev_low) ?
+                                 (ev_high - ev_low) : (ev_low - ev_high);
 
-    // Find interpolation interval
-    for (i = 0; i < 8; i++) {
-        uint32_t ev_low = tuning->bcsh_au32EvList_now[i];
-        uint32_t ev_high = tuning->bcsh_au32EvList_now[i + 1];
+                /* Interpolate 4 saturation arrays */
+                tuning->bcsh_saturation_value = bcsh_uinterp(
+                    tuning->bcsh_au32SminListS_now[i],
+                    tuning->bcsh_au32SminListS_now[i + 1], dist, range);
 
-        if (ev_shifted >= ev_low && ev_shifted < ev_high) {
-            // Linear interpolation between points
-            uint32_t range = ev_high - ev_low;
-            uint32_t dist = ev_shifted - ev_low;
-            uint32_t weight = range ? (dist << 8) / range : 0;  // Fixed point 8.8
+                tuning->bcsh_saturation_max = bcsh_uinterp(
+                    tuning->bcsh_au32SmaxListS_now[i],
+                    tuning->bcsh_au32SmaxListS_now[i + 1], dist, range);
 
-            // Interpolate SminListS
-            uint32_t v1 = tuning->bcsh_au32SminListS_now[i];
-            uint32_t v2 = tuning->bcsh_au32SminListS_now[i + 1];
-            tuning->bcsh_saturation_value = v1 + (((v2 - v1) * weight) >> 8);
+                tuning->bcsh_saturation_min = bcsh_uinterp(
+                    tuning->bcsh_au32SminListM_now[i],
+                    tuning->bcsh_au32SminListM_now[i + 1], dist, range);
 
-            // Interpolate SmaxListS
-            v1 = tuning->bcsh_au32SmaxListS_now[i];
-            v2 = tuning->bcsh_au32SmaxListS_now[i + 1];
-            tuning->bcsh_saturation_max = v1 + (((v2 - v1) * weight) >> 8);
+                tuning->bcsh_saturation_mult = bcsh_uinterp(
+                    tuning->bcsh_au32SmaxListM_now[i],
+                    tuning->bcsh_au32SmaxListM_now[i + 1], dist, range);
 
-            // Interpolate SminListM
-            v1 = tuning->bcsh_au32SminListM_now[i];
-            v2 = tuning->bcsh_au32SminListM_now[i + 1];
-            tuning->bcsh_saturation_min = v1 + (((v2 - v1) * weight) >> 8);
+                /* Interpolate 4 chroma clip limit arrays */
+                bcsh_Cxl_intp = bcsh_uinterp(
+                    Cxl_arr[i], Cxl_arr[i + 1], dist, range);
 
-            // Interpolate SmaxListM
-            v1 = tuning->bcsh_au32SmaxListM_now[i];
-            v2 = tuning->bcsh_au32SmaxListM_now[i + 1];
-            tuning->bcsh_saturation_mult = v1 + (((v2 - v1) * weight) >> 8);
+                bcsh_Cxh_intp = bcsh_uinterp(
+                    Cxh_arr[i], Cxh_arr[i + 1], dist, range);
 
-            break;
+                bcsh_Cyl_intp = bcsh_uinterp(
+                    Cyl_arr[i], Cyl_arr[i + 1], dist, range);
+
+                bcsh_Cyh_intp = bcsh_uinterp(
+                    Cyh_arr[i], Cyh_arr[i + 1], dist, range);
+
+                break;
+            }
         }
     }
+
+    /* OEM: tiziano_bcsh_Toffset_RGB2YUV(&OffsetRGB2yuv, OffsetRGB_now)
+     * Convert current RGB offsets to YUV domain EVERY frame, before TransitParam.
+     * The result feeds into the offset register at 0x8064. */
+    RGB = bcsh_wdr_enabled ? bcsh_OffsetRGB_wdr : bcsh_OffsetRGB;
+    rgb_in[0] = (int32_t)RGB[0];
+    rgb_in[1] = (int32_t)RGB[1];
+    rgb_in[2] = (int32_t)RGB[2];
+    tiziano_bcsh_Toffset_RGB2YUV((int32_t *)bcsh_OffsetRGB2yuv, rgb_in);
+
+    /* TODO: OEM calls tiziano_ct_bcsh_interpolation(tiziano_bcsh_Tccm_Comp2Orig())
+     * here to do CT-based CCM interpolation (reg2para on CCM matrices), then
+     * tiziano_bcsh_Tccm_RGB2YUV before TransitParam. */
+
+    /* Compute adjusted S-values, C-values, slopes, offsets from controls */
+    tiziano_bcsh_TransitParam(tuning);
 
     /* Apply to hardware */
     tiziano_bcsh_reg_apply(tuning);
