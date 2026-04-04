@@ -442,13 +442,13 @@ static uint32_t bcsh_ev_ctrl[4]; /* [mode, idxA, mode2, idxB] — low byte of ea
 #define bcsh_ev_idxB   ((u8)bcsh_ev_ctrl[3])
 
 /* TransitParam output: adjusted S-values (OEM: tisp_BCSH_ai32Svalue + data_b5444..b544c) */
-static uint32_t bcsh_ai32Svalue[4];
+static uint32_t bcsh_ai32Svalue[4] = {1154, 1154, 1154, 1154};
 /* TransitParam output: adjusted C-values (OEM: tisp_BCSH_ai32C + data_b5454..b5460) */
-static uint32_t bcsh_ai32C[5];
+static uint32_t bcsh_ai32C[5] = {1, 0, 900, 0, 900};
 /* TransitParam output: brightness-adjusted Y offset */
-static uint32_t bcsh_brightness_offset;
+static uint32_t bcsh_brightness_offset = 0x400;
 /* TransitParam output: C slopes (OEM: tisp_BCSH_u32Cslope0/1/2) */
-static uint32_t bcsh_Cslope[3];
+static uint32_t bcsh_Cslope[3] = {0, 1024, 1024};
 /* TransitParam output: S-step (OEM: tisp_BCSH_u32Sstep, 2 elements) */
 static uint32_t bcsh_Sstep[2];
 /* TransitParam output: HDP/HBP/HLSP slopes */
