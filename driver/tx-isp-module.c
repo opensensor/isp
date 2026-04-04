@@ -67,6 +67,26 @@ struct sensor_ops_storage {
 };
 static struct sensor_ops_storage stored_sensor_ops;
 
+/* Deferred sensor I2C write — runs in workqueue context (process context, no locks) */
+static void sensor_expo_work_func(struct work_struct *work);
+static DECLARE_WORK(sensor_expo_work, sensor_expo_work_func);
+
+static void sensor_expo_work_func(struct work_struct *work)
+{
+    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor_update_pending)
+        return;
+    if (stored_sensor_ops.original_ops &&
+        stored_sensor_ops.original_ops->sensor &&
+        stored_sensor_ops.original_ops->sensor->ioctl &&
+        stored_sensor_ops.sensor_sd) {
+        int packed = ((int)ourISPdev->sensor->attr.again << 16) |
+                     ((int)ourISPdev->sensor->attr.integration_time & 0xffff);
+        stored_sensor_ops.original_ops->sensor->ioctl(
+            stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_EXPO, &packed);
+    }
+    ourISPdev->sensor_update_pending = 0;
+}
+
 static int tx_isp_sensor_has_usable_attachment(struct tx_isp_sensor *sensor)
 {
     if (!sensor || !sensor->video.attr)
@@ -1869,17 +1889,6 @@ static int sensor_set_integration_time(int time) {
     if (!ourISPdev || !ourISPdev->sensor)
         return 0;
     ourISPdev->sensor->attr.integration_time = (uint16_t)time;
-
-    /* Call original sensor driver's ioctl directly with TX_ISP_EVENT_SENSOR_EXPO.
-     * The packed value (gain<<16 | it) goes to sensor_set_expo() which does I2C. */
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->sensor &&
-        stored_sensor_ops.original_ops->sensor->ioctl &&
-        stored_sensor_ops.sensor_sd) {
-        int packed = ((int)ourISPdev->sensor->attr.again << 16) | (time & 0xffff);
-        stored_sensor_ops.original_ops->sensor->ioctl(
-            stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_EXPO, &packed);
-    }
     return 0;
 }
 
@@ -1908,17 +1917,6 @@ static int sensor_set_analog_gain(int gain) {
     if (!ourISPdev || !ourISPdev->sensor)
         return 0;
     ourISPdev->sensor->attr.again = gain;
-
-    /* Call original sensor driver's ioctl directly with TX_ISP_EVENT_SENSOR_EXPO.
-     * The packed value (gain<<16 | it) goes to sensor_set_expo() which does I2C. */
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->sensor &&
-        stored_sensor_ops.original_ops->sensor->ioctl &&
-        stored_sensor_ops.sensor_sd) {
-        int packed = (gain << 16) | ((int)ourISPdev->sensor->attr.integration_time & 0xffff);
-        stored_sensor_ops.original_ops->sensor->ioctl(
-            stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_EXPO, &packed);
-    }
     return 0;
 }
 
