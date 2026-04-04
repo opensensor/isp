@@ -1325,126 +1325,101 @@ static uint32_t wdr_init_fe8 = 0;     /* data_a1fe8 */
 static uint32_t param_wdr_priv_array[0x40/4] = {0};
 static uint32_t param_wdr_weightLUT20_array[0x80/4] = {0};
 
-/* BCSH hardware apply: program registers using TransitParam outputs.
- * TransitParam must have been called before this function to populate
- * bcsh_ai32Svalue[], bcsh_ai32C[], bcsh_Cslope[], bcsh_brightness_offset,
- * bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope. */
-static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
+/* OEM EXACT: tiziano_bcsh_lut_parameter (HLIL @ 0x28114).
+ *
+ * Writes BCSH registers 0x8000-0x8070.  TransitParam must have been called
+ * beforehand to populate all static BCSH arrays and slopes.
+ *
+ * OEM signature (19 pointer arguments -- MIPS ABI puts first 4 in regs):
+ *   arg1  = &clip0       arg2  = &clip1       arg3  = &clip2
+ *   arg4  = &Offset0     arg5  = &Offset1     arg6  = &ai32C
+ *   arg7  = &Cslope0     arg8  = &Cslope1     arg9  = &Cslope2
+ *   arg10 = &Sthres      arg11 = &ai32Svalue  arg12 = &Sstep
+ *   arg13 = &HMatrix     arg14 = &HDP         arg15 = &HDPslope
+ *   arg16 = &HBP         arg17 = &HBPslope    arg18 = &HLSP
+ *   arg19 = &HLSPslope
+ *
+ * Our wrapper resolves all 19 arguments from static globals (WDR-banked
+ * where applicable) so the caller just passes the tuning pointer.
+ *
+ * Register packing (verified against OEM decompilation):
+ *
+ *   0x8000  clip0[0] << 16 | clip0[1]
+ *   0x8004  clip1[0] << 16 | clip1[1]
+ *   0x8008  clip2[0] << 16 | clip2[1]
+ *   0x800c  clip0[2] << 16 | clip0[3]
+ *   0x8010  clip1[2] << 16 | clip1[3]
+ *   0x8014  clip2[2] << 16 | clip2[3]
+ *   0x8018  Offset1[0] << 16 | Offset0[0]
+ *   0x801c  Offset1[1] << 16 | Offset0[1]
+ *   0x8020  Offset1[2] << 16 | Offset0[2]
+ *   0x8024  HMatrix[1] << 16 | HMatrix[0]
+ *   0x8028  HMatrix[2]
+ *   0x802c  HMatrix[4] << 16 | HMatrix[3]
+ *   0x8030  HMatrix[5]
+ *   0x8034  HMatrix[7] << 16 | HMatrix[6]
+ *   0x8038  HMatrix[8]
+ *   0x803c  HDPslope << 16 | HDP[0]
+ *   0x8040  HDP[2] << 16 | HDP[1]
+ *   0x8044  HBPslope << 16 | HBP[0]
+ *   0x8048  HBP[2] << 16 | HBP[1]
+ *   0x804c  HLSPslope << 16 | HLSP[0]
+ *   0x8050  HLSP[2] << 16 | HLSP[1]  (modified by EV logic)
+ *   0x8054  Cslope0 << 16 | C[0]
+ *   0x8058  Cslope2 << 16 | Cslope1
+ *   0x805c  C[2] << 16 | C[1]
+ *   0x8060  C[4] << 16 | C[3]
+ *   0x8064  Sstep[1] << 16 | (Sstep[0] << 3 | Sthres[0])
+ *   0x8068  Sthres[2] << 16 | Sthres[1]
+ *   0x806c  Svalue[0] << 16 | Svalue[1]
+ *   0x8070  Svalue[2] << 16 | Svalue[3]
+ */
+static void tiziano_bcsh_lut_parameter(struct isp_tuning_data *tuning)
 {
-    /* BCSH hardware writes enabled unconditionally (OEM-style). */
-    const u32 BASE = 0x00008000; /* OEM BCSH block: 0x8000..0x8070 */
-
-    /* Helper to pack two 16-bit values into one 32-bit word, high:lo order */
+    /* Pack two 16-bit values: hi in bits [31:16], lo in bits [15:0] */
     #define PACK16(hi, lo) ((((u32)(hi) & 0xFFFF) << 16) | ((u32)(lo) & 0xFFFF))
 
-    /* Select banked arrays */
-    u32 *HDP  = bcsh_wdr_enabled ? bcsh_HDP_wdr  : bcsh_HDP;
-    u32 *HBP  = bcsh_wdr_enabled ? bcsh_HBP_wdr  : bcsh_HBP;
-    u32 *HLSP = bcsh_wdr_enabled ? bcsh_HLSP_wdr : bcsh_HLSP;
-    u32 *Sth  = bcsh_wdr_enabled ? bcsh_Sthres_wdr : bcsh_Sthres;
-    u32 B_val = bcsh_wdr_enabled ? bcsh_B_wdr : bcsh_B;
+    /* --- Resolve all 19 OEM arguments from WDR-banked globals --- */
+    u32 *clip0   = bcsh_wdr_enabled ? bcsh_clip0_wdr   : bcsh_clip0;   /* arg1  */
+    u32 *clip1   = bcsh_wdr_enabled ? bcsh_clip1_wdr   : bcsh_clip1;   /* arg2  */
+    u32 *clip2   = bcsh_wdr_enabled ? bcsh_clip2_wdr   : bcsh_clip2;   /* arg3  */
+    /* arg4 (Offset0) and arg5 (Offset1) computed inline below */
+    u32 *C       = bcsh_ai32C;                                         /* arg6  */
+    u32  Cslope0 = bcsh_Cslope[0];                                     /* arg7  */
+    u32  Cslope1 = bcsh_Cslope[1];                                     /* arg8  */
+    u32  Cslope2 = bcsh_Cslope[2];                                     /* arg9  */
+    u32 *Sth     = bcsh_wdr_enabled ? bcsh_Sthres_wdr  : bcsh_Sthres;  /* arg10 */
+    u32 *Sval    = bcsh_ai32Svalue;                                    /* arg11 */
+    u32 *Sstep   = bcsh_Sstep;                                         /* arg12 */
+    /* arg13 (HMatrix) built below via tiziano_bcsh_build_HMatrix */
+    u32 *HDP     = bcsh_wdr_enabled ? bcsh_HDP_wdr     : bcsh_HDP;     /* arg14 */
+    u32  HDPsl   = bcsh_HDPslope;                                      /* arg15 */
+    u32 *HBP     = bcsh_wdr_enabled ? bcsh_HBP_wdr     : bcsh_HBP;     /* arg16 */
+    u32  HBPsl   = bcsh_HBPslope;                                      /* arg17 */
+    u32 *HLSP    = bcsh_wdr_enabled ? bcsh_HLSP_wdr    : bcsh_HLSP;    /* arg18 */
+    u32  HLSPsl  = bcsh_HLSPslope;                                     /* arg19 */
 
-    /* Build HMatrix — output is already in 14-bit register format
-     * (tiziano_bcsh_Tccm_RGB2YUV applies para2reg internally) */
-    int32_t Hreg[9];
-    tiziano_bcsh_build_HMatrix(Hreg);
+    /* arg13: HMatrix in 14-bit register format (para2reg already applied) */
+    int32_t HM[9];
+    tiziano_bcsh_build_HMatrix(HM);
 
+    /* arg4/arg5: Offset0/Offset1 (OEM sets in TransitParam, we compute inline) */
+    u32 *offy = bcsh_wdr_enabled ? bcsh_OffsetYUVy_wdr : bcsh_OffsetYUVy;
+    u32 Off0[3], Off1[3];
+    Off0[0] = offy[0];
+    Off0[1] = 0x400;  /* OEM data_9a660 */
+    Off0[2] = 0x400;  /* OEM data_9a664 */
+    Off1[0] = offy[1] + bcsh_OffsetRGB2yuv[0] - 0x0800 + bcsh_brightness_offset;
+    Off1[1] = bcsh_OffsetRGB2yuv[1];
+    Off1[2] = bcsh_OffsetRGB2yuv[2];
+
+    /* --- Pre-compute reg 0x8050 (EV-gated HLSP blend) ---
+     * OEM: s1_3 starts as HLSP[2]<<16 | HLSP[1], then is conditionally
+     * modified by bcsh_ev_mode / bcsh_ev_mode2.  Both default to 0, so
+     * the common path keeps the initial HLSP value unchanged. */
+    u32 s1_3 = PACK16(HLSP[2], HLSP[1]);
     {
-        static int hlog;
-        if (!hlog) {
-            pr_info("BCSH_DIAG: Hreg=[0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x]\n",
-                    Hreg[0], Hreg[1], Hreg[2], Hreg[3], Hreg[4], Hreg[5],
-                    Hreg[6], Hreg[7], Hreg[8]);
-            hlog = 1;
-        }
-    }
-
-    {
-        static int slog;
-        if (!slog) {
-            pr_info("BCSH_DIAG: Sval=[%u,%u,%u,%u] C=[%u,%u,%u,%u,%u]\n",
-                    bcsh_ai32Svalue[0], bcsh_ai32Svalue[1],
-                    bcsh_ai32Svalue[2], bcsh_ai32Svalue[3],
-                    bcsh_ai32C[0], bcsh_ai32C[1], bcsh_ai32C[2],
-                    bcsh_ai32C[3], bcsh_ai32C[4]);
-            pr_info("BCSH_DIAG: Cslope=[%u,%u,%u] Sstep=[%u,%u] bri_off=%u\n",
-                    bcsh_Cslope[0], bcsh_Cslope[1], bcsh_Cslope[2],
-                    bcsh_Sstep[0], bcsh_Sstep[1], bcsh_brightness_offset);
-            pr_info("BCSH_DIAG: B=%u Sthres=[%u,%u,%u]\n",
-                    B_val, Sth[0], Sth[1], Sth[2]);
-            pr_info("BCSH_DIAG: HDP=[%u,%u,%u] HBP=[%u,%u,%u] HLSP=[%u,%u,%u]\n",
-                    HDP[0], HDP[1], HDP[2],
-                    HBP[0], HBP[1], HBP[2],
-                    HLSP[0], HLSP[1], HLSP[2]);
-            pr_info("BCSH_DIAG: slopes HDP=%u HBP=%u HLSP=%u\n",
-                    bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope);
-            slog = 1;
-        }
-    }
-
-    /* 0x8000..0x8014: clip0, clip1, clip2 (display clipping params) */
-    {
-        u32 *clip0 = bcsh_wdr_enabled ? bcsh_clip0_wdr : bcsh_clip0;
-        u32 *clip1 = bcsh_wdr_enabled ? bcsh_clip1_wdr : bcsh_clip1;
-        u32 *clip2 = bcsh_wdr_enabled ? bcsh_clip2_wdr : bcsh_clip2;
-        system_reg_write(BASE + 0x0000, PACK16(clip0[0], clip0[1]));
-        system_reg_write(BASE + 0x0004, PACK16(clip1[0], clip1[1]));
-        system_reg_write(BASE + 0x0008, PACK16(clip2[0], clip2[1]));
-        system_reg_write(BASE + 0x000c, PACK16(clip0[2], clip0[3]));
-        system_reg_write(BASE + 0x0010, PACK16(clip1[2], clip1[3]));
-        system_reg_write(BASE + 0x0014, PACK16(clip2[2], clip2[3]));
-    }
-
-    /* 0x8018..0x8020: Offset1[3] interleaved with Offset0[3]
-     * OEM TransitParam sets:
-     *   Offset1[0] = OffsetYUVy[1] + OffsetRGB2yuv[0] - 0x800 + brightness_offset
-     *   Offset1[1] = OffsetRGB2yuv[1]
-     *   Offset1[2] = OffsetRGB2yuv[2]
-     *   Offset0[0] = OffsetYUVy[0]
-     *   Offset0[1] = 0x400  (data_9a660)
-     *   Offset0[2] = 0x400  (data_9a664) */
-    {
-        u32 *offy = bcsh_wdr_enabled ? bcsh_OffsetYUVy_wdr : bcsh_OffsetYUVy;
-        u32 off1_0 = offy[1] + bcsh_OffsetRGB2yuv[0] - 0x0800 + bcsh_brightness_offset;
-        u32 off1_1 = bcsh_OffsetRGB2yuv[1];
-        u32 off1_2 = bcsh_OffsetRGB2yuv[2];
-        u32 off0_0 = offy[0];
-        u32 off0_1 = 0x400;
-        u32 off0_2 = 0x400;
-        system_reg_write(BASE + 0x0018, PACK16(off1_0, off0_0));
-        system_reg_write(BASE + 0x001c, PACK16(off1_1, off0_1));
-        system_reg_write(BASE + 0x0020, PACK16(off1_2, off0_2));
-    }
-
-    /* 0x8024..0x8038: HMatrixReg (9 elements) in BN pattern */
-    system_reg_write(BASE + 0x0024, PACK16((u32)Hreg[1], (u32)Hreg[0]));
-    system_reg_write(BASE + 0x0028, (u32)Hreg[2]);
-    system_reg_write(BASE + 0x002c, PACK16((u32)Hreg[4], (u32)Hreg[3]));
-    system_reg_write(BASE + 0x0030, (u32)Hreg[5]);
-    system_reg_write(BASE + 0x0034, PACK16((u32)Hreg[7], (u32)Hreg[6]));
-    system_reg_write(BASE + 0x0038, (u32)Hreg[8]);
-
-    /* 0x803C..0x8048: HDPslope:HDP, HBPslope:HBP (OEM layout from lut_parameter) */
-    system_reg_write(BASE + 0x003c, PACK16(bcsh_HDPslope, HDP[0]));
-    system_reg_write(BASE + 0x0040, PACK16(HDP[2], HDP[1]));
-    system_reg_write(BASE + 0x0044, PACK16(bcsh_HBPslope, HBP[0]));
-    system_reg_write(BASE + 0x0048, PACK16(HBP[2], HBP[1]));
-
-    /* 0x804C: HLSPslope:HLSP[0] */
-    system_reg_write(BASE + 0x004c, PACK16(bcsh_HLSPslope, HLSP[0]));
-
-    /* 0x8050: EV/HLSP-gated mixed value (OEM: reg 0x8050).
-     * OEM initializes s1_3 = HLSP[2] << 16 | HLSP[1], then conditionally
-     * modifies it based on control bytes tisp_BCSH_au32clip0 and data_b53d8.
-     * Control bytes default to 0, so the default path keeps the initial value.
-     *
-     * bcsh_ev_mode     = tisp_BCSH_au32clip0 (byte, default 0)
-     * bcsh_ev_idxA     = data_b53d4 (byte, default 0, clamped to [1..9])
-     * bcsh_ev_mode2    = data_b53d8 (byte, default 0)
-     * bcsh_ev_idxB     = data_b53dc (byte, default 0, clamped to [1..9])
-     */
-    {
-        u32 ev10 = tuning->bcsh_ev >> 10; /* matches data_8a604 >> 10 */
+        u32 ev10 = tuning->bcsh_ev >> 10;  /* OEM: data_8a604 u>> 0xa */
         u32 *EvList = bcsh_wdr_enabled ? bcsh_EvList_wdr : bcsh_EvList;
 
         /* OEM: clamp indices to [1..9] */
@@ -1455,82 +1430,117 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
         if (idxB >= 10) idxB = 9;
         else if (idxB == 0) idxB = 1;
 
-        /* OEM: initial value from HLSP array, NOT zero */
-        u32 s1_3 = PACK16(HLSP[2], HLSP[1]);
-
         if (bcsh_ev_mode == 1) {
+            /* Mode 1: scale HLSP[1]/HLSP[2] by ev10 vs threshold */
             u32 a0_48 = EvList[idxA - 1];
             if (ev10 < a0_48) {
                 u32 v1_7 = (ev10 < 2) ? 1 : 0;
-                u32 v0_8 = bcsh_ev_mode - ev10;
+                u32 v0_8 = 1 - ev10;      /* OEM: clip0_1(=1) - ev10 */
                 u32 a2_11 = ev10 - 1;
                 if (v1_7) a2_11 = v0_8;
-                u32 clip0_2 = (a0_48 == 0) ? bcsh_ev_mode : (a0_48 - 1);
+                u32 clip0_2 = (a0_48 == 0) ? 1 : (a0_48 - 1);
                 if (!v1_7) v0_8 = ev10 - 1;
                 u32 v0_9 = (a0_48 == 0) ? 1 : (a0_48 - 1);
                 u32 lo = 0, hi = 0;
-                if (v0_9) lo = (u32)div_u64((u64)v0_8 * HLSP[1], v0_9);
-                if (clip0_2) hi = (u32)div_u64((u64)a2_11 * HLSP[2], clip0_2);
+                if (v0_9)
+                    lo = (u32)div_u64((u64)v0_8 * HLSP[1], v0_9);
+                if (clip0_2)
+                    hi = (u32)div_u64((u64)a2_11 * HLSP[2], clip0_2);
                 s1_3 = (hi << 16) | (lo & 0xFFFF);
             }
         } else if (bcsh_ev_mode2 == 1) {
-            u32 v1_8 = EvList[8]; /* OEM: *(EvList_now + 0x20) = EvList[8] */
-            if (ev10 < v1_8) {
+            /* Mode 2: decay HLSP toward zero between thresholds */
+            u32 v1_8 = EvList[8];  /* OEM: *(EvList_now + 0x20) */
+            if (ev10 >= v1_8) {
+                s1_3 = 0;
+            } else {
                 u32 a0_50 = EvList[idxB - 1];
                 if (a0_50 < ev10) {
+                    /* Compute hi word (from HLSP[2]) */
                     u32 t9_1 = HLSP[2];
-                    u32 s1_6 = HLSP[1];
                     u32 hi_part;
                     if (t9_1 == 0) {
                         hi_part = 0;
                     } else {
-                        u32 s0_1 = (v1_8 >= a0_50) ? (v1_8 - a0_50) : (a0_50 - v1_8);
-                        if (s0_1 == 0) s0_1 = 1;
-                        u32 dec = (u32)div_u64((u64)(ev10 - a0_50) * t9_1, s0_1);
+                        u32 span = (v1_8 >= a0_50) ?
+                                   (v1_8 - a0_50) : (a0_50 - v1_8);
+                        if (span == 0) span = 1;
+                        u32 dec = (u32)div_u64(
+                            (u64)(ev10 - a0_50) * t9_1, span);
                         if (dec > t9_1) dec = t9_1;
                         hi_part = (t9_1 - dec) & 0xFFFF;
                     }
+                    /* Compute lo word (from HLSP[1]) */
+                    u32 s1_6 = HLSP[1];
                     u32 lo_part;
                     if (s1_6 == 0) {
                         lo_part = 0;
                     } else {
-                        u32 v1_9 = (v1_8 >= a0_50) ? (v1_8 - a0_50) : (a0_50 - v1_8);
-                        if (v1_9 == 0) v1_9 = 1;
-                        u32 dec2 = (u32)div_u64((u64)(ev10 - a0_50) * s1_6, v1_9);
-                        if (dec2 > s1_6) dec2 = s1_6;
-                        lo_part = (s1_6 - dec2) & 0xFFFF;
+                        u32 span = (v1_8 >= a0_50) ?
+                                   (v1_8 - a0_50) : (a0_50 - v1_8);
+                        if (span == 0) span = 1;
+                        u32 dec = (u32)div_u64(
+                            (u64)(ev10 - a0_50) * s1_6, span);
+                        if (dec > s1_6) dec = s1_6;
+                        lo_part = (s1_6 - dec) & 0xFFFF;
                     }
                     s1_3 = (hi_part << 16) | lo_part;
                 }
-                /* else: a0_50 >= ev10, s1_3 keeps initial HLSP value (OEM: no assignment) */
-            }
-            /* else: ev10 >= v1_8, s1_3 = 0 */
-            else {
-                s1_3 = 0;
+                /* else: a0_50 >= ev10 -- s1_3 keeps initial HLSP value */
             }
         }
-        /* else: bcsh_ev_mode != 1 && bcsh_ev_mode2 != 1 → s1_3 stays at initial HLSP value */
-        system_reg_write(BASE + 0x0050, s1_3);
+        /* else: mode==0 && mode2==0 -- s1_3 stays at HLSP[2]<<16|HLSP[1] */
     }
 
-    /* 0x8054..0x8060: Cslope0:C[0], Cslope2:Cslope1, C[2]:C[1], C[4]:C[3]
-     * Note: OEM puts Cslope0 (not B) in 0x8054 high word. */
-    system_reg_write(BASE + 0x0054, PACK16(bcsh_Cslope[0], bcsh_ai32C[0]));
-    system_reg_write(BASE + 0x0058, PACK16(bcsh_Cslope[2], bcsh_Cslope[1]));
-    system_reg_write(BASE + 0x005c, PACK16(bcsh_ai32C[2], bcsh_ai32C[1]));
-    system_reg_write(BASE + 0x0060, PACK16(bcsh_ai32C[4], bcsh_ai32C[3]));
+    /* === Write all 29 registers 0x8000..0x8070 === */
 
-    /* 0x8064..0x8070: Sstep/Sthres, then S-values (OEM: arg12/arg10/arg11)
-     * 0x8064: Sstep[1] << 16 | (Sstep[0] << 3 | Sthres[0])
-     *         OEM does NOT mask Sthres[0] — it is OR'd directly (e.g. 0x360)
-     * 0x8068: Sthres[2] << 16 | Sthres[1]
-     * 0x806c: Svalue[0] << 16 | Svalue[1]
-     * 0x8070: Svalue[2] << 16 | Svalue[3] */
-    system_reg_write(BASE + 0x0064,
-        (((u32)bcsh_Sstep[1] & 0xFFFF) << 16) | ((u32)bcsh_Sstep[0] << 3) | (u32)Sth[0]);
-    system_reg_write(BASE + 0x0068, PACK16(Sth[2], Sth[1]));
-    system_reg_write(BASE + 0x006c, PACK16(bcsh_ai32Svalue[0], bcsh_ai32Svalue[1]));
-    system_reg_write(BASE + 0x0070, PACK16(bcsh_ai32Svalue[2], bcsh_ai32Svalue[3]));
+    /* 0x8000-0x8014: Clipping parameters (clip0/clip1/clip2, 4 elements each) */
+    system_reg_write(0x8000, PACK16(clip0[0], clip0[1]));   /* arg1[0]<<16 | arg1[1] */
+    system_reg_write(0x8004, PACK16(clip1[0], clip1[1]));   /* arg2[0]<<16 | arg2[1] */
+    system_reg_write(0x8008, PACK16(clip2[0], clip2[1]));   /* arg3[0]<<16 | arg3[1] */
+    system_reg_write(0x800c, PACK16(clip0[2], clip0[3]));   /* arg1[2]<<16 | arg1[3] */
+    system_reg_write(0x8010, PACK16(clip1[2], clip1[3]));   /* arg2[2]<<16 | arg2[3] */
+    system_reg_write(0x8014, PACK16(clip2[2], clip2[3]));   /* arg3[2]<<16 | arg3[3] */
+
+    /* 0x8018-0x8020: Offset1/Offset0 interleaved (arg5[i]<<16 | arg4[i]) */
+    system_reg_write(0x8018, PACK16(Off1[0], Off0[0]));
+    system_reg_write(0x801c, PACK16(Off1[1], Off0[1]));
+    system_reg_write(0x8020, PACK16(Off1[2], Off0[2]));
+
+    /* 0x8024-0x8038: HMatrix[9] (arg13), packed as pairs + singles */
+    system_reg_write(0x8024, PACK16((u32)HM[1], (u32)HM[0]));
+    system_reg_write(0x8028, (u32)HM[2]);
+    system_reg_write(0x802c, PACK16((u32)HM[4], (u32)HM[3]));
+    system_reg_write(0x8030, (u32)HM[5]);
+    system_reg_write(0x8034, PACK16((u32)HM[7], (u32)HM[6]));
+    system_reg_write(0x8038, (u32)HM[8]);
+
+    /* 0x803c-0x8048: HDP/HBP with slopes (arg14/15/16/17) */
+    system_reg_write(0x803c, PACK16(HDPsl, HDP[0]));        /* *arg15<<16 | *arg14   */
+    system_reg_write(0x8040, PACK16(HDP[2], HDP[1]));       /* arg14[2]<<16|arg14[1] */
+    system_reg_write(0x8044, PACK16(HBPsl, HBP[0]));        /* *arg17<<16 | *arg16   */
+    system_reg_write(0x8048, PACK16(HBP[2], HBP[1]));       /* arg16[2]<<16|arg16[1] */
+
+    /* 0x804c: HLSP slope and start (arg18/19) */
+    system_reg_write(0x804c, PACK16(HLSPsl, HLSP[0]));      /* *arg19<<16 | *arg18   */
+
+    /* 0x8050: HLSP blend (EV-gated, computed above) */
+    system_reg_write(0x8050, s1_3);
+
+    /* 0x8054-0x8060: C-values and C-slopes (arg6/7/8/9) */
+    system_reg_write(0x8054, PACK16(Cslope0, C[0]));         /* *arg7<<16  | *arg6    */
+    system_reg_write(0x8058, PACK16(Cslope2, Cslope1));      /* *arg9<<16  | *arg8    */
+    system_reg_write(0x805c, PACK16(C[2], C[1]));            /* arg6[2]<<16| arg6[1]  */
+    system_reg_write(0x8060, PACK16(C[4], C[3]));            /* arg6[4]<<16| arg6[3]  */
+
+    /* 0x8064-0x8070: S-thresholds, steps, and values (arg10/11/12) */
+    system_reg_write(0x8064,                                 /* arg12[1]<<16 | arg12[0]<<3 | *arg10 */
+        PACK16(Sstep[1], 0) | ((u32)Sstep[0] << 3) | (u32)Sth[0]);
+    system_reg_write(0x8068, PACK16(Sth[2], Sth[1]));       /* arg10[2]<<16| arg10[1] */
+    system_reg_write(0x806c, PACK16(Sval[0], Sval[1]));     /* *arg11<<16 | arg11[1]  */
+    system_reg_write(0x8070, PACK16(Sval[2], Sval[3]));     /* arg11[2]<<16| arg11[3] */
+
+    #undef PACK16
 }
 
 /* ADR (Adaptive Dynamic Range) Variables */
@@ -2410,6 +2420,10 @@ static int tisp_mdns_top_func_refresh(void);
 static int tisp_mdns_bypass(int bypass);
 static int tisp_mdns_par_refresh(uint32_t interp_key, uint32_t threshold);
 int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
+
+/* Forward declarations for AE state variables used before definition */
+static uint32_t data_a0e04;
+static uint32_t data_a0e08;
 static int tisp_mdns_all_reg_refresh(uint32_t interp_key);
 static int tisp_mdns_reg_trigger(void);
 
@@ -4814,7 +4828,7 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
     tiziano_bcsh_TransitParam(tuning);
 
     /* Apply to hardware */
-    tiziano_bcsh_reg_apply(tuning);
+    tiziano_bcsh_lut_parameter(tuning);
     return 0;
 }
 
