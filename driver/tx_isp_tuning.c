@@ -306,16 +306,16 @@ static uint32_t _awb_trend = 1;
 
 /* BCSH matrices and state - declared early for use in tiziano_bcsh functions */
 static int32_t tiziano_MMatrix[9] = {
-	/* OEM RGB->YUV transform matrix from tuning blob */
-	0x0400, 0x0000, 0x0400,
-	0x0400, 0x4a3d, (int32_t)0xffff9645,
-	0x1d2f, (int32_t)0xffffd4d1, (int32_t)0xffffab30,
+	/* OEM MMatrix at 0x9a62c — BT.601 RGB->YUV */
+	0x41cb, 0x8106, 0x1917,
+	(int32_t)0xffffda1d, (int32_t)0xffffb581, 0x7062,
+	0x7062, (int32_t)0xffffa1cb, (int32_t)0xffffedd3,
 };
 static int32_t tiziano_MinvMatrix[9] = {
-	/* OEM inverse transform matrix from tuning blob */
-	(int32_t)0x8000, (int32_t)0x8000, (int32_t)0xffff94d1,
-	(int32_t)0xffffeb30, 0x10253, (int32_t)0xfffffffe,
-	0x16a2b, 0x10253, (int32_t)0xffffa7e9,
+	/* OEM MinvMatrix at 0x9a608 — YUV->RGB inverse */
+	0x12a02, 0x00000, 0x19886,
+	0x12a02, (int32_t)0xffff9bcd, (int32_t)0xffff2fbe,
+	0x12a02, 0x2048f, 0x00000,
 };
 static uint32_t s_bcsh_ct_override = 0;
 static int s_bcsh_ct_override_valid = 0;
