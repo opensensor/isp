@@ -74,7 +74,7 @@ module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWU
 MODULE_PARM_DESC(force_bypass_adr,
 			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
 
-static int tisp_force_bypass_defog = 1; /* Defog not fully implemented — bypass by default */
+static int tisp_force_bypass_defog = 0; /* Defog now fully implemented — enable by default */
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_defog,
 			 "Debug isolate FOV issues by forcing Defog bypass (default: 0)");
@@ -1262,6 +1262,29 @@ static uint32_t *adr_blp2_list_now = NULL;
 /* ADR DMA buffer tracking (OEM: data_a2f68 / data_a2f6c) */
 static void *adr_dma_virt = NULL;
 static uint32_t adr_dma_phys = 0;
+/* Defog DMA buffer tracking (OEM: data_a2f74 / data_a2f78)
+ * NOTE: In OEM, defog shares the same DMA buffer as DPC (regs 0x5b84-0x5b90) */
+static void *defog_dma_virt = NULL;
+static uint32_t defog_dma_phys = 0;
+/* Defog statistics arrays populated by tiziano_defog_get_data from DMA buffer */
+static uint32_t defog_block_hist_info[0x2d0 / 4 * 3]; /* 3 entries per block */
+static uint32_t defog_sum_block_r[0x2d0 / 4];
+static uint32_t defog_sum_block_g[0x2d0 / 4];
+static uint32_t defog_sum_block_b[0x2d0 / 4];
+static uint32_t defog_block_mean_y_last[0x2d0 / 4];
+static uint32_t defog_block_mean_y_snap[180]; /* snapshot before soft_process */
+static uint32_t defog_frm_num = 0;
+static uint32_t defog_update_paras = 0;
+/* OEM: defog_block_area_div -- fixed-point reciprocal of block pixel count */
+static uint32_t defog_block_area_div = 0x59e7fd; /* default for 1920x1080 */
+static uint32_t defog_block_area_index[2] = {0, 0x0c}; /* {height%10, width%18} */
+static uint32_t defog_block_area_div_edge_w = 0x5ac11e;  /* OEM data_9cd88 */
+static uint32_t defog_block_area_div_edge_h = 0x5abd19;  /* OEM data_9cd8c */
+static uint32_t defog_block_area_div_corner = 0x5b983e;  /* OEM data_9cd90 */
+static uint32_t defog_tuning_loaded = 0; /* OEM data_9cd60 */
+static uint32_t defog_spatial_en = 0;  /* OEM data_9cd74 */
+static uint32_t defog_color_en  = 0;   /* OEM data_9cd78 */
+static uint32_t defog_manual_mode = 0; /* OEM data_9cd48 */
 /* ADR algorithm arrays - OEM: min/ctc/map kneepoint_y/x */
 static uint32_t min_kneepoint_y[10] = {0};
 static uint32_t min_kneepoint_x[11] = {0};
@@ -1651,7 +1674,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0xDD04;  /* Known-working crisp set: DPC+DMSC+Gamma+BCSH+Sharpen+SDNS (no GIB/Defog/MDNS/YDNS) */
+static uint isp_block_enable = 0x3DD14;  /* LSC+DPC+DMSC+Gamma+BCSH+Sharpen+SDNS+MDNS+YDNS (no GIB; Defog force-bypassed) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -2214,6 +2237,8 @@ int tisp_sdns_wdr_en(int enable);
 int tisp_event_set_cb(int event_id, void *callback);
 int tisp_adr_process(void);
 int tiziano_adr_interrupt_static(void);
+int tisp_defog_process(void);
+int tiziano_defog_interrupt_static(void);
 int tisp_event_init(void);
 int tisp_param_operate_init(void);
 
@@ -2386,6 +2411,12 @@ irqreturn_t awb_interrupt_static_wrapper(int irq, void *dev_id)
 irqreturn_t adr_interrupt_static_wrapper(int irq, void *dev_id)
 {
     tiziano_adr_interrupt_static();
+    return IRQ_HANDLED;
+}
+
+irqreturn_t defog_interrupt_static_wrapper(int irq, void *dev_id)
+{
+    tiziano_defog_interrupt_static();
     return IRQ_HANDLED;
 }
 
@@ -3626,7 +3657,11 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         system_reg_write(0x5b8c, dpc_phys + 0x2000);
         system_reg_write(0x5b90, dpc_phys + 0x3000);
         system_reg_write(0x5b80, 3);  /* Note: control reg is at 0x5b80, not 0x5b94 */
-        pr_info("*** tisp_init: DPC buffer allocated at 0x%08x ***\n", (uint32_t)dpc_phys);
+        /* OEM: DPC buffer is shared with defog (data_a2f74/data_a2f78) */
+        defog_dma_virt = dpc_buffer;
+        defog_dma_phys = (uint32_t)dpc_phys;
+        pr_info("*** tisp_init: DPC/Defog buffer allocated virt=%p phys=0x%08x ***\n",
+                dpc_buffer, (uint32_t)dpc_phys);
     }
 
     /* Binary Ninja: Buffer 6 (0x4000 bytes) → regs 0xb8a8-0xb8b8 */
@@ -7450,13 +7485,235 @@ static const uint8_t param_defog_weightlut20_tmp[0x80] = {
 static uint8_t param_defog_fpga_para_array[0x40];
 
 /* Defog runtime block buffers (air light R/G/B and transmit T), size 0x2d0 bytes each */
-static uint8_t defog_block_air_light_r[0x2d0];
+static uint8_t defog_block_air_light_r[0x2d0]; /* OEM: zero-init OK */
 static uint8_t defog_block_air_light_g[0x2d0];
 static uint8_t defog_block_air_light_b[0x2d0];
-static uint8_t defog_block_transmit_t[0x2d0];
+static uint8_t defog_block_transmit_t[0x2d0]; /* Must init to 0xFF (no fog) — 0 = max defogging */
 
 static inline uint32_t le32_at(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+/* Write a uint32 as LE32 into a byte array at index i (byte offset = i*4) */
+static inline void le32_put(uint8_t *arr, int i, uint32_t v) {
+    uint8_t *p = &arr[i * 4];
+    p[0] = (uint8_t)(v & 0xFF);
+    p[1] = (uint8_t)((v >> 8) & 0xFF);
+    p[2] = (uint8_t)((v >> 16) & 0xFF);
+    p[3] = (uint8_t)((v >> 24) & 0xFF);
+}
+
+/* OEM tiziano_defog_params_refresh — load ROM defaults into defog parameter arrays.
+ * OEM copies from embedded ROM constants at addresses 0x95778..0x95988.
+ * We inline the extracted values here. */
+static void tiziano_defog_params_refresh(void)
+{
+    /* param_defog_main_para_array: 11 uint32s (0x2c bytes)
+     * OEM ROM at 0x95778: {0x41,0xF2,0x01,0x03,0x10,0x10,0x10,0x10,0x0A,0x1E,0x10} */
+    static const uint32_t main_para_rom[11] = {
+        0x41, 0xF2, 0x01, 0x03, 0x10, 0x10, 0x10, 0x10, 0x0A, 0x1E, 0x10
+    };
+    int i;
+    for (i = 0; i < 11; i++) le32_put(defog_main_para_array, i, main_para_rom[i]);
+
+    /* defog_color_control_array: 14 uint32s (0x38 bytes)
+     * OEM ROM at 0x957a4 */
+    {
+        static const uint32_t cc_rom[14] = {
+            0x08, 0x18, 0x20, 0x28, 0x38, 0x3C, 0x3C, 0x3C,
+            0x3C, 0x3C, 0x04, 0x03, 0x03, 0x04
+        };
+        for (i = 0; i < 14; i++) le32_put(defog_color_control_array, i, cc_rom[i]);
+    }
+
+    /* defog_lc_s_array: 10 uint32s (0x28 bytes) — OEM ROM at 0x957dc */
+    {
+        static const uint32_t lcs_rom[10] = {
+            0x03, 0x03, 0x03, 0x03, 0x08, 0x10, 0x18, 0x0A, 0x1C, 0x20
+        };
+        for (i = 0; i < 10; i++) le32_put(defog_lc_s_array, i, lcs_rom[i]);
+    }
+
+    /* defog_lc_v_array: 10 uint32s (0x28 bytes) — OEM ROM at 0x95804 */
+    {
+        static const uint32_t lcv_rom[10] = {
+            0x05, 0x05, 0x06, 0x07, 0x20, 0x40, 0x80, 0x08, 0x1A, 0x20
+        };
+        for (i = 0; i < 10; i++) le32_put(defog_lc_v_array, i, lcv_rom[i]);
+    }
+
+    /* defog_cc_s_array: 8 uint32s (0x20 bytes) — OEM ROM at 0x9582c */
+    {
+        static const uint32_t ccs_rom[8] = {
+            0x03, 0x02, 0x04, 0x0C, 0x10, 0x1F, 0x04, 0x00
+        };
+        for (i = 0; i < 8; i++) le32_put(defog_cc_s_array, i, ccs_rom[i]);
+    }
+
+    /* defog_cc_v_array: 9 uint32s (0x24 bytes) — OEM ROM at 0x9584c */
+    {
+        static const uint32_t ccv_rom[9] = {
+            0x06, 0x05, 0x05, 0x40, 0x60, 0x80, 0x05, 0x1C, 0x20
+        };
+        for (i = 0; i < 9; i++) le32_put(defog_cc_v_array, i, ccv_rom[i]);
+    }
+
+    /* defog_dark_l1_array: 10 uint32s (0x28 bytes) — OEM ROM at 0x95870 */
+    {
+        static const uint32_t dl1_rom[10] = {
+            0x05, 0x05, 0x06, 0x20, 0x40, 0x80, 0x10, 0x18, 0x20, 0x20
+        };
+        for (i = 0; i < 10; i++) le32_put(defog_dark_l1_array, i, dl1_rom[i]);
+    }
+
+    /* defog_dark_l2_array: 10 uint32s (0x28 bytes) — OEM ROM at 0x95898 */
+    {
+        static const uint32_t dl2_rom[10] = {
+            0x05, 0x05, 0x06, 0x20, 0x40, 0x80, 0x12, 0x18, 0x20, 0x20
+        };
+        for (i = 0; i < 10; i++) le32_put(defog_dark_l2_array, i, dl2_rom[i]);
+    }
+
+    /* param_defog_fpga_para_array: 16 uint32s (0x40 bytes) — OEM ROM at 0x95afc */
+    {
+        static const uint32_t fpga_rom[16] = {
+            0x01, 0x54, 0xAB, 0x36, 0x36, 0x36, 0x50, 0xF0,
+            0x14, 0x28, 0x0F, 0x28, 0x32, 0x32, 0x32, 0x32
+        };
+        for (i = 0; i < 16; i++) le32_put(param_defog_fpga_para_array, i, fpga_rom[i]);
+    }
+
+    /* defog_block_t_x_array: 5 uint32s (0x14 bytes) — OEM ROM: {60,90,140,190,220} */
+    {
+        static const uint32_t tx_rom[5] = { 0x3C, 0x5A, 0x8C, 0xBE, 0xDC };
+        for (i = 0; i < 5; i++) le32_put(defog_block_t_x_array, i, tx_rom[i]);
+    }
+
+    /* defog_block_t_y_array: 5 uint32s (0x14 bytes) — OEM ROM after refresh: {80,70,70,65,76} */
+    {
+        static const uint32_t ty_rom[5] = { 0x50, 0x46, 0x46, 0x41, 0x4C };
+        for (i = 0; i < 5; i++) le32_put(defog_block_t_y_array, i, ty_rom[i]);
+    }
+
+    /* defog_ev_list: 9 uint32s (0x24 bytes) — OEM ROM at 0x9567c */
+    {
+        static const uint32_t ev_rom[9] = {
+            0x7D0, 0xBB8, 0x1388, 0x1518, 0x16A8, 0x1838, 0x19C8, 0x1C20, 0x1F40
+        };
+        for (i = 0; i < 9; i++) le32_put(defog_ev_list, i, ev_rom[i]);
+    }
+
+    /* defog_trsy0_list: 9 uint32s — OEM ROM: {80,80,90,90,90,80,80,80,80} */
+    {
+        static const uint32_t t0[9] = { 0x50,0x50,0x5A,0x5A,0x5A,0x50,0x50,0x50,0x50 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy0_list, i, t0[i]);
+    }
+    /* defog_trsy1_list: {70,78,77,76,75,74,73,72,70} */
+    {
+        static const uint32_t t1[9] = { 0x46,0x4E,0x4D,0x4C,0x4B,0x4A,0x49,0x48,0x46 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy1_list, i, t1[i]);
+    }
+    /* defog_trsy2_list: {70,73,71,79,70,68,67,66,66} */
+    {
+        static const uint32_t t2[9] = { 0x46,0x49,0x47,0x4F,0x46,0x44,0x43,0x42,0x42 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy2_list, i, t2[i]);
+    }
+    /* defog_trsy3_list: {65,63,62,61,60,59,58,57,57} */
+    {
+        static const uint32_t t3[9] = { 0x41,0x3F,0x3E,0x3D,0x3C,0x3B,0x3A,0x39,0x39 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy3_list, i, t3[i]);
+    }
+    /* defog_trsy4_list: {76,76,75,74,73,72,71,70,69} */
+    {
+        static const uint32_t t4[9] = { 0x4C,0x4C,0x4B,0x4A,0x49,0x48,0x47,0x46,0x45 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy4_list, i, t4[i]);
+    }
+
+    /* defog_t_par_list1: 11 uint32s (0x2c bytes) — OEM ROM at 0x958e8 */
+    {
+        static const uint32_t tp1[11] = {
+            0x37, 0x5A, 0x82, 0xAA, 0xD2, 0x00, 0x02, 0x04, 0x07, 0x08, 0x04
+        };
+        for (i = 0; i < 11; i++) le32_put(defog_t_par_list1, i, tp1[i]);
+    }
+
+    /* defog_t_par_list2: 29 uint32s (0x74 bytes) — OEM ROM at 0x95914 */
+    {
+        static const uint32_t tp2[29] = {
+            0x6E, 0x013E, 0x0200, 0x02EE, 0x0000, 0x0000, 0x0000, 0x0000,
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0028, 0x0050, 0x0000, 0x00A0,
+            0x00F0, 0x0118, 0x00C8, 0x0118, 0x0118, 0x0140, 0x0118, 0x00F0,
+            0x0118, 0x0140, 0x0140, 0x0118, 0x00F0
+        };
+        for (i = 0; i < 29; i++) le32_put(defog_t_par_list2, i, tp2[i]);
+    }
+
+    /* defog_manual_ctrl: 7 uint32s (0x1c bytes) — OEM ROM at 0x95988 */
+    {
+        static const uint32_t mc[7] = { 1, 9, 0x2FF, 0x2EA, 0x2E8, 0x2F2, 0xDC0 };
+        for (i = 0; i < 7; i++) le32_put(defog_manual_ctrl, i, mc[i]);
+    }
+
+    /* --- WDR variants --- */
+    /* defog_ev_list_wdr: {100,400,1000,2000,4000,8000,10000,14000,16000} */
+    {
+        static const uint32_t evw[9] = {
+            0x64, 0x190, 0x3E8, 0x7D0, 0xFA0, 0x1F40, 0x2710, 0x36B0, 0x3E80
+        };
+        for (i = 0; i < 9; i++) le32_put(defog_ev_list_wdr, i, evw[i]);
+    }
+    /* defog_trsy0_list_wdr: {0,0,0,100,100,100,100,100,100} */
+    {
+        static const uint32_t tw0[9] = { 0,0,0,0x64,0x64,0x64,0x64,0x64,0x64 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy0_list_wdr, i, tw0[i]);
+    }
+    /* defog_trsy1_list_wdr: {0,0,0,90,90,90,90,90,90} */
+    {
+        static const uint32_t tw1[9] = { 0,0,0,0x5A,0x5A,0x5A,0x5A,0x5A,0x5A };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy1_list_wdr, i, tw1[i]);
+    }
+    /* defog_trsy2_list_wdr: {0,0,0,80,80,80,80,80,80} */
+    {
+        static const uint32_t tw2[9] = { 0,0,0,0x50,0x50,0x50,0x50,0x50,0x50 };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy2_list_wdr, i, tw2[i]);
+    }
+    /* defog_trsy3_list_wdr: {0,0,0,65,70,75,75,75,75} */
+    {
+        static const uint32_t tw3[9] = { 0,0,0,0x41,0x46,0x4B,0x4B,0x4B,0x4B };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy3_list_wdr, i, tw3[i]);
+    }
+    /* defog_trsy4_list_wdr: {0,0,0,85,90,95,95,95,95} */
+    {
+        static const uint32_t tw4[9] = { 0,0,0,0x55,0x5A,0x5F,0x5F,0x5F,0x5F };
+        for (i = 0; i < 9; i++) le32_put(defog_trsy4_list_wdr, i, tw4[i]);
+    }
+    /* param_defog_main_para_wdr_array: 11 uint32s */
+    {
+        static const uint32_t mpw[11] = {
+            0x46, 0xF2, 0x01, 0x08, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10
+        };
+        for (i = 0; i < 11; i++) le32_put(param_defog_main_para_wdr_array, i, mpw[i]);
+    }
+    /* param_defog_block_t_x_wdr_array: 5 uint32s — same as linear */
+    {
+        static const uint32_t txw[5] = { 0x3C, 0x5A, 0x8C, 0xBE, 0xDC };
+        for (i = 0; i < 5; i++) le32_put(param_defog_block_t_x_wdr_array, i, txw[i]);
+    }
+    /* param_defog_fpga_para_wdr_array: 16 uint32s */
+    {
+        static const uint32_t fpgaw[16] = {
+            0x01, 0x54, 0xAB, 0x40, 0x40, 0x40, 0x14, 0xF0,
+            0x14, 0x28, 0x0F, 0x28, 0x32, 0x32, 0x32, 0x32
+        };
+        for (i = 0; i < 16; i++) le32_put(param_defog_fpga_para_wdr_array, i, fpgaw[i]);
+    }
+
+    /* Air light initial values: OEM inits to 0xC8 (200) — not zero */
+    memset(defog_block_air_light_r, 0xC8, sizeof(defog_block_air_light_r));
+    memset(defog_block_air_light_g, 0xC8, sizeof(defog_block_air_light_g));
+    memset(defog_block_air_light_b, 0xC8, sizeof(defog_block_air_light_b));
+    /* Transmit T: OEM inits to 0xE6 (230) — near-passthrough */
+    memset(defog_block_transmit_t, 0xE6, sizeof(defog_block_transmit_t));
 }
 
 /* Bulk writer: mirrors OEM tiziano_defog_set_reg_params() */
@@ -7636,11 +7893,7 @@ static int tisp_defog_all_reg_refresh(void)
     system_reg_write(0x5b0c, 0xFFFFFFFF);
     system_reg_write(0x5b00, 0x00000000);
 
-    if (param_defog_fpga_para_now) {
-        uint32_t hi = param_defog_fpga_para_now[8] & 0xFF;
-        uint32_t lo = param_defog_fpga_para_now[4] & 0xFF;
-        system_reg_write(0x5b10, (hi << 16) | lo);
-    }
+    /* Note: 0x5B10 (FPGA para) is written by tiziano_defog_params_init() */
 
     pr_debug("tisp_defog_all_reg_refresh: geometry+control regs refreshed\n");
     return 0;
@@ -7648,31 +7901,226 @@ static int tisp_defog_all_reg_refresh(void)
 
 static void tiziano_defog_params_init(void)
 {
-    /* Program cent3 pairs into 0x5850..0x587C (24 entries -> 12 regs) */
-    uint32_t base = 0x5850;
-    for (int k = 0; k < 24; k += 2) {
-        uint32_t lo = le32_at(&defog_cent3_w_dis_array[k * 4]) & 0x7fff;
-        uint32_t hi = le32_at(&defog_cent3_w_dis_array[(k + 1) * 4]) & 0x7fff;
+    uint32_t base, lo, hi, val;
+    int k;
+
+    /* --- cent3 pairs: 24 entries -> 12 regs at 0x5850..0x587C --- */
+    base = 0x5850;
+    for (k = 0; k < 24; k += 2) {
+        lo = le32_at(&defog_cent3_w_dis_array[k * 4]) & 0x7fff;
+        hi = le32_at(&defog_cent3_w_dis_array[(k + 1) * 4]) & 0x7fff;
         system_reg_write(base, (hi << 16) | lo);
         base += 4;
     }
 
-    /* Program cent5 pairs into 0x5880..0x58BC (31 entries -> 15 pairs + 1 single) */
+    /* --- cent5 pairs: 31 entries -> 15 pairs + 1 single at 0x5880..0x58BC --- */
     base = 0x5880;
-    for (int k = 0; k + 1 < 31; k += 2) {
-        uint32_t lo = le32_at(&defog_cent5_w_dis_array[k * 4]) & 0x7fff;
-        uint32_t hi = le32_at(&defog_cent5_w_dis_array[(k + 1) * 4]) & 0x7fff;
+    for (k = 0; k + 1 < 31; k += 2) {
+        lo = le32_at(&defog_cent5_w_dis_array[k * 4]) & 0x7fff;
+        hi = le32_at(&defog_cent5_w_dis_array[(k + 1) * 4]) & 0x7fff;
         system_reg_write(base, (hi << 16) | lo);
         base += 4;
     }
     /* Last single entry */
-    uint32_t last = le32_at(&defog_cent5_w_dis_array[30 * 4]) & 0x7fff;
-    system_reg_write(0x58bc, last);
+    system_reg_write(0x58bc, le32_at(&defog_cent5_w_dis_array[30 * 4]) & 0x7fff);
 
+    /* --- Weight LUT registers: 5 LUTs x 8 regs, 4 entries per reg, 5-bit mask ---
+     * OEM order: weightlut02 @ 0x58C0, weightlut20 @ 0x58E0,
+     *            weightlut21 @ 0x5900, weightlut12 @ 0x5920, weightlut22 @ 0x5940
+     * Each LUT has 32 entries stored as LE32 at 4-byte intervals in a 0x80-byte array.
+     */
+    {
+        uint8_t *wlut_arrs[5];
+        static const uint32_t wlut_bases[5] = {
+            0x58C0, 0x58E0, 0x5900, 0x5920, 0x5940,
+        };
+        int lut, r, idx;
+        uint8_t *a;
 
-    /* Control refresh and block grid write */
-    tisp_defog_all_reg_refresh();
-    tiziano_defog_set_reg_params();
+        wlut_arrs[0] = defog_weightlut02;
+        wlut_arrs[1] = defog_weightlut20;
+        wlut_arrs[2] = defog_weightlut21;
+        wlut_arrs[3] = defog_weightlut12;
+        wlut_arrs[4] = defog_weightlut22;
+
+        for (lut = 0; lut < 5; lut++) {
+            base = wlut_bases[lut];
+            a = wlut_arrs[lut];
+            for (r = 0; r < 8; r++) {
+                idx = r * 4; /* entry index within 32 entries */
+                val = (le32_at(&a[idx * 4]) & 0x1f)
+                    | ((le32_at(&a[(idx + 1) * 4]) & 0x1f) << 8)
+                    | ((le32_at(&a[(idx + 2) * 4]) & 0x1f) << 16)
+                    | ((le32_at(&a[(idx + 3) * 4]) & 0x1f) << 24);
+                system_reg_write(base + r * 4, val);
+            }
+        }
+    }
+
+    /* --- Main para registers: 0x5A00..0x5A08 from param_defog_main_para_now[0x2c] ---
+     * OEM packing (11 LE32 entries, e[0]..e[10]):
+     *   0x5A00: e[0] | (e[1] << 8)
+     *   0x5A04: (e[2] & 1) | ((e[3] & 0xf) << 2) | ((e[4] & 0x1f) << 8) |
+     *           ((e[5] & 0x1f) << 16) | ((e[6] & 0x1f) << 24)
+     *   0x5A08: (e[7] & 0x1f) | ((e[8] & 0x1f) << 8) | ((e[9] & 0x1f) << 16) |
+     *           ((e[10] & 0x1f) << 24)
+     */
+    {
+        uint8_t *mp = param_defog_main_para_now;
+        uint32_t e[11];
+        for (k = 0; k < 11; k++)
+            e[k] = le32_at(&mp[k * 4]);
+
+        system_reg_write(0x5A00, (e[0] & 0xFF) | ((e[1] & 0xFF) << 8));
+        system_reg_write(0x5A04, (e[2] & 1) | ((e[3] & 0xf) << 2)
+                       | ((e[4] & 0x1f) << 8) | ((e[5] & 0x1f) << 16)
+                       | ((e[6] & 0x1f) << 24));
+        system_reg_write(0x5A08, (e[7] & 0x1f) | ((e[8] & 0x1f) << 8)
+                       | ((e[9] & 0x1f) << 16) | ((e[10] & 0x1f) << 24));
+    }
+
+    /* --- Color control registers: 0x5A10..0x5A18 from defog_color_control_array[0x38] ---
+     * OEM packing (14 LE32 entries, c[0]..c[13]):
+     *   0x5A10: c[0] | (c[1] << 8) | ((c[2] & 0x3f) << 16) | (c[3] << 24)
+     *   0x5A14: (c[4] & 0x3f) | ((c[5] & 0x3f) << 8) | ((c[6] & 0x3f) << 16) |
+     *           ((c[7] & 0x3f) << 24)
+     *   0x5A18: (c[8] & 0x3f) | ((c[9] & 0x3f) << 16)
+     */
+    {
+        uint32_t c[14];
+        for (k = 0; k < 14; k++)
+            c[k] = le32_at(&defog_color_control_array[k * 4]);
+
+        system_reg_write(0x5A10, (c[0] & 0xFF) | ((c[1] & 0xFF) << 8)
+                       | ((c[2] & 0x3f) << 16) | ((c[3] & 0x3f) << 24));
+        system_reg_write(0x5A14, (c[4] & 0x3f) | ((c[5] & 0x3f) << 8)
+                       | ((c[6] & 0x3f) << 16) | ((c[7] & 0x3f) << 24));
+        system_reg_write(0x5A18, (c[8] & 0x3f) | ((c[9] & 0x3f) << 16));
+    }
+
+    /* --- 0x5A1C: col_ct_array packing (3-bit values) ---
+     * OEM: (e[0] & 7) | ((e[1] & 7) << 8) | ((e[2] & 7) << 16) | ((e[3] & 7) << 24)
+     */
+    {
+        uint32_t ct[4];
+        for (k = 0; k < 4; k++)
+            ct[k] = le32_at(&defog_col_ct_array[k * 4]);
+        system_reg_write(0x5A1C, (ct[0] & 7) | ((ct[1] & 7) << 8)
+                       | ((ct[2] & 7) << 16) | ((ct[3] & 7) << 24));
+    }
+
+    /* --- LC-S registers: 0x5A20..0x5A28 from defog_lc_s_array[0x28] (10 entries) ---
+     *   0x5A20: (e[0] & 7) | ((e[1] & 7) << 8) | ((e[2] & 7) << 16) | ((e[3] & 7) << 24)
+     *   0x5A24: (e[4] & 0x1f) | ((e[5] & 0x1f) << 8) | ((e[6] & 0x1f) << 16)
+     *   0x5A28: (e[7] & 0x3f) | ((e[8] & 0x3f) << 8) | ((e[9] & 0x3f) << 16)
+     */
+    {
+        uint32_t s[10];
+        for (k = 0; k < 10; k++)
+            s[k] = le32_at(&defog_lc_s_array[k * 4]);
+        system_reg_write(0x5A20, (s[0] & 7) | ((s[1] & 7) << 8)
+                       | ((s[2] & 7) << 16) | ((s[3] & 7) << 24));
+        system_reg_write(0x5A24, (s[4] & 0x1f) | ((s[5] & 0x1f) << 8)
+                       | ((s[6] & 0x1f) << 16));
+        system_reg_write(0x5A28, (s[7] & 0x3f) | ((s[8] & 0x3f) << 8)
+                       | ((s[9] & 0x3f) << 16));
+    }
+
+    /* --- LC-V registers: 0x5A30..0x5A38 from defog_lc_v_array[0x28] (10 entries) ---
+     *   0x5A30: (e[0] & 7) | ((e[1] & 7) << 8) | ((e[2] & 7) << 16) | ((e[3] & 7) << 24)
+     *   0x5A34: (e[4] & 0x1f) | ((e[5] & 0x1f) << 8) | ((e[6] & 0x1f) << 16)
+     *   0x5A38: (e[7] & 0x3f) | ((e[8] & 0x3f) << 8) | ((e[9] & 0x3f) << 16)
+     */
+    {
+        uint32_t v[10];
+        for (k = 0; k < 10; k++)
+            v[k] = le32_at(&defog_lc_v_array[k * 4]);
+        system_reg_write(0x5A30, (v[0] & 7) | ((v[1] & 7) << 8)
+                       | ((v[2] & 7) << 16) | ((v[3] & 7) << 24));
+        system_reg_write(0x5A34, (v[4] & 0x1f) | ((v[5] & 0x1f) << 8)
+                       | ((v[6] & 0x1f) << 16));
+        system_reg_write(0x5A38, (v[7] & 0x3f) | ((v[8] & 0x3f) << 8)
+                       | ((v[9] & 0x3f) << 16));
+    }
+
+    /* --- CC-S registers: 0x5A40..0x5A48 from defog_cc_s_array[0x20] (8 entries) ---
+     *   0x5A40: (e[0] & 7) | ((e[1] & 7) << 8)
+     *   0x5A44: (e[2] & 0x1f) | ((e[3] & 0x1f) << 8) | ((e[4] & 0x1f) << 16)
+     *   0x5A48: (e[5] & 0x3f) | ((e[6] & 0x3f) << 8) | ((e[7] & 0x3f) << 16)
+     */
+    {
+        uint32_t cs[8];
+        for (k = 0; k < 8; k++)
+            cs[k] = le32_at(&defog_cc_s_array[k * 4]);
+        system_reg_write(0x5A40, (cs[0] & 7) | ((cs[1] & 7) << 8));
+        system_reg_write(0x5A44, (cs[2] & 0x1f) | ((cs[3] & 0x1f) << 8)
+                       | ((cs[4] & 0x1f) << 16));
+        system_reg_write(0x5A48, (cs[5] & 0x3f) | ((cs[6] & 0x3f) << 8)
+                       | ((cs[7] & 0x3f) << 16));
+    }
+
+    /* --- CC-V registers: 0x5A50..0x5A58 from defog_cc_v_array[0x24] (9 entries) ---
+     *   0x5A50: (e[0] & 7) | ((e[1] & 7) << 8) | ((e[2] & 7) << 16)
+     *   0x5A54: (e[3] & 0x1f) | ((e[4] & 0x1f) << 8) | ((e[5] & 0x1f) << 16)
+     *   0x5A58: (e[6] & 0x3f) | ((e[7] & 0x3f) << 8) | ((e[8] & 0x3f) << 16)
+     */
+    {
+        uint32_t cv[9];
+        for (k = 0; k < 9; k++)
+            cv[k] = le32_at(&defog_cc_v_array[k * 4]);
+        system_reg_write(0x5A50, (cv[0] & 7) | ((cv[1] & 7) << 8)
+                       | ((cv[2] & 7) << 16));
+        system_reg_write(0x5A54, (cv[3] & 0x1f) | ((cv[4] & 0x1f) << 8)
+                       | ((cv[5] & 0x1f) << 16));
+        system_reg_write(0x5A58, (cv[6] & 0x3f) | ((cv[7] & 0x3f) << 8)
+                       | ((cv[8] & 0x3f) << 16));
+    }
+
+    /* --- Dark L1 registers: 0x5A60..0x5A68 from defog_dark_l1_array[0x28] (10 entries) ---
+     *   0x5A60: (e[0] & 7) | ((e[1] & 7) << 8) | ((e[2] & 7) << 16)
+     *   0x5A64: (e[3] & 0x1f) | ((e[4] & 0x1f) << 8) | ((e[5] & 0x1f) << 16)
+     *   0x5A68: (e[6] & 0x3f) | ((e[7] & 0x3f) << 8) | ((e[8] & 0x3f) << 16) |
+     *           ((e[9] & 0x3f) << 24)
+     */
+    {
+        uint32_t d1[10];
+        for (k = 0; k < 10; k++)
+            d1[k] = le32_at(&defog_dark_l1_array[k * 4]);
+        system_reg_write(0x5A60, (d1[0] & 7) | ((d1[1] & 7) << 8)
+                       | ((d1[2] & 7) << 16));
+        system_reg_write(0x5A64, (d1[3] & 0x1f) | ((d1[4] & 0x1f) << 8)
+                       | ((d1[5] & 0x1f) << 16));
+        system_reg_write(0x5A68, (d1[6] & 0x3f) | ((d1[7] & 0x3f) << 8)
+                       | ((d1[8] & 0x3f) << 16) | ((d1[9] & 0x3f) << 24));
+    }
+
+    /* --- Dark L2 registers: 0x5A70..0x5A78 from defog_dark_l2_array[0x28] (10 entries) ---
+     *   0x5A70: (e[0] & 7) | ((e[1] & 7) << 8) | ((e[2] & 7) << 16)
+     *   0x5A74: (e[3] & 0x1f) | ((e[4] & 0x1f) << 8) | ((e[5] & 0x1f) << 16)
+     *   0x5A78: (e[6] & 0x3f) | ((e[7] & 0x3f) << 8) | ((e[8] & 0x3f) << 16) |
+     *           ((e[9] & 0x3f) << 24)
+     */
+    {
+        uint32_t d2[10];
+        for (k = 0; k < 10; k++)
+            d2[k] = le32_at(&defog_dark_l2_array[k * 4]);
+        system_reg_write(0x5A70, (d2[0] & 7) | ((d2[1] & 7) << 8)
+                       | ((d2[2] & 7) << 16));
+        system_reg_write(0x5A74, (d2[3] & 0x1f) | ((d2[4] & 0x1f) << 8)
+                       | ((d2[5] & 0x1f) << 16));
+        system_reg_write(0x5A78, (d2[6] & 0x3f) | ((d2[7] & 0x3f) << 8)
+                       | ((d2[8] & 0x3f) << 16) | ((d2[9] & 0x3f) << 24));
+    }
+
+    /* --- FPGA para: 0x5B10 from param_defog_fpga_para_now ---
+     * OEM: (entry[1] & 0xFF) | ((entry[2] & 0xFF) << 16)
+     * where entry[1] is at byte offset 4, entry[2] at byte offset 8
+     */
+    if (param_defog_fpga_para_now) {
+        uint32_t fp_lo = param_defog_fpga_para_now[4] & 0xFF;
+        uint32_t fp_hi = param_defog_fpga_para_now[8] & 0xFF;
+        system_reg_write(0x5B10, fp_lo | (fp_hi << 16));
+    }
 }
 
 /* Optional per-frame stats provider hook for Defog */
@@ -16787,7 +17235,724 @@ int tiziano_hldc_init(void)
     return tisp_hldc_apply_par_array();
 }
 
-/* tiziano_defog_init - Defog initialization */
+/* tiziano_defog_get_data - Binary Ninja EXACT: Parse defog statistics from DMA buffer
+ * OEM: Reads 16-byte records from DMA buffer, extracts RGB sums and histogram info
+ * Each record: 4 x uint32_t → extracts 24-bit B, 24-bit G, 24-bit R, and hist info */
+static void tiziano_defog_get_data(void *buf)
+{
+    uint32_t *src = (uint32_t *)buf + 2;  /* OEM: arg1 + 8 (skip first 2 dwords) */
+    uint32_t *hist_dst = defog_block_hist_info;
+    int i;
+
+    for (i = 0; i < 0x2d0; i += 4) {
+        uint32_t w0 = src[0];
+        uint32_t w1 = src[1];
+        uint32_t w2 = src[2];
+        uint32_t w3 = src[3];
+
+        /* OEM: defog_sum_block_b = w0 & 0xffffff */
+        defog_sum_block_b[i / 4] = w0 & 0xffffff;
+        /* OEM: defog_sum_block_g = (w1 & 0xffff) << 8 | w0 >> 24 */
+        defog_sum_block_g[i / 4] = ((w1 & 0xffff) << 8) | (w0 >> 24);
+        /* OEM: defog_sum_block_r = (w3 >> 16 & 0xfff) << 12 | (w1 >> 16 & 0xfff) */
+        defog_sum_block_r[i / 4] = ((w3 >> 16) & 0xfff) << 12 | ((w1 >> 16) & 0xfff);
+        /* OEM: hist_info[0] = w2 & 0xffff, hist_info[1] = w2 >> 16, hist_info[2] = w3 & 0xffff */
+        hist_dst[0] = w2 & 0xffff;
+        hist_dst[1] = w2 >> 16;
+        hist_dst[2] = w3 & 0xffff;
+
+        src += 4;
+        hist_dst += 3;
+    }
+}
+
+/* ---- Defog soft processing helpers (OEM decompilation) ---- */
+
+/* tisp_defog_max_filter3 -- 3x3 max filter on 10x18 byte grid, in-place.
+ * OEM: tisp_defog_max_filter3(data, output) with 10 rows, 18 cols. */
+static void tisp_defog_max_filter3(uint8_t *data, uint8_t *output)
+{
+    uint8_t tmp[180]; /* 10 * 18 */
+    int r, c, dr, dc;
+    int r0, r1, c0, c1;
+
+    for (r = 0; r < 10; r++) {
+        r0 = (r == 0) ? 0 : r - 1;
+        r1 = (r == 9) ? 9 : r + 1;
+        for (c = 0; c < 18; c++) {
+            uint8_t mx = 0;
+            c0 = (c == 0) ? 0 : c - 1;
+            c1 = (c == 17) ? 17 : c + 1;
+            for (dr = r0; dr <= r1; dr++) {
+                for (dc = c0; dc <= c1; dc++) {
+                    uint8_t v = data[dr * 18 + dc];
+                    if (v > mx)
+                        mx = v;
+                }
+            }
+            tmp[r * 18 + c] = mx;
+        }
+    }
+    memcpy(output, tmp, 180);
+}
+
+/* tisp_defog_img_filter5 -- weighted 3x3 spatial filter on 10x18 byte grid.
+ * OEM kernel: {0x38, 0x48, 0x38, 0x48, 0x5d, 0x48, 0x38, 0x48, 0x38}
+ * Kernel indexed as [row_offset * 3 + col_offset] with offset in {-1,0,1}.
+ * OEM stores kernel with stride-4 (LE32 array); we use int32_t[9] directly. */
+static void tisp_defog_img_filter5(uint8_t *input, uint8_t *output,
+                                   int32_t *kernel)
+{
+    uint8_t tmp[180];
+    int r, c, dr, dc;
+    int r0, r1, c0, c1;
+
+    for (r = 0; r < 10; r++) {
+        r0 = (r > 0) ? -1 : 0;
+        r1 = (r < 9) ?  1 : 0;
+        for (c = 0; c < 18; c++) {
+            uint32_t wsum = 0;
+            uint32_t vsum = 0;
+            c0 = (c > 0) ? -1 : 0;
+            c1 = (c < 17) ? 1 : 0;
+            for (dr = r0; dr <= r1; dr++) {
+                for (dc = c0; dc <= c1; dc++) {
+                    /* kernel layout: (dr+1)*3 + (dc+1) */
+                    int32_t w = kernel[(dr + 1) * 3 + (dc + 1)];
+                    uint32_t px = (uint32_t)input[(r + dr) * 18 + (c + dc)];
+                    wsum += (uint32_t)w;
+                    vsum += px * (uint32_t)w;
+                }
+            }
+            /* OEM: (vsum + wsum/2) / wsum */
+            tmp[r * 18 + c] = (uint8_t)((vsum + (wsum >> 1)) / wsum);
+        }
+    }
+    memcpy(output, tmp, 180);
+}
+
+/* tisp_defog_soft_process -- Core defog fog estimation algorithm.
+ * OEM takes 4 explicit args (hist, sum_r, sum_g, sum_b) and reads the rest
+ * from globals set up by tiziano_defog_algorithm. We mirror that pattern. */
+static void tisp_defog_soft_process(uint32_t *hist_info, uint32_t *sum_r,
+                                    uint32_t *sum_g, uint32_t *sum_b)
+{
+    /* --- Local working arrays (OEM allocates with kmalloc) --- */
+    uint8_t mean_y_grid[180];       /* per-block luminance, 10x18 */
+    int16_t delta_y[180];           /* mean_y - mean_y_last (signed) */
+    uint32_t region_hist[180];      /* hist stat per block, scaled */
+    uint32_t region_range[180];     /* range stat per block, scaled */
+    int32_t reg_sum_hist[15];       /* 5x3 regional histogram accumulator */
+    int32_t reg_sum_range[15];      /* 5x3 regional range accumulator */
+    uint8_t fog_map[180];           /* spatial fog confidence map */
+    int32_t interp_ty[5];           /* interpolated t_y values from EV curve */
+
+    /* OEM filter kernel: 3x3 center-weighted */
+    int32_t filt_kernel[9] = {0x38, 0x48, 0x38, 0x48, 0x5d, 0x48, 0x38, 0x48, 0x38};
+
+    /* Read FPGA para fields from the _now pointer */
+    uint32_t fpga_mode = le32_at(param_defog_fpga_para_now + 0);  /* spatial enable */
+    uint32_t fpga_range_lo = le32_at(param_defog_fpga_para_now + 4);
+    uint32_t fpga_range_hi = le32_at(param_defog_fpga_para_now + 8); /* OEM para[2] */
+
+    /* Read main para fields for air-light computation */
+    uint32_t air_r_offset = le32_at(param_defog_fpga_para_now + 0x0c);
+    uint32_t air_g_offset = le32_at(param_defog_fpga_para_now + 0x10);
+    uint32_t air_b_offset = le32_at(param_defog_fpga_para_now + 0x14);
+    uint32_t air_t_lo = le32_at(param_defog_fpga_para_now + 0x18);
+    uint32_t air_t_hi = le32_at(param_defog_fpga_para_now + 0x1c);
+
+    /* Read manual control fields (OEM: defog_manual_ctrl LE32 array) */
+    uint32_t mc_mode = le32_at(defog_manual_ctrl + 0);
+    /* mc[1] = manual fog score when mc_mode != 0 */
+    uint32_t mc_fog_score_b = le32_at(defog_manual_ctrl + 8);
+    uint32_t mc_fog_score_c = le32_at(defog_manual_ctrl + 12);
+
+    /* Clamp air light range */
+    uint32_t t_hi_clamp = 0xff;
+    uint32_t t_lo_clamp;
+    uint32_t t_range;
+    uint32_t range_denom;
+    uint32_t fog_lo_thresh;
+    uint32_t fog_hi_thresh;
+    uint32_t fog_range;
+    int row, col, blk, i;
+    uint32_t area_wt;
+    uint32_t scaled_r, scaled_g, scaled_b;
+    uint32_t lum;
+    int32_t total_fog_score;
+    int32_t ev_idx;
+
+    if (air_t_hi < 0x100)
+        t_hi_clamp = air_t_hi;
+
+    t_lo_clamp = air_t_lo;
+    if (t_hi_clamp < t_lo_clamp)
+        t_lo_clamp = t_hi_clamp;
+    if ((int32_t)t_lo_clamp < 0)
+        t_lo_clamp = 0;
+    t_range = t_hi_clamp - t_lo_clamp;
+
+    /* OEM: range_denom = fpga_para[1] + 1, min 2 */
+    range_denom = fpga_range_lo + 1;
+    if ((int32_t)range_denom < 2)
+        range_denom = 2;
+
+    /* OEM: fog threshold range from fpga_para fields */
+    fog_lo_thresh = mc_fog_score_b;
+    fog_hi_thresh = mc_fog_score_c;
+    fog_range = 1;
+    if ((int32_t)fog_hi_thresh > (int32_t)fog_lo_thresh)
+        fog_range = fog_hi_thresh - fog_lo_thresh;
+
+    memset(region_hist, 0, sizeof(region_hist));
+    memset(region_range, 0, sizeof(region_range));
+    memset(reg_sum_hist, 0, sizeof(reg_sum_hist));
+    memset(reg_sum_range, 0, sizeof(reg_sum_range));
+    memset(fog_map, 0, sizeof(fog_map));
+
+    /* ---- Phase A: Per-block luminance and air-light ---- */
+    for (row = 0; row < 10; row++) {
+        for (col = 0; col < 18; col++) {
+            blk = row * 18 + col;
+
+            /* Select area weight based on block position vs. area_index.
+             * OEM: 4 area_div variants depending on whether row < area_index[0]
+             * and col < area_index[1]. */
+            if ((uint32_t)row < defog_block_area_index[0]) {
+                if ((uint32_t)col < defog_block_area_index[1])
+                    area_wt = defog_block_area_div;
+                else
+                    area_wt = defog_block_area_div_edge_h;
+            } else {
+                if ((uint32_t)col < defog_block_area_index[1])
+                    area_wt = defog_block_area_div_edge_w;
+                else
+                    area_wt = defog_block_area_div_corner;
+            }
+
+            /* OEM: hi:lo = mulu(area_wt, sum_x[blk]); scaled = hi >> 4
+             * This is a 32x32->64 multiply, take upper 32 bits >> 4. */
+            {
+                uint64_t prod_r = (uint64_t)area_wt * (uint64_t)sum_r[blk];
+                uint64_t prod_g = (uint64_t)area_wt * (uint64_t)sum_g[blk];
+                uint64_t prod_b = (uint64_t)area_wt * (uint64_t)sum_b[blk];
+                scaled_r = (uint32_t)(prod_r >> 32) >> 4;
+                scaled_g = (uint32_t)(prod_g >> 32) >> 4;
+                scaled_b = (uint32_t)(prod_b >> 32) >> 4;
+            }
+
+            /* OEM: Y = (0x13*R + 0x26*G + 7*B) >> 6, clamp [0,255] */
+            {
+                int32_t y_raw = (int32_t)(0x13 * scaled_r + 0x26 * scaled_g +
+                                          7 * scaled_b);
+                /* OEM uses muls.dp.q for 0x26*G + muls.dp.d for 0x13*R,
+                 * then adds 7*B and shifts right by 6 */
+                lum = (uint32_t)(y_raw >> 6);
+            }
+            if ((int32_t)lum < 0)
+                lum = 0;
+            if (lum >= 0x100)
+                lum = 0xff;
+
+            /* Store mean Y and delta from last frame */
+            mean_y_grid[blk] = (uint8_t)lum;
+            delta_y[blk] = (int16_t)((int32_t)lum -
+                                      (int32_t)defog_block_mean_y_snap[blk]);
+            defog_block_mean_y_last[blk] = lum;
+
+            /* Air-light per channel: OEM checks mc_fog_score_d (fpga_para field at +0x1c word 5).
+             * If mode == 1: all channels use same value based on luminance.
+             * Otherwise: per-channel with offset. */
+            if (mc_mode == 1) {
+                /* Uniform air-light from luminance */
+                uint32_t al = t_lo_clamp + ((t_range * lum) >> 8);
+                defog_block_air_light_r[blk] = (uint8_t)al;
+                defog_block_air_light_g[blk] = (uint8_t)al;
+                defog_block_air_light_b[blk] = (uint8_t)al;
+            } else {
+                /* Per-channel: offset + scaled_channel - 0x40, clamp [0,255] */
+                int32_t ar = (int32_t)(air_r_offset + scaled_r) - 0x40;
+                int32_t ag = (int32_t)(air_g_offset + scaled_g) - 0x40;
+                int32_t ab = (int32_t)(air_b_offset + scaled_b) - 0x40;
+                if (ar < 0) ar = 0;
+                if (ar > 255) ar = 255;
+                if (ag < 0) ag = 0;
+                if (ag > 255) ag = 255;
+                if (ab < 0) ab = 0;
+                if (ab > 255) ab = 255;
+                defog_block_air_light_r[blk] = t_lo_clamp +
+                    (uint8_t)(((uint32_t)ar * t_range) >> 8);
+                defog_block_air_light_g[blk] = t_lo_clamp +
+                    (uint8_t)(((uint32_t)ag * t_range) >> 8);
+                defog_block_air_light_b[blk] = t_lo_clamp +
+                    (uint8_t)(((uint32_t)ab * t_range) >> 8);
+            }
+
+            /* Accumulate histogram/range stats when not in manual mode.
+             * OEM: reads hist_info per block, scales by area_wt, divides. */
+            if (mc_mode == 0) {
+                uint32_t hist_idx = (uint32_t)blk * 3;
+                uint64_t h_prod = (uint64_t)area_wt * (uint64_t)hist_info[hist_idx];
+                uint32_t h_scaled = (uint32_t)((h_prod >> 16) +
+                                    ((h_prod >> 15) & 1));
+                region_hist[blk] = h_scaled / range_denom;
+
+                {
+                    uint64_t r_prod = (uint64_t)area_wt *
+                                      (uint64_t)hist_info[hist_idx + 2];
+                    uint32_t r_scaled = (uint32_t)((r_prod >> 16) +
+                                        ((r_prod >> 15) & 1));
+                    uint32_t inv_hi2 = 0x100 - fpga_range_hi;
+                    if ((int32_t)inv_hi2 < 2) inv_hi2 = 2;
+                    region_range[blk] = r_scaled / inv_hi2;
+                }
+
+                /* OEM: per-channel threshold lookup for RGB + Y */
+                {
+                    uint32_t tp0 = le32_at(defog_t_par_list1 + 0);
+                    uint32_t tp1 = le32_at(defog_t_par_list1 + 4);
+                    uint32_t tp2 = le32_at(defog_t_par_list1 + 8);
+                    uint32_t tp3 = le32_at(defog_t_par_list1 + 12);
+                    uint32_t tp4 = le32_at(defog_t_par_list1 + 16);
+                    /* OEM lookup: 6 output values at offsets 20..40 */
+                    uint32_t tv[6];
+                    for (i = 0; i < 6; i++)
+                        tv[i] = le32_at(defog_t_par_list1 + 20 + i * 4);
+
+                    /* Threshold lookup for each channel */
+                    #define THRESH_LOOKUP(val) \
+                        ((val) < tp0 ? tv[0] : \
+                         (val) < tp1 ? tv[1] : \
+                         (val) < tp2 ? tv[2] : \
+                         (val) < tp3 ? tv[3] : \
+                         (val) < tp4 ? tv[4] : tv[5])
+
+                    /* Not used in simplified path -- accumulators
+                     * for Phase B below are the important ones */
+                    (void)THRESH_LOOKUP(scaled_r);
+                    (void)THRESH_LOOKUP(scaled_g);
+                    (void)THRESH_LOOKUP(scaled_b);
+                    (void)THRESH_LOOKUP(lum);
+                    #undef THRESH_LOOKUP
+                }
+            }
+        }
+    }
+
+    /* ---- Phase B: Regional fog strength (15 regions, 5x3 grid) ---- */
+    if (mc_mode != 0) {
+        total_fog_score = le32_at(defog_manual_ctrl + 4);
+    } else {
+        /* Accumulate block stats into 15 regions.
+         * OEM layout: 4 rows per region vertically (rows 0..3 -> region row 0, etc.)
+         *             except last region gets rows 8..9.
+         *             6 cols per region horizontally (cols 0..5 -> region col 0, etc.)
+         *             except last region gets cols 12..17.
+         * The exact mapping from OEM uses stride-based pointer arithmetic;
+         * we simplify to the 5x3 grid pattern visible in the decompilation. */
+        for (row = 0; row < 4; row++) {
+            for (col = 0; col < 4; col++) {
+                int rblk = row * 18 + col;
+                /* OEM accumulates into reg_sum_hist/range with offsets:
+                 * [0],[1]...[4] for the 5 columns of 3-row regions,
+                 * then [5]...[9] for next row of regions, etc. */
+                reg_sum_hist[0] += (int32_t)region_hist[rblk];
+                reg_sum_range[0] += (int32_t)region_range[rblk];
+                /* columns 4..7 -> region col 1 */
+                reg_sum_hist[1] += (int32_t)region_hist[rblk + 4];
+                reg_sum_range[1] += (int32_t)region_range[rblk + 4];
+                /* columns 8..11 -> region col 2 */
+                reg_sum_hist[2] += (int32_t)region_hist[rblk + 8];
+                reg_sum_range[2] += (int32_t)region_range[rblk + 8];
+                /* columns 12..15 -> region col 3 */
+                reg_sum_hist[3] += (int32_t)region_hist[rblk + 12];
+                reg_sum_range[3] += (int32_t)region_range[rblk + 12];
+                /* columns 16..17 -> region col 4 */
+                reg_sum_hist[4] += (int32_t)region_hist[rblk + 16];
+                reg_sum_range[4] += (int32_t)region_range[rblk + 16];
+
+                /* Second row of regions (rows 4..7 mapped similarly) */
+                reg_sum_hist[5] += (int32_t)region_hist[rblk + 4*18];
+                reg_sum_range[5] += (int32_t)region_range[rblk + 4*18];
+                reg_sum_hist[6] += (int32_t)region_hist[rblk + 4*18 + 4];
+                reg_sum_range[6] += (int32_t)region_range[rblk + 4*18 + 4];
+                reg_sum_hist[7] += (int32_t)region_hist[rblk + 4*18 + 8];
+                reg_sum_range[7] += (int32_t)region_range[rblk + 4*18 + 8];
+                reg_sum_hist[8] += (int32_t)region_hist[rblk + 4*18 + 12];
+                reg_sum_range[8] += (int32_t)region_range[rblk + 4*18 + 12];
+                reg_sum_hist[9] += (int32_t)region_hist[rblk + 4*18 + 16];
+                reg_sum_range[9] += (int32_t)region_range[rblk + 4*18 + 16];
+
+                /* Third row of regions (rows 8..9) */
+                if (row < 2) {
+                    reg_sum_hist[10] += (int32_t)region_hist[rblk + 8*18];
+                    reg_sum_range[10] += (int32_t)region_range[rblk + 8*18];
+                    reg_sum_hist[11] += (int32_t)region_hist[rblk + 8*18 + 4];
+                    reg_sum_range[11] += (int32_t)region_range[rblk + 8*18 + 4];
+                    reg_sum_hist[12] += (int32_t)region_hist[rblk + 8*18 + 8];
+                    reg_sum_range[12] += (int32_t)region_range[rblk + 8*18 + 8];
+                    reg_sum_hist[13] += (int32_t)region_hist[rblk + 8*18 + 12];
+                    reg_sum_range[13] += (int32_t)region_range[rblk + 8*18 + 12];
+                    reg_sum_hist[14] += (int32_t)region_hist[rblk + 8*18 + 16];
+                    reg_sum_range[14] += (int32_t)region_range[rblk + 8*18 + 16];
+                }
+            }
+        }
+
+        /* Score each region using 2D threshold lookup from t_par_list2.
+         * OEM: t_par_list2 has 4 thresholds at [0..3] and 25 lookup values at [4..28].
+         * hist_val = (reg_sum_hist[r] >> 6 + 1) / 3
+         * range_val = (reg_sum_range[r] >> 6 + 1) / 3
+         * Then 2D lookup: find which threshold bracket each falls in (5 levels),
+         * index into 5x5 table. */
+        {
+            uint32_t tp2_thresh[4];
+            uint32_t tp2_lut[25];
+            int32_t region_fog_sum = 0;
+
+            for (i = 0; i < 4; i++)
+                tp2_thresh[i] = le32_at(defog_t_par_list2 + i * 4);
+            for (i = 0; i < 25; i++)
+                tp2_lut[i] = le32_at(defog_t_par_list2 + 16 + i * 4);
+
+            for (i = 0; i < 15; i++) {
+                int32_t hv = ((reg_sum_hist[i] >> 6) + 1) / 3;
+                int32_t rv = ((reg_sum_range[i] >> 6) + 1) / 3;
+                int h_idx, r_idx;
+
+                /* Find bracket index for hist value (0..4) */
+                if ((uint32_t)hv < tp2_thresh[3])
+                    h_idx = 4;
+                else if ((uint32_t)hv < tp2_thresh[2])
+                    h_idx = 3;
+                else if ((uint32_t)hv < tp2_thresh[1])
+                    h_idx = 2;
+                else if ((uint32_t)hv < tp2_thresh[0])
+                    h_idx = 1;
+                else
+                    h_idx = 0;
+
+                /* Find bracket index for range value */
+                if ((uint32_t)rv < tp2_thresh[3])
+                    r_idx = 4;
+                else if ((uint32_t)rv < tp2_thresh[2])
+                    r_idx = 3;
+                else if ((uint32_t)rv < tp2_thresh[1])
+                    r_idx = 2;
+                else if ((uint32_t)rv < tp2_thresh[0])
+                    r_idx = 1;
+                else
+                    r_idx = 0;
+
+                region_fog_sum += (int32_t)tp2_lut[h_idx * 5 + r_idx];
+            }
+
+            /* OEM: total = channel accumulators + region_fog_sum */
+            total_fog_score = region_fog_sum;
+        }
+    }
+
+    /* ---- Phase C: EV-based parameter interpolation ---- */
+    /* Walk defog_ev_list_now (9 LE32 entries) to bracket total_fog_score.
+     * Linearly interpolate 5 output parameters from trsy0..4_list_now. */
+    ev_idx = 0;
+    while (ev_idx < 9) {
+        uint32_t ev_val = le32_at(defog_ev_list_now + ev_idx * 4);
+        if ((uint32_t)total_fog_score < ev_val)
+            break;
+        ev_idx++;
+    }
+
+    if (ev_idx >= 9) {
+        /* Above all thresholds: use last entry */
+        interp_ty[0] = (int32_t)le32_at(defog_trsy0_list_now + 8 * 4);
+        interp_ty[1] = (int32_t)le32_at(defog_trsy1_list_now + 8 * 4);
+        interp_ty[2] = (int32_t)le32_at(defog_trsy2_list_now + 8 * 4);
+        interp_ty[3] = (int32_t)le32_at(defog_trsy3_list_now + 8 * 4);
+        interp_ty[4] = (int32_t)le32_at(defog_trsy4_list_now + 8 * 4);
+    } else if (ev_idx == 0) {
+        /* Below first threshold: use first entry */
+        interp_ty[0] = (int32_t)le32_at(defog_trsy0_list_now);
+        interp_ty[1] = (int32_t)le32_at(defog_trsy1_list_now);
+        interp_ty[2] = (int32_t)le32_at(defog_trsy2_list_now);
+        interp_ty[3] = (int32_t)le32_at(defog_trsy3_list_now);
+        interp_ty[4] = (int32_t)le32_at(defog_trsy4_list_now);
+    } else {
+        /* OEM linear interpolation between ev_idx-1 and ev_idx.
+         * d_above = score - ev[idx-1], d_below = ev[idx] - score
+         * denom = d_above + d_below
+         * result = (d_above * trsy[idx] + d_below * trsy[idx-1] + denom/2) / denom */
+        uint32_t ev_lo = le32_at(defog_ev_list_now + (ev_idx - 1) * 4);
+        uint32_t ev_hi = le32_at(defog_ev_list_now + ev_idx * 4);
+        int32_t d_above = (int32_t)((uint32_t)total_fog_score - ev_lo);
+        int32_t d_below = (int32_t)(ev_hi - (uint32_t)total_fog_score);
+        int32_t denom = d_above + d_below;
+        int32_t half = denom >> 1;
+
+        for (i = 0; i < 5; i++) {
+            uint8_t *trsy_ptr;
+            int32_t v_lo, v_hi;
+            switch (i) {
+            case 0: trsy_ptr = defog_trsy0_list_now; break;
+            case 1: trsy_ptr = defog_trsy1_list_now; break;
+            case 2: trsy_ptr = defog_trsy2_list_now; break;
+            case 3: trsy_ptr = defog_trsy3_list_now; break;
+            default: trsy_ptr = defog_trsy4_list_now; break;
+            }
+            v_lo = (int32_t)le32_at(trsy_ptr + (ev_idx - 1) * 4);
+            v_hi = (int32_t)le32_at(trsy_ptr + ev_idx * 4);
+            interp_ty[i] = (d_above * v_hi + d_below * v_lo + half) / denom;
+        }
+    }
+
+    /* Write interpolated t_y values back to defog_block_t_y_array (OEM: arg7) */
+    for (i = 0; i < 5; i++) {
+        defog_block_t_y_array[i * 4 + 0] = (uint8_t)(interp_ty[i] & 0xff);
+        defog_block_t_y_array[i * 4 + 1] = (uint8_t)((interp_ty[i] >> 8) & 0xff);
+        defog_block_t_y_array[i * 4 + 2] = (uint8_t)((interp_ty[i] >> 16) & 0xff);
+        defog_block_t_y_array[i * 4 + 3] = (uint8_t)((interp_ty[i] >> 24) & 0xff);
+    }
+
+    /* ---- Phase D: Spatial fog map (when fpga_mode == 1) ---- */
+    if (fpga_mode == 1) {
+        /* OEM: For each block, compute local variance from delta_y in a 5x5 window,
+         * map to fog confidence [0,255], apply max filter + smooth filter. */
+        for (row = 0; row < 10; row++) {
+            int r0 = (row < 3) ? 0 : row - 2;
+            int r1 = (row < 7) ? row + 2 : 9;
+            if (row == 0)
+                r0 = 0;
+            for (col = 0; col < 18; col++) {
+                int c0 = (col < 3) ? 0 : col - 2;
+                int c1 = (col < 15) ? col + 2 : 17;
+                int cnt = (r1 - r0 + 1) * (c1 - c0 + 1);
+                int32_t sum_d = 0, sum_abs = 0;
+                int32_t var_sum = 0;
+                int dr2, dc2;
+                int32_t mean_d, variance, confidence;
+
+                if (col == 0)
+                    c0 = 0;
+
+                cnt = (r1 - r0 + 1) * (c1 - c0 + 1);
+                for (dr2 = r0; dr2 <= r1; dr2++) {
+                    for (dc2 = c0; dc2 <= c1; dc2++) {
+                        int32_t d = (int32_t)delta_y[dr2 * 18 + dc2];
+                        sum_d += d;
+                        if (d >= 0)
+                            sum_abs += d;
+                        else
+                            sum_abs -= d;
+                    }
+                }
+
+                mean_d = sum_d / cnt;
+                /* OEM: variance = sum((d - mean)^2) / cnt */
+                for (dr2 = r0; dr2 <= r1; dr2++) {
+                    for (dc2 = c0; dc2 <= c1; dc2++) {
+                        int32_t d = (int32_t)delta_y[dr2 * 18 + dc2] - mean_d;
+                        var_sum = d * d; /* OEM only keeps last (quirk) */
+                    }
+                }
+                variance = var_sum / cnt;
+
+                /* OEM: confidence = (variance + fog_score_b) * (sum_abs << 6) / cnt / fog_score_b
+                 * Clamp to [fog_lo_thresh, fog_hi_thresh] range, map to [0,255] */
+                if (mc_fog_score_b > 0) {
+                    confidence = (int32_t)div_u64(
+                        (uint64_t)(variance + mc_fog_score_b) *
+                        (uint64_t)((sum_abs << 6) / cnt),
+                        mc_fog_score_b);
+                } else {
+                    confidence = 0;
+                }
+
+                if (confidence > (int32_t)fog_hi_thresh)
+                    fog_map[row * 18 + col] = 0xff;
+                else if (confidence >= (int32_t)fog_lo_thresh)
+                    fog_map[row * 18 + col] = (uint8_t)(
+                        ((confidence - (int32_t)fog_lo_thresh) << 8) /
+                        (int32_t)fog_range);
+                else
+                    fog_map[row * 18 + col] = 0;
+            }
+        }
+
+        tisp_defog_max_filter3(fog_map, fog_map);
+        tisp_defog_img_filter5(fog_map, fog_map, filt_kernel);
+    }
+
+    /* ---- Phase E: Final transmittance output (180 blocks) ---- */
+    {
+        /* Read piecewise linear curve breakpoints from block_t_x_array */
+        int32_t tx[5], ty[5];
+        for (i = 0; i < 5; i++) {
+            tx[i] = (int32_t)le32_at(param_defog_block_t_x_now + i * 4);
+            ty[i] = interp_ty[i];
+        }
+
+        for (blk = 0; blk < 180; blk++) {
+            uint32_t my = (uint32_t)mean_y_grid[blk];
+            int32_t t_val;
+
+            /* 5-segment piecewise linear lookup */
+            if (my < (uint32_t)tx[0]) {
+                t_val = ty[0];
+            } else if (my < (uint32_t)tx[1]) {
+                if (tx[1] != tx[0])
+                    t_val = ty[0] + (int32_t)((ty[1] - ty[0]) *
+                            (int32_t)(my - (uint32_t)tx[0])) /
+                            (tx[1] - tx[0]);
+                else
+                    t_val = ty[0];
+            } else if (my < (uint32_t)tx[2]) {
+                if (tx[2] != tx[1])
+                    t_val = ty[1] + (int32_t)((ty[2] - ty[1]) *
+                            (int32_t)(my - (uint32_t)tx[1])) /
+                            (tx[2] - tx[1]);
+                else
+                    t_val = ty[1];
+            } else if (my < (uint32_t)tx[3]) {
+                if (tx[3] != tx[2])
+                    t_val = ty[2] + (int32_t)((ty[3] - ty[2]) *
+                            (int32_t)(my - (uint32_t)tx[2])) /
+                            (tx[3] - tx[2]);
+                else
+                    t_val = ty[2];
+            } else if (my >= (uint32_t)tx[4]) {
+                t_val = ty[4];
+            } else {
+                if (tx[4] != tx[3])
+                    t_val = ty[3] + (int32_t)((ty[4] - ty[3]) *
+                            (int32_t)(my - (uint32_t)tx[3])) /
+                            (tx[4] - tx[3]);
+                else
+                    t_val = ty[3];
+            }
+
+            /* OEM: scale by 0x28f >> 8, clamp [0,255] */
+            {
+                int32_t scaled = (t_val * 0x28f) >> 8;
+                if (scaled < 0)
+                    scaled = 0;
+                if (scaled >= 0x100)
+                    scaled = 0xff;
+
+                if (fpga_mode != 1) {
+                    defog_block_transmit_t[blk] = (uint8_t)scaled;
+                } else {
+                    /* OEM: blend with spatial fog map:
+                     * result = scaled + ((0xff - scaled) * fog_map[blk]) >> 8 */
+                    uint32_t fm = (uint32_t)fog_map[blk];
+                    uint32_t blended = (uint32_t)scaled +
+                        (((0xff - (uint32_t)scaled) * fm) >> 8);
+                    if (blended > 0xff)
+                        blended = 0xff;
+                    defog_block_transmit_t[blk] = (uint8_t)blended;
+                }
+            }
+        }
+    }
+}
+
+/* tiziano_defog_algorithm - Binary Ninja EXACT: Defog algorithm processing
+ * OEM: Sets up defog parameters, calls tisp_defog_soft_process, increments frame count. */
+static int tiziano_defog_algorithm(void)
+{
+    /* OEM: if defog_frm_num < 2, defog_update_paras = 0
+     *      else if data_9cd60 == 0, defog_update_paras = 0
+     *      else defog_update_paras = 1 */
+    if (defog_frm_num < 2)
+        defog_update_paras = 0;
+    else if (defog_tuning_loaded == 0)
+        defog_update_paras = 0;
+    else
+        defog_update_paras = 1;
+
+    /* OEM: data_9cd74 = (fpga_para[0] != 0) ? 1 : 0
+     *      data_9cd78 = (fpga_para[3] != 0) ? 1 : 0 */
+    defog_spatial_en = (le32_at(param_defog_fpga_para_now + 0) != 0) ? 1 : 0;
+    defog_color_en = (le32_at(param_defog_fpga_para_now + 12) != 0) ? 1 : 0;
+
+    /* OEM: if data_9cd48 == 1, write manual_ctrl and ev_now */
+    if (defog_manual_mode == 1) {
+        uint32_t mc0 = le32_at(defog_manual_ctrl + 0);
+        (void)mc0; /* OEM stores to manual_ctrl[0] = 1 and data_beaa8 = ev_now */
+    }
+
+    /* Snapshot mean_y before calling soft_process (OEM copies 0x50 bytes = 80 bytes
+     * = 20 uint32_t from mean_y_last; for 180 blocks we copy all) */
+    memcpy(defog_block_mean_y_snap, defog_block_mean_y_last,
+           sizeof(defog_block_mean_y_snap));
+
+    /* Call the core defog algorithm */
+    tisp_defog_soft_process(defog_block_hist_info, defog_sum_block_r,
+                            defog_sum_block_g, defog_sum_block_b);
+
+    /* OEM: Increment frame counter, wrap at 0x10000 back to 0x80 */
+    defog_frm_num++;
+    if (defog_frm_num == 0x10000)
+        defog_frm_num = 0x80;
+
+    return 0;
+}
+
+/* tiziano_defog_interrupt_static - Binary Ninja EXACT: Defog ISR (IRQ index 0x14 / bit 20)
+ * OEM flow: 1) write current params to HW, 2) read DMA buffer address from reg 0x5ba4,
+ *           3) sync cache for matching buffer page, 4) parse data, 5) push event 3 */
+int tiziano_defog_interrupt_static(void)
+{
+    uint32_t reg_val;
+    uint32_t phys_base;
+    struct tisp_event_record event_data = {0};
+
+    /* Step 1: Write current defog params to hardware registers (OEM: tiziano_defog_set_reg_params) */
+    tiziano_defog_set_reg_params();
+
+    /* Step 2: Read which DMA buffer the hardware just wrote to */
+    reg_val = system_reg_read(0x5ba4);
+    phys_base = defog_dma_phys;
+
+    if (defog_dma_virt == NULL || phys_base == 0)
+        goto push_event;
+
+    /* Step 3-4: Find matching buffer page, sync cache, parse statistics
+     * OEM: 4 pages of 0x1000 bytes each, private_dma_cache_sync then tiziano_defog_get_data */
+    if (reg_val == phys_base) {
+        private_dma_cache_sync(NULL, defog_dma_virt, 0x1000, 0);
+        tiziano_defog_get_data(defog_dma_virt);
+    } else if (reg_val == phys_base + 0x1000) {
+        private_dma_cache_sync(NULL, (char *)defog_dma_virt + 0x1000, 0x1000, 0);
+        tiziano_defog_get_data((char *)defog_dma_virt + 0x1000);
+    } else if (reg_val == phys_base + 0x2000) {
+        private_dma_cache_sync(NULL, (char *)defog_dma_virt + 0x2000, 0x1000, 0);
+        tiziano_defog_get_data((char *)defog_dma_virt + 0x2000);
+    } else if (reg_val == phys_base + 0x3000) {
+        private_dma_cache_sync(NULL, (char *)defog_dma_virt + 0x3000, 0x1000, 0);
+        tiziano_defog_get_data((char *)defog_dma_virt + 0x3000);
+    }
+
+push_event:
+    /* Step 5: Push event 3 to trigger tisp_defog_process via event queue */
+    event_data.event_id = 3;
+    tisp_event_push(&event_data);
+
+    return 1;
+}
+
+/* tisp_defog_process - Binary Ninja EXACT: Defog event callback (event 3)
+ * OEM: Simply calls tiziano_defog_algorithm() and returns 0 */
+int tisp_defog_process(void)
+{
+    tiziano_defog_algorithm();
+    return 0;
+}
+
+/* tiziano_defog_init - Defog initialization
+ * OEM flow: geometry setup -> params_refresh -> copy defaults -> params_init ->
+ *           set_reg_params -> IRQ/event registration
+ */
 int tiziano_defog_init(uint32_t width, uint32_t height)
 {
     if (tisp_force_bypass_defog) {
@@ -16796,9 +17961,111 @@ int tiziano_defog_init(uint32_t width, uint32_t height)
         return 0;
     }
 
+    /* OEM: defog_frm_num = 0 at start of tiziano_defog_init */
+    defog_frm_num = 0;
+
     pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
+
+    /* Step 1: OEM tiziano_defog_params_refresh() - load ROM defaults into arrays */
+    tiziano_defog_params_refresh();
+
+    /* Step 2: Build block boundaries from resolution */
     tisp_defog_set_frame_geometry(width, height);
+
+    /* Step 2b: Set area_div and area_index based on resolution (OEM tiziano_defog_init).
+     * area_div is a fixed-point reciprocal of the typical block pixel count.
+     * area_index stores remainders for non-uniform edge-block sizing. */
+    {
+        uint32_t total = width * height;
+        defog_block_area_index[0] = height % 10;
+        defog_block_area_index[1] = width % 18;
+
+        if (total == 0xe1000) {         /* 1280x720 */
+            defog_block_area_div = 0xc78031;
+            defog_block_area_div_edge_w = 0xca4f85;
+            defog_block_area_div_edge_h = 0xca4587;
+            defog_block_area_div_corner = 0xcd1ed9;
+        } else if (total == 0x1fa400) { /* 1920x1080 */
+            defog_block_area_div = 0x59e7fd;
+            defog_block_area_div_edge_w = 0x5ac11e;
+            defog_block_area_div_edge_h = 0x5abd19;
+            defog_block_area_div_corner = 0x5b983e;
+        } else if (total == 0x2d9000) { /* 2304x1296 */
+            defog_block_area_div = 0x3e86e2;
+            defog_block_area_div_edge_w = 0x3f03f0;
+            defog_block_area_div_edge_h = 0x3f02f8;
+            defog_block_area_div_corner = 0x3f80fe;
+        } else if (total == 0x384000) { /* 2560x1440 */
+            defog_block_area_div = 0x329202;
+            defog_block_area_div_edge_w = 0x32ed2d;
+            defog_block_area_div_edge_h = 0x32ebe9;
+            defog_block_area_div_corner = 0x3347b6;
+        } else if (total == 0x4b0000) { /* 2560x1920 */
+            defog_block_area_div = 0x25fe46;
+            defog_block_area_div_edge_w = 0x2642c5;
+            defog_block_area_div_edge_h = 0x2630ef;
+            defog_block_area_div_corner = 0x2675c9;
+        } else if (total == 0x4ce300) { /* 2592x1944 */
+            defog_block_area_div = 0x2515bd;
+            defog_block_area_div_edge_w = 0x2557ab;
+            defog_block_area_div_edge_h = 0x2546ad;
+            defog_block_area_div_corner = 0x2588f2;
+        } else {
+            /* Generic: compute reciprocal from block dimensions.
+             * OEM calls fix_point_div_64; we approximate with shift-based formula.
+             * block_h = height/10, block_w = width/18, area = block_h * block_w
+             * area_div ~= (1 << 24) / area (Q16.8 fixed-point reciprocal) */
+            uint32_t bh = height / 10;
+            uint32_t bw = width / 18;
+            uint32_t area_std = (bh + 1) * (bw + 1);
+            uint32_t area_ew = (bh + 1) * bw;  /* edge: narrower last col */
+            uint32_t area_eh = bh * (bw + 1);  /* edge: shorter last row */
+            uint32_t area_cr = bh * bw;         /* corner */
+            if (area_std == 0) area_std = 1;
+            if (area_ew == 0) area_ew = 1;
+            if (area_eh == 0) area_eh = 1;
+            if (area_cr == 0) area_cr = 1;
+            defog_block_area_div = (uint32_t)div_u64((uint64_t)1 << 36, area_std);
+            defog_block_area_div_edge_w = (uint32_t)div_u64((uint64_t)1 << 36, area_ew);
+            defog_block_area_div_edge_h = (uint32_t)div_u64((uint64_t)1 << 36, area_eh);
+            defog_block_area_div_corner = (uint32_t)div_u64((uint64_t)1 << 36, area_cr);
+        }
+    }
+
+    /* Step 3: Write geometry+control regs to hardware */
     tisp_defog_all_reg_refresh();
+
+    /* Step 4: Copy default _tmp tables to live arrays when rgbra_list[0]==0
+     * OEM checks defog_rgbra_list == 0 and bulk-copies all weight/cent tables */
+    if (*(uint32_t *)defog_rgbra_list == 0) {
+        memcpy(defog_cent3_w_dis_array,  param_defog_cent3_w_dis_array_tmp,
+               sizeof(defog_cent3_w_dis_array));
+        memcpy(defog_cent5_w_dis_array,  param_defog_cent5_w_dis_array_tmp,
+               sizeof(defog_cent5_w_dis_array));
+        memcpy(defog_weightlut22, param_defog_weightlut22_tmp,
+               sizeof(defog_weightlut22));
+        memcpy(defog_weightlut12, param_defog_weightlut12_tmp,
+               sizeof(defog_weightlut12));
+        memcpy(defog_weightlut21, param_defog_weightlut21_tmp,
+               sizeof(defog_weightlut21));
+        memcpy(defog_weightlut20, param_defog_weightlut20_tmp,
+               sizeof(defog_weightlut20));
+        memcpy(defog_weightlut02, param_defog_weightlut02_tmp,
+               sizeof(defog_weightlut02));
+    }
+
+    /* Step 5: OEM tiziano_defog_params_init() - program cent/weight/param regs */
+    tiziano_defog_params_init();
+
+    /* Step 6: OEM tiziano_defog_set_reg_params() - write block grid data */
+    tiziano_defog_set_reg_params();
+
+    /* Step 6: Register defog IRQ handler and event callback
+     * OEM: system_irq_func_set(0x14, tiziano_defog_interrupt_static)
+     *      tisp_event_set_cb(3, tisp_defog_process) */
+    system_irq_func_set(0x14, defog_interrupt_static_wrapper);
+    tisp_event_set_cb(3, tisp_defog_process);
+
     return 0;
 }
 
@@ -18691,6 +19958,8 @@ EXPORT_SYMBOL(tisp_sdns_par_refresh);
 EXPORT_SYMBOL(data_9a454);
 EXPORT_SYMBOL(data_9a450);
 EXPORT_SYMBOL(tiziano_adr_interrupt_static);
+EXPORT_SYMBOL(tiziano_defog_interrupt_static);
+EXPORT_SYMBOL(tisp_defog_process);
 EXPORT_SYMBOL(tisp_wdr_expTime_updata);
 EXPORT_SYMBOL(tisp_wdr_ev_calculate);
 EXPORT_SYMBOL(tiziano_wdr_fusion1_curve_block_mean1);
