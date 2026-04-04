@@ -17538,9 +17538,9 @@ int tiziano_defog_init(uint32_t width, uint32_t height)
 
     pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
     tisp_defog_set_frame_geometry(width, height);
-    tisp_defog_all_reg_refresh();
 
-    /* OEM: load params from tuning bin, init registers, program block grid */
+    /* OEM: load params from tuning bin, then init regs (which calls
+     * all_reg_refresh + set_reg_params internally), then extra set_reg_params. */
     tiziano_defog_params_refresh();
     tiziano_defog_params_init();
     tiziano_defog_set_reg_params();
