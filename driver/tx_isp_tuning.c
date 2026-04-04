@@ -2966,8 +2966,8 @@ EXPORT_SYMBOL(tisp_sensor_info_update);
 
 /* GB (Green Balance) parameter arrays - Binary Ninja reference */
 static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
-static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x1000, 0x1000, 0x1000, 0x1000};
-static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x1000, 0x1000, 0x1000, 0x1000};
+static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x400, 0x400, 0x400, 0x400};
+static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x400, 0x400, 0x400, 0x400};
 static uint32_t tisp_gb_blc_offset[45] = {0};  /* 5 curves x 9 entries: R,Gr,Gb,B,IR */
 static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
 static uint32_t tisp_gb_blc_min[9] = {0};     /* 9-entry BLC minimum curve */
@@ -3062,20 +3062,22 @@ static const uint32_t tiziano_gib_config_line_oem[12] = {
 };
 static const uint32_t tiziano_gib_r_g_linear_oem[2] = {1024, 1024};
 static const uint32_t tiziano_gib_b_ir_linear_oem[2] = {1024, 1024};
+/* BLC arrays: OEM RUNTIME values from live system (sensor-calibrated by libimp).
+ * ROM defaults were ~67; runtime values are ~256 (proper sensor black level). */
 static const uint32_t tiziano_gib_deirm_blc_r_linear_oem[9] = {
-    67, 68, 67, 67, 66, 66, 66, 66, 66,
+    0xFD, 0xFE, 0x100, 0x102, 0x102, 0x102, 0x102, 0x102, 0x102,
 };
 static const uint32_t tiziano_gib_deirm_blc_gr_linear_oem[9] = {
-    66, 68, 67, 67, 67, 67, 67, 67, 67,
+    0xFD, 0xFE, 0x100, 0x102, 0x103, 0x103, 0x103, 0x103, 0x103,
 };
 static const uint32_t tiziano_gib_deirm_blc_gb_linear_oem[9] = {
-    66, 68, 67, 66, 67, 67, 67, 67, 67,
+    0xFD, 0xFE, 0xFE, 0x101, 0x101, 0x101, 0x101, 0x101, 0x101,
 };
 static const uint32_t tiziano_gib_deirm_blc_b_linear_oem[9] = {
-    66, 68, 68, 67, 67, 67, 67, 67, 67,
+    0xFD, 0xFE, 0xFE, 0x101, 0x100, 0x100, 0x100, 0x100, 0x100,
 };
 static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0x41, 0x3F, 0x43, 0x42, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F,
 };
 static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
 static const uint32_t gib_ir_reser_oem[15] = {0};
@@ -3085,9 +3087,25 @@ static const uint32_t gib_ir_reser_oem[15] = {0};
 static const uint32_t tiziano_gib_deir_r_h_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_g_h_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_b_h_oem[33] = {0};
-static const uint32_t tiziano_gib_deir_r_m_oem[33] = {0};
-static const uint32_t tiziano_gib_deir_g_m_oem[33] = {0};
-static const uint32_t tiziano_gib_deir_b_m_oem[33] = {0};
+/* DEIR _m arrays: OEM RUNTIME values (linear ramps set by libimp) */
+static const uint32_t tiziano_gib_deir_r_m_oem[33] = {
+    0x000, 0x040, 0x080, 0x0C0, 0x100, 0x140, 0x180, 0x1C0,
+    0x200, 0x240, 0x280, 0x2C0, 0x300, 0x340, 0x380, 0x3C0,
+    0x400, 0x440, 0x480, 0x4C0, 0x500, 0x540, 0x580, 0x5C0,
+    0x600, 0x640, 0x680, 0x6C0, 0x700, 0x740, 0x780, 0x7C0, 0x800,
+};
+static const uint32_t tiziano_gib_deir_g_m_oem[33] = {
+    0x000, 0x05A, 0x0B3, 0x10D, 0x166, 0x1C0, 0x21A, 0x273,
+    0x2CD, 0x326, 0x380, 0x3DA, 0x433, 0x48D, 0x4E6, 0x540,
+    0x59A, 0x5F3, 0x64D, 0x6A6, 0x700, 0x75A, 0x7B3, 0x80D,
+    0x866, 0x8C0, 0x91A, 0x973, 0x9CD, 0xA26, 0xA80, 0xADA, 0xB33,
+};
+static const uint32_t tiziano_gib_deir_b_m_oem[33] = {
+    0x000, 0x073, 0x0E6, 0x15A, 0x1CD, 0x240, 0x2B3, 0x326,
+    0x39A, 0x40D, 0x480, 0x4F3, 0x566, 0x5DA, 0x64D, 0x6C0,
+    0x733, 0x7A6, 0x81A, 0x88D, 0x900, 0x973, 0x9E6, 0xA5A,
+    0xACD, 0xB40, 0xBB3, 0xC26, 0xC9A, 0xD0D, 0xD80, 0xDF3, 0xE66,
+};
 static const uint32_t tiziano_gib_deir_r_l_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_g_l_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_b_l_oem[33] = {0};
