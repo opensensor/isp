@@ -1865,22 +1865,12 @@ static int sensor_alloc_integration_time_short(int time, void *arg2) {
     return ret;
 }
 
-/* Calls ORIGINAL sensor driver ioctl directly — bypasses our wrapper that
- * re-syncs VIC dimensions. Uses packed (gain<<16 | it) format via cmd 0x200000d. */
 static int sensor_set_integration_time(int time) {
     if (!ourISPdev || !ourISPdev->sensor)
         return 0;
-
     ourISPdev->sensor->attr.integration_time = (uint16_t)time;
-
-    /* Write packed (again << 16 | it) to real sensor driver */
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->sensor &&
-        stored_sensor_ops.original_ops->sensor->ioctl) {
-        u32 packed = ((u32)ourISPdev->sensor->attr.again << 16) | ((u32)time & 0xffff);
-        stored_sensor_ops.original_ops->sensor->ioctl(
-            stored_sensor_ops.sensor_sd, 0x200000d, &packed);
-    }
+    /* TODO: OEM stores value + sets flags at ISP dev offsets 0x198/0x19c/0x1b0.
+     * Actual I2C write happens via a separate notification path, NOT via sensor ioctl. */
     return 0;
 }
 
