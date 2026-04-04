@@ -1869,8 +1869,17 @@ static int sensor_set_integration_time(int time) {
     if (!ourISPdev || !ourISPdev->sensor)
         return 0;
     ourISPdev->sensor->attr.integration_time = (uint16_t)time;
-    /* TODO: OEM stores value + sets flags at ISP dev offsets 0x198/0x19c/0x1b0.
-     * Actual I2C write happens via a separate notification path, NOT via sensor ioctl. */
+
+    /* Call original sensor driver's ioctl directly with TX_ISP_EVENT_SENSOR_EXPO.
+     * The packed value (gain<<16 | it) goes to sensor_set_expo() which does I2C. */
+    if (stored_sensor_ops.original_ops &&
+        stored_sensor_ops.original_ops->sensor &&
+        stored_sensor_ops.original_ops->sensor->ioctl &&
+        stored_sensor_ops.sensor_sd) {
+        int packed = ((int)ourISPdev->sensor->attr.again << 16) | (time & 0xffff);
+        stored_sensor_ops.original_ops->sensor->ioctl(
+            stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_EXPO, &packed);
+    }
     return 0;
 }
 
@@ -1898,17 +1907,17 @@ static int sensor_end_changes(void) {
 static int sensor_set_analog_gain(int gain) {
     if (!ourISPdev || !ourISPdev->sensor)
         return 0;
-
     ourISPdev->sensor->attr.again = gain;
 
-    /* Write packed (again << 16 | it) to real sensor driver */
+    /* Call original sensor driver's ioctl directly with TX_ISP_EVENT_SENSOR_EXPO.
+     * The packed value (gain<<16 | it) goes to sensor_set_expo() which does I2C. */
     if (stored_sensor_ops.original_ops &&
         stored_sensor_ops.original_ops->sensor &&
-        stored_sensor_ops.original_ops->sensor->ioctl) {
-        u32 packed = ((u32)gain << 16) |
-                     ((u32)ourISPdev->sensor->attr.integration_time & 0xffff);
+        stored_sensor_ops.original_ops->sensor->ioctl &&
+        stored_sensor_ops.sensor_sd) {
+        int packed = (gain << 16) | ((int)ourISPdev->sensor->attr.integration_time & 0xffff);
         stored_sensor_ops.original_ops->sensor->ioctl(
-            stored_sensor_ops.sensor_sd, 0x200000d, &packed);
+            stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_EXPO, &packed);
     }
     return 0;
 }
