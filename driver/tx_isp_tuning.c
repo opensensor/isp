@@ -431,6 +431,15 @@ static uint32_t bcsh_Cyh[9] = { 0, 0, 0, 0, 0x384, 0x384, 0x384, 0x384, 0x384 };
 /* Interpolated chroma clip limits (OEM: data_9a7ac..data_9a7b8) */
 static uint32_t bcsh_Cxl_intp, bcsh_Cxh_intp, bcsh_Cyl_intp, bcsh_Cyh_intp;
 
+/* EV-gating control bytes (OEM: tisp_BCSH_au32clip0 / data_b53d4 / data_b53d8 / data_b53dc)
+ * OEM layout: 4 bytes at 4-byte aligned offsets within a 16-byte block.
+ * We store as uint32_t[4] to match the OEM memcpy layout for ioctl compat. */
+static uint32_t bcsh_ev_ctrl[4]; /* [mode, idxA, mode2, idxB] — low byte of each word */
+#define bcsh_ev_mode   ((u8)bcsh_ev_ctrl[0])
+#define bcsh_ev_idxA   ((u8)bcsh_ev_ctrl[1])
+#define bcsh_ev_mode2  ((u8)bcsh_ev_ctrl[2])
+#define bcsh_ev_idxB   ((u8)bcsh_ev_ctrl[3])
+
 /* TransitParam output: adjusted S-values (OEM: tisp_BCSH_ai32Svalue + data_b5444..b544c) */
 static uint32_t bcsh_ai32Svalue[4];
 /* TransitParam output: adjusted C-values (OEM: tisp_BCSH_ai32C + data_b5454..b5460) */
@@ -444,12 +453,12 @@ static uint32_t bcsh_Sstep[2];
 /* TransitParam output: HDP/HBP/HLSP slopes */
 static uint32_t bcsh_HDPslope, bcsh_HBPslope, bcsh_HLSPslope;
 
-static uint32_t bcsh_B = 0x0384;
+static uint32_t bcsh_B = 0x0400; /* OEM default: tisp_BCSH_u32B = 0x400 */
 static uint32_t bcsh_OffsetRGB2yuv[3] = { 0x0400, 0x0400, 0x0400 }; /* OEM: tisp_BCSH_u32OffsetRGB2yuv */
-static uint32_t bcsh_OffsetYUVy[2] = { 0x0400, 0x0406 };
-static uint32_t bcsh_clip0[4] = { 0x0406, 0x0400, 0x0400, 0x0400 };
-static uint32_t bcsh_clip1[4] = { 0x0000, 0x03ff, 0x0000, 0x03ff };
-static uint32_t bcsh_clip2[4] = { 0xffff4c73, 0x10253, 0x1c5a0, 0x0339 };
+static uint32_t bcsh_OffsetYUVy[2] = { 0x03c0, 0x0440 }; /* OEM: tisp_BCSH_au32OffsetYUVy */
+static uint32_t bcsh_clip0[4] = { 0x0000, 0x03ff, 0x0000, 0x03ff }; /* OEM: tisp_BCSH_au32clip */
+static uint32_t bcsh_clip1[4] = { 0x0000, 0x036c, 0x0040, 0x03bc }; /* OEM: tisp_BCSH_au32clip1 */
+static uint32_t bcsh_clip2[4] = { 0x0040, 0x03ac, 0x0040, 0x03bc }; /* OEM: tisp_BCSH_au32clip2 */
 
 static uint32_t bcsh_CCM_d_wdr[9] = {
 	0x0000, 0x03ff, 0x0000, 0x03ff, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000
@@ -1208,25 +1217,39 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
     /* 0x804C: HLSPslope:HLSP[0] */
     system_reg_write(BASE + 0x004c, PACK16(bcsh_HLSPslope, HLSP[0]));
 
-    /* 0x8050: EV/HLSP-gated mixed value (OEM-like). */
+    /* 0x8050: EV/HLSP-gated mixed value (OEM: reg 0x8050).
+     * OEM initializes s1_3 = HLSP[2] << 16 | HLSP[1], then conditionally
+     * modifies it based on control bytes tisp_BCSH_au32clip0 and data_b53d8.
+     * Control bytes default to 0, so the default path keeps the initial value.
+     *
+     * bcsh_ev_mode     = tisp_BCSH_au32clip0 (byte, default 0)
+     * bcsh_ev_idxA     = data_b53d4 (byte, default 0, clamped to [1..9])
+     * bcsh_ev_mode2    = data_b53d8 (byte, default 0)
+     * bcsh_ev_idxB     = data_b53dc (byte, default 0, clamped to [1..9])
+     */
     {
-        u32 ev10 = tuning->bcsh_ev >> 10; /* matches data_9a614 >> 10 */
+        u32 ev10 = tuning->bcsh_ev >> 10; /* matches data_8a604 >> 10 */
         u32 *EvList = bcsh_wdr_enabled ? bcsh_EvList_wdr : bcsh_EvList;
-        /* Clamp indices as per BN: [1..9] */
-        u32 idxA = 1; /* default for data_c53e4 */
-        u32 idxB = 9; /* default for data_c53ec */
-        if (idxA < 1) idxA = 1; if (idxA > 9) idxA = 9;
-        if (idxB < 1) idxB = 1; if (idxB > 9) idxB = 9;
 
-        u32 s1_3 = 0;
-        if (bcsh_clip0[0] == 1) {
+        /* OEM: clamp indices to [1..9] */
+        u32 idxA = bcsh_ev_idxA;
+        u32 idxB = bcsh_ev_idxB;
+        if (idxA >= 10) idxA = 9;
+        else if (idxA == 0) idxA = 1;
+        if (idxB >= 10) idxB = 9;
+        else if (idxB == 0) idxB = 1;
+
+        /* OEM: initial value from HLSP array, NOT zero */
+        u32 s1_3 = PACK16(HLSP[2], HLSP[1]);
+
+        if (bcsh_ev_mode == 1) {
             u32 a0_48 = EvList[idxA - 1];
             if (ev10 < a0_48) {
                 u32 v1_7 = (ev10 < 2) ? 1 : 0;
-                u32 v0_8 = bcsh_clip0[0] - ev10;
+                u32 v0_8 = bcsh_ev_mode - ev10;
                 u32 a2_11 = ev10 - 1;
                 if (v1_7) a2_11 = v0_8;
-                u32 clip0_2 = (a0_48 == 0) ? bcsh_clip0[0] : (a0_48 - 1);
+                u32 clip0_2 = (a0_48 == 0) ? bcsh_ev_mode : (a0_48 - 1);
                 if (!v1_7) v0_8 = ev10 - 1;
                 u32 v0_9 = (a0_48 == 0) ? 1 : (a0_48 - 1);
                 u32 lo = 0, hi = 0;
@@ -1234,8 +1257,8 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                 if (clip0_2) hi = (u32)div_u64((u64)a2_11 * HLSP[2], clip0_2);
                 s1_3 = (hi << 16) | (lo & 0xFFFF);
             }
-        } else {
-            u32 v1_8 = EvList[8];
+        } else if (bcsh_ev_mode2 == 1) {
+            u32 v1_8 = EvList[8]; /* OEM: *(EvList_now + 0x20) = EvList[8] */
             if (ev10 < v1_8) {
                 u32 a0_50 = EvList[idxB - 1];
                 if (a0_50 < ev10) {
@@ -1262,13 +1285,15 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                         lo_part = (s1_6 - dec2) & 0xFFFF;
                     }
                     s1_3 = (hi_part << 16) | lo_part;
-                } else {
-                    s1_3 = 0;
                 }
-            } else {
+                /* else: a0_50 >= ev10, s1_3 keeps initial HLSP value (OEM: no assignment) */
+            }
+            /* else: ev10 >= v1_8, s1_3 = 0 */
+            else {
                 s1_3 = 0;
             }
         }
+        /* else: bcsh_ev_mode != 1 && bcsh_ev_mode2 != 1 → s1_3 stays at initial HLSP value */
         system_reg_write(BASE + 0x0050, s1_3);
     }
 
@@ -1281,11 +1306,12 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
 
     /* 0x8064..0x8070: Sstep/Sthres, then S-values (OEM: arg12/arg10/arg11)
      * 0x8064: Sstep[1] << 16 | (Sstep[0] << 3 | Sthres[0])
+     *         OEM does NOT mask Sthres[0] — it is OR'd directly (e.g. 0x360)
      * 0x8068: Sthres[2] << 16 | Sthres[1]
      * 0x806c: Svalue[0] << 16 | Svalue[1]
      * 0x8070: Svalue[2] << 16 | Svalue[3] */
     system_reg_write(BASE + 0x0064,
-        PACK16(bcsh_Sstep[1], ((bcsh_Sstep[0] << 3) | (Sth[0] & 0x7))));
+        (((u32)bcsh_Sstep[1] & 0xFFFF) << 16) | ((u32)bcsh_Sstep[0] << 3) | (u32)Sth[0]);
     system_reg_write(BASE + 0x0068, PACK16(Sth[2], Sth[1]));
     system_reg_write(BASE + 0x006c, PACK16(bcsh_ai32Svalue[0], bcsh_ai32Svalue[1]));
     system_reg_write(BASE + 0x0070, PACK16(bcsh_ai32Svalue[2], bcsh_ai32Svalue[3]));
@@ -8577,7 +8603,7 @@ int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf)
     case 0x3d1: src = &bcsh_B;           size = 0x04; break;
     case 0x3d2: src = bcsh_OffsetRGB;    size = 0x0c; break;
     case 0x3d3: src = bcsh_OffsetYUVy;   size = 0x08; break;
-    case 0x3d4: src = bcsh_clip0;        size = 0x10; break;
+    case 0x3d4: src = bcsh_ev_ctrl;      size = 0x10; break;
     case 0x3d5: src = bcsh_clip1;        size = 0x10; break;
 
     /* WDR bank */
@@ -8638,7 +8664,7 @@ int tisp_bcsh_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x3d1: memcpy(&bcsh_B,        in_buf, (size = 0x04)); break;
     case 0x3d2: memcpy(bcsh_OffsetRGB, in_buf, (size = 0x0c)); break;
     case 0x3d3: memcpy(bcsh_OffsetYUVy,in_buf, (size = 0x08)); break;
-    case 0x3d4: memcpy(bcsh_clip0,     in_buf, (size = 0x10)); break;
+    case 0x3d4: memcpy(bcsh_ev_ctrl,   in_buf, (size = 0x10)); break;
     case 0x3d5: memcpy(bcsh_clip1,     in_buf, (size = 0x10)); break;
 
     /* WDR bank */
@@ -17388,7 +17414,7 @@ int tiziano_af_init(uint32_t height, uint32_t width)
 #define BCSH_TPARAMS_B_OFF              0x12414
 #define BCSH_TPARAMS_OFFSETRGB_OFF      0x12418
 #define BCSH_TPARAMS_OFFSETYUVY_OFF     0x12424
-#define BCSH_TPARAMS_CLIP0_OFF          0x1242c
+#define BCSH_TPARAMS_EV_CTRL_OFF          0x1242c
 #define BCSH_TPARAMS_CLIP1_OFF          0x1243c
 #define BCSH_TPARAMS_CCM_D_WDR_OFF      0x1244c
 #define BCSH_TPARAMS_CCM_T_WDR_OFF      0x12470
@@ -17486,7 +17512,10 @@ static void tiziano_bcsh_params_refresh(void)
     memcpy(&bcsh_B,            p + BCSH_TPARAMS_B_OFF,             4);
     memcpy(bcsh_OffsetRGB,     p + BCSH_TPARAMS_OFFSETRGB_OFF,     0x0c);
     memcpy(bcsh_OffsetYUVy,    p + BCSH_TPARAMS_OFFSETYUVY_OFF,    8);
-    memcpy(bcsh_clip0,         p + BCSH_TPARAMS_CLIP0_OFF,         0x10);
+    /* OEM: CLIP0_OFF contains the 4 EV-gating control words (NOT the clip0 array).
+     * Each is a uint32_t where only the low byte matters (OEM stores as byte + 3 pad).
+     * The clip0 array (tisp_BCSH_au32clip) is hardcoded at {0,0x3ff,0,0x3ff}. */
+    memcpy(bcsh_ev_ctrl,       p + BCSH_TPARAMS_EV_CTRL_OFF,         0x10);
     memcpy(bcsh_clip1,         p + BCSH_TPARAMS_CLIP1_OFF,         0x10);
 
     memcpy(bcsh_CCM_d_wdr,     p + BCSH_TPARAMS_CCM_D_WDR_OFF,     0x24);
