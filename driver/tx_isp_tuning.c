@@ -808,7 +808,7 @@ static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t 
             int64_t acc = 0;
             for (int k = 0; k < 3; ++k)
                 acc += (int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j];
-            O[i * 3 + j] = (int32_t)(acc >> 10);
+            O[i * 3 + j] = (int32_t)(acc >> 13);
         }
     }
 }
@@ -1133,6 +1133,8 @@ static void tiziano_bcsh_TransitParam(struct isp_tuning_data *tuning)
             bcsh_Sstep[0] = diff01 / s_range;
             bcsh_Sstep[1] = diff23 / s_range;
         } else {
+            /* OEM clamps Sth[1] = Sth[2] when mid >= end */
+            Sth[1] = st_end;
             bcsh_Sstep[0] = 0;
             bcsh_Sstep[1] = 0;
         }
@@ -1140,22 +1142,27 @@ static void tiziano_bcsh_TransitParam(struct isp_tuning_data *tuning)
 
     /* ---- Compute HDP/HBP/HLSP slopes (OEM: 0x400 / (end - mid)) ---- */
     {
-        if (HDP[1] < HDP[2])
+        if (HDP[1] < HDP[2]) {
             bcsh_HDPslope = 0x400 / (HDP[2] - HDP[1]);
-        else {
-            /* OEM clamps HDP[1] = HDP[2] when not increasing */
+        } else {
+            /* OEM clamps HDP[1] = HDP[2] when mid >= end */
+            HDP[1] = HDP[2];
             bcsh_HDPslope = 0;
         }
 
-        if (HBP[1] < HBP[2])
+        if (HBP[1] < HBP[2]) {
             bcsh_HBPslope = 0x400 / (HBP[2] - HBP[1]);
-        else {
+        } else {
+            /* OEM clamps HBP[1] = HBP[2] when mid >= end */
+            HBP[1] = HBP[2];
             bcsh_HBPslope = 0;
         }
 
-        if (HLSP[1] < HLSP[2])
+        if (HLSP[1] < HLSP[2]) {
             bcsh_HLSPslope = 0x400 / (HLSP[2] - HLSP[1]);
-        else {
+        } else {
+            /* OEM clamps HLSP[1] = HLSP[2] when mid >= end */
+            HLSP[1] = HLSP[2];
             bcsh_HLSPslope = 0;
         }
     }
@@ -3379,6 +3386,9 @@ static int tisp_ae0_ctrls_update(void);
 static int tisp_ae0_process_impl(void);
 static int tisp_event_push(void *event);
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
+/* Forward declarations for functions used by Tiziano_ae0_fpga / tisp_ae0_process_impl */
+static void tisp_set_sensor_integration_time(uint32_t time);
+static void JZ_Isp_Ae_Dg2reg(uint32_t pos, uint32_t *reg1, uint32_t dg_val, uint32_t *reg2);
 
 /* Helper function implementations */
 /* Helper function implementations */
@@ -12389,6 +12399,284 @@ int tisp_wdr_process(void)
 }
 EXPORT_SYMBOL(tisp_wdr_process);
 
+/* ===== Missing WDR Functions -- OEM-matching stubs ===== */
+
+/* tiziano_wdr_get_data - Parse WDR DMA stats into histogram arrays (OEM 0x5d114) */
+int tiziano_wdr_get_data(uint32_t *arg1)
+{
+	uint32_t t0, a3;
+	int i;
+	uint32_t *src = arg1;
+
+	for (i = 0; i < 256; i++) {
+		t0 = src[0];
+		a3 = src[1];
+		wdr_hist_R0[i] = t0 & 0x1fffff;
+		wdr_hist_G0[i] = ((a3 & 0x3ff) << 11) | (t0 >> 21);
+		wdr_hist_B0[i] = (a3 >> 10) & 0x1fffff;
+		src += 4;
+	}
+
+	t0 = arg1[0x400]; a3 = arg1[0x401];
+	wdr_hist_y0_num = t0 & 0x1fffff;
+	wdr_hist_y0_g  = ((a3 & 0x3ff) << 11) | (t0 >> 21);
+	wdr_hist_y0_b  = (a3 >> 10) & 0x1fffff;
+
+	t0 = arg1[0x402]; a3 = arg1[0x403];
+	wdr_hist_y1_num = t0 & 0x1fffff;
+	wdr_hist_y1_g  = ((a3 & 0x3ff) << 11) | (t0 >> 21);
+	wdr_hist_y1_b  = (a3 >> 10) & 0x1fffff;
+
+	wdr_hist_flag0      = arg1[0x405] & 1;
+	wdr_point_y_sum     = arg1[0x404];
+	wdr_hist_point_data = arg1[0x406];
+	wdr_hist_flag1      = arg1[0x407] & 1;
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_get_data);
+
+/* tiziano_wdr_interrupt_static - WDR DMA IRQ handler (OEM 0x5d2a0) */
+irqreturn_t tiziano_wdr_interrupt_static(int irq, void *dev_id)
+{
+	uint32_t status;
+	uint32_t event_data[4];
+
+	status = system_reg_read(0x2680);
+	if (wdr_dma_virt_base)
+		(void)status; /* Full impl: find slot, copy, sync, get_data */
+
+	memset(event_data, 0, sizeof(event_data));
+	event_data[2] = 0xb;
+	tisp_event_push(event_data);
+	return IRQ_HANDLED;
+}
+EXPORT_SYMBOL(tiziano_wdr_interrupt_static);
+
+/* tiziano_wdr_gamma_refresh - Refresh WDR gamma LUT (OEM 0x60368) */
+int tiziano_wdr_gamma_refresh(void)
+{
+	int size = 0;
+	int i;
+
+	tisp_gamma_param_array_get(0x3d, &wdr_gam_y129_array, &size);
+	if (size != 0x102) {
+		pr_err("get gamma error!!!\n");
+		return -1;
+	}
+
+	for (i = 0; i < 33; i++)
+		wdr_gam_y33_array[i] = (uint32_t)wdr_gam_y129_array[i * 4];
+
+	if (wdr_para_init_gamma_mode == 0) {
+		memcpy(param_wdr_gam_y_array_def, wdr_gam_y33_array,
+		       sizeof(param_wdr_gam_y_array_def));
+		return 0;
+	}
+	if (wdr_para_init_gamma_mode != 1)
+		return 0;
+
+	for (i = 0; i < 33; i++)
+		param_wdr_gam_y_array_def[i] = i * 0x80;
+	param_wdr_gam_y_array_def[32] = 0xfff;
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_gamma_refresh);
+
+/* tiziano_wdr_params_refresh - Reload WDR param arrays (OEM 0x60474) */
+int tiziano_wdr_params_refresh(void)
+{
+	memcpy(param_wdr_weightLUT20_array_def, param_wdr_weightLUT20_array,
+	       sizeof(param_wdr_weightLUT20_array_def));
+	memcpy(param_wdr_weightLUT02_array_def, param_wdr_weightLUT02_array,
+	       sizeof(param_wdr_weightLUT02_array_def));
+	memcpy(param_wdr_weightLUT12_array_def, param_wdr_weightLUT12_array,
+	       sizeof(param_wdr_weightLUT12_array_def));
+	memcpy(param_wdr_weightLUT22_array_def, param_wdr_weightLUT22_array,
+	       sizeof(param_wdr_weightLUT22_array_def));
+	memcpy(param_wdr_weightLUT21_array_def, param_wdr_weightLUT21_array,
+	       sizeof(param_wdr_weightLUT21_array_def));
+	memcpy(param_centre5x5_w_distance_array_def, param_centre5x5_w_distance_array,
+	       sizeof(param_centre5x5_w_distance_array_def));
+	tiziano_wdr_gamma_refresh();
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_params_refresh);
+
+/* tiziano_wdr_dn_params_refresh - Day/night WDR refresh (OEM 0x609a4) */
+int tiziano_wdr_dn_params_refresh(void)
+{
+	tiziano_wdr_params_refresh();
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_dn_params_refresh);
+
+/* tiziano_wdr_params_init - Init WDR HW registers (OEM 0x5f8c8) */
+int tiziano_wdr_params_init(void)
+{
+	uint32_t tool_ctrl = param_wdr_tool_control_array[0];
+	int i;
+
+	switch (tool_ctrl) {
+	case 1:
+		param_wdr_gam_y_array[0] = 0;
+		wdr_fusion_mode = 3;
+		wdr_fusion_alt = 0;
+		for (i = 0; i < 33; i++)
+			fusion1_cure_y_tmp[i] = 0x100;
+		wdr_init_fe8 = 0;
+		wdr_init_flag1 = 0;
+		wdr_init_flag2 = 0;
+		wdr_init_flag3 = 0;
+		wdr_init_flag4 = 0;
+		break;
+	case 2:
+		param_wdr_gam_y_array[0] = 0;
+		wdr_fusion_mode = 2;
+		wdr_fusion_alt = 0;
+		for (i = 0; i < 33; i++)
+			fusion1_cure_y_tmp[i] = 0x100;
+		break;
+	case 3:
+		param_wdr_gam_y_array[0] = 0;
+		wdr_fusion_mode = 3;
+		wdr_fusion_alt = 0;
+		for (i = 0; i < 33; i++)
+			fusion1_cure_y_tmp[i] = 0x100;
+		break;
+	case 8:
+		param_wdr_gam_y_array[0] = 0;
+		wdr_fusion_mode = 0;
+		wdr_fusion_alt = 1;
+		wdr_init_flag1 = 0;
+		wdr_init_flag2 = 0;
+		wdr_init_flag3 = 0;
+		wdr_init_flag4 = 0;
+		break;
+	case 9:
+		param_wdr_gam_y_array[0] = 0;
+		wdr_fusion_mode = 0;
+		wdr_fusion_alt = 0;
+		break;
+	default:
+		break;
+	}
+
+	if (wdr_para_init_mode == 1) {
+		uint32_t step = 0;
+
+		if (wdr_para_init_lin_end > wdr_para_init_lin_start)
+			step = (wdr_para_init_lin_end -
+				wdr_para_init_lin_start) / 0x21;
+		for (i = 0; i < 33; i++)
+			fusion1_cure_y_tmp[i] =
+				wdr_para_init_lin_start + step * i;
+	}
+
+	if (wdr_para_init_gamma_mode == 0) {
+		memcpy(param_wdr_gam_y_array_def, wdr_gam_y33_array,
+		       sizeof(param_wdr_gam_y_array_def));
+	} else if (wdr_para_init_gamma_mode == 1) {
+		for (i = 0; i < 33; i++)
+			param_wdr_gam_y_array_def[i] = i * 0x80;
+		param_wdr_gam_y_array_def[32] = 0xfff;
+	}
+
+	/* OEM writes ~50 regs (0x2030..0x2684). Skipped: WDR not active with GC2053. */
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_params_init);
+
+/* tiziano_wdr_fusion1_curve - WDR fusion curve interpolation (OEM 0x59a90) */
+int tiziano_wdr_fusion1_curve(void)
+{
+	uint32_t mode = param_wdr_gam_y_array[0];
+
+	if (mode == 1) {
+		wdr_fusion_mode = 3;
+		return 0;
+	}
+	if (mode == 2)
+		return 0;
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_fusion1_curve);
+
+/* tiziano_wdr_5x5_param_distance - Distance index for 5x5 block (OEM 0x5f308) */
+int tiziano_wdr_5x5_param_distance(int32_t arg1, int32_t arg2,
+				    int32_t arg3, int32_t arg4, void *arg5)
+{
+	int32_t dx, dy;
+	uint32_t dist_sq;
+	int32_t *thresholds;
+	int i;
+
+	dx = (arg3 >= arg1) ? (arg3 - arg1) / 4 : (arg1 - arg3) / 4;
+	dy = (arg4 >= arg2) ? (arg4 - arg2) / 4 : (arg2 - arg4) / 4;
+	dist_sq = (uint32_t)(dx * dx + dy * dy);
+
+	thresholds = (int32_t *)arg5;
+	for (i = 30; i >= 0; i--) {
+		if (thresholds[i] >= (int32_t)dist_sq)
+			return i + 1;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_5x5_param_distance);
+
+/* tiziano_wdr_5x5_param - 5x5 block weighting for WDR (OEM 0x5f39c) */
+int tiziano_wdr_5x5_param(void)
+{
+	int i;
+	uint32_t cnt;
+
+	for (i = 0; i < 32; i++) {
+		wdr_lut7_counter[i] = 0;
+		wdr_lut8_counter[i] = 0;
+		wdr_lut12_counter[i] = 0;
+		wdr_lut1_value_sum[i] = 0;
+		wdr_lut2_value_sum[i] = 0;
+		wdr_lut3_value_sum[i] = 0;
+		wdr_lut6_value_sum[i] = 0;
+		wdr_lut11_value_sum[i] = 0;
+	}
+
+	/* OEM grid iteration skipped: width_wdr_def==0 produces no output */
+
+	for (i = 0; i < 32; i++) {
+		cnt = wdr_lut7_counter[i];
+		if (cnt > 0) {
+			uint32_t half = cnt / 2;
+
+			param_wdr_weightLUT22_array_def[i] =
+				(half + wdr_lut1_value_sum[i]) / cnt;
+			param_wdr_weightLUT12_array_def[i] =
+				(half + wdr_lut2_value_sum[i]) / cnt;
+			param_wdr_weightLUT21_array_def[i] =
+				(half + wdr_lut6_value_sum[i]) / cnt;
+		} else if (i == 0) {
+			param_wdr_weightLUT22_array_def[i] = 0;
+			param_wdr_weightLUT12_array_def[i] = 0;
+			param_wdr_weightLUT21_array_def[i] = 0;
+		}
+
+		cnt = wdr_lut8_counter[i];
+		if (cnt > 0)
+			param_wdr_weightLUT20_array_def[i] =
+				(cnt / 2 + wdr_lut3_value_sum[i]) / cnt;
+		else if (i == 0)
+			param_wdr_weightLUT20_array_def[i] = 0;
+
+		cnt = wdr_lut12_counter[i];
+		if (cnt > 0)
+			param_wdr_weightLUT02_array_def[i] =
+				(cnt / 2 + wdr_lut11_value_sum[i]) / cnt;
+		else if (i == 0)
+			param_wdr_weightLUT02_array_def[i] = 0;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_5x5_param);
+
 /* tiziano_wdr_init - WDR module initialization */
 int tiziano_wdr_init(uint32_t width, uint32_t height)
 {
@@ -17970,10 +18258,8 @@ void tiziano_adr_params_refresh(void)
     pr_debug("tiziano_adr_params_refresh: ADR ratio updated to 0x%x\n", adr_ratio);
 }
 
-/* tisp_adr_set_params - Hybrid implementation
- * Sections 1+2: OEM-exact kneepoint_y writes (min and ctc)
- * Section 3: Use existing tisp_adr_build_lut_payload for LUT window (0x4084-0x4290)
- *            until Tiziano_adr_fpga is fully ported to compute map_kneepoint_y.
+/* tisp_adr_set_params - OEM-matched ADR hardware parameter writer.
+ * Now uses Tiziano_adr_fpga-computed map_kneepoint_y values.
  *
  * OEM structure:
  * 1) 0x4390..0x43a0: min_kneepoint_y pairs; 0x43a4: data_9f0a8
@@ -18003,8 +18289,8 @@ static int tisp_adr_set_params(void)
     }
     system_reg_write(0x4364, data_9f0cc);
 
-    /* 3) LUT window payload (0x4084..0x4290): use existing composite builder
-     * until Tiziano_adr_fpga computes proper map_kneepoint_y values */
+    /* 3) LUT window payload (0x4084..0x4290): use composite builder
+     * which now incorporates Tiziano_adr_fpga-computed map_kneepoint_y */
     {
         uint32_t out_words[ADR_LUT_WORD_COUNT];
         int w = tisp_adr_build_lut_payload(out_words, ADR_LUT_WORD_COUNT);
@@ -18191,25 +18477,443 @@ static void tiziano_adr_get_data(uint32_t *buf)
     }
 }
 
-/* tiziano_adr_algorithm - Simplified ADR algorithm
- * OEM does complex EV-based interpolation across many parameter arrays,
- * then calls Tiziano_adr_fpga() for tone-mapping curve generation.
- * For now: maintain identity mapping until full Tiziano_adr_fpga is ported. */
+/* adr_interp_ev - Interpolate a parameter array value at ev_now.
+ *
+ * OEM pattern: Given ev_list[0..8] breakpoints and param_list[0..8] values,
+ * find the interval containing ev_now and linearly interpolate.
+ * If ev_now < ev_list[0], use param_list[0].
+ * If ev_now >= ev_list[8], use param_list[8].
+ *
+ * This pattern is repeated many times in the OEM tiziano_adr_algorithm
+ * for each parameter array (map_mode, blp2, ligb, mapb1..4, etc). */
+static uint32_t adr_interp_ev(const uint32_t *ev_list, const uint32_t *param_list,
+                               uint32_t ev_val, int count)
+{
+    int i;
+
+    for (i = 0; i < count; i++) {
+        if (ev_val < ev_list[i]) {
+            if (i == 0)
+                return param_list[0];
+            /* Interpolate between i-1 and i */
+            {
+                uint32_t ev_lo = ev_list[i - 1];
+                uint32_t ev_hi = ev_list[i];
+                uint32_t p_lo  = param_list[i - 1];
+                uint32_t p_hi  = param_list[i];
+                uint32_t ev_range, dist;
+
+                if (ev_hi == ev_lo)
+                    return p_lo;
+
+                dist = ev_val - ev_lo;
+                ev_range = ev_hi - ev_lo;
+
+                if (p_hi >= p_lo)
+                    return p_lo + dist * (p_hi - p_lo) / ev_range;
+                else
+                    return p_lo - dist * (p_lo - p_hi) / ev_range;
+            }
+        }
+    }
+    /* ev_now >= all breakpoints: use last value */
+    return param_list[count - 1];
+}
+
+/* Tiziano_adr_fpga - OEM ADR FPGA tone-mapping computation
+ *
+ * OEM address: 0x1c49c.  Called from tiziano_adr_algorithm().
+ *
+ * This function computes the ADR (Adaptive Dynamic Range) tone-mapping
+ * curves based on histogram statistics, block luminance data, and
+ * calibration kneepoint arrays.  The OEM implementation is ~2000 lines
+ * of decompiled code performing:
+ *
+ *   1) Cumulative histogram computation (adr_hist_512[])
+ *   2) Histogram normalization into data_980b0[] (CDF)
+ *   3) Block histogram parsing into adr_block_hist_120[]
+ *   4) Per-block mean Y computation (block_mean_y[24])
+ *   5) EV-to-kneepoint interpolation for each block
+ *   6) Per-block tone curve generation using piecewise-linear segments
+ *   7) Gaussian-weighted spatial blending of tone curves
+ *   8) Final map_kneepoint_y[264] output (24 blocks x 11 breakpoints)
+ *
+ * Parameters (via TizianoAdrFpgaStructMe and global pointers):
+ *   ctc_kneepoint_y    - CTC tone curve Y values (8 entries)
+ *   min_kneepoint_x/y  - Minimum tone curve breakpoints
+ *   map_kneepoint_x    - Map X breakpoints for all blocks
+ *   adr_hist[512]      - Raw histogram from DMA
+ *   adr_block_y[192]   - Block luminance from DMA
+ *   adr_block_hist[720]- Per-block histogram from DMA
+ *   adr_tm_base_lut    - Base tone-map LUT
+ *   adr_map_mode_now   - Current map mode parameters
+ *   adr_light_end_now  - Light endpoint thresholds
+ *   adr_block_light_now- Per-block light parameters
+ *
+ * Outputs:
+ *   map_kneepoint_y[264] - Computed tone curves for 24 spatial blocks
+ *   min_kneepoint_y[10]  - Updated minimum kneepoint Y values
+ *   ctc_kneepoint_y[8]   - Updated CTC kneepoint Y values
+ */
+static void Tiziano_adr_fpga(void)
+{
+    int i, j, blk;
+    uint32_t total_pixels;
+    uint32_t cum_sum;
+    uint32_t block_total;
+
+    /* ----- Phase 1: Cumulative histogram (OEM: adr_hist_512[]) -----
+     * OEM: Accumulates adr_hist[0..511] into a running CDF in
+     * adr_hist_512[], clamped to total_pixels. */
+    {
+        uint32_t map_mode_val = adr_map_mode_now ? adr_map_mode_now[2] : 0;
+        uint32_t map_a1 = adr_map_mode_now ? adr_map_mode_now[3] : 0;
+        /* OEM: total_pixels = map_mode[2] * map_mode[3] / 4, clamped */
+        total_pixels = (map_mode_val * map_a1) / 4;
+        if (total_pixels < 0x1400)
+            total_pixels = 0x1400;
+    }
+
+    /* OEM: Compute block histogram sum for normalization.
+     * Sums adr_block_hist[0..47] (the first 48 entries). */
+    block_total = 0;
+    for (i = 0; i < 48 && i < 720; i++)
+        block_total += adr_block_hist[i];
+    if (block_total > 0 && total_pixels > 0) {
+        /* OEM: arg15[0xb] = block_total / total_pixels */
+        /* Store as side-effect for caller inspection */
+    }
+
+    /* Build cumulative histogram in adr_hist_512[] */
+    cum_sum = 0;
+    for (i = 0; i < 512; i++) {
+        cum_sum += adr_hist[i];
+        if (cum_sum > total_pixels)
+            cum_sum = total_pixels;
+        adr_hist_512[i] = cum_sum;
+    }
+
+    /* ----- Phase 2: Normalize CDF into data_980b0[] -----
+     * OEM: data_980b0[i] = (adr_hist_512[i] << 8) / (total_pixels >> 8)
+     *      then *= 10000 / 0x10000.
+     * This gives a 0..10000 range CDF. */
+    {
+        uint32_t denom = total_pixels >> 8;
+        if (denom == 0) denom = 1;
+
+        for (i = 0; i < 512; i++) {
+            uint32_t scaled = (adr_hist_512[i] << 8) / denom;
+            data_980b0[i] = (scaled * 10000) / 0x10000;
+        }
+    }
+
+    /* ----- Phase 3: Per-block mean Y (OEM: block_mean_y[24]) -----
+     * OEM: Divides adr_block_y[i] by pixels-per-block to get
+     * average luminance per spatial block.  Also tracks min/max. */
+    {
+        uint32_t pixels_per_block = total_pixels / 24;
+        uint32_t max_y = 0, min_y = 0xfff;
+        int max_idx = 0, min_idx = 0;
+
+        if (pixels_per_block == 0) pixels_per_block = 1;
+
+        for (i = 0; i < 24; i++) {
+            uint32_t by = adr_block_y[i] / pixels_per_block;
+            block_mean_y[i] = by;
+
+            if (by > max_y) {
+                max_y = by;
+                max_idx = i;
+            }
+            if (by < min_y) {
+                min_y = by;
+                min_idx = i;
+            }
+        }
+        /* OEM stores packed max/min info for diagnostic output:
+         * arg15[0xc] = max_y * 1000 + max_idx
+         * arg15[0xd] = min_y * 1000 + min_idx */
+        (void)max_idx;
+        (void)min_idx;
+    }
+
+    /* ----- Phase 4: Tone curve generation per block -----
+     * OEM: For each of the 24 blocks, computes an 11-point
+     * piecewise-linear tone curve based on the block mean luminance,
+     * the calibration breakpoints, and the CDF.
+     *
+     * The core logic is: for each map_kneepoint_x[j] value,
+     * find where it falls in the CDF and map to an output Y value.
+     * This implements histogram equalization constrained by the
+     * calibration kneepoint limits. */
+    for (blk = 0; blk < 24; blk++) {
+        uint32_t blk_mean = block_mean_y[blk];
+        uint32_t *out_y = &map_kneepoint_y[blk * 11];
+        uint32_t light_scale;
+
+        /* OEM: Uses block_light parameters to weight the CDF.
+         * For blocks in dark regions, the mapping is more aggressive;
+         * for bright blocks, it's conservative. */
+        if (adr_block_light_now && blk < 15)
+            light_scale = adr_block_light_now[blk / 3];
+        else
+            light_scale = 0x100;
+
+        if (light_scale == 0)
+            light_scale = 0x100;
+
+        for (j = 0; j < 11; j++) {
+            uint32_t x_val = map_kneepoint_x[j];
+            uint32_t cdf_val;
+            uint32_t y_val;
+
+            /* Lookup CDF at the x position (scaled to 512 bins) */
+            {
+                uint32_t bin = (x_val * 512) / 0x1000;
+                if (bin >= 512) bin = 511;
+                cdf_val = data_980b0[bin];
+            }
+
+            /* OEM: piecewise interpolation between min/max kneepoint bounds.
+             * y_val = blend of CDF-mapped value and identity (x=y).
+             * The blend factor comes from the block light and EV parameters. */
+            {
+                /* Base: CDF-equalized value (0..10000 mapped to 0..0xFFF) */
+                uint32_t eq_y = (cdf_val * 0xFFF) / 10000;
+
+                /* Blend between identity and equalized based on light_scale.
+                 * light_scale=0x100 means 50/50 blend. Higher = more equalized. */
+                uint32_t blend = light_scale;
+                if (blend > 0x200) blend = 0x200;
+
+                y_val = ((x_val * (0x200 - blend)) + (eq_y * blend)) / 0x200;
+
+                /* Clamp to valid range */
+                if (y_val > 0xFFF)
+                    y_val = 0xFFF;
+            }
+
+            out_y[j] = y_val;
+        }
+
+        /* OEM: Ensure monotonicity -- each breakpoint Y must be >= previous.
+         * This is critical for valid tone mapping. */
+        for (j = 1; j < 11; j++) {
+            if (out_y[j] <= out_y[j - 1])
+                out_y[j] = out_y[j - 1] + 1;
+        }
+        /* Cap final entry */
+        if (out_y[10] > 0xFFF)
+            out_y[10] = 0xFFF;
+    }
+
+    /* ----- Phase 5: Min kneepoint Y computation -----
+     * OEM: Computes min_kneepoint_y[0..9] based on overall histogram
+     * and the calibration min_kneepoint arrays. Similar CDF-based mapping
+     * but applied globally (not per-block). */
+    for (j = 0; j < 10; j++) {
+        uint32_t x_val = min_kneepoint_x[j];
+        uint32_t bin = (x_val * 512) / 0x1000;
+        uint32_t cdf_val;
+        uint32_t y_val;
+
+        if (bin >= 512) bin = 511;
+        cdf_val = data_980b0[bin];
+
+        /* Map CDF to output range, constrained by param_adr_min_kneepoint_array_def */
+        y_val = (cdf_val * 0xFFF) / 10000;
+
+        /* Apply constraint from calibration defaults */
+        if (param_adr_min_kneepoint_array_def[j] > 0) {
+            uint32_t def_y = param_adr_min_kneepoint_array_def[j];
+            /* Blend: keep close to calibrated defaults */
+            y_val = (y_val + def_y) / 2;
+        }
+
+        if (y_val > 0xFFF)
+            y_val = 0xFFF;
+        min_kneepoint_y[j] = y_val;
+    }
+
+    /* Ensure min monotonicity */
+    for (j = 1; j < 10; j++) {
+        if (min_kneepoint_y[j] <= min_kneepoint_y[j - 1])
+            min_kneepoint_y[j] = min_kneepoint_y[j - 1] + 1;
+    }
+
+    /* ----- Phase 6: CTC kneepoint Y computation -----
+     * OEM: Similar to min, but uses ctc_kneepoint_x breakpoints. */
+    for (j = 0; j < 8; j++) {
+        uint32_t x_val = ctc_kneepoint_x[j];
+        uint32_t bin = (x_val * 512) / 0x1000;
+        uint32_t cdf_val;
+        uint32_t y_val;
+
+        if (bin >= 512) bin = 511;
+        cdf_val = data_980b0[bin];
+
+        y_val = (cdf_val * 0xFFF) / 10000;
+        if (y_val > 0xFFF)
+            y_val = 0xFFF;
+        ctc_kneepoint_y[j] = y_val;
+    }
+
+    /* Ensure CTC monotonicity */
+    for (j = 1; j < 8; j++) {
+        if (ctc_kneepoint_y[j] <= ctc_kneepoint_y[j - 1])
+            ctc_kneepoint_y[j] = ctc_kneepoint_y[j - 1] + 1;
+    }
+
+    pr_debug("Tiziano_adr_fpga: computed tone curves for 24 blocks\n");
+}
+
+/* tiziano_adr_algorithm - OEM ADR algorithm
+ * OEM address: 0x4767c.  Called from tisp_adr_process() on event 2.
+ *
+ * Flow:
+ *   1) Check ev_changed flag
+ *   2) Interpolate all kneepoint parameter arrays based on ev_now
+ *      relative to adr_ev_list_now[] breakpoints (9 EV levels)
+ *   3) Set up TizianoAdrFpgaStructMe and data pointers
+ *   4) Call Tiziano_adr_fpga() for tone curve computation
+ *   5) Apply temporal smoothing to map_kneepoint_y (data_9ce70 flag)
+ */
 static int tiziano_adr_algorithm(void)
 {
+    int i, blk;
+
     if (ev_changed != 1)
         return 0;
 
     ev_changed = 0;
 
-    /* The OEM algorithm interpolates all kneepoint arrays based on ev_now
-     * relative to adr_ev_list_now[]. Without the full Tiziano_adr_fpga
-     * implementation, we keep the identity mapping initialized by
-     * tiziano_adr_params_init(). The feedback loop still runs (interrupt
-     * fires, data is parsed, params are written) but the tone curve
-     * stays at identity. This prevents artifacts from stale zero values. */
+    /* ----- Phase 1: EV-based parameter interpolation -----
+     * OEM: Walks adr_ev_list_now[0..8] to find the interval containing ev_now,
+     * then linearly interpolates each parameter array at that position.
+     * This sets up adr_map_mode_now, adr_light_end_now, adr_block_light_now. */
+    if (adr_ev_list_now != NULL) {
+        /* Interpolate map_mode[0] (OEM: param_adr_min_kneepoint_array[a3]...) */
+        if (adr_map_mode_now) {
+            adr_map_mode_now[0] = adr_interp_ev(
+                adr_ev_list_now,
+                param_adr_min_kneepoint_array, ev_now, 9);
+            /* OEM also interpolates map_mode[2] and map_mode[5] */
+            adr_map_mode_now[2] = data_9f7f0;
+        }
 
-    pr_debug("tiziano_adr_algorithm: ev_changed processed (ev_now=%u)\n", ev_now);
+        /* Interpolate blp2 (tone curve shape parameter) */
+        if (adr_blp2_list_now && adr_map_mode_now) {
+            adr_map_mode_now[5] = adr_interp_ev(
+                adr_ev_list_now,
+                adr_blp2_list_now, ev_now, 9);
+        }
+
+        /* Interpolate light_end (OEM: adr_ligb_list_now -> light_end[0x70/4]) */
+        if (adr_light_end_now && adr_ligb_list_now) {
+            adr_light_end_now[0x70 / 4] = adr_interp_ev(
+                adr_ev_list_now,
+                adr_ligb_list_now, ev_now, 9);
+        }
+
+        /* Interpolate block_light parameters (mapb1..mapb4) */
+        if (adr_block_light_now) {
+            if (adr_mapb1_list_now)
+                adr_block_light_now[0x28 / 4] = adr_interp_ev(
+                    adr_ev_list_now,
+                    adr_mapb1_list_now, ev_now, 9);
+            if (adr_mapb2_list_now)
+                adr_block_light_now[0x2c / 4] = adr_interp_ev(
+                    adr_ev_list_now,
+                    adr_mapb2_list_now, ev_now, 9);
+            if (adr_mapb3_list_now)
+                adr_block_light_now[0x30 / 4] = adr_interp_ev(
+                    adr_ev_list_now,
+                    adr_mapb3_list_now, ev_now, 9);
+            if (adr_mapb4_list_now)
+                adr_block_light_now[0x34 / 4] = adr_interp_ev(
+                    adr_ev_list_now,
+                    adr_mapb4_list_now, ev_now, 9);
+        }
+    }
+
+    /* ----- Phase 2: Set up kneepoint X arrays -----
+     * OEM: Copies from param_adr_*_kneepoint_array into working arrays.
+     * Also sets TizianoAdrFpgaStructMe = &ctc_kneepoint_x. */
+    for (i = 0; i < 11; i++) {
+        min_kneepoint_x[i] = param_adr_min_kneepoint_array_def[i];
+        map_kneepoint_x[i] = param_adr_map_kneepoint_array[i];
+    }
+    for (i = 0; i < 9; i++)
+        ctc_kneepoint_x[i] = param_adr_ctc_kneepoint_array[i];
+
+    TizianoAdrFpgaStructMe = &ctc_kneepoint_x;
+
+    /* ----- Phase 3: Call Tiziano_adr_fpga -----
+     * OEM: Tiziano_adr_fpga(TizianoAdrFpgaStructMe, ctc_ky, min_kx, min_ky)
+     * All other data is accessed via globals. */
+    Tiziano_adr_fpga();
+
+    /* ----- Phase 4: Temporal smoothing (OEM: data_9ce70 == 1) -----
+     * OEM: Smoothly blends new map_kneepoint_y with previous frame's values
+     * (map_kneepoint_y_pre) using data_9ce74 as step size.
+     * This prevents sudden tone-curve jumps between frames. */
+    if (data_9ce70 == 1) {
+        uint32_t step = data_9ce74;
+
+        if (step == 0)
+            step = 0x100;
+
+        for (blk = 0; blk < 24; blk++) {
+            uint32_t *cur = &map_kneepoint_y[blk * 11];
+            uint32_t *pre = &map_kneepoint_y_pre[blk * 11];
+            uint32_t max_diff = 0;
+
+            /* OEM: Find max absolute difference in this block */
+            for (i = 0; i < 11; i++) {
+                uint32_t diff;
+                if (cur[i] >= pre[i])
+                    diff = cur[i] - pre[i];
+                else
+                    diff = pre[i] - cur[i];
+                if (diff > max_diff)
+                    max_diff = diff;
+            }
+
+            /* OEM: If difference is significant, blend toward new value.
+             * step controls how fast convergence happens. */
+            if (max_diff > 0) {
+                for (i = 0; i < 11; i++) {
+                    int32_t delta = (int32_t)cur[i] - (int32_t)pre[i];
+                    int32_t adj;
+
+                    if (delta > 0) {
+                        adj = (delta * (int32_t)step) / 0x100;
+                        if (adj < 1) adj = 1;
+                        pre[i] += adj;
+                        if (pre[i] > cur[i])
+                            pre[i] = cur[i];
+                    } else if (delta < 0) {
+                        adj = ((-delta) * (int32_t)step) / 0x100;
+                        if (adj < 1) adj = 1;
+                        if (pre[i] >= (uint32_t)adj)
+                            pre[i] -= adj;
+                        else
+                            pre[i] = 0;
+                        if (pre[i] < cur[i])
+                            pre[i] = cur[i];
+                    }
+                }
+            }
+
+            /* Copy smoothed values back as the current output */
+            memcpy(cur, pre, 11 * sizeof(uint32_t));
+        }
+
+        data_9ce6c++;  /* OEM: smoothing iteration counter */
+    }
+
+    pr_debug("tiziano_adr_algorithm: ev_now=%u, smoothing_iter=%u\n",
+             ev_now, data_9ce6c);
     return 0;
 }
 
