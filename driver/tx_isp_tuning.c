@@ -762,9 +762,10 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
  * fix_point_mult2_32(16, mag_a, mag_b << 6).  This is equivalent to
  * standard Q16 multiply when the <<6 and final >>6 cancel out.
  * Use plain Q16 here and rely on the final >>6 for hardware scaling. */
-/* OEM uses fix_point_mult2_32(16, mag_a, mag_b << 6) which preserves
- * 6 extra bits during the chain. Accumulate in full 64-bit then shift
- * by 16 ONCE at the end, not per-term. */
+/* OEM uses fix_point_mult2_32(16, A, B << 6) per element which is
+ * effectively (A * B) >> 10. Two matmuls = >> 20 total, then >> 6
+ * in Tccm_RGBYUV = >> 26 total. Using >> 16 per matmul gave >> 38
+ * total = 4096x too small (12 extra bits). Fix: >> 10 per matmul. */
 static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
     for (int i = 0; i < 3; ++i) {
@@ -772,7 +773,7 @@ static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t 
             int64_t acc = 0;
             for (int k = 0; k < 3; ++k)
                 acc += (int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j];
-            O[i * 3 + j] = (int32_t)(acc >> 16);
+            O[i * 3 + j] = (int32_t)(acc >> 10);
         }
     }
 }
