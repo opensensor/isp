@@ -128,6 +128,7 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos,
 			       const uint32_t *gain_base);
 static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct);
 static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv);
+static void tiziano_bcsh_Tccm_RGB2YUV(int32_t *out, const int32_t *ccm);
 static int tiziano_bcsh_update(struct isp_tuning_data *tuning);
 
 /* External hardware register write functions from tx-isp-module.c */
@@ -489,31 +490,17 @@ static uint32_t bcsh_clip0_wdr[4], bcsh_clip1_wdr[4], bcsh_clip2_wdr[4];
 /* Matrices exposed via param IDs 0x3e3/0x3e4 - moved to top of file */
 
 
-/* Build the HMatrix (RGB->YUV transform for BCSH) using OEM constant base
- * as in tiziano_bcsh_Tccm_RGB2YUV: memcpy(var_38, 0x7b8a4, 0x24), then the
- * OEM applies tiziano_bcsh_Tccm_RGBYUV and para2reg. We start by wiring the
- * exact OEM constant; para2reg is applied later in reg_apply.
+/* Build the HMatrix (RGB->YUV transform for BCSH).
+ * Uses OEM tiziano_bcsh_Tccm_RGB2YUV which internally:
+ *   1. Starts from the OEM constant (0x6b894)
+ *   2. Applies M * CCM * Minv via tiziano_bcsh_Tccm_RGBYUV
+ *   3. Converts signed -> 14-bit register format via tiziano_bcsh_para2reg
+ * Output is already in register format — caller should NOT apply para2reg again.
  */
 static void tiziano_bcsh_build_HMatrix(int32_t out[9])
 {
-    static const int32_t oem_ccm_const[9] = {
-        0x00000401, /* 1025 */
-        (int32_t)0xfffffe04, /* -508 */
-        (int32_t)0xfffffef3, /* -269 */
-        (int32_t)0xfffffffe, /* -2 (OEM EXACT: verified at .ko offset 0x6b8b4) */
-        0x00000905, /* 2309 */
-        0x0000015f, /* 351  */
-        (int32_t)0xfffffffe, /* -2 (OEM EXACT: was -1, verified -2 from binary) */
-        0x000002f1, /* 753  */
-        0x00000a9b  /* 2715 */
-    };
     if (!out)
         return;
-
-    /* Start from OEM base constant, then apply full Tccm_RGBYUV chain */
-    int32_t tmp[9];
-    for (int i = 0; i < 9; ++i)
-        tmp[i] = oem_ccm_const[i];
 
     /* Build active CCM from D/T/A sets using OEM CT interpolation */
     int32_t active_ccm[9];
@@ -529,23 +516,9 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
             ct, active_ccm[0], active_ccm[1], active_ccm[2],
             active_ccm[3], active_ccm[4], active_ccm[5],
             active_ccm[6], active_ccm[7], active_ccm[8]);
-    pr_info("BCSH_DIAG: M=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
-            tiziano_MMatrix[0], tiziano_MMatrix[1], tiziano_MMatrix[2],
-            tiziano_MMatrix[3], tiziano_MMatrix[4], tiziano_MMatrix[5],
-            tiziano_MMatrix[6], tiziano_MMatrix[7], tiziano_MMatrix[8]);
-    pr_info("BCSH_DIAG: Minv=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
-            tiziano_MinvMatrix[0], tiziano_MinvMatrix[1], tiziano_MinvMatrix[2],
-            tiziano_MinvMatrix[3], tiziano_MinvMatrix[4], tiziano_MinvMatrix[5],
-            tiziano_MinvMatrix[6], tiziano_MinvMatrix[7], tiziano_MinvMatrix[8]);
 
-    tiziano_bcsh_Tccm_RGBYUV(tmp, tiziano_MMatrix, active_ccm, tiziano_MinvMatrix);
-
-    pr_info("BCSH_DIAG: HMatrix=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
-            tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5],
-            tmp[6], tmp[7], tmp[8]);
-
-    for (int i = 0; i < 9; ++i)
-        out[i] = tmp[i];
+    /* OEM: tiziano_bcsh_Tccm_RGB2YUV(&HMatrix, &CCMMatrix) */
+    tiziano_bcsh_Tccm_RGB2YUV(out, active_ccm);
 }
 /* BCSH CT override for CCM blending - moved to top of file */
 
@@ -554,6 +527,72 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
 static inline int32_t bcsh_reg2para(uint32_t regval)
 {
     return (regval >= 0x2000) ? ((int32_t)regval - 0x4000) : (int32_t)regval;
+}
+
+/* OEM EXACT: tiziano_bcsh_reg2para — array version (HLIL @ 0x286e8).
+ * Converts 9-element 14-bit unsigned register array to signed int32 array.
+ * if (val >= 0x2000) val -= 0x4000; */
+static void tiziano_bcsh_reg2para(int32_t *out, const uint32_t *in)
+{
+    int i;
+    for (i = 0; i < 9; i++) {
+        int32_t v = (int32_t)in[i];
+        if ((uint32_t)v >= 0x2000)
+            v -= 0x4000;
+        out[i] = v;
+    }
+}
+
+/* OEM EXACT: tiziano_bcsh_para2reg — array version (HLIL @ 0x28714).
+ * Converts 9-element signed int32 array to 14-bit unsigned register format.
+ * if (val < 0) val &= 0x3fff; */
+static void tiziano_bcsh_para2reg(int32_t *out, const int32_t *in)
+{
+    int i;
+    for (i = 0; i < 9; i++) {
+        int32_t v = in[i];
+        if (v < 0)
+            v &= 0x3fff;
+        out[i] = v;
+    }
+}
+
+/* OEM EXACT: tiziano_bcsh_Tccm_RGB2YUV (HLIL @ 0x292b4).
+ * Computes the BCSH HMatrix: starts from OEM identity constant (0x6b894),
+ * applies M * CCM * Minv via tiziano_bcsh_Tccm_RGBYUV, then converts
+ * the signed result to 14-bit register format via tiziano_bcsh_para2reg.
+ *
+ * OEM decompilation:
+ *   memcpy(&var_38, 0x6b894, 0x24)
+ *   tiziano_bcsh_Tccm_RGBYUV(&var_38, &MMatrix, arg2, &MinvMatrix)
+ *   return tiziano_bcsh_para2reg(arg1, &var_38)
+ */
+static void tiziano_bcsh_Tccm_RGB2YUV(int32_t *out, const int32_t *ccm)
+{
+    /* OEM constant at binary offset 0x6b894 — 9x int32_t identity-like base */
+    static const int32_t oem_ccm_const[9] = {
+        0x00000401, /* 1025 */
+        (int32_t)0xfffffe04, /* -508 */
+        (int32_t)0xfffffef3, /* -269 */
+        (int32_t)0xfffffffe, /* -2 */
+        0x00000905, /* 2309 */
+        0x0000015f, /* 351  */
+        (int32_t)0xfffffffe, /* -2 */
+        0x000002f1, /* 753  */
+        0x00000a9b  /* 2715 */
+    };
+    int32_t tmp[9];
+    int i;
+
+    /* Step 1: memcpy from OEM constant */
+    for (i = 0; i < 9; i++)
+        tmp[i] = oem_ccm_const[i];
+
+    /* Step 2: apply M * CCM * Minv transform */
+    tiziano_bcsh_Tccm_RGBYUV(tmp, tiziano_MMatrix, ccm, tiziano_MinvMatrix);
+
+    /* Step 3: convert signed -> 14-bit register format */
+    tiziano_bcsh_para2reg(out, tmp);
 }
 
 /* OEM EXACT: tiziano_bcsh_Tccm_Comp2Orig -- convert all three CCM sets
@@ -565,13 +604,11 @@ static void tiziano_bcsh_Tccm_Comp2Orig(void)
     const uint32_t *D = bcsh_wdr_enabled ? bcsh_CCM_d_wdr : bcsh_CCM_d;
     const uint32_t *T = bcsh_wdr_enabled ? bcsh_CCM_t_wdr : bcsh_CCM_t;
     const uint32_t *A = bcsh_wdr_enabled ? bcsh_CCM_a_wdr : bcsh_CCM_a;
-    int i;
 
-    for (i = 0; i < 9; i++) {
-        bcsh_CCM_d_signed[i] = bcsh_reg2para(D[i]);
-        bcsh_CCM_t_signed[i] = bcsh_reg2para(T[i]);
-        bcsh_CCM_a_signed[i] = bcsh_reg2para(A[i]);
-    }
+    /* OEM: three direct calls to tiziano_bcsh_reg2para (array version) */
+    tiziano_bcsh_reg2para(bcsh_CCM_d_signed, D);
+    tiziano_bcsh_reg2para(bcsh_CCM_t_signed, T);
+    tiziano_bcsh_reg2para(bcsh_CCM_a_signed, A);
 }
 
 /* OEM EXACT: tiziano_ct_bcsh_interpolation -- CT-based CCM blending.
@@ -683,11 +720,9 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
 
     /* Convert from 14-bit register format to signed */
     int32_t Ds[9], Ts[9], As[9];
-    for (int i = 0; i < 9; ++i) {
-        Ds[i] = bcsh_reg2para(D[i]);
-        Ts[i] = bcsh_reg2para(T[i]);
-        As[i] = bcsh_reg2para(A[i]);
-    }
+    tiziano_bcsh_reg2para(Ds, D);
+    tiziano_bcsh_reg2para(Ts, T);
+    tiziano_bcsh_reg2para(As, A);
 
     /* OEM thresholds/pivots from HLIL */
     const uint32_t CT_MAX_D   = 0x1357; /* >= -> D */
@@ -1219,6 +1254,70 @@ static uint32_t data_d7228 = 0;
 static void *TizianoWdrFpgaStructMe = NULL;
 static void *data_d94a8 = NULL;
 
+/* WDR DMA / interrupt globals (OEM: data_a2f8c/data_a2f90) */
+static void *wdr_dma_virt_base = NULL;  /* data_a2f8c */
+static uint32_t wdr_dma_status = 0;     /* data_a2f90 */
+
+/* WDR histogram summary globals */
+static uint32_t wdr_hist_y0_num = 0;
+static uint32_t wdr_hist_y1_num = 0;
+static uint32_t wdr_point_y_sum = 0;
+static uint32_t wdr_hist_y0_g = 0;   /* data_c8ef0 */
+static uint32_t wdr_hist_y0_b = 0;   /* data_c8ef4 */
+static uint32_t wdr_hist_y1_g = 0;   /* data_c8ee4 */
+static uint32_t wdr_hist_y1_b = 0;   /* data_c8ee8 */
+static uint32_t wdr_hist_flag0 = 0;  /* data_c8ed4 */
+static uint32_t wdr_hist_flag1 = 0;  /* data_c8edc */
+static uint32_t wdr_hist_point_data = 0; /* data_c8ed8 */
+
+/* WDR gamma / fusion arrays */
+static uint16_t wdr_gam_y129_array[129];
+static uint32_t wdr_gam_y33_array[33];
+static uint32_t param_wdr_gam_y_array_def[33];
+static uint32_t fusion1_cure_y_tmp[33];
+static uint32_t wdr_ev_old = 0;
+
+/* WDR dimensions (set by tiziano_wdr_init) */
+static uint32_t width_wdr_def = 0;
+static uint32_t height_wdr_def = 0;
+
+/* WDR 5x5 block weighting arrays */
+static uint32_t wdr_lut7_counter[32];
+static uint32_t wdr_lut8_counter[32];
+static uint32_t wdr_lut12_counter[32];
+static uint32_t wdr_lut1_value_sum[32];
+static uint32_t wdr_lut2_value_sum[32];
+static uint32_t wdr_lut3_value_sum[32];
+static uint32_t wdr_lut6_value_sum[32];
+static uint32_t wdr_lut11_value_sum[32];
+static uint32_t param_centre5x5_w_distance_array_def[31];
+static uint32_t param_wdr_weightLUT20_array_def[32];
+static uint32_t param_wdr_weightLUT02_array_def[32];
+static uint32_t param_wdr_weightLUT12_array_def[32];
+static uint32_t param_wdr_weightLUT22_array_def[32];
+static uint32_t param_wdr_weightLUT21_array_def[32];
+static uint32_t data_a1570 = 0;
+
+/* WDR param_init internal state */
+static uint32_t wdr_para_init_mode = 0;       /* data_a1578 */
+static uint32_t wdr_para_init_lin_start = 0;   /* data_a157c */
+static uint32_t wdr_para_init_lin_end = 0;     /* data_a1580 */
+static uint32_t wdr_para_init_gamma_mode = 0;  /* data_a1584 */
+static uint32_t wdr_para_init_div5_1 = 0;     /* data_a2414 */
+
+/* WDR params_init additional state */
+static uint32_t wdr_fusion_mode = 0;  /* data_a23fc */
+static uint32_t wdr_fusion_alt = 0;   /* data_a2340 */
+static uint32_t wdr_init_flag1 = 0;   /* data_a1e3c */
+static uint32_t wdr_init_flag2 = 0;   /* data_a1e40 */
+static uint32_t wdr_init_flag3 = 0;   /* data_a1e4c */
+static uint32_t wdr_init_flag4 = 0;   /* data_a1e50 */
+static uint32_t wdr_init_fe8 = 0;     /* data_a1fe8 */
+
+/* WDR priv / extra arrays for params_refresh */
+static uint32_t param_wdr_priv_array[0x40/4] = {0};
+static uint32_t param_wdr_weightLUT20_array[0x80/4] = {0};
+
 /* BCSH hardware apply: program registers using TransitParam outputs.
  * TransitParam must have been called before this function to populate
  * bcsh_ai32Svalue[], bcsh_ai32C[], bcsh_Cslope[], bcsh_brightness_offset,
@@ -1238,22 +1337,14 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
     u32 *Sth  = bcsh_wdr_enabled ? bcsh_Sthres_wdr : bcsh_Sthres;
     u32 B_val = bcsh_wdr_enabled ? bcsh_B_wdr : bcsh_B;
 
-    /* Build HMatrix */
-    int32_t H[9];
+    /* Build HMatrix — output is already in 14-bit register format
+     * (tiziano_bcsh_Tccm_RGB2YUV applies para2reg internally) */
     int32_t Hreg[9];
-    int i_h;
-    tiziano_bcsh_build_HMatrix(H);
-    /* Apply OEM para2reg sign/mask conversion: negative -> mask to 14-bit */
-    for (i_h = 0; i_h < 9; ++i_h) {
-        int32_t v = H[i_h];
-        Hreg[i_h] = (v < 0) ? (v & 0x3fff) : v;
-    }
+    tiziano_bcsh_build_HMatrix(Hreg);
 
     {
         static int hlog;
         if (!hlog) {
-            pr_info("BCSH_DIAG: H_signed=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
-                    H[0], H[1], H[2], H[3], H[4], H[5], H[6], H[7], H[8]);
             pr_info("BCSH_DIAG: Hreg=[0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x, 0x%x,0x%x,0x%x]\n",
                     Hreg[0], Hreg[1], Hreg[2], Hreg[3], Hreg[4], Hreg[5],
                     Hreg[6], Hreg[7], Hreg[8]);
@@ -2314,6 +2405,18 @@ static int tisp_mdns_par_refresh(uint32_t interp_key, uint32_t threshold);
 int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
 static int tisp_mdns_all_reg_refresh(uint32_t interp_key);
 static int tisp_mdns_reg_trigger(void);
+
+/* Forward declarations for WDR functions */
+int tiziano_wdr_get_data(uint32_t *arg1);
+irqreturn_t tiziano_wdr_interrupt_static(int irq, void *dev_id);
+int tiziano_wdr_gamma_refresh(void);
+int tiziano_wdr_params_refresh(void);
+int tiziano_wdr_dn_params_refresh(void);
+int tiziano_wdr_params_init(void);
+int tiziano_wdr_fusion1_curve(void);
+int tiziano_wdr_5x5_param_distance(int32_t arg1, int32_t arg2,
+				    int32_t arg3, int32_t arg4, void *arg5);
+int tiziano_wdr_5x5_param(void);
 
 
 static void *data_d94ac = NULL;
@@ -3398,18 +3501,218 @@ static int tisp_ae0_ctrls_update(void)
     return 0;
 }
 
-static int tisp_ae0_process_impl(void)
+/* Tiziano_ae0_fpga - OEM AE0 FPGA exposure computation
+ *
+ * OEM address: 0x51488.  Called from tisp_ae0_process_impl().
+ * Processes AE zone statistics to compute:
+ *   1) Weighted mean luminance across all AE zones (ae0_weight_mean2 logic)
+ *   2) Histogram tail sums for highlight/shadow analysis
+ *   3) Gaussian-weighted highlight accumulation (mode 1)
+ *   4) Exposure target tuning (ae0_tune2 logic)
+ *
+ * The function operates on IspAeStatic[] (256 zone values from DMA),
+ * the _ae_parameter zone/weight config, and the _AePointPos Q-format.
+ *
+ * Key outputs:
+ *   - _ae_result: updated exposure/gain recommendation
+ *   - system_reg_write_ae() calls to program AE hardware
+ *
+ * Parameters:
+ *   stats      - IspAe0WmeanParam (pointer to IspAeStatic[256])
+ *   ae_rows    - data_c4648 (number of AE zone rows, from sensor config)
+ *   ae_cols    - data_c464c (number of AE zone columns)
+ *   ae_total   - data_c4650 (total pixel count per zone)
+ */
+static void Tiziano_ae0_fpga(uint32_t *stats, uint32_t ae_rows,
+                              uint32_t ae_cols, uint32_t ae_total)
 {
-    /* AE0 processing implementation - performs AE0 algorithm processing */
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
-        return -ENODEV;
+    uint32_t ae_mode;
+    uint32_t rows, cols;
+    uint32_t hist_start, hist_end;
+    uint32_t weight_max;
+    uint32_t luma_sum;
+    uint32_t weighted_sum;
+    uint32_t zone_count;
+    uint32_t total_weight;
+    uint32_t tail_sum_hi, tail_sum_lo;
+    uint32_t weighted_mean;
+    unsigned int i;
+    int32_t pp;
+
+    if (!stats)
+        return;
+
+    pp = _AePointPos.data[0];
+    if (pp <= 0 || pp >= 32)
+        pp = 10;  /* Safe default Q-format */
+
+    /* Extract AE parameter fields -- OEM: arg13[] is the 11-element param block.
+     * In our driver these live in _ae_parameter.data[]:
+     *   [0] = ae_mode (0=auto, 1=highlight-weighted, 2/3=custom zones)
+     *   [1] = hist_start (histogram bin start for shadow region)
+     *   [3] = hist_end (histogram bin for highlight region)
+     *   [6] = weight_max (max weight value for mode selection) */
+    ae_mode    = _ae_parameter.data[0];
+    hist_start = _ae_parameter.data[1];
+    hist_end   = _ae_parameter.data[3];
+    weight_max = _ae_parameter.data[6];
+
+    rows = ae_rows;
+    cols = ae_cols;
+    if (rows == 0) rows = 0xf;
+    if (cols == 0) cols = 0xf;
+    zone_count = rows * cols;
+
+    /* ----- Phase 1: ae0_weight_mean2 logic (OEM 0x4f93c) -----
+     * Accumulates weighted luminance across all AE zones.
+     * Each zone value from stats[] is divided by zone pixel count,
+     * then multiplied by the zone weight from the AE weight map. */
+    luma_sum = 0;
+    weighted_sum = 0;
+    total_weight = 0;
+
+    for (i = 0; i < zone_count && i < 256; i++) {
+        uint32_t zone_luma = stats[i];
+        uint32_t pixel_count = ae_total;
+        uint32_t luma;
+
+        if (pixel_count == 0)
+            pixel_count = 1;
+
+        luma = zone_luma / pixel_count;
+        luma_sum += luma;
+
+        /* OEM uses zone weight map; HW stats already weighted. Uniform w=1. */
+        weighted_sum += luma;
+        total_weight += 1;
     }
 
-    /* Trigger AE0 processing */
-    writel(0x1, ourISPdev->core_regs + 0xa004);  /* Trigger AE0 processing */
+    if (total_weight == 0)
+        total_weight = 1;
+    weighted_mean = weighted_sum / total_weight;
+    if (weighted_mean == 0)
+        weighted_mean = 1;
 
-    pr_debug("AE0 processing completed\n");
+    /* ----- Phase 2: Histogram tail sums -----
+     * OEM accumulates bins for shadow/highlight detection. */
+    tail_sum_lo = 0;
+    for (i = 0; i < hist_end && i < 256; i++)
+        tail_sum_lo += stats[i];
+
+    tail_sum_hi = 0;
+    for (i = hist_start + 1; i < 256; i++)
+        tail_sum_hi += stats[i];
+
+    /* ----- Phase 3: Mode 1 highlight-weighted processing -----
+     * OEM: Gaussian-weighted highlight histogram analysis using
+     * fix_point_mult2_32 chain.  Adjusts effective mean. */
+    if (ae_mode == 1 && weight_max != 0) {
+        uint32_t highlight_acc = 0;
+        uint32_t peak_bin = (hist_end < 0xff) ? (hist_end * 2) / 3 : 0xaa;
+        uint32_t range = 256 - peak_bin;
+        uint32_t wt = weight_max;
+
+        if (wt > 0x20)
+            wt = 0x20;
+
+        for (i = peak_bin; i < 256; i++) {
+            uint32_t dist = i - peak_bin;
+            /* OEM Gaussian via fix_point_mult2_32; simplified linear falloff */
+            uint32_t w = (wt * (range - dist)) / (range ? range : 1);
+            highlight_acc += (stats[i] * w) >> 5;
+        }
+
+        if (ae_total > 0) {
+            uint32_t total_area = rows * cols * ae_total;
+            if (total_area > 0) {
+                uint32_t adj = (highlight_acc + total_area) *
+                                weighted_mean / total_area;
+                if (adj > 0)
+                    weighted_mean = adj;
+            }
+        }
+    }
+
+    /* ----- Phase 4: ae0_tune2 logic (OEM 0x500b8) -----
+     * Computes exposure target from weighted mean, determines
+     * whether exposure/gain needs increase/decrease.
+     * Updates _ae_result with new exposure/gain values. */
+    {
+        uint32_t target = _ae_result.data[4];
+        uint32_t current_ev;
+        uint32_t ratio;
+
+        if (target == 0)
+            target = 0x80;  /* Default mid-gray target */
+
+        current_ev = weighted_mean << (pp & 0x1f);
+        if (current_ev == 0)
+            current_ev = 1 << (pp & 0x1f);
+
+        ratio = fix_point_div_32(pp, target << (pp & 0x1f), current_ev);
+
+        /* Apply ratio to current exposure parameter */
+        _ae_result.data[0] = fix_point_mult2_32(pp,
+            _ae_result.data[0] ? _ae_result.data[0] << (pp & 0x1f)
+                               : 1 << (pp & 0x1f),
+            ratio) >> (pp & 0x1f);
+
+        /* Clamp exposure result to sane bounds */
+        if (_ae_result.data[0] < 0x10)
+            _ae_result.data[0] = 0x10;
+        if (_ae_result.data[0] > 0x40000)
+            _ae_result.data[0] = 0x40000;
+
+        /* Store histogram analysis results for event reporting */
+        _ae_result.data[2] = tail_sum_lo;
+        _ae_result.data[3] = tail_sum_hi;
+        _ae_result.data[5] = weighted_mean;
+    }
+
+    pr_debug("Tiziano_ae0_fpga: mode=%u mean=%u result_exp=0x%x\n",
+             ae_mode, weighted_mean, _ae_result.data[0]);
+}
+
+/* tisp_ae0_process_impl - Binary Ninja EXACT: AE0 process implementation
+ * OEM address: 0x54e8c.  Copies local parameter snapshots, calls
+ * Tiziano_ae0_fpga() for the core AE algorithm, then programs the
+ * sensor integration time and gain via system_reg_write_ae(). */
+static int tisp_ae0_process_impl(void)
+{
+    int32_t AePointPos_1 = _AePointPos.data[0];
+    uint32_t var_38 = 0x4000400;
+    uint32_t var_34 = 0x4000400;
+
+    /* Call the AE0 FPGA computation core.
+     * OEM passes: IspAe0WmeanParam, data_c4648, data_c464c, data_c4650. */
+    Tiziano_ae0_fpga(IspAe0WmeanParam, data_c4648, data_c464c, data_c4650);
+
+    /* OEM: if (ta_custom_en != 0) return 0 */
+    if (ta_custom_en != 0)
+        return 0;
+
+    /* OEM: tisp_set_sensor_integration_time(_ae_reg) */
+    tisp_set_sensor_integration_time(_ae_result.data[0]);
+
+    /* OEM: JZ_Isp_Ae_Dg2reg to convert digital gain to register values */
+    if (AePointPos_1 > 0 && AePointPos_1 < 32) {
+        JZ_Isp_Ae_Dg2reg(AePointPos_1, &var_38,
+                          _ae_result.data[1], &var_34);
+    }
+
+    /* OEM: Write AE register values based on data_a0e04 (WDR mode flag).
+     * Mode 0 (normal): writes to 0x100c/0x1010 (short exposure pair)
+     * Mode 1 (WDR):    writes to 0x1000/0x1004 (long exposure pair) */
+    if (data_a0e04 == 0) {
+        system_reg_write_ae(3, 0x100c, var_38);
+        system_reg_write_ae(3, 0x1010, var_34);
+    } else if (data_a0e04 == 1) {
+        system_reg_write_ae(3, 0x1000, var_38);
+        system_reg_write_ae(3, 0x1004, var_34);
+    }
+
+    pr_debug("tisp_ae0_process_impl: exp=0x%x dg_reg=0x%x\n",
+             _ae_result.data[0], var_38);
     return 0;
 }
 
@@ -9360,6 +9663,32 @@ static uint32_t _awb_cluster_head[3];  /* cluster heads */
 static uint32_t _awb_cluster_tail[7];  /* 0x1c bytes tail */
 static uint32_t _awb_cluster_ext1;     /* data_a9e4c */
 static uint32_t _awb_cluster_ext2;     /* data_a9e50 */
+
+/* OEM BSS arrays for Tiziano_Awb_Ct_Detect cluster-weighted AWB.
+ * Layout matches OEM binary exactly:
+ *   ct_zone_pix_wgh[rows*cols]   - normalized pixel weight per zone
+ *   ct_rgbg_wght[rows*cols]      - combined rgbg weight per zone
+ *   ct_rgbg_dis[rows*cols]       - distance from weighted centroid per zone
+ *   ct_rgbg_d_wght[rows*cols]    - distance-attenuated weight per zone
+ *   ct_cluster_idx_num[15*14]    - zone count per (rg_bin, bg_bin) pair
+ *   ct_cluster_idx_max[12*3]     - top-N cluster: [rg_idx, bg_idx, count] x 12
+ *   ct_cluster_val1[60*3]        - k-means centroids: [rg, bg, member_cnt] x 60
+ *   ct_cluster_val2[60*3]        - sorted/merged:    [rg, bg, weight] x 60
+ * OEM uses stride 0x3c (60) between rg/bg/count planes in the cluster arrays. */
+#define CT_ZONES     (AWB_STATS_ROWS * AWB_STATS_COLS)  /* 225 */
+#define CT_RG_BINS   15
+#define CT_BG_BINS   14
+#define CT_CLUSTERS  60
+
+static uint32_t ct_zone_pix_wgh[CT_ZONES];
+static uint32_t ct_rgbg_wght[CT_ZONES];
+static uint32_t ct_rgbg_dis[CT_ZONES];
+static uint32_t ct_rgbg_d_wght[CT_ZONES];
+static uint32_t ct_cluster_idx_num[CT_RG_BINS * CT_BG_BINS];  /* 210 entries */
+static uint32_t ct_cluster_idx_max[12 * 3];  /* [rg x12, bg x12, count x12] */
+static uint32_t ct_cluster_val1[CT_CLUSTERS * 3];  /* [rg x60, bg x60, cnt x60] */
+static uint32_t ct_cluster_val2[CT_CLUSTERS * 3];  /* [rg x60, bg x60, wgt x60] */
+
 static uint8_t  tisp_wb_zone_attr[0x2a3]; /* AWB zone attribute blob */
 static uint32_t awb_ev_data;           /* data_983b0 equivalent */
 static int      awb_first;             /* OEM awb_first gate for one-time HW param pack */
