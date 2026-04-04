@@ -13977,7 +13977,7 @@ static void Tiziano_Awb_Ct_Detect(
 			uint32_t db=(wbg>=zbg[zi])?(wbg-zbg[zi]):(zbg[zi]-wbg);
 			ct_rgbg_dis[zi]=fix_point_mult2_32(q,dr,dr)+fix_point_mult2_32(q,db,db);
 			if(ct_rgbg_wght[zi]&&ct_zone_pix_wgh[zi]&&lwl[zi])
-				md+=fix_point_mult2_32(q,fix_point_mult3_32(q,ct_rgbg_dis[zi],ct_rgbg_wght[zi]),lwl[zi]<<(q&0x1f));}
+				md+=fix_point_mult3_32(q,ct_rgbg_dis[zi],ct_rgbg_wght[zi],lwl[zi]);}
 		if(wa>0)md=fix_point_div_32(q,md,(uint32_t)wa);
 		if(md){uint64_t rd=0,bd=0,dwa2=0;
 			for(r=0;r<nr;r++) for(c=0;c<nc;c++){uint32_t zi=r*nc+c,rel=fix_point_div_32(q,ct_rgbg_dis[zi],md);
