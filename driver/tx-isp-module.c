@@ -1790,28 +1790,15 @@ static int sensor_hw_reset_enable(void) {
 }
 
 static int sensor_alloc_analog_gain(int gain) {
-    unsigned int sensor_again = 0;
-    int ret;
-
     if (!ourISPdev || !ourISPdev->sensor)
         return gain;
-
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again) {
-        ret = ourISPdev->sensor->attr.sensor_ctrl.alloc_again(gain, 0x10, &sensor_again);
-        return ret;
-    }
+    pr_debug("sensor_alloc_analog_gain: gain=%d\n", gain);
     return gain;
 }
 
 static int sensor_alloc_analog_gain_short(int gain) {
-    unsigned int sensor_again = 0;
-
     if (!ourISPdev || !ourISPdev->sensor)
         return gain;
-
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short) {
-        return ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short(gain, 0x10, &sensor_again);
-    }
 
     pr_debug("sensor_alloc_analog_gain_short: gain=%d\n", gain);
     return gain;
@@ -1828,33 +1815,21 @@ static int sensor_alloc_digital_gain(int gain) {
         return gain;
     }
 
-    if (ourISPdev && ourISPdev->sensor &&
-        ourISPdev->sensor->attr.sensor_ctrl.alloc_dgain) {
-        unsigned int sensor_dgain = 0;
-        return ourISPdev->sensor->attr.sensor_ctrl.alloc_dgain(gain, 0x10, &sensor_dgain);
-    }
+    pr_debug("sensor_alloc_digital_gain: gain=%d\n", gain);
     return gain;
 }
 
 static int sensor_alloc_integration_time(int time) {
     if (!ourISPdev || !ourISPdev->sensor)
         return time;
-
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time) {
-        unsigned int sensor_it = 0;
-        return ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time(time, 0, &sensor_it);
-    }
+    pr_debug("sensor_alloc_integration_time: time=%d\n", time);
     return time;
 }
 
 static int sensor_alloc_integration_time_short(int time) {
     if (!ourISPdev || !ourISPdev->sensor)
         return time;
-
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short) {
-        unsigned int sensor_it = 0;
-        return ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short(time, 0, &sensor_it);
-    }
+    pr_debug("sensor_alloc_integration_time_short: time=%d\n", time);
     return time;
 }
 
