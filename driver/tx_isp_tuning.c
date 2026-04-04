@@ -648,14 +648,17 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
  * fix_point_mult2_32(16, mag_a, mag_b << 6).  This is equivalent to
  * standard Q16 multiply when the <<6 and final >>6 cancel out.
  * Use plain Q16 here and rely on the final >>6 for hardware scaling. */
+/* OEM uses fix_point_mult2_32(16, mag_a, mag_b << 6) which preserves
+ * 6 extra bits during the chain. Accumulate in full 64-bit then shift
+ * by 16 ONCE at the end, not per-term. */
 static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
 {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
             int64_t acc = 0;
             for (int k = 0; k < 3; ++k)
-                acc += ((int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j]) >> 16;
-            O[i * 3 + j] = (int32_t)acc;
+                acc += (int64_t)A[i * 3 + k] * (int64_t)B[k * 3 + j];
+            O[i * 3 + j] = (int32_t)(acc >> 16);
         }
     }
 }
@@ -7417,6 +7420,17 @@ static uint8_t defog_weightlut12[0x80];
 static uint8_t defog_weightlut22[0x80];
 static uint8_t defog_weightlut21[0x80];
 
+/* Defog runtime buffers for DMA stats and algorithm (OEM BSS) */
+static uint32_t defog_block_hist_info[3 * (0x2d0 / 4)]; /* 3 words per block entry */
+static uint32_t defog_sum_block_r[0x2d0 / 4];
+static uint32_t defog_sum_block_g[0x2d0 / 4];
+static uint32_t defog_sum_block_b[0x2d0 / 4];
+static uint32_t defog_block_mean_y_last[0x2d0 / 4];
+static uint32_t defog_block_area_div;
+static uint32_t defog_block_area_index;
+static uint32_t defog_frm_num;
+static uint32_t defog_update_paras;
+
 static uint8_t defog_col_ct_array[0x38];
 static uint8_t defog_cent3_w_dis_array[0x60];
 static uint8_t defog_cent5_w_dis_array[0x7c];
@@ -11781,6 +11795,72 @@ static uint32_t data_c46b8 = 0;       /* Integration time cache */
 static uint32_t data_c46f8 = 0;       /* Short integration time cache */
 static uint32_t data_c470c = 0;       /* Short exposure mode flag */
 
+/* AE max gain limit caches - written by tiziano_ae_s_max_again / _max_isp_dgain */
+static uint32_t data_c46b0 = 0;       /* Cached max analog gain (linear) */
+static uint32_t data_c46bc = 0;       /* Cached max ISP digital gain (linear) */
+
+/* AE EV start parameters */
+static uint32_t ae_ev_init_strict = 0x1f4;  /* Initial EV start value */
+static uint32_t ae_ev_init_en = 0;           /* EV init enable flag */
+
+/* AE dirty flags - set to 0 when params change, forcing re-evaluation */
+static uint32_t IspAeFlag = 0;
+static uint32_t data_a0dfc = 1;   /* AE update-done flag */
+static uint32_t data_a0de4 = 0;   /* AE dirty: deflicker */
+static uint32_t data_a0de8 = 0;   /* AE dirty: scene */
+static uint32_t data_a0df0 = 0;   /* AE dirty: comp/weight 0 */
+static uint32_t data_a0df4 = 0;   /* AE dirty: comp/weight 1 */
+static uint32_t data_a0df8 = 0;   /* AE dirty: misc */
+static uint32_t data_a0e04 = 0;   /* AE dirty: exp threshold */
+static uint32_t data_a0e08 = 0;   /* AE dirty: strategy */
+static uint32_t data_a0c08 = 0;   /* AE comp result */
+
+/* AF parameter arrays - loaded from tuning bin by tiziano_af_params_refresh */
+static uint8_t stAFParam_Zone[0x90];
+static uint8_t stAFParam_ThresEnable[0x34];
+static uint8_t stAFParam_FIR0_V[0x14];
+static uint8_t stAFParam_FIR0_Ldg[0x20];
+static uint8_t stAFParam_FIR0_Coring[0x10];
+static uint8_t stAFParam_FIR1_V[0x14];
+static uint8_t stAFParam_FIR1_Ldg[0x20];
+static uint8_t stAFParam_FIR1_Coring[0x10];
+static uint8_t stAFParam_IIR0_H[0x28];
+static uint8_t stAFParam_IIR0_Ldg[0x20];
+static uint8_t stAFParam_IIR0_Coring[0x10];
+static uint8_t stAFParam_IIR1_H[0x28];
+static uint8_t stAFParam_IIR1_Ldg[0x20];
+static uint8_t stAFParam_IIR1_Coring[0x10];
+static uint8_t AFParam_PointPos[0x8];
+static uint8_t AFParam_Tilt[0x14];
+static uint8_t AFParam_FvWmean[0x3c];
+static uint8_t AFParam_Fv[0xc];
+static uint8_t AFWeight_Param[0x384];
+
+/* AF state flags */
+static uint32_t af_first = 0;
+static uint8_t af_set_trig = 0;
+
+/* AF tuning bin offsets (OEM addr - tparams base 0x84B10) */
+#define AF_TPARAMS_ZONE_OFF        0x11C3C
+#define AF_TPARAMS_THRES_OFF       0x11CCC
+#define AF_TPARAMS_FIR0_V_OFF      0x11D00
+#define AF_TPARAMS_FIR0_LDG_OFF    0x11D14
+#define AF_TPARAMS_FIR0_COR_OFF    0x11D34
+#define AF_TPARAMS_FIR1_V_OFF      0x11D44
+#define AF_TPARAMS_FIR1_LDG_OFF    0x11D58
+#define AF_TPARAMS_FIR1_COR_OFF    0x11D78
+#define AF_TPARAMS_IIR0_H_OFF      0x11D88
+#define AF_TPARAMS_IIR0_LDG_OFF    0x11DB0
+#define AF_TPARAMS_IIR0_COR_OFF    0x11DD0
+#define AF_TPARAMS_IIR1_H_OFF      0x11DE0
+#define AF_TPARAMS_IIR1_LDG_OFF    0x11E08
+#define AF_TPARAMS_IIR1_COR_OFF    0x11E28
+#define AF_TPARAMS_POINTPOS_OFF    0x11E38
+#define AF_TPARAMS_TILT_OFF        0x11E40
+#define AF_TPARAMS_FVWMEAN_OFF     0x11E54
+#define AF_TPARAMS_FV_OFF          0x11E90
+#define AF_TPARAMS_WEIGHT_OFF      0x11E9C
+
 /* IRQ callback function table */
 static void (*irq_func_cb[32])(void) = {NULL};
 
@@ -12356,6 +12436,177 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     pr_info("tiziano_ae_init: AE initialization complete - Binary Ninja EXACT implementation\n");
     return 0;
 }
+
+/* tiziano_ae_s_max_again - OEM EXACT: set max analog gain limit.
+ * OEM HLIL (0x52f40):
+ *   if (data_a2e8c << 0xb u< arg1) { print error; return -1 }
+ *   data_c46b0 = tisp_math_exp2(arg1, 5, 0xa)
+ *   data_a0dfc = 0
+ *   return 0
+ *
+ * data_a2e8c is sensor_info.words[TISP_SI_WORD_AGAIN] (the sensor's max again).
+ * Arg1 is in 5.10 log2 fixed-point. The range check ensures the requested
+ * limit does not exceed sensor_max_again << 11 (converted to same log2 scale).
+ */
+int tiziano_ae_s_max_again(int32_t gain)
+{
+    uint32_t sensor_max_again = sensor_info.words[TISP_SI_WORD_AGAIN];
+
+    /* OEM EXACT: if (data_a2e8c << 0xb u< arg1) */
+    if ((sensor_max_again << 11) < (uint32_t)gain) {
+        pr_err("%d not in range, max_again must between 0~%d\n",
+               gain, sensor_max_again << 11);
+        return -1;
+    }
+
+    /* OEM EXACT: data_c46b0 = tisp_math_exp2(arg1, 5, 0xa) */
+    data_c46b0 = tisp_math_exp2((uint32_t)gain, 5, 0xa);
+
+    /* OEM EXACT: data_a0dfc = 0 (force AE re-evaluation) */
+    data_a0dfc = 0;
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_s_max_again);
+
+/* tiziano_ae_s_max_isp_dgain - OEM EXACT: set max ISP digital gain limit.
+ * OEM HLIL (0x52fb4):
+ *   data_c46bc = tisp_math_exp2(arg1, 5, 0xa)
+ *   data_a0dfc = 0
+ *   return 0
+ *
+ * Unlike max_again, the OEM has no range check for ISP dgain.
+ */
+int tiziano_ae_s_max_isp_dgain(int32_t gain)
+{
+    /* OEM EXACT: data_c46bc = tisp_math_exp2(arg1, 5, 0xa) */
+    data_c46bc = tisp_math_exp2((uint32_t)gain, 5, 0xa);
+
+    /* OEM EXACT: data_a0dfc = 0 (force AE re-evaluation) */
+    data_a0dfc = 0;
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_s_max_isp_dgain);
+
+/* tiziano_ae_s_ev_start - OEM EXACT: set initial EV start point.
+ * OEM HLIL (0x54610):
+ *   ae_ev_init_strict = arg1
+ *   ae_ev_init_en = 1
+ *   return 0
+ */
+int tiziano_ae_s_ev_start(uint32_t ev_value)
+{
+    /* OEM EXACT: ae_ev_init_strict = arg1 */
+    ae_ev_init_strict = ev_value;
+
+    /* OEM EXACT: ae_ev_init_en = 1 */
+    ae_ev_init_en = 1;
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_s_ev_start);
+
+/* tiziano_ae_dn_params_refresh - OEM EXACT: day/night refresh for AE.
+ * OEM HLIL (0x54b54):
+ *   IspAeFlag = 1
+ *   data_a0de4..data_a0e08 = 1  (mark all AE subsystems dirty)
+ *   data_a0dfc = 0
+ *   tiziano_ae_params_refresh()
+ *   load deflicker params from sensor_info
+ *   tiziano_deflicker_expt(...)
+ *   tiziano_ae_init_exp_th()
+ *   tiziano_ae_para_addr()
+ *   tiziano_ae_set_hardware_param(0, ..., 1)
+ *   tiziano_ae_set_hardware_param(1, ..., 1)
+ *   ae_comp_default = data_b0c18 (data_a0c08 in OEM)
+ *   tisp_ae_s_comp(ae_comp_x)
+ *   return 0
+ */
+int tiziano_ae_dn_params_refresh(void)
+{
+    extern int tiziano_ae_params_refresh(void);
+    extern void *tiziano_ae_para_addr(void);
+    extern int tiziano_deflicker_expt(uint32_t, uint32_t, uint32_t, uint32_t,
+                                      uint32_t *, uint32_t *);
+
+    /* OEM EXACT: IspAeFlag = 1 */
+    IspAeFlag = 1;
+
+    /* OEM EXACT: mark all AE dirty flags */
+    data_a0de4 = 1;
+    data_a0de8 = 1;
+    data_a0df0 = 1;
+    data_a0df4 = 1;
+    data_a0df8 = 1;
+    data_a0e04 = 1;
+    data_a0e08 = 1;
+
+    /* OEM EXACT: data_a0dfc = 0 */
+    data_a0dfc = 0;
+
+    /* OEM EXACT: tiziano_ae_params_refresh() */
+    tiziano_ae_params_refresh();
+
+    /* OEM EXACT: load deflicker params from sensor_info (data_a2e44, data_a2e46, data_a2e34)
+     * These correspond to the deflicker base, fps numerator/denominator stored
+     * in the tuning bin. We reuse our existing local copies. */
+    {
+        uint32_t a3 = (uint32_t)data_b2e54;   /* fps denominator */
+        int32_t a1 = data_b2e44;               /* deflicker base */
+        uint32_t a2 = (uint32_t)data_b2e56;   /* fps numerator */
+
+        data_b0b28 = a1;
+        data_b0b2c = a2;
+        data_b0b30 = a3;
+
+        tiziano_deflicker_expt(_flicker_t.data[0], a1, a2, a3,
+                               _deflick_lut.data,
+                               (uint32_t *)&_nodes_num.data[0]);
+    }
+
+    /* OEM EXACT: tiziano_ae_init_exp_th() */
+    tiziano_ae_init_exp_th();
+
+    /* OEM EXACT: tiziano_ae_para_addr() */
+    (void)tiziano_ae_para_addr();
+
+    /* OEM EXACT: tiziano_ae_set_hardware_param(0, &_ae_parameter, 1) */
+    tiziano_ae_set_hardware_param(0, _ae_parameter.data, 1);
+
+    /* OEM EXACT: tiziano_ae_set_hardware_param(1, &_ae_parameter, 1) */
+    tiziano_ae_set_hardware_param(1, _ae_parameter.data, 1);
+
+    /* OEM EXACT: ae_comp_default = data_a0c08 (data_b0c18 in our mapping) */
+    ae_comp_default = data_a0c08;
+
+    /* OEM EXACT: tisp_ae_s_comp(ae_comp_x.b)
+     * Not yet implemented; the OEM recalculates the AE compensation curve.
+     * Omitted for now to avoid pulling in unimplemented dependencies. */
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_dn_params_refresh);
+
+/* Thin wrappers matching OEM tisp_s_max_again / tisp_s_max_isp_dgain / tisp_s_ev_start.
+ * OEM HLIL: these are simple tail-calls into the tiziano_ variants. */
+int tisp_s_max_again(int32_t gain)
+{
+    return tiziano_ae_s_max_again(gain);
+}
+EXPORT_SYMBOL(tisp_s_max_again);
+
+int tisp_s_max_isp_dgain(int32_t gain)
+{
+    return tiziano_ae_s_max_isp_dgain(gain);
+}
+EXPORT_SYMBOL(tisp_s_max_isp_dgain);
+
+int tisp_s_ev_start(uint32_t ev_value)
+{
+    return tiziano_ae_s_ev_start(ev_value);
+}
+EXPORT_SYMBOL(tisp_s_ev_start);
 
 /* tiziano_awb_init - OEM EXACT: initialize AWB hardware and set initial gains.
  * OEM decompile: awb_first=0, memset(&tisp_wb_attr,0,0x1c),
@@ -13492,6 +13743,31 @@ int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
     }
 
     pr_info("tiziano_gamma_init: Gamma correction initialized successfully\n");
+    return 0;
+}
+
+/* OEM EXACT: tiziano_gamma_params_refresh — reload gamma LUTs from tuning bin.
+ * HLIL @ 0x2136c: memcpy(tiziano_gamma_lut, tparams + 0x2844, 0x102)
+ *                 memcpy(tiziano_gamma_lut_wdr, tparams + 0x2946, 0x102) */
+int tiziano_gamma_params_refresh(void)
+{
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+
+    if (!p || !tuning_bin_loaded)
+        return 0;
+
+    memcpy(tiziano_gamma_lut_linear, p + 0x2844, 0x102);
+    memcpy(tiziano_gamma_lut_wdr,    p + 0x2946, 0x102);
+    return 0;
+}
+
+/* OEM EXACT: tiziano_gamma_dn_params_refresh — day/night transition handler.
+ * HLIL @ 0x213f4: calls tiziano_gamma_params_refresh() then
+ *                 tiziano_gamma_lut_parameter() to reprogram HW. */
+int tiziano_gamma_dn_params_refresh(void)
+{
+    tiziano_gamma_params_refresh();
+    tiziano_gamma_lut_parameter();
     return 0;
 }
 
@@ -17386,10 +17662,173 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     return 0;
 }
 
-/* tiziano_af_init - Auto Focus initialization */
+/* tiziano_af_params_refresh - OEM EXACT: load AF parameter arrays from tuning bin.
+ * OEM HLIL (0x568fc): 19 consecutive memcpy calls loading AF filter arrays
+ * from the tuning bin at known offsets into static arrays.
+ */
+int tiziano_af_params_refresh(void)
+{
+    const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+
+    if (!p || !tuning_bin_loaded) {
+        pr_debug("tiziano_af_params_refresh: no tuning bin, skipping\n");
+        return 0;
+    }
+
+    /* OEM EXACT: memcpy(&stAFParam_Zone, 0x9674c, 0x90) */
+    memcpy(stAFParam_Zone,        p + AF_TPARAMS_ZONE_OFF,     0x90);
+    /* OEM EXACT: memcpy(&stAFParam_ThresEnable, 0x967dc, 0x34) */
+    memcpy(stAFParam_ThresEnable, p + AF_TPARAMS_THRES_OFF,    0x34);
+    /* OEM EXACT: memcpy(&stAFParam_FIR0_V, 0x96810, 0x14) */
+    memcpy(stAFParam_FIR0_V,     p + AF_TPARAMS_FIR0_V_OFF,   0x14);
+    /* OEM EXACT: memcpy(&stAFParam_FIR0_Ldg, 0x96824, 0x20) */
+    memcpy(stAFParam_FIR0_Ldg,   p + AF_TPARAMS_FIR0_LDG_OFF, 0x20);
+    /* OEM EXACT: memcpy(&stAFParam_FIR0_Coring, 0x96844, 0x10) */
+    memcpy(stAFParam_FIR0_Coring, p + AF_TPARAMS_FIR0_COR_OFF, 0x10);
+    /* OEM EXACT: memcpy(&stAFParam_FIR1_V, 0x96854, 0x14) */
+    memcpy(stAFParam_FIR1_V,     p + AF_TPARAMS_FIR1_V_OFF,   0x14);
+    /* OEM EXACT: memcpy(&stAFParam_FIR1_Ldg, 0x96868, 0x20) */
+    memcpy(stAFParam_FIR1_Ldg,   p + AF_TPARAMS_FIR1_LDG_OFF, 0x20);
+    /* OEM EXACT: memcpy(&stAFParam_FIR1_Coring, 0x96888, 0x10) */
+    memcpy(stAFParam_FIR1_Coring, p + AF_TPARAMS_FIR1_COR_OFF, 0x10);
+    /* OEM EXACT: memcpy(&stAFParam_IIR0_H, 0x96898, 0x28) */
+    memcpy(stAFParam_IIR0_H,     p + AF_TPARAMS_IIR0_H_OFF,   0x28);
+    /* OEM EXACT: memcpy(&stAFParam_IIR0_Ldg, 0x968c0, 0x20) */
+    memcpy(stAFParam_IIR0_Ldg,   p + AF_TPARAMS_IIR0_LDG_OFF, 0x20);
+    /* OEM EXACT: memcpy(&stAFParam_IIR0_Coring, 0x968e0, 0x10) */
+    memcpy(stAFParam_IIR0_Coring, p + AF_TPARAMS_IIR0_COR_OFF, 0x10);
+    /* OEM EXACT: memcpy(&stAFParam_IIR1_H, 0x968f0, 0x28) */
+    memcpy(stAFParam_IIR1_H,     p + AF_TPARAMS_IIR1_H_OFF,   0x28);
+    /* OEM EXACT: memcpy(&stAFParam_IIR1_Ldg, 0x96918, 0x20) */
+    memcpy(stAFParam_IIR1_Ldg,   p + AF_TPARAMS_IIR1_LDG_OFF, 0x20);
+    /* OEM EXACT: memcpy(&stAFParam_IIR1_Coring, 0x96938, 0x10) */
+    memcpy(stAFParam_IIR1_Coring, p + AF_TPARAMS_IIR1_COR_OFF, 0x10);
+    /* OEM EXACT: memcpy(&AFParam_PointPos, 0x96948, 8) */
+    memcpy(AFParam_PointPos,     p + AF_TPARAMS_POINTPOS_OFF,  0x08);
+    /* OEM EXACT: memcpy(&AFParam_Tilt, 0x96950, 0x14) */
+    memcpy(AFParam_Tilt,         p + AF_TPARAMS_TILT_OFF,      0x14);
+    /* OEM EXACT: memcpy(&AFParam_FvWmean, 0x96964, 0x3c) */
+    memcpy(AFParam_FvWmean,      p + AF_TPARAMS_FVWMEAN_OFF,   0x3c);
+    /* OEM EXACT: memcpy(&AFParam_Fv, 0x969a0, 0xc) */
+    memcpy(AFParam_Fv,           p + AF_TPARAMS_FV_OFF,        0x0c);
+    /* OEM EXACT: memcpy(&AFWeight_Param, 0x969ac, 0x384) */
+    memcpy(AFWeight_Param,       p + AF_TPARAMS_WEIGHT_OFF,    0x384);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_af_params_refresh);
+
+/* tiziano_af_set_hardware_param - OEM EXACT: program AF zone registers.
+ * OEM HLIL (0x57014): computes zone sizes from resolution and AF zone count,
+ * then writes ~40 packed registers at 0xb800..0xb8a4 encoding filter
+ * coefficients, coring thresholds, zone geometry, and weight maps.
+ *
+ * This is a large register-programming function. For now we implement the
+ * zone geometry calculation and the initial register writes; the full
+ * filter coefficient packing will be added when AF is fully enabled.
+ */
+int tiziano_af_set_hardware_param(void)
+{
+    uint32_t *zone = (uint32_t *)stAFParam_Zone;
+    uint32_t h_zones, v_zones;
+    uint32_t h_size, v_size;
+    uint32_t i;
+
+    /* OEM binary stores resolution in data_c651c (width) and data_c6520 (height).
+     * These are set by tiziano_af_init. For now use sensor_info. */
+    uint32_t width  = sensor_info.words[TISP_SI_WORD_WIDTH];
+    uint32_t height = sensor_info.words[TISP_SI_WORD_HEIGHT];
+
+    /* zone[5] = h_zones count, zone[3] = v_zones count (from stAFParam_Zone layout) */
+    h_zones = zone[5];
+    v_zones = zone[3];
+
+    if (h_zones == 0)
+        h_zones = 1;
+    if (v_zones == 0)
+        v_zones = 1;
+
+    /* OEM EXACT: h_size = (width - 0xf) / h_zones; make even */
+    h_size = (width - 0xf) / h_zones;
+    if (h_size & 1)
+        h_size -= 1;
+
+    /* Store computed h_size back into zone array (OEM: data_a1378) */
+    zone[4] = h_size;
+
+    /* OEM EXACT: fill h_size into each horizontal zone slot */
+    for (i = 0; i < h_zones; i++)
+        zone[i * 4 + 4] = h_size;
+
+    /* OEM EXACT: v_size = (height - 3) / v_zones; make even */
+    v_size = (height - 3) / v_zones;
+    if (v_size & 1)
+        v_size -= 1;
+
+    /* Store computed v_size (OEM: data_a13b4) */
+    /* OEM then fills v_size into each vertical zone slot */
+    for (i = 0; i < v_zones; i++)
+        zone[0x12 + i] = v_size;
+
+    /* OEM programs ~40 registers at 0xb800-0xb8a4 on first call (af_first==0).
+     * Subsequent calls only update a subset via system_reg_write_af().
+     * Full register programming is deferred until AF hardware is validated. */
+    if (af_first == 0) {
+        af_first = 1;
+        pr_debug("tiziano_af_set_hardware_param: first-time zone register programming "
+                 "(h_zones=%u h_size=%u v_zones=%u v_size=%u)\n",
+                 h_zones, h_size, v_zones, v_size);
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_af_set_hardware_param);
+
+/* tiziano_af_dn_params_refresh - OEM EXACT: day/night refresh for AF.
+ * OEM HLIL (0x57cb0):
+ *   af_first = 0
+ *   tiziano_af_params_refresh()
+ *   if (af_set_trig) tisp_af_set_attr_refresh()
+ *   return tiziano_af_set_hardware_param()
+ */
+int tiziano_af_dn_params_refresh(void)
+{
+    /* OEM EXACT: af_first = 0 (force full register reprogramming) */
+    af_first = 0;
+
+    /* OEM EXACT: tiziano_af_params_refresh() */
+    tiziano_af_params_refresh();
+
+    /* OEM EXACT: if (af_set_trig) tisp_af_set_attr_refresh()
+     * tisp_af_set_attr_refresh is not yet implemented; skip for now. */
+    if (af_set_trig) {
+        pr_debug("tiziano_af_dn_params_refresh: af_set_trig set, "
+                 "tisp_af_set_attr_refresh not yet implemented\n");
+    }
+
+    /* OEM EXACT: return tiziano_af_set_hardware_param() */
+    return tiziano_af_set_hardware_param();
+}
+EXPORT_SYMBOL(tiziano_af_dn_params_refresh);
+
+/* tiziano_af_init - OEM EXACT: Auto Focus initialization.
+ * OEM HLIL (0x57740): af_first=0, tiziano_af_params_refresh(),
+ * store resolution, tiziano_af_set_hardware_param(), register IRQ,
+ * memset af_attr, copy initial attr values from tuning arrays.
+ */
 int tiziano_af_init(uint32_t height, uint32_t width)
 {
     pr_info("tiziano_af_init: Initializing Auto Focus (%dx%d)\n", width, height);
+
+    /* OEM EXACT: af_first = 0 */
+    af_first = 0;
+
+    /* OEM EXACT: tiziano_af_params_refresh() */
+    tiziano_af_params_refresh();
+
+    /* OEM EXACT: tiziano_af_set_hardware_param() */
+    tiziano_af_set_hardware_param();
+
     return 0;
 }
 
@@ -18857,6 +19296,143 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
 }
 EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
 
+/* ===== Day/Night transition parameter refresh functions =====
+ * OEM pattern: reload tuning arrays from bin, then force a register update.
+ * Called when switching between day and night ISP profiles.
+ * Note: tiziano_gamma_dn_params_refresh is defined earlier (near gamma_init). */
+
+/* OEM EXACT: tiziano_lsc_dn_params_refresh — day/night LSC transition.
+ * Reloads LSC parameters, then forces LSC LUT rewrite on next pass. */
+int tiziano_lsc_dn_params_refresh(void)
+{
+    tiziano_lsc_params_refresh();
+    lsc_force_update = 1;
+    return 0;
+}
+
+/* OEM EXACT: tiziano_ccm_dn_params_refresh — day/night CCM transition.
+ * Reloads CCM parameters, sets ccm_real flag, then runs full CCM update. */
+int tiziano_ccm_dn_params_refresh(void)
+{
+    tiziano_ccm_params_refresh();
+    ccm_real = 1;
+    jz_isp_ccm();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_dmsc_dn_params_refresh — day/night DMSC transition.
+ * Bumps gain tracker by 0x200 to force re-interpolation, reloads params,
+ * then does full DMSC register refresh. */
+int tiziano_dmsc_dn_params_refresh(void)
+{
+    dmsc_gain_last += 0x200;
+    tiziano_dmsc_params_refresh();
+    tisp_dmsc_all_reg_refresh(dmsc_gain_last);
+    return 0;
+}
+
+/* OEM EXACT: tiziano_sharpen_dn_params_refresh — day/night sharpen transition.
+ * Reloads sharpen arrays, then does full sharpen register refresh. */
+int tiziano_sharpen_dn_params_refresh(void)
+{
+    tiziano_sharpen_params_refresh();
+    tisp_sharpen_all_reg_refresh();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_sdns_dn_params_refresh — day/night SDNS transition.
+ * Reloads SDNS arrays, then does full SDNS register refresh. */
+int tiziano_sdns_dn_params_refresh(void)
+{
+    tiziano_sdns_params_refresh();
+    tisp_sdns_all_reg_refresh();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_bcsh_dn_params_refresh — day/night BCSH transition.
+ * Reloads BCSH parameters, sets BCSH_real flag, then runs full BCSH update. */
+int tiziano_bcsh_dn_params_refresh(void)
+{
+    tiziano_bcsh_params_refresh();
+    BCSH_real = 1;
+    tiziano_bcsh_update(ourISPdev ? ourISPdev->tuning_data : NULL);
+    return 0;
+}
+
+/* OEM EXACT: tiziano_dpc_dn_params_refresh — day/night DPC transition.
+ * Bumps gain tracker by 0x200 to force re-interpolation, reloads params,
+ * then does full DPC register refresh. */
+int tiziano_dpc_dn_params_refresh(void)
+{
+    data_9ab10 += 0x200;
+    tiziano_dpc_params_refresh();
+    tisp_dpc_all_reg_refresh(data_9ab10);
+    return 0;
+}
+
+/* OEM EXACT: tiziano_mdns_dn_params_refresh — day/night MDNS transition.
+ * Bumps gain tracker by 0x200, reloads params, does full MDNS register
+ * refresh, top function refresh, and register trigger. */
+int tiziano_mdns_dn_params_refresh(void)
+{
+    mdns_last_refresh_key += 0x200;
+    tiziano_mdns_params_refresh();
+    tisp_mdns_all_reg_refresh(mdns_last_refresh_key);
+    tisp_mdns_top_func_refresh();
+    tisp_mdns_reg_trigger();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_ydns_dn_params_refresh — day/night YDNS transition.
+ * Bumps gain tracker by 0x200 to force re-interpolation, reloads params,
+ * then does full YDNS interpolation and register write. */
+int tiziano_ydns_dn_params_refresh(void)
+{
+    ydns_gain_old += 0x200;
+    tiziano_ydns_params_refresh();
+    tisp_ydns_intp(ydns_gain_old);
+    tisp_ydns_param_cfg();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_rdns_dn_params_refresh — day/night RDNS transition.
+ * Reloads RDNS params, then does full RDNS register refresh. */
+int tiziano_rdns_dn_params_refresh(void)
+{
+    tiziano_rdns_params_refresh();
+    tisp_rdns_all_reg_refresh(rdns_gain_old);
+    return 0;
+}
+
+/* OEM EXACT: tiziano_defog_params_refresh — reload defog arrays from tuning data.
+ * The OEM version copies ~40 arrays from the parameter block. Since defog
+ * parameters are currently set via ioctl (tisp_defog_set_par_cfg), this
+ * stub is a placeholder until full tuning bin offsets are mapped. */
+static void tiziano_defog_params_refresh(void)
+{
+    /* TODO: implement full memcpy chain from tuning bin when offsets are mapped */
+    pr_debug("tiziano_defog_params_refresh: stub (defog uses ioctl-set params)\n");
+}
+
+/* OEM EXACT: tiziano_defog_dn_params_refresh — day/night defog transition.
+ * Reloads defog params, re-inits cent arrays, then rewrites defog registers. */
+int tiziano_defog_dn_params_refresh(void)
+{
+    tiziano_defog_params_refresh();
+    tiziano_defog_params_init();
+    tiziano_defog_set_reg_params();
+    return 0;
+}
+
+/* OEM EXACT: tiziano_adr_dn_params_refresh — day/night ADR transition.
+ * Reloads ADR params, then re-inits ADR _now pointers and kneepoints. */
+int tiziano_adr_dn_params_refresh(void)
+{
+    tiziano_adr_params_refresh();
+    tiziano_adr_params_init();
+    return 0;
+}
+
 /* Export all the tiziano pipeline functions */
 EXPORT_SYMBOL(tiziano_ccm_init);
 EXPORT_SYMBOL(jz_isp_ccm);
@@ -18924,6 +19500,21 @@ EXPORT_SYMBOL(tiziano_adr_params_refresh);
 EXPORT_SYMBOL(tisp_dpc_par_refresh);
 EXPORT_SYMBOL(tisp_sharpen_par_refresh);
 EXPORT_SYMBOL(tisp_sdns_par_refresh);
+
+/* Export day/night transition refresh functions */
+EXPORT_SYMBOL(tiziano_gamma_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_lsc_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_ccm_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_dmsc_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_sharpen_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_sdns_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_bcsh_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_dpc_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_mdns_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_ydns_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_rdns_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_defog_dn_params_refresh);
+EXPORT_SYMBOL(tiziano_adr_dn_params_refresh);
 
 /* Export global variables used across modules */
 EXPORT_SYMBOL(data_9a454);
