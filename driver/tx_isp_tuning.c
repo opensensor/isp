@@ -65,7 +65,7 @@ extern void tx_isp_wakeup_frame_channels(void);
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 1; /* Restore known-good image default: keep ADR bypassed */
+static int tisp_force_bypass_adr = 0; /* Match OEM: ADR not force-bypassed */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
 			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
@@ -131,6 +131,7 @@ extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
 extern void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3);
+extern void system_reg_write_gb(u32 arg1, u32 arg2, u32 arg3);
 extern uint32_t deir_en;
 
 /* CLM (Color Luminance Mapping) constants and data — declared early for param_array_set/get */
@@ -2351,6 +2352,9 @@ int tisp_lsc_write_lut_datas(void);
 static int tisp_lsc_ct_update(uint32_t ct);
 static int tisp_lsc_gain_update(uint32_t gain);
 static uint32_t tisp_simple_intp(int gain_hi, int gain_lo, const uint32_t *array);
+static int tisp_gb_blc_again_interp(uint32_t gain, int channel);
+static int tisp_gb_params_refresh(void);
+static int tisp_gb_init_reg(void);
 
 /* Event processing thread function */
 int tisp_event_process_thread(void *data);
@@ -2964,7 +2968,10 @@ EXPORT_SYMBOL(tisp_sensor_info_update);
 static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
 static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x400, 0x400, 0x400, 0x400};
 static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x400, 0x400, 0x400, 0x400};
-static uint32_t tisp_gb_blc_offset[45] = {0};  /* 5 curves x 9 entries: R,Gr,Gb,B,IR */
+/* OEM static default: all 5 channels initialized to blc_ir_linear values.
+ * OEM binary at 0x9a310: tisp_gb_blc_ir[0x2d] = {0x41,0x3f,0x43,0x42,0x3f,...} × 5
+ * These are RUNTIME values set by libimp; static init is zeros. */
+static uint32_t tisp_gb_blc_offset[45] = {0};
 static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
 static uint32_t tisp_gb_blc_min[9] = {0};     /* 9-entry BLC minimum curve */
 static uint32_t tisp_gb_blc_ag[2] = {0, 0};   /* last gain for channel 0/1 */
@@ -3058,22 +3065,22 @@ static const uint32_t tiziano_gib_config_line_oem[12] = {
 };
 static const uint32_t tiziano_gib_r_g_linear_oem[2] = {1024, 1024};
 static const uint32_t tiziano_gib_b_ir_linear_oem[2] = {1024, 1024};
-/* BLC arrays: OEM RUNTIME values from live system (sensor-calibrated by libimp).
- * ROM defaults were ~67; runtime values are ~256 (proper sensor black level). */
+/* BLC arrays: OEM STATIC defaults from the .ko binary.
+ * libimp overrides these to ~256 at runtime via param_array_set. */
 static const uint32_t tiziano_gib_deirm_blc_r_linear_oem[9] = {
-    0xFD, 0xFE, 0x100, 0x102, 0x102, 0x102, 0x102, 0x102, 0x102,
+    67, 68, 67, 67, 66, 66, 66, 66, 66,
 };
 static const uint32_t tiziano_gib_deirm_blc_gr_linear_oem[9] = {
-    0xFD, 0xFE, 0x100, 0x102, 0x103, 0x103, 0x103, 0x103, 0x103,
+    66, 68, 67, 67, 67, 67, 67, 67, 67,
 };
 static const uint32_t tiziano_gib_deirm_blc_gb_linear_oem[9] = {
-    0xFD, 0xFE, 0xFE, 0x101, 0x101, 0x101, 0x101, 0x101, 0x101,
+    66, 68, 67, 66, 67, 67, 67, 67, 67,
 };
 static const uint32_t tiziano_gib_deirm_blc_b_linear_oem[9] = {
-    0xFD, 0xFE, 0xFE, 0x101, 0x100, 0x100, 0x100, 0x100, 0x100,
+    66, 68, 68, 67, 67, 67, 67, 67, 67,
 };
 static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
-    0x41, 0x3F, 0x43, 0x42, 0x3F, 0x3F, 0x3F, 0x3F, 0x3F,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
 static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
 static const uint32_t gib_ir_reser_oem[15] = {0};
@@ -3083,25 +3090,12 @@ static const uint32_t gib_ir_reser_oem[15] = {0};
 static const uint32_t tiziano_gib_deir_r_h_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_g_h_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_b_h_oem[33] = {0};
-/* DEIR _m arrays: OEM RUNTIME values (linear ramps set by libimp) */
-static const uint32_t tiziano_gib_deir_r_m_oem[33] = {
-    0x000, 0x040, 0x080, 0x0C0, 0x100, 0x140, 0x180, 0x1C0,
-    0x200, 0x240, 0x280, 0x2C0, 0x300, 0x340, 0x380, 0x3C0,
-    0x400, 0x440, 0x480, 0x4C0, 0x500, 0x540, 0x580, 0x5C0,
-    0x600, 0x640, 0x680, 0x6C0, 0x700, 0x740, 0x780, 0x7C0, 0x800,
-};
-static const uint32_t tiziano_gib_deir_g_m_oem[33] = {
-    0x000, 0x05A, 0x0B3, 0x10D, 0x166, 0x1C0, 0x21A, 0x273,
-    0x2CD, 0x326, 0x380, 0x3DA, 0x433, 0x48D, 0x4E6, 0x540,
-    0x59A, 0x5F3, 0x64D, 0x6A6, 0x700, 0x75A, 0x7B3, 0x80D,
-    0x866, 0x8C0, 0x91A, 0x973, 0x9CD, 0xA26, 0xA80, 0xADA, 0xB33,
-};
-static const uint32_t tiziano_gib_deir_b_m_oem[33] = {
-    0x000, 0x073, 0x0E6, 0x15A, 0x1CD, 0x240, 0x2B3, 0x326,
-    0x39A, 0x40D, 0x480, 0x4F3, 0x566, 0x5DA, 0x64D, 0x6C0,
-    0x733, 0x7A6, 0x81A, 0x88D, 0x900, 0x973, 0x9E6, 0xA5A,
-    0xACD, 0xB40, 0xBB3, 0xC26, 0xC9A, 0xD0D, 0xD80, 0xDF3, 0xE66,
-};
+/* DEIR _m arrays: OEM STATIC defaults are all zeros in the .ko binary.
+ * The linear ramps (r×64, g×90, b×115) are set by libimp at RUNTIME.
+ * Using zeros here matches the OEM power-on state. */
+static const uint32_t tiziano_gib_deir_r_m_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_g_m_oem[33] = {0};
+static const uint32_t tiziano_gib_deir_b_m_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_r_l_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_g_l_oem[33] = {0};
 static const uint32_t tiziano_gib_deir_b_l_oem[33] = {0};
@@ -6546,8 +6540,11 @@ int tisp_gb_param_array_set(int param_id, void *in_buf, int *size_buf)
             dest_ptr = &tisp_gb_blc_offset[0]; data_size = 0x24; break;
         case 0x3fd:  /* tisp_gb_blc_min_en */
             dest_ptr = &tisp_gb_blc_min_en; data_size = 8; break;
-        case 0x3fe:  /* tisp_gb_blc_min */
-            dest_ptr = &tisp_gb_blc_min; data_size = 0x24; break;
+        case 0x3fe:  /* tisp_gb_blc_min — OEM calls tisp_gb_init_reg() after */
+            memcpy(&tisp_gb_blc_min, in_buf, 0x24);
+            tisp_gb_init_reg();
+            *size_buf = 0x24;
+            return 0;
         default:
             pr_err("tisp_gb_param_array_set: Unhandled parameter ID 0x%x\n", param_id);
             return -1;
@@ -14383,6 +14380,12 @@ int tiziano_gib_init(void)
                           tiziano_gib_deir_g_m,
                           tiziano_gib_deir_b_m);
 
+    /* Program GB digital gain and BLC registers — the OEM only does this
+     * from tisp_gb_init (WDR path), but we need it here to ensure registers
+     * 0x1000-0x1010 are initialized before GIB starts processing. */
+    tisp_gb_params_refresh();
+    tisp_gb_init_reg();
+
     pr_err("tiziano_gib_init: GIB initialized (deir_en=%d, day_night=%d, DEIR_EN=%d)\n",
             deir_en, ourISPdev->day_night, GIB_CFG_DEIR_EN);
     pr_err("gib_init: deir_r_m[0..3]={%u,%u,%u,%u} deir_g_m[0..3]={%u,%u,%u,%u}\n",
@@ -19297,10 +19300,84 @@ static int tisp_rdns_par_refresh(uint32_t gain, uint32_t threshold, int enable_w
 	return 0;
 }
 
-/* WDR-specific initialization functions */
+/* OEM EXACT: tisp_gb_params_refresh — reset GB parameters to static defaults.
+ * OEM copies from .data section addresses into mutable runtime arrays.
+ * tisp_gb_blc_offset (OEM: tisp_gb_blc_ir) gets 5 copies of blc_ir_linear. */
+static int tisp_gb_params_refresh(void)
+{
+    int i;
+    /* OEM static defaults for dgain arrays — already initialized, just
+     * reset them in case libimp changed them */
+    tisp_gb_dgain_shift[0] = 0;
+    tisp_gb_dgain_shift[1] = 0;
+    tisp_gb_dgain_rgbir_l[0] = 0x400;
+    tisp_gb_dgain_rgbir_l[1] = 0x400;
+    tisp_gb_dgain_rgbir_l[2] = 0x400;
+    tisp_gb_dgain_rgbir_l[3] = 0x400;
+    tisp_gb_dgain_rgbir_s[0] = 0x400;
+    tisp_gb_dgain_rgbir_s[1] = 0x400;
+    tisp_gb_dgain_rgbir_s[2] = 0x400;
+    tisp_gb_dgain_rgbir_s[3] = 0x400;
+
+    /* OEM: all 5 channels of tisp_gb_blc_ir initialized to blc_ir_linear values.
+     * Confirmed from OEM binary dump: tisp_gb_blc_ir[0x2d] at 0x9a310 =
+     * {0x41,0x3f,0x43,0x42,0x3f,0x3f,0x3f,0x3f,0x3f} repeated 5 times. */
+    for (i = 0; i < 5; i++)
+        memcpy(&tisp_gb_blc_offset[i * 9],
+               tiziano_gib_deirm_blc_ir_linear_oem,
+               9 * sizeof(uint32_t));
+
+    tisp_gb_blc_min_en[0] = 0;
+    tisp_gb_blc_min_en[1] = 0;
+    memset(tisp_gb_blc_min, 0, sizeof(tisp_gb_blc_min));
+    return 0;
+}
+
+/* OEM EXACT: tisp_gb_init_reg — program GB digital gain and BLC registers.
+ * Decompiled from OEM at 0x22a10. Writes dgain_shift to 0x1008, dgain RGBIR
+ * to 0x1000/0x1004/0x100c/0x1010 (once), then calls tisp_gb_blc_again_interp. */
+static int tisp_gb_init_reg(void)
+{
+    static int gb_init_done = 0;
+
+    /* Register 0x1008: dgain shift control */
+    system_reg_write_gb(1, 0x1008,
+        (tisp_gb_dgain_shift[1] << 2) | tisp_gb_dgain_shift[0]);
+
+    /* First-time: program RGBIR digital gain registers */
+    if (!gb_init_done) {
+        system_reg_write_gb(1, 0x1000,
+            (tisp_gb_dgain_rgbir_l[1] << 16) | tisp_gb_dgain_rgbir_l[0]);
+        system_reg_write_gb(1, 0x1004,
+            (tisp_gb_dgain_rgbir_l[3] << 16) | tisp_gb_dgain_rgbir_l[2]);
+        system_reg_write_gb(1, 0x100c,
+            (tisp_gb_dgain_rgbir_s[1] << 16) | tisp_gb_dgain_rgbir_s[0]);
+        system_reg_write_gb(1, 0x1010,
+            (tisp_gb_dgain_rgbir_s[3] << 16) | tisp_gb_dgain_rgbir_s[2]);
+    }
+
+    /* Update BLC for both channels */
+    tisp_gb_blc_again_interp(tisp_gb_blc_ag[0], 0);
+    tisp_gb_blc_again_interp(tisp_gb_blc_ag[1], 1);
+    gb_init_done = 1;
+    return 0;
+}
+
+/* OEM EXACT: tisp_gb_dn_params_refresh — day/night GB param refresh.
+ * Decompiled: tisp_gb_params_refresh() then tisp_gb_init_reg(). */
+int tisp_gb_dn_params_refresh(void)
+{
+    tisp_gb_params_refresh();
+    tisp_gb_init_reg();
+    return 0;
+}
+
+/* OEM EXACT: tisp_gb_init — full GB initialization.
+ * Decompiled from OEM at 0x22c7c. */
 int tisp_gb_init(void)
 {
-    pr_info("tisp_gb_init: Initializing GB processing for WDR\n");
+    tisp_gb_params_refresh();
+    tisp_gb_init_reg();
     return 0;
 }
 
@@ -20138,6 +20215,7 @@ EXPORT_SYMBOL(tiziano_ccm_a_now);
 EXPORT_SYMBOL(cm_ev_list_now);
 EXPORT_SYMBOL(cm_sat_list_now);
 EXPORT_SYMBOL(tisp_gb_init);
+EXPORT_SYMBOL(tisp_gb_dn_params_refresh);
 EXPORT_SYMBOL(tiziano_sdns_init);
 EXPORT_SYMBOL(tisp_dmsc_wdr_en);
 EXPORT_SYMBOL(tisp_ae_ir_update);
