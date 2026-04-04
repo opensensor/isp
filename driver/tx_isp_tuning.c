@@ -1230,8 +1230,8 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                 if (!v1_7) v0_8 = ev10 - 1;
                 u32 v0_9 = (a0_48 == 0) ? 1 : (a0_48 - 1);
                 u32 lo = 0, hi = 0;
-                if (v0_9) lo = (v0_8 * HLSP[1]) / v0_9;
-                if (clip0_2) hi = (a2_11 * HLSP[2]) / clip0_2;
+                if (v0_9) lo = (u32)div_u64((u64)v0_8 * HLSP[1], v0_9);
+                if (clip0_2) hi = (u32)div_u64((u64)a2_11 * HLSP[2], clip0_2);
                 s1_3 = (hi << 16) | (lo & 0xFFFF);
             }
         } else {
@@ -1247,7 +1247,7 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                     } else {
                         u32 s0_1 = (v1_8 >= a0_50) ? (v1_8 - a0_50) : (a0_50 - v1_8);
                         if (s0_1 == 0) s0_1 = 1;
-                        u32 dec = ((ev10 - a0_50) * t9_1) / s0_1;
+                        u32 dec = (u32)div_u64((u64)(ev10 - a0_50) * t9_1, s0_1);
                         if (dec > t9_1) dec = t9_1;
                         hi_part = (t9_1 - dec) & 0xFFFF;
                     }
@@ -1257,7 +1257,7 @@ static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
                     } else {
                         u32 v1_9 = (v1_8 >= a0_50) ? (v1_8 - a0_50) : (a0_50 - v1_8);
                         if (v1_9 == 0) v1_9 = 1;
-                        u32 dec2 = ((ev10 - a0_50) * s1_6) / v1_9;
+                        u32 dec2 = (u32)div_u64((u64)(ev10 - a0_50) * s1_6, v1_9);
                         if (dec2 > s1_6) dec2 = s1_6;
                         lo_part = (s1_6 - dec2) & 0xFFFF;
                     }
