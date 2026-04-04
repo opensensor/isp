@@ -61,10 +61,6 @@ extern const char *tx_isp_get_default_bin_path(void);
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
 
-int tisp_cfa_idx_override = -1;
-module_param_named(cfa_idx_override, tisp_cfa_idx_override, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(cfa_idx_override,
-		 "Force Bayer CFA index (-1 auto, 0 RGGB, 1 GRBG, 2 GBRG, 3 BGGR)");
 
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
@@ -1775,7 +1771,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD14;  /* LSC+DPC+DMSC+Gamma+BCSH+Sharpen+SDNS+MDNS+YDNS (no GIB; Defog force-bypassed) */
+static uint isp_block_enable = 0x3DDB4;  /* Full OEM set: DPC+LSC+GIB+DMSC+Gamma+Defog+BCSH+Sharpen+SDNS+MDNS+YDNS */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
