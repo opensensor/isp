@@ -142,6 +142,7 @@ struct tx_isp_vic_device {
     spinlock_t buffer_mgmt_lock;                /* 0x1f4: Buffer management spinlock */
 
     int stream_state;                           /* 0x210: Stream state: 0=off, 1=on */
+    atomic_t stream_refcount;                   /* Number of channels currently streaming through VIC */
 
     bool processing;                            /* 0x214: Processing flag */
 

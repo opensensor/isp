@@ -2620,9 +2620,133 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		vic_dev->capture_buf_size = 0;
 
 	} else if (strncmp(cmdbuf, "saveraw", 7) == 0) {
-		/* --- SAVERAW: like snapraw but re-uses ISP-managed buffer --- */
-		/* For now, just call the existing vic_saveraw */
-		seq_printf(seq, "saveraw: use /proc/jz/isp/isp-w02 write interface\n");
+		/* --- SAVERAW: re-uses ISP-managed buffer from reg 0x7820 --- */
+		/* OEM: reads register 0x7820 to get the current ISP output buffer
+		 * physical address, then programs MDMA to capture into it.
+		 * Does NOT allocate new memory — reuses whatever the ISP pipeline
+		 * is currently writing to. */
+		u32 width = vic_dev->width;
+		u32 height = vic_dev->height;
+		struct tx_isp_sensor_attribute *sattr = vic_raw_sensor_attr_get(vic_dev);
+		int is_nv12 = (sattr && sattr->data_type == 7);
+		u32 stride_line, frame_size, savenum;
+		u32 saved_7810, saved_7814, saved_7804, saved_7820;
+		long ret;
+		int i;
+		void __iomem *vregs;
+
+		vregs = vic_raw_regs_get(vic_dev);
+		if (!vregs) vregs = vic_primary_regs_resolve(vic_dev);
+
+		/* OEM: Save registers and read ISP buffer address */
+		saved_7810 = vregs ? readl(vregs + 0x7810) : 0;
+		saved_7814 = vregs ? readl(vregs + 0x7814) : 0;
+		saved_7804 = vregs ? readl(vregs + 0x7804) : 0;
+		saved_7820 = vregs ? readl(vregs + 0x7820) : 0;
+
+		if (vregs) {
+			writel(saved_7810 & 0x11110111, vregs + 0x7810);
+			writel(0, vregs + 0x7814);
+			writel(saved_7804 | 1, vregs + 0x7804);
+		}
+
+		{ int d; for (d = 10; d > 0; d--) udelay(1000); }
+
+		savenum = 1;
+		if (count > 8)
+			savenum = simple_strtoul(&cmdbuf[8], NULL, 0);
+		if (savenum < 1) savenum = 1;
+
+		stride_line = width << 1;
+		if (is_nv12)
+			stride_line = (stride_line + width) >> 1;
+		frame_size = stride_line * height;
+
+		pr_info("saveraw: %ux%u fmt=%s stride=%u frame=%u num=%u buf=0x%x\n",
+			width, height, is_nv12 ? "nv12" : "raw",
+			stride_line, frame_size, savenum, saved_7820);
+
+		if (width >= 0xa81) {
+			seq_printf(seq, "Can't output the width(%d)!\n", width);
+			if (vregs) {
+				writel(saved_7810 & 0x11111111, vregs + 0x7810);
+				writel(saved_7814, vregs + 0x7814);
+				writel(saved_7804 | 1, vregs + 0x7804);
+			}
+			goto out;
+		}
+
+		/* OEM: Use register 0x7820 value as capture buffer */
+		if (vic_dev->capture_buf_phys != 0) {
+			seq_printf(seq, "The node is busy!\n");
+			if (vregs) {
+				writel(saved_7810 & 0x11111111, vregs + 0x7810);
+				writel(saved_7814, vregs + 0x7814);
+				writel(saved_7804 | 1, vregs + 0x7804);
+			}
+			goto out;
+		}
+
+		if (saved_7820 != 0) {
+			int dual = 0;
+			int fmt_arg = 0;
+
+			/* OEM: *(s0+0x140) = saved_7820, *(s0+0x144) = saved_7820 - 0x80000000 */
+			vic_dev->capture_buf_phys = saved_7820;
+			vic_dev->capture_buf_virt = (void *)(unsigned long)(saved_7820 - 0x80000000);
+
+			if (!is_nv12 && sattr && sattr->total_width != 0)
+				dual = 1;
+			if (is_nv12)
+				fmt_arg = 7;
+
+			INIT_COMPLETION(vic_dev->frame_complete);
+			vic_mdma_enable(vic_dev, 0, dual ? 1 : 0, savenum,
+					saved_7820, fmt_arg);
+
+			ret = wait_for_completion_timeout(&vic_dev->frame_complete,
+							  msecs_to_jiffies(10000));
+			if (ret <= 0) {
+				seq_printf(seq, "snapraw timeout!\n");
+			} else {
+				mm_segment_t old_fs;
+				u32 offset = 0;
+				char filename[64];
+
+				old_fs = get_fs();
+				set_fs(KERNEL_DS);
+				for (i = 0; i < (int)savenum; i++) {
+					const char *ext = is_nv12 ? "nv12" : "raw";
+					struct file *fp;
+					loff_t fpos = 0;
+
+					snprintf(filename, sizeof(filename),
+						 "/tmp/snap%d.%s", i, ext);
+					fp = filp_open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+					if (!IS_ERR(fp)) {
+						vfs_write(fp,
+							  (char *)vic_dev->capture_buf_virt + offset,
+							  frame_size, &fpos);
+						filp_close(fp, NULL);
+					}
+					offset += frame_size;
+				}
+				set_fs(old_fs);
+				seq_printf(seq, "saveraw successful\n");
+			}
+		}
+
+		/* Restore registers */
+		if (vregs) {
+			writel(saved_7810 & 0x11111111, vregs + 0x7810);
+			writel(saved_7814, vregs + 0x7814);
+			writel(saved_7804 | 1, vregs + 0x7804);
+		}
+
+		/* Clear capture state — saveraw does NOT free the buffer since
+		 * it was borrowed from the ISP pipeline, not allocated by us. */
+		vic_dev->capture_buf_phys = 0;
+		vic_dev->capture_buf_virt = NULL;
 
 	} else if (strncmp(cmdbuf, "help", 4) == 0) {
 		/* OEM help text */
@@ -2889,20 +3013,33 @@ static int vic_pad_event_handler(void *priv, unsigned int cmd, void *data)
             cmd, data, vic_dev);
 
     switch (cmd) {
-        case 0x3000003:
-            pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
-            /* Regression fix: frame-channel STREAM_START must still arm the
-             * MDMA/control path even when the VIC core is already in state 4.
-             * The last known green-stream commit routed this event through the
-             * frame-channel helper, while vic_core_s_stream() becomes a no-op
-             * once the VIC has already been started by the main stream path.
-             */
-            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
+        case 0x3000003: {
+            /* atomic_inc_return returns value AFTER increment */
+            int newval = atomic_inc_return(&vic_dev->stream_refcount);
+            pr_info("*** VIC EVENT: STREAM_START (0x3000003) refcount→%d ***\n",
+                    newval);
+            /* Only enable VIC MDMA on the FIRST channel to start streaming.
+             * Subsequent channels share the already-running MDMA pipeline. */
+            if (newval == 1)
+                ret = ispvic_frame_channel_s_stream(vic_dev, 1);
             break;
-        case 0x3000004:
-            pr_info("*** VIC EVENT: STREAM_STOP/CANCEL (0x3000004) - DEACTIVATING VIC HARDWARE ***\n");
-            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
+        }
+        case 0x3000004: {
+            /* atomic_dec_return returns value AFTER decrement */
+            int newval = atomic_dec_return(&vic_dev->stream_refcount);
+            if (newval < 0) {
+                /* Guard against underflow — don't go negative */
+                atomic_set(&vic_dev->stream_refcount, 0);
+                newval = 0;
+            }
+            pr_info("*** VIC EVENT: STREAM_STOP (0x3000004) refcount→%d ***\n",
+                    newval);
+            /* Only disable VIC MDMA when the LAST channel stops streaming.
+             * Other channels still need the VIC pipeline running. */
+            if (newval == 0)
+                ret = ispvic_frame_channel_s_stream(vic_dev, 0);
             break;
+        }
         case 0x3000005:
             /* OEM: QBUF (0x3000005) is NOT dispatched to VIC.
              * MSCA output DMA addresses are written by ispcore_pad_event_handle.
@@ -3387,6 +3524,7 @@ static int ispvic_frame_channel_clearbuf(void)
     vic_dev->active_buffer_count = 0;
     vic_dev->processing = 0;
     vic_dev->stream_state = 0; /* OEM clears 0x210 (stream) and 0x214 (processing) */
+    atomic_set(&vic_dev->stream_refcount, 0);
     vic_dev->streaming = 0;
     spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
 
