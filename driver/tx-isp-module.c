@@ -182,20 +182,6 @@ int sensor_count = 0;
 static int current_sensor_index = -1;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
-static void tx_isp_drop_registered_sensor(struct registered_sensor *reg_sensor)
-{
-    if (!reg_sensor)
-        return;
-
-    mutex_lock(&sensor_list_mutex);
-    list_del(&reg_sensor->list);
-    if (sensor_count > 0)
-        sensor_count--;
-    mutex_unlock(&sensor_list_mutex);
-
-    kfree(reg_sensor);
-}
-
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
 extern uint32_t vic_start_ok;
@@ -496,7 +482,6 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
 }
 EXPORT_SYMBOL(subdev_sensor_ops_ioctl);
 
-static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
@@ -676,145 +661,6 @@ static struct tx_isp_subdev *isp_i2c_new_subdev_board(struct i2c_adapter *adapte
     /* Stock: cleanup on failure - private_i2c_unregister_device(client) */
     i2c_unregister_device(client);
     return NULL;
-}
-
-/* MIPS-SAFE I2C communication test - Fixed for unaligned access */
-static int mips_safe_i2c_test(struct i2c_client *client, const char *sensor_type)
-{
-    struct i2c_adapter *adapter;
-    int test_result = 0;
-
-    if (!client || ((uintptr_t)client & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: client not properly aligned ***\n");
-        return -EINVAL;
-    }
-
-    if (!sensor_type) {
-        pr_err("*** MIPS ERROR: sensor_type is NULL ***\n");
-        return -EINVAL;
-    }
-
-    /* Get I2C adapter from client */
-    adapter = client->adapter;
-    if (!adapter) {
-        pr_err("*** MIPS ERROR: No I2C adapter available ***\n");
-        return -ENODEV;
-    }
-
-    pr_info("*** MIPS-SAFE I2C TEST FOR %s ***\n", sensor_type);
-
-    /* *** FIXED: PROPER I2C COMMUNICATION TEST *** */
-    pr_info("*** TESTING I2C COMMUNICATION WITH %s (IMPROVED METHOD) ***\n", sensor_type);
-    {
-        /* Instead of blind read, try sensor-specific register read */
-        if (strncmp(sensor_type, "gc2053", 6) == 0) {
-            /* GC2053-specific I2C test - read chip ID register */
-            unsigned char reg_addr = 0x03; /* GC2053 chip ID register (high byte) */
-            unsigned char chip_id_high = 0;
-            struct i2c_msg msgs[2] = {
-                {
-                    .addr = client->addr,
-                    .flags = 0,
-                    .len = 1,
-                    .buf = &reg_addr
-                },
-                {
-                    .addr = client->addr,
-                    .flags = I2C_M_RD,
-                    .len = 1,
-                    .buf = &chip_id_high
-                }
-            };
-
-            test_result = i2c_transfer(adapter, msgs, 2);
-            pr_info("*** I2C GC2053 CHIP ID TEST: result=%d, chip_id_high=0x%02x ***\n",
-                   test_result, chip_id_high);
-
-            if (test_result == 2) {
-                if (chip_id_high == 0x20) {
-                    pr_info("*** SUCCESS: GC2053 CHIP ID CONFIRMED (0x20xx) ***\n");
-                } else {
-                    pr_warn("*** WARNING: Unexpected chip ID 0x%02x (expected 0x20) ***\n", chip_id_high);
-                }
-            } else if (test_result < 0) {
-                pr_err("*** FAILED: I2C communication failed: %d ***\n", test_result);
-                pr_err("*** DIAGNOSIS: I2C Error %d indicates hardware issues ***\n", test_result);
-
-                /* Detailed error analysis */
-                switch (test_result) {
-                case -EIO:
-                    pr_err("*** -EIO: I/O error - check sensor power, I2C bus, connections ***\n");
-                    break;
-                case -EREMOTEIO:
-                    pr_err("*** -EREMOTEIO: No ACK from sensor - wrong address or dead sensor ***\n");
-                    break;
-                case -EOPNOTSUPP:
-                    pr_err("*** -EOPNOTSUPP: I2C adapter doesn't support this operation ***\n");
-                    break;
-                case -ETIMEDOUT:
-                    pr_err("*** -ETIMEDOUT: I2C bus timeout - bus may be hung ***\n");
-                    break;
-                default:
-                    pr_err("*** Unknown I2C error %d ***\n", test_result);
-                    break;
-                }
-
-                /* Try alternative I2C addresses for GC2053 */
-                pr_info("*** TRYING ALTERNATIVE GC2053 I2C ADDRESSES ***\n");
-                unsigned char alt_addresses[] = {0x37, 0x3c, 0x21, 0x29};
-                int i;
-                for (i = 0; i < ARRAY_SIZE(alt_addresses); i++) {
-                    if (alt_addresses[i] == client->addr) continue; /* Skip original */
-
-                    msgs[0].addr = alt_addresses[i];
-                    msgs[1].addr = alt_addresses[i];
-
-                    test_result = i2c_transfer(adapter, msgs, 2);
-                    pr_info("*** Testing addr 0x%02x: result=%d, data=0x%02x ***\n",
-                           alt_addresses[i], test_result, chip_id_high);
-
-                    if (test_result == 2) {
-                        pr_info("*** SUCCESS: GC2053 responds at address 0x%02x! ***\n", alt_addresses[i]);
-                        /* Update client address */
-                        client->addr = alt_addresses[i];
-                        break;
-                    }
-                }
-            } else {
-                pr_warn("*** PARTIAL SUCCESS: Got %d messages (expected 2) ***\n", test_result);
-            }
-        } else {
-            /* Generic I2C test for other sensors */
-            pr_info("*** GENERIC I2C TEST FOR %s ***\n", sensor_type);
-
-            /* Try to read a common register that most sensors have */
-            unsigned char test_reg = 0x00; /* Most sensors have something at register 0x00 */
-            unsigned char test_data = 0;
-            struct i2c_msg msgs[2] = {
-                {
-                    .addr = client->addr,
-                    .flags = 0,
-                    .len = 1,
-                    .buf = &test_reg
-                },
-                {
-                    .addr = client->addr,
-                    .flags = I2C_M_RD,
-                    .len = 1,
-                    .buf = &test_data
-                }
-            };
-
-            test_result = i2c_transfer(adapter, msgs, 2);
-            pr_info("*** I2C TEST: result=%d, reg[0x00]=0x%02x ***\n", test_result, test_data);
-
-            if (test_result < 0) {
-                pr_err("*** I2C COMMUNICATION FAILED: %d ***\n", test_result);
-            }
-        }
-    }
-
-    return test_result >= 0 ? 0 : test_result;
 }
 
 /* Prepare I2C infrastructure for dynamic sensor registration */
@@ -2742,48 +2588,6 @@ err_free_dev:
     return ret;
 }
 
-/* CSI video streaming control - Updated to use standalone methods */
-static int tx_isp_csi_s_stream(struct tx_isp_dev *isp_dev, int enable)
-{
-    struct tx_isp_csi_device *csi_dev;
-
-    if (!isp_dev || !isp_dev->csi_dev) {
-        pr_err("CSI s_stream: No CSI device\n");
-        return -EINVAL;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-
-    pr_info("*** CSI STREAMING %s ***\n", enable ? "ENABLE" : "DISABLE");
-
-    /* Call Binary Ninja reference method */
-    return csi_video_s_stream(&csi_dev->sd, enable);
-}
-
-// Activate VIC subdev like reference tx_isp_vic_activate_subdev
-static int tx_isp_activate_vic_subdev(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    int ret = 0;
-
-    if (!isp_dev || !isp_dev->vic_dev) {
-        return -EINVAL;
-    }
-
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-
-    mutex_lock(&vic_dev->mlock);
-
-    // Activate VIC if in initialized state (like reference)
-    if (vic_dev->state == 1) {
-        vic_dev->state = 2; // 2 = activated
-        pr_info("VIC subdev activated\n");
-    }
-
-    mutex_unlock(&vic_dev->mlock);
-    return ret;
-}
-
 // Detect and register loaded sensor modules into subdev infrastructure - Kernel 3.10 compatible
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 {
@@ -3319,215 +3123,9 @@ reset_state:
      *
      */
 
-/* RACE CONDITION SAFE: Global initialization lock for subdev array access */
-static DEFINE_MUTEX(subdev_init_lock);
-static volatile bool subdev_init_complete = false;
-
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
-
-static int tx_isp_use_mipi_stream_order(struct tx_isp_dev *dev)
-{
-    return dev && dev->sensor && dev->sensor->video.attr &&
-           dev->sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI;
-}
-
-static int tx_isp_find_subdev_index(struct tx_isp_dev *dev,
-                                    struct tx_isp_subdev *target)
-{
-    int i;
-
-    if (!dev || !target)
-        return -1;
-
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        if (dev->subdevs[i] == target)
-            return i;
-    }
-
-    return -1;
-}
-
-static void tx_isp_stream_add_ordered_subdev(struct tx_isp_subdev **ordered,
-                                             int *ordered_indices,
-                                             int *ordered_count,
-                                             struct tx_isp_subdev *sd,
-                                             int index)
-{
-    int i;
-
-    if (!ordered || !ordered_indices || !ordered_count || !sd)
-        return;
-
-    for (i = 0; i < *ordered_count; i++) {
-        if (ordered[i] == sd)
-            return;
-    }
-
-    if (*ordered_count >= ISP_MAX_SUBDEVS)
-        return;
-
-    ordered[*ordered_count] = sd;
-    ordered_indices[*ordered_count] = index;
-    *ordered_count += 1;
-}
-
-static int tx_isp_call_subdev_s_stream(struct tx_isp_subdev *sd, int index, int enable)
-{
-    struct tx_isp_subdev_video_ops *video_ops;
-    int (*s_stream_func)(struct tx_isp_subdev *, int);
-    int result;
-
-    if (!sd)
-        return -ENOIOCTLCMD;
-
-    video_ops = sd->ops ? sd->ops->video : NULL;
-    if (!video_ops)
-        return -ENOIOCTLCMD;
-
-    s_stream_func = video_ops->s_stream;
-    if (!s_stream_func)
-        return -ENOIOCTLCMD;
-
-    pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n",
-            index, enable);
-    result = s_stream_func(sd, enable);
-
-    if (result == 0)
-        pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", index);
-
-    return result;
-}
-
-static int tx_isp_video_s_stream_mipi_ordered(struct tx_isp_dev *dev, int enable)
-{
-    struct tx_isp_subdev *ordered[ISP_MAX_SUBDEVS];
-    struct tx_isp_subdev *executed[ISP_MAX_SUBDEVS];
-    struct tx_isp_subdev *csi_sd = NULL;
-    struct tx_isp_subdev *vic_sd = NULL;
-    struct tx_isp_subdev *sensor_sd = NULL;
-    struct tx_isp_subdev *sd;
-    int ordered_indices[ISP_MAX_SUBDEVS];
-    int executed_indices[ISP_MAX_SUBDEVS];
-    int ordered_count = 0;
-    int executed_count = 0;
-    int i;
-    int result;
-    int rollback_enable;
-
-    if (!dev)
-        return -EINVAL;
-
-    if (dev->csi_dev)
-        csi_sd = &((struct tx_isp_csi_device *)dev->csi_dev)->sd;
-    if (dev->vic_dev)
-        vic_sd = &((struct tx_isp_vic_device *)dev->vic_dev)->sd;
-    if (dev->sensor)
-        sensor_sd = &dev->sensor->sd;
-
-    if (!csi_sd || !vic_sd)
-        return -ENOIOCTLCMD;
-
-    pr_info("*** tx_isp_video_s_stream: applying MIPI-ordered stream sequence (%s) ***\n",
-            enable ? "VIC -> CSI -> sensor" : "sensor -> CSI -> VIC");
-
-    if (enable) {
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
-                                         vic_sd, tx_isp_find_subdev_index(dev, vic_sd));
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
-                                         csi_sd, tx_isp_find_subdev_index(dev, csi_sd));
-    } else {
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
-                                         sensor_sd, tx_isp_find_subdev_index(dev, sensor_sd));
-    }
-
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        sd = dev->subdevs[i];
-
-        if (!sd)
-            continue;
-        if (sd == vic_sd || sd == csi_sd || sd == sensor_sd)
-            continue;
-
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count, sd, i);
-    }
-
-    if (enable) {
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
-                                         sensor_sd, tx_isp_find_subdev_index(dev, sensor_sd));
-    } else {
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
-                                         csi_sd, tx_isp_find_subdev_index(dev, csi_sd));
-        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
-                                         vic_sd, tx_isp_find_subdev_index(dev, vic_sd));
-    }
-
-    for (i = 0; i < ordered_count; i++) {
-        result = tx_isp_call_subdev_s_stream(ordered[i], ordered_indices[i], enable);
-
-        if (result == 0) {
-            executed[executed_count] = ordered[i];
-            executed_indices[executed_count] = ordered_indices[i];
-            executed_count += 1;
-            continue;
-        }
-
-        if (result == -ENOIOCTLCMD)
-            continue;
-
-        rollback_enable = (enable < 1) ? 1 : 0;
-        while (executed_count > 0) {
-            executed_count -= 1;
-            tx_isp_call_subdev_s_stream(executed[executed_count],
-                                        executed_indices[executed_count],
-                                        rollback_enable);
-        }
-
-        return result;
-    }
-
-    return 0;
-}
-
-
-/* BRUTAL: open all CPM clocks/resets to force CSI BASIC accessibility (file-scope) */
-static void isp_brutal_cpm_open_all(void)
-{
-    void __iomem *cpm = ioremap(0x10000000, 0x1000);
-    if (!cpm) {
-        pr_warn("[CPM][BRUTAL] ioremap failed\n");
-        return;
-    }
-    /* Snapshot before */
-    u32 g0b = readl(cpm + 0x20);
-    u32 g1b = readl(cpm + 0x28);
-    u32 r30b = readl(cpm + 0x30);
-    u32 r34b = readl(cpm + 0x34);
-    u32 unlb = readl(cpm + 0x38);
-    u32 r3cb = readl(cpm + 0x3C);
-    pr_info("[CPM][BRUTAL] BEFORE: g0=%08x g1=%08x r30=%08x r34=%08x unl=%08x r3c=%08x\n", g0b, g1b, r30b, r34b, unlb, r3cb);
-
-    /* Unlock and clear resets, ungate all clocks in GR0/GR1 */
-    writel(0x0000A5A5, cpm + 0x38);
-    wmb();
-    writel(0x00000000, cpm + 0x34);
-    writel(0x00000000, cpm + 0x30);
-    writel(0x00000000, cpm + 0x20);
-    writel(0x00000000, cpm + 0x28);
-    wmb();
-    udelay(10);
-
-    u32 g0a = readl(cpm + 0x20);
-    u32 g1a = readl(cpm + 0x28);
-    u32 r30a = readl(cpm + 0x30);
-    u32 r34a = readl(cpm + 0x34);
-    u32 unla = readl(cpm + 0x38);
-    u32 r3ca = readl(cpm + 0x3C);
-    pr_info("[CPM][BRUTAL] AFTER:  g0=%08x g1=%08x r30=%08x r34=%08x unl=%08x r3c=%08x\n", g0a, g1a, r30a, r34a, unla, r3ca);
-
-    iounmap(cpm);
-}
 
 /* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
@@ -3892,19 +3490,6 @@ void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
 EXPORT_SYMBOL(tx_isp_hardware_frame_done_handler);
 
 /* Frame channel implementations removed - handled by FS probe instead */
-
-// Destroy ISP tuning device node (reference: tisp_code_destroy_tuning_node)
-static void destroy_isp_tuning_device(void)
-{
-    if (isp_tuning_class) {
-        device_destroy(isp_tuning_class, isp_tuning_devno);
-        class_destroy(isp_tuning_class);
-        cdev_del(&isp_tuning_cdev);
-        unregister_chrdev_region(isp_tuning_devno, 1);
-        isp_tuning_class = NULL;
-        pr_info("ISP tuning device destroyed\n");
-    }
-}
 
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -4811,89 +4396,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     return 0;
 }
-
-// Create frame channel devices - based on reference tx_isp_fs_probe
-static int create_frame_channel_devices(void)
-{
-    int ret, i;
-    char *device_name;
-
-    pr_info("Creating %d frame channel devices...\n", num_channels);
-
-    for (i = 0; i < num_channels; i++) {
-        // Reference creates devices like "num0", "num1" etc. based on framesource error
-        // IMP_FrameSource_EnableChn looks for /dev/framechan%d devices (from decompiled code)
-        device_name = kasprintf(GFP_KERNEL, "framechan%d", i);
-        if (!device_name) {
-            pr_err("Failed to allocate name for channel %d\n", i);
-            ret = -ENOMEM;
-            goto cleanup;
-        }
-
-        // Initialize frame channel structure
-        frame_channels[i].channel_num = i;
-        frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
-        frame_channels[i].miscdev.name = device_name;
-        frame_channels[i].miscdev.fops = &frame_channel_fops;
-
-        // Initialize channel state
-        memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
-
-        /* Initialize Binary Ninja buffer management fields */
-        mutex_init(&frame_channels[i].buffer_mutex);
-        spin_lock_init(&frame_channels[i].buffer_queue_lock);
-        frame_channels[i].buffer_queue_head = &frame_channels[i].buffer_queue_base;
-        frame_channels[i].buffer_queue_base = &frame_channels[i].buffer_queue_base;
-        frame_channels[i].buffer_queue_count = 0;
-        frame_channels[i].streaming_flags = 0;
-        frame_channels[i].buffer_type = 1;  /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
-        frame_channels[i].field = 1;        /* V4L2_FIELD_NONE */
-        memset(frame_channels[i].buffer_array, 0, sizeof(frame_channels[i].buffer_array));
-
-        /* Set remote event target for per-channel dispatch */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            frame_channels[i].vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
-        } else if (ourISPdev && i < ISP_MAX_CHAN) {
-            frame_channels[i].vic_subdev = &ourISPdev->channels[i].subdev;
-        } else {
-            frame_channels[i].vic_subdev = NULL;
-        }
-
-        ret = misc_register(&frame_channels[i].miscdev);
-        if (ret < 0) {
-            pr_err("Failed to register frame channel %d: %d\n", i, ret);
-            kfree(device_name);
-            goto cleanup;
-        }
-
-        pr_info("Frame channel device created: /dev/%s (minor=%d)\n",
-                device_name, frame_channels[i].miscdev.minor);
-    }
-
-    return 0;
-
-cleanup:
-    // Clean up already created devices
-    destroy_frame_channel_devices();
-    return ret;
-}
-
-/* CRITICAL: Destroy frame channel devices - MISSING function that caused EEXIST */
-static void destroy_frame_channel_devices(void)
-{
-    int i;
-
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].miscdev.name) {
-            misc_deregister(&frame_channels[i].miscdev);
-            kfree(frame_channels[i].miscdev.name);
-            frame_channels[i].miscdev.name = NULL;
-            pr_info("Frame channel device %d destroyed\n", i);
-        }
-    }
-}
-
-
 
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
 
@@ -6060,14 +5562,6 @@ static int tx_isp_init(void)
         }
     }
 
-    /* RACE CONDITION FIX: Mark subdev initialization as complete */
-    mutex_lock(&subdev_init_lock);
-    subdev_init_complete = true;
-    mutex_unlock(&subdev_init_lock);
-
-    pr_info("*** RACE CONDITION FIX: SUBDEV INITIALIZATION MARKED COMPLETE ***\n");
-    pr_info("*** tx_isp_video_link_stream CALLS WILL NOW PROCEED SAFELY ***\n");
-
     pr_info("Device subsystem initialization complete\n");
 
     /* Initialize real sensor detection and hardware integration */
@@ -6511,40 +6005,6 @@ int private_reset_tx_isp_module(int arg)
             readl(cpm_regs + 0xc4));
     iounmap(cpm_regs);
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
-}
-
-/* COMPLETE VIC INTERRUPT DISABLE FUNCTION - FROM tx_vic_disable_irq BINARY NINJA */
-static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    unsigned long flags;
-
-    if (!isp_dev || !isp_dev->vic_dev) {
-        pr_info("VIC interrupt disable: no VIC device\n");
-        return;
-    }
-
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-
-    pr_info("*** IMPLEMENTING tx_vic_disable_irq FROM BINARY NINJA ***\n");
-
-    /* From Binary Ninja: spinlock irqsave at offset +0x130 */
-    /* This is simplified since we don't have exact vic_dev structure */
-    local_irq_save(flags);
-
-    /* From Binary Ninja: Clear interrupt enable flag at offset +0x13c */
-    /* Simulate clearing interrupt enable state */
-    if (vic_dev) {
-        vic_dev->state = 0; /* Mark as interrupt-disabled state */
-
-        /* From Binary Ninja: Call function pointer at offset +0x88 if exists */
-        /* This would be a VIC-specific interrupt disable callback */
-        pr_info("VIC interrupt state cleared, device in safe config mode\n");
-    }
-
-    local_irq_restore(flags);
-
-    pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
 #define VIC_RAW_IRQ_LOCK_OFFSET 0x130
@@ -7326,14 +6786,6 @@ void tx_isp_wakeup_frame_channels(void)
     }
 }
 
-/* Synthetic frame completion is intentionally disabled.
- * Userspace-visible completion must track real hardware retirement.
- */
-static void simulate_frame_completion(void)
-{
-    pr_debug("simulate_frame_completion: disabled\n");
-}
-
 /* VIC frame generation work function */
 static void vic_frame_work_function(struct work_struct *work)
 {
@@ -7798,7 +7250,6 @@ static uint32_t data_d04a8 = 0x1000;  /* Integration time short */
 static uint32_t data_d04ac = 0x8000;  /* AG value */
 static uint32_t data_d04b0 = 0x4000;  /* DG value */
 static uint32_t data_b0cec = 0;       /* Effect frame counter */
-static uint32_t data_b0e18 = 1;       /* AE reset flag */
 
 /* AE cache arrays */
 static uint32_t ev1_cache[16] = {0};

@@ -43,58 +43,6 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
  * All accessors now use proper struct member access via vic_dev->field.
  */
 
-static inline bool vic_pixfmt_is_semiplanar_420(u32 pixfmt)
-{
-    return pixfmt == V4L2_PIX_FMT_NV12 || pixfmt == V4L2_PIX_FMT_NV21;
-}
-
-static inline u32 vic_mdma_stride_resolve(struct tx_isp_vic_device *vic_dev,
-                                         u32 width, u32 pixfmt)
-{
-    u32 stride = vic_dev ? vic_dev->stride : 0;
-	u32 min_stride = vic_pixfmt_is_semiplanar_420(pixfmt) ? width : (width << 1);
-
-	if (vic_pixfmt_is_semiplanar_420(pixfmt)) {
-		if (stride < min_stride)
-			return min_stride;
-
-		/* Our QBUF/MSCA path assumes tightly packed NV12/NV21 planes.
-		 * Clamp semiplanar stride to width until padded-line handling is wired
-		 * consistently through UV offset and sizeimage calculations. */
-		return min_stride;
-	}
-
-    if (stride >= min_stride)
-        return stride;
-
-    return min_stride;
-}
-
-static inline u32 vic_mdma_uv_offset_resolve(struct tx_isp_vic_device *vic_dev,
-					     const struct vic_buffer_entry *buffer,
-					     u32 pixfmt)
-{
-	u32 buffer_length = buffer ? buffer->buffer_length : 0;
-	u32 width;
-	u32 height;
-
-	if (!(pixfmt == 0 || vic_pixfmt_is_semiplanar_420(pixfmt)))
-		return 0;
-
-	if (buffer_length >= 3)
-		return (buffer_length * 2) / 3;
-
-	if (!vic_dev)
-		return 0;
-
-	width = vic_dev->width;
-	height = vic_dev->height;
-	if (!width || !height)
-		return 0;
-
-	return width * ALIGN(height, 16);
-}
-
 static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
 {
     int irq = 0;
@@ -151,26 +99,6 @@ static inline void __iomem *vic_raw_regs_get(struct tx_isp_vic_device *vic_dev)
     if (!vic_dev)
         return NULL;
     return vic_dev->sd.base;
-}
-
-static inline int vic_regs_is_secondary(struct tx_isp_vic_device *vic_dev,
-                                        void __iomem *regs)
-{
-    struct tx_isp_dev *isp_dev;
-
-    if (!vic_dev || !regs)
-        return 0;
-
-    isp_dev = ourISPdev;
-
-    if (regs == vic_dev->vic_regs_secondary)
-        return 1;
-    if (isp_dev && regs == isp_dev->vic_regs2)
-        return 1;
-    if (ourISPdev && regs == ourISPdev->vic_regs2)
-        return 1;
-
-    return 0;
 }
 
 static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *vic_dev)
@@ -352,100 +280,6 @@ static int vic_wait_reg0_zero_timeout(struct tx_isp_vic_device *vic_dev,
            origin, waited, reg0);
     vic_log_unlock_timeout_state(vic_dev, vic_regs, origin);
     return -ETIMEDOUT;
-}
-
-static int vic_wait_w01_phase(void __iomem *vic_coord_regs, unsigned int timeout_ms)
-{
-    const u32 t0 = 0x00000230;
-    const u32 t1 = 0x00000300;
-    const u32 t2 = 0x00000330;
-    u32 prev;
-    unsigned int stable = 0;
-    unsigned int waited = 0;
-
-    if (!vic_coord_regs)
-        return 0;
-
-    prev = readl(vic_coord_regs + 0x14);
-
-    while (waited < timeout_ms) {
-        u32 cur;
-        int match;
-
-        usleep_range(1000, 2000);
-        waited += 1;
-        cur = readl(vic_coord_regs + 0x14);
-        match = (cur == t0) || (cur == t1) || (cur == t2);
-
-        if (match && cur == prev) {
-            stable++;
-            if (stable >= 2) {
-                pr_info("tx_isp_vic_start: W01 phase-ready 0x14=0x%08x after %u ms\n",
-                        cur, waited);
-                return 1;
-            }
-        } else {
-            stable = match ? 1 : 0;
-        }
-
-        prev = cur;
-    }
-
-    pr_info("tx_isp_vic_start: W01 phase wait timed out, last 0x14=0x%08x after %u ms\n",
-            prev, waited);
-    return 0;
-}
-
-static int vic_force_channel_start(struct tx_isp_vic_device *vic_dev,
-                                   u32 width, u32 height,
-                                   const char *origin)
-{
-    struct tx_isp_channel_attr attr;
-    u32 attr_words[0x34 / sizeof(u32)];
-    int ret;
-
-    if (!vic_dev)
-        return -EINVAL;
-
-    memset(&attr, 0, sizeof(attr));
-    memset(attr_words, 0, sizeof(attr_words));
-    attr.width = width ? width : 1920;
-    attr.height = height ? height : 1080;
-    attr.stride = attr.width;
-
-    /* Mirror the OEM set-format path enough to populate ds0_attr and the
-     * 0x9860/0x9864 + 0x99xx geometry registers before channel_start.
-     */
-    attr_words[0] = 0;
-    attr_words[1] = attr.width;
-    attr_words[2] = attr.height;
-    attr_words[3] = 0;
-    attr_words[4] = 0;
-    attr_words[5] = 0;
-    attr_words[6] = attr.width;
-    attr_words[7] = attr.height;
-    attr_words[8] = 0;
-
-    ret = tisp_channel_attr_set(0, attr_words);
-    if (ret < 0) {
-        pr_warn("%s: fallback tisp_channel_attr_set(ch0 %ux%u) failed: %d\n",
-                origin, attr.width, attr.height, ret);
-        return ret;
-    }
-
-    pr_info("%s: fallback tisp_channel_attr_set(ch0 %ux%u) complete\n",
-            origin, attr.width, attr.height);
-
-    ret = tisp_channel_start(0, &attr);
-    if (ret < 0) {
-        pr_warn("%s: fallback tisp_channel_start(ch0 %ux%u) failed: %d\n",
-                origin, attr.width, attr.height, ret);
-        return ret;
-    }
-
-    pr_info("%s: fallback tisp_channel_start(ch0 %ux%u) complete\n",
-            origin, attr.width, attr.height);
-    return 0;
 }
 
 static inline void __iomem *vic_stream_regs_resolve(struct tx_isp_vic_device *vic_dev)
@@ -795,16 +629,6 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 }
 EXPORT_SYMBOL(tx_isp_create_vic_device);
 
-/* VIC frame completion handler */
-static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
-{
-    struct tx_isp_vic_device *vic_dev;
-    if (!sd || channel >= VIC_MAX_CHAN)
-        return;
-    vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-    complete(&vic_dev->vic_frame_end_completion[channel]);
-}
-
 /* Forward declarations for interrupt functions */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
@@ -844,80 +668,6 @@ static void vic_program_irq_registers(struct tx_isp_vic_device *vic_dev,
             origin,
             readl(vic_base + 0x1e0), readl(vic_base + 0x1e4),
             readl(vic_base + 0x1e8), readl(vic_base + 0x1ec));
-}
-
-static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
-                                        u32 width, u32 height, u32 stride,
-                                        const char *origin)
-{
-    struct tx_isp_dev *isp_dev;
-    void __iomem *core = NULL;
-    void __iomem *vic_base;
-    u32 packed_geom;
-
-    if (!vic_dev)
-        return;
-
-    isp_dev = ourISPdev;
-    if (isp_dev && isp_dev->core_regs)
-        core = isp_dev->core_regs;
-    if (!core && ourISPdev && ourISPdev->core_regs)
-        core = ourISPdev->core_regs;
-
-    vic_base = vic_primary_regs_resolve(vic_dev);
-
-    if (!core) {
-        pr_info("%s: deferring VIC core route/gate reassert until core_regs is mapped\n",
-                origin);
-        return;
-    }
-
-    if (!width) {
-        width = vic_raw_width_get(vic_dev);
-        if (!width)
-            width = vic_dev->width;
-        if (!width)
-            width = 1920;
-    }
-
-    if (!height) {
-        height = vic_raw_height_get(vic_dev);
-        if (!height)
-            height = vic_dev->height;
-        if (!height)
-            height = 1080;
-    }
-
-    packed_geom = (width << 16) | (height & 0xffff);
-
-    writel(0x1, core + 0x9a70);
-    writel(0x1, core + 0x9a7c);
-    writel(0x1, core + 0x9a34);
-    writel(0x1, core + 0x9a88);
-    writel(0x1, core + 0x9a94);
-
-    /* The OEM trace reprograms the VIC/core route block with live geometry.
-     * Do not preserve stale values from an earlier mode (e.g. 1280-wide route
-     * when VIC is now starting with a 1920-wide sensor).
-     */
-    writel(packed_geom, core + 0x9a00);
-    writel(0x3000300, core + 0x9a04);
-    writel(packed_geom, core + 0x9a2c);
-    writel(width, core + 0x9a80);
-    writel(width, core + 0x9a98);
-    writel(0x200, core + 0x9ac0);
-    writel(0x200, core + 0x9ac8);
-
-    wmb();
-
-    pr_info("%s: core VIC route 9a00=0x%08x 9a04=0x%08x 9a2c=0x%08x 9a34=0x%08x 9a88=0x%08x 9a94=0x%08x 9a80=0x%08x 9a98=0x%08x gate=0x%08x/0x%08x\n",
-            origin,
-            readl(core + 0x9a00),
-            readl(core + 0x9a04),
-            readl(core + 0x9a2c),
-            readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a94),
-            readl(core + 0x9a80), readl(core + 0x9a98),
-            readl(core + 0x9ac0), readl(core + 0x9ac8));
 }
 
 /* VIC interrupt restoration function - using correct VIC base */
@@ -1948,6 +1698,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(1, vic_regs + 0x0);
         wmb();
         pr_info("tx_isp_vic_start: MIPI config done, VIC RUN issued (reg 0x0 = 1)\n");
+        pr_info("VIC REGS: 0x4=0x%x 0x14=0x%x 0x100=0x%x 0x10c=0x%x 0x110=0x%x 0x1a4=0x%x\n",
+                readl(vic_regs + 0x4), readl(vic_regs + 0x14),
+                readl(vic_regs + 0x100), readl(vic_regs + 0x10c),
+                readl(vic_regs + 0x110), readl(vic_regs + 0x1a4));
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */

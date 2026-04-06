@@ -117,35 +117,6 @@ int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
 /* Memory management functions */
 int parse_rmem_bootarg(unsigned long *base, unsigned long *size);
 
-/* Core device register access */
-static inline void tx_isp_core_reg_write(struct tx_isp_core_device *core_dev, 
-                                         uint32_t reg, uint32_t value)
-{
-    if (core_dev && core_dev->core_regs) {
-        writel(value, core_dev->core_regs + reg);
-    }
-}
-
-static inline uint32_t tx_isp_core_reg_read(struct tx_isp_core_device *core_dev, 
-                                            uint32_t reg)
-{
-    if (core_dev && core_dev->core_regs) {
-        return readl(core_dev->core_regs + reg);
-    }
-    return 0;
-}
-
-/* Core device validation */
-static inline bool tx_isp_core_device_is_valid(struct tx_isp_core_device *core_dev)
-{
-    return (core_dev && core_dev->magic == 0x434F5245); /* 'CORE' */
-}
-
-/* Core device container_of helper */
-static inline struct tx_isp_core_device *tx_isp_subdev_to_core_device(struct tx_isp_subdev *sd)
-{
-    return container_of(sd, struct tx_isp_core_device, sd);
-}
 
 /* Clock configuration structure - EXACT Binary Ninja MCP compatibility */
 struct tx_isp_device_clk {

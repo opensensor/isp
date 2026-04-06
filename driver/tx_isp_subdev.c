@@ -123,18 +123,6 @@ static int __frame_channel_vb2_streamoff(void *chan, void *queue)
     return 0;
 }
 
-static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
-{
-    struct frame_channel_buffer *fbuf = (struct frame_channel_buffer *)vb;
-
-    if (!fbuf || !buf)
-        return;
-
-    // Copy buffer info
-    memcpy(buf, &fbuf->v4l2_buf, sizeof(struct v4l2_buffer));
-}
-
-
 /* Optional registration API (no-op if never used) */
 /*
  * Event callback lookup: use VIC wrapper's event_callback_struct when the
@@ -185,22 +173,6 @@ static void sd_set_event_callback(struct tx_isp_subdev *sd, void *cb)
             }
         }
     }
-}
-
-static int tx_isp_register_event_handler(struct tx_isp_subdev *sd,
-                                         isp_event_cb handler)
-{
-    static struct tx_isp_channel_config disp;
-
-    if (!sd)
-        return -EINVAL;
-
-    memset(&disp, 0, sizeof(disp));
-    disp.enabled = 1;
-    disp.state = 3;
-    disp.event_handler = handler;
-    sd_set_event_callback(sd, &disp);
-    return 0;
 }
 
 static int tx_isp_dispatch_event_callback(struct tx_isp_subdev *sd,

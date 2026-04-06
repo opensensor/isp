@@ -609,15 +609,6 @@ enum tx_isp_frame_channel_bypass_isp{
 	TX_ISP_FRAME_CHANNEL_BYPASS_ISP_DISABLE,
 	TX_ISP_FRAME_CHANNEL_BYPASS_ISP_ENABLE,
 };
-#if 0
-enum {
-	TX_ISP_STATE_CLOSE = 0,
-	TX_ISP_STATE_OPEN,
-	TX_ISP_STATE_STOP = TX_ISP_STATE_OPEN,
-	TX_ISP_STATE_RUN,
-};
-#endif
-
 struct priv_pipe {
 	int (*priv_qbuf)(void *handle, void *buffer);
 	int (*priv_dqbuf)(void *handle, void *buffer);

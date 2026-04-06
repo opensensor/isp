@@ -525,24 +525,6 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
     return ret;
 }
 
-/* Initialize CSI hardware */
-static int tx_isp_csi_hw_init(struct tx_isp_subdev *sd)
-{
-    if (!sd)
-        return -EINVAL;
-
-    /* Reset CSI */
-    csi_write32(CSI_CTRL, CSI_CTRL_RST);
-    udelay(10);
-    csi_write32(CSI_CTRL, 0);
-
-    /* Clear and mask all interrupts initially */
-    csi_write32(CSI_INT_STATUS, 0xFFFFFFFF);
-    csi_write32(CSI_INT_MASK, 0xFFFFFFFF);
-
-    return 0;
-}
-
 /* CSI start operation */
 int tx_isp_csi_start(struct tx_isp_subdev *sd)
 {
@@ -835,9 +817,11 @@ static int csi_calc_rate_sel(struct tx_isp_sensor_attribute *sensor_attr)
     if (!sensor_attr)
         return 0;
 
-    rate = sensor_attr->mipi.settle_time_apative_en;
-    if (rate != 0)
-        return rate;
+    /* OEM returns settle_time_apative_en directly when non-zero, but some
+     * sensor drivers hardcode 1 regardless of MIPI clock speed.  Always
+     * auto-calculate from clk and use the larger of the two so the PHY
+     * settle time is never too short for the actual data rate. */
+    int override = sensor_attr->mipi.settle_time_apative_en;
 
     clk = sensor_attr->mipi.clk;
     if (clk - 0x50 < 0x1e)
@@ -874,6 +858,15 @@ static int csi_calc_rate_sel(struct tx_isp_sensor_attribute *sensor_attr)
         }
     }
 
+    if (override > rate)
+        rate = override;
+    /* Empirical: some sensors need more PHY settle time than auto-calc
+     * provides.  Add +3 margin to the auto-calculated value. */
+    rate += 3;
+    if (rate > 0xb)
+        rate = 0xb;
+    pr_info("csi_calc_rate_sel: clk=%u override=%d auto=%d -> final=%d\n",
+            clk, override, rate, rate);
     return rate;
 }
 

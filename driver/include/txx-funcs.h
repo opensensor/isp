@@ -186,16 +186,6 @@ struct jz_driver_common_interfaces {
 
 #define paddr2vaddr(phyaddr) ((void *)((phyaddr) + PAGE_OFFSET - PHYS_OFFSET))
 
-#if 0
-#define APICAL_ABS(a)        ((a)>=0?(a):-(a))
-#define APICAL_SIGN(a)  ((a)>=0?(1):(-1))
-#define APICAL_MIN(a,b) ((a)>=b?(b):(a))
-#define APICAL_MAX(a,b) ((a)>=b?(a):(b))
-#define APICAL_ABSDIFF(a,b) ((a)>(b)? (a-b) : (b-a))
-#define LIN_EQUATION_FRACTION_SIZE 5
-#define round_shift(a,sh)   (((a)>>(sh))+(((a)>>(sh-1))&1))
-#endif
-
 uint8_t private_leading_one_position(const uint32_t in);
 uint32_t private_log2_int_to_fixed(const uint32_t val, const uint8_t out_precision, const uint8_t shift_out);
 uint32_t private_log2_fixed_to_fixed(const uint32_t val, const int in_fix_point, const uint8_t out_fix_point);

@@ -1424,18 +1424,6 @@ static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe
 static int s_adr_hw_apply = 1;
 static int s_ydns_hw_apply = 1;
 
-/* Helper: pack pairs of 16-bit lanes from a u32 array into 32-bit words */
-static inline void adr_pack_pairs(uint32_t *dst, int dst_cap, int *w, const uint32_t *src, int n)
-{
-    int j = 0;
-    while (j < n) {
-        uint32_t lo = src[j] & 0xFFFF;
-        uint32_t hi = (j + 1 < n) ? (src[j + 1] & 0xFFFF) : 0;
-        if (*w < dst_cap) dst[(*w)++] = PACK16_U32(hi, lo); else break;
-        j += 2;
-    }
-}
-
 /* Forward externs for ADR arrays used by LUT builder (defined later in this file) */
 extern uint32_t param_adr_weight_20_lut_array[32];
 extern uint32_t param_adr_weight_02_lut_array[32];
@@ -3921,14 +3909,6 @@ int tisp_init(void *sensor_info_arg, char *param_name)
 
     return 0;
 }
-
-static inline u64 ktime_get_real_ns(void)
-{
-    struct timespec ts;
-    ktime_get_real_ts(&ts);
-    return timespec_to_ns(&ts);
-}
-
 
 /* System register access functions - removed duplicate, using external from tx-isp-module.c */
 

@@ -725,11 +725,6 @@ static inline void tx_isp_set_subdev_nodeops(struct tx_isp_subdev *sd, struct fi
 	tx_isp_set_module_nodeops(&sd->module, ops);
 }
 
-static inline void tx_isp_set_subdev_debugops(struct tx_isp_subdev *sd, struct file_operations *ops)
-{
-	tx_isp_set_module_debugops(&sd->module, ops);
-}
-
 static inline void tx_isp_set_subdevdata(struct tx_isp_subdev *sd, void *data)
 {
 	sd->dev_priv = data;
