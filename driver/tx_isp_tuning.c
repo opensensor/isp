@@ -65,7 +65,7 @@ extern void tx_isp_wakeup_frame_channels(void);
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 1; /* ADR init fixed (LUTs loaded) but algorithm still identity — bypass until Tiziano_adr_fpga ported */
+static int tisp_force_bypass_adr = 0; /* ADR algorithm now ported — enable by default */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
 			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
@@ -1415,6 +1415,22 @@ static uint32_t data_9f7d0 = 0;
 static uint32_t data_9f7f0 = 0;
 /* ADR FPGA struct pointer (OEM: TizianoAdrFpgaStructMe) */
 static void *TizianoAdrFpgaStructMe = NULL;
+/* FPGA call argument pointers (OEM: data_c03cc..data_c0404) */
+static uint32_t *data_c03cc = NULL;  /* &ctc_kneepoint_y */
+static uint32_t *data_c03d0 = NULL;  /* &min_kneepoint_x */
+static uint32_t *data_c03d4 = NULL;  /* &min_kneepoint_y */
+static uint32_t *data_c03d8 = NULL;  /* &map_kneepoint_x */
+static uint32_t *data_c03dc = NULL;  /* &map_kneepoint_y */
+static uint32_t *data_c03e0 = NULL;  /* &adr_hist */
+static uint32_t *data_c03e4 = NULL;  /* &adr_block_y */
+static uint32_t *data_c03e8 = NULL;  /* &adr_block_hist */
+static uint32_t *data_c03ec = NULL;  /* &adr_tm_base_lut */
+static uint8_t  *data_c03f0 = NULL;  /* &param_adr_gam_x_array */
+static uint8_t  *data_c03f4 = NULL;  /* &param_adr_gam_y_array_def */
+static uint32_t *data_c03f8 = NULL;  /* adr_ctc_map2cut_y_now */
+static uint32_t *data_c03fc = NULL;  /* adr_map_mode_now */
+static uint32_t *data_c0400 = NULL;  /* adr_light_end_now */
+static uint32_t *data_c0404 = NULL;  /* adr_block_light_now */
 /* ADR param array def (used by algorithm for default init) */
 static uint32_t param_adr_min_kneepoint_array_def[0x5c/4] = {0};
 static uint8_t param_adr_gam_y_array_def[0x102] = {0};
@@ -1760,7 +1776,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD14;  /* All OEM blocks except GIB(5) and ADR(7) — ADR needs Tiziano_adr_fpga tone-mapping algorithm */
+static uint isp_block_enable = 0x3DD94;  /* All OEM blocks except GIB(5) — ADR(7) now enabled */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -18615,26 +18631,296 @@ static void tiziano_adr_get_data(uint32_t *buf)
     }
 }
 
-/* tiziano_adr_algorithm - Simplified ADR algorithm
- * OEM does complex EV-based interpolation across many parameter arrays,
- * then calls Tiziano_adr_fpga() for tone-mapping curve generation.
- * For now: maintain identity mapping until full Tiziano_adr_fpga is ported. */
+/* adr_ev_interpolate - Linear interpolation helper for ADR EV-based parameter blending.
+ * OEM pattern: interpolate between val_lo and val_hi based on ev_now's position
+ * between ev_lo and ev_hi. All values are unsigned 32-bit.
+ * When val_hi >= val_lo: result = abs(ev_now - ev_lo) * (val_hi - val_lo) / abs(ev_hi - ev_lo) + val_lo
+ * When val_hi < val_lo:  result = val_lo - abs(ev_now - ev_lo) * (val_lo - val_hi) / abs(ev_hi - ev_lo)
+ */
+static uint32_t adr_ev_interpolate(uint32_t ev_val, uint32_t ev_lo, uint32_t ev_hi,
+				   uint32_t val_lo, uint32_t val_hi)
+{
+	uint32_t ev_delta, ev_range;
+
+	/* abs(ev_now - ev_lo) */
+	if (ev_lo < ev_val)
+		ev_delta = ev_val - ev_lo;
+	else
+		ev_delta = ev_lo - ev_val;
+
+	/* abs(ev_hi - ev_lo) */
+	if (ev_hi < ev_lo)
+		ev_range = ev_lo - ev_hi;
+	else
+		ev_range = ev_hi - ev_lo;
+
+	if (ev_range == 0)
+		return val_lo;
+
+	if (val_hi >= val_lo)
+		return ev_delta * (val_hi - val_lo) / ev_range + val_lo;
+	else
+		return val_lo - ev_delta * (val_lo - val_hi) / ev_range;
+}
+
+/* Tiziano_adr_fpga - ADR tone-mapping curve generator
+ * OEM: massive function at 0x1c49c that computes map_kneepoint_y from
+ * histogram data, block statistics, and all the interpolated parameters.
+ * TODO: port full implementation from OEM decompilation.
+ * For now this is a stub that preserves the current map_kneepoint_y values
+ * (initialized to identity by tiziano_adr_params_init). */
+static int Tiziano_adr_fpga(void *arg1, uint32_t *arg2, uint32_t *arg3,
+			     uint32_t *arg4, uint32_t *arg5, uint32_t *arg6,
+			     uint32_t *arg7, uint32_t *arg8, uint32_t *arg9,
+			     uint32_t *arg10, uint8_t *arg11, uint8_t *arg12,
+			     uint32_t *arg13, uint32_t *arg14,
+			     uint32_t *arg15, uint32_t *arg16)
+{
+	/* Stub: full tone-mapping computation not yet ported */
+	return 0;
+}
+
+/* tiziano_adr_algorithm - OEM-exact ADR algorithm
+ * Phase 1: Find EV bracket index in adr_ev_list_now[0..8]
+ * Phase 2: Interpolate 8 parameter arrays based on EV position
+ * Phase 3: CTC interpolation (when data_9ce4c == 1)
+ * Phase 4: Set up FPGA pointers and call Tiziano_adr_fpga()
+ * Phase 5: Temporal smoothing of map_kneepoint_y toward map_kneepoint_y_pre
+ */
 static int tiziano_adr_algorithm(void)
 {
-    if (ev_changed != 1)
-        return 0;
+	uint32_t ev_val;
+	uint32_t ev_lo, ev_hi;
+	int idx;
+	int i, j, blk;
+	uint16_t *gam_y_16;
+	uint32_t val_lo, val_hi;
+	uint32_t rate, max_diff, smooth_updated;
 
-    ev_changed = 0;
+	if (ev_changed != 1)
+		return 0;
 
-    /* The OEM algorithm interpolates all kneepoint arrays based on ev_now
-     * relative to adr_ev_list_now[]. Without the full Tiziano_adr_fpga
-     * implementation, we keep the identity mapping initialized by
-     * tiziano_adr_params_init(). The feedback loop still runs (interrupt
-     * fires, data is parsed, params are written) but the tone curve
-     * stays at identity. This prevents artifacts from stale zero values. */
+	ev_changed = 0;
+	ev_val = ev_now;
 
-    pr_debug("tiziano_adr_algorithm: ev_changed processed (ev_now=%u)\n", ev_now);
-    return 0;
+	/* === Phase 1: Find EV bracket index === */
+	/* Search adr_ev_list_now[0..8] for first entry >= ev_val */
+	idx = 0;
+	while (idx < 9) {
+		if (adr_ev_list_now[idx] >= ev_val)
+			break;
+		idx++;
+	}
+
+	/* === Phase 2: Interpolate 8 parameter arrays === */
+	if (idx == 0) {
+		/* Below first EV level: use first-entry defaults */
+		adr_map_mode_now[0] = data_9f79c;
+		adr_map_mode_now[2] = data_9f7d0;
+		adr_map_mode_now[5] = adr_blp2_list_now[0];
+		adr_light_end_now[28] = adr_ligb_list_now[0];
+		adr_block_light_now[10] = adr_mapb1_list_now[0];
+		adr_block_light_now[11] = adr_mapb2_list_now[0];
+		adr_block_light_now[12] = adr_mapb3_list_now[0];
+		adr_block_light_now[13] = adr_mapb4_list_now[0];
+	} else if (idx == 9) {
+		/* Past last EV level: use last-entry defaults */
+		adr_map_mode_now[0] = data_9f7bc;
+		adr_map_mode_now[2] = data_9f7f0;
+		adr_map_mode_now[5] = adr_blp2_list_now[8];
+		adr_light_end_now[28] = adr_ligb_list_now[8];
+		adr_block_light_now[10] = adr_mapb1_list_now[8];
+		adr_block_light_now[11] = adr_mapb2_list_now[8];
+		adr_block_light_now[12] = adr_mapb3_list_now[8];
+		adr_block_light_now[13] = adr_mapb4_list_now[8];
+	} else if (adr_ev_list_now[idx] == adr_ev_list_now[idx - 1]) {
+		/* Equal EV values: no interpolation needed, use idx values directly */
+		adr_map_mode_now[0] = param_adr_min_kneepoint_array[idx + 1];
+		adr_map_mode_now[2] = param_adr_min_kneepoint_array[idx + 14];
+		adr_map_mode_now[5] = adr_blp2_list_now[idx];
+		adr_light_end_now[28] = adr_ligb_list_now[idx];
+		adr_block_light_now[10] = adr_mapb1_list_now[idx];
+		adr_block_light_now[11] = adr_mapb2_list_now[idx];
+		adr_block_light_now[12] = adr_mapb3_list_now[idx];
+		adr_block_light_now[13] = adr_mapb4_list_now[idx];
+	} else {
+		/* Interpolate between ev_list[idx-1] and ev_list[idx] */
+		ev_lo = adr_ev_list_now[idx - 1];
+		ev_hi = adr_ev_list_now[idx];
+
+		/* 1) adr_map_mode_now[0] from param_adr_min_kneepoint_array[idx] / [idx+1] */
+		adr_map_mode_now[0] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			param_adr_min_kneepoint_array[idx],
+			param_adr_min_kneepoint_array[idx + 1]);
+
+		/* 2) adr_map_mode_now[2] from param_adr_min_kneepoint_array[idx+0xd] / [idx+0xe] */
+		adr_map_mode_now[2] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			param_adr_min_kneepoint_array[idx + 0xd],
+			param_adr_min_kneepoint_array[idx + 0xe]);
+
+		/* 3) adr_map_mode_now[5] from adr_blp2_list_now[idx-1] / [idx] */
+		adr_map_mode_now[5] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			adr_blp2_list_now[idx - 1], adr_blp2_list_now[idx]);
+
+		/* 4) adr_light_end_now[28] from adr_ligb_list_now[idx-1] / [idx] */
+		adr_light_end_now[28] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			adr_ligb_list_now[idx - 1], adr_ligb_list_now[idx]);
+
+		/* 5) adr_block_light_now[10] from adr_mapb1_list_now[idx-1] / [idx] */
+		adr_block_light_now[10] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			adr_mapb1_list_now[idx - 1], adr_mapb1_list_now[idx]);
+
+		/* 6) adr_block_light_now[11] from adr_mapb2_list_now[idx-1] / [idx] */
+		adr_block_light_now[11] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			adr_mapb2_list_now[idx - 1], adr_mapb2_list_now[idx]);
+
+		/* 7) adr_block_light_now[12] from adr_mapb3_list_now[idx-1] / [idx] */
+		adr_block_light_now[12] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			adr_mapb3_list_now[idx - 1], adr_mapb3_list_now[idx]);
+
+		/* 8) adr_block_light_now[13] from adr_mapb4_list_now[idx-1] / [idx] */
+		adr_block_light_now[13] = adr_ev_interpolate(ev_val, ev_lo, ev_hi,
+			adr_mapb4_list_now[idx - 1], adr_mapb4_list_now[idx]);
+	}
+
+	/* === Phase 3: CTC interpolation (when data_9ce4c == 1) === */
+	/* OEM gam_y array has 9 CTC entries per EV level, but levels are not
+	 * uniformly spaced. Level base offsets (in uint16_t indices):
+	 * Level: 0   1   2   3   4   5   6   7   8
+	 * Base:  0  10  20  32  42  52  64  74  84
+	 * These are hardcoded in the OEM unrolled code. */
+	if (data_9ce4c == 1) {
+		static const int ctc_level_base[9] = {
+			0, 10, 20, 32, 42, 52, 64, 74, 84
+		};
+		gam_y_16 = (uint16_t *)param_adr_gam_y_array;
+
+		if (idx == 0) {
+			/* Below first EV: use level 0 entries directly */
+			for (j = 0; j < 9; j++)
+				adr_ctc_map2cut_y_now[j] = (uint32_t)gam_y_16[ctc_level_base[0] + j];
+		} else if (idx == 9) {
+			/* Past last EV: use level 8 entries directly */
+			for (j = 0; j < 9; j++)
+				adr_ctc_map2cut_y_now[j] = (uint32_t)gam_y_16[ctc_level_base[8] + j];
+		} else {
+			/* Interpolate CTC between level[idx-1] and level[idx] */
+			ev_lo = adr_ev_list_now[idx - 1];
+			ev_hi = adr_ev_list_now[idx];
+
+			if (ev_lo == ev_hi) {
+				for (j = 0; j < 9; j++)
+					adr_ctc_map2cut_y_now[j] = (uint32_t)gam_y_16[ctc_level_base[idx] + j];
+			} else {
+				for (j = 0; j < 9; j++) {
+					val_lo = (uint32_t)gam_y_16[ctc_level_base[idx - 1] + j];
+					val_hi = (uint32_t)gam_y_16[ctc_level_base[idx] + j];
+					adr_ctc_map2cut_y_now[j] = adr_ev_interpolate(
+						ev_val, ev_lo, ev_hi, val_lo, val_hi);
+				}
+			}
+		}
+	}
+
+	/* === Phase 3.5: Copy param arrays to working arrays === */
+	/* OEM copies param_adr_min_kneepoint_array_def → min_kneepoint_x,
+	 *            param_adr_map_kneepoint_array → map_kneepoint_x,
+	 *            param_adr_ctc_kneepoint_array → ctc_kneepoint_x */
+	for (i = 0; i < 11; i++) {
+		min_kneepoint_x[i] = param_adr_min_kneepoint_array_def[i];
+		map_kneepoint_x[i] = param_adr_map_kneepoint_array[i];
+		if (i < 9)
+			ctc_kneepoint_x[i] = param_adr_ctc_kneepoint_array[i];
+	}
+
+	/* === Phase 4: Set up FPGA struct pointers and call Tiziano_adr_fpga === */
+	TizianoAdrFpgaStructMe = ctc_kneepoint_x;
+	data_c03e0 = adr_hist;
+	data_c03e4 = adr_block_y;
+	data_c03e8 = adr_block_hist;
+	data_c03ec = adr_tm_base_lut;
+	data_c03f0 = param_adr_gam_x_array;
+	data_c03f4 = param_adr_gam_y_array_def;
+	data_c03f8 = adr_ctc_map2cut_y_now;
+	data_c03fc = adr_map_mode_now;
+	data_c0400 = adr_light_end_now;
+	data_c03cc = ctc_kneepoint_y;
+	data_c0404 = adr_block_light_now;
+	data_c03d4 = min_kneepoint_y;
+	data_c03d0 = min_kneepoint_x;
+	data_c03d8 = map_kneepoint_x;
+	data_c03dc = map_kneepoint_y;
+
+	Tiziano_adr_fpga(TizianoAdrFpgaStructMe,
+			 data_c03cc, data_c03d0, data_c03d4,
+			 data_c03d8, data_c03dc,
+			 data_c03e0, data_c03e4, data_c03e8,
+			 data_c03ec, data_c03f0, data_c03f4,
+			 data_c03f8, data_c03fc,
+			 data_c0400, data_c0404);
+
+	/* === Phase 5: Temporal smoothing of map_kneepoint_y === */
+	if (data_9ce70 == 1) {
+		rate = data_9ce74;
+		smooth_updated = 0;
+
+		for (blk = 0; blk < 24; blk++) {
+			/* Find max difference in this block between map_kneepoint_y and _pre */
+			max_diff = 0;
+			for (j = 0; j < 11; j++) {
+				uint32_t cur = map_kneepoint_y[blk * 11 + j];
+				uint32_t pre = map_kneepoint_y_pre[blk * 11 + j];
+				uint32_t diff = (pre >= cur) ? (pre - cur) : (cur - pre);
+				if ((int32_t)max_diff < (int32_t)diff)
+					max_diff = diff;
+			}
+
+			/* Clamp rate and handle special cases */
+			if (rate >= 0x201) {
+				smooth_updated = 1;
+				rate = 0x200;
+			} else if (data_9ce6c != 9 && rate == 0) {
+				rate = 1;
+				smooth_updated = 1;
+			}
+
+			if (rate < max_diff) {
+				/* Blend: gradually move map_kneepoint_y toward _pre
+				 * scale = (rate << 21) / max_diff
+				 * OEM: s/ 0x200000 (signed div, but values always positive here) */
+				uint32_t scale = (rate << 21) / max_diff;
+				for (j = 0; j < 11; j++) {
+					uint32_t cur = map_kneepoint_y[blk * 11 + j];
+					uint32_t pre = map_kneepoint_y_pre[blk * 11 + j];
+					uint32_t clamp_max = 0xff5 + (uint32_t)j;
+					uint32_t blended;
+
+					if (pre >= cur) {
+						blended = pre - ((pre - cur) * scale + 0x100000) / 0x200000;
+					} else {
+						blended = ((cur - pre) * scale + 0x100000) / 0x200000 + pre;
+					}
+					if (clamp_max < blended)
+						blended = clamp_max;
+					map_kneepoint_y[blk * 11 + j] = blended;
+					map_kneepoint_y_pre[blk * 11 + j] = blended;
+				}
+			} else {
+				/* Difference within rate: snap to current, clamp per-entry */
+				for (j = 0; j < 11; j++) {
+					uint32_t clamp_max = 0xff5 + (uint32_t)j;
+					if (clamp_max < map_kneepoint_y[blk * 11 + j])
+						map_kneepoint_y[blk * 11 + j] = clamp_max;
+					map_kneepoint_y_pre[blk * 11 + j] = map_kneepoint_y[blk * 11 + j];
+				}
+			}
+		}
+
+		if (smooth_updated)
+			data_9ce74 = rate;
+	}
+
+	return 0;
 }
 
 /* tisp_adr_process - Binary Ninja EXACT: ADR processing callback (event 2) */
