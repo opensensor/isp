@@ -1779,7 +1779,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD94;  /* All OEM blocks except GIB(5) */
+static uint isp_block_enable = 0x3DD94;  /* All OEM except GIB(5) — hardware darkens even with all-zero regs; needs ISP core-level fix */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -15672,6 +15672,24 @@ int tiziano_gib_init(void)
             tiziano_gib_deir_r_m[2], tiziano_gib_deir_r_m[3],
             tiziano_gib_deir_g_m[0], tiziano_gib_deir_g_m[1],
             tiziano_gib_deir_g_m[2], tiziano_gib_deir_g_m[3]);
+
+    /* GIB register dump — find any register with wrong hardware default */
+    pr_err("GIB_REGS: 0x1000=%08x 0x1004=%08x 0x1008=%08x 0x100c=%08x\n",
+            system_reg_read(0x1000), system_reg_read(0x1004),
+            system_reg_read(0x1008), system_reg_read(0x100c));
+    pr_err("GIB_REGS: 0x1010=%08x 0x1014=%08x 0x1018=%08x 0x101c=%08x\n",
+            system_reg_read(0x1010), system_reg_read(0x1014),
+            system_reg_read(0x1018), system_reg_read(0x101c));
+    pr_err("GIB_REGS: 0x1020=%08x 0x1024=%08x 0x1028=%08x 0x102c=%08x\n",
+            system_reg_read(0x1020), system_reg_read(0x1024),
+            system_reg_read(0x1028), system_reg_read(0x102c));
+    pr_err("GIB_REGS: 0x1030=%08x 0x1034=%08x 0x1038=%08x 0x103c=%08x\n",
+            system_reg_read(0x1030), system_reg_read(0x1034),
+            system_reg_read(0x1038), system_reg_read(0x103c));
+    pr_err("GIB_REGS: 0x1060=%08x 0x1064=%08x 0x1068=%08x 0x106c=%08x 0x1070=%08x\n",
+            system_reg_read(0x1060), system_reg_read(0x1064),
+            system_reg_read(0x1068), system_reg_read(0x106c),
+            system_reg_read(0x1070));
     return 0;
 }
 
@@ -23097,10 +23115,12 @@ static int tisp_gb_blc_again_interp(uint32_t gain, int channel)
         break;
     }
 
-    system_reg_write(0x1014, (tisp_gb_blc_min_en[1] << 16) | tisp_gb_blc_min_en[0]);
-    system_reg_write(reg_a, (s2_out << 16) | s0_out);
-    system_reg_write(reg_b, (s1_out << 16) | v1_out);
-    system_reg_write(reg_c, (blc_min_val << 16) | fp);
+    /* These registers need the 0x1070 latch to persist.
+     * Plain system_reg_write causes readback=0x00000000. */
+    system_reg_write_gb(1, 0x1014, (tisp_gb_blc_min_en[1] << 16) | tisp_gb_blc_min_en[0]);
+    system_reg_write_gb(1, reg_a, (s2_out << 16) | s0_out);
+    system_reg_write_gb(1, reg_b, (s1_out << 16) | v1_out);
+    system_reg_write_gb(1, reg_c, (blc_min_val << 16) | fp);
     return 0;
 }
 
