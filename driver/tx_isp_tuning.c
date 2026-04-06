@@ -1779,7 +1779,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DDB4;  /* All OEM blocks including GIB(5) + ADR(7) */
+static uint isp_block_enable = 0x3DD94;  /* All OEM blocks except GIB(5) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -9734,7 +9734,10 @@ static int tiziano_awb_set_hardware_param(void)
 	         * register as a pure magic constant. */
 	        param_word0 = (u32)p[0] | ((u32)p[1] << 8) |
 	            ((u32)p[2] << 16) | ((u32)p[3] << 24);
-	        stats_cfg = (AWB_ZONE_COLS << 28) | (1u << 16) |
+	        /* OEM: data_99fb8<<28 | data_99fb4<<16 | param | data_99fb0<<12
+	         * bit16=0 gives raw Bayer stats (R≠G≠B); bit16=1 gives post-WB
+	         * (R=G=B). Previous purple was GIB, not this bit. */
+	        stats_cfg = (AWB_ZONE_COLS << 28) | (0u << 16) |
 	            (AWB_ZONE_ROWS << 12) | param_word0;
 	        /* OEM uses raw system_reg_write for zone config registers
 	         * (0xb004-0xb024) — no 0xb000 latch here.
