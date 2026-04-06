@@ -4274,12 +4274,41 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * data to overwrite ISP-processed NV12 output → color corruption.
          */
         if (ourISPdev && ourISPdev->core_regs && channel >= 0 && channel < 3) {
-            struct tx_isp_vic_device *vic = ourISPdev->vic_dev ?
-                (struct tx_isp_vic_device *)ourISPdev->vic_dev : NULL;
-            u32 w = (vic && vic->width) ? vic->width : (state->width ? state->width : 1920);
-            u32 h = (vic && vic->height) ? vic->height : (state->height ? state->height : 1080);
+            /* OEM: UV offset uses per-CHANNEL width/height, NOT sensor resolution.
+             * Channel 0 is typically full-res (1920x1080), but channel 1 may be
+             * scaled (e.g., 640x360).  Using vic->width for all channels puts
+             * the UV plane at the wrong offset → green/magenta corruption. */
+            u32 w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
+            u32 h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
             u32 aligned_h = (h + 0xf) & ~0xf;
             u32 uv_addr = buffer_phys_addr + w * aligned_h;
+
+            /* Auto-configure MSCA scaler for channels > 0 on first QBUF.
+             * libimp configures channels through the IMP system API which
+             * calls IMP_FrameSource_SetChnAttr / EnableChn.  These go through
+             * an event path that our driver doesn't fully handle, so the
+             * MSCA scaler registers for channel 1+ never get configured.
+             * Without this, the scaler outputs full-resolution into a small
+             * buffer → diagonal green/magenta corruption. */
+            if (channel > 0 && !state->msca_configured) {
+                u32 attr_words[0x34 / sizeof(u32)];
+                memset(attr_words, 0, sizeof(attr_words));
+                attr_words[0] = 0;       /* no fcrop */
+                attr_words[1] = w;       /* target width */
+                attr_words[2] = h;       /* target height */
+                attr_words[3] = 0;       /* no crop */
+                attr_words[4] = 0;       /* crop x */
+                attr_words[5] = 0;       /* crop y */
+                attr_words[6] = w;       /* crop width = output */
+                attr_words[7] = h;       /* crop height = output */
+                attr_words[8] = 0;       /* scaler mode */
+
+                pr_info("QBUF ch%d: auto-configuring MSCA scaler for %ux%u\n",
+                        channel, w, h);
+                tisp_channel_attr_set(channel, attr_words);
+                tisp_channel_start(channel, NULL);
+                state->msca_configured = true;
+            }
 
             /* OEM: *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x996c) = Y addr
              *      *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x9984) = UV addr
