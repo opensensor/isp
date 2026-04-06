@@ -65,7 +65,7 @@ extern void tx_isp_wakeup_frame_channels(void);
 #define TISP_TOP_BYPASS_ADR_BIT	BIT(7)
 #define TISP_TOP_BYPASS_DEFOG_BIT	BIT(11)
 
-static int tisp_force_bypass_adr = 1; /* ADR init corrupts pipeline; keep bypassed until fixed */
+static int tisp_force_bypass_adr = 1; /* ADR init fixed (LUTs loaded) but algorithm still identity — bypass until Tiziano_adr_fpga ported */
 module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_adr,
 			 "Force ADR bypass (default: 1 to preserve known-good image sequencing)");
@@ -1760,7 +1760,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD14;  /* All blocks except GIB(5) and ADR(7) — GIB causes posterization (unsolved) */
+static uint isp_block_enable = 0x3DD14;  /* All OEM blocks except GIB(5) and ADR(7) — ADR needs Tiziano_adr_fpga tone-mapping algorithm */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -18293,13 +18293,26 @@ int tiziano_defog_init(uint32_t width, uint32_t height)
     return 0;
 }
 
-/* ADR parameter arrays - simplified based on Binary Ninja reference */
-uint32_t param_adr_centre_w_dis_array[31]; /* Center weight distribution */
-uint32_t param_adr_weight_20_lut_array[32]; /* Weight LUT 20 */
-uint32_t param_adr_weight_02_lut_array[32]; /* Weight LUT 02 */
-uint32_t param_adr_weight_12_lut_array[32]; /* Weight LUT 12 */
-uint32_t param_adr_weight_22_lut_array[32]; /* Weight LUT 22 */
-uint32_t param_adr_weight_21_lut_array[32]; /* Weight LUT 21 */
+/* ADR parameter arrays */
+uint32_t param_adr_centre_w_dis_array[31]; /* Final center weight distribution */
+uint32_t param_adr_weight_20_lut_array[32]; /* Final Weight LUT 20 */
+uint32_t param_adr_weight_02_lut_array[32]; /* Final Weight LUT 02 */
+uint32_t param_adr_weight_12_lut_array[32]; /* Final Weight LUT 12 */
+uint32_t param_adr_weight_22_lut_array[32]; /* Final Weight LUT 22 */
+uint32_t param_adr_weight_21_lut_array[32]; /* Final Weight LUT 21 */
+
+/* ADR working (tmp) arrays — populated from resolution-specific sources, then
+ * copied to final arrays above when param_adr_tool_control_array == 0 */
+static uint32_t param_adr_centre_w_dis_array_tmp[31];
+static uint32_t param_adr_weight_20_lut_array_tmp[32];
+static uint32_t param_adr_weight_02_lut_array_tmp[32];
+static uint32_t param_adr_weight_12_lut_array_tmp[32];
+static uint32_t param_adr_weight_22_lut_array_tmp[32];
+static uint32_t param_adr_weight_21_lut_array_tmp[32];
+
+/* OEM resolution-specific ADR LUT data (extracted from OEM tx-isp-t31.ko)
+ * Each resolution has 6 arrays: centre_w_dis[31] + 5 weight LUTs[32] */
+#include "tx_isp_tuning_adr_luts.inc"
 /* Additional ADR arrays required by BN mappings */
 uint32_t param_adr_para_array[0x20/4] = {0};
 uint32_t param_adr_ctc_kneepoint_array[0x44/4] = {0};
@@ -18719,11 +18732,10 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     system_reg_write(0x4454, ((height - height_sub) << 16) | height_sub);
     system_reg_write(0x4458, ((width - width_sub) << 16) | width_sub);
 
-    /* Binary Ninja: Refresh parameters */
+    /* OEM EXACT ordering: refresh params, then set params (writes HW regs).
+     * tiziano_adr_params_init is called AFTER LUT copy, not here. */
     tiziano_adr_params_refresh();
 
-    /* Binary Ninja: Initialize and set parameters */
-    tiziano_adr_params_init();
     /* Program ADR static header/control registers per HLIL */
     tisp_adr_write_headers();
 
@@ -18732,9 +18744,6 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
         pr_err("tiziano_adr_init: Failed to set ADR parameters: %d\n", ret);
         return ret;
     }
-    /* Log expected register windows for ADR/YDNS (parity audit aid) */
-    tisp_adr_regmap_selfcheck();
-    tisp_ydns_regmap_selfcheck();
 
 
     /* Binary Ninja: Calculate final parameter */
@@ -18747,11 +18756,83 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
         data_ace54 = (width_calc * 3 + 1) >> 1;
     }
 
+    /* OEM EXACT: Copy resolution-specific ADR weight LUTs into working arrays.
+     * Without this, the weight arrays are all-zero and ADR posterizes the image.
+     * Resolution switch matches OEM tiziano_adr_init exactly. */
+    {
+        const uint32_t *cwd = NULL, *w20 = NULL, *w02 = NULL, *w12 = NULL, *w22 = NULL, *w21 = NULL;
+
+        if (width == 1920 && height == 1080) {          /* 0x780 x 0x438 */
+            cwd = param_adr_centre_w_dis_1080P; w20 = param_adr_weight_20_1080P;
+            w02 = param_adr_weight_02_1080P; w12 = param_adr_weight_12_1080P;
+            w22 = param_adr_weight_22_1080P; w21 = param_adr_weight_21_1080P;
+        } else if (width == 1280 && height == 720) {    /* 0x500 x 0x2d0 */
+            cwd = param_adr_centre_w_dis_720P; w20 = param_adr_weight_20_720P;
+            w02 = param_adr_weight_02_720P; w12 = param_adr_weight_12_720P;
+            w22 = param_adr_weight_22_720P; w21 = param_adr_weight_21_720P;
+        } else if (width == 2304 && height == 1296) {   /* 0x900 x 0x510 — 3M */
+            cwd = param_adr_centre_w_dis_3M; w20 = param_adr_weight_20_3M;
+            w02 = param_adr_weight_02_3M; w12 = param_adr_weight_12_3M;
+            w22 = param_adr_weight_22_3M; w21 = param_adr_weight_21_3M;
+        } else if (width == 2592 && height == 1944) {   /* 0xa20 x 0x798 — 5M */
+            cwd = param_adr_centre_w_dis_5M; w20 = param_adr_weight_20_5M;
+            w02 = param_adr_weight_02_5M; w12 = param_adr_weight_12_5M;
+            w22 = param_adr_weight_22_5M; w21 = param_adr_weight_21_5M;
+        } else if (width == 2560 && height == 1440) {   /* 0xa00 x 0x5a0 — 4M */
+            cwd = param_adr_centre_w_dis_4M; w20 = param_adr_weight_20_4M;
+            w02 = param_adr_weight_02_4M; w12 = param_adr_weight_12_4M;
+            w22 = param_adr_weight_22_4M; w21 = param_adr_weight_21_4M;
+        } else if (width == 2560 && height == 1920) {   /* 0xa00 x 0x780 — 5MA */
+            cwd = param_adr_centre_w_dis_5MA; w20 = param_adr_weight_20_5MA;
+            w02 = param_adr_weight_02_5MA; w12 = param_adr_weight_12_5MA;
+            w22 = param_adr_weight_22_5MA; w21 = param_adr_weight_21_5MA;
+        } else if (width == 1728 && height == 972) {    /* 0x6c0 x 0x3cc */
+            cwd = param_adr_centre_w_dis_1728_972; w20 = param_adr_weight_20_1728_972;
+            w02 = param_adr_weight_02_1728_972; w12 = param_adr_weight_12_1728_972;
+            w22 = param_adr_weight_22_1728_972; w21 = param_adr_weight_21_1728_972;
+        } else if (width == 1080 && height == 1440) {   /* 0x438 x 0x5a0 */
+            cwd = param_adr_centre_w_dis_1080_1440; w20 = param_adr_weight_20_1080_1440;
+            w02 = param_adr_weight_02_1080_1440; w12 = param_adr_weight_12_1080_1440;
+            w22 = param_adr_weight_22_1080_1440; w21 = param_adr_weight_21_1080_1440;
+        } else if (width == 1072 && height == 1440) {   /* 0x430 x 0x5a0 */
+            cwd = param_adr_centre_w_dis_1072_1440; w20 = param_adr_weight_20_1072_1440;
+            w02 = param_adr_weight_02_1072_1440; w12 = param_adr_weight_12_1072_1440;
+            w22 = param_adr_weight_22_1072_1440; w21 = param_adr_weight_21_1072_1440;
+        }
+        /* OEM fallback: tiziano_adr_5x5_param() for unknown resolutions — not yet ported */
+
+        if (cwd) {
+            memcpy(param_adr_centre_w_dis_array_tmp, cwd, sizeof(param_adr_centre_w_dis_array_tmp));
+            memcpy(param_adr_weight_20_lut_array_tmp, w20, sizeof(param_adr_weight_20_lut_array_tmp));
+            memcpy(param_adr_weight_02_lut_array_tmp, w02, sizeof(param_adr_weight_02_lut_array_tmp));
+            memcpy(param_adr_weight_12_lut_array_tmp, w12, sizeof(param_adr_weight_12_lut_array_tmp));
+            memcpy(param_adr_weight_22_lut_array_tmp, w22, sizeof(param_adr_weight_22_lut_array_tmp));
+            memcpy(param_adr_weight_21_lut_array_tmp, w21, sizeof(param_adr_weight_21_lut_array_tmp));
+            pr_info("tiziano_adr_init: loaded ADR LUTs for %ux%u\n", width, height);
+        } else {
+            pr_warn("tiziano_adr_init: no ADR LUT data for %ux%u, using zeros\n", width, height);
+        }
+    }
+
+    /* OEM EXACT: Copy from tmp arrays to final arrays when tool control is 0.
+     * param_adr_tool_control_array[0] == 0 means "use default LUTs" (not tool-overridden). */
+    if (param_adr_tool_control_array[0] == 0) {
+        memcpy(param_adr_centre_w_dis_array, param_adr_centre_w_dis_array_tmp, sizeof(param_adr_centre_w_dis_array));
+        memcpy(param_adr_weight_20_lut_array, param_adr_weight_20_lut_array_tmp, sizeof(param_adr_weight_20_lut_array));
+        memcpy(param_adr_weight_02_lut_array, param_adr_weight_02_lut_array_tmp, sizeof(param_adr_weight_02_lut_array));
+        memcpy(param_adr_weight_12_lut_array, param_adr_weight_12_lut_array_tmp, sizeof(param_adr_weight_12_lut_array));
+        memcpy(param_adr_weight_22_lut_array, param_adr_weight_22_lut_array_tmp, sizeof(param_adr_weight_22_lut_array));
+        memcpy(param_adr_weight_21_lut_array, param_adr_weight_21_lut_array_tmp, sizeof(param_adr_weight_21_lut_array));
+    }
+
+    /* OEM EXACT: Re-init params AFTER LUT copy (OEM calls tiziano_adr_params_init here) */
+    tiziano_adr_params_init();
+
     /* Binary Ninja EXACT: OEM uses system_irq_func_set for IRQ, tisp_event_set_cb for event */
     system_irq_func_set(0x12, adr_interrupt_static_wrapper);
     tisp_event_set_cb(2, tisp_adr_process);
 
-    pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
+    pr_info("tiziano_adr_init: ADR processing initialized successfully (%ux%u)\n", width, height);
     return 0;
 }
 

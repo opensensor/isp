@@ -817,11 +817,9 @@ static int csi_calc_rate_sel(struct tx_isp_sensor_attribute *sensor_attr)
     if (!sensor_attr)
         return 0;
 
-    /* OEM returns settle_time_apative_en directly when non-zero, but some
-     * sensor drivers hardcode 1 regardless of MIPI clock speed.  Always
-     * auto-calculate from clk and use the larger of the two so the PHY
-     * settle time is never too short for the actual data rate. */
-    int override = sensor_attr->mipi.settle_time_apative_en;
+    rate = sensor_attr->mipi.settle_time_apative_en;
+    if (rate != 0)
+        return rate;
 
     clk = sensor_attr->mipi.clk;
     if (clk - 0x50 < 0x1e)
@@ -858,15 +856,6 @@ static int csi_calc_rate_sel(struct tx_isp_sensor_attribute *sensor_attr)
         }
     }
 
-    if (override > rate)
-        rate = override;
-    /* Empirical: some sensors need more PHY settle time than auto-calc
-     * provides.  Add +3 margin to the auto-calculated value. */
-    rate += 3;
-    if (rate > 0xb)
-        rate = 0xb;
-    pr_info("csi_calc_rate_sel: clk=%u override=%d auto=%d -> final=%d\n",
-            clk, override, rate, rate);
     return rate;
 }
 
