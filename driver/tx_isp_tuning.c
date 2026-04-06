@@ -14692,6 +14692,10 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		memcpy(awb_zone_rgbg + AWB_STATS_ZONES, awb_zone_bg,
 		       AWB_STATS_ZONES * sizeof(uint32_t));
 
+		if (fpga_diag_count <= 5)
+			pr_info("AWB_CTDET_PRE[%u]: calling Ct_Detect light_src=%u q=%u\n",
+				fpga_diag_count, active_light_src_num, q);
+
 		Tiziano_Awb_Ct_Detect(
 			awb_zone_rgbg,                        /* arg1: zone rg+bg interleaved */
 			awb_zone_pix_cnt,                     /* arg2: zone pixel counts */
@@ -14713,6 +14717,11 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 			cl_params,                            /* arg18: cluster params */
 			ct_detect_rg_bg,                      /* arg19: output rg/bg */
 			&ct_detect_status);                   /* arg20: output status */
+
+		if (fpga_diag_count <= 5)
+			pr_info("AWB_CTDET_POST[%u]: status=%u rg=%u bg=%u ct=%u\n",
+				fpga_diag_count, ct_detect_status,
+				ct_detect_rg_bg[0], ct_detect_rg_bg[1], ct_detect_ct);
 
 		if (ct_detect_status == 0) {
 			target_rg = ct_detect_rg_bg[0];
