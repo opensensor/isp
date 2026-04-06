@@ -458,16 +458,24 @@ static u32 tisp_fps_from_raw(u32 raw_fps)
 
 static u32 tisp_cfa_base_from_mbus(u32 mbus_code)
 {
+    /* CFA indices must match the tuning demosaic module (tisp_dmsc_cfa_base_from_mbus).
+     * Mapping verified against Ingenic SDK v4l2 enum (tx-isp-common.h):
+     *   RGGB=0: 0x300d(SRGGB10_DPCM8) 0x300f(SRGGB10_1X10) 0x3012(SRGGB12) 0x3014(SRGGB8)
+     *   GRBG=1: 0x3002(SGRBG8) 0x3009(SGRBG10_DPCM8) 0x300a(SGRBG10_1X10) 0x3011(SGRBG12)
+     *   GBRG=2: 0x300c(SGBRG10_DPCM8) 0x300e(SGBRG10_1X10) 0x3010(SGBRG12) 0x3013(SGBRG8)
+     *   BGGR=3: 0x3001(SBGGR8) 0x3003-0x3006(SBGGR10_2X8) 0x3007(SBGGR10_1X10)
+     *           0x3008(SBGGR12) 0x300b(SBGGR10_DPCM8)
+     */
     switch (mbus_code) {
     case 0x300d: case 0x300f: case 0x3012: case 0x3014:
-        return 0;
+        return 0;  /* RGGB */
+    case 0x3002: case 0x3009: case 0x300a: case 0x3011:
+        return 1;  /* GRBG */
+    case 0x300c: case 0x300e: case 0x3010: case 0x3013:
+        return 2;  /* GBRG */
     case 0x3001: case 0x3003: case 0x3004: case 0x3005:
     case 0x3006: case 0x3007: case 0x3008: case 0x300b:
-        return 1;
-    case 0x3002: case 0x3009: case 0x300a: case 0x3011:
-        return 2;
-    case 0x300c: case 0x300e: case 0x3010: case 0x3013:
-        return 3;
+        return 3;  /* BGGR */
     default:
         return 0;
     }
@@ -1834,11 +1842,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* One-shot bayer write and top_sel — must fire on first interrupt,
      * not gated by bit 0x1 which may not fire reliably yet. */
 	    if (bayer_write_pending) {
-	        u32 mbus_code = 0;
-	        if (isp_dev && isp_dev->sensor)
-	            mbus_code = isp_dev->sensor->video.mbus.code;
-	        if (mbus_code != 0) {
-	            mbus_to_bayer_write(mbus_code);
+	        if (isp_dev && isp_dev->sensor &&
+	            isp_dev->sensor->video.mbus.code != 0) {
+	            u32 bayer = tisp_bayer_from_sensor(isp_dev);
+	            system_reg_write(8, bayer);
 	            bayer_write_pending = 0;
 	        }
 	    }
