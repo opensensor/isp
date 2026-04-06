@@ -4293,9 +4293,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (channel > 0 && !state->msca_configured) {
                 u32 attr_words[0x34 / sizeof(u32)];
                 memset(attr_words, 0, sizeof(attr_words));
-                attr_words[0] = 0;       /* no fcrop */
-                attr_words[1] = w;       /* target width */
-                attr_words[2] = h;       /* target height */
+                /* attr[0] MUST be non-zero so tisp_channel_attr_set uses
+                 * our target dimensions instead of overwriting them with
+                 * the full ISP resolution (the *arg2==0 path). */
+                attr_words[0] = 1;       /* enable custom dimensions */
+                attr_words[1] = w;       /* target width (e.g., 640) */
+                attr_words[2] = h;       /* target height (e.g., 360) */
                 attr_words[3] = 0;       /* no crop */
                 attr_words[4] = 0;       /* crop x */
                 attr_words[5] = 0;       /* crop y */
