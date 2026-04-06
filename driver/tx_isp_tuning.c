@@ -13029,12 +13029,6 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	gain_pair[0] = (gain_gr_q + rounding) >> q;
 	gain_pair[1] = (gain_gb_q + rounding) >> q;
 
-	/* HACK: Post-WB stats feedback causes insufficient correction.
-	 * Stock OEM has dramatically more blue — push B/R ratio very hard.
-	 * TODO: replace with proper pre-WB stats correction or custom tuning. */
-	gain_pair[0] = (gain_pair[0] * 5) / 8;   /* R × 0.625 */
-	gain_pair[1] = (gain_pair[1] * 4);        /* B × 4.0 */
-
 	/* Guard against divide-by-zero if gain computation produced 0 */
 	if (gain_pair[0] == 0)
 		gain_pair[0] = 0x100;
@@ -13079,11 +13073,33 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	}
 
 	if (awb_frz == 0) {
+		/* Revert to original addresses while investigating correct ones.
+		 * 0x1810 confirmed working. 0x183c/0x1840/0x1844 read as 0 but
+		 * may be write-only latched registers that still take effect. */
 		system_reg_write_awb(2, 0x183c, reg_pair[0]);
 		system_reg_write_awb(2, 0x1840, reg_pair[1]);
 		system_reg_write_awb(2, 0x1844, reg_pair[0]);
 		system_reg_write_awb(2, 0x1810, reg_pair[1]);
 		tisp_rdns_awb_gain_updata(reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
+	}
+
+	/* One-time color register dump to compare with OEM */
+	if (awb_gain_diag_count == 10) {
+		pr_info("COLOR_REGS: WB 0x1800=%08x 0x183c=%08x 0x1840=%08x 0x1844=%08x 0x1810=%08x\n",
+			system_reg_read(0x1800), system_reg_read(0x183c),
+			system_reg_read(0x1840), system_reg_read(0x1844),
+			system_reg_read(0x1810));
+		pr_info("COLOR_REGS: CCM 0x5000=%08x 0x5004=%08x 0x5008=%08x 0x500c=%08x 0x5010=%08x 0x5014=%08x\n",
+			system_reg_read(0x5000), system_reg_read(0x5004),
+			system_reg_read(0x5008), system_reg_read(0x500c),
+			system_reg_read(0x5010), system_reg_read(0x5014));
+		pr_info("COLOR_REGS: BCSH 0x8024=%08x 0x8028=%08x 0x802c=%08x 0x8030=%08x 0x8034=%08x 0x8038=%08x\n",
+			system_reg_read(0x8024), system_reg_read(0x8028),
+			system_reg_read(0x802c), system_reg_read(0x8030),
+			system_reg_read(0x8034), system_reg_read(0x8038));
+		pr_info("COLOR_REGS: BCSH_SAT 0x806c=%08x 0x8070=%08x BYPASS=0x%08x\n",
+			system_reg_read(0x806c), system_reg_read(0x8070),
+			system_reg_read(0xc));
 	}
 
 	awb_moa = 0;
