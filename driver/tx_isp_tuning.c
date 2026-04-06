@@ -4007,31 +4007,13 @@ static int32_t fix_point_div_64(int32_t shift_bits, int32_t scale,
                                int32_t num_low, int32_t num_high,
                                int32_t denom_low, int32_t denom_high)
 {
-    // Initial result tracking
-    int32_t quotient = 0;
-    int32_t remainder = num_low;
-    int32_t temp_high = num_high;
+    uint64_t num = ((uint64_t)(uint32_t)num_high << 32) | (uint32_t)num_low;
+    uint64_t den = ((uint64_t)(uint32_t)denom_high << 32) | (uint32_t)denom_low;
 
-    // Iterative long division
-    for (int i = 0; i < 32; i++) {
-        int32_t carry = remainder & 0x80000000;
+    if (den == 0)
+        return 0;
 
-        // Shift left by 1
-        remainder = (remainder << 1) | ((temp_high >> 31) & 1);
-        temp_high = temp_high << 1;
-        quotient = quotient << 1;
-
-        // See if we can subtract denominator
-        if (carry || remainder >= denom_low) {
-            remainder = remainder - denom_low;
-            if (carry && remainder >= 0) {
-                temp_high--;
-            }
-            quotient |= 1;
-        }
-    }
-
-    return quotient;
+    return (int32_t)div64_u64(num, den);
 }
 
 /* fix_point_* functions are now defined in tx_isp_fixpt.h */
@@ -14208,6 +14190,26 @@ find_bg_idx:
 			for (c = 0; c < cols; c++)
 				total_wght += rgbg_wght[r * cols + c];
 
+		{
+			static unsigned int ctdet_diag;
+			ctdet_diag++;
+			if (ctdet_diag <= 5) {
+				uint32_t nz = 0;
+				for (r = 0; r < rows; r++)
+					for (c = 0; c < cols; c++)
+						if (rgbg_wght[r * cols + c])
+							nz++;
+				pr_info("AWB_CTDET_WGHT[%u]: total_wght=%u nonzero=%u/%u "
+					"pix[0]=%u pix[112]=%u wght[0]=%u wght[112]=%u "
+					"rg[0]=%u bg[0]=%u rg[112]=%u bg[112]=%u\n",
+					ctdet_diag, total_wght, nz, total,
+					zone_pix_wgh[0], zone_pix_wgh[112],
+					rgbg_wght[0], rgbg_wght[112],
+					zone_rg[0], zone_rg[v0_28],
+					zone_rg[112], zone_rg[v0_28 + 112]);
+			}
+		}
+
 		if (total_wght == 0) {
 			/* No valid zones — output defaults */
 			goto fail_output;
@@ -14251,6 +14253,19 @@ find_bg_idx:
 			i_17 = fix_point_div_64(fp, 0,
 				(uint32_t)sum_bg_w, (uint32_t)(sum_bg_w >> 32),
 				(uint32_t)sum_w, (uint32_t)(sum_w >> 32));
+
+			{
+				static unsigned int avg_diag;
+				avg_diag++;
+				if (avg_diag <= 5)
+					pr_info("AWB_CTDET_AVG[%u]: i_18=%u i_17=%u "
+						"sum_rg=%llu sum_bg=%llu sum_w=%llu "
+						"rg_out=%u bg_out=%u\n",
+						avg_diag, i_18, i_17,
+						sum_rg_w, sum_bg_w, sum_w,
+						(i_18 + rounding) >> q_mask,
+						(i_17 + rounding) >> q_mask);
+			}
 
 			/* --- Phase 9: Distance-based refinement (when dis_enable == 1) --- */
 			if (dis_enable == 1) {
