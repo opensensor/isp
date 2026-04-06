@@ -640,14 +640,20 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     }
     pr_info("Created proc entry: /proc/jz/isp/isp-w01\n");
 
-    /* Create /proc/jz/isp/isp-w02 - CRITICAL: This was missing! */
-    ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
-                                         &tx_isp_proc_w02_fops, isp);
+    /* Create /proc/jz/isp/isp-w02 using the OEM VIC fops (isp_vic_frd_fops).
+     * PDE_DATA stores the ISP dev pointer.  The open/write handlers resolve
+     * the VIC subdev dynamically from isp->vic_dev at access time, since
+     * VIC is probed AFTER this proc entry is created. */
+    {
+        extern const struct file_operations isp_vic_frd_fops_wrapper;
+        ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
+                                             &isp_vic_frd_fops_wrapper, isp);
+    }
     if (!ctx->isp_w02_entry) {
         pr_err("Failed to create isp-w02 proc entry\n");
         goto error_remove_w01;
     }
-    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-w02 (CRITICAL FOR VIC FUNCTIONALITY) ***\n");
+    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-w02 (VIC frd fops, snapraw/saveraw) ***\n");
 
     /* Create /proc/jz/isp/isp-fs - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
     ctx->isp_fs_entry = proc_create_data(TX_ISP_PROC_ISP_FS_FILE, 0644, ctx->isp_dir,

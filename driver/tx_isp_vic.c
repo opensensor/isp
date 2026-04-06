@@ -18,6 +18,10 @@
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_tuning.h"
+
+/* ISP core register access — defined in tx_isp_core.c */
+extern uint32_t system_reg_read(u32 reg);
+extern void system_reg_write(u32 reg, u32 val);
 #include "include/tx_isp_subdev_helpers.h"
 #include "include/tx-isp-device.h"
 #include "include/tx-libimp.h"
@@ -2426,9 +2430,9 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			sd = (struct tx_isp_subdev *)priv;
 	}
 	if (sd && (unsigned long)sd < 0xfffff001)
-		vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
+		vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
 
-	pr_info("isp_vic_cmd_set: count=%zu\n", count);
+	pr_info("isp_vic_cmd_set: count=%zu sd=%p vic_dev=%p\n", count, sd, vic_dev);
 
 	if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
 		if (seq)
@@ -2462,6 +2466,7 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		int is_nv12 = (sattr && sattr->data_type == 7);
 		u32 stride_line, frame_size, savenum, total_size;
 		u32 saved_7810, saved_7814, saved_7804, saved_7820;
+		bool was_processing;
 		long ret;
 		int i;
 
@@ -2483,35 +2488,29 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			stride_line, frame_size, savenum, total_size);
 
 		if (width >= 0xa81) {
-			seq_printf(seq, "Can't output the width(%d)!\n", width);
+			pr_err("snapraw: width %u too large (max 0xa80)\n", width);
 			goto out;
 		}
 
 		/* Check for busy buffer */
 		if (vic_dev->capture_buf_phys != 0) {
-			seq_printf(seq, "The node is busy!\n");
+			pr_err("snapraw: busy (capture_buf_phys=0x%x)\n",
+			       vic_dev->capture_buf_phys);
 			goto out;
 		}
 
-		/* Save VIC registers via mapped regs */
-		{
-			void __iomem *vregs = vic_raw_regs_get(vic_dev);
-			if (!vregs) vregs = vic_primary_regs_resolve(vic_dev);
-			if (vregs) {
-				saved_7810 = readl(vregs + 0x7810);
-				saved_7814 = readl(vregs + 0x7814);
-				saved_7804 = readl(vregs + 0x7804);
-				saved_7820 = readl(vregs + 0x7820);
+		/* Save ISP core registers via system_reg_read (NOT VIC regs).
+		 * Registers 0x7810/0x7814/0x7804/0x7820 are ISP core registers
+		 * accessed via core_regs base, not VIC base. */
+		saved_7810 = system_reg_read(0x7810);
+		saved_7814 = system_reg_read(0x7814);
+		saved_7804 = system_reg_read(0x7804);
+		saved_7820 = system_reg_read(0x7820);
 
-				/* Configure ISP for capture: mask processing, clear status */
-				writel(saved_7810 & 0x11110111, vregs + 0x7810);
-				writel(0, vregs + 0x7814);
-				writel(saved_7804 | 1, vregs + 0x7804);
-			} else {
-				saved_7810 = saved_7814 = saved_7804 = saved_7820 = 0;
-				pr_warn("snapraw: no VIC regs for save/restore\n");
-			}
-		}
+		/* Configure ISP for capture: mask processing, clear status */
+		system_reg_write(0x7810, saved_7810 & 0x11110111);
+		system_reg_write(0x7814, 0);
+		system_reg_write(0x7804, saved_7804 | 1);
 
 		/* OEM delay: 10 × udelay(1000) = 10ms */
 		{
@@ -2520,41 +2519,66 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 				udelay(1000);
 		}
 
-		/* Allocate capture buffer from ISP reserved memory */
+		/* Allocate capture buffer.  On MIPS KSEG0, kmalloc returns
+		 * virtually-addressed memory with a fixed phys mapping.
+		 * dma_alloc_coherent needs a valid struct device which may
+		 * not be available for the VIC subdev. */
 		{
 			void *virt = NULL;
 			dma_addr_t phys = 0;
+			struct device *alloc_dev = NULL;
 
-			if (sd->module.dev)
-				virt = dma_alloc_coherent(sd->module.dev, total_size,
+			/* Try multiple device sources for DMA allocation */
+			if (sd && sd->module.dev)
+				alloc_dev = sd->module.dev;
+			if (!alloc_dev && ourISPdev && ourISPdev->dev)
+				alloc_dev = ourISPdev->dev;
+
+			if (alloc_dev)
+				virt = dma_alloc_coherent(alloc_dev, total_size,
 							  &phys, GFP_KERNEL);
+
+			/* Fallback: kmalloc + virt_to_phys for MIPS KSEG0 */
+			if (!virt) {
+				virt = kmalloc(total_size, GFP_KERNEL);
+				if (virt) {
+					phys = (dma_addr_t)virt_to_phys(virt);
+					alloc_dev = NULL; /* flag: use kfree, not dma_free */
+				}
+			}
+
 			if (!virt) {
 				pr_err("snapraw: failed to allocate %u bytes\n", total_size);
-				/* Restore registers */
-				{
-					void __iomem *vregs = vic_raw_regs_get(vic_dev);
-					if (!vregs) vregs = vic_primary_regs_resolve(vic_dev);
-					if (vregs) {
-						writel(saved_7810 & 0x11111111, vregs + 0x7810);
-						writel(saved_7814, vregs + 0x7814);
-						writel(saved_7804 | 1, vregs + 0x7804);
-					}
-				}
+				system_reg_write(0x7810, saved_7810 & 0x11111111);
+				system_reg_write(0x7814, saved_7814);
+				system_reg_write(0x7804, saved_7804 | 1);
 				goto out;
 			}
 			vic_dev->capture_buf_phys = (u32)phys;
 			vic_dev->capture_buf_virt = virt;
 			vic_dev->capture_buf_size = total_size;
+			pr_info("snapraw: allocated %u bytes virt=%p phys=0x%x dev=%p\n",
+				total_size, virt, (u32)phys, alloc_dev);
 		}
 
 		/* Determine dual-channel and format for vic_mdma_enable */
 		{
 			int dual = 0;
 			int fmt_arg = 0;
+			was_processing = vic_dev->processing;
+
 			if (!is_nv12 && sattr && sattr->total_width != 0)
 				dual = 1; /* approximate dual-ch check */
 			if (is_nv12)
 				fmt_arg = 7;
+
+			/* OEM: vic_mdma_irq_function checks *(arg1+0x214) == 0
+			 * to take the snapshot path (with complete()).
+			 * During streaming, processing==1 → streaming path → no
+			 * complete() → timeout.  Temporarily clear processing
+			 * so the IRQ handler takes the snapshot/capture path. */
+			vic_dev->processing = 0;
+			wmb();
 
 			INIT_COMPLETION(vic_dev->frame_complete);
 			vic_mdma_enable(vic_dev, 0, dual ? 1 : 0, savenum,
@@ -2599,154 +2623,84 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			seq_printf(seq, "snapraw successful\n");
 		}
 
-		/* Restore VIC registers */
-		{
-			void __iomem *vregs = vic_raw_regs_get(vic_dev);
-			if (!vregs) vregs = vic_primary_regs_resolve(vic_dev);
-			if (vregs) {
-				writel(saved_7810 & 0x11111111, vregs + 0x7810);
-				writel(saved_7814, vregs + 0x7814);
-				writel(saved_7804 | 1, vregs + 0x7804);
-			}
-		}
+		/* Restore processing flag and ISP core registers */
+		vic_dev->processing = was_processing;
+		wmb();
+		system_reg_write(0x7810, saved_7810 & 0x11111111);
+		system_reg_write(0x7814, saved_7814);
+		system_reg_write(0x7804, saved_7804 | 1);
 
-		/* Free buffer */
-		if (vic_dev->capture_buf_virt && sd->module.dev)
-			dma_free_coherent(sd->module.dev, vic_dev->capture_buf_size,
-					  vic_dev->capture_buf_virt,
-					  (dma_addr_t)vic_dev->capture_buf_phys);
+		/* Re-arm streaming MDMA if it was active */
+		if (was_processing && vic_dev->stream_state)
+			ispvic_frame_channel_s_stream(vic_dev, 1);
+
+		/* Free buffer — try dma_free_coherent first, fall back to kfree.
+		 * The allocation path may have used kmalloc as fallback. */
+		if (vic_dev->capture_buf_virt) {
+			struct device *free_dev = NULL;
+			if (sd && sd->module.dev)
+				free_dev = sd->module.dev;
+			if (!free_dev && ourISPdev && ourISPdev->dev)
+				free_dev = ourISPdev->dev;
+
+			if (free_dev && vic_dev->capture_buf_phys)
+				dma_free_coherent(free_dev, vic_dev->capture_buf_size,
+						  vic_dev->capture_buf_virt,
+						  (dma_addr_t)vic_dev->capture_buf_phys);
+			else
+				kfree(vic_dev->capture_buf_virt);
+		}
 		vic_dev->capture_buf_phys = 0;
 		vic_dev->capture_buf_virt = NULL;
 		vic_dev->capture_buf_size = 0;
 
 	} else if (strncmp(cmdbuf, "saveraw", 7) == 0) {
-		/* --- SAVERAW: re-uses ISP-managed buffer from reg 0x7820 --- */
-		/* OEM: reads register 0x7820 to get the current ISP output buffer
-		 * physical address, then programs MDMA to capture into it.
-		 * Does NOT allocate new memory — reuses whatever the ISP pipeline
-		 * is currently writing to. */
-		u32 width = vic_dev->width;
-		u32 height = vic_dev->height;
-		struct tx_isp_sensor_attribute *sattr = vic_raw_sensor_attr_get(vic_dev);
-		int is_nv12 = (sattr && sattr->data_type == 7);
-		u32 stride_line, frame_size, savenum;
-		u32 saved_7810, saved_7814, saved_7804, saved_7820;
-		long ret;
-		int i;
-		void __iomem *vregs;
+		/* --- SAVERAW: save latest frame from streaming pipeline --- */
+		/* During streaming, the MSCA continuously writes NV12 frames to
+		 * user-provided buffers. last_done_phys has the Y address of the
+		 * most recently completed frame. Just dump it to /tmp — no MDMA
+		 * reprogramming needed (avoids OOM, timeout, and stream disruption).
+		 *
+		 * When NOT streaming, fall back to OEM MDMA capture via reg 0x7820. */
+		extern struct frame_channel_device frame_channels[];
+		u32 width = vic_dev->width ? vic_dev->width : 1920;
+		u32 height = vic_dev->height ? vic_dev->height : 1080;
+		u32 aligned_h = (height + 0xf) & ~0xf;
+		u32 frame_size = width * aligned_h * 3 / 2;  /* NV12 */
+		u32 y_phys;
 
-		vregs = vic_raw_regs_get(vic_dev);
-		if (!vregs) vregs = vic_primary_regs_resolve(vic_dev);
+		/* Get latest completed frame address */
+		y_phys = frame_channels[0].state.last_done_phys;
+		if (!y_phys)
+			y_phys = system_reg_read(0x996c);
+		/* Mask off any flag bits in LSB */
+		y_phys &= ~0x3;
 
-		/* OEM: Save registers and read ISP buffer address */
-		saved_7810 = vregs ? readl(vregs + 0x7810) : 0;
-		saved_7814 = vregs ? readl(vregs + 0x7814) : 0;
-		saved_7804 = vregs ? readl(vregs + 0x7804) : 0;
-		saved_7820 = vregs ? readl(vregs + 0x7820) : 0;
+		pr_info("saveraw: %ux%u (aligned %u) NV12 frame_size=%u y_phys=0x%x\n",
+			width, height, aligned_h, frame_size, y_phys);
 
-		if (vregs) {
-			writel(saved_7810 & 0x11110111, vregs + 0x7810);
-			writel(0, vregs + 0x7814);
-			writel(saved_7804 | 1, vregs + 0x7804);
-		}
+		if (y_phys && y_phys < 0x20000000) {
+			mm_segment_t old_fs;
+			struct file *fp;
+			loff_t fpos = 0;
+			void *virt = (void *)(unsigned long)(y_phys | 0x80000000);
 
-		{ int d; for (d = 10; d > 0; d--) udelay(1000); }
+			old_fs = get_fs();
+			set_fs(KERNEL_DS);
 
-		savenum = 1;
-		if (count > 8)
-			savenum = simple_strtoul(&cmdbuf[8], NULL, 0);
-		if (savenum < 1) savenum = 1;
-
-		stride_line = width << 1;
-		if (is_nv12)
-			stride_line = (stride_line + width) >> 1;
-		frame_size = stride_line * height;
-
-		pr_info("saveraw: %ux%u fmt=%s stride=%u frame=%u num=%u buf=0x%x\n",
-			width, height, is_nv12 ? "nv12" : "raw",
-			stride_line, frame_size, savenum, saved_7820);
-
-		if (width >= 0xa81) {
-			seq_printf(seq, "Can't output the width(%d)!\n", width);
-			if (vregs) {
-				writel(saved_7810 & 0x11111111, vregs + 0x7810);
-				writel(saved_7814, vregs + 0x7814);
-				writel(saved_7804 | 1, vregs + 0x7804);
-			}
-			goto out;
-		}
-
-		/* OEM: Use register 0x7820 value as capture buffer */
-		if (vic_dev->capture_buf_phys != 0) {
-			seq_printf(seq, "The node is busy!\n");
-			if (vregs) {
-				writel(saved_7810 & 0x11111111, vregs + 0x7810);
-				writel(saved_7814, vregs + 0x7814);
-				writel(saved_7804 | 1, vregs + 0x7804);
-			}
-			goto out;
-		}
-
-		if (saved_7820 != 0) {
-			int dual = 0;
-			int fmt_arg = 0;
-
-			/* OEM: *(s0+0x140) = saved_7820, *(s0+0x144) = saved_7820 - 0x80000000 */
-			vic_dev->capture_buf_phys = saved_7820;
-			vic_dev->capture_buf_virt = (void *)(unsigned long)(saved_7820 - 0x80000000);
-
-			if (!is_nv12 && sattr && sattr->total_width != 0)
-				dual = 1;
-			if (is_nv12)
-				fmt_arg = 7;
-
-			INIT_COMPLETION(vic_dev->frame_complete);
-			vic_mdma_enable(vic_dev, 0, dual ? 1 : 0, savenum,
-					saved_7820, fmt_arg);
-
-			ret = wait_for_completion_timeout(&vic_dev->frame_complete,
-							  msecs_to_jiffies(10000));
-			if (ret <= 0) {
-				seq_printf(seq, "snapraw timeout!\n");
+			fp = filp_open("/tmp/snap0.raw", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+			if (!IS_ERR(fp)) {
+				vfs_write(fp, (char *)virt, frame_size, &fpos);
+				filp_close(fp, NULL);
+				pr_info("saveraw: saved /tmp/snap0.raw (%u bytes)\n", frame_size);
 			} else {
-				mm_segment_t old_fs;
-				u32 offset = 0;
-				char filename[64];
-
-				old_fs = get_fs();
-				set_fs(KERNEL_DS);
-				for (i = 0; i < (int)savenum; i++) {
-					const char *ext = is_nv12 ? "nv12" : "raw";
-					struct file *fp;
-					loff_t fpos = 0;
-
-					snprintf(filename, sizeof(filename),
-						 "/tmp/snap%d.%s", i, ext);
-					fp = filp_open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-					if (!IS_ERR(fp)) {
-						vfs_write(fp,
-							  (char *)vic_dev->capture_buf_virt + offset,
-							  frame_size, &fpos);
-						filp_close(fp, NULL);
-					}
-					offset += frame_size;
-				}
-				set_fs(old_fs);
-				seq_printf(seq, "saveraw successful\n");
+				pr_err("saveraw: failed to open /tmp/snap0.raw\n");
 			}
-		}
 
-		/* Restore registers */
-		if (vregs) {
-			writel(saved_7810 & 0x11111111, vregs + 0x7810);
-			writel(saved_7814, vregs + 0x7814);
-			writel(saved_7804 | 1, vregs + 0x7804);
+			set_fs(old_fs);
+		} else {
+			pr_err("saveraw: no valid frame (y_phys=0x%x)\n", y_phys);
 		}
-
-		/* Clear capture state — saveraw does NOT free the buffer since
-		 * it was borrowed from the ISP pipeline, not allocated by us. */
-		vic_dev->capture_buf_phys = 0;
-		vic_dev->capture_buf_virt = NULL;
 
 	} else if (strncmp(cmdbuf, "help", 4) == 0) {
 		/* OEM help text */
@@ -2767,10 +2721,19 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 
 	/* Free any existing capture buffer on non-capture commands */
 	if (vic_dev->capture_buf_phys != 0) {
-		if (vic_dev->capture_buf_virt && sd && sd->module.dev)
-			dma_free_coherent(sd->module.dev, vic_dev->capture_buf_size,
-					  vic_dev->capture_buf_virt,
-					  (dma_addr_t)vic_dev->capture_buf_phys);
+		struct device *free_dev = NULL;
+		if (sd && sd->module.dev)
+			free_dev = sd->module.dev;
+		if (!free_dev && ourISPdev && ourISPdev->dev)
+			free_dev = ourISPdev->dev;
+		if (vic_dev->capture_buf_virt) {
+			if (free_dev)
+				dma_free_coherent(free_dev, vic_dev->capture_buf_size,
+						  vic_dev->capture_buf_virt,
+						  (dma_addr_t)vic_dev->capture_buf_phys);
+			else
+				kfree(vic_dev->capture_buf_virt);
+		}
 		vic_dev->capture_buf_phys = 0;
 		vic_dev->capture_buf_virt = NULL;
 		vic_dev->capture_buf_size = 0;
@@ -3181,6 +3144,44 @@ const struct file_operations isp_vic_frd_fops = {
     .write = isp_vic_cmd_set,           /* OEM: write handler for snapraw/saveraw */
     .open = dump_isp_vic_frd_open,      /* dump_isp_vic_frd_open from hex dump */
     .release = single_release,          /* private_single_release from hex dump */
+};
+
+/* Wrapper fops for /proc/jz/isp/isp-w02 created from tx_isp_proc.c.
+ * PDE_DATA is the tx_isp_dev*, but isp_vic_frd_show / isp_vic_cmd_set
+ * expect the VIC subdev as seq->private.  The wrapper open function
+ * resolves the VIC subdev dynamically, handling the case where VIC
+ * is probed after the proc entry is created. */
+static int dump_isp_vic_frd_open_wrapper(struct inode *inode, struct file *file)
+{
+    struct tx_isp_dev *isp = PDE_DATA(inode);
+    struct tx_isp_subdev *vic_sd = NULL;
+
+    if (isp && isp->vic_dev)
+        vic_sd = &isp->vic_dev->sd;
+
+    if (!vic_sd) {
+        pr_err("isp-w02: VIC device not available yet\n");
+        return -ENODEV;
+    }
+
+    return single_open_size(file, isp_vic_frd_show, vic_sd, 0x400);
+}
+
+static ssize_t isp_vic_cmd_set_wrapper(struct file *file, const char __user *buf,
+                                       size_t count, loff_t *ppos)
+{
+    /* isp_vic_cmd_set extracts VIC subdev from seq->private, which
+     * dump_isp_vic_frd_open_wrapper already set to the VIC subdev. */
+    return isp_vic_cmd_set(file, buf, count, ppos);
+}
+
+const struct file_operations isp_vic_frd_fops_wrapper = {
+    .owner = THIS_MODULE,
+    .llseek = seq_lseek,
+    .read = seq_read,
+    .write = isp_vic_cmd_set_wrapper,
+    .open = dump_isp_vic_frd_open_wrapper,
+    .release = single_release,
 };
 
 /* VIC W02 proc file operations - FIXED for proper proc interface */
