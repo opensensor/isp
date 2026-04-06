@@ -583,6 +583,7 @@ static void tiziano_bcsh_build_HMatrix(int32_t out[9])
     } else if (ourISPdev && ourISPdev->tuning_data) {
         ct = ourISPdev->tuning_data->wb_temp;
     }
+    /* CT bias removed — A-matrix CCM boosts green, counterproductive */
     tiziano_bcsh_build_active_ccm(active_ccm, ct);
 
     pr_info("BCSH_DIAG: CT=%u CCM=[%d,%d,%d, %d,%d,%d, %d,%d,%d]\n",
@@ -1778,7 +1779,7 @@ module_param(isp_bypass_override, uint, 0644);
  *          isp_block_enable=0xDD24 adds GIB (green imbalance correction) to crisp set
  *          isp_block_enable=0xDD34 adds GIB+LSC (green correction + lens shading)
  */
-static uint isp_block_enable = 0x3DD94;  /* All OEM blocks except GIB(5) — ADR(7) now enabled */
+static uint isp_block_enable = 0x3DDB4;  /* All OEM blocks including GIB(5) + ADR(7) */
 module_param(isp_block_enable, uint, 0644);
 MODULE_PARM_DESC(isp_block_enable,
 		 "Block enable bitmask: set bits enable ISP blocks (0=all bypassed)");
@@ -4012,6 +4013,9 @@ static int32_t fix_point_div_64(int32_t shift_bits, int32_t scale,
 
     if (den == 0)
         return 0;
+
+    /* OEM shifts numerator left by shift_bits to maintain Q-format precision */
+    num <<= (shift_bits & 0x1f);
 
     return (int32_t)div64_u64(num, den);
 }
@@ -13025,6 +13029,12 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 	gain_pair[0] = (gain_gr_q + rounding) >> q;
 	gain_pair[1] = (gain_gb_q + rounding) >> q;
 
+	/* HACK: Post-WB stats feedback causes insufficient correction.
+	 * Stock OEM has dramatically more blue — push B/R ratio very hard.
+	 * TODO: replace with proper pre-WB stats correction or custom tuning. */
+	gain_pair[0] = (gain_pair[0] * 5) / 8;   /* R × 0.625 */
+	gain_pair[1] = (gain_pair[1] * 4);        /* B × 4.0 */
+
 	/* Guard against divide-by-zero if gain computation produced 0 */
 	if (gain_pair[0] == 0)
 		gain_pair[0] = 0x100;
@@ -14437,23 +14447,23 @@ find_bg_idx:
 						bg_bi = 15;
 				}
 
-				/* Interpolate CT from the mesh at the clamped rg/bg */
+				/* Interpolate CT from the CT mesh (arg7), NOT the weight mesh (arg12) */
 				if (rg_bi == 15 && bg_bi == 15) {
 					/* Both at max — use corner value */
-					interp_val = ct_wght_mesh[14 * 15 + 14] << q_mask;
+					interp_val = ct_mesh[14 * 15 + 14] << q_mask;
 				} else if (rg_bi == 15) {
 					/* rg at max — interpolate along bg axis in last column */
 					uint32_t off = bg_bi * 15;
-					uint32_t v0 = ct_wght_mesh[off - 1];
-					uint32_t v1 = ct_wght_mesh[off - 1 + 15];
+					uint32_t v0 = ct_mesh[off - 1];
+					uint32_t v1 = ct_mesh[off - 1 + 15];
 					interp_val = ISPAWBInterpolation1(fp,
 						final_bg, bg_pos[bg_bi - 1], bg_pos[bg_bi],
 						v0, v1);
 				} else if (bg_bi == 15) {
 					/* bg at max — interpolate along rg axis in last row */
 					uint32_t off = 14 * 15 + rg_bi;
-					uint32_t v0 = ct_wght_mesh[off - 1];
-					uint32_t v1 = ct_wght_mesh[off];
+					uint32_t v0 = ct_mesh[off - 1];
+					uint32_t v1 = ct_mesh[off];
 					interp_val = ISPAWBInterpolation1(fp,
 						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
 						v0, v1);
@@ -14462,10 +14472,10 @@ find_bg_idx:
 					uint32_t off = (bg_bi - 1) * 15 + (rg_bi - 1);
 					uint32_t r0 = ISPAWBInterpolation1(fp,
 						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
-						ct_wght_mesh[off], ct_wght_mesh[off + 1]);
+						ct_mesh[off], ct_mesh[off + 1]);
 					uint32_t r1 = ISPAWBInterpolation1(fp,
 						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
-						ct_wght_mesh[off + 15], ct_wght_mesh[off + 16]);
+						ct_mesh[off + 15], ct_mesh[off + 16]);
 					interp_val = ISPAWBInterpolation2(fp,
 						final_bg, bg_pos[bg_bi - 1], bg_pos[bg_bi],
 						r0, r1);
@@ -14701,11 +14711,19 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 		cl_params[4] = _awb_cluster_tail[1];  /* convergence tolerance */
 		cl_params[5] = _awb_cluster_tail[2];  /* max iterations */
 
-		/* Build combined rg+bg array matching OEM zone_rgbg layout */
-		memcpy(awb_zone_rgbg, awb_zone_rg,
-		       AWB_STATS_ZONES * sizeof(uint32_t));
-		memcpy(awb_zone_rgbg + AWB_STATS_ZONES, awb_zone_bg,
-		       AWB_STATS_ZONES * sizeof(uint32_t));
+		/* Zone data must be in Q-shifted 0x100 scale for Ct_Detect:
+		 * rg_pos/bg_pos grid values get compared as (pos << q) inside
+		 * Ct_Detect, so zone data must also be in (ratio << q) format.
+		 * Divide out cof calibration factor first, then Q-shift. */
+		{
+			int zi;
+			u32 cr = cof_rg ? cof_rg : 1;
+			u32 cb = cof_bg ? cof_bg : 1;
+			for (zi = 0; zi < AWB_STATS_ZONES; zi++) {
+				awb_zone_rgbg[zi] = (awb_zone_rg[zi] / cr) << q;
+				awb_zone_rgbg[AWB_STATS_ZONES + zi] = (awb_zone_bg[zi] / cb) << q;
+			}
+		}
 
 		if (fpga_diag_count <= 5)
 			pr_info("AWB_CTDET_PRE[%u]: calling Ct_Detect light_src=%u q=%u\n",
