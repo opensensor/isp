@@ -9567,6 +9567,9 @@ static uint8_t  _rgbg_weight_ot[0x384];
 static uint8_t  _ls_w_lut[0x808];
 static uint32_t awb_zone_rg[AWB_STATS_ZONES];
 static uint32_t awb_zone_bg[AWB_STATS_ZONES];
+/* Combined rg+bg array for Tiziano_Awb_Ct_Detect (OEM: zone_rgbg).
+ * First 225 entries = rg, next 225 = bg.  Copied from awb_zone_rg/bg before call. */
+static uint32_t awb_zone_rgbg[AWB_STATS_ZONES * 2];
 static uint32_t awb_zone_rg_last[AWB_STATS_ZONES];
 static uint32_t awb_zone_bg_last[AWB_STATS_ZONES];
 static uint32_t awb_zone_pix_cnt[AWB_STATS_ZONES];
@@ -9611,6 +9614,36 @@ static uint32_t wb_mode_gain_gb;       /* OEM data_a5a2c */
 static uint32_t wb_live_gain_gr_inv;   /* OEM data_a5a38 */
 static uint32_t wb_live_gain_gb_inv;   /* OEM data_a5a3c */
 static int      awb_dn_refresh_flag;
+
+/* Tiziano_Awb_Ct_Detect BSS arrays — OEM uses these as globals in .bss */
+static uint32_t zone_pix_wgh[AWB_STATS_ZONES];     /* OEM 0xa5a40 */
+static uint32_t rgbg_d_wght[AWB_STATS_ZONES];      /* OEM 0xa5dc4 */
+static uint32_t rgbg_dis[AWB_STATS_ZONES];          /* OEM 0xa6148 — AWB distance array */
+static uint32_t rgbg_wght[AWB_STATS_ZONES];         /* OEM 0xa64cc */
+static uint32_t Cluster_rgbg_index_num[14 * 14];    /* OEM 0xa6850 — 196 entries */
+static uint32_t Cluster_rgbg_weight[AWB_STATS_ZONES]; /* OEM 0xa6b60 */
+
+/*
+ * Cluster value arrays: each has 60 entries for rg, 60 for bg, and 60 for count.
+ * OEM layout: [rg0..rg59][bg0..bg59][count0..count59]
+ * Accessed as value[i], value[i+0x3c], value[i+0x78].
+ */
+#define CLUSTER_ENTRIES     60
+#define CLUSTER_BG_OFF      CLUSTER_ENTRIES        /* 0x3c */
+#define CLUSTER_CNT_OFF     (CLUSTER_ENTRIES * 2)  /* 0x78 */
+#define CLUSTER_WAVG_OFF    (CLUSTER_ENTRIES * 3)  /* 0xb4 — only in value2 */
+
+static uint32_t Cluster_rgbg_value1[CLUSTER_ENTRIES * 3];  /* OEM 0xa72a4: rg+bg+count */
+static uint32_t Cluster_rgbg_value2[CLUSTER_ENTRIES * 4];  /* OEM 0xa6ee4: rg+bg+count+wavg */
+
+/*
+ * Cluster_rgbg_index_max: 3 layers of 12 entries each.
+ * [0..11]  = max_col index
+ * [12..23] = max_row index (offset 0xc)
+ * [24..35] = max_count    (offset 0x18)
+ */
+#define CIDX_MAX_ENTRIES    12
+static uint32_t Cluster_rgbg_index_max[CIDX_MAX_ENTRIES * 3]; /* OEM 0xa7574 */
 
 /* tiziano_awb_params_refresh - OEM EXACT: load AWB parameters from tuning bin.
  * Called at init and on day/night mode switch. */
@@ -13315,6 +13348,1140 @@ static uint32_t awb_ratio_to_mf_gain(uint32_t point_pos, uint32_t ratio)
 	return (gain_q + rounding) >> q;
 }
 
+/* OEM func_zone_ct_weight — adjusts a zone's CT mesh weight based on how
+ * far the zone's inverse-CT (1000000/CT) falls relative to the CT-weight
+ * boundary defined by arg2[0..3].  When the zone is well within the
+ * boundary, the weight passes through unchanged; near the edges it is
+ * scaled by arg6/arg7 ramp factors.
+ *
+ * OEM decompilation at 0x19da0:
+ *   arg1 = inv_ct (= 1000000 / zone_ct)
+ *   arg2 = ct_weight_params (arg5 in Ct_Detect: 4 entries)
+ *   arg3 = ct_scale          (arg6[1] in Ct_Detect)
+ *   arg4 = q                 (fixed-point shift)
+ *   arg5 = zone_wght_q       (zone CT mesh weight, Q-format)
+ *   arg6 = ramp_bg           (var_a4 in Ct_Detect)
+ *   arg7 = ramp_rg           (var_a0 in Ct_Detect)
+ */
+static uint32_t func_zone_ct_weight(uint32_t inv_ct, const uint32_t *cw,
+				    uint32_t ct_scale, uint32_t q,
+				    uint32_t zone_wght_q, uint32_t ramp_bg,
+				    uint32_t ramp_rg)
+{
+	/*
+	 * OEM 0x19da0:
+	 * cw[0] = ct_lo_outer, cw[1] = ct_lo_inner,
+	 * cw[2] = ct_hi_inner, cw[3] = ct_hi
+	 *
+	 * Regions (in inv_ct space):
+	 *   inv_ct >= ct_hi          -> scale = ct_scale (outside high)
+	 *   ct_lo_inner >= inv_ct    -> scale = ct_scale (outside low)
+	 *   ct_hi_inner < inv_ct     -> ramp from ct_scale toward 0x100 using ramp_bg
+	 *   inv_ct < ct_lo_outer     -> ramp from ct_scale toward 0x100 using ramp_rg
+	 *   otherwise (fully inside) -> scale = 0x100 (full weight)
+	 */
+	uint32_t ct_hi = cw[3];
+	uint32_t scale_q;
+
+	if (inv_ct >= ct_hi) {
+		/* Outside high boundary */
+		scale_q = ct_scale << (q & 0x1f);
+	} else {
+		uint32_t ct_lo_inner = cw[1];
+
+		if (ct_lo_inner >= inv_ct) {
+			/* Outside low boundary */
+			scale_q = ct_scale << (q & 0x1f);
+		} else if (cw[2] < inv_ct) {
+			/* Between ct_hi_inner and ct_hi: ramp toward ct_scale */
+			scale_q = (ct_scale << (q & 0x1f))
+				+ fix_point_mult2_32(q,
+					(ct_hi - inv_ct) << (q & 0x1f),
+					ramp_bg);
+		} else if (inv_ct < cw[0]) {
+			/* Between ct_lo_inner and ct_lo_outer: ramp toward ct_scale */
+			scale_q = (ct_scale << (q & 0x1f))
+				+ fix_point_mult2_32(q,
+					(inv_ct - ct_lo_inner) << (q & 0x1f),
+					ramp_rg);
+		} else {
+			/* Fully inside — full weight */
+			scale_q = 0x100u << (q & 0x1f);
+		}
+	}
+
+	return fix_point_div_32(q,
+			fix_point_mult2_32(q, zone_wght_q, scale_q),
+			0x100u << (q & 0x1f));
+}
+
+/* Tiziano_Awb_Ct_Detect — OEM AWB color-temperature detection function.
+ *
+ * Computes weighted rg/bg targets from per-zone AWB statistics by:
+ * 1. Normalizing zone pixel counts to get per-zone weights
+ * 2. Clamping zone rg/bg values to valid range and finding bracket indices
+ * 3. Interpolating zone CT values from the color temp mesh
+ * 4. Optionally applying CT-weight adjustment (when ct_mode[0]==1)
+ * 5. Computing distance-based proximity weights in rg/bg space
+ * 6. Running cluster-based AWB: find dominant clusters, iterate to converge
+ * 7. Applying cluster weights to zone weights
+ * 8. Computing weighted-average rg/bg across all zones
+ * 9. Optionally refining via distance weighting (when dis_tw[0]==1)
+ *
+ * OEM decompilation at 0x19e78 in tx-isp-t31.ko.
+ *
+ * @zone_rg:     Per-zone rg ratios (Q-format). bg ratios at [cols*rows].
+ * @zone_pix:    Per-zone pixel counts.
+ * @light_src:   Light source CT reference points (2*n_lights entries).
+ * @n_lights:    Number of light sources (CT nodes).
+ * @ct_wght_p:   CT weight boundary params [4]: lo_outer, lo_inner, hi_inner, hi.
+ * @ct_mode:     CT mode [2]: [0]=enable, [1]=scale.
+ * @ct_mesh:     Color temperature mesh (15x15 uint32_t).
+ * @cols:        Number of columns (15).
+ * @rows:        Number of rows (15).
+ * @rg_pos:      rg grid positions [15].
+ * @bg_pos:      bg grid positions [15].
+ * @ct_wght_mesh: CT weight mesh (same layout as ct_mesh), used when ct_mode[0]==1.
+ * @awb_wght:    Per-zone AWB weights (15x15 uint32_t).
+ * @dis_tw:      Distance threshold/weight params [3]: [0]=enable, [1]=hi, [2]=lo.
+ * @out_ct:      Output: detected color temperature.
+ * @ls_w_lut:    Distance-to-weight lookup table (512 entries).
+ * @pp:          Pointer to AwbPointPos (Q-format parameter).
+ * @cl_params:   Cluster params [6]: enable, dist_thr, merge_dist, conv_thr, conv_tol, max_iter.
+ * @out_rg_bg:   Output: [0]=rg, [1]=bg (un-shifted values).
+ * @out_status:  Output: 0=success, 1=failure (no valid zones).
+ */
+static void Tiziano_Awb_Ct_Detect(
+	uint32_t *zone_rg,       /* arg1  — also contains bg at +cols*rows */
+	const uint32_t *zone_pix, /* arg2 */
+	const uint32_t *light_src, /* arg3 */
+	uint32_t n_lights,        /* arg4 */
+	const uint32_t *ct_wght_p, /* arg5 */
+	const uint32_t *ct_mode,  /* arg6 */
+	const uint32_t *ct_mesh,  /* arg7 */
+	uint32_t cols,            /* arg8 */
+	uint32_t rows,            /* arg9 */
+	const uint32_t *rg_pos,  /* arg10 */
+	const uint32_t *bg_pos,  /* arg11 */
+	const uint32_t *ct_wght_mesh, /* arg12 */
+	const uint32_t *awb_wght, /* arg13 */
+	const uint32_t *dis_tw,  /* arg14 */
+	uint32_t *out_ct,        /* arg15 */
+	const uint32_t *ls_w_lut, /* arg16 */
+	const uint32_t *pp_ptr,  /* arg17 */
+	const uint32_t *cl_params, /* arg18 */
+	uint32_t *out_rg_bg,     /* arg19 */
+	uint32_t *out_status)    /* arg20 */
+{
+	uint32_t fp = *pp_ptr;            /* Q-format shift count */
+	uint32_t q_mask = fp & 0x1f;
+	uint32_t total = cols * rows;
+	uint32_t v0_28 = total;           /* offset from rg to bg in zone_rg */
+	uint32_t rounding = 1u << ((fp - 1) & 0x1f);
+
+	/* Local copies of mode/threshold params */
+	uint32_t ct_enable = ct_mode[0];   /* 1 = CT weighting enabled */
+	uint32_t ct_scale = ct_mode[1];
+	uint32_t cl_enable = cl_params[0]; /* 1 = cluster mode */
+	uint32_t cl_dist = cl_params[1];   /* cluster distance threshold */
+	uint32_t cl_merge = cl_params[2];  /* merge distance */
+	uint32_t cl_conv_thr = cl_params[3]; /* convergence threshold */
+	uint32_t cl_conv_tol = cl_params[4]; /* convergence tolerance */
+	uint32_t cl_max_iter = cl_params[5]; /* max cluster iterations */
+	uint32_t dis_enable = dis_tw[0];
+	uint32_t dis_hi = dis_tw[1];
+	uint32_t dis_lo = dis_tw[2];
+
+	/* CT-weight ramp factors (precomputed) */
+	uint32_t var_a0 = 0, var_a4 = 0;
+
+	/* Light source CT reference array (subtract 1 from each entry) */
+	uint32_t ls_ref[20]; /* max 10 light sources * 2 */
+	uint32_t ls_idx;
+
+	uint32_t max_pix;
+	uint32_t r, c, idx;
+
+	/* --- Phase 0: Setup --- */
+	memset(ls_ref, 0, sizeof(ls_ref));
+
+	if (ct_enable == 1) {
+		uint32_t s2_2 = (0x100u - ct_scale) << q_mask;
+		uint32_t denom_bg = (ct_wght_p[3] - ct_wght_p[2]) << q_mask;
+		uint32_t denom_rg = (ct_wght_p[0] - ct_wght_p[1]) << q_mask;
+		if (denom_bg)
+			var_a4 = fix_point_div_32(fp, s2_2, denom_bg);
+		if (denom_rg)
+			var_a0 = fix_point_div_32(fp, s2_2, denom_rg);
+	}
+
+	/* Copy light-source reference points (subtract 1 from each) */
+	for (ls_idx = 0; ls_idx < n_lights * 2 && ls_idx < 20; ls_idx++)
+		ls_ref[ls_idx] = light_src[ls_idx] - 1;
+
+	/* --- Phase 1: Find max pixel count --- */
+	max_pix = zone_pix[0];
+	for (r = 0; r < rows; r++)
+		for (c = 0; c < cols; c++) {
+			uint32_t p = zone_pix[r * cols + c];
+			if (max_pix < p)
+				max_pix = p;
+		}
+
+	/* --- Phase 2: Compute zone_pix_wgh (normalized pixel weights) --- */
+	for (r = 0; r < rows; r++) {
+		for (c = 0; c < cols; c++) {
+			idx = r * cols + c;
+			if (max_pix == 0) {
+				zone_pix_wgh[idx] = 0;
+				/* OEM breaks the inner loop on max_pix==0 */
+				break;
+			}
+			zone_pix_wgh[idx] = fix_point_div_32(fp,
+				zone_pix[idx] << q_mask,
+				max_pix << q_mask);
+		}
+	}
+
+	/* --- Phase 3: Clamp zone rg/bg to valid range --- */
+	{
+		uint32_t rg_lo_q = rg_pos[0] << q_mask;
+		uint32_t rg_hi_q = rg_pos[14] << q_mask;
+		uint32_t bg_lo_q = bg_pos[0] << q_mask;
+		uint32_t bg_hi_q = bg_pos[14] << q_mask;
+
+		for (r = 0; r < rows; r++) {
+			for (c = 0; c < cols; c++) {
+				uint32_t *rg_p = &zone_rg[r * cols + c];
+				uint32_t *bg_p = &zone_rg[v0_28 + r * cols + c];
+
+				if (rg_hi_q < *rg_p)
+					*rg_p = rg_hi_q;
+				else if (*rg_p < rg_lo_q)
+					*rg_p = rg_lo_q;
+
+				if (bg_hi_q < *bg_p)
+					*bg_p = bg_hi_q;
+				else if (*bg_p < bg_lo_q)
+					*bg_p = bg_lo_q;
+			}
+		}
+	}
+
+	/* --- Phase 4: Interpolate CT mesh and compute rgbg_wght --- */
+	memset(rgbg_wght, 0, sizeof(rgbg_wght));
+	memset(Cluster_rgbg_index_num, 0, sizeof(Cluster_rgbg_index_num));
+
+	for (r = 0; r < rows; r++) {
+		for (c = 0; c < cols; c++) {
+			uint32_t *wght_p = &rgbg_wght[r * cols + c];
+			uint32_t zone_rg_val = zone_rg[r * cols + c];
+			uint32_t zone_bg_val = zone_rg[v0_28 + r * cols + c];
+			uint32_t rg_idx, bg_idx;
+			uint32_t mesh_val;
+
+			/* Find rg bracket index */
+			rg_idx = 0;
+			if (zone_rg_val < (rg_pos[0] << q_mask)) {
+				/* Below range */
+				goto find_bg_idx;
+			} else if ((rg_pos[14] << q_mask) < zone_rg_val) {
+				/* Above range */
+				goto find_bg_idx;
+			} else if (zone_rg_val == (rg_pos[14] << q_mask)) {
+				rg_idx = 15;
+			} else {
+				uint32_t ri;
+				rg_idx = 15; /* default if not found */
+				for (ri = 0; ri < 14; ri++) {
+					if (zone_rg_val >= (rg_pos[ri] << q_mask) &&
+					    zone_rg_val < (rg_pos[ri + 1] << q_mask)) {
+						rg_idx = ri + 1;
+						break;
+					}
+				}
+				if (ri == 14)
+					rg_idx = 15;
+			}
+
+find_bg_idx:
+			/* Find bg bracket index */
+			bg_idx = 0;
+			if (zone_bg_val >= (bg_pos[0] << q_mask) &&
+			    !((bg_pos[14] << q_mask) < zone_bg_val)) {
+				if (zone_bg_val == (bg_pos[14] << q_mask)) {
+					bg_idx = 15;
+				} else {
+					uint32_t bi;
+					bg_idx = 0;
+					for (bi = 0; bi < 14; bi++) {
+						if (zone_bg_val >= (bg_pos[bi] << q_mask) &&
+						    zone_bg_val < (bg_pos[bi + 1] << q_mask)) {
+							bg_idx = bi + 1;
+							break;
+						}
+					}
+					if (bi == 14)
+						bg_idx = 15;
+				}
+			}
+
+			/* Update cluster index counts */
+			if (rg_idx == 0 || bg_idx == 0) {
+				/* Out of range — no weight */
+				*wght_p = 0;
+				continue;
+			}
+
+			/* Increment cluster index counter */
+			if (bg_idx != 15 && rg_idx != 15) {
+				/* Both in range: Cluster_rgbg_index_num[(bg_idx-1)*14 + (rg_idx-1)] */
+				Cluster_rgbg_index_num[(bg_idx - 1) * 14 + (rg_idx - 1)] += 1;
+			} else if (rg_idx == 15) {
+				if (bg_idx == 15) {
+					/* Both at max */
+					Cluster_rgbg_index_num[13 * 14 + 13] += 1;
+				} else {
+					/* rg at max, bg in range */
+					Cluster_rgbg_index_num[(bg_idx - 1) * 14 + 13] += 1;
+				}
+			} else {
+				/* bg at max, rg in range */
+				Cluster_rgbg_index_num[13 * 14 + (rg_idx - 1)] += 1;
+			}
+
+			if (bg_idx == 0 || rg_idx == 0) {
+				*wght_p = 0;
+				continue;
+			}
+
+			/* Interpolate CT mesh value */
+			if (rg_idx == 15) {
+				/* rg at max boundary — use last column */
+				uint32_t mesh_off = bg_idx * 15; /* row = bg_idx */
+				uint32_t row_last = ct_mesh[mesh_off - 1]; /* last element of prev row */
+				uint32_t row_last_next = ct_mesh[mesh_off - 1 + 15]; /* next row last */
+
+				mesh_val = ISPAWBInterpolation1(fp,
+					zone_bg_val,
+					bg_pos[bg_idx - 1], bg_pos[bg_idx],
+					row_last, row_last_next);
+
+				if (ct_enable == 1) {
+					uint32_t ct_w_last = ct_wght_mesh[mesh_off - 1];
+					uint32_t ct_w_last_next = ct_wght_mesh[mesh_off - 1 + 15];
+					uint32_t ct_interp = ISPAWBInterpolation1(fp,
+						zone_bg_val,
+						bg_pos[bg_idx - 1], bg_pos[bg_idx],
+						ct_w_last, ct_w_last_next);
+					uint32_t inv_ct_val = ct_interp >> q_mask;
+					if (inv_ct_val)
+						inv_ct_val = 1000000u / inv_ct_val;
+					*wght_p = func_zone_ct_weight(inv_ct_val,
+						ct_wght_p, ct_scale, fp,
+						mesh_val, var_a4, var_a0);
+				} else {
+					*wght_p = mesh_val;
+				}
+			} else if (bg_idx == 15) {
+				/* bg at max boundary — use last row */
+				uint32_t mesh_off = rg_idx; /* col = rg_idx */
+				uint32_t col_rg = ct_mesh[14 * 15 + mesh_off - 1];
+				uint32_t col_rg_next = ct_mesh[14 * 15 + mesh_off];
+
+				mesh_val = ISPAWBInterpolation1(fp,
+					zone_rg_val,
+					rg_pos[rg_idx - 1], rg_pos[rg_idx],
+					col_rg, col_rg_next);
+
+				if (ct_enable == 1) {
+					uint32_t ct_col = ct_wght_mesh[14 * 15 + mesh_off - 1];
+					uint32_t ct_col_next = ct_wght_mesh[14 * 15 + mesh_off];
+					uint32_t ct_interp = ISPAWBInterpolation1(fp,
+						zone_rg_val,
+						rg_pos[rg_idx - 1], rg_pos[rg_idx],
+						ct_col, ct_col_next);
+					uint32_t inv_ct_val = ct_interp >> q_mask;
+					if (inv_ct_val)
+						inv_ct_val = 1000000u / inv_ct_val;
+					*wght_p = func_zone_ct_weight(inv_ct_val,
+						ct_wght_p, ct_scale, fp,
+						mesh_val, var_a4, var_a0);
+				} else {
+					*wght_p = mesh_val;
+				}
+			} else {
+				/* Normal case: bilinear interpolation */
+				uint32_t mesh_off = (bg_idx - 1) * 15 + (rg_idx - 1);
+				uint32_t row0_val, row1_val;
+
+				row0_val = ISPAWBInterpolation1(fp,
+					zone_rg_val,
+					rg_pos[rg_idx - 1], rg_pos[rg_idx],
+					ct_mesh[mesh_off], ct_mesh[mesh_off + 1]);
+
+				row1_val = ISPAWBInterpolation1(fp,
+					zone_rg_val,
+					rg_pos[rg_idx - 1], rg_pos[rg_idx],
+					ct_mesh[mesh_off + 15], ct_mesh[mesh_off + 16]);
+
+				mesh_val = ISPAWBInterpolation2(fp,
+					zone_bg_val,
+					bg_pos[bg_idx - 1], bg_pos[bg_idx],
+					row0_val, row1_val);
+
+				*wght_p = mesh_val;
+
+				if (ct_enable == 1) {
+					uint32_t ct_r0 = ISPAWBInterpolation1(fp,
+						zone_rg_val,
+						rg_pos[rg_idx - 1], rg_pos[rg_idx],
+						ct_wght_mesh[mesh_off],
+						ct_wght_mesh[mesh_off + 1]);
+					uint32_t ct_r1 = ISPAWBInterpolation1(fp,
+						zone_rg_val,
+						rg_pos[rg_idx - 1], rg_pos[rg_idx],
+						ct_wght_mesh[mesh_off + 15],
+						ct_wght_mesh[mesh_off + 16]);
+					uint32_t ct_interp = ISPAWBInterpolation2(fp,
+						zone_bg_val,
+						bg_pos[bg_idx - 1], bg_pos[bg_idx],
+						ct_r0, ct_r1);
+					uint32_t inv_ct_val = ct_interp >> q_mask;
+					if (inv_ct_val)
+						inv_ct_val = 1000000u / inv_ct_val;
+					*wght_p = func_zone_ct_weight(inv_ct_val,
+						ct_wght_p, ct_scale, fp,
+						mesh_val, var_a4, var_a0);
+				}
+			}
+		}
+	}
+
+	/* --- Phase 5: Compute distance-based proximity weights in rg/bg space --- */
+	{
+		uint32_t t1 = 0;
+		for (t1 = 0; t1 < n_lights; t1++) {
+			uint32_t ls_rg_ref = ls_ref[t1 * 2];
+			uint32_t ls_bg_ref = ls_ref[t1 * 2 + 1];
+
+			for (r = 0; r < rows; r++) {
+				for (c = 0; c < cols; c++) {
+					uint32_t zone_idx = r * cols + c;
+					uint32_t rg_q = (rounding + zone_rg[zone_idx]) >> q_mask;
+					uint32_t bg_q = (rounding + zone_rg[v0_28 + zone_idx]) >> q_mask;
+					uint32_t d_rg, d_bg;
+					uint64_t dist_sq;
+					uint32_t wght_class;
+					uint32_t wght_q;
+					uint32_t *wp;
+
+					d_rg = (rg_q >= ls_rg_ref) ?
+						(rg_q - ls_rg_ref) : (ls_rg_ref - rg_q);
+					d_bg = (bg_q >= ls_bg_ref) ?
+						(bg_q - ls_bg_ref) : (ls_bg_ref - bg_q);
+
+					dist_sq = (uint64_t)d_bg * d_bg + (uint64_t)d_rg * d_rg;
+
+					/* OEM distance-to-weight classification */
+					wght_class = 0;
+					if ((uint32_t)dist_sq < 0x332) {
+						wght_class = 1;
+						if ((uint32_t)dist_sq < 0x2a7) {
+							wght_class = 2;
+							if ((uint32_t)dist_sq < 0x267) {
+								wght_class = 3;
+								if ((uint32_t)dist_sq < 0x23c) {
+									wght_class = 4;
+									if ((uint32_t)dist_sq < 0x21c) {
+										wght_class = 5;
+										if ((uint32_t)dist_sq < 0x202) {
+											wght_class = ls_w_lut[(uint32_t)dist_sq];
+										}
+									}
+								}
+							}
+						}
+					}
+
+					wght_q = wght_class << q_mask;
+					wp = &rgbg_wght[r * cols + c];
+					if (*wp < wght_q)
+						*wp = wght_q;
+				}
+			}
+		}
+	}
+
+	/* --- Phase 6: Cluster-based AWB (when cl_enable == 1) --- */
+	if (cl_enable == 1) {
+		uint32_t ci, cj;
+
+		/* 6a: Find dominant cluster indices from index_num */
+		memset(Cluster_rgbg_index_max, 0, sizeof(Cluster_rgbg_index_max));
+
+		for (ci = 0; ci < CIDX_MAX_ENTRIES; ci++) {
+			uint32_t best_col = 0;
+			uint32_t best_row = 0;
+			uint32_t best_cnt = 0;
+
+			for (cj = 0; cj < 14; cj++) {
+				uint32_t ck;
+				for (ck = 0; ck < 14; ck++) {
+					uint32_t cnt = Cluster_rgbg_index_num[cj * 14 + ck];
+					if (cnt == 0)
+						continue;
+					if (best_cnt >= cnt)
+						continue;
+					best_col = ck;
+					best_row = cj;
+					best_cnt = cnt;
+				}
+			}
+
+			Cluster_rgbg_index_max[ci] = best_col;
+			Cluster_rgbg_index_max[ci + CIDX_MAX_ENTRIES] = best_row;
+			Cluster_rgbg_index_max[ci + CIDX_MAX_ENTRIES * 2] = best_cnt;
+
+			/* Zero out the found cell so next iteration finds the next best */
+			Cluster_rgbg_index_num[best_row * 14 + best_col] = 0;
+		}
+
+		/* 6b: Initialize cluster value1 from dominant indices */
+		for (ci = 0; ci < CLUSTER_ENTRIES; ci++) {
+			Cluster_rgbg_value1[ci] = 0;
+			Cluster_rgbg_value1[ci + CLUSTER_BG_OFF] = 0;
+			Cluster_rgbg_value1[ci + CLUSTER_CNT_OFF] = 0;
+		}
+
+		for (ci = 0; ci < CIDX_MAX_ENTRIES; ci++) {
+			uint32_t col_idx = Cluster_rgbg_index_max[ci];
+			uint32_t row_idx = Cluster_rgbg_index_max[ci + CIDX_MAX_ENTRIES];
+
+			Cluster_rgbg_value1[ci * 5] = rg_pos[col_idx];
+			Cluster_rgbg_value1[ci * 5 + CLUSTER_BG_OFF] = bg_pos[row_idx];
+
+			/* OEM stores: min, center, max of the bracket */
+			Cluster_rgbg_value1[ci * 5 + 1] = rg_pos[col_idx];
+			Cluster_rgbg_value1[ci * 5 + 1 + CLUSTER_BG_OFF] = bg_pos[row_idx + 1];
+
+			Cluster_rgbg_value1[ci * 5 + 2] = (rg_pos[col_idx] + 1 + rg_pos[col_idx + 1]) >> 1;
+			Cluster_rgbg_value1[ci * 5 + 2 + CLUSTER_BG_OFF] = (bg_pos[row_idx] + 1 + bg_pos[row_idx + 1]) >> 1;
+
+			Cluster_rgbg_value1[ci * 5 + 3] = rg_pos[col_idx + 1];
+			Cluster_rgbg_value1[ci * 5 + 3 + CLUSTER_BG_OFF] = bg_pos[row_idx];
+
+			Cluster_rgbg_value1[ci * 5 + 4] = rg_pos[col_idx + 1];
+			Cluster_rgbg_value1[ci * 5 + 4 + CLUSTER_BG_OFF] = bg_pos[row_idx + 1];
+		}
+
+		/* 6c: Remove duplicate cluster entries */
+		for (ci = 0; ci < CLUSTER_ENTRIES - 1; ci++) {
+			if (Cluster_rgbg_value1[ci] == 0)
+				continue;
+			if (Cluster_rgbg_value1[ci + CLUSTER_BG_OFF] == 0)
+				continue;
+			for (cj = ci + 1; cj < CLUSTER_ENTRIES; cj++) {
+				if (Cluster_rgbg_value1[ci] == Cluster_rgbg_value1[cj] &&
+				    Cluster_rgbg_value1[ci + CLUSTER_BG_OFF] ==
+				    Cluster_rgbg_value1[cj + CLUSTER_BG_OFF]) {
+					Cluster_rgbg_value1[cj] = 0;
+					Cluster_rgbg_value1[cj + CLUSTER_BG_OFF] = 0;
+				}
+			}
+		}
+
+		/* 6d: Iteratively converge cluster centers */
+		{
+			uint32_t *cv1 = Cluster_rgbg_value1;
+			uint32_t cv1_rg;
+
+			cv1_rg = cv1[0];
+			while (1) {
+				uint32_t iter_count;
+
+				if (cv1_rg == 0 || cv1[CLUSTER_BG_OFF] == 0) {
+					cv1++;
+					if (cv1 >= &Cluster_rgbg_value1[CLUSTER_ENTRIES])
+						break;
+					cv1_rg = *cv1;
+					continue;
+				}
+
+				iter_count = 0;
+				while (1) {
+					uint32_t sum_rg = 0, sum_bg = 0;
+					uint32_t match_cnt = 0;
+					uint32_t half;
+
+					iter_count++;
+
+					for (r = 0; r < rows; r++) {
+						for (c = 0; c < cols; c++) {
+							uint32_t zr = (rounding + zone_rg[r * cols + c]) >> q_mask;
+							uint32_t zb = (rounding + zone_rg[v0_28 + r * cols + c]) >> q_mask;
+							uint32_t dr, db;
+							uint64_t dsq;
+
+							dr = (zr >= *cv1) ?
+								(zr - *cv1) : (*cv1 - zr);
+							db = (zb >= cv1[CLUSTER_BG_OFF]) ?
+								(zb - cv1[CLUSTER_BG_OFF]) :
+								(cv1[CLUSTER_BG_OFF] - zb);
+
+							dsq = (uint64_t)db * db + (uint64_t)dr * dr;
+							if (cl_dist >= (uint32_t)dsq) {
+								sum_rg += zone_rg[r * cols + c];
+								sum_bg += zone_rg[v0_28 + r * cols + c];
+								match_cnt++;
+							}
+						}
+					}
+
+					if (match_cnt == 0) {
+						cv1++;
+						break;
+					}
+
+					half = match_cnt >> 1;
+					{
+						uint32_t new_rg = ((sum_rg + half) / match_cnt) >> q_mask;
+						uint32_t new_bg = ((sum_bg + half) / match_cnt) >> q_mask;
+						uint32_t delta_rg, delta_bg;
+
+						delta_rg = (new_rg >= *cv1) ?
+							(new_rg - *cv1) : (*cv1 - new_rg);
+
+						if (cl_conv_tol >= delta_rg) {
+							delta_bg = (new_bg >= cv1[CLUSTER_BG_OFF]) ?
+								(new_bg - cv1[CLUSTER_BG_OFF]) :
+								(cv1[CLUSTER_BG_OFF] - new_bg);
+
+							if (cl_conv_tol >= delta_bg) {
+								cv1++;
+								break;
+							}
+						}
+
+						if (cl_max_iter < iter_count) {
+							cv1++;
+							break;
+						}
+
+						*cv1 = new_rg;
+						cv1[CLUSTER_BG_OFF] = new_bg;
+						cv1[CLUSTER_CNT_OFF] = match_cnt;
+					}
+				}
+
+				if (cv1 >= &Cluster_rgbg_value1[CLUSTER_ENTRIES])
+					break;
+				cv1_rg = *cv1;
+			}
+		}
+
+		/* 6e: Build value2 — sort clusters by count, merge nearby */
+		memset(Cluster_rgbg_value2, 0, sizeof(Cluster_rgbg_value2));
+
+		for (ci = 0; ci < CLUSTER_ENTRIES; ci++) {
+			uint32_t *cv2 = &Cluster_rgbg_value2[ci];
+			uint32_t *cv1 = Cluster_rgbg_value1;
+			uint32_t best_cnt;
+
+			best_cnt = cv2[CLUSTER_CNT_OFF];
+
+			while (cv1 < &Cluster_rgbg_value1[CLUSTER_ENTRIES]) {
+				uint32_t cnt1 = cv1[CLUSTER_CNT_OFF];
+				if (cnt1 == 0) {
+					cv1++;
+					continue;
+				}
+				if (best_cnt >= cnt1) {
+					cv1++;
+					continue;
+				}
+				/* Found a better one */
+				cv2[CLUSTER_CNT_OFF] = cnt1;
+				best_cnt = cnt1;
+				cv2[0] = cv1[0];
+				cv2[CLUSTER_BG_OFF] = cv1[CLUSTER_BG_OFF];
+				cv1++;
+			}
+
+			if (cv2[CLUSTER_CNT_OFF] == 0)
+				break;
+
+			/* Merge nearby clusters from value1 into this value2 entry */
+			{
+				uint32_t *cv1m = Cluster_rgbg_value1;
+				uint32_t sum_w = 0, sum_rg_w = 0, sum_bg_w = 0;
+
+				while (cv1m < &Cluster_rgbg_value1[CLUSTER_ENTRIES]) {
+					uint32_t cnt1 = cv1m[CLUSTER_CNT_OFF];
+					if (cnt1 == 0) {
+						cv1m++;
+						continue;
+					}
+					{
+						uint32_t d_rg, d_bg;
+						uint64_t dsq;
+
+						d_rg = (cv2[0] >= cv1m[0]) ?
+							(cv2[0] - cv1m[0]) : (cv1m[0] - cv2[0]);
+						d_bg = (cv2[CLUSTER_BG_OFF] >= cv1m[CLUSTER_BG_OFF]) ?
+							(cv2[CLUSTER_BG_OFF] - cv1m[CLUSTER_BG_OFF]) :
+							(cv1m[CLUSTER_BG_OFF] - cv2[CLUSTER_BG_OFF]);
+
+						dsq = (uint64_t)d_bg * d_bg + (uint64_t)d_rg * d_rg;
+						if (cl_merge < (uint32_t)dsq) {
+							cv1m++;
+							continue;
+						}
+						sum_w += cnt1;
+						sum_rg_w += cnt1 * cv1m[0];
+						sum_bg_w += cnt1 * cv1m[CLUSTER_BG_OFF];
+						cv1m[CLUSTER_CNT_OFF] = 0;
+					}
+					cv1m++;
+				}
+
+				if (sum_w != 0) {
+					uint32_t half = sum_w >> 1;
+					cv2[CLUSTER_CNT_OFF] = 0;
+					cv2[0] = (sum_rg_w + half) / sum_w;
+					cv2[CLUSTER_BG_OFF] = (sum_bg_w + half) / sum_w;
+				}
+			}
+		}
+
+		/* 6f: Count zones near each value2 cluster, compute weight averages */
+		{
+			uint32_t *cv2 = Cluster_rgbg_value2;
+
+			while (cv2 < &Cluster_rgbg_value2[CLUSTER_ENTRIES]) {
+				uint32_t cv2_rg = cv2[0];
+
+				if (cv2_rg == 0 || cv2[CLUSTER_BG_OFF] == 0) {
+					cv2++;
+					continue;
+				}
+
+				cv2[CLUSTER_CNT_OFF] = 0;
+				cv2[CLUSTER_WAVG_OFF] = 0;
+
+				for (r = 0; r < rows; r++) {
+					for (c = 0; c < cols; c++) {
+						uint32_t w = rgbg_wght[r * cols + c];
+						if (w == 0)
+							continue;
+						{
+							uint32_t zr = (rounding + zone_rg[r * cols + c]) >> q_mask;
+							uint32_t zb = (rounding + zone_rg[v0_28 + r * cols + c]) >> q_mask;
+							uint32_t dr, db;
+							uint64_t dsq;
+
+							dr = (zr >= cv2_rg) ?
+								(zr - cv2_rg) : (cv2_rg - zr);
+							db = (zb >= cv2[CLUSTER_BG_OFF]) ?
+								(zb - cv2[CLUSTER_BG_OFF]) :
+								(cv2[CLUSTER_BG_OFF] - zb);
+
+							dsq = (uint64_t)db * db + (uint64_t)dr * dr;
+							if (cl_conv_thr >= (uint32_t)dsq) {
+								cv2[CLUSTER_CNT_OFF] += 1;
+								cv2[CLUSTER_WAVG_OFF] += w;
+							}
+						}
+					}
+				}
+
+				cv2++;
+			}
+		}
+
+		/* 6g: Normalize weight averages by zone count */
+		{
+			uint32_t *cv2 = Cluster_rgbg_value2;
+			while (cv2 < &Cluster_rgbg_value2[CLUSTER_ENTRIES]) {
+				uint32_t cnt = cv2[CLUSTER_CNT_OFF];
+				if (cnt != 0)
+					cv2[CLUSTER_WAVG_OFF] = (cv2[CLUSTER_WAVG_OFF] + (cnt >> 1)) / cnt;
+				cv2++;
+			}
+		}
+
+		/* 6h: Find max weight average */
+		{
+			uint32_t max_wavg = 0;
+			uint32_t *cv2 = Cluster_rgbg_value2;
+			while (cv2 < &Cluster_rgbg_value2[CLUSTER_ENTRIES]) {
+				uint32_t w = cv2[CLUSTER_WAVG_OFF];
+				if (w != 0 && max_wavg < w)
+					max_wavg = w;
+				cv2++;
+			}
+
+			/* 6i: Scale zone counts by weight averages */
+			cv2 = Cluster_rgbg_value2;
+			while (cv2 < &Cluster_rgbg_value2[CLUSTER_ENTRIES]) {
+				uint32_t cnt = cv2[CLUSTER_CNT_OFF];
+				if (cnt != 0 && max_wavg != 0)
+					cv2[CLUSTER_CNT_OFF] =
+						(cnt * cv2[CLUSTER_WAVG_OFF] + (max_wavg >> 1)) / max_wavg;
+				cv2++;
+			}
+		}
+
+		/* 6j: Find max cluster count for normalization */
+		{
+			uint32_t max_cnt = 0;
+			uint32_t half_max;
+			uint32_t *cv2 = Cluster_rgbg_value2;
+
+			while (cv2 < &Cluster_rgbg_value2[CLUSTER_ENTRIES]) {
+				uint32_t cnt = cv2[CLUSTER_CNT_OFF];
+				if (cnt != 0 && max_cnt < cnt)
+					max_cnt = cnt;
+				cv2++;
+			}
+
+			half_max = max_cnt >> 1;
+
+			/* 6k: Apply cluster weights to rgbg_wght */
+			for (r = 0; r < rows; r++) {
+				for (c = 0; c < cols; c++) {
+					uint32_t *wp = &rgbg_wght[r * cols + c];
+					uint32_t best_j = 0;
+					uint32_t best_cnt = 0;
+
+					cv2 = Cluster_rgbg_value2;
+					for (ci = 1; ci <= CLUSTER_ENTRIES; ci++) {
+						uint32_t cv2_rg = cv2[0];
+						if (cv2_rg == 0 || cv2[CLUSTER_BG_OFF] == 0) {
+							cv2++;
+							if (ci >= CLUSTER_ENTRIES)
+								break;
+							continue;
+						}
+						{
+							uint32_t zr = (rounding + zone_rg[r * cols + c]) >> q_mask;
+							uint32_t zb = (rounding + zone_rg[v0_28 + r * cols + c]) >> q_mask;
+							uint32_t dr, db;
+							uint64_t dsq;
+
+							dr = (zr >= cv2_rg) ?
+								(zr - cv2_rg) : (cv2_rg - zr);
+							db = (zb >= cv2[CLUSTER_BG_OFF]) ?
+								(zb - cv2[CLUSTER_BG_OFF]) :
+								(cv2[CLUSTER_BG_OFF] - zb);
+
+							dsq = (uint64_t)db * db + (uint64_t)dr * dr;
+							if (cl_conv_thr < (uint32_t)dsq) {
+								cv2++;
+								continue;
+							}
+							if (best_j == 0) {
+								best_j = ci;
+							} else if (Cluster_rgbg_value2[best_j - 1 + CLUSTER_CNT_OFF] <
+								   cv2[CLUSTER_CNT_OFF]) {
+								best_j = ci;
+							}
+						}
+						cv2++;
+					}
+
+					if (best_j == 0)
+						*wp = (half_max + *wp) / (max_cnt ? max_cnt : 1);
+					else
+						*wp = (Cluster_rgbg_value2[best_j - 1 + CLUSTER_CNT_OFF] * *wp +
+						       half_max) / (max_cnt ? max_cnt : 1);
+				}
+			}
+		}
+	}
+
+	/* --- Phase 7: Compute total weight sum --- */
+	{
+		uint32_t total_wght = 0;
+
+		for (r = 0; r < rows; r++)
+			for (c = 0; c < cols; c++)
+				total_wght += rgbg_wght[r * cols + c];
+
+		if (total_wght == 0) {
+			/* No valid zones — output defaults */
+			goto fail_output;
+		}
+
+		/* --- Phase 8: Weighted-average rg/bg computation --- */
+		*out_status = 0;
+
+		{
+			/* 64-bit accumulation for weighted sums */
+			uint64_t sum_rg_w = 0;
+			uint64_t sum_bg_w = 0;
+			uint64_t sum_w = 0;
+			uint32_t i_18, i_17; /* final rg, bg in Q-format */
+
+			for (r = 0; r < rows; r++) {
+				for (c = 0; c < cols; c++) {
+					idx = r * cols + c;
+					{
+						/* OEM: w = fix_point_mult2_32(q, rgbg_wght, zone_pix_wgh) */
+						uint32_t w = fix_point_mult2_32(fp,
+							rgbg_wght[idx],
+							zone_pix_wgh[idx]);
+						sum_rg_w += (uint64_t)fix_point_mult2_32(fp,
+							zone_rg[idx], w);
+						sum_bg_w += (uint64_t)fix_point_mult2_32(fp,
+							zone_rg[v0_28 + idx], w);
+						sum_w += w;
+					}
+				}
+			}
+
+			if (sum_w == 0)
+				goto fail_output;
+
+			/* fix_point_div_64 for rg: sum_rg_w / sum_w */
+			i_18 = fix_point_div_64(fp, 0,
+				(uint32_t)sum_rg_w, (uint32_t)(sum_rg_w >> 32),
+				(uint32_t)sum_w, (uint32_t)(sum_w >> 32));
+
+			i_17 = fix_point_div_64(fp, 0,
+				(uint32_t)sum_bg_w, (uint32_t)(sum_bg_w >> 32),
+				(uint32_t)sum_w, (uint32_t)(sum_w >> 32));
+
+			/* --- Phase 9: Distance-based refinement (when dis_enable == 1) --- */
+			if (dis_enable == 1) {
+				uint32_t dist_sum_w = 0;
+
+				/* Compute per-zone distance from weighted average */
+				for (r = 0; r < rows; r++) {
+					for (c = 0; c < cols; c++) {
+						uint32_t zone_idx = r * cols + c;
+						uint32_t zrg = zone_rg[zone_idx];
+						uint32_t zbg = zone_rg[v0_28 + zone_idx];
+						uint32_t d_rg, d_bg;
+						uint32_t dist;
+
+						d_rg = (i_18 >= zrg) ?
+							(i_18 - zrg) : (zrg - i_18);
+						d_bg = (i_17 >= zbg) ?
+							(i_17 - zbg) : (zbg - i_17);
+
+						dist = fix_point_mult2_32(fp, d_rg, d_rg)
+						     + fix_point_mult2_32(fp, d_bg, d_bg);
+
+						rgbg_dis[zone_idx] = dist;
+
+						/* OEM: dist_sum += mult2(q, mult2(q, dist, rgbg_wght),
+						 *                         awb_wght << q) */
+						if (rgbg_wght[zone_idx] == 0)
+							continue;
+						if (zone_pix_wgh[zone_idx] == 0)
+							continue;
+						if (awb_wght[zone_idx] == 0)
+							continue;
+
+						dist_sum_w += fix_point_mult2_32(fp,
+							fix_point_mult2_32(fp, dist,
+								rgbg_wght[zone_idx]),
+							awb_wght[zone_idx] << q_mask);
+					}
+				}
+
+				{
+					uint32_t norm_dist = fix_point_div_32(fp, dist_sum_w, (uint32_t)sum_w);
+
+					if (norm_dist != 0) {
+						/* Compute distance-weighted rgbg_d_wght */
+						uint64_t dw_sum_rg = 0;
+						uint64_t dw_sum_bg = 0;
+						uint64_t dw_sum_w = 0;
+
+						for (r = 0; r < rows; r++) {
+							for (c = 0; c < cols; c++) {
+								idx = r * cols + c;
+								{
+									uint32_t rel_dist;
+									uint32_t dw;
+									uint32_t w_combined;
+
+									rel_dist = fix_point_div_32(fp,
+										rgbg_dis[idx],
+										norm_dist);
+
+									/* Apply distance threshold/weighting */
+									if (dis_hi < rel_dist) {
+										rgbg_d_wght[idx] = 0;
+									} else if (rel_dist >= dis_lo) {
+										uint32_t w_base = rgbg_wght[idx];
+										rgbg_d_wght[idx] =
+											fix_point_mult2_32(fp,
+												w_base,
+												(1u << q_mask) -
+												fix_point_div_32(fp,
+													rel_dist - dis_lo,
+													dis_hi - dis_lo));
+									} else {
+										rgbg_d_wght[idx] = rgbg_wght[idx];
+									}
+
+									/* OEM: dw = mult2(q, rgbg_d_wght, zone_pix_wgh) */
+									dw = fix_point_mult2_32(fp,
+										rgbg_d_wght[idx],
+										zone_pix_wgh[idx]);
+
+									w_combined = fix_point_mult2_32(fp,
+										zone_rg[idx], dw);
+									dw_sum_rg += w_combined;
+
+									w_combined = fix_point_mult2_32(fp,
+										zone_rg[v0_28 + idx], dw);
+									dw_sum_bg += w_combined;
+
+									dw_sum_w += dw;
+								}
+							}
+						}
+
+						if (dw_sum_w != 0) {
+							i_18 = fix_point_div_64(fp, 0,
+								(uint32_t)dw_sum_rg, (uint32_t)(dw_sum_rg >> 32),
+								(uint32_t)dw_sum_w, (uint32_t)(dw_sum_w >> 32));
+							i_17 = fix_point_div_64(fp, 0,
+								(uint32_t)dw_sum_bg, (uint32_t)(dw_sum_bg >> 32),
+								(uint32_t)dw_sum_w, (uint32_t)(dw_sum_w >> 32));
+						}
+					}
+				}
+			}
+
+			/* --- Phase 10: Final CT/rg/bg output --- */
+			{
+				/* Clamp i_18 (rg) to valid range */
+				uint32_t rg_hi_q = rg_pos[14] << q_mask;
+				uint32_t rg_lo_q = rg_pos[0] << q_mask;
+				uint32_t bg_hi_q = bg_pos[14] << q_mask;
+				uint32_t bg_lo_q = bg_pos[0] << q_mask;
+				uint32_t final_rg, final_bg;
+				uint32_t ct_val;
+				uint32_t rg_bi, bg_bi;
+				uint32_t interp_val;
+				uint32_t bi; /* bracket search index */
+
+				if (rg_hi_q >= i_18) {
+					if (i_18 >= rg_lo_q)
+						final_rg = i_18;
+					else
+						final_rg = rg_lo_q;
+				} else {
+					final_rg = rg_hi_q;
+				}
+
+				if (bg_hi_q >= i_17) {
+					if (i_17 >= bg_lo_q)
+						final_bg = i_17;
+					else
+						final_bg = bg_lo_q;
+				} else {
+					final_bg = bg_hi_q;
+				}
+
+				/* Find bracket for final rg/bg and interpolate CT */
+				/* rg bracket */
+				if (final_rg == rg_hi_q) {
+					rg_bi = 15;
+				} else {
+					rg_bi = 0;
+					for (bi = 0; bi < 14; bi++) {
+						if (final_rg >= (rg_pos[bi] << q_mask) &&
+						    final_rg < (rg_pos[bi + 1] << q_mask)) {
+							rg_bi = bi + 1;
+							break;
+						}
+					}
+					if (bi == 14)
+						rg_bi = 15;
+				}
+
+				/* bg bracket */
+				if (final_bg == bg_hi_q) {
+					bg_bi = 15;
+				} else {
+					bg_bi = 0;
+					for (bi = 0; bi < 14; bi++) {
+						if (final_bg >= (bg_pos[bi] << q_mask) &&
+						    final_bg < (bg_pos[bi + 1] << q_mask)) {
+							bg_bi = bi + 1;
+							break;
+						}
+					}
+					if (bi == 14)
+						bg_bi = 15;
+				}
+
+				/* Interpolate CT from the mesh at the clamped rg/bg */
+				if (rg_bi == 15 && bg_bi == 15) {
+					/* Both at max — use corner value */
+					interp_val = ct_wght_mesh[14 * 15 + 14] << q_mask;
+				} else if (rg_bi == 15) {
+					/* rg at max — interpolate along bg axis in last column */
+					uint32_t off = bg_bi * 15;
+					uint32_t v0 = ct_wght_mesh[off - 1];
+					uint32_t v1 = ct_wght_mesh[off - 1 + 15];
+					interp_val = ISPAWBInterpolation1(fp,
+						final_bg, bg_pos[bg_bi - 1], bg_pos[bg_bi],
+						v0, v1);
+				} else if (bg_bi == 15) {
+					/* bg at max — interpolate along rg axis in last row */
+					uint32_t off = 14 * 15 + rg_bi;
+					uint32_t v0 = ct_wght_mesh[off - 1];
+					uint32_t v1 = ct_wght_mesh[off];
+					interp_val = ISPAWBInterpolation1(fp,
+						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
+						v0, v1);
+				} else {
+					/* Normal bilinear interpolation */
+					uint32_t off = (bg_bi - 1) * 15 + (rg_bi - 1);
+					uint32_t r0 = ISPAWBInterpolation1(fp,
+						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
+						ct_wght_mesh[off], ct_wght_mesh[off + 1]);
+					uint32_t r1 = ISPAWBInterpolation1(fp,
+						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
+						ct_wght_mesh[off + 15], ct_wght_mesh[off + 16]);
+					interp_val = ISPAWBInterpolation2(fp,
+						final_bg, bg_pos[bg_bi - 1], bg_pos[bg_bi],
+						r0, r1);
+				}
+
+				/* Convert to CT: 1000000 / (interp >> q) */
+				if (interp_val != 0) {
+					ct_val = (rounding +
+						fix_point_div_32(fp,
+							0xf4240u << q_mask,
+							interp_val)) >> q_mask;
+				} else {
+					ct_val = 5000; /* 0x1388 */
+				}
+
+				*out_ct = ct_val;
+				out_rg_bg[0] = (final_rg + rounding) >> q_mask;
+				out_rg_bg[1] = (final_bg + rounding) >> q_mask;
+				*out_status = 0;
+			}
+		}
+		return;
+	}
+
+fail_output:
+	*out_status = 1;
+	*out_ct = 5000; /* 0x1388 */
+	out_rg_bg[0] = 0x100;
+	out_rg_bg[1] = 0x100;
+}
+
 /* OEM-matched Tiziano_awb_fpga: compute per-zone rg/bg ratios in Q-format
  * with _awb_cof calibration coefficients, matching the OEM exactly.
  *
@@ -13459,62 +14626,118 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 	 *
 	 * The OEM then feeds zone data into Tiziano_Awb_Ct_Detect which
 	 * computes a weighted/interpolated rg/bg target in ~0x100 scale.
-	 * Since we don't yet implement Ct_Detect, use the simple per-zone
-	 * average: rg_sum / (cof_rg * active_zones).  For neutral R=G with
-	 * cof_rg=1, each zone_rg ~ 256, so the average ~ 256 (= 0x100).
-	 *
-	 * Previous bug: used reciprocal-average (pix_cnt << 2q) / rg_sum
-	 * which gave values ~5000, producing mf gains of ~12 (green tint).
 	 */
 	{
-		u32 rg_avg, bg_avg;
-		u32 rg_denom, bg_denom;
+		u32 ct_detect_status = 0;
+		u32 ct_detect_rg_bg[2] = { 0x100, 0x100 };
+		u32 ct_detect_ct = 5000;
+		u32 cl_params[6];
+		/* OEM dynamically selects CT arrays based on ambient light level.
+		 * awb_rgbg_weight_active was already set by JZ_Isp_Awb.
+		 * Use same criteria for CT threshold and CT para arrays. */
+		const uint32_t *ct_th_active;
+		const uint32_t *ct_para_active;
+		const uint32_t *ct_wght_mesh_active;
+		u32 ev_th_low = _awb_mode[0] << 10;
+		u32 ev_th_high = _awb_mode[1] << 10;
+		u32 active_light_src_num;
 
-		/* Per-zone average: sum / (cof * active_zones), rounded >> q */
-		rg_denom = (u64)cof_rg * rg_pix_cnt;
-		bg_denom = (u64)cof_bg * bg_pix_cnt;
-
-		if (rg_pix_cnt && rg_sum && rg_denom)
-			rg_avg = (u32)div_u64(rg_sum + (rg_denom >> 1),
-					      rg_denom);
-		else
-			rg_avg = 0x100;
-
-		if (bg_pix_cnt && bg_sum && bg_denom)
-			bg_avg = (u32)div_u64(bg_sum + (bg_denom >> 1),
-					      bg_denom);
-		else
-			bg_avg = 0x100;
-
-		/* Store the raw reciprocal-average for diagnostics, but
-		 * use per-zone average for actual gain computation */
-		awb_zone_rg_global = rg_avg;
-		awb_zone_bg_global = bg_avg;
-
-		if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0) {
-			pr_info("AWB_FPGA_DIAG[%u]: total_zones=%u "
-				"rg_pix_cnt=%u bg_pix_cnt=%u "
-				"rg_avg=%u bg_avg=%u "
-				"rg_sum=%llu bg_sum=%llu "
-				"cof=%u,%u cof_q=%u,%u "
-				"zone_rg[0]=%u zone_bg[0]=%u "
-				"pixel_cnt_th=%u pix[0]=%u q=%u pp=0x%x\n",
-				fpga_diag_count, total_zones,
-				rg_pix_cnt, bg_pix_cnt,
-				rg_avg, bg_avg,
-				rg_sum, bg_sum,
-				cof_rg, cof_bg, cof_rg_q, cof_bg_q,
-				awb_zone_rg[0], awb_zone_bg[0],
-				_pixel_cnt_th, stats_p[0], q, pp);
+		if (awb_ev_data < ev_th_low) {
+			/* Low light / outdoor */
+			ct_th_active = (const uint32_t *)_awb_ct_th_ot_luxhigh;
+			ct_para_active = _awb_ct_para_ot;
+			ct_wght_mesh_active = (const uint32_t *)_rgbg_weight_ot;
+			active_light_src_num = 0;
+		} else if (awb_ev_data >= ev_th_high) {
+			/* Normal / indoor */
+			ct_th_active = (const uint32_t *)_awb_ct_th_in;
+			ct_para_active = _awb_ct_para_in;
+			ct_wght_mesh_active = (const uint32_t *)_rgbg_weight;
+			active_light_src_num = _light_src_num;
+		} else {
+			/* Transitional */
+			ct_th_active = (const uint32_t *)_awb_ct_th_ot_luxlow;
+			ct_para_active = _awb_ct_para_ot;
+			ct_wght_mesh_active = (const uint32_t *)_rgbg_weight_ot;
+			active_light_src_num = 0;
 		}
 
-		target_rg = rg_avg;
-		target_bg = bg_avg;
-	}
+		/* Store globals for diagnostics */
+		if (rg_pix_cnt) {
+			u32 rg_denom = (u64)cof_rg * rg_pix_cnt;
+			awb_zone_rg_global = rg_denom ?
+				(u32)div_u64(rg_sum + (rg_denom >> 1), rg_denom) : 0x100;
+		} else {
+			awb_zone_rg_global = 0x100;
+		}
+		if (bg_pix_cnt) {
+			u32 bg_denom = (u64)cof_bg * bg_pix_cnt;
+			awb_zone_bg_global = bg_denom ?
+				(u32)div_u64(bg_sum + (bg_denom >> 1), bg_denom) : 0x100;
+		} else {
+			awb_zone_bg_global = 0x100;
+		}
 
-	target_ct = awb_estimate_ct(target_rg, target_bg);
-	if (target_ct == 0)
-		target_ct = 5000;
+		/* Pack cluster parameters */
+		cl_params[0] = _awb_cluster_head[0];  /* enable */
+		cl_params[1] = _awb_cluster_head[1];  /* cluster dist threshold */
+		cl_params[2] = _awb_cluster_head[2];  /* merge distance */
+		cl_params[3] = _awb_cluster_tail[0];  /* convergence threshold */
+		cl_params[4] = _awb_cluster_tail[1];  /* convergence tolerance */
+		cl_params[5] = _awb_cluster_tail[2];  /* max iterations */
+
+		/* Build combined rg+bg array matching OEM zone_rgbg layout */
+		memcpy(awb_zone_rgbg, awb_zone_rg,
+		       AWB_STATS_ZONES * sizeof(uint32_t));
+		memcpy(awb_zone_rgbg + AWB_STATS_ZONES, awb_zone_bg,
+		       AWB_STATS_ZONES * sizeof(uint32_t));
+
+		Tiziano_Awb_Ct_Detect(
+			awb_zone_rgbg,                        /* arg1: zone rg+bg interleaved */
+			awb_zone_pix_cnt,                     /* arg2: zone pixel counts */
+			(const uint32_t *)_light_src,         /* arg3: light source refs */
+			active_light_src_num,                 /* arg4: number of light sources */
+			ct_th_active,                         /* arg5: CT weight boundary [4] */
+			ct_para_active,                       /* arg6: CT mode [enable, scale] */
+			(const uint32_t *)_color_temp_mesh,   /* arg7: CT mesh */
+			AWB_STATS_COLS,                       /* arg8: cols */
+			AWB_STATS_ROWS,                       /* arg9: rows */
+			(const uint32_t *)_rg_pos,            /* arg10: rg positions */
+			(const uint32_t *)_bg_pos,            /* arg11: bg positions */
+			ct_wght_mesh_active,                  /* arg12: CT weight mesh */
+			(const uint32_t *)_awb_wght,          /* arg13: zone weights */
+			_awb_dis_tw,                          /* arg14: distance thresh/weight */
+			&ct_detect_ct,                        /* arg15: output CT */
+			(const uint32_t *)_ls_w_lut,          /* arg16: distance LUT */
+			&_AwbPointPos[0],                     /* arg17: Q-format param */
+			cl_params,                            /* arg18: cluster params */
+			ct_detect_rg_bg,                      /* arg19: output rg/bg */
+			&ct_detect_status);                   /* arg20: output status */
+
+		if (ct_detect_status == 0) {
+			target_rg = ct_detect_rg_bg[0];
+			target_bg = ct_detect_rg_bg[1];
+			target_ct = ct_detect_ct;
+		} else {
+			/* Ct_Detect failed — fallback to simple average */
+			target_rg = awb_zone_rg_global;
+			target_bg = awb_zone_bg_global;
+			target_ct = awb_estimate_ct(target_rg, target_bg);
+			if (target_ct == 0)
+				target_ct = 5000;
+		}
+
+		if (fpga_diag_count <= 10 || (fpga_diag_count % 300) == 0) {
+			pr_info("AWB_FPGA[%u]: Ct_Detect status=%u "
+				"rg=%u bg=%u ct=%u "
+				"rg_global=%u bg_global=%u "
+				"zones=%u q=%u\n",
+				fpga_diag_count, ct_detect_status,
+				target_rg, target_bg, target_ct,
+				awb_zone_rg_global, awb_zone_bg_global,
+				total_zones, q);
+		}
+	}
 
 	if (awb_history_reset || awb_history_count == 0)
 		awb_history_fill(target_rg, target_bg, target_ct);
@@ -16598,7 +17821,7 @@ void tiziano_sharpen_dn_params_refresh(void)
 }
 
 /* SDNS parameter arrays - moved to top of file to avoid forward reference issues */
-static uint32_t rgbg_dis[16] = {0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1};
+static uint32_t sdns_rgbg_dis[16] = {0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1};
 
 /* tiziano_sdns_params_refresh - OEM-style bulk SDNS parameter load from tuning bin.
  * Loads all SDNS arrays sequentially from tparams_active at offset SDNS_TPARAMS_OFFSET.
@@ -16741,7 +17964,7 @@ int tiziano_sdns_init(void)
         sdns_sp_uu_stren_array_now = sdns_sp_uu_stren_array;
         sdns_sp_mv_uu_thres_array_now = sdns_sp_mv_uu_thres_array;
         sdns_sp_mv_uu_stren_array_now = sdns_sp_mv_uu_stren_array;
-        sdns_ave_thres_array_now = rgbg_dis; /* Binary Ninja shows this for linear mode */
+        sdns_ave_thres_array_now = sdns_rgbg_dis; /* Binary Ninja shows this for linear mode */
         pr_info("tiziano_sdns_init: Using linear SDNS parameters\n");
     }
 
@@ -21429,7 +22652,7 @@ int tisp_sdns_wdr_en(int enable)
         sdns_sp_uu_stren_array_now = sdns_sp_uu_stren_array;
         sdns_sp_mv_uu_thres_array_now = sdns_sp_mv_uu_thres_array;
         sdns_sp_mv_uu_stren_array_now = sdns_sp_mv_uu_stren_array;
-        sdns_ave_thres_array_now = rgbg_dis;
+        sdns_ave_thres_array_now = sdns_rgbg_dis;
     }
 
     tisp_sdns_all_reg_refresh();
