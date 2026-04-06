@@ -3530,47 +3530,20 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
 {
     struct tx_isp_channel_config *dispatch = (struct tx_isp_channel_config *)arg1;
     struct tx_isp_dev *isp_dev = ourISPdev;
-    void *s2, *s3;
-    int32_t v1_2;
-    int32_t var_28 = 0;
-    uint32_t s5_1;
-    int32_t a1_2;
     extern int tisp_channel_stop(uint32_t channel_id);
 
     if (!isp_dev || !dispatch)
         return;
 
-    v1_2 = ispcore_bypass_enabled(isp_dev);
-    s2 = dispatch->event_priv;
-    s3 = isp_dev->sensor ? (void *)isp_dev->sensor : NULL;
-
-    if (v1_2 != 1) {
-        s5_1 = dispatch->state;
-
-        if (s5_1 == 4 && s2) {
-            __private_spin_lock_irqsave((char*)s2 + 0x9c, &var_28);
-            a1_2 = var_28;
-
-            if (*((int32_t*)((char*)s2 + 0x74)) == (int32_t)s5_1) {
-                private_spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
-                tisp_channel_stop(dispatch->channel_id);
-                *((int32_t*)((char*)s2 + 0x74)) = 3;
-                dispatch->state = 3;
-                memset(s2, 0, 0x70);
-                if (s3) {
-                    *((int32_t*)((char*)s3 + 0x9c)) = 0;
-                    *((int32_t*)((char*)s3 + 0xac)) = 0;
-                }
-                *((int32_t*)((char*)isp_dev + 0x17c)) = 0;
-            } else {
-                private_spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
-            }
-        }
-    } else {
-        /* Bypass mode callback — OEM reads *(isp_private + 0x1cc) */
-        int32_t v0_1 = *((int32_t*)((char*)isp_dev + 0x1cc));
-        if (v0_1 != 0) {
-            ISP_INFO("ispcore_frame_channel_streamoff: bypass callback");
+    /* Use dispatch->state instead of raw OEM pointer offsets into
+     * event_priv.  The OEM's *(priv+0x74) hw_state and *(priv+0x9c)
+     * spinlock hit wrong memory in our isp_channel struct layout. */
+    if (!ispcore_bypass_enabled(isp_dev)) {
+        if (dispatch->state == 4) {
+            tisp_channel_stop(dispatch->channel_id);
+            dispatch->state = 3;
+            pr_info("*** ispcore_frame_channel_streamoff: stopped channel %u ***\n",
+                    dispatch->channel_id);
         }
     }
 }
@@ -3923,9 +3896,6 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 {
     struct tx_isp_channel_config *dispatch = (struct tx_isp_channel_config *)arg1;
     int32_t result = 0;
-    uint32_t var_58;
-    void* v0_13;  /* Removed const qualifier */
-    int32_t v1_7;
     struct tx_isp_dev *isp_dev = tx_isp_get_device();
 
     /* Add MCP logging for method entry */
@@ -3999,62 +3969,26 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
         }
 
         case 0x3000003: {
-            /* Stream start */
+            /* Stream start — use dispatch->state instead of raw OEM pointer
+             * offsets.  The OEM event_priv layout does NOT match our
+             * isp_channel struct; raw *(priv+0x9c) spinlock and *(priv+0x74)
+             * hw_state hit garbage memory, causing hangs on channel 1. */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000003 (stream start)");
-            v0_13 = 0;
 
-            if (arg1 == 0) {
-                var_58 = 0;
-            } else if ((uintptr_t)arg1 >= 0xfffff001) {
-                var_58 = 0;
-            } else {
-                void* v1_6 = (void*)*arg1;
-                if (v1_6 == 0) {
-                    var_58 = 0;
-                } else if ((uintptr_t)v1_6 < 0xfffff001) {
-                    v0_13 = (void*)(*((uint32_t*)v1_6 + 0x35)); /* *(v1_6 + 0xd4) */
-                    var_58 = 0;
-                } else {
-                    var_58 = 0;
-                }
-            }
+            pr_info("*** ispcore_pad_event_handle: STREAMON ch=%u state=%u ***\n",
+                    dispatch->channel_id, dispatch->state);
 
-            void* s2_1 = dispatch->event_priv;
-
-            pr_info("*** ispcore_pad_event_handle: STREAMON ch=%u enabled=0x%x state=%u priv=%p ***\n",
-                    dispatch->channel_id, dispatch->enabled, dispatch->state, s2_1);
-
-            if (ispcore_bypass_enabled(isp_dev)) { /* *(v0_13 + 0x15c) == 1 */
-                v1_7 = *((int32_t*)v0_13 + 0x73); /* *(v0_13 + 0x1cc) */
-                if (v1_7 == 0)
-                    return 0;
-
-                /* Call function pointer v1_7(*(v0_13 + 0x1d0), 1) */
-                ISP_INFO("ispcore_pad_event_handle: calling stream start callback");
+            if (ispcore_bypass_enabled(isp_dev))
                 return 0;
-            }
 
             if (dispatch->state != 3)
                 return 0;
 
-            __private_spin_lock_irqsave((char*)s2_1 + 0x9c, &var_58);
-
-            if (*((uint32_t*)s2_1 + 0x1d) != 4) { /* *(s2_1 + 0x74) != 4 */
-                tisp_channel_start(dispatch->channel_id, NULL);
-                *((uint32_t*)s2_1 + 0x1d) = 4; /* *(s2_1 + 0x74) = 4 */
-                uint32_t a1_6 = var_58;
-                dispatch->state = 4;
-                result = 0;
-                private_spin_unlock_irqrestore((char*)s2_1 + 0x9c, a1_6);
-                pr_info("*** ispcore_pad_event_handle: STREAMON started channel %u ***\n",
-                        dispatch->channel_id);
-                ISP_INFO("ispcore_pad_event_handle: channel started successfully");
-            } else {
-                arch_local_irq_restore(var_58);
-                /* Preemption handling */
-                result = 0;
-                ISP_INFO("ispcore_pad_event_handle: channel already started");
-            }
+            tisp_channel_start(dispatch->channel_id, NULL);
+            dispatch->state = 4;
+            result = 0;
+            pr_info("*** ispcore_pad_event_handle: STREAMON started channel %u ***\n",
+                    dispatch->channel_id);
             break;
         }
 
@@ -4066,121 +4000,80 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
         }
 
         case 0x3000005: {
-            /* Queue buffer */
-            ISP_INFO("ispcore_pad_event_handle: case 0x3000005 (queue buffer)");
-            void* v0_21;  /* Removed const qualifier */
-            void* s3_4;   /* Removed const qualifier */
+            /* Queue buffer — rewritten to use proper struct field access.
+             * The OEM reads width/height/pixelformat from event_priv at
+             * offsets +0x04/+0x08/+0x0c and channel_id at +0x70, then
+             * writes Y/UV addresses to per-channel MSCA registers.
+             * Our isp_channel struct has a completely different layout,
+             * so we use dispatch->channel_id and isp_channel fields. */
+            struct isp_channel *qbuf_ch;
+            u32 ch_id, y_addr, uv_addr, ch_w, ch_h, aligned_h;
 
-            if (arg1 == 0 || (uintptr_t)arg1 >= 0xfffff001) {
-                s3_4 = 0;
-                v0_21 = 0;
-                var_58 = 0;
-            } else {
-                s3_4 = (void*)*arg1;
-                v0_21 = 0;
-                if (s3_4 == 0) {
-                    var_58 = 0;
-                } else if ((uintptr_t)s3_4 < 0xfffff001) {
-                    v0_21 = (void*)(*((uint32_t*)s3_4 + 0x35)); /* *(s3_4 + 0xd4) */
-                    var_58 = 0;
-                } else {
-                    var_58 = 0;
-                }
+            ISP_INFO("ispcore_pad_event_handle: case 0x3000005 (queue buffer)");
+
+            if (ispcore_bypass_enabled(isp_dev)) {
+                result = 0;
+                break;
             }
 
-            if (!ispcore_bypass_enabled(isp_dev)) { /* *(v0_21 + 0x15c) != 1 */
-                result = 0;
-                if ((dispatch->enabled & 0x20) == 0) {
-                    void* s1_2 = dispatch->event_priv;
+            result = 0;
+            if ((dispatch->enabled & 0x20) != 0)
+                break;
 
-                    if (arg3 == 0 || s1_2 == 0) {
-                        isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n");
-                        return 0;
-                    }
+            ch_id = dispatch->channel_id;
+            qbuf_ch = (struct isp_channel *)dispatch->event_priv;
 
-                    *((uint32_t*)arg3 - 7) = 4;  /* *(arg3 - 0x1c) = 4 */
-                    __private_spin_lock_irqsave((char*)s1_2 + 0x9c, &var_58);
+            if (!arg3 || !qbuf_ch) {
+                isp_printf(2, "error: %s,%d, buf = %p, chan = %p\n",
+                           "ispcore_frame_channel_qbuf", __LINE__, arg3, qbuf_ch);
+                break;
+            }
 
-                    if (*((uint32_t*)s1_2 + 3) != 0x3231564e) { /* *(s1_2 + 0xc) != 0x3231564e */
-                        isp_printf(2, "Err [VIC_INT] : control limit err!!!\n");
-                        return 0xffffffff;
-                    }
+            /* Get channel dimensions from isp_channel struct */
+            ch_w = qbuf_ch->width;
+            ch_h = qbuf_ch->height;
+            if (!ch_w || !ch_h) {
+                /* Fallback to sensor dimensions */
+                ch_w = isp_dev->sensor_width ? isp_dev->sensor_width : 1920;
+                ch_h = isp_dev->sensor_height ? isp_dev->sensor_height : 1080;
+            }
 
-                    /* Buffer configuration */
-                    int32_t v0_26 = ((*((uint32_t*)s1_2 + 2) + 0xf) & 0xfffffff0); /* (*(s1_2 + 8) + 0xf) & 0xfffffff0 */
-                    int32_t a1_9 = *((uint32_t*)s1_2 + 1);     /* *(s1_2 + 4) */
-                    *((uint32_t*)arg3 - 7) = 5;               /* *(arg3 - 0x1c) = 5 */
-                    int32_t a0_13 = *((uint32_t*)arg3 + 2);   /* *(arg3 + 8) */
-                    *((uint32_t*)arg3 - 6) += 1;              /* *(arg3 - 0x18) += 1 */
-                    *((uint32_t*)arg3 + 3) = v0_26 * a1_9 + a0_13; /* *(arg3 + 0xc) = calculation */
+            /* OEM: Y addr from *(arg3 + 8), UV = Y + aligned_h * width */
+            y_addr = *((uint32_t*)arg3 + 2);    /* *(arg3 + 0x08) = Y phys */
+            aligned_h = (ch_h + 0xf) & ~0xf;
+            uv_addr = y_addr + ch_w * aligned_h;
 
-                    /* Hardware register writes */
-                    uint32_t base_addr = *((uint32_t*)s3_4 + 0x2e);   /* *(s3_4 + 0xb8) */
-                    uint32_t offset = (*((uint32_t*)s1_2 + 0x1c) << 8); /* *(s1_2 + 0x70) << 8 */
-                    *((uint32_t*)(base_addr + offset + 0x996c)) = a0_13;
-                    *((uint32_t*)(base_addr + offset + 0x9984)) = *((uint32_t*)arg3 + 3);
-
-                    private_spin_unlock_irqrestore((char*)s1_2 + 0x9c, var_58);
-                    ISP_INFO("ispcore_pad_event_handle: buffer queued successfully");
-                }
-            } else {
-                int32_t v1_9 = *((uint32_t*)v0_21 + 0x70); /* *(v0_21 + 0x1c0) */
-                result = 0;
-                if (v1_9 != 0) {
-                    /* Call function pointer v1_9(*(v0_21 + 0x1d0), arg3) */
-                    ISP_INFO("ispcore_pad_event_handle: calling queue buffer callback");
-                }
+            /* Write per-channel MSCA DMA addresses.
+             * OEM: *(base + (ch_id << 8) + 0x996c) = Y
+             *      *(base + (ch_id << 8) + 0x9984) = UV */
+            if (isp_dev->core_regs && ch_id < 3) {
+                writel(y_addr,
+                       isp_dev->core_regs + (ch_id << 8) + 0x996c);
+                writel(uv_addr,
+                       isp_dev->core_regs + (ch_id << 8) + 0x9984);
+                ISP_INFO("ispcore QBUF: ch%u Y=0x%x UV=0x%x (%ux%u)",
+                         ch_id, y_addr, uv_addr, ch_w, ch_h);
             }
             break;
         }
 
         case 0x3000006: {
-            /* Simple return case */
-            ISP_INFO("ispcore_pad_event_handle: case 0x3000006 (simple return)");
+            /* Buffer done — simple return (handled by ISR frame_chan_event) */
             return 0;
         }
 
         case 0x3000007: {
-            /* Dequeue buffer */
-            ISP_INFO("ispcore_pad_event_handle: case 0x3000007 (dequeue buffer)");
-            v0_13 = 0;
+            /* FIFO clear — use dispatch->channel_id, not raw pointer offsets */
+            ISP_INFO("ispcore_pad_event_handle: case 0x3000007 (fifo clear)");
 
-            if (arg1 == 0) {
-                var_58 = 0;
-            } else if ((uintptr_t)arg1 >= 0xfffff001) {
-                var_58 = 0;
-            } else {
-                void* v1_17 = (void*)*arg1;
-                if (v1_17 == 0) {
-                    var_58 = 0;
-                } else if ((uintptr_t)v1_17 < 0xfffff001) {
-                    v0_13 = (void*)(*((uint32_t*)v1_17 + 0x35)); /* *(v1_17 + 0xd4) */
-                    var_58 = 0;
-                } else {
-                    var_58 = 0;
-                }
-            }
-
-            if (ispcore_bypass_enabled(isp_dev)) { /* *(v0_13 + 0x15c) == 1 */
-                v1_7 = *((int32_t*)v0_13 + 0x72); /* *(v0_13 + 0x1c8) */
-                if (v1_7 == 0)
-                    return 0;
-
-                /* Call function pointer v1_7(*(v0_13 + 0x1d0), arg3) */
-                ISP_INFO("ispcore_pad_event_handle: calling dequeue buffer callback");
+            if (ispcore_bypass_enabled(isp_dev))
                 return 0;
-            }
 
             result = 0;
             if ((dispatch->enabled & 0x20) == 0) {
-                void* s0_2 = dispatch->event_priv;
-                if (s0_2 != 0) {
-                    __private_spin_lock_irqsave((char*)s0_2 + 0x9c, &var_58);
-                    tisp_channel_fifo_clear(dispatch->channel_id);
-                    result = 0;
-                    private_spin_unlock_irqrestore((char*)s0_2 + 0x9c, var_58);
-                    ISP_INFO("ispcore_pad_event_handle: channel fifo cleared");
-                }
+                tisp_channel_fifo_clear(dispatch->channel_id);
+                ISP_INFO("ispcore_pad_event_handle: channel %u fifo cleared",
+                         dispatch->channel_id);
             }
             break;
         }
