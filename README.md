@@ -41,26 +41,27 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 
 - [`docs/T31_ISP_ARCHITECTURE.md`](docs/T31_ISP_ARCHITECTURE.md) — current hardware / driver architecture notes
 - [`docs/IMAGE_TUNING_PRD.md`](docs/IMAGE_TUNING_PRD.md) — plan for finishing image tuning and remaining work
-- [`driver/REGMAP_ADR_YDNS.md`](driver/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
-- [`driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
+- [`driver/t31/REGMAP_ADR_YDNS.md`](driver/t31/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
+- [`driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
 - [`external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md`](external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md) — current map of recovered vs synthetic tuning data
 
 ## Repository Layout
 
 | Path | Purpose |
 |---|---|
-| `driver/` | Open-source T31 ISP kernel-driver implementation |
-| `driver/include/` | Shared headers and data structures |
+| `driver/` | Per-SoC open-source ISP kernel-driver implementations |
+| `driver/t31/` | T31 ISP kernel-driver implementation |
+| `driver/t31/include/` | Shared headers and data structures (T31) |
 | `external/ingenic-sdk/` | Sensor and SDK reference material |
 | `docs/` | High-level project documentation and planning |
 | `OEM-tx-isp-t31.ko` | OEM reference kernel module |
 
 Important driver files:
 
-- `driver/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
-- `driver/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
-- `driver/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
-- `driver/tx_isp_csi.c` / `driver/tx_isp_vic.c` / `driver/tx_isp_vin.c` / `driver/tx_isp_fs.c` — CSI/VIC/VIN/frame-source subdevices
+- `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
+- `driver/t31/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
+- `driver/t31/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
+- `driver/t31/tx_isp_csi.c` / `driver/t31/tx_isp_vic.c` / `driver/t31/tx_isp_vin.c` / `driver/t31/tx_isp_fs.c` — CSI/VIC/VIN/frame-source subdevices
 
 ## Project Goals
 
@@ -82,7 +83,7 @@ Important driver files:
 Typical cross-compile command for the vendor 3.10.14 kernel environment:
 
 ```bash
-make -C <kernel-src> M=$(pwd)/driver modules ARCH=mips CROSS_COMPILE=mipsel-linux-gnu-
+make -C <kernel-src> M=$(pwd)/driver/t31 modules ARCH=mips CROSS_COMPILE=mipsel-linux-gnu-
 ```
 
 Expected artifact:

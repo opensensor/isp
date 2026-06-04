@@ -282,7 +282,7 @@ The "fatal exception in interrupt" crash was caused by dangerous offset-based po
 The key lesson: **Never use decompiled code directly in interrupt handlers**. Always convert dangerous offset arithmetic to safe struct member access and add comprehensive validation.
 
 ## Files Modified
-- `driver/tx_isp_vic.c` - Fixed VIC interrupt handler
-- `driver/tx_isp_core.c` - Fixed ISP core interrupt handler with safe struct access
+- `driver/t31/tx_isp_vic.c` - Fixed VIC interrupt handler
+- `driver/t31/tx_isp_core.c` - Fixed ISP core interrupt handler with safe struct access
 
 The system should now be crash-safe and handle interrupts properly without the "fatal exception in interrupt" panics.
