@@ -20,7 +20,3 @@ tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \
 
 # Build both modules - changed tx-isp.o to tx-isp-t31.o
 obj-m := tx-isp-t31.o
-
-# Standalone register-trace diagnostic module (own module_init; cannot be
-# linked into tx-isp-t31). Single source file tx_isp_trace.c.
-obj-m += tx_isp_trace.o

@@ -24,10 +24,14 @@ KDIR="${KDIR:-$ROOT/build/linux-45a11a3318ee823a83536db737a8e1136ed766fd}"
 
 export PATH="$ROOT/host/bin:$PATH"
 
-make -C "$KDIR" \
-     M="$(cd "$(dirname "$0")" && pwd)/driver/${SOC:-t31}" \
-     DIR=. \
-     ARCH=mips \
-     CROSS_COMPILE=mipsel-linux- \
-     KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error=int-conversion -Wno-error=implicit-int" \
-     "${@:-modules}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+KCFLAGS="-Wno-error=implicit-function-declaration -Wno-error=int-conversion -Wno-error=implicit-int"
+GOAL="${1:-modules}"
+
+# Per-SoC ISP driver (driver/<SOC>/, default t31) -> tx-isp-<soc>.ko
+make -C "$KDIR" M="$HERE/driver/${SOC:-t31}" DIR=. \
+     ARCH=mips CROSS_COMPILE=mipsel-linux- KCFLAGS="$KCFLAGS" "$GOAL"
+
+# Shared SoC-agnostic diagnostics (driver/) -> tx_isp_trace.ko
+make -C "$KDIR" M="$HERE/driver" DIR=. \
+     ARCH=mips CROSS_COMPILE=mipsel-linux- KCFLAGS="$KCFLAGS" "$GOAL"

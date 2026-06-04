@@ -1,0 +1,7 @@
+# Shared (SoC-agnostic) diagnostics built from the driver/ base.
+#
+# tx_isp_trace.c is a standalone pre-module-load register tracer: it owns its
+# own module_init, depends only on linux/* headers, and is meant to be reused
+# (and eventually generalized) across SoCs rather than living inside any one
+# per-SoC driver such as driver/t31/. Build with M=$(pwd)/driver.
+obj-m := tx_isp_trace.o
