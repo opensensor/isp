@@ -46,15 +46,15 @@ The source tree is organized by functional block:
 
 | File | Role |
 |---|---|
-| `driver/tx_isp_module.c` | Module entry/exit, platform devices, shared register helpers, IRQ adoption/dispatch |
-| `driver/tx_isp_core.c` | Core probe, MMIO mappings, core init, ISP ISR, first-frame bring-up logic |
-| `driver/tx_isp_csi.c` | CSI device / stream control |
-| `driver/tx_isp_vic.c` | VIC device / frame movement / buffer handling |
-| `driver/tx_isp_vin.c` | VIN-facing subdevice |
-| `driver/tx_isp_fs.c` | Frame-source channels presented to user space |
-| `driver/tx_isp_tuning.c` | Tuning subsystem, ISP block init, parameter IOCTLs, per-block updates |
-| `driver/tx_isp_subdev*.c` | Subdevice registration, graph creation, pad/link management |
-| `driver/include/` | Shared headers, structs, register-map helpers |
+| `driver/t31/tx_isp_module.c` | Module entry/exit, platform devices, shared register helpers, IRQ adoption/dispatch |
+| `driver/t31/tx_isp_core.c` | Core probe, MMIO mappings, core init, ISP ISR, first-frame bring-up logic |
+| `driver/t31/tx_isp_csi.c` | CSI device / stream control |
+| `driver/t31/tx_isp_vic.c` | VIC device / frame movement / buffer handling |
+| `driver/t31/tx_isp_vin.c` | VIN-facing subdevice |
+| `driver/t31/tx_isp_fs.c` | Frame-source channels presented to user space |
+| `driver/t31/tx_isp_tuning.c` | Tuning subsystem, ISP block init, parameter IOCTLs, per-block updates |
+| `driver/t31/tx_isp_subdev*.c` | Subdevice registration, graph creation, pad/link management |
+| `driver/t31/include/` | Shared headers, structs, register-map helpers |
 
 ## Platform and Subdevice Model
 
@@ -114,7 +114,7 @@ If CFA phase is wrong, demosaic output is visibly corrupted.
 
 ## Tuning Subsystem Model
 
-`driver/tx_isp_tuning.c` is the bulk of the ISP behavior model. It contains:
+`driver/t31/tx_isp_tuning.c` is the bulk of the ISP behavior model. It contains:
 
 - block initialization (`tiziano_*_init`)
 - parameter bank storage and IOCTL set/get handlers
@@ -165,7 +165,7 @@ The main image-processing blocks currently modeled in-tree are:
 - **SDNS / MDNS / RDNS / YDNS**: spatial, motion, raw, and luma denoise families
 - **Defog / ADR / WDR**: dynamic range and tone-mapping related paths
 
-`driver/REGMAP_ADR_YDNS.md` documents the ADR/YDNS register windows and some OEM ordering constraints.
+`driver/t31/REGMAP_ADR_YDNS.md` documents the ADR/YDNS register windows and some OEM ordering constraints.
 
 ## Banked Modes and Runtime Switching
 
@@ -230,6 +230,6 @@ The AE (Auto-Exposure) subsystem is the most complex algorithm in the ISP driver
 - `README.md`
 - `CLAUDE.md`
 - `docs/AE_CONVERGENCE_ARCHITECTURE.md` — AE convergence algorithm deep dive
-- `driver/REGMAP_ADR_YDNS.md`
-- `driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`
+- `driver/t31/REGMAP_ADR_YDNS.md`
+- `driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`
 - `external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md`

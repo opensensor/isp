@@ -1574,6 +1574,6 @@ Common formats:
 |----------|---------|
 | `CLAUDE.md` | Development workflow and MCP tool usage |
 | `docs/T31_ISP_ARCHITECTURE.md` | High-level architecture notes |
-| `driver/REGMAP_ADR_YDNS.md` | ADR/YDNS register windows and OEM constraints |
-| `driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md` | Stream start verification notes |
+| `driver/t31/REGMAP_ADR_YDNS.md` | ADR/YDNS register windows and OEM constraints |
+| `driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md` | Stream start verification notes |
 | `external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md` | OEM tuning blob status |

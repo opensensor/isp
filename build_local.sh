@@ -25,7 +25,7 @@ KDIR="${KDIR:-$ROOT/build/linux-45a11a3318ee823a83536db737a8e1136ed766fd}"
 export PATH="$ROOT/host/bin:$PATH"
 
 make -C "$KDIR" \
-     M="$(cd "$(dirname "$0")" && pwd)/driver" \
+     M="$(cd "$(dirname "$0")" && pwd)/driver/${SOC:-t31}" \
      DIR=. \
      ARCH=mips \
      CROSS_COMPILE=mipsel-linux- \
