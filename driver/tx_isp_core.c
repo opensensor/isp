@@ -12,14 +12,14 @@
 #include "include/tx_isp.h"
 #include "include/tx_isp_core.h"
 #include "include/tx_isp_core_device.h"
-#include "include/tx-isp-debug.h"
+#include "include/tx_isp_debug.h"
 #include "include/tx_isp_sysfs.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_tuning.h"
-#include "include/tx-isp-device.h"
-#include "include/tx-libimp.h"
+#include "include/tx_isp_device.h"
+#include "include/tx_libimp.h"
 #include "include/tx_isp_subdev_helpers.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
@@ -467,7 +467,7 @@ static u32 tisp_fps_from_raw(u32 raw_fps)
 static u32 tisp_cfa_base_from_mbus(u32 mbus_code)
 {
     /* CFA indices must match the tuning demosaic module (tisp_dmsc_cfa_base_from_mbus).
-     * Mapping verified against Ingenic SDK v4l2 enum (tx-isp-common.h):
+     * Mapping verified against Ingenic SDK v4l2 enum (tx_isp_common.h):
      *   RGGB=0: 0x300d(SRGGB10_DPCM8) 0x300f(SRGGB10_1X10) 0x3012(SRGGB12) 0x3014(SRGGB8)
      *   GRBG=1: 0x3002(SGRBG8) 0x3009(SGRBG10_DPCM8) 0x300a(SGRBG10_1X10) 0x3011(SGRBG12)
      *   GBRG=2: 0x300c(SGBRG10_DPCM8) 0x300e(SGBRG10_1X10) 0x3010(SGBRG12) 0x3013(SGBRG8)
@@ -4046,7 +4046,7 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
         }
         fs_miscdev->minor = MISC_DYNAMIC_MINOR;
 
-        /* Use the existing frame_channel_fops from tx-isp-module.c */
+        /* Use the existing frame_channel_fops from tx_isp_module.c */
         extern const struct file_operations frame_channel_fops;
         fs_miscdev->fops = &frame_channel_fops;
         frame_channels[i].channel_num = i;
@@ -4085,7 +4085,7 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
  *   ispcore_slake_module -> core_sd->slake_module -> ispcore_slake_module -> ...
  */
 
-/* Forward declaration from tx-isp-module.c */
+/* Forward declaration from tx_isp_module.c */
 extern long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd,
                                     unsigned int cmd, void *arg);
 
@@ -4248,7 +4248,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
             struct tx_isp_frame_channel *current_channel = (struct tx_isp_frame_channel *)channel_array;
 
             while (channel_idx < channel_count) {
-                /* SAFE: Initialize channel using proper struct members from tx-isp-device.h */
+                /* SAFE: Initialize channel using proper struct members from tx_isp_device.h */
                 /* tx_isp_frame_channel has: misc, name, pad, pad_id, slock, mlock, frame_done, state, active */
 
                 /* Initialize channel state and basic fields */

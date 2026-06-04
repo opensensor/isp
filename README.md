@@ -57,7 +57,7 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 
 Important driver files:
 
-- `driver/tx-isp-module.c` — module init/exit, platform resources, shared register helpers
+- `driver/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
 - `driver/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
 - `driver/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
 - `driver/tx_isp_csi.c` / `driver/tx_isp_vic.c` / `driver/tx_isp_vin.c` / `driver/tx_isp_fs.c` — CSI/VIC/VIN/frame-source subdevices

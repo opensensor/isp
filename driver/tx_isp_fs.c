@@ -13,14 +13,14 @@
 #include "include/tx_isp.h"
 #include "include/tx_isp_core.h"
 #include "include/tx_isp_core_device.h"
-#include "include/tx-isp-debug.h"
+#include "include/tx_isp_debug.h"
 #include "include/tx_isp_sysfs.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_tuning.h"
-#include "include/tx-isp-device.h"
-#include "include/tx-libimp.h"
+#include "include/tx_isp_device.h"
+#include "include/tx_libimp.h"
 
 /* Binary Ninja reference global variables */
 struct tx_isp_fs_device *dump_fsd = NULL;  /* Global FS device pointer */

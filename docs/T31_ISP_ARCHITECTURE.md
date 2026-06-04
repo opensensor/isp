@@ -46,7 +46,7 @@ The source tree is organized by functional block:
 
 | File | Role |
 |---|---|
-| `driver/tx-isp-module.c` | Module entry/exit, platform devices, shared register helpers, IRQ adoption/dispatch |
+| `driver/tx_isp_module.c` | Module entry/exit, platform devices, shared register helpers, IRQ adoption/dispatch |
 | `driver/tx_isp_core.c` | Core probe, MMIO mappings, core init, ISP ISR, first-frame bring-up logic |
 | `driver/tx_isp_csi.c` | CSI device / stream control |
 | `driver/tx_isp_vic.c` | VIC device / frame movement / buffer handling |
@@ -58,7 +58,7 @@ The source tree is organized by functional block:
 
 ## Platform and Subdevice Model
 
-`tx-isp-module.c` creates logical platform devices for:
+`tx_isp_module.c` creates logical platform devices for:
 
 - `tx-isp` (top-level wrapper)
 - `isp-m0` (core / primary IRQ domain)
@@ -76,7 +76,7 @@ This graph-based model is the main in-tree abstraction for representing how the 
 
 ## MMIO Access Model
 
-The shared helpers in `tx-isp-module.c` are central:
+The shared helpers in `tx_isp_module.c` are central:
 
 - `system_reg_write(u32 reg, u32 value)`
 - `system_reg_read(u32 reg)`
@@ -87,7 +87,7 @@ These helpers resolve the live ISP base from `ourISPdev->core_regs` and are the 
 
 The current driver bring-up is split across module init, platform probe, and core init:
 
-1. `tx_isp_init()` in `tx-isp-module.c`
+1. `tx_isp_init()` in `tx_isp_module.c`
    - allocates `ourISPdev`
    - registers platform devices
    - registers/initializes subdevice platform drivers

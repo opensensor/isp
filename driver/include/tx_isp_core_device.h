@@ -1,7 +1,7 @@
 #ifndef __TX_ISP_CORE_DEVICE_H__
 #define __TX_ISP_CORE_DEVICE_H__
 
-#include "tx-isp-device.h"
+#include "tx_isp_device.h"
 #include "tx_isp.h"
 
 /**

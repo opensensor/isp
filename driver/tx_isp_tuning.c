@@ -42,15 +42,15 @@
 #include "include/tx_isp.h"
 #include "include/tx_isp_tuning.h"
 #include "include/tx_isp_core.h"
-#include "include/tx-isp-debug.h"
+#include "include/tx_isp_debug.h"
 #include "include/tx_isp_sysfs.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_fixpt.h"
 
-#include "include/tx-isp-device.h"
-#include "include/tx-libimp.h"
+#include "include/tx_isp_device.h"
+#include "include/tx_libimp.h"
 
 #include "include/tx_isp_regmap.h"
 
@@ -227,7 +227,7 @@ int tisp_s_defog_enable(int enable);
 int tisp_s_ccm_attr(const void *in);
 static int tisp_get_csc_attr(uint32_t *buf);
 
-/* External hardware register write functions from tx-isp-module.c */
+/* External hardware register write functions from tx_isp_module.c */
 extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
@@ -3286,7 +3286,7 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file);
 int tisp_code_tuning_release(struct inode *inode, struct file *file);
 long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-/* System register access functions - use external from tx-isp-module.c */
+/* System register access functions - use external from tx_isp_module.c */
 extern uint32_t system_reg_read(u32 reg);
 
 /* ISP register base definitions for proper alignment */
@@ -3372,7 +3372,7 @@ int tisp_set_csc_version(int version)
 		effective_version, version);
 	return 1;
 }
-/* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
+/* Use external system_reg_write from tx_isp_module.c that does real hardware writes */
 extern void system_reg_write(u32 reg, u32 value);
 
 /* External system_irq_func_set from tx_isp_core.c */
@@ -4538,7 +4538,7 @@ static unsigned int tisp_event_count;
 static spinlock_t tisp_event_lock;
 
 /* Helper functions - Forward declarations */
-/* private_dma_cache_sync declared in txx-funcs.h */
+/* private_dma_cache_sync declared in txx_funcs.h */
 void private_complete(struct completion *comp);
 static int tisp_ae0_get_statistics(void *buffer, uint32_t flags);
 static int tisp_ae1_get_statistics(void *buffer, uint32_t flags);
@@ -6984,7 +6984,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     return 0;
 }
 
-/* System register access functions - removed duplicate, using external from tx-isp-module.c */
+/* System register access functions - removed duplicate, using external from tx_isp_module.c */
 
 
 static int32_t tisp_log2_int_to_fixed(uint32_t value, char precision_bits, char shift_amt)
@@ -7303,7 +7303,7 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 	return 0;
 }
 
-/* Additional tuning event definitions not yet in tx-libimp.h */
+/* Additional tuning event definitions not yet in tx_libimp.h */
 #ifndef ISP_TUNING_EVENT_FRAME_DONE
 #define ISP_TUNING_EVENT_FRAME_DONE 0x4000004
 #endif
@@ -9196,7 +9196,7 @@ int tisp_set_awb_info(void *in_buf);
 /* AWB algo attribute setter from vendor binary */
 extern int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
                           uint32_t p4, uint32_t p5, uint32_t p6);
-/* AWB register write helpers from tx-isp-module.c */
+/* AWB register write helpers from tx_isp_module.c */
 extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 
@@ -35943,7 +35943,7 @@ static int data_b2f08(uint32_t param, int flag)
  * which correctly implements log2_int_to_fixed(val, out_q, 0) - (in_q << out_q).
  * The old stub returned a constant 0x1000 which made tisp_set_sensor_analog_gain broken. */
 
-/* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
+/* REMOVED: Static stub system_reg_write - use external implementation from tx_isp_module.c */
 /* The real system_reg_write() that does actual hardware writes is declared extern */
 
 

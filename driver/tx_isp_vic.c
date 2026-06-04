@@ -12,7 +12,7 @@
 
 #include "include/tx_isp.h"
 #include "include/tx_isp_core.h"
-#include "include/tx-isp-debug.h"
+#include "include/tx_isp_debug.h"
 #include "include/tx_isp_sysfs.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_csi.h"
@@ -23,8 +23,8 @@
 extern uint32_t system_reg_read(u32 reg);
 extern void system_reg_write(u32 reg, u32 val);
 #include "include/tx_isp_subdev_helpers.h"
-#include "include/tx-isp-device.h"
-#include "include/tx-libimp.h"
+#include "include/tx_isp_device.h"
+#include "include/tx_libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
 #include <linux/jiffies.h>
@@ -708,7 +708,7 @@ static void vic_free_buffer_list(struct list_head *head)
 }
 
 /* Helper functions - removed conflicting declarations as they're already in SDK headers */
-/* __private_spin_lock_irqsave and private_spin_unlock_irqrestore are defined in txx-funcs.h */
+/* __private_spin_lock_irqsave and private_spin_unlock_irqrestore are defined in txx_funcs.h */
 
 
 /* Forward declaration for streaming functions */
@@ -3020,8 +3020,8 @@ extern ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 
 /* VIC sensor operations structure - MISSING from original implementation */
 struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
-    .ioctl = vic_sensor_ops_ioctl,                    /* From tx-isp-module.c */
-    .sync_sensor_attr = vic_sensor_ops_sync_sensor_attr, /* From tx-isp-module.c */
+    .ioctl = vic_sensor_ops_ioctl,                    /* From tx_isp_module.c */
+    .sync_sensor_attr = vic_sensor_ops_sync_sensor_attr, /* From tx_isp_module.c */
 };
 
 /* VIC core operations structure - MISSING ioctl registration */

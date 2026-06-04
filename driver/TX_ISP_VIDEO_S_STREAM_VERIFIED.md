@@ -168,7 +168,7 @@ The function calls `s_stream` on:
 
 ## File
 
-- `driver/tx-isp-module.c`, lines 2293-2465
+- `driver/tx_isp_module.c`, lines 2293-2465
 
 ## Conclusion
 

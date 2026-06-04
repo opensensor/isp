@@ -9,7 +9,7 @@
 #include <linux/delay.h>
 #include <linux/io.h>
 #include "tx_isp_core.h"
-#include "tx-isp-debug.h"
+#include "tx_isp_debug.h"
 
 /* Hardware reset control register */
 #define TX_ISP_RESET_REG        0xb00000c4
