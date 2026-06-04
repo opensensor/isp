@@ -4,7 +4,7 @@
 #include <linux/interrupt.h>
 #include "include/tx_isp.h"
 #include "include/tx_isp_csi.h"
-#include "include/tx-isp-device.h"
+#include "include/tx_isp_device.h"
 
 #include <linux/kthread.h>
 #include <linux/delay.h>
@@ -1108,7 +1108,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     pr_info("*** tx_isp_csi_probe: Starting CSI device probe ***\n");
 
     /* CRITICAL: Use existing CSI device from ourISPdev, DO NOT create a new one!
-     * The CSI device is already created by csi_device_probe in tx-isp-module.c
+     * The CSI device is already created by csi_device_probe in tx_isp_module.c
      */
     if (ourISPdev && ourISPdev->csi_dev) {
         csi_dev = ourISPdev->csi_dev;

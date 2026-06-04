@@ -35,15 +35,15 @@
 /* Note: V4L2 structures and enums are already defined in kernel headers */
 #include "include/tx_isp.h"
 #include "include/tx_isp_core.h"
-#include "include/tx-libimp.h"
-#include "include/tx-isp-debug.h"
+#include "include/tx_libimp.h"
+#include "include/tx_isp_debug.h"
 #include "include/tx_isp_sysfs.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_tuning.h"
-#include "include/tx-isp-device.h"
-#include "include/tx-libimp.h"
+#include "include/tx_isp_device.h"
+#include "include/tx_libimp.h"
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
 
@@ -1910,7 +1910,7 @@ static dev_t isp_tuning_devno;
 static int isp_tuning_major = 0;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
-/* Use existing frame_buffer structure from tx-libimp.h */
+/* Use existing frame_buffer structure from tx_libimp.h */
 
 /* Forward declaration for sensor registration handler */
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */

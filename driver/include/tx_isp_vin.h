@@ -4,7 +4,7 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 
-#include "tx-isp-device.h"
+#include "tx_isp_device.h"
 
 /* Forward declarations */
 struct tx_isp_subdev;
@@ -46,7 +46,7 @@ struct tx_isp_vin_device {
 
 #define sd_to_vin_device(sd) (container_of(sd, struct tx_isp_vin_device, sd))
 
-/* VIN shares the common module-state enum from tx-isp-device.h:
+/* VIN shares the common module-state enum from tx_isp_device.h:
  *   SLAKE=1, ACTIVATE=2, INIT=3, RUNNING=4.
  * Keep a compatibility alias for legacy notes that refer to DEINIT,
  * but do not invent a separate state 5 for RUNNING.

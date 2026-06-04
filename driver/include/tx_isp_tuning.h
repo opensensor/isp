@@ -5,7 +5,7 @@
 #include <linux/errno.h>
 #include <linux/err.h>
 
-#include "tx-isp-common.h"
+#include "tx_isp_common.h"
 
 int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 int isp_core_tuning_release(struct tx_isp_dev *dev);

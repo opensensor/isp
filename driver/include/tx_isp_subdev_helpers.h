@@ -2,7 +2,7 @@
 #define __TX_ISP_SUBDEV_HELPERS_H__
 
 #include "tx_isp.h"
-#include "tx-isp-device.h"
+#include "tx_isp_device.h"
 
 /* OEM subdev layout for name/pad metadata used by the stock binary. */
 #define TX_ISP_OEM_SUBDEV_NAME_OFFSET         0x08

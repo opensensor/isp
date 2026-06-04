@@ -3,7 +3,7 @@
 
 #include <linux/hrtimer.h>
 #include <linux/dma-mapping.h>
-#include <txx-funcs.h>
+#include <txx_funcs.h>
 
 /* =================== switchs ================== */
 

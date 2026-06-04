@@ -18,7 +18,7 @@
 #include <linux/miscdevice.h>
 #include <linux/videodev2.h>
 
-#include "tx-isp-device.h"
+#include "tx_isp_device.h"
 
 #define ISP_SUCCESS 0
 

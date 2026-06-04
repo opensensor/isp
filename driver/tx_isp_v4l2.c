@@ -18,7 +18,7 @@
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
 #include "include/tx_isp.h"
-#include "include/tx-isp-device.h"
+#include "include/tx_isp_device.h"
 
 /* V4L2 frame channel device structure */
 struct tx_isp_v4l2_device {
@@ -268,7 +268,7 @@ static int tx_isp_v4l2_querycap(struct file *file, void *priv,
     return 0;
 }
 
-/* Forward declare frame channel ioctl function from tx-isp-module.c */
+/* Forward declare frame channel ioctl function from tx_isp_module.c */
 extern long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* VIDIOC_REQBUFS - Request buffers - Route to frame channel IOCTL */

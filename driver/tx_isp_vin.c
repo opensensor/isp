@@ -19,8 +19,8 @@
 #include <linux/delay.h>
 #include "include/tx_isp.h"
 #include "include/tx_isp_vin.h"
-#include "include/tx-isp-device.h"
-#include "include/tx-isp-debug.h"
+#include "include/tx_isp_device.h"
+#include "include/tx_isp_debug.h"
 
 /* MCP Logging Integration */
 #define mcp_log_info(msg, val) \

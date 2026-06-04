@@ -11,8 +11,8 @@
 #include <asm/io.h>
 #include <linux/miscdevice.h>
 #include <linux/v4l2-common.h>
-#include "tx-isp-debug.h"
-#include "tx-libimp.h"
+#include "tx_isp_debug.h"
+#include "tx_libimp.h"
 
 
 enum tx_isp_subdev_id {
@@ -560,7 +560,7 @@ struct tx_isp_frame_channel {
     wait_queue_head_t wait;
 };
 
-/* Frame channel state management - shared between tx-isp-module.c and tx_isp_vic.c */
+/* Frame channel state management - shared between tx_isp_module.c and tx_isp_vic.c */
 struct tx_isp_channel_state {
     bool enabled;
     bool streaming;

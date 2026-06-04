@@ -1,7 +1,7 @@
 ccflags-y += -I$(src)/include
 
-# Main ISP module objects - note changed name to tx-isp-t31 (ensure tx-isp-module.o is first)
-tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
+# Main ISP module objects - note changed name to tx-isp-t31 (ensure tx_isp_module.o is first)
+tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \
                 $(DIR)/tx_isp_core.o \
                $(DIR)/tx_isp_reset.o \
                $(DIR)/tx_isp_subdev.o \
@@ -20,3 +20,7 @@ tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
 
 # Build both modules - changed tx-isp.o to tx-isp-t31.o
 obj-m := tx-isp-t31.o
+
+# Standalone register-trace diagnostic module (own module_init; cannot be
+# linked into tx-isp-t31). Single source file tx_isp_trace.c.
+obj-m += tx_isp_trace.o

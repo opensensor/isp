@@ -14,7 +14,7 @@
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
 
-/* External sensor registration structures from tx-isp-module.c */
+/* External sensor registration structures from tx_isp_module.c */
 struct registered_sensor {
     char name[32];
     int index;
@@ -63,7 +63,7 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 
 /* Platform data structure moved to tx_isp.h for global access */
 
-/* IRQ info structure - defined in tx-isp-device.h */
+/* IRQ info structure - defined in tx_isp_device.h */
 
 /* Frame channel states */
 #define FRAME_CHAN_INIT    2

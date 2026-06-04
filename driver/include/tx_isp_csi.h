@@ -20,7 +20,7 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
 
 /* CSI Video Operations - Remove conflicting declaration */
-/* csi_video_s_stream is static in tx-isp-module.c */
+/* csi_video_s_stream is static in tx_isp_module.c */
 
 /* CSI States */
 #define CSI_STATE_OFF       0
