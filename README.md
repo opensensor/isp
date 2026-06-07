@@ -52,6 +52,7 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 | `driver/` | Per-SoC open-source ISP kernel-driver implementations |
 | `driver/t31/` | T31 ISP kernel-driver implementation |
 | `driver/t31/include/` | Shared headers and data structures (T31) |
+| `driver/t40/` | T40 OEM-driver recovery and bring-up workspace |
 | `external/ingenic-sdk/` | Sensor and SDK reference material |
 | `docs/` | High-level project documentation and planning |
 | `OEM-tx-isp-t31.ko` | OEM reference kernel module |
