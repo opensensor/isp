@@ -6078,6 +6078,7 @@ static bool regtrace_framechan_dma_sync_qbuf = true;
 static bool regtrace_framechan_dma_sync_dqbuf = true;
 static bool regtrace_trace_core_top_writes;
 static bool regtrace_enable_t40_color_reg_snapshot;
+static bool regtrace_framechan_neutral_uv_on_done;
 static uint regtrace_tisp_stream_reg_1008_offset = 0x1008;
 static uint regtrace_tisp_stream_reg_1008_value = 286;
 static uint regtrace_core_irq_mask0_value = 0x1ffff;
@@ -6101,6 +6102,8 @@ static uint regtrace_irq_frame_done_min_change_words = 1U;
 static uint regtrace_framechan_wait_irq_timeout_ms = 100;
 static uint regtrace_framechan_dma_sync_qbuf_dir = DMA_BIDIRECTIONAL;
 static uint regtrace_framechan_dma_sync_dqbuf_dir = DMA_BIDIRECTIONAL;
+static uint regtrace_framechan_neutral_uv_channel_mask = 0x1U;
+static uint regtrace_framechan_neutral_uv_value = 0x80U;
 static uint regtrace_tisp_ipc_1000_delay_ms;
 static uint regtrace_core_bayer_reg8_value = 0x10002;
 static uint regtrace_core_start_mode_804_value = 0x10;
@@ -6264,6 +6267,7 @@ module_param_named(framechan_dma_sync_qbuf, regtrace_framechan_dma_sync_qbuf, bo
 module_param_named(framechan_dma_sync_dqbuf, regtrace_framechan_dma_sync_dqbuf, bool, 0644);
 module_param_named(trace_core_top_writes, regtrace_trace_core_top_writes, bool, 0644);
 module_param_named(enable_t40_color_reg_snapshot, regtrace_enable_t40_color_reg_snapshot, bool, 0644);
+module_param_named(framechan_neutral_uv_on_done, regtrace_framechan_neutral_uv_on_done, bool, 0644);
 module_param_named(tisp_stream_reg_1008_offset, regtrace_tisp_stream_reg_1008_offset, uint, 0644);
 module_param_named(tisp_stream_reg_1008_value, regtrace_tisp_stream_reg_1008_value, uint, 0644);
 module_param_named(core_irq_mask0_value, regtrace_core_irq_mask0_value, uint, 0644);
@@ -6287,6 +6291,8 @@ module_param_named(irq_frame_done_min_change_words, regtrace_irq_frame_done_min_
 module_param_named(framechan_wait_irq_timeout_ms, regtrace_framechan_wait_irq_timeout_ms, uint, 0644);
 module_param_named(framechan_dma_sync_qbuf_dir, regtrace_framechan_dma_sync_qbuf_dir, uint, 0644);
 module_param_named(framechan_dma_sync_dqbuf_dir, regtrace_framechan_dma_sync_dqbuf_dir, uint, 0644);
+module_param_named(framechan_neutral_uv_channel_mask, regtrace_framechan_neutral_uv_channel_mask, uint, 0644);
+module_param_named(framechan_neutral_uv_value, regtrace_framechan_neutral_uv_value, uint, 0644);
 module_param_named(tisp_ipc_1000_delay_ms, regtrace_tisp_ipc_1000_delay_ms, uint, 0644);
 module_param_named(core_bayer_reg8_value, regtrace_core_bayer_reg8_value, uint, 0644);
 module_param_named(core_start_mode_804_value, regtrace_core_start_mode_804_value, uint, 0644);
@@ -7313,6 +7319,12 @@ static uint32_t regtrace_framechan_dma_sync_last_len[4];
 static uint32_t regtrace_framechan_dma_sync_last_dir[4];
 static uint32_t regtrace_framechan_dma_sync_last_vaddr[4];
 static uint32_t regtrace_framechan_dma_sync_last_stage[4];
+static uint32_t regtrace_framechan_neutral_uv_count[4];
+static uint32_t regtrace_framechan_neutral_uv_skip_count[4];
+static uint32_t regtrace_framechan_neutral_uv_last_phys[4];
+static uint32_t regtrace_framechan_neutral_uv_last_len[4];
+static uint32_t regtrace_framechan_neutral_uv_last_index[4];
+static long regtrace_framechan_neutral_uv_last_ret[4];
 static uint32_t regtrace_framechan_shadow_submit_next_count[4];
 static uint32_t regtrace_framechan_shadow_submit_next_no_queued[4];
 static uint32_t regtrace_framechan_shadow_submit_next_fail[4];
@@ -11279,6 +11291,94 @@ static uint32_t regtrace_untag_phys(uint32_t phys)
     if (phys >= 0x80000000U)
         phys &= 0x1fffffffU;
     return phys;
+}
+
+static long regtrace_phys_fill_plane(uint32_t phys, uint32_t length,
+                                     uint32_t byte_value)
+{
+    void __iomem *mapped;
+    uint32_t fill_len;
+    uint32_t pattern;
+    uint32_t off;
+
+    phys = regtrace_untag_phys(phys);
+    if (!phys || phys >= 0x20000000U || !length)
+        return -EINVAL;
+
+    fill_len = length;
+    if (fill_len > 0x100000U)
+        fill_len = 0x100000U;
+    if (!fill_len)
+        return -EINVAL;
+
+    mapped = __ioremap((phys_addr_t)phys, fill_len,
+                       REGTRACE_IOREMAP_UNCACHED);
+    if (!mapped)
+        return -ENOMEM;
+
+    byte_value &= 0xffU;
+    pattern = byte_value | (byte_value << 8) |
+              (byte_value << 16) | (byte_value << 24);
+    for (off = 0; off + 4U <= fill_len; off += 4U)
+        writel(pattern, (void __iomem *)((char __iomem *)mapped + off));
+    for (; off < fill_len; off++)
+        writeb((uint8_t)byte_value,
+               (void __iomem *)((char __iomem *)mapped + off));
+
+    wmb();
+    __iounmap(mapped);
+    return 0;
+}
+
+static void regtrace_framechan_neutralize_uv_on_done(int channel, uint32_t y,
+                                                     uint32_t uv,
+                                                     uint32_t index,
+                                                     bool deferred_context)
+{
+    uint32_t y_len;
+    uint32_t uv_len;
+    uint32_t total_len = 0;
+    long ret;
+
+    if (channel < 0 || channel >= 4)
+        return;
+    if (!regtrace_framechan_neutral_uv_on_done ||
+        !(regtrace_framechan_neutral_uv_channel_mask & (1U << channel)))
+        return;
+    if (!deferred_context) {
+        regtrace_framechan_neutral_uv_skip_count[channel]++;
+        regtrace_framechan_neutral_uv_last_ret[channel] = -EAGAIN;
+        return;
+    }
+
+    if (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        total_len = regtrace_framechan_qbuf_len[channel][index];
+
+    y_len = regtrace_framechan_uv_offset(channel);
+    if (!y_len && total_len)
+        y_len = (total_len * 2U) / 3U;
+    if (!uv && y && y_len)
+        uv = y + y_len;
+    if (total_len > y_len)
+        uv_len = total_len - y_len;
+    else
+        uv_len = y_len ? y_len / 2U : 0;
+
+    regtrace_framechan_neutral_uv_last_phys[channel] =
+        regtrace_untag_phys(uv);
+    regtrace_framechan_neutral_uv_last_len[channel] = uv_len;
+    regtrace_framechan_neutral_uv_last_index[channel] = index;
+
+    if (!uv || !uv_len) {
+        regtrace_framechan_neutral_uv_skip_count[channel]++;
+        regtrace_framechan_neutral_uv_last_ret[channel] = -EINVAL;
+        return;
+    }
+
+    ret = regtrace_phys_fill_plane(uv, uv_len,
+                                   regtrace_framechan_neutral_uv_value);
+    regtrace_framechan_neutral_uv_count[channel]++;
+    regtrace_framechan_neutral_uv_last_ret[channel] = ret;
 }
 
 static void regtrace_phys_sample_plane(uint32_t phys, uint32_t length,
@@ -17098,6 +17198,35 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_framechan_wait_msca_last_timeout_ms[1],
                regtrace_framechan_wait_msca_last_timeout_ms[2],
                regtrace_framechan_wait_msca_last_timeout_ms[3]);
+    seq_printf(m,
+               "framechan_neutral_uv param=%u mask=0x%x value=0x%x count=%u,%u,%u,%u skip=%u,%u,%u,%u last_phys=0x%x,0x%x,0x%x,0x%x last_len=0x%x,0x%x,0x%x,0x%x last_idx=%u,%u,%u,%u ret=%ld,%ld,%ld,%ld\n",
+               regtrace_framechan_neutral_uv_on_done ? 1U : 0U,
+               regtrace_framechan_neutral_uv_channel_mask,
+               regtrace_framechan_neutral_uv_value,
+               regtrace_framechan_neutral_uv_count[0],
+               regtrace_framechan_neutral_uv_count[1],
+               regtrace_framechan_neutral_uv_count[2],
+               regtrace_framechan_neutral_uv_count[3],
+               regtrace_framechan_neutral_uv_skip_count[0],
+               regtrace_framechan_neutral_uv_skip_count[1],
+               regtrace_framechan_neutral_uv_skip_count[2],
+               regtrace_framechan_neutral_uv_skip_count[3],
+               regtrace_framechan_neutral_uv_last_phys[0],
+               regtrace_framechan_neutral_uv_last_phys[1],
+               regtrace_framechan_neutral_uv_last_phys[2],
+               regtrace_framechan_neutral_uv_last_phys[3],
+               regtrace_framechan_neutral_uv_last_len[0],
+               regtrace_framechan_neutral_uv_last_len[1],
+               regtrace_framechan_neutral_uv_last_len[2],
+               regtrace_framechan_neutral_uv_last_len[3],
+               regtrace_framechan_neutral_uv_last_index[0],
+               regtrace_framechan_neutral_uv_last_index[1],
+               regtrace_framechan_neutral_uv_last_index[2],
+               regtrace_framechan_neutral_uv_last_index[3],
+               regtrace_framechan_neutral_uv_last_ret[0],
+               regtrace_framechan_neutral_uv_last_ret[1],
+               regtrace_framechan_neutral_uv_last_ret[2],
+               regtrace_framechan_neutral_uv_last_ret[3]);
     seq_printf(m,
                "framechan_wait_irq param=%u timeout_ms=%u count=%u,%u,%u,%u hit=%u,%u,%u,%u timeout=%u,%u,%u,%u signal=%u,%u,%u,%u ready=%d,%d,%d,%d last=%u/%u/%ld,%u/%u/%ld,%u/%u/%ld,%u/%u/%ld\n",
                regtrace_enable_framechan_wait_irq_done ? 1U : 0U,
@@ -37087,7 +37216,8 @@ out:
 
 static long regtrace_irq_frame_done_send(int channel, uint32_t source,
                                          uint32_t core_pad, uint32_t y,
-                                         uint32_t uv, uint32_t index)
+                                         uint32_t uv, uint32_t index,
+                                         bool deferred_context)
 {
     uint32_t event_data[8] = { 0 };
     uint32_t remote_pad = 0;
@@ -37098,6 +37228,9 @@ static long regtrace_irq_frame_done_send(int channel, uint32_t source,
 
     if (channel < 0 || channel >= 4 || !y)
         return -EINVAL;
+
+    regtrace_framechan_neutralize_uv_on_done(channel, y, uv, index,
+                                             deferred_context);
 
     if (regtrace_irq_frame_done_delivery_mode ==
         REGTRACE_IRQ_FD_DELIVERY_LOCAL ||
@@ -37451,7 +37584,7 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
         if (regtrace_irq_frame_done_delivery_mode ==
             REGTRACE_IRQ_FD_DELIVERY_LOCAL) {
             regtrace_irq_frame_done_send((int)channel, source, 0, y, uv,
-                                         index);
+                                         index, true);
             return;
         }
 
@@ -37466,7 +37599,8 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
         }
     }
 
-    regtrace_irq_frame_done_send((int)channel, source, pad, y, uv, index);
+    regtrace_irq_frame_done_send((int)channel, source, pad, y, uv, index,
+                                 true);
 }
 
 static void regtrace_irq_frame_done_work_init(void)
@@ -37592,7 +37726,7 @@ static long regtrace_irq_frame_done_event(int channel, uint32_t source)
     if (regtrace_irq_frame_done_delivery_mode ==
         REGTRACE_IRQ_FD_DELIVERY_LOCAL)
         return regtrace_irq_frame_done_send(channel, source, 0, y, uv,
-                                            index);
+                                            index, false);
 
     core_pad = regtrace_irq_frame_done_resolve_core_pad(channel);
     if (!regtrace_is_kernel_ptr((void *)(uintptr_t)core_pad)) {
@@ -37634,7 +37768,7 @@ static long regtrace_irq_frame_done_event(int channel, uint32_t source)
     }
 
     return regtrace_irq_frame_done_send(channel, source, core_pad, y, uv,
-                                        index);
+                                        index, false);
 #else
     return 0;
 #endif

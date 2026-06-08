@@ -186,6 +186,14 @@ Neutral-UV buffer test:
   live buffer ownership/timing is part of the problem and a driver-side
   neutral-UV control would be a better diagnostic than userspace `/dev/mem`
   racing.
+- A default-off driver diagnostic now exposes
+  `framechan_neutral_uv_on_done`, `framechan_neutral_uv_channel_mask`, and
+  `framechan_neutral_uv_value`. It fills the completed UV plane only from the
+  deferred frame-done work item, and direct IRQ calls record a skip instead of
+  mapping/writing frame memory. Runtime validation is still pending because
+  `192.168.50.242` dropped off the network while stopping Raptor before the
+  diagnostic module was inserted:
+  `logs/20260608-163949-driver-neutral-uv-smoke-242`.
 
 ## T31 Lessons To Reuse Carefully
 
@@ -243,7 +251,7 @@ plus the known DMSC neighborhood before changing it. A plausible path is:
 
 ### 4. BCSH / CSC / CCM
 
-BCSH H-matrix registers live at `0x8024-0x8038` in the T31 map. Identity
+BCSH H-matrix registers live at `0x11024-0x11038` on this T40 path. Identity
 matrix values are not a valid RGB-to-YUV conversion and can produce bad color.
 
 The T40 profile currently forces a CSC version path, and the corrected CSC
@@ -282,8 +290,8 @@ ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
 
 1. Add or use a T40 register snapshot for:
    - `0x8`, `0x0c`
-   - `0x4800` and nearby DMSC registers
-   - `0x8024-0x8038` BCSH H-matrix range
+   - `0xa000` and nearby DMSC registers
+   - `0x11024-0x11038` BCSH H-matrix range
    - `0x1030-0x1070` GIB range
 2. Keep broad DMSC/BCSH/GIB snapshots default-off during normal RTSP runs.
    Audit one register window at a time, preferably before stream start or in a
