@@ -133,6 +133,60 @@ Current safe restore after the failed color-init probe:
   samples were nonzero and changing, and RTSP produced
   `frame-safe-csc2.jpg` at 1920x1080. The frame is still false-colored.
 
+## 2026-06-08 Post-RTSP Color Probes
+
+The earlier proc `core_color_path_snapshot` used T31-era windows (`0x4800`
+DMSC and `0x8024` BCSH). Direct physical reads on T40 showed the live windows
+are different:
+
+- DMSC main: `0xa000` and nearby offsets.
+- BCSH main: `0x11000-0x11070`; H matrix is `0x11024-0x11038`.
+- AWB gains: `0x4004/0x4008/0x400c/0x4010` and
+  `0x5004/0x5008/0x500c/0x5010`.
+- CSC: `0xd010-0xd030`.
+- GIB remains in the `0x1030-0x1070` neighborhood.
+
+The driver proc snapshot has been updated to print those T40 windows when
+`enable_t40_color_reg_snapshot=1`; it remains default-off.
+
+Manual BCSH tests:
+
+- H-matrix-only OEM base write:
+  `logs/20260608-161114-capture-after-bcsh-oem-base-242`.
+- Full clip/offset plus H-matrix write:
+  `logs/20260608-161540-live-bcsh-full-oem-242`.
+- Result: the scene brightened and moved away from the darkest false-color
+  class, but it remained non-lifelike. BCSH is involved, but not sufficient.
+
+Top-gate matrix after the BCSH write:
+
+- `logs/20260608-161722-live-top-color-matrix-after-bcsh-242`
+- Re-enabling LSC produced strong geometric/striping artifacts.
+- Re-enabling GIB changed the palette but did not normalize color.
+- Bypassing CCM/Gamma/BCSH made the frame more synthetic/magenta.
+- Keep LSC bypassed and do not treat downstream bypass as a valid baseline.
+
+BCSH saturation-like clamp:
+
+- `logs/20260608-162119-live-bcsh-saturation-clamp-242`
+- Clamping `0x1106c/0x11070` from `0x1fff` to `0x0`, `0x100`, `0x200`,
+  `0x400`, and `0x800` barely changed the frame. Those words are not the
+  dominant false-color control.
+
+Neutral-UV buffer test:
+
+- Utility: `tools/phys_memfill.c`
+- Slow fill did not hold against the live ISP writer:
+  `logs/20260608-162801-live-neutral-uv-fill-242`.
+- Fast fill held one observed UV plane fully neutral and partially affected
+  the other:
+  `logs/20260608-162937-live-neutral-uv-fill-fast-242`.
+- Result: the RTSP frame became dark/tearing/false-colored rather than clean
+  grayscale. This is not conclusive proof of correct UV addressing; it shows
+  live buffer ownership/timing is part of the problem and a driver-side
+  neutral-UV control would be a better diagnostic than userspace `/dev/mem`
+  racing.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
