@@ -6,12 +6,19 @@ USER="${THINGINO_USER:-root}"
 PASS="${THINGINO_PASS:-}"
 ROOT="${ROOT:-/home/matteius/output/wyze_cam3pro_nor_t40xp_gc4653_rtl8192fs}"
 SOC="${SOC:-t40}"
-QBUF_PHYS_FALLBACK="${QBUF_PHYS_FALLBACK:-0x6bab300}"
+QBUF_PHYS_FALLBACK="${QBUF_PHYS_FALLBACK:-0x6ea8300}"
+QBUF_EXTRA_PHYS="${QBUF_EXTRA_PHYS:-0x6bab300}"
 QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
+FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
 	echo "refusing non-target IP: $IP" >&2
+	exit 2
+fi
+if [[ "$FRAMECHAN_NEUTRAL_UV_ON_DONE" != "0" &&
+	"$FRAMECHAN_NEUTRAL_UV_ON_DONE" != "1" ]]; then
+	echo "FRAMECHAN_NEUTRAL_UV_ON_DONE must be 0 or 1" >&2
 	exit 2
 fi
 if [[ -n "$PASS" ]]; then
@@ -37,8 +44,10 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"$USER@$IP:/tmp/tx_isp_t40_recovered.ko"
 "${SCP[@]}" tools/phys_memdump.mipsel "$USER@$IP:/tmp/phys_memdump"
 
-"${SSH[@]}" sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
+"${SSH[@]}" "FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
+	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
+: "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -62,7 +71,7 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_tisp_main_init_color_inits=0 \
 	tisp_main_init_color_init_mask=0 \
 	force_tisp_main_init_yuv_input_csc_version=0 \
-	framechan_neutral_uv_on_done=0
+	framechan_neutral_uv_on_done="$FRAMECHAN_NEUTRAL_UV_ON_DONE"
 PARAM=/sys/module/tx_isp_t40_recovered/parameters
 echo 0x7fdfe8ff > "$PARAM/tisp_main_init_top40_value"
 echo 2 > "$PARAM/tisp_main_init_csc_version_value"
@@ -105,13 +114,31 @@ if [[ -z "$phys" ]]; then
 fi
 
 printf 'phys=%s len=%s\n' "$phys" "$len" | tee "$LOG/qbuf-dump.txt"
-"${SSH[@]}" "/tmp/phys_memdump '$phys' '$len' /tmp/qbuf-ch0.bin" \
-	>"$LOG/dump-qbuf.log" 2>&1
-"${SCP[@]}" "$USER@$IP:/tmp/qbuf-ch0.bin" "$LOG/qbuf-ch0.bin"
 
-python3 tools/nv12_probe.py "$LOG/qbuf-ch0.bin" \
-	--width 1920 --height 1080 --out-dir "$LOG/qbuf-renders" \
-	>"$LOG/nv12-probe.log"
+dump_qbuf() {
+	local dump_phys="$1"
+	local name="$2"
+
+	"${SSH[@]}" "/tmp/phys_memdump '$dump_phys' '$len' '/tmp/$name.bin'" \
+		>"$LOG/dump-$name.log" 2>&1
+	"${SCP[@]}" "$USER@$IP:/tmp/$name.bin" "$LOG/$name.bin"
+	python3 tools/nv12_probe.py "$LOG/$name.bin" \
+		--width 1920 --height 1080 --out-dir "$LOG/$name-renders" \
+		>"$LOG/nv12-probe-$name.log"
+}
+
+dump_qbuf "$phys" qbuf-ch0
+cp "$LOG/dump-qbuf-ch0.log" "$LOG/dump-qbuf.log"
+cp "$LOG/nv12-probe-qbuf-ch0.log" "$LOG/nv12-probe.log"
+ln -sfn qbuf-ch0-renders "$LOG/qbuf-renders"
+
+for extra_phys in $QBUF_EXTRA_PHYS; do
+	[[ "$extra_phys" == "$phys" ]] && continue
+	extra_name="qbuf-${extra_phys//[^A-Za-z0-9]/_}"
+	printf 'extra_phys=%s len=%s name=%s\n' \
+		"$extra_phys" "$len" "$extra_name" | tee -a "$LOG/qbuf-dump.txt"
+	dump_qbuf "$extra_phys" "$extra_name"
+done
 
 timeout 25 ffmpeg -hide_banner -loglevel info -y -rtsp_transport tcp \
 	-i "rtsp://thingino:thingino@$IP/ch0" -frames:v 1 \

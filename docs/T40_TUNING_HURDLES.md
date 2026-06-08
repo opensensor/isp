@@ -194,6 +194,14 @@ Neutral-UV buffer test:
   `192.168.50.242` dropped off the network while stopping Raptor before the
   diagnostic module was inserted:
   `logs/20260608-163949-driver-neutral-uv-smoke-242`.
+- Runtime validation after a clean Tasmota power cycle
+  (`192.168.50.103` controls the camera power for `192.168.50.242`) reached the
+  diagnostic path:
+  `logs/20260608-182925-t40-neutral-uv-qbuf-242`. Buffer `0x6ea8300` rendered
+  grayscale when interpreted as either NV12 or NV21, proving that the direct
+  qbuf UV plane was neutralized. The RTSP frame stayed false-colored, so the
+  encoder is still reading a different/stale buffer sequence or the neutral
+  fill timing is not aligned with the buffer the encoder consumes.
 
 Raw qbuf dump workflow for the next live pass:
 
@@ -206,9 +214,11 @@ Raw qbuf dump workflow for the next live pass:
 - For the known safe 1920x1080 qbuf layout, dump `0x2fd000` bytes starting at
   the active qbuf physical address. The Y plane is `1920 * 1088 = 0x1fe000`
   bytes, so UV begins at `phys + 0x1fe000`.
-- The repeated safe-profile allocations on 2026-06-08 used ch0 buffer 0 at
-  `0x6bab300` with length `0x2fd000`; the script uses that as a fallback when
-  no qbuf line is available from `dmesg`.
+- The repeated safe-profile allocations on 2026-06-08 used ch0 buffers around
+  `0x6bab300` and `0x6ea8300` with length `0x2fd000`. Later captures showed
+  `0x6ea8300` is the better primary fallback; `0x6bab300` can be stale or
+  partially black. The script dumps both when no qbuf line is available from
+  `dmesg`.
 - Render the dump as NV12, NV21, and neutral chroma:
   `python3 tools/nv12_probe.py qbuf.bin --width 1920 --height 1080`.
 - If the neutral render is sane but NV12/NV21 are not, the fault is chroma
@@ -227,6 +237,11 @@ Raw qbuf dump result:
 - Conclusion: this is not just NV12/NV21 byte order. The Y/luma output is
   carrying a plausible scene, and the next target is UV/chroma generation or
   downstream color-to-YUV programming before the qbuf reaches RTSP.
+- Updated dual-buffer baseline after another Tasmota power cycle:
+  `logs/20260608-183454-t40-safe-qbuf-dual-242`. IRQ 38 and IRQ 39 were live,
+  `framechan_neutral_uv_on_done=0`, and the qbuf/RTSP captures matched as real
+  scene data with bad chroma. This is the current best non-neutral baseline for
+  color work.
 
 ## T31 Lessons To Reuse Carefully
 
