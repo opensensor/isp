@@ -43,7 +43,7 @@ were needed to get a live stream far enough to test:
 - `enable_core_bayer_reg8`
 - `enable_core_top_sel_reg0c`
 - `enable_tisp_top_regs_final_reapply`
-- `tisp_main_init_top40_value = 0x7fd9004f`
+- profile default `tisp_main_init_top40_value = 0x7fd9004f`
 
 Those are now suspects. They may be partly correct, partly stale, or too broad
 for a minimal valid-color baseline. The next experiments should hold the
@@ -89,6 +89,49 @@ Conclusion: GIB/LSC bypass and CFA phase are not sufficient by themselves.
 The next likely hurdle is DMSC output/refresh and downstream BCSH/CSC/CCM
 state, with a minimal top-bypass profile used to keep enhancement blocks out
 of the way.
+
+CSC and YUV-input CSC probes:
+
+- The first `csc-version-sweep` log was invalid as a CSC sweep because the
+  bring-up profile reset `tisp_main_init_csc_version_value` back to `2` during
+  module init. Do not use `logs/20260608-151739-csc-version-sweep-r40-7fdfe8ff-242`
+  as evidence for versions `0`, `1`, or `3`.
+- The corrected sweep echoed the CSC version after `insmod` and before the
+  sensor load: `logs/20260608-153126-actual-csc-version-sweep-r40-7fdfe8ff-242`.
+  Versions `0`, `1`, and `2` produced similar washed false color; version `3`
+  regressed to the older saturated false-color class. CSC version alone is not
+  the missing color fix.
+- OEM `tisp_main_init` only calls the YUV-input CSC latch when the mode field
+  is `3`; the live GC4653 path reports mode `1`. Forcing that path anyway
+  (`logs/20260608-152957-yuv-input-csc-force-r40-7fdfe8ff-242`) regressed to a
+  flat green-class frame. Keep `force_tisp_main_init_yuv_input_csc_version=0`.
+
+Direct recovered color-init replay:
+
+- A broad direct replay of recovered DMSC, CCM, Gamma, and BCSH init calls with
+  mask `0x8700` reached the first color-init call and oopsed before the normal
+  tisp tail, MSCA OEM, event init, and Tiziano init could run:
+  `logs/20260608-153902-color-inits-8700-r40-7fdfe8ff-csc2-242`.
+- The pre-restore fault bundle is
+  `logs/20260608-154238-pre-restore-color-inits-oops-242`; proc showed
+  `tail_count=0`, `msca_oem_count=0`, `event_init_count=0`,
+  `tiziano_count=0`, zero IRQ 38/39 counts, and empty qbuf samples.
+- The driver keeps `enable_tisp_main_init_color_inits` default-off and now
+  leaves `tisp_main_init_color_init_mask` at `0` by default. Any future replay
+  must explicitly select one block at a time and should prefer manual register
+  mirroring over broad direct calls into recovered functions.
+
+Current safe restore after the failed color-init probe:
+
+- `logs/20260608-155233-force-reboot-safe-csc2-242`
+- Forced reboot verified by uptime reset, then loaded the rebuilt recovered
+  module with `enable_tisp_main_init_color_inits=0`,
+  `force_tisp_main_init_yuv_input_csc_version=0`, CSC version `2`,
+  top value `0x7fdfe8ff`, forced Bayer `0x10008`, and `reg88=0x10c`.
+- Evidence: IRQ 38 and 39 were active, `tail_count=1`,
+  `msca_oem_count=1`, `event_init_count=1`, `tiziano_count=1`, qbuf/output
+  samples were nonzero and changing, and RTSP produced
+  `frame-safe-csc2.jpg` at 1920x1080. The frame is still false-colored.
 
 ## T31 Lessons To Reuse Carefully
 
@@ -149,7 +192,8 @@ plus the known DMSC neighborhood before changing it. A plausible path is:
 BCSH H-matrix registers live at `0x8024-0x8038` in the T31 map. Identity
 matrix values are not a valid RGB-to-YUV conversion and can produce bad color.
 
-The T40 profile currently forces a CSC version path, but that is not proof that
+The T40 profile currently forces a CSC version path, and the corrected CSC
+sweep proves that CSC version alone is not sufficient. That is not proof that
 BCSH/CCM tables are valid or that the H-matrix is being recomputed. Dump this
 range before trusting any color-correction stage.
 
@@ -204,7 +248,10 @@ ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
    - LSC
    - GIB
    - denoise family
-7. Only after a plausible lifelike frame appears, map T40 tuning-blob offsets
+7. Do not broad-call recovered T40 color init helpers. Isolate one block per
+   boot, or mirror the exact OEM register writes manually, and capture
+   pre/post proc evidence before starting Raptor.
+8. Only after a plausible lifelike frame appears, map T40 tuning-blob offsets
    for the active blocks and replace guesses with blob-backed values.
 
 ## Success Criteria

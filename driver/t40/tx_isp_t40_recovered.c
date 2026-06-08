@@ -6046,11 +6046,14 @@ static bool regtrace_enable_tisp_top_regs_final_reapply;
 static bool regtrace_enable_tisp_main_init_dma_regs;
 static bool regtrace_enable_tisp_main_init_dma_kseg0;
 static bool regtrace_enable_tisp_main_init_tispinfo_dma;
+static bool regtrace_enable_tisp_main_init_color_inits;
 static bool regtrace_enable_tisp_main_init_tail_regs;
 static bool regtrace_enable_tisp_main_init_sensor_init;
 static bool regtrace_enable_tisp_main_init_param_alloc;
 static bool regtrace_enable_tiziano_param_load = true;
 static bool regtrace_enable_tisp_main_init_csc_version;
+static bool regtrace_enable_tisp_main_init_yuv_input_csc_version;
+static bool regtrace_force_tisp_main_init_yuv_input_csc_version;
 static bool regtrace_enable_tisp_main_init_msca_oem_order;
 static bool regtrace_enable_tisp_main_init_event_init;
 static bool regtrace_enable_tisp_main_init_tiziano;
@@ -6123,6 +6126,7 @@ static uint regtrace_tisp_main_init_reg6c_value = 0x00030024;
 static uint regtrace_tisp_main_init_reg60_value = 0;
 static uint regtrace_tisp_main_init_reg88_override = 0x00000102;
 static uint regtrace_tisp_main_init_csc_version_value = 2;
+static uint regtrace_tisp_main_init_color_init_mask;
 static char *regtrace_t40_tuning_bin_path = "/usr/share/sensor/gc4653-t40.bin";
 static uint regtrace_framechan_wait_msca_timeout_ms = 40;
 static uint regtrace_vic_mdma_qbuf_ring_ctrl_value;
@@ -6228,11 +6232,14 @@ module_param_named(enable_tisp_top_regs_final_reapply, regtrace_enable_tisp_top_
 module_param_named(enable_tisp_main_init_dma_regs, regtrace_enable_tisp_main_init_dma_regs, bool, 0644);
 module_param_named(enable_tisp_main_init_dma_kseg0, regtrace_enable_tisp_main_init_dma_kseg0, bool, 0644);
 module_param_named(enable_tisp_main_init_tispinfo_dma, regtrace_enable_tisp_main_init_tispinfo_dma, bool, 0644);
+module_param_named(enable_tisp_main_init_color_inits, regtrace_enable_tisp_main_init_color_inits, bool, 0644);
 module_param_named(enable_tisp_main_init_tail_regs, regtrace_enable_tisp_main_init_tail_regs, bool, 0644);
 module_param_named(enable_tisp_main_init_sensor_init, regtrace_enable_tisp_main_init_sensor_init, bool, 0644);
 module_param_named(enable_tisp_main_init_param_alloc, regtrace_enable_tisp_main_init_param_alloc, bool, 0644);
 module_param_named(enable_tiziano_param_load, regtrace_enable_tiziano_param_load, bool, 0644);
 module_param_named(enable_tisp_main_init_csc_version, regtrace_enable_tisp_main_init_csc_version, bool, 0644);
+module_param_named(enable_tisp_main_init_yuv_input_csc_version, regtrace_enable_tisp_main_init_yuv_input_csc_version, bool, 0644);
+module_param_named(force_tisp_main_init_yuv_input_csc_version, regtrace_force_tisp_main_init_yuv_input_csc_version, bool, 0644);
 module_param_named(enable_tisp_main_init_msca_oem_order, regtrace_enable_tisp_main_init_msca_oem_order, bool, 0644);
 module_param_named(enable_tisp_main_init_event_init, regtrace_enable_tisp_main_init_event_init, bool, 0644);
 module_param_named(enable_tisp_main_init_tiziano, regtrace_enable_tisp_main_init_tiziano, bool, 0644);
@@ -6305,6 +6312,7 @@ module_param_named(tisp_main_init_reg6c_value, regtrace_tisp_main_init_reg6c_val
 module_param_named(tisp_main_init_reg60_value, regtrace_tisp_main_init_reg60_value, uint, 0644);
 module_param_named(tisp_main_init_reg88_override, regtrace_tisp_main_init_reg88_override, uint, 0644);
 module_param_named(tisp_main_init_csc_version_value, regtrace_tisp_main_init_csc_version_value, uint, 0644);
+module_param_named(tisp_main_init_color_init_mask, regtrace_tisp_main_init_color_init_mask, uint, 0644);
 module_param_named(t40_tuning_bin_path, regtrace_t40_tuning_bin_path, charp, 0644);
 module_param_named(framechan_wait_msca_timeout_ms, regtrace_framechan_wait_msca_timeout_ms, uint, 0644);
 module_param_named(vic_mdma_qbuf_ring_ctrl_value, regtrace_vic_mdma_qbuf_ring_ctrl_value, uint, 0644);
@@ -7048,6 +7056,14 @@ static uint32_t regtrace_tisp_main_init_dma_fail_index;
 static uint32_t regtrace_tisp_main_init_dma_last_mask;
 static uint32_t regtrace_tisp_main_init_tispinfo_count;
 static long regtrace_tisp_main_init_dma_last_ret;
+static uint32_t regtrace_tisp_main_init_color_init_count;
+static uint32_t regtrace_tisp_main_init_color_init_last_mask;
+static long regtrace_tisp_main_init_color_init_last_ret;
+static long regtrace_tisp_main_init_color_init_dmsc_ret;
+static long regtrace_tisp_main_init_color_init_gamma_ret;
+static long regtrace_tisp_main_init_color_init_bcsh_ret;
+static long regtrace_tisp_main_init_color_init_ccm_ret;
+static long regtrace_tisp_main_init_color_init_clm_ret;
 static uint32_t regtrace_tisp_main_init_tail_reg_count;
 static uint32_t regtrace_tisp_main_init_sensor_init_count;
 static long regtrace_tisp_main_init_sensor_init_last_ret;
@@ -7093,6 +7109,17 @@ static uint32_t regtrace_tisp_main_init_csc_last_d018;
 static uint32_t regtrace_tisp_main_init_csc_last_d020;
 static uint32_t regtrace_tisp_main_init_csc_last_d030;
 static long regtrace_tisp_main_init_csc_last_ret;
+static uint32_t regtrace_tisp_main_init_yuv_csc_count;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_channel;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_mode;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_base;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_d000;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_d010;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_d014;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_d018;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_d020;
+static uint32_t regtrace_tisp_main_init_yuv_csc_last_d030;
+static long regtrace_tisp_main_init_yuv_csc_last_ret;
 static uint32_t regtrace_tisp_main_init_msca_oem_count;
 static uint32_t regtrace_tisp_main_init_msca_oem_last_width;
 static uint32_t regtrace_tisp_main_init_msca_oem_last_height;
@@ -16761,6 +16788,33 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_tisp_main_init_csc_last_d020,
                regtrace_tisp_main_init_csc_last_d030,
                regtrace_tisp_main_init_csc_last_ret);
+    seq_printf(m,
+               "tisp_main_init_yuv_csc param=%u force=%u count=%u last_ch=%u last_mode=%u base=0x%x regs=d000:0x%x d010:0x%x d014:0x%x d018:0x%x d020:0x%x d030:0x%x ret=%ld\n",
+               regtrace_enable_tisp_main_init_yuv_input_csc_version ? 1U : 0U,
+               regtrace_force_tisp_main_init_yuv_input_csc_version ? 1U : 0U,
+               regtrace_tisp_main_init_yuv_csc_count,
+               regtrace_tisp_main_init_yuv_csc_last_channel,
+               regtrace_tisp_main_init_yuv_csc_last_mode,
+               regtrace_tisp_main_init_yuv_csc_last_base,
+               regtrace_tisp_main_init_yuv_csc_last_d000,
+               regtrace_tisp_main_init_yuv_csc_last_d010,
+               regtrace_tisp_main_init_yuv_csc_last_d014,
+               regtrace_tisp_main_init_yuv_csc_last_d018,
+               regtrace_tisp_main_init_yuv_csc_last_d020,
+               regtrace_tisp_main_init_yuv_csc_last_d030,
+               regtrace_tisp_main_init_yuv_csc_last_ret);
+    seq_printf(m,
+               "tisp_main_init_color_inits param=%u mask_param=0x%x count=%u last_mask=0x%x dmsc=%ld gamma=%ld bcsh=%ld ccm=%ld clm=%ld ret=%ld\n",
+               regtrace_enable_tisp_main_init_color_inits ? 1U : 0U,
+               regtrace_tisp_main_init_color_init_mask,
+               regtrace_tisp_main_init_color_init_count,
+               regtrace_tisp_main_init_color_init_last_mask,
+               regtrace_tisp_main_init_color_init_dmsc_ret,
+               regtrace_tisp_main_init_color_init_gamma_ret,
+               regtrace_tisp_main_init_color_init_bcsh_ret,
+               regtrace_tisp_main_init_color_init_ccm_ret,
+               regtrace_tisp_main_init_color_init_clm_ret,
+               regtrace_tisp_main_init_color_init_last_ret);
     seq_printf(m,
                "tisp_scalar_late param=%u count=%u last_ch=%u last_ret=%ld\n",
                regtrace_enable_tisp_main_init_scalar_regs_after_video ? 1U : 0U,
@@ -62957,6 +63011,149 @@ out:
            channel, version, d010, d014, d018, d020, d030, ret);
     return ret;
 }
+
+static int regtrace_tisp_main_init_yuv_input_csc_version(uint32_t channel,
+                                                         uint32_t mode)
+{
+    uint32_t base = (channel + 416U) << 7;
+    uint32_t d010 = 0;
+    uint32_t d014 = 0;
+    uint32_t d018 = 0;
+    uint32_t d030 = 0;
+    int ret = 0;
+    int subret;
+
+    /*
+     * OEM tisp_main_init calls tisp_yuv_input_set_csc_version(channel) when
+     * the stream mode field is 3. Its ASM re-latches the current CSC
+     * coefficients, forces d020 to zero, then commits the YUV-input CSC block
+     * by writing the block base register to all ones.
+     */
+    subret = regtrace_core_read(base + 0x10, &d010);
+    if (subret && !ret)
+        ret = subret;
+    if (!subret) {
+        subret = regtrace_core_write(base + 0x10, d010);
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    subret = regtrace_core_read(base + 0x14, &d014);
+    if (subret && !ret)
+        ret = subret;
+    if (!subret) {
+        subret = regtrace_core_write(base + 0x14, d014);
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    subret = regtrace_core_read(base + 0x18, &d018);
+    if (subret && !ret)
+        ret = subret;
+    if (!subret) {
+        subret = regtrace_core_write(base + 0x18, d018);
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    subret = regtrace_core_write(base + 0x20, 0);
+    if (subret && !ret)
+        ret = subret;
+
+    subret = regtrace_core_read(base + 0x30, &d030);
+    if (subret && !ret)
+        ret = subret;
+    if (!subret) {
+        subret = regtrace_core_write(base + 0x30, d030);
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    subret = regtrace_core_write(base, 0xffffffffU);
+    if (subret && !ret)
+        ret = subret;
+
+    regtrace_tisp_main_init_yuv_csc_count++;
+    regtrace_tisp_main_init_yuv_csc_last_channel = channel;
+    regtrace_tisp_main_init_yuv_csc_last_mode = mode;
+    regtrace_tisp_main_init_yuv_csc_last_base = base;
+    regtrace_tisp_main_init_yuv_csc_last_d000 = 0xffffffffU;
+    regtrace_tisp_main_init_yuv_csc_last_d010 = d010;
+    regtrace_tisp_main_init_yuv_csc_last_d014 = d014;
+    regtrace_tisp_main_init_yuv_csc_last_d018 = d018;
+    regtrace_tisp_main_init_yuv_csc_last_d020 = 0;
+    regtrace_tisp_main_init_yuv_csc_last_d030 = d030;
+    regtrace_tisp_main_init_yuv_csc_last_ret = ret;
+    printk(KERN_WARNING "tx_isp_t40_recovered: tisp_main_init YUV-input CSC ch=%u mode=%u base=0x%x d010=0x%x d014=0x%x d018=0x%x d020=0x0 d030=0x%x d000=0xffffffff ret=%d\n",
+           channel, mode, base, d010, d014, d018, d030, ret);
+    return ret;
+}
+
+#define REGTRACE_TISP_COLOR_DMSC  0x00000100U
+#define REGTRACE_TISP_COLOR_CCM   0x00000200U
+#define REGTRACE_TISP_COLOR_GAMMA 0x00000400U
+#define REGTRACE_TISP_COLOR_BCSH  0x00008000U
+#define REGTRACE_TISP_COLOR_CLM   0x00010000U
+
+static int regtrace_tisp_main_init_color_inits(uint32_t mask)
+{
+    int ret = 0;
+    int subret;
+
+    regtrace_tisp_main_init_color_init_dmsc_ret = 0;
+    regtrace_tisp_main_init_color_init_gamma_ret = 0;
+    regtrace_tisp_main_init_color_init_bcsh_ret = 0;
+    regtrace_tisp_main_init_color_init_ccm_ret = 0;
+    regtrace_tisp_main_init_color_init_clm_ret = 0;
+
+    if (mask & REGTRACE_TISP_COLOR_DMSC) {
+        subret = tisp_dmsc_main_init();
+        regtrace_tisp_main_init_color_init_dmsc_ret = subret;
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    if (mask & REGTRACE_TISP_COLOR_GAMMA) {
+        subret = tisp_gamma_init(0);
+        regtrace_tisp_main_init_color_init_gamma_ret = subret;
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    if (mask & REGTRACE_TISP_COLOR_BCSH) {
+        subret = tisp_bcsh_main_init(2);
+        regtrace_tisp_main_init_color_init_bcsh_ret = subret;
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    if (mask & REGTRACE_TISP_COLOR_CCM) {
+        subret = tisp_ccm_main_init();
+        regtrace_tisp_main_init_color_init_ccm_ret = subret;
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    if (mask & REGTRACE_TISP_COLOR_CLM) {
+        subret = tisp_clm_init(0);
+        regtrace_tisp_main_init_color_init_clm_ret = subret;
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    regtrace_tisp_main_init_color_init_count++;
+    regtrace_tisp_main_init_color_init_last_mask = mask;
+    regtrace_tisp_main_init_color_init_last_ret = ret;
+    printk(KERN_WARNING "tx_isp_t40_recovered: tisp_main_init color inits mask=0x%x dmsc=%ld gamma=%ld bcsh=%ld ccm=%ld clm=%ld ret=%d\n",
+           mask,
+           regtrace_tisp_main_init_color_init_dmsc_ret,
+           regtrace_tisp_main_init_color_init_gamma_ret,
+           regtrace_tisp_main_init_color_init_bcsh_ret,
+           regtrace_tisp_main_init_color_init_ccm_ret,
+           regtrace_tisp_main_init_color_init_clm_ret,
+           ret);
+    return ret;
+}
 #endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001e268 origin=fragment_seed original=tisp_main_init */
@@ -63084,6 +63281,13 @@ int64_t tisp_main_init(uintptr_t a0, uint32_t a1)
             if (subret && !ret)
                 ret = subret;
         }
+        if (regtrace_enable_tisp_main_init_yuv_input_csc_version &&
+            (mode == 3 ||
+             regtrace_force_tisp_main_init_yuv_input_csc_version)) {
+            subret = regtrace_tisp_main_init_yuv_input_csc_version(0, mode);
+            if (subret && !ret)
+                ret = subret;
+        }
         subret = regtrace_core_write(0x40, reg40);
         if (subret && !ret)
             ret = subret;
@@ -63110,6 +63314,13 @@ int64_t tisp_main_init(uintptr_t a0, uint32_t a1)
 
     if (regtrace_enable_tisp_main_init_dma_regs) {
         subret = regtrace_tisp_main_init_dma_regs();
+        if (subret && !ret)
+            ret = subret;
+    }
+
+    if (regtrace_enable_tisp_main_init_color_inits) {
+        subret = regtrace_tisp_main_init_color_inits(
+            regtrace_tisp_main_init_color_init_mask);
         if (subret && !ret)
             ret = subret;
     }
@@ -184731,6 +184942,7 @@ static void regtrace_apply_t40_bringup_profile(void)
     regtrace_enable_tisp_main_init_scalar_regs_after_video = false;
     regtrace_enable_tisp_main_init_sensor_init = true;
     regtrace_enable_tisp_main_init_csc_version = true;
+    regtrace_enable_tisp_main_init_yuv_input_csc_version = true;
     regtrace_tisp_main_init_csc_version_value = 2;
     regtrace_enable_tisp_main_init_dma_regs = true;
     regtrace_enable_tisp_main_init_dma_kseg0 = true;
