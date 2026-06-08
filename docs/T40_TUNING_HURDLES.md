@@ -215,6 +215,19 @@ Raw qbuf dump workflow for the next live pass:
   generation/order. If the neutral render is still spatially/color-broken,
   keep looking before the YUV output stage.
 
+Raw qbuf dump result:
+
+- Evidence: `logs/20260608-182321-t40-safe-qbuf-dump-242`.
+- Both IRQs were live after safe-profile load: IRQ 38 and IRQ 39 were active.
+- The static `/tmp/phys_memdump` path successfully dumped ch0 qbufs without a
+  proc read. Build it static; the camera userland is uClibc and cannot execute
+  a musl-linked helper.
+- Buffer `0x6ea8300` rendered as neutral chroma is a coherent grayscale scene.
+  Rendering the same bytes as NV12 or NV21 remains strongly false-colored.
+- Conclusion: this is not just NV12/NV21 byte order. The Y/luma output is
+  carrying a plausible scene, and the next target is UV/chroma generation or
+  downstream color-to-YUV programming before the qbuf reaches RTSP.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
