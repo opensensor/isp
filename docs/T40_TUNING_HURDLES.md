@@ -49,6 +49,12 @@ Those are now suspects. They may be partly correct, partly stale, or too broad
 for a minimal valid-color baseline. The next experiments should hold the
 streaming machinery constant and vary only ISP color/tuning state.
 
+Active-stream register reads are also a risk. An always-on proc snapshot of
+the DMSC/BCSH/GIB windows wedged the camera while Raptor was running and
+forced a recovery reboot. The driver now exposes this only through the
+default-off `enable_t40_color_reg_snapshot` parameter. Do not enable it in the
+normal RTSP profile until the individual register windows are isolated.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
@@ -146,20 +152,23 @@ ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
    - `0x4800` and nearby DMSC registers
    - `0x8024-0x8038` BCSH H-matrix range
    - `0x1030-0x1070` GIB range
-2. Capture the current bad-color baseline with those registers in the same log.
-3. Hold CSI/VIC/MSCA/RTSP knobs fixed and sweep Bayer phase at `0x8`.
-4. Build a minimal top-bypass profile:
+2. Keep broad DMSC/BCSH/GIB snapshots default-off during normal RTSP runs.
+   Audit one register window at a time, preferably before stream start or in a
+   bounded smoke run.
+3. Capture the current bad-color baseline with safe registers in the same log.
+4. Hold CSI/VIC/MSCA/RTSP knobs fixed and sweep Bayer phase at `0x8`.
+5. Build a minimal top-bypass profile:
    - keep stream/stat plumbing alive
    - keep DMSC active if required for output format
    - bypass GIB, LSC, denoise, sharpen, defog, ADR/WDR, and other enhancement
      blocks initially
-5. Re-enable blocks one at a time from the minimal baseline:
+6. Re-enable blocks one at a time from the minimal baseline:
    - DMSC refresh
    - Gamma/CSC/BCSH
    - LSC
    - GIB
    - denoise family
-6. Only after a plausible lifelike frame appears, map T40 tuning-blob offsets
+7. Only after a plausible lifelike frame appears, map T40 tuning-blob offsets
    for the active blocks and replace guesses with blob-backed values.
 
 ## Success Criteria
@@ -171,4 +180,3 @@ A passing frame is not just a large JPEG or changing frame. It must show:
 - no stable green/magenta blobs
 - stable output after at least 90 seconds of RTSP capture
 - matching register/proc evidence for the tested tuning state
-
