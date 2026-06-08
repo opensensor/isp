@@ -290,6 +290,12 @@ CSI/PHY timing checkpoint:
   `0x10022000` for the MIPI PHY. The requested `0x1b` was present at PHY
   settle offsets `0x160/0x1e0/0x260/0x2e0/0x360`, and W01 phase read back
   `0x630`. Do not use the T31-era `0x10021000` PHY base for this T40 test.
+- The stock T40 register-diff reference uses `0x13380000` as the primary VIC
+  physical base. A live read after the dual-qbuf validation showed
+  `0x13380304=0x07800438`, `0x13380310/314=0x780`, and Y/UV banks alternating
+  between `0x6bab300/0x6ea8300` and `0x6da9300/0x70a6300`. The earlier
+  `0x133e0000` T31-style VIC base reads as zero on this target and should not
+  be used for T40 MDMA evidence.
 - Conclusion: CSI settle was a real discrepancy and `0x1b` is now the default
   probe/profile value, but it is not the whole fix. The remaining geometry
   artifacts still point at CSI/VIC timing, crop, packed-width, or stride state
@@ -401,8 +407,8 @@ ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
    `0x10002`; do not repeat unless other path state changes.
 5. Capture the small T40 CSI/MIPI/VIC register snapshot from
    `tools/t40_safe_qbuf_dump_probe.sh` for each run. Compare the
-   `0x10054000`, `0x10023000`, and `0x10022000` blocks against OEM-good
-   evidence before changing more ISP tuning state.
+   `0x10054000`, `0x10023000`, `0x10022000`, and `0x13380000` blocks against
+   OEM-good evidence before changing more ISP tuning state.
 6. Build a minimal top-bypass profile:
    - keep stream/stat plumbing alive
    - keep DMSC active if required for output format
