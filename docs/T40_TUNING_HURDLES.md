@@ -206,6 +206,9 @@ Raw qbuf dump workflow for the next live pass:
 - For the known safe 1920x1080 qbuf layout, dump `0x2fd000` bytes starting at
   the active qbuf physical address. The Y plane is `1920 * 1088 = 0x1fe000`
   bytes, so UV begins at `phys + 0x1fe000`.
+- The repeated safe-profile allocations on 2026-06-08 used ch0 buffer 0 at
+  `0x6bab300` with length `0x2fd000`; the script uses that as a fallback when
+  no qbuf line is available from `dmesg`.
 - Render the dump as NV12, NV21, and neutral chroma:
   `python3 tools/nv12_probe.py qbuf.bin --width 1920 --height 1080`.
 - If the neutral render is sane but NV12/NV21 are not, the fault is chroma

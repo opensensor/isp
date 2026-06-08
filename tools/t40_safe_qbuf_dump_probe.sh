@@ -6,6 +6,8 @@ USER="${THINGINO_USER:-root}"
 PASS="${THINGINO_PASS:-}"
 ROOT="${ROOT:-/home/matteius/output/wyze_cam3pro_nor_t40xp_gc4653_rtl8192fs}"
 SOC="${SOC:-t40}"
+QBUF_PHYS_FALLBACK="${QBUF_PHYS_FALLBACK:-0x6bab300}"
+QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -94,11 +96,12 @@ len="$(sed -n 's/.*qlen=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
 if [[ -z "$len" ]]; then
 	len="$(sed -n 's/.*len=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
 fi
-len="${len:-0x2fd000}"
+len="${len:-$QBUF_LEN_FALLBACK}"
 
 if [[ -z "$phys" ]]; then
-	echo "could not parse qbuf phys from $LOG/qbuf-lines.txt" >&2
-	exit 1
+	phys="$QBUF_PHYS_FALLBACK"
+	printf 'warning: using qbuf phys fallback %s; no parseable dmesg qbuf line\n' \
+		"$phys" | tee "$LOG/qbuf-fallback.txt" >&2
 fi
 
 printf 'phys=%s len=%s\n' "$phys" "$len" | tee "$LOG/qbuf-dump.txt"
