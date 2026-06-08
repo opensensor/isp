@@ -265,6 +265,36 @@ Raw qbuf dump result:
   closer to a neutral/lifelike scene than the earlier all-color baseline, but
   still has green tint and severe line/geometry artifacts.
 
+CSI/PHY timing checkpoint:
+
+- Earlier real-frame proof was
+  `logs/20260608-182321-t40-safe-qbuf-dump-242/qbuf-6ea8300-renders/qbuf-6ea8300-gray.jpg`.
+  That file is coherent grayscale scene data from the qbuf Y plane. The NV12
+  and NV21 renders from the same dump are false-colored, so this is not a
+  simple NV12/NV21 byte-order problem.
+- The old/default-profile evidence used `csi_settle_override=0x1b`; the
+  current T40 bring-up profile had drifted to `0x10`.
+- Re-testing the minimal DMSC+BCSH top baseline with
+  `CSI_SETTLE_OVERRIDE=0x1b` in
+  `logs/20260608-190839-t40-csi-settle-1b-242` kept both IRQs live and moved
+  qbuf/RTSP channel means slightly closer together. The image was still not
+  lifelike; the horizontal/diagonal line artifacts remained.
+- Validation after another Tasmota power cycle:
+  `logs/20260608-192131-t40-csi-snapshot-dual-1b-242`. This run captured both
+  ch0 qbufs (`0x6bab300` and `0x6ea8300`) plus RTSP. Buffer `0x6ea8300`
+  matched the RTSP frame much more closely; `0x6bab300` can show a stale or
+  worse half-frame class. Keep dumping both known qbufs until buffer ownership
+  is resolved.
+- Corrected live `devmem` readback on 2026-06-08 showed the recovered T40 CSI
+  constants are `0x10054000` for CSI reg0, `0x10023000` for CSI reg1/W01, and
+  `0x10022000` for the MIPI PHY. The requested `0x1b` was present at PHY
+  settle offsets `0x160/0x1e0/0x260/0x2e0/0x360`, and W01 phase read back
+  `0x630`. Do not use the T31-era `0x10021000` PHY base for this T40 test.
+- Conclusion: CSI settle was a real discrepancy and `0x1b` is now the default
+  probe/profile value, but it is not the whole fix. The remaining geometry
+  artifacts still point at CSI/VIC timing, crop, packed-width, or stride state
+  that must be compared against OEM-good readbacks.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
@@ -369,21 +399,25 @@ ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
 3. Capture the current bad-color baseline with safe registers in the same log.
 4. Treat the initial Bayer sweep as done for `0x10008-0x1000b` plus
    `0x10002`; do not repeat unless other path state changes.
-5. Build a minimal top-bypass profile:
+5. Capture the small T40 CSI/MIPI/VIC register snapshot from
+   `tools/t40_safe_qbuf_dump_probe.sh` for each run. Compare the
+   `0x10054000`, `0x10023000`, and `0x10022000` blocks against OEM-good
+   evidence before changing more ISP tuning state.
+6. Build a minimal top-bypass profile:
    - keep stream/stat plumbing alive
    - keep DMSC active if required for output format
    - bypass GIB, LSC, denoise, sharpen, defog, ADR/WDR, and other enhancement
      blocks initially
-6. Re-enable blocks one at a time from the minimal baseline:
+7. Re-enable blocks one at a time from the minimal baseline:
    - DMSC refresh
    - Gamma/CSC/BCSH
    - LSC
    - GIB
    - denoise family
-7. Do not broad-call recovered T40 color init helpers. Isolate one block per
+8. Do not broad-call recovered T40 color init helpers. Isolate one block per
    boot, or mirror the exact OEM register writes manually, and capture
    pre/post proc evidence before starting Raptor.
-8. Only after a plausible lifelike frame appears, map T40 tuning-blob offsets
+9. Only after a plausible lifelike frame appears, map T40 tuning-blob offsets
    for the active blocks and replace guesses with blob-backed values.
 
 ## Success Criteria

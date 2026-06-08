@@ -7,13 +7,14 @@ PASS="${THINGINO_PASS:-}"
 ROOT="${ROOT:-/home/matteius/output/wyze_cam3pro_nor_t40xp_gc4653_rtl8192fs}"
 SOC="${SOC:-t40}"
 QBUF_PHYS_FALLBACK="${QBUF_PHYS_FALLBACK:-0x6ea8300}"
-QBUF_EXTRA_PHYS="${QBUF_EXTRA_PHYS:-0x6bab300}"
+QBUF_EXTRA_PHYS="${QBUF_EXTRA_PHYS:-0x6bab300 0x6ea8300}"
 QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 TISP_MAIN_INIT_TOP40_VALUE="${TISP_MAIN_INIT_TOP40_VALUE:-0x7fdfeeff}"
 TISP_MAIN_INIT_CSC_VERSION_VALUE="${TISP_MAIN_INIT_CSC_VERSION_VALUE:-2}"
 ENABLE_TISP_MAIN_INIT_COLOR_INITS="${ENABLE_TISP_MAIN_INIT_COLOR_INITS:-0}"
 TISP_MAIN_INIT_COLOR_INIT_MASK="${TISP_MAIN_INIT_COLOR_INIT_MASK:-0}"
+CSI_SETTLE_OVERRIDE="${CSI_SETTLE_OVERRIDE:-0x1b}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -31,7 +32,7 @@ if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
 	exit 2
 fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
-	TISP_MAIN_INIT_COLOR_INIT_MASK; do
+	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
@@ -66,6 +67,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"TISP_MAIN_INIT_CSC_VERSION_VALUE=$TISP_MAIN_INIT_CSC_VERSION_VALUE" \
 	"ENABLE_TISP_MAIN_INIT_COLOR_INITS=$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
 	"TISP_MAIN_INIT_COLOR_INIT_MASK=$TISP_MAIN_INIT_COLOR_INIT_MASK" \
+	"CSI_SETTLE_OVERRIDE=$CSI_SETTLE_OVERRIDE" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
@@ -73,6 +75,7 @@ set -x
 : "${TISP_MAIN_INIT_CSC_VERSION_VALUE:=2}"
 : "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
 : "${TISP_MAIN_INIT_COLOR_INIT_MASK:=0}"
+: "${CSI_SETTLE_OVERRIDE:=0x1b}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -96,6 +99,7 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_tisp_main_init_color_inits="$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
 	tisp_main_init_color_init_mask="$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	force_tisp_main_init_yuv_input_csc_version=0 \
+	csi_settle_override="$CSI_SETTLE_OVERRIDE" \
 	framechan_neutral_uv_on_done="$FRAMECHAN_NEUTRAL_UV_ON_DONE"
 PARAM=/sys/module/tx_isp_t40_recovered/parameters
 echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
@@ -106,11 +110,51 @@ sleep 12
 chmod +x /tmp/phys_memdump
 cat /proc/interrupts | grep -E '(^ *3[89]:|tx|isp|vic)' || true
 cat /proc/interrupts > /tmp/t40-interrupts-after.txt
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done' | tail -120 > /tmp/t40-qbuf-lines.txt
+set +x
+if command -v devmem >/dev/null 2>&1; then
+	{
+		echo "# T40 recovered CSI/VIC snapshot $(date)"
+		echo "# csi0 regs0 phys 0x10054000"
+		for off in 0x04 0x08 0x0c 0x10 0x28 0x2c 0x80 0x100; do
+			addr=$((0x10054000 + off))
+			hex="$(printf '0x%08x' "$addr")"
+			printf '%s ' "$hex"
+			devmem "$hex" 32 || true
+		done
+		echo "# csi1/w01 regs1 phys 0x10023000"
+		for off in 0x04 0x08 0x0c 0x10 0x14 0x28 0x2c 0x40 0x44 0x48 0x80 0x100 0x160 0x1e0 0x260; do
+			addr=$((0x10023000 + off))
+			hex="$(printf '0x%08x' "$addr")"
+			printf '%s ' "$hex"
+			devmem "$hex" 32 || true
+		done
+		echo "# mipi phy phys 0x10022000"
+		for off in 0x00 0x80 0x128 0x160 0x1a8 0x1e0 0x228 0x260 0x2a8 0x2e0 0x328 0x360 0x3a8; do
+			addr=$((0x10022000 + off))
+			hex="$(printf '0x%08x' "$addr")"
+			printf '%s ' "$hex"
+			devmem "$hex" 32 || true
+		done
+		echo "# vic primary phys 0x133e0000"
+		for off in 0x00 0x04 0x0c 0x14 0x100 0x104 0x108 0x10c 0x110 0x1e0 0x1e4 0x1e8 0x1ec 0x300 0x304 0x308 0x310 0x314 0x318 0x31c 0x320 0x324 0x328 0x32c 0x330 0x334 0x338 0x33c 0x340 0x344 0x348 0x34c 0x350 0x370 0x380 0x3a8; do
+			addr=$((0x133e0000 + off))
+			hex="$(printf '0x%08x' "$addr")"
+			printf '%s ' "$hex"
+			devmem "$hex" 32 || true
+		done
+	} > /tmp/t40-csi-vic-regs.txt 2>&1
+else
+	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
+fi
+set -x
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -180 > /tmp/t40-qbuf-lines.txt
+dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 EOS
 
 "${SCP[@]}" "$USER@$IP:/tmp/t40-interrupts-after.txt" "$LOG/interrupts-after.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-qbuf-lines.txt" "$LOG/qbuf-lines.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-csi-vic-regs.txt" "$LOG/csi-vic-regs.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-tail.txt" "$LOG/dmesg-tail.txt"
 
 qline="$(grep -m1 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" || true)"
 if [[ -z "$qline" ]]; then

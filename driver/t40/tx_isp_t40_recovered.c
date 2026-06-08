@@ -19214,6 +19214,7 @@ int64_t tx_isp_vic_index_cal(uintptr_t a0, uint32_t a1)
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     {
+        static unsigned int log_count;
         uint32_t idx = a1;
         uint32_t vic_idx = idx;
 
@@ -19231,9 +19232,15 @@ int64_t tx_isp_vic_index_cal(uintptr_t a0, uint32_t a1)
                           (vic_idx * sizeof(uint32_t))) = vic_idx;
         }
 
-        printk(KERN_INFO
-               "tx_isp_t40_recovered: vic index map requested=%u mapped=%u vic=%p\n",
-               idx, vic_idx, (void *)a0);
+        if (log_count < 8) {
+            printk(KERN_INFO
+                   "tx_isp_t40_recovered: vic index map requested=%u mapped=%u vic=%p\n",
+                   idx, vic_idx, (void *)a0);
+        } else if (log_count == 8) {
+            printk(KERN_INFO
+                   "tx_isp_t40_recovered: vic index map logging suppressed\n");
+        }
+        log_count++;
         return vic_idx;
     }
 #endif
@@ -185093,7 +185100,7 @@ static void regtrace_apply_t40_bringup_profile(void)
         regtrace_enable_vic_mdma_qbuf_rearm_irq = true;
     regtrace_csi_direct_stage_limit = 4;
     if (!regtrace_csi_settle_override)
-        regtrace_csi_settle_override = 0x10;
+        regtrace_csi_settle_override = 0x1b;
 
     regtrace_enable_core_event_tisp_main_init = true;
     regtrace_enable_core_event_oem_state_sequence = true;
