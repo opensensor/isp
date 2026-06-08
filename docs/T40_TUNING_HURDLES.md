@@ -55,6 +55,41 @@ forced a recovery reboot. The driver now exposes this only through the
 default-off `enable_t40_color_reg_snapshot` parameter. Do not enable it in the
 normal RTSP profile until the individual register windows are isolated.
 
+## 2026-06-08 Live Color Experiments
+
+All runs below kept the no-direct RTSP/IRQ path fixed on `192.168.50.242` and
+kept `enable_t40_color_reg_snapshot=0`.
+
+Top-bypass probes:
+
+- `0x7fd9006f` set the suspected GIB bypass bit. The proc evidence showed
+  `top40_param=0x7fd9006f` and live `r40=0x7fd9006f`; the RTSP frame remained
+  false-colored.
+- `0x7fd9007f` added the adjacent LSC-style bypass bit. The proc evidence
+  showed `top40_param=0x7fd9007f` and live `r40=0x7fd9007f`; the RTSP frame
+  remained false-colored.
+
+CFA/Bayer probes:
+
+- The descriptor path was overriding `core_bayer_reg8_value`, so the driver now
+  has `force_core_bayer_reg8_value` to force the descriptor Bayer word and the
+  first-frame `reg8` write together.
+- `0x10008` with derived `reg88=0x10c`: active IRQs and RTSP frame, still
+  false-colored.
+- `0x10009` with derived `reg88=0x10d`: active IRQs and RTSP frame, still
+  false-colored.
+- `0x1000a` with derived `reg88=0x10e`: no active ISP IRQ counts and no usable
+  RTSP video parameters; treat as a bad phase for this profile.
+- `0x1000b` with derived `reg88=0x10f`: active IRQs and RTSP frame, different
+  color balance, still false-colored.
+- `0x10002` with derived `reg88=0x102`: active IRQs and RTSP frame, different
+  color balance, still false-colored.
+
+Conclusion: GIB/LSC bypass and CFA phase are not sufficient by themselves.
+The next likely hurdle is DMSC output/refresh and downstream BCSH/CSC/CCM
+state, with a minimal top-bypass profile used to keep enhancement blocks out
+of the way.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
@@ -156,7 +191,8 @@ ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
    Audit one register window at a time, preferably before stream start or in a
    bounded smoke run.
 3. Capture the current bad-color baseline with safe registers in the same log.
-4. Hold CSI/VIC/MSCA/RTSP knobs fixed and sweep Bayer phase at `0x8`.
+4. Treat the initial Bayer sweep as done for `0x10008-0x1000b` plus
+   `0x10002`; do not repeat unless other path state changes.
 5. Build a minimal top-bypass profile:
    - keep stream/stat plumbing alive
    - keep DMSC active if required for output format

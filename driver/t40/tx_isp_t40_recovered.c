@@ -6036,6 +6036,7 @@ static bool regtrace_enable_core_event_state_4;
 static bool regtrace_enable_core_event_state_2_before_boot;
 static bool regtrace_enable_core_event_oem_state_sequence;
 static bool regtrace_enable_tisp_desc_oem_fill;
+static bool regtrace_force_core_bayer_reg8_value;
 static bool regtrace_enable_tisp_process_init;
 static bool regtrace_enable_tisp_main_init_state;
 static bool regtrace_enable_tisp_main_init_size_reg;
@@ -6217,6 +6218,7 @@ module_param_named(enable_core_event_state_4, regtrace_enable_core_event_state_4
 module_param_named(enable_core_event_state_2_before_boot, regtrace_enable_core_event_state_2_before_boot, bool, 0644);
 module_param_named(enable_core_event_oem_state_sequence, regtrace_enable_core_event_oem_state_sequence, bool, 0644);
 module_param_named(enable_tisp_desc_oem_fill, regtrace_enable_tisp_desc_oem_fill, bool, 0644);
+module_param_named(force_core_bayer_reg8_value, regtrace_force_core_bayer_reg8_value, bool, 0644);
 module_param_named(enable_tisp_process_init, regtrace_enable_tisp_process_init, bool, 0644);
 module_param_named(enable_tisp_main_init_state, regtrace_enable_tisp_main_init_state, bool, 0644);
 module_param_named(enable_tisp_main_init_size_reg, regtrace_enable_tisp_main_init_size_reg, bool, 0644);
@@ -8597,7 +8599,8 @@ static int regtrace_core_first_frame_regs(int enable)
 
     if (enable && regtrace_enable_core_bayer_reg8) {
         bayer_value = regtrace_core_bayer_reg8_value;
-        if (regtrace_enable_tisp_desc_oem_fill &&
+        if (!regtrace_force_core_bayer_reg8_value &&
+            regtrace_enable_tisp_desc_oem_fill &&
             regtrace_tisp_desc_oem_fill_last_bayer)
             bayer_value = regtrace_tisp_desc_oem_fill_last_bayer;
 
@@ -13978,6 +13981,8 @@ static void regtrace_tisp_desc_oem_fill(uint32_t *desc, uint32_t channel,
     }
 
     bayer_word = regtrace_t40_bayer_word_from_mbus(mbus_code);
+    if (regtrace_force_core_bayer_reg8_value)
+        bayer_word = regtrace_core_bayer_reg8_value;
     total_width = regtrace_attr_u16_or(attr, 0xb4, 3000);
     total_height = regtrace_attr_u16_or(attr, 0xb6, 1920);
     max_it_native = regtrace_attr_u16_or(attr, 0xac,
@@ -16406,8 +16411,9 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_tisp_event_thread_last_channel,
                regtrace_tisp_event_thread_last_ret);
     seq_printf(m,
-               "core_first_frame bayer_param=%u top_sel_param=%u start800_param=%u bayer_value=0x%x mode804_value=0x%x count=%u bayer_count=%u top_count=%u start_count=%u last_enable=%u last_ret=%ld last=reg8:0x%x reg0c:0x%x reg800:0x%x reg804:0x%x\n",
+               "core_first_frame bayer_param=%u force_bayer=%u top_sel_param=%u start800_param=%u bayer_value=0x%x mode804_value=0x%x count=%u bayer_count=%u top_count=%u start_count=%u last_enable=%u last_ret=%ld last=reg8:0x%x reg0c:0x%x reg800:0x%x reg804:0x%x\n",
                regtrace_enable_core_bayer_reg8 ? 1U : 0U,
+               regtrace_force_core_bayer_reg8_value ? 1U : 0U,
                regtrace_enable_core_top_sel_reg0c ? 1U : 0U,
                regtrace_enable_core_start_800 ? 1U : 0U,
                regtrace_core_bayer_reg8_value,
@@ -16621,8 +16627,9 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_core_event_clear_skip_failed_count[3],
                regtrace_core_event_clear_skip_invalid_count);
     seq_printf(m,
-               "tisp_desc_oem_fill param=%u count=%u last_ch=%u attr=%p mbus=0x%x bayer=0x%x fps=0x%x total=%ux%u it=%u limits=%u/%u line=%u\n",
+               "tisp_desc_oem_fill param=%u force_bayer=%u count=%u last_ch=%u attr=%p mbus=0x%x bayer=0x%x fps=0x%x total=%ux%u it=%u limits=%u/%u line=%u\n",
                regtrace_enable_tisp_desc_oem_fill ? 1U : 0U,
+               regtrace_force_core_bayer_reg8_value ? 1U : 0U,
                regtrace_tisp_desc_oem_fill_count,
                regtrace_tisp_desc_oem_fill_last_channel,
                (void *)(uintptr_t)regtrace_tisp_desc_oem_fill_last_attr,
