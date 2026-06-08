@@ -166,6 +166,23 @@ Top-gate matrix after the BCSH write:
 - Bypassing CCM/Gamma/BCSH made the frame more synthetic/magenta.
 - Keep LSC bypassed and do not treat downstream bypass as a valid baseline.
 
+Top-gate matrix after raw-qbuf validation:
+
+- `logs/20260608-184023-t40-top-dmsc-only-242`, top `0x7fdffeff`
+  (DMSC only active): both IRQs stayed live, but qbuf/RTSP regressed to strong
+  magenta/blue false color.
+- `logs/20260608-184231-t40-top-dmsc-ccm-242`, top `0x7fdffcff`
+  (DMSC+CCM active): also a strong false-color regression.
+- `logs/20260608-184336-t40-top-dmsc-ccm-bcsh-nogamma-242`, top
+  `0x7fdfecff` (DMSC+CCM+BCSH active, Gamma bypassed): recognizable mostly
+  neutral scene, still with green/pink tint and severe line/geometry artifacts.
+- `logs/20260608-184604-t40-top-dmsc-bcsh-242`, top `0x7fdfeeff`
+  (DMSC+BCSH active, CCM/Gamma bypassed): matched the best no-Gamma result
+  without needing CCM. This is the current minimal top-register baseline.
+- Conclusion: DMSC alone is not enough; CLM/BCSH is needed to avoid the
+  magenta failure. Gamma is harmful in the current path, and CCM is not needed
+  for the best minimal baseline observed so far.
+
 BCSH saturation-like clamp:
 
 - `logs/20260608-162119-live-bcsh-saturation-clamp-242`
@@ -242,6 +259,11 @@ Raw qbuf dump result:
   `framechan_neutral_uv_on_done=0`, and the qbuf/RTSP captures matched as real
   scene data with bad chroma. This is the current best non-neutral baseline for
   color work.
+- Newer minimal-top baseline:
+  `logs/20260608-184604-t40-top-dmsc-bcsh-242` with top `0x7fdfeeff`.
+  This keeps DMSC and CLM/BCSH active while bypassing CCM and Gamma; it is
+  closer to a neutral/lifelike scene than the earlier all-color baseline, but
+  still has green tint and severe line/geometry artifacts.
 
 ## T31 Lessons To Reuse Carefully
 

@@ -10,6 +10,10 @@ QBUF_PHYS_FALLBACK="${QBUF_PHYS_FALLBACK:-0x6ea8300}"
 QBUF_EXTRA_PHYS="${QBUF_EXTRA_PHYS:-0x6bab300}"
 QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
+TISP_MAIN_INIT_TOP40_VALUE="${TISP_MAIN_INIT_TOP40_VALUE:-0x7fdfeeff}"
+TISP_MAIN_INIT_CSC_VERSION_VALUE="${TISP_MAIN_INIT_CSC_VERSION_VALUE:-2}"
+ENABLE_TISP_MAIN_INIT_COLOR_INITS="${ENABLE_TISP_MAIN_INIT_COLOR_INITS:-0}"
+TISP_MAIN_INIT_COLOR_INIT_MASK="${TISP_MAIN_INIT_COLOR_INIT_MASK:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -21,6 +25,18 @@ if [[ "$FRAMECHAN_NEUTRAL_UV_ON_DONE" != "0" &&
 	echo "FRAMECHAN_NEUTRAL_UV_ON_DONE must be 0 or 1" >&2
 	exit 2
 fi
+if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
+	"$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "1" ]]; then
+	echo "ENABLE_TISP_MAIN_INIT_COLOR_INITS must be 0 or 1" >&2
+	exit 2
+fi
+for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
+	TISP_MAIN_INIT_COLOR_INIT_MASK; do
+	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
+		echo "$numeric must be decimal or hex" >&2
+		exit 2
+	fi
+done
 if [[ -n "$PASS" ]]; then
 	SSH=(sshpass -p "$PASS" ssh -T -o LogLevel=ERROR \
 		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
@@ -44,10 +60,19 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"$USER@$IP:/tmp/tx_isp_t40_recovered.ko"
 "${SCP[@]}" tools/phys_memdump.mipsel "$USER@$IP:/tmp/phys_memdump"
 
-"${SSH[@]}" "FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
+"${SSH[@]}" \
+	"FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
+	"TISP_MAIN_INIT_TOP40_VALUE=$TISP_MAIN_INIT_TOP40_VALUE" \
+	"TISP_MAIN_INIT_CSC_VERSION_VALUE=$TISP_MAIN_INIT_CSC_VERSION_VALUE" \
+	"ENABLE_TISP_MAIN_INIT_COLOR_INITS=$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
+	"TISP_MAIN_INIT_COLOR_INIT_MASK=$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
+: "${TISP_MAIN_INIT_TOP40_VALUE:=0x7fdfeeff}"
+: "${TISP_MAIN_INIT_CSC_VERSION_VALUE:=2}"
+: "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
+: "${TISP_MAIN_INIT_COLOR_INIT_MASK:=0}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -68,13 +93,13 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	force_core_bayer_reg8_value=1 \
 	core_bayer_reg8_value=0x10008 \
 	tisp_main_init_reg88_override=0xffffffff \
-	enable_tisp_main_init_color_inits=0 \
-	tisp_main_init_color_init_mask=0 \
+	enable_tisp_main_init_color_inits="$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
+	tisp_main_init_color_init_mask="$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	force_tisp_main_init_yuv_input_csc_version=0 \
 	framechan_neutral_uv_on_done="$FRAMECHAN_NEUTRAL_UV_ON_DONE"
 PARAM=/sys/module/tx_isp_t40_recovered/parameters
-echo 0x7fdfe8ff > "$PARAM/tisp_main_init_top40_value"
-echo 2 > "$PARAM/tisp_main_init_csc_version_value"
+echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
+echo "$TISP_MAIN_INIT_CSC_VERSION_VALUE" > "$PARAM/tisp_main_init_csc_version_value"
 insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
 /etc/init.d/S31raptor start
 sleep 12
