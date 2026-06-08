@@ -11,6 +11,7 @@
 *.mod.o
 *.order
 *.symvers
+*.mipsel
 built-in.o
 .tmp_versions/
 modules.builtin

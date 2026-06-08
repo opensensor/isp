@@ -195,6 +195,19 @@ Neutral-UV buffer test:
   diagnostic module was inserted:
   `logs/20260608-163949-driver-neutral-uv-smoke-242`.
 
+Raw qbuf dump workflow for the next live pass:
+
+- Device helper: `tools/phys_memdump.c`.
+- Host renderer: `tools/nv12_probe.py`.
+- For the known safe 1920x1080 qbuf layout, dump `0x2fd000` bytes starting at
+  the active qbuf physical address. The Y plane is `1920 * 1088 = 0x1fe000`
+  bytes, so UV begins at `phys + 0x1fe000`.
+- Render the dump as NV12, NV21, and neutral chroma:
+  `python3 tools/nv12_probe.py qbuf.bin --width 1920 --height 1080`.
+- If the neutral render is sane but NV12/NV21 are not, the fault is chroma
+  generation/order. If the neutral render is still spatially/color-broken,
+  keep looking before the YUV output stage.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
