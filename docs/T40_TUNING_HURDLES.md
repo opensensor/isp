@@ -315,6 +315,59 @@ CSI/PHY timing checkpoint:
   artifacts still point at CSI/VIC timing, crop, packed-width, or stride state
   that must be compared against OEM-good readbacks.
 
+## 2026-06-08 Offline qbuf forensics: VIC MDMA stride/format is the dominant defect
+
+Re-analysis of the raw qbuf dumps already on disk (no live camera needed,
+`tools/qbuf_forensics.py`) reframes the problem. Two findings:
+
+1. The committed "best" stock-Bayer baseline is not better color -- it is a
+   near-monochrome frame. In `logs/20260608-192914-t40-stock-bayer-10002-1b-242`
+   the RTSP-matching buffer `0x6ea8300` has Y std 40 (real scene) but U/V std of
+   only ~2.6/3.0. Chroma collapsed to near-zero. The low RTSP "channel spread"
+   (10.5) that looked like progress is desaturation, not correction. Every
+   color-bearing config (DMSC-only, +CCM, +BCSH) instead shows structured chroma
+   with std 40-67, a persistent +dV (red/magenta) DC bias, and chroma
+   anti-correlated with luma -- a demosaic/CFA-phase or CbCr-sign signature.
+   Do not optimize for channel spread; it rewards killing color.
+
+2. The dominant *luma* defect is a strong periodic vertical band (FFT period
+   ~64/128 rows, strength ~68x) plus a horizontal-shear sideband, visible as a
+   diagonal "venetian-blind" tearing lattice over the whole frame. It is present
+   in every recovered-driver dump regardless of color config, so it is a fixed
+   capture-geometry artifact, not a per-frame race. The OEM stock RTSP frame
+   (`logs/20260608-034423-t40-stock-reg-diff-reference/rtsp-ch0-frame.jpg`) has
+   no such banding.
+
+Register evidence pins the cause. Comparing the live VIC snapshot to the stock
+register diff reference (`.../stock-devmem-regs.txt`):
+
+- Stock OEM: `vic+0x310 = vic+0x314 = 0x00000F00` (Y/UV stride = 3840 = width*2),
+  and `vic+0x18 = 0x00000F00`.
+- Recovered: `0x13380310 = 0x13380314 = 0x00000780` (stride = 1920 = width).
+
+The recovered qbuf-ring path (`regtrace_vic_mdma_internal_program` /
+`enable_vic_mdma_qbuf_ring`) defaults `stride = width` with the ctrl fmt nibble
+= `7` (1 byte/px). The OEM stride 0xF00 implies a non-7, 2-byte/px VIC MDMA
+output format. fmt=7 is the prime suspect for the 64-row tiled banding. This is
+upstream of the entire color path codex was tuning, so color cannot be trusted
+until the luma geometry matches OEM.
+
+Next experiments (knobs now exposed in `tools/t40_safe_qbuf_dump_probe.sh`:
+`VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE`, `VIC_MDMA_QBUF_RING_CTRL_VALUE`,
+`VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE`; all default 0 = current behavior):
+
+1. First, a read-only capture: re-run the stock OEM driver and snapshot
+   `vic+0x300` (ctrl) and `0x310/0x314` *during streaming* (the existing stock
+   reference caught stride but `0x300=0` pre-stream). That gives the exact OEM
+   fmt nibble to replicate.
+2. Then sweep our fmt+stride together to match OEM. Caution: raising stride to
+   0xF00 with the current fmt=7 8bpp layout doubles the Y-plane footprint
+   (3840*1088 > the 0x2fd000 qbuf) and will overrun the buffer, so stride must
+   move with a matching fmt/`UV_OFFSET_OVERRIDE` (and possibly a larger qbuf),
+   not alone.
+3. Re-run `tools/qbuf_forensics.py` on each dump; success is band strength
+   dropping toward ~1x with chroma std staying nonzero.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe

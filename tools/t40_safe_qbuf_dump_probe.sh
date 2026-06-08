@@ -16,6 +16,13 @@ ENABLE_TISP_MAIN_INIT_COLOR_INITS="${ENABLE_TISP_MAIN_INIT_COLOR_INITS:-0}"
 TISP_MAIN_INIT_COLOR_INIT_MASK="${TISP_MAIN_INIT_COLOR_INIT_MASK:-0}"
 CSI_SETTLE_OVERRIDE="${CSI_SETTLE_OVERRIDE:-0x1b}"
 CORE_BAYER_REG8_VALUE="${CORE_BAYER_REG8_VALUE:-0x10002}"
+# VIC MDMA qbuf-ring output geometry. Defaults of 0 keep the driver's built-in
+# behavior (stride=width=0x780, fmt=7). Stock/OEM VIC stride is 0xF00 (width<<1);
+# sweep STRIDE_OVERRIDE/CTRL_VALUE/UV_OFFSET together to test the OEM 2-byte/px
+# format against the 64-row luma banding (see docs/T40_TUNING_HURDLES.md).
+VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE="${VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE:-0}"
+VIC_MDMA_QBUF_RING_CTRL_VALUE="${VIC_MDMA_QBUF_RING_CTRL_VALUE:-0}"
+VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE="${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -34,7 +41,8 @@ if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
 fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
-	CORE_BAYER_REG8_VALUE; do
+	CORE_BAYER_REG8_VALUE VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE \
+	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
@@ -71,6 +79,9 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"TISP_MAIN_INIT_COLOR_INIT_MASK=$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	"CSI_SETTLE_OVERRIDE=$CSI_SETTLE_OVERRIDE" \
 	"CORE_BAYER_REG8_VALUE=$CORE_BAYER_REG8_VALUE" \
+	"VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE=$VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE" \
+	"VIC_MDMA_QBUF_RING_CTRL_VALUE=$VIC_MDMA_QBUF_RING_CTRL_VALUE" \
+	"VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE=$VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
@@ -80,6 +91,9 @@ set -x
 : "${TISP_MAIN_INIT_COLOR_INIT_MASK:=0}"
 : "${CSI_SETTLE_OVERRIDE:=0x1b}"
 : "${CORE_BAYER_REG8_VALUE:=0x10002}"
+: "${VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE:=0}"
+: "${VIC_MDMA_QBUF_RING_CTRL_VALUE:=0}"
+: "${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:=0}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -104,6 +118,9 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	tisp_main_init_color_init_mask="$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	force_tisp_main_init_yuv_input_csc_version=0 \
 	csi_settle_override="$CSI_SETTLE_OVERRIDE" \
+	vic_mdma_qbuf_ring_stride_override="$VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE" \
+	vic_mdma_qbuf_ring_ctrl_value="$VIC_MDMA_QBUF_RING_CTRL_VALUE" \
+	vic_mdma_qbuf_ring_uv_offset_override="$VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE" \
 	framechan_neutral_uv_on_done="$FRAMECHAN_NEUTRAL_UV_ON_DONE"
 PARAM=/sys/module/tx_isp_t40_recovered/parameters
 echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
