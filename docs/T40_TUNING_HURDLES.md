@@ -317,6 +317,12 @@ CSI/PHY timing checkpoint:
 
 ## 2026-06-08 Offline qbuf forensics: VIC MDMA stride/format is the dominant defect
 
+> CORRECTION (superseded by the live OEM capture below): the 0xF00 VIC stride
+> is the VIC->ISP *internal* raw line stride (1920 * 2 bytes), not the DDR/NV12
+> qbuf stride. The real NV12 output stride is 0x780 and is correct. The true
+> root cause is the output *engine*, not this stride -- see the next section.
+
+
 Re-analysis of the raw qbuf dumps already on disk (no live camera needed,
 `tools/qbuf_forensics.py`) reframes the problem. Two findings:
 
@@ -367,6 +373,63 @@ Next experiments (knobs now exposed in `tools/t40_safe_qbuf_dump_probe.sh`:
    not alone.
 3. Re-run `tools/qbuf_forensics.py` on each dump; success is band strength
    dropping toward ~1x with chroma std staying nonzero.
+
+## 2026-06-08 Live OEM capture: root cause is the wrong output engine
+
+Reboot to a clean boot, then load the genuine stock driver
+(`/lib/modules/4.4.94/ingenic/tx-isp-t40.ko`, note hyphens) + sensor + Raptor
+and read the VIC and ISP-core channel registers *during streaming*. Evidence:
+`logs/20260608-195228-t40-oem-live-ctrl-stream-242/` (`oem-load-stream.log`,
+`oem-core-channel-regs.log`, `oem-stock-frame.jpg`). The fresh stock frame is
+pristine: sharp geometry, no banding, no tearing (neutral grayscale because the
+camera was in IR/night mode, RGB spread 0.0).
+
+VIC MDMA is NOT the OEM output path. While stock is streaming:
+
+- `vic+0x300` (MDMA ctrl) = 0, sampled repeatedly. Our recovered driver instead
+  writes `0x80030027` here (`(qbuf_count<<16)|0x80000020|fmt7`).
+- `vic+0x308/0x30c` = 0 and ALL buffer-base slots `vic+0x318..0x338` = 0.
+- Only the size/stride config is set: `vic+0x304=0x07800438` (1920x1080),
+  `vic+0x18 = vic+0x310 = vic+0x314 = 0xF00` (the VIC->ISP internal raw line
+  stride = 1920*2, a 16-bit intermediate -- not a DDR qbuf stride).
+
+The OEM writes NV12 via the ISP-core MSCA channel engine. While streaming:
+
+- `core+0x16100 = 0x07800438` (ch0 out 1920x1080), `core+0x16180 = 0x780`
+  (Y stride 1920), `core+0x16198 = 0x780` (UV stride).
+- `core+0x16170 = 0x800101xx` (Y FIFO ctrl, enable bit set, live-changing),
+  `core+0x16174 = 0x0764B70x` (Y FIFO frame addr + status, live-updating),
+  `core+0x16188 = 0x800110xx` (UV FIFO ctrl), `core+0x16084 = 0x0A0005A0`,
+  `core+0x160a4/ac/b4 = 0x0A000000`.
+- `/proc/jz/isp` confirms: ch0 "scaler width: 1920" with `queue addr:
+  0x0764b700 / 0x0734e700`; ch1 "scaler width: 640" (the substream). Those qbuf
+  addresses are in the SAME rmem pool (0x06-0x07M) our recovered qbuf ring uses
+  (`0x6bab300/0x6ea8300/...`).
+
+Conclusion. Sensor -> CSI -> VIC (raw 16-bit, internal stride 0xF00) -> ISP core
+(demosaic/CCM/BCSH/...) -> **ISP MSCA channel FIFO** writes clean NV12 to the
+framechan qbufs (stride 0x780). The recovered bring-up profile bypasses that
+final write engine: `t40_profile_force_vic_mdma_qbuf_ring=1` arms the VIC MDMA
+ring (`vic+0x300/0x310/0x318`, fmt=7) to dump VIC-stage data straight to the
+qbuf. Reading VIC-stage 16-bit/stride-3840 bytes as 8-bit/stride-1920 NV12 is
+exactly the ~64-row banded shear + false chroma we see. This is why no
+CFA/CSC/BCSH/CCM color tuning ever fixed it -- the ISP core's processed output
+was never the thing reaching the qbuf.
+
+Fix direction (real driver work, not a knob sweep). The MSCA channel-output
+path already exists in the recovered driver but is gated/unused in this profile:
+`REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG 0x16170`, `..._READ_REG 0x16174`,
+`..._UV_FIFO_CTRL_REG 0x16188`, the `0x16100/0x160a4/0x16180` programming, and
+the `enable_t40_msca_shadow_fifo_program` / `enable_t40_msca_*` family. The work
+is to drive the MSCA Y/UV output FIFO into the framechan qbufs the way stock
+does (mirror `core+0x16170/0x16174/0x16180/0x16188/0x16198` + per-frame addr
+rearm) and stop forcing the VIC MDMA ring -- then re-validate luma geometry with
+`tools/qbuf_forensics.py` (target: band strength ~1x) before touching color
+again. The `VIC_MDMA_QBUF_RING_*` knobs added earlier remain useful only for
+characterizing the wrong-engine artifact, not for matching OEM.
+
+Device left on the clean stock driver after this capture; re-run
+`tools/t40_safe_qbuf_dump_probe.sh` to reload the recovered module.
 
 ## T31 Lessons To Reuse Carefully
 
