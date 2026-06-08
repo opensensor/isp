@@ -30,7 +30,7 @@ fi
 mkdir -p "$LOG"
 
 ROOT="$ROOT" SOC="$SOC" ./build_local.sh
-"$ROOT/host/bin/mipsel-linux-gcc" -Os -Wall -Wextra \
+"$ROOT/host/bin/mipsel-linux-gcc" -Os -Wall -Wextra -static \
 	-o tools/phys_memdump.mipsel tools/phys_memdump.c
 
 "${SCP[@]}" driver/t40/tx_isp_t40_recovered.ko \
