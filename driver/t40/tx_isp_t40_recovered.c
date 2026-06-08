@@ -6073,6 +6073,7 @@ static bool regtrace_irq_frame_done_require_content;
 static bool regtrace_framechan_dma_sync_qbuf = true;
 static bool regtrace_framechan_dma_sync_dqbuf = true;
 static bool regtrace_trace_core_top_writes;
+static bool regtrace_enable_t40_color_reg_snapshot;
 static uint regtrace_tisp_stream_reg_1008_offset = 0x1008;
 static uint regtrace_tisp_stream_reg_1008_value = 286;
 static uint regtrace_core_irq_mask0_value = 0x1ffff;
@@ -6253,6 +6254,7 @@ module_param_named(irq_frame_done_require_content, regtrace_irq_frame_done_requi
 module_param_named(framechan_dma_sync_qbuf, regtrace_framechan_dma_sync_qbuf, bool, 0644);
 module_param_named(framechan_dma_sync_dqbuf, regtrace_framechan_dma_sync_dqbuf, bool, 0644);
 module_param_named(trace_core_top_writes, regtrace_trace_core_top_writes, bool, 0644);
+module_param_named(enable_t40_color_reg_snapshot, regtrace_enable_t40_color_reg_snapshot, bool, 0644);
 module_param_named(tisp_stream_reg_1008_offset, regtrace_tisp_stream_reg_1008_offset, uint, 0644);
 module_param_named(tisp_stream_reg_1008_value, regtrace_tisp_stream_reg_1008_value, uint, 0644);
 module_param_named(core_irq_mask0_value, regtrace_core_irq_mask0_value, uint, 0644);
@@ -15891,6 +15893,29 @@ static void regtrace_debug_proc_show_core_regs(struct seq_file *m)
                readl(regs + 0x1000), readl(regs + 0x1004),
                readl(regs + 0x1008), readl(regs + 0x1010),
                readl(regs + 0x1014), readl(regs + 0x1060));
+    seq_printf(m, "core_color_path_snapshot_param=%u\n",
+               regtrace_enable_t40_color_reg_snapshot ? 1U : 0U);
+    if (regtrace_enable_t40_color_reg_snapshot) {
+        seq_printf(m,
+                   "core_color_path bayer8=0x%x top0c=0x%x dmsc4800=0x%x dmsc4834=0x%x dmsc4838=0x%x dmsc483c=0x%x dmsc4840=0x%x dmsc499c=0x%x\n",
+                   readl(regs + 0x08), readl(regs + 0x0c),
+                   readl(regs + 0x4800), readl(regs + 0x4834),
+                   readl(regs + 0x4838), readl(regs + 0x483c),
+                   readl(regs + 0x4840), readl(regs + 0x499c));
+        seq_printf(m,
+                   "core_bcsh_h r8024=0x%x r8028=0x%x r802c=0x%x r8030=0x%x r8034=0x%x r8038=0x%x r806c=0x%x r8070=0x%x\n",
+                   readl(regs + 0x8024), readl(regs + 0x8028),
+                   readl(regs + 0x802c), readl(regs + 0x8030),
+                   readl(regs + 0x8034), readl(regs + 0x8038),
+                   readl(regs + 0x806c), readl(regs + 0x8070));
+        seq_printf(m,
+                   "core_gib r1030=0x%x r1034=0x%x r1038=0x%x r103c=0x%x r1060=0x%x r1064=0x%x r1068=0x%x r106c=0x%x r1070=0x%x\n",
+                   readl(regs + 0x1030), readl(regs + 0x1034),
+                   readl(regs + 0x1038), readl(regs + 0x103c),
+                   readl(regs + 0x1060), readl(regs + 0x1064),
+                   readl(regs + 0x1068), readl(regs + 0x106c),
+                   readl(regs + 0x1070));
+    }
     seq_printf(m,
                "core_t40_gate r17000=0x%x r17004=0x%x r17008=0x%x r1700c=0x%x r17010=0x%x r17014=0x%x r17018=0x%x r1701c=0x%x r17020=0x%x r17024=0x%x r17028=0x%x r1702c=0x%x\n",
                readl(regs + 0x17000), readl(regs + 0x17004),
