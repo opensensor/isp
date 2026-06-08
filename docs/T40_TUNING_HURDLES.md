@@ -200,6 +200,9 @@ Raw qbuf dump workflow for the next live pass:
 - Device helper: `tools/phys_memdump.c`.
 - Host renderer: `tools/nv12_probe.py`.
 - Combined safe-profile probe script: `tools/t40_safe_qbuf_dump_probe.sh`.
+  It intentionally avoids full `/proc/tx_isp_t40_recovered` reads while
+  streaming; the 2026-06-08 18:10 run wedged at that proc read even though IRQ
+  38/39 had come online.
 - For the known safe 1920x1080 qbuf layout, dump `0x2fd000` bytes starting at
   the active qbuf physical address. The Y plane is `1920 * 1088 = 0x1fe000`
   bytes, so UV begins at `phys + 0x1fe000`.

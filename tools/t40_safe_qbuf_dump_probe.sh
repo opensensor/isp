@@ -69,18 +69,26 @@ insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
 sleep 12
 chmod +x /tmp/phys_memdump
 cat /proc/interrupts | grep -E '(^ *3[89]:|tx|isp|vic)' || true
-cat /proc/tx_isp_t40_recovered > /tmp/t40-proc-after.txt
+cat /proc/interrupts > /tmp/t40-interrupts-after.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done' | tail -120 > /tmp/t40-qbuf-lines.txt
 EOS
 
-"${SCP[@]}" "$USER@$IP:/tmp/t40-proc-after.txt" "$LOG/proc-after.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-interrupts-after.txt" "$LOG/interrupts-after.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-qbuf-lines.txt" "$LOG/qbuf-lines.txt"
 
-qline="$(grep -m1 'framechan_qbuf_sample ch0 idx=0' "$LOG/proc-after.txt" || true)"
+qline="$(grep -m1 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" || true)"
 if [[ -z "$qline" ]]; then
-	qline="$(grep -m1 'framechan0 qbuf_repair ' "$LOG/proc-after.txt" || true)"
+	qline="$(grep -m1 'framechan0 qbuf' "$LOG/qbuf-lines.txt" || true)"
+fi
+if [[ -z "$qline" ]]; then
+	qline="$(grep -m1 'VIC frame MDMA qbuf ring' "$LOG/qbuf-lines.txt" || true)"
 fi
 phys="$(sed -n 's/.*qphys=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
 if [[ -z "$phys" ]]; then
 	phys="$(sed -n 's/.*phys=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
+fi
+if [[ -z "$phys" ]]; then
+	phys="$(sed -n 's/.*y0=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
 fi
 len="$(sed -n 's/.*qlen=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
 if [[ -z "$len" ]]; then
@@ -89,7 +97,7 @@ fi
 len="${len:-0x2fd000}"
 
 if [[ -z "$phys" ]]; then
-	echo "could not parse qbuf phys from $LOG/proc-after.txt" >&2
+	echo "could not parse qbuf phys from $LOG/qbuf-lines.txt" >&2
 	exit 1
 fi
 
