@@ -1495,6 +1495,7 @@ static uint32_t major;
 static struct class *cls;
 #define REGTRACE_TISP_INFO_SIZE 104
 #define REGTRACE_MSCA_STATE_BYTES 1860
+#define REGTRACE_MSCA_CHANNEL_BYTES 616
 #define REGTRACE_SENSOR_CTRL_MAIN_BYTES 0x1a8
 static int16_t mscaler_s0[REGTRACE_MSCA_STATE_BYTES / sizeof(int16_t)];
 static int16_t mscaler_s1[REGTRACE_MSCA_STATE_BYTES / sizeof(int16_t)];
@@ -5969,6 +5970,8 @@ static bool regtrace_skip_sensor_core_init;
 static bool regtrace_skip_sensor_video_stream;
 static bool regtrace_t40_bringup_profile = true;
 static bool regtrace_t40_profile_direct_vic_feed = true;
+static bool regtrace_t40_profile_no_direct_irq_defaults = true;
+static bool regtrace_t40_profile_isp_irq_passthrough;
 static bool regtrace_enable_core_irq_on_stream;
 static bool regtrace_enable_tisp_stream_on;
 static bool regtrace_enable_tisp_stream_regs;
@@ -6009,7 +6012,14 @@ static bool regtrace_t40_msca_clear_load_after_program = true;
 static bool regtrace_t40_msca_shadow_write_load_mask;
 static bool regtrace_t40_msca_rewrite_full_size_late;
 static bool regtrace_t40_msca_rewrite_coeffs_late;
+static bool regtrace_t40_msca_work_en_dma_bits;
+static bool regtrace_t40_msca_fifo_ctrl_on_set_fmt;
+static bool regtrace_t40_msca_fifo_ctrl_on_qbuf;
+static bool regtrace_t40_msca_fifo_addr_tag_write;
 static bool regtrace_enable_vic_mdma_qbuf_ring;
+static bool regtrace_t40_profile_force_vic_mdma_qbuf_ring;
+static bool regtrace_enable_vic_mdma_no_ring;
+static bool regtrace_enable_vic_mdma_internal_ring;
 static bool regtrace_enable_vic_irq_ack_filter;
 static bool regtrace_enable_vic_mdma_kick_370;
 static bool regtrace_enable_core_event_tisp_main_init;
@@ -6026,6 +6036,8 @@ static bool regtrace_enable_tisp_main_init_scalar_regs;
 static bool regtrace_enable_tisp_main_init_scalar_regs_after_video;
 static bool regtrace_enable_tisp_top_regs_final_reapply;
 static bool regtrace_enable_tisp_main_init_dma_regs;
+static bool regtrace_enable_tisp_main_init_dma_kseg0;
+static bool regtrace_enable_tisp_main_init_tispinfo_dma;
 static bool regtrace_enable_tisp_main_init_tail_regs;
 static bool regtrace_enable_tisp_main_init_sensor_init;
 static bool regtrace_enable_tisp_main_init_param_alloc;
@@ -6043,8 +6055,11 @@ static bool regtrace_irq_frame_done_defer = true;
 static bool regtrace_irq_frame_done_dry_run = true;
 static bool regtrace_irq_frame_done_defer_fifo_read = true;
 static bool regtrace_irq_frame_done_count_only = true;
+static bool regtrace_irq_frame_done_local_match_buf;
 static bool regtrace_irq_frame_done_local_touch_buf;
 static bool regtrace_enable_framechan_wait_irq_done;
+static bool regtrace_framechan_dma_sync_qbuf = true;
+static bool regtrace_framechan_dma_sync_dqbuf = true;
 static bool regtrace_trace_core_top_writes;
 static uint regtrace_tisp_stream_reg_1008_offset = 0x1008;
 static uint regtrace_tisp_stream_reg_1008_value = 286;
@@ -6055,12 +6070,18 @@ static uint regtrace_core_irq_errmask1_value;
 static uint regtrace_core_irq_cfg0_value = 0x2a000000;
 static uint regtrace_core_irq_cfg1_value;
 static uint regtrace_isp_irq_ack_only_disable_after;
+static uint regtrace_isp_irq_frame_done_status0_mask = 0x1U;
+static uint regtrace_isp_irq_frame_done_status1_mask;
+static uint regtrace_isp_irq_frame_done_sec_status0_mask;
 static uint regtrace_irq_frame_done_addr_source;
 static uint regtrace_irq_frame_done_delivery_mode;
 static uint regtrace_irq_frame_done_source_mask = 0x2U;
 static uint regtrace_irq_frame_done_channel_mask = 0x1U;
 static uint regtrace_irq_frame_done_event_limit;
+static uint regtrace_irq_frame_done_delay_ms;
 static uint regtrace_framechan_wait_irq_timeout_ms = 100;
+static uint regtrace_framechan_dma_sync_qbuf_dir = DMA_BIDIRECTIONAL;
+static uint regtrace_framechan_dma_sync_dqbuf_dir = DMA_BIDIRECTIONAL;
 static uint regtrace_tisp_ipc_1000_delay_ms;
 static uint regtrace_core_bayer_reg8_value = 0x10002;
 static uint regtrace_core_start_mode_804_value = 0x10;
@@ -6068,8 +6089,17 @@ static uint regtrace_t40_msca_shadow_cmd_mask = 0x3;
 static uint regtrace_t40_msca_shadow_kick_reg = 0x50420;
 static uint regtrace_t40_msca_shadow_kick_value = 0x24000001;
 static uint regtrace_t40_msca_work_cfg_override = 0xffffffffU;
+static uint regtrace_t40_msca_work_en_dma_mask = 0xf0000U;
 static uint regtrace_t40_msca_cfg_1602c_value = 0x7400;
 static uint regtrace_t40_msca_coeff_override = 0x40080;
+static uint regtrace_t40_profile_no_direct_addr_source = 0U;
+static uint regtrace_t40_msca_fifo_ch0_y_ctrl = 0x80004100U;
+static uint regtrace_t40_msca_fifo_ch0_uv_ctrl = 0x80000001U;
+static uint regtrace_t40_msca_fifo_ch1_y_ctrl = 0x80021100U;
+static uint regtrace_t40_msca_fifo_ch1_uv_ctrl = 0x80021100U;
+static uint regtrace_t40_msca_fifo_ch2_y_ctrl = 0x80021100U;
+static uint regtrace_t40_msca_fifo_ch2_uv_ctrl = 0x80021100U;
+static uint regtrace_t40_msca_fifo_addr_tag_mode = 2U;
 static uint regtrace_tisp_main_init_reg20_value = 0xc7ff1030;
 static uint regtrace_tisp_main_init_top40_value = 0x7fd1000d;
 static uint regtrace_tisp_main_init_reg48_value = 0x8fffffff;
@@ -6081,6 +6111,9 @@ static uint regtrace_framechan_wait_msca_timeout_ms = 40;
 static uint regtrace_vic_mdma_qbuf_ring_ctrl_value;
 static uint regtrace_vic_mdma_qbuf_ring_stride_override;
 static uint regtrace_vic_mdma_qbuf_ring_uv_offset_override;
+static uint regtrace_vic_mdma_internal_count = 8U;
+static uint regtrace_vic_mdma_internal_fmt = 7U;
+static uint regtrace_vic_mdma_internal_channel_mask = 1U;
 static uint regtrace_sensor_full_width_override;
 static uint regtrace_sensor_full_height_override;
 static uint regtrace_t40_msca_scaler_level;
@@ -6104,6 +6137,8 @@ module_param_named(skip_sensor_core_init, regtrace_skip_sensor_core_init, bool, 
 module_param_named(skip_sensor_video_stream, regtrace_skip_sensor_video_stream, bool, 0644);
 module_param_named(t40_bringup_profile, regtrace_t40_bringup_profile, bool, 0644);
 module_param_named(t40_profile_direct_vic_feed, regtrace_t40_profile_direct_vic_feed, bool, 0644);
+module_param_named(t40_profile_no_direct_irq_defaults, regtrace_t40_profile_no_direct_irq_defaults, bool, 0644);
+module_param_named(t40_profile_isp_irq_passthrough, regtrace_t40_profile_isp_irq_passthrough, bool, 0644);
 module_param_named(enable_core_irq_on_stream, regtrace_enable_core_irq_on_stream, bool, 0644);
 module_param_named(enable_tisp_stream_on, regtrace_enable_tisp_stream_on, bool, 0644);
 module_param_named(enable_tisp_stream_regs, regtrace_enable_tisp_stream_regs, bool, 0644);
@@ -6144,7 +6179,14 @@ module_param_named(t40_msca_clear_load_after_program, regtrace_t40_msca_clear_lo
 module_param_named(t40_msca_shadow_write_load_mask, regtrace_t40_msca_shadow_write_load_mask, bool, 0644);
 module_param_named(t40_msca_rewrite_full_size_late, regtrace_t40_msca_rewrite_full_size_late, bool, 0644);
 module_param_named(t40_msca_rewrite_coeffs_late, regtrace_t40_msca_rewrite_coeffs_late, bool, 0644);
+module_param_named(t40_msca_work_en_dma_bits, regtrace_t40_msca_work_en_dma_bits, bool, 0644);
+module_param_named(t40_msca_fifo_ctrl_on_set_fmt, regtrace_t40_msca_fifo_ctrl_on_set_fmt, bool, 0644);
+module_param_named(t40_msca_fifo_ctrl_on_qbuf, regtrace_t40_msca_fifo_ctrl_on_qbuf, bool, 0644);
+module_param_named(t40_msca_fifo_addr_tag_write, regtrace_t40_msca_fifo_addr_tag_write, bool, 0644);
 module_param_named(enable_vic_mdma_qbuf_ring, regtrace_enable_vic_mdma_qbuf_ring, bool, 0644);
+module_param_named(t40_profile_force_vic_mdma_qbuf_ring, regtrace_t40_profile_force_vic_mdma_qbuf_ring, bool, 0644);
+module_param_named(enable_vic_mdma_no_ring, regtrace_enable_vic_mdma_no_ring, bool, 0644);
+module_param_named(enable_vic_mdma_internal_ring, regtrace_enable_vic_mdma_internal_ring, bool, 0644);
 module_param_named(enable_vic_irq_ack_filter, regtrace_enable_vic_irq_ack_filter, bool, 0644);
 module_param_named(enable_vic_mdma_kick_370, regtrace_enable_vic_mdma_kick_370, bool, 0644);
 module_param_named(enable_core_event_tisp_main_init, regtrace_enable_core_event_tisp_main_init, bool, 0644);
@@ -6161,6 +6203,8 @@ module_param_named(enable_tisp_main_init_scalar_regs, regtrace_enable_tisp_main_
 module_param_named(enable_tisp_main_init_scalar_regs_after_video, regtrace_enable_tisp_main_init_scalar_regs_after_video, bool, 0644);
 module_param_named(enable_tisp_top_regs_final_reapply, regtrace_enable_tisp_top_regs_final_reapply, bool, 0644);
 module_param_named(enable_tisp_main_init_dma_regs, regtrace_enable_tisp_main_init_dma_regs, bool, 0644);
+module_param_named(enable_tisp_main_init_dma_kseg0, regtrace_enable_tisp_main_init_dma_kseg0, bool, 0644);
+module_param_named(enable_tisp_main_init_tispinfo_dma, regtrace_enable_tisp_main_init_tispinfo_dma, bool, 0644);
 module_param_named(enable_tisp_main_init_tail_regs, regtrace_enable_tisp_main_init_tail_regs, bool, 0644);
 module_param_named(enable_tisp_main_init_sensor_init, regtrace_enable_tisp_main_init_sensor_init, bool, 0644);
 module_param_named(enable_tisp_main_init_param_alloc, regtrace_enable_tisp_main_init_param_alloc, bool, 0644);
@@ -6178,8 +6222,11 @@ module_param_named(irq_frame_done_defer, regtrace_irq_frame_done_defer, bool, 06
 module_param_named(irq_frame_done_dry_run, regtrace_irq_frame_done_dry_run, bool, 0644);
 module_param_named(irq_frame_done_defer_fifo_read, regtrace_irq_frame_done_defer_fifo_read, bool, 0644);
 module_param_named(irq_frame_done_count_only, regtrace_irq_frame_done_count_only, bool, 0644);
+module_param_named(irq_frame_done_local_match_buf, regtrace_irq_frame_done_local_match_buf, bool, 0644);
 module_param_named(irq_frame_done_local_touch_buf, regtrace_irq_frame_done_local_touch_buf, bool, 0644);
 module_param_named(enable_framechan_wait_irq_done, regtrace_enable_framechan_wait_irq_done, bool, 0644);
+module_param_named(framechan_dma_sync_qbuf, regtrace_framechan_dma_sync_qbuf, bool, 0644);
+module_param_named(framechan_dma_sync_dqbuf, regtrace_framechan_dma_sync_dqbuf, bool, 0644);
 module_param_named(trace_core_top_writes, regtrace_trace_core_top_writes, bool, 0644);
 module_param_named(tisp_stream_reg_1008_offset, regtrace_tisp_stream_reg_1008_offset, uint, 0644);
 module_param_named(tisp_stream_reg_1008_value, regtrace_tisp_stream_reg_1008_value, uint, 0644);
@@ -6190,12 +6237,18 @@ module_param_named(core_irq_errmask1_value, regtrace_core_irq_errmask1_value, ui
 module_param_named(core_irq_cfg0_value, regtrace_core_irq_cfg0_value, uint, 0644);
 module_param_named(core_irq_cfg1_value, regtrace_core_irq_cfg1_value, uint, 0644);
 module_param_named(isp_irq_ack_only_disable_after, regtrace_isp_irq_ack_only_disable_after, uint, 0644);
+module_param_named(isp_irq_frame_done_status0_mask, regtrace_isp_irq_frame_done_status0_mask, uint, 0644);
+module_param_named(isp_irq_frame_done_status1_mask, regtrace_isp_irq_frame_done_status1_mask, uint, 0644);
+module_param_named(isp_irq_frame_done_sec_status0_mask, regtrace_isp_irq_frame_done_sec_status0_mask, uint, 0644);
 module_param_named(irq_frame_done_addr_source, regtrace_irq_frame_done_addr_source, uint, 0644);
 module_param_named(irq_frame_done_delivery_mode, regtrace_irq_frame_done_delivery_mode, uint, 0644);
 module_param_named(irq_frame_done_source_mask, regtrace_irq_frame_done_source_mask, uint, 0644);
 module_param_named(irq_frame_done_channel_mask, regtrace_irq_frame_done_channel_mask, uint, 0644);
 module_param_named(irq_frame_done_event_limit, regtrace_irq_frame_done_event_limit, uint, 0644);
+module_param_named(irq_frame_done_delay_ms, regtrace_irq_frame_done_delay_ms, uint, 0644);
 module_param_named(framechan_wait_irq_timeout_ms, regtrace_framechan_wait_irq_timeout_ms, uint, 0644);
+module_param_named(framechan_dma_sync_qbuf_dir, regtrace_framechan_dma_sync_qbuf_dir, uint, 0644);
+module_param_named(framechan_dma_sync_dqbuf_dir, regtrace_framechan_dma_sync_dqbuf_dir, uint, 0644);
 module_param_named(tisp_ipc_1000_delay_ms, regtrace_tisp_ipc_1000_delay_ms, uint, 0644);
 module_param_named(core_bayer_reg8_value, regtrace_core_bayer_reg8_value, uint, 0644);
 module_param_named(core_start_mode_804_value, regtrace_core_start_mode_804_value, uint, 0644);
@@ -6203,8 +6256,17 @@ module_param_named(t40_msca_shadow_cmd_mask, regtrace_t40_msca_shadow_cmd_mask, 
 module_param_named(t40_msca_shadow_kick_reg, regtrace_t40_msca_shadow_kick_reg, uint, 0644);
 module_param_named(t40_msca_shadow_kick_value, regtrace_t40_msca_shadow_kick_value, uint, 0644);
 module_param_named(t40_msca_work_cfg_override, regtrace_t40_msca_work_cfg_override, uint, 0644);
+module_param_named(t40_msca_work_en_dma_mask, regtrace_t40_msca_work_en_dma_mask, uint, 0644);
 module_param_named(t40_msca_cfg_1602c_value, regtrace_t40_msca_cfg_1602c_value, uint, 0644);
 module_param_named(t40_msca_coeff_override, regtrace_t40_msca_coeff_override, uint, 0644);
+module_param_named(t40_profile_no_direct_addr_source, regtrace_t40_profile_no_direct_addr_source, uint, 0644);
+module_param_named(t40_msca_fifo_ch0_y_ctrl, regtrace_t40_msca_fifo_ch0_y_ctrl, uint, 0644);
+module_param_named(t40_msca_fifo_ch0_uv_ctrl, regtrace_t40_msca_fifo_ch0_uv_ctrl, uint, 0644);
+module_param_named(t40_msca_fifo_ch1_y_ctrl, regtrace_t40_msca_fifo_ch1_y_ctrl, uint, 0644);
+module_param_named(t40_msca_fifo_ch1_uv_ctrl, regtrace_t40_msca_fifo_ch1_uv_ctrl, uint, 0644);
+module_param_named(t40_msca_fifo_ch2_y_ctrl, regtrace_t40_msca_fifo_ch2_y_ctrl, uint, 0644);
+module_param_named(t40_msca_fifo_ch2_uv_ctrl, regtrace_t40_msca_fifo_ch2_uv_ctrl, uint, 0644);
+module_param_named(t40_msca_fifo_addr_tag_mode, regtrace_t40_msca_fifo_addr_tag_mode, uint, 0644);
 module_param_named(tisp_main_init_reg20_value, regtrace_tisp_main_init_reg20_value, uint, 0644);
 module_param_named(tisp_main_init_top40_value, regtrace_tisp_main_init_top40_value, uint, 0644);
 module_param_named(tisp_main_init_reg48_value, regtrace_tisp_main_init_reg48_value, uint, 0644);
@@ -6216,6 +6278,9 @@ module_param_named(framechan_wait_msca_timeout_ms, regtrace_framechan_wait_msca_
 module_param_named(vic_mdma_qbuf_ring_ctrl_value, regtrace_vic_mdma_qbuf_ring_ctrl_value, uint, 0644);
 module_param_named(vic_mdma_qbuf_ring_stride_override, regtrace_vic_mdma_qbuf_ring_stride_override, uint, 0644);
 module_param_named(vic_mdma_qbuf_ring_uv_offset_override, regtrace_vic_mdma_qbuf_ring_uv_offset_override, uint, 0644);
+module_param_named(vic_mdma_internal_count, regtrace_vic_mdma_internal_count, uint, 0644);
+module_param_named(vic_mdma_internal_fmt, regtrace_vic_mdma_internal_fmt, uint, 0644);
+module_param_named(vic_mdma_internal_channel_mask, regtrace_vic_mdma_internal_channel_mask, uint, 0644);
 module_param_named(sensor_full_width_override, regtrace_sensor_full_width_override, uint, 0644);
 module_param_named(sensor_full_height_override, regtrace_sensor_full_height_override, uint, 0644);
 module_param_named(t40_msca_scaler_level, regtrace_t40_msca_scaler_level, uint, 0644);
@@ -6251,6 +6316,15 @@ module_param_named(csi_settle_override, regtrace_csi_settle_override, uint, 0644
 #define REGTRACE_FRAMECHAN_STATE_READY 3
 #define REGTRACE_FRAMECHAN_STATE_STREAMING 4
 #define REGTRACE_FRAMECHAN_FRAMEBUF_SIZE 0x88
+#define REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX 8
+#define REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX 64
+#define REGTRACE_FRAMECHAN_BUFFER_STATE_QUEUED 3
+#define REGTRACE_FRAMECHAN_BUFFER_STATE_DONE 4
+#define REGTRACE_FRAMECHAN_SHADOW_STATE_FREE 0
+#define REGTRACE_FRAMECHAN_SHADOW_STATE_QUEUED 1
+#define REGTRACE_FRAMECHAN_SHADOW_STATE_ACTIVE 3
+#define REGTRACE_FRAMECHAN_SHADOW_STATE_DONE 4
+#define REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX 16
 #define REGTRACE_FRAMECHAN_STREAMING_FLAG_OFFSET 0x244
 #define REGTRACE_FRAMECHAN_REAL_STRIDE 0x384
 #define REGTRACE_FS_CHANNELS_OFFSET 0x114
@@ -6364,8 +6438,10 @@ module_param_named(csi_settle_override, regtrace_csi_settle_override, uint, 0644
 #define REGTRACE_T40_MSCA_CFG_LOAD_REG 0x16010U
 #define REGTRACE_T40_MSCA_WORK_CFG_REG 0x16028U
 #define REGTRACE_T40_MSCA_Y_FIFO_WRITE_REG 0x1616cU
+#define REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG 0x16170U
 #define REGTRACE_T40_MSCA_Y_FIFO_READ_REG 0x16174U
 #define REGTRACE_T40_MSCA_UV_FIFO_WRITE_REG 0x16184U
+#define REGTRACE_T40_MSCA_UV_FIFO_CTRL_REG 0x16188U
 #define REGTRACE_T40_MSCA_UV_FIFO_READ_REG 0x1618cU
 #define REGTRACE_T40_MSCA_CH_BANK_STRIDE 0x100U
 #define REGTRACE_T40_MSCA_SHADOW_CMD_REG 0x50320U
@@ -6373,6 +6449,8 @@ module_param_named(csi_settle_override, regtrace_csi_settle_override, uint, 0644
 #define REGTRACE_T40_MSCA_SHADOW_STATUS_REG 0x50420U
 #define REGTRACE_T40_MSCA_SHADOW_KICK_REG 0x50420U
 #define REGTRACE_T40_MSCA_SHADOW_KICK_VALUE 0x24000001U
+#define REGTRACE_T40_MSCA_SHADOW_LINE_KICK_REG 0x834U
+#define REGTRACE_T40_MSCA_SHADOW_LINE_KICK_VALUE 0x3f000001U
 #define REGTRACE_T40_MSCA_SHADOW_CMD_BEGIN 0x101U
 #define REGTRACE_T40_MSCA_SHADOW_CMD_MASK_COMMIT 0x250102U
 #define REGTRACE_T40_MSCA_SHADOW_CMD_LINE_COMMIT 0x400102U
@@ -6663,6 +6741,11 @@ static uint32_t regtrace_isp_irq_ack_only_last_errmask1;
 static uint32_t regtrace_isp_irq_ack_only_last_sec_status0;
 static uint32_t regtrace_isp_irq_ack_only_last_sec_ack0;
 static uint32_t regtrace_isp_irq_ack_only_last_sec_cfg0;
+static uint32_t regtrace_isp_irq_ack_only_frame_done_count;
+static uint32_t regtrace_isp_irq_ack_only_frame_done_skip_count;
+static uint32_t regtrace_isp_irq_ack_only_last_frame_done_bits0;
+static uint32_t regtrace_isp_irq_ack_only_last_frame_done_bits1;
+static uint32_t regtrace_isp_irq_ack_only_last_frame_done_sec_bits0;
 static uint32_t regtrace_isp_irq_ack_only_disable_count;
 static uint32_t regtrace_isp_irq_ack_only_last_disabled_irq;
 static void *regtrace_isp_irq_ack_only_last_dev_id;
@@ -6927,6 +7010,7 @@ static uint32_t regtrace_tisp_main_init_dma_reg_count;
 static uint32_t regtrace_tisp_main_init_dma_alloc_count;
 static uint32_t regtrace_tisp_main_init_dma_fail_index;
 static uint32_t regtrace_tisp_main_init_dma_last_mask;
+static uint32_t regtrace_tisp_main_init_tispinfo_count;
 static long regtrace_tisp_main_init_dma_last_ret;
 static uint32_t regtrace_tisp_main_init_tail_reg_count;
 static uint32_t regtrace_tisp_main_init_sensor_init_count;
@@ -6989,6 +7073,34 @@ struct regtrace_tisp_dma_buf {
 
 #define REGTRACE_TISP_DMA_BUFS 5
 static struct regtrace_tisp_dma_buf regtrace_tisp_dma_bufs[REGTRACE_TISP_DMA_BUFS];
+static uint32_t regtrace_tisp_main_init_dma_last_hw[REGTRACE_TISP_DMA_BUFS];
+struct regtrace_vic_mdma_internal_buf {
+    void *virt;
+    dma_addr_t dma;
+    uint32_t phys;
+    uint32_t size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t plane_size;
+    uint32_t frame_size;
+    uint32_t count;
+    uint32_t fmt;
+    bool coherent;
+};
+
+static struct regtrace_vic_mdma_internal_buf regtrace_vic_mdma_internal_bufs[REGTRACE_MAX_IRQS_PER_DEVICE];
+static uint32_t regtrace_vic_mdma_internal_alloc_count;
+static uint32_t regtrace_vic_mdma_internal_program_count;
+static uint32_t regtrace_vic_mdma_internal_last_channel;
+static uint32_t regtrace_vic_mdma_internal_last_idx;
+static uint32_t regtrace_vic_mdma_internal_last_width;
+static uint32_t regtrace_vic_mdma_internal_last_height;
+static uint32_t regtrace_vic_mdma_internal_last_size;
+static uint32_t regtrace_vic_mdma_internal_last_phys;
+static uint32_t regtrace_vic_mdma_internal_last_ctrl;
+static uint32_t regtrace_vic_mdma_internal_last_y0;
+static uint32_t regtrace_vic_mdma_internal_last_uv0;
+static long regtrace_vic_mdma_internal_last_ret;
 static uint32_t regtrace_vic_mdma_qbuf_ring_count;
 static uint32_t regtrace_vic_mdma_qbuf_ring_last_channel;
 static uint32_t regtrace_vic_mdma_qbuf_ring_last_ctrl;
@@ -7032,14 +7144,59 @@ static uint32_t regtrace_tzn_fifo_last_y;
 static uint32_t regtrace_tzn_fifo_last_uv;
 static uint32_t regtrace_tzn_fifo_last_adjust;
 static uint32_t regtrace_tzn_fifo_last_have_read;
+static uint32_t regtrace_tzn_fifo_last_irq_status;
+static uint32_t regtrace_tzn_fifo_last_write_raw_y;
+static uint32_t regtrace_tzn_fifo_last_write_raw_uv;
+static uint32_t regtrace_tzn_fifo_last_write_tagged_y;
+static uint32_t regtrace_tzn_fifo_last_write_tagged_uv;
+static uint32_t regtrace_tzn_fifo_last_write_index;
+static uint32_t regtrace_tzn_fifo_last_read_index;
+static uint32_t regtrace_tzn_fifo_ctrl_count;
+static uint32_t regtrace_tzn_fifo_ctrl_last_group;
+static uint32_t regtrace_tzn_fifo_ctrl_last_channel;
+static uint32_t regtrace_tzn_fifo_ctrl_last_y;
+static uint32_t regtrace_tzn_fifo_ctrl_last_uv;
+static uint32_t regtrace_tzn_fifo_ctrl_last_y_readback;
+static uint32_t regtrace_tzn_fifo_ctrl_last_uv_readback;
+static long regtrace_tzn_fifo_ctrl_last_ret;
+static uint32_t regtrace_tzn_fifo_ctrl_set_fmt_count;
+static uint32_t regtrace_tzn_fifo_ctrl_set_fmt_last_channel;
+static long regtrace_tzn_fifo_ctrl_set_fmt_last_ret;
+static uint32_t regtrace_tzn_fifo_write_index_count[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
+static uint32_t regtrace_tzn_fifo_read_index_count[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
+static uint32_t regtrace_tzn_fifo_write_unknown_count[4];
+static uint32_t regtrace_tzn_fifo_read_unknown_count[4];
 static uint32_t regtrace_vic_mdma_count;
 static uint32_t regtrace_msca_ch_en = ~0U;
+static uint32_t regtrace_t40_msca_work_en_last_active;
+static uint32_t regtrace_t40_msca_work_en_last_hw;
+static uint32_t regtrace_t40_msca_work_en_last_readback;
+static uint32_t regtrace_t40_msca_work_en_write_count;
+static long regtrace_t40_msca_work_en_last_ret;
 static uint32_t regtrace_msca_dmaout_arb = ~0U;
 static int regtrace_sensor_core_initialized;
-static uint32_t regtrace_framechan_qbuf_phys[4][8];
-static uint32_t regtrace_framechan_qbuf_uv[4][8];
-static uint32_t regtrace_framechan_qbuf_len[4][8];
+static uint32_t regtrace_framechan_qbuf_phys[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
+static uint32_t regtrace_framechan_qbuf_uv[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
+static uint32_t regtrace_framechan_qbuf_len[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
+static uint32_t regtrace_framechan_qbuf_state[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
+static uint32_t regtrace_framechan_qbuf_driver_state[4][REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX];
 static uint32_t regtrace_framechan_qbuf_count[4];
+static uint32_t regtrace_framechan_dma_sync_qbuf_count[4];
+static uint32_t regtrace_framechan_dma_sync_dqbuf_count[4];
+static uint32_t regtrace_framechan_dma_sync_skip_count[4];
+static uint32_t regtrace_framechan_dma_sync_last_phys[4];
+static uint32_t regtrace_framechan_dma_sync_last_len[4];
+static uint32_t regtrace_framechan_dma_sync_last_dir[4];
+static uint32_t regtrace_framechan_dma_sync_last_vaddr[4];
+static uint32_t regtrace_framechan_dma_sync_last_stage[4];
+static uint32_t regtrace_framechan_shadow_submit_next_count[4];
+static uint32_t regtrace_framechan_shadow_submit_next_no_queued[4];
+static uint32_t regtrace_framechan_shadow_submit_next_fail[4];
+static uint32_t regtrace_framechan_shadow_submit_next_last_index[4];
+static long regtrace_framechan_shadow_submit_next_last_ret[4];
+static uint32_t regtrace_framechan_shadow_dq_free_count[4];
+static void *regtrace_framechan_repaired_buf[4][REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX];
+static uint32_t regtrace_framechan_repaired_buf_count[4];
 static uint32_t regtrace_framechan_wait_msca_count[4];
 static uint32_t regtrace_framechan_wait_msca_hit_count[4];
 static uint32_t regtrace_framechan_wait_msca_timeout_count[4];
@@ -7065,10 +7222,28 @@ static uint32_t regtrace_irq_frame_done_local_done_uv[4];
 static uint32_t regtrace_irq_frame_done_local_done_index[4];
 static uint32_t regtrace_irq_frame_done_local_old_state[4];
 static uint32_t regtrace_irq_frame_done_local_old_driver_state[4];
+static uint32_t regtrace_irq_frame_done_local_match_count[4];
+static uint32_t regtrace_irq_frame_done_local_shadow_done_count[4];
+static spinlock_t regtrace_irq_frame_done_queue_lock[4];
+static uint32_t regtrace_irq_frame_done_queue_phys[4][REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX];
+static uint32_t regtrace_irq_frame_done_queue_uv[4][REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX];
+static uint32_t regtrace_irq_frame_done_queue_index[4][REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX];
+static uint32_t regtrace_irq_frame_done_queue_head[4];
+static uint32_t regtrace_irq_frame_done_queue_tail[4];
+static uint32_t regtrace_irq_frame_done_queue_count[4];
+static uint32_t regtrace_irq_frame_done_queue_overflow_count[4];
+static uint32_t regtrace_irq_frame_done_queue_push_count[4];
+static uint32_t regtrace_irq_frame_done_queue_pop_count[4];
+static uint32_t regtrace_irq_frame_done_queue_empty_pop_count[4];
+static uint32_t regtrace_irq_frame_done_queue_last_pop_phys[4];
+static uint32_t regtrace_irq_frame_done_queue_last_pop_uv[4];
+static uint32_t regtrace_irq_frame_done_queue_last_pop_index[4];
 static uint32_t regtrace_irq_frame_done_defer_queue_count[4];
 static uint32_t regtrace_irq_frame_done_defer_merge_count[4];
 static uint32_t regtrace_irq_frame_done_work_count[4];
 static uint32_t regtrace_irq_frame_done_msca_read_count[4];
+static uint32_t regtrace_irq_frame_done_delay_count[4];
+static uint32_t regtrace_irq_frame_done_delay_last_ms[4];
 static uint32_t regtrace_irq_frame_done_addr_seq[4];
 static uint32_t regtrace_irq_frame_done_limit_skip_count;
 static uint32_t regtrace_irq_frame_done_last_channel;
@@ -7088,6 +7263,14 @@ static uint32_t regtrace_framechan_wait_irq_signal_count[4];
 static uint32_t regtrace_framechan_wait_irq_last_before[4];
 static uint32_t regtrace_framechan_wait_irq_last_after[4];
 static long regtrace_framechan_wait_irq_last_ret[4];
+static uint32_t regtrace_framechan_dqbuf_repair_count[4];
+static uint32_t regtrace_framechan_dqbuf_repair_no_done[4];
+static uint32_t regtrace_framechan_dqbuf_repair_copy_fail[4];
+static uint32_t regtrace_framechan_dqbuf_repair_bad_index[4];
+static uint32_t regtrace_framechan_dqbuf_repair_last_index[4];
+static uint32_t regtrace_framechan_dqbuf_repair_last_phys[4];
+static uint32_t regtrace_framechan_dqbuf_repair_last_uv[4];
+static long regtrace_framechan_dqbuf_repair_last_ret[4];
 
 struct regtrace_irq_frame_done_work_item {
     struct work_struct work;
@@ -8383,6 +8566,13 @@ static void regtrace_tisp_dma_free(void)
     }
 }
 
+static void regtrace_sensor_dimensions(uint32_t channel, uint32_t *width,
+                                       uint32_t *height);
+static void regtrace_vic_mdma_kick370(volatile void __iomem *base,
+                                      uint32_t channel, uint32_t idx,
+                                      uint32_t source,
+                                      uint32_t pending0, uint32_t pending1);
+
 static int regtrace_tisp_dma_alloc(unsigned int index, uint32_t size)
 {
     void *virt;
@@ -8403,6 +8593,251 @@ static int regtrace_tisp_dma_alloc(unsigned int index, uint32_t size)
     regtrace_tisp_dma_bufs[index].size = size;
     regtrace_tisp_main_init_dma_alloc_count++;
     return 0;
+}
+
+static void regtrace_vic_mdma_internal_free_one(unsigned int index)
+{
+    struct regtrace_vic_mdma_internal_buf *buf;
+
+    if (index >= REGTRACE_MAX_IRQS_PER_DEVICE)
+        return;
+
+    buf = &regtrace_vic_mdma_internal_bufs[index];
+    if (!buf->virt)
+        return;
+
+    if (buf->coherent)
+        dma_free_coherent(&tx_isp_vic_platform_device.dev, buf->size,
+                          buf->virt, buf->dma);
+    else
+        kfree(buf->virt);
+
+    memset(buf, 0, sizeof(*buf));
+}
+
+static void regtrace_vic_mdma_internal_free(void)
+{
+    unsigned int i;
+
+    for (i = 0; i < REGTRACE_MAX_IRQS_PER_DEVICE; i++)
+        regtrace_vic_mdma_internal_free_one(i);
+}
+
+static int regtrace_vic_mdma_internal_alloc(unsigned int index,
+                                            uint32_t width, uint32_t height,
+                                            uint32_t fmt, uint32_t count)
+{
+    struct regtrace_vic_mdma_internal_buf *buf;
+    uint64_t plane64;
+    uint64_t frame64;
+    uint64_t need64;
+    uint32_t alloc_size;
+    dma_addr_t dma = 0;
+    void *virt;
+
+    if (index >= REGTRACE_MAX_IRQS_PER_DEVICE || !width || !height)
+        return -EINVAL;
+
+    plane64 = (uint64_t)width * (uint64_t)height;
+    frame64 = (fmt == 7U) ? ((plane64 * 3U) / 2U) : (plane64 * 2U);
+    need64 = (uint64_t)count * frame64;
+    if (fmt == 7U && need64 < (plane64 * 10U))
+        need64 = plane64 * 10U;
+    if (!need64 || need64 > 0x7fffffffULL)
+        return -EINVAL;
+
+    alloc_size = (uint32_t)ALIGN((unsigned long)need64, PAGE_SIZE);
+    buf = &regtrace_vic_mdma_internal_bufs[index];
+    if (buf->virt && buf->width == width && buf->height == height &&
+        buf->fmt == fmt && buf->count == count && buf->size >= alloc_size)
+        return 0;
+
+    regtrace_vic_mdma_internal_free_one(index);
+
+    virt = dma_alloc_coherent(&tx_isp_vic_platform_device.dev, alloc_size,
+                              &dma, GFP_KERNEL);
+    if (virt) {
+        buf->coherent = true;
+        buf->dma = dma;
+        buf->phys = (uint32_t)dma;
+    } else {
+        virt = kzalloc(alloc_size, GFP_KERNEL | GFP_DMA);
+        if (!virt)
+            return -ENOMEM;
+        buf->coherent = false;
+        buf->dma = (dma_addr_t)virt_to_phys(virt);
+        buf->phys = (uint32_t)buf->dma;
+        dma_cache_sync(NULL, virt, alloc_size, DMA_BIDIRECTIONAL);
+    }
+
+    buf->virt = virt;
+    buf->size = alloc_size;
+    buf->width = width;
+    buf->height = height;
+    buf->plane_size = (uint32_t)plane64;
+    buf->frame_size = (uint32_t)frame64;
+    buf->count = count;
+    buf->fmt = fmt;
+    regtrace_vic_mdma_internal_alloc_count++;
+    return 0;
+}
+
+static int regtrace_vic_mdma_internal_program(uintptr_t vic_dev,
+                                              volatile void __iomem *base,
+                                              uint32_t channel,
+                                              uint32_t irq_index)
+{
+    struct regtrace_vic_mdma_internal_buf *buf;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t fmt;
+    uint32_t count;
+    uint32_t plane;
+    uint32_t stride;
+    uint32_t ctrl;
+    uint32_t y[REGTRACE_VIC_MDMA_RING_SLOTS];
+    uint32_t uv[REGTRACE_VIC_MDMA_RING_SLOTS];
+    uint32_t i;
+    int ret;
+
+    if (!(regtrace_vic_mdma_internal_channel_mask & (1U << channel)))
+        return -ENOENT;
+
+    fmt = regtrace_vic_mdma_internal_fmt ? regtrace_vic_mdma_internal_fmt : 7U;
+    count = regtrace_vic_mdma_internal_count ? regtrace_vic_mdma_internal_count : 8U;
+    if (count > 8U)
+        count = 8U;
+
+    regtrace_sensor_dimensions(channel, &width, &height);
+    if (!width || !height)
+        return -EINVAL;
+
+    ret = regtrace_vic_mdma_internal_alloc(channel, width, height, fmt, count);
+    if (ret) {
+        regtrace_vic_mdma_internal_last_channel = channel;
+        regtrace_vic_mdma_internal_last_idx = irq_index;
+        regtrace_vic_mdma_internal_last_width = width;
+        regtrace_vic_mdma_internal_last_height = height;
+        regtrace_vic_mdma_internal_last_ret = ret;
+        printk(KERN_WARNING "tx_isp_t40_recovered: VIC internal MDMA alloc failed ch=%u idx=%u %ux%u fmt=%u count=%u ret=%d\n",
+               channel, irq_index, width, height, fmt, count, ret);
+        return ret;
+    }
+
+    buf = &regtrace_vic_mdma_internal_bufs[channel];
+    plane = buf->plane_size;
+    stride = (fmt == 7U) ? width : (width << 1);
+
+    y[0] = buf->phys;
+    y[1] = buf->phys + plane;
+    y[2] = buf->phys + (plane * 2U);
+    y[3] = buf->phys + (plane * 3U);
+    y[4] = buf->phys + (plane * 4U);
+    uv[0] = buf->phys + plane;
+    uv[1] = buf->phys + (plane * 3U);
+    uv[2] = buf->phys + (plane * 5U);
+    uv[3] = buf->phys + (plane * 7U);
+    uv[4] = buf->phys + (plane * 9U);
+
+    regtrace_put_u32(vic_dev, 664, buf->phys);
+    regtrace_put_u32(vic_dev, 668, buf->phys | 0x80000000U);
+    vic_mdma_ch0_set_buff_index = 4;
+    vic_mdma_ch1_set_buff_index = 4;
+    vic_mdma_bypass_onoff = 1;
+    vic_mdma_ch0_sub_get_num = (int32_t)count;
+    vic_mdma_ch1_sub_get_num = 0;
+
+    writel(1, base + REGTRACE_VIC_MDMA_ENABLE_OFFSET);
+    writel((width << 16) | height, base + REGTRACE_VIC_MDMA_SIZE_OFFSET);
+    writel(stride, base + REGTRACE_VIC_MDMA_STRIDE_Y_OFFSET);
+    writel(stride, base + REGTRACE_VIC_MDMA_STRIDE_UV_OFFSET);
+    for (i = 0; i < REGTRACE_VIC_MDMA_RING_SLOTS; i++)
+        writel(y[i], base + REGTRACE_VIC_MDMA_Y_BASE_OFFSET + (i * 4U));
+    if (fmt == 7U) {
+        for (i = 0; i < REGTRACE_VIC_MDMA_RING_SLOTS; i++)
+            writel(uv[i], base + REGTRACE_VIC_MDMA_UV0_BASE_OFFSET + (i * 4U));
+    }
+    for (i = 0; i < REGTRACE_VIC_MDMA_RING_SLOTS; i++)
+        writel(uv[i], base + REGTRACE_VIC_MDMA_UV1_BASE_OFFSET + (i * 4U));
+
+    ctrl = (count >= 8U) ?
+        (0x80080020U | fmt) :
+        ((count << 16) | 0x80000020U | fmt);
+    writel(ctrl, base + REGTRACE_VIC_MDMA_CTRL_OFFSET);
+    wmb();
+
+    regtrace_vic_mdma_kick370(base, channel, irq_index, 3, 0, 0);
+    regtrace_vic_mdma_internal_program_count++;
+    regtrace_vic_mdma_internal_last_channel = channel;
+    regtrace_vic_mdma_internal_last_idx = irq_index;
+    regtrace_vic_mdma_internal_last_width = width;
+    regtrace_vic_mdma_internal_last_height = height;
+    regtrace_vic_mdma_internal_last_size = buf->size;
+    regtrace_vic_mdma_internal_last_phys = buf->phys;
+    regtrace_vic_mdma_internal_last_ctrl = ctrl;
+    regtrace_vic_mdma_internal_last_y0 = y[0];
+    regtrace_vic_mdma_internal_last_uv0 = uv[0];
+    regtrace_vic_mdma_internal_last_ret = 0;
+
+    printk(KERN_WARNING "tx_isp_t40_recovered: VIC internal MDMA on ch=%u idx=%u %ux%u fmt=%u count=%u size=0x%x phys=0x%x stride=%u ctrl=0x%x y0=0x%x uv0=0x%x coherent=%u\n",
+           channel, irq_index, width, height, fmt, count, buf->size,
+           buf->phys, stride, ctrl, y[0], uv[0], buf->coherent ? 1U : 0U);
+    return 0;
+}
+
+static uint32_t regtrace_tisp_dma_hw_addr(unsigned int index, uint32_t offset)
+{
+    uint32_t addr;
+
+    if (index >= REGTRACE_TISP_DMA_BUFS)
+        return 0;
+
+    addr = regtrace_tisp_dma_bufs[index].phys + offset;
+    if (regtrace_enable_tisp_main_init_dma_kseg0)
+        addr |= 0x80000000U;
+
+    return addr;
+}
+
+static uint32_t regtrace_tisp_dma_virt32(unsigned int index, uint32_t offset)
+{
+    if (index >= REGTRACE_TISP_DMA_BUFS ||
+        !regtrace_tisp_dma_bufs[index].virt)
+        return 0;
+
+    return (uint32_t)(uintptr_t)
+        ((char *)regtrace_tisp_dma_bufs[index].virt + offset);
+}
+
+static void regtrace_tisp_main_init_seed_tispinfo_dma(void)
+{
+    if (!regtrace_enable_tisp_main_init_tispinfo_dma)
+        return;
+
+    *(uint32_t *)(tispinfo + 8) = 4;
+    *(uint32_t *)(tispinfo + 12) = regtrace_tisp_dma_virt32(0, 0);
+    *(uint32_t *)(tispinfo + 16) = regtrace_tisp_dma_hw_addr(0, 0);
+    *(uint32_t *)(tispinfo + 20) = 4;
+    *(uint32_t *)(tispinfo + 24) = regtrace_tisp_dma_virt32(0, 0x4000);
+    *(uint32_t *)(tispinfo + 28) = regtrace_tisp_dma_hw_addr(0, 0x4000);
+
+    *(uint32_t *)(tispinfo + 32) = 4;
+    *(uint32_t *)(tispinfo + 36) = regtrace_tisp_dma_virt32(1, 0);
+    *(uint32_t *)(tispinfo + 40) = regtrace_tisp_dma_hw_addr(1, 0);
+
+    *(uint32_t *)(tispinfo + 44) = 4;
+    *(uint32_t *)(tispinfo + 48) = regtrace_tisp_dma_virt32(2, 0);
+    *(uint32_t *)(tispinfo + 52) = regtrace_tisp_dma_hw_addr(2, 0);
+
+    *(uint32_t *)(tispinfo + 56) = 4;
+    *(uint32_t *)(tispinfo + 60) = regtrace_tisp_dma_virt32(3, 0);
+    *(uint32_t *)(tispinfo + 64) = regtrace_tisp_dma_hw_addr(3, 0);
+
+    *(uint32_t *)(tispinfo + 68) = 4;
+    *(uint32_t *)(tispinfo + 72) = regtrace_tisp_dma_virt32(4, 0);
+    *(uint32_t *)(tispinfo + 76) = regtrace_tisp_dma_hw_addr(4, 0);
+
+    regtrace_tisp_main_init_tispinfo_count++;
 }
 
 static int regtrace_tisp_main_init_dma_regs(void)
@@ -8426,7 +8861,13 @@ static int regtrace_tisp_main_init_dma_regs(void)
         }
     }
 
-    p = regtrace_tisp_dma_bufs[0].phys;
+    for (i = 0; i < REGTRACE_TISP_DMA_BUFS; i++)
+        regtrace_tisp_main_init_dma_last_hw[i] =
+            regtrace_tisp_dma_hw_addr(i, 0);
+
+    regtrace_tisp_main_init_seed_tispinfo_dma();
+
+    p = regtrace_tisp_dma_hw_addr(0, 0);
     subret = regtrace_core_write(0x1902c, p + 0x0000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x19030, p + 0x1000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x19034, p + 0x2000); if (subret && !ret) ret = subret;
@@ -8438,7 +8879,7 @@ static int regtrace_tisp_main_init_dma_regs(void)
     subret = regtrace_core_write(0x1904c, 0x33); if (subret && !ret) ret = subret;
     regtrace_tisp_main_init_dma_last_mask |= 1U << 0;
 
-    p = regtrace_tisp_dma_bufs[1].phys;
+    p = regtrace_tisp_dma_hw_addr(1, 0);
     subret = regtrace_core_write(0x1803c, p + 0x00000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x18040, p + 0x08000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x18044, p + 0x10000); if (subret && !ret) ret = subret;
@@ -8446,7 +8887,7 @@ static int regtrace_tisp_main_init_dma_regs(void)
     subret = regtrace_core_write(0x1804c, 3); if (subret && !ret) ret = subret;
     regtrace_tisp_main_init_dma_last_mask |= 1U << 1;
 
-    p = regtrace_tisp_dma_bufs[2].phys;
+    p = regtrace_tisp_dma_hw_addr(2, 0);
     subret = regtrace_core_write(0x9514, p + 0x0000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x9518, p + 0x1000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x951c, p + 0x2000); if (subret && !ret) ret = subret;
@@ -8454,7 +8895,7 @@ static int regtrace_tisp_main_init_dma_regs(void)
     subret = regtrace_core_write(0x9510, 3); if (subret && !ret) ret = subret;
     regtrace_tisp_main_init_dma_last_mask |= 1U << 2;
 
-    p = regtrace_tisp_dma_bufs[3].phys;
+    p = regtrace_tisp_dma_hw_addr(3, 0);
     subret = regtrace_core_write(0xc290, p + 0x0000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0xc294, p + 0x0800); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0xc298, p + 0x1000); if (subret && !ret) ret = subret;
@@ -8462,7 +8903,7 @@ static int regtrace_tisp_main_init_dma_regs(void)
     subret = regtrace_core_write(0xc28c, 3); if (subret && !ret) ret = subret;
     regtrace_tisp_main_init_dma_last_mask |= 1U << 3;
 
-    p = regtrace_tisp_dma_bufs[4].phys;
+    p = regtrace_tisp_dma_hw_addr(4, 0);
     subret = regtrace_core_write(0x1a0cc, p + 0x0000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x1a0d0, p + 0x1000); if (subret && !ret) ret = subret;
     subret = regtrace_core_write(0x1a0d4, p + 0x2000); if (subret && !ret) ret = subret;
@@ -8473,15 +8914,23 @@ static int regtrace_tisp_main_init_dma_regs(void)
 out:
     regtrace_tisp_main_init_dma_reg_count++;
     regtrace_tisp_main_init_dma_last_ret = ret;
-    printk(KERN_WARNING "tx_isp_t40_recovered: tisp_main_init dma regs mask=0x%x allocs=%u fail=%u phys=%x/%x/%x/%x/%x ret=%d\n",
+    printk(KERN_WARNING "tx_isp_t40_recovered: tisp_main_init dma regs mask=0x%x allocs=%u fail=%u kseg0=%u tispinfo=%u/%u phys=%x/%x/%x/%x/%x hw=%x/%x/%x/%x/%x ret=%d\n",
            regtrace_tisp_main_init_dma_last_mask,
            regtrace_tisp_main_init_dma_alloc_count,
            regtrace_tisp_main_init_dma_fail_index,
+           regtrace_enable_tisp_main_init_dma_kseg0 ? 1U : 0U,
+           regtrace_enable_tisp_main_init_tispinfo_dma ? 1U : 0U,
+           regtrace_tisp_main_init_tispinfo_count,
            regtrace_tisp_dma_bufs[0].phys,
            regtrace_tisp_dma_bufs[1].phys,
            regtrace_tisp_dma_bufs[2].phys,
            regtrace_tisp_dma_bufs[3].phys,
            regtrace_tisp_dma_bufs[4].phys,
+           regtrace_tisp_main_init_dma_last_hw[0],
+           regtrace_tisp_main_init_dma_last_hw[1],
+           regtrace_tisp_main_init_dma_last_hw[2],
+           regtrace_tisp_main_init_dma_last_hw[3],
+           regtrace_tisp_main_init_dma_last_hw[4],
            ret);
     return ret;
 }
@@ -8968,21 +9417,16 @@ static int regtrace_tisp_top_regs_final_reapply(int channel,
     return regtrace_tisp_main_init_scalar_reapply(channel, reason, true);
 }
 
-static int regtrace_t40_msca_shadow_kick_834(const char *reason)
+static int regtrace_t40_msca_shadow_kick_write(const char *reason,
+                                               uint32_t reg,
+                                               uint32_t value)
 {
     uint32_t before = 0;
     uint32_t after = 0;
-    uint32_t reg;
-    uint32_t value;
     int ret;
 
     if (!regtrace_enable_t40_msca_shadow_kick_834)
         return 0;
-
-    reg = regtrace_t40_msca_shadow_kick_reg ?
-        regtrace_t40_msca_shadow_kick_reg : REGTRACE_T40_MSCA_SHADOW_KICK_REG;
-    value = regtrace_t40_msca_shadow_kick_value ?
-        regtrace_t40_msca_shadow_kick_value : REGTRACE_T40_MSCA_SHADOW_KICK_VALUE;
 
     regtrace_core_read(reg, &before);
     ret = regtrace_core_write(reg, value);
@@ -8999,10 +9443,30 @@ static int regtrace_t40_msca_shadow_kick_834(const char *reason)
     return ret;
 }
 
+static int regtrace_t40_msca_shadow_kick_834(const char *reason)
+{
+    uint32_t reg = regtrace_t40_msca_shadow_kick_reg ?
+        regtrace_t40_msca_shadow_kick_reg : REGTRACE_T40_MSCA_SHADOW_KICK_REG;
+    uint32_t value = regtrace_t40_msca_shadow_kick_value ?
+        regtrace_t40_msca_shadow_kick_value : REGTRACE_T40_MSCA_SHADOW_KICK_VALUE;
+
+    return regtrace_t40_msca_shadow_kick_write(reason, reg, value);
+}
+
+static int regtrace_t40_msca_shadow_kick_line(const char *reason)
+{
+    return regtrace_t40_msca_shadow_kick_write(
+        reason,
+        REGTRACE_T40_MSCA_SHADOW_LINE_KICK_REG,
+        REGTRACE_T40_MSCA_SHADOW_LINE_KICK_VALUE);
+}
+
 static int regtrace_t40_msca_shadow_commit(const char *reason)
 {
     uint32_t mask;
     uint32_t status = 0;
+    bool did_mask = false;
+    bool did_line = false;
     int ret = 0;
     int subret;
 
@@ -9029,6 +9493,7 @@ static int regtrace_t40_msca_shadow_commit(const char *reason)
             ret = subret;
         regtrace_t40_msca_shadow_commit_last_cmd =
             REGTRACE_T40_MSCA_SHADOW_CMD_MASK_COMMIT;
+        did_mask = true;
     }
 
     if (mask & 0x4U) {
@@ -9038,6 +9503,7 @@ static int regtrace_t40_msca_shadow_commit(const char *reason)
             ret = subret;
         regtrace_t40_msca_shadow_commit_last_cmd =
             REGTRACE_T40_MSCA_SHADOW_CMD_LINE_COMMIT;
+        did_line = true;
     }
 
     if (mask & 0x8U) {
@@ -9050,8 +9516,10 @@ static int regtrace_t40_msca_shadow_commit(const char *reason)
     }
 
     regtrace_core_read(REGTRACE_T40_MSCA_SHADOW_CMD_REG, &status);
-    if (!ret)
+    if (!ret && did_mask)
         ret = regtrace_t40_msca_shadow_kick_834(reason);
+    if (!ret && did_line)
+        ret = regtrace_t40_msca_shadow_kick_line(reason);
     regtrace_t40_msca_shadow_commit_count++;
     regtrace_t40_msca_shadow_commit_last_mask = mask;
     regtrace_t40_msca_shadow_commit_last_status = status;
@@ -9078,7 +9546,43 @@ static int regtrace_t40_msca_shadow_pair(uint32_t value, uint32_t addr,
     return 0;
 }
 
+static uint32_t regtrace_t40_msca_work_en_hw_value(uint32_t active_mask)
+{
+    if (regtrace_t40_msca_work_en_dma_bits && active_mask)
+        return active_mask | regtrace_t40_msca_work_en_dma_mask;
+    return active_mask;
+}
+
+static int regtrace_t40_msca_write_work_en(uint32_t active_mask,
+                                           const char *reason)
+{
+    uint32_t hw_value;
+    uint32_t readback = 0;
+    int ret;
+
+    hw_value = regtrace_t40_msca_work_en_hw_value(active_mask);
+    ret = regtrace_core_write(REGTRACE_T40_MSCA_WORK_EN_REG, hw_value);
+    regtrace_core_read(REGTRACE_T40_MSCA_WORK_EN_REG, &readback);
+
+    regtrace_t40_msca_work_en_last_active = active_mask;
+    regtrace_t40_msca_work_en_last_hw = hw_value;
+    regtrace_t40_msca_work_en_last_readback = readback;
+    regtrace_t40_msca_work_en_last_ret = ret;
+    regtrace_t40_msca_work_en_write_count++;
+
+    if (regtrace_t40_msca_work_en_write_count <= 8) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: T40 MSCA work_en reason=%s active=0x%x hw=0x%x read=0x%x ret=%d\n",
+               reason ? reason : "unknown", active_mask, hw_value, readback,
+               ret);
+    } else if (regtrace_t40_msca_work_en_write_count == 9) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: T40 MSCA work_en logging suppressed\n");
+    }
+
+    return ret;
+}
+
 static uint32_t regtrace_msca_ratio(uint32_t source, uint32_t target);
+static uint32_t regtrace_t40_msca_oem_aux68(unsigned int channel);
 
 static int regtrace_t40_msca_shadow_fifo_program(int trigger_channel,
                                                  const char *reason,
@@ -9123,7 +9627,8 @@ static int regtrace_t40_msca_shadow_fifo_program(int trigger_channel,
                                         0x16084U, &pairs);
     if (ret)
         goto out;
-    ret = regtrace_t40_msca_shadow_pair(active_mask, 0x16008U, &pairs);
+    ret = regtrace_t40_msca_shadow_pair(
+        regtrace_t40_msca_work_en_hw_value(active_mask), 0x16008U, &pairs);
     if (ret)
         goto out;
     if (regtrace_t40_msca_shadow_write_load_mask) {
@@ -9198,7 +9703,7 @@ static int regtrace_t40_msca_shadow_fifo_program(int trigger_channel,
                                             base, &pairs);
         if (ret)
             goto out;
-        ret = regtrace_t40_msca_shadow_pair((vratio << 16) | (hratio & 0xffff),
+        ret = regtrace_t40_msca_shadow_pair((hratio << 16) | (vratio & 0xffff),
                                             base + 4, &pairs);
         if (ret)
             goto out;
@@ -9209,8 +9714,8 @@ static int regtrace_t40_msca_shadow_fifo_program(int trigger_channel,
                                             base + 0x2c, &pairs);
         if (ret)
             goto out;
-        ret = regtrace_t40_msca_shadow_pair(crop_width << 6, base + 0x68,
-                                            &pairs);
+        ret = regtrace_t40_msca_shadow_pair(
+            regtrace_t40_msca_oem_aux68(ch), base + 0x68, &pairs);
         if (ret)
             goto out;
         ret = regtrace_t40_msca_shadow_pair(crop_width, base + 0x80, &pairs);
@@ -9565,6 +10070,23 @@ static uint32_t regtrace_msca_ratio(uint32_t source, uint32_t target)
     return ratio;
 }
 
+static uint32_t regtrace_t40_msca_oem_aux68(unsigned int channel)
+{
+    unsigned char *state;
+
+    if (channel >= 3)
+        return 0;
+
+    /*
+     * OEM Tzn_Msca_cfg_load writes:
+     *   (state[channel].byte7 << 6) | state[channel].byte6
+     * at channel_base + 0x68.  These bytes are left zero by the OEM init
+     * layout for the normal scaler path; do not substitute stride/width here.
+     */
+    state = (unsigned char *)mscaler_s0 + channel * 616U;
+    return ((uint32_t)state[17] << 6) | state[16];
+}
+
 static void regtrace_t40_msca_state_put16(unsigned char *base, uint32_t off,
                                           uint32_t value)
 {
@@ -9908,7 +10430,8 @@ static int regtrace_t40_msca_cfg_program(int trigger_channel,
             goto out;
         regtrace_core_read(base + 4,
                            &regtrace_t40_msca_cfg_read_after_write_ratio[ch]);
-        ret = regtrace_core_write(base + 0x68, crop_width << 6);
+        ret = regtrace_core_write(base + 0x68,
+                                  regtrace_t40_msca_oem_aux68(ch));
         if (ret)
             goto out;
         ret = regtrace_core_write(base + 0x80, crop_width);
@@ -9926,10 +10449,10 @@ static int regtrace_t40_msca_cfg_program(int trigger_channel,
             goto out;
 
         if ((!regtrace_t40_msca_scale_active_only || active) &&
-            source_height > crop_height)
+            source_width > crop_width)
             scale_bits |= 1U << ch;
         if ((!regtrace_t40_msca_scale_active_only || active) &&
-            source_width > crop_width)
+            source_height > crop_height)
             scale_bits |= 1U << (ch + 3U);
 
         if (source_height > crop_height) {
@@ -9996,7 +10519,8 @@ static int regtrace_t40_msca_cfg_program(int trigger_channel,
                                   (hratio << 16) | (vratio & 0xffff));
         if (ret)
             goto out;
-        ret = regtrace_core_write(base + 0x68, 0);
+        ret = regtrace_core_write(base + 0x68,
+                                  regtrace_t40_msca_oem_aux68(ch));
         if (ret)
             goto out;
         ret = regtrace_core_write(base + 0x80, target_width);
@@ -10122,6 +10646,9 @@ out:
     return ret;
 }
 
+static int regtrace_t40_msca_program_fifo_ctrl(uint32_t group,
+                                               uint32_t channel);
+
 static int regtrace_core_program_channel_attr(
     int channel, const struct regtrace_frame_image_format *format)
 {
@@ -10215,6 +10742,16 @@ static int regtrace_core_program_channel_attr(
             if (ret)
                 return ret;
         }
+        if (regtrace_t40_msca_fifo_ctrl_on_set_fmt) {
+            ret = regtrace_t40_msca_program_fifo_ctrl(0,
+                                                      (uint32_t)channel);
+            regtrace_tzn_fifo_ctrl_set_fmt_count++;
+            regtrace_tzn_fifo_ctrl_set_fmt_last_channel =
+                (uint32_t)channel;
+            regtrace_tzn_fifo_ctrl_set_fmt_last_ret = ret;
+            if (ret)
+                return ret;
+        }
         return 0;
     }
 
@@ -10273,8 +10810,8 @@ static int regtrace_core_channel_stream(int channel, int enable)
     if (!enable) {
         if (regtrace_msca_ch_en != ~0U) {
             regtrace_msca_ch_en &= ~(1U << (channel & 0x1f));
-            regtrace_core_write(REGTRACE_T40_MSCA_WORK_EN_REG,
-                                regtrace_msca_ch_en);
+            regtrace_t40_msca_write_work_en(regtrace_msca_ch_en,
+                                            "streamoff");
             regtrace_t40_msca_cfg_program(channel, "streamoff");
         }
         return 0;
@@ -10318,18 +10855,128 @@ static int regtrace_core_channel_stream(int channel, int enable)
         }
     }
 
-    ret = regtrace_core_write(REGTRACE_T40_MSCA_WORK_EN_REG,
-                              regtrace_msca_ch_en);
+    ret = regtrace_t40_msca_write_work_en(regtrace_msca_ch_en, "streamon");
     if (!ret)
         ret = regtrace_t40_msca_cfg_program(channel, "stream");
     if (!ret)
         ret = regtrace_msca_cfg_load_pulse(channel, "stream");
+    if (!ret && regtrace_t40_msca_fifo_ctrl_on_set_fmt) {
+        ret = regtrace_t40_msca_program_fifo_ctrl(0, (uint32_t)channel);
+        regtrace_tzn_fifo_ctrl_set_fmt_count++;
+        regtrace_tzn_fifo_ctrl_set_fmt_last_channel = (uint32_t)channel;
+        regtrace_tzn_fifo_ctrl_set_fmt_last_ret = ret;
+    }
     if (!ret)
         regtrace_msca_stream_count++;
 
     printk(KERN_WARNING "tx_isp_t40_recovered: MSCA streamon ch=%d target=%ux%u full=%ux%u scaled=%d arb=0x%x work_en=0x%x ret=%d\n",
            channel, target_width, target_height, full_width, full_height,
            scaled, regtrace_msca_dmaout_arb, regtrace_msca_ch_en, ret);
+    return ret;
+}
+
+static uint32_t regtrace_t40_msca_fifo_y_ctrl_value(uint32_t channel)
+{
+    switch (channel) {
+    case 0:
+        return regtrace_t40_msca_fifo_ch0_y_ctrl;
+    case 1:
+        return regtrace_t40_msca_fifo_ch1_y_ctrl;
+    default:
+        return regtrace_t40_msca_fifo_ch2_y_ctrl;
+    }
+}
+
+static uint32_t regtrace_t40_msca_fifo_uv_ctrl_value(uint32_t channel)
+{
+    switch (channel) {
+    case 0:
+        return regtrace_t40_msca_fifo_ch0_uv_ctrl;
+    case 1:
+        return regtrace_t40_msca_fifo_ch1_uv_ctrl;
+    default:
+        return regtrace_t40_msca_fifo_ch2_uv_ctrl;
+    }
+}
+
+static void regtrace_t40_msca_fifo_apply_addr_tags(uint32_t channel,
+                                                   uint32_t *y,
+                                                   uint32_t *uv)
+{
+    if (!regtrace_t40_msca_fifo_addr_tag_write || !y || !uv)
+        return;
+
+    if (regtrace_t40_msca_fifo_addr_tag_mode == 0U) {
+        return;
+    } else if (regtrace_t40_msca_fifo_addr_tag_mode == 1U) {
+        if (channel == 0) {
+            *y = (*y & ~7U) | 1U;
+            *uv = (*uv & ~7U) | 2U;
+        } else {
+            *y = (*y & ~7U) | 4U;
+            *uv = (*uv & ~7U) | 4U;
+        }
+    } else if (regtrace_t40_msca_fifo_addr_tag_mode == 2U) {
+        if (channel == 0) {
+            *y = (*y & ~7U) | 4U;
+            *uv = (*uv & ~7U) | 5U;
+        } else {
+            *y = (*y & ~7U) | 6U;
+            *uv = (*uv & ~7U) | 6U;
+        }
+    } else if (channel == 0) {
+        *y = (*y & ~7U) | 4U;
+        *uv = (*uv & ~7U) | 5U;
+    } else {
+        *y = (*y & ~7U) | 6U;
+        *uv = (*uv & ~7U) | 6U;
+    }
+}
+
+static int regtrace_t40_msca_program_fifo_ctrl(uint32_t group,
+                                               uint32_t channel)
+{
+    uint32_t bank;
+    uint32_t y_ctrl;
+    uint32_t uv_ctrl;
+    uint32_t y_readback = 0;
+    uint32_t uv_readback = 0;
+    int ret;
+    static unsigned int log_count;
+
+    if (group > 1 || channel >= 3)
+        return -EINVAL;
+
+    bank = (group << 12) + channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
+    y_ctrl = regtrace_t40_msca_fifo_y_ctrl_value(channel);
+    uv_ctrl = regtrace_t40_msca_fifo_uv_ctrl_value(channel);
+
+    ret = regtrace_core_write(REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG + bank,
+                              y_ctrl);
+    if (!ret)
+        ret = regtrace_core_write(REGTRACE_T40_MSCA_UV_FIFO_CTRL_REG + bank,
+                                  uv_ctrl);
+
+    regtrace_core_read(REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG + bank, &y_readback);
+    regtrace_core_read(REGTRACE_T40_MSCA_UV_FIFO_CTRL_REG + bank, &uv_readback);
+
+    regtrace_tzn_fifo_ctrl_count++;
+    regtrace_tzn_fifo_ctrl_last_group = group;
+    regtrace_tzn_fifo_ctrl_last_channel = channel;
+    regtrace_tzn_fifo_ctrl_last_y = y_ctrl;
+    regtrace_tzn_fifo_ctrl_last_uv = uv_ctrl;
+    regtrace_tzn_fifo_ctrl_last_y_readback = y_readback;
+    regtrace_tzn_fifo_ctrl_last_uv_readback = uv_readback;
+    regtrace_tzn_fifo_ctrl_last_ret = ret;
+
+    if (log_count < 8) {
+        printk(KERN_INFO "tx_isp_t40_recovered: T40 MSCA FIFO ctrl group=%u ch=%u y=0x%x/0x%x uv=0x%x/0x%x ret=%d\n",
+               group, channel, y_ctrl, y_readback, uv_ctrl, uv_readback, ret);
+    } else if (log_count == 8) {
+        printk(KERN_INFO "tx_isp_t40_recovered: T40 MSCA FIFO ctrl logging suppressed\n");
+    }
+    log_count++;
+
     return ret;
 }
 
@@ -10353,12 +11000,99 @@ static uint32_t regtrace_framechan_uv_offset(int channel)
     return width * ALIGN(height, 16);
 }
 
+static void regtrace_framechan_shadow_reset(int channel)
+{
+    unsigned long flags;
+
+    if (channel < 0 || channel >= 4)
+        return;
+
+    memset(regtrace_framechan_qbuf_phys[channel], 0,
+           sizeof(regtrace_framechan_qbuf_phys[channel]));
+    memset(regtrace_framechan_qbuf_uv[channel], 0,
+           sizeof(regtrace_framechan_qbuf_uv[channel]));
+    memset(regtrace_framechan_qbuf_len[channel], 0,
+           sizeof(regtrace_framechan_qbuf_len[channel]));
+    memset(regtrace_framechan_qbuf_state[channel], 0,
+           sizeof(regtrace_framechan_qbuf_state[channel]));
+    memset(regtrace_framechan_qbuf_driver_state[channel], 0,
+           sizeof(regtrace_framechan_qbuf_driver_state[channel]));
+    regtrace_framechan_qbuf_count[channel] = 0;
+    regtrace_framechan_shadow_submit_next_last_index[channel] = 0xffffffffU;
+    regtrace_framechan_shadow_submit_next_last_ret[channel] = 0;
+    regtrace_irq_frame_done_local_done_index[channel] = 0xffffffffU;
+    regtrace_irq_frame_done_local_old_state[channel] = 0;
+    regtrace_irq_frame_done_local_old_driver_state[channel] = 0;
+    spin_lock_irqsave(&regtrace_irq_frame_done_queue_lock[channel], flags);
+    regtrace_irq_frame_done_queue_head[channel] = 0;
+    regtrace_irq_frame_done_queue_tail[channel] = 0;
+    regtrace_irq_frame_done_queue_count[channel] = 0;
+    spin_unlock_irqrestore(&regtrace_irq_frame_done_queue_lock[channel], flags);
+}
+
+static void regtrace_framechan_shadow_set_state(int channel, uint32_t index,
+                                                uint32_t state,
+                                                uint32_t driver_state)
+{
+    if (channel < 0 || channel >= 4 ||
+        index >= REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        return;
+
+    regtrace_framechan_qbuf_state[channel][index] = state;
+    regtrace_framechan_qbuf_driver_state[channel][index] = driver_state;
+}
+
+static uint32_t regtrace_framechan_index_for_phys(int channel, uint32_t phys);
+
+static enum dma_data_direction regtrace_framechan_dma_sync_dir(uint dir)
+{
+    if (dir <= DMA_NONE)
+        return (enum dma_data_direction)dir;
+    return DMA_BIDIRECTIONAL;
+}
+
+static void *regtrace_phys_to_kseg0(uint32_t phys)
+{
+    if (!phys || phys >= 0x20000000U)
+        return NULL;
+    return (void *)(uintptr_t)(0x80000000U | phys);
+}
+
+static void regtrace_framechan_dma_sync_phys(int channel, uint32_t phys,
+                                             uint32_t length,
+                                             enum dma_data_direction dir,
+                                             uint32_t stage)
+{
+    void *vaddr;
+
+    if (channel < 0 || channel >= 4 || !phys || !length)
+        return;
+
+    vaddr = regtrace_phys_to_kseg0(phys);
+    regtrace_framechan_dma_sync_last_stage[channel] = stage;
+    regtrace_framechan_dma_sync_last_phys[channel] = phys;
+    regtrace_framechan_dma_sync_last_len[channel] = length;
+    regtrace_framechan_dma_sync_last_dir[channel] = (uint32_t)dir;
+    regtrace_framechan_dma_sync_last_vaddr[channel] = (uint32_t)(uintptr_t)vaddr;
+    if (!vaddr) {
+        regtrace_framechan_dma_sync_skip_count[channel]++;
+        return;
+    }
+
+    dma_cache_sync(NULL, vaddr, length, dir);
+    if (stage == 1)
+        regtrace_framechan_dma_sync_qbuf_count[channel]++;
+    else if (stage == 2)
+        regtrace_framechan_dma_sync_dqbuf_count[channel]++;
+}
+
 static void regtrace_framechan_record_qbuf(int channel, uint32_t index,
                                            uint32_t phys, uint32_t length)
 {
     uint32_t uv_offset;
 
-    if (channel < 0 || channel >= 4 || index >= 8)
+    if (channel < 0 || channel >= 4 ||
+        index >= REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
         return;
 
     uv_offset = regtrace_framechan_uv_offset(channel);
@@ -10366,6 +11100,9 @@ static void regtrace_framechan_record_qbuf(int channel, uint32_t index,
     regtrace_framechan_qbuf_uv[channel][index] =
         phys && uv_offset ? phys + uv_offset : 0;
     regtrace_framechan_qbuf_len[channel][index] = length;
+    regtrace_framechan_shadow_set_state(channel, index,
+                                        REGTRACE_FRAMECHAN_SHADOW_STATE_QUEUED,
+                                        REGTRACE_FRAMECHAN_SHADOW_STATE_QUEUED);
     if (regtrace_framechan_qbuf_count[channel] < index + 1)
         regtrace_framechan_qbuf_count[channel] = index + 1;
 }
@@ -10378,6 +11115,8 @@ static int regtrace_core_program_qbuf(int channel, uint32_t phys,
     uint32_t aligned_height;
     uint32_t uv_phys;
     uint32_t bank;
+    uint32_t index;
+    uint32_t sync_len;
     int ret;
 
     if (channel < 0 || channel >= 3 || !phys || !format)
@@ -10390,14 +11129,26 @@ static int regtrace_core_program_qbuf(int channel, uint32_t phys,
     aligned_height = ALIGN(height, 16);
     uv_phys = phys + (width * aligned_height);
     bank = (uint32_t)channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
+    index = regtrace_framechan_index_for_phys(channel, phys);
+    sync_len = (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX &&
+                regtrace_framechan_qbuf_len[channel][index]) ?
+        regtrace_framechan_qbuf_len[channel][index] :
+        (width * aligned_height * 3U / 2U);
 
-    ret = regtrace_core_write(REGTRACE_T40_MSCA_Y_FIFO_WRITE_REG + bank, phys);
+    if (regtrace_framechan_dma_sync_qbuf)
+        regtrace_framechan_dma_sync_phys(
+            channel, phys, sync_len,
+            regtrace_framechan_dma_sync_dir(regtrace_framechan_dma_sync_qbuf_dir),
+            1);
+
+    ret = Tzn_Msca_addr_fifo_write(0, (uint32_t)channel, phys, uv_phys);
     if (ret)
         return ret;
-    ret = regtrace_core_write(REGTRACE_T40_MSCA_UV_FIFO_WRITE_REG + bank,
-                              uv_phys);
-    if (ret)
-        return ret;
+
+    if (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        regtrace_framechan_shadow_set_state(channel, index,
+                                            REGTRACE_FRAMECHAN_SHADOW_STATE_ACTIVE,
+                                            REGTRACE_FRAMECHAN_SHADOW_STATE_ACTIVE);
 
     regtrace_msca_qbuf_count++;
     if (regtrace_msca_qbuf_count <= 4) {
@@ -10409,6 +11160,73 @@ static int regtrace_core_program_qbuf(int channel, uint32_t phys,
         printk(KERN_INFO "tx_isp_t40_recovered: MSCA qbuf logging suppressed\n");
     }
     return 0;
+}
+
+static int regtrace_framechan_submit_next_queued(int channel,
+                                                 uint32_t after_index,
+                                                 const char *source)
+{
+    struct regtrace_frame_image_format format;
+    uint32_t count;
+    uint32_t start;
+    uint32_t i;
+    uint32_t index;
+    uint32_t phys;
+    int ret;
+    static unsigned int log_count[4];
+
+    if (channel < 0 || channel >= 3)
+        return -EINVAL;
+
+    count = regtrace_framechan_qbuf_count[channel];
+    if (count > REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        count = REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX;
+    while (count && !regtrace_framechan_qbuf_phys[channel][count - 1])
+        count--;
+    if (!count) {
+        regtrace_framechan_shadow_submit_next_no_queued[channel]++;
+        regtrace_framechan_shadow_submit_next_last_index[channel] =
+            0xffffffffU;
+        regtrace_framechan_shadow_submit_next_last_ret[channel] = -ENOENT;
+        return -ENOENT;
+    }
+
+    start = after_index < count ? after_index + 1 : 0;
+    if (start >= count)
+        start = 0;
+
+    for (i = 0; i < count; i++) {
+        index = (start + i) % count;
+        phys = regtrace_framechan_qbuf_phys[channel][index];
+        if (!phys ||
+            regtrace_framechan_qbuf_state[channel][index] !=
+            REGTRACE_FRAMECHAN_SHADOW_STATE_QUEUED)
+            continue;
+
+        regtrace_get_framechan_format(channel, &format);
+        ret = regtrace_core_program_qbuf(channel, phys, &format);
+        regtrace_framechan_shadow_submit_next_last_index[channel] = index;
+        regtrace_framechan_shadow_submit_next_last_ret[channel] = ret;
+        if (!ret)
+            regtrace_framechan_shadow_submit_next_count[channel]++;
+        else
+            regtrace_framechan_shadow_submit_next_fail[channel]++;
+
+        if (log_count[channel] < 8) {
+            printk(KERN_INFO "tx_isp_t40_recovered: framechan%d shadow submit-next source=%s idx=%u phys=0x%x ret=%d\n",
+                   channel, source ? source : "?", index, phys, ret);
+        } else if (log_count[channel] == 8) {
+            printk(KERN_INFO "tx_isp_t40_recovered: framechan%d shadow submit-next logging suppressed\n",
+                   channel);
+        }
+        log_count[channel]++;
+        return ret;
+    }
+
+    regtrace_framechan_shadow_submit_next_no_queued[channel]++;
+    regtrace_framechan_shadow_submit_next_last_index[channel] = 0xffffffffU;
+    regtrace_framechan_shadow_submit_next_last_ret[channel] = -ENOENT;
+    return -ENOENT;
 }
 
 static void regtrace_vic_mdma_kick370(volatile void __iomem *base,
@@ -10489,6 +11307,18 @@ static int regtrace_vic_frame_mdma_stream(int channel, int enable)
         return 0;
     }
 
+    if (regtrace_enable_vic_mdma_internal_ring) {
+        int internal_ret;
+
+        internal_ret = regtrace_vic_mdma_internal_program(vic_dev, base,
+                                                          (uint32_t)channel,
+                                                          (uint32_t)irq_index);
+        if (internal_ret != -ENOENT) {
+            regtrace_vic_mdma_count++;
+            return internal_ret;
+        }
+    }
+
     if (regtrace_enable_vic_mdma_qbuf_ring) {
         uint32_t qbuf_count = regtrace_framechan_qbuf_count[channel];
         uint32_t y_phys[REGTRACE_VIC_MDMA_RING_SLOTS];
@@ -10508,8 +11338,8 @@ static int regtrace_vic_frame_mdma_stream(int channel, int enable)
             return -EINVAL;
         }
 
-        if (qbuf_count > 8)
-            qbuf_count = 8;
+        if (qbuf_count > REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+            qbuf_count = REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX;
         while (qbuf_count && !regtrace_framechan_qbuf_phys[channel][qbuf_count - 1])
             qbuf_count--;
         if (!qbuf_count || !regtrace_framechan_qbuf_phys[channel][0]) {
@@ -10565,6 +11395,20 @@ static int regtrace_vic_frame_mdma_stream(int channel, int enable)
         printk(KERN_WARNING "tx_isp_t40_recovered: VIC frame MDMA qbuf ring on ch=%d idx=%d %ux%u stride=%u uv_off=0x%x qbufs=%u ctrl=0x%x y0=0x%x uv0=0x%x\n",
                channel, irq_index, width, height, stride, y_size,
                qbuf_count, ctrl, y_phys[0], uv_phys[0]);
+        return 0;
+    }
+
+    if (!regtrace_enable_vic_mdma_no_ring) {
+        writel(0, base + REGTRACE_VIC_MDMA_CTRL_OFFSET);
+        wmb();
+        regtrace_vic_mdma_count++;
+        regtrace_vic_mdma_qbuf_ring_last_channel = (uint32_t)channel;
+        regtrace_vic_mdma_qbuf_ring_last_ctrl = 0;
+        regtrace_vic_mdma_qbuf_ring_last_y0 = 0;
+        regtrace_vic_mdma_qbuf_ring_last_uv0 = 0;
+        regtrace_vic_mdma_qbuf_ring_last_ret = 0;
+        printk(KERN_WARNING "tx_isp_t40_recovered: VIC frame MDMA no-ring disabled ch=%d idx=%d\n",
+               channel, irq_index);
         return 0;
     }
 
@@ -12461,6 +13305,9 @@ static int regtrace_core_event_qbuf(int channel, void *data)
     return ret;
 }
 
+static int regtrace_irq_frame_done_queue_pop(int channel, uint32_t *y,
+                                             uint32_t *uv, uint32_t *index);
+
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static int regtrace_tisp_event_thread(void *data)
 {
@@ -13220,6 +14067,7 @@ static long regtrace_framechan_buffer_ioctl(int channel, unsigned int cmd, unsig
         }
         req[1] = REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE;
         req[2] = REGTRACE_TISP_MEMORY_USERPTR;
+        regtrace_framechan_shadow_reset(channel);
         if (copy_to_user((void __user *)(uintptr_t)arg, req, sizeof(req))) {
             return -EFAULT;
         }
@@ -13237,9 +14085,9 @@ static long regtrace_framechan_buffer_ioctl(int channel, unsigned int cmd, unsig
         }
 
         if (cmd == REGTRACE_TISP_VIDIOC_QBUF) {
-            regtrace_core_program_qbuf(channel, words[13], &format);
             regtrace_framechan_record_qbuf(channel, words[0], words[13],
                                            words[14]);
+            regtrace_core_program_qbuf(channel, words[13], &format);
             if (log_count[channel] < 4) {
                 printk(KERN_INFO "tx_isp_t40_recovered: framechan%d qbuf idx=%u len=%u userptr=0x%x\n",
                        channel, words[0], words[14], words[13]);
@@ -13252,21 +14100,48 @@ static long regtrace_framechan_buffer_ioctl(int channel, unsigned int cmd, unsig
         }
 
         regtrace_fill_tisp_buffer_words(channel, words, &format);
-        if (cmd == REGTRACE_TISP_VIDIOC_DQBUF &&
-            channel >= 0 && channel < 4 &&
-            regtrace_irq_frame_done_local_count[channel] &&
-            regtrace_irq_frame_done_local_done_index[channel] !=
-            0xffffffffU) {
-            uint32_t done_index =
-                regtrace_irq_frame_done_local_done_index[channel];
-            uint32_t done_y =
-                regtrace_irq_frame_done_local_done_phys[channel];
+        if (cmd == REGTRACE_TISP_VIDIOC_DQBUF && channel >= 0 &&
+            channel < 4) {
+            uint32_t done_index = 0xffffffffU;
+            uint32_t done_y = 0;
+            uint32_t done_uv = 0;
+            int have_done = regtrace_irq_frame_done_queue_pop(channel,
+                &done_y, &done_uv, &done_index);
 
-            words[0] = done_index;
-            if (done_y)
-                words[13] = done_y;
-            if (!words[14] && done_index < 8)
-                words[14] = regtrace_framechan_qbuf_len[channel][done_index];
+            if (!have_done &&
+                regtrace_irq_frame_done_local_count[channel] &&
+                regtrace_irq_frame_done_local_done_index[channel] !=
+                0xffffffffU) {
+                done_index =
+                    regtrace_irq_frame_done_local_done_index[channel];
+                done_y =
+                    regtrace_irq_frame_done_local_done_phys[channel];
+                done_uv =
+                    regtrace_irq_frame_done_local_done_uv[channel];
+                have_done = 1;
+            }
+
+            if (have_done &&
+                done_index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX) {
+                uint32_t qbuf_y =
+                    regtrace_framechan_qbuf_phys[channel][done_index];
+                uint32_t qbuf_uv =
+                    regtrace_framechan_qbuf_uv[channel][done_index];
+
+                words[0] = done_index;
+                if (qbuf_y)
+                    words[13] = qbuf_y;
+                else if (done_y)
+                    words[13] = done_y;
+                if (!qbuf_uv && done_uv)
+                    regtrace_framechan_qbuf_uv[channel][done_index] = done_uv;
+                if (!words[14])
+                    words[14] =
+                        regtrace_framechan_qbuf_len[channel][done_index];
+                if (!words[14] &&
+                    qbuf_y && qbuf_uv && qbuf_uv > qbuf_y)
+                    words[14] = qbuf_uv - qbuf_y;
+            }
         }
         if (copy_to_user((void __user *)(uintptr_t)arg, words, sizeof(words))) {
             return -EFAULT;
@@ -13356,8 +14231,8 @@ static uint32_t regtrace_framechan_index_for_phys(int channel, uint32_t phys)
         return 0xffffffffU;
 
     count = regtrace_framechan_qbuf_count[channel];
-    if (count > 8)
-        count = 8;
+    if (count > REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        count = REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX;
     for (i = 0; i < count; i++) {
         if (regtrace_framechan_qbuf_phys[channel][i] == phys)
             return i;
@@ -13511,6 +14386,12 @@ static void regtrace_framechan_enqueue_queued(int channel, unsigned char *ctx)
     while (regtrace_is_kernel_ptr((void *)node) && node != head && guard++ < 32) {
         uintptr_t next = *(uint32_t *)node;
         uintptr_t buf = node - REGTRACE_FRAMECHAN_BUFFER_QUEUED_NODE_OFFSET;
+        uint32_t payload;
+        uint32_t phys;
+        uint32_t index;
+        uint32_t write_before = 0;
+        uint32_t write_after = 0;
+        int have_write_index = 0;
         long ret;
 
         if (!regtrace_is_kernel_ptr((void *)buf))
@@ -13518,14 +14399,25 @@ static void regtrace_framechan_enqueue_queued(int channel, unsigned char *ctx)
         *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_QUEUE_OFFSET) = queue;
         *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_STATE_OFFSET) = 3;
         *(uint8_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_DRIVER_STATE_OFFSET) = 3;
+        payload = (uint32_t)(uintptr_t)
+            (buf + REGTRACE_FRAMECHAN_BUFFER_EVENT_PAYLOAD_OFFSET);
+        phys = *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_EVENT_PHYS_OFFSET);
+        index = regtrace_framechan_index_for_phys(channel, phys);
+        if (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX) {
+            write_before =
+                regtrace_tzn_fifo_write_index_count[channel][index];
+            have_write_index = 1;
+        }
         ret = tx_isp_send_event_to_remote((void *)(uintptr_t)remote,
                                           REGTRACE_TX_ISP_EVENT_FRAME_QBUF,
-                                          (void *)(uintptr_t)
-                                              (buf + REGTRACE_FRAMECHAN_BUFFER_EVENT_PAYLOAD_OFFSET));
-        if (ret == -ENOIOCTLCMD)
+                                          (void *)(uintptr_t)payload);
+        if (have_write_index)
+            write_after =
+                regtrace_tzn_fifo_write_index_count[channel][index];
+        if (phys && (ret == -ENOIOCTLCMD ||
+                     (have_write_index && write_after == write_before)))
             ret = regtrace_core_event_qbuf(channel,
-                                           (void *)(uintptr_t)
-                                               (buf + REGTRACE_FRAMECHAN_BUFFER_EVENT_PAYLOAD_OFFSET));
+                                           (void *)(uintptr_t)payload);
         if (ret && ret != -ENOIOCTLCMD) {
             printk(KERN_WARNING "tx_isp_t40_recovered: framechan%d queued qbuf remote=%p buf=%p ret=%ld\n",
                    channel, (void *)(uintptr_t)remote,
@@ -13552,26 +14444,45 @@ static void regtrace_framechan_free_repaired_buffers(int channel,
                                                      uint32_t count)
 {
     uint32_t i;
+    uint32_t owned_count = 0;
+    uint32_t clear_count;
 
     if (!ctx)
         return;
 
-    if (count > 64)
-        count = 64;
-    for (i = 0; i < count; i++) {
-        uintptr_t slot = (uintptr_t)(ctx + REGTRACE_FRAMECHAN_BUFFER_TABLE_OFFSET +
-                                     i * sizeof(uint32_t));
-        uint32_t buf = *(uint32_t *)slot;
+    if (channel >= 0 && channel < 4)
+        owned_count = regtrace_framechan_repaired_buf_count[channel];
 
-        if (regtrace_is_kernel_ptr((void *)(uintptr_t)buf)) {
-            private_kfree((void *)(uintptr_t)buf);
-            if (channel >= 0 && channel < 4)
+    if (count > REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX)
+        count = REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX;
+    if (owned_count > REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX)
+        owned_count = REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX;
+
+    clear_count = count > owned_count ? count : owned_count;
+    for (i = 0; i < clear_count; i++) {
+        if (channel >= 0 && channel < 4) {
+            void *owned = regtrace_framechan_repaired_buf[channel][i];
+
+            if (regtrace_is_kernel_ptr(owned)) {
+                private_kfree(owned);
                 regtrace_reqbufs_repair_diag[channel].freed++;
+            }
+            regtrace_framechan_repaired_buf[channel][i] = NULL;
         }
-        *(uint32_t *)slot = 0;
+        if (i < count) {
+            uintptr_t slot =
+                (uintptr_t)(ctx + REGTRACE_FRAMECHAN_BUFFER_TABLE_OFFSET +
+                            i * sizeof(uint32_t));
+
+            *(uint32_t *)slot = 0;
+        }
     }
     *(uint32_t *)(ctx + REGTRACE_FRAMECHAN_BUFFER_COUNT_OFFSET) = 0;
     regtrace_framechan_reset_queued_list(ctx);
+    if (channel >= 0 && channel < 4) {
+        regtrace_framechan_repaired_buf_count[channel] = 0;
+        regtrace_framechan_shadow_reset(channel);
+    }
 }
 
 static void regtrace_framechan_fill_qbuf_payload(unsigned char *buf,
@@ -13674,8 +14585,10 @@ static long regtrace_framechan_repair_reqbufs(int channel,
         return -EINVAL;
     }
 
-    if (old_count)
+    if (old_count || regtrace_framechan_repaired_buf_count[channel])
         regtrace_framechan_free_repaired_buffers(channel, ctx, old_count);
+    else
+        regtrace_framechan_shadow_reset(channel);
 
     req[0] = count;
     req[1] = type;
@@ -13711,6 +14624,9 @@ static long regtrace_framechan_repair_reqbufs(int channel,
         }
 
         memset(buf, 0, alloc_size);
+        regtrace_framechan_repaired_buf[channel][i] = buf;
+        if (regtrace_framechan_repaired_buf_count[channel] < i + 1)
+            regtrace_framechan_repaired_buf_count[channel] = i + 1;
         *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_QUEUE_OFFSET) =
             (uint32_t)(uintptr_t)(ctx + REGTRACE_FRAMECHAN_VB2_QUEUE_OFFSET);
         *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_STATE_OFFSET) = 0;
@@ -13779,6 +14695,9 @@ static long regtrace_framechan_repair_qbuf_event(int channel,
     uint32_t payload;
     uint32_t phys;
     uint32_t length;
+    uint32_t write_before = 0;
+    uint32_t write_after = 0;
+    int have_write_index = 0;
     long ret;
     long remote_ret;
     static unsigned int log_count[4];
@@ -13815,6 +14734,13 @@ static long regtrace_framechan_repair_qbuf_event(int channel,
 
     buf = *(uint32_t *)(ctx + REGTRACE_FRAMECHAN_BUFFER_TABLE_OFFSET +
                         (index * sizeof(uint32_t)));
+    if (!regtrace_is_kernel_ptr((void *)buf) &&
+        index < REGTRACE_FRAMECHAN_REPAIRED_BUFFER_MAX) {
+        buf = (uintptr_t)regtrace_framechan_repaired_buf[channel][index];
+        if (regtrace_is_kernel_ptr((void *)buf))
+            *(uint32_t *)(ctx + REGTRACE_FRAMECHAN_BUFFER_TABLE_OFFSET +
+                          (index * sizeof(uint32_t))) = (uint32_t)buf;
+    }
     diag->last_buf = (void *)buf;
     if (!regtrace_is_kernel_ptr((void *)buf)) {
         diag->no_buf++;
@@ -13836,7 +14762,12 @@ static long regtrace_framechan_repair_qbuf_event(int channel,
     length = *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_LENGTH_OFFSET);
     diag->last_phys = phys;
     diag->last_length = length;
+    if (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX) {
+        write_before = regtrace_tzn_fifo_write_index_count[channel][index];
+        have_write_index = 1;
+    }
     regtrace_framechan_record_qbuf(channel, index, phys, length);
+    diag->last_msca_before = regtrace_msca_qbuf_count;
 
     *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_QUEUE_OFFSET) = queue;
     *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_STATE_OFFSET) = 3;
@@ -13846,10 +14777,14 @@ static long regtrace_framechan_repair_qbuf_event(int channel,
                                              REGTRACE_TX_ISP_EVENT_FRAME_QBUF,
                                              (void *)(uintptr_t)payload);
     ret = remote_ret;
-    if (ret == -ENOIOCTLCMD || (ret == -EINVAL && phys))
+    if (have_write_index)
+        write_after = regtrace_tzn_fifo_write_index_count[channel][index];
+    if (phys && (ret == -ENOIOCTLCMD || ret == -EINVAL ||
+                 (have_write_index && write_after == write_before)))
         ret = regtrace_core_event_qbuf(channel,
                                        (void *)(uintptr_t)payload);
     diag->last_repair_ret = ret;
+    diag->last_msca_after = regtrace_msca_qbuf_count;
     diag->sent++;
 
     if (log_count[channel] < 8) {
@@ -13860,6 +14795,88 @@ static long regtrace_framechan_repair_qbuf_event(int channel,
                (void *)(uintptr_t)payload, phys, length, remote_ret, ret);
     } else if (log_count[channel] == 8) {
         printk(KERN_INFO "tx_isp_t40_recovered: framechan%d repaired qbuf logging suppressed\n",
+               channel);
+    }
+    log_count[channel]++;
+    return ret;
+}
+
+static long regtrace_framechan_repair_dqbuf_event(int channel,
+                                                  unsigned long arg,
+                                                  const char *source)
+{
+    uint32_t words[REGTRACE_TISP_BUFFER_COMPAT_SIZE / sizeof(uint32_t)];
+    struct regtrace_frame_image_format format;
+    uint32_t index = 0xffffffffU;
+    uint32_t phys = 0;
+    uint32_t uv = 0;
+    long ret = 0;
+    static unsigned int log_count[4];
+
+    if (channel < 0 || channel >= 4 || !arg)
+        return -EINVAL;
+
+    memset(words, 0, sizeof(words));
+    if (copy_from_user(words, (const void __user *)(uintptr_t)arg,
+                       sizeof(words))) {
+        regtrace_framechan_dqbuf_repair_copy_fail[channel]++;
+        regtrace_framechan_dqbuf_repair_last_ret[channel] = -EFAULT;
+        return -EFAULT;
+    }
+
+    if (!regtrace_irq_frame_done_queue_pop(channel, &phys, &uv, &index)) {
+        regtrace_framechan_dqbuf_repair_no_done[channel]++;
+        regtrace_framechan_dqbuf_repair_last_ret[channel] = -ENODATA;
+        return -ENODATA;
+    }
+
+    if (index >= REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX) {
+        regtrace_framechan_dqbuf_repair_bad_index[channel]++;
+        regtrace_framechan_dqbuf_repair_last_ret[channel] = -ENOENT;
+        return -ENOENT;
+    }
+
+    regtrace_get_framechan_format(channel, &format);
+    regtrace_fill_tisp_buffer_words(channel, words, &format);
+    words[0] = index;
+    if (regtrace_framechan_qbuf_phys[channel][index])
+        words[13] = regtrace_framechan_qbuf_phys[channel][index];
+    else if (phys)
+        words[13] = phys;
+    if (!words[14] && regtrace_framechan_qbuf_len[channel][index])
+        words[14] = regtrace_framechan_qbuf_len[channel][index];
+    if (!words[2])
+        words[2] = words[14];
+    if (uv && !regtrace_framechan_qbuf_uv[channel][index])
+        regtrace_framechan_qbuf_uv[channel][index] = uv;
+    if (regtrace_framechan_dma_sync_dqbuf && words[13] && words[14])
+        regtrace_framechan_dma_sync_phys(
+            channel, words[13], words[14],
+            regtrace_framechan_dma_sync_dir(regtrace_framechan_dma_sync_dqbuf_dir),
+            2);
+
+    if (copy_to_user((void __user *)(uintptr_t)arg, words, sizeof(words))) {
+        regtrace_framechan_dqbuf_repair_copy_fail[channel]++;
+        regtrace_framechan_dqbuf_repair_last_ret[channel] = -EFAULT;
+        return -EFAULT;
+    }
+
+    regtrace_framechan_shadow_set_state(channel, index,
+                                        REGTRACE_FRAMECHAN_SHADOW_STATE_FREE,
+                                        REGTRACE_FRAMECHAN_SHADOW_STATE_FREE);
+    regtrace_framechan_shadow_dq_free_count[channel]++;
+    regtrace_framechan_dqbuf_repair_count[channel]++;
+    regtrace_framechan_dqbuf_repair_last_index[channel] = index;
+    regtrace_framechan_dqbuf_repair_last_phys[channel] = phys;
+    regtrace_framechan_dqbuf_repair_last_uv[channel] = uv;
+    regtrace_framechan_dqbuf_repair_last_ret[channel] = 0;
+
+    if (log_count[channel] < 8) {
+        printk(KERN_INFO "tx_isp_t40_recovered: framechan%d repaired dqbuf source=%s idx=%u userptr=0x%x done=0x%x uv=0x%x len=0x%x ret=0\n",
+               channel, source ? source : "?", index, words[13], phys, uv,
+               words[14]);
+    } else if (log_count[channel] == 8) {
+        printk(KERN_INFO "tx_isp_t40_recovered: framechan%d repaired dqbuf logging suppressed\n",
                channel);
     }
     log_count[channel]++;
@@ -14058,6 +15075,20 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
     if (regtrace_framechan_private_cmd(cmd)) {
         int used_oem_private = 0;
         uint32_t msca_qbuf_before = regtrace_msca_qbuf_count;
+        uint32_t qbuf_index = 0xffffffffU;
+        uint32_t qbuf_write_before = 0;
+        int qbuf_write_have = 0;
+
+        if (cmd == REGTRACE_TISP_VIDIOC_QBUF && arg &&
+            channel >= 0 && channel < 4 &&
+            !copy_from_user(&qbuf_index,
+                            (const void __user *)(uintptr_t)arg,
+                            sizeof(qbuf_index)) &&
+            qbuf_index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX) {
+            qbuf_write_before =
+                regtrace_tzn_fifo_write_index_count[channel][qbuf_index];
+            qbuf_write_have = 1;
+        }
 
         if (cmd == REGTRACE_TISP_VIDIOC_WAIT_FRAME &&
             regtrace_enable_framechan_wait_irq_done) {
@@ -14097,7 +15128,10 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
                 qdiag->raw_fail++;
 
             if (ret >= 0 && ctx &&
-                regtrace_msca_qbuf_count == msca_qbuf_before) {
+                (qbuf_write_have ?
+                 regtrace_tzn_fifo_write_index_count[channel][qbuf_index] ==
+                    qbuf_write_before :
+                 regtrace_msca_qbuf_count == msca_qbuf_before)) {
                 long qret = regtrace_framechan_repair_qbuf_event(channel, ctx, arg,
                     used_oem_private ? "oem-qbuf" : "private-qbuf");
 
@@ -14116,6 +15150,18 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
             } else if (ret >= 0) {
                 qdiag->skipped_msca_done++;
                 qdiag->last_msca_after = regtrace_msca_qbuf_count;
+            }
+        }
+        if (cmd == REGTRACE_TISP_VIDIOC_DQBUF && ret >= 0 &&
+            used_oem_private &&
+            channel >= 0 && channel < 4 &&
+            regtrace_enable_framechan_wait_irq_done) {
+            long dqret = regtrace_framechan_repair_dqbuf_event(channel, arg,
+                used_oem_private ? "oem-dqbuf" : "private-dqbuf");
+
+            if (dqret && dqret != -ENODATA) {
+                printk(KERN_WARNING "tx_isp_t40_recovered: framechan%d dqbuf repair ret=%ld kept ioctl ret=%ld\n",
+                       channel, dqret, ret);
             }
         }
         if (cmd == REGTRACE_TISP_VIDIOC_STREAMON ||
@@ -14410,7 +15456,8 @@ static void regtrace_debug_proc_show_core_regs(struct seq_file *m)
                readl(regs + REGTRACE_T40_MSCA_WORK_CFG_REG),
                readl(regs + 0x1602c));
     seq_printf(m,
-               "core_t40_shadow r50320=0x%x r50324=0x%x r50420=0x%x kick_reg=0x%x kick_value=0x%x\n",
+               "core_t40_shadow r834=0x%x r50320=0x%x r50324=0x%x r50420=0x%x kick_reg=0x%x kick_value=0x%x\n",
+               readl(regs + 0x834),
                readl(regs + REGTRACE_T40_MSCA_SHADOW_CMD_REG),
                readl(regs + REGTRACE_T40_MSCA_SHADOW_FIFO_REG),
                readl(regs + REGTRACE_T40_MSCA_SHADOW_STATUS_REG),
@@ -14474,6 +15521,22 @@ static void regtrace_debug_proc_show_core_regs(struct seq_file *m)
                readl(regs + REGTRACE_T40_MSCA_Y_FIFO_READ_REG +
                      (2 * REGTRACE_T40_MSCA_CH_BANK_STRIDE)),
                readl(regs + REGTRACE_T40_MSCA_UV_FIFO_READ_REG +
+                     (2 * REGTRACE_T40_MSCA_CH_BANK_STRIDE)));
+    seq_printf(m,
+               "core_msca_t40_ctrl ch0_y=0x%x ch0_y_stat=0x%x ch0_uv=0x%x ch1_y=0x%x ch1_y_stat=0x%x ch1_uv=0x%x ch2_y=0x%x ch2_y_stat=0x%x ch2_uv=0x%x\n",
+               readl(regs + REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG),
+               readl(regs + 0x1617c),
+               readl(regs + REGTRACE_T40_MSCA_UV_FIFO_CTRL_REG),
+               readl(regs + REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG +
+                     REGTRACE_T40_MSCA_CH_BANK_STRIDE),
+               readl(regs + 0x1617c + REGTRACE_T40_MSCA_CH_BANK_STRIDE),
+               readl(regs + REGTRACE_T40_MSCA_UV_FIFO_CTRL_REG +
+                     REGTRACE_T40_MSCA_CH_BANK_STRIDE),
+               readl(regs + REGTRACE_T40_MSCA_Y_FIFO_CTRL_REG +
+                     (2 * REGTRACE_T40_MSCA_CH_BANK_STRIDE)),
+               readl(regs + 0x1617c +
+                     (2 * REGTRACE_T40_MSCA_CH_BANK_STRIDE)),
+               readl(regs + REGTRACE_T40_MSCA_UV_FIFO_CTRL_REG +
                      (2 * REGTRACE_T40_MSCA_CH_BANK_STRIDE)));
 }
 
@@ -14610,9 +15673,37 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_vic_start_call_count,
                regtrace_vic_irq_enable_count,
                regtrace_skip_vic_irq_enable ? 1U : 0U);
-    seq_printf(m, "t40_bringup_profile=%u direct_vic_feed=%u\n",
+    seq_printf(m, "t40_bringup_profile=%u direct_vic_feed=%u isp_irq_passthrough=%u\n",
                regtrace_t40_bringup_profile ? 1U : 0U,
-               regtrace_t40_profile_direct_vic_feed ? 1U : 0U);
+               regtrace_t40_profile_direct_vic_feed ? 1U : 0U,
+               regtrace_t40_profile_isp_irq_passthrough ? 1U : 0U);
+    seq_printf(m,
+               "framechan_dma_sync qbuf=%u dqbuf=%u qdir=%u ddir=%u qcount=%u,%u,%u,%u dcount=%u,%u,%u,%u skip=%u,%u,%u,%u last=stage%u ch0:0x%x/%u/%u/%p ch1:0x%x/%u/%u/%p\n",
+               regtrace_framechan_dma_sync_qbuf ? 1U : 0U,
+               regtrace_framechan_dma_sync_dqbuf ? 1U : 0U,
+               regtrace_framechan_dma_sync_qbuf_dir,
+               regtrace_framechan_dma_sync_dqbuf_dir,
+               regtrace_framechan_dma_sync_qbuf_count[0],
+               regtrace_framechan_dma_sync_qbuf_count[1],
+               regtrace_framechan_dma_sync_qbuf_count[2],
+               regtrace_framechan_dma_sync_qbuf_count[3],
+               regtrace_framechan_dma_sync_dqbuf_count[0],
+               regtrace_framechan_dma_sync_dqbuf_count[1],
+               regtrace_framechan_dma_sync_dqbuf_count[2],
+               regtrace_framechan_dma_sync_dqbuf_count[3],
+               regtrace_framechan_dma_sync_skip_count[0],
+               regtrace_framechan_dma_sync_skip_count[1],
+               regtrace_framechan_dma_sync_skip_count[2],
+               regtrace_framechan_dma_sync_skip_count[3],
+               regtrace_framechan_dma_sync_last_stage[0],
+               regtrace_framechan_dma_sync_last_phys[0],
+               regtrace_framechan_dma_sync_last_len[0],
+               regtrace_framechan_dma_sync_last_dir[0],
+               (void *)(uintptr_t)regtrace_framechan_dma_sync_last_vaddr[0],
+               regtrace_framechan_dma_sync_last_phys[1],
+               regtrace_framechan_dma_sync_last_len[1],
+               regtrace_framechan_dma_sync_last_dir[1],
+               (void *)(uintptr_t)regtrace_framechan_dma_sync_last_vaddr[1]);
     seq_printf(m,
                "core_direct activate_param=%u state_only=%u clk_mask=0x%x probe_state=%u probe_clk_mask=0x%x requested=0x%x point=%u attempts=%u clk_enable=%u state_writes=%u last_mask=0x%x ret=%ld state=%u/%u/%u->%u/%u/%u\n",
                regtrace_activate_core_direct ? 1U : 0U,
@@ -14661,11 +15752,19 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_core_irq_cfg0_value,
                regtrace_core_irq_cfg1_value);
     seq_printf(m,
-               "isp_irq_ack_only_param=%u disable_after=%u disabled=%u disabled_irq=%u count=%u core=%u fs=%u last_irq=%u last_is_fs=%u dev=%p status=0x%x/0x%x err=0x%x/0x%x mask=0x%x/0x%x errmask=0x%x/0x%x sec0=0x%x ack0=0x%x cfg0=0x%x\n",
+               "isp_irq_ack_only_param=%u disable_after=%u disabled=%u disabled_irq=%u fd_masks=0x%x/0x%x/0x%x fd_count=%u fd_skip=%u fd_last=0x%x/0x%x/0x%x count=%u core=%u fs=%u last_irq=%u last_is_fs=%u dev=%p status=0x%x/0x%x err=0x%x/0x%x mask=0x%x/0x%x errmask=0x%x/0x%x sec0=0x%x ack0=0x%x cfg0=0x%x\n",
                regtrace_enable_isp_irq_ack_only ? 1U : 0U,
                regtrace_isp_irq_ack_only_disable_after,
                regtrace_isp_irq_ack_only_disable_count,
                regtrace_isp_irq_ack_only_last_disabled_irq,
+               regtrace_isp_irq_frame_done_status0_mask,
+               regtrace_isp_irq_frame_done_status1_mask,
+               regtrace_isp_irq_frame_done_sec_status0_mask,
+               regtrace_isp_irq_ack_only_frame_done_count,
+               regtrace_isp_irq_ack_only_frame_done_skip_count,
+               regtrace_isp_irq_ack_only_last_frame_done_bits0,
+               regtrace_isp_irq_ack_only_last_frame_done_bits1,
+               regtrace_isp_irq_ack_only_last_frame_done_sec_bits0,
                regtrace_isp_irq_ack_only_count,
                regtrace_isp_irq_ack_only_core_count,
                regtrace_isp_irq_ack_only_fs_count,
@@ -15041,7 +16140,7 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_tisp_desc_oem_fill_last_limits >> 16,
                regtrace_tisp_desc_oem_fill_last_line);
     seq_printf(m,
-               "tisp_main_init state_param=%u param_alloc_param=%u size_reg_param=%u scalar_param=%u dma_param=%u tail_param=%u sensor_init_param=%u msca_oem_param=%u event_init_param=%u tiziano_param=%u reg20_param=0x%x top40_param=0x%x reg48_param=0x%x reg6c_param=0x%x reg60_param=0x%x reg88_override=0x%x count=%u state_count=%u param_alloc_count=%u param_alloc_ret=%ld param_mode=%u param_flags=0x%x param_ptrs=%p/%p/%p/%p/%p size_count=%u scalar_count=%u dma_count=%u dma_allocs=%u dma_mask=0x%x dma_fail=%u dma_ret=%ld tail_count=%u sensor_init_count=%u sensor_init_ret=%ld sensor_src=%p ctrl=0:0x%x 28:0x%x 30:0x%x 144:%pS msca_oem_count=%u msca_oem_last=%ux%u flags=0x%x msca_oem_ret=%ld event_init_count=%u event_init_ret=%ld tiziano_count=%u last=%ux%u code=0x%x mode=%u wdr=%u daynight=%u msca=0x%x regs=20:0x%x 88:0x%x 40:0x%x 6c:0x%x 48:0x%x 60:0x%x d000:0x%x d004:0x%x dma_phys=%x/%x/%x/%x/%x a0=%p path=%p ret=%ld\n",
+               "tisp_main_init state_param=%u param_alloc_param=%u size_reg_param=%u scalar_param=%u dma_param=%u tail_param=%u sensor_init_param=%u msca_oem_param=%u event_init_param=%u tiziano_param=%u reg20_param=0x%x top40_param=0x%x reg48_param=0x%x reg6c_param=0x%x reg60_param=0x%x reg88_override=0x%x count=%u state_count=%u param_alloc_count=%u param_alloc_ret=%ld param_mode=%u param_flags=0x%x param_ptrs=%p/%p/%p/%p/%p size_count=%u scalar_count=%u dma_count=%u dma_allocs=%u dma_mask=0x%x dma_fail=%u dma_ret=%ld tail_count=%u sensor_init_count=%u sensor_init_ret=%ld sensor_src=%p ctrl=0:0x%x 28:0x%x 30:0x%x 144:%pS msca_oem_count=%u msca_oem_last=%ux%u flags=0x%x msca_oem_ret=%ld event_init_count=%u event_init_ret=%ld tiziano_count=%u last=%ux%u code=0x%x mode=%u wdr=%u daynight=%u msca=0x%x regs=20:0x%x 88:0x%x 40:0x%x 6c:0x%x 48:0x%x 60:0x%x d000:0x%x d004:0x%x dma_phys=%x/%x/%x/%x/%x dma_kseg0=%u tispinfo_dma=%u tispinfo_count=%u dma_hw=%x/%x/%x/%x/%x a0=%p path=%p ret=%ld\n",
                regtrace_enable_tisp_main_init_state ? 1U : 0U,
                regtrace_enable_tisp_main_init_param_alloc ? 1U : 0U,
                regtrace_enable_tisp_main_init_size_reg ? 1U : 0U,
@@ -15112,6 +16211,14 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_tisp_dma_bufs[2].phys,
                regtrace_tisp_dma_bufs[3].phys,
                regtrace_tisp_dma_bufs[4].phys,
+               regtrace_enable_tisp_main_init_dma_kseg0 ? 1U : 0U,
+               regtrace_enable_tisp_main_init_tispinfo_dma ? 1U : 0U,
+               regtrace_tisp_main_init_tispinfo_count,
+               regtrace_tisp_main_init_dma_last_hw[0],
+               regtrace_tisp_main_init_dma_last_hw[1],
+               regtrace_tisp_main_init_dma_last_hw[2],
+               regtrace_tisp_main_init_dma_last_hw[3],
+               regtrace_tisp_main_init_dma_last_hw[4],
                (void *)regtrace_tisp_main_init_last_a0,
                (void *)regtrace_tisp_main_init_last_path,
                regtrace_tisp_main_init_last_ret);
@@ -15135,8 +16242,9 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_tisp_main_init_scalar_late_last_channel,
                regtrace_tisp_main_init_scalar_late_last_ret);
     seq_printf(m,
-               "vic_mdma_qbuf_ring_param=%u ctrl_param=0x%x stride_param=%u uv_off_param=0x%x count=%u last_ch=%u last_ctrl=0x%x last_y0=0x%x last_uv0=0x%x last_ret=%ld qbuf_count=%u,%u,%u,%u qbuf0=0x%x/0x%x qbuf1=0x%x/0x%x\n",
+               "vic_mdma_qbuf_ring_param=%u no_ring_param=%u ctrl_param=0x%x stride_param=%u uv_off_param=0x%x count=%u last_ch=%u last_ctrl=0x%x last_y0=0x%x last_uv0=0x%x last_ret=%ld qbuf_count=%u,%u,%u,%u qbuf0=0x%x/0x%x/%u/%u qbuf1=0x%x/0x%x/%u/%u repaired_owned=%u,%u,%u,%u\n",
                regtrace_enable_vic_mdma_qbuf_ring ? 1U : 0U,
+               regtrace_enable_vic_mdma_no_ring ? 1U : 0U,
                regtrace_vic_mdma_qbuf_ring_ctrl_value,
                regtrace_vic_mdma_qbuf_ring_stride_override,
                regtrace_vic_mdma_qbuf_ring_uv_offset_override,
@@ -15152,10 +16260,18 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_framechan_qbuf_count[3],
                regtrace_framechan_qbuf_phys[0][0],
                regtrace_framechan_qbuf_len[0][0],
+               regtrace_framechan_qbuf_state[0][0],
+               regtrace_framechan_qbuf_driver_state[0][0],
                regtrace_framechan_qbuf_phys[1][0],
-               regtrace_framechan_qbuf_len[1][0]);
+               regtrace_framechan_qbuf_len[1][0],
+               regtrace_framechan_qbuf_state[1][0],
+               regtrace_framechan_qbuf_driver_state[1][0],
+               regtrace_framechan_repaired_buf_count[0],
+               regtrace_framechan_repaired_buf_count[1],
+               regtrace_framechan_repaired_buf_count[2],
+               regtrace_framechan_repaired_buf_count[3]);
     seq_printf(m,
-               "tzn_fifo write=%u read=%u have_read=%u last_group=%u last_channel=%u last_y=0x%x last_uv=0x%x last_adjust=0x%x last_have=0x%x\n",
+               "tzn_fifo write=%u read=%u have_read=%u last_group=%u last_channel=%u last_y=0x%x last_uv=0x%x last_adjust=0x%x last_have=0x%x last_irq_status=0x%x ctrl_on_set_fmt=%u ctrl_on_qbuf=%u addr_tag_write=%u addr_tag_mode=%u last_write_raw=0x%x/0x%x last_write_tagged=0x%x/0x%x ctrl_set_fmt=%u last_set_fmt=%u/%ld ctrl_count=%u ctrl_last=%u/%u y=0x%x/0x%x uv=0x%x/0x%x ctrl_ret=%ld\n",
                regtrace_tzn_fifo_write_count,
                regtrace_tzn_fifo_read_count,
                regtrace_tzn_fifo_have_read_count,
@@ -15164,7 +16280,63 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_tzn_fifo_last_y,
                regtrace_tzn_fifo_last_uv,
                regtrace_tzn_fifo_last_adjust,
-               regtrace_tzn_fifo_last_have_read);
+               regtrace_tzn_fifo_last_have_read,
+               regtrace_tzn_fifo_last_irq_status,
+               regtrace_t40_msca_fifo_ctrl_on_set_fmt ? 1U : 0U,
+               regtrace_t40_msca_fifo_ctrl_on_qbuf ? 1U : 0U,
+               regtrace_t40_msca_fifo_addr_tag_write ? 1U : 0U,
+               regtrace_t40_msca_fifo_addr_tag_mode,
+               regtrace_tzn_fifo_last_write_raw_y,
+               regtrace_tzn_fifo_last_write_raw_uv,
+               regtrace_tzn_fifo_last_write_tagged_y,
+               regtrace_tzn_fifo_last_write_tagged_uv,
+               regtrace_tzn_fifo_ctrl_set_fmt_count,
+               regtrace_tzn_fifo_ctrl_set_fmt_last_channel,
+               regtrace_tzn_fifo_ctrl_set_fmt_last_ret,
+               regtrace_tzn_fifo_ctrl_count,
+               regtrace_tzn_fifo_ctrl_last_group,
+               regtrace_tzn_fifo_ctrl_last_channel,
+               regtrace_tzn_fifo_ctrl_last_y,
+               regtrace_tzn_fifo_ctrl_last_y_readback,
+               regtrace_tzn_fifo_ctrl_last_uv,
+               regtrace_tzn_fifo_ctrl_last_uv_readback,
+               regtrace_tzn_fifo_ctrl_last_ret);
+    seq_printf(m,
+               "t40_fifo_ctrl_values ch0=0x%x/0x%x ch1=0x%x/0x%x ch2=0x%x/0x%x\n",
+               regtrace_t40_msca_fifo_ch0_y_ctrl,
+               regtrace_t40_msca_fifo_ch0_uv_ctrl,
+               regtrace_t40_msca_fifo_ch1_y_ctrl,
+               regtrace_t40_msca_fifo_ch1_uv_ctrl,
+               regtrace_t40_msca_fifo_ch2_y_ctrl,
+               regtrace_t40_msca_fifo_ch2_uv_ctrl);
+    seq_printf(m,
+               "tzn_fifo_idx last_write=%u last_read=%u write_unknown=%u,%u,%u,%u read_unknown=%u,%u,%u,%u ch0_write=%u,%u,%u,%u ch0_read=%u,%u,%u,%u ch1_write=%u,%u,%u,%u ch1_read=%u,%u,%u,%u\n",
+               regtrace_tzn_fifo_last_write_index,
+               regtrace_tzn_fifo_last_read_index,
+               regtrace_tzn_fifo_write_unknown_count[0],
+               regtrace_tzn_fifo_write_unknown_count[1],
+               regtrace_tzn_fifo_write_unknown_count[2],
+               regtrace_tzn_fifo_write_unknown_count[3],
+               regtrace_tzn_fifo_read_unknown_count[0],
+               regtrace_tzn_fifo_read_unknown_count[1],
+               regtrace_tzn_fifo_read_unknown_count[2],
+               regtrace_tzn_fifo_read_unknown_count[3],
+               regtrace_tzn_fifo_write_index_count[0][0],
+               regtrace_tzn_fifo_write_index_count[0][1],
+               regtrace_tzn_fifo_write_index_count[0][2],
+               regtrace_tzn_fifo_write_index_count[0][3],
+               regtrace_tzn_fifo_read_index_count[0][0],
+               regtrace_tzn_fifo_read_index_count[0][1],
+               regtrace_tzn_fifo_read_index_count[0][2],
+               regtrace_tzn_fifo_read_index_count[0][3],
+               regtrace_tzn_fifo_write_index_count[1][0],
+               regtrace_tzn_fifo_write_index_count[1][1],
+               regtrace_tzn_fifo_write_index_count[1][2],
+               regtrace_tzn_fifo_write_index_count[1][3],
+               regtrace_tzn_fifo_read_index_count[1][0],
+               regtrace_tzn_fifo_read_index_count[1][1],
+               regtrace_tzn_fifo_read_index_count[1][2],
+               regtrace_tzn_fifo_read_index_count[1][3]);
     seq_printf(m,
                "framechan_wait_msca param=%u timeout_ms=%u count=%u,%u,%u,%u hit=%u,%u,%u,%u timeout=%u,%u,%u,%u last_y=0x%x,0x%x,0x%x,0x%x last_uv=0x%x,0x%x,0x%x,0x%x last_idx=%u,%u,%u,%u last_loops=%u,%u,%u,%u last_timeout=%u,%u,%u,%u\n",
                regtrace_enable_framechan_wait_msca_poll ? 1U : 0U,
@@ -15308,11 +16480,23 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_irq_frame_done_last_uv,
                regtrace_irq_frame_done_last_index,
                regtrace_irq_frame_done_last_pad,
-               regtrace_irq_frame_done_last_remote,
-               regtrace_irq_frame_done_last_ret);
-    seq_printf(m,
-               "irq_frame_done_local delivery_mode=%u touch_buf=%u local=%u,%u,%u,%u no_ctx=%u,%u,%u,%u no_buf=%u,%u,%u,%u done_phys=0x%x,0x%x,0x%x,0x%x done_uv=0x%x,0x%x,0x%x,0x%x done_idx=%u,%u,%u,%u old_state=%u,%u,%u,%u old_driver=%u,%u,%u,%u\n",
+	               regtrace_irq_frame_done_last_remote,
+	               regtrace_irq_frame_done_last_ret);
+	    seq_printf(m,
+	               "irq_frame_done_delay ms=%u count=%u,%u,%u,%u last_ms=%u,%u,%u,%u\n",
+	               regtrace_irq_frame_done_delay_ms,
+	               regtrace_irq_frame_done_delay_count[0],
+	               regtrace_irq_frame_done_delay_count[1],
+	               regtrace_irq_frame_done_delay_count[2],
+	               regtrace_irq_frame_done_delay_count[3],
+	               regtrace_irq_frame_done_delay_last_ms[0],
+	               regtrace_irq_frame_done_delay_last_ms[1],
+	               regtrace_irq_frame_done_delay_last_ms[2],
+	               regtrace_irq_frame_done_delay_last_ms[3]);
+	    seq_printf(m,
+	               "irq_frame_done_local delivery_mode=%u match_buf=%u touch_buf=%u local=%u,%u,%u,%u no_ctx=%u,%u,%u,%u no_buf=%u,%u,%u,%u match=%u,%u,%u,%u shadow_done=%u,%u,%u,%u done_phys=0x%x,0x%x,0x%x,0x%x done_uv=0x%x,0x%x,0x%x,0x%x done_idx=%u,%u,%u,%u old_state=%u,%u,%u,%u old_driver=%u,%u,%u,%u\n",
                regtrace_irq_frame_done_delivery_mode,
+               regtrace_irq_frame_done_local_match_buf ? 1U : 0U,
                regtrace_irq_frame_done_local_touch_buf ? 1U : 0U,
                regtrace_irq_frame_done_local_count[0],
                regtrace_irq_frame_done_local_count[1],
@@ -15326,6 +16510,14 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_irq_frame_done_local_no_buf_count[1],
                regtrace_irq_frame_done_local_no_buf_count[2],
                regtrace_irq_frame_done_local_no_buf_count[3],
+               regtrace_irq_frame_done_local_match_count[0],
+               regtrace_irq_frame_done_local_match_count[1],
+               regtrace_irq_frame_done_local_match_count[2],
+               regtrace_irq_frame_done_local_match_count[3],
+               regtrace_irq_frame_done_local_shadow_done_count[0],
+               regtrace_irq_frame_done_local_shadow_done_count[1],
+               regtrace_irq_frame_done_local_shadow_done_count[2],
+               regtrace_irq_frame_done_local_shadow_done_count[3],
                regtrace_irq_frame_done_local_done_phys[0],
                regtrace_irq_frame_done_local_done_phys[1],
                regtrace_irq_frame_done_local_done_phys[2],
@@ -15346,6 +16538,36 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_irq_frame_done_local_old_driver_state[1],
                regtrace_irq_frame_done_local_old_driver_state[2],
                regtrace_irq_frame_done_local_old_driver_state[3]);
+    seq_printf(m,
+               "irq_frame_done_queue depth=%u,%u,%u,%u push=%u,%u,%u,%u pop=%u,%u,%u,%u empty_pop=%u,%u,%u,%u overflow=%u,%u,%u,%u last_pop=0x%x/%u,0x%x/%u,0x%x/%u,0x%x/%u\n",
+               regtrace_irq_frame_done_queue_count[0],
+               regtrace_irq_frame_done_queue_count[1],
+               regtrace_irq_frame_done_queue_count[2],
+               regtrace_irq_frame_done_queue_count[3],
+               regtrace_irq_frame_done_queue_push_count[0],
+               regtrace_irq_frame_done_queue_push_count[1],
+               regtrace_irq_frame_done_queue_push_count[2],
+               regtrace_irq_frame_done_queue_push_count[3],
+               regtrace_irq_frame_done_queue_pop_count[0],
+               regtrace_irq_frame_done_queue_pop_count[1],
+               regtrace_irq_frame_done_queue_pop_count[2],
+               regtrace_irq_frame_done_queue_pop_count[3],
+               regtrace_irq_frame_done_queue_empty_pop_count[0],
+               regtrace_irq_frame_done_queue_empty_pop_count[1],
+               regtrace_irq_frame_done_queue_empty_pop_count[2],
+               regtrace_irq_frame_done_queue_empty_pop_count[3],
+               regtrace_irq_frame_done_queue_overflow_count[0],
+               regtrace_irq_frame_done_queue_overflow_count[1],
+               regtrace_irq_frame_done_queue_overflow_count[2],
+               regtrace_irq_frame_done_queue_overflow_count[3],
+               regtrace_irq_frame_done_queue_last_pop_phys[0],
+               regtrace_irq_frame_done_queue_last_pop_index[0],
+               regtrace_irq_frame_done_queue_last_pop_phys[1],
+               regtrace_irq_frame_done_queue_last_pop_index[1],
+               regtrace_irq_frame_done_queue_last_pop_phys[2],
+               regtrace_irq_frame_done_queue_last_pop_index[2],
+               regtrace_irq_frame_done_queue_last_pop_phys[3],
+               regtrace_irq_frame_done_queue_last_pop_index[3]);
     seq_printf(m,
                "vic_irq_ack_filter_param=%u count=%u frame=%u mdma0=%u mdma1=%u other=%u last_irq=%u last_idx=%u status=0x%x/0x%x mask=0x%x/0x%x pending=0x%x/0x%x\n",
                regtrace_enable_vic_irq_ack_filter ? 1U : 0U,
@@ -15416,6 +16638,15 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_skip_sensor_video_stream ? 1U : 0U,
                regtrace_csi_direct_stage_limit,
                regtrace_csi_settle_override);
+    seq_printf(m,
+               "t40_msca_work_en dma_bits=%u dma_mask=0x%x writes=%u active=0x%x hw=0x%x readback=0x%x ret=%ld\n",
+               regtrace_t40_msca_work_en_dma_bits ? 1U : 0U,
+               regtrace_t40_msca_work_en_dma_mask,
+               regtrace_t40_msca_work_en_write_count,
+               regtrace_t40_msca_work_en_last_active,
+               regtrace_t40_msca_work_en_last_hw,
+               regtrace_t40_msca_work_en_last_readback,
+               regtrace_t40_msca_work_en_last_ret);
     seq_printf(m,
                "vic_start_diag attempts=%u ch=%u idx=%u ret=%d wait=%u vic=%p regs=%p base=%p attr=%p %ux%u twidth=%u csi=%u bpp=%u frame=%u sensor=%u fid=%u ctrl=0x%x reg10c=0x%x unlock=0x%x\n",
                regtrace_vic_start_diag.attempts,
@@ -15632,7 +16863,7 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                        qdiag->no_buf, qdiag->last_raw_ret,
                        qdiag->last_repair_ret, qdiag->last_index,
                        qdiag->last_count, qdiag->last_phys,
-                       (qdiag->last_index < 8) ?
+                       (qdiag->last_index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX) ?
                            regtrace_framechan_qbuf_uv[i][qdiag->last_index] : 0,
                        qdiag->last_length, qdiag->last_msca_before,
                        qdiag->last_msca_after);
@@ -15641,6 +16872,34 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                        i, qdiag->last_ctx, qdiag->last_queue,
                        qdiag->last_remote, qdiag->last_buf,
                        qdiag->last_payload);
+            seq_printf(m,
+                       "framechan%d dqbuf_repair count=%u no_done=%u copy_fail=%u bad_index=%u idx=%u phys=0x%x uv=0x%x ret=%ld\n",
+                       i, regtrace_framechan_dqbuf_repair_count[i],
+                       regtrace_framechan_dqbuf_repair_no_done[i],
+                       regtrace_framechan_dqbuf_repair_copy_fail[i],
+                       regtrace_framechan_dqbuf_repair_bad_index[i],
+                       regtrace_framechan_dqbuf_repair_last_index[i],
+                       regtrace_framechan_dqbuf_repair_last_phys[i],
+                       regtrace_framechan_dqbuf_repair_last_uv[i],
+                       regtrace_framechan_dqbuf_repair_last_ret[i]);
+            seq_printf(m,
+                       "framechan%d qbuf_shadow count=%u owned=%u submit_next=%u no_queued=%u fail=%u last_next=%u/%ld dq_free=%u buf0=0x%x/0x%x/%u/%u buf1=0x%x/0x%x/%u/%u\n",
+                       i, regtrace_framechan_qbuf_count[i],
+                       regtrace_framechan_repaired_buf_count[i],
+                       regtrace_framechan_shadow_submit_next_count[i],
+                       regtrace_framechan_shadow_submit_next_no_queued[i],
+                       regtrace_framechan_shadow_submit_next_fail[i],
+                       regtrace_framechan_shadow_submit_next_last_index[i],
+                       regtrace_framechan_shadow_submit_next_last_ret[i],
+                       regtrace_framechan_shadow_dq_free_count[i],
+                       regtrace_framechan_qbuf_phys[i][0],
+                       regtrace_framechan_qbuf_len[i][0],
+                       regtrace_framechan_qbuf_state[i][0],
+                       regtrace_framechan_qbuf_driver_state[i][0],
+                       regtrace_framechan_qbuf_phys[i][1],
+                       regtrace_framechan_qbuf_len[i][1],
+                       regtrace_framechan_qbuf_state[i][1],
+                       regtrace_framechan_qbuf_driver_state[i][1]);
         }
     }
     return 0;
@@ -34791,14 +36050,80 @@ int32_t private_math_exp2(void)
     return 0;
 }
 
+static void regtrace_irq_frame_done_queue_push(int channel, uint32_t y,
+                                               uint32_t uv, uint32_t index)
+{
+    unsigned long flags;
+    uint32_t slot;
+
+    if (channel < 0 || channel >= 4 || !y)
+        return;
+
+    spin_lock_irqsave(&regtrace_irq_frame_done_queue_lock[channel], flags);
+    if (regtrace_irq_frame_done_queue_count[channel] >=
+        REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX) {
+        regtrace_irq_frame_done_queue_head[channel] =
+            (regtrace_irq_frame_done_queue_head[channel] + 1) %
+            REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX;
+        regtrace_irq_frame_done_queue_count[channel]--;
+        regtrace_irq_frame_done_queue_overflow_count[channel]++;
+    }
+
+    slot = regtrace_irq_frame_done_queue_tail[channel];
+    regtrace_irq_frame_done_queue_phys[channel][slot] = y;
+    regtrace_irq_frame_done_queue_uv[channel][slot] = uv;
+    regtrace_irq_frame_done_queue_index[channel][slot] = index;
+    regtrace_irq_frame_done_queue_tail[channel] =
+        (slot + 1) % REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX;
+    regtrace_irq_frame_done_queue_count[channel]++;
+    regtrace_irq_frame_done_queue_push_count[channel]++;
+    spin_unlock_irqrestore(&regtrace_irq_frame_done_queue_lock[channel],
+                           flags);
+}
+
+static int regtrace_irq_frame_done_queue_pop(int channel, uint32_t *y,
+                                             uint32_t *uv, uint32_t *index)
+{
+    unsigned long flags;
+    uint32_t slot;
+    int ret = 0;
+
+    if (channel < 0 || channel >= 4 || !y || !uv || !index)
+        return 0;
+
+    spin_lock_irqsave(&regtrace_irq_frame_done_queue_lock[channel], flags);
+    if (!regtrace_irq_frame_done_queue_count[channel]) {
+        regtrace_irq_frame_done_queue_empty_pop_count[channel]++;
+        goto out;
+    }
+
+    slot = regtrace_irq_frame_done_queue_head[channel];
+    *y = regtrace_irq_frame_done_queue_phys[channel][slot];
+    *uv = regtrace_irq_frame_done_queue_uv[channel][slot];
+    *index = regtrace_irq_frame_done_queue_index[channel][slot];
+    regtrace_irq_frame_done_queue_head[channel] =
+        (slot + 1) % REGTRACE_IRQ_FRAME_DONE_QUEUE_MAX;
+    regtrace_irq_frame_done_queue_count[channel]--;
+    regtrace_irq_frame_done_queue_pop_count[channel]++;
+    regtrace_irq_frame_done_queue_last_pop_phys[channel] = *y;
+    regtrace_irq_frame_done_queue_last_pop_uv[channel] = *uv;
+    regtrace_irq_frame_done_queue_last_pop_index[channel] = *index;
+    ret = *y != 0;
+
+out:
+    spin_unlock_irqrestore(&regtrace_irq_frame_done_queue_lock[channel],
+                           flags);
+    return ret;
+}
+
 static long regtrace_irq_frame_done_record_local(int channel, uint32_t source,
                                                  uint32_t y, uint32_t uv,
                                                  uint32_t index)
 {
-    unsigned char *ctx;
-    uintptr_t buf = 0;
-    uint32_t count;
-    uint32_t i;
+    uint32_t count = 0;
+    uint32_t old_state = 0xffffffffU;
+    uint32_t old_driver_state = 0xffffffffU;
+    uint32_t require_match;
     long ret = 0;
     static unsigned int log_count[4];
 
@@ -34808,65 +36133,61 @@ static long regtrace_irq_frame_done_record_local(int channel, uint32_t source,
     if (index == 0xffffffffU)
         index = regtrace_framechan_index_for_phys(channel, y);
 
-    regtrace_irq_frame_done_local_count[channel]++;
-    regtrace_irq_frame_done_local_done_phys[channel] = y;
-    regtrace_irq_frame_done_local_done_uv[channel] = uv;
-    regtrace_irq_frame_done_local_done_index[channel] = index;
-    regtrace_framechan_wait_irq_signal_count[channel]++;
-    atomic_inc(&regtrace_irq_frame_done_ready[channel]);
-    wake_up_interruptible(&regtrace_irq_frame_done_waitq[channel]);
+    require_match = regtrace_irq_frame_done_local_match_buf ||
+                    regtrace_irq_frame_done_local_touch_buf;
+    if (!require_match)
+        goto queue_done;
 
-    if (!regtrace_irq_frame_done_local_touch_buf)
-        goto out;
+    regtrace_irq_frame_done_local_old_state[channel] = 0xffffffffU;
+    regtrace_irq_frame_done_local_old_driver_state[channel] = 0xffffffffU;
 
-    ctx = regtrace_active_framechan_context(channel);
-    if (!ctx) {
+    count = regtrace_framechan_qbuf_count[channel];
+    if (count > REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        count = REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX;
+    while (count && !regtrace_framechan_qbuf_phys[channel][count - 1])
+        count--;
+    if (!count) {
         regtrace_irq_frame_done_local_no_ctx_count[channel]++;
-        ret = -ENODEV;
+        ret = -ENOENT;
         goto out;
     }
 
-    count = *(uint32_t *)(ctx + REGTRACE_FRAMECHAN_BUFFER_COUNT_OFFSET);
-    if (count > 64)
-        count = 64;
-
-    if (index < count) {
-        buf = *(uint32_t *)(ctx + REGTRACE_FRAMECHAN_BUFFER_TABLE_OFFSET +
-                            index * sizeof(uint32_t));
+    if (index >= count || regtrace_framechan_qbuf_phys[channel][index] != y) {
+        index = regtrace_framechan_index_for_phys(channel, y);
+        regtrace_irq_frame_done_local_done_index[channel] = index;
     }
 
-    if (!regtrace_is_kernel_ptr((void *)buf)) {
-        for (i = 0; i < count; i++) {
-            uintptr_t candidate =
-                *(uint32_t *)(ctx + REGTRACE_FRAMECHAN_BUFFER_TABLE_OFFSET +
-                              i * sizeof(uint32_t));
-
-            if (!regtrace_is_kernel_ptr((void *)candidate))
-                continue;
-            if (*(uint32_t *)(candidate +
-                              REGTRACE_FRAMECHAN_BUFFER_EVENT_PHYS_OFFSET) ==
-                y) {
-                buf = candidate;
-                index = i;
-                regtrace_irq_frame_done_local_done_index[channel] = i;
-                break;
-            }
-        }
-    }
-
-    if (!regtrace_is_kernel_ptr((void *)buf)) {
+    if (index >= count || index >= REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX ||
+        regtrace_framechan_qbuf_phys[channel][index] != y) {
         regtrace_irq_frame_done_local_no_buf_count[channel]++;
         ret = -ENOENT;
         goto out;
     }
 
-    regtrace_irq_frame_done_local_old_state[channel] =
-        *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_STATE_OFFSET);
-    regtrace_irq_frame_done_local_old_driver_state[channel] =
-        *(uint8_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_DRIVER_STATE_OFFSET);
-    *(uint32_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_STATE_OFFSET) = 4;
-    *(uint8_t *)(buf + REGTRACE_FRAMECHAN_BUFFER_DRIVER_STATE_OFFSET) = 4;
-    wmb();
+    old_state = regtrace_framechan_qbuf_state[channel][index];
+    old_driver_state = regtrace_framechan_qbuf_driver_state[channel][index];
+    regtrace_irq_frame_done_local_old_state[channel] = old_state;
+    regtrace_irq_frame_done_local_old_driver_state[channel] = old_driver_state;
+    regtrace_irq_frame_done_local_match_count[channel]++;
+
+    if (regtrace_irq_frame_done_local_touch_buf) {
+        regtrace_framechan_shadow_set_state(channel, index,
+                                            REGTRACE_FRAMECHAN_SHADOW_STATE_DONE,
+                                            REGTRACE_FRAMECHAN_SHADOW_STATE_DONE);
+        regtrace_irq_frame_done_local_shadow_done_count[channel]++;
+        regtrace_framechan_submit_next_queued(channel, index, "frame-done");
+        wmb();
+    }
+
+queue_done:
+    regtrace_irq_frame_done_local_count[channel]++;
+    regtrace_irq_frame_done_local_done_phys[channel] = y;
+    regtrace_irq_frame_done_local_done_uv[channel] = uv;
+    regtrace_irq_frame_done_local_done_index[channel] = index;
+    regtrace_irq_frame_done_queue_push(channel, y, uv, index);
+    regtrace_framechan_wait_irq_signal_count[channel]++;
+    atomic_inc(&regtrace_irq_frame_done_ready[channel]);
+    wake_up_interruptible(&regtrace_irq_frame_done_waitq[channel]);
 
 out:
     regtrace_irq_frame_done_last_channel = (uint32_t)channel;
@@ -34877,8 +36198,9 @@ out:
     regtrace_irq_frame_done_last_ret = ret;
 
     if (log_count[channel] < 8) {
-        printk(KERN_INFO "tx_isp_t40_recovered: framechan%d irq frame-done local source=0x%x y=0x%x uv=0x%x idx=%u ctx=%p buf=%p ret=%ld\n",
-               channel, source, y, uv, index, ctx, (void *)buf, ret);
+        printk(KERN_INFO "tx_isp_t40_recovered: framechan%d irq frame-done local source=0x%x y=0x%x uv=0x%x idx=%u shadow_count=%u old=%u/%u ret=%ld\n",
+               channel, source, y, uv, index, count, old_state,
+               old_driver_state, ret);
     } else if (log_count[channel] == 8) {
         printk(KERN_INFO "tx_isp_t40_recovered: framechan%d irq frame-done local logging suppressed\n",
                channel);
@@ -34891,10 +36213,12 @@ static long regtrace_irq_frame_done_send(int channel, uint32_t source,
                                          uint32_t core_pad, uint32_t y,
                                          uint32_t uv, uint32_t index)
 {
-    uint32_t event_data[4] = { 0, 0, 0, 0 };
+    uint32_t event_data[8] = { 0 };
     uint32_t remote_pad = 0;
+    uint32_t seq = 0;
     long ret;
     static unsigned int log_count[4];
+    static uint32_t frame_done_seq[4];
 
     if (channel < 0 || channel >= 4 || !y)
         return -EINVAL;
@@ -34922,8 +36246,19 @@ static long regtrace_irq_frame_done_send(int channel, uint32_t source,
     regtrace_irq_frame_done_last_uv = uv;
     regtrace_irq_frame_done_last_index = index;
 
+    seq = ++frame_done_seq[channel];
+    /*
+     * T40's OEM ISR passes an eight-word stack object to frame_chan_event:
+     * +0x08 is the Y buffer key, +0x0c is UV, +0x14 stays zero for the
+     * pre-dequeue path, +0x18 carries sequence/status, and +0x1c is a low
+     * byte copied into the completed buffer metadata.
+     */
     event_data[2] = y;
     event_data[3] = uv;
+    event_data[4] = 0;
+    event_data[5] = 0;
+    event_data[6] = seq & 0xffffU;
+    event_data[7] = (index == 0xffffffffU) ? 0 : (index & 0xffU);
     ret = tx_isp_send_event_to_remote((void *)(uintptr_t)core_pad,
                                       REGTRACE_TX_ISP_EVENT_FRAME_DONE,
                                       event_data);
@@ -34931,9 +36266,10 @@ static long regtrace_irq_frame_done_send(int channel, uint32_t source,
     regtrace_irq_frame_done_last_ret = ret;
 
     if (log_count[channel] < 8) {
-        printk(KERN_INFO "tx_isp_t40_recovered: framechan%d irq frame-done source=0x%x pad=%p remote=%p y=0x%x uv=0x%x idx=%u ret=%ld\n",
+        printk(KERN_INFO "tx_isp_t40_recovered: framechan%d irq frame-done source=0x%x pad=%p remote=%p y=0x%x uv=0x%x idx=%u seq=0x%x tag=0x%x ret=%ld\n",
                channel, source, (void *)(uintptr_t)core_pad,
-               (void *)(uintptr_t)remote_pad, y, uv, index, ret);
+               (void *)(uintptr_t)remote_pad, y, uv, index, event_data[6],
+               event_data[7], ret);
     } else if (log_count[channel] == 8) {
         printk(KERN_INFO "tx_isp_t40_recovered: framechan%d irq frame-done logging suppressed\n",
                channel);
@@ -34976,8 +36312,8 @@ static int regtrace_irq_frame_done_read_qbuf_addr(int channel, uint32_t *y,
         return 0;
 
     count = regtrace_framechan_qbuf_count[channel];
-    if (count > 8)
-        count = 8;
+    if (count > REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        count = REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX;
     while (count && !regtrace_framechan_qbuf_phys[channel][count - 1])
         count--;
     if (!count || !regtrace_framechan_qbuf_phys[channel][0])
@@ -35019,6 +36355,44 @@ static int regtrace_irq_frame_done_read_msca_addr(int channel, uint32_t *y,
     return 1;
 }
 
+static void regtrace_irq_frame_done_delay_before_fifo(int channel)
+{
+    uint32_t delay;
+
+    if (channel < 0 || channel >= 4)
+        return;
+
+    delay = regtrace_irq_frame_done_delay_ms;
+    if (!delay)
+        return;
+    if (delay > 20)
+        delay = 20;
+
+    regtrace_irq_frame_done_delay_count[channel]++;
+    regtrace_irq_frame_done_delay_last_ms[channel] = delay;
+    msleep(delay);
+}
+
+static int regtrace_t40_msca_fifo_irq_has_entry(int channel)
+{
+    uint32_t status = 0;
+    uint32_t bank;
+
+    if (channel < 0 || channel >= 3)
+        return 0;
+
+    bank = (uint32_t)channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
+    if (regtrace_core_read(0x1617cU + bank, &status))
+        return 0;
+
+    regtrace_tzn_fifo_have_read_count++;
+    regtrace_tzn_fifo_last_group = 0;
+    regtrace_tzn_fifo_last_channel = (uint32_t)channel;
+    regtrace_tzn_fifo_last_irq_status = status;
+    regtrace_tzn_fifo_last_have_read = (status >> 8) & 0xf;
+    return regtrace_tzn_fifo_last_have_read ? 1 : 0;
+}
+
 static int regtrace_irq_frame_done_read_addr(int channel, uint32_t *y,
                                              uint32_t *uv, uint32_t *index)
 {
@@ -35034,13 +36408,17 @@ static int regtrace_irq_frame_done_read_addr(int channel, uint32_t *y,
     } else if (regtrace_irq_frame_done_addr_source ==
                REGTRACE_IRQ_FD_ADDR_MSCA_READ) {
         regtrace_irq_frame_done_read_msca_addr(channel, y, uv, index);
-    } else if (channel >= 0 && channel < 3 &&
-        Tzn_Msca_addr_fifo_have_read(0, channel) &&
-        !Tzn_Msca_addr_fifo_read(0, channel,
-                                 (uintptr_t)y, (uintptr_t)uv) &&
-        *y) {
-        regtrace_irq_frame_done_fifo_hit_count[channel]++;
-        *index = regtrace_framechan_index_for_phys(channel, *y);
+    } else if (channel >= 0 && channel < 3) {
+        regtrace_irq_frame_done_delay_before_fifo(channel);
+        if (regtrace_t40_msca_fifo_irq_has_entry(channel) &&
+            !Tzn_Msca_addr_fifo_read(0, channel,
+                                     (uintptr_t)y, (uintptr_t)uv) &&
+            *y) {
+            regtrace_irq_frame_done_fifo_hit_count[channel]++;
+            *index = regtrace_framechan_index_for_phys(channel, *y);
+        } else {
+            regtrace_irq_frame_done_fifo_empty_count[channel]++;
+        }
     } else if (channel >= 0 && channel < 4) {
         regtrace_irq_frame_done_fifo_empty_count[channel]++;
     }
@@ -35164,10 +36542,12 @@ static void regtrace_irq_frame_done_work_init(void)
     for (i = 0; i < 4; i++) {
         regtrace_irq_frame_done_work[i].channel = i;
         spin_lock_init(&regtrace_irq_frame_done_work[i].lock);
+        spin_lock_init(&regtrace_irq_frame_done_queue_lock[i]);
         INIT_WORK(&regtrace_irq_frame_done_work[i].work,
                   regtrace_irq_frame_done_workfn);
         init_waitqueue_head(&regtrace_irq_frame_done_waitq[i]);
         atomic_set(&regtrace_irq_frame_done_ready[i], 0);
+        regtrace_irq_frame_done_queue_last_pop_index[i] = 0xffffffffU;
     }
 }
 
@@ -35436,6 +36816,9 @@ static int32_t regtrace_isp_irq_ack_only_filter(int32_t irq, void *dev_id)
     uint32_t sec_status0 = 0;
     uint32_t sec_ack0 = 0;
     uint32_t sec_cfg0 = 0;
+    uint32_t frame_done_bits0 = 0;
+    uint32_t frame_done_bits1 = 0;
+    uint32_t frame_done_sec_bits0 = 0;
     bool is_core = false;
     bool is_fs = false;
     static unsigned int log_count;
@@ -35514,8 +36897,21 @@ static int32_t regtrace_isp_irq_ack_only_filter(int32_t irq, void *dev_id)
     regtrace_isp_irq_ack_only_last_sec_ack0 = sec_ack0;
     regtrace_isp_irq_ack_only_last_sec_cfg0 = sec_cfg0;
 
-    if (is_core && (status0 || status1 || sec_status0))
+    frame_done_bits0 = status0 & regtrace_isp_irq_frame_done_status0_mask;
+    frame_done_bits1 = status1 & regtrace_isp_irq_frame_done_status1_mask;
+    frame_done_sec_bits0 =
+        sec_status0 & regtrace_isp_irq_frame_done_sec_status0_mask;
+    regtrace_isp_irq_ack_only_last_frame_done_bits0 = frame_done_bits0;
+    regtrace_isp_irq_ack_only_last_frame_done_bits1 = frame_done_bits1;
+    regtrace_isp_irq_ack_only_last_frame_done_sec_bits0 =
+        frame_done_sec_bits0;
+    if (is_core && (frame_done_bits0 || frame_done_bits1 ||
+                    frame_done_sec_bits0)) {
+        regtrace_isp_irq_ack_only_frame_done_count++;
         regtrace_irq_frame_done_event(0, REGTRACE_IRQ_FD_SOURCE_ISP_CORE);
+    } else if (is_core && (status0 || status1 || sec_status0)) {
+        regtrace_isp_irq_ack_only_frame_done_skip_count++;
+    }
 
     if (regtrace_isp_irq_ack_only_disable_after &&
         regtrace_isp_irq_ack_only_count >=
@@ -35527,9 +36923,10 @@ static int32_t regtrace_isp_irq_ack_only_filter(int32_t irq, void *dev_id)
     }
 
     if (log_count < 12) {
-        printk(KERN_WARNING "tx_isp_t40_recovered: ISP irq ack-only irq=%d core=%u fs=%u dev=%p status=0x%x/0x%x err=0x%x/0x%x mask=0x%x/0x%x errmask=0x%x/0x%x sec0=0x%x ack0=0x%x cfg0=0x%x\n",
+        printk(KERN_WARNING "tx_isp_t40_recovered: ISP irq ack-only irq=%d core=%u fs=%u dev=%p status=0x%x/0x%x fd=0x%x/0x%x/%x err=0x%x/0x%x mask=0x%x/0x%x errmask=0x%x/0x%x sec0=0x%x ack0=0x%x cfg0=0x%x\n",
                irq, is_core ? 1U : 0U, is_fs ? 1U : 0U, dev_id,
-               status0, status1, err0, err1, mask0, mask1,
+               status0, status1, frame_done_bits0, frame_done_bits1,
+               frame_done_sec_bits0, err0, err1, mask0, mask1,
                errmask0, errmask1, sec_status0, sec_ack0, sec_cfg0);
     } else if (log_count == 12) {
         printk(KERN_WARNING "tx_isp_t40_recovered: ISP irq ack-only logging suppressed\n");
@@ -35555,6 +36952,9 @@ static void regtrace_isp_irq_post_dispatch_ack(int32_t irq, void *dev_id)
     uint32_t sec_status0 = 0;
     uint32_t sec_ack0 = 0;
     uint32_t sec_cfg0 = 0;
+    uint32_t frame_done_bits0 = 0;
+    uint32_t frame_done_bits1 = 0;
+    uint32_t frame_done_sec_bits0 = 0;
     bool is_core = false;
     static unsigned int log_count;
 
@@ -35624,9 +37024,32 @@ static void regtrace_isp_irq_post_dispatch_ack(int32_t irq, void *dev_id)
     regtrace_isp_irq_post_ack_last_sec_ack0 = sec_ack0;
     regtrace_isp_irq_post_ack_last_sec_cfg0 = sec_cfg0;
 
+    /*
+     * In OEM-passthrough mode the recovered top-half runs before this point,
+     * but the synthetic DQBUF completion path still needs a local trigger.
+     * T40's main-frame completion bit is status0 bit 13 (0x2000), as used by
+     * ispcore_interrupt_service_routine() for tisp_push_frame_count(0).
+     */
+    frame_done_bits0 = status0 & regtrace_isp_irq_frame_done_status0_mask;
+    frame_done_bits1 = status1 & regtrace_isp_irq_frame_done_status1_mask;
+    frame_done_sec_bits0 =
+        sec_status0 & regtrace_isp_irq_frame_done_sec_status0_mask;
+    regtrace_isp_irq_ack_only_last_frame_done_bits0 = frame_done_bits0;
+    regtrace_isp_irq_ack_only_last_frame_done_bits1 = frame_done_bits1;
+    regtrace_isp_irq_ack_only_last_frame_done_sec_bits0 =
+        frame_done_sec_bits0;
+    if (is_core && (frame_done_bits0 || frame_done_bits1 ||
+                    frame_done_sec_bits0)) {
+        regtrace_isp_irq_ack_only_frame_done_count++;
+        regtrace_irq_frame_done_event(0, REGTRACE_IRQ_FD_SOURCE_ISP_CORE);
+    } else if (is_core && (status0 || status1 || sec_status0)) {
+        regtrace_isp_irq_ack_only_frame_done_skip_count++;
+    }
+
     if (log_count < 12) {
-        printk(KERN_WARNING "tx_isp_t40_recovered: ISP irq post-dispatch ack irq=%d core=%u dev=%p status=0x%x/0x%x err=0x%x/0x%x mask=0x%x/0x%x errmask=0x%x/0x%x sec0=0x%x ack0=0x%x cfg0=0x%x\n",
+        printk(KERN_WARNING "tx_isp_t40_recovered: ISP irq post-dispatch ack irq=%d core=%u dev=%p status=0x%x/0x%x fd=0x%x/0x%x/%x err=0x%x/0x%x mask=0x%x/0x%x errmask=0x%x/0x%x sec0=0x%x ack0=0x%x cfg0=0x%x\n",
                irq, is_core ? 1U : 0U, dev_id, status0, status1,
+               frame_done_bits0, frame_done_bits1, frame_done_sec_bits0,
                err0, err1, mask0, mask1, errmask0, errmask1,
                sec_status0, sec_ack0, sec_cfg0);
     } else if (log_count == 12) {
@@ -46396,6 +47819,7 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
     void *remote_pad = NULL;
     void *callback = NULL;
     static unsigned int log_count;
+    static unsigned int qbuf_log_count;
     int ret;
 
     regtrace_send_event_diag.total++;
@@ -46440,13 +47864,22 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
             ret = ((int (*)(void *, uint32_t, void *))callback)(remote_pad, event, data);
             regtrace_send_event_diag.remote_calls++;
             regtrace_send_event_diag.last_ret = ret;
-            if (log_count < 128) {
+            if (event == REGTRACE_TX_ISP_EVENT_FRAME_QBUF) {
+                if (qbuf_log_count < 4) {
+                    printk(KERN_INFO "tx_isp_t40_recovered: send_event remote pad=%p remote=%p cb=%p event=0x%x ret=%d\n",
+                           pad, remote_pad, callback, event, ret);
+                } else if (qbuf_log_count == 4) {
+                    printk(KERN_INFO "tx_isp_t40_recovered: send_event qbuf logging suppressed\n");
+                }
+                qbuf_log_count++;
+            } else if (log_count < 128) {
                 printk(KERN_INFO "tx_isp_t40_recovered: send_event remote pad=%p remote=%p cb=%p event=0x%x ret=%d\n",
                        pad, remote_pad, callback, event, ret);
             } else if (log_count == 128) {
                 printk(KERN_INFO "tx_isp_t40_recovered: send_event logging suppressed\n");
             }
-            log_count++;
+            if (event != REGTRACE_TX_ISP_EVENT_FRAME_QBUF)
+                log_count++;
             return ret;
         }
     }
@@ -158637,9 +160070,13 @@ int32_t Tzn_Msca_Work_en(uint32_t a0, uintptr_t a1)
     mask |= (uint32_t)*(uint8_t *)((char *)a1 + 624) << 1;
     mask |= (uint32_t)*(uint8_t *)((char *)a1 + 1240) << 2;
     reg = (a0 << 12) + 0x16008;
-    ret = regtrace_core_write(reg, mask);
-    printk(KERN_WARNING "tx_isp_t40_recovered: Tzn_Msca_Work_en idx=%u reg=0x%x mask=0x%x ret=%d\n",
-           a0, reg, mask, ret);
+    if (a0 == 0)
+        ret = regtrace_t40_msca_write_work_en(mask, "oem-work-en");
+    else
+        ret = regtrace_core_write(reg, mask);
+    printk(KERN_WARNING "tx_isp_t40_recovered: Tzn_Msca_Work_en idx=%u reg=0x%x mask=0x%x hw=0x%x ret=%d\n",
+           a0, reg, mask,
+           a0 == 0 ? regtrace_t40_msca_work_en_last_hw : mask, ret);
     return ret;
 #else
     uint32_t t9 = 0;
@@ -158736,7 +160173,7 @@ int32_t Tzn_Msca_Shd_mask(uint32_t arg1, void *arg2)
     system_reg_write(0x50324, v0_16 | *(uint32_t *)((char *)arg2 + 0x24) | *(uint32_t *)((char *)arg2 + 0x34) | *(uint32_t *)((char *)arg2 + 0x44) | *(uint32_t *)((char *)arg2 + 0x54));
     system_reg_write(0x50324, s4_1 + 0x16014);
     system_reg_write(0x50320, 0x250102);
-    system_reg_write(0x24000834, 0x24000001);
+    system_reg_write(0x50420, 0x24000001);
 
     return private_spin_unlock_irqrestore();
 }
@@ -159035,6 +160472,7 @@ int64_t Tzn_Msca_addr_fifo_write(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
     uint32_t group;
     uint32_t channel;
     uint32_t bank;
+    uint32_t index;
     uint32_t adjust = 0;
     uint32_t y;
     uint32_t uv;
@@ -159048,7 +160486,7 @@ int64_t Tzn_Msca_addr_fifo_write(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
 
     state = (group ? (unsigned char *)mscaler_s1 :
                      (unsigned char *)mscaler_s0) +
-            channel * REGTRACE_MSCA_STATE_BYTES + 8;
+            channel * REGTRACE_MSCA_CHANNEL_BYTES + 8;
     y = a2;
     uv = a3;
 
@@ -159060,21 +160498,45 @@ int64_t Tzn_Msca_addr_fifo_write(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
         uv += adjust;
     }
 
+    regtrace_tzn_fifo_last_write_raw_y = y;
+    regtrace_tzn_fifo_last_write_raw_uv = uv;
+    regtrace_t40_msca_fifo_apply_addr_tags(channel, &y, &uv);
+    regtrace_tzn_fifo_last_write_tagged_y = y;
+    regtrace_tzn_fifo_last_write_tagged_uv = uv;
+
     bank = (group << 12) + channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
+    if (regtrace_t40_msca_fifo_ctrl_on_qbuf) {
+        ret = regtrace_t40_msca_program_fifo_ctrl(group, channel);
+        if (ret)
+            goto record;
+    }
     ret = regtrace_core_write(REGTRACE_T40_MSCA_Y_FIFO_WRITE_REG + bank, y);
     if (!ret)
         ret = regtrace_core_write(REGTRACE_T40_MSCA_UV_FIFO_WRITE_REG + bank, uv);
 
+record:
     regtrace_tzn_fifo_write_count++;
     regtrace_tzn_fifo_last_group = group;
     regtrace_tzn_fifo_last_channel = channel;
     regtrace_tzn_fifo_last_y = y;
     regtrace_tzn_fifo_last_uv = uv;
     regtrace_tzn_fifo_last_adjust = adjust;
+    index = regtrace_framechan_index_for_phys((int)channel, a2);
+    regtrace_tzn_fifo_last_write_index = index;
+    if (channel < 4 && index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        regtrace_tzn_fifo_write_index_count[channel][index]++;
+    else if (channel < 4)
+        regtrace_tzn_fifo_write_unknown_count[channel]++;
 
     if (log_count < 8) {
-        printk(KERN_INFO "tx_isp_t40_recovered: Tzn_Msca_addr_fifo_write group=%u ch=%u y=0x%x uv=0x%x adjust=0x%x ret=%d\n",
-               group, channel, y, uv, adjust, ret);
+        printk(KERN_INFO "tx_isp_t40_recovered: Tzn_Msca_addr_fifo_write group=%u ch=%u raw=0x%x/0x%x write=0x%x/0x%x adjust=0x%x tag=%u mode=%u idx=%u ret=%d\n",
+               group, channel,
+               regtrace_tzn_fifo_last_write_raw_y,
+               regtrace_tzn_fifo_last_write_raw_uv,
+               y, uv, adjust,
+               regtrace_t40_msca_fifo_addr_tag_write ? 1U : 0U,
+               regtrace_t40_msca_fifo_addr_tag_mode,
+               index, ret);
     } else if (log_count == 8) {
         printk(KERN_INFO "tx_isp_t40_recovered: Tzn_Msca_addr_fifo_write logging suppressed\n");
     }
@@ -159198,6 +160660,7 @@ uint32_t Tzn_Msca_addr_fifo_read(uint32_t a0, uint32_t a1, uintptr_t a2, uintptr
     uint32_t group;
     uint32_t channel;
     uint32_t bank;
+    uint32_t index;
     uint32_t adjust = 0;
     uint32_t y = 0;
     uint32_t uv = 0;
@@ -159213,7 +160676,7 @@ uint32_t Tzn_Msca_addr_fifo_read(uint32_t a0, uint32_t a1, uintptr_t a2, uintptr
 
     state = (group ? (unsigned char *)mscaler_s1 :
                      (unsigned char *)mscaler_s0) +
-            channel * REGTRACE_MSCA_STATE_BYTES + 8;
+            channel * REGTRACE_MSCA_CHANNEL_BYTES + 8;
 
     bank = (group << 12) + channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
     ret = regtrace_core_read(REGTRACE_T40_MSCA_Y_FIFO_READ_REG + bank, &y);
@@ -159241,10 +160704,16 @@ uint32_t Tzn_Msca_addr_fifo_read(uint32_t a0, uint32_t a1, uintptr_t a2, uintptr
     regtrace_tzn_fifo_last_y = y;
     regtrace_tzn_fifo_last_uv = uv;
     regtrace_tzn_fifo_last_adjust = adjust;
+    index = regtrace_framechan_index_for_phys((int)channel, y);
+    regtrace_tzn_fifo_last_read_index = index;
+    if (channel < 4 && index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX)
+        regtrace_tzn_fifo_read_index_count[channel][index]++;
+    else if (channel < 4)
+        regtrace_tzn_fifo_read_unknown_count[channel]++;
 
     if (log_count < 8) {
-        printk(KERN_INFO "tx_isp_t40_recovered: Tzn_Msca_addr_fifo_read group=%u ch=%u y=0x%x uv=0x%x adjust=0x%x\n",
-               group, channel, y, uv, adjust);
+        printk(KERN_INFO "tx_isp_t40_recovered: Tzn_Msca_addr_fifo_read group=%u ch=%u y=0x%x uv=0x%x adjust=0x%x idx=%u\n",
+               group, channel, y, uv, adjust, index);
     } else if (log_count == 8) {
         printk(KERN_INFO "tx_isp_t40_recovered: Tzn_Msca_addr_fifo_read logging suppressed\n");
     }
@@ -182174,28 +183643,33 @@ static void regtrace_apply_t40_bringup_profile(void)
     regtrace_enable_core_irq_on_stream = true;
     regtrace_enable_core_irq_after_video = true;
     regtrace_enable_core_irq_oem_enable_path = true;
+    regtrace_enable_proc_jz_sensor_read = true;
     regtrace_core_irq_mask0_value = 0xffffffffU;
     regtrace_core_irq_errmask0_value = 0xffffffffU;
 
     regtrace_enable_t40_msca_cfg_program = true;
     regtrace_enable_t40_msca_cfg_on_set_fmt = true;
     regtrace_skip_legacy_msca_attr = true;
-    regtrace_t40_msca_work_cfg_override = 0x13;
+    regtrace_t40_msca_work_cfg_override = 0xffffffffU;
     regtrace_t40_msca_cfg_1602c_value = 0x7400;
-    regtrace_t40_msca_clear_load_after_program = true;
-    regtrace_t40_msca_shadow_write_load_mask = false;
+    regtrace_t40_msca_clear_load_after_program = false;
+    regtrace_enable_t40_msca_shadow_fifo_program = true;
+    regtrace_enable_t40_msca_shadow_kick_834 = true;
+    regtrace_t40_msca_shadow_write_load_mask = true;
     regtrace_t40_msca_rewrite_full_size_late = true;
     regtrace_t40_msca_rewrite_coeffs_late = true;
     regtrace_t40_msca_coeff_override = 0x40080;
-    regtrace_enable_t40_msca_oem_cfg_load = false;
+    regtrace_t40_msca_fifo_ctrl_on_set_fmt = true;
     regtrace_enable_t40_msca_cfg_after_video = false;
 
     regtrace_enable_vic_irq_ack_filter = true;
     regtrace_enable_vic_mdma_kick_370 = true;
     regtrace_enable_vic_mdma_qbuf_ring =
-        regtrace_t40_profile_direct_vic_feed;
+        regtrace_t40_profile_direct_vic_feed ||
+        regtrace_t40_profile_force_vic_mdma_qbuf_ring;
     regtrace_csi_direct_stage_limit = 4;
-    regtrace_csi_settle_override = 0x1b;
+    if (!regtrace_csi_settle_override)
+        regtrace_csi_settle_override = 0x10;
 
     regtrace_enable_core_event_tisp_main_init = true;
     regtrace_enable_core_event_oem_state_sequence = true;
@@ -182209,6 +183683,8 @@ static void regtrace_apply_t40_bringup_profile(void)
     regtrace_enable_tisp_main_init_csc_version = true;
     regtrace_tisp_main_init_csc_version_value = 2;
     regtrace_enable_tisp_main_init_dma_regs = true;
+    regtrace_enable_tisp_main_init_dma_kseg0 = true;
+    regtrace_enable_tisp_main_init_tispinfo_dma = true;
     regtrace_enable_tisp_main_init_tail_regs = true;
     regtrace_enable_tisp_main_init_msca_oem_order = true;
     regtrace_enable_tisp_main_init_event_init = true;
@@ -182227,11 +183703,49 @@ static void regtrace_apply_t40_bringup_profile(void)
 
     regtrace_enable_isp_irq_ack_only = true;
     regtrace_enable_isp_irq_post_dispatch_ack = false;
-    regtrace_enable_framechan_wait_msca_poll =
-        !regtrace_t40_profile_direct_vic_feed;
+    if (regtrace_t40_profile_isp_irq_passthrough) {
+        regtrace_enable_isp_irq_ack_only = false;
+        regtrace_enable_isp_irq_post_dispatch_ack = true;
+    }
+    if (!regtrace_t40_profile_direct_vic_feed &&
+        regtrace_t40_profile_no_direct_irq_defaults) {
+        regtrace_enable_irq_frame_done_event = true;
+        regtrace_irq_frame_done_addr_source =
+            regtrace_t40_profile_no_direct_addr_source;
+        regtrace_irq_frame_done_delivery_mode = REGTRACE_IRQ_FD_DELIVERY_LOCAL;
+        regtrace_enable_framechan_wait_irq_done = true;
+        regtrace_framechan_wait_irq_timeout_ms = 100;
+        regtrace_irq_frame_done_count_only = false;
+        regtrace_irq_frame_done_dry_run = false;
+        regtrace_irq_frame_done_defer_fifo_read = true;
+        regtrace_irq_frame_done_defer = true;
+        regtrace_isp_irq_frame_done_status0_mask = 0x2000U;
+        regtrace_isp_irq_frame_done_status1_mask = 0;
+        regtrace_isp_irq_frame_done_sec_status0_mask = 0;
+        regtrace_irq_frame_done_source_mask = 0x4U;
+        regtrace_irq_frame_done_channel_mask = 0x1U;
+        regtrace_irq_frame_done_local_match_buf = true;
+        regtrace_irq_frame_done_delay_ms = 2;
+        regtrace_irq_frame_done_event_limit = 0;
+        regtrace_irq_frame_done_require_fifo =
+            regtrace_irq_frame_done_addr_source != REGTRACE_IRQ_FD_ADDR_QBUF;
+    }
+    if (!regtrace_enable_framechan_wait_irq_done) {
+        regtrace_enable_framechan_wait_msca_poll =
+            !regtrace_t40_profile_direct_vic_feed;
+    }
 
-    printk(KERN_WARNING "tx_isp_t40_recovered: T40 bring-up profile applied (ack-only IRQs, direct_vic_feed=%u); pass t40_bringup_profile=0 for raw recovered defaults\n",
-           regtrace_t40_profile_direct_vic_feed ? 1U : 0U);
+    printk(KERN_WARNING "tx_isp_t40_recovered: T40 bring-up profile applied (irq_mode=%s, direct_vic_feed=%u force_vic_ring=%u no_direct_irq_defaults=%u wait_irq=%u msca_poll=%u irq_fd=%u addr_source=%u fifo_addr_tags=%u fifo_addr_tag_mode=%u); pass t40_bringup_profile=0 for raw recovered defaults\n",
+           regtrace_t40_profile_isp_irq_passthrough ? "oem-passthrough" : "ack-only",
+           regtrace_t40_profile_direct_vic_feed ? 1U : 0U,
+           regtrace_t40_profile_force_vic_mdma_qbuf_ring ? 1U : 0U,
+           regtrace_t40_profile_no_direct_irq_defaults ? 1U : 0U,
+           regtrace_enable_framechan_wait_irq_done ? 1U : 0U,
+           regtrace_enable_framechan_wait_msca_poll ? 1U : 0U,
+           regtrace_enable_irq_frame_done_event ? 1U : 0U,
+           regtrace_irq_frame_done_addr_source,
+           regtrace_t40_msca_fifo_addr_tag_write ? 1U : 0U,
+           regtrace_t40_msca_fifo_addr_tag_mode);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000007c700 origin=fragment_seed original=init_module */
