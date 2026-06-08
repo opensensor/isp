@@ -15,6 +15,7 @@ TISP_MAIN_INIT_CSC_VERSION_VALUE="${TISP_MAIN_INIT_CSC_VERSION_VALUE:-2}"
 ENABLE_TISP_MAIN_INIT_COLOR_INITS="${ENABLE_TISP_MAIN_INIT_COLOR_INITS:-0}"
 TISP_MAIN_INIT_COLOR_INIT_MASK="${TISP_MAIN_INIT_COLOR_INIT_MASK:-0}"
 CSI_SETTLE_OVERRIDE="${CSI_SETTLE_OVERRIDE:-0x1b}"
+CORE_BAYER_REG8_VALUE="${CORE_BAYER_REG8_VALUE:-0x10002}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -32,7 +33,8 @@ if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
 	exit 2
 fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
-	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE; do
+	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
+	CORE_BAYER_REG8_VALUE; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
@@ -68,6 +70,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"ENABLE_TISP_MAIN_INIT_COLOR_INITS=$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
 	"TISP_MAIN_INIT_COLOR_INIT_MASK=$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	"CSI_SETTLE_OVERRIDE=$CSI_SETTLE_OVERRIDE" \
+	"CORE_BAYER_REG8_VALUE=$CORE_BAYER_REG8_VALUE" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
@@ -76,6 +79,7 @@ set -x
 : "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
 : "${TISP_MAIN_INIT_COLOR_INIT_MASK:=0}"
 : "${CSI_SETTLE_OVERRIDE:=0x1b}"
+: "${CORE_BAYER_REG8_VALUE:=0x10002}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -94,7 +98,7 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_profile_isp_irq_passthrough=1 \
 	t40_profile_force_vic_mdma_qbuf_ring=1 \
 	force_core_bayer_reg8_value=1 \
-	core_bayer_reg8_value=0x10008 \
+	core_bayer_reg8_value="$CORE_BAYER_REG8_VALUE" \
 	tisp_main_init_reg88_override=0xffffffff \
 	enable_tisp_main_init_color_inits="$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
 	tisp_main_init_color_init_mask="$TISP_MAIN_INIT_COLOR_INIT_MASK" \

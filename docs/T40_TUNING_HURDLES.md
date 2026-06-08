@@ -90,6 +90,20 @@ The next likely hurdle is DMSC output/refresh and downstream BCSH/CSC/CCM
 state, with a minimal top-bypass profile used to keep enhancement blocks out
 of the way.
 
+Bayer phase was revisited after the minimal DMSC+BCSH/CSI-settle baseline
+because the stock T40 register-diff reference has `core+0x88=0x102` while the
+safe qbuf probe was forcing derived `reg88=0x10c`. Re-test:
+
+- `logs/20260608-192914-t40-stock-bayer-10002-1b-242` used
+  `CORE_BAYER_REG8_VALUE=0x10002`, top `0x7fdfeeff`, and CSI settle `0x1b`.
+  Live readback after the run showed `core+0x88=0x102`.
+- The RTSP-matching qbuf `0x6ea8300` became slightly more neutral than the
+  previous `0x10008` baseline: RTSP channel spread dropped from about `14.4`
+  to `10.5`. This is not a lifelike/color-complete image yet, but it is the
+  better stock-aligned minimal baseline.
+- `CORE_BAYER_REG8_VALUE` is now exposed by `tools/t40_safe_qbuf_dump_probe.sh`
+  and defaults to `0x10002`.
+
 CSC and YUV-input CSC probes:
 
 - The first `csc-version-sweep` log was invalid as a CSC sweep because the
