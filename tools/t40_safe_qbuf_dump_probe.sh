@@ -23,6 +23,14 @@ CORE_BAYER_REG8_VALUE="${CORE_BAYER_REG8_VALUE:-0x10002}"
 VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE="${VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE:-0}"
 VIC_MDMA_QBUF_RING_CTRL_VALUE="${VIC_MDMA_QBUF_RING_CTRL_VALUE:-0}"
 VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE="${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:-0}"
+# Output-engine selection. Default 1 forces the VIC-MDMA qbuf ring (legacy
+# behavior, produces the 64-row banded raw-VIC capture). Set to 0 to use the
+# OEM-style ISP MSCA channel FIFO + frame-done IRQ path instead (the profile
+# wires it up automatically when the ring is not forced). ADDR_SOURCE picks how
+# frame-done finds the completed buffer: 0=MSCA FIFO read (OEM), 1=qbuf record,
+# 2=MSCA read reg 0x16174. See docs/T40_TUNING_HURDLES.md.
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING="${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:-1}"
+T40_PROFILE_NO_DIRECT_ADDR_SOURCE="${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -42,7 +50,8 @@ fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
 	CORE_BAYER_REG8_VALUE VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE \
-	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE; do
+	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE \
+	T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
@@ -82,6 +91,8 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE=$VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE" \
 	"VIC_MDMA_QBUF_RING_CTRL_VALUE=$VIC_MDMA_QBUF_RING_CTRL_VALUE" \
 	"VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE=$VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE" \
+	"T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
+	"T40_PROFILE_NO_DIRECT_ADDR_SOURCE=$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
@@ -94,6 +105,8 @@ set -x
 : "${VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE:=0}"
 : "${VIC_MDMA_QBUF_RING_CTRL_VALUE:=0}"
 : "${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:=0}"
+: "${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:=1}"
+: "${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:=0}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -110,7 +123,8 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_profile_direct_vic_feed=0 \
 	t40_profile_no_direct_irq_defaults=1 \
 	t40_profile_isp_irq_passthrough=1 \
-	t40_profile_force_vic_mdma_qbuf_ring=1 \
+	t40_profile_force_vic_mdma_qbuf_ring="$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
+	t40_profile_no_direct_addr_source="$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	force_core_bayer_reg8_value=1 \
 	core_bayer_reg8_value="$CORE_BAYER_REG8_VALUE" \
 	tisp_main_init_reg88_override=0xffffffff \
@@ -168,7 +182,7 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -180 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -240 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 EOS
 

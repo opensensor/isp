@@ -431,6 +431,66 @@ characterizing the wrong-engine artifact, not for matching OEM.
 Device left on the clean stock driver after this capture; re-run
 `tools/t40_safe_qbuf_dump_probe.sh` to reload the recovered module.
 
+## 2026-06-08 MSCA-FIFO bring-up WORKS: banding gone, new bottleneck is AE
+
+Switching the recovered driver from the forced VIC-MDMA qbuf ring to the
+OEM-style ISP MSCA channel FIFO path is achieved with a **single parameter** --
+no driver code change. The MSCA FIFO + frame-done completion path was already
+coded but gated behind `t40_profile_force_vic_mdma_qbuf_ring`. Loading with that
+forced to 0 lets `regtrace_apply_t40_bringup_profile()` wire up the frame-done
+IRQ + MSCA FIFO read path automatically.
+
+Evidence: `logs/20260608-201105-t40-msca-fifo-ringoff-242` (loaded via
+`T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0 tools/t40_safe_qbuf_dump_probe.sh`).
+dmesg shows the full OEM-style cycle at ~25 fps:
+
+- `Tzn_Msca_addr_fifo_write group=0 ch=0 raw=0x6bab300/0x6da9300 ... tag=1`
+  (push qbuf Y/UV addrs into the MSCA FIFO),
+- `Tzn_Msca_addr_fifo_read group=0 ch=0 y=0x6ea8300 uv=0x70a6300` (read the
+  completed-frame addr back from FIFO reg 0x16174),
+- `framechan0 irq frame-done local source=0x4 y=0x6ea8300 idx=1` (frame-done
+  marks the buffer done),
+- `framechan0 repaired qbuf source=oem-qbuf` (buffer recycled).
+
+Results:
+
+- The RTSP frame is CLEAN: recognizable scene geometry matching the OEM frame,
+  **no 64-row banding, no diagonal tearing**. The VIC-MDMA raw-capture artifact
+  is gone because we now read the ISP-core-processed channel output, not the
+  raw VIC stage.
+- Frames are live (sequential RTSP frames differ by md5), streaming is stable
+  (IRQ 38/39 keep incrementing).
+- RTSP serves frames (no more "connection refused" that the bare no-ring path
+  used to give -- the historical "buffers don't move" failure is resolved by
+  the now-complete frame-done path).
+
+New bottleneck -- exposure/AE, not geometry:
+
+- The frame is very dark (RTSP brightness ~2-17/255) and decays toward black
+  over the first minute of streaming, with a faint green tint. Because the MSCA
+  path captures the ISP-core *processed* output, near-zero AE gain yields a dark
+  frame -- the old VIC-ring captures only looked bright (Y mean ~127) because
+  they grabbed *raw* VIC data that bypassed AE. So this is the sensor
+  exposure/gain (AE) loop not being driven up, not a pipeline defect. (Ambient
+  light was also lower than the 19:57 stock capture, but the time-correlated
+  decay points at AE.)
+- Next work is the AE/gain path: confirm the tisp event-4 (`tisp_tgain_update`)
+  loop is closing onto the GC4653 exposure/again over I2C, and that AE stats are
+  being read. Only after exposure is usable should CFA/CSC/BCSH color tuning
+  resume -- and now it is meaningful because the ISP-core output finally reaches
+  the qbuf.
+
+Knobs added: `T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING` (default 1 = legacy ring;
+set 0 for the OEM MSCA path) and `T40_PROFILE_NO_DIRECT_ADDR_SOURCE`
+(0=MSCA FIFO read, 1=qbuf record, 2=MSCA read reg) in
+`tools/t40_safe_qbuf_dump_probe.sh`. The probe default is left at the legacy
+ring for now so existing baselines reproduce; flip to 0 for OEM-path work.
+
+NOTE: before loading the recovered module, ensure stock `tx_isp_t40` is fully
+unloaded -- it owns the `isp_printf` symbol and a leftover instance makes the
+recovered insmod fail with "invalid module format"/"duplicate symbol". A clean
+reboot (no ISP module auto-loads) is the reliable reset.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
