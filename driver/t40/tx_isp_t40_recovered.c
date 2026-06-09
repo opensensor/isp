@@ -5996,6 +5996,7 @@ static bool regtrace_enable_tisp_stream_event_init;
 static bool regtrace_enable_tisp_stream_event_cbs;
 static bool regtrace_enable_tisp_stream_event_cbs_before_1008;
 static bool regtrace_enable_tisp_event_threads;
+static bool regtrace_enable_isp_3a_diag;
 static bool regtrace_enable_ae_sensor_apply;
 static bool regtrace_ae_sensor_apply_clear_dirty = true;
 static bool regtrace_ae_sensor_apply_log_skips;
@@ -6024,6 +6025,21 @@ static bool regtrace_t40_msca_work_en_dma_bits;
 static bool regtrace_t40_msca_fifo_ctrl_on_set_fmt;
 static bool regtrace_t40_msca_fifo_ctrl_on_qbuf;
 static bool regtrace_t40_msca_fifo_ctrl_after_qbuf;
+/*
+ * MSCA re-arm guard. The recovered completion path re-arms a just-delivered
+ * qbuf back into the MSCA write FIFO ~13ms after handing it to the consumer
+ * (raptor re-queues fast for zero-copy RTSP), so the scaler overwrites the
+ * buffer while it is still being read -> the diagonal "ghost"/tearing seen
+ * once exposure is correct. When enabled, refuse to arm the same physical
+ * buffer for two consecutive MSCA writes on a channel, forcing alternation;
+ * a bounded consecutive-skip escape keeps the stream alive if only one buffer
+ * is ever available. Default off so the known-good MSCA path is unchanged.
+ */
+static bool regtrace_enable_msca_rearm_guard;
+static uint regtrace_msca_rearm_guard_max_skips = 3U;
+static uint32_t regtrace_msca_rearm_guard_last_phys[4];
+static uint32_t regtrace_msca_rearm_guard_skip_count[4];
+static uint32_t regtrace_msca_rearm_guard_consec_skip[4];
 static bool regtrace_t40_msca_fifo_addr_tag_write;
 static bool regtrace_enable_vic_mdma_qbuf_ring;
 static bool regtrace_t40_profile_force_vic_mdma_qbuf_ring;
@@ -6190,6 +6206,7 @@ module_param_named(enable_tisp_stream_event_init, regtrace_enable_tisp_stream_ev
 module_param_named(enable_tisp_stream_event_cbs, regtrace_enable_tisp_stream_event_cbs, bool, 0644);
 module_param_named(enable_tisp_stream_event_cbs_before_1008, regtrace_enable_tisp_stream_event_cbs_before_1008, bool, 0644);
 module_param_named(enable_tisp_event_threads, regtrace_enable_tisp_event_threads, bool, 0644);
+module_param_named(enable_isp_3a_diag, regtrace_enable_isp_3a_diag, bool, 0644);
 module_param_named(enable_ae_sensor_apply, regtrace_enable_ae_sensor_apply, bool, 0644);
 module_param_named(ae_sensor_apply_clear_dirty, regtrace_ae_sensor_apply_clear_dirty, bool, 0644);
 module_param_named(ae_sensor_apply_log_skips, regtrace_ae_sensor_apply_log_skips, bool, 0644);
@@ -6217,6 +6234,8 @@ module_param_named(t40_msca_rewrite_coeffs_late, regtrace_t40_msca_rewrite_coeff
 module_param_named(t40_msca_work_en_dma_bits, regtrace_t40_msca_work_en_dma_bits, bool, 0644);
 module_param_named(t40_msca_fifo_ctrl_on_set_fmt, regtrace_t40_msca_fifo_ctrl_on_set_fmt, bool, 0644);
 module_param_named(t40_msca_fifo_ctrl_on_qbuf, regtrace_t40_msca_fifo_ctrl_on_qbuf, bool, 0644);
+module_param_named(enable_msca_rearm_guard, regtrace_enable_msca_rearm_guard, bool, 0644);
+module_param_named(msca_rearm_guard_max_skips, regtrace_msca_rearm_guard_max_skips, uint, 0644);
 module_param_named(t40_msca_fifo_ctrl_after_qbuf, regtrace_t40_msca_fifo_ctrl_after_qbuf, bool, 0644);
 module_param_named(t40_msca_fifo_addr_tag_write, regtrace_t40_msca_fifo_addr_tag_write, bool, 0644);
 module_param_named(enable_vic_mdma_qbuf_ring, regtrace_enable_vic_mdma_qbuf_ring, bool, 0644);
@@ -6905,6 +6924,16 @@ static uint32_t regtrace_tisp_event_process_empty_count;
 static uint32_t regtrace_tisp_event_process_callback_count;
 static uint32_t regtrace_tisp_event_thread_start_count;
 static uint32_t regtrace_tisp_event_thread_stop_count;
+/*
+ * ISP 3A/stats-loop diagnostic. The fixed ~30-zone banding is ADR applying a
+ * never-updated per-tile gain map: the stats interrupt -> per-stat handler ->
+ * tisp_event_push -> *_main_process loop is not running. These gated counters
+ * locate the dead link: ISR running? ADR stats handler dispatched? ADR process
+ * run? Default off; enable_isp_3a_diag wires first-N dmesg traces.
+ */
+static uint32_t regtrace_3a_isr_count;
+static uint32_t regtrace_3a_adr_irq_count;
+static uint32_t regtrace_3a_adr_proc_count;
 static uint32_t regtrace_tisp_event_thread_loop_count[2];
 static uint32_t regtrace_tisp_event_thread_last_channel;
 static long regtrace_tisp_event_thread_last_ret;
@@ -38213,6 +38242,20 @@ static void regtrace_isp_irq_post_dispatch_ack(int32_t irq, void *dev_id)
     if (regs) {
         mask0 = readl(regs + 0x40020);
         status0 = readl(regs + 0x40028);
+
+        if (regtrace_enable_isp_3a_diag && is_core) {
+            regtrace_3a_isr_count++;
+            if (regtrace_3a_isr_count <= 5) {
+                int __i;
+                printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag core-irq#%u status0=0x%x mask0=0x%x (bits: 3awb 4ae 5aehist 6af 9adr 10defog 11wdr)\n",
+                       regtrace_3a_isr_count, status0, mask0);
+                for (__i = 0; __i < 16; __i++)
+                    if (irq_func_cb[__i])
+                        printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag   irq_func_cb[%d]=%p\n",
+                               __i, (void *)(uintptr_t)irq_func_cb[__i]);
+            }
+        }
+
         if (status0)
             writel(status0, regs + 0x40024);
 
@@ -132648,6 +132691,13 @@ int32_t tiziano_adr_main_interrupt_static(void)
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
+    if (regtrace_enable_isp_3a_diag) {
+        regtrace_3a_adr_irq_count++;
+        if (regtrace_3a_adr_irq_count <= 6)
+            printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag ADR irq-handler dispatched #%u\n",
+                   regtrace_3a_adr_irq_count);
+    }
+
     /* fragment 1: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_read)(38208); /* jalr target resolved by relocation */
 
@@ -140764,6 +140814,13 @@ int32_t tisp_adr_main_process(void)
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
+
+    if (regtrace_enable_isp_3a_diag) {
+        regtrace_3a_adr_proc_count++;
+        if (regtrace_3a_adr_proc_count <= 6)
+            printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag ADR main_process ran #%u\n",
+                   regtrace_3a_adr_proc_count);
+    }
 
     /* fragment 1: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_lock)(&isp_memopt); /* jalr target resolved by relocation */
@@ -162077,6 +162134,25 @@ int64_t Tzn_Msca_addr_fifo_write(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
     regtrace_tzn_fifo_last_write_tagged_uv = uv;
 
     bank = (group << 12) + channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
+
+    if (regtrace_enable_msca_rearm_guard && a2 && channel < 4) {
+        if (a2 == regtrace_msca_rearm_guard_last_phys[channel] &&
+            regtrace_msca_rearm_guard_consec_skip[channel] <
+                regtrace_msca_rearm_guard_max_skips) {
+            regtrace_msca_rearm_guard_skip_count[channel]++;
+            regtrace_msca_rearm_guard_consec_skip[channel]++;
+            if (log_count < 8)
+                printk(KERN_INFO "tx_isp_t40_recovered: MSCA rearm-guard skip ch=%u phys=0x%x consec=%u total=%u\n",
+                       channel, a2,
+                       regtrace_msca_rearm_guard_consec_skip[channel],
+                       regtrace_msca_rearm_guard_skip_count[channel]);
+            ret = 0;
+            goto record;
+        }
+        regtrace_msca_rearm_guard_last_phys[channel] = a2;
+        regtrace_msca_rearm_guard_consec_skip[channel] = 0;
+    }
+
     if (regtrace_t40_msca_fifo_ctrl_on_qbuf) {
         ret = regtrace_t40_msca_program_fifo_ctrl(group, channel);
         if (ret)
@@ -183000,6 +183076,20 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
     v0 = *(uint32_t *)((char *)a0 + 232);
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
     s5 = *(uint32_t *)((char *)v0 + 104);
+
+    if (regtrace_enable_isp_3a_diag) {
+        regtrace_3a_isr_count++;
+        if (regtrace_3a_isr_count <= 4) {
+            int __i;
+            printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag isr#%u status s2=0x%x s5=0x%x\n",
+                   regtrace_3a_isr_count, (uint32_t)(uintptr_t)s2,
+                   (uint32_t)(uintptr_t)s5);
+            for (__i = 0; __i < 16; __i++)
+                if (irq_func_cb[__i])
+                    printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag   irq_func_cb[%d]=%p (3awb 4ae 5aehist 6af 9adr 10defog 11wdr)\n",
+                           __i, (void *)(uintptr_t)irq_func_cb[__i]);
+        }
+    }
 
     /* fragment 2: Branch */
     v0 = (uintptr_t *)&isp_ch0_pre_dequeue_time;

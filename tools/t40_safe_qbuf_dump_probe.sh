@@ -43,6 +43,15 @@ ENABLE_TISP_STREAM_EVENT_CBS="${ENABLE_TISP_STREAM_EVENT_CBS:-0}"
 # frame-done work. AE_SENSOR_APPLY_FORCE_PACKED is a test override:
 # packed=(again_index<<16)|integration_time. GC4653 T40 has 26 analog-gain
 # LUT entries, so the default max safe index is 25 (e.g. 0x00190760).
+# MSCA re-arm guard: stop the scaler overwriting a qbuf while the consumer is
+# still reading it (the diagonal ghost/tearing). Default off keeps the known
+# MSCA path; set ENABLE_MSCA_REARM_GUARD=1 to forbid two consecutive writes to
+# the same buffer (MAX_SKIPS bounds the escape so a held buffer can't freeze).
+ENABLE_MSCA_REARM_GUARD="${ENABLE_MSCA_REARM_GUARD:-0}"
+MSCA_REARM_GUARD_MAX_SKIPS="${MSCA_REARM_GUARD_MAX_SKIPS:-3}"
+# Delay (ms, capped at 20) before frame-done reads the completed-buffer addr and
+# delivers it. Tests whether delivery races the MSCA DDR write-complete.
+IRQ_FRAME_DONE_DELAY_MS="${IRQ_FRAME_DONE_DELAY_MS:-0}"
 ENABLE_AE_SENSOR_APPLY="${ENABLE_AE_SENSOR_APPLY:-0}"
 AE_SENSOR_APPLY_FORCE_PACKED="${AE_SENSOR_APPLY_FORCE_PACKED:-0}"
 AE_SENSOR_APPLY_CLEAR_DIRTY="${AE_SENSOR_APPLY_CLEAR_DIRTY:-1}"
@@ -70,6 +79,7 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE \
 	T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE \
 	ENABLE_TISP_STREAM_EVENT_INIT ENABLE_TISP_STREAM_EVENT_CBS \
+	ENABLE_MSCA_REARM_GUARD MSCA_REARM_GUARD_MAX_SKIPS IRQ_FRAME_DONE_DELAY_MS \
 	ENABLE_AE_SENSOR_APPLY \
 	AE_SENSOR_APPLY_FORCE_PACKED \
 	AE_SENSOR_APPLY_CLEAR_DIRTY AE_SENSOR_APPLY_MAX_AGAIN_INDEX \
@@ -117,6 +127,9 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"T40_PROFILE_NO_DIRECT_ADDR_SOURCE=$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	"ENABLE_TISP_STREAM_EVENT_INIT=$ENABLE_TISP_STREAM_EVENT_INIT" \
 	"ENABLE_TISP_STREAM_EVENT_CBS=$ENABLE_TISP_STREAM_EVENT_CBS" \
+	"ENABLE_MSCA_REARM_GUARD=$ENABLE_MSCA_REARM_GUARD" \
+	"MSCA_REARM_GUARD_MAX_SKIPS=$MSCA_REARM_GUARD_MAX_SKIPS" \
+	"IRQ_FRAME_DONE_DELAY_MS=$IRQ_FRAME_DONE_DELAY_MS" \
 	"ENABLE_AE_SENSOR_APPLY=$ENABLE_AE_SENSOR_APPLY" \
 	"AE_SENSOR_APPLY_FORCE_PACKED=$AE_SENSOR_APPLY_FORCE_PACKED" \
 	"AE_SENSOR_APPLY_CLEAR_DIRTY=$AE_SENSOR_APPLY_CLEAR_DIRTY" \
@@ -138,6 +151,9 @@ set -x
 : "${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:=0}"
 : "${ENABLE_TISP_STREAM_EVENT_INIT:=0}"
 : "${ENABLE_TISP_STREAM_EVENT_CBS:=0}"
+: "${ENABLE_MSCA_REARM_GUARD:=0}"
+: "${MSCA_REARM_GUARD_MAX_SKIPS:=3}"
+: "${IRQ_FRAME_DONE_DELAY_MS:=0}"
 : "${ENABLE_AE_SENSOR_APPLY:=0}"
 : "${AE_SENSOR_APPLY_FORCE_PACKED:=0}"
 : "${AE_SENSOR_APPLY_CLEAR_DIRTY:=1}"
@@ -163,6 +179,10 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_profile_no_direct_addr_source="$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	enable_tisp_stream_event_init="$ENABLE_TISP_STREAM_EVENT_INIT" \
 	enable_tisp_stream_event_cbs="$ENABLE_TISP_STREAM_EVENT_CBS" \
+	enable_isp_3a_diag="${ENABLE_ISP_3A_DIAG:-0}" \
+	enable_msca_rearm_guard="$ENABLE_MSCA_REARM_GUARD" \
+	msca_rearm_guard_max_skips="$MSCA_REARM_GUARD_MAX_SKIPS" \
+	irq_frame_done_delay_ms="$IRQ_FRAME_DONE_DELAY_MS" \
 	enable_ae_sensor_apply="$ENABLE_AE_SENSOR_APPLY" \
 	ae_sensor_apply_force_packed="$AE_SENSOR_APPLY_FORCE_PACKED" \
 	ae_sensor_apply_clear_dirty="$AE_SENSOR_APPLY_CLEAR_DIRTY" \
@@ -269,7 +289,7 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|TISP stream event|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -320 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -320 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 EOS
 

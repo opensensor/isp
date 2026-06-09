@@ -761,3 +761,48 @@ GC4653 EXPO bridge"):
    it's tearing; if static, a fixed scaler-strip layout. (b) Disable/repoint ch2
    and re-check the comb. Driving the scaler/FIFO config -- not color tuning --
    is the lever.
+
+## 2026-06-09 "Fractal regression" diagnosed: dead ISP 3A/stats loop (ADR)
+
+The persistent diagonal "venetian-blind" artifact is NOT tearing/timing/MSCA.
+Proven this session:
+
+1. **Fixed additive overlay** — ~80% cancels in a two-frame difference; it's the
+   same pattern every frame, content-independent. ~28-30 vertical-zone banding
+   (~38 output-row period) measured in a smooth region.
+2. **Upstream of the MSCA** — MSCA geometry/scaler/filter/format all match OEM on
+   live silicon (0x161c0-cc=0x40080, 0x16028=1, 0x1602c=0x7400, single group).
+   Ruled out buffer-ownership (rearm-guard alternated buffers perfectly, no
+   change) and delivery-timing (12ms delay, no change).
+3. **It's ADR** — Adaptive Dynamic Range, the only enabled tile-based block.
+   Extracted the OEM tisp_main_init reg40 bit->block map: bit4=DPC, bit5=GIB,
+   **bit7=ADR**, bit8=DMSC, bit9=CCM, bit10=gamma, bit11=defog, bit14=YDNS,
+   bit15=BCSH, bit21=LCE. Live top40=0x7fdfeeff has bit7 set (ADR active),
+   bit21 (LCE) clear.
+4. **Root cause = the 3A/stats loop never runs.** ADR is a closed loop (T31 ref
+   gtxaspec/txx-isp-c confirms): stats-DMA IRQ -> per-stat handler reads stats +
+   tisp_event_push -> event thread runs *_main_process -> writes new per-tile
+   gains. With the loop dead, ADR applies its init-default tile map forever.
+
+   `enable_isp_3a_diag` instrumentation (gated, in post_dispatch_ack +
+   ispcore_interrupt_service_routine + the ADR handler/process) proved the exact
+   break on live silicon:
+   - ISP stats interrupts **DO fire**: status0 (core+0x40028) shows bits
+     3(AWB) 4(AE) 5(AE-hist) 6(AF) 8(LCE) setting; mask0=0x1ffff enables them.
+   - `irq_func_cb[]` is **EMPTY** -> no stat handlers registered.
+   - `ispcore_interrupt_service_routine` is **never invoked** (isp_irq_handle's
+     subdev-ops pointer-walk doesn't resolve in the bring-up profile); the live
+     path is regtrace_isp_irq_post_dispatch_ack, which acks status0 but does no
+     `irq_func_cb` fanout.
+   - The per-block software init (`tisp_adr_main_init`/`tisp_ae_main_init`, which
+     vmalloc the stats DMA buffer AND call system_irq_func_set) never ran -- the
+     recovered bring-up programs ADR *hardware* registers directly but skips the
+     software init. `adr_main_stat_info` is therefore null.
+
+   Same root cause as the earlier "AE never driven" finding (staged AE slots
+   always clean) -- one fix addresses both AE and ADR.
+
+Fix (option 3, in progress): run tisp_adr_main_init + tisp_ae_main_init (gated)
+to allocate stats DMA + register handlers in irq_func_cb, then add the stats
+fanout to post_dispatch_ack (for each set status0 stat bit, call
+irq_func_cb[bit]). Event thread + cbs already enabled. ADR idx=9, AE idx=4/5.
