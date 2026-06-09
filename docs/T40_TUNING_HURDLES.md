@@ -806,3 +806,31 @@ Fix (option 3, in progress): run tisp_adr_main_init + tisp_ae_main_init (gated)
 to allocate stats DMA + register handlers in irq_func_cb, then add the stats
 fanout to post_dispatch_ack (for each set status0 stat bit, call
 irq_func_cb[bit]). Event thread + cbs already enabled. ADR idx=9, AE idx=4/5.
+
+### Update: the wall — recovered bring-up runs NO ISP software init
+
+Step-2 wiring built: `enable_isp_stats_fanout` adds the missing `irq_func_cb[]`
+fanout to post_dispatch_ack (for each set status0 stat bit 3-11, call the
+registered handler; null-guarded). Correct, but it has nothing to dispatch to:
+
+- With `enable_tisp_main_init_tiziano=1` + `enable_tisp_main_init_event_init=1` +
+  `enable_isp_stats_fanout=1`, `irq_func_cb[]` is STILL empty; ADR-irq=0,
+  ADR-proc=0.
+- Root: `enable_tisp_main_init_tiziano` only sets the global `tiziano_enable`,
+  which is read by **`tisp_deinit`** (line ~61006), NOT by an init path. The
+  recovered live bring-up **never calls** `tisp_init`, `tisp_adr_main_init`, or
+  `tisp_ae_main_init` (no call sites in the live path). It pokes ADR/AE hardware
+  registers directly and skips the entire ISP software init.
+
+Therefore the per-stat handlers are never registered and the stats DMA buffers
+(`adr_main_stat_info`, AE buffers) are never allocated. The fanout + event
+thread are ready, but the loop has no producers.
+
+**Remaining work to finish option 3:** actually invoke the OEM ISP software init
+in the recovered driver — either `tisp_init` (the full block-init sequence) or
+the individual `tisp_adr_main_init` + `tisp_ae_main_init` with correct args and
+prerequisites (tuning blob loaded via `enable_tiziano_param_load`, core base,
+DMA). This is the integration the bring-up profile deliberately avoided because
+it is complex and crash-prone; it needs careful, incremental work (high risk of
+device crash per attempt). The diagnosis, reg40 bit map, fanout, and event
+plumbing are all in place; this init invocation is the one missing producer.

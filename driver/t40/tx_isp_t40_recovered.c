@@ -5997,6 +5997,17 @@ static bool regtrace_enable_tisp_stream_event_cbs;
 static bool regtrace_enable_tisp_stream_event_cbs_before_1008;
 static bool regtrace_enable_tisp_event_threads;
 static bool regtrace_enable_isp_3a_diag;
+/*
+ * ISP 3A stats fanout. The live IRQ path (post_dispatch_ack) acks status0 but
+ * never dispatches to the per-stat handlers, because ispcore_interrupt_service_
+ * routine isn't reached. When enabled, dispatch each set stats bit in status0
+ * to its registered irq_func_cb[] handler (null-guarded), driving the
+ * AE/ADR/AWB stats->event->*_main_process loop. Requires the block inits
+ * (enable_tisp_main_init_tiziano) to have registered the handlers + stats DMA.
+ */
+static bool regtrace_enable_isp_stats_fanout;
+static uint32_t regtrace_isp_stats_fanout_count;
+static uint32_t regtrace_isp_stats_fanout_bit_count[16];
 static bool regtrace_enable_ae_sensor_apply;
 static bool regtrace_ae_sensor_apply_clear_dirty = true;
 static bool regtrace_ae_sensor_apply_log_skips;
@@ -6207,6 +6218,7 @@ module_param_named(enable_tisp_stream_event_cbs, regtrace_enable_tisp_stream_eve
 module_param_named(enable_tisp_stream_event_cbs_before_1008, regtrace_enable_tisp_stream_event_cbs_before_1008, bool, 0644);
 module_param_named(enable_tisp_event_threads, regtrace_enable_tisp_event_threads, bool, 0644);
 module_param_named(enable_isp_3a_diag, regtrace_enable_isp_3a_diag, bool, 0644);
+module_param_named(enable_isp_stats_fanout, regtrace_enable_isp_stats_fanout, bool, 0644);
 module_param_named(enable_ae_sensor_apply, regtrace_enable_ae_sensor_apply, bool, 0644);
 module_param_named(ae_sensor_apply_clear_dirty, regtrace_ae_sensor_apply_clear_dirty, bool, 0644);
 module_param_named(ae_sensor_apply_log_skips, regtrace_ae_sensor_apply_log_skips, bool, 0644);
@@ -38253,6 +38265,18 @@ static void regtrace_isp_irq_post_dispatch_ack(int32_t irq, void *dev_id)
                     if (irq_func_cb[__i])
                         printk(KERN_WARNING "tx_isp_t40_recovered: 3a-diag   irq_func_cb[%d]=%p\n",
                                __i, (void *)(uintptr_t)irq_func_cb[__i]);
+            }
+        }
+
+        if (regtrace_enable_isp_stats_fanout && is_core && status0) {
+            uint32_t sbits = status0 & 0x0ff8U;  /* bits 3-11: awb/ae/aehist/af/lce/adr/defog/wdr */
+            int __b;
+            for (__b = 3; __b < 12; __b++) {
+                if ((sbits & (1U << __b)) && irq_func_cb[__b]) {
+                    ((int32_t (*)(void))(uintptr_t)irq_func_cb[__b])();
+                    regtrace_isp_stats_fanout_count++;
+                    regtrace_isp_stats_fanout_bit_count[__b]++;
+                }
             }
         }
 
