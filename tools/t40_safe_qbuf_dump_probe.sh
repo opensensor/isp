@@ -31,6 +31,13 @@ VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE="${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:-
 # 2=MSCA read reg 0x16174. See docs/T40_TUNING_HURDLES.md.
 T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING="${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:-1}"
 T40_PROFILE_NO_DIRECT_ADDR_SOURCE="${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:-0}"
+# Auto-exposure (AE) event callbacks. The bring-up profile starts the tisp event
+# thread but does NOT register the AE gain/exposure update callbacks (events
+# 6/7/10 = tgain/again update) unless these are on. Without them the GC4653
+# exposure/gain over I2C is never driven and the frame stays dark. Set both to 1
+# to register the AE callbacks. See docs/T40_TUNING_HURDLES.md.
+ENABLE_TISP_STREAM_EVENT_INIT="${ENABLE_TISP_STREAM_EVENT_INIT:-0}"
+ENABLE_TISP_STREAM_EVENT_CBS="${ENABLE_TISP_STREAM_EVENT_CBS:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -51,7 +58,8 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
 	CORE_BAYER_REG8_VALUE VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE \
 	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE \
-	T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE; do
+	T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE \
+	ENABLE_TISP_STREAM_EVENT_INIT ENABLE_TISP_STREAM_EVENT_CBS; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
@@ -93,6 +101,8 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE=$VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE" \
 	"T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
 	"T40_PROFILE_NO_DIRECT_ADDR_SOURCE=$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
+	"ENABLE_TISP_STREAM_EVENT_INIT=$ENABLE_TISP_STREAM_EVENT_INIT" \
+	"ENABLE_TISP_STREAM_EVENT_CBS=$ENABLE_TISP_STREAM_EVENT_CBS" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
@@ -107,6 +117,8 @@ set -x
 : "${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:=0}"
 : "${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:=1}"
 : "${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:=0}"
+: "${ENABLE_TISP_STREAM_EVENT_INIT:=0}"
+: "${ENABLE_TISP_STREAM_EVENT_CBS:=0}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -125,6 +137,8 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_profile_isp_irq_passthrough=1 \
 	t40_profile_force_vic_mdma_qbuf_ring="$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
 	t40_profile_no_direct_addr_source="$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
+	enable_tisp_stream_event_init="$ENABLE_TISP_STREAM_EVENT_INIT" \
+	enable_tisp_stream_event_cbs="$ENABLE_TISP_STREAM_EVENT_CBS" \
 	force_core_bayer_reg8_value=1 \
 	core_bayer_reg8_value="$CORE_BAYER_REG8_VALUE" \
 	tisp_main_init_reg88_override=0xffffffff \
@@ -182,7 +196,7 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -240 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|TISP stream event|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -260 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 EOS
 

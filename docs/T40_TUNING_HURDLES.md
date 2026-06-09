@@ -491,6 +491,51 @@ unloaded -- it owns the `isp_printf` symbol and a leftover instance makes the
 recovered insmod fail with "invalid module format"/"duplicate symbol". A clean
 reboot (no ISP module auto-loads) is the reliable reset.
 
+## 2026-06-08 AE/exposure investigation: the AE->sensor I2C bridge is the gap
+
+With the MSCA pipeline clean, the dark frame is an AE problem. Findings (live +
+code):
+
+Live proof the lever works:
+- GC4653 is at I2C `1-0029`. Its exposure/gain registers are STATIC across
+  repeated reads under the recovered driver: exposure `0x0202/0x0203 = 0x05d0`
+  (1488 of VTS `0x0340/41 = 0x0780` = 1920), analog gain `0x0205 = 0xc0`. A
+  working AE in a near-black scene would be maxing exposure and cranking gain.
+- Manually writing exposure `0x0760` + again `0xff` + a digital-gain bump over
+  I2C raised RTSP brightness ~9x (2 -> 18.7) and produced a clearly visible
+  (noisy, untinted-by-AWB) scene: `logs/20260608-203632-t40-ae-manual-i2c-242`.
+  Critically, the recovered driver never overwrote those manual writes, proving
+  it issues NO sensor exposure/gain writes at all.
+
+Code path (driver/t40/tx_isp_t40_recovered.c):
+- The bring-up profile starts the tisp event thread (`enable_tisp_event_threads`
+  default on) but does NOT register the AE gain/exposure update callbacks. Those
+  (events 6/7/10 = long/short tgain + long again, table at ~line 9342) only
+  register when `enable_tisp_stream_event_init=1` AND
+  `enable_tisp_stream_event_cbs=1` (both default off).
+- Enabling both (`logs/20260608-204340-t40-msca-ae-events-242`) was NOT
+  sufficient: sensor regs stayed frozen, frame stayed dark. So callback
+  registration alone does not close the loop.
+- The AE->sensor bridge is `tiziano_sync_sensor_attr` (65739) ->
+  `tisp_ae_sensor_trig` (70041) -> sensor ioctl. But `tisp_ae_sensor_trig` only
+  sets a "needs-sync" flag byte; the real I2C write is a separate
+  `regtrace_sensor_call_sensor_ioctl(REGTRACE_TX_ISP_EVENT_SENSOR_SET_*, ...)`
+  (7959/8067). `tisp_main_long_again_update` (58656) is a stub returning 0.
+  There is no module_param that forces the sync/trigger to run, and no
+  sensor_ioctl exposure/gain call is seen in dmesg.
+
+Conclusion: the AE algorithm result is never pushed to the GC4653 over I2C. The
+remaining work is to wire the AE->sensor sync: (1) confirm the AE algorithm
+actually ticks and computes gain from ISP stats, (2) ensure the computed
+exposure/again reach `sensor_ioctl` (un-stub `tisp_main_long_again_update` and/or
+drive `tiziano_sync_sensor_attr` + consume the `tisp_ae_sensor_trig` flag from
+the event loop). Until then, a userspace I2C AE shim can brighten the image as a
+bridge, since manual sensor gain works. AWB is also off (manual-gain frame had a
+yellow/green tint) and will need the ct/awb events similarly wired.
+
+Knobs added: `ENABLE_TISP_STREAM_EVENT_INIT`, `ENABLE_TISP_STREAM_EVENT_CBS`
+(both default 0) in `tools/t40_safe_qbuf_dump_probe.sh`.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
