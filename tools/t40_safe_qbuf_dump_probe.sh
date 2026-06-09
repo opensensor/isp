@@ -9,6 +9,10 @@ SOC="${SOC:-t40}"
 QBUF_PHYS_FALLBACK="${QBUF_PHYS_FALLBACK:-0x6ea8300}"
 QBUF_EXTRA_PHYS="${QBUF_EXTRA_PHYS:-0x6bab300 0x6ea8300}"
 QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
+SMOKE_SLEEP_SECS="${SMOKE_SLEEP_SECS:-12}"
+STOP_RAPTOR_TIMEOUT_SECS="${STOP_RAPTOR_TIMEOUT_SECS:-20}"
+SKIP_QBUF_DUMP="${SKIP_QBUF_DUMP:-0}"
+SKIP_RTSP="${SKIP_RTSP:-0}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 TISP_MAIN_INIT_TOP40_VALUE="${TISP_MAIN_INIT_TOP40_VALUE:-0x7fdfeeff}"
 TISP_MAIN_INIT_CSC_VERSION_VALUE="${TISP_MAIN_INIT_CSC_VERSION_VALUE:-2}"
@@ -16,6 +20,18 @@ ENABLE_TISP_MAIN_INIT_COLOR_INITS="${ENABLE_TISP_MAIN_INIT_COLOR_INITS:-0}"
 TISP_MAIN_INIT_COLOR_INIT_MASK="${TISP_MAIN_INIT_COLOR_INIT_MASK:-0}"
 CSI_SETTLE_OVERRIDE="${CSI_SETTLE_OVERRIDE:-0x1b}"
 CORE_BAYER_REG8_VALUE="${CORE_BAYER_REG8_VALUE:-0x10002}"
+# Init-latched host-side stock overrides for the diamond/grid artifact. Mask:
+# 0x1=MIPI PHY +0x1d4 stock 0x22, 0x2=VIC +0x1e0/+0x1e8/+0x1ec stock 0,
+# 0x4=CSI0 +0x128..+0x1bc stock bank. Default off.
+T40_STOCK_HOST_INIT_MASK="${T40_STOCK_HOST_INIT_MASK:-0}"
+# Stream-order experiment for the diamond/grid artifact. Sequence tracing showed
+# recovered OEM remote streamon touching VIC before CSI, while stock brings CSI0
+# and VIC up together before later MIPI changes. Set PRE_CSI=1 to direct-start
+# CSI before the remote streamon; STAGE_LIMIT maps to csi_direct_stage_limit for
+# only that pre-call (3 = CSI ctrl/status only, no MIPI); DELAY waits after it.
+OEM_EVENT_PRE_CSI_STREAM="${OEM_EVENT_PRE_CSI_STREAM:-0}"
+OEM_EVENT_PRE_CSI_STAGE_LIMIT="${OEM_EVENT_PRE_CSI_STAGE_LIMIT:-0}"
+OEM_EVENT_PRE_CSI_DELAY_MS="${OEM_EVENT_PRE_CSI_DELAY_MS:-0}"
 # VIC MDMA qbuf-ring output geometry. Defaults of 0 keep the driver's built-in
 # behavior (stride=width=0x780, fmt=7). Stock/OEM VIC stride is 0xF00 (width<<1);
 # sweep STRIDE_OVERRIDE/CTRL_VALUE/UV_OFFSET together to test the OEM 2-byte/px
@@ -31,6 +47,10 @@ VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE="${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:-
 # 2=MSCA read reg 0x16174. See docs/T40_TUNING_HURDLES.md.
 T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING="${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:-1}"
 T40_PROFILE_NO_DIRECT_ADDR_SOURCE="${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:-0}"
+T40_PROFILE_DIRECT_VIC_FEED="${T40_PROFILE_DIRECT_VIC_FEED:-0}"
+ADR_LINEAR_MODE="${ADR_LINEAR_MODE:-0}"
+SENSOR_FULL_WIDTH_OVERRIDE="${SENSOR_FULL_WIDTH_OVERRIDE:-0}"
+SENSOR_FULL_HEIGHT_OVERRIDE="${SENSOR_FULL_HEIGHT_OVERRIDE:-0}"
 # Auto-exposure (AE) event callbacks. The bring-up profile starts the tisp event
 # thread but does NOT register the AE gain/exposure update callbacks (events
 # 6/7/10 = tgain/again update) unless these are on. Without them the GC4653
@@ -38,6 +58,21 @@ T40_PROFILE_NO_DIRECT_ADDR_SOURCE="${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:-0}"
 # to register the AE callbacks. See docs/T40_TUNING_HURDLES.md.
 ENABLE_TISP_STREAM_EVENT_INIT="${ENABLE_TISP_STREAM_EVENT_INIT:-0}"
 ENABLE_TISP_STREAM_EVENT_CBS="${ENABLE_TISP_STREAM_EVENT_CBS:-0}"
+# ISP 3A software loop bring-up. BLOCK_INIT allocates/registers AE/ADR block
+# state; BLOCK_INIT_AE additionally calls AE init (ADR-only when 0). STATS_FANOUT
+# dispatches ISP stats IRQ bits into the recovered callbacks.
+ENABLE_ISP_3A_DIAG="${ENABLE_ISP_3A_DIAG:-0}"
+ENABLE_ISP_STATS_FANOUT="${ENABLE_ISP_STATS_FANOUT:-0}"
+ISP_STATS_FANOUT_ADR_STATUS0_MASK="${ISP_STATS_FANOUT_ADR_STATUS0_MASK:-0}"
+ENABLE_ADR_PROCESS_WORK="${ENABLE_ADR_PROCESS_WORK:-0}"
+ENABLE_ISP_BLOCK_INIT="${ENABLE_ISP_BLOCK_INIT:-0}"
+ENABLE_ISP_BLOCK_INIT_AE="${ENABLE_ISP_BLOCK_INIT_AE:-0}"
+ISP_BLOCK_INIT_STAGE_LIMIT="${ISP_BLOCK_INIT_STAGE_LIMIT:-0}"
+ADR_MAIN_INIT_STAGE_LIMIT="${ADR_MAIN_INIT_STAGE_LIMIT:-0}"
+# ADR grid/register push gate. With BLOCK_INIT=1, default 1 mirrors OEM and
+# pushes the recomputed ADR grid/register table; set 0 to allocate/register the
+# ADR loop but leave hardware ADR registers untouched during bisection.
+ENABLE_ADR_REG_WRITES="${ENABLE_ADR_REG_WRITES:-1}"
 # Sensor exposure apply bridge. ENABLE_AE_SENSOR_APPLY wires the recovered
 # driver's staged AE value to the GC4653 TX_ISP_EVENT_SENSOR_EXPO ioctl from
 # frame-done work. AE_SENSOR_APPLY_FORCE_PACKED is a test override:
@@ -74,11 +109,23 @@ if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
 	exit 2
 fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
+	SMOKE_SLEEP_SECS STOP_RAPTOR_TIMEOUT_SECS SKIP_QBUF_DUMP SKIP_RTSP \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
+	T40_STOCK_HOST_INIT_MASK OEM_EVENT_PRE_CSI_STREAM \
+	OEM_EVENT_PRE_CSI_STAGE_LIMIT OEM_EVENT_PRE_CSI_DELAY_MS \
 	CORE_BAYER_REG8_VALUE VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE \
-	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE \
-	T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE \
-	ENABLE_TISP_STREAM_EVENT_INIT ENABLE_TISP_STREAM_EVENT_CBS \
+		VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE \
+		T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE \
+		T40_PROFILE_DIRECT_VIC_FEED \
+		ADR_LINEAR_MODE \
+		SENSOR_FULL_WIDTH_OVERRIDE SENSOR_FULL_HEIGHT_OVERRIDE \
+		ENABLE_TISP_STREAM_EVENT_INIT ENABLE_TISP_STREAM_EVENT_CBS \
+	ENABLE_ISP_3A_DIAG ENABLE_ISP_STATS_FANOUT \
+	ISP_STATS_FANOUT_ADR_STATUS0_MASK \
+	ENABLE_ADR_PROCESS_WORK \
+	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE \
+	ISP_BLOCK_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
+	ENABLE_ADR_REG_WRITES \
 	ENABLE_MSCA_REARM_GUARD MSCA_REARM_GUARD_MAX_SKIPS IRQ_FRAME_DONE_DELAY_MS \
 	ENABLE_AE_SENSOR_APPLY \
 	AE_SENSOR_APPLY_FORCE_PACKED \
@@ -113,20 +160,39 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 "${SCP[@]}" tools/phys_memdump.mipsel "$USER@$IP:/tmp/phys_memdump"
 
 "${SSH[@]}" \
+	"SMOKE_SLEEP_SECS=$SMOKE_SLEEP_SECS" \
+	"STOP_RAPTOR_TIMEOUT_SECS=$STOP_RAPTOR_TIMEOUT_SECS" \
 	"FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
 	"TISP_MAIN_INIT_TOP40_VALUE=$TISP_MAIN_INIT_TOP40_VALUE" \
 	"TISP_MAIN_INIT_CSC_VERSION_VALUE=$TISP_MAIN_INIT_CSC_VERSION_VALUE" \
 	"ENABLE_TISP_MAIN_INIT_COLOR_INITS=$ENABLE_TISP_MAIN_INIT_COLOR_INITS" \
 	"TISP_MAIN_INIT_COLOR_INIT_MASK=$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	"CSI_SETTLE_OVERRIDE=$CSI_SETTLE_OVERRIDE" \
+	"T40_STOCK_HOST_INIT_MASK=$T40_STOCK_HOST_INIT_MASK" \
+	"OEM_EVENT_PRE_CSI_STREAM=$OEM_EVENT_PRE_CSI_STREAM" \
+	"OEM_EVENT_PRE_CSI_STAGE_LIMIT=$OEM_EVENT_PRE_CSI_STAGE_LIMIT" \
+	"OEM_EVENT_PRE_CSI_DELAY_MS=$OEM_EVENT_PRE_CSI_DELAY_MS" \
 	"CORE_BAYER_REG8_VALUE=$CORE_BAYER_REG8_VALUE" \
 	"VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE=$VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE" \
 	"VIC_MDMA_QBUF_RING_CTRL_VALUE=$VIC_MDMA_QBUF_RING_CTRL_VALUE" \
 	"VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE=$VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE" \
 	"T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
 	"T40_PROFILE_NO_DIRECT_ADDR_SOURCE=$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
+	"T40_PROFILE_DIRECT_VIC_FEED=$T40_PROFILE_DIRECT_VIC_FEED" \
+	"ADR_LINEAR_MODE=$ADR_LINEAR_MODE" \
+	"SENSOR_FULL_WIDTH_OVERRIDE=$SENSOR_FULL_WIDTH_OVERRIDE" \
+	"SENSOR_FULL_HEIGHT_OVERRIDE=$SENSOR_FULL_HEIGHT_OVERRIDE" \
 	"ENABLE_TISP_STREAM_EVENT_INIT=$ENABLE_TISP_STREAM_EVENT_INIT" \
 	"ENABLE_TISP_STREAM_EVENT_CBS=$ENABLE_TISP_STREAM_EVENT_CBS" \
+	"ENABLE_ISP_3A_DIAG=$ENABLE_ISP_3A_DIAG" \
+	"ENABLE_ISP_STATS_FANOUT=$ENABLE_ISP_STATS_FANOUT" \
+	"ISP_STATS_FANOUT_ADR_STATUS0_MASK=$ISP_STATS_FANOUT_ADR_STATUS0_MASK" \
+	"ENABLE_ADR_PROCESS_WORK=$ENABLE_ADR_PROCESS_WORK" \
+	"ENABLE_ISP_BLOCK_INIT=$ENABLE_ISP_BLOCK_INIT" \
+	"ENABLE_ISP_BLOCK_INIT_AE=$ENABLE_ISP_BLOCK_INIT_AE" \
+	"ISP_BLOCK_INIT_STAGE_LIMIT=$ISP_BLOCK_INIT_STAGE_LIMIT" \
+	"ADR_MAIN_INIT_STAGE_LIMIT=$ADR_MAIN_INIT_STAGE_LIMIT" \
+	"ENABLE_ADR_REG_WRITES=$ENABLE_ADR_REG_WRITES" \
 	"ENABLE_MSCA_REARM_GUARD=$ENABLE_MSCA_REARM_GUARD" \
 	"MSCA_REARM_GUARD_MAX_SKIPS=$MSCA_REARM_GUARD_MAX_SKIPS" \
 	"IRQ_FRAME_DONE_DELAY_MS=$IRQ_FRAME_DONE_DELAY_MS" \
@@ -138,19 +204,38 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
+: "${SMOKE_SLEEP_SECS:=12}"
+: "${STOP_RAPTOR_TIMEOUT_SECS:=20}"
 : "${TISP_MAIN_INIT_TOP40_VALUE:=0x7fdfeeff}"
 : "${TISP_MAIN_INIT_CSC_VERSION_VALUE:=2}"
 : "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
 : "${TISP_MAIN_INIT_COLOR_INIT_MASK:=0}"
 : "${CSI_SETTLE_OVERRIDE:=0x1b}"
+: "${T40_STOCK_HOST_INIT_MASK:=0}"
+: "${OEM_EVENT_PRE_CSI_STREAM:=0}"
+: "${OEM_EVENT_PRE_CSI_STAGE_LIMIT:=0}"
+: "${OEM_EVENT_PRE_CSI_DELAY_MS:=0}"
 : "${CORE_BAYER_REG8_VALUE:=0x10002}"
 : "${VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE:=0}"
 : "${VIC_MDMA_QBUF_RING_CTRL_VALUE:=0}"
 : "${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:=0}"
 : "${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:=1}"
 : "${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:=0}"
+: "${T40_PROFILE_DIRECT_VIC_FEED:=0}"
+: "${ADR_LINEAR_MODE:=0}"
+: "${SENSOR_FULL_WIDTH_OVERRIDE:=0}"
+: "${SENSOR_FULL_HEIGHT_OVERRIDE:=0}"
 : "${ENABLE_TISP_STREAM_EVENT_INIT:=0}"
 : "${ENABLE_TISP_STREAM_EVENT_CBS:=0}"
+: "${ENABLE_ISP_3A_DIAG:=0}"
+: "${ENABLE_ISP_STATS_FANOUT:=0}"
+: "${ISP_STATS_FANOUT_ADR_STATUS0_MASK:=0}"
+: "${ENABLE_ADR_PROCESS_WORK:=0}"
+: "${ENABLE_ISP_BLOCK_INIT:=0}"
+: "${ENABLE_ISP_BLOCK_INIT_AE:=0}"
+: "${ISP_BLOCK_INIT_STAGE_LIMIT:=0}"
+: "${ADR_MAIN_INIT_STAGE_LIMIT:=0}"
+: "${ENABLE_ADR_REG_WRITES:=1}"
 : "${ENABLE_MSCA_REARM_GUARD:=0}"
 : "${MSCA_REARM_GUARD_MAX_SKIPS:=3}"
 : "${IRQ_FRAME_DONE_DELAY_MS:=0}"
@@ -159,7 +244,20 @@ set -x
 : "${AE_SENSOR_APPLY_CLEAR_DIRTY:=1}"
 : "${AE_SENSOR_APPLY_MAX_AGAIN_INDEX:=25}"
 : "${AE_SENSOR_APPLY_LOG_SKIPS:=0}"
-/etc/init.d/S31raptor stop || true
+raptor_stop_pid=
+/etc/init.d/S31raptor stop &
+raptor_stop_pid=$!
+raptor_stop_elapsed=0
+while kill -0 "$raptor_stop_pid" 2>/dev/null; do
+	if [ "$raptor_stop_elapsed" -ge "$STOP_RAPTOR_TIMEOUT_SECS" ]; then
+		echo "S31raptor stop timed out after ${STOP_RAPTOR_TIMEOUT_SECS}s; killing stop helper" >&2
+		kill -9 "$raptor_stop_pid" 2>/dev/null || true
+		break
+	fi
+	sleep 1
+	raptor_stop_elapsed=$((raptor_stop_elapsed + 1))
+done
+wait "$raptor_stop_pid" 2>/dev/null || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
 	/dev/shm/rss_ring_* /dev/shm/rss_osd_* 2>/dev/null || true
@@ -170,16 +268,28 @@ rmmod tx_isp_t40_recovered 2>/tmp/rmmod-recovered.err || true
 cat /tmp/rmmod-recovered.err || true
 rmmod tx_isp_t40 2>/tmp/rmmod-stock.err || true
 cat /tmp/rmmod-stock.err || true
+dmesg -c > /tmp/t40-dmesg-before-load.txt 2>/dev/null || true
 insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_bringup_profile=1 \
-	t40_profile_direct_vic_feed=0 \
+	t40_profile_direct_vic_feed="$T40_PROFILE_DIRECT_VIC_FEED" \
 	t40_profile_no_direct_irq_defaults=1 \
 	t40_profile_isp_irq_passthrough=1 \
 	t40_profile_force_vic_mdma_qbuf_ring="$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
 	t40_profile_no_direct_addr_source="$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
+	adr_linear_mode="$ADR_LINEAR_MODE" \
+	sensor_full_width_override="$SENSOR_FULL_WIDTH_OVERRIDE" \
+	sensor_full_height_override="$SENSOR_FULL_HEIGHT_OVERRIDE" \
 	enable_tisp_stream_event_init="$ENABLE_TISP_STREAM_EVENT_INIT" \
 	enable_tisp_stream_event_cbs="$ENABLE_TISP_STREAM_EVENT_CBS" \
-	enable_isp_3a_diag="${ENABLE_ISP_3A_DIAG:-0}" \
+	enable_isp_3a_diag="$ENABLE_ISP_3A_DIAG" \
+	enable_isp_stats_fanout="$ENABLE_ISP_STATS_FANOUT" \
+	isp_stats_fanout_adr_status0_mask="$ISP_STATS_FANOUT_ADR_STATUS0_MASK" \
+	enable_adr_process_work="$ENABLE_ADR_PROCESS_WORK" \
+	enable_isp_block_init="$ENABLE_ISP_BLOCK_INIT" \
+	enable_isp_block_init_ae="$ENABLE_ISP_BLOCK_INIT_AE" \
+	isp_block_init_stage_limit="$ISP_BLOCK_INIT_STAGE_LIMIT" \
+	adr_main_init_stage_limit="$ADR_MAIN_INIT_STAGE_LIMIT" \
+	enable_adr_reg_writes="$ENABLE_ADR_REG_WRITES" \
 	enable_msca_rearm_guard="$ENABLE_MSCA_REARM_GUARD" \
 	msca_rearm_guard_max_skips="$MSCA_REARM_GUARD_MAX_SKIPS" \
 	irq_frame_done_delay_ms="$IRQ_FRAME_DONE_DELAY_MS" \
@@ -195,6 +305,10 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	tisp_main_init_color_init_mask="$TISP_MAIN_INIT_COLOR_INIT_MASK" \
 	force_tisp_main_init_yuv_input_csc_version=0 \
 	csi_settle_override="$CSI_SETTLE_OVERRIDE" \
+	t40_stock_host_init_mask="$T40_STOCK_HOST_INIT_MASK" \
+	oem_event_pre_csi_stream="$OEM_EVENT_PRE_CSI_STREAM" \
+	oem_event_pre_csi_stage_limit="$OEM_EVENT_PRE_CSI_STAGE_LIMIT" \
+	oem_event_pre_csi_delay_ms="$OEM_EVENT_PRE_CSI_DELAY_MS" \
 	vic_mdma_qbuf_ring_stride_override="$VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE" \
 	vic_mdma_qbuf_ring_ctrl_value="$VIC_MDMA_QBUF_RING_CTRL_VALUE" \
 	vic_mdma_qbuf_ring_uv_offset_override="$VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE" \
@@ -204,7 +318,21 @@ echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
 echo "$TISP_MAIN_INIT_CSC_VERSION_VALUE" > "$PARAM/tisp_main_init_csc_version_value"
 insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
 /etc/init.d/S31raptor start
-sleep 12
+dmesg | grep -E 'isp-block-init|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
+dmesg | tail -260 > /tmp/t40-dmesg-start-immediate.txt
+hold_secs=$((SMOKE_SLEEP_SECS))
+if [ "$hold_secs" -gt 4 ]; then
+	sleep 4
+	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
+	dmesg | grep -E 'isp-block-init|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
+	sleep $((hold_secs - 4))
+else
+	sleep "$hold_secs"
+	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
+	dmesg | grep -E 'isp-block-init|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
+fi
 chmod +x /tmp/phys_memdump
 cat /proc/interrupts | grep -E '(^ *3[89]:|tx|isp|vic)' || true
 cat /proc/interrupts > /tmp/t40-interrupts-after.txt
@@ -289,14 +417,22 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -320 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
+dmesg > /tmp/t40-dmesg-full.txt
 EOS
 
 "${SCP[@]}" "$USER@$IP:/tmp/t40-interrupts-after.txt" "$LOG/interrupts-after.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-interrupts-start.txt" "$LOG/interrupts-start.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-start-immediate-lines.txt" "$LOG/start-immediate-lines.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-start-immediate.txt" "$LOG/dmesg-start-immediate.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-start-lines.txt" "$LOG/start-lines.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-start.txt" "$LOG/dmesg-start.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-qbuf-lines.txt" "$LOG/qbuf-lines.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-csi-vic-regs.txt" "$LOG/csi-vic-regs.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-tail.txt" "$LOG/dmesg-tail.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-full.txt" "$LOG/dmesg-full.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-before-load.txt" "$LOG/dmesg-before-load.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-sensor-ae-regs.txt" "$LOG/sensor-ae-regs.txt"
 
 qline="$(grep -m1 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" || true)"
@@ -327,35 +463,44 @@ fi
 
 printf 'phys=%s len=%s\n' "$phys" "$len" | tee "$LOG/qbuf-dump.txt"
 
-dump_qbuf() {
-	local dump_phys="$1"
-	local name="$2"
-
-	"${SSH[@]}" "/tmp/phys_memdump '$dump_phys' '$len' '/tmp/$name.bin'" \
+if [[ "$SKIP_QBUF_DUMP" == "1" ]]; then
+	printf 'skipping qbuf dump (SKIP_QBUF_DUMP=1)\n' | tee -a "$LOG/qbuf-dump.txt"
+else
+	name=qbuf-ch0
+	"${SSH[@]}" "/tmp/phys_memdump '$phys' '$len' '/tmp/$name.bin'" \
 		>"$LOG/dump-$name.log" 2>&1
 	"${SCP[@]}" "$USER@$IP:/tmp/$name.bin" "$LOG/$name.bin"
 	python3 tools/nv12_probe.py "$LOG/$name.bin" \
 		--width 1920 --height 1080 --out-dir "$LOG/$name-renders" \
 		>"$LOG/nv12-probe-$name.log"
-}
+	cp "$LOG/dump-qbuf-ch0.log" "$LOG/dump-qbuf.log"
+	cp "$LOG/nv12-probe-qbuf-ch0.log" "$LOG/nv12-probe.log"
+	ln -sfn qbuf-ch0-renders "$LOG/qbuf-renders"
 
-dump_qbuf "$phys" qbuf-ch0
-cp "$LOG/dump-qbuf-ch0.log" "$LOG/dump-qbuf.log"
-cp "$LOG/nv12-probe-qbuf-ch0.log" "$LOG/nv12-probe.log"
-ln -sfn qbuf-ch0-renders "$LOG/qbuf-renders"
+	for extra_phys in $QBUF_EXTRA_PHYS; do
+		[[ "$extra_phys" == "$phys" ]] && continue
+		name="qbuf-${extra_phys//[^A-Za-z0-9]/_}"
+		printf 'extra_phys=%s len=%s name=%s\n' \
+			"$extra_phys" "$len" "$name" | tee -a "$LOG/qbuf-dump.txt"
+		"${SSH[@]}" "/tmp/phys_memdump '$extra_phys' '$len' '/tmp/$name.bin'" \
+			>"$LOG/dump-$name.log" 2>&1
+		"${SCP[@]}" "$USER@$IP:/tmp/$name.bin" "$LOG/$name.bin"
+		python3 tools/nv12_probe.py "$LOG/$name.bin" \
+			--width 1920 --height 1080 --out-dir "$LOG/$name-renders" \
+			>"$LOG/nv12-probe-$name.log"
+	done
+fi
 
-for extra_phys in $QBUF_EXTRA_PHYS; do
-	[[ "$extra_phys" == "$phys" ]] && continue
-	extra_name="qbuf-${extra_phys//[^A-Za-z0-9]/_}"
-	printf 'extra_phys=%s len=%s name=%s\n' \
-		"$extra_phys" "$len" "$extra_name" | tee -a "$LOG/qbuf-dump.txt"
-	dump_qbuf "$extra_phys" "$extra_name"
-done
-
-timeout 25 ffmpeg -hide_banner -loglevel info -y -rtsp_transport tcp \
-	-i "rtsp://thingino:thingino@$IP/ch0" -frames:v 1 \
-	"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
+if [[ "$SKIP_RTSP" == "1" ]]; then
+	printf 'skipping RTSP snapshot (SKIP_RTSP=1)\n' >"$LOG/ffmpeg.log"
+else
+	timeout 25 ffmpeg -hide_banner -loglevel info -y -rtsp_transport tcp \
+		-i "rtsp://thingino:thingino@$IP/ch0" -frames:v 1 \
+		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
+fi
 
 printf 'log=%s\n' "$LOG"
 sed -n '1,20p' "$LOG/qbuf-dump.txt"
-sed -n '1,20p' "$LOG/nv12-probe.log"
+if [[ -f "$LOG/nv12-probe.log" ]]; then
+	sed -n '1,20p' "$LOG/nv12-probe.log"
+fi

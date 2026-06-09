@@ -884,3 +884,161 @@ T31 reference -- fix the lost register assignments so the inits run cleanly.
 Then they register the idx-4/idx-9 stats handlers + alloc stats DMA, the
 already-built fanout drives the loop, and ADR gains update (banding clears).
 This is a focused multi-function reconstruction-repair effort.
+
+### Update 4: ADR grid/register repair, build-tested only
+
+The streaming/MSCA path can work while ADR is still visibly wrong. The likely
+failure is not qbuf/interrupt delivery anymore; it is stale or bad ADR hardware
+state after `tisp_adr_main_init` survives far enough to allocate/register the
+software loop but never correctly recomputes and pushes the OEM block grid.
+
+OEM `tiziano_adr_base_pars(width, height, ch)` does three concrete things:
+
+- Selects `adr_main_hard_base` / `adr_sec_hard_base`.
+- Recomputes the 5x7 tile coordinates from frame size:
+  `grid_x = even(width / 6)`, `grid_y = even(height / 4)`, M coords
+  `{0, grid_y, 2*grid_y, 3*grid_y, height}`, N coords
+  `{0, grid_x, 2*grid_x, 3*grid_x, 4*grid_x, 5*grid_x, width}`.
+- Recomputes the 31-value 5x5 distance table from `adr_5x5_in2`, then the OEM
+  writers push hard-base and hard-para tables to ADR registers.
+
+The recovered `tiziano_adr_base_pars` still contains unresolved div/mflo and
+table-access artifacts, and the old ADR writer functions rely on similarly
+fragile decompiler output. New direct guarded helpers now do the OEM-equivalent
+base-pars math and ADR register writes:
+
+- `regtrace_tiziano_adr_base_pars()` computes the 5x7 grid and distance table.
+- `regtrace_func_adr_reg_write_one/5x5/sometimes/every()` push the ADR register
+  tables using the recovered hard-base/hard-para pointer tables.
+- `enable_adr_reg_writes` gates the hardware write stage. Probe default is `1`
+  when block-init is enabled, matching OEM; set `ENABLE_ADR_REG_WRITES=0` to
+  bisect allocation/handler registration separately from register programming.
+
+Important caveat: the direct base-pars helper deliberately does NOT call the old
+`tiziano_adr_5x5_init()` yet. That function still has risky reconstruction
+damage, so this patch repairs the grid/register push first. If the live image
+still shows an ADR tile artifact after this, repair `tiziano_adr_5x5_init` next.
+
+Human-inspection test recipe when it is safe to interrupt the camera:
+
+```
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0 \
+ENABLE_ISP_BLOCK_INIT=1 \
+ENABLE_ISP_BLOCK_INIT_AE=0 \
+ENABLE_ISP_STATS_FANOUT=1 \
+ENABLE_TISP_STREAM_EVENT_INIT=1 \
+ENABLE_TISP_STREAM_EVENT_CBS=1 \
+ENABLE_ADR_REG_WRITES=1 \
+SMOKE_SLEEP_SECS=120 \
+tools/t40_safe_qbuf_dump_probe.sh logs/$(date +%Y%m%d-%H%M%S)-t40-adr-grid-242
+```
+
+Per user request, leave the stream running long enough for visual inspection on
+future live tests. Do not churn reloads around a short automatic capture unless
+the stream is already down.
+
+### Update 5: ADR pointer-table builders repaired, build-tested only
+
+The screenshot/user-visible failure is still the fixed diagonal ADR/fractal
+artifact in the raw qbuf, not an RTSP encode problem. Live read-only check while
+the stream stayed up showed:
+
+- Current live module has `enable_isp_block_init=N`, so the new ADR-grid code is
+  not loaded/running on that stream.
+- `enable_msca_rearm_guard=Y` was toggled live without interrupt loss, but a
+  new RTSP frame and both raw qbuf renders still showed the same wedge. The
+  simple same-buffer guard is not the fix.
+
+Deeper ADR reconstruction bug found and fixed locally: several ADR pointer-table
+builders had GP/global reconstruction damage, not just `tiziano_adr_base_pars`.
+
+- `tiziano_adr_wal_para_refresh()` was writing 142 pointers into the 0x11c-byte
+  WAL allocation, which only holds 71 pointers. OEM has a 71-entry table and
+  selects one of two offset tables using `data_a8958[channel]` (linear/WDR ADR
+  mode). The recovered helper lost that branch and overran the allocation.
+- `tiziano_adr_hard_base_refresh()` and `tiziano_adr_hard_para_refresh()` were
+  treating OEM byte offsets as `int32_t *` word offsets. That points the ADR
+  hardware table entries hundreds of bytes too far into `main_adr_paras`.
+- `tiziano_adr_hard_para_refresh()` was also sourcing entries 0xb/0xd/0xe from
+  the top-para table in recovered code; OEM sources them from WAL entries
+  0x42/0x43/0x44.
+- `tiziano_adr_top_para_refresh()` and `_soft_para_refresh()` each had a final
+  pointer store stranded after an early return.
+- `tisp_adr_linear_switch()` wrote its mode/dirty flags through a bogus
+  `isp_memopt` base. It now updates a real `regtrace_adr_linear_mode[channel]`
+  state, rebuilds the ADR tables, recomputes base geometry when needed, and
+  pushes the ADR register tables.
+
+The local driver now uses direct OEM-equivalent ADR table builders for WAL,
+top, soft, hard-para, and hard-base. This should be the next thing to live-test
+with `ENABLE_ISP_BLOCK_INIT=1`, `ENABLE_ISP_BLOCK_INIT_AE=0`, stats fanout/event
+callbacks on, and a long human-inspection window. Still not live-tested as of
+this note.
+
+One more critical caller fix: block-init must call `tisp_adr_main_init(width,
+height)`, not `(tisp_par_info, blob+0x5940)`. The AE init uses the latter form,
+but ADR init stores its two args into the global ADR width/height slots and then
+uses `tparamsN` for tuning. The live-test path now calls ADR init as
+`1920x1080` unless the existing sensor-full-width/height override knobs are set.
+
+### Update 6: diamond/green pattern localized to UV/chroma, not ADR geometry
+
+Live tests on 2026-06-09 falsified the ADR-grid root-cause hypothesis for the
+visible green/diamond artifact.
+
+What was ruled out:
+
+- ADR direct init, full-sensor grid, and linear mode ran cleanly:
+  `ENABLE_ISP_BLOCK_INIT=1`, `ENABLE_ISP_BLOCK_INIT_AE=0`,
+  `ENABLE_ADR_REG_WRITES=1`, `ADR_LINEAR_MODE=1`,
+  `SENSOR_FULL_WIDTH_OVERRIDE=2560`, `SENSOR_FULL_HEIGHT_OVERRIDE=1440`.
+  The ADR regs matched the full-sensor grid:
+  `0x13309030=0x01680000`, `0x13309034=0x043802d0`,
+  `0x13309038=0x000005a0`, `0x1330903c=0x01aa0000`,
+  `0x13309040=0x04fe0354`, `0x13309044=0x085206a8`,
+  `0x13309048=0x00000a00`.
+  The visible green/diamond artifact remained.
+- GC4653 stock-vs-recovered I2C dump (`tools/t40_dump_gc4653_i2c_regs.sh`)
+  differed only in timing/exposure regs:
+  `0x0202/03`, `0x0207/08`, `0x0340/41`. Forcing stock timing/exposure onto
+  recovered changed brightness/exposure but did not remove the artifact.
+- Forcing the remaining stock host-side CSI/MIPI/VIC static diffs after streamon
+  was diagnostic only and did not remove the artifact.
+
+Decisive localization:
+
+- Live-enabling `framechan_neutral_uv_on_done=Y` removed the green/chroma
+  diamonds from completed frames and left a coherent grayscale luma image.
+- Startup neutral-UV alone only partly neutralized the image; the lower band
+  stayed green. Enabling `enable_msca_rearm_guard=Y` fixed that startup race by
+  skipping early same-buffer MSCA completions until the FIFO alternated buffers.
+- Clean-start run with both knobs enabled produced a stable clean grayscale
+  stream with healthy IRQs 38/39:
+  `logs/20260609-105536-t40-neutral-uv-rearm-startup-hold`.
+  Follow-up non-invasive RTSP check:
+  `logs/20260609-verify-live-neutral-uv/rtsp-now.jpg`.
+
+Current known-good inspection recipe:
+
+```
+FRAMECHAN_NEUTRAL_UV_ON_DONE=1 \
+ENABLE_MSCA_REARM_GUARD=1 \
+MSCA_REARM_GUARD_MAX_SKIPS=8 \
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0 \
+CSI_SETTLE_OVERRIDE=0x10 \
+ADR_LINEAR_MODE=1 \
+SENSOR_FULL_WIDTH_OVERRIDE=2560 \
+SENSOR_FULL_HEIGHT_OVERRIDE=1440 \
+ENABLE_ISP_BLOCK_INIT=1 \
+ENABLE_ISP_BLOCK_INIT_AE=0 \
+ENABLE_ADR_REG_WRITES=1 \
+SMOKE_SLEEP_SECS=180 \
+SKIP_QBUF_DUMP=1 \
+tools/t40_safe_qbuf_dump_probe.sh logs/$(date +%Y%m%d-%H%M%S)-t40-neutral-uv-rearm-242
+```
+
+Bottom line: the visible diamond/green failure is a chroma-plane problem in the
+MSCA/output path (UV contents, UV address freshness, color conversion/AWB/IR
+chroma), not luma geometry and not the ADR hardware grid. The neutral-UV fill is
+a valid inspection workaround for the current IR/night scene, but the real color
+fix is to make the MSCA UV plane correct without neutralizing it.
