@@ -6008,6 +6008,16 @@ static bool regtrace_enable_isp_3a_diag;
 static bool regtrace_enable_isp_stats_fanout;
 static uint32_t regtrace_isp_stats_fanout_count;
 static uint32_t regtrace_isp_stats_fanout_bit_count[16];
+/*
+ * Run the OEM ADR/AE block inits (register the idx-9/idx-4 stats handlers and
+ * vmalloc the stats DMA buffers) which the recovered bring-up otherwise skips.
+ * Mirrors OEM tisp_main_init args: tisp_adr_main_init(&tisp_par_info,
+ * tuning_blob+0x5940). The handler registration + DMA alloc do not depend on
+ * param quality; the AE/ADR feedback loop converges from real hardware stats.
+ */
+static bool regtrace_enable_isp_block_init;
+static int regtrace_isp_block_init_ae_ret;
+static int regtrace_isp_block_init_adr_ret;
 static bool regtrace_enable_ae_sensor_apply;
 static bool regtrace_ae_sensor_apply_clear_dirty = true;
 static bool regtrace_ae_sensor_apply_log_skips;
@@ -6219,6 +6229,7 @@ module_param_named(enable_tisp_stream_event_cbs_before_1008, regtrace_enable_tis
 module_param_named(enable_tisp_event_threads, regtrace_enable_tisp_event_threads, bool, 0644);
 module_param_named(enable_isp_3a_diag, regtrace_enable_isp_3a_diag, bool, 0644);
 module_param_named(enable_isp_stats_fanout, regtrace_enable_isp_stats_fanout, bool, 0644);
+module_param_named(enable_isp_block_init, regtrace_enable_isp_block_init, bool, 0644);
 module_param_named(enable_ae_sensor_apply, regtrace_enable_ae_sensor_apply, bool, 0644);
 module_param_named(ae_sensor_apply_clear_dirty, regtrace_ae_sensor_apply_clear_dirty, bool, 0644);
 module_param_named(ae_sensor_apply_log_skips, regtrace_ae_sensor_apply_log_skips, bool, 0644);
@@ -63726,6 +63737,18 @@ int64_t tisp_main_init(uintptr_t a0, uint32_t a1)
                                                         msca_flags);
         if (subret && !ret)
             ret = subret;
+    }
+
+    if (regtrace_enable_isp_block_init) {
+        uint32_t __pi = (uint32_t)(uintptr_t)&tisp_par_info;
+        uint32_t __blob = (uint32_t)(uintptr_t)(&data_b0000[0] + 0x5940);
+
+        regtrace_isp_block_init_ae_ret = (int)tisp_ae_main_init(__pi, __blob);
+        regtrace_isp_block_init_adr_ret = (int)tisp_adr_main_init(__pi, __blob);
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init ae_ret=%d adr_ret=%d pi=0x%x blob=0x%x adr_stat=0x%x\n",
+               regtrace_isp_block_init_ae_ret, regtrace_isp_block_init_adr_ret,
+               __pi, __blob,
+               (uint32_t)*(volatile uint32_t *)((char *)&adr_main_stat_info));
     }
 
     if (regtrace_enable_tisp_main_init_event_init) {

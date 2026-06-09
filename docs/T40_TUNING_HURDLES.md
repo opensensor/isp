@@ -834,3 +834,24 @@ DMA). This is the integration the bring-up profile deliberately avoided because
 it is complex and crash-prone; it needs careful, incremental work (high risk of
 device crash per attempt). The diagnosis, reg40 bit map, fanout, and event
 plumbing are all in place; this init invocation is the one missing producer.
+
+### Update 2: option-3 attempt A — block-init call faults on missing param infra
+
+Added gated `enable_isp_block_init`: calls the OEM `tisp_ae_main_init` +
+`tisp_adr_main_init` inside regtrace_tisp_main_init (mirroring OEM args
+&tisp_par_info, tuning_blob+0x5940), to register the stats handlers + vmalloc
+the stats DMA. Result on device: bring-up aborts inside the call — the
+regtrace_tisp_main_init shim line (printed AFTER the call) never appears, reg40
+isn't applied, and streaming never comes up (dmesg has only audio-codec init,
+no ISP). No Oops, but a fault/hang in the block init.
+
+Cause: the recovered driver's tuning blob is truncated (`data_b0000[16384]`,
+but OEM passes blob+0x5940 = 0x5940 > 0x4000) and the per-block param structures
+the inits dereference aren't reconstructed. So the inits read past valid data.
+
+Conclusion: option 3 (drive the 3A loop) is blocked by missing ISP param/tuning
+infrastructure, not by the wiring (which is done: reg40 map, stats fanout, event
+plumbing). Finishing it requires reconstructing the ISP tuning-param blob load +
+the per-block param tables the inits consume -- i.e. completing the ISP software
+reconstruction, a substantial effort beyond bring-up tweaks. enable_isp_block_init
+is left default-off (faults when enabled).
