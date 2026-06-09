@@ -536,6 +536,50 @@ yellow/green tint) and will need the ct/awb events similarly wired.
 Knobs added: `ENABLE_TISP_STREAM_EVENT_INIT`, `ENABLE_TISP_STREAM_EVENT_CBS`
 (both default 0) in `tools/t40_safe_qbuf_dump_probe.sh`.
 
+## 2026-06-08 In-driver AE plan: decoded GC4653 sensor ioctl ABI
+
+Groundwork for wiring the AE->sensor push inside the recovered driver.
+
+What the recovered driver is missing: the "sensor-apply" stage. `sensor_set_
+integration_time` (42313) and `sensor_set_analog_gain` (42451) only STAGE values
+into ISP-core shadow memory (`g_ispcore` + offsets 176/288/792/796/816/820 with
+dirty flags) -- they never touch I2C. The only `regtrace_sensor_call_sensor_
+ioctl` call in the whole driver is `SENSOR_SET_INPUT` (8067). There is NO call
+that pushes exposure/gain to the sensor.
+
+Decoded sensor ABI (from the on-device `sensor_gc4653_t40.ko`, not stripped;
+full disasm saved to `scratch/gc4653_ioctl_abi.txt`):
+
+- `sensor_sensor_ops_ioctl(sd, cmd, arg)` decodes `cmd` as
+  `idx = cmd - 0x2000006`, valid when `idx < 17` (so cmd in
+  `0x2000006 .. 0x2000016`), then dispatches via a 17-entry jump table.
+- The exposure/integration case reads the value at `*(arg+4)` and writes GC4653
+  registers `0x0203` (low) and `0x0202` (high) via `sensor_write`, then applies
+  analog gain from `sensor_again_lut`. So the combined-exposure event near
+  `cmd=0x2000006` is the apply the ISP must call; payload is a struct whose
+  word at offset 4 carries the packed value.
+- NOTE the recovered driver's `REGTRACE_TX_ISP_EVENT_SENSOR_SET_INPUT=0x2000004`
+  is below this range; the exposure/gain events are a few indices higher. The
+  exact EXPO/INT_TIME/AGAIN cmd values must be read off the jump table in
+  `scratch/gc4653_ioctl_abi.txt` before coding the call.
+
+Wiring plan (next):
+1. Verify the AE algorithm actually ticks and computes a total gain/exposure
+   (find the AE process/`tisp_ae_process` tick driven by the event thread or the
+   frame-done work) and where it deposits the result.
+2. Add a sensor-apply step: read the staged exposure/again (the ISP shadow slots
+   that `sensor_set_integration_time`/`_analog_gain` write) and call
+   `regtrace_sensor_call_sensor_ioctl(<EXPO cmd>, &payload)` once per frame
+   (from the frame-done work or the event loop). Un-stub
+   `tisp_main_long_again_update` (58656) if it is on the path.
+3. Gate it behind a new `enable_ae_sensor_apply` knob (default off) so it can be
+   toggled, and verify live: GC4653 `0x0202/0x0203/0x0205` should start MOVING
+   and RTSP brightness should track the scene.
+
+Reminder: manual I2C exposure/gain already produces a good image, so this is a
+wiring task, not a sensor-capability question. Keep the Tasmota power-cycle
+(`192.168.50.103`) handy; reload requires stock `tx_isp_t40` fully unloaded.
+
 ## T31 Lessons To Reuse Carefully
 
 The T31 tuning history has the same class of visual failure: severe
