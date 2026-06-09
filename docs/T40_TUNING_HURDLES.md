@@ -717,3 +717,47 @@ A passing frame is not just a large JPEG or changing frame. It must show:
 - no stable green/magenta blobs
 - stable output after at least 90 seconds of RTSP capture
 - matching register/proc evidence for the tested tuning state
+
+## 2026-06-08 EXPO bridge verified + shear is a pre-existing MSCA defect
+
+Two independent results from the in-driver AE work (commit "lock in verified
+GC4653 EXPO bridge"):
+
+1. **AE->sensor EXPO bridge works (verified).** A gated frame-done hook
+   (`enable_ae_sensor_apply`, default off) issues `TX_ISP_EVENT_SENSOR_EXPO`
+   (combined case **0x02000016**, not 0x02000006) to the GC4653 with a packed
+   `(again_idx<<16)|integration`. Forcing `0x00190760` moved GC4653
+   `0x0202/0x0203 -> 0x07/0x60` and took the frame black->bright
+   (`logs/20260608-212400-t40-ae-force-expo-safe-cmd16-242`, RTSP mean ~255).
+   Gain index is clamped to 25 (GC4653 LUT = 26 entries); index 255 walked off
+   the LUT and crashed the sensor module. Non-forced runs show the staged AE
+   slots are never dirtied (`dirty=0/0/0`) -> the upstream AE algorithm isn't
+   producing values; that's the remaining AE gap (separate from the bridge).
+   The `enable_ae_main_process_on_frame` experiment (ticking
+   `tisp_ae_main_process()` from frame-done) **reboots the camera every run**
+   and was removed.
+
+2. **The diagonal shear is NOT exposure/AE and NOT a geometry-register bug.**
+   With exposure now mid-tone (~140) the raw qbuf shows a periodic
+   **4-strip diagonal comb: 272-line vertical period (1088 = 4x272)**, dominant
+   2-D FFT sideband at (fx=1, fy=4). It was always present on the MSCA-FIFO
+   path; the earlier "no tearing" 20:11 capture was fooled by a near-black frame
+   (ymean 17) -- normalized by brightness the comb energy is the same in both.
+   - Luma stride is correct: stride=1920 minimizes the vertical-gradient sweep.
+   - **ISP-core MSCA ch0 geometry matches OEM exactly**: `0x13316100=0x07800438`
+     (1920x1080), `0x13316180=0x16198=0x780` (Y/UV stride 1920). So the shear is
+     not static out-size/stride misprogramming.
+   - The addr-FIFO writes a single linear 1920x1088 buffer (Y then UV
+     contiguous, UV-Y = 0x1fe000), so the shear is generated *inside* the MSCA
+     output, not at the buffer-address level.
+   - Notable: **ch0 AND ch2 are both active at full 1920x1080**
+     (`0x13316300=0x07800438`, stride 0x780); ch1 is the 640x360 substream
+     (`0x16200=0x02800168`), ch3 inactive. The rendered frame also *ghosts*
+     (scene visible twice) -> two full-res channels + frame-done are a prime
+     suspect for tearing/mixing.
+
+   Next experiments (device, the probe now also dumps `0x13316xxx` MSCA geometry
+   via devmem): (a) dump two consecutive frames -> if the comb position moves,
+   it's tearing; if static, a fixed scaler-strip layout. (b) Disable/repoint ch2
+   and re-check the comb. Driving the scaler/FIFO config -- not color tuning --
+   is the lever.

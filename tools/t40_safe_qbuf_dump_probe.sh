@@ -242,6 +242,28 @@ if command -v devmem >/dev/null 2>&1; then
 			printf '%s ' "$hex"
 			devmem "$hex" 32 || true
 		done
+		# ISP-core MSCA channel-output geometry phys 0x13300000.
+		# OEM reference (docs/T40_TUNING_HURDLES.md): 0x13316100=0x07800438
+		# (ch0 out 1920x1080), 0x13316180=0x780 (Y stride), 0x13316198=0x780
+		# (UV stride). Diffing these against the recovered driver localizes the
+		# 4-strip (272-line) diagonal shear in the MSCA FIFO path.
+		echo "# isp-core msca window phys 0x13300000 (window regs)"
+		for off in 0x16064 0x16080 0x16084 0x160a0 0x160a4 0x160a8 0x160ac 0x160b0 0x160b4; do
+			addr=$((0x13300000 + off))
+			hex="$(printf '0x%08x' "$addr")"
+			printf '%s ' "$hex"
+			devmem "$hex" 32 || true
+		done
+		for ch in 0 1 2 3; do
+			bank=$((ch * 0x100))
+			echo "# isp-core msca ch$ch geometry (out-size/stride)"
+			for off in 0x16100 0x16104 0x16128 0x1612c 0x16168 0x16180 0x16198; do
+				addr=$((0x13300000 + off + bank))
+				hex="$(printf '0x%08x' "$addr")"
+				printf '%s ' "$hex"
+				devmem "$hex" 32 || true
+			done
+		done
 	} > /tmp/t40-csi-vic-regs.txt 2>&1
 else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
