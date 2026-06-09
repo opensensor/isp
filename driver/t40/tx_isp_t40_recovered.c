@@ -5996,6 +5996,9 @@ static bool regtrace_enable_tisp_stream_event_init;
 static bool regtrace_enable_tisp_stream_event_cbs;
 static bool regtrace_enable_tisp_stream_event_cbs_before_1008;
 static bool regtrace_enable_tisp_event_threads;
+static bool regtrace_enable_ae_sensor_apply;
+static bool regtrace_ae_sensor_apply_clear_dirty = true;
+static bool regtrace_ae_sensor_apply_log_skips;
 static bool regtrace_enable_core_bayer_reg8;
 static bool regtrace_enable_core_top_sel_reg0c;
 static bool regtrace_enable_core_start_800;
@@ -6146,6 +6149,8 @@ static uint regtrace_sensor_full_height_override;
 static uint regtrace_t40_msca_scaler_level;
 static uint regtrace_csi_direct_stage_limit;
 static uint regtrace_csi_settle_override;
+static uint regtrace_ae_sensor_apply_force_packed;
+static uint regtrace_ae_sensor_apply_max_again_index = 25U;
 module_param_named(delegate_tx_isp_ioctl, regtrace_delegate_tx_isp_ioctl, bool, 0644);
 module_param_named(delegate_framechan_ioctl, regtrace_delegate_framechan_ioctl, bool, 0644);
 module_param_named(activate_core_direct, regtrace_activate_core_direct, bool, 0644);
@@ -6185,6 +6190,9 @@ module_param_named(enable_tisp_stream_event_init, regtrace_enable_tisp_stream_ev
 module_param_named(enable_tisp_stream_event_cbs, regtrace_enable_tisp_stream_event_cbs, bool, 0644);
 module_param_named(enable_tisp_stream_event_cbs_before_1008, regtrace_enable_tisp_stream_event_cbs_before_1008, bool, 0644);
 module_param_named(enable_tisp_event_threads, regtrace_enable_tisp_event_threads, bool, 0644);
+module_param_named(enable_ae_sensor_apply, regtrace_enable_ae_sensor_apply, bool, 0644);
+module_param_named(ae_sensor_apply_clear_dirty, regtrace_ae_sensor_apply_clear_dirty, bool, 0644);
+module_param_named(ae_sensor_apply_log_skips, regtrace_ae_sensor_apply_log_skips, bool, 0644);
 module_param_named(enable_core_bayer_reg8, regtrace_enable_core_bayer_reg8, bool, 0644);
 module_param_named(enable_core_top_sel_reg0c, regtrace_enable_core_top_sel_reg0c, bool, 0644);
 module_param_named(enable_core_start_800, regtrace_enable_core_start_800, bool, 0644);
@@ -6335,6 +6343,8 @@ module_param_named(sensor_full_height_override, regtrace_sensor_full_height_over
 module_param_named(t40_msca_scaler_level, regtrace_t40_msca_scaler_level, uint, 0644);
 module_param_named(csi_direct_stage_limit, regtrace_csi_direct_stage_limit, uint, 0644);
 module_param_named(csi_settle_override, regtrace_csi_settle_override, uint, 0644);
+module_param_named(ae_sensor_apply_force_packed, regtrace_ae_sensor_apply_force_packed, uint, 0644);
+module_param_named(ae_sensor_apply_max_again_index, regtrace_ae_sensor_apply_max_again_index, uint, 0644);
 
 #define REGTRACE_TX_ISP_CONTEXT_SIZE 0x4000
 #define REGTRACE_FRAMECHAN_CONTEXT_SIZE 0x400
@@ -6396,6 +6406,7 @@ module_param_named(csi_settle_override, regtrace_csi_settle_override, uint, 0644
 #define REGTRACE_TX_ISP_VIDEO_VIC_ID_OFFSET 0x4c
 #define REGTRACE_TX_ISP_EVENT_SENSOR_REGISTER 0x02000000U
 #define REGTRACE_TX_ISP_EVENT_SENSOR_SET_INPUT 0x02000004U
+#define REGTRACE_TX_ISP_EVENT_SENSOR_EXPO 0x02000016U
 #define REGTRACE_TX_ISP_EVENT_SYNC_SENSOR_ATTR 0x01000001U
 #define REGTRACE_TX_SENSOR_CONTROL_INTERFACE_I2C 1
 #define REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI 1U
@@ -6506,6 +6517,13 @@ module_param_named(csi_settle_override, regtrace_csi_settle_override, uint, 0644
 #define REGTRACE_T40_MSCA_SHADOW_CMD_LINE_COMMIT 0x400102U
 #define REGTRACE_T40_MSCA_SHADOW_CMD_OSD_COMMIT 0x102U
 #define REGTRACE_T40_CORE_OPS_INIT_DONE_REG 0x1700cU
+#define REGTRACE_AE_SENSOR_SLOT_STRIDE 72U
+#define REGTRACE_AE_SENSOR_AGAIN_DIRTY_OFFSET 768U
+#define REGTRACE_AE_SENSOR_AGAIN_OFFSET 772U
+#define REGTRACE_AE_SENSOR_INT_DIRTY_OFFSET 792U
+#define REGTRACE_AE_SENSOR_INT_OFFSET 796U
+#define REGTRACE_AE_SENSOR_PACKED_DIRTY_OFFSET 816U
+#define REGTRACE_AE_SENSOR_PACKED_OFFSET 820U
 #define REGTRACE_CORE_PAD_CHANNEL_OFFSET 0x20U
 #define REGTRACE_CORE_CH_TISP_INDEX_OFFSET 0x70U
 #define REGTRACE_CORE_CH_TISP_ID_OFFSET 0x74U
@@ -7387,6 +7405,19 @@ static uint32_t regtrace_irq_frame_done_msca_read_count[4];
 static uint32_t regtrace_irq_frame_done_delay_count[4];
 static uint32_t regtrace_irq_frame_done_delay_last_ms[4];
 static uint32_t regtrace_irq_frame_done_addr_seq[4];
+static uint32_t regtrace_ae_sensor_apply_count[4];
+static uint32_t regtrace_ae_sensor_apply_skip_clean_count[4];
+static uint32_t regtrace_ae_sensor_apply_skip_no_core_count[4];
+static uint32_t regtrace_ae_sensor_apply_skip_zero_count[4];
+static uint32_t regtrace_ae_sensor_apply_force_count[4];
+static uint32_t regtrace_ae_sensor_apply_clamp_count[4];
+static uint32_t regtrace_ae_sensor_apply_last_dirty[4];
+static uint32_t regtrace_ae_sensor_apply_last_again_dirty[4];
+static uint32_t regtrace_ae_sensor_apply_last_int_dirty[4];
+static uint32_t regtrace_ae_sensor_apply_last_packed[4];
+static uint32_t regtrace_ae_sensor_apply_last_again[4];
+static uint32_t regtrace_ae_sensor_apply_last_int[4];
+static long regtrace_ae_sensor_apply_last_ret[4];
 static uint32_t regtrace_irq_frame_done_limit_skip_count;
 static uint32_t regtrace_irq_frame_done_last_channel;
 static uint32_t regtrace_irq_frame_done_last_source;
@@ -12460,6 +12491,114 @@ static inline void regtrace_put_u32(uintptr_t base, uint32_t off, uint32_t value
 static inline void regtrace_put_u16(uintptr_t base, uint32_t off, uint16_t value)
 {
     *(uint16_t *)(base + off) = value;
+}
+
+static int regtrace_ae_sensor_apply_maybe(int channel, const char *reason)
+{
+    uintptr_t core;
+    uintptr_t slot;
+    uint32_t dirty;
+    uint32_t again_dirty;
+    uint32_t int_dirty;
+    uint32_t packed;
+    uint32_t payload[2];
+    uint32_t forced;
+    uint32_t again;
+    uint32_t max_again;
+    long ret;
+    static unsigned int log_count[4];
+    static unsigned int skip_log_count[4];
+
+    if (!regtrace_enable_ae_sensor_apply)
+        return 0;
+    if (channel < 0 || channel >= 4)
+        return -EINVAL;
+
+    core = regtrace_get_u32((uintptr_t)g_ispcore, 0);
+    if (!regtrace_is_kernel_ptr((void *)core)) {
+        regtrace_ae_sensor_apply_skip_no_core_count[channel]++;
+        return -ENODEV;
+    }
+
+    slot = core + (uint32_t)channel * REGTRACE_AE_SENSOR_SLOT_STRIDE;
+    dirty = regtrace_get_u32(slot, REGTRACE_AE_SENSOR_PACKED_DIRTY_OFFSET);
+    packed = regtrace_get_u32(slot, REGTRACE_AE_SENSOR_PACKED_OFFSET);
+    again_dirty = regtrace_get_u32(slot, REGTRACE_AE_SENSOR_AGAIN_DIRTY_OFFSET);
+    int_dirty = regtrace_get_u32(slot, REGTRACE_AE_SENSOR_INT_DIRTY_OFFSET);
+    forced = regtrace_ae_sensor_apply_force_packed;
+
+    regtrace_ae_sensor_apply_last_dirty[channel] = dirty;
+    regtrace_ae_sensor_apply_last_again_dirty[channel] = again_dirty;
+    regtrace_ae_sensor_apply_last_int_dirty[channel] = int_dirty;
+    regtrace_ae_sensor_apply_last_packed[channel] = packed;
+    regtrace_ae_sensor_apply_last_again[channel] = packed >> 16;
+    regtrace_ae_sensor_apply_last_int[channel] = packed & 0xffffU;
+
+    if (forced) {
+        packed = forced;
+        dirty = 1;
+        regtrace_ae_sensor_apply_force_count[channel]++;
+    } else if (!dirty && !again_dirty && !int_dirty) {
+        regtrace_ae_sensor_apply_skip_clean_count[channel]++;
+        if (regtrace_ae_sensor_apply_log_skips &&
+            skip_log_count[channel] < 12) {
+            printk(KERN_WARNING "tx_isp_t40_recovered: AE sensor apply skip ch=%d reason=%s dirty=%u/%u/%u packed=0x%08x\n",
+                   channel, reason ? reason : "unknown", dirty,
+                   again_dirty, int_dirty, packed);
+            skip_log_count[channel]++;
+        }
+        return 0;
+    }
+
+    again = packed >> 16;
+    max_again = regtrace_ae_sensor_apply_max_again_index;
+    if (max_again && again > max_again) {
+        packed = (max_again << 16) | (packed & 0xffffU);
+        again = max_again;
+        regtrace_ae_sensor_apply_clamp_count[channel]++;
+    }
+
+    regtrace_ae_sensor_apply_last_dirty[channel] = dirty;
+    regtrace_ae_sensor_apply_last_again_dirty[channel] = again_dirty;
+    regtrace_ae_sensor_apply_last_int_dirty[channel] = int_dirty;
+    regtrace_ae_sensor_apply_last_packed[channel] = packed;
+    regtrace_ae_sensor_apply_last_again[channel] = again;
+    regtrace_ae_sensor_apply_last_int[channel] = packed & 0xffffU;
+
+    if (!(packed & 0xffffU)) {
+        regtrace_ae_sensor_apply_skip_zero_count[channel]++;
+        return -EINVAL;
+    }
+
+    /*
+     * GC4653 T40's sensor module reads the packed EXPO word from arg+4.
+     * Keep arg+0 populated too so this remains compatible with the usual
+     * Ingenic sensor handlers that dereference *(int *)arg.
+     */
+    payload[0] = packed;
+    payload[1] = packed;
+    ret = regtrace_sensor_call_sensor_ioctl(REGTRACE_TX_ISP_EVENT_SENSOR_EXPO,
+                                            payload);
+    regtrace_ae_sensor_apply_count[channel]++;
+    regtrace_ae_sensor_apply_last_ret[channel] = ret;
+
+    if (!ret && !forced && regtrace_ae_sensor_apply_clear_dirty) {
+        regtrace_put_u32(slot, REGTRACE_AE_SENSOR_PACKED_DIRTY_OFFSET, 0);
+        regtrace_put_u32(slot, REGTRACE_AE_SENSOR_AGAIN_DIRTY_OFFSET, 0);
+        regtrace_put_u32(slot, REGTRACE_AE_SENSOR_INT_DIRTY_OFFSET, 0);
+    }
+
+    if (log_count[channel] < 12 || ret) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: AE sensor apply ch=%d reason=%s dirty=%u/%u/%u packed=0x%08x again=%u int=%u force=%u ret=%ld\n",
+               channel, reason ? reason : "unknown", dirty, again_dirty,
+               int_dirty, packed, again, packed & 0xffffU,
+               forced ? 1U : 0U, ret);
+    } else if (log_count[channel] == 12) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: AE sensor apply ch=%d logging suppressed\n",
+               channel);
+    }
+    log_count[channel]++;
+    return (int)ret;
 }
 
 static int regtrace_is_kernel_addr(const void *ptr)
@@ -37545,6 +37684,7 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
     uint32_t uv;
     uint32_t index;
     uint32_t read_fifo;
+    uint32_t ae_applied = 0;
 
     spin_lock_irqsave(&item->lock, flags);
     if (!item->pending) {
@@ -37582,6 +37722,9 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
             return;
         }
 
+        regtrace_ae_sensor_apply_maybe((int)channel, "irq-fd-fifo");
+        ae_applied = 1;
+
         if (regtrace_irq_frame_done_dry_run) {
             regtrace_irq_frame_done_record_dry((int)channel, source, y,
                                                uv, index);
@@ -37605,6 +37748,9 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
             return;
         }
     }
+
+    if (!ae_applied)
+        regtrace_ae_sensor_apply_maybe((int)channel, "irq-fd");
 
     regtrace_irq_frame_done_send((int)channel, source, pad, y, uv, index,
                                  true);

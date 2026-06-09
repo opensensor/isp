@@ -38,6 +38,16 @@ T40_PROFILE_NO_DIRECT_ADDR_SOURCE="${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:-0}"
 # to register the AE callbacks. See docs/T40_TUNING_HURDLES.md.
 ENABLE_TISP_STREAM_EVENT_INIT="${ENABLE_TISP_STREAM_EVENT_INIT:-0}"
 ENABLE_TISP_STREAM_EVENT_CBS="${ENABLE_TISP_STREAM_EVENT_CBS:-0}"
+# Sensor exposure apply bridge. ENABLE_AE_SENSOR_APPLY wires the recovered
+# driver's staged AE value to the GC4653 TX_ISP_EVENT_SENSOR_EXPO ioctl from
+# frame-done work. AE_SENSOR_APPLY_FORCE_PACKED is a test override:
+# packed=(again_index<<16)|integration_time. GC4653 T40 has 26 analog-gain
+# LUT entries, so the default max safe index is 25 (e.g. 0x00190760).
+ENABLE_AE_SENSOR_APPLY="${ENABLE_AE_SENSOR_APPLY:-0}"
+AE_SENSOR_APPLY_FORCE_PACKED="${AE_SENSOR_APPLY_FORCE_PACKED:-0}"
+AE_SENSOR_APPLY_CLEAR_DIRTY="${AE_SENSOR_APPLY_CLEAR_DIRTY:-1}"
+AE_SENSOR_APPLY_MAX_AGAIN_INDEX="${AE_SENSOR_APPLY_MAX_AGAIN_INDEX:-25}"
+AE_SENSOR_APPLY_LOG_SKIPS="${AE_SENSOR_APPLY_LOG_SKIPS:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -59,7 +69,11 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	CORE_BAYER_REG8_VALUE VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE \
 	VIC_MDMA_QBUF_RING_CTRL_VALUE VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE \
 	T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING T40_PROFILE_NO_DIRECT_ADDR_SOURCE \
-	ENABLE_TISP_STREAM_EVENT_INIT ENABLE_TISP_STREAM_EVENT_CBS; do
+	ENABLE_TISP_STREAM_EVENT_INIT ENABLE_TISP_STREAM_EVENT_CBS \
+	ENABLE_AE_SENSOR_APPLY \
+	AE_SENSOR_APPLY_FORCE_PACKED \
+	AE_SENSOR_APPLY_CLEAR_DIRTY AE_SENSOR_APPLY_MAX_AGAIN_INDEX \
+	AE_SENSOR_APPLY_LOG_SKIPS; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
@@ -103,6 +117,11 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"T40_PROFILE_NO_DIRECT_ADDR_SOURCE=$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	"ENABLE_TISP_STREAM_EVENT_INIT=$ENABLE_TISP_STREAM_EVENT_INIT" \
 	"ENABLE_TISP_STREAM_EVENT_CBS=$ENABLE_TISP_STREAM_EVENT_CBS" \
+	"ENABLE_AE_SENSOR_APPLY=$ENABLE_AE_SENSOR_APPLY" \
+	"AE_SENSOR_APPLY_FORCE_PACKED=$AE_SENSOR_APPLY_FORCE_PACKED" \
+	"AE_SENSOR_APPLY_CLEAR_DIRTY=$AE_SENSOR_APPLY_CLEAR_DIRTY" \
+	"AE_SENSOR_APPLY_MAX_AGAIN_INDEX=$AE_SENSOR_APPLY_MAX_AGAIN_INDEX" \
+	"AE_SENSOR_APPLY_LOG_SKIPS=$AE_SENSOR_APPLY_LOG_SKIPS" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
@@ -119,6 +138,11 @@ set -x
 : "${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:=0}"
 : "${ENABLE_TISP_STREAM_EVENT_INIT:=0}"
 : "${ENABLE_TISP_STREAM_EVENT_CBS:=0}"
+: "${ENABLE_AE_SENSOR_APPLY:=0}"
+: "${AE_SENSOR_APPLY_FORCE_PACKED:=0}"
+: "${AE_SENSOR_APPLY_CLEAR_DIRTY:=1}"
+: "${AE_SENSOR_APPLY_MAX_AGAIN_INDEX:=25}"
+: "${AE_SENSOR_APPLY_LOG_SKIPS:=0}"
 /etc/init.d/S31raptor stop || true
 killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
@@ -139,6 +163,11 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_profile_no_direct_addr_source="$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	enable_tisp_stream_event_init="$ENABLE_TISP_STREAM_EVENT_INIT" \
 	enable_tisp_stream_event_cbs="$ENABLE_TISP_STREAM_EVENT_CBS" \
+	enable_ae_sensor_apply="$ENABLE_AE_SENSOR_APPLY" \
+	ae_sensor_apply_force_packed="$AE_SENSOR_APPLY_FORCE_PACKED" \
+	ae_sensor_apply_clear_dirty="$AE_SENSOR_APPLY_CLEAR_DIRTY" \
+	ae_sensor_apply_max_again_index="$AE_SENSOR_APPLY_MAX_AGAIN_INDEX" \
+	ae_sensor_apply_log_skips="$AE_SENSOR_APPLY_LOG_SKIPS" \
 	force_core_bayer_reg8_value=1 \
 	core_bayer_reg8_value="$CORE_BAYER_REG8_VALUE" \
 	tisp_main_init_reg88_override=0xffffffff \
@@ -159,6 +188,28 @@ sleep 12
 chmod +x /tmp/phys_memdump
 cat /proc/interrupts | grep -E '(^ *3[89]:|tx|isp|vic)' || true
 cat /proc/interrupts > /tmp/t40-interrupts-after.txt
+{
+	echo "# GC4653 AE regs $(date)"
+	read_reg16() {
+		local reg="$1"
+		local hi lo
+		hi=$(( (reg >> 8) & 255 ))
+		lo=$(( reg & 255 ))
+		i2ctransfer -f -y 1 w2@0x29 \
+			"$(printf '0x%02x' "$hi")" "$(printf '0x%02x' "$lo")" \
+			r1 2>/dev/null || printf 'ERR'
+	}
+	for pass in 1 2 3 4 5; do
+		printf 'pass=%s ' "$pass"
+		for reg in 0x0202 0x0203 0x0205 0x0218 0x0219 0x0340 0x0341; do
+			printf '%s=' "$reg"
+			read_reg16 "$reg"
+			printf ' '
+		done
+		printf '\n'
+		sleep 2
+	done
+} > /tmp/t40-sensor-ae-regs.txt 2>&1 || true
 set +x
 if command -v devmem >/dev/null 2>&1; then
 	{
@@ -196,7 +247,7 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|TISP stream event|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -260 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|TISP stream event|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -320 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 EOS
 
@@ -204,6 +255,7 @@ EOS
 "${SCP[@]}" "$USER@$IP:/tmp/t40-qbuf-lines.txt" "$LOG/qbuf-lines.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-csi-vic-regs.txt" "$LOG/csi-vic-regs.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-tail.txt" "$LOG/dmesg-tail.txt"
+"${SCP[@]}" "$USER@$IP:/tmp/t40-sensor-ae-regs.txt" "$LOG/sensor-ae-regs.txt"
 
 qline="$(grep -m1 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" || true)"
 if [[ -z "$qline" ]]; then
