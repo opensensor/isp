@@ -1203,3 +1203,81 @@ the local recovered MSCA/VIC/CSI shutdown path instead of
 later with `ALLOW_ACTIVE_STREAM_STOP=1`, but default probe behavior should no
 longer arm a recovered module that uses the suspected remote streamoff callback
 on `rvd` exit.
+
+## 2026-06-09 AWB reconstruction repairs verified against OEM binary
+
+Offline disassembly of `tx-isp-t40.ko` (`tisp_awb_params_refresh` at
+`0x2fc38`, `tisp_awb_main_init` at `0x311b4`) confirmed the pointer-table
+interpretation of the AWB ctx and exposed four reconstruction bugs, all fixed:
+
+1. `stMainAwbInterOri` was materialized truncated (16384 of 60328 bytes).
+   Re-extracted the full blob from OEM `.data+0x1d3d8` (no relocations inside).
+   The tail carries real seed data at `+0xc605..0xc6b5` and `+0xe0f4..0xe11b`,
+   and several AWB functions index past 16K (`+0x4f5c`, `+0x515c`, `+0x53b8`,
+   `+0x53c0`), which previously read out of bounds.
+2. `tisp_awb_params_refresh` stored the `arg1[54]` flag byte at `dest+0x5a`;
+   the OEM stores it at `dest+0x5e` (`sh v0,-10(a0)` with `a0=dest+0x68`).
+   The flag-clear semantics (`sb zero,0(ptr)` through `arg1[101]`) and both
+   tail grid loops were verified correct as repaired.
+3. `pstMainAwbOri`/`pstSecAwbOri` were declared as 4-byte scalars but OEM
+   reserves 0x200 bytes each — `tisp_awb_params_transmit` fills them as
+   128-entry pointer tables and would have smashed adjacent .bss. Now arrays.
+4. `tisp_awb_main_init` anchored its ctx at `isp_memopt` (.bss+0); OEM anchors
+   at `pstMainAwbOri` (.bss+0x3f34). Also OEM `tisp_main_init` passes sensor
+   width/height words (`tisp_par_info[0]`, `tisp_par_info+4`) to
+   `tisp_awb_main_init`, not the `(par_info, blob)` pair AE takes; the
+   block-init gate now does the same with override fallback.
+
+Probe guard refinement: the active-stream refusal now only triggers when the
+recovered module is actually loaded (`/sys/module/tx_isp_t40_recovered`), so
+fresh-boot runs over the stock driver proceed without
+`ALLOW_ACTIVE_STREAM_STOP=1`.
+
+## 2026-06-09 AWB live bring-up results (fresh-boot power-cycle workflow)
+
+Workflow note: camera power-cycles via the Tasmota switch at 192.168.50.103
+(`curl http://192.168.50.103/cm?cmnd=Power%20Off` / `On`), camera back on LAN
+~20s later; run probes only from this fresh-boot state.
+
+- Stage-4 AWB block-init (alloc + transmit + refresh, no reg writes, no
+  callbacks) is stable live: `isp_block_init_awb_ret=0`, IRQs healthy
+  (`logs/20260609-173701-t40-awb-stage4-neutraluv-242`).
+- Full AWB init (stage 0) crashed: `tisp_awb_main_interrupt_static` was
+  fragment soup that fed a garbage vaddr to `private_dma_cache_sync` in IRQ
+  context, and the AWB stats vaddr (`tispinfo+36`) is only seeded when
+  `enable_tisp_main_init_tispinfo_dma=1`. Handler repaired against OEM 0x31a40
+  with a skip-and-log guard when the stats vaddr is unset.
+- Stage-4 + `ENABLE_AWB_REG_WRITES=1` oopsed at `tisp_awb_set_regional_threshold`
+  → `tisp_simple_intp_int16` (BadVA = outer+0x34c0, vmalloc guard page): the
+  recovered function passed swapped interpolation args and had unmatched
+  lwl/lwr fragments. Repaired against OEM 0x3053c (8 ct-interpolated thresholds
+  into outer[68..82], packed-word writes to 0x18028/0x18228 banks, awb trig).
+- BREAKTHROUGH: with the AWB table/blob repairs in place, real UV
+  (`FRAMECHAN_NEUTRAL_UV_ON_DONE=0`) now produces a clean color image — no
+  diamond/venetian-blind artifact — with the expected strong green cast of
+  un-white-balanced Bayer (`logs/20260609-175033-t40-awb-stage4-realuv-nowrites-242`,
+  frame: lamp renders yellow, window cyan, walls green). The remaining color
+  fix is WB gains via the `tisp_awb_set_gain`/`set_hardware_param` path.
+
+### AWB hw-write chain repairs (2026-06-09, continued)
+
+The kmsg-streaming workflow (start `cat /proc/kmsg` over SSH before the probe
+so oops reports survive the watchdog reboot) pinned the reg-writes crashes:
+
+1. `tisp_awb_params_transmit` (recovered) wrote wrong bases/offsets into the
+   upper pointer-table entries — live diagnostic showed `ctx[34] = outer+13504`
+   (an inter-family offset on the outer base). Rewrote the whole function from
+   a symbolic extraction of OEM 0x2f560: entries 0..38 are outer+{0,100,...,4712},
+   entries 39..127 are inter+{0,1800,...,59428}; sec path (a1=1) uses the
+   stSec* pair. Verified live: `ctx34=outer+3376`, `ctx117=inter+57592`,
+   `*ct=0x400`.
+2. `tisp_awb_set_hardware_param` (recovered) contained foreign fragment code
+   calling `tisp_simple_intp_int8` with a garbage table (OEM makes no such
+   call) → BadVA 0xacb. Rewrote per OEM 0x30a70: pack 10 words from outer
+   params → 0x18004..0x18024 + 0x1804c (sec +0x200), gated by *ctx[100], then
+   call regional_threshold + lum_th_freq.
+3. `tisp_awb_set_lum_th_freq` rewritten per OEM 0x30704: mode!=1 does ct
+   interpolation over the three 11-entry tables at ctx[34]+176/198/220;
+   mode==1 does piecewise-linear over the 9-entry lum zone table at ctx[21]
+   keyed by *ctx[116]; tail calls tisp_ae_(sec_)mean_update, writes packed
+   word to 0x18038/0x18238, pulses awb trig.
