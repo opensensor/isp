@@ -11,6 +11,7 @@ QBUF_EXTRA_PHYS="${QBUF_EXTRA_PHYS:-0x6bab300 0x6ea8300}"
 QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
 SMOKE_SLEEP_SECS="${SMOKE_SLEEP_SECS:-12}"
 STOP_RAPTOR_TIMEOUT_SECS="${STOP_RAPTOR_TIMEOUT_SECS:-20}"
+ALLOW_ACTIVE_STREAM_STOP="${ALLOW_ACTIVE_STREAM_STOP:-0}"
 SKIP_QBUF_DUMP="${SKIP_QBUF_DUMP:-0}"
 SKIP_RTSP="${SKIP_RTSP:-0}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
@@ -69,7 +70,10 @@ ISP_STATS_FANOUT_ADR_STATUS0_MASK="${ISP_STATS_FANOUT_ADR_STATUS0_MASK:-0}"
 ENABLE_ADR_PROCESS_WORK="${ENABLE_ADR_PROCESS_WORK:-0}"
 ENABLE_ISP_BLOCK_INIT="${ENABLE_ISP_BLOCK_INIT:-0}"
 ENABLE_ISP_BLOCK_INIT_AE="${ENABLE_ISP_BLOCK_INIT_AE:-0}"
+ENABLE_ISP_BLOCK_INIT_AWB="${ENABLE_ISP_BLOCK_INIT_AWB:-0}"
+ENABLE_AWB_REG_WRITES="${ENABLE_AWB_REG_WRITES:-1}"
 ISP_BLOCK_INIT_STAGE_LIMIT="${ISP_BLOCK_INIT_STAGE_LIMIT:-0}"
+AWB_MAIN_INIT_STAGE_LIMIT="${AWB_MAIN_INIT_STAGE_LIMIT:-0}"
 ADR_MAIN_INIT_STAGE_LIMIT="${ADR_MAIN_INIT_STAGE_LIMIT:-0}"
 # ADR grid/register push gate. With BLOCK_INIT=1, default 1 mirrors OEM and
 # pushes the recomputed ADR grid/register table; set 0 to allocate/register the
@@ -111,7 +115,8 @@ if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
 	exit 2
 fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
-	SMOKE_SLEEP_SECS STOP_RAPTOR_TIMEOUT_SECS SKIP_QBUF_DUMP SKIP_RTSP \
+	SMOKE_SLEEP_SECS STOP_RAPTOR_TIMEOUT_SECS ALLOW_ACTIVE_STREAM_STOP \
+	SKIP_QBUF_DUMP SKIP_RTSP \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
 	T40_STOCK_HOST_INIT_MASK OEM_EVENT_PRE_CSI_STREAM \
 	OEM_EVENT_PRE_CSI_STAGE_LIMIT OEM_EVENT_PRE_CSI_DELAY_MS \
@@ -125,8 +130,9 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_ISP_3A_DIAG ENABLE_ISP_STATS_FANOUT \
 	ISP_STATS_FANOUT_ADR_STATUS0_MASK \
 	ENABLE_ADR_PROCESS_WORK \
-	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE \
-	ISP_BLOCK_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
+	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE ENABLE_ISP_BLOCK_INIT_AWB \
+	ENABLE_AWB_REG_WRITES \
+	ISP_BLOCK_INIT_STAGE_LIMIT AWB_MAIN_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
 	ENABLE_ADR_REG_WRITES \
 	ENABLE_MSCA_REARM_GUARD MSCA_REARM_GUARD_MAX_SKIPS IRQ_FRAME_DONE_DELAY_MS \
 	ENABLE_AE_SENSOR_APPLY \
@@ -164,6 +170,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 "${SSH[@]}" \
 	"SMOKE_SLEEP_SECS=$SMOKE_SLEEP_SECS" \
 	"STOP_RAPTOR_TIMEOUT_SECS=$STOP_RAPTOR_TIMEOUT_SECS" \
+	"ALLOW_ACTIVE_STREAM_STOP=$ALLOW_ACTIVE_STREAM_STOP" \
 	"FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
 	"TISP_MAIN_INIT_TOP40_VALUE=$TISP_MAIN_INIT_TOP40_VALUE" \
 	"TISP_MAIN_INIT_CSC_VERSION_VALUE=$TISP_MAIN_INIT_CSC_VERSION_VALUE" \
@@ -192,7 +199,10 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"ENABLE_ADR_PROCESS_WORK=$ENABLE_ADR_PROCESS_WORK" \
 	"ENABLE_ISP_BLOCK_INIT=$ENABLE_ISP_BLOCK_INIT" \
 	"ENABLE_ISP_BLOCK_INIT_AE=$ENABLE_ISP_BLOCK_INIT_AE" \
+	"ENABLE_ISP_BLOCK_INIT_AWB=$ENABLE_ISP_BLOCK_INIT_AWB" \
+	"ENABLE_AWB_REG_WRITES=$ENABLE_AWB_REG_WRITES" \
 	"ISP_BLOCK_INIT_STAGE_LIMIT=$ISP_BLOCK_INIT_STAGE_LIMIT" \
+	"AWB_MAIN_INIT_STAGE_LIMIT=$AWB_MAIN_INIT_STAGE_LIMIT" \
 	"ADR_MAIN_INIT_STAGE_LIMIT=$ADR_MAIN_INIT_STAGE_LIMIT" \
 	"ENABLE_ADR_REG_WRITES=$ENABLE_ADR_REG_WRITES" \
 	"ENABLE_MSCA_REARM_GUARD=$ENABLE_MSCA_REARM_GUARD" \
@@ -208,6 +218,7 @@ set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
 : "${SMOKE_SLEEP_SECS:=12}"
 : "${STOP_RAPTOR_TIMEOUT_SECS:=20}"
+: "${ALLOW_ACTIVE_STREAM_STOP:=0}"
 : "${TISP_MAIN_INIT_TOP40_VALUE:=0x7fffeeff}"
 : "${TISP_MAIN_INIT_CSC_VERSION_VALUE:=2}"
 : "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
@@ -235,7 +246,10 @@ set -x
 : "${ENABLE_ADR_PROCESS_WORK:=0}"
 : "${ENABLE_ISP_BLOCK_INIT:=0}"
 : "${ENABLE_ISP_BLOCK_INIT_AE:=0}"
+: "${ENABLE_ISP_BLOCK_INIT_AWB:=0}"
+: "${ENABLE_AWB_REG_WRITES:=1}"
 : "${ISP_BLOCK_INIT_STAGE_LIMIT:=0}"
+: "${AWB_MAIN_INIT_STAGE_LIMIT:=0}"
 : "${ADR_MAIN_INIT_STAGE_LIMIT:=0}"
 : "${ENABLE_ADR_REG_WRITES:=1}"
 : "${ENABLE_MSCA_REARM_GUARD:=0}"
@@ -247,6 +261,10 @@ set -x
 : "${AE_SENSOR_APPLY_MAX_AGAIN_INDEX:=25}"
 : "${AE_SENSOR_APPLY_LOG_SKIPS:=0}"
 raptor_stop_pid=
+if [ "$ALLOW_ACTIVE_STREAM_STOP" != "1" ] && pidof rvd >/dev/null 2>&1; then
+	echo "refusing to stop active rvd stream; set ALLOW_ACTIVE_STREAM_STOP=1 or power-cycle first" >&2
+	exit 3
+fi
 /etc/init.d/S31raptor stop &
 raptor_stop_pid=$!
 raptor_stop_elapsed=0
@@ -289,7 +307,10 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_adr_process_work="$ENABLE_ADR_PROCESS_WORK" \
 	enable_isp_block_init="$ENABLE_ISP_BLOCK_INIT" \
 	enable_isp_block_init_ae="$ENABLE_ISP_BLOCK_INIT_AE" \
+	enable_isp_block_init_awb="$ENABLE_ISP_BLOCK_INIT_AWB" \
+	enable_awb_reg_writes="$ENABLE_AWB_REG_WRITES" \
 	isp_block_init_stage_limit="$ISP_BLOCK_INIT_STAGE_LIMIT" \
+	awb_main_init_stage_limit="$AWB_MAIN_INIT_STAGE_LIMIT" \
 	adr_main_init_stage_limit="$ADR_MAIN_INIT_STAGE_LIMIT" \
 	enable_adr_reg_writes="$ENABLE_ADR_REG_WRITES" \
 	enable_msca_rearm_guard="$ENABLE_MSCA_REARM_GUARD" \
@@ -320,19 +341,19 @@ echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
 echo "$TISP_MAIN_INIT_CSC_VERSION_VALUE" > "$PARAM/tisp_main_init_csc_version_value"
 insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
 /etc/init.d/S31raptor start
-dmesg | grep -E 'isp-block-init|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
+dmesg | grep -E 'isp-block-init|awb|AWB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
 dmesg | tail -260 > /tmp/t40-dmesg-start-immediate.txt
 hold_secs=$((SMOKE_SLEEP_SECS))
 if [ "$hold_secs" -gt 4 ]; then
 	sleep 4
 	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
-	dmesg | grep -E 'isp-block-init|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | grep -E 'isp-block-init|awb|AWB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
 	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
 	sleep $((hold_secs - 4))
 else
 	sleep "$hold_secs"
 	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
-	dmesg | grep -E 'isp-block-init|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | grep -E 'isp-block-init|awb|AWB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
 	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
 fi
 chmod +x /tmp/phys_memdump
@@ -419,7 +440,7 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|awb|AWB|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 dmesg > /tmp/t40-dmesg-full.txt
 EOS

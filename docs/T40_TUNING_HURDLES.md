@@ -1093,3 +1093,104 @@ Revised root-cause split:
 - Green diamond color: bad UV/chroma plane, currently suppressed by neutral UV.
 - Remaining real image-quality work: restore correct chroma/color and AE/AWB;
   keep bit21 set unless a later OEM-equivalent LCE init is reconstructed.
+
+### Update 8: AWB block-init reconstruction started for color/tuning parity
+
+Live IRQ status on the clean grayscale stream shows the ISP is raising AWB/AE
+stats (`status0=0x38`: bits 3 AWB, 4 AE, 5 AE-hist), but only ADR had a
+registered stats handler (`irq_func_cb[9]`). There was no `irq_func_cb[3]`, so
+AWB stats were acknowledged and dropped.
+
+Root cause in `tisp_awb_main_init` was the same reconstruction class seen in
+AE/ADR: GP-relative globals were rendered incorrectly. Two concrete AWB bugs
+were repaired behind a new default-off knob:
+
+- `tisp_awb_main_init` allocated the 60328-byte AWB inter block but copied from
+  `&sclk_name`; original assembly points at the AWB initialized object. The
+  repair seeds from the recovered `stMainAwbInterOri` materialized bytes and
+  zero-fills the missing tail.
+- The recovered init called `tisp_awb_main_process(0,14,fn)` directly. Original
+  assembly registers it with `tisp_event_set_cb(0,14,fn)`, after registering
+  AWB static IRQ handler index 3.
+- `tisp_awb_params_refresh` now writes into allocated `stMainAwbOuter` /
+  `stSecAwbOuter` instead of the wrong static scratch arrays, and its final AWB
+  grid loops use the pointer fields shown by the original assembly.
+
+New gated knobs:
+
+```
+ENABLE_ISP_BLOCK_INIT_AWB=1
+ENABLE_AWB_REG_WRITES=0|1
+AWB_MAIN_INIT_STAGE_LIMIT=0..4
+```
+
+Use `ENABLE_AWB_REG_WRITES=0` for the first callback-registration test. That
+keeps the AWB allocation/refresh/event path live but prevents the still-recovered
+AWB hardware setters from touching color registers until the handler path is
+proven. `AWB_MAIN_INIT_STAGE_LIMIT` is an internal bisect gate:
+
+- `1`: return after inter/outer allocation.
+- `2`: return after `tisp_awb_params_transmit`.
+- `3`: return after `tisp_awb_params_refresh`.
+- `4`: return after optional hardware writes but before callback registration.
+- `0`: full AWB init.
+
+Suggested first live test for color-loop bring-up, leaving the stream up for
+human inspection:
+
+```
+TISP_MAIN_INIT_TOP40_VALUE=0x7fffeeff \
+FRAMECHAN_NEUTRAL_UV_ON_DONE=1 \
+ENABLE_MSCA_REARM_GUARD=1 \
+MSCA_REARM_GUARD_MAX_SKIPS=8 \
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0 \
+CSI_SETTLE_OVERRIDE=0x10 \
+ENABLE_TISP_STREAM_EVENT_INIT=1 \
+ENABLE_TISP_STREAM_EVENT_CBS=1 \
+ENABLE_ISP_STATS_FANOUT=1 \
+ENABLE_ISP_BLOCK_INIT=1 \
+ENABLE_ISP_BLOCK_INIT_AE=0 \
+ENABLE_ISP_BLOCK_INIT_AWB=1 \
+ENABLE_AWB_REG_WRITES=0 \
+AWB_MAIN_INIT_STAGE_LIMIT=0 \
+ENABLE_ADR_REG_WRITES=1 \
+ADR_LINEAR_MODE=1 \
+SENSOR_FULL_WIDTH_OVERRIDE=2560 \
+SENSOR_FULL_HEIGHT_OVERRIDE=1440 \
+SMOKE_SLEEP_SECS=180 \
+SKIP_QBUF_DUMP=1 \
+tools/t40_safe_qbuf_dump_probe.sh logs/$(date +%Y%m%d-%H%M%S)-t40-awb-blockinit-neutraluv-242
+```
+
+Expected proof of life: dmesg should show `awb-main-init repaired`,
+`irq_func_cb[3]`, AWB stats fanout counts rising, IRQs 38/39 healthy, and the
+neutral-UV inspection stream should remain clean. Only after that passes should
+we run a real-UV/color test with `FRAMECHAN_NEUTRAL_UV_ON_DONE=0` and then
+consider enabling AWB register writes. If UV is still bad, keep neutral UV as the
+inspection workaround and continue with the MSCA UV-plane/AWB gain path
+separately.
+
+Note: the 2026-06-09 `t40-awb-blockinit-realuv` attempt did not reach the new
+AWB code; the partial `load-safe.log` ends during `S31raptor stop`, before
+`insmod`. The camera was power-cycled and restored with the known-good
+neutral-UV recovered stream:
+`logs/20260609-142105-t40-recover-clean-neutraluv-242`.
+
+Follow-up: `logs/20260609-142438-t40-awb-cb-neutraluv-242` reproduced the same
+failure signature while stopping the active recovered stream. The log again ends
+inside `S31raptor stop` after consumer daemons stop and before any new `insmod`,
+so this is not an AWB-code result. Treat it as a recovered-driver
+release/stream-stop blocker: killing the active `rvd` stream can take the camera
+off-LAN before the module reload starts.
+
+Safety change: `tools/t40_safe_qbuf_dump_probe.sh` now refuses to stop an active
+`rvd` stream by default. Use one of these paths instead:
+
+- Preferred: power-cycle first, wait for the camera to return, then run the
+  probe from a no-stream boot state.
+- Explicit override only when deliberately testing the release path:
+  `ALLOW_ACTIVE_STREAM_STOP=1`.
+
+Current restored stream after the stop/release finding:
+`logs/20260609-142753-t40-recover-clean-neutraluv-242` with neutral UV,
+MSCA rearm guard, top40 bit21, IRQs healthy, and AWB disabled.

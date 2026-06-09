@@ -6033,13 +6033,17 @@ static int regtrace_adr_process_work_last_ret;
  */
 static bool regtrace_enable_isp_block_init;
 static bool regtrace_enable_isp_block_init_ae;
+static bool regtrace_enable_isp_block_init_awb;
+static bool regtrace_enable_awb_reg_writes = true;
 static bool regtrace_enable_adr_reg_writes = true;
 static uint regtrace_isp_block_init_stage_limit;
+static uint regtrace_awb_main_init_stage_limit;
 static uint regtrace_adr_main_init_stage_limit;
 static bool regtrace_isp_block_init_ran;
 static uint32_t regtrace_isp_block_init_count;
 static uint32_t regtrace_isp_block_init_skip_no_blob;
 static int regtrace_isp_block_init_ae_ret;
+static int regtrace_isp_block_init_awb_ret;
 static int regtrace_isp_block_init_adr_ret;
 static uint32_t regtrace_adr_main_init_direct_count;
 static uint32_t regtrace_adr_main_init_direct_stage;
@@ -6264,13 +6268,17 @@ module_param_named(isp_stats_fanout_adr_status0_mask, regtrace_isp_stats_fanout_
 module_param_named(enable_adr_process_work, regtrace_enable_adr_process_work, bool, 0644);
 module_param_named(enable_isp_block_init, regtrace_enable_isp_block_init, bool, 0644);
 module_param_named(enable_isp_block_init_ae, regtrace_enable_isp_block_init_ae, bool, 0644);
+module_param_named(enable_isp_block_init_awb, regtrace_enable_isp_block_init_awb, bool, 0644);
+module_param_named(enable_awb_reg_writes, regtrace_enable_awb_reg_writes, bool, 0644);
 module_param_named(enable_adr_reg_writes, regtrace_enable_adr_reg_writes, bool, 0644);
 module_param_named(isp_block_init_stage_limit, regtrace_isp_block_init_stage_limit, uint, 0644);
+module_param_named(awb_main_init_stage_limit, regtrace_awb_main_init_stage_limit, uint, 0644);
 module_param_named(adr_main_init_stage_limit, regtrace_adr_main_init_stage_limit, uint, 0644);
 module_param_named(isp_block_init_ran, regtrace_isp_block_init_ran, bool, 0444);
 module_param_named(isp_block_init_count, regtrace_isp_block_init_count, uint, 0444);
 module_param_named(isp_block_init_skip_no_blob, regtrace_isp_block_init_skip_no_blob, uint, 0444);
 module_param_named(isp_block_init_ae_ret, regtrace_isp_block_init_ae_ret, int, 0444);
+module_param_named(isp_block_init_awb_ret, regtrace_isp_block_init_awb_ret, int, 0444);
 module_param_named(isp_block_init_adr_ret, regtrace_isp_block_init_adr_ret, int, 0444);
 module_param_named(adr_main_init_direct_count, regtrace_adr_main_init_direct_count, uint, 0444);
 module_param_named(adr_main_init_direct_stage, regtrace_adr_main_init_direct_stage, uint, 0444);
@@ -6488,10 +6496,16 @@ static int regtrace_isp_block_init_once(const char *where)
     printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init after-ae where=%s ae_ret=%d\n",
            where ? where : "?", regtrace_isp_block_init_ae_ret);
 
+    if (regtrace_enable_isp_block_init_awb)
+        regtrace_isp_block_init_awb_ret = (int)tisp_awb_main_init(pi, blob);
+    printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init after-awb where=%s awb_ret=%d\n",
+           where ? where : "?", regtrace_isp_block_init_awb_ret);
+
     if (regtrace_isp_block_init_stage_limit == 2) {
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init stage-limit=2 return before ADR where=%s\n",
                where ? where : "?");
-        return regtrace_isp_block_init_ae_ret;
+        return regtrace_isp_block_init_ae_ret ? regtrace_isp_block_init_ae_ret :
+            regtrace_isp_block_init_awb_ret;
     }
 
     regtrace_isp_block_init_adr_ret =
@@ -6501,8 +6515,11 @@ static int regtrace_isp_block_init_once(const char *where)
            regtrace_isp_block_init_adr_ret,
            (uint32_t)*(volatile uint32_t *)((char *)&adr_main_stat_info));
 
-    return regtrace_isp_block_init_ae_ret ? regtrace_isp_block_init_ae_ret :
-        regtrace_isp_block_init_adr_ret;
+    if (regtrace_isp_block_init_ae_ret)
+        return regtrace_isp_block_init_ae_ret;
+    if (regtrace_isp_block_init_awb_ret)
+        return regtrace_isp_block_init_awb_ret;
+    return regtrace_isp_block_init_adr_ret;
 }
 
 #define REGTRACE_TX_ISP_CONTEXT_SIZE 0x4000
@@ -88186,174 +88203,108 @@ tisp_awb_sec_deinit0x4c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002fc38 origin=model_output original=tisp_awb_params_refresh */
 int32_t tisp_awb_params_refresh(int32_t *arg1, int32_t arg2, void *arg3)
 {
-    int32_t *v0;
+    const uint8_t *src;
     uint8_t *dest;
-    int32_t a2_val;
-    int32_t a1_35;
-    int32_t *t2;
-    int32_t v0_14;
-    int32_t lo;
-    int32_t *i;
-    int16_t *a0_69;
-    int16_t *v1_8;
-    int16_t *a3_3;
-    int16_t *a0_159;
-    int32_t v1_13;
+    uint8_t *flag404;
+    uint8_t *flag472;
+    uint8_t *flag5a;
+    uint16_t *grid;
+    uint16_t *limit;
+    uint32_t i;
+    uint32_t count;
+    int32_t span;
 
-    v0 = *(int32_t *)((uintptr_t)arg3 + 0x64);
+    if (!arg1 || !arg3)
+        return -EINVAL;
 
-    if (arg2 != 0) {
-        dest = DATA_A84AC;
-        *(int32_t *)(dest + 0x64) = v0;
-        memcpy(dest, arg3, 0x62);
-        *(uint16_t *)(dest + 0x5a) = (uint16_t)(*(uint16_t *)(arg1 + 0x36));
-        memcpy(dest + 0x68, (uintptr_t)arg3 + 0x68, 4);
-        memcpy(dest + 0x6c, (uintptr_t)arg3 + 0x6c, 4);
-        memcpy(dest + 0x70, (uintptr_t)arg3 + 0x70, 0xc);
-        memcpy(dest + 0x94, (uintptr_t)arg3 + 0x94, 0xc);
-        memcpy(dest + 0xa8, (uintptr_t)arg3 + 0xa8, 8);
-        memcpy(dest + 0xb0, (uintptr_t)arg3 + 0xb0, 0x28);
-        memcpy(dest + 0xd8, (uintptr_t)arg3 + 0xd8, 0x28);
-        memcpy(dest + 0x100, (uintptr_t)arg3 + 0x100, 2);
-        memcpy(dest + 0x104, (uintptr_t)arg3 + 0x104, 0x3c);
-        memcpy(dest + 0x140, (uintptr_t)arg3 + 0x140, 0x3c);
-        memcpy(dest + 0x17c, (uintptr_t)arg3 + 0x17c, 0x10);
-        memcpy(dest + 0x18c, (uintptr_t)arg3 + 0x18c, 0x10);
-        memcpy(dest + 0x19c, (uintptr_t)arg3 + 0x19c, 0x10);
-        memcpy(dest + 0x1ac, (uintptr_t)arg3 + 0x1ac, 8);
-        memcpy(dest + 0x1b4, (uintptr_t)arg3 + 0x1b4, 8);
-        memcpy(dest + 0x1bc, (uintptr_t)arg3 + 0x1bc, 0xc);
-        memcpy(dest + 0x1c8, (uintptr_t)arg3 + 0x1c8, 0x24);
-        memcpy(dest + 0x1ec, (uintptr_t)arg3 + 0x1ec, 0x14);
-        memcpy(dest + 0x200, (uintptr_t)arg3 + 0x200, 0x10);
-        memcpy(dest + 0x210, (uintptr_t)arg3 + 0x210, 0xa);
-        memcpy(dest + 0x21c, (uintptr_t)arg3 + 0x21c, 0x20);
-        memcpy(dest + 0x23c, (uintptr_t)arg3 + 0x23c, 0xc);
-        memcpy(dest + 0x248, (uintptr_t)arg3 + 0x248, 0xa);
-        memcpy(dest + 0x254, (uintptr_t)arg3 + 0x254, 0x28);
+    src = arg3;
+    dest = (uint8_t *)(uintptr_t)(arg2 ? stSecAwbOuter : stMainAwbOuter);
+    if (!dest)
+        return -ENOMEM;
 
-        if (*(uint64_t *)(arg1 + 0x65) != 0 || *(uint64_t *)(arg1 + 0x76) != 0) {
-            *(uint16_t *)(dest + 0x286) = *(uint16_t *)((uintptr_t)arg3 + 0x286);
-            *(uint16_t *)(dest + 0x288) = *(uint16_t *)((uintptr_t)arg3 + 0x288);
-            *(uint16_t *)(dest + 0x28a) = *(uint16_t *)((uintptr_t)arg3 + 0x28a);
-            *(uint16_t *)(dest + 0x28c) = *(uint16_t *)((uintptr_t)arg3 + 0x28c);
-            *(uint16_t *)(dest + 0x28e) = *(uint16_t *)((uintptr_t)arg3 + 0x28e);
-            *(uint16_t *)(dest + 0x29a) = *(uint16_t *)((uintptr_t)arg3 + 0x29a);
-            *(uint16_t *)(dest + 0x29c) = *(uint16_t *)((uintptr_t)arg3 + 0x29c);
-            *(uint16_t *)(dest + 0x29e) = *(uint16_t *)((uintptr_t)arg3 + 0x29e);
-            *(uint16_t *)(dest + 0x2a0) = *(uint16_t *)((uintptr_t)arg3 + 0x2a0);
-            *(uint16_t *)(dest + 0x2a2) = *(uint16_t *)((uintptr_t)arg3 + 0x2a2);
-        } else {
-            *(int32_t *)(dest + 0xa0) = *(int32_t *)((uintptr_t)arg3 + 0xa0);
-            *(int32_t *)(dest + 0x80) = 0;
-            *(int32_t *)(dest + 0xa4) = *(int32_t *)((uintptr_t)arg3 + 0xa4);
-            *(int32_t *)(dest + 0x7c) = 1;
-            *(int32_t *)(dest + 0x84) = *(int32_t *)((uintptr_t)arg3 + 0x84);
-            *(int32_t *)(dest + 0x88) = *(int32_t *)((uintptr_t)arg3 + 0x88);
-            *(int32_t *)(dest + 0x8c) = *(int32_t *)((uintptr_t)arg3 + 0x8c);
-            *(int32_t *)(dest + 0x90) = *(int32_t *)((uintptr_t)arg3 + 0x90);
-            memcpy(dest + 0x27c, (uintptr_t)arg3 + 0x27c, 0x14);
-            memcpy(dest + 0x290, (uintptr_t)arg3 + 0x290, 0x14);
-        }
+    *(uint32_t *)(dest + 0x64) = *(const uint32_t *)(src + 0x64);
+    memcpy(dest, src, 0x62);
+    flag5a = (uint8_t *)(uintptr_t)(uint32_t)arg1[54];
+    *(uint16_t *)(dest + 0x5a) = flag5a ? *flag5a : 0;
+    memcpy(dest + 0x68, src + 0x68, 4);
+    memcpy(dest + 0x6c, src + 0x6c, 4);
+    memcpy(dest + 0x70, src + 0x70, 0x0c);
+    memcpy(dest + 0x94, src + 0x94, 0x0c);
+    memcpy(dest + 0xa8, src + 0xa8, 8);
+    memcpy(dest + 0xb0, src + 0xb0, 0x28);
+    memcpy(dest + 0xd8, src + 0xd8, 0x28);
+    memcpy(dest + 0x100, src + 0x100, 2);
+    memcpy(dest + 0x104, src + 0x104, 0x3c);
+    memcpy(dest + 0x140, src + 0x140, 0x3c);
+    memcpy(dest + 0x17c, src + 0x17c, 0x10);
+    memcpy(dest + 0x18c, src + 0x18c, 0x10);
+    memcpy(dest + 0x19c, src + 0x19c, 0x10);
+    memcpy(dest + 0x1ac, src + 0x1ac, 8);
+    memcpy(dest + 0x1b4, src + 0x1b4, 8);
+    memcpy(dest + 0x1bc, src + 0x1bc, 0x0c);
+    memcpy(dest + 0x1c8, src + 0x1c8, 0x24);
+    memcpy(dest + 0x1ec, src + 0x1ec, 0x14);
+    memcpy(dest + 0x200, src + 0x200, 0x10);
+    memcpy(dest + 0x210, src + 0x210, 0x0a);
+    memcpy(dest + 0x21c, src + 0x21c, 0x20);
+    memcpy(dest + 0x23c, src + 0x23c, 0x0c);
+    memcpy(dest + 0x248, src + 0x248, 0x0a);
+    memcpy(dest + 0x254, src + 0x254, 0x28);
 
-        *(int32_t *)(arg1 + 0x65) = 0;
-        memcpy(dest + 0x2a4, (uintptr_t)arg3 + 0x2a4, 0x384);
-        memcpy(dest + 0x628, (uintptr_t)arg3 + 0x628, 0x384);
-        memcpy(dest + 0x9ac, (uintptr_t)arg3 + 0x9ac, 0x384);
-        memcpy(dest + 0xd30, (uintptr_t)arg3 + 0xd30, 0x404);
-        memcpy(dest + 0x1134, (uintptr_t)arg3 + 0x1134, 0xe1);
-        memcpy(dest + 0x1218, (uintptr_t)arg3 + 0x1218, 0x28);
-        memcpy(dest + 0x1240, (uintptr_t)arg3 + 0x1240, 0x28);
-        dest = DATA_A84AC;
+    flag404 = (uint8_t *)(uintptr_t)(uint32_t)arg1[101];
+    flag472 = (uint8_t *)(uintptr_t)(uint32_t)arg1[118];
+    if ((flag404 && *flag404) || (flag472 && *flag472)) {
+        *(uint16_t *)(dest + 0x286) = *(const uint16_t *)(src + 0x286);
+        *(uint16_t *)(dest + 0x288) = *(const uint16_t *)(src + 0x288);
+        *(uint16_t *)(dest + 0x28a) = *(const uint16_t *)(src + 0x28a);
+        *(uint16_t *)(dest + 0x28c) = *(const uint16_t *)(src + 0x28c);
+        *(uint16_t *)(dest + 0x28e) = *(const uint16_t *)(src + 0x28e);
+        *(uint16_t *)(dest + 0x29a) = *(const uint16_t *)(src + 0x29a);
+        *(uint16_t *)(dest + 0x29c) = *(const uint16_t *)(src + 0x29c);
+        *(uint16_t *)(dest + 0x29e) = *(const uint16_t *)(src + 0x29e);
+        *(uint16_t *)(dest + 0x2a0) = *(const uint16_t *)(src + 0x2a0);
+        *(uint16_t *)(dest + 0x2a2) = *(const uint16_t *)(src + 0x2a2);
     } else {
-        dest = DATA_A84B0;
-        *(int32_t *)(dest + 0x64) = v0;
-        memcpy(dest, arg3, 0x62);
-        *(uint16_t *)(dest + 0x5a) = (uint16_t)(*(uint16_t *)(arg1 + 0x36));
-        memcpy(dest + 0x68, (uintptr_t)arg3 + 0x68, 4);
-        memcpy(dest + 0x6c, (uintptr_t)arg3 + 0x6c, 4);
-        memcpy(dest + 0x70, (uintptr_t)arg3 + 0x70, 0xc);
-        memcpy(dest + 0x94, (uintptr_t)arg3 + 0x94, 0xc);
-        memcpy(dest + 0xa8, (uintptr_t)arg3 + 0xa8, 8);
-        memcpy(dest + 0xb0, (uintptr_t)arg3 + 0xb0, 0x28);
-        memcpy(dest + 0xd8, (uintptr_t)arg3 + 0xd8, 0x28);
-        memcpy(dest + 0x100, (uintptr_t)arg3 + 0x100, 2);
-        memcpy(dest + 0x104, (uintptr_t)arg3 + 0x104, 0x3c);
-        memcpy(dest + 0x140, (uintptr_t)arg3 + 0x140, 0x3c);
-        memcpy(dest + 0x17c, (uintptr_t)arg3 + 0x17c, 0x10);
-        memcpy(dest + 0x18c, (uintptr_t)arg3 + 0x18c, 0x10);
-        memcpy(dest + 0x19c, (uintptr_t)arg3 + 0x19c, 0x10);
-        memcpy(dest + 0x1ac, (uintptr_t)arg3 + 0x1ac, 8);
-        memcpy(dest + 0x1b4, (uintptr_t)arg3 + 0x1b4, 8);
-        memcpy(dest + 0x1bc, (uintptr_t)arg3 + 0x1bc, 0xc);
-        memcpy(dest + 0x1c8, (uintptr_t)arg3 + 0x1c8, 0x24);
-        memcpy(dest + 0x1ec, (uintptr_t)arg3 + 0x1ec, 0x14);
-        memcpy(dest + 0x200, (uintptr_t)arg3 + 0x200, 0x10);
-        memcpy(dest + 0x210, (uintptr_t)arg3 + 0x210, 0xa);
-        memcpy(dest + 0x21c, (uintptr_t)arg3 + 0x21c, 0x20);
-        memcpy(dest + 0x23c, (uintptr_t)arg3 + 0x23c, 0xc);
-        memcpy(dest + 0x248, (uintptr_t)arg3 + 0x248, 0xa);
-        memcpy(dest + 0x254, (uintptr_t)arg3 + 0x254, 0x28);
-
-        if (*(uint64_t *)(arg1 + 0x65) != 0 || *(uint64_t *)(arg1 + 0x76) != 0) {
-            *(uint16_t *)(dest + 0x286) = *(uint16_t *)((uintptr_t)arg3 + 0x286);
-            *(uint16_t *)(dest + 0x288) = *(uint16_t *)((uintptr_t)arg3 + 0x288);
-            *(uint16_t *)(dest + 0x28a) = *(uint16_t *)((uintptr_t)arg3 + 0x28a);
-            *(uint16_t *)(dest + 0x28c) = *(uint16_t *)((uintptr_t)arg3 + 0x28c);
-            *(uint16_t *)(dest + 0x28e) = *(uint16_t *)((uintptr_t)arg3 + 0x28e);
-            *(uint16_t *)(dest + 0x29a) = *(uint16_t *)((uintptr_t)arg3 + 0x29a);
-            *(uint16_t *)(dest + 0x29c) = *(uint16_t *)((uintptr_t)arg3 + 0x29c);
-            *(uint16_t *)(dest + 0x29e) = *(uint16_t *)((uintptr_t)arg3 + 0x29e);
-            *(uint16_t *)(dest + 0x2a0) = *(uint16_t *)((uintptr_t)arg3 + 0x2a0);
-            *(uint16_t *)(dest + 0x2a2) = *(uint16_t *)((uintptr_t)arg3 + 0x2a2);
-        } else {
-            *(int32_t *)(dest + 0xa0) = *(int32_t *)((uintptr_t)arg3 + 0xa0);
-            *(int32_t *)(dest + 0x80) = 0;
-            *(int32_t *)(dest + 0xa4) = *(int32_t *)((uintptr_t)arg3 + 0xa4);
-            *(int32_t *)(dest + 0x7c) = 1;
-            *(int32_t *)(dest + 0x84) = *(int32_t *)((uintptr_t)arg3 + 0x84);
-            *(int32_t *)(dest + 0x88) = *(int32_t *)((uintptr_t)arg3 + 0x88);
-            *(int32_t *)(dest + 0x8c) = *(int32_t *)((uintptr_t)arg3 + 0x8c);
-            *(int32_t *)(dest + 0x90) = *(int32_t *)((uintptr_t)arg3 + 0x90);
-            memcpy(dest + 0x27c, (uintptr_t)arg3 + 0x27c, 0x14);
-            memcpy(dest + 0x290, (uintptr_t)arg3 + 0x290, 0x14);
-        }
-
-        *(int32_t *)(arg1 + 0x65) = 0;
-        memcpy(dest + 0x2a4, (uintptr_t)arg3 + 0x2a4, 0x384);
-        memcpy(dest + 0x628, (uintptr_t)arg3 + 0x628, 0x384);
-        memcpy(dest + 0x9ac, (uintptr_t)arg3 + 0x9ac, 0x384);
-        memcpy(dest + 0xd30, (uintptr_t)arg3 + 0xd30, 0x404);
-        memcpy(dest + 0x1134, (uintptr_t)arg3 + 0x1134, 0xe1);
-        memcpy(dest + 0x1218, (uintptr_t)arg3 + 0x1218, 0x28);
-        memcpy(dest + 0x1240, (uintptr_t)arg3 + 0x1240, 0x28);
-        dest = DATA_A84B0;
+        *(int32_t *)(dest + 0xa0) = *(const int32_t *)(src + 0xa0);
+        *(int32_t *)(dest + 0x80) = 0;
+        *(int32_t *)(dest + 0xa4) = *(const int32_t *)(src + 0xa4);
+        *(int32_t *)(dest + 0x7c) = 1;
+        *(int32_t *)(dest + 0x84) = *(const int32_t *)(src + 0x84);
+        *(int32_t *)(dest + 0x88) = *(const int32_t *)(src + 0x88);
+        *(int32_t *)(dest + 0x8c) = *(const int32_t *)(src + 0x8c);
+        *(int32_t *)(dest + 0x90) = *(const int32_t *)(src + 0x90);
+        memcpy(dest + 0x27c, src + 0x27c, 0x14);
+        memcpy(dest + 0x290, src + 0x290, 0x14);
     }
 
-    memcpy(dest + 0x1268, (uintptr_t)arg3 + 0x1268, 0x28);
+    if (flag404)
+        *flag404 = 0;
+    memcpy(dest + 0x2a4, src + 0x2a4, 0x384);
+    memcpy(dest + 0x628, src + 0x628, 0x384);
+    memcpy(dest + 0x9ac, src + 0x9ac, 0x384);
+    memcpy(dest + 0xd30, src + 0xd30, 0x404);
+    memcpy(dest + 0x1134, src + 0x1134, 0xe1);
+    memcpy(dest + 0x1218, src + 0x1218, 0x28);
+    memcpy(dest + 0x1240, src + 0x1240, 0x28);
+    memcpy(dest + 0x1268, src + 0x1268, 0x28);
 
-    a0_69 = (int16_t *)*arg1;
-    v1_8 = (int16_t *)arg1[0x31];
-    t2 = (uint32_t *)(*(uint16_t *)a0_69);
-    a1_35 = (uint32_t)(a0_69[1]);
-   i = 0;
-    while ((int32_t)i < (int32_t)a2_val) {
-        a3_3 = (uintptr_t)a0_69 + (((uintptr_t)i + 4) << 1);
-        i = (void *)(uintptr_t)((uintptr_t)i + (1));
-        *a3_3 = (int16_t)(lo / a2_val);
+    grid = (uint16_t *)(uintptr_t)(uint32_t)arg1[0];
+    limit = (uint16_t *)(uintptr_t)(uint32_t)arg1[49];
+    if (!grid || !limit)
+        return 0;
+
+    count = grid[3];
+    if (count) {
+        span = ((int32_t)limit[0] - (int32_t)grid[2] + 1) / 2;
+        for (i = 0; i < count; i++)
+            grid[i + 4] = (uint16_t)(span / (int32_t)count);
     }
 
-    v1_13 = 0;
-    while ((int32_t)v1_13 < (int32_t)a1_35) {
-        i = (void *)(uintptr_t)((uintptr_t)i + (1));
-        *a3_3 = (int16_t)(lo / a2_val);
-    }
-
-    v1_13 = 0;
-    while (v1_13 < a1_35) {
-        a0_159 = (uintptr_t)a0_69 + ((v1_13 + 0x13) << 1);
-        v1_13 += 1;
-        *a0_159 = (int16_t)(((v0_14 - (uintptr_t)t2 + 1) / 2 / a1_35));
+    count = grid[1];
+    if (count) {
+        span = ((int32_t)limit[1] - (int32_t)grid[0] + 1) / 2;
+        for (i = 0; i < count; i++)
+            grid[i + 19] = (uint16_t)(span / (int32_t)count);
     }
 
     return 0;
@@ -89658,99 +89609,114 @@ tisp_awb_set_gain0x3bc:
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
 
+static void *regtrace_awb_main_inter_alloc(void)
+{
+    void *buf;
+    size_t seed_len;
+
+    if (stMainAwbInter)
+        return (void *)(uintptr_t)stMainAwbInter;
+
+    buf = (void *)(uintptr_t)
+        ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(60328);
+    if (!buf)
+        return NULL;
+
+    memset(buf, 0, 60328);
+    seed_len = sizeof(stMainAwbInterOri);
+    if (seed_len > 60328)
+        seed_len = 60328;
+    memcpy(buf, stMainAwbInterOri, seed_len);
+    stMainAwbInter = (uintptr_t)buf;
+
+    return buf;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000311b4 origin=fragment_seed original=tisp_awb_main_init */
 int32_t tisp_awb_main_init(uint32_t a0, uint32_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t *local_24 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *s3 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    uint32_t *ctx = (uint32_t *)&isp_memopt;
+    void *inter;
+    void *outer;
+    uint32_t nbuf;
+    uint8_t *skip_hw;
+    int32_t ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    inter = regtrace_awb_main_inter_alloc();
+    if (!inter)
+        return -ENOMEM;
 
-    /* fragment 1: Arithmetic */
-    s3 = (uint32_t *)&isp_memopt;
+    if (!stMainAwbOuter) {
+        outer = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(4752);
+        if (!outer)
+            return -ENOMEM;
+        memset(outer, 0, 4752);
+        stMainAwbOuter = (uintptr_t)outer;
+    }
 
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&stMainAwbInter));
-    local_14 = s0;
-    s0 = (uintptr_t *)&private_vmalloc;
-    local_1c = s2;
-    local_18 = s1;
-    local_24 = ra;
-    s2 = a0;
-    s1 = a1;
+    if (regtrace_awb_main_init_stage_limit == 1) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init stage-limit=1 inter=%p outer=%p\n",
+               inter, (void *)(uintptr_t)stMainAwbOuter);
+        return 0;
+    }
 
-    /* fragment 3: Branch */
-    s0 = (uintptr_t *)&private_vmalloc;
-    if (v0 != 0) { goto tisp_awb_main_init0x5c; }
+    (void)tisp_awb_params_transmit((uintptr_t)ctx, 0);
 
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(60328); /* jalr target resolved by relocation */
+    if (regtrace_awb_main_init_stage_limit == 2) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init stage-limit=2 ctx49=0x%x inter=%p outer=%p\n",
+               ctx[49], inter, (void *)(uintptr_t)stMainAwbOuter);
+        return 0;
+    }
 
-    /* fragment 5: CallSetup */
-    *(uint32_t *)((char *)s3 + 16696) = v0;
-    v0 = (uintptr_t *)memcpy((void *)(uintptr_t)v0, (void *)(uintptr_t)&sclk_name, 60328); /* jalr target resolved by relocation */
+    if (!ctx[49])
+        return -EFAULT;
+    *(uint16_t *)(uintptr_t)ctx[49] = (uint16_t)a0;
+    *(uint16_t *)((uintptr_t)ctx[49] + 2) = (uint16_t)a1;
 
-tisp_awb_main_init0x5c:
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(4752); /* jalr target resolved by relocation */
+    nbuf = *(uint32_t *)((char *)&tparamsN);
+    if (!nbuf)
+        return -ENOENT;
 
-    /* fragment 7: CallSetup */
-    *(uint32_t *)((char *)((char *)&stMainAwbOuter)) = v0;
-    v0 = (uintptr_t *)memset((void *)(uintptr_t)v0, 0, 4752); /* jalr target resolved by relocation */
+    ret = tisp_awb_params_refresh((int32_t *)ctx, 0,
+                                  (void *)(uintptr_t)(nbuf + 4288));
+    if (ret)
+        return ret;
 
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_params_transmit)(&isp_memopt, 0); /* jalr target resolved by relocation */
+    if (regtrace_awb_main_init_stage_limit == 3) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init stage-limit=3 ctx49=0x%x inter=%p outer=%p\n",
+               ctx[49], inter, (void *)(uintptr_t)stMainAwbOuter);
+        return 0;
+    }
 
-    /* fragment 9: CallSetup */
-    *(uint16_t *)((char *)(*(uint32_t *)((char *)(s0) + 196)) + 0) = s2;
-    *(uint16_t *)((char *)(*(uint32_t *)((char *)(s0) + 196)) + 2) = s1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_awb_params_refresh)(s0, 0, (*(uint32_t *)((char *)((char *)&tparamsN))) + 4288); /* jalr target resolved by relocation */
+    skip_hw = (uint8_t *)(uintptr_t)ctx[119];
+    if (regtrace_enable_awb_reg_writes && !skip_hw) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init missing ctx[119] skip pointer; refusing reg writes\n");
+        return -EFAULT;
+    }
 
-    /* fragment 10: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 476);
-    v0 = *(uint8_t *)((char *)v0 + 0);
+    if (regtrace_enable_awb_reg_writes && !*skip_hw) {
+        (void)tisp_awb_set_hardware_param((uintptr_t)ctx, 0);
+        (void)tisp_awb_set_gain((uintptr_t)ctx, 0);
+    } else if (!regtrace_enable_awb_reg_writes) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init skipping AWB hardware register writes by param\n");
+    } else {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init skipping AWB hardware register writes by ctx flag\n");
+    }
 
-    /* fragment 11: Branch */
-    a1 = (uint32_t *)&tisp_awb_main_interrupt_static;
-    if (v0 != 0) { goto tisp_awb_main_init0x10c; }
+    if (regtrace_awb_main_init_stage_limit == 4) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init stage-limit=4 before callback registration\n");
+        return 0;
+    }
 
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_set_hardware_param)(s0, 0); /* jalr target resolved by relocation */
+    (void)system_irq_func_set(3,
+                              (int32_t)(uintptr_t)&tisp_awb_main_interrupt_static);
+    (void)tisp_event_set_cb(0, 14,
+                            (int32_t)(uintptr_t)&tisp_awb_main_process);
 
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_set_gain)(s0, 0); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    a1 = (uint32_t *)&tisp_awb_main_interrupt_static;
-
-tisp_awb_main_init0x10c:
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_irq_func_set)(3, &tisp_awb_main_interrupt_static); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_awb_main_process)(0, 14, &tisp_awb_main_process); /* jalr target resolved by relocation */
-
-    /* fragment 17: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 18: Arithmetic */
-    v0 = 0;
-
-    /* fragment 19: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init repaired pi=0x%x blob=0x%x inter=%p outer=%p reg_writes=%u ret=0\n",
+           a0, a1, inter, (void *)(uintptr_t)stMainAwbOuter,
+           regtrace_enable_awb_reg_writes ? 1U : 0U);
     return 0;
 }
 
@@ -94674,50 +94640,13 @@ int32_t tisp_awb_main_face_pos(int32_t arg1, int32_t arg2, int32_t arg3, int32_t
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034a40 origin=fragment_seed original=tisp_awb_main_sel_en */
 void* tisp_awb_main_sel_en(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *inter = regtrace_awb_main_inter_alloc();
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!inter)
+        return NULL;
 
-    /* fragment 1: Arithmetic */
-    s0 = (uintptr_t *)&isp_memopt;
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&stMainAwbInter));
-    local_18 = s1;
-    local_1c = ra;
-
-    /* fragment 3: Branch */
-    s1 = a0;
-    if (v0 != 0) { goto tisp_awb_main_sel_en0x50; }
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(60328); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    *(uint32_t *)((char *)s0 + 16696) = v0;
-    v0 = (uintptr_t *)memcpy((void *)(uintptr_t)v0, (void *)(uintptr_t)&sclk_name, 60328); /* jalr target resolved by relocation */
-
-tisp_awb_main_sel_en0x50:
-    /* fragment 6: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&stMainAwbInter));
-    *(uint8_t *)((char *)v0 + 13586) = s1;
-    ra = local_1c;
-    s1 = local_18;
-    s0 = local_14;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (void*)v0;
+    inter[13586] = (uint8_t)a0;
+    return inter;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034aac origin=fragment_seed original=tisp_awb_main_ev_update */
