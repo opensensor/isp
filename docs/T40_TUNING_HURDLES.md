@@ -855,3 +855,32 @@ plumbing). Finishing it requires reconstructing the ISP tuning-param blob load +
 the per-block param tables the inits consume -- i.e. completing the ISP software
 reconstruction, a substantial effort beyond bring-up tweaks. enable_isp_block_init
 is left default-off (faults when enabled).
+
+### Update 3: option-3 attempt A — init wiring correct, init functions mis-reconstructed
+
+Corrected the block-init arg: pass the LOADED tuning blob (tparamsN[0]+0x5940,
+from /etc/sensor/gc4653-t40.bin, 200KB, bridged at lines ~63283-86) instead of
+the truncated static data_b0000. The param-load IS wired (the user was right).
+
+With the right arg, calling the inits no longer reads bad params -- but both
+**decompiled init functions crash from reconstruction bugs** (uninitialized
+register artifacts), because the recovered bring-up never executed them before
+so the bugs were latent:
+
+- `tisp_ae_main_init` (71524): fragment 8 writes `*(*(s2+60))=...` but s2 is
+  never assigned (declared =0) -> null+0x28c deref Oops.
+- `tisp_adr_main_init` (135097): null+0 deref Oops in a sub-call/divergence.
+  The OEM decompiled_text for tisp_adr_main_init is clean (vmalloc+memset of
+  data_a8xxx globals), so the fault is in the recovered version's divergence,
+  not the OEM logic.
+
+Knobs added (default off): enable_isp_block_init (ADR), enable_isp_block_init_ae
+(AE, separate because it faults first).
+
+**Conclusion / remaining work for A:** the recovered ISP 3A init chain
+(tisp_ae_main_init, tisp_adr_main_init, and their callees) must be repaired
+against the OEM decompiled_text (tx-isp-t40-whole-binary.json) / the gtxaspec
+T31 reference -- fix the lost register assignments so the inits run cleanly.
+Then they register the idx-4/idx-9 stats handlers + alloc stats DMA, the
+already-built fanout drives the loop, and ADR gains update (banding clears).
+This is a focused multi-function reconstruction-repair effort.
