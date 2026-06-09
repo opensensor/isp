@@ -6097,6 +6097,7 @@ static bool regtrace_t40_profile_force_vic_mdma_qbuf_ring;
 static bool regtrace_enable_vic_mdma_no_ring;
 static bool regtrace_enable_vic_mdma_internal_ring;
 static bool regtrace_enable_vic_mdma_qbuf_rearm_irq;
+static bool regtrace_force_local_frame_streamoff;
 static bool regtrace_enable_vic_irq_ack_filter;
 static bool regtrace_enable_vic_mdma_kick_370;
 static bool regtrace_enable_core_event_tisp_main_init;
@@ -6319,6 +6320,7 @@ module_param_named(t40_profile_force_vic_mdma_qbuf_ring, regtrace_t40_profile_fo
 module_param_named(enable_vic_mdma_no_ring, regtrace_enable_vic_mdma_no_ring, bool, 0644);
 module_param_named(enable_vic_mdma_internal_ring, regtrace_enable_vic_mdma_internal_ring, bool, 0644);
 module_param_named(enable_vic_mdma_qbuf_rearm_irq, regtrace_enable_vic_mdma_qbuf_rearm_irq, bool, 0644);
+module_param_named(force_local_frame_streamoff, regtrace_force_local_frame_streamoff, bool, 0644);
 module_param_named(enable_vic_irq_ack_filter, regtrace_enable_vic_irq_ack_filter, bool, 0644);
 module_param_named(enable_vic_mdma_kick_370, regtrace_enable_vic_mdma_kick_370, bool, 0644);
 module_param_named(enable_core_event_tisp_main_init, regtrace_enable_core_event_tisp_main_init, bool, 0644);
@@ -16121,7 +16123,17 @@ static long regtrace_framechan_oem_event_stream_ioctl(int channel,
             __vb2_queue_cancel(ctx + REGTRACE_FRAMECHAN_VB2_QUEUE_OFFSET);
         }
     } else {
-        if (use_remote_stream) {
+        if (regtrace_force_local_frame_streamoff) {
+            long mdma_ret = regtrace_vic_frame_mdma_stream(channel, 0);
+            long core_ret = regtrace_core_channel_stream(channel, 0);
+            long vic_ret = regtrace_framechan_call_vic_stream(channel, 0);
+            long csi_ret = regtrace_framechan_call_csi_stream(channel, 0);
+
+            printk(KERN_WARNING "tx_isp_t40_recovered: framechan%d force-local streamoff remote=%p remote_ch=%d mdma=%ld core=%ld vic=%ld csi=%ld\n",
+                   channel, (void *)(uintptr_t)remote, remote_channel,
+                   mdma_ret, core_ret, vic_ret, csi_ret);
+            ret = 0;
+        } else if (use_remote_stream) {
             ret = tx_isp_send_event_to_remote((void *)(uintptr_t)remote,
                                               REGTRACE_TX_ISP_EVENT_FRAME_STREAMOFF,
                                               NULL);

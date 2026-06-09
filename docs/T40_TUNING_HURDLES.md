@@ -1194,3 +1194,12 @@ Safety change: `tools/t40_safe_qbuf_dump_probe.sh` now refuses to stop an active
 Current restored stream after the stop/release finding:
 `logs/20260609-142753-t40-recover-clean-neutraluv-242` with neutral UV,
 MSCA rearm guard, top40 bit21, IRQs healthy, and AWB disabled.
+
+Follow-up code guard for future loads: the probe now passes
+`FORCE_LOCAL_FRAME_STREAMOFF=1` by default (`force_local_frame_streamoff` module
+param). This leaves streamon on the OEM remote path, but routes streamoff through
+the local recovered MSCA/VIC/CSI shutdown path instead of
+`TX_ISP_EVENT_FRAME_STREAMOFF`. The release crash needs a deliberate live test
+later with `ALLOW_ACTIVE_STREAM_STOP=1`, but default probe behavior should no
+longer arm a recovered module that uses the suspected remote streamoff callback
+on `rvd` exit.
