@@ -558,10 +558,13 @@ full disasm saved to `scratch/gc4653_ioctl_abi.txt`):
   analog gain from `sensor_again_lut`. So the combined-exposure event near
   `cmd=0x2000006` is the apply the ISP must call; payload is a struct whose
   word at offset 4 carries the packed value.
-- NOTE the recovered driver's `REGTRACE_TX_ISP_EVENT_SENSOR_SET_INPUT=0x2000004`
-  is below this range; the exposure/gain events are a few indices higher. The
-  exact EXPO/INT_TIME/AGAIN cmd values must be read off the jump table in
-  `scratch/gc4653_ioctl_abi.txt` before coding the call.
+- CONFIRMED from the jump table: index 0 (`cmd = 0x2000006`) is the EXPO case.
+  Payload is a struct whose word at offset +4 is packed
+  `(again_index << 16) | integration_time` (integration is the low 16 bits ->
+  regs 0x0202/0x0203; again_index selects the `sensor_again_lut` row). So the
+  apply call is `regtrace_sensor_call_sensor_ioctl(0x2000006, &payload)` with
+  `payload[4] = (again<<16)|inttime`. (`SENSOR_SET_INPUT=0x2000004` is a
+  different, lower event and unrelated to exposure.)
 
 Wiring plan (next):
 1. Verify the AE algorithm actually ticks and computes a total gain/exposure
