@@ -1281,3 +1281,36 @@ so oops reports survive the watchdog reboot) pinned the reg-writes crashes:
    mode==1 does piecewise-linear over the 9-entry lum zone table at ctx[21]
    keyed by *ctx[116]; tail calls tisp_ae_(sec_)mean_update, writes packed
    word to 0x18038/0x18238, pulses awb trig.
+
+## 2026-06-09 WB gains live + software gray-world AWB
+
+Empirical discoveries (all live-verified on .242):
+
+- top40 (reg 0x40) bits are BYPASS bits for bits 8/12-class blocks (clear =
+  active, matching the 2026-06-08 matrix): **bit2 = WB gain (WBG) unit**. With
+  bit2 set (bypassed) the AWB gain bank writes have zero image effect; with it
+  clear they apply directly. New probe default top40: `0x7fffeefb`.
+- **bit3 hard-freezes the SoC when cleared** (silent, watchdog reboot, even
+  with sane AWB config). Blacklisted until its block is identified/initialized.
+- WB gain registers (confirmed by image response): `0x4004`/`0x400c` = R,
+  `0x4008`/`0x4010` = B (G implicit unity, matching the T31
+  `Tiziano_awb_set_gain` write pattern), value = `clamp14(gain)|0x04000000`
+  with 0x400 = 1.0, latched by writing 1 to `0x4000`/`0x5000`
+  (`system_reg_set_awb_trig(2/3, 0)`). Second bank `0x5004..0x5010` mirrors.
+- **`enable_tisp_main_init_dma_kseg0` was a live bug**: the stats DMA engines
+  take pure physical bank addresses; the KSEG0 OR made the AWB stats banks
+  cycle but stay zero. Profile default flipped to false.
+- AWB stats record format (live-decoded, matches the OEM parser at 0x3146c):
+  16-byte records on 128-byte group strides; R = w0[21:0],
+  G = w1[11:0]<<10|w0[31:22], B = w2[1:0]<<20|w1[31:12],
+  count = w3[5:0]<<8|w2[31:24], frame tag = w3[15:8].
+- New `enable_awb_grayworld=1` mode: the repaired AWB stats IRQ handler
+  parses all four banks (freshest tag wins), computes gray-world R/B gains
+  with EMA smoothing and live-calibrated output-path biases
+  (`awb_grayworld_rbias=1193`, `awb_grayworld_bbias=1448`, both 0644), writes
+  the WBG banks, and re-arms the stats engine — a self-sustaining AWB loop at
+  frame rate (~500 updates in the first verification run, stable convergence).
+  The faithful Tiziano `tisp_awb_main_process` chain repair remains future
+  work; gray-world bypasses it entirely.
+- `tisp_ae_main_init` takes sensor width/height (OEM 0x23b34 stores a0/a1 as
+  uint16 pair), same as AWB — the block-init gate now passes them.

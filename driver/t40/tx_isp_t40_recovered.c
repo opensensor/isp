@@ -8787,6 +8787,28 @@ static bool regtrace_enable_isp_block_init_ae;
 static bool regtrace_enable_isp_block_init_awb;
 static bool regtrace_enable_awb_reg_writes = true;
 static bool regtrace_enable_awb_set_gain = true;
+/*
+ * Software gray-world AWB loop: registers the repaired AWB stats IRQ handler
+ * and computes R/B gains from the raw stats records instead of the
+ * still-unrepaired Tiziano process chain. Verified live: WB gains apply in
+ * the bit2 (WBG) unit via regs 0x4004/0x400c (R) and 0x4008/0x4010 (B),
+ * format clamp14|0x04000000, latched by trig writes 0x4000/0x5000 = 1.
+ */
+static bool regtrace_enable_awb_grayworld;
+static void regtrace_awb_grayworld_apply(uint32_t rgain, uint32_t bgain);
+static void regtrace_awb_grayworld_update(void);
+static uint regtrace_awb_grayworld_interval = 2;
+static uint32_t regtrace_awb_grayworld_updates;
+static uint32_t regtrace_awb_grayworld_irqs;
+static uint32_t regtrace_awb_grayworld_last_rgain = 0x5a0;
+static uint32_t regtrace_awb_grayworld_last_bgain = 0x666;
+/*
+ * Output-path bias on top of stats-balanced gains, 1024 = 1.0. The stats tap
+ * and the displayed output disagree by a fixed pipeline factor (CSC/BCSH);
+ * live-calibrated 2026-06-09 against neutral channel means.
+ */
+static uint regtrace_awb_grayworld_rbias = 1193;
+static uint regtrace_awb_grayworld_bbias = 1448;
 static bool regtrace_enable_adr_reg_writes = true;
 static uint regtrace_isp_block_init_stage_limit;
 static uint regtrace_awb_main_init_stage_limit;
@@ -9024,6 +9046,14 @@ module_param_named(enable_isp_block_init_ae, regtrace_enable_isp_block_init_ae, 
 module_param_named(enable_isp_block_init_awb, regtrace_enable_isp_block_init_awb, bool, 0644);
 module_param_named(enable_awb_reg_writes, regtrace_enable_awb_reg_writes, bool, 0644);
 module_param_named(enable_awb_set_gain, regtrace_enable_awb_set_gain, bool, 0644);
+module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
+module_param_named(awb_grayworld_interval, regtrace_awb_grayworld_interval, uint, 0644);
+module_param_named(awb_grayworld_updates, regtrace_awb_grayworld_updates, uint, 0444);
+module_param_named(awb_grayworld_irqs, regtrace_awb_grayworld_irqs, uint, 0444);
+module_param_named(awb_grayworld_last_rgain, regtrace_awb_grayworld_last_rgain, uint, 0444);
+module_param_named(awb_grayworld_last_bgain, regtrace_awb_grayworld_last_bgain, uint, 0444);
+module_param_named(awb_grayworld_rbias, regtrace_awb_grayworld_rbias, uint, 0644);
+module_param_named(awb_grayworld_bbias, regtrace_awb_grayworld_bbias, uint, 0644);
 module_param_named(enable_adr_reg_writes, regtrace_enable_adr_reg_writes, bool, 0644);
 module_param_named(isp_block_init_stage_limit, regtrace_isp_block_init_stage_limit, uint, 0644);
 module_param_named(awb_main_init_stage_limit, regtrace_awb_main_init_stage_limit, uint, 0644);
@@ -9246,8 +9276,22 @@ static int regtrace_isp_block_init_once(const char *where)
         return 0;
     }
 
-    if (regtrace_enable_isp_block_init_ae)
-        regtrace_isp_block_init_ae_ret = (int)tisp_ae_main_init(pi, blob);
+    if (regtrace_enable_isp_block_init_ae) {
+        /*
+         * OEM 0x23b34 stores a0/a1 as a uint16 width/height pair (sh s4/s3),
+         * identical to AWB main init — not the (par_info, blob) pair the
+         * earlier reconstruction assumed.
+         */
+        uint32_t ae_width = *(uint32_t *)tisp_par_info;
+        uint32_t ae_height = *(uint32_t *)(tisp_par_info + 4);
+
+        if (!ae_width || ae_width > 0xffffU)
+            ae_width = adr_width;
+        if (!ae_height || ae_height > 0xffffU)
+            ae_height = adr_height;
+        regtrace_isp_block_init_ae_ret =
+            (int)tisp_ae_main_init(ae_width, ae_height);
+    }
     printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init after-ae where=%s ae_ret=%d\n",
            where ? where : "?", regtrace_isp_block_init_ae_ret);
 
@@ -91492,6 +91536,23 @@ int32_t tisp_awb_main_init(uint32_t a0, uint32_t a1)
     }
 
     if (regtrace_awb_main_init_stage_limit == 4) {
+        if (regtrace_enable_awb_grayworld) {
+            /*
+             * Gray-world mode: register only the repaired stats IRQ handler
+             * (no event-14 process callback), seed sane indoor gains so the
+             * pre-convergence frames aren't green, and arm the first stats
+             * capture.
+             */
+            regtrace_awb_grayworld_apply(regtrace_awb_grayworld_last_rgain,
+                                         regtrace_awb_grayworld_last_bgain);
+            (void)system_irq_func_set(3,
+                (int32_t)(uintptr_t)&tisp_awb_main_interrupt_static);
+            (void)system_reg_set_awb_trig(1, 0);
+            printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init stage-limit=4 grayworld irq registered rgain=0x%x bgain=0x%x\n",
+                   regtrace_awb_grayworld_last_rgain,
+                   regtrace_awb_grayworld_last_bgain);
+            return 0;
+        }
         printk(KERN_WARNING "tx_isp_t40_recovered: awb-main-init stage-limit=4 before callback registration\n");
         return 0;
     }
@@ -92093,6 +92154,98 @@ tisp_awb_get_statistics0x5a8:
     return 0;
 }
 
+
+static void regtrace_awb_grayworld_apply(uint32_t rgain, uint32_t bgain)
+{
+    uint32_t rv = (rgain & 0x3fffU) | 0x04000000U;
+    uint32_t bv = (bgain & 0x3fffU) | 0x04000000U;
+
+    (void)system_reg_write(0x4004, rv);
+    (void)system_reg_write(0x4008, bv);
+    (void)system_reg_write(0x400c, rv);
+    (void)system_reg_write(0x4010, bv);
+    (void)system_reg_set_awb_trig(2, 0);
+    (void)system_reg_write(0x5004, rv);
+    (void)system_reg_write(0x5008, bv);
+    (void)system_reg_write(0x500c, rv);
+    (void)system_reg_write(0x5010, bv);
+    (void)system_reg_set_awb_trig(3, 0);
+}
+
+/*
+ * Gray-world gain update from the raw AWB stats buffer (live-decoded record
+ * format): 16-byte records on 128-byte group strides; per record
+ *   w0..w3:  R = w0[21:0], G = w1[11:0]<<10 | w0[31:22],
+ *            B = w2[1:0]<<20 | w1[31:12],
+ *            count = w3[5:0]<<8 | w2[31:24], frame tag = w3[15:8].
+ * All four DMA banks are scanned and only the freshest tag is accumulated.
+ */
+static void regtrace_awb_grayworld_update(void)
+{
+    const uint8_t *buf;
+    uint32_t off;
+    uint32_t tag_max = 0;
+    uint64_t rs = 0, gs = 0, bs = 0;
+    uint32_t zones = 0;
+    uint32_t rgain, bgain;
+
+    buf = (const uint8_t *)(uintptr_t)regtrace_tisp_dma_virt32(1, 0);
+    if (!buf)
+        return;
+
+    ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)
+        private_dma_cache_sync)(0, (uintptr_t)buf, 0x20000, 0);
+
+    for (off = 0; off + 16 <= 0x20000; off += 128) {
+        uint32_t w0 = *(const uint32_t *)(buf + off);
+        uint32_t w1 = *(const uint32_t *)(buf + off + 4);
+        uint32_t w2 = *(const uint32_t *)(buf + off + 8);
+        uint32_t w3 = *(const uint32_t *)(buf + off + 12);
+        uint32_t cnt = ((w3 & 0x3fU) << 8) | (w2 >> 24);
+        uint32_t tag = (w3 >> 8) & 0xffU;
+
+        if (!cnt)
+            continue;
+        if (tag > tag_max) {
+            tag_max = tag;
+            rs = gs = bs = 0;
+            zones = 0;
+        } else if (tag != tag_max) {
+            continue;
+        }
+        rs += w0 & 0x3fffffU;
+        gs += ((w1 & 0xfffU) << 10) | (w0 >> 22);
+        bs += ((w2 & 3U) << 20) | (w1 >> 12);
+        zones++;
+    }
+
+    if (!zones || !rs || !gs || !bs)
+        return;
+
+    rgain = (uint32_t)div64_u64(gs * 1024ULL, rs);
+    bgain = (uint32_t)div64_u64(gs * 1024ULL, bs);
+    rgain = (rgain * regtrace_awb_grayworld_rbias) >> 10;
+    bgain = (bgain * regtrace_awb_grayworld_bbias) >> 10;
+    if (rgain < 0x200U) rgain = 0x200U;
+    if (rgain > 0x1800U) rgain = 0x1800U;
+    if (bgain < 0x200U) bgain = 0x200U;
+    if (bgain > 0x1800U) bgain = 0x1800U;
+
+    /* EMA smoothing to avoid visible hunting */
+    rgain = (regtrace_awb_grayworld_last_rgain * 7 + rgain) / 8;
+    bgain = (regtrace_awb_grayworld_last_bgain * 7 + bgain) / 8;
+    regtrace_awb_grayworld_last_rgain = rgain;
+    regtrace_awb_grayworld_last_bgain = bgain;
+    regtrace_awb_grayworld_updates++;
+
+    regtrace_awb_grayworld_apply(rgain, bgain);
+
+    if (regtrace_awb_grayworld_updates <= 4 ||
+        (regtrace_awb_grayworld_updates & 0x3fU) == 0)
+        printk(KERN_INFO "tx_isp_t40_recovered: awb-grayworld update#%u zones=%u rgain=0x%x bgain=0x%x tag=%u\n",
+               regtrace_awb_grayworld_updates, zones, rgain, bgain, tag_max);
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031a40 origin=fragment_seed original=tisp_awb_main_interrupt_static */
 int32_t tisp_awb_main_interrupt_static(void)
 {
@@ -92116,6 +92269,17 @@ int32_t tisp_awb_main_interrupt_static(void)
     bank = (uint32_t)system_reg_read(0x10000U | 32848U);
     addr = *(uint32_t *)(tispinfo + 36);
 
+    if (regtrace_enable_awb_grayworld) {
+        regtrace_awb_grayworld_irqs++;
+        if (regtrace_awb_grayworld_interval == 0 ||
+            (regtrace_awb_grayworld_irqs %
+             (regtrace_awb_grayworld_interval + 1)) == 0)
+            regtrace_awb_grayworld_update();
+        /* re-arm the stats engine for the next frame */
+        (void)system_reg_set_awb_trig(1, 0);
+        goto count;
+    }
+
     if (addr) {
         addr += bank * size;
         ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)
@@ -92128,6 +92292,7 @@ int32_t tisp_awb_main_interrupt_static(void)
         printk(KERN_WARNING "tx_isp_t40_recovered: awb-irq skip: tispinfo stats vaddr unset (enable_tisp_main_init_tispinfo_dma?)\n");
     }
 
+count:
     ctr = (uint32_t *)(uintptr_t)pstMainAwbOri[102];
     if (ctr) {
         *ctr += 1;
@@ -188201,7 +188366,12 @@ static void regtrace_apply_t40_bringup_profile(void)
     regtrace_enable_tisp_main_init_yuv_input_csc_version = true;
     regtrace_tisp_main_init_csc_version_value = 2;
     regtrace_enable_tisp_main_init_dma_regs = true;
-    regtrace_enable_tisp_main_init_dma_kseg0 = true;
+    /*
+     * Live-verified 2026-06-09: the stats DMA engines treat the bank address
+     * registers as pure physical; OR-ing the KSEG0 bit made the AWB stats
+     * writes vanish (banks cycled but stayed zero). Keep hw addrs physical.
+     */
+    regtrace_enable_tisp_main_init_dma_kseg0 = false;
     regtrace_enable_tisp_main_init_tispinfo_dma = true;
     regtrace_enable_tisp_main_init_tail_regs = true;
     regtrace_enable_tisp_main_init_msca_oem_order = true;
