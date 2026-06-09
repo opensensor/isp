@@ -6190,7 +6190,7 @@ static uint regtrace_t40_msca_fifo_ch2_uv_ctrl = 0x00000001U;
 static uint regtrace_t40_msca_fifo_addr_tag_mode = 0U;
 static bool regtrace_adr_linear_mode[2];
 static uint regtrace_tisp_main_init_reg20_value = 0xc7ff1030;
-static uint regtrace_tisp_main_init_top40_value = 0x7fd1000d;
+static uint regtrace_tisp_main_init_top40_value = 0x7fffeeff;
 static uint regtrace_tisp_main_init_reg48_value = 0x8fffffff;
 static uint regtrace_tisp_main_init_reg6c_value = 0x00030024;
 static uint regtrace_tisp_main_init_reg60_value = 0;
@@ -186523,7 +186523,12 @@ static void regtrace_apply_t40_bringup_profile(void)
     regtrace_enable_tisp_ipc_oem_gate = true;
     regtrace_enable_tisp_ipc_trigger = true;
     regtrace_enable_tisp_top_regs_final_reapply = true;
-    regtrace_tisp_main_init_top40_value = 0x7fd9004f;
+    /*
+     * Keep top40 bit21 set.  On T40/GC4653, leaving it clear produces the
+     * persistent luma diamond texture even when the MSCA FIFO path and UV plane
+     * are otherwise correct.  The module param remains writable for sweeps.
+     */
+    regtrace_tisp_main_init_top40_value = 0x7fffeeff;
 
     regtrace_enable_isp_irq_ack_only = true;
     regtrace_enable_isp_irq_post_dispatch_ack = false;

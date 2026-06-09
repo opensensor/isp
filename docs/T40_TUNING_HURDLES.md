@@ -1042,3 +1042,54 @@ MSCA/output path (UV contents, UV address freshness, color conversion/AWB/IR
 chroma), not luma geometry and not the ADR hardware grid. The neutral-UV fill is
 a valid inspection workaround for the current IR/night scene, but the real color
 fix is to make the MSCA UV plane correct without neutralizing it.
+
+### Update 7: neutral UV was only half the fix; top40 bit21 removes luma diamonds
+
+User-visible correction: the green chroma diamond was gone after neutral UV, but
+the grayscale stream still had the luma diamond/diagonal texture. Raw MSCA qbuf
+Y renders confirmed the pattern was already in the completed luma plane, not an
+RTSP encode artifact.
+
+Live reversible testing on the running stream:
+
+- Clearing ADR bit7, YDNS bit14, defog bit11, or BCSH bit15 did not remove the
+  luma diamond.
+- Setting top40 bit21 (`0x13300040: 0x7fdfeeff -> 0x7fffeeff`) immediately
+  produced stable clean luma over repeated RTSP frames:
+  `logs/20260609-115023-t40-live-lce-bit21-hold/rtsp-0.jpg` ..
+  `rtsp-5.jpg`.
+- Readback after the hold showed `0x13300040 = 0x7fffeeff`, and IRQs 38/39
+  remained healthy. The stream was intentionally left running in this state for
+  human inspection.
+
+Correct current inspection baseline:
+
+```
+TISP_MAIN_INIT_TOP40_VALUE=0x7fffeeff \
+FRAMECHAN_NEUTRAL_UV_ON_DONE=1 \
+ENABLE_MSCA_REARM_GUARD=1 \
+MSCA_REARM_GUARD_MAX_SKIPS=8 \
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0 \
+CSI_SETTLE_OVERRIDE=0x10 \
+ADR_LINEAR_MODE=1 \
+SENSOR_FULL_WIDTH_OVERRIDE=2560 \
+SENSOR_FULL_HEIGHT_OVERRIDE=1440 \
+ENABLE_ISP_BLOCK_INIT=1 \
+ENABLE_ISP_BLOCK_INIT_AE=0 \
+ENABLE_ADR_REG_WRITES=1 \
+SMOKE_SLEEP_SECS=180 \
+SKIP_QBUF_DUMP=1 \
+tools/t40_safe_qbuf_dump_probe.sh logs/$(date +%Y%m%d-%H%M%S)-t40-lce21-neutraluv-242
+```
+
+Code default updated: the T40 bring-up profile and
+`tools/t40_safe_qbuf_dump_probe.sh` now seed `tisp_main_init_top40_value` with
+`0x7fffeeff`. That keeps the LCE/top40 bit21 state that removed the luma
+diamonds, while preserving the module/script override for future sweeps.
+
+Revised root-cause split:
+
+- Luma diamond texture: top40 bit21/LCE-path state.
+- Green diamond color: bad UV/chroma plane, currently suppressed by neutral UV.
+- Remaining real image-quality work: restore correct chroma/color and AE/AWB;
+  keep bit21 set unless a later OEM-equivalent LCE init is reconstructed.
