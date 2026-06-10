@@ -1365,3 +1365,27 @@ callback chain unconditionally).
   frame-done applies on change. Verified at night: luma 35 -> 103 in ~60s
   (it=1919, again=8), UV self-neutralizing, image transformed from black
   grain to a properly exposed scene.
+
+## 2026-06-09 (final): gamma online, grain eliminated, smooth 3A
+
+- Soft gamma shipped: `enable_soft_gamma=1` (probe default) streams a 2.2
+  tone curve into the instance-0 gamma LUT units at block-init using the
+  protocol decoded from OEM `tisp_gamma_real_write_lut` (start
+  0x50040/60/80 = 0x101, 128 packed pairs to 0x50044/64/84, commit
+  0x7f0102), and the probe's default top40 is now `0x7fffeafb` (bit10
+  gamma + bit2 WBG active). Effect: the AE hits its target with a
+  fraction of the exposure - converged at it=600/again=0 at night, where
+  the linear pipeline needed it=1919/again=8+. Grain gone.
+- The 3A agent is now proportional + slew-limited (max +/-15%/tick,
+  deadband, luma EMA, gain-preferred-down, fast shed on gross
+  overexposure) and resumes exposure state from
+  ae_sensor_apply_force_packed on restart - no more ratcheting or reload
+  slams. UV trim uses EMA'd means and a wider neutral window to stop
+  ring-buffer sampling jitter from dithering the gains. The probe deploys
+  and auto-starts /tmp/3a.sh after raptor.
+- top40 sweep negative results (live, with temporal-noise metric): bits
+  4/13/14 no visible effect without inits; bit6 brightens; **bit15 blanks
+  the output to a solid green frame** (and fooled the temporal-noise
+  metric with tnoise=0.08 - sanity-check content before trusting a noise
+  metric). bit3 remains a hard-freeze. Real denoise needs the Tiziano
+  YDNS/RDNS/SDNS inits.

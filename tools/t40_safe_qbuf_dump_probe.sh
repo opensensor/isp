@@ -17,7 +17,7 @@ SKIP_RTSP="${SKIP_RTSP:-0}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 # Keep the LCE/top40 bit21 set. With 0x7fdfeeff the recovered MSCA output keeps
 # a luma diamond pattern even after UV is neutralized; 0x7fffeeff removes it.
-TISP_MAIN_INIT_TOP40_VALUE="${TISP_MAIN_INIT_TOP40_VALUE:-0x7fffeeff}"
+TISP_MAIN_INIT_TOP40_VALUE="${TISP_MAIN_INIT_TOP40_VALUE:-0x7fffeafb}"
 TISP_MAIN_INIT_CSC_VERSION_VALUE="${TISP_MAIN_INIT_CSC_VERSION_VALUE:-2}"
 ENABLE_TISP_MAIN_INIT_COLOR_INITS="${ENABLE_TISP_MAIN_INIT_COLOR_INITS:-0}"
 TISP_MAIN_INIT_COLOR_INIT_MASK="${TISP_MAIN_INIT_COLOR_INIT_MASK:-0}"
@@ -77,6 +77,7 @@ ENABLE_AWB_SET_GAIN="${ENABLE_AWB_SET_GAIN:-1}"
 ENABLE_AWB_GRAYWORLD="${ENABLE_AWB_GRAYWORLD:-0}"
 ENABLE_AE_SOFT="${ENABLE_AE_SOFT:-0}"
 ENABLE_FRAME_3A="${ENABLE_FRAME_3A:-0}"
+ENABLE_SOFT_GAMMA="${ENABLE_SOFT_GAMMA:-1}"
 ISP_BLOCK_INIT_STAGE_LIMIT="${ISP_BLOCK_INIT_STAGE_LIMIT:-0}"
 AWB_MAIN_INIT_STAGE_LIMIT="${AWB_MAIN_INIT_STAGE_LIMIT:-0}"
 ADR_MAIN_INIT_STAGE_LIMIT="${ADR_MAIN_INIT_STAGE_LIMIT:-0}"
@@ -138,6 +139,7 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_ADR_PROCESS_WORK \
 	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE ENABLE_ISP_BLOCK_INIT_AWB \
 	ENABLE_AWB_REG_WRITES ENABLE_AWB_SET_GAIN ENABLE_AWB_GRAYWORLD ENABLE_AE_SOFT ENABLE_FRAME_3A \
+	ENABLE_SOFT_GAMMA \
 	ISP_BLOCK_INIT_STAGE_LIMIT AWB_MAIN_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
 	ENABLE_ADR_REG_WRITES \
 	ENABLE_MSCA_REARM_GUARD MSCA_REARM_GUARD_MAX_SKIPS IRQ_FRAME_DONE_DELAY_MS \
@@ -172,6 +174,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 "${SCP[@]}" driver/t40/tx_isp_t40_recovered.ko \
 	"$USER@$IP:/tmp/tx_isp_t40_recovered.ko"
 "${SCP[@]}" tools/phys_memdump.mipsel "$USER@$IP:/tmp/phys_memdump"
+"${SCP[@]}" tools/t40_userspace_3a.sh "$USER@$IP:/tmp/3a.sh"
 
 "${SSH[@]}" \
 	"SMOKE_SLEEP_SECS=$SMOKE_SLEEP_SECS" \
@@ -212,6 +215,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"ENABLE_AWB_GRAYWORLD=$ENABLE_AWB_GRAYWORLD" \
 	"ENABLE_AE_SOFT=$ENABLE_AE_SOFT" \
 	"ENABLE_FRAME_3A=$ENABLE_FRAME_3A" \
+	"ENABLE_SOFT_GAMMA=$ENABLE_SOFT_GAMMA" \
 	"ISP_BLOCK_INIT_STAGE_LIMIT=$ISP_BLOCK_INIT_STAGE_LIMIT" \
 	"AWB_MAIN_INIT_STAGE_LIMIT=$AWB_MAIN_INIT_STAGE_LIMIT" \
 	"ADR_MAIN_INIT_STAGE_LIMIT=$ADR_MAIN_INIT_STAGE_LIMIT" \
@@ -264,6 +268,7 @@ set -x
 : "${ENABLE_AWB_GRAYWORLD:=0}"
 : "${ENABLE_AE_SOFT:=0}"
 : "${ENABLE_FRAME_3A:=0}"
+: "${ENABLE_SOFT_GAMMA:=1}"
 : "${ISP_BLOCK_INIT_STAGE_LIMIT:=0}"
 : "${AWB_MAIN_INIT_STAGE_LIMIT:=0}"
 : "${ADR_MAIN_INIT_STAGE_LIMIT:=0}"
@@ -333,6 +338,7 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_awb_grayworld="$ENABLE_AWB_GRAYWORLD" \
 	enable_ae_soft="$ENABLE_AE_SOFT" \
 	enable_frame_3a="$ENABLE_FRAME_3A" \
+	enable_soft_gamma="$ENABLE_SOFT_GAMMA" \
 	isp_block_init_stage_limit="$ISP_BLOCK_INIT_STAGE_LIMIT" \
 	awb_main_init_stage_limit="$AWB_MAIN_INIT_STAGE_LIMIT" \
 	adr_main_init_stage_limit="$ADR_MAIN_INIT_STAGE_LIMIT" \
@@ -545,6 +551,9 @@ else
 		-i "rtsp://thingino:thingino@$IP/ch0" -frames:v 1 \
 		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
 fi
+
+# start the userspace 3A agent (AE + WB trim) on the camera
+"${SSH[@]}" 'pkill -f 3a.sh 2>/dev/null; sh -c "nohup sh /tmp/3a.sh > /tmp/3a.log 2>&1 < /dev/null &"; echo 3a-agent-started' || true
 
 printf 'log=%s\n' "$LOG"
 sed -n '1,20p' "$LOG/qbuf-dump.txt"

@@ -8830,6 +8830,7 @@ static uint32_t regtrace_ae_soft_last_mean;
  * the second streamon - under investigation).
  */
 static bool regtrace_enable_frame_3a;
+static bool regtrace_enable_soft_gamma;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
 static uint regtrace_awb_manual_bgain;
@@ -9078,6 +9079,7 @@ module_param_named(enable_isp_block_init_ae, regtrace_enable_isp_block_init_ae, 
 module_param_named(enable_isp_block_init_awb, regtrace_enable_isp_block_init_awb, bool, 0644);
 module_param_named(enable_awb_reg_writes, regtrace_enable_awb_reg_writes, bool, 0644);
 module_param_named(enable_awb_set_gain, regtrace_enable_awb_set_gain, bool, 0644);
+module_param_named(enable_soft_gamma, regtrace_enable_soft_gamma, bool, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
 module_param_named(awb_grayworld_interval, regtrace_awb_grayworld_interval, uint, 0644);
 module_param_named(awb_grayworld_updates, regtrace_awb_grayworld_updates, uint, 0444);
@@ -9281,6 +9283,49 @@ module_param_named(oem_event_pre_csi_delay_ms, regtrace_oem_event_pre_csi_delay_
 module_param_named(ae_sensor_apply_force_packed, regtrace_ae_sensor_apply_force_packed, uint, 0644);
 module_param_named(ae_sensor_apply_max_again_index, regtrace_ae_sensor_apply_max_again_index, uint, 0644);
 
+
+/*
+ * Soft gamma: stream a 2.2 tone curve into the instance-0 gamma LUT units
+ * using the protocol decoded from OEM tisp_gamma_real_write_lut (0x48450):
+ * start regs 0x50040/0x50060/0x50080 = 0x101, 128 packed entry pairs
+ * ((lut[i+1]<<12)|lut[i]) to data ports 0x50044/0x50064/0x50084, commit
+ * 0x7f0102. Lets AE hit its target with far less analog gain. The gamma
+ * block itself is activated by clearing top40 bit10.
+ */
+static void regtrace_soft_gamma_write(void)
+{
+    static const uint16_t lut[129] = {
+    0, 451, 618, 744, 847, 938, 1019, 1093, 1161, 1225, 1285, 1342,
+    1396, 1448, 1498, 1545, 1591, 1636, 1679, 1721, 1761, 1801, 1839, 1877,
+    1913, 1949, 1984, 2019, 2052, 2085, 2118, 2149, 2181, 2211, 2242, 2271,
+    2301, 2329, 2358, 2386, 2413, 2441, 2468, 2494, 2520, 2546, 2572, 2597,
+    2622, 2647, 2671, 2695, 2719, 2743, 2766, 2789, 2812, 2835, 2858, 2880,
+    2902, 2924, 2945, 2967, 2988, 3009, 3030, 3051, 3072, 3092, 3113, 3133,
+    3153, 3172, 3192, 3212, 3231, 3250, 3269, 3288, 3307, 3326, 3345, 3363,
+    3381, 3400, 3418, 3436, 3454, 3472, 3489, 3507, 3524, 3542, 3559, 3576,
+    3593, 3610, 3627, 3644, 3660, 3677, 3693, 3710, 3726, 3742, 3759, 3775,
+    3791, 3807, 3822, 3838, 3854, 3869, 3885, 3900, 3916, 3931, 3946, 3962,
+    3977, 3992, 4007, 4021, 4036, 4051, 4066, 4080, 4095
+    };
+    unsigned int i;
+
+    (void)system_reg_write(0x50040, 0x101);
+    (void)system_reg_write(0x50060, 0x101);
+    (void)system_reg_write(0x50080, 0x101);
+    for (i = 0; i < 128; i++) {
+        uint32_t w = ((uint32_t)(lut[i + 1] & 0xfffU) << 12) |
+                     (lut[i] & 0xfffU);
+
+        (void)system_reg_write(0x50044, w);
+        (void)system_reg_write(0x50064, w);
+        (void)system_reg_write(0x50084, w);
+    }
+    (void)system_reg_write(0x50040, 0x7f0102);
+    (void)system_reg_write(0x50060, 0x7f0102);
+    (void)system_reg_write(0x50080, 0x7f0102);
+    printk(KERN_WARNING "tx_isp_t40_recovered: soft-gamma 2.2 LUT written\n");
+}
+
 static int regtrace_isp_block_init_once(const char *where)
 {
     uint32_t nbuf;
@@ -9377,6 +9422,9 @@ static int regtrace_isp_block_init_once(const char *where)
            where ? where : "?",
            regtrace_isp_block_init_adr_ret,
            (uint32_t)*(volatile uint32_t *)((char *)&adr_main_stat_info));
+
+    if (regtrace_enable_soft_gamma)
+        regtrace_soft_gamma_write();
 
     if (regtrace_isp_block_init_ae_ret)
         return regtrace_isp_block_init_ae_ret;
