@@ -1451,3 +1451,23 @@ docs/extracted/: noref complete (32 writes, no control flow), ref has 81
 writes extracted but contains slt/movn/movz min-max clamp ladders that
 need emulator-grade branch handling in the extractor before the C can be
 assembled. That plus YDNS-pattern glue is the remaining sharpening work.
+
+## 2026-06-10 (cont): sharpening online — YSP chain via literal translation
+
+- New tool `tools/mips2c_literal.py`: literal MIPS32->C translator (per-
+  instruction statements over virtual registers, goto control flow, delay-
+  slot-safe condition pre-evaluation, reloc-anchored symbol mapping, call
+  dispatch through tracked symbols). This is the general solution for the
+  remaining fragment functions; min/max clamp ladders, loops and unaligned
+  lwl/lwr pairs all translate mechanically.
+- YSP chain installed: ref/noref reg_cfg + wdr_en + intp are literal
+  translations; params_refresh/glue/main_init are YDNS-pattern rewrites
+  (params 3432B from blob +0x16d98, unit regs at 0x13000). The model-output
+  params_refresh was garbage (NULL deref + infinite loop) — replaced.
+  `enable_ysp=1` probe default.
+- top40 sweep with edge-energy metric: **bit20 gates the sharpening path**
+  (+23% edge energy at +13% luma; visually stock-level texture/edges).
+  New probe top40 default `0x7fefaadb`. bit18 blanks the output (black
+  frame) — blacklisted alongside bit3 (freeze) and bit15 (green blank).
+  bit19 brightens strongly (LCE/defog-class?) — left bypassed, candidate
+  for later.
