@@ -1494,3 +1494,20 @@ Pipeline now live end-to-end: GIB BLC -> WBG (userspace auto-WB) -> DMSC ->
 CCM -> OEM gamma -> BCSH -> YDNS -> YSP sharpening, with userspace AE.
 Remaining vs stock: MDNS/SDNS (high-gain denoise), faithful GIB
 gain-tracking, ADR loop, LSC; investigations: stats-death, daylight.
+
+## 2026-06-10 (cont): anti-flicker AE, DNS gain tracking
+
+- "Rolling fog" diagnosed as mains flicker banding: the 3A picked arbitrary
+  integration times. The agent now moves IT only in whole flicker periods
+  (FLICKER_STEP=400 lines ~= one 120Hz period at 25fps/1920 lines) and uses
+  analog gain between rungs - converges to it=1600 (4 periods) + gain.
+  Quantization lesson: percent-steps smaller than half a rung round back
+  and deadlock; step in whole rungs.
+- AE smoothness: rung ladder + gain steps at 1Hz with luma EMA and a 10%
+  deadband; no more visible exposure staggering.
+- Grain: YDNS/YSP strengths were stuck at their gain-1.0 interpolation
+  point. New `dns_gain_ev` param (log2-gain 16.16, written by the agent on
+  every exposure change) lets frame-done re-run ydns/ysp par_refresh so
+  denoise/sharpen strength tracks gain like OEM tgain_update does.
+- Remaining grain delta vs stock is MDNS (temporal denoise) - the next
+  translation target.

@@ -7,12 +7,16 @@ P=/sys/module/tx_isp_t40_recovered/parameters
 PM=/tmp/phys_memdump
 Y_PHYS=${Y_PHYS:-0x6a3e500}
 UV_PHYS=${UV_PHYS:-0x6c3c500}
-TARGET=${TARGET:-110}
-DEADBAND_PCT=${DEADBAND_PCT:-8}
+TARGET=${TARGET:-120}
+DEADBAND_PCT=${DEADBAND_PCT:-10}
 MAX_IT=${MAX_IT:-1919}
 MIN_IT=${MIN_IT:-64}
 MAX_AGAIN=${MAX_AGAIN:-25}
 PERIOD=${PERIOD:-1}
+# Anti-flicker: quantize integration time to multiples of the mains light
+# period (120Hz flicker; ~20.8us/line at 25fps/1920 total lines -> ~400
+# lines per period). Arbitrary IT values produce rolling brightness bands.
+FLICKER_STEP=${FLICKER_STEP:-400}
 
 # resume from the last applied exposure so a restart doesn't slam the sensor
 prev=$(cat $P/ae_sensor_apply_force_packed 2>/dev/null || echo 0)
@@ -40,8 +44,19 @@ uv_means() {  # phys len -> "umean vmean" (NV12: word = U | V<<8)
 		END { if (n) printf "%d %d", u / n, v / n; else print "-1 -1" }'
 }
 
+quantize_it() {  # snap to flicker-safe multiples (min one period)
+	q=$(( (it + FLICKER_STEP / 2) / FLICKER_STEP * FLICKER_STEP ))
+	[ "$q" -lt "$FLICKER_STEP" ] && q=$FLICKER_STEP
+	[ "$q" -gt "$MAX_IT" ] && q=$(( MAX_IT / FLICKER_STEP * FLICKER_STEP ))
+	it=$q
+}
+
 apply_expo() {
+	quantize_it
 	echo $(( (again << 16) | it )) > $P/ae_sensor_apply_force_packed
+	# tell the kernel the gain EV so YDNS/YSP strength tracks it
+	# (~0.158 log2 per GC4653 analog gain index -> ~10362 in 16.16)
+	echo $(( again * 10362 )) > $P/dns_gain_ev 2>/dev/null
 }
 
 i=0
@@ -58,29 +73,25 @@ while true; do
 	err_pct=$(( (TARGET - luma_ema) * 100 / TARGET ))
 	abs_err=${err_pct#-}
 	if [ "$abs_err" -gt "$DEADBAND_PCT" ]; then
-		# scale factor in percent, clamped to +/-15% per tick for smoothness
-		scale=$(( luma_ema > 0 ? TARGET * 100 / luma_ema : 200 ))
-		[ "$scale" -gt 115 ] && scale=115
-		[ "$scale" -lt 87 ] && scale=87
-		if [ "$scale" -gt 100 ]; then
-			if [ "$it" -lt "$MAX_IT" ]; then
-				it=$(( it * scale / 100 + 1 ))
-				[ "$it" -gt "$MAX_IT" ] && it=$MAX_IT
-			elif [ "$again" -lt "$MAX_AGAIN" ] && [ "$scale" -ge 110 ]; then
+		# integration moves in whole flicker periods (anti-banding rungs);
+		# analog gain provides the steps between rungs
+		max_rung=$(( MAX_IT / FLICKER_STEP * FLICKER_STEP ))
+		if [ "$err_pct" -gt 0 ]; then
+			if [ "$it" -lt "$max_rung" ]; then
+				it=$(( it + FLICKER_STEP ))
+			elif [ "$again" -lt "$MAX_AGAIN" ]; then
 				again=$(( again + 1 ))
 			fi
 			apply_expo
 		else
-			if [ "$again" -gt 0 ] && [ "$scale" -le 90 ]; then
-				# gross overexposure: shed gain fast
-				if [ "$scale" -le 75 ] && [ "$again" -ge 3 ]; then
+			if [ "$again" -gt 0 ]; then
+				if [ "$luma_ema" -gt $(( TARGET * 2 )) ] && [ "$again" -ge 3 ]; then
 					again=$(( again - 3 ))
 				else
 					again=$(( again - 1 ))
 				fi
-			elif [ "$it" -gt "$MIN_IT" ]; then
-				it=$(( it * scale / 100 ))
-				[ "$it" -lt "$MIN_IT" ] && it=$MIN_IT
+			elif [ "$it" -gt "$FLICKER_STEP" ]; then
+				it=$(( it - FLICKER_STEP ))
 			fi
 			apply_expo
 		fi

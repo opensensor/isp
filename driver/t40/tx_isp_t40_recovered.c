@@ -8843,6 +8843,8 @@ static bool regtrace_enable_ydns;
 static bool regtrace_enable_gib_blc;
 static bool regtrace_enable_ysp;
 static bool regtrace_enable_ccm;
+/* userspace 3A: gain EV (log2(total_gain) in 16.16) drives DNS/sharpen strength */
+static uint regtrace_dns_gain_ev;
 static uint regtrace_gib_blc_offset = 0x100;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
@@ -9097,6 +9099,7 @@ module_param_named(enable_ydns, regtrace_enable_ydns, bool, 0644);
 module_param_named(enable_gib_blc, regtrace_enable_gib_blc, bool, 0644);
 module_param_named(enable_ysp, regtrace_enable_ysp, bool, 0644);
 module_param_named(enable_ccm, regtrace_enable_ccm, bool, 0644);
+module_param_named(dns_gain_ev, regtrace_dns_gain_ev, uint, 0644);
 module_param_named(gib_blc_offset, regtrace_gib_blc_offset, uint, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
 module_param_named(awb_grayworld_interval, regtrace_awb_grayworld_interval, uint, 0644);
@@ -42508,6 +42511,19 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
             if (++f3a_tick >= regtrace_frame_3a_interval) {
                 f3a_tick = 0;
                 regtrace_frame_3a_sample(y, uv);
+            }
+        }
+
+        /* userspace 3A: retune DNS/sharpen strength when the gain EV moves */
+        if (regtrace_enable_ydns || regtrace_enable_ysp) {
+            static uint32_t dns_ev_applied;
+
+            if (regtrace_dns_gain_ev != dns_ev_applied) {
+                dns_ev_applied = regtrace_dns_gain_ev;
+                if (regtrace_enable_ydns)
+                    (void)tisp_ydns_par_refresh(0, dns_ev_applied, 256);
+                if (regtrace_enable_ysp)
+                    (void)tisp_ysp_par_refresh(0, dns_ev_applied, 256);
             }
         }
 
