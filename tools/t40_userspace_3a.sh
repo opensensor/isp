@@ -8,7 +8,7 @@ PM=/tmp/phys_memdump
 Y_PHYS=${Y_PHYS:-0x6a3e500}
 UV_PHYS=${UV_PHYS:-0x6c3c500}
 TARGET=${TARGET:-105}
-DEADBAND_PCT=${DEADBAND_PCT:-10}
+DEADBAND_PCT=${DEADBAND_PCT:-5}
 MAX_IT=${MAX_IT:-1919}
 MIN_IT=${MIN_IT:-64}
 MAX_AGAIN=${MAX_AGAIN:-25}
@@ -24,9 +24,13 @@ if [ "$prev" -gt 0 ]; then
 	it=$(( prev & 0xffff ))
 	again=$(( prev >> 16 ))
 else
-	it=600
+	it=800
 	again=0
 fi
+rung=$(( (it + FLICKER_STEP / 2) / FLICKER_STEP * FLICKER_STEP ))
+[ "$rung" -lt "$FLICKER_STEP" ] && rung=$FLICKER_STEP
+fine=0
+settle=0
 luma_ema=-1
 rgain=$(cat $P/awb_grayworld_last_rgain 2>/dev/null || echo 1280)
 bgain=$(cat $P/awb_grayworld_last_bgain 2>/dev/null || echo 1480)
@@ -44,15 +48,10 @@ uv_means() {  # phys len -> "umean vmean" (NV12: word = U | V<<8)
 		END { if (n) printf "%d %d", u / n, v / n; else print "-1 -1" }'
 }
 
-quantize_it() {  # snap to flicker-safe multiples (min one period)
-	q=$(( (it + FLICKER_STEP / 2) / FLICKER_STEP * FLICKER_STEP ))
-	[ "$q" -lt "$FLICKER_STEP" ] && q=$FLICKER_STEP
-	[ "$q" -gt "$MAX_IT" ] && q=$(( MAX_IT / FLICKER_STEP * FLICKER_STEP ))
-	it=$q
-}
-
 apply_expo() {
-	quantize_it
+	it=$(( rung + fine ))
+	[ "$it" -lt "$MIN_IT" ] && it=$MIN_IT
+	[ "$it" -gt "$MAX_IT" ] && it=$MAX_IT
 	echo $(( (again << 16) | it )) > $P/ae_sensor_apply_force_packed
 	# tell the kernel the gain EV so YDNS/YSP strength tracks it
 	# (~0.158 log2 per GC4653 analog gain index -> ~10362 in 16.16)
@@ -73,25 +72,30 @@ while true; do
 	err_pct=$(( (TARGET - luma_ema) * 100 / TARGET ))
 	abs_err=${err_pct#-}
 	if [ "$abs_err" -gt "$DEADBAND_PCT" ]; then
-		# integration moves in whole flicker periods (anti-banding rungs);
-		# analog gain provides the steps between rungs
+		# Two-level control: integration micro-trim (+/-80 lines around the
+		# flicker rung, 16-line steps ~ 1% luma each, negligible residual
+		# banding at <=20% of a period) does fine corrections; analog gain
+		# (12-14%/step) and whole rungs do coarse moves. After any coarse
+		# move, hold for settle ticks so the EMA catches up (no pumping).
 		max_rung=$(( MAX_IT / FLICKER_STEP * FLICKER_STEP ))
-		if [ "$err_pct" -gt 0 ]; then
-			if [ "$it" -lt "$max_rung" ]; then
-				it=$(( it + FLICKER_STEP ))
+		if [ "${settle:-0}" -gt 0 ]; then
+			settle=$(( settle - 1 ))
+		elif [ "$err_pct" -gt 0 ]; then
+			if [ "$fine" -lt 80 ]; then
+				fine=$(( fine + 16 ))
+			elif [ "$rung" -lt "$max_rung" ]; then
+				rung=$(( rung + FLICKER_STEP )); fine=-80; settle=4
 			elif [ "$again" -lt "$MAX_AGAIN" ]; then
-				again=$(( again + 1 ))
+				again=$(( again + 1 )); fine=-80; settle=4
 			fi
 			apply_expo
 		else
-			if [ "$again" -gt 0 ]; then
-				if [ "$luma_ema" -gt $(( TARGET * 2 )) ] && [ "$again" -ge 3 ]; then
-					again=$(( again - 3 ))
-				else
-					again=$(( again - 1 ))
-				fi
-			elif [ "$it" -gt "$FLICKER_STEP" ]; then
-				it=$(( it - FLICKER_STEP ))
+			if [ "$fine" -gt -80 ]; then
+				fine=$(( fine - 16 ))
+			elif [ "$again" -gt 0 ]; then
+				again=$(( again - 1 )); fine=80; settle=4
+			elif [ "$rung" -gt "$FLICKER_STEP" ]; then
+				rung=$(( rung - FLICKER_STEP )); fine=80; settle=4
 			fi
 			apply_expo
 		fi

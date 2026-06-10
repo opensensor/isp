@@ -1530,3 +1530,19 @@ intp/wdr_en/func_en/glue/main_init. Findings:
 AE/grain round (user-reported): target back to 105 (less gain), DNS
 gain-EV mapping strengthened (24576/step ~ mid-table by gain 8). Visible
 grain reduced; full fix remains MDNS.
+
+## 2026-06-10 (cont): two-level AE — smooth at last
+
+Measured GC4653 analog-gain steps: ~12-14% luma each — single steps are
+visible and a deadband smaller than one step guarantees oscillation
+("breathing"), which also pumps the encoder (perceived "distortion").
+GIB digital gain knobs were chased and ruled out live (0x1050 no-op,
+0x8000 window = sec instance, main 0x50140..0x50164 unconfigured/no-op).
+
+The shipped design needs no new hardware: two-level control in the agent —
+integration micro-trim of +/-80 lines in 16-line (~1%) steps around the
+flicker rung (<=20% of a mains period off-perfect = negligible residual
+banding) for fine corrections, with analog gain/rung changes only when the
+fine range saturates, followed by a 4-tick settle hold. Deadband 5%.
+Verified: converged at rung 1600 + fine 80, gain 7 (one step lower than
+before), perfectly static readings.
