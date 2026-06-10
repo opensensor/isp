@@ -37,6 +37,8 @@ settle=0
 luma_ema=-1
 rgain=$(cat $P/awb_grayworld_last_rgain 2>/dev/null || echo 1280)
 bgain=$(cat $P/awb_grayworld_last_bgain 2>/dev/null || echo 1480)
+[ "$rgain" -le 0 ] 2>/dev/null && rgain=1280
+[ "$bgain" -le 0 ] 2>/dev/null && bgain=1480
 
 # busybox od has no -t/-A; use -d (unsigned 16-bit LE words), skip addr column
 mean_of() {  # phys len -> byte mean
@@ -60,6 +62,10 @@ apply_expo() {
 	# (~0.158 log2 per GC4653 analog gain index -> ~10362 in 16.16)
 	echo $(( again * 24576 )) > $P/dns_gain_ev 2>/dev/null
 }
+
+apply_expo
+echo "$rgain" > $P/awb_manual_rgain 2>/dev/null
+echo "$bgain" > $P/awb_manual_bgain 2>/dev/null
 
 i=0
 while true; do

@@ -87,6 +87,15 @@ BCSH_MODE="${BCSH_MODE:-2}"
 ENABLE_CLM="${ENABLE_CLM:-0}"
 CLM_STAGE_LIMIT="${CLM_STAGE_LIMIT:-0}"
 ENABLE_MDNS="${ENABLE_MDNS:-1}"
+# LSC literal chain (tx_isp_t40_lsc_lit.inc): faithful OEM lens-shading init
+# from the tparamsN tuning blob. LSC_LIT_CT picks the static color-temperature
+# interp point (OEM refines it from AWB at runtime); LSC_LIT_GAIN is the 16.16
+# log-gain for the global gain tables.
+ENABLE_LSC_LIT="${ENABLE_LSC_LIT:-0}"
+LSC_LIT_CT="${LSC_LIT_CT:-5000}"
+LSC_LIT_GAIN="${LSC_LIT_GAIN:-0}"
+ENABLE_USERSPACE_3A="${ENABLE_USERSPACE_3A:-1}"
+USERSPACE_3A_SETTLE_SECS="${USERSPACE_3A_SETTLE_SECS:-12}"
 ISP_BLOCK_INIT_STAGE_LIMIT="${ISP_BLOCK_INIT_STAGE_LIMIT:-0}"
 AWB_MAIN_INIT_STAGE_LIMIT="${AWB_MAIN_INIT_STAGE_LIMIT:-0}"
 ADR_MAIN_INIT_STAGE_LIMIT="${ADR_MAIN_INIT_STAGE_LIMIT:-0}"
@@ -149,6 +158,8 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE ENABLE_ISP_BLOCK_INIT_AWB \
 	ENABLE_AWB_REG_WRITES ENABLE_AWB_SET_GAIN ENABLE_AWB_GRAYWORLD ENABLE_AE_SOFT ENABLE_FRAME_3A \
 	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC ENABLE_YSP ENABLE_CCM ENABLE_BCSH BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT ENABLE_MDNS \
+	ENABLE_LSC_LIT LSC_LIT_CT LSC_LIT_GAIN \
+	ENABLE_USERSPACE_3A USERSPACE_3A_SETTLE_SECS \
 	ISP_BLOCK_INIT_STAGE_LIMIT AWB_MAIN_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
 	ENABLE_ADR_REG_WRITES \
 	ENABLE_MSCA_REARM_GUARD MSCA_REARM_GUARD_MAX_SKIPS IRQ_FRAME_DONE_DELAY_MS \
@@ -180,6 +191,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 "$ROOT/host/bin/mipsel-linux-gcc" -Os -Wall -Wextra -static \
 	-o tools/phys_memdump.mipsel tools/phys_memdump.c
 
+"${SSH[@]}" 'pkill -f "[3]a.sh" 2>/dev/null || true; pkill -f /tmp/phys_memdump 2>/dev/null || true' || true
 "${SCP[@]}" driver/t40/tx_isp_t40_recovered.ko \
 	"$USER@$IP:/tmp/tx_isp_t40_recovered.ko"
 "${SCP[@]}" tools/phys_memdump.mipsel "$USER@$IP:/tmp/phys_memdump"
@@ -234,6 +246,9 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"ENABLE_CLM=$ENABLE_CLM" \
 	"CLM_STAGE_LIMIT=$CLM_STAGE_LIMIT" \
 	"ENABLE_MDNS=$ENABLE_MDNS" \
+	"ENABLE_LSC_LIT=$ENABLE_LSC_LIT" \
+	"LSC_LIT_CT=$LSC_LIT_CT" \
+	"LSC_LIT_GAIN=$LSC_LIT_GAIN" \
 	"ISP_BLOCK_INIT_STAGE_LIMIT=$ISP_BLOCK_INIT_STAGE_LIMIT" \
 	"AWB_MAIN_INIT_STAGE_LIMIT=$AWB_MAIN_INIT_STAGE_LIMIT" \
 	"ADR_MAIN_INIT_STAGE_LIMIT=$ADR_MAIN_INIT_STAGE_LIMIT" \
@@ -296,6 +311,9 @@ set -x
 : "${ENABLE_CLM:=0}"
 : "${CLM_STAGE_LIMIT:=0}"
 : "${ENABLE_MDNS:=1}"
+: "${ENABLE_LSC_LIT:=0}"
+: "${LSC_LIT_CT:=5000}"
+: "${LSC_LIT_GAIN:=0}"
 : "${ISP_BLOCK_INIT_STAGE_LIMIT:=0}"
 : "${AWB_MAIN_INIT_STAGE_LIMIT:=0}"
 : "${ADR_MAIN_INIT_STAGE_LIMIT:=0}"
@@ -375,6 +393,9 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_clm="$ENABLE_CLM" \
 	clm_stage_limit="$CLM_STAGE_LIMIT" \
 	enable_mdns="$ENABLE_MDNS" \
+	enable_lsc_lit="$ENABLE_LSC_LIT" \
+	lsc_lit_ct="$LSC_LIT_CT" \
+	lsc_lit_gain="$LSC_LIT_GAIN" \
 	isp_block_init_stage_limit="$ISP_BLOCK_INIT_STAGE_LIMIT" \
 	awb_main_init_stage_limit="$AWB_MAIN_INIT_STAGE_LIMIT" \
 	adr_main_init_stage_limit="$ADR_MAIN_INIT_STAGE_LIMIT" \
@@ -407,19 +428,19 @@ echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
 echo "$TISP_MAIN_INIT_CSC_VERSION_VALUE" > "$PARAM/tisp_main_init_csc_version_value"
 insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
 /etc/init.d/S31raptor start
-dmesg | grep -E 'isp-block-init|awb|AWB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
+dmesg | grep -E 'isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
 dmesg | tail -260 > /tmp/t40-dmesg-start-immediate.txt
 hold_secs=$((SMOKE_SLEEP_SECS))
 if [ "$hold_secs" -gt 4 ]; then
 	sleep 4
 	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
-	dmesg | grep -E 'isp-block-init|awb|AWB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | grep -E 'isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
 	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
 	sleep $((hold_secs - 4))
 else
 	sleep "$hold_secs"
 	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
-	dmesg | grep -E 'isp-block-init|awb|AWB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | grep -E 'isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
 	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
 fi
 chmod +x /tmp/phys_memdump
@@ -506,7 +527,7 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|awb|AWB|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 dmesg > /tmp/t40-dmesg-full.txt
 EOS
@@ -523,6 +544,18 @@ EOS
 "${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-full.txt" "$LOG/dmesg-full.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-before-load.txt" "$LOG/dmesg-before-load.txt"
 "${SCP[@]}" "$USER@$IP:/tmp/t40-sensor-ae-regs.txt" "$LOG/sensor-ae-regs.txt"
+
+if [[ "$ENABLE_USERSPACE_3A" == "1" ]]; then
+	{
+		echo "# starting userspace 3A before qbuf/RTSP capture"
+		"${SSH[@]}" 'sh -c "nohup sh /tmp/3a.sh > /tmp/3a.log 2>&1 < /dev/null &"; echo 3a-agent-started; sleep 1; ps | grep "[3]a.sh" || true'
+	} >"$LOG/3a-start.log" 2>&1 || true
+	if [[ "$USERSPACE_3A_SETTLE_SECS" != "0" ]]; then
+		sleep "$USERSPACE_3A_SETTLE_SECS"
+	fi
+else
+	echo "userspace 3A disabled (ENABLE_USERSPACE_3A=0)" >"$LOG/3a-start.log"
+fi
 
 qline="$(grep -m1 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" || true)"
 if [[ -z "$qline" ]]; then
@@ -588,8 +621,15 @@ else
 		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
 fi
 
-# start the userspace 3A agent (AE + WB trim) on the camera
-"${SSH[@]}" 'pkill -f 3a.sh 2>/dev/null; sh -c "nohup sh /tmp/3a.sh > /tmp/3a.log 2>&1 < /dev/null &"; echo 3a-agent-started' || true
+"${SSH[@]}" 'P=/sys/module/tx_isp_t40_recovered/parameters; \
+	echo "# 3A process"; ps | grep "[3]a.sh" || true; \
+	echo "# 3A params"; \
+	for p in ae_sensor_apply_force_packed dns_gain_ev awb_manual_rgain awb_manual_bgain awb_grayworld_last_rgain awb_grayworld_last_bgain; do \
+		printf "%s=" "$p"; cat "$P/$p" 2>/dev/null || echo NA; \
+	done; \
+	echo "# 3A log tail"; tail -80 /tmp/3a.log 2>/dev/null || true' \
+	>"$LOG/3a-status.txt" 2>&1 || true
+"${SCP[@]}" "$USER@$IP:/tmp/3a.log" "$LOG/3a.log" 2>/dev/null || true
 
 printf 'log=%s\n' "$LOG"
 sed -n '1,20p' "$LOG/qbuf-dump.txt"

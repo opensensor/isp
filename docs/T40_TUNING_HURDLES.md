@@ -659,6 +659,49 @@ scene. Then test:
 
 Do not assume the pair is safe just because each block initializes.
 
+#### LSC resolved (2026-06-10): lit chain works, CT zone matters
+
+The native recovered `tisp_lsc_*` bodies are unusable: `tisp_lsc_write_reg`
+drops the `divu`/`mflo` mesh-step quotient and the value argument of two
+`system_reg_write` calls, and `tisp_lsc_real_write_lut` pointer-scales the port
+addresses so the LUT streams to 0x50080/0x500C0 instead of 0x50020/0x50030.
+The earlier "re-enabling LSC produced strong geometric/striping artifacts" is
+exactly the signature of a garbage mesh (a constant-word LUT produces magenta
+vertical stripes — verified live with `tools/lsc_lut_blast.c`).
+
+`driver/t40/tx_isp_t40_lsc_lit.inc` (gated by `enable_lsc_lit`) is a faithful
+re-translation of the OEM chain (.text 0x36b50-0x37ad8) and was verified live
+on .242:
+
+- Config window base `(bank+96)<<7` = 0x3000 main / 0x3080 secondary. Our
+  programming is byte-identical to stock: `0x00240030 0x001c0000 0x01000804
+  0x01000804` (cells 48x36, count 28, mesh start=4 end=8 step=1024/4=256).
+- LUT write port: ctrl 0x50020 / data 0x50024 (bank0), 0x50030/0x50034
+  (bank1); stream = `0x101`, nodes*3 packed words, `((nodes-1)<<16)|0x102`.
+- Tool data = tparamsN blob + 13036, 0xa324 bytes. The gc4653-t40.bin payload
+  carries real calibration: 1148 nodes, lut words at tool+292/+14116/+27940,
+  CT breakpoints [2986, 3615, 3815, 5058].
+- The LUT gains are plain multipliers: an all-zeros LUT blacks out the frame
+  (verified live), so the hardware applies LUT * pixel with no unity offset.
+- CT zone selection is critical: a forced `lsc_lit_ct=5000` lands in the
+  lut1/lut2 daylight blend and visibly under-corrects a warm indoor scene;
+  `lsc_lit_ct=3300` (lut0/lut1 blend) matches the stock day image much more
+  closely. Until the AWB CT estimate is wired into
+  `regtrace_lsc_lit_ct_update()`, pick `lsc_lit_ct` per scene.
+- reg 0x40 bit1 tracks the OEM `tparams_status & 2` LSC gate and flips with
+  stock day/night: stock day runs `0x7fd1000d` (bit1 clear), stock night
+  `0x7fd9004f` (bit1 set, LSC parked for mono). Treat bit1 set as "LSC
+  parked"; run the lit chain with a top40 value that clears bit1 (e.g.
+  `0x7fef88d9`). The bit only latches around stream start — live devmem
+  toggles do not change the picture.
+- Stock boots into night mode on the bench; force day via `[ircut]
+  enabled=true mode=day` in `/etc/raptor.conf` (already applied to .242)
+  before using stock frames as color references
+  (`logs/20260610-stock-lsc-reference/stock-day-baseline.jpg`).
+
+Remaining gap after LSC: overall desaturation / muted color vs stock, which is
+CCM/BCSH territory, and runtime CT/gain refresh wiring for LSC.
+
 ### 6. Event-driven refresh
 
 T31 event 4 refreshes gain-dependent blocks: GIB, GB/BLC, DMSC, sharpen, SDNS,

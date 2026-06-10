@@ -9386,6 +9386,7 @@ static void regtrace_soft_gamma_write(void)
 
 #include "tx_isp_t40_bcsh_lit.inc"
 #include "tx_isp_t40_clm_lit.inc"
+#include "tx_isp_t40_lsc_lit.inc"
 
 
 /*
@@ -13947,6 +13948,25 @@ static int regtrace_isp_block_init_once(const char *where)
 
     if (regtrace_enable_soft_gamma)
         regtrace_soft_gamma_write();
+
+    if (regtrace_enable_lsc_lit) {
+        /*
+         * OEM tisp_main_init hands tisp_lsc_init the same sensor
+         * width/height words AWB gets (tisp_par_info[0]/[4]).
+         */
+        uint32_t lsc_width = *(uint32_t *)tisp_par_info;
+        uint32_t lsc_height = *(uint32_t *)(tisp_par_info + 4);
+        int lsc_ret;
+
+        if (!lsc_width || lsc_width > 0xffffU)
+            lsc_width = adr_width;
+        if (!lsc_height || lsc_height > 0xffffU)
+            lsc_height = adr_height;
+        lsc_ret = regtrace_lsc_main_init_lit(0, (const uint8_t *)(uintptr_t)nbuf,
+                                             lsc_width, lsc_height);
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init lsc-lit ret=%d\n",
+               lsc_ret);
+    }
 
     if (regtrace_enable_bcsh) {
         int bcsh_ret = (int)regtrace_bcsh_main_init_lit(regtrace_bcsh_mode);
@@ -194591,6 +194611,7 @@ void cleanup_module(void)
     cancel_work_sync(&regtrace_irq_frame_done_work[2].work);
     cancel_work_sync(&regtrace_irq_frame_done_work[3].work);
     regtrace_tisp_event_threads_stop();
+    regtrace_lsc_lit_cleanup();
     regtrace_tisp_main_init_param_free();
     regtrace_tisp_dma_free();
     regtrace_vic_mdma_internal_free();
