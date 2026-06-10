@@ -9316,6 +9316,40 @@ module_param_named(ae_sensor_apply_max_again_index, regtrace_ae_sensor_apply_max
  * 0x7f0102. Lets AE hit its target with far less analog gain. The gamma
  * block itself is activated by clearing top40 bit10.
  */
+/*
+ * Static BCSH config snapshotted from a converged stock day-mode boot
+ * (full-bank /dev/mem diff, docs/extracted/bank1-stock-day.bin). Our BCSH
+ * unit (0x11000) was gated active (top40 bit12) but never initialized, so
+ * it sat at reset defaults (identity clamps) and the image rendered
+ * desaturated vs stock. 0x11018-0x11020 is the saturation matrix in .10
+ * fixed point (0x400 = 1.0); the rest are offsets, hue/sat LUT params and
+ * enables. Interim until the faithful tisp_bcsh chain (OEM 0x6a738) is
+ * literal-translated — values are day-mode; night uses a different blend.
+ */
+static bool regtrace_enable_bcsh_static; /* default off: snapshot does not compose with our CCM (greens shift purple); needs the faithful tisp_bcsh chain */
+module_param_named(enable_bcsh_static, regtrace_enable_bcsh_static, bool, 0644);
+
+static void regtrace_bcsh_static_write(void)
+{
+    static const uint32_t bcsh_cfg[][2] = {
+        { 0x11018, 0x03fe0400 }, { 0x1101c, 0x04000400 },
+        { 0x11020, 0x03fc0400 }, { 0x11024, 0x00000400 },
+        { 0x11028, 0x00000000 }, { 0x1102c, 0x03ff0000 },
+        { 0x11030, 0x00000000 }, { 0x11034, 0x00000000 },
+        { 0x11038, 0x00000400 },
+        /*
+         * The hue/sat LUT half of the stock snapshot (0x1103c-0x11094)
+         * is calibrated against stock's CCM state and rotates our greens
+         * to purple — bisected out until the faithful BCSH chain lands.
+         */
+    };
+    unsigned int k;
+
+    for (k = 0; k < sizeof(bcsh_cfg) / sizeof(bcsh_cfg[0]); k++)
+        (void)system_reg_write(bcsh_cfg[k][0], bcsh_cfg[k][1]);
+    printk(KERN_WARNING "tx_isp_t40_recovered: bcsh-static %u regs written\n", k);
+}
+
 static void regtrace_soft_gamma_write(void)
 {
     static const uint16_t lut[129] = {
@@ -13910,6 +13944,9 @@ static int regtrace_isp_block_init_once(const char *where)
 
     if (regtrace_enable_soft_gamma)
         regtrace_soft_gamma_write();
+
+    if (regtrace_enable_bcsh_static)
+        regtrace_bcsh_static_write();
 
     if (regtrace_enable_ydns) {
         int ydns_ret = (int)tisp_ydns_main_init();

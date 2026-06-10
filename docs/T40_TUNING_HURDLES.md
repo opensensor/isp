@@ -1601,3 +1601,35 @@ and full-unit dumps in docs/extracted/mdns-unit-oem.bin + top-oem.bin
 Stock-boot top40 also says bits 4/7/11/15/17/18/21 are active on OEM and
 bit20 bypassed — our empirical map disagrees on 15/18/20; worth a careful
 re-derivation when chasing the remaining color/LCE deltas.
+
+## 2026-06-10 midday: daylight color — green ceiling fixed, structural delta identified
+
+User compared daylight frames vs stock: stock renders the white ceiling
+white AND the green-painted walls green; ours rendered the ceiling green.
+
+Userspace AWB rework (tools/t40_userspace_3a.sh): whole-frame gray-world
+fails on this scene (dominant green walls drag the UV mean; neutralizing
+it tints the true whites). Now does OEM-style candidate selection — 12
+sample blocks; candidates must be >= frame-mean luma, unclipped, and
+near-neutral chroma — and uses only the TWO BRIGHTEST candidates
+(averaging all candidates re-admits the walls once gains make them
+near-neutral: a whitewash feedback loop that overshoots to purple). UV
+window env-tunable (UV_LO/UV_HI; 0/255 freezes gains).
+
+Structural finding (full-bank /dev/mem diffs, converged day state, ours
+vs stock — docs/extracted/bank{0,1,5}-{ours,stock}-day.bin): WB gains and
+the CCM matrix (0xb004-0xb014) are nearly IDENTICAL to stock, yet no WB
+point renders both surfaces correctly — the character delta lives in the
+blocks our shim never initializes (enable_tisp_main_init_color_inits=0,
+fragment inits unsafe): BCSH unit 0x11000 sits at reset defaults (stock
+has a configured matrix + hue/sat LUT), CLM unit 0xc000 (101 words
+differ), LSC 0x9000 (160), LCE/defog-area 0xa000 (90). Transplanting the
+stock BCSH register snapshot does NOT work (greens rotate purple — the
+LUT only composes with stock's full pipeline state): added
+enable_bcsh_static (default off) with the snapshot for experiments.
+
+NEXT MILESTONE: literal-translate (mips2c) the faithful tisp_bcsh chain
+(OEM tisp_bcsh_main_init 0x6a738), tisp_clm_init, and tisp_lsc_init, like
+the MDNS/YSP/CCM bring-ups. Stock day-mode register ground truth for all
+three is in the bank dumps. Stock day/night switch for reference boots:
+`raptorctl ric mode day`.
