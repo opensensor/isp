@@ -9384,6 +9384,9 @@ static void regtrace_soft_gamma_write(void)
     printk(KERN_WARNING "tx_isp_t40_recovered: soft-gamma 2.2 LUT written\n");
 }
 
+#include "tx_isp_t40_bcsh_lit.inc"
+#include "tx_isp_t40_clm_lit.inc"
+
 
 /*
  * Literal mips2c CCM (color correction matrix) chain — self-contained _lit
@@ -13945,6 +13948,13 @@ static int regtrace_isp_block_init_once(const char *where)
     if (regtrace_enable_soft_gamma)
         regtrace_soft_gamma_write();
 
+    if (regtrace_enable_bcsh) {
+        int bcsh_ret = (int)regtrace_bcsh_main_init_lit(regtrace_bcsh_mode);
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init bcsh ret=%d\n",
+               bcsh_ret);
+    }
+
     if (regtrace_enable_bcsh_static)
         regtrace_bcsh_static_write();
 
@@ -13967,6 +13977,13 @@ static int regtrace_isp_block_init_once(const char *where)
 
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init ccm ret=%d\n",
                ccm_ret);
+    }
+
+    if (regtrace_enable_clm) {
+        int clm_ret = (int)regtrace_clm_main_init_lit();
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init clm ret=%d\n",
+               clm_ret);
     }
 
     if (regtrace_enable_mdns) {

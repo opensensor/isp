@@ -136,6 +136,10 @@ while i < len(insns):
         pos, size = int(a[2],0), int(a[3],0)
         mask = ((1<<size)-1) << pos
         emit(f"{r(a[0])} = ({r(a[0])} & ~0x{mask:x}U) | (({r(a[1])} << {pos}) & 0x{mask:x}U);")
+    elif op == "seb":
+        emit(f"{r(a[0])} = (uint32_t)(int8_t)({r(a[1])} & 0xffU);")
+    elif op == "seh":
+        emit(f"{r(a[0])} = (uint32_t)(int16_t)({r(a[1])} & 0xffffU);")
     elif op in ("lw","lbu","lhu","lb","lh"):
         size = 4 if op=="lw" else (1 if op in ("lbu","lb") else 2)
         base, off, isanchor = memref(a[1], ins, size)

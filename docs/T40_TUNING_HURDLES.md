@@ -1633,3 +1633,34 @@ NEXT MILESTONE: literal-translate (mips2c) the faithful tisp_bcsh chain
 the MDNS/YSP/CCM bring-ups. Stock day-mode register ground truth for all
 three is in the bank dumps. Stock day/night switch for reference boots:
 `raptorctl ric mode day`.
+
+2026-06-10 update: the faithful BCSH chain is now compiled in as
+`driver/t40/tx_isp_t40_bcsh_lit.inc`, gated behind `enable_bcsh=0`
+(probe env `ENABLE_BCSH`, `BCSH_MODE=2`). It is a self-contained literal
+translation using the OEM T40 BCSH inter table (`.data+0x2cd44`), the
+`.rodata+0x2184` hue matrix, explicit CT switch-table repair, and local
+`StrenCal` helpers so none of the GP-mangled recovered BCSH functions are
+called. Live validation with `ENABLE_BCSH=1` left IRQs/stream healthy and
+programmed the BCSH block to the stock day register state except five
+EV/CT-dependent words (`0x1104c`, `0x11050`, `0x11064`, `0x1106c`,
+`0x11070`); live-writing those five stock values did not materially change
+the purple/green cast. Conclusion: BCSH is no longer the blocking delta by
+itself; the stock color character depends on the missing CLM/LSC/LCE stack
+composing with it.
+
+2026-06-10 update 2: the faithful CLM chain is now compiled in as
+`driver/t40/tx_isp_t40_clm_lit.inc`, gated behind `enable_clm=0` (probe env
+`ENABLE_CLM`). It uses OEM `stMainClmInterOri` / `stSecClmInterOri`
+(`.data+0x2e354` / `.data+0x2c9c0`, 0x1994 bytes each), the decoded
+`tisp_ct_clm_interpolation` 5-way jump table (`.rodata+0x1d10`), and a
+small `mips2c_literal.py` fix for MIPS `seb`/`seh`. Local T40 module build
+passes.
+
+Live result: `ENABLE_BCSH=1 ENABLE_CLM=1 CLM_STAGE_LIMIT=0` reboots during
+Raptor start / stream block-init before any frame capture
+(`logs/20260610-clm-bcsh-lit-clean`). The camera was restored to the
+known-good BCSH/CLM-off stream afterward (`logs/20260610-stable-restore-after-clm`).
+The CLM entrypoint now has `clm_stage_limit` (probe `CLM_STAGE_LIMIT`):
+`1` stop after allocation, `2` after params_transmit, `3` after blob refresh,
+`0` full set_params/hardware writes. Next live CLM work should sweep those
+stages first, then split `tisp_clm_set_params_lit` if stage 3 is stable.
