@@ -1546,3 +1546,58 @@ banding) for fine corrections, with analog gain/rung changes only when the
 fine range saturates, followed by a 4-tick settle hold. Deadband 5%.
 Verified: converged at rung 1600 + fine 80, gain 7 (one step lower than
 before), perfectly static readings.
+
+## 2026-06-10: MDNS temporal denoise ONLINE — the grain fix
+
+End state: the MDNS unit (0xF000) is configured byte-identically to the
+OEM-driven hardware (verified by full-unit /dev/mem diff against a stock
+boot), the camera is stable, and the live image is visibly grain-free.
+
+What it took, in dependency order:
+
+1. **Reference buffers.** OEM programs them from a TX_ISP set-buffer ioctl
+   branch (OEM 0x131bc) that our probe path never issues: five planes from
+   one rmem chunk at (ch+30)<<11 + 0x40..0x64 (addr/stride pairs), with
+   the Y/UV plane sizes >>8 at +0x70/+0x74. Layout (isp_memopt=0):
+   Y ref w16*H*33/32, UV ref w32*H/2*129/128, motion plane ~W/16 B/line,
+   full-width half plane, quarter plane — each align1024; 2560x1440 needs
+   0x7a3400. Now carved statically at phys 0x08000000 (rmem=96M@0x6000000,
+   stream buffers live below 0x7000000) by regtrace_mdns_buf_setup().
+   The /proc raw-dump handler's "mode 2" reads reg 0xF040 to reuse this
+   buffer — that's how the register was identified.
+2. **Comb pointer table.** tisp_mdns_wdr_en is the comb builder (84
+   pointers into the par blob; separate linear/WDR offset sets). The
+   literal translation dropped a bnez delay-slot store AND exited before
+   the entire linear fill; entry [83] lives in the jr-ra delay slot
+   (par+1507 linear / par+2387 WDR) and was missed by a first manual
+   extraction too — tisp_mdns_intp reads all 84 and oopsed on the NULL
+   at vaddr 1 (simple_intp(1, 0, NULL)). Faithfully rewritten in C.
+3. **params_refresh return value.** OEM tail-calls memcpy, so it returns
+   the dest pointer; treating nonzero as failure made main-init bail with
+   -EFAULT right after buffer setup on every boot.
+4. **Fragment-chain clobber.** tisp_main_long_tgain_update (live AE event
+   path) called the fragment tisp_mdns_refresh, which reads gain state
+   from a fake anchor (sclk_name-14128) and re-ran the broken fragment
+   reg_cfg with width=0 — zeroing 0xF068/0xF06C and filling 0xF100+ with
+   garbage after every gain move. Fragment entries are now no-ops; gain
+   tracking runs from the frame-done dns_gain_ev hook via
+   tisp_mdns_par_refresh_lit(0, ev, 256) (process context).
+5. **Block-init timing.** The tuning blob often arrives after the
+   streamon that calls isp_block_init_once, and retriggering via an rvd
+   restart crashes the camera (pre-existing second-streamon fragility —
+   confirmed by an ENABLE_MDNS=0 control crashing identically).
+   isp_block_init_once is now retried from frame-done until the blob
+   shows up.
+6. **The gate is top40 bit13**, not bit3 (stock top40=0x7fd9004f has bit3
+   set too — bit3 is bypassed even on stock and remains blacklisted).
+   Bit13 matches the module-control bit13 the OEM buffer ioctl toggles.
+   New default top40 = 0x7fef88db; ENABLE_MDNS defaults to 1.
+
+Debug helpers that made this possible: /sys params mdns_dbg_init_ret /
+mdns_dbg_reg68 (log-rotation-proof breadcrumbs), tools/phys_memwrite32.c,
+and full-unit dumps in docs/extracted/mdns-unit-oem.bin + top-oem.bin
+(stock top40/0x20 values, AE/AF stats DMA window at 0x6010-0x601c).
+
+Stock-boot top40 also says bits 4/7/11/15/17/18/21 are active on OEM and
+bit20 bypassed — our empirical map disagrees on 15/18/20; worth a careful
+re-derivation when chasing the remaining color/LCE deltas.

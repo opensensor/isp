@@ -10653,6 +10653,84 @@ static uint32_t regtrace_mdns_height;
 static uint32_t regtrace_mdns_gain_old = 0xffffffffU;
 static uint32_t regtrace_mdns_wdr_flags[2];
 
+/*
+ * MDNS temporal reference buffers. In the OEM stack these are programmed
+ * by a tx_isp_unlocked_ioctl set-buffer branch (OEM 0x131bc): userspace
+ * libimp passes an rmem {paddr,size} and the kernel splits it into five
+ * planes written to (ch+30)<<11 + 0x40..0x64 (addr/stride pairs) with the
+ * Y/UV plane byte sizes at +0x70/+0x74. Our probe path never issues that
+ * ioctl, so the unit would DMA from address 0 — the suspected cause of
+ * the top40-bit3 hard freeze. We carve a static chunk from rmem
+ * (96M@0x6000000 on this cam; stream buffers live below 0x7000000) and
+ * program the same layout for isp_memopt=0 (full five planes).
+ */
+static uint32_t regtrace_mdns_buf_phys = 0x08000000U;
+static uint32_t regtrace_mdns_buf_size = 0x00800000U;
+module_param_named(mdns_buf_phys, regtrace_mdns_buf_phys, uint, 0644);
+module_param_named(mdns_buf_size, regtrace_mdns_buf_size, uint, 0644);
+static uint32_t regtrace_mdns_dbg_reg68;
+static uint32_t regtrace_mdns_dbg_init_ret = 0xdeadbeefU;
+module_param_named(mdns_dbg_reg68, regtrace_mdns_dbg_reg68, uint, 0444);
+module_param_named(mdns_dbg_init_ret, regtrace_mdns_dbg_init_ret, uint, 0444);
+
+static int regtrace_mdns_buf_setup(uint32_t ch, uint32_t width, uint32_t height)
+{
+    uint32_t base = (ch + 30U) << 11;
+    uint32_t phys = regtrace_mdns_buf_phys;
+    uint32_t off = 0;
+    uint32_t w;
+    uint32_t sz;
+
+    if (!phys || !width || !height)
+        return -ENOENT;
+
+    /* plane 1: Y reference (+1/32 metadata), 1K-aligned */
+    w = (width + 15U) & ~15U;
+    sz = ((w * height) + ((w * height) >> 5) + 1023U) & ~1023U;
+    system_reg_write(base + 0x70, sz >> 8);
+    system_reg_write(base + 0x40, phys);
+    system_reg_write(base + 0x44, w);
+    off += sz;
+
+    /* plane 2: UV reference (+1/128 metadata) */
+    w = (width + 31U) & ~31U;
+    sz = (((w * height) >> 1) + ((w * height) >> 7) + 1023U) & ~1023U;
+    system_reg_write(base + 0x74, sz >> 8);
+    system_reg_write(base + 0x48, phys + off);
+    system_reg_write(base + 0x4c, w);
+    off += sz;
+
+    /* plane 3: motion metadata (~4 bits per 8-px block) */
+    w = (((((width + 7U) >> 3) + 1U) >> 1) + 7U) & ~7U;
+    sz = (((w * height) >> 3) + 1023U) & ~1023U;
+    system_reg_write(base + 0x50, phys + off);
+    system_reg_write(base + 0x54, w);
+    off += sz;
+
+    /* plane 4: full-width half-size plane (isp_memopt==0 layout) */
+    w = (width + 31U) & ~31U;
+    sz = (((w * height) >> 1) + 1023U) & ~1023U;
+    system_reg_write(base + 0x58, phys + off);
+    system_reg_write(base + 0x5c, w);
+    off += sz;
+
+    /* plane 5: quarter-size plane, width/2 rounded to 16 */
+    w = ((width + 31U) >> 5) << 4;
+    sz = (((w * height) >> 2) + 1023U) & ~1023U;
+    system_reg_write(base + 0x60, phys + off);
+    system_reg_write(base + 0x64, w);
+    off += sz;
+
+    if (off > regtrace_mdns_buf_size) {
+        printk(KERN_ERR "tx_isp_t40_recovered: mdns-buf ch=%u needs 0x%x > 0x%x\n",
+               ch, off, regtrace_mdns_buf_size);
+        return -ENOMEM;
+    }
+    printk(KERN_WARNING "tx_isp_t40_recovered: mdns-buf ch=%u phys=0x%x used=0x%x of 0x%x %ux%u\n",
+           ch, phys, off, regtrace_mdns_buf_size, width, height);
+    return 0;
+}
+
 static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
 static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
 static int32_t tisp_mdns_reg_cfg_lit(uint32_t a0_in);
@@ -13335,374 +13413,49 @@ fn_exit:
 
 static int32_t tisp_mdns_wdr_en_lit(uint32_t a0_in, uint32_t a1_in)
 {
-    uint32_t r_v0 = 0, r_v1 = 0;
-    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
-    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
-    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
-    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
-    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
-    uint32_t r_a0 = a0_in;
-    uint32_t r_a1 = a1_in;
-    uint32_t r_a2 = 0;
-    uint32_t r_a3 = 0;
-    uint8_t mips_stack[448] __attribute__((aligned(8)));
-    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+    /*
+     * Faithful rewrite of OEM tisp_mdns_wdr_en 0x5f348. This is the comb
+     * pointer-table builder: comb[] holds pointers to the 11-byte interp
+     * node arrays inside the par blob that tisp_mdns_intp feeds through
+     * tisp_simple_intp_int8. The previous literal translation dropped the
+     * bnez delay-slot store (comb[27]) and exited on the linear path
+     * without filling any entries, leaving NULL pointers that broke (and
+     * would oops) the whole intp/reg_cfg refresh chain.
+     */
+    static const uint16_t mdns_comb_lin_off[84] = {
+        10, 21, 32, 109, 120, 131, 175, 186, 197, 252, 263, 274,
+        484, 495, 506, 517, 682, 693, 704, 715, 726, 737, 748, 759,
+        792, 803, 814, 825, 770, 781, 836, 847, 858, 869, 880, 891,
+        902, 913, 924, 935, 946, 957, 968, 979, 990, 1001, 1012, 1023,
+        1034, 1078, 1089, 1100, 1111, 1122, 1155, 1166, 1177, 1188, 1199,
+        1210, 1221, 1232, 1243, 1254, 1265, 1276, 1287, 1298, 1309, 1353,
+        1364, 1375, 1386, 1397, 1408, 1419, 1430, 1441, 1452, 1463, 1474,
+        1485, 1496, 1507,
+    };
+    uint32_t ch = a0_in ? 1U : 0U;
+    uintptr_t par = ch ? sec_mdns : main_mdns;
+    uint32_t *comb = (uint32_t *)(uintptr_t)(ch ? sec_mdns_comb : main_mdns_comb);
+    uint32_t i;
 
-    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
-    (void)mips_cond;
-    mips_cond = (r_a0 == 0) ? 1U : 0U;
-    r_v0 = 0; /* HI16 .bss anchor */
-    if (mips_cond) goto L_5f61c;
-    r_v0 = 0; /* HI16 .bss anchor */
-    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns_comb);
-    r_v0 = 0; /* HI16 .bss anchor */
-    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns);
-L_5f360:
-    r_a2 = 0; /* HI16 .bss anchor */
-    r_a0 = r_a0 << 2;
-    r_a2 = (uint32_t)(uintptr_t)&regtrace_mdns_wdr_flags;
-    r_a0 = r_a0 + r_a2;
-    *(uint32_t *)(uintptr_t)(r_a0 + 0) = (uint32_t)r_a1;
-    r_a0 = r_v0 + 0x318U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 96) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x323U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 100) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x32eU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 104) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x339U;
-    mips_cond = (r_a1 != 0) ? 1U : 0U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 108) = (uint32_t)r_a0;
-    if (mips_cond) goto L_5f62c;
-    r_a0 = r_v0 + 0xaU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 0) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x15U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 4) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x20U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 8) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 12) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x78U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 16) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x83U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 20) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0xafU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 24) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0xbaU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 28) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0xc5U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 32) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0xfcU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 36) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x107U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 40) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x112U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 44) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x1e4U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 48) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x1efU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 52) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x1faU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 56) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x205U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 60) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2aaU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 64) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2b5U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 68) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2c0U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 72) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2cbU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 76) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2d6U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 80) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2e1U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 84) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2ecU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 88) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x2f7U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 92) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x302U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 112) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x30dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 116) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x344U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 120) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x34fU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 124) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x35aU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 128) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x365U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 132) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x370U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 136) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x37bU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 140) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x386U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 144) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x391U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 148) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x39cU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 152) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3a7U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 156) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3b2U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 160) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3bdU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 164) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3c8U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 168) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3d3U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 172) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3deU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 176) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3e9U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 180) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3f4U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 184) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x3ffU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 188) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x40aU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 192) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x436U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 196) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x441U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 200) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x44cU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 204) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x457U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 208) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x462U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 212) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x483U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 216) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x48eU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 220) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x499U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 224) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4a4U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 228) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4afU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 232) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4baU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 236) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4c5U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 240) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4d0U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 244) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4dbU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 248) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4e6U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 252) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4f1U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 256) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x4fcU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 260) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x507U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 264) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x512U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 268) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x51dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 272) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x549U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 276) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x554U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 280) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x55fU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 284) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x56aU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 288) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x575U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 292) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x580U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 296) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x58bU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 300) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x596U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 304) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5a1U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 308) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5acU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 312) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5b7U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 316) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5c2U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 320) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5cdU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 324) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5d8U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 328) = (uint32_t)r_a0;
-    r_v0 = r_v0 + 0x5e3U;
-L_5f614:
-    *(uint32_t *)(uintptr_t)(r_v1 + 332) = (uint32_t)r_v0;
-    goto fn_exit;
-L_5f61c:
-    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns_comb);
-    r_v0 = 0; /* HI16 .bss anchor */
-    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns);
-    goto L_5f360;
-L_5f62c:
-    r_a0 = r_v0 + 0x5eeU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 0) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x5f9U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 4) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x604U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 8) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x60fU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 12) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x61aU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 16) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x625U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 20) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x630U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 24) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x63bU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 28) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x646U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 32) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x651U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 36) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x65cU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 40) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x667U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 44) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x672U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 48) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x67dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 52) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x688U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 56) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x693U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 60) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x69eU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 64) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6a9U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 68) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6b4U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 72) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6bfU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 76) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6caU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 80) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6d5U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 84) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6e0U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 88) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6ebU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 92) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x6f6U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 112) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x701U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 116) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x70cU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 120) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x717U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 124) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x722U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 128) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x72dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 132) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x738U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 136) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x743U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 140) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x74eU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 144) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x759U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 148) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x764U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 152) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x76fU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 156) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x77aU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 160) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x785U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 164) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x790U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 168) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x79bU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 172) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7a6U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 176) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7b1U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 180) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7bcU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 184) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7c7U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 188) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7d2U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 192) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7ddU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 196) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7e8U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 200) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7f3U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 204) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x7feU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 208) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x809U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 212) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x814U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 216) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x81fU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 220) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x82aU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 224) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x835U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 228) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x840U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 232) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x84bU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 236) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x856U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 240) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x861U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 244) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x86cU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 248) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x877U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 252) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x882U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 256) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x88dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 260) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x898U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 264) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8a3U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 268) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8aeU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 272) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8b9U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 276) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8c4U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 280) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8cfU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 284) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8daU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 288) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8e5U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 292) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8f0U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 296) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x8fbU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 300) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x906U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 304) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x911U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 308) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x91cU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 312) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x927U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 316) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x932U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 320) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x93dU;
-    *(uint32_t *)(uintptr_t)(r_v1 + 324) = (uint32_t)r_a0;
-    r_a0 = r_v0 + 0x948U;
-    *(uint32_t *)(uintptr_t)(r_v1 + 328) = (uint32_t)r_a0;
-    r_v0 = r_v0 + 0x953U;
-    goto L_5f614;
-fn_exit:
-    return (int32_t)r_v0;
+    if (!par || !comb)
+        return -1;
+    regtrace_mdns_wdr_flags[ch] = a1_in;
+    if (!a1_in) {
+        for (i = 0; i < 84; i++)
+            comb[i] = (uint32_t)(par + mdns_comb_lin_off[i]);
+    } else {
+        /* WDR node arrays are contiguous 11-byte records from par+1518 */
+        for (i = 0; i < 24; i++)
+            comb[i] = (uint32_t)(par + 1518 + i * 11);
+        comb[24] = (uint32_t)(par + 792);
+        comb[25] = (uint32_t)(par + 803);
+        comb[26] = (uint32_t)(par + 814);
+        comb[27] = (uint32_t)(par + 825);
+        for (i = 28; i < 83; i++)
+            comb[i] = (uint32_t)(par + 1782 + (i - 28) * 11);
+        comb[83] = (uint32_t)(par + 2387);
+    }
+    return 0;
 }
 
 static int32_t tisp_mdns_func_en_lit(uint32_t a0_in, uint32_t a1_in)
@@ -14036,15 +13789,25 @@ static int32_t regtrace_mdns_main_init_lit(uint32_t width, uint32_t height)
         main_mdns_comb = (uintptr_t)comb;
         main_mdns_intp = (uintptr_t)wrk;
     }
-    if (tisp_mdns_params_refresh_lit(0))
-        return -EFAULT;
+    if (regtrace_mdns_buf_setup(0, width, height))
+        return -ENOMEM;
+    /* returns memcpy()'s dest pointer (OEM tail-call), not an error code */
+    (void)tisp_mdns_params_refresh_lit(0);
+    printk(KERN_WARNING "tx_isp_t40_recovered: mdns-init params ok par[0]=0x%02x par[1]=0x%02x\n",
+           *(uint8_t *)(uintptr_t)main_mdns, *(uint8_t *)(uintptr_t)(main_mdns + 1));
     (void)tisp_mdns_wdr_en_lit(0, regtrace_mdns_wdr_flags[0]);
+    printk(KERN_WARNING "tx_isp_t40_recovered: mdns-init comb ok [0]=%p [82]=%p\n",
+           (void *)(uintptr_t)((uint32_t *)(uintptr_t)main_mdns_comb)[0],
+           (void *)(uintptr_t)((uint32_t *)(uintptr_t)main_mdns_comb)[82]);
     regtrace_mdns_width = width;
     regtrace_mdns_height = height;
     regtrace_mdns_gain_old = 0xffffffffU;
     (void)tisp_mdns_refresh_lit(0, 0x10000U);
-    printk(KERN_WARNING "tx_isp_t40_recovered: mdns-main-init-lit done par=%p w=%u h=%u\n",
-           (void *)(uintptr_t)main_mdns, width, height);
+    regtrace_mdns_dbg_reg68 =
+        (uint32_t)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_read)(0xf068);
+    regtrace_mdns_dbg_init_ret = 0;
+    printk(KERN_WARNING "tx_isp_t40_recovered: mdns-main-init-lit done par=%p w=%u h=%u reg68=0x%x\n",
+           (void *)(uintptr_t)main_mdns, width, height, regtrace_mdns_dbg_reg68);
     return 0;
 }
 
@@ -45930,8 +45693,19 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
             }
         }
 
+        /*
+         * The tuning blob (tparamsN) arrives whenever rvd gets around to
+         * its tuning init, often after the streamon that calls
+         * isp_block_init_once — and a manual rvd restart to retrigger it
+         * crashes the camera (pre-existing second-streamon fragility).
+         * Retry from frame-done until the blob shows up; the helper
+         * no-ops once it has run.
+         */
+        if (!regtrace_isp_block_init_ran)
+            (void)regtrace_isp_block_init_once("frame-done");
+
         /* userspace 3A: retune DNS/sharpen strength when the gain EV moves */
-        if (regtrace_enable_ydns || regtrace_enable_ysp) {
+        if (regtrace_enable_ydns || regtrace_enable_ysp || regtrace_enable_mdns) {
             static uint32_t dns_ev_applied;
 
             if (regtrace_dns_gain_ev != dns_ev_applied) {
@@ -45940,6 +45714,9 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
                     (void)tisp_ydns_par_refresh(0, dns_ev_applied, 256);
                 if (regtrace_enable_ysp)
                     (void)tisp_ysp_par_refresh(0, dns_ev_applied, 256);
+                if (regtrace_enable_mdns && main_mdns &&
+                    !regtrace_mdns_dbg_init_ret)
+                    (void)tisp_mdns_par_refresh_lit(0, dns_ev_applied, 256);
             }
         }
 
@@ -153994,46 +153771,17 @@ int32_t tiziano_mdns_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005fb10 origin=fragment_seed original=tisp_mdns_refresh */
 int32_t tisp_mdns_refresh(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_mdns_par_refresh)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    v1 = (int32_t *)&sclk_name;
-    v0 = (uintptr_t)s0 << 2;
-    v1 = v1 - 14128;
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: MemoryAccess */
-    a1 = *(uint32_t *)((char *)v0 + 0);
-    a0 = s0;
-    s0 = local_10;
-    t9 = (uintptr_t)&tisp_mdns_all_reg_refresh;
-    t9 = t9;
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 5fb58:	03200408 	jr.hb	t9 */
-
-    /* fragment 6: Arithmetic */
-    /* unmatched fragment 6 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 5fb5c:	27bd0018 	addiu	sp,sp,24 */
-
+    /*
+     * Fragment chain neutralized: the original recovery read gain state
+     * from a fake anchor (sclk_name-14128) and ran the broken fragment
+     * par_refresh/reg_cfg, clobbering the MDNS unit (0xf068/0xf06c and the
+     * 0xf100+ param block) with width=0 garbage on every AE tgain update.
+     * Running the literal chain from this event context hard-freezes the
+     * SoC, so gain tracking is done from the frame-done dns_gain_ev hook
+     * instead (process context, same as YDNS/YSP).
+     */
+    (void)a0;
+    (void)a1;
     return 0;
 }
 
@@ -155055,67 +154803,9 @@ tisp_s_mdns_ratio0x4a0:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006047c origin=fragment_seed original=tisp_mdns_dn_params_refresh */
 int32_t tisp_mdns_dn_params_refresh(uint32_t a0)
 {
-#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Fragment chain neutralized (fake anchors, see tisp_mdns_refresh). */
+    (void)a0;
     return 0;
-#else
-
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_mdns_params_refresh)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s1 = (uintptr_t)s0 << 2;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_mdns_wdr_en)((uintptr_t)s0, *(uint32_t *)((char *)(((uintptr_t)s0 << 2) + &isp_memopt) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_mdns_func_en)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    s1 = s1 + &sclk_name;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_mdns_all_reg_refresh)(s0, *(uint32_t *)((char *)(s1) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_mdns_start)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_mdns_reg_trig)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 8: Arithmetic */
-    a0 = s0;
-
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 10: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 11: Unknown */
-    /* unmatched fragment 11 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60528:	03200408 	jr.hb	t9 */
-
-    /* fragment 12: Arithmetic */
-    /* unmatched fragment 12 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 6052c:	27bd0020 	addiu	sp,sp,32 */
-
-    return 0;
-
-#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060530 origin=fragment_seed original=tisp_ydns_reg_cfg */
