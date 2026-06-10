@@ -8832,6 +8832,8 @@ static uint32_t regtrace_ae_soft_last_mean;
 static bool regtrace_enable_frame_3a;
 static bool regtrace_enable_soft_gamma;
 static bool regtrace_enable_ydns;
+static bool regtrace_enable_gib_blc;
+static uint regtrace_gib_blc_offset = 0x100;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
 static uint regtrace_awb_manual_bgain;
@@ -9082,6 +9084,8 @@ module_param_named(enable_awb_reg_writes, regtrace_enable_awb_reg_writes, bool, 
 module_param_named(enable_awb_set_gain, regtrace_enable_awb_set_gain, bool, 0644);
 module_param_named(enable_soft_gamma, regtrace_enable_soft_gamma, bool, 0644);
 module_param_named(enable_ydns, regtrace_enable_ydns, bool, 0644);
+module_param_named(enable_gib_blc, regtrace_enable_gib_blc, bool, 0644);
+module_param_named(gib_blc_offset, regtrace_gib_blc_offset, uint, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
 module_param_named(awb_grayworld_interval, regtrace_awb_grayworld_interval, uint, 0644);
 module_param_named(awb_grayworld_updates, regtrace_awb_grayworld_updates, uint, 0444);
@@ -9287,7 +9291,8 @@ module_param_named(ae_sensor_apply_max_again_index, regtrace_ae_sensor_apply_max
 
 
 /*
- * Soft gamma: stream a 2.2 tone curve into the instance-0 gamma LUT units
+ * Soft gamma: stream the OEM tuning-blob tone curve (gc4653-t40.bin +0x106ec,
+ * entries hw[2..130]; zero toe anchors blacks, max 3932) into the gamma LUT units
  * using the protocol decoded from OEM tisp_gamma_real_write_lut (0x48450):
  * start regs 0x50040/0x50060/0x50080 = 0x101, 128 packed entry pairs
  * ((lut[i+1]<<12)|lut[i]) to data ports 0x50044/0x50064/0x50084, commit
@@ -9297,17 +9302,17 @@ module_param_named(ae_sensor_apply_max_again_index, regtrace_ae_sensor_apply_max
 static void regtrace_soft_gamma_write(void)
 {
     static const uint16_t lut[129] = {
-    0, 451, 618, 744, 847, 938, 1019, 1093, 1161, 1225, 1285, 1342,
-    1396, 1448, 1498, 1545, 1591, 1636, 1679, 1721, 1761, 1801, 1839, 1877,
-    1913, 1949, 1984, 2019, 2052, 2085, 2118, 2149, 2181, 2211, 2242, 2271,
-    2301, 2329, 2358, 2386, 2413, 2441, 2468, 2494, 2520, 2546, 2572, 2597,
-    2622, 2647, 2671, 2695, 2719, 2743, 2766, 2789, 2812, 2835, 2858, 2880,
-    2902, 2924, 2945, 2967, 2988, 3009, 3030, 3051, 3072, 3092, 3113, 3133,
-    3153, 3172, 3192, 3212, 3231, 3250, 3269, 3288, 3307, 3326, 3345, 3363,
-    3381, 3400, 3418, 3436, 3454, 3472, 3489, 3507, 3524, 3542, 3559, 3576,
-    3593, 3610, 3627, 3644, 3660, 3677, 3693, 3710, 3726, 3742, 3759, 3775,
-    3791, 3807, 3822, 3838, 3854, 3869, 3885, 3900, 3916, 3931, 3946, 3962,
-    3977, 3992, 4007, 4021, 4036, 4051, 4066, 4080, 4095
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 144,
+        288, 412, 526, 625, 714, 796, 871, 941, 1007, 1070, 1129, 1186,
+        1240, 1293, 1343, 1392, 1440, 1486, 1530, 1574, 1616, 1657, 1697, 1737,
+        1775, 1813, 1850, 1886, 1922, 1957, 1991, 2025, 2058, 2091, 2123, 2155,
+        2186, 2217, 2247, 2277, 2306, 2336, 2364, 2393, 2421, 2449, 2476, 2503,
+        2530, 2557, 2583, 2609, 2635, 2660, 2685, 2710, 2735, 2760, 2784, 2808,
+        2832, 2855, 2879, 2902, 2925, 2948, 2970, 2993, 3015, 3037, 3059, 3081,
+        3103, 3124, 3146, 3167, 3188, 3209, 3229, 3250, 3270, 3291, 3311, 3331,
+        3351, 3371, 3390, 3410, 3429, 3449, 3468, 3487, 3506, 3525, 3543, 3562,
+        3581, 3599, 3617, 3636, 3654, 3672, 3690, 3708, 3725, 3743, 3761, 3778,
+        3795, 3813, 3830, 3847, 3864, 3881, 3898, 3915, 3932
     };
     unsigned int i;
 
@@ -9433,6 +9438,22 @@ static int regtrace_isp_block_init_once(const char *where)
 
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init ydns ret=%d\n",
                ydns_ret);
+    }
+
+    if (regtrace_enable_gib_blc) {
+        /*
+         * Soft GIB black-level: program the four per-channel BLC offsets
+         * (regs 0x1030..0x103c) with the sensor pedestal so the gamma toe
+         * lands on real blacks instead of the pedestal haze. The faithful
+         * gain-tracking GIB chain (tisp_gib_init, blob +0xd610) remains
+         * future work; GIB block itself is activated by top40 bit5.
+         */
+        (void)system_reg_write(0x1030, regtrace_gib_blc_offset);
+        (void)system_reg_write(0x1034, regtrace_gib_blc_offset);
+        (void)system_reg_write(0x1038, regtrace_gib_blc_offset);
+        (void)system_reg_write(0x103c, regtrace_gib_blc_offset);
+        printk(KERN_WARNING "tx_isp_t40_recovered: gib-blc offsets=0x%x\n",
+               regtrace_gib_blc_offset);
     }
 
     if (regtrace_isp_block_init_ae_ret)

@@ -1413,3 +1413,23 @@ callback chain unconditionally).
 - AWB-stats-death after second streamon: still open; the alive window is
   only the first ~60s of a boot, so the planned register-window diff needs
   a scripted boot-race capture. Documented for next session.
+
+## 2026-06-10: fog eliminated — OEM gamma curve + GIB black level
+
+The "foggy" look vs stock was diagnosed as three missing pieces (NOT the
+defog block, which targets atmospheric haze):
+
+1. The synthetic 2.2 gamma lifted near-black enormously (out[1]=459/4095).
+   The REAL OEM curve lives in the tuning blob at gc4653-t40.bin +0x106ec
+   (halfword entries hw[2..130]): zero toe through entry 11 (anchored
+   blacks) and max output 3932. soft-gamma now streams the OEM curve.
+2. GIB (bit5) was bypassed, leaving the sensor black pedestal in the
+   signal. New `enable_gib_blc=1` writes the four per-channel BLC offsets
+   (regs 0x1030..0x103c, default 0x100) at block-init; probe top40 default
+   is now `0x7fffaadb` (bit5 also active). The faithful gain-tracking GIB
+   chain (tisp_gib_init 0x366c0, blob +0xd610, write_reg 0x35ff0 with 3
+   mode paths) is decoded and remains for full repair (task: GIB init).
+3. CCM saturation — still pending (indirect apply path).
+
+Result: deep blacks, real contrast, stock-like tone. Remaining gaps vs
+stock: sharpening (block unidentified yet) and CCM color depth.
