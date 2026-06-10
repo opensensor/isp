@@ -1433,3 +1433,21 @@ defog block, which targets atmospheric haze):
 
 Result: deep blacks, real contrast, stock-like tone. Remaining gaps vs
 stock: sharpening (block unidentified yet) and CCM color depth.
+
+## 2026-06-10 (cont): YSP sharpening scoped + extraction tooling
+
+Sharpening = the YSP block (unit base (ch+152)<<9 = 0x13000 main), with the
+exact same chain architecture as YDNS: params 3432B from blob +0x16d98
+(main_ysp .bss+18228), 420B comb pointer table (+18220), 146B working buf
+(+18212), wdr_en selects linear/WDR tables, all_reg_refresh = intp ->
+noref_reg_cfg -> ref_reg_cfg -> reg_trig. Recovered fragment functions:
+wdr_en, both reg_cfgs, the small glue; intp/params_refresh/reg_trig are
+model_output (verify before trusting).
+
+New tool `tools/regcfg_extract.py`: symbolic MIPS extractor for the
+Tiziano reg_cfg-style functions (anchor loads, pointer arithmetic, packed
+field expressions, system_reg_write emission). Extracted register maps in
+docs/extracted/: noref complete (32 writes, no control flow), ref has 81
+writes extracted but contains slt/movn/movz min-max clamp ladders that
+need emulator-grade branch handling in the extractor before the C can be
+assembled. That plus YDNS-pattern glue is the remaining sharpening work.
