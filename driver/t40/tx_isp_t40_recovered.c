@@ -8843,6 +8843,7 @@ static bool regtrace_enable_ydns;
 static bool regtrace_enable_gib_blc;
 static bool regtrace_enable_ysp;
 static bool regtrace_enable_ccm;
+static bool regtrace_enable_mdns;
 /* userspace 3A: gain EV (log2(total_gain) in 16.16) drives DNS/sharpen strength */
 static uint regtrace_dns_gain_ev;
 static uint regtrace_gib_blc_offset = 0x100;
@@ -9099,6 +9100,7 @@ module_param_named(enable_ydns, regtrace_enable_ydns, bool, 0644);
 module_param_named(enable_gib_blc, regtrace_enable_gib_blc, bool, 0644);
 module_param_named(enable_ysp, regtrace_enable_ysp, bool, 0644);
 module_param_named(enable_ccm, regtrace_enable_ccm, bool, 0644);
+module_param_named(enable_mdns, regtrace_enable_mdns, bool, 0644);
 module_param_named(dns_gain_ev, regtrace_dns_gain_ev, uint, 0644);
 module_param_named(gib_blc_offset, regtrace_gib_blc_offset, uint, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
@@ -10639,6 +10641,3413 @@ static int32_t regtrace_ccm_main_init_lit(void)
     return 0;
 }
 
+
+/*
+ * Literal mips2c MDNS (temporal/motion denoise) chain — self-contained
+ * _lit set; default OFF pending reference-buffer identification (the
+ * top40 MDNS bit is suspected to be the bit3 hard-freeze). OEM unit at
+ * (ch+30)<<11 = 0xF000; params 2398B from the tuning blob.
+ */
+static uint32_t regtrace_mdns_width;
+static uint32_t regtrace_mdns_height;
+static uint32_t regtrace_mdns_gain_old = 0xffffffffU;
+static uint32_t regtrace_mdns_wdr_flags[2];
+
+static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
+static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
+static int32_t tisp_mdns_reg_cfg_lit(uint32_t a0_in);
+static int32_t tisp_mdns_start_lit(uint32_t a0_in);
+static int32_t tisp_mdns_reg_trig_lit(uint32_t a0_in);
+static int32_t tisp_mdns_intp_lit(uint32_t a0_in, uint32_t a1_in);
+static int32_t tisp_mdns_wdr_en_lit(uint32_t a0_in, uint32_t a1_in);
+static int32_t tisp_mdns_func_en_lit(uint32_t a0_in, uint32_t a1_in);
+static int32_t tisp_mdns_all_reg_refresh_lit(uint32_t a0_in, uint32_t a1_in);
+static int32_t tisp_mdns_par_refresh_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
+static int32_t tisp_mdns_refresh_lit(uint32_t a0_in, uint32_t a1_in);
+static int32_t tisp_mdns_params_refresh_lit(uint32_t a0_in);
+
+#define REGCALL_get_isp_memopt(a, b, c, d) ((uint32_t)get_isp_memopt())
+#ifndef REGCALL_tisp_simple_intp_int8
+#define REGCALL_tisp_simple_intp_int8(a, b, c, d) \
+    tisp_simple_intp_int8((int32_t)(a), (int32_t)(b), (void *)(uintptr_t)(c))
+#endif
+#ifndef REGCALL_tisp_simple_intp_int16
+#define REGCALL_tisp_simple_intp_int16(a, b, c, d) \
+    tisp_simple_intp_int16((int32_t)(a), (int32_t)(b), (void *)(uintptr_t)(c))
+#endif
+#ifndef CALL_VIA
+#define CALL_VIA(f) (r_v0 = (uint32_t)system_reg_write(r_a0, r_a1))
+#define TAILCALL(f) (r_v0 = (uint32_t)system_reg_write(r_a0, r_a1))
+#endif
+#define REGCALL_tisp_mdns_reg_cfg_equation_smp(a, b, c, d) \
+    ((uint32_t)tisp_mdns_reg_cfg_equation_smp_lit((a), (b), (c)))
+#define REGCALL_tisp_mdns_reg_cfg_equation_dif(a, b, c, d) \
+    ((uint32_t)tisp_mdns_reg_cfg_equation_dif_lit((a), (b), (c)))
+#define REGCALL_tisp_mdns_reg_cfg(a, b, c, d) ((uint32_t)tisp_mdns_reg_cfg_lit((a)))
+#define REGCALL_tisp_mdns_start(a, b, c, d) ((uint32_t)tisp_mdns_start_lit((a)))
+#define REGCALL_tisp_mdns_reg_trig(a, b, c, d) ((uint32_t)tisp_mdns_reg_trig_lit((a)))
+#define REGCALL_tisp_mdns_intp(a, b, c, d) ((uint32_t)tisp_mdns_intp_lit((a), (b)))
+#define REGCALL_tisp_mdns_func_en(a, b, c, d) ((uint32_t)tisp_mdns_func_en_lit((a), (b)))
+#define REGCALL_tisp_mdns_all_reg_refresh(a, b, c, d) \
+    ((uint32_t)tisp_mdns_all_reg_refresh_lit((a), (b)))
+#define REGCALL_tisp_mdns_par_refresh(a, b, c, d) \
+    ((uint32_t)tisp_mdns_par_refresh_lit((a), (b), (c)))
+
+static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = a2_in;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_t0 = ((int32_t)r_a0 < 7) ? 1U : 0U;
+    r_v0 = 6U;
+    if (r_t0 != 0) r_v0 = r_a0;
+    r_t0 = r_v0;
+    r_v0 = ((int32_t)r_v0 < (int32_t)r_a1) ? 1U : 0U;
+    mips_cond = (r_v0 != 0) ? 1U : 0U;
+    r_t6 = r_a3 - r_a2;
+    if (mips_cond) goto L_5cdf0;
+    r_a1 = r_t0 + 0x1U;
+L_5cdf0:
+    r_v0 = (uint32_t)((int32_t)r_t6 >> 31);
+    r_v1 = r_v0 ^ r_t6;
+    r_v1 = r_v1 - r_v0;
+    r_t1 = 7U;
+    r_v0 = ((int32_t)r_a1 < 8) ? 1U : 0U;
+    if (r_v0 == 0) r_a1 = r_t1;
+    r_a1 = r_a1 - r_t0;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_v1 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_v1 % (int32_t)r_a1); }
+    r_t4 = 0; /* HI16 .bss anchor */
+    r_t3 = 0; /* HI16 .bss anchor */
+    r_t2 = 0; /* HI16 .bss anchor */
+    r_t1 = 0; /* HI16 .bss anchor */
+    r_t0 = 0; /* HI16 .bss anchor */
+    r_v1 = 0; /* HI16 .bss anchor */
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t5 = 0; /* HI16 .bss anchor */
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval0) + 0) = (uint32_t)r_a2;
+    mips_cond = ((int32_t)r_t6 <= 0) ? 1U : 0U;
+    r_a1 = mips_lo;
+    if (mips_cond) goto L_5cf68;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_t6 = 1U;
+    if (mips_cond) goto L_5cf04;
+    r_a0 = r_a2 + r_a1;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval1) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 + r_a1;
+L_5ce50:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval2) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 + r_a1;
+L_5ce58:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval3) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 + r_a1;
+L_5ce60:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval4) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 + r_a1;
+L_5ce68:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval5) + 0) = (uint32_t)r_a0;
+    r_a1 = r_a0 + r_a1;
+L_5ce70:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval6) + 0) = (uint32_t)r_a1;
+L_5ce74:
+    r_a2 = ((int32_t)r_a2 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a2 != 0) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval7) + 0) = (uint32_t)r_a3;
+    if (mips_cond) goto L_5ce84;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval0) + 0) = (uint32_t)r_a3;
+L_5ce84:
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = ((int32_t)r_a0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    if (mips_cond) goto L_5ce9c;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval1) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+L_5ce9c:
+    r_a0 = ((int32_t)r_a0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    if (mips_cond) goto L_5ceb0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval2) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+L_5ceb0:
+    r_a0 = ((int32_t)r_a0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    if (mips_cond) goto L_5cec4;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval3) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+L_5cec4:
+    r_a0 = ((int32_t)r_a0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    if (mips_cond) goto L_5ced8;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval4) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+L_5ced8:
+    r_a0 = ((int32_t)r_a0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5cee8;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval5) + 0) = (uint32_t)r_a3;
+L_5cee8:
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v1 = ((int32_t)r_v1 < (int32_t)r_a3) ? 1U : 0U;
+L_5cef0:
+    mips_cond = (r_v1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5cefc;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval6) + 0) = (uint32_t)r_a3;
+L_5cefc:
+    r_v0 = 0;
+    goto fn_exit;
+L_5cf04:
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval1) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5cf14;
+    r_a0 = r_a2 + r_a1;
+    goto L_5ce50;
+L_5cf14:
+    r_t6 = 2U;
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval2) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5cf28;
+    r_a0 = r_a2 + r_a1;
+    goto L_5ce58;
+L_5cf28:
+    r_t6 = 3U;
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval3) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5cf3c;
+    r_a0 = r_a2 + r_a1;
+    goto L_5ce60;
+L_5cf3c:
+    r_t6 = 4U;
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval4) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5cf50;
+    r_a0 = r_a2 + r_a1;
+    goto L_5ce68;
+L_5cf50:
+    r_t6 = 5U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval5) + 0) = (uint32_t)r_a2;
+    mips_cond = (r_a0 == r_t6) ? 1U : 0U;
+    r_a1 = r_a2 + r_a1;
+    if (mips_cond) goto L_5ce70;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval6) + 0) = (uint32_t)r_a2;
+    goto L_5ce74;
+L_5cf68:
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_t6 = 1U;
+    if (mips_cond) goto L_5d020;
+    r_a0 = r_a2 - r_a1;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval1) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 - r_a1;
+L_5cf7c:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval2) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 - r_a1;
+L_5cf84:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval3) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 - r_a1;
+L_5cf8c:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval4) + 0) = (uint32_t)r_a0;
+    r_a0 = r_a0 - r_a1;
+L_5cf94:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval5) + 0) = (uint32_t)r_a0;
+    r_a1 = r_a0 - r_a1;
+L_5cf9c:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval6) + 0) = (uint32_t)r_a1;
+L_5cfa0:
+    r_a2 = ((int32_t)r_a3 < (int32_t)r_a2) ? 1U : 0U;
+    mips_cond = (r_a2 != 0) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval7) + 0) = (uint32_t)r_a3;
+    if (mips_cond) goto L_5cfb0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval0) + 0) = (uint32_t)r_a3;
+L_5cfb0:
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = ((int32_t)r_a3 < (int32_t)r_a0) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    if (mips_cond) goto L_5cfc8;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval1) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+L_5cfc8:
+    r_a0 = ((int32_t)r_a3 < (int32_t)r_a0) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    if (mips_cond) goto L_5cfdc;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval2) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+L_5cfdc:
+    r_a0 = ((int32_t)r_a3 < (int32_t)r_a0) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    if (mips_cond) goto L_5cff0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval3) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+L_5cff0:
+    r_a0 = ((int32_t)r_a3 < (int32_t)r_a0) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    if (mips_cond) goto L_5d004;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval4) + 0) = (uint32_t)r_a3;
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+L_5d004:
+    r_a0 = ((int32_t)r_a3 < (int32_t)r_a0) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d014;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval5) + 0) = (uint32_t)r_a3;
+L_5d014:
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v1 = ((int32_t)r_a3 < (int32_t)r_v1) ? 1U : 0U;
+    goto L_5cef0;
+L_5d020:
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval1) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5d030;
+    r_a0 = r_a2 - r_a1;
+    goto L_5cf7c;
+L_5d030:
+    r_t6 = 2U;
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval2) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5d044;
+    r_a0 = r_a2 - r_a1;
+    goto L_5cf84;
+L_5d044:
+    r_t6 = 3U;
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval3) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5d058;
+    r_a0 = r_a2 - r_a1;
+    goto L_5cf8c;
+L_5d058:
+    r_t6 = 4U;
+    mips_cond = (r_a0 != r_t6) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval4) + 0) = (uint32_t)r_a2;
+    if (mips_cond) goto L_5d06c;
+    r_a0 = r_a2 - r_a1;
+    goto L_5cf94;
+L_5d06c:
+    r_t6 = 5U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval5) + 0) = (uint32_t)r_a2;
+    mips_cond = (r_a0 == r_t6) ? 1U : 0U;
+    r_a1 = r_a2 - r_a1;
+    if (mips_cond) goto L_5cf9c;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_smp_yval6) + 0) = (uint32_t)r_a2;
+    goto L_5cfa0;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = a2_in;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_t2 = r_a0 ^ 0xffU;
+    r_v0 = 254U;
+    if (r_t2 != 0) r_v0 = r_a0;
+    r_sp = r_sp + -0x18U;
+    r_t2 = r_v0;
+    r_v0 = ((int32_t)r_v0 < (int32_t)r_a1) ? 1U : 0U;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_s4;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_s3;
+    *(uint32_t *)(uintptr_t)(r_sp + 12) = (uint32_t)r_s2;
+    *(uint32_t *)(uintptr_t)(r_sp + 8) = (uint32_t)r_s1;
+    mips_cond = (r_v0 != 0) ? 1U : 0U;
+    *(uint32_t *)(uintptr_t)(r_sp + 4) = (uint32_t)r_s0;
+    if (mips_cond) goto L_5d0b8;
+    r_a1 = r_t2 + 0x1U;
+L_5d0b8:
+    r_s4 = r_a3 - r_a2;
+    r_v1 = r_s4 << 13;
+    r_v0 = (uint32_t)((int32_t)r_v1 >> 31);
+    r_v1 = r_v0 ^ r_v1;
+    r_v0 = r_v1 - r_v0;
+    r_a1 = r_a1 - r_t2;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_v0 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_v0 % (int32_t)r_a1); }
+    r_v0 = 256U;
+    r_a0 = r_v0 - r_a0;
+    r_v0 = 7U;
+    r_t0 = 6U;
+    r_s0 = 0; /* HI16 .bss anchor */
+    r_t9 = 0; /* HI16 .bss anchor */
+    r_t7 = 0; /* HI16 .bss anchor */
+    r_t6 = 0; /* HI16 .bss anchor */
+    r_t5 = 0; /* HI16 .bss anchor */
+    r_t4 = 0; /* HI16 .bss anchor */
+    r_t3 = 0; /* HI16 .bss anchor */
+    r_t8 = 0; /* HI16 .bss anchor */
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval0) + 0) = (uint32_t)r_a2;
+    r_a1 = mips_lo;
+    if (r_v0) { mips_lo = (uint32_t)((int32_t)r_a0 / (int32_t)r_v0); mips_hi = (uint32_t)((int32_t)r_a0 % (int32_t)r_v0); }
+    r_a0 = mips_lo;
+    r_v1 = r_a0 << 1;
+    r_v0 = r_a0 << 2;
+    r_t0 = (uint32_t)((int32_t)r_a0 * (int32_t)r_t0);
+    r_s3 = r_a0 << 3;
+    r_s2 = (uint32_t)((int32_t)r_a1 * (int32_t)r_a0);
+    r_s1 = (uint32_t)((int32_t)r_v1 * (int32_t)r_a1);
+    r_v1 = r_v1 + r_a0;
+    r_t1 = (uint32_t)((int32_t)r_v0 * (int32_t)r_a1);
+    r_v0 = r_v0 + r_a0;
+    r_a0 = r_s3 - r_a0;
+    r_v1 = (uint32_t)((int32_t)r_v1 * (int32_t)r_a1);
+    r_v0 = (uint32_t)((int32_t)r_v0 * (int32_t)r_a1);
+    r_t0 = (uint32_t)((int32_t)r_t0 * (int32_t)r_a1);
+    mips_cond = ((int32_t)r_s4 <= 0) ? 1U : 0U;
+    r_s3 = (uint32_t)((int32_t)r_a0 * (int32_t)r_a1);
+    if (mips_cond) goto L_5d270;
+    r_a0 = 8192U;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_s2 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_s2 % (int32_t)r_a0); }
+    r_s2 = mips_lo;
+    r_s2 = r_s2 + r_a2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval1) + 0) = (uint32_t)r_s2;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_s1 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_s1 % (int32_t)r_a0); }
+    r_s1 = mips_lo;
+    r_s1 = r_s1 + r_a2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval2) + 0) = (uint32_t)r_s1;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_v1 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_v1 % (int32_t)r_a0); }
+    r_v1 = mips_lo;
+    r_v1 = r_v1 + r_a2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval3) + 0) = (uint32_t)r_v1;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_t1 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_t1 % (int32_t)r_a0); }
+    r_t1 = mips_lo;
+    r_t1 = r_t1 + r_a2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval4) + 0) = (uint32_t)r_t1;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_v0 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_v0 % (int32_t)r_a0); }
+    r_v0 = mips_lo;
+    r_v0 = r_v0 + r_a2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval5) + 0) = (uint32_t)r_v0;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_t0 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_t0 % (int32_t)r_a0); }
+    r_t0 = mips_lo;
+    r_t0 = r_t0 + r_a2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval6) + 0) = (uint32_t)r_t0;
+    if (r_a0) { mips_lo = (uint32_t)((int32_t)r_s3 / (int32_t)r_a0); mips_hi = (uint32_t)((int32_t)r_s3 % (int32_t)r_a0); }
+    r_a0 = mips_lo;
+    r_a0 = r_a0 + r_a2;
+    r_a2 = ((int32_t)r_a2 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a2 != 0) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval7) + 0) = (uint32_t)r_a0;
+    if (mips_cond) goto L_5d1d0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval0) + 0) = (uint32_t)r_a3;
+L_5d1d0:
+    r_s2 = ((int32_t)r_s2 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_s2 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d1e0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval1) + 0) = (uint32_t)r_a3;
+L_5d1e0:
+    r_s1 = ((int32_t)r_s1 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_s1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d1f0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval2) + 0) = (uint32_t)r_a3;
+L_5d1f0:
+    r_v1 = ((int32_t)r_v1 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_v1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d200;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval3) + 0) = (uint32_t)r_a3;
+L_5d200:
+    r_t1 = ((int32_t)r_t1 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_t1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d210;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval4) + 0) = (uint32_t)r_a3;
+L_5d210:
+    r_v0 = ((int32_t)r_v0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_v0 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d220;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval5) + 0) = (uint32_t)r_a3;
+L_5d220:
+    r_t0 = ((int32_t)r_t0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_t0 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d230;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval6) + 0) = (uint32_t)r_a3;
+L_5d230:
+    r_a0 = ((int32_t)r_a0 < (int32_t)r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_v0 = 0; /* HI16 .bss anchor */
+    if (mips_cond) goto L_5d244;
+L_5d23c:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval7) + 0) = (uint32_t)r_a3;
+    r_v0 = 0; /* HI16 .bss anchor */
+L_5d244:
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_segopt) + 0) = (uint32_t)0;
+L_5d248:
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s4 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_s3 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_s2 = *(uint32_t *)(uintptr_t)(r_sp + 12);
+    r_s1 = *(uint32_t *)(uintptr_t)(r_sp + 8);
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 4);
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_cutval) + 0) = (uint32_t)r_t2;
+    r_v0 = 0;
+    r_sp = r_sp + 0x18U;
+    goto fn_exit;
+L_5d270:
+    r_a1 = 8192U;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s2 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s2 % (int32_t)r_a1); }
+    r_s2 = mips_lo;
+    r_s2 = r_a2 - r_s2;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval1) + 0) = (uint32_t)r_s2;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s1 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s1 % (int32_t)r_a1); }
+    r_s1 = mips_lo;
+    r_s1 = r_a2 - r_s1;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval2) + 0) = (uint32_t)r_s1;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_v1 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_v1 % (int32_t)r_a1); }
+    r_v1 = mips_lo;
+    r_v1 = r_a2 - r_v1;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval3) + 0) = (uint32_t)r_v1;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_t1 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_t1 % (int32_t)r_a1); }
+    r_t1 = mips_lo;
+    r_t1 = r_a2 - r_t1;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval4) + 0) = (uint32_t)r_t1;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_v0 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_v0 % (int32_t)r_a1); }
+    r_v0 = mips_lo;
+    r_v0 = r_a2 - r_v0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval5) + 0) = (uint32_t)r_v0;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_t0 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_t0 % (int32_t)r_a1); }
+    r_t0 = mips_lo;
+    r_t0 = r_a2 - r_t0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval6) + 0) = (uint32_t)r_t0;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s3 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s3 % (int32_t)r_a1); }
+    r_a1 = mips_lo;
+    r_a1 = r_a2 - r_a1;
+    r_a2 = ((int32_t)r_a3 < (int32_t)r_a2) ? 1U : 0U;
+    mips_cond = (r_a2 != 0) ? 1U : 0U;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval7) + 0) = (uint32_t)r_a1;
+    if (mips_cond) goto L_5d2f0;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval0) + 0) = (uint32_t)r_a3;
+L_5d2f0:
+    r_s2 = ((int32_t)r_a3 < (int32_t)r_s2) ? 1U : 0U;
+    mips_cond = (r_s2 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d300;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval1) + 0) = (uint32_t)r_a3;
+L_5d300:
+    r_s1 = ((int32_t)r_a3 < (int32_t)r_s1) ? 1U : 0U;
+    mips_cond = (r_s1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d310;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval2) + 0) = (uint32_t)r_a3;
+L_5d310:
+    r_v1 = ((int32_t)r_a3 < (int32_t)r_v1) ? 1U : 0U;
+    mips_cond = (r_v1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d320;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval3) + 0) = (uint32_t)r_a3;
+L_5d320:
+    r_t1 = ((int32_t)r_a3 < (int32_t)r_t1) ? 1U : 0U;
+    mips_cond = (r_t1 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d330;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval4) + 0) = (uint32_t)r_a3;
+L_5d330:
+    r_v0 = ((int32_t)r_a3 < (int32_t)r_v0) ? 1U : 0U;
+    mips_cond = (r_v0 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d340;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval5) + 0) = (uint32_t)r_a3;
+L_5d340:
+    r_t0 = ((int32_t)r_a3 < (int32_t)r_t0) ? 1U : 0U;
+    mips_cond = (r_t0 != 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5d350;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_yval6) + 0) = (uint32_t)r_a3;
+L_5d350:
+    r_a1 = ((int32_t)r_a3 < (int32_t)r_a1) ? 1U : 0U;
+    mips_cond = (r_a1 == 0) ? 1U : 0U;
+    r_v0 = 0; /* HI16 .bss anchor */
+    if (mips_cond) goto L_5d23c;
+    *(uint32_t *)((uintptr_t)((uintptr_t)&mdns_equation_dif_segopt) + 0) = (uint32_t)0;
+    goto L_5d248;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_reg_cfg_lit(uint32_t a0_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = 0;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_sp = r_sp + -0x70U;
+    *(uint32_t *)(uintptr_t)(r_sp + 108) = (uint32_t)r_ra;
+    *(uint32_t *)(uintptr_t)(r_sp + 104) = (uint32_t)r_s8;
+    *(uint32_t *)(uintptr_t)(r_sp + 100) = (uint32_t)r_s7;
+    *(uint32_t *)(uintptr_t)(r_sp + 96) = (uint32_t)r_s6;
+    *(uint32_t *)(uintptr_t)(r_sp + 92) = (uint32_t)r_s5;
+    *(uint32_t *)(uintptr_t)(r_sp + 88) = (uint32_t)r_s4;
+    *(uint32_t *)(uintptr_t)(r_sp + 84) = (uint32_t)r_s3;
+    *(uint32_t *)(uintptr_t)(r_sp + 80) = (uint32_t)r_s2;
+    *(uint32_t *)(uintptr_t)(r_sp + 76) = (uint32_t)r_s1;
+    mips_cond = (r_a0 == 0) ? 1U : 0U;
+    *(uint32_t *)(uintptr_t)(r_sp + 72) = (uint32_t)r_s0;
+    if (mips_cond) goto L_5e7d0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s7 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns_intp);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s8 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns);
+L_5d3a4:
+    r_s4 = 0; /* HI16 .data anchor */
+    r_s5 = r_a0 << 2;
+    r_s4 = (uint32_t)(uintptr_t)&regtrace_mdns_width;
+    r_v0 = r_s5 + r_s4;
+    r_v0 = *(uint32_t *)(uintptr_t)(r_v0 + 0);
+    r_a1 = 16U;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_v0 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_v0 % (int32_t)r_a1); }
+    r_a2 = r_v0 & 0xfU;
+    mips_cond = (r_a2 == 0) ? 1U : 0U;
+    r_a1 = mips_lo;
+    if (mips_cond) goto L_5d3d0;
+    r_a1 = r_a1 + 0x1U;
+L_5d3d0:
+    r_s3 = 0; /* HI16 .data anchor */
+    r_s3 = (uint32_t)(uintptr_t)&regtrace_mdns_height;
+    r_a2 = r_s3 + r_s5;
+    r_a3 = *(uint32_t *)(uintptr_t)(r_a2 + 0);
+    r_a2 = 32U;
+    r_a1 = (uint32_t)((int32_t)r_a3 * (int32_t)r_a1);
+    if (r_a2) { mips_lo = (uint32_t)((int32_t)r_v0 / (int32_t)r_a2); mips_hi = (uint32_t)((int32_t)r_v0 % (int32_t)r_a2); }
+    r_v0 = r_v0 & 0x1fU;
+    mips_cond = (r_v0 == 0) ? 1U : 0U;
+    r_a2 = mips_lo;
+    if (mips_cond) goto L_5d3fc;
+    r_a2 = r_a2 + 0x1U;
+L_5d3fc:
+    r_s2 = (uint32_t)((int32_t)r_a3 * (int32_t)r_a2);
+    r_a0 = r_a0 + 0x1eU;
+    r_s0 = r_a0 << 11;
+    r_t9 = (uint32_t)(uintptr_t)&system_reg_write; /* HI16 system_reg_write */
+    r_s1 = (uint32_t)(uintptr_t)&system_reg_write;
+    r_a0 = r_s0 + 0x68U;
+    *(uint32_t *)(uintptr_t)(r_sp + 68) = (uint32_t)r_t9;
+    CALL_VIA(r_s1);
+    r_a0 = r_s0 + 0x6cU;
+    r_s4 = r_s4 + r_s5;
+    r_s3 = r_s3 + r_s5;
+    r_s5 = 0; /* HI16 .bss anchor */
+    r_s6 = 0; /* HI16 .bss anchor */
+    r_a1 = r_s2 >> 1;
+    CALL_VIA(r_s1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 4);
+    r_a0 = r_s0 + 0x100U;
+    CALL_VIA(r_s1);
+    r_s2 = *(uint8_t *)(uintptr_t)(r_s7 + 4);
+    r_s4 = *(uint32_t *)(uintptr_t)(r_s4 + 0);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 5);
+    r_s3 = *(uint32_t *)(uintptr_t)(r_s3 + 0);
+    if (r_s2) { mips_lo = (uint32_t)((int32_t)r_s4 / (int32_t)r_s2); mips_hi = (uint32_t)((int32_t)r_s4 % (int32_t)r_s2); }
+    r_a1 = mips_hi;
+    r_v0 = (uint32_t)((int32_t)r_a0 * (int32_t)r_s2);
+    if (r_s2) { mips_lo = (uint32_t)((int32_t)r_s3 / (int32_t)r_s2); mips_hi = (uint32_t)((int32_t)r_s3 % (int32_t)r_s2); }
+    r_a0 = r_v0 + r_a1;
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 6);
+    r_s4 = r_s4 - r_a0;
+    r_a1 = mips_hi;
+    r_v1 = (uint32_t)((int32_t)r_v0 * (int32_t)r_s2);
+    r_v0 = r_v1 + r_a1;
+    r_a1 = 2U;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_v0 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_v0 % (int32_t)r_a1); }
+    r_s3 = r_s3 - r_v0;
+    r_v0 = mips_lo;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_a0 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_a0 % (int32_t)r_a1); }
+    r_a0 = r_s0 + 0x104U;
+    r_a1 = mips_lo;
+    r_a1 = r_a1 & 0xffU;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_v0 = r_s3 << 16;
+    r_a1 = r_s4 & 0xffffU;
+    r_a1 = r_a1 | r_v0;
+    r_a0 = r_s0 + 0x108U;
+    CALL_VIA(r_s1);
+    if (r_s2) { mips_lo = (uint32_t)((int32_t)r_s4 / (int32_t)r_s2); mips_hi = (uint32_t)((int32_t)r_s4 % (int32_t)r_s2); }
+    r_a0 = r_s0 + 0x10cU;
+    r_s4 = 0x700000U;
+    r_a1 = mips_lo;
+    r_a1 = r_a1 & 0xffffU;
+    if (r_s2) { mips_lo = (uint32_t)((int32_t)r_s3 / (int32_t)r_s2); mips_hi = (uint32_t)((int32_t)r_s3 % (int32_t)r_s2); }
+    r_s3 = mips_lo;
+    r_s3 = r_s3 << 16;
+    r_a1 = r_a1 | r_s3;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 7);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 8);
+    r_t5 = 0x30000U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_t5;
+    r_v0 = r_v0 & 0x300U;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = r_s2 + 0x800U;
+    r_s2 = r_s2 << 1;
+    if (r_s2) { mips_lo = (uint32_t)((int32_t)r_a1 / (int32_t)r_s2); mips_hi = (uint32_t)((int32_t)r_a1 % (int32_t)r_s2); }
+    r_a0 = r_s0 + 0x110U;
+    *(uint32_t *)(uintptr_t)(r_sp + 48) = (uint32_t)r_t5;
+    r_s3 = 0xf0000U;
+    r_s2 = 0x800000U;
+    r_a1 = mips_lo;
+    r_a1 = r_a1 & 0xffU;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 3);
+    r_a0 = r_s0 + 0x114U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 24;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 0);
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 2);
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_s3;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 21);
+    r_a1 = r_a1 << 23;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 10);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 13);
+    r_a0 = r_s0 + 0x118U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 24;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 9);
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 11);
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_s3;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 12);
+    r_a1 = r_a1 << 20;
+    r_a1 = r_a1 & r_s4;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 14);
+    r_a1 = r_a1 << 23;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 16);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 19);
+    r_a0 = r_s0 + 0x11cU;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 24;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 15);
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 17);
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_s3;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 18);
+    r_s3 = (uint32_t)(uintptr_t)&tisp_mdns_reg_cfg_equation_dif; /* HI16 tisp_mdns_reg_cfg_equation_dif */
+    r_s3 = (uint32_t)(uintptr_t)&tisp_mdns_reg_cfg_equation_dif;
+    r_a1 = r_a1 << 20;
+    r_a1 = r_a1 & r_s4;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 20);
+    r_s4 = 0; /* HI16 .bss anchor */
+    r_a1 = r_a1 << 23;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 27);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 26);
+    r_a0 = r_s0 + 0x120U;
+    r_v0 = r_v0 << 16;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 31);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 30);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 29);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 28);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_a1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    r_t3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a1 = r_a1 & 0x3U;
+    r_a1 = r_v0 | r_a1;
+    r_a0 = r_s0 + 0x124U;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t8;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t3;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t7;
+    CALL_VIA(r_s1);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_t7 = r_t7 << 24;
+    r_s2 = r_s2 & 0xffU;
+    r_t4 = r_t4 << 8;
+    r_s2 = r_s2 | r_t7;
+    r_t4 = r_t4 & 0xffffU;
+    r_t4 = r_s2 | r_t4;
+    r_a1 = r_t3 << 16;
+    r_s2 = 0xff0000U;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_t4 | r_a1;
+    r_a0 = r_s0 + 0x128U;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t6 = r_t6 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_a3 = r_a3 << 8;
+    r_a2 = r_a2 | r_t6;
+    r_a1 = r_t8 << 16;
+    r_a3 = r_a3 & 0xffffU;
+    r_a2 = r_a2 | r_a3;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a2 | r_a1;
+    r_a0 = r_s0 + 0x12cU;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 35);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 34);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 33);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 32);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_a1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    r_t4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_v0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_a1 = r_a1 & 0x3U;
+    r_a0 = r_s0 + 0x130U;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a1 = r_v0 | r_a1;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t3;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t7;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t8;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_t8 = r_t8 << 24;
+    r_a3 = r_a3 & 0xffU;
+    r_t6 = r_t6 << 8;
+    r_a3 = r_a3 | r_t8;
+    r_t6 = r_t6 & 0xffffU;
+    r_a1 = r_t4 << 16;
+    r_a3 = r_a3 | r_t6;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a3 | r_a1;
+    r_a0 = r_s0 + 0x134U;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_t7 = r_t7 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_t3 = r_t3 << 8;
+    r_a2 = r_a2 | r_t7;
+    r_t3 = r_t3 & 0xffffU;
+    r_a1 = r_v0 << 16;
+    r_a2 = r_a2 | r_t3;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a2 | r_a1;
+    r_a0 = r_s0 + 0x138U;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 24);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 25);
+    r_v1 = 0xf0000U;
+    r_a0 = 0x700000U;
+    r_v0 = r_v0 << 16;
+    r_a1 = r_a1 << 20;
+    r_v0 = r_v0 & r_v1;
+    r_a1 = r_a1 & r_a0;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 23);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 22);
+    r_a1 = r_a1 << 8;
+    r_a1 = r_a1 | r_a0;
+    r_a1 = r_v0 | r_a1;
+    r_a0 = r_s0 + 0x13cU;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 66);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s8 + 472);
+    r_a0 = r_s0 + 0x150U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 65);
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s8 + 473);
+    r_a1 = r_a1 << 24;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 472); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x154U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 476); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x158U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 472); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x15cU;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 476); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x160U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 472); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x164U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 476); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x168U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s8, 480); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x16cU;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 45);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 44);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 43);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 42);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_a1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    r_t4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_v0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_a1 = r_a1 & 0x3U;
+    r_a0 = r_s0 + 0x170U;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a1 = r_v0 | r_a1;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t3;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t7;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t8;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_t8 = r_t8 << 24;
+    r_a3 = r_a3 & 0xffU;
+    r_t6 = r_t6 << 8;
+    r_a3 = r_a3 | r_t8;
+    r_t6 = r_t6 & 0xffffU;
+    r_a1 = r_t4 << 16;
+    r_a3 = r_a3 | r_t6;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a3 | r_a1;
+    r_a0 = r_s0 + 0x174U;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_t7 = r_t7 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_t3 = r_t3 << 8;
+    r_a2 = r_a2 | r_t7;
+    r_t3 = r_t3 & 0xffffU;
+    r_a1 = r_v0 << 16;
+    r_a2 = r_a2 | r_t3;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a2 | r_a1;
+    r_a0 = r_s0 + 0x178U;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 51);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 50);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 49);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 48);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_a1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    r_t5 = *(uint32_t *)(uintptr_t)(r_sp + 48);
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_v0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_a1 = r_a1 & 0x3U;
+    r_t4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 47);
+    r_a0 = r_s0 + 0x17cU;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_a2;
+    r_a1 = r_a1 << 24;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 46);
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t3;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t7;
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_t5;
+    r_a1 = r_v0 | r_a1;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t8;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_t8 = r_t8 << 24;
+    r_a3 = r_a3 & 0xffU;
+    r_t6 = r_t6 << 8;
+    r_a3 = r_a3 | r_t8;
+    r_t6 = r_t6 & 0xffffU;
+    r_a1 = r_t4 << 16;
+    r_a3 = r_a3 | r_t6;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a3 | r_a1;
+    r_a0 = r_s0 + 0x180U;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_t7 = r_t7 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_t3 = r_t3 << 8;
+    r_a2 = r_a2 | r_t7;
+    r_t3 = r_t3 & 0xffffU;
+    r_a1 = r_v0 << 16;
+    r_a2 = r_a2 | r_t3;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a2 | r_a1;
+    r_a0 = r_s0 + 0x184U;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 55);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 54);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 53);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 52);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t5 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_a1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a1 = r_a1 & 0x3U;
+    r_a1 = r_v0 | r_a1;
+    r_a0 = r_s0 + 0x188U;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t3;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_t5;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t7;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t8;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_t8 = r_t8 << 24;
+    r_a3 = r_a3 & 0xffU;
+    r_t7 = r_t7 << 8;
+    r_a3 = r_a3 | r_t8;
+    r_t7 = r_t7 & 0xffffU;
+    r_a1 = r_t6 << 16;
+    r_a3 = r_a3 | r_t7;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a3 | r_a1;
+    r_a0 = r_s0 + 0x18cU;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_t5 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t5 = r_t5 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_t4 = r_t4 << 8;
+    r_a2 = r_a2 | r_t5;
+    r_t4 = r_t4 & 0xffffU;
+    r_a1 = r_t3 << 16;
+    r_a2 = r_a2 | r_t4;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a2 | r_a1;
+    r_a0 = r_s0 + 0x190U;
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s7, 56); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x194U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 61);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 62);
+    r_a0 = 0xf000000U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 60);
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 64);
+    r_a1 = r_a1 << 28;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 63);
+    r_a1 = r_a1 << 24;
+    r_a1 = r_a1 & r_a0;
+    r_a1 = r_v0 | r_a1;
+    r_a0 = r_s0 + 0x198U;
+    CALL_VIA(r_s1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 74);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 80);
+    r_a0 = r_s0 + 0x1b0U;
+    r_a1 = r_a1 << 8;
+    r_v0 = r_v0 << 16;
+    r_a1 = r_a1 | r_v0;
+    CALL_VIA(r_s1);
+    r_a1 = REGTRACE_LWLR(r_s7, 75); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x1b4U;
+    /* lwr handled with lwl above */
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 79);
+    r_a0 = r_v0 << 16;
+    r_a1 = r_v0 << 8;
+    r_a1 = r_a1 | r_a0;
+    r_a1 = r_a1 | r_v0;
+    r_v0 = r_v0 << 24;
+    r_a1 = r_a1 | r_v0;
+    r_a0 = r_s0 + 0x1b8U;
+    CALL_VIA(r_s1);
+    r_t5 = *(uint8_t *)(uintptr_t)(r_s8 + 474);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s8 + 475);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s8 + 473);
+    r_t3 = *(uint8_t *)(uintptr_t)(r_s8 + 476);
+    r_a1 = r_t5 + r_a0;
+    r_v0 = r_v0 + r_t5;
+    r_v0 = (uint32_t)((int32_t)r_v0 >> 1);
+    r_a1 = (uint32_t)((int32_t)r_a1 >> 1);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s8 + 478);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s8 + 479);
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = r_a0 + r_t3;
+    r_t4 = *(uint8_t *)(uintptr_t)(r_s8 + 477);
+    r_a1 = (uint32_t)((int32_t)r_a1 >> 1);
+    r_a3 = r_a3 + r_a2;
+    r_v0 = r_v0 | 0x14U;
+    r_a1 = r_a1 << 24;
+    r_a3 = (uint32_t)((int32_t)r_a3 >> 1);
+    r_a1 = r_v0 | r_a1;
+    r_a0 = r_s0 + 0x1bcU;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_t3;
+    CALL_VIA(r_s1);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a1 = r_t4 + r_a2;
+    r_a1 = (uint32_t)((int32_t)r_a1 >> 1);
+    r_t3 = r_t3 + r_t4;
+    r_a1 = r_a1 << 8;
+    r_a3 = r_a3 << 16;
+    r_a3 = r_a1 | r_a3;
+    r_a1 = (uint32_t)((int32_t)r_t3 >> 1);
+    r_a1 = r_a3 | r_a1;
+    r_a0 = r_s0 + 0x1c0U;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 37);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 36);
+    r_a0 = r_s0 + 0x1c4U;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0x300U;
+    r_a1 = r_a1 & 0x3U;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 40);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 41);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 39);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 38);
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_reg_cfg_equation_smp; /* HI16 tisp_mdns_reg_cfg_equation_smp */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_reg_cfg_equation_smp;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_v0;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_smp(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t5 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval7);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint8_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval0);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    r_t4 = 0; /* HI16 .bss anchor */
+    r_t3 = 0; /* HI16 .bss anchor */
+    r_v0 = r_v0 << 24;
+    r_t6 = r_t6 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = r_s0 + 0x1c8U;
+    *(uint32_t *)(uintptr_t)(r_sp + 64) = (uint32_t)r_t5;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_t6 = r_t6 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 60) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 56) = (uint32_t)r_t3;
+    r_v0 = r_v0 << 16;
+    r_v0 = r_v0 & r_s2;
+    r_t6 = r_t6 | r_v0;
+    r_a1 = r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_v1;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t8;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_t7;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a3;
+    CALL_VIA(r_s1);
+    r_v1 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_a2 = r_v1 & 0xffU;
+    r_a3 = r_a3 << 24;
+    r_t8 = r_t8 << 8;
+    r_t8 = r_t8 & 0xffffU;
+    r_a2 = r_a2 | r_a3;
+    r_t7 = r_t7 << 16;
+    r_t7 = r_t7 & r_s2;
+    r_a2 = r_a2 | r_t8;
+    r_a2 = r_a2 | r_t7;
+    r_a1 = r_a2;
+    r_a0 = r_s0 + 0x1ccU;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    CALL_VIA(r_s1);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_a0 = r_s0 + 0x1d0U;
+    r_a1 = r_t6;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x1d4U;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 73);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 72);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 71);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 70);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_v0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_a3 = r_a3 << 8;
+    r_a3 = r_a3 & 0xffffU;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_v0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_a0 = r_s0 + 0x1d8U;
+    *(uint32_t *)(uintptr_t)(r_sp + 52) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_v0;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    *(uint32_t *)(uintptr_t)(r_sp + 48) = (uint32_t)r_t7;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t8;
+    r_v0 = r_v0 & 0x3U;
+    r_a3 = r_a3 | r_v0;
+    r_a1 = r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_a3;
+    CALL_VIA(r_s1);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 52);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 48);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t8 = r_t8 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_t7 = r_t7 << 8;
+    r_a2 = r_a2 | r_t8;
+    r_t7 = r_t7 & 0xffffU;
+    r_t6 = r_t6 << 16;
+    r_a2 = r_a2 | r_t7;
+    r_t6 = r_t6 & r_s2;
+    r_t6 = r_a2 | r_t6;
+    r_a1 = r_t6;
+    r_a0 = r_s0 + 0x1dcU;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t6;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x1e0U;
+    r_v0 = r_v0 << 24;
+    r_a2 = r_a2 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a2 = r_a2 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_v0 = r_v0 << 16;
+    r_v0 = r_v0 & r_s2;
+    r_a2 = r_a2 | r_v0;
+    r_a1 = r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_a0 = r_s0 + 0x1e4U;
+    r_a1 = r_a3;
+    CALL_VIA(r_s1);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_a0 = r_s0 + 0x1e8U;
+    r_a1 = r_t6;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x1ecU;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 68);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 69);
+    r_a0 = r_a2 << 16;
+    r_a1 = r_v0 << 8;
+    r_a0 = r_a0 | r_a2;
+    r_a1 = r_a1 & 0x100U;
+    r_a1 = r_a1 | r_a0;
+    r_v0 = r_v0 << 24;
+    r_a0 = 0x1000000U;
+    r_v0 = r_v0 & r_a0;
+    r_a1 = r_a1 | r_v0;
+    r_a0 = r_s0 + 0x1f0U;
+    CALL_VIA(r_s1);
+    r_a2 = REGTRACE_LWLR(r_s7, 85); /* lwl/lwr pair */
+    r_a1 = REGTRACE_LWLR(r_s7, 81); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x1f4U;
+    /* lwr handled with lwl above */
+    /* lwr handled with lwl above */
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x1f8U;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 91);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 92);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 90);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 89);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_smp(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t5 = *(uint32_t *)(uintptr_t)(r_sp + 64);
+    r_t8 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval7);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint8_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval0);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 60);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 56);
+    r_v0 = r_v0 << 24;
+    r_t6 = r_t6 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = r_s0 + 0x1fcU;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_t5;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_t6 = r_t6 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t3;
+    r_v0 = r_v0 << 16;
+    r_v0 = r_v0 & r_s2;
+    r_t6 = r_t6 | r_v0;
+    r_a1 = r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 48) = (uint32_t)r_v1;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_t8;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_t7;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a3;
+    CALL_VIA(r_s1);
+    r_v1 = *(uint32_t *)(uintptr_t)(r_sp + 48);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t8 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_a2 = r_v1 & 0xffU;
+    r_a3 = r_a3 << 24;
+    r_t8 = r_t8 << 8;
+    r_t8 = r_t8 & 0xffffU;
+    r_a2 = r_a2 | r_a3;
+    r_t7 = r_t7 << 16;
+    r_a2 = r_a2 | r_t8;
+    r_t7 = r_t7 & r_s2;
+    r_a2 = r_a2 | r_t7;
+    r_a1 = r_a2;
+    r_a0 = r_s0 + 0x200U;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    CALL_VIA(r_s1);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_a0 = r_s0 + 0x204U;
+    r_a1 = r_t6;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x208U;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 67);
+    r_a0 = r_s0 + 0x20cU;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 94);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 95);
+    r_a0 = r_s0 + 0x210U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 93);
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 99);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 98);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 97);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 96);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_smp(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t5 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t7 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval7);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a1 = *(uint8_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval0);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_v0 = r_v0 << 24;
+    r_a1 = r_a1 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = r_s0 + 0x214U;
+    *(uint32_t *)(uintptr_t)(r_sp + 56) = (uint32_t)r_t5;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a1 = r_a1 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 52) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 48) = (uint32_t)r_t3;
+    r_v0 = r_v0 << 16;
+    r_v0 = r_v0 & r_s2;
+    r_a1 = r_a1 | r_v0;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t7;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t7 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_t7 = r_t7 << 24;
+    r_a2 = r_a2 & 0xffU;
+    r_t6 = r_t6 << 8;
+    r_a2 = r_a2 | r_t7;
+    r_t6 = r_t6 & 0xffffU;
+    r_a1 = r_a3 << 16;
+    r_a2 = r_a2 | r_t6;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_a2 | r_a1;
+    r_a0 = r_s0 + 0x218U;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 102);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 100);
+    r_v1 = 0xf0000U;
+    r_v0 = r_v0 & 0xfU;
+    r_a1 = r_a1 << 8;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 103);
+    r_a0 = 0x700000U;
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_v1;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 101);
+    r_a1 = r_a1 << 20;
+    r_a1 = r_a1 & r_a0;
+    r_a1 = r_v0 | r_a1;
+    r_a0 = r_s0 + 0x230U;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 105);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s8 + 472);
+    r_a0 = r_s0 + 0x234U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 104);
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s8 + 473);
+    r_a1 = r_a1 << 24;
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 111);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 112);
+    r_a0 = r_s0 + 0x238U;
+    r_t6 = r_a3 << 8;
+    r_a1 = r_a3 & 0x3U;
+    r_a1 = r_a1 | r_t6;
+    r_v0 = r_v0 << 16;
+    r_a1 = r_a1 | r_v0;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t6;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x23cU;
+    r_a2 = r_a3 << 16;
+    r_a2 = r_a2 | r_t6;
+    r_a2 = r_a2 | r_a3;
+    r_a3 = r_a3 << 24;
+    r_a2 = r_a2 | r_a3;
+    r_a1 = r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x240U;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 113);
+    r_a0 = r_v0 << 16;
+    r_a2 = r_v0 << 8;
+    r_a2 = r_a2 | r_a0;
+    r_a2 = r_a2 | r_v0;
+    r_v0 = r_v0 << 24;
+    r_a2 = r_a2 | r_v0;
+    r_a1 = r_a2;
+    r_a0 = r_s0 + 0x244U;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x248U;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 110);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 109);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 108);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 107);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval0);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval1);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval6);
+    r_a2 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_cutval);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval7);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_segopt);
+    r_a2 = r_a2 << 8;
+    r_a2 = r_a2 & 0xffffU;
+    r_v0 = r_v0 & 0x3U;
+    r_a2 = r_a2 | r_v0;
+    r_a1 = r_a2;
+    r_a0 = r_s0 + 0x24cU;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_a2;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_a3;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_t6;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_v1;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_t2;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_t0;
+    r_s6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_dif_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_t1;
+    CALL_VIA(r_s1);
+    r_t2 = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_t1 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_t0 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_v0 = r_t2 & 0xffU;
+    r_s5 = r_t1 << 24;
+    r_s5 = r_v0 | r_s5;
+    r_v0 = r_t0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_s6 = r_s6 << 16;
+    r_s5 = r_s5 | r_v0;
+    r_s6 = r_s6 & r_s2;
+    r_s6 = r_s5 | r_s6;
+    r_a1 = r_s6;
+    r_a0 = r_s0 + 0x250U;
+    CALL_VIA(r_s1);
+    r_v1 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_a3 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_t6 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_s4 = r_v1 << 24;
+    r_s3 = r_s3 & 0xffU;
+    r_a3 = r_a3 << 8;
+    r_a3 = r_a3 & 0xffffU;
+    r_s3 = r_s3 | r_s4;
+    r_t6 = r_t6 << 16;
+    r_t6 = r_t6 & r_s2;
+    r_s3 = r_s3 | r_a3;
+    r_s3 = r_s3 | r_t6;
+    r_a1 = r_s3;
+    r_a0 = r_s0 + 0x254U;
+    CALL_VIA(r_s1);
+    r_a2 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0 + 0x258U;
+    r_a1 = r_a2;
+    CALL_VIA(r_s1);
+    r_a1 = r_s6;
+    r_a0 = r_s0 + 0x25cU;
+    CALL_VIA(r_s1);
+    r_a1 = r_s3;
+    r_a0 = r_s0 + 0x260U;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 117);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 116);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 115);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 114);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_smp(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_t5 = *(uint32_t *)(uintptr_t)(r_sp + 56);
+    r_s4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval7);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s5 = *(uint8_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval0);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 52);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 48);
+    r_v0 = r_v0 << 24;
+    r_s5 = r_s5 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = r_s0 + 0x264U;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_t5;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_s5 = r_s5 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_t4;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_t3;
+    r_v0 = r_v0 << 16;
+    r_v0 = r_v0 & r_s2;
+    r_s5 = r_s5 | r_v0;
+    r_a1 = r_s5;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_v1;
+    CALL_VIA(r_s1);
+    r_v1 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_s3 = r_s3 & 0xffU;
+    r_s6 = r_s6 << 16;
+    r_v0 = r_v1 << 24;
+    r_s3 = r_s3 | r_v0;
+    r_v0 = r_s4 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_s6 = r_s6 & r_s2;
+    r_s3 = r_s3 | r_v0;
+    r_s3 = r_s3 | r_s6;
+    r_a1 = r_s3;
+    r_a0 = r_s0 + 0x268U;
+    CALL_VIA(r_s1);
+    r_a1 = r_s5;
+    r_a0 = r_s0 + 0x26cU;
+    CALL_VIA(r_s1);
+    r_a1 = r_s3;
+    r_a0 = r_s0 + 0x270U;
+    CALL_VIA(r_s1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 106);
+    r_a0 = r_s0 + 0x274U;
+    CALL_VIA(r_s1);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 119);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 120);
+    r_a0 = r_s0 + 0x278U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 118);
+    r_a1 = r_v0 | r_a1;
+    CALL_VIA(r_s1);
+    r_a3 = *(uint8_t *)(uintptr_t)(r_s7 + 124);
+    r_a2 = *(uint8_t *)(uintptr_t)(r_s7 + 123);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 122);
+    r_v0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 121);
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_smp(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s3 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval4);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s5 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval5);
+    r_t5 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s4 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval6);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s6 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval7);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_a1 = *(uint8_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval0);
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval3);
+    r_t4 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_t3 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_v0 = r_v0 << 24;
+    r_a1 = r_a1 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval1);
+    r_a0 = r_s0 + 0x27cU;
+    r_s6 = r_s6 << 24;
+    r_v0 = r_v0 << 8;
+    r_v0 = r_v0 & 0xffffU;
+    r_a1 = r_a1 | r_v0;
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&mdns_equation_smp_yval2);
+    r_s3 = r_s3 & 0xffU;
+    r_s5 = r_s5 << 8;
+    r_v0 = r_v0 << 16;
+    r_v0 = r_v0 & r_s2;
+    r_a1 = r_a1 | r_v0;
+    CALL_VIA(r_s1);
+    r_s3 = r_s3 | r_s6;
+    r_s5 = r_s5 & 0xffffU;
+    r_a1 = r_s4 << 16;
+    r_s3 = r_s3 | r_s5;
+    r_a1 = r_a1 & r_s2;
+    r_a1 = r_s3 | r_a1;
+    r_a0 = r_s0 + 0x280U;
+    CALL_VIA(r_s1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 132);
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s7 + 134);
+    r_s2 = *(uint8_t *)(uintptr_t)(r_s7 + 133);
+    r_v0 = 128U;
+    r_s6 = ((int32_t)r_a1 < 129) ? 1U : 0U;
+    r_s5 = ((int32_t)r_a0 < 129) ? 1U : 0U;
+    if (r_s6 == 0) r_a1 = r_v0;
+    r_t9 = *(uint32_t *)(uintptr_t)(r_sp + 68);
+    if (r_s5 != 0) r_v0 = r_a0;
+    r_s5 = r_v0;
+    r_v0 = r_s2 - r_a1;
+    r_v0 = ((int32_t)r_v0 < 8) ? 1U : 0U;
+    r_s1 = *(uint8_t *)(uintptr_t)(r_s7 + 135);
+    r_s6 = r_a1;
+    mips_cond = (r_v0 == 0) ? 1U : 0U;
+    r_s3 = (uint32_t)(uintptr_t)&system_reg_write;
+    if (mips_cond) goto L_5e6e4;
+    r_s2 = r_s2 + 0x8U;
+L_5e6e4:
+    r_v0 = r_s1 - r_s5;
+    r_v0 = ((int32_t)r_v0 < 8) ? 1U : 0U;
+    mips_cond = (r_v0 == 0) ? 1U : 0U;
+    /* nop */
+    if (mips_cond) goto L_5e6f8;
+    r_s1 = r_s1 + 0x8U;
+L_5e6f8:
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s7 + 126);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 127);
+    r_a0 = r_s0 + 0x2a0U;
+    r_v0 = r_v0 << 8;
+    r_a1 = r_a1 << 16;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 125);
+    r_s4 = 1024U;
+    r_a1 = r_v0 | r_a1;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_a1 = REGTRACE_LWLR(r_s7, 128); /* lwl/lwr pair */
+    r_a0 = r_s0 + 0x2a4U;
+    /* lwr handled with lwl above */
+    r_s7 = 0xff0000U;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_a1 = r_s2 - r_s6;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s4 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s4 % (int32_t)r_a1); }
+    r_s2 = r_s2 << 8;
+    r_s2 = r_s2 & 0xffffU;
+    r_s2 = r_s2 | r_s6;
+    r_a0 = r_s0 + 0x2a8U;
+    r_a1 = mips_lo;
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_s7;
+    r_a1 = r_a1 | r_s2;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_a1 = r_s1 - r_s5;
+    if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s4 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s4 % (int32_t)r_a1); }
+    r_s1 = r_s1 << 8;
+    r_s1 = r_s1 & 0xffffU;
+    r_s1 = r_s1 | r_s5;
+    r_a0 = r_s0 + 0x2acU;
+    r_a1 = mips_lo;
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_s7;
+    r_a1 = r_a1 | r_s1;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s8 + 9);
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 108);
+    r_s8 = *(uint32_t *)(uintptr_t)(r_sp + 104);
+    r_s7 = *(uint32_t *)(uintptr_t)(r_sp + 100);
+    r_s6 = *(uint32_t *)(uintptr_t)(r_sp + 96);
+    r_s5 = *(uint32_t *)(uintptr_t)(r_sp + 92);
+    r_s4 = *(uint32_t *)(uintptr_t)(r_sp + 88);
+    r_s2 = *(uint32_t *)(uintptr_t)(r_sp + 80);
+    r_s1 = *(uint32_t *)(uintptr_t)(r_sp + 76);
+    r_a0 = r_s0 + 0xcU;
+    r_t9 = r_s3;
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 72);
+    r_s3 = *(uint32_t *)(uintptr_t)(r_sp + 84);
+    r_a1 = r_a1 & 0x3fU;
+    r_a1 = r_a1 | 0x40U;
+    r_sp = r_sp + 0x70U;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+L_5e7d0:
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s7 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns_intp);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s8 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns);
+    goto L_5d3a4;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_start_lit(uint32_t a0_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = 0;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_a0 = r_a0 + 0x1eU;
+    r_a0 = r_a0 << 11;
+    r_t9 = (uint32_t)(uintptr_t)&system_reg_write; /* HI16 system_reg_write */
+    r_a1 = 1U;
+    r_t9 = (uint32_t)(uintptr_t)&system_reg_write;
+    r_a0 = r_a0 + 0x8U;
+    r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_reg_trig_lit(uint32_t a0_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = 0;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_a0 = r_a0 + 0x1eU;
+    r_a0 = r_a0 << 11;
+    r_t9 = (uint32_t)(uintptr_t)&system_reg_write; /* HI16 system_reg_write */
+    r_a1 = 1U;
+    r_t9 = (uint32_t)(uintptr_t)&system_reg_write;
+    r_a0 = r_a0 + 0x4U;
+    r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_intp_lit(uint32_t a0_in, uint32_t a1_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_sp = r_sp + -0x30U;
+    *(uint32_t *)(uintptr_t)(r_sp + 44) = (uint32_t)r_ra;
+    *(uint32_t *)(uintptr_t)(r_sp + 40) = (uint32_t)r_s5;
+    *(uint32_t *)(uintptr_t)(r_sp + 36) = (uint32_t)r_s4;
+    *(uint32_t *)(uintptr_t)(r_sp + 32) = (uint32_t)r_s3;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_s2;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_s1;
+    mips_cond = (r_a0 == 0) ? 1U : 0U;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_s0;
+    if (mips_cond) goto L_5f32c;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s2 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns_intp);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s4 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns_comb);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s5 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns);
+L_5e858:
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 0);
+    r_s3 = (uint32_t)((int32_t)r_a1 >> 16);
+    r_s0 = r_a1 & 0xffffU;
+    r_s1 = (uint32_t)(uintptr_t)&tisp_simple_intp_int8; /* HI16 tisp_simple_intp_int8 */
+    r_s1 = (uint32_t)(uintptr_t)&tisp_simple_intp_int8;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 0) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 4);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 1) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 8);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 2) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x2bU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 3) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x36U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 4) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x41U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 5) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x4cU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 6) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x57U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 7) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x62U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 8) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 12);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 9) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 16);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 10) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 20);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 11) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x8eU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 12) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x99U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 13) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0xa4U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 14) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 24);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 15) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 28);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 16) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 32);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 17) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0xd0U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 18) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0xdbU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 19) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0xe6U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 20) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0xf1U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 21) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 36);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 22) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 40);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 23) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 44);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 24) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x11dU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 25) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x128U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 26) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x133U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 27) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x13eU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 28) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x149U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 29) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x154U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 30) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x15fU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 31) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x16aU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 32) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x175U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 33) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x180U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 34) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x18bU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 35) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x196U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 36) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x1a1U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 37) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x1acU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 38) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x1b7U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 39) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x1c2U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 40) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x1cdU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 41) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 48);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 42) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 52);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 43) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 56);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 44) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 60);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 45) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x210U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 46) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x21bU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 47) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x226U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 48) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x231U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 49) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x23cU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 50) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x247U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 51) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x252U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 52) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x25dU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 53) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x268U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 54) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x273U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 55) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x27eU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 56) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x289U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 57) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x294U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 58) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x29fU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 59) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 64);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 60) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 68);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 61) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 72);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 62) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 76);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 63) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 80);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 64) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 84);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 65) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 88);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 66) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 92);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 67) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 112);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 68) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 116);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 69) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 96);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 70) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 100);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 71) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 104);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 72) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 108);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 73) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 120);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 74) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 124);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 75) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 128);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 76) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 132);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 77) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 136);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 78) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 140);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 79) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 144);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 80) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 148);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 81) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 152);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 82) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 156);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 83) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 160);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 84) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 164);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 85) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 168);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 86) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 172);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 87) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 176);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 88) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 180);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 89) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 184);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 90) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 188);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 91) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 192);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 92) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x415U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 93) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x420U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 94) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x42bU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 95) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 196);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 96) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 200);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 97) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 204);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 98) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 208);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 99) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 212);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 100) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x46dU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 101) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x478U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 102) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 216);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 103) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 220);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 104) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 224);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 105) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 228);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 106) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 232);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 107) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 236);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 108) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 240);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 109) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 244);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 110) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 248);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 111) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 252);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 112) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 256);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 113) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 260);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 114) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 264);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 115) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 268);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 116) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 272);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 117) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x528U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 118) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x533U;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 119) = (uint8_t)r_v0;
+    r_a2 = r_s5 + 0x53eU;
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 120) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 276);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 121) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 280);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 122) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 284);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 123) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 288);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 124) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 292);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 125) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 296);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 126) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 300);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 127) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 304);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 128) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 308);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 129) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 312);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 130) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 316);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 131) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 320);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 132) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 324);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 133) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 328);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 134) = (uint8_t)r_v0;
+    r_a2 = *(uint32_t *)(uintptr_t)(r_s4 + 332);
+    r_a1 = r_s0;
+    r_a0 = r_s3;
+    r_v0 = (uint32_t)REGCALL_tisp_simple_intp_int8(r_a0, r_a1, r_a2, r_a3);
+    *(uint8_t *)(uintptr_t)(r_s2 + 135) = (uint8_t)r_v0;
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 44);
+    r_s5 = *(uint32_t *)(uintptr_t)(r_sp + 40);
+    r_s4 = *(uint32_t *)(uintptr_t)(r_sp + 36);
+    r_s3 = *(uint32_t *)(uintptr_t)(r_sp + 32);
+    r_s2 = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_s1 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_sp = r_sp + 0x30U;
+    goto fn_exit;
+L_5f32c:
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s2 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns_intp);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s4 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns_comb);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_s5 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns);
+    goto L_5e858;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_wdr_en_lit(uint32_t a0_in, uint32_t a1_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    mips_cond = (r_a0 == 0) ? 1U : 0U;
+    r_v0 = 0; /* HI16 .bss anchor */
+    if (mips_cond) goto L_5f61c;
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns_comb);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns);
+L_5f360:
+    r_a2 = 0; /* HI16 .bss anchor */
+    r_a0 = r_a0 << 2;
+    r_a2 = (uint32_t)(uintptr_t)&regtrace_mdns_wdr_flags;
+    r_a0 = r_a0 + r_a2;
+    *(uint32_t *)(uintptr_t)(r_a0 + 0) = (uint32_t)r_a1;
+    r_a0 = r_v0 + 0x318U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 96) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x323U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 100) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x32eU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 104) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x339U;
+    mips_cond = (r_a1 != 0) ? 1U : 0U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 108) = (uint32_t)r_a0;
+    if (mips_cond) goto L_5f62c;
+    r_a0 = r_v0 + 0xaU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 0) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x15U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 4) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x20U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 8) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 12) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x78U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 16) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x83U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 20) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0xafU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 24) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0xbaU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 28) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0xc5U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 32) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0xfcU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 36) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x107U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 40) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x112U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 44) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x1e4U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 48) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x1efU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 52) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x1faU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 56) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x205U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 60) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2aaU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 64) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2b5U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 68) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2c0U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 72) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2cbU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 76) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2d6U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 80) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2e1U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 84) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2ecU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 88) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x2f7U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 92) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x302U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 112) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x30dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 116) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x344U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 120) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x34fU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 124) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x35aU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 128) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x365U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 132) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x370U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 136) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x37bU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 140) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x386U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 144) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x391U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 148) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x39cU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 152) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3a7U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 156) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3b2U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 160) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3bdU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 164) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3c8U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 168) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3d3U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 172) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3deU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 176) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3e9U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 180) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3f4U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 184) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x3ffU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 188) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x40aU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 192) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x436U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 196) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x441U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 200) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x44cU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 204) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x457U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 208) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x462U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 212) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x483U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 216) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x48eU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 220) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x499U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 224) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4a4U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 228) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4afU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 232) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4baU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 236) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4c5U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 240) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4d0U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 244) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4dbU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 248) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4e6U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 252) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4f1U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 256) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x4fcU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 260) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x507U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 264) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x512U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 268) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x51dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 272) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x549U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 276) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x554U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 280) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x55fU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 284) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x56aU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 288) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x575U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 292) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x580U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 296) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x58bU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 300) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x596U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 304) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5a1U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 308) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5acU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 312) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5b7U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 316) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5c2U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 320) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5cdU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 324) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5d8U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 328) = (uint32_t)r_a0;
+    r_v0 = r_v0 + 0x5e3U;
+L_5f614:
+    *(uint32_t *)(uintptr_t)(r_v1 + 332) = (uint32_t)r_v0;
+    goto fn_exit;
+L_5f61c:
+    r_v1 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns_comb);
+    r_v0 = 0; /* HI16 .bss anchor */
+    r_v0 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns);
+    goto L_5f360;
+L_5f62c:
+    r_a0 = r_v0 + 0x5eeU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 0) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x5f9U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 4) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x604U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 8) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x60fU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 12) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x61aU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 16) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x625U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 20) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x630U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 24) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x63bU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 28) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x646U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 32) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x651U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 36) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x65cU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 40) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x667U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 44) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x672U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 48) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x67dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 52) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x688U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 56) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x693U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 60) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x69eU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 64) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6a9U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 68) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6b4U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 72) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6bfU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 76) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6caU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 80) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6d5U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 84) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6e0U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 88) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6ebU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 92) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x6f6U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 112) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x701U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 116) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x70cU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 120) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x717U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 124) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x722U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 128) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x72dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 132) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x738U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 136) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x743U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 140) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x74eU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 144) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x759U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 148) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x764U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 152) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x76fU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 156) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x77aU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 160) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x785U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 164) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x790U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 168) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x79bU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 172) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7a6U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 176) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7b1U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 180) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7bcU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 184) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7c7U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 188) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7d2U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 192) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7ddU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 196) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7e8U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 200) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7f3U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 204) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x7feU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 208) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x809U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 212) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x814U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 216) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x81fU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 220) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x82aU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 224) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x835U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 228) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x840U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 232) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x84bU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 236) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x856U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 240) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x861U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 244) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x86cU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 248) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x877U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 252) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x882U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 256) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x88dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 260) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x898U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 264) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8a3U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 268) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8aeU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 272) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8b9U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 276) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8c4U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 280) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8cfU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 284) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8daU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 288) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8e5U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 292) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8f0U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 296) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x8fbU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 300) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x906U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 304) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x911U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 308) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x91cU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 312) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x927U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 316) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x932U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 320) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x93dU;
+    *(uint32_t *)(uintptr_t)(r_v1 + 324) = (uint32_t)r_a0;
+    r_a0 = r_v0 + 0x948U;
+    *(uint32_t *)(uintptr_t)(r_v1 + 328) = (uint32_t)r_a0;
+    r_v0 = r_v0 + 0x953U;
+    goto L_5f614;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_func_en_lit(uint32_t a0_in, uint32_t a1_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_sp = r_sp + -0x20U;
+    r_v0 = (uint32_t)(uintptr_t)&get_isp_memopt; /* HI16 get_isp_memopt */
+    r_v0 = (uint32_t)(uintptr_t)&get_isp_memopt;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_s1;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_ra;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_s2;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_s0;
+    r_s1 = r_a0;
+    r_v0 = (uint32_t)REGCALL_get_isp_memopt(r_a0, r_a1, r_a2, r_a3);
+    mips_cond = (r_s1 == 0) ? 1U : 0U;
+    r_v1 = 0; /* HI16 .bss anchor */
+    if (mips_cond) goto L_5f9e8;
+    r_v1 = 0; /* HI16 .bss anchor */
+    r_s0 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns);
+L_5f8e0:
+    r_v1 = r_s1 << 2;
+    r_v0 = (uint32_t)((int32_t)r_v0 >> (r_v1 & 31));
+    r_v0 = r_v0 & 0xfU;
+    r_v1 = r_v0 + -0x1U;
+    r_v1 = (r_v1 < (uint32_t)2) ? 1U : 0U;
+    mips_cond = (r_v1 == 0) ? 1U : 0U;
+    r_a2 = 1U;
+    if (mips_cond) goto L_5f91c;
+    r_a0 = *(uint8_t *)(uintptr_t)(r_s0 + 7);
+    r_a1 = 4294967294U;
+    r_v1 = *(uint8_t *)(uintptr_t)(r_s0 + 4);
+    mips_cond = (r_v0 != r_a2) ? 1U : 0U;
+    r_a0 = r_a0 & r_a1;
+    if (mips_cond) goto L_5f9f0;
+    r_v1 = r_v1 & r_a1;
+L_5f914:
+    *(uint8_t *)(uintptr_t)(r_s0 + 4) = (uint8_t)r_v1;
+    *(uint8_t *)(uintptr_t)(r_s0 + 7) = (uint8_t)r_a0;
+L_5f91c:
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s0 + 1);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s0 + 0);
+    r_s1 = r_s1 + 0x1eU;
+    r_v0 = r_v0 << 4;
+    r_s1 = r_s1 << 11;
+    r_v0 = r_v0 & 0x10U;
+    r_a1 = r_a1 & 0x1U;
+    r_s2 = (uint32_t)(uintptr_t)&system_reg_write; /* HI16 system_reg_write */
+    r_a0 = r_s1 + 0x20U;
+    r_s2 = (uint32_t)(uintptr_t)&system_reg_write;
+    r_a1 = r_v0 | r_a1;
+    r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = *(uint8_t *)(uintptr_t)(r_s0 + 3);
+    r_v1 = *(uint8_t *)(uintptr_t)(r_s0 + 2);
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s0 + 5);
+    r_a0 = 0x10000000U;
+    r_v0 = r_v0 << 4;
+    r_v1 = r_v1 & 0x1U;
+    r_v1 = r_v1 | r_a0;
+    r_v0 = r_v0 & 0x10U;
+    r_a1 = r_a1 << 8;
+    r_v0 = r_v0 | r_v1;
+    r_a1 = r_a1 & 0x100U;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s0 + 6);
+    r_v1 = 0x30000U;
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_a1 = r_a1 << 12;
+    r_a1 = r_a1 & 0x1000U;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s0 + 4);
+    r_a0 = r_s1 + 0x24U;
+    r_t9 = r_s2;
+    r_a1 = r_a1 << 16;
+    r_a1 = r_a1 & r_v1;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s0 + 7);
+    r_v1 = 0x300000U;
+    r_s2 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_a1 = r_a1 << 20;
+    r_a1 = r_a1 & r_v1;
+    r_v0 = r_v0 | r_a1;
+    r_a1 = *(uint8_t *)(uintptr_t)(r_s0 + 8);
+    r_s1 = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_a1 = r_a1 << 24;
+    r_v1 = 0x1000000U;
+    r_a1 = r_a1 & r_v1;
+    r_a1 = r_v0 | r_a1;
+    r_sp = r_sp + 0x20U;
+    r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+L_5f9e8:
+    r_s0 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns);
+    goto L_5f8e0;
+L_5f9f0:
+    r_v1 = r_v1 & 0xfcU;
+    goto L_5f914;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_all_reg_refresh_lit(uint32_t a0_in, uint32_t a1_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_sp = r_sp + -0x18U;
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_intp; /* HI16 tisp_mdns_intp */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_intp;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_s0;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_ra;
+    r_s0 = r_a0;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_intp(r_a0, r_a1, r_a2, r_a3);
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a0 = r_s0;
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_t9 = (uint32_t)(uintptr_t)&tisp_mdns_reg_cfg; /* HI16 tisp_mdns_reg_cfg */
+    r_t9 = (uint32_t)(uintptr_t)&tisp_mdns_reg_cfg;
+    r_sp = r_sp + 0x18U;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_par_refresh_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = a2_in;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_v0 = 0; /* HI16 .data anchor */
+    r_sp = r_sp + -0x20U;
+    r_t0 = r_a0 << 2;
+    r_v0 = (uint32_t)(uintptr_t)&regtrace_mdns_gain_old;
+    r_t1 = r_t0 + r_v0;
+    *(uint32_t *)(uintptr_t)(r_sp + 24) = (uint32_t)r_s0;
+    *(uint32_t *)(uintptr_t)(r_sp + 28) = (uint32_t)r_ra;
+    r_a3 = *(uint32_t *)(uintptr_t)(r_t1 + 0);
+    r_v1 = 4294967295U;
+    mips_cond = (r_a3 != r_v1) ? 1U : 0U;
+    r_s0 = r_a0;
+    if (mips_cond) goto L_5fac0;
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_func_en; /* HI16 tisp_mdns_func_en */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_func_en;
+    *(uint32_t *)(uintptr_t)(r_t1 + 0) = (uint32_t)r_a1;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_a1;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_func_en(r_a0, r_a1, r_a2, r_a3);
+    r_a1 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_all_reg_refresh; /* HI16 tisp_mdns_all_reg_refresh */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_all_reg_refresh;
+    r_a0 = r_s0;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_all_reg_refresh(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_start; /* HI16 tisp_mdns_start */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_start;
+    r_a0 = r_s0;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_start(r_a0, r_a1, r_a2, r_a3);
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 28);
+L_5faa8:
+    r_a0 = r_s0;
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_t9 = (uint32_t)(uintptr_t)&tisp_mdns_reg_trig; /* HI16 tisp_mdns_reg_trig */
+    r_t9 = (uint32_t)(uintptr_t)&tisp_mdns_reg_trig;
+    r_sp = r_sp + 0x20U;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_trig(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+L_5fac0:
+    r_a0 = (r_a1 < r_a3) ? 1U : 0U;
+    mips_cond = (r_a0 != 0) ? 1U : 0U;
+    r_v1 = r_a3 - r_a1;
+    if (mips_cond) goto L_5fad0;
+    r_v1 = r_a1 - r_a3;
+L_5fad0:
+    r_v1 = (r_v1 < r_a2) ? 1U : 0U;
+    mips_cond = (r_v1 != 0) ? 1U : 0U;
+    r_v0 = r_v0 + r_t0;
+    if (mips_cond) goto L_5faf8;
+    *(uint32_t *)(uintptr_t)(r_v0 + 0) = (uint32_t)r_a1;
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_all_reg_refresh; /* HI16 tisp_mdns_all_reg_refresh */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_all_reg_refresh;
+    r_a0 = r_s0;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_all_reg_refresh(r_a0, r_a1, r_a2, r_a3);
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    goto L_5faa8;
+L_5faf8:
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 28);
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 24);
+    r_sp = r_sp + 0x20U;
+    goto fn_exit;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_refresh_lit(uint32_t a0_in, uint32_t a1_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = a1_in;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    r_sp = r_sp + -0x18U;
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_par_refresh; /* HI16 tisp_mdns_par_refresh */
+    r_v0 = (uint32_t)(uintptr_t)&tisp_mdns_par_refresh;
+    *(uint32_t *)(uintptr_t)(r_sp + 16) = (uint32_t)r_s0;
+    *(uint32_t *)(uintptr_t)(r_sp + 20) = (uint32_t)r_ra;
+    r_a2 = 256U;
+    r_s0 = r_a0;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_par_refresh(r_a0, r_a1, r_a2, r_a3);
+    r_v1 = 0; /* HI16 .data anchor */
+    r_v0 = r_s0 << 2;
+    r_v1 = (uint32_t)(uintptr_t)&regtrace_mdns_gain_old;
+    r_v0 = r_v0 + r_v1;
+    r_ra = *(uint32_t *)(uintptr_t)(r_sp + 20);
+    r_a1 = *(uint32_t *)(uintptr_t)(r_v0 + 0);
+    r_a0 = r_s0;
+    r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 16);
+    r_t9 = (uint32_t)(uintptr_t)&tisp_mdns_all_reg_refresh; /* HI16 tisp_mdns_all_reg_refresh */
+    r_t9 = (uint32_t)(uintptr_t)&tisp_mdns_all_reg_refresh;
+    r_sp = r_sp + 0x18U;
+    r_v0 = (uint32_t)REGCALL_tisp_mdns_all_reg_refresh(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+static int32_t tisp_mdns_params_refresh_lit(uint32_t a0_in)
+{
+    uint32_t r_v0 = 0, r_v1 = 0;
+    uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
+    uint32_t r_t6 = 0, r_t7 = 0, r_t8 = 0, r_t9 = 0;
+    uint32_t r_s0 = 0, r_s1 = 0, r_s2 = 0, r_s3 = 0, r_s4 = 0, r_s5 = 0;
+    uint32_t r_s6 = 0, r_s7 = 0, r_s8 = 0, r_ra = 0, r_at = 0;
+    uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
+    uint32_t r_a0 = a0_in;
+    uint32_t r_a1 = 0;
+    uint32_t r_a2 = 0;
+    uint32_t r_a3 = 0;
+    uint8_t mips_stack[448] __attribute__((aligned(8)));
+    uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
+
+    (void)r_at; (void)r_ra; (void)r_t8; (void)mips_lo; (void)mips_hi; (void)r_sp;
+    (void)mips_cond;
+    mips_cond = (r_a0 == 0) ? 1U : 0U;
+    r_v0 = r_a0;
+    if (mips_cond) goto L_5fba0;
+    r_v1 = 0; /* HI16 .bss anchor */
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&sec_mdns);
+L_5fb70:
+    r_v1 = (uint32_t)(uintptr_t)&tparamsN; /* HI16 tparamsN */
+    r_v0 = r_v0 << 2;
+    r_v1 = (uint32_t)(uintptr_t)&tparamsN;
+    r_v0 = r_v0 + r_v1;
+    r_a1 = *(uint32_t *)(uintptr_t)(r_v0 + 0);
+    r_v0 = 0x10000U;
+    r_v0 = r_v0 + 0x105cU;
+    r_t9 = (uint32_t)(uintptr_t)&memcpy; /* HI16 memcpy */
+    r_a2 = 2398U;
+    r_t9 = (uint32_t)(uintptr_t)&memcpy;
+    r_a1 = r_a1 + r_v0;
+    r_v0 = (uint32_t)REGCALL_memcpy(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+L_5fba0:
+    r_v1 = 0; /* HI16 .bss anchor */
+    r_a0 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns);
+    goto L_5fb70;
+fn_exit:
+    return (int32_t)r_v0;
+}
+
+
+static int32_t regtrace_mdns_main_init_lit(uint32_t width, uint32_t height)
+{
+    /* OEM tisp_mdns_main_init 0x5fbac */
+    void *par, *comb, *wrk;
+
+    if (!main_mdns) {
+        par = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(2398);
+        comb = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(336);
+        wrk = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(136);
+        if (!par || !comb || !wrk)
+            return -ENOMEM;
+        memset(par, 0, 2398);
+        memset(comb, 0, 336);
+        memset(wrk, 0, 136);
+        main_mdns = (uintptr_t)par;
+        main_mdns_comb = (uintptr_t)comb;
+        main_mdns_intp = (uintptr_t)wrk;
+    }
+    if (tisp_mdns_params_refresh_lit(0))
+        return -EFAULT;
+    (void)tisp_mdns_wdr_en_lit(0, regtrace_mdns_wdr_flags[0]);
+    regtrace_mdns_width = width;
+    regtrace_mdns_height = height;
+    regtrace_mdns_gain_old = 0xffffffffU;
+    (void)tisp_mdns_refresh_lit(0, 0x10000U);
+    printk(KERN_WARNING "tx_isp_t40_recovered: mdns-main-init-lit done par=%p w=%u h=%u\n",
+           (void *)(uintptr_t)main_mdns, width, height);
+    return 0;
+}
+
 static int regtrace_isp_block_init_once(const char *where)
 {
     uint32_t nbuf;
@@ -10758,6 +14167,13 @@ static int regtrace_isp_block_init_once(const char *where)
 
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init ccm ret=%d\n",
                ccm_ret);
+    }
+
+    if (regtrace_enable_mdns) {
+        int mdns_ret = (int)regtrace_mdns_main_init_lit(adr_width, adr_height);
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init mdns ret=%d\n",
+               mdns_ret);
     }
 
     if (regtrace_enable_gib_blc) {

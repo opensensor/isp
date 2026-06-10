@@ -1511,3 +1511,22 @@ gain-tracking, ADR loop, LSC; investigations: stats-death, daylight.
   denoise/sharpen strength tracks gain like OEM tgain_update does.
 - Remaining grain delta vs stock is MDNS (temporal denoise) - the next
   translation target.
+
+## 2026-06-10 (cont): MDNS chain installed (recon state, default off)
+
+Full MDNS chain literal-translated and installed as _lit set
+(`enable_mdns`, DEFAULT OFF): eq_smp/eq_dif/reg_cfg(5.2KB)/start/trig/
+intp/wdr_en/func_en/glue/main_init. Findings:
+- Unit at (ch+30)<<11 = 0xF000 main; version reg +0 reads 0x20191209.
+- Params 2398B from tuning blob +0x1105c (1813 nonzero bytes).
+- tisp_mdns_func_en gates on get_isp_memopt() (memopt mode word) - in
+  memopt modes temporal may be restricted.
+- After an enable_mdns=1 init run, only sparse regs are nonzero
+  (+0xc=0x40, +0x20=0x11, +0x100=0x10); needs a marker-verified run with
+  kmsg + dense before/after reg diff to confirm the init executes fully,
+  then identification of the temporal reference buffer & the MDNS top40
+  gate (bit3 = freeze suspect) before any enable attempt.
+
+AE/grain round (user-reported): target back to 105 (less gain), DNS
+gain-EV mapping strengthened (24576/step ~ mid-table by gain 8). Visible
+grain reduced; full fix remains MDNS.

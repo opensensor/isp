@@ -7,7 +7,7 @@ P=/sys/module/tx_isp_t40_recovered/parameters
 PM=/tmp/phys_memdump
 Y_PHYS=${Y_PHYS:-0x6a3e500}
 UV_PHYS=${UV_PHYS:-0x6c3c500}
-TARGET=${TARGET:-120}
+TARGET=${TARGET:-105}
 DEADBAND_PCT=${DEADBAND_PCT:-10}
 MAX_IT=${MAX_IT:-1919}
 MIN_IT=${MIN_IT:-64}
@@ -56,7 +56,7 @@ apply_expo() {
 	echo $(( (again << 16) | it )) > $P/ae_sensor_apply_force_packed
 	# tell the kernel the gain EV so YDNS/YSP strength tracks it
 	# (~0.158 log2 per GC4653 analog gain index -> ~10362 in 16.16)
-	echo $(( again * 10362 )) > $P/dns_gain_ev 2>/dev/null
+	echo $(( again * 24576 )) > $P/dns_gain_ev 2>/dev/null
 }
 
 i=0
