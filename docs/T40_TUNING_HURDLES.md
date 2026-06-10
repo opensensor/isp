@@ -1314,3 +1314,28 @@ Empirical discoveries (all live-verified on .242):
   work; gray-world bypasses it entirely.
 - `tisp_ae_main_init` takes sensor width/height (OEM 0x23b34 stores a0/a1 as
   uint16 pair), same as AWB — the block-init gate now passes them.
+
+### Software AE (ae-soft) status: controller works, sensor EXPO bridge is a no-op
+
+`enable_ae_soft=1` (with `enable_ae_sensor_apply=1`) adds a proportional AE
+controller to the gray-world stats loop: it measures G-channel per-pixel mean
+from the AWB stats records and ladders GC4653 integration time (64..1919)
+then analog-gain index (0..25) toward `ae_soft_target`, staging
+`(again<<16)|it` through `ae_sensor_apply_force_packed`.
+
+Live result 2026-06-09: the controller measured/stepped correctly and the
+EXPO ioctl returned 0, but exposure never changed — A/B test
+(again=10 vs 25 at it=0x400) moved scene luma 26.2 -> 27.3 (noise). At
+it=1919/again=25 the ioctl returns -290. Conclusion: the
+`TX_ISP_EVENT_SENSOR_EXPO` bridge into the GC4653 module does not reach the
+sensor I2C (payload format or event routing). Direct i2ctransfer
+verification is blocked: the bus times out while the sensor driver holds it.
+Next session: trace the gc4653 module's EXPO ioctl handler (payload struct
+layout, return -290 origin) or drive the sensor's 0x0202/0x0203 + gain LUT
+registers through the driver's own I2C client. ae-soft stays default-off.
+
+Also fixed: `stMainAeInterOri` materialized (17772 bytes from OEM
+.data+0x5d3c); the recovered tisp_ae_main_init memcpy'd from the .data base
+symbol instead. AE block-init remains gated off pending the same
+verification pass AWB got (its init registers the full unverified AE
+callback chain unconditionally).
