@@ -27,6 +27,9 @@ for ln in lines:
 
 # collect branch targets for labels
 targets = set()
+if len(sys.argv) > 4:
+    for t in sys.argv[4].split(','):
+        targets.add(int(t, 16))
 for ins in insns:
     m = re.search(r'\b([0-9a-f]+)\s+<', ins["args"])
     if ins["op"].startswith(("b","j")) and m:

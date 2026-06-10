@@ -1471,3 +1471,26 @@ assembled. That plus YDNS-pattern glue is the remaining sharpening work.
   frame) — blacklisted alongside bit3 (freeze) and bit15 (green blank).
   bit19 brightens strongly (LCE/defog-class?) — left bypassed, candidate
   for later.
+
+## 2026-06-10 (cont): CCM online — full color pipeline complete
+
+- The entire CCM chain (transmit, refresh, reg2par, parameter_convert,
+  ct_ccm_interpolation incl. its .rodata jump table -> C switch, para2reg,
+  lut_parameter [the hw apply point], ev_ct_update, cm_control) installed
+  as a self-contained `_lit` set via mips2c_literal; Ori blob (228B,
+  .data+0x2d07c) materialized; `enable_ccm=1`, top40 default `0x7fefa8db`
+  (bit9 CCM active).
+- LESSON (cost two crash cycles): the literal-translation wrapper's
+  virtual `mips_stack` must cover the translated function's full stack
+  frame — cm_control uses a 256-byte frame and the original 288/224
+  wrapper overflowed into the kernel stack (silent watchdog reboot).
+  Wrappers now use 448/384. Also: shared macros (REGTRACE_LWLR) must be
+  defined before the FIRST translated function in file order (an
+  undefined-symbol modpost warning means a misplaced define).
+- Visual result: full stock-character color — saturated greens, natural
+  tungsten warmth, wood tones — on top of the sharpening/gamma/BLC stack.
+
+Pipeline now live end-to-end: GIB BLC -> WBG (userspace auto-WB) -> DMSC ->
+CCM -> OEM gamma -> BCSH -> YDNS -> YSP sharpening, with userspace AE.
+Remaining vs stock: MDNS/SDNS (high-gain denoise), faithful GIB
+gain-tracking, ADR loop, LSC; investigations: stats-death, daylight.
