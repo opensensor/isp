@@ -1339,3 +1339,29 @@ Also fixed: `stMainAeInterOri` materialized (17772 bytes from OEM
 symbol instead. AE block-init remains gated off pending the same
 verification pass AWB got (its init registers the full unverified AE
 callback chain unconditionally).
+
+## 2026-06-09 (late): EXPO bridge fixed, userspace 3A online
+
+- ROOT CAUSE of the dead exposure path: the driver sent sensor event
+  0x2000006, which in the GC4653 ioctl jump table is "set integration time
+  only" (regs 0x200/0x201). The full expo handler (integration regs
+  0x202/0x203 + the 9-register analog-gain LUT) is cmd **0x2000016**, reading
+  the packed (again_idx<<16)|it word from arg+4. With the fix, gain index
+  10 vs 0 swings scene luma 10x. The mystery -290 = two -145 I2C write
+  failures summed (transient bus timeouts).
+- The AWB stats engine input dies after rvd's second streamon (banks cycle,
+  config intact, all zone counts zero; thresholds/windows ruled out by live
+  permissive writes). Under investigation; the gray-world IRQ loop freezes
+  with it. Workarounds in place: stats watchdog re-arm from frame-done +
+  bank-select parse (the old frame-tag filter also wedged on its own).
+- In-kernel frame sampling (enable_frame_3a) crashes the camera (suspected
+  rmem cache-alias machine check from a second kernel mapping) — left
+  default-off, DO NOT enable until reworked.
+- WORKING SOLUTION: userspace 3A (`tools/t40_userspace_3a.sh`, deploy to
+  camera /tmp, nohup): samples the NV12 output planes via /dev/mem
+  (phys_memdump), ladders exposure through ae_sensor_apply_force_packed
+  (now deduplicated - forced values only re-sent on change to avoid a 25Hz
+  I2C storm) and trims WB via new awb_manual_rgain/bgain params that
+  frame-done applies on change. Verified at night: luma 35 -> 103 in ~60s
+  (it=1919, again=8), UV self-neutralizing, image transformed from black
+  grain to a properly exposed scene.

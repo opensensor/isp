@@ -8797,6 +8797,7 @@ static bool regtrace_enable_awb_set_gain = true;
 static bool regtrace_enable_awb_grayworld;
 static void regtrace_awb_grayworld_apply(uint32_t rgain, uint32_t bgain);
 static void regtrace_awb_grayworld_update(void);
+static void regtrace_frame_3a_sample(uint32_t y_phys, uint32_t uv_phys);
 static uint regtrace_awb_grayworld_interval = 2;
 static uint32_t regtrace_awb_grayworld_updates;
 static uint32_t regtrace_awb_grayworld_irqs;
@@ -8822,6 +8823,22 @@ static uint regtrace_ae_soft_cur_it = 600;
 static uint regtrace_ae_soft_cur_again;
 static uint32_t regtrace_ae_soft_updates;
 static uint32_t regtrace_ae_soft_last_mean;
+/*
+ * Frame-sampled 3A: measures the completed output frame (NV12 Y plane for
+ * exposure, UV plane for white-balance trim) from the frame-done workqueue.
+ * Independent of the ISP AWB/AE stats engines (whose input feed dies after
+ * the second streamon - under investigation).
+ */
+static bool regtrace_enable_frame_3a;
+/* userspace 3A: gains written here (0644) are applied on change from frame-done */
+static uint regtrace_awb_manual_rgain;
+static uint regtrace_awb_manual_bgain;
+static uint regtrace_frame_3a_interval = 15;
+static uint regtrace_frame_3a_target = 110;
+static uint32_t regtrace_frame_3a_samples;
+static uint32_t regtrace_frame_3a_last_luma;
+static uint32_t regtrace_frame_3a_last_u;
+static uint32_t regtrace_frame_3a_last_v;
 static uint regtrace_awb_grayworld_rbias = 1193;
 static uint regtrace_awb_grayworld_bbias = 1448;
 static bool regtrace_enable_adr_reg_writes = true;
@@ -9078,6 +9095,15 @@ module_param_named(ae_soft_cur_it, regtrace_ae_soft_cur_it, uint, 0444);
 module_param_named(ae_soft_cur_again, regtrace_ae_soft_cur_again, uint, 0444);
 module_param_named(ae_soft_updates, regtrace_ae_soft_updates, uint, 0444);
 module_param_named(ae_soft_last_mean, regtrace_ae_soft_last_mean, uint, 0444);
+module_param_named(enable_frame_3a, regtrace_enable_frame_3a, bool, 0644);
+module_param_named(awb_manual_rgain, regtrace_awb_manual_rgain, uint, 0644);
+module_param_named(awb_manual_bgain, regtrace_awb_manual_bgain, uint, 0644);
+module_param_named(frame_3a_interval, regtrace_frame_3a_interval, uint, 0644);
+module_param_named(frame_3a_target, regtrace_frame_3a_target, uint, 0644);
+module_param_named(frame_3a_samples, regtrace_frame_3a_samples, uint, 0444);
+module_param_named(frame_3a_last_luma, regtrace_frame_3a_last_luma, uint, 0444);
+module_param_named(frame_3a_last_u, regtrace_frame_3a_last_u, uint, 0444);
+module_param_named(frame_3a_last_v, regtrace_frame_3a_last_v, uint, 0444);
 module_param_named(enable_adr_reg_writes, regtrace_enable_adr_reg_writes, bool, 0644);
 module_param_named(isp_block_init_stage_limit, regtrace_isp_block_init_stage_limit, uint, 0644);
 module_param_named(awb_main_init_stage_limit, regtrace_awb_main_init_stage_limit, uint, 0644);
@@ -9419,7 +9445,14 @@ static int regtrace_isp_block_init_once(const char *where)
 #define REGTRACE_TX_ISP_VIDEO_VIC_ID_OFFSET 0x4c
 #define REGTRACE_TX_ISP_EVENT_SENSOR_REGISTER 0x02000000U
 #define REGTRACE_TX_ISP_EVENT_SENSOR_SET_INPUT 0x02000004U
-#define REGTRACE_TX_ISP_EVENT_SENSOR_EXPO 0x02000006U
+/*
+ * GC4653 sensor ioctl jump table (sensor_sensor_ops_ioctl, cmds
+ * 0x2000006..0x2000016): 0x2000006 writes integration-time regs 0x200/0x201
+ * only; the full expo handler (integration regs 0x202/0x203 + the 9-register
+ * analog-gain LUT write) is the LAST entry, 0x2000016, reading the packed
+ * (again_idx<<16)|integration word from arg+4.
+ */
+#define REGTRACE_TX_ISP_EVENT_SENSOR_EXPO 0x02000016U
 #define REGTRACE_TX_ISP_EVENT_SYNC_SENSOR_ATTR 0x01000001U
 #define REGTRACE_TX_SENSOR_CONTROL_INTERFACE_I2C 1
 #define REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI 1U
@@ -15587,6 +15620,18 @@ static int regtrace_ae_sensor_apply_maybe(int channel, const char *reason)
     regtrace_ae_sensor_apply_last_int[channel] = packed & 0xffffU;
 
     if (forced) {
+        /*
+         * Only push a forced value when it changes: re-sending the EXPO
+         * ioctl every frame-done is a 25Hz I2C storm (integration regs plus
+         * the 9-register gain LUT) that eventually wedges the bus/sensor.
+         */
+        static uint32_t forced_applied[4];
+
+        if (forced == forced_applied[channel]) {
+            regtrace_ae_sensor_apply_skip_clean_count[channel]++;
+            return 0;
+        }
+        forced_applied[channel] = forced;
         packed = forced;
         dirty = 1;
         regtrace_ae_sensor_apply_force_count[channel]++;
@@ -41040,6 +41085,51 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
 
         regtrace_ae_sensor_apply_maybe((int)channel, "irq-fd-fifo");
         ae_applied = 1;
+
+        /*
+         * Gray-world stats watchdog: the AWB stats engine is one-shot and the
+         * IRQ handler re-arms it; if a single stats IRQ is lost the chain
+         * starves while frames keep flowing. Re-arm from frame-done when the
+         * stats IRQ counter stops advancing.
+         */
+        if (regtrace_enable_awb_grayworld) {
+            static uint32_t gw_wd_last_irqs;
+            static uint32_t gw_wd_stale;
+
+            if (regtrace_awb_grayworld_irqs == gw_wd_last_irqs) {
+                if (++gw_wd_stale >= 30U) {
+                    gw_wd_stale = 0;
+                    (void)system_reg_set_awb_trig(1, 0);
+                }
+            } else {
+                gw_wd_last_irqs = regtrace_awb_grayworld_irqs;
+                gw_wd_stale = 0;
+            }
+        }
+
+        if (regtrace_enable_frame_3a && channel == 0 && y && uv) {
+            static uint32_t f3a_tick;
+
+            if (++f3a_tick >= regtrace_frame_3a_interval) {
+                f3a_tick = 0;
+                regtrace_frame_3a_sample(y, uv);
+            }
+        }
+
+        /* userspace 3A: apply manual WBG gains when they change */
+        if (regtrace_awb_manual_rgain && regtrace_awb_manual_bgain) {
+            static uint32_t manual_applied_r, manual_applied_b;
+
+            if (regtrace_awb_manual_rgain != manual_applied_r ||
+                regtrace_awb_manual_bgain != manual_applied_b) {
+                manual_applied_r = regtrace_awb_manual_rgain;
+                manual_applied_b = regtrace_awb_manual_bgain;
+                regtrace_awb_grayworld_last_rgain = manual_applied_r;
+                regtrace_awb_grayworld_last_bgain = manual_applied_b;
+                regtrace_awb_grayworld_apply(manual_applied_r,
+                                             manual_applied_b);
+            }
+        }
 
         if (regtrace_irq_frame_done_dry_run) {
             regtrace_irq_frame_done_record_dry((int)channel, source, y,
@@ -93294,6 +93384,137 @@ tisp_awb_get_statistics0x5a8:
 }
 
 
+
+/*
+ * Frame-sampled 3A worker. y/uv are physical NV12 plane addresses of the
+ * completed 1920x1080 frame. Runs in the frame-done workqueue (process
+ * context); maps a static 32MB rmem window on first use.
+ */
+static void regtrace_frame_3a_sample(uint32_t y_phys, uint32_t uv_phys)
+{
+    static void __iomem *win;
+    static uint32_t win_base;
+    const uint8_t *yp;
+    const uint8_t *uvp;
+    uint32_t row, col;
+    uint64_t ysum = 0, usum = 0, vsum = 0;
+    uint32_t yn = 0, uvn = 0;
+    uint32_t luma, umean, vmean;
+
+    if (!win) {
+        win_base = y_phys & ~0x01ffffffU;
+        win = ioremap(win_base, 0x02000000U);
+        if (!win)
+            return;
+    }
+    if (y_phys < win_base || y_phys + 1920U * 1080U > win_base + 0x02000000U ||
+        uv_phys < win_base || uv_phys + 1920U * 540U > win_base + 0x02000000U)
+        return;
+
+    yp = (const uint8_t *)win + (y_phys - win_base);
+    uvp = (const uint8_t *)win + (uv_phys - win_base);
+
+    for (row = 12; row < 1080U; row += 24U) {
+        const uint8_t *line = yp + row * 1920U;
+
+        for (col = 16; col < 1920U; col += 32U) {
+            ysum += line[col];
+            yn++;
+        }
+    }
+    for (row = 6; row < 540U; row += 12U) {
+        const uint8_t *line = uvp + row * 1920U;
+
+        for (col = 16; col < 1920U; col += 32U) {
+            usum += line[col & ~1U];
+            vsum += line[(col & ~1U) + 1];
+            uvn++;
+        }
+    }
+    if (!yn || !uvn)
+        return;
+
+    luma = (uint32_t)div64_u64(ysum, yn);
+    umean = (uint32_t)div64_u64(usum, uvn);
+    vmean = (uint32_t)div64_u64(vsum, uvn);
+    regtrace_frame_3a_last_luma = luma;
+    regtrace_frame_3a_last_u = umean;
+    regtrace_frame_3a_last_v = vmean;
+    regtrace_frame_3a_samples++;
+
+    /* AE: ladder integration time first, then analog gain index */
+    if (regtrace_enable_ae_sensor_apply) {
+        uint32_t it = regtrace_ae_soft_cur_it;
+        uint32_t again = regtrace_ae_soft_cur_again;
+        uint32_t max_again = regtrace_ae_sensor_apply_max_again_index;
+        bool changed = false;
+
+        if (luma + regtrace_ae_soft_hyst / 2 < regtrace_frame_3a_target) {
+            if (it < regtrace_ae_soft_max_it) {
+                it = it + it / 4 + 8;
+                if (it > regtrace_ae_soft_max_it)
+                    it = regtrace_ae_soft_max_it;
+                changed = true;
+            } else if (again < max_again) {
+                again++;
+                changed = true;
+            }
+        } else if (luma > regtrace_frame_3a_target + regtrace_ae_soft_hyst) {
+            if (again > 0) {
+                again--;
+                changed = true;
+            } else if (it > regtrace_ae_soft_min_it) {
+                it = it - it / 4;
+                if (it < regtrace_ae_soft_min_it)
+                    it = regtrace_ae_soft_min_it;
+                changed = true;
+            }
+        }
+        if (changed) {
+            regtrace_ae_soft_cur_it = it;
+            regtrace_ae_soft_cur_again = again;
+            regtrace_ae_sensor_apply_force_packed =
+                (again << 16) | (it & 0xffffU);
+            regtrace_ae_soft_updates++;
+        }
+    }
+
+    /* AWB trim: drive UV means toward neutral 128 via the WBG gains */
+    {
+        uint32_t rgain = regtrace_awb_grayworld_last_rgain;
+        uint32_t bgain = regtrace_awb_grayworld_last_bgain;
+        bool changed = false;
+
+        if (vmean > 136U && rgain > 0x200U) {
+            rgain -= rgain / 32U;
+            changed = true;
+        } else if (vmean < 120U && rgain < 0x1800U) {
+            rgain += rgain / 32U;
+            changed = true;
+        }
+        if (umean > 136U && bgain > 0x200U) {
+            bgain -= bgain / 32U;
+            changed = true;
+        } else if (umean < 120U && bgain < 0x1800U) {
+            bgain += bgain / 32U;
+            changed = true;
+        }
+        if (changed) {
+            regtrace_awb_grayworld_last_rgain = rgain;
+            regtrace_awb_grayworld_last_bgain = bgain;
+            regtrace_awb_grayworld_apply(rgain, bgain);
+        }
+    }
+
+    if (regtrace_frame_3a_samples <= 6 ||
+        (regtrace_frame_3a_samples & 0x3fU) == 0)
+        printk(KERN_INFO "tx_isp_t40_recovered: frame-3a #%u luma=%u u=%u v=%u it=%u again=%u rgain=0x%x bgain=0x%x\n",
+               regtrace_frame_3a_samples, luma, umean, vmean,
+               regtrace_ae_soft_cur_it, regtrace_ae_soft_cur_again,
+               regtrace_awb_grayworld_last_rgain,
+               regtrace_awb_grayworld_last_bgain);
+}
+
 static void regtrace_awb_grayworld_apply(uint32_t rgain, uint32_t bgain)
 {
     uint32_t rv = (rgain & 0x3fffU) | 0x04000000U;
@@ -93323,37 +93544,35 @@ static void regtrace_awb_grayworld_update(void)
 {
     const uint8_t *buf;
     uint32_t off;
-    uint32_t tag_max = 0;
+    uint32_t bank;
     uint64_t rs = 0, gs = 0, bs = 0;
     uint64_t pixels = 0;
     uint32_t zones = 0;
     uint32_t rgain, bgain;
 
-    buf = (const uint8_t *)(uintptr_t)regtrace_tisp_dma_virt32(1, 0);
+    /*
+     * Parse only the most recently completed bank ((idx+3)&3; the idx
+     * register points at the next bank to fill). The earlier frame-tag
+     * filter wedged: the 8-bit record tag is not monotonic, so a max-tag
+     * comparison eventually rejects every record and the loop starves.
+     */
+    bank = ((uint32_t)system_reg_read(0x10000U | 32848U) + 3U) & 3U;
+    buf = (const uint8_t *)(uintptr_t)regtrace_tisp_dma_virt32(1, bank * 0x8000U);
     if (!buf)
         return;
 
     ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)
-        private_dma_cache_sync)(0, (uintptr_t)buf, 0x20000, 0);
+        private_dma_cache_sync)(0, (uintptr_t)buf, 0x8000, 0);
 
-    for (off = 0; off + 16 <= 0x20000; off += 128) {
+    for (off = 0; off + 16 <= 0x8000; off += 128) {
         uint32_t w0 = *(const uint32_t *)(buf + off);
         uint32_t w1 = *(const uint32_t *)(buf + off + 4);
         uint32_t w2 = *(const uint32_t *)(buf + off + 8);
         uint32_t w3 = *(const uint32_t *)(buf + off + 12);
         uint32_t cnt = ((w3 & 0x3fU) << 8) | (w2 >> 24);
-        uint32_t tag = (w3 >> 8) & 0xffU;
 
         if (!cnt)
             continue;
-        if (tag > tag_max) {
-            tag_max = tag;
-            rs = gs = bs = 0;
-            pixels = 0;
-            zones = 0;
-        } else if (tag != tag_max) {
-            continue;
-        }
         rs += w0 & 0x3fffffU;
         gs += ((w1 & 0xfffU) << 10) | (w0 >> 22);
         bs += ((w2 & 3U) << 20) | (w1 >> 12);
@@ -93430,8 +93649,8 @@ static void regtrace_awb_grayworld_update(void)
 
     if (regtrace_awb_grayworld_updates <= 4 ||
         (regtrace_awb_grayworld_updates & 0x3fU) == 0)
-        printk(KERN_INFO "tx_isp_t40_recovered: awb-grayworld update#%u zones=%u rgain=0x%x bgain=0x%x tag=%u\n",
-               regtrace_awb_grayworld_updates, zones, rgain, bgain, tag_max);
+        printk(KERN_INFO "tx_isp_t40_recovered: awb-grayworld update#%u zones=%u rgain=0x%x bgain=0x%x bank=%u\n",
+               regtrace_awb_grayworld_updates, zones, rgain, bgain, bank);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031a40 origin=fragment_seed original=tisp_awb_main_interrupt_static */
