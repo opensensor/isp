@@ -1389,3 +1389,27 @@ callback chain unconditionally).
   metric with tnoise=0.08 - sanity-check content before trusting a noise
   metric). bit3 remains a hard-freeze. Real denoise needs the Tiziano
   YDNS/RDNS/SDNS inits.
+
+## 2026-06-09 (cont): YDNS chain repaired faithfully, CCM scoped
+
+- Full YDNS chain rewritten against OEM (params_refresh 0x60ae8, wdr_en
+  0x608b8, intp 0x60674, reg_cfg 0x60530, all_reg_refresh/par_refresh/
+  refresh/main_init): 465-byte param block from tparamsN+0x119ba, 20-entry
+  comb pointer table selecting linear (+3..+244) vs WDR (+245..+464)
+  11-byte interpolation tables, 22 working bytes pushed to the YDNS unit at
+  0x10000 (regs +8/+10/+20/+24/+28/+40/+44/+48, trig +4). The recovered
+  wdr_en had inverted flag logic AND wrote into fake g_data_* placeholder
+  arrays while intp read the real anchors. `enable_ydns=1` (probe default)
+  runs it at block-init; probe top40 default now 0x7fffaafb (bit14 also
+  active). Live: regs configured with real values, stream healthy.
+  A/B bit14 toggle showed no measurable tnoise change at the current
+  operating point (gamma keeps analog gain at 0, tnoise already 0.41);
+  expect the benefit at high-gain very-dark scenes.
+- CCM scoped: tisp_ccm_main_init (0x6ffd8) chains transmit/refresh/
+  ev_ct_update/lut_parameter/cm_control - all memory-to-memory; the hw
+  apply point is indirect (no system_reg_write anywhere in the chain), so
+  CCM needs the faithful chain repair + identifying its DMA/LUT apply
+  mechanism. Parked with notes.
+- AWB-stats-death after second streamon: still open; the alive window is
+  only the first ~60s of a boot, so the planned register-window diff needs
+  a scripted boot-race capture. Documented for next session.

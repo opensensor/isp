@@ -8831,6 +8831,7 @@ static uint32_t regtrace_ae_soft_last_mean;
  */
 static bool regtrace_enable_frame_3a;
 static bool regtrace_enable_soft_gamma;
+static bool regtrace_enable_ydns;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
 static uint regtrace_awb_manual_bgain;
@@ -9080,6 +9081,7 @@ module_param_named(enable_isp_block_init_awb, regtrace_enable_isp_block_init_awb
 module_param_named(enable_awb_reg_writes, regtrace_enable_awb_reg_writes, bool, 0644);
 module_param_named(enable_awb_set_gain, regtrace_enable_awb_set_gain, bool, 0644);
 module_param_named(enable_soft_gamma, regtrace_enable_soft_gamma, bool, 0644);
+module_param_named(enable_ydns, regtrace_enable_ydns, bool, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
 module_param_named(awb_grayworld_interval, regtrace_awb_grayworld_interval, uint, 0644);
 module_param_named(awb_grayworld_updates, regtrace_awb_grayworld_updates, uint, 0444);
@@ -9425,6 +9427,13 @@ static int regtrace_isp_block_init_once(const char *where)
 
     if (regtrace_enable_soft_gamma)
         regtrace_soft_gamma_write();
+
+    if (regtrace_enable_ydns) {
+        int ydns_ret = (int)tisp_ydns_main_init();
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init ydns ret=%d\n",
+               ydns_ret);
+    }
 
     if (regtrace_isp_block_init_ae_ret)
         return regtrace_isp_block_init_ae_ret;
@@ -150342,99 +150351,39 @@ int32_t tisp_mdns_dn_params_refresh(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060530 origin=fragment_seed original=tisp_ydns_reg_cfg */
 int32_t tisp_ydns_reg_cfg(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t *local_24 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *s3 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
+    /*
+     * OEM 0x60530: push the 22 interpolated bytes plus three param bytes to
+     * the YDNS unit at ((ch + 0x100) << 8) (= 0x10000 for main).
+     */
+    const uint8_t *w;
+    const uint8_t *par;
+    uint32_t base = (a0 + 0x100U) << 8;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (a0 == 0) {
+        w = (const uint8_t *)(uintptr_t)main_ydns_intp;
+        par = (const uint8_t *)(uintptr_t)main_ydns;
+    } else {
+        w = (const uint8_t *)(uintptr_t)sec_ydns_intp;
+        par = (const uint8_t *)(uintptr_t)sec_ydns;
+    }
+    if (!w || !par)
+        return -EFAULT;
 
-    /* fragment 1: Branch */
-    if (a0 == 0) { goto tisp_ydns_reg_cfg0x114; }
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)&isp_memopt;
-    s0 = *(uint32_t *)((char *)((char *)&sec_ydns_intp));
-    v0 = (uintptr_t *)&isp_memopt;
-    s3 = *(uint32_t *)((char *)((char *)&sec_ydns));
-
-tisp_ydns_reg_cfg0x2c:
-    /* fragment 3: CallSetup */
-    s1 = (a0 + 256) << 8;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(((a0 + 256) << 8) + 8, *(uint8_t *)((char *)((uintptr_t)s3) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 + 16, ((*(uint8_t *)((char *)((uintptr_t)s3) + 2)) << 4 & 16) | (*(uint8_t *)((char *)((uintptr_t)s3) + 1) & 1)); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 + 32, ((*(uint8_t *)((char *)((uintptr_t)s0) + 1)) << 8 & 768) | ((*(uint8_t *)((char *)((uintptr_t)s0) + 2)) << 12 & 12288) | (*(uint8_t *)((char *)((uintptr_t)s0) + 0))); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s1 + 36, a1); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s1 + 40, a1); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 + 64, ((*(uint8_t *)((char *)((uintptr_t)s0) + 12)) << 8) | ((*(uint8_t *)((char *)((uintptr_t)s0) + 13)) << 16) | (*(uint8_t *)((char *)((uintptr_t)s0) + 11))); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s1 + 68, a1); /* jalr target resolved by relocation */
-
-    /* fragment 10: Unknown */
-    /* unmatched fragment 10 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60618:	8a050015 	lwl	a1,21(s0) */
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 12: Unknown */
-    /* unmatched fragment 12 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60624:	9a050012 	lwr	a1,18(s0) */
-
-    /* fragment 13: Arithmetic */
-    a0 = s1 + 72;
-
-    /* fragment 14: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 15: Arithmetic */
-    t9 = s2;
-
-    /* fragment 16: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-    /* fragment 17: Unknown */
-    /* unmatched fragment 17 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 6063c:	03200408 	jr.hb	t9 */
-
-    /* fragment 18: Arithmetic */
-    /* unmatched fragment 18 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 60640:	27bd0028 	addiu	sp,sp,40 */
-
-tisp_ydns_reg_cfg0x114:
-    /* fragment 19: Arithmetic */
-    v0 = (uintptr_t *)&isp_memopt;
-
-    /* fragment 20: MemoryAccess */
-    s0 = *(uint32_t *)((char *)((char *)&main_ydns_intp));
-    v0 = (uintptr_t *)&isp_memopt;
-
-    /* fragment 21: Branch */
-    s3 = *(uint32_t *)((char *)((char *)&main_ydns));
-    goto tisp_ydns_reg_cfg0x2c;
-
+    (void)system_reg_write(base + 0x08, par[0]);
+    (void)system_reg_write(base + 0x10,
+        ((par[2] << 4) & 0x10U) | (par[1] & 1U));
+    (void)system_reg_write(base + 0x20,
+        ((w[2] << 12) & 0x3000U) | ((w[1] << 8) & 0x300U) | w[0]);
+    (void)system_reg_write(base + 0x24,
+        w[3] | (w[4] << 8) | (w[5] << 16) | ((uint32_t)w[6] << 24));
+    (void)system_reg_write(base + 0x28,
+        w[7] | (w[8] << 8) | (w[9] << 16) | ((uint32_t)w[10] << 24));
+    (void)system_reg_write(base + 0x40,
+        w[11] | (w[12] << 8) | ((uint32_t)w[13] << 16));
+    (void)system_reg_write(base + 0x44,
+        w[14] | (w[15] << 8) | (w[16] << 16) | ((uint32_t)w[17] << 24));
+    (void)system_reg_write(base + 0x48,
+        w[18] | (w[19] << 8) | (w[20] << 16) | ((uint32_t)w[21] << 24));
     return 0;
 }
 
@@ -150447,270 +150396,89 @@ int32_t tisp_ydns_reg_trig(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060674 origin=fragment_seed original=tisp_ydns_intp */
 int32_t tisp_ydns_intp(uint32_t a0, uint32_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t *local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uint32_t *s3 = 0;
-    uintptr_t *s4 = 0;
-    uint32_t s5 = 0;
-    uintptr_t *v0 = 0;
+    /*
+     * OEM 0x60674: interpolate the 22 YDNS working bytes from the 11-entry
+     * tables by the packed gain position a1 (hi16 = segment, lo16 = frac).
+     * out[12]/out[13] use the fixed tables at par+135/+146; the rest come
+     * from the comb pointer table.
+     */
+    uint8_t *out;
+    const uint8_t *par;
+    const uint32_t *comb;
+    int32_t hi = (int32_t)(a1 >> 16);
+    int32_t lo = (int32_t)(a1 & 0xffffU);
+    unsigned int i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (a0 == 0) {
+        out = (uint8_t *)(uintptr_t)main_ydns_intp;
+        par = (const uint8_t *)(uintptr_t)main_ydns;
+        comb = (const uint32_t *)(uintptr_t)main_ydns_comb;
+    } else {
+        out = (uint8_t *)(uintptr_t)sec_ydns_intp;
+        par = (const uint8_t *)(uintptr_t)sec_ydns;
+        comb = (const uint32_t *)(uintptr_t)sec_ydns_comb;
+    }
+    if (!out || !par || !comb || !comb[0])
+        return -EFAULT;
 
-    /* fragment 1: Branch */
-    if (a0 == 0) { goto tisp_ydns_intp0x228; }
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)&isp_memopt;
-    s2 = *(uint32_t *)((char *)((char *)&sec_ydns_intp));
-    v0 = (uintptr_t *)&isp_memopt;
-    s5 = *(uint32_t *)((char *)((char *)&sec_ydns));
-    v0 = (uintptr_t *)&isp_memopt;
-    s4 = *(uint32_t *)((char *)((char *)&sec_ydns_comb));
-
-tisp_ydns_intp0x3c:
-    /* fragment 3: CallSetup */
-    s3 = (uintptr_t)a1 >> 16;
-    s0 = a1 & 65535;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)((uintptr_t *)((uintptr_t)a1 >> 16), a1 & 65535, s5 + 135); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    *(uint8_t *)((char *)s2 + 12) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, s5 + 146); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    *(uint8_t *)((char *)s2 + 13) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    *(uint8_t *)((char *)s2 + 0) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 4)); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    *(uint8_t *)((char *)s2 + 1) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 8)); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    *(uint8_t *)((char *)s2 + 2) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 12)); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    *(uint8_t *)((char *)s2 + 3) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 16)); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    *(uint8_t *)((char *)s2 + 4) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 20)); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    *(uint8_t *)((char *)s2 + 5) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 24)); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    *(uint8_t *)((char *)s2 + 6) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 28)); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    *(uint8_t *)((char *)s2 + 7) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 32)); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    *(uint8_t *)((char *)s2 + 8) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 36)); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    *(uint8_t *)((char *)s2 + 9) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 40)); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    *(uint8_t *)((char *)s2 + 10) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 44)); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    *(uint8_t *)((char *)s2 + 11) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 48)); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    *(uint8_t *)((char *)s2 + 14) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 52)); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    *(uint8_t *)((char *)s2 + 15) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 56)); /* jalr target resolved by relocation */
-
-    /* fragment 20: CallSetup */
-    *(uint8_t *)((char *)s2 + 16) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 60)); /* jalr target resolved by relocation */
-
-    /* fragment 21: CallSetup */
-    *(uint8_t *)((char *)s2 + 17) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 64)); /* jalr target resolved by relocation */
-
-    /* fragment 22: CallSetup */
-    *(uint8_t *)((char *)s2 + 18) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 68)); /* jalr target resolved by relocation */
-
-    /* fragment 23: CallSetup */
-    *(uint8_t *)((char *)s2 + 19) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 72)); /* jalr target resolved by relocation */
-
-    /* fragment 24: CallSetup */
-    *(uint8_t *)((char *)s2 + 20) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int8)(s3, s0, *(uint32_t *)((char *)(s4) + 76)); /* jalr target resolved by relocation */
-
-    /* fragment 25: MemoryAccess */
-    *(uint8_t *)((char *)s2 + 21) = v0;
-    ra = local_2c;
-    s5 = local_28;
-    s4 = local_24;
-    s3 = local_20;
-    s2 = local_1c;
-    s1 = local_18;
-    s0 = local_14;
-
-    /* fragment 26: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tisp_ydns_intp0x228:
-    /* fragment 27: Arithmetic */
-    v0 = (uintptr_t *)&isp_memopt;
-
-    /* fragment 28: MemoryAccess */
-    s2 = *(uint32_t *)((char *)((char *)&main_ydns_intp));
-    v0 = (uintptr_t *)&isp_memopt;
-    s5 = *(uint32_t *)((char *)((char *)&main_ydns));
-    v0 = (uintptr_t *)&isp_memopt;
-
-    /* fragment 29: Branch */
-    s4 = *(uint32_t *)((char *)((char *)&main_ydns_comb));
-    goto tisp_ydns_intp0x3c;
-
+    out[12] = (uint8_t)tisp_simple_intp_int8(hi, lo, (void *)(par + 135));
+    out[13] = (uint8_t)tisp_simple_intp_int8(hi, lo, (void *)(par + 146));
+    for (i = 0; i < 12; i++)
+        out[i] = (uint8_t)tisp_simple_intp_int8(hi, lo,
+            (void *)(uintptr_t)comb[i]);
+    for (i = 0; i < 8; i++)
+        out[14 + i] = (uint8_t)tisp_simple_intp_int8(hi, lo,
+            (void *)(uintptr_t)comb[12 + i]);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000608b8 origin=model_output original=tisp_ydns_wdr_en */
+static uint32_t regtrace_ydns_wdr_flag[2];
 int32_t tisp_ydns_wdr_en(int32_t arg1, int32_t arg2)
 {
-    int32_t *v1;
-    int32_t *v0;
-    int32_t *result;
-    int32_t *i;
+    /*
+     * OEM 0x608b8: select the linear (+3..+244) or WDR (+245..+464) 11-byte
+     * interpolation tables inside the 465-byte param block and publish their
+     * pointers into the 20-entry comb table.
+     */
+    uint32_t *comb;
+    uint8_t *par;
+    unsigned int i;
 
-    /* Conditional selection of base addresses */
     if (arg1 == 0) {
-        v1 = &g_data_a8a44;
-        v0 = g_data_a8a4c;
+        comb = (uint32_t *)(uintptr_t)main_ydns_comb;
+        par = (uint8_t *)(uintptr_t)main_ydns;
     } else {
-        v1 = &g_data_a8a40;
-        v0 = g_data_a8a48;
+        comb = (uint32_t *)(uintptr_t)sec_ydns_comb;
+        par = (uint8_t *)(uintptr_t)sec_ydns;
     }
+    if (arg1 >= 0 && arg1 < 2)
+        regtrace_ydns_wdr_flag[arg1] = (uint32_t)arg2;
+    if (!comb || !par)
+        return -EFAULT;
 
-    /* Store arg2 at indexed location */
-    ((void **)g_data_a8a30)[arg1] = arg2;
-
-    /* Loop to write computed values */
-    if (arg2 != 0) {
-        /* Write v0 + offsets when arg2 != 0 */
-        ((void **)v1)[0] = v0 + 3;
-        ((void **)v1)[1] = v0 + 14;
-        ((void **)v1)[2] = v0 + 25;
-        ((void **)v1)[3] = v0 + 36;
-        ((void **)v1)[4] = v0 + 47;
-        ((void **)v1)[5] = v0 + 58;
-        ((void **)v1)[6] = v0 + 69;
-        ((void **)v1)[7] = v0 + 80;
-        ((void **)v1)[8] = v0 + 91;
-        ((void **)v1)[9] = v0 + 102;
-        ((void **)v1)[10] = v0 + 113;
-        ((void **)v1)[11] = v0 + 124;
-        ((void **)v1)[12] = v0 + 157;
-        ((void **)v1)[13] = v0 + 168;
-        ((void **)v1)[14] = v0 + 179;
-        ((void **)v1)[15] = v0 + 190;
-        ((void **)v1)[16] = v0 + 201;
-        ((void **)v1)[17] = v0 + 212;
-        ((void **)v1)[18] = v0 + 223;
-        result = v0 + 234;
+    if (arg2 == 0) {
+        for (i = 0; i < 12; i++)
+            comb[i] = (uint32_t)(uintptr_t)(par + 3 + 11 * i);
+        for (i = 0; i < 7; i++)
+            comb[12 + i] = (uint32_t)(uintptr_t)(par + 157 + 11 * i);
+        comb[19] = (uint32_t)(uintptr_t)(par + 234);
     } else {
-        /* Write v0 + different offsets when arg2 == 0 */
-        ((void **)v1)[0] = v0 + 0xf5;
-        ((void **)v1)[1] = v0 + 0x100;
-        ((void **)v1)[2] = v0 + 0x10b;
-        ((void **)v1)[3] = v0 + 0x116;
-        ((void **)v1)[4] = v0 + 0x121;
-        ((void **)v1)[5] = v0 + 0x12c;
-        ((void **)v1)[6] = v0 + 0x137;
-        ((void **)v1)[7] = v0 + 0x142;
-        ((void **)v1)[8] = v0 + 0x14d;
-        ((void **)v1)[9] = v0 + 0x158;
-        ((void **)v1)[10] = v0 + 0x163;
-        ((void **)v1)[11] = v0 + 0x16e;
-        ((void **)v1)[12] = v0 + 0x179;
-        ((void **)v1)[13] = v0 + 0x184;
-        ((void **)v1)[14] = v0 + 0x18f;
-        ((void **)v1)[15] = v0 + 0x19a;
-        ((void **)v1)[16] = v0 + 0x1a5;
-        ((void **)v1)[17] = v0 + 0x1b0;
-        ((void **)v1)[18] = v0 + 0x1bb;
-        result = v0 + 0x1c6;
+        for (i = 0; i < 12; i++)
+            comb[i] = (uint32_t)(uintptr_t)(par + 245 + 11 * i);
+        for (i = 0; i < 7; i++)
+            comb[12 + i] = (uint32_t)(uintptr_t)(par + 377 + 11 * i);
+        comb[19] = (uint32_t)(uintptr_t)(par + 454);
     }
-
-    ((void **)v1)[19] = result;
-    return result;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060a3c origin=fragment_seed original=tisp_ydns_all_reg_refresh */
 int32_t tisp_ydns_all_reg_refresh(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ydns_intp)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ydns_reg_cfg)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Arithmetic */
-    a0 = s0;
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60a7c:	03200408 	jr.hb	t9 */
-
-    /* fragment 8: Arithmetic */
-    /* unmatched fragment 8 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 60a80:	27bd0018 	addiu	sp,sp,24 */
-
-    return 0;
+    (void)tisp_ydns_intp(a0, a1);
+    (void)tisp_ydns_reg_cfg(a0);
+    return tisp_ydns_reg_trig((int32_t)a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060a84 origin=fragment_seed original=tisp_ydns_intp_reg_refresh */
@@ -150733,202 +150501,85 @@ int32_t tisp_ydns_intp_reg_refresh(uint32_t a0, uint32_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060a94 origin=fragment_seed original=tisp_ydns_par_refresh */
+static uint32_t regtrace_ydns_gain_old[2] = { 0xffffffffU, 0xffffffffU };
 int32_t tisp_ydns_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 {
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uint32_t *t1 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    /*
+     * OEM 0x60a94: refresh the YDNS registers when the gain position moves
+     * by at least the threshold (or on first use, cache == -1).
+     */
+    uint32_t cached;
+    uint32_t delta;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-    t1 = a0 << 2;
-    v0 = v0 - 14112;
-    v1 = (uintptr_t)t1 + (uintptr_t)v0;
-
-    /* fragment 1: MemoryAccess */
-    a3 = *(uint32_t *)((char *)v1 + 0);
-    v1 = -1;
-
-    /* fragment 2: Branch */
-    t0 = a1 < a3;
-    if (a3 != v1) { goto tisp_ydns_par_refresh0x34; }
-
-    /* fragment 3: Arithmetic */
-    t9 = (uintptr_t)&tisp_ydns_all_reg_refresh;
-
-tisp_ydns_par_refresh0x24:
-    /* fragment 4: Arithmetic */
-    v0 = (uintptr_t)v0 + (uintptr_t)t1;
-    t9 = t9;
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60ac0:	03200408 	jr.hb	t9 */
-
-    /* fragment 6: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = a1;
-
-tisp_ydns_par_refresh0x34:
-    /* fragment 7: Branch */
-    v1 = a3 - a1;
-    if (t0 != 0) { goto tisp_ydns_par_refresh0x40; }
-
-    /* fragment 8: Arithmetic */
-    v1 = a1 - (uintptr_t)a3;
-
-tisp_ydns_par_refresh0x40:
-    /* fragment 9: Arithmetic */
-    v1 = v1 < a2;
-
-    /* fragment 10: Branch */
-    t9 = (uintptr_t)&tisp_ydns_all_reg_refresh;
-    if (v1 == 0) { goto tisp_ydns_par_refresh0x24; }
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 12: Unknown */
-    /* unmatched fragment 12 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60ae4:	00000000 	nop */
-
-    return 0;
+    if (a0 >= 2)
+        return -EINVAL;
+    cached = regtrace_ydns_gain_old[a0];
+    if (cached != 0xffffffffU) {
+        delta = (a1 > cached) ? (a1 - cached) : (cached - a1);
+        if (delta < a2)
+            return 0;
+    }
+    regtrace_ydns_gain_old[a0] = a1;
+    return tisp_ydns_all_reg_refresh(a0, a1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060ae8 origin=model_output original=tisp_ydns_params_refresh */
 int32_t tisp_ydns_params_refresh(int32_t arg1)
 {
-    
-    unsigned char *src;
-    unsigned char *dst;
-    
-    if (arg1 == 0) {
-        dst = (unsigned char *)_bss_18140;
-    } else {
-        src = (unsigned char *)&tparamsN[arg1 * 4];
-        dst = (unsigned char *)_bss_18136;
-        memcpy(dst, src, 465);
-    }
-    
-    // Loop back to reload tparamsN base - this is the backward branch
-    // The actual loop behavior loads from tparamsN again
-    return (int32_t)dst;
+    /* OEM 0x60ae8: copy the 465-byte YDNS param block from the tuning blob */
+    uintptr_t dst = arg1 ? sec_ydns : main_ydns;
+    uint32_t nbuf = *((uint32_t *)&tparamsN + arg1);
+
+    if (!dst || !nbuf)
+        return -EFAULT;
+    memcpy((void *)dst, (const void *)(uintptr_t)(nbuf + 0x119baU), 465);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060b34 origin=fragment_seed original=tisp_ydns_refresh */
 int32_t tisp_ydns_refresh(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ydns_par_refresh)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    v1 = (int32_t *)&sclk_name;
-    v0 = (uintptr_t)s0 << 2;
-    v1 = v1 - 14112;
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: MemoryAccess */
-    a1 = *(uint32_t *)((char *)v0 + 0);
-    a0 = s0;
-    s0 = local_10;
-    t9 = (uintptr_t)&tisp_ydns_all_reg_refresh;
-    t9 = t9;
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 60b7c:	03200408 	jr.hb	t9 */
-
-    /* fragment 6: Arithmetic */
-    /* unmatched fragment 6 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 60b80:	27bd0018 	addiu	sp,sp,24 */
-
-    return 0;
+    if (a0 >= 2)
+        return -EINVAL;
+    (void)tisp_ydns_par_refresh(a0, a1, 256);
+    return tisp_ydns_all_reg_refresh(a0, regtrace_ydns_gain_old[a0]);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000060b84 origin=fragment_seed original=tisp_ydns_main_init */
 int32_t tisp_ydns_main_init(void)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t *local_24 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uintptr_t *s3 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    /*
+     * OEM 0x60b84: allocate the param (465B), comb (80B) and working (22B)
+     * buffers, seed params from the tuning blob, publish the linear/WDR
+     * table pointers, and push the initial register set at gain 1.0.
+     */
+    void *par, *comb, *wrk;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!main_ydns) {
+        par = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(465);
+        comb = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(80);
+        wrk = (void *)(uintptr_t)
+            ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(22);
+        if (!par || !comb || !wrk)
+            return -ENOMEM;
+        memset(par, 0, 465);
+        memset(comb, 0, 80);
+        memset(wrk, 0, 22);
+        main_ydns = (uintptr_t)par;
+        main_ydns_comb = (uintptr_t)comb;
+        main_ydns_intp = (uintptr_t)wrk;
+    }
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(465); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    *(uint32_t *)((char *)((char *)&main_ydns)) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(80); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    *(uint32_t *)((char *)&main_ydns_comb) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(22); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    *(uint32_t *)((char *)((char *)&main_ydns_intp)) = v0;
-    v0 = (uintptr_t *)memset((void *)(uintptr_t)(*(uint32_t *)((char *)((char *)&main_ydns))), 0, 465); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)memset((void *)(uintptr_t)(*(uint32_t *)((char *)((char *)&main_ydns_comb))), 0, 80); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)memset((void *)(uintptr_t)(*(uint32_t *)((char *)((char *)&main_ydns_intp))), 0, 22); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ydns_params_refresh)(0); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_ydns_wdr_en)(0, *(uint32_t *)((char *)((char *)&ydns_wdr_en))); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    *(uint32_t *)((char *)&sclk_name + -14112) = (-1);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_ydns_refresh)(0, 65536); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_ydns_par_refresh)(0, 65536, 65536); /* jalr target resolved by relocation */
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 12: Arithmetic */
-    v0 = 0;
-
-    /* fragment 13: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    if (tisp_ydns_params_refresh(0))
+        return -EFAULT;
+    (void)tisp_ydns_wdr_en(0, (int32_t)regtrace_ydns_wdr_flag[0]);
+    regtrace_ydns_gain_old[0] = 0xffffffffU;
+    (void)tisp_ydns_refresh(0, 0x10000U);
+    (void)tisp_ydns_par_refresh(0, 0x10000U, 0x10000U);
+    printk(KERN_WARNING "tx_isp_t40_recovered: ydns-main-init done par=%p\n",
+           (void *)(uintptr_t)main_ydns);
     return 0;
 }
 
