@@ -5,8 +5,14 @@
  */
 static bool regtrace_enable_clm;
 static uint32_t regtrace_clm_stage_limit;
+static uint32_t regtrace_clm_defer_trig;
+static uint32_t regtrace_clm_stage_reached;
+static int32_t regtrace_clm_last_ret;
 module_param_named(enable_clm, regtrace_enable_clm, bool, 0644);
 module_param_named(clm_stage_limit, regtrace_clm_stage_limit, uint, 0644);
+module_param_named(clm_defer_trig, regtrace_clm_defer_trig, uint, 0644);
+module_param_named(clm_stage_reached, regtrace_clm_stage_reached, uint, 0444);
+module_param_named(clm_last_ret, regtrace_clm_last_ret, int, 0444);
 
 static uint32_t pstMainClmOri_lit[18];
 static uint32_t pstSecClmOri_lit[18];
@@ -841,7 +847,7 @@ static unsigned char __attribute__((aligned(4))) stSecClmInterOri_lit[6548] = {
 static int32_t tisp_clm_params_transmit_lit(uint32_t, uint32_t, uint32_t);
 static int32_t tisp_clm_params_refresh_lit(uint32_t, uint32_t, uint32_t);
 static int32_t system_reg_write_clm_trig_lit(uint32_t, uint32_t);
-static int32_t clm_lut2reg_lit(uint32_t, uint32_t);
+static int32_t clm_lut2reg_lit(uint32_t, uint32_t, uint32_t);
 static int32_t tisp_ct_clm_interpolation_lit(uint32_t);
 static int32_t tisp_clm_set_params_lit(uint32_t, uint32_t);
 static int32_t tisp_clm_main_init_lit(uint32_t);
@@ -867,7 +873,7 @@ static int32_t tisp_clm_set_hardware_param_reg_lit(uint32_t, uint32_t);
 #define REGCALL_system_reg_write_clm_trig(a, b, c, d) ((uint32_t)system_reg_write_clm_trig_lit((a), (b)))
 #define REGCALL_tisp_clm_params_transmit(a, b, c, d) ((uint32_t)tisp_clm_params_transmit_lit((a), (b), (c)))
 #define REGCALL_tisp_clm_params_refresh(a, b, c, d) ((uint32_t)tisp_clm_params_refresh_lit((a), (b), (c)))
-#define REGCALL_clm_lut2reg(a, b, c, d) ((uint32_t)clm_lut2reg_lit((a), (b)))
+#define REGCALL_clm_lut2reg(a, b, c, d) ((uint32_t)clm_lut2reg_lit((a), (b), (c)))
 #define REGCALL_tisp_ct_clm_interpolation(a, b, c, d) ((uint32_t)tisp_ct_clm_interpolation_lit((a)))
 #define REGCALL_tisp_clm_set_params(a, b, c, d) ((uint32_t)tisp_clm_set_params_lit((a), (b)))
 
@@ -1092,7 +1098,7 @@ L_67f80:
 fn_exit:
     return (int32_t)r_v0;
 }
-static int32_t clm_lut2reg_lit(uint32_t a0_in, uint32_t a1_in)
+static int32_t clm_lut2reg_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in)
 {
     uint32_t r_v0 = 0, r_v1 = 0;
     uint32_t r_at = 0, r_a0 = 0, r_a1 = 0, r_a2 = 0, r_a3 = 0;
@@ -1105,6 +1111,7 @@ static int32_t clm_lut2reg_lit(uint32_t a0_in, uint32_t a1_in)
     uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 1024);
     r_a0 = a0_in;
     r_a1 = a1_in;
+    r_a2 = a2_in;
 
     (void)r_at; (void)r_k0; (void)r_k1; (void)r_gp;
     (void)r_t8; (void)r_t9; (void)r_ra; (void)mips_hi;
@@ -1607,6 +1614,7 @@ static int32_t tisp_clm_set_params_lit(uint32_t a0_in, uint32_t a1_in)
     uint32_t mips_lo = 0, mips_hi = 0, mips_cond = 0;
     uint8_t mips_stack[2048] __attribute__((aligned(8)));
     uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 1024);
+    uint32_t regtrace_clm_stream = a1_in;
     r_a0 = a0_in;
     r_a1 = a1_in;
 
@@ -1633,6 +1641,8 @@ static int32_t tisp_clm_set_params_lit(uint32_t a0_in, uint32_t a1_in)
     r_s1 = *(uint32_t *)(uintptr_t)(r_a0 + 32);
     r_s2 = *(uint32_t *)(uintptr_t)(r_a0 + 36);
     r_v0 = (uint32_t)REGCALL_tisp_ct_clm_interpolation(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 4;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 4) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage4 after interpolation ret=%u\n", r_v0);
         goto fn_exit;
@@ -1647,19 +1657,27 @@ L_685b0:
     r_s0 = (uint32_t)(uintptr_t)&system_reg_write;
     /* nop */
     r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 5;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 5) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage5 after mode write addr=0x%x value=0x%x ret=%u\n",
                r_a0, r_a1, r_v0);
         goto fn_exit;
     }
-    r_v0 = (uint32_t)(uintptr_t)&system_reg_write_clm_trig_lit; /* HI16 system_reg_write_clm_trig */
-    r_a1 = r_s4;
-    r_v0 = (uint32_t)(uintptr_t)&system_reg_write_clm_trig_lit;
-    r_a0 = 1U;
-    r_v0 = (uint32_t)REGCALL_system_reg_write_clm_trig(r_a0, r_a1, r_a2, r_a3);
+    if (regtrace_clm_defer_trig) {
+        r_v0 = 0;
+    } else {
+        r_v0 = (uint32_t)(uintptr_t)&system_reg_write_clm_trig_lit; /* HI16 system_reg_write_clm_trig */
+        r_a1 = r_s4;
+        r_v0 = (uint32_t)(uintptr_t)&system_reg_write_clm_trig_lit;
+        r_a0 = 1U;
+        r_v0 = (uint32_t)REGCALL_system_reg_write_clm_trig(r_a0, r_a1, r_a2, r_a3);
+    }
+    regtrace_clm_stage_reached = 6;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 6) {
-        printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage6 after trig stream=%u ret=%u\n",
-               r_s4, r_v0);
+        printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage6 after trig stream=%u ret=%u deferred=%u\n",
+               r_s4, r_v0, regtrace_clm_defer_trig);
         goto fn_exit;
     }
     r_v0 = (uint32_t)(uintptr_t)&clm_lut2reg_lit; /* HI16 clm_lut2reg */
@@ -1668,6 +1686,8 @@ L_685b0:
     r_v0 = (uint32_t)(uintptr_t)&clm_lut2reg_lit;
     r_a1 = r_s2;
     r_v0 = (uint32_t)REGCALL_clm_lut2reg(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 7;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 7) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage7 after lut2reg ret=%u\n", r_v0);
         goto fn_exit;
@@ -1698,6 +1718,8 @@ L_68620:
     r_a1 = 257U;
     r_a0 = r_s3;
     r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 8;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 8) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage8 after LUT pre-enable ret=%u\n", r_v0);
         goto fn_exit;
@@ -1723,6 +1745,8 @@ L_68654:
     mips_cond = (r_s1 != r_a2) ? 1U : 0U;
     /* nop */
     if (mips_cond) goto L_68654;
+    regtrace_clm_stage_reached = 9;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 9) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage9 after LUT data writes ret=%u\n", r_v0);
         goto fn_exit;
@@ -1731,6 +1755,8 @@ L_68654:
     r_a1 = r_s1 + 0x102U;
     r_a0 = r_s6;
     r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 10;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 10) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage10 after final commit 1 addr=0x%x ret=%u\n",
                r_a0, r_v0);
@@ -1739,6 +1765,8 @@ L_68654:
     r_a1 = r_s1 | 0x102U;
     r_a0 = r_s5;
     r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 11;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 11) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage11 after final commit 2 addr=0x%x ret=%u\n",
                r_a0, r_v0);
@@ -1747,6 +1775,8 @@ L_68654:
     r_a1 = r_s1 | 0x102U;
     r_a0 = r_s4;
     r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 12;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 12) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage12 after final commit 3 addr=0x%x ret=%u\n",
                r_a0, r_v0);
@@ -1767,9 +1797,21 @@ L_68654:
     r_s0 = *(uint32_t *)(uintptr_t)(r_sp + 32);
     r_sp = r_sp + 0x48U;
     r_v0 = (uint32_t)REGCALL_system_reg_write(r_a0, r_a1, r_a2, r_a3);
+    regtrace_clm_stage_reached = 13;
+    regtrace_clm_last_ret = (int32_t)r_v0;
     if (regtrace_clm_stage_limit == 13) {
         printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage13 after final commit 4 addr=0x%x ret=%u\n",
                r_a0, r_v0);
+        goto fn_exit;
+    }
+    if (regtrace_clm_defer_trig) {
+        r_v0 = (uint32_t)system_reg_write_clm_trig_lit(1U, regtrace_clm_stream);
+        regtrace_clm_stage_reached = 14;
+        regtrace_clm_last_ret = (int32_t)r_v0;
+        if (regtrace_clm_stage_limit == 14) {
+            printk(KERN_WARNING "tx_isp_t40_recovered: clm-set-params stage14 deferred trig stream=%u ret=%u\n",
+                   regtrace_clm_stream, r_v0);
+        }
     }
     goto fn_exit;
 L_68700:
@@ -2024,32 +2066,46 @@ static int32_t regtrace_clm_main_init_lit(void)
     void *outer;
     int32_t ret;
 
-    if (!nbuf)
+    regtrace_clm_stage_reached = 0;
+    regtrace_clm_last_ret = 0;
+    if (!nbuf) {
+        regtrace_clm_last_ret = -ENOENT;
         return -ENOENT;
+    }
     if (!stMainClmOuter_lit) {
         outer = (void *)(uintptr_t)
             ((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(18924);
-        if (!outer)
+        if (!outer) {
+            regtrace_clm_last_ret = -ENOMEM;
             return -ENOMEM;
+        }
         memset(outer, 0, 4);
         stMainClmOuter_lit = (uintptr_t)outer;
     }
-    if (regtrace_clm_stage_limit == 1)
+    if (regtrace_clm_stage_limit == 1) {
+        regtrace_clm_stage_reached = 1;
+        regtrace_clm_last_ret = 0;
         return 0;
+    }
 
     ret = tisp_clm_params_transmit_lit((uint32_t)(uintptr_t)pstMainClmOri_lit,
                                        (uint32_t)stMainClmOuter_lit,
                                        (uint32_t)(uintptr_t)stMainClmInterOri_lit);
-    if (ret || regtrace_clm_stage_limit == 2)
-        return ret;
+    regtrace_clm_stage_reached = 2;
+    regtrace_clm_last_ret = 0;
+    if (regtrace_clm_stage_limit == 2)
+        return 0;
 
     ret = tisp_clm_params_refresh_lit((uint32_t)(uintptr_t)pstMainClmOri_lit,
                                       (uint32_t)stMainClmOuter_lit,
                                       nbuf + 0x123acU);
+    regtrace_clm_stage_reached = 3;
+    regtrace_clm_last_ret = ret;
     if (ret || regtrace_clm_stage_limit == 3)
         return ret;
 
     ret = tisp_clm_set_params_lit((uint32_t)(uintptr_t)pstMainClmOri_lit, 0);
+    regtrace_clm_last_ret = ret;
     printk(KERN_WARNING "tx_isp_t40_recovered: clm-main-init-lit done outer=%p stage=%u ret=%d\n",
            (void *)(uintptr_t)stMainClmOuter_lit, regtrace_clm_stage_limit,
            ret);

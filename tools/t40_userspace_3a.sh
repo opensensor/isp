@@ -58,9 +58,14 @@ apply_expo() {
 	[ "$it" -lt "$MIN_IT" ] && it=$MIN_IT
 	[ "$it" -gt "$MAX_IT" ] && it=$MAX_IT
 	echo $(( (again << 16) | it )) > $P/ae_sensor_apply_force_packed
-	# tell the kernel the gain EV so YDNS/YSP strength tracks it
-	# (~0.158 log2 per GC4653 analog gain index -> ~10362 in 16.16)
-	echo $(( again * 24576 )) > $P/dns_gain_ev 2>/dev/null
+	# tell the kernel the gain EV so YDNS/YSP/MDNS strength tracks it.
+	# Empirical (2026-06-10 night bench): temporal noise only reaches the
+	# stock level around ev = again_idx*49152 (0.75 log2/idx in 16.16);
+	# the old again*24576 left MDNS at half strength. ev >= ~589824 (9.0)
+	# OOPSES the kernel (interp table overrun) -- clamp at 491520.
+	dns_ev=$(( again * 49152 ))
+	[ "$dns_ev" -gt 491520 ] && dns_ev=491520
+	echo "$dns_ev" > $P/dns_gain_ev 2>/dev/null
 }
 
 apply_expo

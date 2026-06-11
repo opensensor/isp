@@ -29,6 +29,31 @@ static uint regtrace_lsc_lit_ct = 5000; /* CT used for the static init interp */
 module_param_named(lsc_lit_ct, regtrace_lsc_lit_ct, uint, 0644);
 static uint regtrace_lsc_lit_gain; /* 16.16 log-gain for the static init interp */
 module_param_named(lsc_lit_gain, regtrace_lsc_lit_gain, uint, 0644);
+/*
+ * Scene CT tracking from the userspace-3A WB gains. The OEM AWB derives CT
+ * from its zone-statistics grid; our bring-up runs WB in userspace, so we
+ * estimate CT as piecewise-linear in x = bgain*1024/rgain between two
+ * anchors. Warm anchor measured on .242 (rgain=1915 bgain=2009 -> ~3300K,
+ * frame visually matches the stock day reference); cool anchor is a
+ * placeholder slope until a daylight measurement refines it. Zone precision
+ * is all that matters: LSC CT breakpoints are 2986/3615/3815/5058.
+ */
+static bool regtrace_lsc_lit_ct_track = true;
+module_param_named(lsc_lit_ct_track, regtrace_lsc_lit_ct_track, bool, 0644);
+static uint regtrace_lsc_lit_ct_warm_x = 1074;
+module_param_named(lsc_lit_ct_warm_x, regtrace_lsc_lit_ct_warm_x, uint, 0644);
+static uint regtrace_lsc_lit_ct_warm_ct = 3300;
+module_param_named(lsc_lit_ct_warm_ct, regtrace_lsc_lit_ct_warm_ct, uint, 0644);
+static uint regtrace_lsc_lit_ct_cool_x = 730;
+module_param_named(lsc_lit_ct_cool_x, regtrace_lsc_lit_ct_cool_x, uint, 0644);
+static uint regtrace_lsc_lit_ct_cool_ct = 6500;
+module_param_named(lsc_lit_ct_cool_ct, regtrace_lsc_lit_ct_cool_ct, uint, 0644);
+static uint regtrace_lsc_lit_ct_min = 2300;
+module_param_named(lsc_lit_ct_min, regtrace_lsc_lit_ct_min, uint, 0444);
+static uint regtrace_lsc_lit_ct_max = 8000;
+module_param_named(lsc_lit_ct_max, regtrace_lsc_lit_ct_max, uint, 0444);
+static uint regtrace_lsc_lit_ct_now; /* last CT pushed into the LSC chain */
+module_param_named(lsc_lit_ct_now, regtrace_lsc_lit_ct_now, uint, 0444);
 
 #define LSC_LIT_TOOL_BYTES   0xa324
 #define LSC_LIT_TOOL_OFFSET  13036
@@ -422,6 +447,45 @@ static void __maybe_unused regtrace_lsc_lit_ct_update(uint32_t bank, uint32_t ct
 		return;
 	if (lsc_lit_interp_by_ct(bank, ct, 0) == 0)
 		lsc_lit_real_write_lut(bank);
+}
+
+static uint32_t regtrace_lsc_lit_ct_from_gains(uint32_t rgain, uint32_t bgain)
+{
+	uint32_t wx = regtrace_lsc_lit_ct_warm_x, wc = regtrace_lsc_lit_ct_warm_ct;
+	uint32_t cx = regtrace_lsc_lit_ct_cool_x, cc = regtrace_lsc_lit_ct_cool_ct;
+	uint32_t x;
+	int32_t ct;
+
+	if (!rgain || wx <= cx || wc >= cc)
+		return wc;
+	x = (bgain * 1024U) / rgain;
+	/* higher x (more blue boost vs red) = warmer light = lower CT */
+	ct = (int32_t)wc + (int32_t)(wx - x) * ((int32_t)cc - (int32_t)wc) /
+	     (int32_t)(wx - cx);
+	if (ct < (int32_t)regtrace_lsc_lit_ct_min)
+		ct = regtrace_lsc_lit_ct_min;
+	if (ct > (int32_t)regtrace_lsc_lit_ct_max)
+		ct = regtrace_lsc_lit_ct_max;
+	return (uint32_t)ct;
+}
+
+/* called from the frame-done path whenever the userspace 3A WB gains change */
+static void regtrace_lsc_lit_track_wb_gains(uint32_t rgain, uint32_t bgain)
+{
+	uint32_t ct;
+	uint8_t zone_before, zone_after;
+
+	if (!regtrace_enable_lsc_lit || !regtrace_lsc_lit_ct_track ||
+	    !lsc_lit_banks[0].alive)
+		return;
+	ct = regtrace_lsc_lit_ct_from_gains(rgain, bgain);
+	zone_before = lsc_lit_banks[0].zone;
+	regtrace_lsc_lit_ct_update(0, ct);
+	zone_after = lsc_lit_banks[0].zone;
+	if (zone_after != zone_before)
+		printk(KERN_INFO "tx_isp_t40_recovered: lsc-lit ct-track rgain=%u bgain=%u ct=%u zone=%u->%u\n",
+		       rgain, bgain, ct, zone_before, zone_after);
+	regtrace_lsc_lit_ct_now = ct;
 }
 
 static void __maybe_unused regtrace_lsc_lit_gain_update(uint32_t bank, uint32_t gain)

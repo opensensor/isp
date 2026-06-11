@@ -1,10 +1,90 @@
 # T40 Tuning Hurdles Study
 
-Date: 2026-06-08
+Date: started 2026-06-08. This file is a chronological lab notebook -- newest
+findings at the BOTTOM. The section below is the rolling summary; trust it
+over older sections (stale ones are marked "historical").
 
 Target device: `192.168.50.242` only.
 
-## Baseline
+## CURRENT STATUS (updated 2026-06-10, late night)
+
+Image state: the recovered driver forensically matches stock channel means
+and exposure in a same-scene night A/B (`125/123/123` vs stock `122/114/116`)
+when WB/exposure are set manually. Remaining visible gaps: noise grain,
+slight shadow tint, saturation. Auto (3A) color/exposure still converges
+wrong -- see open work.
+
+Live and verified chains (all literal-translation `_lit` unless noted):
+
+- Output engine: ISP-core MSCA FIFO (stock path). The legacy raw VIC-MDMA
+  ring must stay OFF (`T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0`, the default)
+  -- re-enabling it races MSCA and corrupts every 4th frame.
+- OEM gamma curve + GIB BLC offsets (the original "fog" fix).
+- YDNS, YSP sharpening, CCM (full chain), MDNS temporal denoise
+  (unit 0xF000, ref buffers at nmem 0xC000000).
+- LSC lit chain with live CT tracking from AWB gains.
+- BCSH lit chain compiles and programs stock-shaped registers
+  (`ENABLE_BCSH=1` is safe) but is default-off; its prior "no visible change"
+  verdicts predate correct WB and need re-testing.
+- CLM lit chain to stage 13 with `CLM_DEFER_TRIG=1`. Stage 14 / final
+  trigger OOPSES -- do not raise the limit.
+- Userspace 3A: two-level AE (integration micro-trim + gain rungs) and
+  candidate-selection AWB -- both work when ISP stats are alive, but see
+  open work item 2.
+
+Current harness profile (RTSP endpoint is `/ch0` since the raptor.conf
+restore -- see the 2026-06-10 forensic section's bench-incident note):
+
+    THINGINO_PASS=... ALLOW_ACTIVE_STREAM_STOP=1 \
+    T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0 ENABLE_ISP_BLOCK_INIT=1 \
+    ENABLE_LSC_LIT=1 LSC_LIT_CT=3300 ENABLE_CLM=1 CLM_STAGE_LIMIT=13 \
+    CLM_DEFER_TRIG=1 ENABLE_USERSPACE_3A=1 RTSP_PATH=ch0 \
+    tools/t40_safe_qbuf_dump_probe.sh logs/<name>
+
+Forensic ground truth (same-scene stock references):
+
+- Night scene: `logs/20260610-stock-night-scene-forensic/` (frames + two
+  full core dumps `0x13300000+0x0..0x13100` 10s apart for volatility
+  masking) vs `logs/20260610-recovered-night-scene-forensic/`.
+- Day state bank dumps: `docs/extracted/bank{0,1,5}-{ours,stock}-day.bin`.
+- Block map: 0x2000 GIB-ish, 0x4000/0x5000 WBG apply banks, 0x9000 LSC,
+  0xa000 LCE/defog, 0xb000 CCM, 0xc000 CLM unit, 0xF000 MDNS, 0x11000 BCSH,
+  0x12000 CLM ctrl/trig, 0x13000 YSP, 0x16000 MSCA.
+- To boot stock for reference: clean power cycle, then
+  `insmod /lib/modules/4.4.94/ingenic/tx-isp-t40.ko`, the gc4653 sensor ko,
+  `/etc/init.d/S31raptor start`. Day mode is forced via `[ircut]` in
+  `/etc/raptor.conf`. Never rmmod a streaming driver -- power-cycle.
+
+Open work, ranked (details in the final 2026-06-10/06-11 sections):
+
+0. MSCA buffer-ownership fix: the rearm free-runs over dequeued buffers,
+   causing OSD-region clobbering (position set by irq_frame_done_delay_ms
+   phase) and subtle gradient tearing. Interim: delay=30ms. Also watch the
+   ~2h05m-dwell watchdog reboots (2 occurrences, possibly related).
+
+1. ~~MDNS grain at high gain~~ FIXED 2026-06-10 late: two literal-translation
+   bugs (equation helpers' dropped 4th arg zeroed every blend LUT; the
+   reg_cfg tail's s3 rebind to system_reg_write was missed, skipping the
+   0x2a0-0x2ac + unit+0xc writes) plus a 2x-low dns_gain_ev scale (now
+   `again*49152` clamped to 491520; >=589824 oopses). Temporal noise
+   3.23 -> 0.22, stiller than stock's 0.24. See the final section.
+2. WB multi-apply bug: the recovered driver multiplies WB gains at ~3 points
+   in series (B/G goes with bgain CUBED at low signal), so OEM gains do not
+   transfer and gray-world converges wrong.
+3. 3A stats-death: in some boots the AE/AWB luma input reads ~1 and the
+   3A freezes at again=0 (4x dark). Diagnose the stats path regression.
+4. Re-test BCSH at a correct WB/exposure operating point.
+5. ~~Port SDNS~~ DONE 2026-06-11 (tx_isp_t40_sdns_lit.inc, ENABLE_SDNS) --
+   but SDNS was NOT the grain source. The static 2x texture is the DMSC
+   (demosaic, unit 0xa000) running a wrong config; live-blasting stock's 92
+   DMSC words dropped texture 2.25 -> 0.896 (below stock's 1.16). Port the
+   faithful DMSC chain or add an interim enable_dmsc_static snapshot write
+   -- see the 2026-06-11 section.
+6. Port LCE/defog (0xa000), faithful gain-tracking GIB, CLM final
+   activation (OEM `tisp_clm_init()` ordering) -- the remaining
+   shadow-tint/saturation deltas.
+
+## Baseline (historical, 2026-06-08)
 
 Current data-path checkpoint:
 
@@ -19,7 +99,11 @@ interrupt lines are active, VIC MDMA qbuf rearm is running, and the RTSP
 pipeline carries real sensor content. Treat the next problem as ISP color-path
 bring-up, not stream bring-up.
 
-## What Is Proven
+## What Is Proven (historical, 2026-06-08)
+
+> 2026-06-10 correction: the VIC MDMA ring claim below is OBSOLETE. The MSCA
+> FIFO is the real output engine; the ring is off by default and must stay
+> off (it races MSCA -- see "Every-4th-frame psychedelic flash root-caused").
 
 - CSI/VIC/MSCA/RTSP are capable of carrying changing sensor data.
 - The current no-direct T40 profile needs the VIC MDMA qbuf ring and IRQ rearm
@@ -31,7 +115,10 @@ bring-up, not stream bring-up.
 - The T40 tuning bank size in this blob is `0x18ff4`; do not reuse T31
   `0x137f0` offsets without proving the T40 layout.
 
-## Current T40 Image-Path Risk
+## Current T40 Image-Path Risk (historical, 2026-06-08)
+
+> Superseded by the block-by-block literal-translation bring-ups recorded
+> below.
 
 The working bring-up profile enables several image-path pieces because they
 were needed to get a live stream far enough to test:
@@ -600,7 +687,10 @@ Important caution: `0xDD04` is a T31 experimental anchor, not automatically a
 valid T40 bypass value. It tells us which classes of blocks to question first:
 early raw/color blocks, especially CFA/DMSC/GIB/LSC/BCSH.
 
-## High-Probability Hurdles
+## High-Probability Hurdles (2026-06-08 list)
+
+> Several items since resolved -- see the dated resolution subsections inside
+> each item and CURRENT STATUS at the top.
 
 ### 1. CFA/Bayer phase
 
@@ -686,8 +776,20 @@ on .242:
 - CT zone selection is critical: a forced `lsc_lit_ct=5000` lands in the
   lut1/lut2 daylight blend and visibly under-corrects a warm indoor scene;
   `lsc_lit_ct=3300` (lut0/lut1 blend) matches the stock day image much more
-  closely. Until the AWB CT estimate is wired into
-  `regtrace_lsc_lit_ct_update()`, pick `lsc_lit_ct` per scene.
+  closely.
+- Scene CT tracking is wired and verified live (2026-06-10,
+  `logs/20260610-t40-lsc-ct-track-verify`): the frame-done manual-WB hook
+  calls `regtrace_lsc_lit_track_wb_gains()`, which estimates CT as
+  piecewise-linear in `x = bgain*1024/rgain` between a warm anchor
+  (x=1074 → 3300K, measured on .242) and a placeholder cool anchor
+  (x=730 → 6500K), then feeds `regtrace_lsc_lit_ct_update()`. Zone
+  transitions log as `lsc-lit ct-track rgain=... bgain=... ct=... zone=A->B`;
+  the live estimate is readable at `parameters/lsc_lit_ct_now`. Knobs:
+  `lsc_lit_ct_track` (default on), `lsc_lit_ct_{warm,cool}_{x,ct}`. The
+  cool anchor slope needs a daylight measurement to refine; gray-world
+  convergence varies a few hundred K run-to-run with scene framing
+  (observed 3096→3709K on the same bench scene), so anchor precision only
+  matters near the 2986/3615/3815/5058 breakpoints.
 - reg 0x40 bit1 tracks the OEM `tparams_status & 2` LSC gate and flips with
   stock day/night: stock day runs `0x7fd1000d` (bit1 clear), stock night
   `0x7fd9004f` (bit1 set, LSC parked for mono). Treat bit1 set as "LSC
@@ -700,7 +802,30 @@ on .242:
   (`logs/20260610-stock-lsc-reference/stock-day-baseline.jpg`).
 
 Remaining gap after LSC: overall desaturation / muted color vs stock, which is
-CCM/BCSH territory, and runtime CT/gain refresh wiring for LSC.
+CCM/BCSH territory.
+
+#### Every-4th-frame psychedelic flash root-caused (2026-06-10): legacy VIC ring
+
+Watching the live RTSP stream (not single-frame captures) showed exactly every
+4th frame as full-frame wrap-contour garbage — mod-256 luma isophote rings plus
+saturated chroma noise, i.e. raw 10-bit Bayer rendered as NV12. Ruled out in
+order: LSC CT tracking (A/B vs pre-tracking HEAD identical), runtime LUT
+rewrites (pattern survives with tracking off and the 3A killed), and the MDNS
+buffer/rmem collision (relocating to nmem changed nothing — though the
+collision is real and the default now lives at 0xc000000 in nmem; rvd maps all
+96M of rmem and 0x8000000 was 32MB into it).
+
+Root cause: the harness still defaulted
+`T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=1`, so the legacy raw VIC-MDMA ring and
+the OEM MSCA FIFO path BOTH wrote the same two framechan qbufs. The processed
+MSCA write usually landed last; every 4th encoder fetch caught the raw VIC
+write instead. A buffer dump caught framechan buf0 holding a full raw frame
+(`logs/20260610-t40-mdns-buf-relocate2/qbuf-ch0-renders/`). With the ring off
+(`logs/20260610-t40-msca-ringoff-fix`) 60/60 consecutive RTSP frames are
+clean, the picture is sharper, and LSC CT tracking works unchanged. The
+harness default is now 0; do not re-enable the ring while the MSCA path is
+live. Single-frame captures hid this for days — 3-in-4 odds favor a clean
+frame; score a consecutive-frame burst when judging stream health.
 
 ### 6. Event-driven refresh
 
@@ -717,7 +842,9 @@ For T40, distinguish between:
 The `image crisp` checkpoint removed a synthetic AWB/LSC fallback tick from the
 ISR path. Avoid reintroducing that class of "help" until OEM evidence proves it.
 
-## Immediate Experiment Order
+## Immediate Experiment Order (historical, 2026-06-08)
+
+> Superseded; current priorities live in CURRENT STATUS at the top.
 
 1. Add or use a T40 register snapshot for:
    - `0x8`, `0x0c`
@@ -1707,3 +1834,391 @@ The CLM entrypoint now has `clm_stage_limit` (probe `CLM_STAGE_LIMIT`):
 `1` stop after allocation, `2` after params_transmit, `3` after blob refresh,
 `0` full set_params/hardware writes. Next live CLM work should sweep those
 stages first, then split `tisp_clm_set_params_lit` if stage 3 is stable.
+
+2026-06-10 update 3: CLM is localized much further. The apparent stage-2
+failure was a false negative: `tisp_clm_params_transmit_lit()` returns its
+last pointer-ish memcpy value, not an error, so the wrapper normalizes that
+stage to success. Moving block init out of the frame-done path and onto a
+workqueue made stages 1-4 stable; stage 5 (main `0x12004` mode write) is also
+stable.
+
+Two real CLM hazards remain:
+
+- Stage 6, the early `system_reg_write_clm_trig_lit(1, 0)` write
+  (`0x12000 = 1`), reboots or kills the media path if executed before the LUT
+  writes. `clm_defer_trig=1` skips that early trigger.
+- Stage 7 originally oopsed because the literal `clm_lut2reg_lit()` wrapper
+  was mistranscribed as a 2-argument helper. The lifted body uses `a2` as the
+  second destination buffer; dropping that argument left `a2=0` and faulted at
+  `clm_lut2reg_lit+0x3b8`. The helper now takes/passes three args.
+
+With `CLM_STAGE_LIMIT=13 CLM_DEFER_TRIG=1`, CLM reaches stage 13 cleanly after
+a 30s dwell (`logs/20260610-clm-stage13-defertrig-a2fix-dwell30`) and a
+60-frame RTSP burst was stable (60/60 frames, max frame-to-frame mean delta
+0.284). The final/deferred trigger is still unsafe: the accidental stage-14
+run (`logs/20260610-clm-stage13-defertrig-a2fix`) reached
+`clm_stage_reached=14` then oopsed in the kernel after CLM activation. Treat
+stage 13 as the current safe CLM write ceiling; stage 14/full activation needs
+separate ordering/gating work, likely against the OEM `tisp_clm_init()` shape
+(`write_csc_para -> ct_interp -> real_write_lut`) rather than this cold
+`set_params` path.
+
+Same-scene BCSH check after the CLM localization:
+`logs/20260610-baseline-3a-current-scene` vs
+`logs/20260610-bcsh-3a-current-scene`, both from clean Tasmota cycles with the
+same userspace 3A gains (`rgain=1440`, `bgain=1638`, integration 1120).
+BCSH mode 2 produced no meaningful image change in the current dark mixed-light
+scene: baseline RTSP mean RGB/saturation was `42.23/6.36/17.36`, sat 0.9518;
+BCSH-on was `41.64/5.94/16.93`, sat 0.9569. This reinforces the earlier
+finding that BCSH alone is not the desaturation fix; the remaining color gap is
+in the combined CLM/LCE/defog/stock activation ordering, plus a proper daylight
+CT anchor.
+
+## 2026-06-10 Same-scene stock-vs-recovered forensic diff (night bench scene)
+
+Bench incident first: `/etc/raptor.conf` was found truncated to 0 bytes
+(mtime 17:38, likely a casualty of one of the CLM stage-14 oops/power-cut
+cycles). Symptoms of the empty conf: stock `tx-isp-t40.ko` + sensor insmod
+fails with `Failed to get I2C adapter 0, deferring probe` (the conf's
+`[sensor] i2c_adapter = 1` is what points rvd at the right bus) and rvd dies
+with `IMP_ISP_AddSensor failed`. Restored from the squashfs copy
+(`cp /rom/etc/raptor.conf /etc/raptor.conf`), then re-applied ONLY the
+`[ircut] enabled = true / mode = day` lines (321/322). NOTE: the factory conf
+serves RTSP at `/ch0` and `/ch1` -- the old `/main` alias lived in the lost
+custom conf. Harness runs need `RTSP_PATH=ch0` until someone re-adds the alias.
+
+Forensic reference (stock, same dark lamp-lit scene as tonight's recovered
+runs): `logs/20260610-stock-night-scene-forensic/`. Stock day mode
+(`top40=0x7FD1000D`), 12 RTSP frames, mean RGB `121.8/114.3/115.8` -- bright
+and neutral. Artifacts: the 160-reg output-engine list re-dump
+(`stock-night-devmem-regs.txt`) plus TWO full core window dumps
+`0x13300000+0x0..0x13100` taken 10s apart (`stock-core-0x0-0x13100*.bin`) so
+volatile stat words can be masked. Recovered counterpart dumps in
+`logs/20260610-recovered-night-scene-forensic/` (same windows, same scene,
+CLM13+defer profile with userspace 3A).
+
+Masked static diff: 427 words differ. The interesting clusters, labeled with
+the block map from the midday bank-diff work (0x9000 LSC, 0xa000 LCE/defog
+area, 0xb000 CCM, 0xc000 CLM unit, 0xF000 MDNS, 0x11000 BCSH):
+
+- `0x4000/0x5000` banks hold the applied WB gain pairs (probably WBG main/sec
+  instances -- our `awb_manual_*` values appear there verbatim). Stock ran
+  `rgain=0x470 (1136)`, `bgain=0x15F0 (5616)` in this warm scene; our
+  gray-world 3A had applied `1470/1672`. That wrong-by-3.4x blue gain IS the
+  magenta cast.
+- BCSH `0x11018-0x11088`: stock has a real programmed matrix; ours sits at
+  reset defaults (`0x7ff/0x1fff/0x3ff` patterns) because this run used
+  `ENABLE_BCSH=0`.
+- CLM unit `0xc020-0xc08c`: stock's LUT values ~1.8x higher -- expected while
+  our CLM stops at the stage-13 write ceiling without final activation.
+- LCE/defog area `0xa000` (91 words): structurally different config (stock
+  `0x800081FE` at `0xa004` vs our `0xC8`) -- block still unported.
+- MDNS `0xf040-0xf3dc` (45 words): mostly LEGITIMATE differences --
+  `0xf040/0xf33c/0xf3dc` are the relocated reference buffers (stock 0x6xxxxxx
+  rmem vs our 0xC000000 nmem), and the LUT-vs-flat-table deltas track
+  dns_gain_ev state, which differed. Live-writing stock's table values changed
+  nothing measurable (luma contrast 53.1 -> 54.5), so these are NOT the fog.
+- GIB-ish `0x2004-0x2034`, `0x8000/0x8030`: stock `0x444`/`0x4CE` gains and
+  `0xFF` clips vs our flat `0x400` and `0x42/0x3C` -- consistent with the
+  faithful gain-tracking GIB init still pending.
+- CCM `0xb004-0xb014`: only 5 words -- CT-interpolation state, expected with
+  the wrong CT estimate in this scene (the midday day-state diff showed CCM
+  nearly identical to stock once converged).
+- LSC `0x9000` (103 words): table interpolation tracking the wrong CT for the
+  same reason.
+
+WB multi-apply bug (key driver finding): pushing stock's exact gains
+(1136/5616) through `awb_manual_rgain/bgain` swings the image to massive blue
+(`30/4/159`). Measured B/G response is ~CUBED in bgain at low signal (each
+1.27x bgain step tripled B/G), going sublinear at high signal. The recovered
+driver applies the same WB gain at ~three multiplication points in series
+(the `0x4000` bank, the `0x5000` bank, plus at least one more apply site);
+stock multiplies pixels once. Until single-apply is fixed, manual gains for
+this pipeline must be found empirically and do NOT transfer from stock values.
+
+Second 3A gap: in tonight's runs the userspace 3A sat at `again=0` with
+`luma=1` and never climbed, leaving night scenes ~4x darker than stock. The
+two-level AE demonstrably laddered gain earlier (converged at rung 1600 /
+gain 7), so this smells like the stats/luma input dying in these boots (the
+known stats-death investigation), not a missing feature -- the AE saw luma=1,
+"satisfied" its own logic, and froze. Needs a dedicated look. Manual operating
+point that forensically matches stock channel means in this scene:
+
+    awb_manual_rgain=1085 awb_manual_bgain=3100
+    ae_sensor_apply_force_packed=$(( (12<<16) | 1120 ))   # again_idx=12
+    # later refined: again_idx=10, it=1440 -- same luma, ~1.6x less grain
+
+Result: recovered `125.3/123.1/123.4` vs stock `121.8/114.3/115.8`
+(`logs/20260610-recovered-night-scene-forensic/rec-ag12-rg1085-bg3100-02.jpg`),
+and `122.4/118.2/123.5` at the ag10/it1440 point with a 60/60-frame burst,
+max frame-to-frame channel delta 0.28. Exposure and balance match; remaining
+visible gaps are noise grain (high again, and our MDNS state vs stock's),
+slight shadow tint, and saturation -- i.e. BCSH-off, the LCE/defog block, and
+CLM final activation.
+
+Next steps, in order:
+1. Find and fix the WB multi-apply so OEM gains transfer 1:1 (check whether
+   0x4000 and 0x5000 are main/sec WBG instances that BOTH multiply, plus a
+   third apply site).
+2. Diagnose why the 3A's luma input read ~1 in these boots (stats-death
+   regression); restore analog-gain laddering (target mean luma ~115).
+3. Re-test ENABLE_BCSH=1 at a correct WB/exposure operating point -- the
+   earlier "BCSH changes nothing" verdicts were taken on top of wrong WB.
+4. Port the LCE/defog block (`0xa004` feature word first).
+5. Faithful gain-tracking GIB init (the `0x444/0x4CE` vs `0x400` delta).
+6. CLM stage-14/final activation via the OEM `tisp_clm_init()` ordering.
+
+## 2026-06-10 (post-forensic): residual grain localized to MDNS strength state
+
+User report: image still grainy / "not still" on a static scene at the
+matched operating point. Quantified with mean per-pixel |frame-to-frame|
+luma diff over 30-frame bursts (new standard metric for this):
+
+- recovered, again_idx=10/it=1440: **3.12-3.43** across several states
+  (clean boot vs polluted regs vs corrected dns_gain_ev -- all within noise
+  of each other)
+- recovered, again=0 (dark): **0.09** -- the pipeline is perfectly still at
+  low gain
+- stock, same scene, similar exposure: **0.24-0.63**
+
+Ruled out tonight, in order:
+
+1. NOT my earlier stock-LUT register pollution: a clean power-cycle reload
+   with pristine tables measured 3.23.
+2. NOT stale dns_gain_ev alone: the 3A writes `again_idx*24576` and the
+   frame-done hook only refreshes MDNS/YDNS/YSP when the value CHANGES;
+   after killing 3a.sh it froze at 73728 (gain 3). Correcting to 245760
+   (gain 10) helped only marginally (3.39 -> 2.87).
+3. NOT exposure strategy: stock's live GC4653 i2c regs in this scene
+   (`logs/20260610-stock-night-scene-forensic/stock-sensor-exposure-regs.txt`)
+   show it=0x535 (1333 lines) with VTS=0x640 (1600) -- SHORTER integration
+   than ours, normal fps, gain code 0x23/0x00. Stock is not buying stillness
+   with longer exposure.
+4. NOT dead reference buffers: both stock (rmem 0x06000000) and ours
+   (nmem 0x0C000000) hold live image-statistics data while streaming
+   (stock mean/std 125/79, ours 120/83; dumps in the two forensic log dirs).
+   The temporal engine reads/writes refs on both sides.
+
+What remains -- the MDNS unit register state itself. At matched scene and
+corrected gain-ev, 85 of 256 words in 0xF000..0xF3FF differ
+(`logs/20260610-mdns-refbuf-check/rec-mdns-unit-ag10.bin` vs the stock core
+dump). Beyond the expected relocated buffer addresses (0x6xxxxxx->0xCxxxxxx),
+the structural pattern:
+
+- Stock programs table segments that are ALL-ZERO on ours: `0xf174/0xf178`
+  (stock `0x724c2600/0xdcdcbe98`), `0xf1c8-0xf1ec` (stock
+  `0x6c482400/0xffd8b490/.../0xe99b4d00/0xffffffff`), `0xf2a0-0xf2ac`
+  (stock `0x00ffffc8/0x80808080/0x00660a00 x2`). Our init/interp path never
+  writes them.
+- Stock holds all-ones words at `0xf250-0xf260` where ours has
+  `0x000000ff/0x00000000` -- if these are blend/coverage masks, our temporal
+  blend runs at a fraction of stock coverage.
+- The interp-family tables (`0xf128-0xf190`) come out as ramps on ours vs
+  flat `0x80808080`/`0x6c6c6c6c`/`0xffffffff` on stock at its converged
+  state -- either stock's ev sits at the flat end of the LUT family, or our
+  `dns_gain_ev = again_idx*24576` scale does not match the OEM ev semantics
+  (OEM ev is plausibly log2-of-total-gain based; this needs the OEM
+  tisp_ae ev derivation read carefully).
+
+NEXT (MDNS-specific, in order):
+1. Re-derive the OEM dns ev formula from the OEM binary (what value did
+   tisp_mdns_par_refresh receive at stock's 0x23 gain state?) and check
+   which LUT family segment that selects.
+2. Find which OEM init/refresh writes the segments we leave zeroed
+   (`0xf174+`, `0xf1c8+`, `0xf2a0+`) -- likely a missed branch or truncated
+   table in the literal translation -- and the `0xf250-0xf260` mask words.
+3. Only then consider SDNS (spatial) -- stock may also lean on it, but the
+   zeroed-segment/mask deltas above are in the temporal unit itself.
+
+## 2026-06-10 (late): MDNS grain FIXED — two translation bugs + ev scale
+
+Temporal noise at the night operating point (again_idx=10/it=1440):
+**3.23 -> 0.22** (stock measured 0.24-0.63 in the same scene). 60/60-frame
+final burst, max pair delta 1.17 (`logs/20260610-mdns-final-verify/`).
+
+Method: a write-bitmap instrumentation in `system_reg_write` (new RO param
+`mdns_wr_bitmap`, 8 words covering 0xF000-0xF3FF) split the bad registers
+into "written with zero" (data bug) vs "never written" (code bug). Three
+findings:
+
+1. **Equation helpers dropped their 4th argument** (same bug class as the
+   CLM `clm_lut2reg_lit` 3-arg fix). `tisp_mdns_reg_cfg_equation_smp/dif`
+   are 4-arg functions -- OEM prologues do `subu t6,a3,a2` -- but the
+   REGCALL macros passed only 3 args and the lit bodies initialized
+   `r_a3 = 0`. a3 is the ramp END value, so every generated blend-weight
+   LUT (yval0..7) came out zero: zero blend weight = no temporal mixing =
+   all the grain. After the fix, `0xf1c8/0xf1cc` match stock exactly
+   (`0x6C482400/0xFFD8B490` -- a linear 0..0xFF ramp) and the
+   `0xf250-0xf260` coverage masks self-healed to stock's `0xFFFFFFFF`.
+2. **The reg_cfg tail rebound s3 and the translator missed it.** At OEM
+   `5e6dc` the function reloads `s3 = system_reg_write` (it held the
+   equation_dif pointer earlier); the last five `jalr s3` sites write
+   `0x2a0/0x2a4/0x2a8/0x2ac` and the final `unit+0xc` enable word. The lit
+   translation called equation_dif there instead, so those registers were
+   never written. Patched to direct `system_reg_write` calls; live values
+   now match stock byte-for-byte (`0x00FFFFC8/0x80808080/0x00660A00 x2`,
+   `0xf00c=0x40`).
+3. **dns_gain_ev scale was ~2x too low.** Empirical sweep at again_idx=10:
+   ev=65536 -> 4.70, 131072 -> 3.25, 245760 (old formula) -> 2.00,
+   327680 -> 1.69, **491520 -> 0.58**, and 589824 OOPSED the kernel
+   (interp table overrun -- treat ~9.0 in 16.16 as a hard ceiling).
+   `tools/t40_userspace_3a.sh` now uses `again*49152` clamped to 491520.
+   The OEM ev derivation (what tisp_ae actually feeds) is still worth
+   reading to replace this empirical scale.
+
+The `mdns_wr_bitmap` param is left in as a permanent debug aid -- it made
+the data-vs-code split trivial and costs two instructions per write.
+
+## 2026-06-10 (final): "OSD pulsing" + residual grain = encoder breathing on a 2x spatial-noise floor; SDNS is the confirmed next port
+
+User-visible symptom after the MDNS fix: OSD appears to "pulse" and minor
+grain remains. Diagnosis with per-frame metrics (mean |dx| gradient energy
+for texture, mean |frame diff| for temporal):
+
+- Mean luma is rock stable (p2p 0.21/255 over 90 frames) -- not brightness
+  pulsing.
+- Texture energy oscillates with PERIOD 2 (autocorr r=0.76 at lag 2,
+  +/-18%). STOCK SHOWS THE SAME OSCILLATION (r=0.82, +/-19%) -- it is the
+  encoder's normal P-frame quantization alternation, not an ISP defect.
+- The actual difference: our absolute texture floor is 2x stock
+  (grad 2.25 vs 1.16). The same relative breathing on twice the grain is
+  what reads as "pulsing" against the static OSD.
+
+Eliminated as the source of the 2x spatial floor, in order:
+
+1. YDNS table content: live-blasting stock's whole 0x7000-block diff
+   (20 words incl. the 0x7004/0x7008 mode bytes) changed texture by <3%.
+   Values were restored after the test.
+2. Sensor gain structure: our idx10 = analog code 0x05, stock = code 0x23.
+   The 0x0207/08 "dgain" difference (0x1ac vs 0x6c) is NOT a bridge bug --
+   GC4653 auto-pregain (0x0205=0xc0) computes it per analog code; writes
+   to 0x207/8 are overwritten by the sensor within a second. Forcing more
+   analog (idx16, code 0x1c) overshot brightness (193 mean) and made
+   texture WORSE (2.47). Note stock's VTS is 1600 vs our 1920 (we run
+   slower fps), and no LUT index produces stock's code 0x23 (0x1c -> 0x5c
+   jump) -- the AE gain LUT itself may deserve a re-derivation pass later.
+3. MDNS: already at/below stock's temporal level (0.22 vs 0.24).
+
+Conclusion by elimination: the remaining 2x spatial grain is the unported
+SDNS (spatial denoise) block. That is the next literal-translation port --
+budget for the same bug classes found in MDNS (dropped 4th args,
+mid-function register rebinds, delay-slot stores).
+
+Aside for future foggy-image reports: "pulsing" perception scales with the
+noise floor; check texture-energy autocorrelation against stock before
+suspecting a new ISP defect.
+
+## 2026-06-11 (early): SDNS ported; real grain culprit was the DMSC config
+
+The SDNS literal chain is now in as `driver/t40/tx_isp_t40_sdns_lit.inc`
+(`ENABLE_SDNS`, default off): noref/ref_reg_cfg, intp, wdr_en machine-
+translated (mips2c_literal + scratch/sdns_bssmap.py); glue hand-written.
+One OEM hazard handled: tisp_sdns_par_refresh shares a single jr-t9 site
+between all_reg_refresh and intp_reg_refresh (t9 rebound mid-function), so
+it is plain C. Unit base `(ch+0x50)<<10` = 0x14000, trig +0x54; params =
+blob bank +0x17b00 (2900B), comb 500B/125 ptrs, intp buf 126B; init seq
+params_refresh(0) -> wdr_en(0,flags) -> all_reg_refresh(0,0x10000).
+Verified: init ret 0, unit regs match a live stock boot almost word-for-word
+(only the gain-tracked 0x14050 differs). Which led to the real finding --
+**SDNS was never the texture gap**; stock and ours run equivalent SDNS state.
+
+Top40 ground truth extracted from the OEM binary (corrects earlier notes):
+`tisp_slake_all` + `tisp_main_long_tgain_update` read reg 0x40 and gate
+per-block refresh/remove calls; bit SET = block bypassed. Map: bit0=BLC,
+bit1=LSC, bit4=DPC, bit5=GIB, bit7=ADR, bit10=gamma, **bit13=DMSC (NOT
+MDNS as previously noted)**, bit14=YDNS, bit17=YSP, **bit18=SDNS**,
+bit19=CDNS, bit21=LCE. Reg 0x44 is a second bank (identical stock vs ours
+tonight). NOTE: these bits gate the OEM SOFTWARE paths; clearing bit18 alone
+changed nothing measurable on our driver, and clearing arbitrary bits is
+dangerous -- clearing bit22 stalled the video pipeline entirely (rvd fell
+back to COLOR BARS; texture metrics measured 0.40 on the bars -- always eyeball
+a frame before trusting a metric).
+
+Static-texture reframing: 60-frame averaging keeps 97% of our excess
+texture (2.23 single -> 2.17 averaged, vs stock 1.10 -> 1.09), so the
+remaining "grain" is a STATIC spatial pattern, not noise. Sweeps of YSP
+strength (live-blasted stock's 29 differing 0x13000 words + trig 0x13078=1,
+values persisted) and SDNS state changed nothing.
+
+Root cause found: **the DMSC (demosaic) unit at 0xa000** -- confirmed as
+DMSC by the OEM `tisp_dmsc_reg_trig` base math `(ch+40)<<10`, trig +0x19c
+(the midday "LCE/defog-area 0xa000" label was wrong). Our DMSC runs a
+structurally different config (92 static words differ; feature word 0xa004
+stock `0x800081FE` vs ours `0xC8`); a mis-tuned demosaic emits static
+zipper/maze texture that no denoiser downstream can remove and that scales
+with gain. Live-blasting stock's 92 DMSC words + `0xa19c=1`:
+**texture 2.25 -> 0.896** (stock 1.16), temporal 0.20, color/brightness
+intact (132/127/131), and the frame is visually clean
+(`logs/20260610-sdns-window-diff/burst-dmsc-stock/frame-030.jpg`).
+
+The blasted values live only until reload. Productization next session:
+1. Port the faithful DMSC chain (tisp_dmsc_* literal translation -- the
+   gold-standard fix; check which of our init paths wrote the wrong 0xa000
+   values, likely a fragment with fake anchors).
+2. Interim: an enable_dmsc_static knob that writes the stock 0xa000
+   snapshot + trig at block-init (precedent: enable_bcsh_static).
+3. Sanity-check DMSC values across scenes/CT before trusting the snapshot
+   (they may be partially blob/CT-derived).
+
+## 2026-06-11: thingino-logo OSD blink root-caused — frame-done delay race
+
+User-visible: the bottom-right thingino logo blinks; everything else stable.
+Measurement: the logo region pulses with PERIOD 4 (autocorr 0.95 at lag 4)
+and the logo is fully ABSENT in the dim frames
+(`logs/20260611-osd-flicker/logo-{lo,hi}.png`). The top-left timestamp never
+blinks. Geometry is the tell: the logo occupies the LAST rows the MSCA
+writes; rvd draws OSD at frame-done, and with
+`irq_frame_done_delay_ms=20` (the bring-up profile hardcode) the OSD draw
+landed inside the MSCA write window of the rotating buffer — the write tail
+erased the freshly drawn logo on a 4-buffer cadence.
+
+Empirical sweep: delay 0ms -> logo p2p 0.10, zero missing logos (40/40);
+35ms -> equally clean; 20ms -> p2p 5.02 with periodic missing logos. 20 was
+the worst possible phase. Profile default changed to 0 (lowest latency);
+the harness env already defaulted to 0 but the probe-time profile hardcode
+clobbered the insmod param — fixed in the profile block.
+
+Validation at 0ms (90/90 frames): texture 0.869, temporal 0.08, logo p2p
+0.10, RGB 133/127/131 — all at or better than stock.
+
+Open stability item: the camera watchdog-rebooted after ~2h idle dwell on
+the full stack (CLM13 + MDNS + SDNS + DMSC live-blast) around 01:56; panic=2
+and no pstore means no oops log survives. Watch for recurrence; a serial
+console capture is the next step if it repeats.
+
+## 2026-06-11 (cont): OSD flicker is a buffer-ownership violation, not a phase bug
+
+Moving `irq_frame_done_delay_ms` 20 -> 0 fixed the logo but moved the blink
+to the TOP OSD (timestamps) and added subtle "moving shadows" (soft tearing
+in smooth gradients). Full phase sweep, measuring all three OSD regions
+(p2p of region mean over 50-frame bursts):
+
+    delay=0ms:  ts 1.02  uptime 0.30  logo 0.18   <- top clobbered
+    delay=30ms: ts 0.04  uptime 0.11  logo 4.76   <- bottom clobbered
+    delay=38ms: ts 0.27  uptime 0.11  logo 4.68
+    delay=45ms: STREAM STALLS, then watchdog reboot (delay > frame period)
+
+No phase is fully clean -> rvd's OSD draw ALWAYS overlaps an active MSCA
+write. Conclusion: our MSCA rearm free-runs over the whole buffer ring,
+including buffers userspace has dequeued (stock only writes queued
+buffers). The delay knob merely chooses WHICH rows the overlapping write
+clobbers. This also explains the "moving shadows": the encoder reads
+buffers that are partially frame N / partially frame N+1.
+
+`ENABLE_MSCA_REARM_GUARD=1` (the old experimental partial guard) crashes
+the camera right after streamon with the current FIFO path -- not a
+shortcut. THE REAL FIX (next session): respect qbuf/dqbuf ownership in the
+MSCA rearm -- only feed the FIFO buffers currently queued by userspace; on
+dequeue, drop the buffer from the rearm rotation until re-queued.
+
+Interim state shipped: delay=30ms (timestamps clean, only the small
+bottom-right logo blinks; `logs/20260611-interim-30ms`, texture 0.858,
+temporal 0.15, RGB 134/128/131). NOTE the bring-up profile hardcode is 0 --
+30 is set via sysfs by hand/harness for now.
+
+Stability watch: TWO unexplained watchdog reboots, both after ~2h05m of
+continuous streaming on the full stack (01:56 and ~04:09). ~2h at ~21fps is
+~5.6e5 frames (suspiciously near 2^19); suspect a counter overflow or slow
+leak in the frame-done path -- possibly the same free-running rearm
+touching a stale buffer. Needs serial console or periodic dmesg polling to
+catch.

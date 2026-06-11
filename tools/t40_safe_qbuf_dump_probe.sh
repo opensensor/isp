@@ -14,6 +14,7 @@ STOP_RAPTOR_TIMEOUT_SECS="${STOP_RAPTOR_TIMEOUT_SECS:-20}"
 ALLOW_ACTIVE_STREAM_STOP="${ALLOW_ACTIVE_STREAM_STOP:-0}"
 SKIP_QBUF_DUMP="${SKIP_QBUF_DUMP:-0}"
 SKIP_RTSP="${SKIP_RTSP:-0}"
+RTSP_PATH="${RTSP_PATH:-main}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 # Keep the LCE/top40 bit21 set. With 0x7fdfeeff the recovered MSCA output keeps
 # a luma diamond pattern even after UV is neutralized; 0x7fffeeff removes it.
@@ -48,7 +49,12 @@ VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE="${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:-
 # wires it up automatically when the ring is not forced). ADDR_SOURCE picks how
 # frame-done finds the completed buffer: 0=MSCA FIFO read (OEM), 1=qbuf record,
 # 2=MSCA read reg 0x16174. See docs/T40_TUNING_HURDLES.md.
-T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING="${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:-1}"
+# Default 0 = OEM MSCA FIFO path. The legacy forced VIC-MDMA ring (1) races
+# the MSCA output for the same framechan buffers once the ISP core path is
+# live: every 4th encoded frame catches the raw VIC write instead of the
+# processed frame (full-frame wrap-contour psychedelic flash, root-caused
+# 2026-06-10 in logs/20260610-t40-msca-ringoff-fix).
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING="${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:-0}"
 T40_PROFILE_NO_DIRECT_ADDR_SOURCE="${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:-0}"
 T40_PROFILE_DIRECT_VIC_FEED="${T40_PROFILE_DIRECT_VIC_FEED:-0}"
 FORCE_LOCAL_FRAME_STREAMOFF="${FORCE_LOCAL_FRAME_STREAMOFF:-1}"
@@ -86,7 +92,14 @@ ENABLE_BCSH="${ENABLE_BCSH:-0}"
 BCSH_MODE="${BCSH_MODE:-2}"
 ENABLE_CLM="${ENABLE_CLM:-0}"
 CLM_STAGE_LIMIT="${CLM_STAGE_LIMIT:-0}"
+CLM_DEFER_TRIG="${CLM_DEFER_TRIG:-0}"
 ENABLE_MDNS="${ENABLE_MDNS:-1}"
+ENABLE_SDNS="${ENABLE_SDNS:-0}"
+# MDNS temporal-reference buffer. The old driver default (0x8000000) sits
+# 32MB into rmem, which rvd maps whole and carves its encoder buffers from —
+# the ISP would scribble over rvd allocations there. Park it in nmem; the
+# NNA is idle on the bench.
+MDNS_BUF_PHYS="${MDNS_BUF_PHYS:-0xc000000}"
 # LSC literal chain (tx_isp_t40_lsc_lit.inc): faithful OEM lens-shading init
 # from the tparamsN tuning blob. LSC_LIT_CT picks the static color-temperature
 # interp point (OEM refines it from AWB at runtime); LSC_LIT_GAIN is the 16.16
@@ -157,7 +170,7 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_ADR_PROCESS_WORK \
 	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE ENABLE_ISP_BLOCK_INIT_AWB \
 	ENABLE_AWB_REG_WRITES ENABLE_AWB_SET_GAIN ENABLE_AWB_GRAYWORLD ENABLE_AE_SOFT ENABLE_FRAME_3A \
-	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC ENABLE_YSP ENABLE_CCM ENABLE_BCSH BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT ENABLE_MDNS \
+	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC ENABLE_YSP ENABLE_CCM ENABLE_BCSH BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT CLM_DEFER_TRIG ENABLE_MDNS ENABLE_SDNS \
 	ENABLE_LSC_LIT LSC_LIT_CT LSC_LIT_GAIN \
 	ENABLE_USERSPACE_3A USERSPACE_3A_SETTLE_SECS \
 	ISP_BLOCK_INIT_STAGE_LIMIT AWB_MAIN_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
@@ -186,6 +199,17 @@ else
 fi
 
 mkdir -p "$LOG"
+
+scp_fetch_optional() {
+	local remote="$1"
+	local dest="$2"
+
+	if ! timeout 20 "${SCP[@]}" "$USER@$IP:$remote" "$dest"; then
+		printf 'warning: failed to fetch %s -> %s\n' "$remote" "$dest" \
+			>>"$LOG/scp-warnings.txt"
+		: >"$dest"
+	fi
+}
 
 ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 "$ROOT/host/bin/mipsel-linux-gcc" -Os -Wall -Wextra -static \
@@ -245,7 +269,10 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"BCSH_MODE=$BCSH_MODE" \
 	"ENABLE_CLM=$ENABLE_CLM" \
 	"CLM_STAGE_LIMIT=$CLM_STAGE_LIMIT" \
+	"CLM_DEFER_TRIG=$CLM_DEFER_TRIG" \
 	"ENABLE_MDNS=$ENABLE_MDNS" \
+	"ENABLE_SDNS=$ENABLE_SDNS" \
+	"MDNS_BUF_PHYS=$MDNS_BUF_PHYS" \
 	"ENABLE_LSC_LIT=$ENABLE_LSC_LIT" \
 	"LSC_LIT_CT=$LSC_LIT_CT" \
 	"LSC_LIT_GAIN=$LSC_LIT_GAIN" \
@@ -280,7 +307,7 @@ set -x
 : "${VIC_MDMA_QBUF_RING_STRIDE_OVERRIDE:=0}"
 : "${VIC_MDMA_QBUF_RING_CTRL_VALUE:=0}"
 : "${VIC_MDMA_QBUF_RING_UV_OFFSET_OVERRIDE:=0}"
-: "${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:=1}"
+: "${T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING:=0}"
 : "${T40_PROFILE_NO_DIRECT_ADDR_SOURCE:=0}"
 : "${T40_PROFILE_DIRECT_VIC_FEED:=0}"
 : "${FORCE_LOCAL_FRAME_STREAMOFF:=1}"
@@ -310,7 +337,10 @@ set -x
 : "${BCSH_MODE:=2}"
 : "${ENABLE_CLM:=0}"
 : "${CLM_STAGE_LIMIT:=0}"
+: "${CLM_DEFER_TRIG:=0}"
 : "${ENABLE_MDNS:=1}"
+: "${ENABLE_SDNS:=0}"
+: "${MDNS_BUF_PHYS:=0xc000000}"
 : "${ENABLE_LSC_LIT:=0}"
 : "${LSC_LIT_CT:=5000}"
 : "${LSC_LIT_GAIN:=0}"
@@ -351,6 +381,25 @@ killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
 rm -f /var/run/rss/*.pid /var/run/rss/*.sock \
 	/dev/shm/rss_ring_* /dev/shm/rss_osd_* 2>/dev/null || true
 sleep 1
+# A raptor daemon respawned here (e.g. the boot-time S31raptor start still in
+# flight) grabs /dev/tx-isp the moment the recovered module appears — before
+# the sensor module is in — fails sensor registration, and wedges the whole
+# bring-up (then rmmod of the wedged module oopses). Re-kill until the box is
+# quiet; bail out rather than insmod into a race.
+raptor_quiet=0
+for _i in 1 2 3 4 5 6 7 8 9 10; do
+	if ps | grep -qE "[r]vd|[r]ic"; then
+		killall -9 rvd rad rod rsd rhd ric rwd 2>/dev/null || true
+		sleep 2
+	else
+		raptor_quiet=1
+		break
+	fi
+done
+if [ "$raptor_quiet" != "1" ]; then
+	echo "raptor daemons keep respawning; refusing to insmod into the race" >&2
+	exit 4
+fi
 rmmod sensor_gc4653_t40 2>/tmp/rmmod-sensor.err || true
 cat /tmp/rmmod-sensor.err || true
 rmmod tx_isp_t40_recovered 2>/tmp/rmmod-recovered.err || true
@@ -392,7 +441,10 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	bcsh_mode="$BCSH_MODE" \
 	enable_clm="$ENABLE_CLM" \
 	clm_stage_limit="$CLM_STAGE_LIMIT" \
+	clm_defer_trig="$CLM_DEFER_TRIG" \
 	enable_mdns="$ENABLE_MDNS" \
+	enable_sdns="$ENABLE_SDNS" \
+	mdns_buf_phys="$MDNS_BUF_PHYS" \
 	enable_lsc_lit="$ENABLE_LSC_LIT" \
 	lsc_lit_ct="$LSC_LIT_CT" \
 	lsc_lit_gain="$LSC_LIT_GAIN" \
@@ -428,19 +480,19 @@ echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
 echo "$TISP_MAIN_INIT_CSC_VERSION_VALUE" > "$PARAM/tisp_main_init_csc_version_value"
 insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
 /etc/init.d/S31raptor start
-dmesg | grep -E 'isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
+dmesg | grep -E 'isp-block-init|lsc-lit|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
 dmesg | tail -260 > /tmp/t40-dmesg-start-immediate.txt
 hold_secs=$((SMOKE_SLEEP_SECS))
 if [ "$hold_secs" -gt 4 ]; then
 	sleep 4
 	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
-	dmesg | grep -E 'isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | grep -E 'isp-block-init|lsc-lit|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
 	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
 	sleep $((hold_secs - 4))
 else
 	sleep "$hold_secs"
 	cat /proc/interrupts > /tmp/t40-interrupts-start.txt
-	dmesg | grep -E 'isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
+	dmesg | grep -E 'isp-block-init|lsc-lit|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-lines.txt 2>/dev/null || true
 	dmesg | tail -220 > /tmp/t40-dmesg-start.txt
 fi
 chmod +x /tmp/phys_memdump
@@ -527,23 +579,23 @@ else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
 set -x
-dmesg | grep -E 'framechan0 (repaired )?qbuf|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
+dmesg | grep -E 'framechan0 (repaired )?qbuf|lsc-lit|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 dmesg > /tmp/t40-dmesg-full.txt
 EOS
 
-"${SCP[@]}" "$USER@$IP:/tmp/t40-interrupts-after.txt" "$LOG/interrupts-after.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-interrupts-start.txt" "$LOG/interrupts-start.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-start-immediate-lines.txt" "$LOG/start-immediate-lines.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-start-immediate.txt" "$LOG/dmesg-start-immediate.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-start-lines.txt" "$LOG/start-lines.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-start.txt" "$LOG/dmesg-start.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-qbuf-lines.txt" "$LOG/qbuf-lines.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-csi-vic-regs.txt" "$LOG/csi-vic-regs.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-tail.txt" "$LOG/dmesg-tail.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-full.txt" "$LOG/dmesg-full.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-dmesg-before-load.txt" "$LOG/dmesg-before-load.txt"
-"${SCP[@]}" "$USER@$IP:/tmp/t40-sensor-ae-regs.txt" "$LOG/sensor-ae-regs.txt"
+scp_fetch_optional /tmp/t40-interrupts-after.txt "$LOG/interrupts-after.txt"
+scp_fetch_optional /tmp/t40-interrupts-start.txt "$LOG/interrupts-start.txt"
+scp_fetch_optional /tmp/t40-start-immediate-lines.txt "$LOG/start-immediate-lines.txt"
+scp_fetch_optional /tmp/t40-dmesg-start-immediate.txt "$LOG/dmesg-start-immediate.txt"
+scp_fetch_optional /tmp/t40-start-lines.txt "$LOG/start-lines.txt"
+scp_fetch_optional /tmp/t40-dmesg-start.txt "$LOG/dmesg-start.txt"
+scp_fetch_optional /tmp/t40-qbuf-lines.txt "$LOG/qbuf-lines.txt"
+scp_fetch_optional /tmp/t40-csi-vic-regs.txt "$LOG/csi-vic-regs.txt"
+scp_fetch_optional /tmp/t40-dmesg-tail.txt "$LOG/dmesg-tail.txt"
+scp_fetch_optional /tmp/t40-dmesg-full.txt "$LOG/dmesg-full.txt"
+scp_fetch_optional /tmp/t40-dmesg-before-load.txt "$LOG/dmesg-before-load.txt"
+scp_fetch_optional /tmp/t40-sensor-ae-regs.txt "$LOG/sensor-ae-regs.txt"
 
 if [[ "$ENABLE_USERSPACE_3A" == "1" ]]; then
 	{
@@ -557,12 +609,18 @@ else
 	echo "userspace 3A disabled (ENABLE_USERSPACE_3A=0)" >"$LOG/3a-start.log"
 fi
 
-qline="$(grep -m1 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" || true)"
+qline="$(grep -h 'framechan0 repaired qbuf' "$LOG/qbuf-lines.txt" \
+	"$LOG/start-immediate-lines.txt" "$LOG/dmesg-start-immediate.txt" \
+	2>/dev/null | head -n1 || true)"
 if [[ -z "$qline" ]]; then
-	qline="$(grep -m1 'framechan0 qbuf' "$LOG/qbuf-lines.txt" || true)"
+	qline="$(grep -h 'framechan0 qbuf' "$LOG/qbuf-lines.txt" \
+		"$LOG/start-immediate-lines.txt" "$LOG/dmesg-start-immediate.txt" \
+		2>/dev/null | head -n1 || true)"
 fi
 if [[ -z "$qline" ]]; then
-	qline="$(grep -m1 'VIC frame MDMA qbuf ring' "$LOG/qbuf-lines.txt" || true)"
+	qline="$(grep -h 'VIC frame MDMA qbuf ring' "$LOG/qbuf-lines.txt" \
+		"$LOG/start-immediate-lines.txt" "$LOG/dmesg-start-immediate.txt" \
+		2>/dev/null | head -n1 || true)"
 fi
 phys="$(sed -n 's/.*qphys=0x\([0-9a-fA-F][0-9a-fA-F]*\).*/0x\1/p' <<<"$qline")"
 if [[ -z "$phys" ]]; then
@@ -617,14 +675,14 @@ if [[ "$SKIP_RTSP" == "1" ]]; then
 	printf 'skipping RTSP snapshot (SKIP_RTSP=1)\n' >"$LOG/ffmpeg.log"
 else
 	timeout 25 ffmpeg -hide_banner -loglevel info -y -rtsp_transport tcp \
-		-i "rtsp://thingino:thingino@$IP/ch0" -frames:v 1 \
+		-i "rtsp://thingino:thingino@$IP:554/$RTSP_PATH" -frames:v 1 \
 		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
 fi
 
 "${SSH[@]}" 'P=/sys/module/tx_isp_t40_recovered/parameters; \
 	echo "# 3A process"; ps | grep "[3]a.sh" || true; \
 	echo "# 3A params"; \
-	for p in ae_sensor_apply_force_packed dns_gain_ev awb_manual_rgain awb_manual_bgain awb_grayworld_last_rgain awb_grayworld_last_bgain; do \
+	for p in ae_sensor_apply_force_packed dns_gain_ev awb_manual_rgain awb_manual_bgain awb_grayworld_last_rgain awb_grayworld_last_bgain lsc_lit_ct lsc_lit_ct_now isp_block_init_ran isp_block_init_count isp_block_init_skip_no_blob isp_block_init_adr_ret isp_block_init_clm_ret clm_stage_limit clm_defer_trig clm_stage_reached clm_last_ret; do \
 		printf "%s=" "$p"; cat "$P/$p" 2>/dev/null || echo NA; \
 	done; \
 	echo "# 3A log tail"; tail -80 /tmp/3a.log 2>/dev/null || true' \

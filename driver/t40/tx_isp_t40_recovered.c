@@ -8846,6 +8846,8 @@ static bool regtrace_enable_ccm;
 static bool regtrace_enable_mdns;
 /* userspace 3A: gain EV (log2(total_gain) in 16.16) drives DNS/sharpen strength */
 static uint regtrace_dns_gain_ev;
+/* debug: bitmap of 32-bit words written in the MDNS unit window 0xF000-0xF3FF */
+static uint regtrace_mdns_wr_bitmap[8];
 static uint regtrace_gib_blc_offset = 0x100;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
@@ -8868,6 +8870,7 @@ static uint32_t regtrace_isp_block_init_skip_no_blob;
 static int regtrace_isp_block_init_ae_ret;
 static int regtrace_isp_block_init_awb_ret;
 static int regtrace_isp_block_init_adr_ret;
+static int regtrace_isp_block_init_clm_ret;
 static uint32_t regtrace_adr_main_init_direct_count;
 static uint32_t regtrace_adr_main_init_direct_stage;
 static int regtrace_adr_main_init_direct_ret;
@@ -8914,6 +8917,21 @@ static uint regtrace_msca_rearm_guard_max_skips = 3U;
 static uint32_t regtrace_msca_rearm_guard_last_phys[4];
 static uint32_t regtrace_msca_rearm_guard_skip_count[4];
 static uint32_t regtrace_msca_rearm_guard_consec_skip[4];
+/*
+ * MSCA address-FIFO ownership: rvd runs a 2-buffer ping-pong, and its
+ * dqbuf->requeue turnaround races the per-frame address consumption. On
+ * underrun the engine reuses the last address and scribbles over the buffer
+ * userspace holds (OSD erasure at a delay-dependent row, gradient tearing).
+ * Fix: track FIFO depth (pushes - pops) and, whenever a pop would leave the
+ * write side without a fresh address, push a driver-owned spare frame in
+ * nmem as a bit bucket. Spare frames are consumed in Tzn_Msca_addr_fifo_read
+ * and never delivered to userspace.
+ */
+static bool regtrace_enable_msca_spare = true;
+static uint regtrace_msca_spare_phys = 0x0c800000U;
+static uint32_t regtrace_msca_fifo_depth[4];
+static uint32_t regtrace_msca_spare_push_count[4];
+static uint32_t regtrace_msca_spare_drop_count[4];
 static bool regtrace_t40_msca_fifo_addr_tag_write;
 static bool regtrace_enable_vic_mdma_qbuf_ring;
 static bool regtrace_t40_profile_force_vic_mdma_qbuf_ring;
@@ -9102,6 +9120,7 @@ module_param_named(enable_ysp, regtrace_enable_ysp, bool, 0644);
 module_param_named(enable_ccm, regtrace_enable_ccm, bool, 0644);
 module_param_named(enable_mdns, regtrace_enable_mdns, bool, 0644);
 module_param_named(dns_gain_ev, regtrace_dns_gain_ev, uint, 0644);
+module_param_array_named(mdns_wr_bitmap, regtrace_mdns_wr_bitmap, uint, NULL, 0444);
 module_param_named(gib_blc_offset, regtrace_gib_blc_offset, uint, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
 module_param_named(awb_grayworld_interval, regtrace_awb_grayworld_interval, uint, 0644);
@@ -9139,6 +9158,7 @@ module_param_named(isp_block_init_skip_no_blob, regtrace_isp_block_init_skip_no_
 module_param_named(isp_block_init_ae_ret, regtrace_isp_block_init_ae_ret, int, 0444);
 module_param_named(isp_block_init_awb_ret, regtrace_isp_block_init_awb_ret, int, 0444);
 module_param_named(isp_block_init_adr_ret, regtrace_isp_block_init_adr_ret, int, 0444);
+module_param_named(isp_block_init_clm_ret, regtrace_isp_block_init_clm_ret, int, 0444);
 module_param_named(adr_main_init_direct_count, regtrace_adr_main_init_direct_count, uint, 0444);
 module_param_named(adr_main_init_direct_stage, regtrace_adr_main_init_direct_stage, uint, 0444);
 module_param_named(adr_main_init_direct_ret, regtrace_adr_main_init_direct_ret, int, 0444);
@@ -9170,6 +9190,11 @@ module_param_named(t40_msca_work_en_dma_bits, regtrace_t40_msca_work_en_dma_bits
 module_param_named(t40_msca_fifo_ctrl_on_set_fmt, regtrace_t40_msca_fifo_ctrl_on_set_fmt, bool, 0644);
 module_param_named(t40_msca_fifo_ctrl_on_qbuf, regtrace_t40_msca_fifo_ctrl_on_qbuf, bool, 0644);
 module_param_named(enable_msca_rearm_guard, regtrace_enable_msca_rearm_guard, bool, 0644);
+module_param_named(enable_msca_spare, regtrace_enable_msca_spare, bool, 0644);
+module_param_named(msca_spare_phys, regtrace_msca_spare_phys, uint, 0644);
+module_param_array_named(msca_fifo_depth, regtrace_msca_fifo_depth, uint, NULL, 0444);
+module_param_array_named(msca_spare_push_count, regtrace_msca_spare_push_count, uint, NULL, 0444);
+module_param_array_named(msca_spare_drop_count, regtrace_msca_spare_drop_count, uint, NULL, 0444);
 module_param_named(msca_rearm_guard_max_skips, regtrace_msca_rearm_guard_max_skips, uint, 0644);
 module_param_named(t40_msca_fifo_ctrl_after_qbuf, regtrace_t40_msca_fifo_ctrl_after_qbuf, bool, 0644);
 module_param_named(t40_msca_fifo_addr_tag_write, regtrace_t40_msca_fifo_addr_tag_write, bool, 0644);
@@ -9387,6 +9412,7 @@ static void regtrace_soft_gamma_write(void)
 #include "tx_isp_t40_bcsh_lit.inc"
 #include "tx_isp_t40_clm_lit.inc"
 #include "tx_isp_t40_lsc_lit.inc"
+#include "tx_isp_t40_sdns_lit.inc"
 
 
 /*
@@ -10702,7 +10728,14 @@ static uint32_t regtrace_mdns_wdr_flags[2];
  * (96M@0x6000000 on this cam; stream buffers live below 0x7000000) and
  * program the same layout for isp_memopt=0 (full five planes).
  */
-static uint32_t regtrace_mdns_buf_phys = 0x08000000U;
+/*
+ * MDNS temporal-reference planes need ~5MB of physically contiguous DDR the
+ * ISP DMA owns exclusively. 0x8000000 (the old default) is 32MB into rmem,
+ * which rvd maps in full and carves its encoder working buffers from, so the
+ * ISP would scribble over whatever rvd allocates there. Default into nmem
+ * (64M@0xc000000 on the Wyze T40 cmdline), which is idle unless the NNA runs.
+ */
+static uint32_t regtrace_mdns_buf_phys = 0x0c000000U;
 static uint32_t regtrace_mdns_buf_size = 0x00800000U;
 module_param_named(mdns_buf_phys, regtrace_mdns_buf_phys, uint, 0644);
 module_param_named(mdns_buf_size, regtrace_mdns_buf_size, uint, 0644);
@@ -10769,8 +10802,8 @@ static int regtrace_mdns_buf_setup(uint32_t ch, uint32_t width, uint32_t height)
     return 0;
 }
 
-static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
-static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in);
+static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in, uint32_t a3_in);
+static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in, uint32_t a3_in);
 static int32_t tisp_mdns_reg_cfg_lit(uint32_t a0_in);
 static int32_t tisp_mdns_start_lit(uint32_t a0_in);
 static int32_t tisp_mdns_reg_trig_lit(uint32_t a0_in);
@@ -10796,9 +10829,9 @@ static int32_t tisp_mdns_params_refresh_lit(uint32_t a0_in);
 #define TAILCALL(f) (r_v0 = (uint32_t)system_reg_write(r_a0, r_a1))
 #endif
 #define REGCALL_tisp_mdns_reg_cfg_equation_smp(a, b, c, d) \
-    ((uint32_t)tisp_mdns_reg_cfg_equation_smp_lit((a), (b), (c)))
+    ((uint32_t)tisp_mdns_reg_cfg_equation_smp_lit((a), (b), (c), (d)))
 #define REGCALL_tisp_mdns_reg_cfg_equation_dif(a, b, c, d) \
-    ((uint32_t)tisp_mdns_reg_cfg_equation_dif_lit((a), (b), (c)))
+    ((uint32_t)tisp_mdns_reg_cfg_equation_dif_lit((a), (b), (c), (d)))
 #define REGCALL_tisp_mdns_reg_cfg(a, b, c, d) ((uint32_t)tisp_mdns_reg_cfg_lit((a)))
 #define REGCALL_tisp_mdns_start(a, b, c, d) ((uint32_t)tisp_mdns_start_lit((a)))
 #define REGCALL_tisp_mdns_reg_trig(a, b, c, d) ((uint32_t)tisp_mdns_reg_trig_lit((a)))
@@ -10809,7 +10842,7 @@ static int32_t tisp_mdns_params_refresh_lit(uint32_t a0_in);
 #define REGCALL_tisp_mdns_par_refresh(a, b, c, d) \
     ((uint32_t)tisp_mdns_par_refresh_lit((a), (b), (c)))
 
-static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in)
+static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in, uint32_t a3_in)
 {
     uint32_t r_v0 = 0, r_v1 = 0;
     uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
@@ -10820,7 +10853,7 @@ static int32_t tisp_mdns_reg_cfg_equation_smp_lit(uint32_t a0_in, uint32_t a1_in
     uint32_t r_a0 = a0_in;
     uint32_t r_a1 = a1_in;
     uint32_t r_a2 = a2_in;
-    uint32_t r_a3 = 0;
+    uint32_t r_a3 = a3_in;
     uint8_t mips_stack[448] __attribute__((aligned(8)));
     uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
 
@@ -11068,7 +11101,7 @@ fn_exit:
     return (int32_t)r_v0;
 }
 
-static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in)
+static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in, uint32_t a2_in, uint32_t a3_in)
 {
     uint32_t r_v0 = 0, r_v1 = 0;
     uint32_t r_t0 = 0, r_t1 = 0, r_t2 = 0, r_t3 = 0, r_t4 = 0, r_t5 = 0;
@@ -11079,7 +11112,7 @@ static int32_t tisp_mdns_reg_cfg_equation_dif_lit(uint32_t a0_in, uint32_t a1_in
     uint32_t r_a0 = a0_in;
     uint32_t r_a1 = a1_in;
     uint32_t r_a2 = a2_in;
-    uint32_t r_a3 = 0;
+    uint32_t r_a3 = a3_in;
     uint8_t mips_stack[448] __attribute__((aligned(8)));
     uint32_t r_sp = (uint32_t)(uintptr_t)(mips_stack + 384);
 
@@ -12599,12 +12632,12 @@ L_5e6f8:
     r_a1 = *(uint8_t *)(uintptr_t)(r_s7 + 125);
     r_s4 = 1024U;
     r_a1 = r_v0 | r_a1;
-    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = (uint32_t)system_reg_write(r_a0, r_a1); /* a3fix: OEM reloads s3=system_reg_write at 5e6dc */
     r_a1 = REGTRACE_LWLR(r_s7, 128); /* lwl/lwr pair */
     r_a0 = r_s0 + 0x2a4U;
     /* lwr handled with lwl above */
     r_s7 = 0xff0000U;
-    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = (uint32_t)system_reg_write(r_a0, r_a1); /* a3fix: OEM reloads s3=system_reg_write at 5e6dc */
     r_a1 = r_s2 - r_s6;
     if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s4 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s4 % (int32_t)r_a1); }
     r_s2 = r_s2 << 8;
@@ -12615,7 +12648,7 @@ L_5e6f8:
     r_a1 = r_a1 << 16;
     r_a1 = r_a1 & r_s7;
     r_a1 = r_a1 | r_s2;
-    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = (uint32_t)system_reg_write(r_a0, r_a1); /* a3fix: OEM reloads s3=system_reg_write at 5e6dc */
     r_a1 = r_s1 - r_s5;
     if (r_a1) { mips_lo = (uint32_t)((int32_t)r_s4 / (int32_t)r_a1); mips_hi = (uint32_t)((int32_t)r_s4 % (int32_t)r_a1); }
     r_s1 = r_s1 << 8;
@@ -12626,7 +12659,7 @@ L_5e6f8:
     r_a1 = r_a1 << 16;
     r_a1 = r_a1 & r_s7;
     r_a1 = r_a1 | r_s1;
-    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3);
+    r_v0 = (uint32_t)system_reg_write(r_a0, r_a1); /* a3fix: OEM reloads s3=system_reg_write at 5e6dc */
     r_a1 = *(uint8_t *)(uintptr_t)(r_s8 + 9);
     r_ra = *(uint32_t *)(uintptr_t)(r_sp + 108);
     r_s8 = *(uint32_t *)(uintptr_t)(r_sp + 104);
@@ -12643,7 +12676,7 @@ L_5e6f8:
     r_a1 = r_a1 & 0x3fU;
     r_a1 = r_a1 | 0x40U;
     r_sp = r_sp + 0x70U;
-    r_v0 = (uint32_t)REGCALL_tisp_mdns_reg_cfg_equation_dif(r_a0, r_a1, r_a2, r_a3); goto fn_exit;
+    r_v0 = (uint32_t)system_reg_write(r_a0, r_a1); goto fn_exit; /* a3fix: OEM tail write via s3 */
 L_5e7d0:
     r_v0 = 0; /* HI16 .bss anchor */
     r_s7 = *(uint32_t *)(uintptr_t)((uintptr_t)&main_mdns_intp);
@@ -13966,6 +13999,12 @@ static int regtrace_isp_block_init_once(const char *where)
                                              lsc_width, lsc_height);
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init lsc-lit ret=%d\n",
                lsc_ret);
+        /* seed CT tracking from the current WB gains; the frame-done hook
+         * only fires on gain changes, which never come once 3A converged */
+        if (!lsc_ret && regtrace_awb_grayworld_last_rgain &&
+            regtrace_awb_grayworld_last_bgain)
+            regtrace_lsc_lit_track_wb_gains(regtrace_awb_grayworld_last_rgain,
+                                            regtrace_awb_grayworld_last_bgain);
     }
 
     if (regtrace_enable_bcsh) {
@@ -13992,6 +14031,14 @@ static int regtrace_isp_block_init_once(const char *where)
                ysp_ret);
     }
 
+    if (regtrace_enable_sdns) {
+        int sdns_ret = (int)regtrace_sdns_main_init_lit();
+
+        regtrace_sdns_dbg_init_ret = sdns_ret;
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init sdns ret=%d\n",
+               sdns_ret);
+    }
+
     if (regtrace_enable_ccm) {
         int ccm_ret = (int)regtrace_ccm_main_init_lit();
 
@@ -14002,6 +14049,7 @@ static int regtrace_isp_block_init_once(const char *where)
     if (regtrace_enable_clm) {
         int clm_ret = (int)regtrace_clm_main_init_lit();
 
+        regtrace_isp_block_init_clm_ret = clm_ret;
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init clm ret=%d\n",
                clm_ret);
     }
@@ -14034,6 +14082,35 @@ static int regtrace_isp_block_init_once(const char *where)
     if (regtrace_isp_block_init_awb_ret)
         return regtrace_isp_block_init_awb_ret;
     return regtrace_isp_block_init_adr_ret;
+}
+
+static void regtrace_isp_block_init_workfn(struct work_struct *work)
+{
+    (void)work;
+    (void)regtrace_isp_block_init_once("frame-done-work");
+}
+
+static DECLARE_WORK(regtrace_isp_block_init_work,
+                    regtrace_isp_block_init_workfn);
+
+static void regtrace_isp_block_init_retry(const char *where)
+{
+    static uint32_t log_count;
+    uint32_t nbuf;
+
+    if (regtrace_isp_block_init_ran)
+        return;
+
+    nbuf = *(uint32_t *)((char *)&tparamsN);
+    if (log_count < 4) {
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init precheck where=%s enable=%u ran=%u nbuf=0x%x count=%u\n",
+               where ? where : "?",
+               regtrace_enable_isp_block_init ? 1U : 0U,
+               regtrace_isp_block_init_ran ? 1U : 0U, nbuf, log_count);
+        log_count++;
+    }
+
+    (void)schedule_work(&regtrace_isp_block_init_work);
 }
 
 #define REGTRACE_TX_ISP_CONTEXT_SIZE 0x4000
@@ -14314,6 +14391,9 @@ static void *regtrace_fs_subdev;
 static void *regtrace_sensor_subdev;
 static void *regtrace_sensor_ops;
 static struct i2c_client *regtrace_sensor_client;
+static int regtrace_sensor_i2c_adapter_fallback = 1;
+module_param_named(sensor_i2c_adapter_fallback,
+                   regtrace_sensor_i2c_adapter_fallback, int, 0644);
 static int regtrace_active_sensor_input;
 static struct regtrace_isp_buf_info regtrace_mdns_buf_info[3];
 static struct regtrace_isp_buf_info regtrace_wdr_buf_info[3];
@@ -15698,6 +15778,15 @@ static void regtrace_seed_sensor_register_info(const struct regtrace_tx_isp_sens
         }
         if (seeded.pwdn_gpio == 0) {
             seeded.pwdn_gpio = -1;
+        }
+        if (seeded.power_gpio == 0) {
+            seeded.power_gpio = -1;
+        }
+        if (seeded.video_interface < 0) {
+            seeded.video_interface = 0;
+        }
+        if (seeded.mclk < 0) {
+            seeded.mclk = 1;
         }
     }
 
@@ -19880,6 +19969,14 @@ static long regtrace_tx_isp_sensor_register_ioctl(unsigned long arg)
         board_info.addr = sensor_info.i2c.addr;
 
         adapter = i2c_get_adapter(sensor_info.i2c.i2c_adapter_id);
+        if (!adapter && regtrace_sensor_i2c_adapter_fallback >= 0 &&
+            regtrace_sensor_i2c_adapter_fallback !=
+                sensor_info.i2c.i2c_adapter_id) {
+            printk(KERN_WARNING "tx_isp_t40_recovered: sensor adapter %d unavailable, retrying adapter %d for %s\n",
+                   sensor_info.i2c.i2c_adapter_id,
+                   regtrace_sensor_i2c_adapter_fallback, board_info.type);
+            adapter = i2c_get_adapter(regtrace_sensor_i2c_adapter_fallback);
+        }
         if (!adapter) {
             printk(KERN_ERR "tx_isp_t40_recovered: failed to get i2c adapter %d for sensor %s\n",
                    sensor_info.i2c.i2c_adapter_id, board_info.type);
@@ -45293,6 +45390,8 @@ static long regtrace_irq_frame_done_record_local(int channel, uint32_t source,
     if (channel < 0 || channel >= 4 || !y)
         return -EINVAL;
 
+    regtrace_isp_block_init_retry("frame-done-local");
+
     if (index == 0xffffffffU)
         index = regtrace_framechan_index_for_phys(channel, y);
 
@@ -45716,6 +45815,13 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
     if (channel < 4)
         regtrace_irq_frame_done_work_count[channel]++;
 
+    /*
+     * Block bring-up depends on tparamsN, not on the frame-done delivery
+     * guard path. Run this retry before content/active checks so CLM/BCSH/LCE
+     * init is not silently skipped when those guards return early.
+     */
+    regtrace_isp_block_init_retry("frame-done-precheck");
+
     if (read_fifo) {
         if (!regtrace_irq_frame_done_read_addr((int)channel, &y, &uv,
                                                &index)) {
@@ -45768,18 +45874,14 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
         }
 
         /*
-         * The tuning blob (tparamsN) arrives whenever rvd gets around to
-         * its tuning init, often after the streamon that calls
-         * isp_block_init_once — and a manual rvd restart to retrigger it
-         * crashes the camera (pre-existing second-streamon fragility).
-         * Retry from frame-done until the blob shows up; the helper
-         * no-ops once it has run.
+         * Keep the old post-guard retry too; this is normally a no-op after
+         * the precheck above, but preserves coverage for non-fifo paths.
          */
-        if (!regtrace_isp_block_init_ran)
-            (void)regtrace_isp_block_init_once("frame-done");
+        regtrace_isp_block_init_retry("frame-done");
 
         /* userspace 3A: retune DNS/sharpen strength when the gain EV moves */
-        if (regtrace_enable_ydns || regtrace_enable_ysp || regtrace_enable_mdns) {
+        if (regtrace_enable_ydns || regtrace_enable_ysp || regtrace_enable_mdns ||
+            regtrace_enable_sdns) {
             static uint32_t dns_ev_applied;
 
             if (regtrace_dns_gain_ev != dns_ev_applied) {
@@ -45791,6 +45893,11 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
                 if (regtrace_enable_mdns && main_mdns &&
                     !regtrace_mdns_dbg_init_ret)
                     (void)tisp_mdns_par_refresh_lit(0, dns_ev_applied, 256);
+                if (regtrace_enable_sdns && main_sdns &&
+                    !regtrace_sdns_dbg_init_ret)
+                    (void)tisp_sdns_par_refresh_lit(0, dns_ev_applied, 256);
+                if (regtrace_enable_lsc_lit)
+                    regtrace_lsc_lit_gain_update(0, dns_ev_applied);
             }
         }
 
@@ -45806,6 +45913,8 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
                 regtrace_awb_grayworld_last_bgain = manual_applied_b;
                 regtrace_awb_grayworld_apply(manual_applied_r,
                                              manual_applied_b);
+                regtrace_lsc_lit_track_wb_gains(manual_applied_r,
+                                                manual_applied_b);
             }
         }
 
@@ -171229,6 +171338,8 @@ int64_t Tzn_Msca_addr_fifo_write(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
 	ret = regtrace_core_write(REGTRACE_T40_MSCA_Y_FIFO_WRITE_REG + bank, y);
 	if (!ret)
 		ret = regtrace_core_write(REGTRACE_T40_MSCA_UV_FIFO_WRITE_REG + bank, uv);
+	if (!ret && channel < 4)
+		regtrace_msca_fifo_depth[channel]++;
 	if (!ret && regtrace_t40_msca_fifo_ctrl_after_qbuf)
 		ret = regtrace_t40_msca_program_fifo_ctrl(group, channel);
 
@@ -171370,6 +171481,25 @@ Tzn_Msca_addr_fifo_write0xc4:
 #endif
 }
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+/*
+ * Feed the engine the spare bit-bucket frame so an address-FIFO underrun
+ * never lands in a buffer userspace holds. Safe from IRQ context (writel
+ * only); depth accounting happens inside Tzn_Msca_addr_fifo_write.
+ */
+static void regtrace_msca_push_spare(uint32_t group, uint32_t channel)
+{
+    uint32_t y = regtrace_msca_spare_phys;
+    uint32_t uv;
+
+    if (!regtrace_enable_msca_spare || !y || group > 1 || channel >= 3)
+        return;
+    uv = y + regtrace_framechan_uv_offset((int)channel);
+    if (!Tzn_Msca_addr_fifo_write(group, channel, y, uv))
+        regtrace_msca_spare_push_count[channel]++;
+}
+#endif
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006d5dc origin=fragment_seed original=Tzn_Msca_addr_fifo_read */
 uint32_t Tzn_Msca_addr_fifo_read(uint32_t a0, uint32_t a1, uintptr_t a2, uintptr_t a3)
 {
@@ -171415,6 +171545,36 @@ uint32_t Tzn_Msca_addr_fifo_read(uint32_t a0, uint32_t a1, uintptr_t a2, uintptr
 
     *(uint32_t *)a2 = y;
     *(uint32_t *)a3 = uv;
+
+    if (channel < 4) {
+        if (regtrace_msca_fifo_depth[channel])
+            regtrace_msca_fifo_depth[channel]--;
+        if (regtrace_enable_msca_spare && regtrace_msca_spare_phys) {
+            uint32_t status = 0;
+            uint32_t done_pending = 0;
+
+            /*
+             * Depth counts pushed-not-popped addresses, which conflates
+             * "available for future writes" with "done, waiting for this
+             * read". Subtract the hardware done-count (status[11:8]) to
+             * get the true write-side reserve.
+             */
+            if (!regtrace_core_read(0x1617cU + bank, &status))
+                done_pending = (status >> 8) & 0xf;
+            if (y == regtrace_msca_spare_phys) {
+                /* bit-bucket frame: drop, never deliver to userspace */
+                regtrace_msca_spare_drop_count[channel]++;
+                if (regtrace_msca_fifo_depth[channel] <= done_pending)
+                    regtrace_msca_push_spare(group, channel);
+                *(uint32_t *)a2 = 0;
+                *(uint32_t *)a3 = 0;
+                regtrace_tzn_fifo_read_count++;
+                return 0;
+            }
+            if (regtrace_msca_fifo_depth[channel] <= done_pending)
+                regtrace_msca_push_spare(group, channel);
+        }
+    }
 
     regtrace_tzn_fifo_read_count++;
     regtrace_tzn_fifo_last_group = group;
@@ -189556,6 +189716,12 @@ int32_t system_reg_write(uint32_t a0, uint32_t a1)
     if (watched)
         before = readl(base + a0);
 
+    if (a0 - 0xf000u < 0x400u) {
+        uint32_t w = (a0 - 0xf000u) >> 2;
+
+        regtrace_mdns_wr_bitmap[w >> 5] |= 1u << (w & 31);
+    }
+
     writel(a1, base + a0);
     wmb();
     if (watched)
@@ -194473,7 +194639,13 @@ static void regtrace_apply_t40_bringup_profile(void)
         regtrace_irq_frame_done_local_match_buf = true;
         regtrace_irq_frame_done_require_active = true;
         regtrace_irq_frame_done_active_fallback = true;
-        regtrace_irq_frame_done_delay_ms = 20;
+        /*
+         * 0, not 20: a 20ms frame-done delay lands rvd's OSD redraw inside
+         * the MSCA write window of the next frame, so the bottom-right OSD
+         * (last rows written) blinks with the 4-buffer rotation. 0ms and
+         * 35ms are both clean; 0 keeps latency lowest (2026-06-11).
+         */
+        regtrace_irq_frame_done_delay_ms = 0;
         regtrace_irq_frame_done_require_content = true;
         regtrace_irq_frame_done_min_nonzero_words = 32;
         regtrace_irq_frame_done_min_change_words = 16;
@@ -194610,6 +194782,7 @@ void cleanup_module(void)
     cancel_work_sync(&regtrace_irq_frame_done_work[1].work);
     cancel_work_sync(&regtrace_irq_frame_done_work[2].work);
     cancel_work_sync(&regtrace_irq_frame_done_work[3].work);
+    cancel_work_sync(&regtrace_isp_block_init_work);
     regtrace_tisp_event_threads_stop();
     regtrace_lsc_lit_cleanup();
     regtrace_tisp_main_init_param_free();
