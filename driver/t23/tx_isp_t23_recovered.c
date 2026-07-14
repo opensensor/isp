@@ -9811,8 +9811,12 @@ static bool regtrace_t23_source_msca_curves;
 static bool regtrace_t23_source_msca_init;
 static uint regtrace_t23_source_core_bypass = 0xb4000001U;
 static bool regtrace_t23_source_core_bypass_from_tuning = true;
+static bool regtrace_t23_source_park_uninitialized_mdns = true;
+static bool regtrace_t23_source_dmsc_tuning_init;
+static bool regtrace_t23_source_bcsh_neutral;
+static bool regtrace_t23_source_csccr_init;
 static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin";
-static uint regtrace_t23_source_core_bayer = 3U;
+static uint regtrace_t23_source_core_bayer = 1U;
 static uint regtrace_t23_source_core_mode = 0x1cU;
 static bool regtrace_t23_direct_csi_start;
 static bool regtrace_t23_direct_vic_start;
@@ -9838,6 +9842,14 @@ module_param_named(source_msca_init, regtrace_t23_source_msca_init, bool, 0644);
 module_param_named(source_core_bypass, regtrace_t23_source_core_bypass, uint, 0644);
 module_param_named(source_core_bypass_from_tuning,
                    regtrace_t23_source_core_bypass_from_tuning, bool, 0644);
+module_param_named(source_park_uninitialized_mdns,
+                   regtrace_t23_source_park_uninitialized_mdns, bool, 0644);
+module_param_named(source_dmsc_tuning_init,
+                   regtrace_t23_source_dmsc_tuning_init, bool, 0644);
+module_param_named(source_bcsh_neutral,
+                   regtrace_t23_source_bcsh_neutral, bool, 0644);
+module_param_named(source_csccr_init,
+                   regtrace_t23_source_csccr_init, bool, 0644);
 module_param_named(source_core_tuning_path,
                    regtrace_t23_source_core_tuning_path, charp, 0644);
 module_param_named(source_core_bayer, regtrace_t23_source_core_bayer, uint, 0644);
@@ -11227,6 +11239,62 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
     return bypass;
 }
 
+#include "tx_isp_t23_dmsc_tuning.inc"
+
+static void regtrace_t23_source_dmsc_write_tuning_startup(void)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup); ++i)
+        system_reg_write(regtrace_t23_dmsc_sc2336_startup[i][0],
+                         regtrace_t23_dmsc_sc2336_startup[i][1]);
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source DMSC SC2336 tuning startup committed (%u writes)\n",
+           (unsigned int)ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup));
+}
+
+static void regtrace_t23_source_bcsh_write_neutral(void)
+{
+    static const uint32_t bcsh_cfg[][2] = {
+        { 0x8000U, 0x000003ffU }, { 0x8004U, 0x0000036cU },
+        { 0x8008U, 0x004003acU }, { 0x800cU, 0x000003ffU },
+        { 0x8010U, 0x004003bcU }, { 0x8014U, 0x004003bcU },
+        { 0x8018U, 0x044003c0U }, { 0x801cU, 0x04000400U },
+        { 0x8020U, 0x04000400U }, { 0x8024U, 0x3e040401U },
+        { 0x8028U, 0x00003ef3U }, { 0x802cU, 0x09053ffeU },
+        { 0x8030U, 0x0000015fU }, { 0x8034U, 0x02f13ffeU },
+        { 0x8038U, 0x00000a9bU }, { 0x803cU, 0x00100000U },
+        { 0x8040U, 0x00580018U }, { 0x8044U, 0x00100000U },
+        { 0x8048U, 0x03600320U }, { 0x804cU, 0x00400000U },
+        { 0x8050U, 0x00180008U }, { 0x8054U, 0x02000000U },
+        { 0x8058U, 0x03d40414U }, { 0x805cU, 0x03440010U },
+        { 0x8060U, 0x034c0008U }, { 0x8064U, 0x00100080U },
+        { 0x8068U, 0x002a000aU }, { 0x806cU, 0x03000500U },
+        { 0x8070U, 0x03000500U },
+    };
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(bcsh_cfg); ++i)
+        system_reg_write(bcsh_cfg[i][0], bcsh_cfg[i][1]);
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source BCSH neutral parameters written\n");
+}
+
+static void regtrace_t23_source_csccr_write_init(void)
+{
+    /* Exact T23 tiziano_csccr_init mode-0 register image. */
+    system_reg_write(0xc040U, 0x00000400U);
+    system_reg_write(0xc044U, 0x0000ff00U);
+    system_reg_write(0xc050U, 0x00000400U);
+    system_reg_write(0xc054U, 0x007f0180U);
+    system_reg_write(0xc010U, 0xffffffffU);
+    system_reg_write(0xc000U, 0x20230115U);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source CSCCR mode-0 parameters committed\n");
+}
+
 static int regtrace_t23_source_core_set_stream(int enable,
                                                const char *reason)
 {
@@ -11257,6 +11325,8 @@ static int regtrace_t23_source_core_set_stream(int enable,
     }
 
     bypass = regtrace_t23_source_core_bypass_value();
+    if (regtrace_t23_source_park_uninitialized_mdns)
+        bypass |= 1U << 16;
 
     /* Recovered T23 tisp_init order and parameter-derived top bypass. */
     system_reg_write(0x800U, 0);
@@ -11268,6 +11338,12 @@ static int regtrace_t23_source_core_set_stream(int enable,
     system_reg_write(0xcU, bypass);
     system_reg_write(0x10U, 0xf3U);
     system_reg_write(0x30U, 0xffffffffU);
+    if (regtrace_t23_source_dmsc_tuning_init)
+        regtrace_t23_source_dmsc_write_tuning_startup();
+    if (regtrace_t23_source_bcsh_neutral)
+        regtrace_t23_source_bcsh_write_neutral();
+    if (regtrace_t23_source_csccr_init)
+        regtrace_t23_source_csccr_write_init();
     if (regtrace_t23_source_msca_init)
         system_reg_write(0x33cU, 0x20230219U);
     system_reg_write(0x804U, regtrace_t23_source_core_mode);
