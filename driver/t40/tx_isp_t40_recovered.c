@@ -8852,6 +8852,17 @@ static uint regtrace_gib_blc_offset = 0x100;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
 static uint regtrace_awb_manual_bgain;
+/*
+ * BCSH saturation override (0644), applied on change from frame-done like the
+ * manual WB gains. 0 = unset (leave the lit BCSH chain's own value untouched);
+ * otherwise a scale where 128 = unity and 255 ~= 2x. The recovered BCSH unit
+ * lands desaturated vs stock, so this is the live dial to restore chroma
+ * without a reload. Implemented as a direct write to the BCSH saturation
+ * matrix (0x11018-0x11020) via the crash-safe system_reg_write path, because
+ * the OEM tisp_set_saturation struct (pstMainBcshOri) is never initialized in
+ * this reconstruction.
+ */
+static uint regtrace_bcsh_saturation;
 static uint regtrace_frame_3a_interval = 15;
 static uint regtrace_frame_3a_target = 110;
 static uint32_t regtrace_frame_3a_samples;
@@ -8927,11 +8938,15 @@ static uint32_t regtrace_msca_rearm_guard_consec_skip[4];
  * nmem as a bit bucket. Spare frames are consumed in Tzn_Msca_addr_fifo_read
  * and never delivered to userspace.
  */
-static bool regtrace_enable_msca_spare = true;
+static bool regtrace_enable_msca_spare; /* opt-in until the load-time crash is understood */
 static uint regtrace_msca_spare_phys = 0x0c800000U;
 static uint32_t regtrace_msca_fifo_depth[4];
 static uint32_t regtrace_msca_spare_push_count[4];
 static uint32_t regtrace_msca_spare_drop_count[4];
+static uint32_t regtrace_msca_spare_violation_count[4];
+static bool regtrace_msca_spare_in_flight[4];
+/* out-of-DRAM (MMIO/garbage) scaler DMA targets refused at fifo-write */
+static uint32_t regtrace_msca_fifo_oob_drop_count[4];
 static bool regtrace_t40_msca_fifo_addr_tag_write;
 static bool regtrace_enable_vic_mdma_qbuf_ring;
 static bool regtrace_t40_profile_force_vic_mdma_qbuf_ring;
@@ -9142,6 +9157,7 @@ module_param_named(ae_soft_last_mean, regtrace_ae_soft_last_mean, uint, 0444);
 module_param_named(enable_frame_3a, regtrace_enable_frame_3a, bool, 0644);
 module_param_named(awb_manual_rgain, regtrace_awb_manual_rgain, uint, 0644);
 module_param_named(awb_manual_bgain, regtrace_awb_manual_bgain, uint, 0644);
+module_param_named(bcsh_saturation, regtrace_bcsh_saturation, uint, 0644);
 module_param_named(frame_3a_interval, regtrace_frame_3a_interval, uint, 0644);
 module_param_named(frame_3a_target, regtrace_frame_3a_target, uint, 0644);
 module_param_named(frame_3a_samples, regtrace_frame_3a_samples, uint, 0444);
@@ -9195,6 +9211,8 @@ module_param_named(msca_spare_phys, regtrace_msca_spare_phys, uint, 0644);
 module_param_array_named(msca_fifo_depth, regtrace_msca_fifo_depth, uint, NULL, 0444);
 module_param_array_named(msca_spare_push_count, regtrace_msca_spare_push_count, uint, NULL, 0444);
 module_param_array_named(msca_spare_drop_count, regtrace_msca_spare_drop_count, uint, NULL, 0444);
+module_param_array_named(msca_fifo_oob_drop_count, regtrace_msca_fifo_oob_drop_count, uint, NULL, 0444);
+module_param_array_named(msca_spare_violation_count, regtrace_msca_spare_violation_count, uint, NULL, 0444);
 module_param_named(msca_rearm_guard_max_skips, regtrace_msca_rearm_guard_max_skips, uint, 0644);
 module_param_named(t40_msca_fifo_ctrl_after_qbuf, regtrace_t40_msca_fifo_ctrl_after_qbuf, bool, 0644);
 module_param_named(t40_msca_fifo_addr_tag_write, regtrace_t40_msca_fifo_addr_tag_write, bool, 0644);
@@ -9375,6 +9393,188 @@ static void regtrace_bcsh_static_write(void)
     printk(KERN_WARNING "tx_isp_t40_recovered: bcsh-static %u regs written\n", k);
 }
 
+/*
+ * Static DMSC config snapshotted from a converged stock boot
+ * (logs/20260609-135527-t40-stock-dmsc-live-realuv-colorpeek). Live devmem
+ * replay of this bank was the only texture/noise change that moved the
+ * recovered stream toward stock without raising exposure/gain. Keep it
+ * opt-in until the faithful tisp_dmsc chain is fully validated.
+ */
+static bool regtrace_enable_dmsc_static;
+module_param_named(enable_dmsc_static, regtrace_enable_dmsc_static, bool, 0644);
+
+static void regtrace_dmsc_static_write(void)
+{
+    static const uint32_t dmsc_cfg[][2] = {
+        { 0x0a000, 0x00000000 },
+        { 0x0a004, 0x800081fe },
+        { 0x0a008, 0x00000064 },
+        { 0x0a00c, 0x00000000 },
+        { 0x0a010, 0x00000000 },
+        { 0x0a014, 0x00000000 },
+        { 0x0a018, 0x00000000 },
+        { 0x0a01c, 0x00000000 },
+        { 0x0a020, 0x64ff0190 },
+        { 0x0a024, 0x00000000 },
+        { 0x0a028, 0x64ff0190 },
+        { 0x0a02c, 0x00000000 },
+        { 0x0a030, 0x64ff0190 },
+        { 0x0a034, 0x032193ff },
+        { 0x0a038, 0x02580190 },
+        { 0x0a03c, 0x00000100 },
+        { 0x0a040, 0x003f1901 },
+        { 0x0a044, 0x00100500 },
+        { 0x0a048, 0x0050005a },
+        { 0x0a04c, 0x00640000 },
+        { 0x0a050, 0x0fff0000 },
+        { 0x0a054, 0x00001fff },
+        { 0x0a058, 0x00001fff },
+        { 0x0a05c, 0x00080088 },
+        { 0x0a060, 0x002d0028 },
+        { 0x0a064, 0x00000000 },
+        { 0x0a068, 0x0fff0000 },
+        { 0x0a06c, 0x00001fff },
+        { 0x0a070, 0x00001fff },
+        { 0x0a074, 0x0100000f },
+        { 0x0a078, 0x01000000 },
+        { 0x0a07c, 0x0004001f },
+        { 0x0a080, 0x00000000 },
+        { 0x0a084, 0x00140000 },
+        { 0x0a088, 0x0bb80000 },
+        { 0x0a08c, 0x00002f0f },
+        { 0x0a090, 0x00100410 },
+        { 0x0a094, 0x00000000 },
+        { 0x0a098, 0x00000000 },
+        { 0x0a09c, 0x00000fff },
+        { 0x0a0a0, 0x00000000 },
+        { 0x0a0a4, 0x0fff003f },
+        { 0x0a0a8, 0x00000000 },
+        { 0x0a0ac, 0x00000000 },
+        { 0x0a0b0, 0x080e0100 },
+        { 0x0a0b4, 0x08030211 },
+        { 0x0a0b8, 0x04b00818 },
+        { 0x0a0bc, 0x00000000 },
+        { 0x0a0c0, 0x00000000 },
+        { 0x0a0c4, 0x00000003 },
+        { 0x0a0c8, 0x00000000 },
+        { 0x0a0cc, 0x00000000 },
+        { 0x0a0d0, 0x00000000 },
+        { 0x0a0d4, 0x00000000 },
+        { 0x0a0d8, 0x00000000 },
+        { 0x0a0dc, 0x00000000 },
+        { 0x0a0e0, 0x00000000 },
+        { 0x0a0e4, 0x00000000 },
+        { 0x0a0e8, 0x00000000 },
+        { 0x0a0ec, 0x00000000 },
+        { 0x0a0f0, 0x00000000 },
+        { 0x0a0f4, 0x20820820 },
+        { 0x0a0f8, 0x20820820 },
+        { 0x0a0fc, 0x20820820 },
+        { 0x0a100, 0x20820820 },
+        { 0x0a104, 0x1f820820 },
+        { 0x0a108, 0x0845871e },
+        { 0x0a10c, 0x00000003 },
+        { 0x0a110, 0x00000000 },
+        { 0x0a114, 0x00000000 },
+        { 0x0a118, 0x00000000 },
+        { 0x0a11c, 0x2081f718 },
+        { 0x0a120, 0x20820820 },
+        { 0x0a124, 0x20820820 },
+        { 0x0a128, 0x20820820 },
+        { 0x0a12c, 0x20820820 },
+        { 0x0a130, 0x197e0820 },
+        { 0x0a134, 0x0000010f },
+        { 0x0a138, 0x00000000 },
+        { 0x0a13c, 0x00000000 },
+        { 0x0a140, 0x00000000 },
+        { 0x0a144, 0x00000000 },
+        { 0x0a148, 0x0fff0000 },
+        { 0x0a14c, 0x0fff0000 },
+        { 0x0a150, 0x00000000 },
+        { 0x0a154, 0x00000000 },
+        { 0x0a158, 0x00000000 },
+        { 0x0a15c, 0x00000000 },
+        { 0x0a160, 0x00000000 },
+        { 0x0a164, 0x00000000 },
+        { 0x0a168, 0x00000000 },
+        { 0x0a16c, 0x00000000 },
+        { 0x0a170, 0x00000000 },
+        { 0x0a174, 0x00000000 },
+        { 0x0a178, 0x00000000 },
+        { 0x0a17c, 0x00000000 },
+        { 0x0a180, 0x00000000 },
+        { 0x0a184, 0x04000400 },
+        { 0x0a188, 0x0000000f },
+        { 0x0a18c, 0x0103e120 },
+        { 0x0a190, 0x0003a4e3 },
+        { 0x0a194, 0x00070001 },
+        { 0x0a198, 0x00010008 },
+        { 0x0a19c, 0x00000000 },
+        { 0x0a1a0, 0x00000000 },
+        { 0x0a1a4, 0x00000000 },
+        { 0x0a1a8, 0x01000000 },
+        { 0x0a1ac, 0x00000000 },
+        { 0x0a1b0, 0x03fc01fe },
+        { 0x0a1b4, 0x00000000 },
+        { 0x0a1b8, 0x00000fff },
+        { 0x0a1bc, 0x00000000 },
+        { 0x0a1c0, 0x000c0000 },
+        { 0x0a1c4, 0x0fff00c8 },
+        { 0x0a1c8, 0x00000078 },
+        { 0x0a1cc, 0x000a0078 },
+        { 0x0a1d0, 0x0fff00c8 },
+        { 0x0a1d4, 0x000000f0 },
+        { 0x0a1d8, 0x000c00f0 },
+        { 0x0a1dc, 0x0fff00c8 },
+        { 0x0a1e0, 0x0000001f },
+        { 0x0a1e4, 0x00002121 },
+        { 0x0a1e8, 0x00c80000 },
+        { 0x0a1ec, 0x000001ff },
+        { 0x0a1f0, 0x00003300 },
+        { 0x0a1f4, 0x00000002 },
+        { 0x0a1f8, 0x00001610 },
+        { 0x0a1fc, 0x000005a0 },
+        { 0x0a200, 0x00001fff },
+        { 0x0a204, 0x1fff0050 },
+        { 0x0a208, 0x011803e8 },
+        { 0x0a20c, 0x00000000 },
+        { 0x0a210, 0x00000fff },
+        { 0x0a214, 0x00000000 },
+        { 0x0a218, 0x00000000 },
+        { 0x0a21c, 0x00000113 },
+        { 0x0a220, 0x0fff03e8 },
+        { 0x0a224, 0x0fff012c },
+        { 0x0a228, 0x001400fa },
+        { 0x0a22c, 0x00000000 },
+        { 0x0a230, 0x0fff0000 },
+        { 0x0a234, 0x00000000 },
+        { 0x0a238, 0x0000012c },
+        { 0x0a23c, 0x00010010 },
+        { 0x0a240, 0x000001fe },
+        { 0x0a244, 0x000f0000 },
+        { 0x0a248, 0x00000000 },
+        { 0x0a24c, 0x1d180e02 },
+        { 0x0a250, 0x2020201f },
+        { 0x0a254, 0x20202020 },
+        { 0x0a258, 0x20202020 },
+        { 0x0a25c, 0x20202020 },
+        { 0x0a260, 0x1e1f2020 },
+        { 0x0a264, 0x1016191c },
+        { 0x0a268, 0x00010308 },
+        { 0x0a26c, 0x000ff02c },
+        { 0x0a270, 0x00000030 },
+        { 0x0a274, 0x000ff020 },
+        { 0x0a278, 0x00001430 },
+        { 0x0a27c, 0x00000000 },
+    };
+    unsigned int k;
+
+    for (k = 0; k < sizeof(dmsc_cfg) / sizeof(dmsc_cfg[0]); k++)
+        (void)system_reg_write(dmsc_cfg[k][0], dmsc_cfg[k][1]);
+    (void)system_reg_write(0x0a19c, 0x00000001);
+    printk(KERN_WARNING "tx_isp_t40_recovered: dmsc-static %u regs written + trig\n", k);
+}
+
 static void regtrace_soft_gamma_write(void)
 {
     static const uint16_t lut[129] = {
@@ -9413,6 +9613,7 @@ static void regtrace_soft_gamma_write(void)
 #include "tx_isp_t40_clm_lit.inc"
 #include "tx_isp_t40_lsc_lit.inc"
 #include "tx_isp_t40_sdns_lit.inc"
+#include "tx_isp_t40_isr_lit.inc"
 
 
 /*
@@ -14016,6 +14217,9 @@ static int regtrace_isp_block_init_once(const char *where)
 
     if (regtrace_enable_bcsh_static)
         regtrace_bcsh_static_write();
+
+    if (regtrace_enable_dmsc_static)
+        regtrace_dmsc_static_write();
 
     if (regtrace_enable_ydns) {
         int ydns_ret = (int)tisp_ydns_main_init();
@@ -19135,6 +19339,26 @@ static uint32_t regtrace_untag_phys(uint32_t phys)
     return phys;
 }
 
+/*
+ * A legitimate ISP frame-buffer physical address must live in DRAM. This board
+ * is mem=96M@0x0 + rmem=96M@0x6000000 + nmem=64M@0xc000000, i.e. DRAM tops out
+ * at 0x10000000; everything at/above that is peripheral MMIO (the ISP core
+ * itself is at 0x13300000). A CPU readl/writel -- or worse, an engine DMA --
+ * to an MMIO address freezes the AHB bus with no oops or panic (the silent
+ * hard-lockup signature). FIFO underruns and corrupt qbufs can produce such
+ * addresses, so every phys we are about to ioremap+touch, or hand to the
+ * scaler as a DMA target, must be screened first. 0x10000000 is the hard DRAM
+ * ceiling on all T40 parts; we deliberately do NOT lower-bound to rmem here so
+ * the check stays board-independent (stats/scratch buffers in low DRAM stay
+ * valid) -- excluding MMIO is what prevents the freeze.
+ */
+#define REGTRACE_PHYS_DRAM_TOP 0x10000000U
+static bool regtrace_phys_is_dram(uint32_t phys)
+{
+    phys = regtrace_untag_phys(phys);
+    return phys != 0U && phys < REGTRACE_PHYS_DRAM_TOP;
+}
+
 static long regtrace_phys_fill_plane(uint32_t phys, uint32_t length,
                                      uint32_t byte_value)
 {
@@ -19143,9 +19367,9 @@ static long regtrace_phys_fill_plane(uint32_t phys, uint32_t length,
     uint32_t pattern;
     uint32_t off;
 
-    phys = regtrace_untag_phys(phys);
-    if (!phys || phys >= 0x20000000U || !length)
+    if (!regtrace_phys_is_dram(phys) || !length)
         return -EINVAL;
+    phys = regtrace_untag_phys(phys);
 
     fill_len = length;
     if (fill_len > 0x100000U)
@@ -19246,13 +19470,13 @@ static void regtrace_phys_sample_plane(uint32_t phys, uint32_t length,
 
     count = sample->count;
     memset(sample, 0, sizeof(*sample));
-    phys = regtrace_untag_phys(phys);
-    if (!phys || phys >= 0x20000000U || length < 4U) {
-        sample->phys = phys;
+    if (!regtrace_phys_is_dram(phys) || length < 4U) {
+        sample->phys = regtrace_untag_phys(phys);
         sample->len = length;
         sample->ret = -EINVAL;
         return;
     }
+    phys = regtrace_untag_phys(phys);
 
     sample_len = length;
     if (sample_len > 0x100000U)
@@ -19491,9 +19715,9 @@ static enum dma_data_direction regtrace_framechan_dma_sync_dir(uint dir)
 
 static void *regtrace_phys_to_kseg0(uint32_t phys)
 {
-    if (!phys || phys >= 0x20000000U)
+    if (!regtrace_phys_is_dram(phys))
         return NULL;
-    return (void *)(uintptr_t)(0x80000000U | phys);
+    return (void *)(uintptr_t)(0x80000000U | regtrace_untag_phys(phys));
 }
 
 static void regtrace_framechan_dma_sync_phys(int channel, uint32_t phys,
@@ -45918,6 +46142,51 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
             }
         }
 
+        /*
+         * userspace 3A: apply BCSH saturation override when it changes.
+         *
+         * NOTE: the OEM tisp_set_saturation path is unusable in this build --
+         * its backing struct pstMainBcshOri is never initialized (only the
+         * faithful tisp_bcsh chain sets it; we run the "lit" reconstruction),
+         * so calling it NULL-derefs and oopses the kernel. Drive the BCSH
+         * saturation matrix directly via system_reg_write instead -- the same
+         * crash-safe mechanism regtrace_bcsh_static_write uses (it validates
+         * ispcore_sd and cannot fault on an uninit struct). 0x11018-0x11020 is
+         * the saturation matrix in .10 fixed point (0x400 = 1.0); scale every
+         * packed field by sat/128 (128 = unity, the snapshot identity) so the
+         * matrix's hue structure is preserved while its magnitude (chroma
+         * saturation) grows. 0 = leave the lit chain's own value untouched.
+         */
+        if (regtrace_enable_bcsh && regtrace_bcsh_saturation) {
+            static const uint32_t sat_regs[3] = { 0x11018, 0x1101c, 0x11020 };
+            static const uint32_t sat_base[3] = {
+                0x03fe0400, 0x04000400, 0x03fc0400
+            };
+            static uint32_t sat_applied;
+            uint32_t sat = regtrace_bcsh_saturation;
+            unsigned int k;
+
+            if (sat > 255)
+                sat = 255;
+            if (sat != sat_applied) {
+                sat_applied = sat;
+                for (k = 0; k < 3; k++) {
+                    uint32_t hi = (sat_base[k] >> 16) & 0xffff;
+                    uint32_t lo = sat_base[k] & 0xffff;
+
+                    hi = (hi * sat) / 128u;
+                    lo = (lo * sat) / 128u;
+                    if (hi > 0x0fffu)
+                        hi = 0x0fffu;
+                    if (lo > 0x0fffu)
+                        lo = 0x0fffu;
+                    (void)system_reg_write(sat_regs[k], (hi << 16) | lo);
+                }
+                printk(KERN_INFO "tx_isp_t40_recovered: bcsh saturation matrix scaled to %u/128\n",
+                       sat);
+            }
+        }
+
         if (regtrace_irq_frame_done_dry_run) {
             regtrace_irq_frame_done_record_dry((int)channel, source, y,
                                                uv, index);
@@ -45967,6 +46236,11 @@ static void regtrace_irq_frame_done_work_init(void)
 
 static long regtrace_irq_frame_done_event(int channel, uint32_t source)
 {
+    /* OEM ISR port owns delivery when enabled -- the shim must not also
+     * pop the done FIFOs or double-deliver. */
+    if (regtrace_enable_oem_isr_lit)
+        return 0;
+
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     uint32_t core_pad = 0;
     uint32_t remote_pad = 0;
@@ -74992,6 +75266,23 @@ int64_t tisp_event_process(uint32_t a0)
     event = node->event;
     cb_ptr = event < REGTRACE_TISP_EVENT_COUNT ?
         regtrace_tisp_event_cb[a0][event] : NULL;
+    /*
+     * head-to-head trace link #2: which events get dispatched and whether they
+     * find a registered callback. event 1 = AE main process, 14 = AWB main
+     * process. cb=0 means the callback was never registered (init didn't run);
+     * cb!=0 but tisp_awb_gain_reg empty means the callback ran but produced
+     * nothing.
+     */
+    {
+        static uint32_t evp_trace_count;
+
+        if (event == 1U || event == 14U) {
+            evp_trace_count++;
+            if (evp_trace_count <= 24 || (evp_trace_count & 0x7fU) == 0)
+                printk(KERN_INFO "tx_isp_t40_recovered: TRACE event_process ch=%u event=%u cb=0x%x\n",
+                       a0, event, (uint32_t)(uintptr_t)cb_ptr);
+        }
+    }
     cb_ret = 0;
     if (cb_ptr) {
         cb = (regtrace_tisp_event_callback_t)cb_ptr;
@@ -76626,6 +76917,13 @@ int64_t tisp_ae_par_calc(uint32_t a0, uintptr_t a1)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    /* TEMPORARY unblock (validate registration): faults at vaddr 0x4 on a
+     * pstMainAeOri field deref (a field left null partly because deflicker is
+     * early-returned). Return early to reach tisp_ae_main_init's handler
+     * registration and confirm the OEM AE/AWB chain comes alive. TODO: fix
+     * properly once the chain is validated (and deflicker is restored). */
+    return 0;
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -76933,14 +77231,18 @@ int32_t tisp_ae_init_par_calc(uint32_t a0, uintptr_t a1)
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
-    /* fragment 1: ConstantLoad */
-    v0 = ((char *)&LC29);
+    /* fragment 1: ConstantLoad
+     * OEM 0x21d14-0x21d28: the .rodata+5572 table is &ae_cache_init[chan]
+     * (per-channel AE cache, 0x514 bytes each), NOT &LC29 -- the translator
+     * mis-mapped the pointer table to the "GBIG" debug string, so LC29[a0]
+     * read ASCII as a pointer and fault-unaligned. regtrace_ae_cache_for_channel
+     * already implements `&ae_cache_init + chan*0x514` (with the ae_cache live
+     * override). */
 
     /* fragment 2: StackAccess */
     local_10 = s0;
-    s0 = a0 << 2;
-    v0 = (uintptr_t)s0 + (uintptr_t)v0;
-    v0 = *(uint32_t *)((char *)v0 + 0);
+    s0 = a0 << 2;   /* kept: reused for the aeShowPar[a0] lookup in fragment 6 */
+    v0 = (uintptr_t *)regtrace_ae_cache_for_channel(a0);
     local_24 = ra;
     local_1c = s3;
     local_18 = s2;
@@ -76960,16 +77262,26 @@ int32_t tisp_ae_init_par_calc(uint32_t a0, uintptr_t a1)
     a2 = (uintptr_t)a2 << a0;
     v0 = v0;
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK ipcA pre-div\n");
     /* fragment 3: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)fix_point_div_32)(a0); /* jalr target resolved by relocation */
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK ipcB pre-fps a1+4=0x%x a1+316=0x%x\n", *(uint32_t *)((char *)s2 + 4), *(uint32_t *)((char *)s2 + 316));
     /* fragment 4: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_ae_fps_calc_max_exp)(s3, s2, v0); /* jalr target resolved by relocation */
 
-    /* fragment 5: ConstantLoad */
-    v1 = 0x0;
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK ipcC post-fps\n");
+    /* fragment 5: ConstantLoad
+     * OEM 0x21d94-0x21d98: lui/addiu v1,%hi/lo(aeShowPar). The translator
+     * zeroed this anchor (v1 = 0x0). */
+    v1 = (uintptr_t *)&aeShowPar;
 
-    /* fragment 6: MemoryAccess */
+    /* fragment 6: MemoryAccess
+     * OEM 0x21d9c `addu s0,s0,v1` (s0 += &aeShowPar) was DROPPED, leaving
+     * s0 = a0<<2 (= 0) so `lw v1,0(s0)` derefs NULL. Restore the base-add so
+     * v1 = aeShowPar[a0] before the stores. Same dropped-table-base class as
+     * the tisp_deflicker_expt LC29 bug. */
+    s0 = (uintptr_t *)((uintptr_t)s0 + (uintptr_t)v1);
     v1 = *(uint32_t *)((char *)s0 + 0);
     *(uint32_t *)((char *)v1 + 516) = v0;
     v0 = *(uint32_t *)((char *)v1 + 520);
@@ -79098,11 +79410,31 @@ int64_t tisp_deflicker_expt(uint32_t a0, uintptr_t a1)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    /*
+     * TEMPORARY unblock: the loop below has a second translation defect -- the
+     * `div zero,s3,v0` at OEM 0x23618 is an untranslated "Unknown" fragment and
+     * the surrounding 120-entry anti-flicker loop hangs. Return early so
+     * tisp_ae_main_init reaches its handler registration (system_irq_func_set 4
+     * + tisp_event_set_cb 1) and the OEM AE/AWB chain comes alive. The
+     * anti-flicker table init is skipped (fliker_info/fliker_para stay zeroed,
+     * already memset by tisp_ae_main_init). TODO: port the loop faithfully
+     * against the OEM disasm (fix_point_div_32/mult3_32 + the missing div).
+     */
+    return 0;
+
     /* fragment 0: ConstantLoad */
     v0 = ((char *)&LC29);
 
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 0);
+    /*
+     * fragment 1: MemoryAccess
+     * OEM 0x23570-0x23578: sll a0,a0,2 ; addu a0,a0,v0 ; lw v0,0(a0)
+     * i.e. v0 = ((uint32_t *)&LC29)[a0] -- a table-of-pointers lookup indexed
+     * by a0. The original fragment translation dropped the sll/addu index math
+     * and emitted `v0 = *(a0)`, which NULL-derefs (a0 is 0 from the caller) and
+     * oopses the block-init thread before tisp_ae_main_init registers the AE
+     * stats handler -- the root cause of the dead OEM 3A chain.
+     */
+    v0 = *(uint32_t *)((char *)&LC29 + ((uintptr_t)a0 << 2));
     local_3c = s5;
     local_38 = s4;
     local_4c = ra;
@@ -79292,6 +79624,12 @@ int32_t system_reg_set_ae_trig(int32_t arg1, int32_t arg2)
     return 3;
 
 do_write:
+    {
+        static uint32_t _ae_trig_trace;
+        if (_ae_trig_trace++ < 8)
+            printk(KERN_WARNING "tx_isp_t40_recovered: AETRIG set_ae_trig arg1=%d arg2=%d -> reg=0x%x=1\n",
+                   arg1, arg2, (uint32_t)(uintptr_t)a0);
+    }
     return system_reg_write(a0, 1);
 }
 
@@ -79524,7 +79862,16 @@ tisp_ae_set_hardware_param0x288:
 
 tisp_ae_set_hardware_param0x290:
     /* fragment 29: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)(a0); /* jalr target resolved by relocation */
+    /*
+     * OEM writes system_reg_write(a0, a1) here (shared write site reached from
+     * both AE-stats config paths; e.g. the 0x19028 write = v1 = local_18). The
+     * reconstruction dropped the value arg (cast to a 1-arg fn), so this config
+     * register was written with a garbage a1 -> the AE stats engine ends up
+     * mis-configured and never raises its stats-ready IRQ (status0 bits 4/5
+     * stay 0, so cb[4]/[5] never fire and event-1 -> tisp_ae_main_process never
+     * runs). a1 already holds the correct value at every entry to this label.
+     */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(a0, (uintptr_t)a1); /* jalr target resolved by relocation */
 
     /* fragment 30: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_set_ae_trig)(1, s8); /* jalr target resolved by relocation */
@@ -80725,8 +81072,21 @@ static unsigned char __attribute__((aligned(4))) stMainAeInterOri[17772] = {
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000023b34 origin=fragment_seed original=tisp_ae_main_init */
 int64_t tisp_ae_main_init(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_1b4 = 0;
+    /*
+     * OEM stack scratch buffers. The loop at label 0x17c byte-copies 420 bytes
+     * (sensor_ctrl_main+4) into &local_10, and the loop at 0x160 copies 152
+     * bytes (tisp_par_info) into &local_1b4. The reconstruction declared both
+     * as 4-byte scalars, so those copies overran the stack frame and smashed
+     * the saved return address: tisp_ae_main_init then returned to garbage
+     * (observed ra=0x33700, landing back on the block-init AE gate lbu with a
+     * null base) and oopsed -- truncating block-init right after AE
+     * registration so AWB/ADR/LSC/color never ran. The OEM frame offsets
+     * (local_10@0x10 -> local_1b4@0x1b4 -> local_250@0x250) confirm the 420 and
+     * 152 byte extents. They are write-only scratch here, so sizing them
+     * correctly just makes the copies land in valid storage.
+     */
+    uint8_t local_10[420] = {0};
+    uint8_t local_1b4[152] = {0};
     uint32_t local_250 = 0;
     uint32_t local_254 = 0;
     uint32_t local_258 = 0;
@@ -80743,6 +81103,8 @@ int64_t tisp_ae_main_init(uint32_t a0, uint32_t a1)
     uint32_t s4 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK entry a0=%u a1=%u\n", a0, a1);
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -80823,26 +81185,33 @@ tisp_ae_main_init0x17c:
     a3 = (uintptr_t)v1 + (uintptr_t)v0;
     if (a1 != 0) { goto tisp_ae_main_init0x2b8; }
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK c1 sensor_inform\n");
     /* fragment 18: CallSetup */
     v0 = (uintptr_t *)(uintptr_t)tisp_ae_sensor_inform(0, (uintptr_t)&pstMainAeOri, (uintptr_t)&tisp_ae_main_ctrls); /* jalr target resolved by relocation */
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK c2 deflicker_expt\n");
     /* fragment 19: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_deflicker_expt)(0, &pstMainAeOri); /* jalr target resolved by relocation */
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK c3 init_par_calc\n");
     /* fragment 20: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_ae_init_par_calc)(0, &pstMainAeOri); /* jalr target resolved by relocation */
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK c4 par_calc\n");
     /* fragment 21: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_ae_par_calc)(0, &pstMainAeOri); /* jalr target resolved by relocation */
 
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK c5 set_hardware_param\n");
     /* fragment 22: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_ae_set_hardware_param)(&pstMainAeOri, 0); /* jalr target resolved by relocation */
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK c5done\n");
 
     /* fragment 23: CallSetup */
     v1 = *(uint32_t *)((char *)&pstMainAeOri + 288);
     v1 = v1 ? ((*(uint8_t *)((char *)v1 + 20)) + 1) : 1;
     *(uint8_t *)((char *)((char *)&tx_isp_core_platform_device + 0x189)) = v1;
     *(uint8_t *)((char *)((char *)&tx_isp_core_platform_device + 0x18a)) = v1;
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK pre-register (about to system_irq_func_set 4)\n");
     v0 = (uintptr_t *)(uintptr_t)system_irq_func_set(5, (int32_t)(uintptr_t)&tisp_ae_main_interrupt_hist); /* jalr target resolved by relocation */
 
     /* fragment 24: CallSetup */
@@ -80850,6 +81219,7 @@ tisp_ae_main_init0x17c:
 
     /* fragment 25: CallSetup */
     v0 = (uintptr_t *)(uintptr_t)tisp_event_set_cb(0, 1, (int32_t)(uintptr_t)&tisp_ae_main_process); /* jalr target resolved by relocation */
+    printk(KERN_WARNING "tx_isp_t40_recovered: AECHK registered irq_func_cb[4]+event1 OK\n");
 
     /* fragment 26: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_spin_lock_init)(&main_slock); /* jalr target resolved by relocation */
@@ -81223,13 +81593,18 @@ int32_t tisp_ae_main_interrupt_static(void)
     int32_t* ptr;
     int32_t tisp_base;
     
+    {
+        static uint32_t _ae_static_trace;
+        if (_ae_static_trace++ < 8)
+            printk(KERN_WARNING "tx_isp_t40_recovered: AEIRQ static-interrupt fired #%u\n", _ae_static_trace);
+    }
     reg_value = system_reg_read(0x19050);
     tisp_base = tispinfo + 12;
     ptr = (int32_t*)((((reg_value >> 4) & 3) << 12) + tisp_base);
-    
+
     private_dma_cache_sync();
     tisp_ae_get_statistics(ptr, (int32_t*)(_bss_start + 14624));
-    
+
     return 1;
 }
 
@@ -81393,6 +81768,11 @@ int32_t tisp_ae_main_interrupt_hist(void)
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
+    {
+        static uint32_t _ae_hist_trace;
+        if (_ae_hist_trace++ < 8)
+            printk(KERN_WARNING "tx_isp_t40_recovered: AEIRQ hist-interrupt fired #%u (will push event 1)\n", _ae_hist_trace);
+    }
     /* fragment 1: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_read)(65536 | 36944); /* jalr target resolved by relocation */
 
@@ -81409,8 +81789,22 @@ int32_t tisp_ae_main_interrupt_hist(void)
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_ai_main_interrupt_static)(a0); /* jalr target resolved by relocation */
 
     /* fragment 5: CallSetup */
-    local_18 = 1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_event_push)(0, &local_10); /* jalr target resolved by relocation */
+    /*
+     * Push event 1 -> tisp_ae_main_process (registered via tisp_event_set_cb(0,1)
+     * in tisp_ae_main_init). The OEM builds the event struct on the stack
+     * (ev base = sp+16, event# stored at ev[2] = sp+24). The reconstruction
+     * mapped those slots to separate scalars local_10 (ev[0]) and local_18
+     * (ev[2]); with no guaranteed 8-byte adjacency the pushed event number was
+     * garbage, so the AE main process never ran while only AWB's event 14 fired.
+     * Use a contiguous event array exactly like tisp_awb_main_interrupt_static.
+     */
+    {
+        uint32_t ev[10];
+
+        memset(ev, 0, sizeof(ev));
+        ev[2] = 1;
+        v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_event_push)(0, (uintptr_t)ev); /* jalr target resolved by relocation */
+    }
 
     /* fragment 6: Epilogue */
     /* function epilogue: restore registers and return */
@@ -90516,6 +90910,23 @@ int64_t tisp_ae_main_process(void)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    /*
+     * head-to-head trace: a hit here means the OEM AE event-1 process actually
+     * runs (driven by the stats IRQ). The exposure it ultimately drives shows
+     * up in the existing "AE sensor apply ... int=" log; compare to stock
+     * (AeAGain=1024 min, AeIspDGain=1165, a SHORT integration for this bright
+     * scene -- ours is climbing into a blowout).
+     */
+    {
+        static uint32_t ae_proc_trace_count;
+
+        ae_proc_trace_count++;
+        if (ae_proc_trace_count <= 16 || (ae_proc_trace_count & 0x3fU) == 0)
+            printk(KERN_INFO "tx_isp_t40_recovered: TRACE ae_main_process #%u ran force_packed=0x%x\n",
+                   ae_proc_trace_count,
+                   regtrace_ae_sensor_apply_force_packed);
+    }
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -97047,6 +97458,21 @@ int32_t tisp_awb_gain_reg(int32_t *arg1, int32_t *arg2)
     int32_t a3 = arg1[1];
     int32_t *a2 = 0x3fff;
 
+    /*
+     * head-to-head trace: this is the OEM AWB's final gain output (our manual
+     * grayworld path writes 0x4004/0x4008 directly and never calls here, so a
+     * hit here means the OEM AWB algorithm actually ran). Compare rgain/bgain
+     * to stock's converged register values (R=2172/B=2360 @ CT 5048K).
+     */
+    {
+        static uint32_t awb_gain_trace_count;
+
+        awb_gain_trace_count++;
+        if (awb_gain_trace_count <= 16 || (awb_gain_trace_count & 0x3fU) == 0)
+            printk(KERN_INFO "tx_isp_t40_recovered: TRACE awb_gain_reg #%u rgain=%d bgain=%d (stock R=2172 B=2360)\n",
+                   awb_gain_trace_count, arg1[0], arg1[1]);
+    }
+
     if (v0 >= 0x4000) {
         v0 = 0x3fff;
     }
@@ -97276,7 +97702,36 @@ tisp_awb_set_gain0x210:
     /* fragment 25: CallSetup */
     local_18 = (((uintptr_t)v0 << 2) - 1024) + (*(uint32_t *)((char *)((uintptr_t)s3) + 0));
     local_1c = ((local_1c << 2) - 1024) + (*(uint32_t *)((char *)((uintptr_t)s3) + 4));
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_gain_reg)(&local_18, &local_10); /* jalr target resolved by relocation */
+    {
+        static uint32_t _awbg_trace;
+        if (_awbg_trace++ < 8)
+            printk(KERN_WARNING "tx_isp_t40_recovered: AWBGAIN v0=%u s4(shift)=%u p12=%p p12+2=%u a0+20deref=%u base_r=%u -> rgain=%d bgain=%d\n",
+                   (uint32_t)(uintptr_t)v0, (uint32_t)(uintptr_t)s4,
+                   (void *)*(uint32_t *)((char *)a0 + 12),
+                   (*(uint32_t *)((char *)a0 + 12)) ? *(uint16_t *)((char *)(uintptr_t)(*(uint32_t *)((char *)a0 + 12)) + 2) : 0xffff,
+                   (*(uint32_t *)((char *)a0 + 20)) ? *(uint32_t *)((char *)(uintptr_t)(*(uint32_t *)((char *)a0 + 20)) + 20) : 0xffffffff,
+                   *(uint32_t *)((char *)((uintptr_t)s3) + 0),
+                   (int)(uintptr_t)local_18, (int)local_1c);
+    }
+    /*
+     * tisp_awb_gain_reg reads arg1[0]/arg1[1] (rgain,bgain) and writes
+     * arg2[0]/arg2[1] (packed rgain,bgain). The OEM frame has local_18@0x18 /
+     * local_1c@0x1c and local_10@0x10 / local_14@0x14 as ADJACENT slot pairs;
+     * the reconstruction declared them as separate scalars, so &local_18+4 and
+     * &local_10+4 read/write unrelated stack -> bgain came back as a stack
+     * garbage pointer (e.g. -2141316532). Marshal through contiguous 2-word
+     * temporaries so the pair ABI holds regardless of compiler slot placement.
+     */
+    {
+        uint32_t _gr_in[2];
+        uint32_t _gr_out[2] = { 0, 0 };
+
+        _gr_in[0] = (uint32_t)(uintptr_t)local_18; /* rgain */
+        _gr_in[1] = (uint32_t)local_1c;            /* bgain */
+        v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_gain_reg)((uintptr_t)_gr_in, (uintptr_t)_gr_out); /* jalr target resolved by relocation */
+        local_10 = (uint32_t *)(uintptr_t)_gr_out[0]; /* packed rgain */
+        local_14 = _gr_out[1];                        /* packed bgain */
+    }
 
     /* fragment 26: MemoryAccess */
     v0 = *(uint32_t *)((char *)s0 + 476);
@@ -98456,6 +98911,22 @@ int32_t tisp_awb_main_interrupt_static(void)
     uint32_t addr;
     uint32_t ev[10];
     uint32_t *ctr;
+
+    /*
+     * head-to-head trace link #1: does the AWB stats IRQ even fire? If this is
+     * empty the ISP stats engine is unarmed/not dispatching (the chain dies
+     * before the event push); if it fires but tisp_awb_gain_reg stays empty,
+     * the break is event-14 dispatch -> tisp_awb_main_process.
+     */
+    {
+        static uint32_t awb_irq_trace_count;
+
+        awb_irq_trace_count++;
+        if (awb_irq_trace_count <= 16 || (awb_irq_trace_count & 0x7fU) == 0)
+            printk(KERN_INFO "tx_isp_t40_recovered: TRACE awb_irq #%u pstMainAwbOri0=0x%x gray=%u\n",
+                   awb_irq_trace_count, pstMainAwbOri[0],
+                   regtrace_enable_awb_grayworld ? 1U : 0U);
+    }
 
     if (pstMainAwbOri[0])
         flag = *(uint8_t *)(uintptr_t)(pstMainAwbOri[0] + 94);
@@ -101461,14 +101932,24 @@ int64_t tisp_awb_main_process(void)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    /*
+     * OEM tisp_awb_main_process passes a0=&pstMainAwbOri (.bss+0x3f34) and
+     * a1=&pstMainAwbCtDetectOri (.bss+0x3cac) to the AWB algorithm calls. The
+     * reconstruction failed to resolve the s0/s1 .bss base registers and
+     * defaulted them to &isp_memopt (a 4-byte module-param int), so
+     * tisp_awb_long_par_update dereferenced *(isp_memopt+12) past the int into
+     * adjacent .bss -> NULL pointer -> *(uint16)(NULL+2) paging-fault oops in
+     * the tisp-event-0 thread once the OEM AWB process actually ran. Restore
+     * the real structs (pstMainAwbOri[128]=0x200, pstMainAwbCtDetectOri[34]=0x88).
+     */
     /* fragment 0: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_awb_long_par_update)(&isp_memopt, &isp_memopt, *(uint32_t *)((char *)((char *)&stMainAwbInter))); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_awb_long_par_update)(&pstMainAwbOri, &pstMainAwbCtDetectOri, *(uint32_t *)((char *)((char *)&stMainAwbInter))); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_spec_calculate)(&isp_memopt, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_spec_calculate)(&pstMainAwbOri, 0); /* jalr target resolved by relocation */
 
     /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_awb_long_alogrithm)(&isp_memopt, &isp_memopt, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_awb_long_alogrithm)(&pstMainAwbOri, &pstMainAwbCtDetectOri, 0); /* jalr target resolved by relocation */
 
     /* fragment 3: Arithmetic */
     v0 = (uintptr_t *)&isp_memopt;
@@ -101490,12 +101971,17 @@ int64_t tisp_awb_main_process(void)
 
 tisp_awb_main_process0x8c:
     /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_set_gain)(&isp_memopt, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_awb_set_gain)(&pstMainAwbOri, 0); /* jalr target resolved by relocation */
 
     /* fragment 9: CallSetup */
+    /*
+     * OEM: lw v0,28(s0); lw v0,0(v0) with s0=&pstMainAwbOri -> the value is
+     * *(*(pstMainAwbOri+28)). The reconstruction mis-resolved pstMainAwbOri+28
+     * (.bss+0x3f50) to &vic_mdma_ch1_set_buff_index.
+     */
     local_18 = 13;
     local_24 = 0;
-    local_20 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((char *)&vic_mdma_ch1_set_buff_index))) + 0);
+    local_20 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((char *)&pstMainAwbOri) + 28)) + 0);
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_event_push)(0, &local_10); /* jalr target resolved by relocation */
 
     /* fragment 10: Arithmetic */
@@ -171290,6 +171776,28 @@ int64_t Tzn_Msca_addr_fifo_write(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
     if (group > 1 || channel >= 3)
         return -EINVAL;
 
+    /*
+     * Never hand the scaler a DMA target outside DRAM. a2/a3 are the buffer
+     * Y/UV phys; a FIFO underrun or a corrupt qbuf can produce an MMIO-range
+     * address, and the engine DMA-writing a frame there freezes the AHB bus
+     * with no oops (the silent hard-lockup). a2==0 is the legitimate
+     * disable/priming case and is left alone; only a nonzero out-of-DRAM
+     * target is dropped. Legit rmem buffers (< 0x10000000) always pass.
+     */
+    if ((a2 && !regtrace_phys_is_dram(a2)) ||
+        (a3 && !regtrace_phys_is_dram(a3))) {
+        static unsigned int oob_log;
+
+        if (channel < 4)
+            regtrace_msca_fifo_oob_drop_count[channel]++;
+        if (oob_log < 8) {
+            printk(KERN_WARNING "tx_isp_t40_recovered: MSCA fifo-write dropped out-of-DRAM target group=%u ch=%u y=0x%x uv=0x%x\n",
+                   group, channel, a2, a3);
+            oob_log++;
+        }
+        return -EINVAL;
+    }
+
     state = (group ? (unsigned char *)mscaler_s1 :
                      (unsigned char *)mscaler_s0) +
             channel * REGTRACE_MSCA_CHANNEL_BYTES + 8;
@@ -171548,31 +172056,42 @@ uint32_t Tzn_Msca_addr_fifo_read(uint32_t a0, uint32_t a1, uintptr_t a2, uintptr
 
     if (channel < 4) {
         if (regtrace_msca_fifo_depth[channel])
-            regtrace_msca_fifo_depth[channel]--;
+            regtrace_msca_fifo_depth[channel]--; /* telemetry only */
         if (regtrace_enable_msca_spare && regtrace_msca_spare_phys) {
-            uint32_t status = 0;
-            uint32_t done_pending = 0;
-
-            /*
-             * Depth counts pushed-not-popped addresses, which conflates
-             * "available for future writes" with "done, waiting for this
-             * read". Subtract the hardware done-count (status[11:8]) to
-             * get the true write-side reserve.
-             */
-            if (!regtrace_core_read(0x1617cU + bank, &status))
-                done_pending = (status >> 8) & 0xf;
             if (y == regtrace_msca_spare_phys) {
-                /* bit-bucket frame: drop, never deliver to userspace */
+                /* bit-bucket frame came back: drop, never deliver */
                 regtrace_msca_spare_drop_count[channel]++;
-                if (regtrace_msca_fifo_depth[channel] <= done_pending)
-                    regtrace_msca_push_spare(group, channel);
+                regtrace_msca_spare_in_flight[channel] = false;
                 *(uint32_t *)a2 = 0;
                 *(uint32_t *)a3 = 0;
                 regtrace_tzn_fifo_read_count++;
                 return 0;
             }
-            if (regtrace_msca_fifo_depth[channel] <= done_pending)
-                regtrace_msca_push_spare(group, channel);
+            /*
+             * Ownership check: DONE/FREE mean userspace holds (or already
+             * consumed) this buffer, so the engine reused a stale address
+             * after a FIFO underrun -- the content races rvd's OSD/encode
+             * and must not be delivered; arm the spare to absorb the next
+             * underrun. Unknown/QUEUED states pass through: the initial
+             * priming bypasses the shadow tracker and dropping those
+             * starves rvd into a watchdog reboot.
+             */
+            index = regtrace_framechan_index_for_phys((int)channel, y);
+            if (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX &&
+                (regtrace_framechan_qbuf_state[channel][index] ==
+                 REGTRACE_FRAMECHAN_SHADOW_STATE_DONE ||
+                 regtrace_framechan_qbuf_state[channel][index] ==
+                 REGTRACE_FRAMECHAN_SHADOW_STATE_FREE)) {
+                regtrace_msca_spare_violation_count[channel]++;
+                if (!regtrace_msca_spare_in_flight[channel]) {
+                    regtrace_msca_push_spare(group, channel);
+                    regtrace_msca_spare_in_flight[channel] = true;
+                }
+                *(uint32_t *)a2 = 0;
+                *(uint32_t *)a3 = 0;
+                regtrace_tzn_fifo_read_count++;
+                return 0;
+            }
         }
     }
 
@@ -192248,6 +192767,10 @@ update_isp_osd0x78:
 int64_t ispcore_interrupt_service_routine(uintptr_t a0)
 {
     uint32_t *local_10 = 0;
+    if (regtrace_enable_oem_isr_lit)
+        return ispcore_interrupt_service_routine_lit(a0);
+
+
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t *local_20 = 0;
@@ -194640,12 +195163,11 @@ static void regtrace_apply_t40_bringup_profile(void)
         regtrace_irq_frame_done_require_active = true;
         regtrace_irq_frame_done_active_fallback = true;
         /*
-         * 0, not 20: a 20ms frame-done delay lands rvd's OSD redraw inside
-         * the MSCA write window of the next frame, so the bottom-right OSD
-         * (last rows written) blinks with the 4-buffer rotation. 0ms and
-         * 35ms are both clean; 0 keeps latency lowest (2026-06-11).
+         * Leave irq_frame_done_delay_ms at the module-param value. The OSD
+         * clobber phase is scene/profile dependent; 0ms tends to move the
+         * blink to top-row timestamps, while ~30ms keeps timestamps stable
+         * at the cost of exposing the bottom-logo phase.
          */
-        regtrace_irq_frame_done_delay_ms = 0;
         regtrace_irq_frame_done_require_content = true;
         regtrace_irq_frame_done_min_nonzero_words = 32;
         regtrace_irq_frame_done_min_change_words = 16;

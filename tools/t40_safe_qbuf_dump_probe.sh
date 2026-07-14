@@ -12,8 +12,21 @@ QBUF_LEN_FALLBACK="${QBUF_LEN_FALLBACK:-0x2fd000}"
 SMOKE_SLEEP_SECS="${SMOKE_SLEEP_SECS:-12}"
 STOP_RAPTOR_TIMEOUT_SECS="${STOP_RAPTOR_TIMEOUT_SECS:-20}"
 ALLOW_ACTIVE_STREAM_STOP="${ALLOW_ACTIVE_STREAM_STOP:-0}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_QBUF_DUMP="${SKIP_QBUF_DUMP:-0}"
 SKIP_RTSP="${SKIP_RTSP:-0}"
+SKIP_REG_SNAPSHOT="${SKIP_REG_SNAPSHOT:-0}"
+RTSP_FIRST="${RTSP_FIRST:-0}"
+RTSP_TIMEOUT_SECS="${RTSP_TIMEOUT_SECS:-25}"
+FAST_RTSP_ONLY="${FAST_RTSP_ONLY:-0}"
+FAST_STATS_SNAPSHOT="${FAST_STATS_SNAPSHOT:-0}"
+FAST_STATS_SAMPLE_SECS="${FAST_STATS_SAMPLE_SECS:-6}"
+FAST_STATS_SAMPLE_INTERVAL="${FAST_STATS_SAMPLE_INTERVAL:-1}"
+REMOTE_PROBE_TIMEOUT_SECS="${REMOTE_PROBE_TIMEOUT_SECS:-300}"
+PRESTREAM_EXPO_IT="${PRESTREAM_EXPO_IT:-0}"
+AWB_MANUAL_RGAIN="${AWB_MANUAL_RGAIN:-0}"
+AWB_MANUAL_BGAIN="${AWB_MANUAL_BGAIN:-0}"
+DNS_GAIN_EV_INIT="${DNS_GAIN_EV_INIT:-0}"
 RTSP_PATH="${RTSP_PATH:-main}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 # Keep the LCE/top40 bit21 set. With 0x7fdfeeff the recovered MSCA output keeps
@@ -89,6 +102,7 @@ ENABLE_GIB_BLC="${ENABLE_GIB_BLC:-1}"
 ENABLE_YSP="${ENABLE_YSP:-1}"
 ENABLE_CCM="${ENABLE_CCM:-1}"
 ENABLE_BCSH="${ENABLE_BCSH:-0}"
+ENABLE_DMSC_STATIC="${ENABLE_DMSC_STATIC:-0}"
 BCSH_MODE="${BCSH_MODE:-2}"
 ENABLE_CLM="${ENABLE_CLM:-0}"
 CLM_STAGE_LIMIT="${CLM_STAGE_LIMIT:-0}"
@@ -107,6 +121,11 @@ MDNS_BUF_PHYS="${MDNS_BUF_PHYS:-0xc000000}"
 ENABLE_LSC_LIT="${ENABLE_LSC_LIT:-0}"
 LSC_LIT_CT="${LSC_LIT_CT:-5000}"
 LSC_LIT_GAIN="${LSC_LIT_GAIN:-0}"
+LSC_LIT_CT_TRACK="${LSC_LIT_CT_TRACK:-1}"
+LSC_LIT_CT_WARM_X="${LSC_LIT_CT_WARM_X:-1074}"
+LSC_LIT_CT_WARM_CT="${LSC_LIT_CT_WARM_CT:-3300}"
+LSC_LIT_CT_COOL_X="${LSC_LIT_CT_COOL_X:-730}"
+LSC_LIT_CT_COOL_CT="${LSC_LIT_CT_COOL_CT:-6500}"
 ENABLE_USERSPACE_3A="${ENABLE_USERSPACE_3A:-1}"
 USERSPACE_3A_SETTLE_SECS="${USERSPACE_3A_SETTLE_SECS:-12}"
 ISP_BLOCK_INIT_STAGE_LIMIT="${ISP_BLOCK_INIT_STAGE_LIMIT:-0}"
@@ -135,6 +154,8 @@ AE_SENSOR_APPLY_FORCE_PACKED="${AE_SENSOR_APPLY_FORCE_PACKED:-0}"
 AE_SENSOR_APPLY_CLEAR_DIRTY="${AE_SENSOR_APPLY_CLEAR_DIRTY:-1}"
 AE_SENSOR_APPLY_MAX_AGAIN_INDEX="${AE_SENSOR_APPLY_MAX_AGAIN_INDEX:-25}"
 AE_SENSOR_APPLY_LOG_SKIPS="${AE_SENSOR_APPLY_LOG_SKIPS:-0}"
+ENABLE_OEM_ISR_LIT="${ENABLE_OEM_ISR_LIT:-0}"
+OEM_ISR_LIT_CUT="${OEM_ISR_LIT_CUT:-0}"
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t40-safe-qbuf-dump-242}"
 
 if [[ "$IP" != "192.168.50.242" ]]; then
@@ -153,7 +174,10 @@ if [[ "$ENABLE_TISP_MAIN_INIT_COLOR_INITS" != "0" &&
 fi
 for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	SMOKE_SLEEP_SECS STOP_RAPTOR_TIMEOUT_SECS ALLOW_ACTIVE_STREAM_STOP \
-	SKIP_QBUF_DUMP SKIP_RTSP \
+	SKIP_BUILD SKIP_QBUF_DUMP SKIP_RTSP SKIP_REG_SNAPSHOT RTSP_FIRST FAST_RTSP_ONLY \
+	FAST_STATS_SNAPSHOT FAST_STATS_SAMPLE_SECS FAST_STATS_SAMPLE_INTERVAL \
+	REMOTE_PROBE_TIMEOUT_SECS RTSP_TIMEOUT_SECS PRESTREAM_EXPO_IT \
+	AWB_MANUAL_RGAIN AWB_MANUAL_BGAIN DNS_GAIN_EV_INIT \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
 	T40_STOCK_HOST_INIT_MASK OEM_EVENT_PRE_CSI_STREAM \
 	OEM_EVENT_PRE_CSI_STAGE_LIMIT OEM_EVENT_PRE_CSI_DELAY_MS \
@@ -170,8 +194,10 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_ADR_PROCESS_WORK \
 	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE ENABLE_ISP_BLOCK_INIT_AWB \
 	ENABLE_AWB_REG_WRITES ENABLE_AWB_SET_GAIN ENABLE_AWB_GRAYWORLD ENABLE_AE_SOFT ENABLE_FRAME_3A \
-	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC ENABLE_YSP ENABLE_CCM ENABLE_BCSH BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT CLM_DEFER_TRIG ENABLE_MDNS ENABLE_SDNS \
+	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC ENABLE_YSP ENABLE_CCM ENABLE_BCSH ENABLE_DMSC_STATIC BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT CLM_DEFER_TRIG ENABLE_MDNS ENABLE_SDNS \
 	ENABLE_LSC_LIT LSC_LIT_CT LSC_LIT_GAIN \
+	LSC_LIT_CT_TRACK LSC_LIT_CT_WARM_X LSC_LIT_CT_WARM_CT \
+	LSC_LIT_CT_COOL_X LSC_LIT_CT_COOL_CT \
 	ENABLE_USERSPACE_3A USERSPACE_3A_SETTLE_SECS \
 	ISP_BLOCK_INIT_STAGE_LIMIT AWB_MAIN_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
 	ENABLE_ADR_REG_WRITES \
@@ -179,23 +205,27 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_AE_SENSOR_APPLY \
 	AE_SENSOR_APPLY_FORCE_PACKED \
 	AE_SENSOR_APPLY_CLEAR_DIRTY AE_SENSOR_APPLY_MAX_AGAIN_INDEX \
-	AE_SENSOR_APPLY_LOG_SKIPS; do
+	AE_SENSOR_APPLY_LOG_SKIPS ENABLE_OEM_ISR_LIT OEM_ISR_LIT_CUT; do
 	if [[ ! "${!numeric}" =~ ^(0x[0-9a-fA-F]+|[0-9]+)$ ]]; then
 		echo "$numeric must be decimal or hex" >&2
 		exit 2
 	fi
 done
 if [[ -n "$PASS" ]]; then
-	SSH=(sshpass -p "$PASS" ssh -T -o LogLevel=ERROR \
+	export SSHPASS="$PASS"
+	SSH=(sshpass -e ssh -T -o LogLevel=ERROR \
 		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-		-o ConnectTimeout=5 "$USER@$IP")
-	SCP=(sshpass -p "$PASS" scp -O -q -o LogLevel=ERROR \
-		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+		-o ConnectTimeout=5 -o ConnectionAttempts=1 "$USER@$IP")
+	SCP=(sshpass -e scp -O -q -o LogLevel=ERROR \
+		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+		-o ConnectTimeout=5 -o ConnectionAttempts=1)
 else
 	SSH=(ssh -T -o LogLevel=ERROR -o StrictHostKeyChecking=no \
-		-o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 "$USER@$IP")
+		-o UserKnownHostsFile=/dev/null -o BatchMode=yes \
+		-o ConnectTimeout=5 -o ConnectionAttempts=1 "$USER@$IP")
 	SCP=(scp -O -q -o LogLevel=ERROR -o StrictHostKeyChecking=no \
-		-o UserKnownHostsFile=/dev/null)
+		-o UserKnownHostsFile=/dev/null -o BatchMode=yes \
+		-o ConnectTimeout=5 -o ConnectionAttempts=1)
 fi
 
 mkdir -p "$LOG"
@@ -211,9 +241,20 @@ scp_fetch_optional() {
 	fi
 }
 
-ROOT="$ROOT" SOC="$SOC" ./build_local.sh
-"$ROOT/host/bin/mipsel-linux-gcc" -Os -Wall -Wextra -static \
-	-o tools/phys_memdump.mipsel tools/phys_memdump.c
+if [[ "$SKIP_BUILD" == "0" ]]; then
+	ROOT="$ROOT" SOC="$SOC" ./build_local.sh
+	"$ROOT/host/bin/mipsel-linux-gcc" -Os -Wall -Wextra -static \
+		-o tools/phys_memdump.mipsel tools/phys_memdump.c
+else
+	[[ -f driver/t40/tx_isp_t40_recovered.ko ]] || {
+		echo "SKIP_BUILD=1 but driver/t40/tx_isp_t40_recovered.ko is missing" >&2
+		exit 2
+	}
+	[[ -x tools/phys_memdump.mipsel ]] || {
+		echo "SKIP_BUILD=1 but tools/phys_memdump.mipsel is missing" >&2
+		exit 2
+	}
+fi
 
 "${SSH[@]}" 'pkill -f "[3]a.sh" 2>/dev/null || true; pkill -f /tmp/phys_memdump 2>/dev/null || true' || true
 "${SCP[@]}" driver/t40/tx_isp_t40_recovered.ko \
@@ -221,10 +262,19 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 "${SCP[@]}" tools/phys_memdump.mipsel "$USER@$IP:/tmp/phys_memdump"
 "${SCP[@]}" tools/t40_userspace_3a.sh "$USER@$IP:/tmp/3a.sh"
 
-"${SSH[@]}" \
+timeout "$REMOTE_PROBE_TIMEOUT_SECS" "${SSH[@]}" \
 	"SMOKE_SLEEP_SECS=$SMOKE_SLEEP_SECS" \
 	"STOP_RAPTOR_TIMEOUT_SECS=$STOP_RAPTOR_TIMEOUT_SECS" \
 	"ALLOW_ACTIVE_STREAM_STOP=$ALLOW_ACTIVE_STREAM_STOP" \
+	"SKIP_REG_SNAPSHOT=$SKIP_REG_SNAPSHOT" \
+	"FAST_RTSP_ONLY=$FAST_RTSP_ONLY" \
+	"FAST_STATS_SNAPSHOT=$FAST_STATS_SNAPSHOT" \
+	"FAST_STATS_SAMPLE_SECS=$FAST_STATS_SAMPLE_SECS" \
+	"FAST_STATS_SAMPLE_INTERVAL=$FAST_STATS_SAMPLE_INTERVAL" \
+	"PRESTREAM_EXPO_IT=$PRESTREAM_EXPO_IT" \
+	"AWB_MANUAL_RGAIN=$AWB_MANUAL_RGAIN" \
+	"AWB_MANUAL_BGAIN=$AWB_MANUAL_BGAIN" \
+	"DNS_GAIN_EV_INIT=$DNS_GAIN_EV_INIT" \
 	"FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
 	"TISP_MAIN_INIT_TOP40_VALUE=$TISP_MAIN_INIT_TOP40_VALUE" \
 	"TISP_MAIN_INIT_CSC_VERSION_VALUE=$TISP_MAIN_INIT_CSC_VERSION_VALUE" \
@@ -266,6 +316,7 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"ENABLE_YSP=$ENABLE_YSP" \
 	"ENABLE_CCM=$ENABLE_CCM" \
 	"ENABLE_BCSH=$ENABLE_BCSH" \
+	"ENABLE_DMSC_STATIC=$ENABLE_DMSC_STATIC" \
 	"BCSH_MODE=$BCSH_MODE" \
 	"ENABLE_CLM=$ENABLE_CLM" \
 	"CLM_STAGE_LIMIT=$CLM_STAGE_LIMIT" \
@@ -276,6 +327,11 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"ENABLE_LSC_LIT=$ENABLE_LSC_LIT" \
 	"LSC_LIT_CT=$LSC_LIT_CT" \
 	"LSC_LIT_GAIN=$LSC_LIT_GAIN" \
+	"LSC_LIT_CT_TRACK=$LSC_LIT_CT_TRACK" \
+	"LSC_LIT_CT_WARM_X=$LSC_LIT_CT_WARM_X" \
+	"LSC_LIT_CT_WARM_CT=$LSC_LIT_CT_WARM_CT" \
+	"LSC_LIT_CT_COOL_X=$LSC_LIT_CT_COOL_X" \
+	"LSC_LIT_CT_COOL_CT=$LSC_LIT_CT_COOL_CT" \
 	"ISP_BLOCK_INIT_STAGE_LIMIT=$ISP_BLOCK_INIT_STAGE_LIMIT" \
 	"AWB_MAIN_INIT_STAGE_LIMIT=$AWB_MAIN_INIT_STAGE_LIMIT" \
 	"ADR_MAIN_INIT_STAGE_LIMIT=$ADR_MAIN_INIT_STAGE_LIMIT" \
@@ -288,12 +344,23 @@ ROOT="$ROOT" SOC="$SOC" ./build_local.sh
 	"AE_SENSOR_APPLY_CLEAR_DIRTY=$AE_SENSOR_APPLY_CLEAR_DIRTY" \
 	"AE_SENSOR_APPLY_MAX_AGAIN_INDEX=$AE_SENSOR_APPLY_MAX_AGAIN_INDEX" \
 	"AE_SENSOR_APPLY_LOG_SKIPS=$AE_SENSOR_APPLY_LOG_SKIPS" \
+	"ENABLE_OEM_ISR_LIT=$ENABLE_OEM_ISR_LIT" \
+	"OEM_ISR_LIT_CUT=$OEM_ISR_LIT_CUT" \
 	sh -s >"$LOG/load-safe.log" 2>&1 <<'EOS'
 set -x
 : "${FRAMECHAN_NEUTRAL_UV_ON_DONE:=0}"
 : "${SMOKE_SLEEP_SECS:=12}"
 : "${STOP_RAPTOR_TIMEOUT_SECS:=20}"
 : "${ALLOW_ACTIVE_STREAM_STOP:=0}"
+: "${SKIP_REG_SNAPSHOT:=0}"
+: "${FAST_RTSP_ONLY:=0}"
+: "${FAST_STATS_SNAPSHOT:=0}"
+: "${FAST_STATS_SAMPLE_SECS:=6}"
+: "${FAST_STATS_SAMPLE_INTERVAL:=1}"
+: "${PRESTREAM_EXPO_IT:=0}"
+: "${AWB_MANUAL_RGAIN:=0}"
+: "${AWB_MANUAL_BGAIN:=0}"
+: "${DNS_GAIN_EV_INIT:=0}"
 : "${TISP_MAIN_INIT_TOP40_VALUE:=0x7fffeeff}"
 : "${TISP_MAIN_INIT_CSC_VERSION_VALUE:=2}"
 : "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
@@ -334,6 +401,7 @@ set -x
 : "${ENABLE_YSP:=1}"
 : "${ENABLE_CCM:=1}"
 : "${ENABLE_BCSH:=0}"
+: "${ENABLE_DMSC_STATIC:=0}"
 : "${BCSH_MODE:=2}"
 : "${ENABLE_CLM:=0}"
 : "${CLM_STAGE_LIMIT:=0}"
@@ -344,6 +412,11 @@ set -x
 : "${ENABLE_LSC_LIT:=0}"
 : "${LSC_LIT_CT:=5000}"
 : "${LSC_LIT_GAIN:=0}"
+: "${LSC_LIT_CT_TRACK:=1}"
+: "${LSC_LIT_CT_WARM_X:=1074}"
+: "${LSC_LIT_CT_WARM_CT:=3300}"
+: "${LSC_LIT_CT_COOL_X:=730}"
+: "${LSC_LIT_CT_COOL_CT:=6500}"
 : "${ISP_BLOCK_INIT_STAGE_LIMIT:=0}"
 : "${AWB_MAIN_INIT_STAGE_LIMIT:=0}"
 : "${ADR_MAIN_INIT_STAGE_LIMIT:=0}"
@@ -356,6 +429,8 @@ set -x
 : "${AE_SENSOR_APPLY_CLEAR_DIRTY:=1}"
 : "${AE_SENSOR_APPLY_MAX_AGAIN_INDEX:=25}"
 : "${AE_SENSOR_APPLY_LOG_SKIPS:=0}"
+: "${ENABLE_OEM_ISR_LIT:=0}"
+: "${OEM_ISR_LIT_CUT:=0}"
 raptor_stop_pid=
 # The stream-stop crash is specific to a stream served by the recovered
 # module; stopping the stock-driver stream on a fresh boot is routine.
@@ -407,11 +482,17 @@ cat /tmp/rmmod-recovered.err || true
 rmmod tx_isp_t40 2>/tmp/rmmod-stock.err || true
 cat /tmp/rmmod-stock.err || true
 dmesg -c > /tmp/t40-dmesg-before-load.txt 2>/dev/null || true
+# Detached kmsg capture: catches oops/epc in streamon worker threads that
+# dmesg's ring buffer rotates away under event spam (see T40_TUNING_HURDLES).
+rm -f /tmp/k.log
+( cat /proc/kmsg > /tmp/k.log 2>/dev/null & echo $! > /tmp/kmsg.pid )
 insmod /tmp/tx_isp_t40_recovered.ko \
 	t40_bringup_profile=1 \
 	t40_profile_direct_vic_feed="$T40_PROFILE_DIRECT_VIC_FEED" \
 	t40_profile_no_direct_irq_defaults=1 \
 	t40_profile_isp_irq_passthrough=1 \
+	enable_oem_isr_lit="${ENABLE_OEM_ISR_LIT:-0}" \
+	oem_isr_lit_cut="${OEM_ISR_LIT_CUT:-0}" \
 	t40_profile_force_vic_mdma_qbuf_ring="$T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING" \
 	t40_profile_no_direct_addr_source="$T40_PROFILE_NO_DIRECT_ADDR_SOURCE" \
 	force_local_frame_streamoff="$FORCE_LOCAL_FRAME_STREAMOFF" \
@@ -438,6 +519,7 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_ysp="$ENABLE_YSP" \
 	enable_ccm="$ENABLE_CCM" \
 	enable_bcsh="$ENABLE_BCSH" \
+	enable_dmsc_static="$ENABLE_DMSC_STATIC" \
 	bcsh_mode="$BCSH_MODE" \
 	enable_clm="$ENABLE_CLM" \
 	clm_stage_limit="$CLM_STAGE_LIMIT" \
@@ -448,6 +530,11 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_lsc_lit="$ENABLE_LSC_LIT" \
 	lsc_lit_ct="$LSC_LIT_CT" \
 	lsc_lit_gain="$LSC_LIT_GAIN" \
+	lsc_lit_ct_track="$LSC_LIT_CT_TRACK" \
+	lsc_lit_ct_warm_x="$LSC_LIT_CT_WARM_X" \
+	lsc_lit_ct_warm_ct="$LSC_LIT_CT_WARM_CT" \
+	lsc_lit_ct_cool_x="$LSC_LIT_CT_COOL_X" \
+	lsc_lit_ct_cool_ct="$LSC_LIT_CT_COOL_CT" \
 	isp_block_init_stage_limit="$ISP_BLOCK_INIT_STAGE_LIMIT" \
 	awb_main_init_stage_limit="$AWB_MAIN_INIT_STAGE_LIMIT" \
 	adr_main_init_stage_limit="$ADR_MAIN_INIT_STAGE_LIMIT" \
@@ -460,6 +547,9 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	ae_sensor_apply_clear_dirty="$AE_SENSOR_APPLY_CLEAR_DIRTY" \
 	ae_sensor_apply_max_again_index="$AE_SENSOR_APPLY_MAX_AGAIN_INDEX" \
 	ae_sensor_apply_log_skips="$AE_SENSOR_APPLY_LOG_SKIPS" \
+	awb_manual_rgain="$AWB_MANUAL_RGAIN" \
+	awb_manual_bgain="$AWB_MANUAL_BGAIN" \
+	dns_gain_ev="$DNS_GAIN_EV_INIT" \
 	force_core_bayer_reg8_value=1 \
 	core_bayer_reg8_value="$CORE_BAYER_REG8_VALUE" \
 	tisp_main_init_reg88_override=0xffffffff \
@@ -479,7 +569,118 @@ PARAM=/sys/module/tx_isp_t40_recovered/parameters
 echo "$TISP_MAIN_INIT_TOP40_VALUE" > "$PARAM/tisp_main_init_top40_value"
 echo "$TISP_MAIN_INIT_CSC_VERSION_VALUE" > "$PARAM/tisp_main_init_csc_version_value"
 insmod /lib/modules/4.4.94/ingenic/sensor_gc4653_t40.ko
+if [ "$PRESTREAM_EXPO_IT" != "0" ]; then
+	{
+		hi=$(( (PRESTREAM_EXPO_IT >> 8) & 255 ))
+		lo=$(( PRESTREAM_EXPO_IT & 255 ))
+		printf 'prestream_expo_it=%s hi=0x%02x lo=0x%02x\n' \
+			"$PRESTREAM_EXPO_IT" "$hi" "$lo"
+		i2ctransfer -f -y 1 w3@0x29 0x02 0x02 "$(printf '0x%02x' "$hi")"
+		i2ctransfer -f -y 1 w3@0x29 0x02 0x03 "$(printf '0x%02x' "$lo")"
+		printf 'readback_0202='
+		i2ctransfer -f -y 1 w2@0x29 0x02 0x02 r1 2>/dev/null || true
+		printf ' readback_0203='
+		i2ctransfer -f -y 1 w2@0x29 0x02 0x03 r1 2>/dev/null || true
+		printf '\n'
+	} > /tmp/t40-prestream-expo.txt 2>&1 || true
+else
+	echo "prestream exposure clamp disabled" > /tmp/t40-prestream-expo.txt
+fi
+
+capture_t40_fast_stats() {
+	set +x
+	cat /proc/interrupts > /tmp/t40-interrupts-after.txt 2>/dev/null || true
+	echo "skipped fast proc dump: /proc/tx_isp_t40_recovered can block while streaming" > /tmp/t40-proc.txt
+	dmesg > /tmp/t40-dmesg-full.txt 2>/dev/null || true
+	dmesg | grep -E 'framechan0 (repaired )?qbuf|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|isp-block-init|awb|AWB|AEIRQ|AETRIG|AWBGAIN|3a-diag|stats fanout|irq_func_cb|TISP stream event|event_process|ae_main_process|sensor_ioctl|core-event streamon' | tail -500 > /tmp/t40-qbuf-lines.txt 2>/dev/null || true
+
+	if ! command -v devmem >/dev/null 2>&1; then
+		echo "devmem not found" > /tmp/t40-fast-core-regs.txt
+		echo "devmem not found" > /tmp/t40-fast-core-regs-post.txt
+		echo "devmem not found" > /tmp/t40-fast-core-samples.txt
+		return
+	fi
+
+	dump_core_reg_range() {
+		local label="$1"
+		local start="$2"
+		local end="$3"
+		local off addr hex
+
+		echo "# $label"
+		off="$start"
+		while [ "$off" -le "$end" ]; do
+			addr=$((0x13300000 + off))
+			hex="$(printf '0x%08x' "$addr")"
+			printf 'off=0x%05x addr=%s value=' "$off" "$hex"
+			devmem "$hex" 32 2>/dev/null || true
+			off=$((off + 4))
+		done
+	}
+
+	dump_t40_core_regs() {
+		local phase="$1"
+
+		echo "# T40 ISP core register snapshot phase=$phase $(date)"
+		dump_core_reg_range "core-top" $((0x00000)) $((0x00110))
+		dump_core_reg_range "core-pipe" $((0x00800)) $((0x00840))
+		dump_core_reg_range "tisp-stream" $((0x01000)) $((0x01064))
+		dump_core_reg_range "awb-wb" $((0x04000)) $((0x05010))
+		dump_core_reg_range "dmsc" $((0x0a000)) $((0x0a27c))
+		dump_core_reg_range "csc" $((0x0d000)) $((0x0d040))
+		dump_core_reg_range "stats-awb" $((0x18000)) $((0x18080))
+		dump_core_reg_range "stats-ae" $((0x19000)) $((0x19080))
+		dump_core_reg_range "msca" $((0x16000)) $((0x16400))
+		dump_core_reg_range "t40-gate" $((0x17000)) $((0x17040))
+		dump_core_reg_range "irq-route" $((0x40000)) $((0x400b8))
+		dump_core_reg_range "legacy-route-9a" $((0x09a00)) $((0x09ad0))
+		dump_core_reg_range "legacy-route-b0" $((0x0b000)) $((0x0b030))
+	}
+
+	dump_t40_core_regs pre > /tmp/t40-fast-core-regs.txt 2>&1
+
+	{
+		i=0
+		while [ "$i" -lt "$FAST_STATS_SAMPLE_SECS" ]; do
+			echo "# sample $i $(date)"
+			for off in 0x18050 0x18054 0x18058 0x19000 0x19004 0x19050 0x19054 0x19058 \
+				0x40020 0x40024 0x40028 0x40030 0x40034 0x40038 0x40060 0x40064 0x40068 \
+				0x400a0 0x400a4 0x400a8; do
+				addr=$((0x13300000 + off))
+				hex="$(printf '0x%08x' "$addr")"
+				printf 'off=%s addr=%s value=' "$off" "$hex"
+				devmem "$hex" 32 2>/dev/null || true
+			done
+			cat /proc/interrupts | grep -E '(^ *3[89]:|tx|isp|vic)' || true
+			sleep "$FAST_STATS_SAMPLE_INTERVAL"
+			i=$((i + FAST_STATS_SAMPLE_INTERVAL))
+		done
+	} > /tmp/t40-fast-core-samples.txt 2>&1
+
+	dump_t40_core_regs post > /tmp/t40-fast-core-regs-post.txt 2>&1
+	echo "skipped fast proc dump: /proc/tx_isp_t40_recovered can block while streaming" > /tmp/t40-proc-post.txt
+	dmesg > /tmp/t40-dmesg-full.txt 2>/dev/null || true
+	dmesg | grep -E 'framechan0 (repaired )?qbuf|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|isp-block-init|awb|AWB|AEIRQ|AETRIG|AWBGAIN|3a-diag|stats fanout|irq_func_cb|TISP stream event|event_process|ae_main_process|sensor_ioctl|core-event streamon' | tail -700 > /tmp/t40-qbuf-lines.txt 2>/dev/null || true
+}
+
 /etc/init.d/S31raptor start
+if [ "$FAST_RTSP_ONLY" = "1" ]; then
+	{
+		date
+		uptime
+		ps | grep "[r]vd" || true
+	} > /tmp/t40-fast-start.txt 2>&1
+	if [ "$FAST_STATS_SNAPSHOT" = "1" ]; then
+		capture_t40_fast_stats
+	else
+		echo "skipped fast stats snapshot (FAST_STATS_SNAPSHOT=0)" > /tmp/t40-proc.txt
+		echo "skipped fast stats snapshot (FAST_STATS_SNAPSHOT=0)" > /tmp/t40-proc-post.txt
+		echo "skipped fast stats snapshot (FAST_STATS_SNAPSHOT=0)" > /tmp/t40-fast-core-regs.txt
+		echo "skipped fast stats snapshot (FAST_STATS_SNAPSHOT=0)" > /tmp/t40-fast-core-regs-post.txt
+		echo "skipped fast stats snapshot (FAST_STATS_SNAPSHOT=0)" > /tmp/t40-fast-core-samples.txt
+	fi
+	exit 0
+fi
 dmesg | grep -E 'isp-block-init|lsc-lit|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|3a-diag|ADR|adr|irq_func_cb|stats fanout|OEM event pre-CSI|CSI direct stage-limit|CSI direct start|direct VIC streamon|OEM event streamon|core-event streamon|CSI direct|settle|phy complete|vic_start_diag' > /tmp/t40-start-immediate-lines.txt 2>/dev/null || true
 dmesg | tail -260 > /tmp/t40-dmesg-start-immediate.txt
 hold_secs=$((SMOKE_SLEEP_SECS))
@@ -498,6 +699,11 @@ fi
 chmod +x /tmp/phys_memdump
 cat /proc/interrupts | grep -E '(^ *3[89]:|tx|isp|vic)' || true
 cat /proc/interrupts > /tmp/t40-interrupts-after.txt
+cat /proc/tx_isp_t40_recovered > /tmp/t40-proc.txt 2>/dev/null || true
+if [ "$SKIP_REG_SNAPSHOT" = "1" ]; then
+	echo "skipped active sensor/devmem snapshot (SKIP_REG_SNAPSHOT=1)" > /tmp/t40-sensor-ae-regs.txt
+	echo "skipped active sensor/devmem snapshot (SKIP_REG_SNAPSHOT=1)" > /tmp/t40-csi-vic-regs.txt
+else
 {
 	echo "# GC4653 AE regs $(date)"
 	read_reg16() {
@@ -578,11 +784,45 @@ if command -v devmem >/dev/null 2>&1; then
 else
 	echo "devmem not found" > /tmp/t40-csi-vic-regs.txt
 fi
+fi
 set -x
 dmesg | grep -E 'framechan0 (repaired )?qbuf|lsc-lit|VIC frame MDMA qbuf ring|irq frame-done|frame.?done|msca|MSCA|fifo|FIFO|addr_fifo|bring-up profile|stock-host override|OEM event pre-CSI|isp-block-init|awb|AWB|clm|CLM|bcsh|BCSH|ccm|CCM|mdns|MDNS|ydns|YDNS|ysp|YSP|gib|GIB|ADR|adr|3a-diag|stats fanout|irq_func_cb|TISP stream event|rearm-guard|AE sensor apply|tgain|again|event setup|sensor_ioctl|CSI direct|csi_|settle|phy complete|vic_start_diag' | tail -380 > /tmp/t40-qbuf-lines.txt
 dmesg | tail -260 > /tmp/t40-dmesg-tail.txt
 dmesg > /tmp/t40-dmesg-full.txt
 EOS
+
+capture_rtsp_frame() {
+	timeout "$RTSP_TIMEOUT_SECS" ffmpeg -hide_banner -loglevel info -y \
+		-rtsp_transport tcp \
+		-i "rtsp://thingino:thingino@$IP:554/$RTSP_PATH" -frames:v 1 \
+		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
+}
+
+if [[ "$RTSP_FIRST" == "1" || "$FAST_RTSP_ONLY" == "1" ]]; then
+	if [[ "$SKIP_RTSP" == "1" ]]; then
+		printf 'skipping RTSP snapshot (SKIP_RTSP=1)\n' >"$LOG/ffmpeg.log"
+	else
+		capture_rtsp_frame
+	fi
+fi
+
+if [[ "$FAST_RTSP_ONLY" == "1" ]]; then
+	scp_fetch_optional /tmp/t40-fast-start.txt "$LOG/fast-start.txt"
+	scp_fetch_optional /tmp/t40-prestream-expo.txt "$LOG/prestream-expo.txt"
+	scp_fetch_optional /tmp/t40-proc.txt "$LOG/proc.txt"
+	scp_fetch_optional /tmp/t40-proc-post.txt "$LOG/proc-post.txt"
+	scp_fetch_optional /tmp/t40-fast-core-regs.txt "$LOG/fast-core-regs.txt"
+	scp_fetch_optional /tmp/t40-fast-core-regs-post.txt "$LOG/fast-core-regs-post.txt"
+	scp_fetch_optional /tmp/t40-fast-core-samples.txt "$LOG/fast-core-samples.txt"
+	scp_fetch_optional /tmp/t40-interrupts-after.txt "$LOG/interrupts-after.txt"
+	scp_fetch_optional /tmp/t40-qbuf-lines.txt "$LOG/qbuf-lines.txt"
+	"${SSH[@]}" 'kill "$(cat /tmp/kmsg.pid 2>/dev/null)" 2>/dev/null; true' || true
+	scp_fetch_optional /tmp/k.log "$LOG/kmsg.log"
+	scp_fetch_optional /tmp/t40-dmesg-full.txt "$LOG/dmesg-full.txt"
+	printf 'log=%s\n' "$LOG"
+	sed -n '1,40p' "$LOG/ffmpeg.log"
+	exit 0
+fi
 
 scp_fetch_optional /tmp/t40-interrupts-after.txt "$LOG/interrupts-after.txt"
 scp_fetch_optional /tmp/t40-interrupts-start.txt "$LOG/interrupts-start.txt"
@@ -591,11 +831,15 @@ scp_fetch_optional /tmp/t40-dmesg-start-immediate.txt "$LOG/dmesg-start-immediat
 scp_fetch_optional /tmp/t40-start-lines.txt "$LOG/start-lines.txt"
 scp_fetch_optional /tmp/t40-dmesg-start.txt "$LOG/dmesg-start.txt"
 scp_fetch_optional /tmp/t40-qbuf-lines.txt "$LOG/qbuf-lines.txt"
+scp_fetch_optional /tmp/t40-proc.txt "$LOG/proc.txt"
 scp_fetch_optional /tmp/t40-csi-vic-regs.txt "$LOG/csi-vic-regs.txt"
 scp_fetch_optional /tmp/t40-dmesg-tail.txt "$LOG/dmesg-tail.txt"
 scp_fetch_optional /tmp/t40-dmesg-full.txt "$LOG/dmesg-full.txt"
 scp_fetch_optional /tmp/t40-dmesg-before-load.txt "$LOG/dmesg-before-load.txt"
+"${SSH[@]}" 'kill "$(cat /tmp/kmsg.pid 2>/dev/null)" 2>/dev/null; true' || true
+scp_fetch_optional /tmp/k.log "$LOG/kmsg.log"
 scp_fetch_optional /tmp/t40-sensor-ae-regs.txt "$LOG/sensor-ae-regs.txt"
+scp_fetch_optional /tmp/t40-prestream-expo.txt "$LOG/prestream-expo.txt"
 
 if [[ "$ENABLE_USERSPACE_3A" == "1" ]]; then
 	{
@@ -671,12 +915,12 @@ else
 	done
 fi
 
-if [[ "$SKIP_RTSP" == "1" ]]; then
-	printf 'skipping RTSP snapshot (SKIP_RTSP=1)\n' >"$LOG/ffmpeg.log"
-else
-	timeout 25 ffmpeg -hide_banner -loglevel info -y -rtsp_transport tcp \
-		-i "rtsp://thingino:thingino@$IP:554/$RTSP_PATH" -frames:v 1 \
-		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
+if [[ "$RTSP_FIRST" != "1" ]]; then
+	if [[ "$SKIP_RTSP" == "1" ]]; then
+		printf 'skipping RTSP snapshot (SKIP_RTSP=1)\n' >"$LOG/ffmpeg.log"
+	else
+		capture_rtsp_frame
+	fi
 fi
 
 "${SSH[@]}" 'P=/sys/module/tx_isp_t40_recovered/parameters; \

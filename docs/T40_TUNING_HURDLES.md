@@ -57,10 +57,18 @@ Forensic ground truth (same-scene stock references):
 
 Open work, ranked (details in the final 2026-06-10/06-11 sections):
 
-0. MSCA buffer-ownership fix: the rearm free-runs over dequeued buffers,
-   causing OSD-region clobbering (position set by irq_frame_done_delay_ms
-   phase) and subtle gradient tearing. Interim: delay=30ms. Also watch the
-   ~2h05m-dwell watchdog reboots (2 occurrences, possibly related).
+0. PORT THE OEM ISR (`ispcore_interrupt_service_routine` + `update_isp_osd`)
+   -- the standing direction per user: forensically match OEM logic, no
+   more delivery knobs. Our frame-done fires on status0 bit 0x2000, which
+   in the OEM is only a ch0 pre-dequeue DIAGNOSTIC; the OEM reads the done
+   FIFOs and pushes to the framechan remote inside the ISR in one ordered
+   place, and composites the ISP OSD at status bit0. See the 2026-06-11
+   direction-change section for the full extraction. Retires: delay knob,
+   spare bit-bucket (stays as debug), DMSC register blast (port tisp_dmsc_*
+   instead).
+1. Bench stability first: silent hard-lockup crashes (no oops over live
+   kmsg), build-independent, 2-15 min after any load incl. stock-path
+   boots. Serial console on ttyS1 before burning more cycles.
 
 1. ~~MDNS grain at high gain~~ FIXED 2026-06-10 late: two literal-translation
    bugs (equation helpers' dropped 4th arg zeroed every blend LUT; the
@@ -2213,8 +2221,9 @@ dequeue, drop the buffer from the rearm rotation until re-queued.
 
 Interim state shipped: delay=30ms (timestamps clean, only the small
 bottom-right logo blinks; `logs/20260611-interim-30ms`, texture 0.858,
-temporal 0.15, RGB 134/128/131). NOTE the bring-up profile hardcode is 0 --
-30 is set via sysfs by hand/harness for now.
+temporal 0.15, RGB 134/128/131). 2026-06-11 update: the bring-up profile no
+longer hardcodes this back to 0; use `IRQ_FRAME_DONE_DELAY_MS=30` in the
+harness for the timestamp-clean interim profile.
 
 Stability watch: TWO unexplained watchdog reboots, both after ~2h05m of
 continuous streaming on the full stack (01:56 and ~04:09). ~2h at ~21fps is
@@ -2222,3 +2231,484 @@ continuous streaming on the full stack (01:56 and ~04:09). ~2h at ~21fps is
 leak in the frame-done path -- possibly the same free-running rearm
 touching a stale buffer. Needs serial console or periodic dmesg polling to
 catch.
+
+## 2026-06-11 (early am): MSCA ownership fix v3 implemented; bench entered a silent fast-crash regime
+
+Buffer-ownership work (the OSD-blink/tearing root cause):
+
+1. v1 (depth counting): tracked FIFO depth as pushes-minus-pops in
+   Tzn_Msca_addr_fifo_write/read and pushed a spare bit-bucket frame
+   (nmem 0xc800000, `msca_spare_phys`) when depth ran dry. WRONG: the
+   initial buffer priming at streamon bypasses Tzn_Msca_addr_fifo_write,
+   so depth undercounts, the condition was always true, the spare got
+   pushed every IRQ, and the 4-deep hardware FIFO overflowed -> wedge.
+2. v2 (shadow-state violations, all-states): drop any pop whose shadow
+   state is not ACTIVE and arm the spare. WRONG: startup pops are
+   unknown/QUEUED (same priming bypass), every frame got dropped, rvd
+   starved, thingino watchdog rebooted.
+3. v3 (current, `enable_msca_spare`, default OFF): enforce only on
+   DONE/FREE pops (definitive "userspace holds this buffer"), pass
+   unknown/QUEUED through, at most one spare in flight
+   (`msca_spare_in_flight`), spare frames consumed inside
+   Tzn_Msca_addr_fifo_read and never delivered. Telemetry:
+   `msca_fifo_depth/spare_push_count/spare_drop_count/
+   msca_spare_violation_count`. In its one clean window v3 behaved
+   exactly as designed: 1 startup violation caught, 1 spare pushed and
+   absorbed, stream healthy through a 74-frame burst. BUT the
+   timestamp-region flicker persisted at delay=0 with only that single
+   violation -- so the top-row clobber does NOT pop stale DONE/FREE
+   entries; the engine's overwrite during rvd's hold produces a
+   normal-looking ACTIVE pop later. The detector as designed cannot see
+   it; the next idea is pairing push/pop sequence numbers per buffer.
+
+Then the bench failed out from under the work: from ~04:50 every load
+crashed within 1-4 minutes -- INCLUDING the spare-off build that is
+functionally identical to the binary that streamed 2h straight last
+night. A resilient /proc/kmsg network streamer caught the death: kernel
+logging perfectly healthy, then instant silence -- NO oops, NO panic
+text. That is a hard lockup (IRQs-off hang or AHB bus freeze), invisible
+to network logging by nature. Conclusions:
+
+- The fast-crash regime is BUILD-INDEPENDENT (reproduced on the
+  known-2h-stable binary). Suspects: dawn light flooding the fixed night
+  exposure (manual ag10/it1440, AE off -- sensor saturation changes ISP
+  stats/IRQ timing), thermals, or hardware fatigue after ~30 power
+  cycles in one night. The earlier "~2h05m dwell" reboots were likely
+  the same silent hang on a longer fuse.
+- Validating the ownership fix is BLOCKED on bench stability. Next
+  session: serial console on ttyS1 (the only way to see a hard lockup),
+  re-test in daylight with sane exposure, and re-run the v3 A/B
+  (enable_msca_spare=1 live) once a load survives 10+ minutes.
+
+Device left on a clean boot, no module loaded.
+
+## 2026-06-11: DIRECTION CHANGE — port the OEM ISR wholesale, stop knob-tuning delivery
+
+User verdict (correct): the driver must implement OEM logic, not approximate
+it with reference-point hacks. The delay knob, the spare bit-bucket, the
+DMSC register blast, and manual WB/exposure are all symptom patches. The
+OEM needs none of them because its interrupt service routine orders
+everything correctly by construction.
+
+Extraction from `ispcore_interrupt_service_routine` (OEM 0x7b29c-0x7c150,
+1169 insns; /tmp/oem-isr.dis from this session):
+
+- Status read+ack: status0 = read `dev_regs+0x40028`, write back to
+  `+0x40024` (ack); status1 = read `+0x40038`, ack to `+0x40034`; a third
+  word read from `+0x40068` gates a large processing block.
+- **Status0 bit0 -> `update_isp_osd()` called directly in the ISR.** Stock
+  composites the ISP OSD at a fixed IRQ phase inside the driver. Our
+  recovered driver never calls update_isp_osd (symbol exists at OEM
+  0x7b210).
+- **Status0 bit13 (0x2000) is NOT frame-done** -- in the OEM it only gates
+  a ch0 "pre-dequeue" diagnostic (reads FIFO have-read counts at
+  0x16170/0x16188 + 0x167f4 and isp_printf's). OUR PROFILE DELIVERS FRAMES
+  ON 0x2000 (`isp_irq_frame_done_status0_mask=0x2000`) -- we are delivering
+  on a diagnostic condition with hand-tuned delays, which is exactly why no
+  delay phase is clean.
+- Bits 0x100/0x200/0x400/0x10: per-channel frame bookkeeping (timestamps
+  via private_do_gettimeofday, tisp_push_frame_count, bss work flags).
+- The three `Tzn_Msca_addr_fifo_read` call sites live in the ISR's
+  channel-walk block (state structs of 0xd8 bytes per channel, fields
+  +0xd0/+0xd1/+0xd2), followed by `tx_isp_send_event_to_remote` (6 sites)
+  -- the OEM reads each channel's done FIFO and pushes the buffer to the
+  framechan remote IN THE ISR, in one ordered place. `pre_frame_dequeue` +
+  `private_schedule_work` handle the ch0 pre-dequeue path; `irq_func_cb`
+  dispatches the secondary table.
+
+THE TASK (next session, fresh bench): literal-translate
+`ispcore_interrupt_service_routine` + `update_isp_osd` (mips2c, same
+workflow as MDNS/SDNS), wire it as the real IRQ handler in place of the
+regtrace frame-done shim (masks/delays/sources retire), and port
+`tisp_dmsc_*` faithfully to replace the register blast. Audit for the
+known translation bug classes (dropped args, mid-function jr-t9 rebinds,
+delay-slot stores). Expected outcome: OSD stable at all positions with no
+delay knob, no tearing, no spare needed (it stays as a debug option), and
+crispness from real DMSC logic instead of a night-scene snapshot.
+
+Bench note: the silent fast-crash regime continued through dawn (crashes
+2-15 min after any load, including stock-path boots; zero kernel output on
+live kmsg at death). Serial console on ttyS1 required before the next
+session burns cycles.
+
+## 2026-06-11 (cont): lit ISR static audit PASSED — cleared for first live load
+
+`ispcore_interrupt_service_routine_lit` + `update_isp_osd_lit`
+(tx_isp_t40_isr_lit.inc) audited line-by-line against the OEM disasm
+(tx-isp-t40.ko 0x7b29c / 0x7b210). Compiles clean into
+tx_isp_t40_recovered.ko (symbols at 0x1eb30 / 0x1e830). It had NEVER been
+live-exercised: every isr-lit{2,3} run had enable_oem_isr_lit at its
+default (off), so the prior silent crashes were NOT this code.
+
+Audited faithful (offsets, shifts, bitfield ext, .bss anchor handling all
+verified): update_isp_osd_lit (msca_state gate, 12B stride, Shd_ctrl dec,
+sltiu/movz wrap); ISR entry (status0/1 read+ack at +0x40028/+0x40038, ch0
+pre-dq diag, OSD-on-bit0); s5 frame-err/overflow block (isp_err/overflow/
+breakfrm at .bss+22104/22100/22096, 2x isp_printf); the frame_vb_measure
+timestamp + tisp_push_frame_count blocks; the buffer-descriptor build
+L_7bf40 (highest lockup risk -- 26460/380 offsets, x96 stride, <<16|hi
+pack, tmp_addr/tmp_addr_uv .bss handling); both Tzn_Msca_addr_fifo_read s6
+sites; all 4 .text calls resolve correctly (ispcore_irqstatus_func @0x79834
+x2, ispcore_irqstatusSec_func @0x799f4 x2, each a0=s3); irq_func_cb[]
+dispatch (cb[i] + cb[i+42] at +168, movn accumulate). Emulated
+mips_stack[448] is bounds-safe; fifo-read->build->send dataflow is
+self-consistent. No lockup-class defects found.
+
+Probe wiring correction (found after the live runs): the initial probe edit
+added `enable_oem_isr_lit="${ENABLE_OEM_ISR_LIT:-0}"` and
+`oem_isr_lit_cut="${OEM_ISR_LIT_CUT:-0}"` to the remote insmod, but did NOT
+define, validate, or pass those env vars through the ssh command. With the
+single-quoted heredoc, the remote side defaulted both to 0. The logs prove
+the intended lit/cut runs did not actually exercise the lit ISR:
+
+- `logs/20260611-isr-lit/load-safe.log`,
+  `logs/20260611-isr-lit2/load-safe.log`, and
+  `logs/20260611-isr-lit3/load-safe.log`: insmod line contains no
+  `enable_oem_isr_lit`/`oem_isr_lit_cut` args at all (pre-wiring script).
+- `logs/20260611-isr-lit-cut1/load-safe.log`: insmod line explicitly says
+  `enable_oem_isr_lit=0` and `oem_isr_lit_cut=0`.
+- `logs/20260611-fragment-baseline/load-safe.log`: same
+  `enable_oem_isr_lit=0` / `oem_isr_lit_cut=0` baseline.
+
+Therefore the earlier "first lit ISR hard-hung", "cut=1 auto-rebooted",
+and "lit ISR exonerated-by-confound" reads are INVALID as ISR evidence.
+They are all default/fragment-path evidence. The lit ISR static audit still
+stands, and the cut-point code compiles, but live validation has not started.
+
+Fix applied in `tools/t40_safe_qbuf_dump_probe.sh`: `ENABLE_OEM_ISR_LIT` and
+`OEM_ISR_LIT_CUT` now have local defaults, numeric validation, ssh env
+passthrough, and remote defaults. Source of truth for any future run is the
+`load-safe.log` insmod line; it must show the requested values before the run
+is interpreted.
+
+Valid live conclusion from the failed runs: the bench/default path was
+acutely unstable at the time. The known-good fragment path
+(`enable_oem_isr_lit=0`, `oem_isr_lit_cut=0`) hard-hung within ~5-7 minutes
+of a fresh boot and needed the .103 power-cycle. That still blocks ISR
+validation until the same baseline survives >=20 minutes, or ttyS1 serial is
+attached.
+
+Next real ISR validation, only after the known-good fragment path is stable:
+
+1. Baseline control:
+   `ENABLE_OEM_ISR_LIT=0 OEM_ISR_LIT_CUT=0 ... tools/t40_safe_qbuf_dump_probe.sh ...`
+   and require >=20 min survival.
+2. First cut:
+   `ENABLE_OEM_ISR_LIT=1 OEM_ISR_LIT_CUT=1 ... tools/t40_safe_qbuf_dump_probe.sh ...`
+   then verify `load-safe.log` says `enable_oem_isr_lit=1`
+   `oem_isr_lit_cut=1` before interpreting liveness.
+3. If cut=1 survives, walk cut=2/3/4/full. If any cut dies while the baseline
+   is stable, that is the first real lit-ISR signal.
+
+## 2026-06-11 (morning): stable RTSP compromise recovered, forensic point still unstable
+
+Harness fixes applied to `tools/t40_safe_qbuf_dump_probe.sh` while chasing the
+current acute crash regime:
+
+- `SKIP_REG_SNAPSHOT=1`: skips active GC4653 I2C and devmem snapshots. Earlier
+  runs showed frame IRQ/qbuf activity, then the probe died while doing active
+  register diagnostics.
+- `RTSP_FIRST=1` and `FAST_RTSP_ONLY=1`: return immediately after Raptor starts
+  and capture the RTSP frame before SCP/qbuf/3A/status diagnostics.
+- `PRESTREAM_EXPO_IT=N`: optional pre-stream GC4653 `0x0202/0x0203` write. In
+  this bench state the direct I2C write returned `I/O error`, so the useful
+  exposure control remained the frame-done EXPO bridge.
+- Load-time `AWB_MANUAL_RGAIN`, `AWB_MANUAL_BGAIN`, and `DNS_GAIN_EV_INIT`
+  passthroughs, so color/denoise state can be present before the first captured
+  frame instead of requiring fragile live sysfs writes.
+
+Best stable stream as of 07:41 EDT:
+
+```
+ENABLE_AE_SENSOR_APPLY=1
+AE_SENSOR_APPLY_FORCE_PACKED=$(( (2 << 16) | 1440 ))
+AE_SENSOR_APPLY_MAX_AGAIN_INDEX=25
+AWB_MANUAL_RGAIN=1500
+AWB_MANUAL_BGAIN=2000
+DNS_GAIN_EV_INIT=98304
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0
+ENABLE_ISP_BLOCK_INIT=1
+ENABLE_LSC_LIT=1 LSC_LIT_CT=3300
+ENABLE_CLM=1 CLM_STAGE_LIMIT=13 CLM_DEFER_TRIG=1
+ENABLE_MDNS=1 ENABLE_SDNS=1
+ENABLE_USERSPACE_3A=0
+ENABLE_OEM_ISR_LIT=0 OEM_ISR_LIT_CUT=0
+RTSP_FIRST=1 FAST_RTSP_ONLY=1 SKIP_REG_SNAPSHOT=1 SKIP_QBUF_DUMP=1
+```
+
+Evidence:
+
+- Capture: `logs/20260611-072903-fast-rtsp-ag2-it1440-r1500-b2000/rtsp-frame.jpg`
+- Liveness: `logs/20260611-072934-ag2-it1440-liveness-monitor.txt`
+- It survived the scheduled SSH-only checks at 1, 2, 4, 7, and 12 minutes
+  uptime with `rvd` alive, `tx_isp_t40_recovered` loaded, and IRQ38/39 moving.
+- Frame metrics vs stored stock-night reference:
+  - stable compromise: mean `27533.9`, RGB `0.4227/0.4137/0.4241`
+  - stock reference: mean `30142.7`, RGB `0.4775/0.4481/0.4543`
+  - Interpretation: color balance is close, exposure is about 9 percent low,
+    and the frame is usable/stable but not a forensic stock match.
+
+Higher-quality points failed in the current bench state:
+
+- `again=4,it=1440,rgain=1500,bgain=2000`:
+  `logs/20260611-072627-fast-rtsp-ag4-it1440-r1500-b2000/rtsp-frame.jpg`
+  matched channel balance closely (mean `32183.4`, RGB
+  `0.4972/0.5029/0.4731`) but the device auto-rebooted immediately after the
+  first frame.
+- `again=8,it=1440`:
+  `logs/20260611-072015-fast-rtsp-ag8-it1440/rtsp-frame.jpg` was overexposed
+  and very green (mean `35796.1`, RGB `0.5443/0.8024/0.2920`), then the device
+  auto-rebooted.
+- `again=10,it=1440,rgain=1085,bgain=3100,dns_gain_ev=491520` reached RTSP but
+  hard-hung/reset during first-frame decode and wrote no usable JPEG.
+
+Conclusion for this session: the device is streaming on the stable compromise
+profile, but strict forensic match is still blocked by stability at the proper
+exposure/gain point. The next quality work should either (a) stabilize the
+`again=4,it=1440` operating point, or (b) reduce the remaining texture/color
+delta at the stable `again=2,it=1440` point. The known DMSC static-texture gap
+is still not fixed in-tree; the faithful `tisp_dmsc_*` port or an
+`enable_dmsc_static` snapshot remains required for true stock-grade texture.
+
+## 2026-06-11 (late morning): DMSC static replay landed; BCSH/LSC daytime candidate, bench blocked
+
+Implementation:
+
+- Added `enable_dmsc_static=1` to `tx_isp_t40_recovered.ko`. It replays the
+  stock DMSC bank snapshot from
+  `logs/20260609-135527-t40-stock-dmsc-live-realuv-colorpeek/stock-dmsc-writes.sh`
+  to offsets `0xa000..0xa27c` and then triggers `0xa19c=1`.
+- `tools/t40_safe_qbuf_dump_probe.sh` now passes `ENABLE_DMSC_STATIC` and the
+  LSC CT tracking anchors (`LSC_LIT_CT_TRACK`, `LSC_LIT_CT_WARM_X`,
+  `LSC_LIT_CT_WARM_CT`, `LSC_LIT_CT_COOL_X`, `LSC_LIT_CT_COOL_CT`) through
+  to `insmod`.
+
+Quality result before the bench went acute again:
+
+- DMSC static at the stable low-gain point lifted brightness and reduced the
+  known demosaic texture, but pushed the scene green/cyan until WB/exposure
+  were retuned.
+- BCSH lit (`ENABLE_BCSH=1 BCSH_MODE=2`) is useful once DMSC/WB are sane:
+  it brought green closer to the daylight stock reference.
+- The best daytime same-profile candidate during the stable window was:
+
+```
+ENABLE_AE_SENSOR_APPLY=1
+AE_SENSOR_APPLY_FORCE_PACKED=$(( (2 << 16) | 905 ))
+AWB_MANUAL_RGAIN=1520
+AWB_MANUAL_BGAIN=1850
+DNS_GAIN_EV_INIT=98304
+T40_PROFILE_FORCE_VIC_MDMA_QBUF_RING=0
+ENABLE_ISP_BLOCK_INIT=1
+ENABLE_LSC_LIT=1 LSC_LIT_CT=3300
+LSC_LIT_CT_TRACK=1 LSC_LIT_CT_WARM_X=1260
+ENABLE_CLM=1 CLM_STAGE_LIMIT=13 CLM_DEFER_TRIG=1
+ENABLE_BCSH=1 BCSH_MODE=2
+ENABLE_DMSC_STATIC=1
+ENABLE_MDNS=1 ENABLE_SDNS=1
+ENABLE_USERSPACE_3A=0
+RTSP_PATH=ch0 RTSP_FIRST=1 FAST_RTSP_ONLY=1
+SKIP_REG_SNAPSHOT=1 SKIP_QBUF_DUMP=1
+```
+
+Evidence:
+
+- DMSC-only first frame:
+  `logs/20260611-075019-fast-rtsp-ag2-it1440-dmsc-static-r1500-b2000/rtsp-frame.jpg`
+  mean `32513.5`, RGB `0.4796/0.5136/0.4951`.
+- BCSH+DMSC daylight tuned candidate:
+  `logs/20260611-080320-live-replay-retune-it905-r1520-b1850/rtsp-frame.jpg`
+  vs `logs/20260610-stock-lsc-reference/stock-day-baseline.jpg`:
+  stock mean `27976.4`, RGB `0.4131/0.4475/0.4201`; recovered mean
+  `28235.1`, RGB `0.4164/0.4513/0.4248` (all channels within about 1.2%).
+
+Important caveat: the stock-day reference above was from the prior day. A
+same-session stock reference was attempted at
+`logs/20260611-080601-same-session-stock-day-ref`, but the stock path did not
+publish RTSP and the box reset/returned to a clean idle boot. After that,
+both the richer recovered profile and even the earlier stable compromise hit
+the acute bench failure again:
+
+- `logs/20260611-081140-restored-final-daymatch-dmsc-bcsh-it905-r1520-b1850`:
+  reboot during/just after recovered `insmod`.
+- `logs/20260611-081444-restore-stable-compromise-ag2-it1440-r1500-b2000`:
+  reached Raptor/RTSP but hard-hung during first-frame decode; no JPEG written,
+  `No route to host`.
+
+The device was power-cycled back to a clean reachable boot after the failures.
+Do not interpret the late failures as DMSC/BCSH regressions without a stable
+fragment-path baseline; stock/manual-stock and the known stable compromise
+were both failing in the same window.
+
+## 2026-06-11 (deep session): OEM 3A root-caused & AE registration unlocked; lockup fix; stock color targets
+
+This session crossed the critical threshold on "why the recovered image can't match
+stock via the OEM code paths." Summary + clean-resume notes. NOTE: open-tx-isp is
+untracked by git, so these driver edits live only on disk — this entry is the record.
+
+### REAL fixes (keep):
+1. Memory-safety / silent lockup: every frame-buffer phys we ioremap+readl/writel or
+   hand the scaler as a DMA target is now screened by `regtrace_phys_is_dram()`
+   (nonzero && < 0x10000000) — added near `regtrace_untag_phys`. Old bounds only
+   rejected >= 0x20000000, letting a FIFO-underrun/corrupt-qbuf MMIO address
+   (0x10000000-0x1fffffff; ISP@0x13300000) reach a CPU readl (regtrace_phys_sample_plane,
+   every frame w/ require_content=Y) or an engine DMA (Tzn_Msca_addr_fifo_write) ->
+   AHB freeze, no oops = the silent 2-15min hard-lockup. Also gates phys_fill_plane,
+   phys_to_kseg0; drops out-of-DRAM scaler targets at fifo-write (counter
+   `msca_fifo_oob_drop_count`). Result: survival 2min -> 40min..1h41m. Longer-fuse
+   remnant may remain. The audit's irq_func_cb-fanout-hang theory was a red herring
+   (gated by enable_isp_stats_fanout, off by default).
+2. OEM 3A CORE FIX: `tisp_ae_init_par_calc` fragment 2 used `LC29[a0]` to fetch the
+   per-channel AE param struct -- but `LC29` is literally `static const char LC29[]="GBIG"`,
+   a printf debug string. The translator mis-mapped the OEM `.rodata+5572` pointer table
+   to it. Replaced with `regtrace_ae_cache_for_channel(a0)` (= &ae_cache_init + a0*0x514,
+   the real table = { .data+0xb318, .data+0xb82c }). This cleared the unaligned-access
+   fault and is THE unlock: tisp_ae_main_init now runs to completion and registers
+   irq_func_cb[4] (tisp_ae_main_interrupt_static) + event-1 (tisp_ae_main_process).
+   Verified live: "AECHK registered irq_func_cb[4]+event1 OK". The OEM AE is now wired
+   and firing (the AE stats IRQ -- status0 bit 4, confirmed via 3a-diag status0=0x38 --
+   dispatches through the fanout). Required profile flags: ENABLE_ISP_BLOCK_INIT_AE=1
+   ENABLE_ISP_BLOCK_INIT_AWB=1 ENABLE_ISP_STATS_FANOUT=1 (handlers register in
+   tisp_ae/awb_main_init, gated by enable_isp_block_init_ae/awb which default off).
+
+### KEY DISCOVERY: the running 3A is a userspace shell hack, not the kernel OEM path.
+Traces (tisp_ae_main_process, tisp_awb_gain_reg) stay empty -> the kernel OEM AE/AWB
+never ran. `/tmp/3a.sh` (started by harness/thingino) samples Y/UV via /dev/mem
+(phys_memdump) and pokes ae_sensor_apply_force_packed + awb_manual_rgain/bgain. It
+mis-converges (fixed Y_PHYS=0x6a3e500 while buffers rotate -> reads stale/dark ->
+cranks exposure -> blowout). That's why hand-matching stock registers never stuck.
+
+### Stock color forensic targets (devmem from stock tx_isp_t40; ISP core phys 0x13300000):
+- WB gains regs 0x4004/0x4008 = 2172/2360 (format (gain&0x3fff)|0x04000000, 1024=1.0).
+  Our manual 1520/1850 under-boost R/B -> green cast. (Stock proc AWBGlobalRgain=550 is
+  pre-pipeline; the register is ground truth.)
+- Black level GIB/BLC 0x1030-0x103c = 0x00000000 (we write gib_blc_offset=0x100 -> milky
+  lifted blacks). Saturation/Contrast/Brightness/Hue/Sharpness all = 128 (neutral).
+
+### TEMP scaffolding (REMOVE before shipping; grep "AECHK"):
+- ~12 `AECHK ...` printk's in tisp_ae_main_init + tisp_ae_init_par_calc (checkpoint bisect).
+- `TRACE awb_irq / event_process / ae_main_process / awb_gain_reg` printk's.
+- tisp_deflicker_expt: early `return 0` at top (it has a NULL-deref [fixed wrong, redo
+  with regtrace_ae_cache_for_channel] AND an untranslated `div zero,s3,v0` @0x23618 in a
+  120-entry loop that hangs).
+- tisp_ae_par_calc: early `return 0` at top (faults vaddr 0x4 on a pstMainAeOri field deref).
+- init_par_calc fragment 6 fix (added &aeShowPar base) is CORRECT, keep.
+- deflicker fragment 1 edit used &LC29 (WRONG, same string) -- redo with the cache helper.
+- bcsh_saturation knob (earlier) writes BCSH sat matrix 0x11018-0x11020 via system_reg_write
+  (the OEM tisp_set_saturation is dead: pstMainBcshOri never initialized). Harmless/dormant.
+
+### NEXT STEPS (multi-session, ordered):
+1. tisp_main_init+0x928 epc=0 null-call to regtrace_core_write(0x16094,1): enabling
+   block_init drives more of OEM tisp_main_init than the reconstruction normally runs.
+   Decide gate-vs-fix. (Map via /proc/modules base + objdump -t/-d on the built .ko.)
+2. tisp_ae_main_interrupt_static (@~81470, model_output stub) does NOT push event-1
+   (unlike the AWB interrupt pushing event-14) -> make it push event-1 so the algorithm
+   is triggered; verify tisp_event_process drains it.
+3. Fix tisp_ae_main_process's null-callee chain (long_par_update/spec_calculate/long_alogrithm).
+4. Restore + properly fix deflicker (cache helper + the div loop) and par_calc.
+5. Repeat the whole playbook for AWB init (its own fragment bugs expected).
+6. Strip AECHK/TRACE printk's + the temp early-returns.
+
+Method that works: detached `cat /proc/kmsg >/tmp/k.log` started BEFORE insmod (dmesg
+rotates too fast under event spam) + AECHK checkpoint printk's to bisect the hanging/
+faulting call + OEM `objdump -d -r` / `objdump -s -j .rodata` for the correct translation.
+Recover via Tasmota relay at 192.168.50.103 (`/cm?cmnd=Power%20OFF` then `%20ON`).
+
+## 2026-06-11 (later session): block-init crash root-caused & fixed — OEM AE/AWB now EXECUTE
+
+Continues the deep 3A-port session. The prior entry's "epc=0 null-call to
+regtrace_core_write" diagnosis was WRONG. open-tx-isp is untracked by git, so
+this is the record.
+
+### Method upgrade (what finally nailed it)
+- Instrumented `tools/t40_safe_qbuf_dump_probe.sh` to start a detached
+  `cat /proc/kmsg >/tmp/k.log` *before* insmod and fetch it (kmsg.log) — catches
+  the streamon-thread oops that the harness's `dmesg | tail` rotates away under
+  event spam.
+- ALWAYS recompute the module base from `/proc/modules` for the boot you are
+  analysing. Base is deterministic on this box (0xc0ac6000) but differs from the
+  prior session's 0xc0a90000; using the stale base mis-maps epc to the wrong fn.
+- `/proc/kcore` reads the LIVE relocated instruction bytes: parse its ELF
+  program headers to map vaddr->file offset, then
+  `dd if=/proc/kcore bs=1 skip=$((fileoff)) count=N | hexdump -e '1/4 "%08x\n"'`
+  (busybox `od` lacks `-A`). This proved the faulting instruction was correctly
+  relocated, killing the reloc/codegen theories and pointing at `ra==epc` =
+  a corrupted return.
+
+### THREE real fixes (keep)
+1. **tisp_ae_main_init stack-buffer overflow (THE block-init blocker).** Two
+   byte-copy loops — label 0x160 copies 152 bytes (tisp_par_info) into
+   `&local_1b4`; label 0x17c copies 420 bytes (sensor_ctrl_main+4) into
+   `&local_10` — but `local_10`/`local_1b4` were declared as 4-byte
+   scalars. The copies overran the frame and smashed the saved return address;
+   tisp_ae_main_init returned to garbage 0x33700 (back onto block_init_once's
+   AE-gate `lbu` with a null base) and oopsed (BadVA 0x3efd / 0x62a4),
+   truncating block-init right after AE registration (`ran=true` already set so
+   AWB/ADR/LSC/color never ran and never retried). FIX:
+   `uint8_t local_10[420]; uint8_t local_1b4[152];` (OEM frame offsets
+   local_10@0x10 -> local_1b4@0x1b4 -> local_250@0x250 confirm the extents).
+   RESULT: block-init now runs to completion — after-ae, after-awb, post adr,
+   lsc-lit, bcsh, ydns, ysp, sdns, ccm, clm, mdns, gib all `ret=0`.
+2. **AWB process arg mis-mapping.** `tisp_awb_main_process` passed `&isp_memopt`
+   (a 4-byte module-param int) as a0/a1 to tisp_awb_long_par_update /
+   spec_calculate / long_alogrithm / set_gain. OEM (objdump -d -r tx-isp-t40.ko)
+   passes a0=&pstMainAwbOri (.bss+0x3f34, 0x200B) and a1=&pstMainAwbCtDetectOri
+   (.bss+0x3cac, 0x88B). The translator failed to resolve the s0/s1 .bss base
+   registers and defaulted them to isp_memopt; `*(isp_memopt+12)` read past the
+   int into adjacent .bss -> NULL -> `*(uint16)(NULL+2)` oops in tisp-event-0
+   once the OEM AWB process actually ran. FIX: substituted the real structs
+   (both already declared: pstMainAwbOri[128], pstMainAwbCtDetectOri[34]); also
+   fragment-9 event_push `*(*(vic_mdma_ch1_set_buff_index))` ->
+   `*(*(pstMainAwbOri+28))`.
+3. (reverted) a tisp_par_info compiler-barrier added under the wrong reloc
+   theory — unnecessary once #1 was fixed; reverted to keep the diff honest.
+
+### State now
+- No oops anywhere; box streams stable; the `tisp-event-0` event thread
+  SURVIVES (previously it died on the AWB null deref).
+- `TRACE awb_gain_reg` now FIRES — the kernel OEM AWB algorithm executes
+  end-to-end (it was empty/dead in every prior session). The OEM 3A is no longer
+  just "registered", it is RUNNING.
+
+### Remaining (same find-and-fix method)
+- AWB gains are still garbage (e.g. rgain=8528 bgain=-2141316532, pointer-like)
+  -> more mis-mapped globals INSIDE tisp_awb_long_alogrithm / tisp_awb_gain_reg
+  (large fns; cross-ref OEM objdump -d -r, same as fix #2).
+- AE process chain: tisp_ae_main_process null-callee chain + make
+  tisp_ae_main_interrupt_static push event-1 (so the AE algo is triggered).
+- deflicker / tisp_ae_par_calc still temp early-returned (grep TEMPORARY).
+- Strip AECHK + AeIntegrationTimeUnit dump_stack debug (grep AECHK) once the
+  above are done.
+
+### Addendum (same session): AWB gains real + AE event-1 wired
+
+Two more fixes of the same "OEM stack/struct adjacency the reconstruction lost"
+class:
+
+- **AWB gain-pair adjacency** (`tisp_awb_set_gain` -> `tisp_awb_gain_reg`).
+  gain_reg reads `arg1[0]/arg1[1]` (rgain,bgain) and writes `arg2[0]/arg2[1]`.
+  The OEM frame has `local_18@0x18 / local_1c@0x1c` and `local_10@0x10 /
+  local_14@0x14` as adjacent slot pairs; the recon declared them as separate
+  scalars so `arg1[1]` read stack garbage and bgain came back as a pointer
+  (-2141316532). Fixed by marshalling in/out through contiguous 2-word temps at
+  the call site. Now `TRACE awb_gain_reg rgain=8528 bgain=8416` (both real). The
+  ~4x-over-stock magnitude is expected: stock R=2172/B=2360 was a *daylight*
+  (CT 5048K) measurement and the bench scene is dim/indoor; the
+  `(v0<<2)-1024+v1` formula is faithful to the OEM disasm.
+- **AE event-1 push adjacency** (`tisp_ae_main_interrupt_hist`). AE's event-1
+  (which triggers tisp_ae_main_process via tisp_event_set_cb(0,1)) is pushed by
+  the *histogram* interrupt (irq_func_set 5), NOT the static one — the OEM
+  static interrupt (size 0x7c) just collects stats and returns. The hist recon
+  did `local_18=1; tisp_event_push(0,&local_10)` relying on
+  `local_18 == ev[2] == &local_10+8` adjacency (lost). Fixed with a contiguous
+  `uint32_t ev[10]; ev[2]=1` array, exactly like
+  tisp_awb_main_interrupt_static. Correct but currently latent (see next).
+
+**Precise next gap:** the AE stats interrupt (irq_func_cb[4] static / [5] hist)
+never fires, so event-1 is never pushed and `tisp_ae_main_process` never runs
+(event_process shows only event=14 AWB). AWB re-arms its stats engine *inside
+its own running IRQ* via `system_reg_set_awb_trig(1,0)`; the AE equivalent
+`system_reg_set_ae_trig` is not invoked in the active streamon path, so the AE
+stats engine stays unarmed and cb[4]/[5] are silent. Find where the OEM arms
+the AE stats engine (tisp_ae_main_init tail or a frame/streamon hook) and wire
+it; then tisp_ae_main_process runs (expect its own internal mis-map bugs next).
