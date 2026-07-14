@@ -9203,17 +9203,20 @@ static struct tx_isp_subdev *regtrace_t23_sensor_sd;
 static struct i2c_client *regtrace_t23_sensor_client;
 static struct i2c_driver *regtrace_t23_sensor_driver;
 static struct module *regtrace_t23_sensor_owner;
+static bool regtrace_t23_sensor_identified;
 static bool regtrace_t23_sensor_initialized;
 static bool regtrace_t23_sensor_streaming;
+static bool regtrace_t23_csi_initialized;
 static bool regtrace_t23_valid_ptr(uintptr_t ptr);
 static void regtrace_t23_seed_sensor_caches(const char *reason);
+static int regtrace_t23_call_sensor_chip_ident(const char *reason);
 static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
                                              unsigned short addr,
                                              const char *reason);
 static void regtrace_t23_release_sensor_client(struct i2c_driver *drv,
                                                const char *reason);
 #define REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET 0xbc
-#define REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET 0x84
+#define REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET 0x80
 #define REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET 0xc0
 #define REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET 0xc4
 #define REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET 0xc8
@@ -9264,6 +9267,7 @@ static int regtrace_t23_capture_sensor_subdev(uintptr_t pdev,
         return 0;
 
     regtrace_t23_sensor_sd = (struct tx_isp_subdev *)sd;
+    regtrace_t23_sensor_identified = false;
     regtrace_t23_sensor_initialized = false;
     regtrace_t23_sensor_streaming = false;
     regtrace_t23_seed_sensor_caches("sensor-subdev-init");
@@ -9645,6 +9649,9 @@ int tx_isp_sinfo_sensor_bind(struct tx_isp_subdev *sd, struct module *owner)
         return -EINVAL;
 
     regtrace_t23_sensor_sd = sd;
+    regtrace_t23_sensor_identified = false;
+    regtrace_t23_sensor_initialized = false;
+    regtrace_t23_sensor_streaming = false;
     regtrace_t23_seed_sensor_caches("sensor-bind");
     mutex_lock(&regtrace_sinfo_lock);
     for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
@@ -9691,6 +9698,7 @@ void tx_isp_sinfo_sensor_unbind(struct tx_isp_subdev *sd, struct module *owner)
     mutex_unlock(&regtrace_sinfo_lock);
     if (regtrace_t23_sensor_sd == sd) {
         regtrace_t23_sensor_sd = NULL;
+        regtrace_t23_sensor_identified = false;
         regtrace_t23_sensor_initialized = false;
         regtrace_t23_sensor_streaming = false;
     }
@@ -9729,12 +9737,13 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_SC2336_WIDTH 1920U
 #define REGTRACE_SC2336_HEIGHT 1080U
 #define REGTRACE_SC2336_TOTAL_WIDTH 0x8caU
-#define REGTRACE_SC2336_TOTAL_HEIGHT 0x963U
+#define REGTRACE_SC2336_TOTAL_HEIGHT 0x5a0U
 #define REGTRACE_SC2336_CHIP_ID 0xcb3aU
 #define REGTRACE_SC2336_MIPI_CLK 405U
 #define REGTRACE_T23_SENSOR_IOCTL_561B 0xc008561bU
 #define REGTRACE_T23_SENSOR_IOCTL_561C 0xc008561cU
 #define REGTRACE_T23_SENSOR_ATTR_SIZE 0x100U
+#define REGTRACE_T23_SENSOR_VIDEO_ATTR_OFFSET 0x270U
 #define REGTRACE_T23_CSI_PHY_PHYS 0x10022000U
 #define REGTRACE_T23_CSI_PHY_SIZE 0x1000U
 #define REGTRACE_T23_ATTR_NAME 0x00U
@@ -9787,6 +9796,8 @@ static int regtrace_tx_isp_misc_registered;
 int32_t system_reg_write(uint32_t a0, uint32_t a1);
 int32_t system_reg_read(uint32_t a0);
 int32_t tisp_msca_addr_fifo_write(char arg1, int32_t arg2, int32_t arg3);
+int32_t tisp_channel_start(int32_t arg1);
+int64_t tisp_channel_main_attr_set(uint32_t a0, uintptr_t a1);
 
 static bool regtrace_t23_enable_irqs_on_streamon;
 static bool regtrace_t23_log_framechan_payloads = true;
@@ -9794,6 +9805,10 @@ static bool regtrace_t23_direct_msca_qbuf;
 static bool regtrace_t23_direct_msca_start;
 static bool regtrace_t23_direct_msca_cfg_load;
 static bool regtrace_t23_direct_tisp_stream_regs;
+static bool regtrace_t23_source_core_start;
+static uint regtrace_t23_source_core_bypass = 0xb4000001U;
+static uint regtrace_t23_source_core_bayer = 3U;
+static uint regtrace_t23_source_core_mode = 0x1cU;
 static bool regtrace_t23_direct_csi_start;
 static bool regtrace_t23_direct_vic_start;
 static bool regtrace_t23_direct_vic_force_run;
@@ -9811,6 +9826,10 @@ module_param_named(direct_msca_qbuf, regtrace_t23_direct_msca_qbuf, bool, 0644);
 module_param_named(direct_msca_start, regtrace_t23_direct_msca_start, bool, 0644);
 module_param_named(direct_msca_cfg_load, regtrace_t23_direct_msca_cfg_load, bool, 0644);
 module_param_named(direct_tisp_stream_regs, regtrace_t23_direct_tisp_stream_regs, bool, 0644);
+module_param_named(source_core_start, regtrace_t23_source_core_start, bool, 0644);
+module_param_named(source_core_bypass, regtrace_t23_source_core_bypass, uint, 0644);
+module_param_named(source_core_bayer, regtrace_t23_source_core_bayer, uint, 0644);
+module_param_named(source_core_mode, regtrace_t23_source_core_mode, uint, 0644);
 module_param_named(direct_csi_start, regtrace_t23_direct_csi_start, bool, 0644);
 module_param_named(direct_vic_start, regtrace_t23_direct_vic_start, bool, 0644);
 module_param_named(direct_vic_force_run, regtrace_t23_direct_vic_force_run, bool, 0644);
@@ -9841,6 +9860,18 @@ static bool regtrace_t23_csi_clks_enabled;
 static bool regtrace_t23_vic_clks_enabled;
 static bool regtrace_t23_ivdc_clks_enabled;
 static uint32_t regtrace_t23_msca_ch_en;
+static bool regtrace_t23_core_started;
+
+#define REGTRACE_T23_CORE_DMA_BUFS 6
+
+struct regtrace_t23_core_dma_buf {
+    void *virt;
+    uint32_t phys;
+    uint32_t size;
+};
+
+static struct regtrace_t23_core_dma_buf
+    regtrace_t23_core_dma_bufs[REGTRACE_T23_CORE_DMA_BUFS];
 
 static void regtrace_t23_enable_subdev_clks(const char *name,
                                             unsigned char *sd,
@@ -9893,6 +9924,8 @@ static void regtrace_t23_set_irq_enabled(const char *name,
                                          int channel)
 {
     struct tx_isp_irq_info *irq_info;
+    void __iomem *base;
+    uint32_t hw_mask = 0;
     unsigned int irq;
 
     if (!sd || !enabled)
@@ -9902,6 +9935,13 @@ static void regtrace_t23_set_irq_enabled(const char *name,
     irq = *(uint32_t *)irq_info;
     if (!irq)
         return;
+
+    base = (void __iomem *)(uintptr_t)*(uint32_t *)(sd + 184);
+    if (sd == regtrace_t23_core_sd && base) {
+        writel(enable ? 0xffffffffU : 0, base + 0xb0);
+        wmb();
+        hw_mask = readl(base + 0xb0);
+    }
 
     if (enable) {
         if (*enabled)
@@ -9915,9 +9955,9 @@ static void regtrace_t23_set_irq_enabled(const char *name,
         *enabled = false;
     }
 
-    printk(KERN_WARNING "tx_isp_t23_recovered: %s irq %s irq=%u sd=%p channel=%d reason=%s\n",
+    printk(KERN_WARNING "tx_isp_t23_recovered: %s irq %s irq=%u sd=%p hw_mask=0x%x channel=%d reason=%s\n",
            name ? name : "subdev", enable ? "enable" : "disable",
-           irq, sd, channel, reason ? reason : "?");
+           irq, sd, hw_mask, channel, reason ? reason : "?");
 }
 
 static void regtrace_t23_stream_irq_gate(int enable,
@@ -9962,7 +10002,7 @@ static void regtrace_t23_put_le16(unsigned char *p, uint16_t value)
 
 static bool regtrace_t23_valid_ptr(uintptr_t ptr)
 {
-    return ptr && ptr < 0xfffff001U;
+    return ptr >= 0x80000000U && ptr < 0xfffff001U;
 }
 
 static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
@@ -9979,7 +10019,7 @@ static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
     if (strcmp(name, "sc2336"))
         return 0;
     if (regtrace_t23_sensor_client)
-        return 0;
+        return regtrace_t23_call_sensor_chip_ident(reason);
 
     memset(&info, 0, sizeof(info));
     snprintf(info.type, sizeof(info.type), "%s", name);
@@ -10005,7 +10045,7 @@ static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
     printk(KERN_INFO "tx_isp_t23_recovered: created i2c sensor client %s addr=0x%x adapter=%d client=%p reason=%s\n",
            name, info.addr, regtrace_t23_sensor_i2c_adapter,
            regtrace_t23_sensor_client, reason ? reason : "?");
-    return 0;
+    return regtrace_t23_call_sensor_chip_ident("sensor-client-created");
 }
 
 static void regtrace_t23_release_sensor_client(struct i2c_driver *drv,
@@ -10023,13 +10063,14 @@ static void regtrace_t23_release_sensor_client(struct i2c_driver *drv,
     regtrace_t23_sensor_driver = NULL;
     regtrace_t23_sensor_owner = NULL;
     regtrace_t23_sensor_sd = NULL;
+    regtrace_t23_sensor_identified = false;
     regtrace_t23_sensor_initialized = false;
     regtrace_t23_sensor_streaming = false;
 }
 
 static void regtrace_t23_seed_sc2336_attr(void)
 {
-    unsigned int max_it = REGTRACE_SC2336_TOTAL_HEIGHT - 6U;
+    unsigned int max_it = REGTRACE_SC2336_TOTAL_HEIGHT - 4U;
 
     memset(regtrace_t23_sc2336_attr, 0, sizeof(regtrace_t23_sc2336_attr));
     regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_NAME,
@@ -10052,7 +10093,7 @@ static void regtrace_t23_seed_sc2336_attr(void)
     regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_IMAGE_HEIGHT,
                           REGTRACE_SC2336_HEIGHT);
     regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_SETTLE_ADAPT,
-                          0);
+                          1);
     regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_HCROP_DIFF,
                           0);
     regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_VCOMP,
@@ -10073,8 +10114,8 @@ static void regtrace_t23_seed_sc2336_attr(void)
                           0);
     regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MAX_AGAIN,
                           327680U);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIN_IT, 1);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIN_IT_NATIVE, 1);
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIN_IT, 2);
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIN_IT_NATIVE, 2);
     regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MAX_IT_NATIVE, max_it);
     regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_IT_LIMIT, max_it);
     regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_TOTAL_WIDTH,
@@ -10084,28 +10125,51 @@ static void regtrace_t23_seed_sc2336_attr(void)
     regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MAX_IT, max_it);
     regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_IT_DELAY, 2);
     regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_AGAIN_DELAY, 2);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_ONE_LINE_US, 13);
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_ONE_LINE_US, 28);
     regtrace_t23_sensor_attr_ready = true;
+}
+
+static unsigned char *regtrace_t23_sensor_owned_attr(void)
+{
+    uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
+    uintptr_t attr;
+
+    if (!regtrace_t23_valid_ptr(sd))
+        return NULL;
+
+    attr = *(uint32_t *)(sd + REGTRACE_T23_SENSOR_VIDEO_ATTR_OFFSET);
+    if (!regtrace_t23_valid_ptr(attr))
+        return NULL;
+    if (regtrace_t23_get_le32((unsigned char *)attr + REGTRACE_T23_ATTR_CHIP_ID) !=
+        REGTRACE_SC2336_CHIP_ID)
+        return NULL;
+
+    return (unsigned char *)attr;
 }
 
 static void regtrace_t23_seed_sensor_caches(const char *reason)
 {
+    unsigned char *attr;
+
     if (!regtrace_t23_sensor_attr_ready)
         regtrace_t23_seed_sc2336_attr();
+    attr = regtrace_t23_sensor_owned_attr();
+    if (!attr)
+        attr = regtrace_t23_sc2336_attr;
 
     if (regtrace_t23_csi_sd) {
-        memcpy(regtrace_t23_csi_sd + 0xdc, regtrace_t23_sc2336_attr, 0x34);
+        memcpy(regtrace_t23_csi_sd + 0xdc, attr, 0x34);
         *(uint32_t *)(regtrace_t23_csi_sd + 0x14) =
             REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI;
         *(uint32_t *)(regtrace_t23_csi_sd + 0x110) =
-            (uint32_t)(uintptr_t)regtrace_t23_sc2336_attr;
+            (uint32_t)(uintptr_t)attr;
         if (*(uint32_t *)(regtrace_t23_csi_sd + 0x12c) < 3)
             *(uint32_t *)(regtrace_t23_csi_sd + 0x12c) = 3;
     }
 
     if (regtrace_t23_vic_sd) {
         *(uint32_t *)(regtrace_t23_vic_sd + 0x110) =
-            (uint32_t)(uintptr_t)regtrace_t23_sc2336_attr;
+            (uint32_t)(uintptr_t)attr;
         *(uint32_t *)(regtrace_t23_vic_sd + 0xdc) = REGTRACE_SC2336_WIDTH;
         *(uint32_t *)(regtrace_t23_vic_sd + 0xe0) = REGTRACE_SC2336_HEIGHT;
         if (*(uint32_t *)(regtrace_t23_vic_sd + 0x12c) < 3)
@@ -10113,16 +10177,53 @@ static void regtrace_t23_seed_sensor_caches(const char *reason)
     }
 
     if (regtrace_t23_core_sd) {
-        memcpy(regtrace_t23_core_sd + 0xec, regtrace_t23_sc2336_attr, 0x50);
+        memcpy(regtrace_t23_core_sd + 0xec, attr, 0x50);
         *(uint32_t *)(regtrace_t23_core_sd + 0x120) =
-            (uint32_t)(uintptr_t)regtrace_t23_sc2336_attr;
+            (uint32_t)(uintptr_t)attr;
         *(uint32_t *)(regtrace_t23_core_sd + 0x124) = REGTRACE_SC2336_WIDTH;
         *(uint32_t *)(regtrace_t23_core_sd + 0x128) = REGTRACE_SC2336_HEIGHT;
     }
 
-    printk(KERN_INFO "tx_isp_t23_recovered: seeded SC2336 attrs csi=%p vic=%p core=%p sensor=%p reason=%s\n",
+    printk(KERN_INFO "tx_isp_t23_recovered: seeded SC2336 attrs attr=%p source=%s csi=%p vic=%p core=%p sensor=%p reason=%s\n",
+           attr, attr == regtrace_t23_sc2336_attr ? "fallback" : "sensor",
            regtrace_t23_csi_sd, regtrace_t23_vic_sd, regtrace_t23_core_sd,
 	   regtrace_t23_sensor_sd, reason ? reason : "?");
+}
+
+static int regtrace_t23_call_sensor_chip_ident(const char *reason)
+{
+    uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
+    uintptr_t ops;
+    uintptr_t core_ops;
+    uintptr_t ident_fn;
+    int ret;
+
+    if (regtrace_t23_sensor_identified)
+        return 0;
+    if (!regtrace_t23_valid_ptr(sd))
+        return -ENODEV;
+
+    ops = *(uint32_t *)(sd + REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET);
+    if (!regtrace_t23_valid_ptr(ops))
+        return -ENODEV;
+    core_ops = *(uint32_t *)(ops + 0);
+    if (!regtrace_t23_valid_ptr(core_ops))
+        return -ENODEV;
+    ident_fn = *(uint32_t *)(core_ops + 0);
+    if (!regtrace_t23_valid_ptr(ident_fn)) {
+        regtrace_t23_sensor_identified = true;
+        return 0;
+    }
+
+    printk(KERN_WARNING "tx_isp_t23_recovered: sensor g_chip_ident start sd=%p fn=%p reason=%s\n",
+           (void *)sd, (void *)ident_fn, reason ? reason : "?");
+    ret = ((int (*)(void *, void *))(uintptr_t)ident_fn)((void *)sd, NULL);
+    if (!ret)
+        regtrace_t23_sensor_identified = true;
+    regtrace_t23_seed_sensor_caches("sensor-g-chip-ident");
+    printk(KERN_WARNING "tx_isp_t23_recovered: sensor g_chip_ident ret=%d reason=%s\n",
+           ret, reason ? reason : "?");
+    return ret;
 }
 
 static int regtrace_t23_map_csi_phy(unsigned char *csi)
@@ -10166,6 +10267,9 @@ static int regtrace_t23_call_sensor_core_init(const char *reason)
 
     if (regtrace_t23_sensor_initialized)
         return 0;
+    ret = regtrace_t23_call_sensor_chip_ident(reason);
+    if (ret)
+        return ret;
     if (!regtrace_t23_valid_ptr(sd))
         return -ENODEV;
 
@@ -10179,6 +10283,8 @@ static int regtrace_t23_call_sensor_core_init(const char *reason)
     if (!regtrace_t23_valid_ptr(init_fn))
         return -ENODEV;
 
+    printk(KERN_WARNING "tx_isp_t23_recovered: sensor init start sd=%p fn=%p reason=%s\n",
+           (void *)sd, (void *)init_fn, reason ? reason : "?");
     ret = ((int (*)(void *, int))(uintptr_t)init_fn)((void *)sd, 1);
     if (!ret)
         regtrace_t23_sensor_initialized = true;
@@ -10392,13 +10498,22 @@ static unsigned char *regtrace_t23_subdev_self(void *sd)
 static unsigned char *regtrace_t23_resolve_sensor_attr(unsigned char *dev,
                                                        const char *reason)
 {
-    uintptr_t attr = 0;
+    unsigned char *owned;
+    uintptr_t attr;
 
     if (!regtrace_t23_sensor_attr_ready)
         regtrace_t23_seed_sc2336_attr();
-    if (dev)
+    owned = regtrace_t23_sensor_owned_attr();
+    if (owned) {
+        attr = (uintptr_t)owned;
+    } else if (dev) {
         attr = *(uint32_t *)(dev + 0x110);
-    if (!regtrace_t23_valid_ptr(attr))
+    } else {
+        attr = 0;
+    }
+    if (!regtrace_t23_valid_ptr(attr) ||
+        regtrace_t23_get_le32((unsigned char *)attr + REGTRACE_T23_ATTR_CHIP_ID) !=
+            REGTRACE_SC2336_CHIP_ID)
         attr = (uintptr_t)regtrace_t23_sc2336_attr;
     regtrace_t23_seed_sensor_caches(reason);
     return (unsigned char *)attr;
@@ -10412,6 +10527,7 @@ static int regtrace_t23_csi_core_ops_init_repaired(struct tx_isp_subdev *sd,
     unsigned char *attr;
     void __iomem *base;
     void __iomem *wrap;
+    void __iomem *vic_base;
     uint32_t state;
     uint32_t dbus;
     uint32_t lanes;
@@ -10435,11 +10551,15 @@ static int regtrace_t23_csi_core_ops_init_repaired(struct tx_isp_subdev *sd,
         writel(readl(base + 0x0c) & ~1U, base + 0x0c);
         writel(readl(base + 0x10) & ~1U, base + 0x10);
         wmb();
+        regtrace_t23_csi_initialized = false;
         *(uint32_t *)(csi + 0x12c) = 2;
         printk(KERN_INFO "tx_isp_t23_recovered: CSI core off base=%p wrap=%p reason=%s\n",
                base, wrap, reason ? reason : "?");
         return 0;
     }
+
+    if (regtrace_t23_csi_initialized)
+        return 0;
 
     attr = regtrace_t23_resolve_sensor_attr(csi, reason);
     dbus = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_DBUS_TYPE);
@@ -10486,12 +10606,21 @@ static int regtrace_t23_csi_core_ops_init_repaired(struct tx_isp_subdev *sd,
         rate_reg = readl(wrap + 0x160);
     }
 
+    vic_base = regtrace_t23_vic_sd ?
+        (void __iomem *)(uintptr_t)*(uint32_t *)(regtrace_t23_vic_sd + 184) :
+        NULL;
+    if (vic_base) {
+        writel(1, vic_base + 0x0c);
+        wmb();
+    }
+
     writel(0x7d, wrap + 0x00);
     writel(0x3f, wrap + 0x128);
     writel(1, base + 0x10);
     wmb();
     private_msleep(10);
 
+    regtrace_t23_csi_initialized = true;
     *(uint32_t *)(csi + 0x12c) = 3;
     printk(KERN_WARNING "tx_isp_t23_recovered: CSI core on base=%p wrap=%p lanes=%u rate=0x%x reg04=0x%x reg0c=0x%x reg10=0x%x wrap00=0x%x wrap128=0x%x r160=0x%x reason=%s\n",
            base, wrap, lanes, rate, readl(base + 0x04), readl(base + 0x0c),
@@ -10596,6 +10725,12 @@ static int regtrace_t23_vic_start_repaired(unsigned char *vic,
     if (!regtrace_t23_valid_ptr((uintptr_t)vic))
         return -EINVAL;
 
+    if (regtrace_t23_source_sensor_stream) {
+        ret = regtrace_t23_call_sensor_core_init(reason);
+        if (ret)
+            return ret;
+    }
+
     regtrace_t23_seed_sensor_caches(reason);
     attr = regtrace_t23_resolve_sensor_attr(vic, reason);
     dbus = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_DBUS_TYPE);
@@ -10647,8 +10782,6 @@ static int regtrace_t23_vic_start_repaired(unsigned char *vic,
     if (regtrace_t23_source_csi_stream && regtrace_t23_csi_sd)
         regtrace_t23_csi_core_ops_init_repaired(
             (struct tx_isp_subdev *)regtrace_t23_csi_sd, 1, reason);
-    if (regtrace_t23_source_sensor_stream)
-        regtrace_t23_call_sensor_stream(1, reason);
 
     writel(reg_1a4, base + 0x1a4);
     writel(((bits_per_pixel * image_width) + 0x1fU) >> 5, base + 0x100);
@@ -10679,6 +10812,13 @@ static int regtrace_t23_vic_start_repaired(unsigned char *vic,
     writel(frame_mode_reg, base + 0x1a8);
     writel(0x10, base + 0x1b0);
     wmb();
+
+    if (regtrace_t23_source_sensor_stream) {
+        ret = regtrace_t23_call_sensor_stream(1, reason);
+        if (ret < 0 && ret != -ENOIOCTLCMD)
+            printk(KERN_WARNING "tx_isp_t23_recovered: sensor stream before VIC unlock ret=%d reason=%s\n",
+                   ret, reason ? reason : "?");
+    }
 
     writel(2, base + 0x0);
     writel(4, base + 0x0);
@@ -10759,7 +10899,8 @@ static int regtrace_t23_source_input_stream(int enable, const char *reason)
                 regtrace_t23_csi_video_s_stream_repaired(
                     regtrace_t23_csi_sd, 1, reason);
         }
-        if (regtrace_t23_source_sensor_stream && !ret)
+        if (regtrace_t23_source_sensor_stream &&
+            !regtrace_t23_source_vic_stream && !ret)
             ret = regtrace_t23_call_sensor_stream(1, reason);
         if (regtrace_t23_source_vic_stream && !ret && regtrace_t23_vic_sd)
             ret = regtrace_t23_vic_core_s_stream_repaired(
@@ -10768,7 +10909,8 @@ static int regtrace_t23_source_input_stream(int enable, const char *reason)
         if (regtrace_t23_source_vic_stream && regtrace_t23_vic_sd)
             regtrace_t23_vic_core_s_stream_repaired(
                 regtrace_t23_vic_sd, 0, reason);
-        if (regtrace_t23_source_sensor_stream)
+        if (regtrace_t23_source_sensor_stream &&
+            !regtrace_t23_source_vic_stream)
             regtrace_t23_call_sensor_stream(0, reason);
         if (regtrace_t23_source_csi_stream && regtrace_t23_csi_sd) {
             regtrace_t23_csi_video_s_stream_repaired(
@@ -10915,6 +11057,165 @@ static void regtrace_t23_direct_vic_mdma_stream(int channel,
            readl(base + 0x304), readl(base + 0x308), reason ? reason : "?");
 }
 
+static void regtrace_t23_core_dma_free(void)
+{
+    unsigned int i;
+
+    for (i = 0; i < REGTRACE_T23_CORE_DMA_BUFS; i++) {
+        kfree(regtrace_t23_core_dma_bufs[i].virt);
+        memset(&regtrace_t23_core_dma_bufs[i], 0,
+               sizeof(regtrace_t23_core_dma_bufs[i]));
+    }
+}
+
+static int regtrace_t23_core_dma_alloc(unsigned int index, uint32_t size)
+{
+    struct regtrace_t23_core_dma_buf *buf;
+
+    if (index >= REGTRACE_T23_CORE_DMA_BUFS)
+        return -EINVAL;
+
+    buf = &regtrace_t23_core_dma_bufs[index];
+    if (buf->virt)
+        return 0;
+
+    buf->virt = kzalloc(size, GFP_KERNEL | GFP_DMA);
+    if (!buf->virt)
+        return -ENOMEM;
+
+    buf->phys = (uint32_t)virt_to_phys(buf->virt);
+    buf->size = size;
+    return 0;
+}
+
+static int regtrace_t23_program_core_dma(void)
+{
+    static const uint32_t sizes[REGTRACE_T23_CORE_DMA_BUFS] = {
+        0x6000U, 0x6000U, 0x4000U, 0x4000U, 0x4000U, 0x4000U,
+    };
+    uint32_t p;
+    unsigned int i;
+    int ret;
+
+    for (i = 0; i < REGTRACE_T23_CORE_DMA_BUFS; i++) {
+        ret = regtrace_t23_core_dma_alloc(i, sizes[i]);
+        if (ret)
+            return ret;
+    }
+
+    /* T23 tisp_init: AE0 and AE1 each use one 0x6000-byte statistics ring. */
+    p = regtrace_t23_core_dma_bufs[0].phys;
+    system_reg_write(0xa02cU, p + 0x0000U);
+    system_reg_write(0xa030U, p + 0x1000U);
+    system_reg_write(0xa034U, p + 0x2000U);
+    system_reg_write(0xa038U, p + 0x3000U);
+    system_reg_write(0xa03cU, p + 0x4000U);
+    system_reg_write(0xa040U, p + 0x4800U);
+    system_reg_write(0xa044U, p + 0x5000U);
+    system_reg_write(0xa048U, p + 0x5800U);
+    system_reg_write(0xa04cU, 0x33U);
+
+    p = regtrace_t23_core_dma_bufs[1].phys;
+    system_reg_write(0xa82cU, p + 0x0000U);
+    system_reg_write(0xa830U, p + 0x1000U);
+    system_reg_write(0xa834U, p + 0x2000U);
+    system_reg_write(0xa838U, p + 0x3000U);
+    system_reg_write(0xa83cU, p + 0x4000U);
+    system_reg_write(0xa840U, p + 0x4800U);
+    system_reg_write(0xa844U, p + 0x5000U);
+    system_reg_write(0xa848U, p + 0x5800U);
+    system_reg_write(0xa84cU, 0x33U);
+
+    /* AWB, ADR, DPC/defog, and the final T23 statistics producer. */
+    p = regtrace_t23_core_dma_bufs[2].phys;
+    system_reg_write(0xb03cU, p + 0x0000U);
+    system_reg_write(0xb040U, p + 0x1000U);
+    system_reg_write(0xb044U, p + 0x2000U);
+    system_reg_write(0xb048U, p + 0x3000U);
+    system_reg_write(0xb04cU, 3U);
+
+    p = regtrace_t23_core_dma_bufs[3].phys;
+    system_reg_write(0x4494U, p + 0x0000U);
+    system_reg_write(0x4498U, p + 0x1000U);
+    system_reg_write(0x449cU, p + 0x2000U);
+    system_reg_write(0x44a0U, p + 0x3000U);
+    system_reg_write(0x44a4U, 3U);
+
+    p = regtrace_t23_core_dma_bufs[4].phys;
+    system_reg_write(0x5b84U, p + 0x0000U);
+    system_reg_write(0x5b88U, p + 0x1000U);
+    system_reg_write(0x5b8cU, p + 0x2000U);
+    system_reg_write(0x5b90U, p + 0x3000U);
+    system_reg_write(0x5b80U, 3U);
+
+    p = regtrace_t23_core_dma_bufs[5].phys;
+    system_reg_write(0xb8a8U, p + 0x0000U);
+    system_reg_write(0xb8acU, p + 0x1000U);
+    system_reg_write(0xb8b0U, p + 0x2000U);
+    system_reg_write(0xb8b4U, p + 0x3000U);
+    system_reg_write(0xb8b8U, 3U);
+
+    printk(KERN_WARNING "tx_isp_t23_recovered: source core DMA phys=%x/%x/%x/%x/%x/%x\n",
+           regtrace_t23_core_dma_bufs[0].phys,
+           regtrace_t23_core_dma_bufs[1].phys,
+           regtrace_t23_core_dma_bufs[2].phys,
+           regtrace_t23_core_dma_bufs[3].phys,
+           regtrace_t23_core_dma_bufs[4].phys,
+           regtrace_t23_core_dma_bufs[5].phys);
+    return 0;
+}
+
+static int regtrace_t23_source_core_set_stream(int enable,
+                                               const char *reason)
+{
+    int ret;
+
+    if (!regtrace_t23_source_core_start)
+        return 0;
+
+    if (!enable) {
+        if (!regtrace_t23_core_started)
+            return 0;
+        system_reg_write(0x800U, 0);
+        regtrace_t23_core_started = false;
+        printk(KERN_WARNING "tx_isp_t23_recovered: source core stopped r800=0x%x reason=%s\n",
+               system_reg_read(0x800U), reason ? reason : "?");
+        return 0;
+    }
+
+    if (regtrace_t23_core_started)
+        return 0;
+
+    ret = regtrace_t23_program_core_dma();
+    if (ret) {
+        printk(KERN_ERR "tx_isp_t23_recovered: source core DMA setup failed ret=%d reason=%s\n",
+               ret, reason ? reason : "?");
+        return ret;
+    }
+
+    /* Recovered T23 tisp_init order, with the T31 proven global-bypass start. */
+    system_reg_write(0x800U, 0);
+    system_reg_write(0x4U,
+                     (REGTRACE_SC2336_WIDTH << 16) | REGTRACE_SC2336_HEIGHT);
+    system_reg_write(0x8U, regtrace_t23_source_core_bayer);
+    system_reg_write(0x1cU, 0);
+    system_reg_write(0x2cU, 0x400040U);
+    system_reg_write(0xcU, regtrace_t23_source_core_bypass);
+    system_reg_write(0x10U, 0xf3U);
+    system_reg_write(0x30U, 0xffffffffU);
+    system_reg_write(0x804U, regtrace_t23_source_core_mode);
+    system_reg_write(0x1cU, 8U);
+    system_reg_write(0x800U, 1U);
+    regtrace_t23_core_started = true;
+
+    printk(KERN_WARNING "tx_isp_t23_recovered: source core started size=0x%x bayer=0x%x bypass=0x%x main=0x%x irq=0x%x mode=0x%x run=0x%x reason=%s\n",
+           system_reg_read(0x4U), system_reg_read(0x8U),
+           system_reg_read(0xcU), system_reg_read(0x10U),
+           system_reg_read(0x30U), system_reg_read(0x804U),
+           system_reg_read(0x800U), reason ? reason : "?");
+    return 0;
+}
+
 static void regtrace_t23_tisp_stream_regs(int enable,
                                           int channel,
                                           const char *reason)
@@ -10926,12 +11227,14 @@ static void regtrace_t23_tisp_stream_regs(int enable,
         return;
 
     if (enable) {
+        regtrace_t23_source_core_set_stream(1, reason);
         system_reg_write(0x1010U, 0);
         system_reg_write(0x1014U, 0);
         system_reg_write(0x1008U, 286U);
         system_reg_write(0x1060U, 1);
-    } else {
+    } else if (channel < 0 || !regtrace_t23_msca_ch_en) {
         system_reg_write(0x1060U, 0);
+        regtrace_t23_source_core_set_stream(0, reason);
     }
 
     r1008 = system_reg_read(0x1008U);
@@ -11463,6 +11766,44 @@ static void regtrace_unregister_misc_ivdc(void)
 #define REGTRACE_FRAMECHAN_QBUF_WORDS 17
 #define REGTRACE_FRAMECHAN_QBUF_SLOTS 8
 #define REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE 1U
+#define REGTRACE_TISP_FIELD_NONE 1U
+#define REGTRACE_TISP_COLORSPACE_REC709 3U
+#define REGTRACE_TISP_PIX_FMT_NV12 0x3231564eU
+
+struct regtrace_t23_pix_format {
+    uint32_t width;
+    uint32_t height;
+    uint32_t pixelformat;
+    uint32_t field;
+    uint32_t bytesperline;
+    uint32_t sizeimage;
+    uint32_t colorspace;
+    uint32_t priv;
+    uint32_t flags;
+    uint32_t ycbcr_enc;
+    uint32_t quantization;
+    uint32_t xfer_func;
+};
+
+struct regtrace_t23_frame_image_format {
+    uint32_t type;
+    struct regtrace_t23_pix_format pix;
+    bool crop_enable;
+    uint32_t crop_top;
+    uint32_t crop_left;
+    uint32_t crop_width;
+    uint32_t crop_height;
+    bool scaler_enable;
+    uint32_t scaler_out_width;
+    uint32_t scaler_out_height;
+    uint32_t rate_bits;
+    uint32_t rate_mask;
+    bool fcrop_enable;
+    uint32_t fcrop_top;
+    uint32_t fcrop_left;
+    uint32_t fcrop_width;
+    uint32_t fcrop_height;
+};
 
 struct regtrace_framechan_context {
     int channel;
@@ -11486,14 +11827,25 @@ static uint32_t regtrace_framechan_qbuf_len[REGTRACE_FRAMECHAN_COUNT][REGTRACE_F
 static uint32_t regtrace_framechan_qbuf_count[REGTRACE_FRAMECHAN_COUNT];
 static uint32_t regtrace_framechan_dq_sequence[REGTRACE_FRAMECHAN_COUNT];
 static uint32_t regtrace_framechan_log_count[REGTRACE_FRAMECHAN_COUNT];
+static struct regtrace_t23_frame_image_format
+    regtrace_t23_framechan_formats[REGTRACE_FRAMECHAN_COUNT];
+static bool regtrace_t23_framechan_format_ready[REGTRACE_FRAMECHAN_COUNT];
 
 static uint32_t regtrace_t23_frame_width(int channel)
 {
+    if (channel >= 0 && channel < REGTRACE_FRAMECHAN_COUNT &&
+        regtrace_t23_framechan_format_ready[channel] &&
+        regtrace_t23_framechan_formats[channel].pix.width)
+        return regtrace_t23_framechan_formats[channel].pix.width;
     return channel == 1 ? 640U : 1920U;
 }
 
 static uint32_t regtrace_t23_frame_height(int channel)
 {
+    if (channel >= 0 && channel < REGTRACE_FRAMECHAN_COUNT &&
+        regtrace_t23_framechan_format_ready[channel] &&
+        regtrace_t23_framechan_formats[channel].pix.height)
+        return regtrace_t23_framechan_formats[channel].pix.height;
     return channel == 1 ? 360U : 1080U;
 }
 
@@ -11502,6 +11854,80 @@ static uint32_t regtrace_t23_frame_uv_offset(int channel)
     uint32_t height = regtrace_t23_frame_height(channel);
 
     return regtrace_t23_frame_width(channel) * ((height + 15U) & ~15U);
+}
+
+static int regtrace_t23_program_msca_format(
+    int channel, struct regtrace_t23_frame_image_format *format)
+{
+    uint32_t attr[13];
+    uint32_t full_width = REGTRACE_SC2336_WIDTH;
+    uint32_t full_height = REGTRACE_SC2336_HEIGHT;
+    uint32_t target_width;
+    uint32_t target_height;
+    uint32_t aligned_height;
+    bool implicit_scaler;
+    int ret;
+
+    if (channel < 0 || channel >= 3 || !format)
+        return -EINVAL;
+    if (sizeof(*format) != 0x70)
+        return -EINVAL;
+
+    target_width = format->pix.width;
+    target_height = format->pix.height;
+    if (!target_width)
+        target_width = regtrace_t23_frame_width(channel);
+    if (!target_height)
+        target_height = regtrace_t23_frame_height(channel);
+
+    format->type = REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE;
+    format->pix.width = target_width;
+    format->pix.height = target_height;
+    if (!format->pix.pixelformat)
+        format->pix.pixelformat = REGTRACE_TISP_PIX_FMT_NV12;
+    format->pix.field = REGTRACE_TISP_FIELD_NONE;
+    if (!format->pix.colorspace)
+        format->pix.colorspace = REGTRACE_TISP_COLORSPACE_REC709;
+    aligned_height = (target_height + 15U) & ~15U;
+    if (format->pix.pixelformat == REGTRACE_TISP_PIX_FMT_NV12) {
+        format->pix.bytesperline = target_width;
+        format->pix.sizeimage = target_width * aligned_height * 3U / 2U;
+    }
+
+    implicit_scaler = target_width != full_width || target_height != full_height;
+    memset(attr, 0, sizeof(attr));
+    attr[0] = format->scaler_enable || implicit_scaler;
+    attr[1] = format->scaler_out_width ?
+        format->scaler_out_width : target_width;
+    attr[2] = format->scaler_out_height ?
+        format->scaler_out_height : target_height;
+    attr[3] = format->crop_enable;
+    attr[4] = format->crop_left;
+    attr[5] = format->crop_top;
+    attr[6] = format->crop_width;
+    attr[7] = format->crop_height;
+    attr[8] = format->fcrop_enable;
+    attr[9] = format->fcrop_left;
+    attr[10] = format->fcrop_top;
+    attr[11] = format->fcrop_width;
+    attr[12] = format->fcrop_height;
+
+    regtrace_t23_put_le32(tisp_par_info + 0, full_width);
+    regtrace_t23_put_le32(tisp_par_info + 4, full_height);
+    ret = (int)tisp_channel_main_attr_set((uint32_t)channel,
+                                          (uintptr_t)attr);
+    if (ret)
+        return ret;
+
+    regtrace_t23_framechan_formats[channel] = *format;
+    regtrace_t23_framechan_format_ready[channel] = true;
+    printk(KERN_WARNING "tx_isp_t23_recovered: T23 MSCA format ch=%d source=%ux%u target=%ux%u scaler=%u crop=%u fcrop=%u cfg=%ux%u load=0x%x\n",
+           channel, full_width, full_height, target_width, target_height,
+           attr[0], attr[3], attr[8],
+           regtrace_t23_get_le32(msca + channel * 56 + 0x20),
+           regtrace_t23_get_le32(msca + channel * 56 + 0x24),
+           regtrace_t23_get_le32(msca + channel * 56 + 0x30));
+    return 0;
 }
 
 static void regtrace_t23_program_msca_qbuf(int channel,
@@ -11526,6 +11952,7 @@ static void regtrace_t23_set_msca_stream(int channel,
                                          int enable,
                                          const char *reason)
 {
+    int ret;
     uint32_t bit;
     uint32_t before;
     uint32_t value;
@@ -11536,8 +11963,14 @@ static void regtrace_t23_set_msca_stream(int channel,
     if (channel < 0 || channel >= 3)
         return;
 
-    if (enable)
-        regtrace_t23_msca_cfg_load(channel, reason);
+    if (enable) {
+        ret = tisp_channel_start(channel);
+        if (ret) {
+            printk(KERN_ERR "tx_isp_t23_recovered: T23 MSCA channel start failed ch=%d ret=%d reason=%s\n",
+                   channel, ret, reason ? reason : "?");
+            return;
+        }
+    }
 
     bit = 1U << channel;
     if (enable)
@@ -11687,17 +12120,28 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
 
     switch (cmd) {
     case REGTRACE_FRAMECHAN_SET_FMT: {
-        uint32_t words[28];
+        struct regtrace_t23_frame_image_format format;
 
-        memset(words, 0, sizeof(words));
-        if (arg && copy_from_user(words, (const void __user *)(uintptr_t)arg,
-                                  sizeof(words))) {
+        memset(&format, 0, sizeof(format));
+        if (!arg || copy_from_user(&format,
+                                   (const void __user *)(uintptr_t)arg,
+                                   sizeof(format))) {
+            ret = -EFAULT;
+            break;
+        }
+        ret = regtrace_t23_program_msca_format(channel, &format);
+        if (ret)
+            break;
+        if (copy_to_user((void __user *)(uintptr_t)arg, &format,
+                         sizeof(format))) {
             ret = -EFAULT;
             break;
         }
         if (regtrace_t23_log_framechan_payloads)
             printk(KERN_INFO "tx_isp_t23_recovered: framechan%d set_fmt w=%u h=%u pix=0x%x field=%u size=0x%x ret=0\n",
-                   channel, words[4], words[5], words[6], words[7], words[8]);
+                   channel, format.pix.width, format.pix.height,
+                   format.pix.pixelformat, format.pix.field,
+                   format.pix.sizeimage);
         break;
     }
     case REGTRACE_FRAMECHAN_REQBUFS: {
@@ -13971,49 +14415,21 @@ static struct file_operations video_input_cmd_fops = {
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000000 origin=fragment_seed original=isp_printf */
 int32_t isp_printf(uint32_t level, const char *fmt, ...)
 {
-    uint32_t *v0 = 0;
-    uint32_t v1 = 0;
-    uint32_t *s0 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t *local_38 = 0;
-    uint32_t local_3c = 0;
+    struct va_format vaf;
+    va_list args;
+    int ret = 0;
 
-    v0 = (uintptr_t *)&sclk_name;
-    v1 = *(uint32_t *)((char *)((char *)&print_level));
-    v0 = 0;
-    v1 = level < v1;
-    local_2c = ra;
-    local_28 = s0;
-    local_38 = (uint32_t *)fmt;
+    if (level < print_level)
+        return 0;
 
-    if (v1 != 0) { goto isp_printf0x74; }
-
-    local_3c = a3;
-    local_18 = (uint32_t *)&local_38;
-    s0 = level;
-    local_14 = (uint32_t *)&local_18;
-    local_10 = (uint32_t *)fmt;
-    s0 = s0 < 2;
-    v0 = (uintptr_t *)printk((const char *)(uint32_t *)&LC0, &local_10);
-
-    if (s0 != 0) { goto isp_printf0x74; }
-
-    local_20 = v0;
-    dump_stack();
-    v0 = local_20;
-
-isp_printf0x74:
-    ra = local_2c;
-    s0 = local_28;
-
-    return 0;
+    va_start(args, fmt);
+    vaf.fmt = fmt;
+    vaf.va = &args;
+    ret = printk("%pV", &vaf);
+    va_end(args);
+    if (level >= 2)
+        dump_stack();
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000084 origin=fragment_seed original=get_isp_clk */
@@ -28025,7 +28441,107 @@ int32_t sub_b1e4(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b1f0 origin=model_output original=isp_irq_handle */
-int32_t isp_irq_handle(int32_t arg1, void *arg2) {
+static u32 regtrace_t23_vic_irq_count;
+static u32 regtrace_t23_core_irq_count;
+static u32 regtrace_t23_ivdc_irq_count;
+
+static bool regtrace_t23_log_irq_count(u32 count)
+{
+    return count <= 8 || !(count & (count - 1));
+}
+
+int32_t isp_irq_handle(int32_t irq, void *dev_id)
+{
+    unsigned char *sd;
+    void __iomem *base;
+    u32 status0;
+    u32 status1;
+    u32 mask0;
+    u32 mask1;
+    u32 pending0;
+    u32 pending1;
+
+    if (!dev_id)
+        return IRQ_NONE;
+
+    sd = (unsigned char *)dev_id - REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET;
+    if (sd == regtrace_t23_vic_sd) {
+        base = (void __iomem *)(uintptr_t)*(u32 *)(sd + 0xb8);
+        if (!regtrace_t23_valid_ptr((uintptr_t)base))
+            return IRQ_NONE;
+
+        status0 = readl(base + 0x1e0);
+        status1 = readl(base + 0x1e4);
+        mask0 = readl(base + 0x1e8);
+        mask1 = readl(base + 0x1ec);
+        pending0 = status0 & ~mask0;
+        pending1 = status1 & ~mask1;
+        if (pending0)
+            writel(pending0, base + 0x1f0);
+        if (pending1)
+            writel(pending1, base + 0x1f4);
+        if (pending0 || pending1)
+            wmb();
+
+        regtrace_t23_vic_irq_count++;
+        if (regtrace_t23_log_irq_count(regtrace_t23_vic_irq_count))
+            printk(KERN_INFO
+                   "tx_isp_t23_recovered: VIC irq=%d count=%u status=0x%x/0x%x pending=0x%x/0x%x mask=0x%x/0x%x\n",
+                   irq, regtrace_t23_vic_irq_count, status0, status1,
+                   pending0, pending1, mask0, mask1);
+        return IRQ_HANDLED;
+    }
+
+    if (sd == regtrace_t23_core_sd) {
+        base = (void __iomem *)(uintptr_t)*(u32 *)(sd + 0xb8);
+        if (!regtrace_t23_valid_ptr((uintptr_t)base))
+            return IRQ_NONE;
+
+        status0 = readl(base + 0xb4);
+        if (status0) {
+            writel(status0, base + 0xb8);
+            wmb();
+        }
+        regtrace_t23_core_irq_count++;
+        if (regtrace_t23_log_irq_count(regtrace_t23_core_irq_count))
+            printk(KERN_INFO
+                   "tx_isp_t23_recovered: core irq=%d count=%u status=0x%x\n",
+                   irq, regtrace_t23_core_irq_count, status0);
+        return IRQ_HANDLED;
+    }
+
+    if (sd == regtrace_t23_ivdc_sd) {
+        base = (void __iomem *)(uintptr_t)*(u32 *)(sd + 0xb8);
+        if (!regtrace_t23_valid_ptr((uintptr_t)base))
+            return IRQ_NONE;
+
+        status0 = readl(base + 0x44);
+        if (status0) {
+            writel(status0, base + 0x54);
+            wmb();
+        }
+        regtrace_t23_ivdc_irq_count++;
+        if (regtrace_t23_log_irq_count(regtrace_t23_ivdc_irq_count))
+            printk(KERN_INFO
+                   "tx_isp_t23_recovered: IVDC irq=%d count=%u status=0x%x\n",
+                   irq, regtrace_t23_ivdc_irq_count, status0);
+        return IRQ_HANDLED;
+    }
+
+    printk_ratelimited(KERN_WARNING
+                       "tx_isp_t23_recovered: unowned irq=%d dev_id=%p sd=%p\n",
+                       irq, dev_id, sd);
+    return IRQ_NONE;
+}
+
+int32_t isp_irq_thread_handle(int32_t irq, void *dev_id)
+{
+    (void)irq;
+    (void)dev_id;
+    return IRQ_HANDLED;
+}
+
+static int32_t __maybe_unused isp_irq_handle_generated_unused(int32_t arg1, void *arg2) {
     int *i = 0;
     int32_t *result;
 
@@ -28223,7 +28739,7 @@ int32_t isp_irq_handle(int32_t arg1, void *arg2) {
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b2c0 origin=model_output original=isp_irq_thread_handle */
-int32_t isp_irq_thread_handle(int32_t arg1, void *arg2) {
+static int32_t __maybe_unused isp_irq_thread_handle_generated_unused(int32_t arg1, void *arg2) {
     void *s0;
     int32_t *s1;
 
@@ -36094,8 +36610,89 @@ int32_t tisp_channel_main_fifo_clear(int32_t arg1)
 	return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000001688c origin=fragment_seed original=tisp_channel_main_attr_set */
-int64_t tisp_channel_main_attr_set(uint32_t a0, uintptr_t a1)
+/* Source-equivalent translation of the T23 0x1688c channel-state builder. */
+int64_t tisp_channel_main_attr_set(uint32_t channel, uintptr_t attr_ptr)
+{
+    unsigned char *cfg;
+    const uint32_t *attr = (const uint32_t *)attr_ptr;
+    uint32_t source_width;
+    uint32_t source_height;
+    uint32_t crop_width;
+    uint32_t crop_height;
+    uint32_t crop_left;
+    uint32_t crop_top;
+
+    if (channel >= 3 || !attr)
+        return -EINVAL;
+
+    cfg = msca + channel * 56U;
+    if (!cfg[3]) {
+        if (attr[8] == 1U) {
+            regtrace_t23_put_le32(cfg + 0x10, attr[9]);
+            regtrace_t23_put_le32(cfg + 0x14, attr[10]);
+            regtrace_t23_put_le32(cfg + 0x18, attr[11]);
+            regtrace_t23_put_le32(cfg + 0x1c, attr[12]);
+        } else {
+            source_width = regtrace_t23_get_le32(tisp_par_info + 0);
+            source_height = regtrace_t23_get_le32(tisp_par_info + 4);
+            if (!source_width)
+                source_width = REGTRACE_SC2336_WIDTH;
+            if (!source_height)
+                source_height = REGTRACE_SC2336_HEIGHT;
+            regtrace_t23_put_le32(cfg + 0x10, 0);
+            regtrace_t23_put_le32(cfg + 0x14, 0);
+            regtrace_t23_put_le32(cfg + 0x18, source_width);
+            regtrace_t23_put_le32(cfg + 0x1c, source_height);
+        }
+    }
+
+    if (!cfg[4]) {
+        if (attr[0]) {
+            regtrace_t23_put_le32(cfg + 0x20, attr[1]);
+            regtrace_t23_put_le32(cfg + 0x24, attr[2]);
+        } else {
+            regtrace_t23_put_le32(cfg + 0x20,
+                                  regtrace_t23_get_le32(cfg + 0x18));
+            regtrace_t23_put_le32(cfg + 0x24,
+                                  regtrace_t23_get_le32(cfg + 0x1c));
+        }
+    }
+
+    if (!cfg[5]) {
+        if (attr[3]) {
+            regtrace_t23_put_le32(cfg + 0x28, attr[4]);
+            regtrace_t23_put_le32(cfg + 0x2c, attr[5]);
+            regtrace_t23_put_le32(cfg + 0x30, attr[6]);
+            regtrace_t23_put_le32(cfg + 0x34, attr[7]);
+        } else {
+            regtrace_t23_put_le32(cfg + 0x28, 0);
+            regtrace_t23_put_le32(cfg + 0x2c, 0);
+            regtrace_t23_put_le32(cfg + 0x30,
+                                  regtrace_t23_get_le32(cfg + 0x20));
+            regtrace_t23_put_le32(cfg + 0x34,
+                                  regtrace_t23_get_le32(cfg + 0x24));
+        }
+    }
+
+    crop_left = regtrace_t23_get_le32(cfg + 0x28);
+    crop_top = regtrace_t23_get_le32(cfg + 0x2c);
+    crop_width = regtrace_t23_get_le32(cfg + 0x30);
+    crop_height = regtrace_t23_get_le32(cfg + 0x34);
+    regtrace_t23_put_le32(cfg + 0x08, crop_width);
+    regtrace_t23_put_le32(cfg + 0x0c, crop_height);
+    regtrace_t23_put_le16(mscaler + channel * 2U,
+                          (uint16_t)(crop_width - crop_left));
+    regtrace_t23_put_le16(mscaler + (channel + 3U) * 2U,
+                          (uint16_t)(crop_height - crop_top));
+    cfg[1] = 0;
+    cfg[2] = 0;
+    cfg[0] = 1;
+    return 0;
+}
+
+/* Retained only as evidence for the original malformed reconstruction. */
+static int64_t tisp_channel_main_attr_set_generated_unused(uint32_t a0,
+                                                           uintptr_t a1)
 {
     uint32_t *v0;
     uint32_t v1;
@@ -37677,8 +38274,50 @@ int32_t tisp_sin(uint32_t a0, uint32_t a1, uintptr_t a2)
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000187f4 origin=fragment_seed original=tisp_msca_para_calc */
-int32_t tisp_msca_para_calc(uint32_t a0, uint32_t a1, uintptr_t a2)
+/* Source-equivalent bounded form of T23 0x187f4. */
+int32_t tisp_msca_para_calc(uint32_t unused, uint32_t channel,
+                            uintptr_t cfg_ptr)
+{
+    unsigned char *params;
+    unsigned char *cfg = (unsigned char *)cfg_ptr;
+    uint32_t source_width;
+    uint32_t source_height;
+    uint32_t target_width;
+    uint32_t target_height;
+
+    (void)unused;
+    channel &= 0xffU;
+    if (!cfg || channel >= 3)
+        return -EINVAL;
+
+    if (channel == 0)
+        params = msca_ch0_scale_paras;
+    else if (channel == 1)
+        params = msca_ch1_scale_paras;
+    else
+        params = msca_ch2_scale_paras;
+
+    source_width = regtrace_t23_get_le32(cfg + 0x18);
+    source_height = regtrace_t23_get_le32(cfg + 0x1c);
+    target_width = regtrace_t23_get_le32(cfg + 0x20);
+    target_height = regtrace_t23_get_le32(cfg + 0x24);
+    if (!source_width || !source_height || !target_width || !target_height)
+        return -EINVAL;
+
+    /* The initialized T23 kernel tables select phase 0 and eight taps. */
+    regtrace_t23_put_le32(params + 0x10, 0);
+    regtrace_t23_put_le32(params + 0x14, 8);
+    regtrace_t23_put_le32(params + 0x18,
+                          (source_width << 14) / target_width);
+    regtrace_t23_put_le32(params + 0x1c,
+                          (source_height << 14) / target_height);
+    return 0;
+}
+
+/* Retained only as evidence for the original malformed reconstruction. */
+static int32_t tisp_msca_para_calc_generated_unused(uint32_t a0,
+                                                    uint32_t a1,
+                                                    uintptr_t a2)
 {
     uint32_t *a3 = 0;
     uint32_t ra = 0;
@@ -37891,10 +38530,77 @@ tisp_msca_para_calc0x150:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001894c origin=fragment_seed original=tisp_msca_init_chx_cfg */
-int32_t tisp_msca_init_chx_cfg(uint32_t a0, uint32_t a1, uintptr_t a2)
+int32_t tisp_msca_init_chx_cfg(uint32_t unused, uint32_t channel,
+                               uintptr_t cfg_ptr)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    unsigned char *cfg = (unsigned char *)cfg_ptr;
+    unsigned char *params;
+    uint32_t base;
+    uint32_t target_width;
+    uint32_t target_height;
+    uint32_t crop_left;
+    uint32_t crop_top;
+    uint32_t crop_width;
+    uint32_t crop_height;
+    uint32_t value;
+    uint32_t out_control;
+
+    (void)unused;
+    channel &= 0xffU;
+    if (!cfg || channel >= 3)
+        return -EINVAL;
+
+    if (channel == 0)
+        params = msca_ch0_scale_paras;
+    else if (channel == 1)
+        params = msca_ch1_scale_paras;
+    else
+        params = msca_ch2_scale_paras;
+
+    base = (channel + 0xd1U) << 8;
+    value = (regtrace_t23_get_le32(cfg + 0x10) << 16) |
+        regtrace_t23_get_le32(cfg + 0x14);
+    system_reg_write(base + 0x00, value);
+    target_width = regtrace_t23_get_le32(cfg + 0x20);
+    target_height = regtrace_t23_get_le32(cfg + 0x24);
+    system_reg_write(base + 0x04, (target_width << 16) | target_height);
+
+    crop_left = regtrace_t23_get_le32(cfg + 0x28);
+    crop_top = regtrace_t23_get_le32(cfg + 0x2c);
+    crop_width = regtrace_t23_get_le32(cfg + 0x30);
+    crop_height = regtrace_t23_get_le32(cfg + 0x34);
+    if (target_width < crop_left + crop_width) {
+        crop_width = target_width - crop_left;
+        regtrace_t23_put_le32(cfg + 0x30, crop_width);
+    }
+    if (target_height < crop_top + crop_height) {
+        crop_height = target_height - crop_top;
+        regtrace_t23_put_le32(cfg + 0x34, crop_height);
+    }
+    system_reg_write(base + 0x08,
+                     ((crop_left & 0x1fffU) << 16) |
+                     (crop_top & 0x0fffU));
+    system_reg_write(base + 0x0c,
+                     ((crop_width & 0x1fffU) << 16) |
+                     (crop_height & 0x0fffU));
+
+    system_reg_write(base + 0x70,
+                     ((regtrace_t23_get_le32(params + 0x04) & 0x3ffU) << 16) |
+                     (regtrace_t23_get_le32(params + 0x00) & 0x3ffU));
+    value = (params[0x08] & 0xffU) |
+        ((regtrace_t23_get_le32(params + 0x0c) << 8) & 0xffffU) |
+        ((regtrace_t23_get_le32(params + 0x10) & 0x1ffU) << 16) |
+        (regtrace_t23_get_le32(params + 0x14) << 28);
+    system_reg_write(base + 0x74, value);
+    system_reg_write(base + 0x14,
+                     regtrace_t23_get_le32(params + 0x18) & 0x7ffffU);
+    system_reg_write(base + 0x10,
+                     regtrace_t23_get_le32(params + 0x1c) & 0x7ffffU);
+
+    out_control = (msca_ch_out[channel * 2U] & 0x3U) |
+        ((msca_ch_out[channel * 2U + 1U] & 0x1U) << 6);
+    system_reg_write(base + 0x28, out_control);
+    return system_reg_write(base + 0x28, 0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018c68 origin=fragment_seed original=tisp_msca_ch_curve_write */
@@ -39045,23 +39751,94 @@ tisp_msca_curve_calc0x178:
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000019e48 origin=fragment_seed original=tisp_msca_chx_cfg_load */
-int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
+static void regtrace_t23_msca_commit_global_window(void)
 {
-    int channel = a1 & 0xffU;
-    int ret;
+    uint32_t min_left = 0xffffU;
+    uint32_t min_top = 0xffffU;
+    uint32_t max_right = 0;
+    uint32_t max_bottom = 0;
+    bool active = false;
+    int channel;
 
-    (void)a0;
-    if (a2 && channel >= 0 && channel < 3) {
-        unsigned char *cfg = (unsigned char *)a2;
-        uint32_t cfg_word = regtrace_t23_get_le32(cfg + 0x30);
+    for (channel = 0; channel < 3; channel++) {
+        unsigned char *cfg = msca + channel * 56U;
+        uint32_t left;
+        uint32_t top;
+        uint32_t width;
+        uint32_t height;
 
-        if (cfg_word)
-            regtrace_t23_put_le32(msca + channel * 56 + 0x30, cfg_word);
+        if (!cfg[0])
+            continue;
+        left = regtrace_t23_get_le32(cfg + 0x10);
+        top = regtrace_t23_get_le32(cfg + 0x14);
+        width = regtrace_t23_get_le32(cfg + 0x18);
+        height = regtrace_t23_get_le32(cfg + 0x1c);
+        if (left < min_left)
+            min_left = left;
+        if (top < min_top)
+            min_top = top;
+        if (left + width > max_right)
+            max_right = left + width;
+        if (top + height > max_bottom)
+            max_bottom = top + height;
+        active = true;
     }
 
-    ret = regtrace_t23_msca_cfg_load(channel, "tisp_msca_chx_cfg_load");
-    return ret < 0 ? ret : 0;
+    if (!active) {
+        min_left = 0;
+        min_top = 0;
+        max_right = REGTRACE_SC2336_WIDTH;
+        max_bottom = REGTRACE_SC2336_HEIGHT;
+    }
+    system_reg_write(0xd090U,
+                     ((min_left & 0x1fffU) << 16) |
+                     (min_top & 0x0fffU));
+    system_reg_write(0xd094U,
+                     (((max_right - min_left) & 0x1fffU) << 16) |
+                     ((max_bottom - min_top) & 0x0fffU));
+    system_reg_write(0xd050U, system_reg_read(0xd050U) | 0x7U);
+    system_reg_write(0xd04cU, 0);
+    system_reg_write(0xd010U, 1);
+}
+
+/* Bounded source-equivalent channel load; coefficient synthesis is separate. */
+int32_t tisp_msca_chx_cfg_load(uint32_t unused, uint32_t channel,
+                               uintptr_t cfg_ptr)
+{
+    unsigned char *cfg = (unsigned char *)cfg_ptr;
+    uint32_t base;
+    uint32_t cfg_word;
+    uint32_t work;
+    int ret;
+
+    (void)unused;
+    channel &= 0xffU;
+    if (!cfg || channel >= 3)
+        return -EINVAL;
+
+    ret = tisp_msca_para_calc(0, channel, cfg_ptr);
+    if (ret)
+        return ret;
+    ret = tisp_msca_init_chx_cfg(0, channel, cfg_ptr);
+    if (ret)
+        return ret;
+    regtrace_t23_msca_commit_global_window();
+
+    base = (channel + 0xd0U) << 8;
+    cfg_word = regtrace_t23_get_le32(cfg + 0x30);
+    system_reg_write(base + 0x140U, cfg_word);
+    system_reg_write(base + 0x160U, cfg_word);
+    work = system_reg_read(0xd040U) | ((uint32_t)cfg[0] << channel);
+    system_reg_write(0xd040U, work);
+    printk(KERN_WARNING "tx_isp_t23_recovered: T23 MSCA cfg-load ch=%u source=%ux%u target=%ux%u crop=%ux%u load=0x%x work=0x%x\n",
+           channel,
+           regtrace_t23_get_le32(cfg + 0x18),
+           regtrace_t23_get_le32(cfg + 0x1c),
+           regtrace_t23_get_le32(cfg + 0x20),
+           regtrace_t23_get_le32(cfg + 0x24),
+           regtrace_t23_get_le32(cfg + 0x30),
+           regtrace_t23_get_le32(cfg + 0x34), cfg_word, work);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019f7c origin=fragment_seed original=tisp_msca_params_refresh */
@@ -94338,6 +95115,8 @@ int32_t init_module(void)
 void cleanup_module(void)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
+    regtrace_t23_source_core_set_stream(0, "module-exit");
+    regtrace_t23_core_dma_free();
     regtrace_unregister_real_platforms();
     regtrace_unregister_framechans();
     regtrace_unregister_misc_ivdc();
