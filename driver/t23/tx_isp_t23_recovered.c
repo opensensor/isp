@@ -9643,6 +9643,134 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TISP_TOTAL_GAIN_1X (1U << 8)
 #define REGTRACE_TISP_AE_LUMA_DAY 80U
 #define REGTRACE_TISP_WB_GAIN_NEUTRAL 256U
+#define REGTRACE_T23_VIDIOC_STREAMON 0x80045612U
+#define REGTRACE_T23_VIDIOC_STREAMOFF 0x80045613U
+
+int32_t system_reg_write(uint32_t a0, uint32_t a1);
+int32_t system_reg_read(uint32_t a0);
+int32_t tisp_msca_addr_fifo_write(char arg1, int32_t arg2, int32_t arg3);
+
+static bool regtrace_t23_enable_irqs_on_streamon;
+static bool regtrace_t23_log_framechan_payloads = true;
+static bool regtrace_t23_direct_msca_qbuf;
+static bool regtrace_t23_direct_msca_start;
+static bool regtrace_t23_direct_enable_clks;
+module_param_named(enable_irqs_on_streamon, regtrace_t23_enable_irqs_on_streamon, bool, 0644);
+module_param_named(log_framechan_payloads, regtrace_t23_log_framechan_payloads, bool, 0644);
+module_param_named(direct_msca_qbuf, regtrace_t23_direct_msca_qbuf, bool, 0644);
+module_param_named(direct_msca_start, regtrace_t23_direct_msca_start, bool, 0644);
+module_param_named(direct_enable_clks, regtrace_t23_direct_enable_clks, bool, 0644);
+
+static unsigned char *regtrace_t23_vin_sd;
+static unsigned char *regtrace_t23_csi_sd;
+static unsigned char *regtrace_t23_vic_sd;
+static unsigned char *regtrace_t23_core_sd;
+static unsigned char *regtrace_t23_fs_sd;
+static unsigned char *regtrace_t23_ivdc_sd;
+static bool regtrace_t23_core_irq_enabled;
+static bool regtrace_t23_vic_irq_enabled;
+static bool regtrace_t23_ivdc_irq_enabled;
+static bool regtrace_t23_core_clks_enabled;
+static bool regtrace_t23_csi_clks_enabled;
+static bool regtrace_t23_vic_clks_enabled;
+static bool regtrace_t23_ivdc_clks_enabled;
+static uint32_t regtrace_t23_msca_ch_en;
+
+static void regtrace_t23_enable_subdev_clks(const char *name,
+                                            unsigned char *sd,
+                                            bool *enabled)
+{
+    uintptr_t clk_ptr;
+    uint32_t clk_num;
+    uint32_t i;
+
+    if (!regtrace_t23_direct_enable_clks || !sd || !enabled || *enabled)
+        return;
+
+    clk_ptr = *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET);
+    clk_num = *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET);
+    if (!clk_ptr || clk_num > 8)
+        return;
+
+    for (i = 0; i < clk_num; i++) {
+        struct clk *clk = *(struct clk **)(clk_ptr + i * sizeof(uint32_t));
+        int ret;
+
+        if (!clk || IS_ERR(clk))
+            continue;
+        ret = private_clk_enable(clk);
+        printk(KERN_WARNING "tx_isp_t23_recovered: direct clk enable %s[%u]=%p rate=%lu ret=%d\n",
+               name ? name : "subdev", i, clk,
+               private_clk_get_rate(clk), ret);
+    }
+
+    *enabled = true;
+}
+
+static void regtrace_t23_enable_stream_clks(void)
+{
+    regtrace_t23_enable_subdev_clks("core", regtrace_t23_core_sd,
+                                    &regtrace_t23_core_clks_enabled);
+    regtrace_t23_enable_subdev_clks("csi", regtrace_t23_csi_sd,
+                                    &regtrace_t23_csi_clks_enabled);
+    regtrace_t23_enable_subdev_clks("vic", regtrace_t23_vic_sd,
+                                    &regtrace_t23_vic_clks_enabled);
+    regtrace_t23_enable_subdev_clks("ivdc", regtrace_t23_ivdc_sd,
+                                    &regtrace_t23_ivdc_clks_enabled);
+}
+
+static void regtrace_t23_set_irq_enabled(const char *name,
+                                         unsigned char *sd,
+                                         bool *enabled,
+                                         int enable,
+                                         const char *reason,
+                                         int channel)
+{
+    struct tx_isp_irq_info *irq_info;
+    unsigned int irq;
+
+    if (!sd || !enabled)
+        return;
+
+    irq_info = (struct tx_isp_irq_info *)(sd + REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET);
+    irq = *(uint32_t *)irq_info;
+    if (!irq)
+        return;
+
+    if (enable) {
+        if (*enabled)
+            return;
+        tx_isp_enable_irq((uintptr_t)irq_info);
+        *enabled = true;
+    } else {
+        if (!*enabled)
+            return;
+        tx_isp_disable_irq((uintptr_t)irq_info);
+        *enabled = false;
+    }
+
+    printk(KERN_WARNING "tx_isp_t23_recovered: %s irq %s irq=%u sd=%p channel=%d reason=%s\n",
+           name ? name : "subdev", enable ? "enable" : "disable",
+           irq, sd, channel, reason ? reason : "?");
+}
+
+static void regtrace_t23_stream_irq_gate(int enable,
+                                         const char *reason,
+                                         int channel)
+{
+    if (!regtrace_t23_enable_irqs_on_streamon)
+        return;
+
+    regtrace_t23_set_irq_enabled("core", regtrace_t23_core_sd,
+                                 &regtrace_t23_core_irq_enabled,
+                                 enable, reason, channel);
+    regtrace_t23_set_irq_enabled("vic", regtrace_t23_vic_sd,
+                                 &regtrace_t23_vic_irq_enabled,
+                                 enable, reason, channel);
+    regtrace_t23_set_irq_enabled("ivdc", regtrace_t23_ivdc_sd,
+                                 &regtrace_t23_ivdc_irq_enabled,
+                                 enable, reason, channel);
+}
 
 struct regtrace_v4l2_input {
     u32 index;
@@ -9882,6 +10010,13 @@ static long regtrace_tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned 
         return ret;
     }
 
+    if (cmd == REGTRACE_T23_VIDIOC_STREAMON) {
+        regtrace_t23_enable_stream_clks();
+        regtrace_t23_stream_irq_gate(1, "tx-isp-streamon", -1);
+    } else if (cmd == REGTRACE_T23_VIDIOC_STREAMOFF) {
+        regtrace_t23_stream_irq_gate(0, "tx-isp-streamoff", -1);
+    }
+
     ret = tx_isp_unlocked_ioctl(file, cmd, arg);
     printk(KERN_INFO "tx_isp_t23_recovered: tx-isp ioctl cmd=0x%x arg=0x%lx ret=%ld pid=%d comm=%s\n",
            cmd, arg, ret, current->pid, current->comm);
@@ -10090,8 +10225,15 @@ static void regtrace_unregister_misc_ivdc(void)
 }
 
 #define REGTRACE_FRAMECHAN_COUNT 4
+#define REGTRACE_FRAMECHAN_SET_FMT 0xc07056c3U
+#define REGTRACE_FRAMECHAN_REQBUFS 0xc0145608U
+#define REGTRACE_FRAMECHAN_QBUF 0xc044560fU
 #define REGTRACE_FRAMECHAN_WAIT 0x400456bfU
 #define REGTRACE_FRAMECHAN_DQBUF 0xc0445611U
+#define REGTRACE_FRAMECHAN_QUERYBUF 0xc0445609U
+#define REGTRACE_FRAMECHAN_QBUF_WORDS 17
+#define REGTRACE_FRAMECHAN_QBUF_SLOTS 8
+#define REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE 1U
 
 struct regtrace_framechan_context {
     int channel;
@@ -10109,6 +10251,146 @@ static const char regtrace_framechan1_name[] = "framechan1";
 static const char regtrace_framechan2_name[] = "framechan2";
 static const char regtrace_framechan3_name[] = "framechan3";
 static int regtrace_framechan_registered[REGTRACE_FRAMECHAN_COUNT];
+static uint32_t regtrace_framechan_qbuf_index[REGTRACE_FRAMECHAN_COUNT][REGTRACE_FRAMECHAN_QBUF_SLOTS];
+static uint32_t regtrace_framechan_qbuf_userptr[REGTRACE_FRAMECHAN_COUNT][REGTRACE_FRAMECHAN_QBUF_SLOTS];
+static uint32_t regtrace_framechan_qbuf_len[REGTRACE_FRAMECHAN_COUNT][REGTRACE_FRAMECHAN_QBUF_SLOTS];
+static uint32_t regtrace_framechan_qbuf_count[REGTRACE_FRAMECHAN_COUNT];
+static uint32_t regtrace_framechan_dq_sequence[REGTRACE_FRAMECHAN_COUNT];
+static uint32_t regtrace_framechan_log_count[REGTRACE_FRAMECHAN_COUNT];
+
+static uint32_t regtrace_t23_frame_width(int channel)
+{
+    return channel == 1 ? 640U : 1920U;
+}
+
+static uint32_t regtrace_t23_frame_height(int channel)
+{
+    return channel == 1 ? 360U : 1080U;
+}
+
+static uint32_t regtrace_t23_frame_uv_offset(int channel)
+{
+    uint32_t height = regtrace_t23_frame_height(channel);
+
+    return regtrace_t23_frame_width(channel) * ((height + 15U) & ~15U);
+}
+
+static void regtrace_t23_program_msca_qbuf(int channel,
+                                           uint32_t phys,
+                                           uint32_t length)
+{
+    uint32_t uv_phys;
+    int ret;
+
+    if (!regtrace_t23_direct_msca_qbuf)
+        return;
+    if (channel < 0 || channel >= 3 || !phys)
+        return;
+
+    uv_phys = phys + regtrace_t23_frame_uv_offset(channel);
+    ret = tisp_msca_addr_fifo_write((char)channel, phys, uv_phys);
+    printk(KERN_WARNING "tx_isp_t23_recovered: direct MSCA qbuf ch=%d y=0x%x uv=0x%x len=0x%x ret=%d\n",
+           channel, phys, uv_phys, length, ret);
+}
+
+static void regtrace_t23_set_msca_stream(int channel,
+                                         int enable,
+                                         const char *reason)
+{
+    uint32_t bit;
+    uint32_t value;
+    uint32_t readback;
+
+    if (!regtrace_t23_direct_msca_start)
+        return;
+    if (channel < 0 || channel >= 3)
+        return;
+
+    bit = 1U << channel;
+    if (enable)
+        regtrace_t23_msca_ch_en |= bit;
+    else
+        regtrace_t23_msca_ch_en &= ~bit;
+
+    value = regtrace_t23_msca_ch_en ? (0x000f0000U | regtrace_t23_msca_ch_en) : 0U;
+    system_reg_write(0x9804U, value);
+    readback = system_reg_read(0x9804U);
+    printk(KERN_WARNING "tx_isp_t23_recovered: direct MSCA %s ch=%d value=0x%x readback=0x%x reason=%s\n",
+           enable ? "start" : "stop", channel, value, readback,
+           reason ? reason : "?");
+}
+
+static void regtrace_framechan_record_qbuf(int channel, const uint32_t *words)
+{
+    uint32_t slot;
+
+    if (channel < 0 || channel >= REGTRACE_FRAMECHAN_COUNT || !words)
+        return;
+
+    slot = regtrace_framechan_qbuf_count[channel] % REGTRACE_FRAMECHAN_QBUF_SLOTS;
+    regtrace_framechan_qbuf_index[channel][slot] = words[0];
+    regtrace_framechan_qbuf_userptr[channel][slot] = words[13];
+    regtrace_framechan_qbuf_len[channel][slot] = words[14];
+    regtrace_framechan_qbuf_count[channel]++;
+    regtrace_t23_program_msca_qbuf(channel, words[13], words[14]);
+}
+
+static int regtrace_framechan_latest_slot(int channel)
+{
+    uint32_t count;
+
+    if (channel < 0 || channel >= REGTRACE_FRAMECHAN_COUNT)
+        return -1;
+    count = regtrace_framechan_qbuf_count[channel];
+    if (!count)
+        return -1;
+    return (int)((count - 1U) % REGTRACE_FRAMECHAN_QBUF_SLOTS);
+}
+
+static long regtrace_framechan_copy_words_from_user(uint32_t *words,
+                                                    unsigned long arg)
+{
+    if (!arg)
+        return -EINVAL;
+    if (copy_from_user(words, (const void __user *)(uintptr_t)arg,
+                       REGTRACE_FRAMECHAN_QBUF_WORDS * sizeof(uint32_t)))
+        return -EFAULT;
+    return 0;
+}
+
+static long regtrace_framechan_repair_dqbuf(int channel, unsigned long arg)
+{
+    uint32_t words[REGTRACE_FRAMECHAN_QBUF_WORDS];
+    int slot;
+    long ret;
+
+    if (channel < 0 || channel >= REGTRACE_FRAMECHAN_COUNT)
+        return -EINVAL;
+
+    ret = regtrace_framechan_copy_words_from_user(words, arg);
+    if (ret)
+        return ret;
+
+    slot = regtrace_framechan_latest_slot(channel);
+    if (slot >= 0) {
+        words[0] = regtrace_framechan_qbuf_index[channel][slot];
+        words[13] = regtrace_framechan_qbuf_userptr[channel][slot];
+        words[14] = regtrace_framechan_qbuf_len[channel][slot];
+    }
+    words[1] = REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE;
+    words[3] = 0x00000004U;
+    words[11] = regtrace_framechan_dq_sequence[channel]++;
+
+    if (copy_to_user((void __user *)(uintptr_t)arg, words, sizeof(words)))
+        return -EFAULT;
+
+    if (regtrace_t23_log_framechan_payloads &&
+        regtrace_framechan_log_count[channel] < 16) {
+        printk(KERN_INFO "tx_isp_t23_recovered: framechan%d dqbuf idx=%u seq=%u userptr=0x%x len=0x%x slot=%d\n",
+               channel, words[0], words[11], words[13], words[14], slot);
+    }
+    return 0;
+}
 
 static int regtrace_framechan_index_from_misc(struct miscdevice *mdev)
 {
@@ -10161,14 +10443,93 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
 {
     struct regtrace_framechan_context *ctx;
     int channel = -1;
+    long ret = 0;
 
     ctx = file ? file->private_data : NULL;
     if (ctx)
         channel = ctx->channel;
-    if (cmd != REGTRACE_FRAMECHAN_WAIT && cmd != REGTRACE_FRAMECHAN_DQBUF)
+
+    switch (cmd) {
+    case REGTRACE_FRAMECHAN_SET_FMT: {
+        uint32_t words[28];
+
+        memset(words, 0, sizeof(words));
+        if (arg && copy_from_user(words, (const void __user *)(uintptr_t)arg,
+                                  sizeof(words))) {
+            ret = -EFAULT;
+            break;
+        }
+        if (regtrace_t23_log_framechan_payloads)
+            printk(KERN_INFO "tx_isp_t23_recovered: framechan%d set_fmt w=%u h=%u pix=0x%x field=%u size=0x%x ret=0\n",
+                   channel, words[4], words[5], words[6], words[7], words[8]);
+        break;
+    }
+    case REGTRACE_FRAMECHAN_REQBUFS: {
+        uint32_t words[5];
+
+        memset(words, 0, sizeof(words));
+        if (arg && copy_from_user(words, (const void __user *)(uintptr_t)arg,
+                                  sizeof(words))) {
+            ret = -EFAULT;
+            break;
+        }
+        if (regtrace_t23_log_framechan_payloads)
+            printk(KERN_INFO "tx_isp_t23_recovered: framechan%d reqbufs count=%u type=%u memory=%u ret=0\n",
+                   channel, words[0], words[1], words[2]);
+        break;
+    }
+    case REGTRACE_FRAMECHAN_QBUF: {
+        uint32_t words[REGTRACE_FRAMECHAN_QBUF_WORDS];
+
+        ret = regtrace_framechan_copy_words_from_user(words, arg);
+        if (ret)
+            break;
+        regtrace_framechan_record_qbuf(channel, words);
+        if (regtrace_t23_log_framechan_payloads &&
+            channel >= 0 && channel < REGTRACE_FRAMECHAN_COUNT &&
+            regtrace_framechan_log_count[channel] < 16) {
+            printk(KERN_INFO "tx_isp_t23_recovered: framechan%d qbuf idx=%u type=%u memory=%u userptr=0x%x len=0x%x flags=0x%x count=%u\n",
+                   channel, words[0], words[1], words[10], words[13],
+                   words[14], words[3], regtrace_framechan_qbuf_count[channel]);
+        }
+        break;
+    }
+    case REGTRACE_FRAMECHAN_QUERYBUF:
+        if (regtrace_t23_log_framechan_payloads)
+            printk(KERN_INFO "tx_isp_t23_recovered: framechan%d querybuf arg=0x%lx ret=0\n",
+                   channel, arg);
+        break;
+    case REGTRACE_FRAMECHAN_DQBUF:
+        ret = regtrace_framechan_repair_dqbuf(channel, arg);
+        break;
+    case REGTRACE_T23_VIDIOC_STREAMON:
+        regtrace_t23_enable_stream_clks();
+        regtrace_t23_set_msca_stream(channel, 1, "framechan-streamon");
+        regtrace_t23_stream_irq_gate(1, "framechan-streamon", channel);
+        if (regtrace_t23_log_framechan_payloads)
+            printk(KERN_WARNING "tx_isp_t23_recovered: framechan%d streamon arg=0x%lx ret=0 core=%p vic=%p csi=%p fs=%p\n",
+                   channel, arg, regtrace_t23_core_sd, regtrace_t23_vic_sd,
+                   regtrace_t23_csi_sd, regtrace_t23_fs_sd);
+        break;
+    case REGTRACE_T23_VIDIOC_STREAMOFF:
+        regtrace_t23_set_msca_stream(channel, 0, "framechan-streamoff");
+        regtrace_t23_stream_irq_gate(0, "framechan-streamoff", channel);
+        if (regtrace_t23_log_framechan_payloads)
+            printk(KERN_WARNING "tx_isp_t23_recovered: framechan%d streamoff arg=0x%lx ret=0\n",
+                   channel, arg);
+        break;
+    case REGTRACE_FRAMECHAN_WAIT:
+        break;
+    default:
         printk(KERN_INFO "tx_isp_t23_recovered: framechan%d ioctl cmd=0x%x arg=0x%lx ret=0 pid=%d comm=%s\n",
                channel, cmd, arg, current->pid, current->comm);
-    return 0;
+        break;
+    }
+
+    if (regtrace_t23_log_framechan_payloads &&
+        channel >= 0 && channel < REGTRACE_FRAMECHAN_COUNT)
+        regtrace_framechan_log_count[channel]++;
+    return ret;
 }
 
 static ssize_t regtrace_framechan_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
@@ -11262,6 +11623,7 @@ static int regtrace_t23_probe_vin_safe(struct platform_device *pdev)
     *(uint32_t *)(vin + 224) = (uint32_t)(uintptr_t)(vin + 220);
     *(uint32_t *)(vin + 244) = 1;
     *(uint32_t *)(vin + 52) = (uint32_t)(uintptr_t)&video_input_cmd_fops;
+    regtrace_t23_vin_sd = vin;
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe vin sd=%p\n", vin);
     return 0;
 }
@@ -11288,6 +11650,7 @@ static int regtrace_t23_probe_csi_safe(struct platform_device *pdev)
     private_spin_lock_init((spinlock_t *)(csi + 304));
     private_raw_mutex_init((struct mutex *)(csi + 304), "csi->mlock", 0);
     *(uint32_t *)((char *)&dump_csd) = (uint32_t)(uintptr_t)csi;
+    regtrace_t23_csi_sd = csi;
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe csi sd=%p base=%p\n",
            csi, (void *)(uintptr_t)*(uint32_t *)(csi + 184));
     return 0;
@@ -11324,6 +11687,7 @@ static int regtrace_t23_probe_vic_safe(struct platform_device *pdev)
     private_init_completion((struct completion *)(vic + 332));
     dump_vsd = (uintptr_t)vic;
     test_addr = (uintptr_t)(vic + 128);
+    regtrace_t23_vic_sd = vic;
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe vic sd=%p base=%p\n",
            vic, (void *)(uintptr_t)*(uint32_t *)(vic + 184));
     return 0;
@@ -11392,6 +11756,7 @@ static int regtrace_t23_probe_core_safe(struct platform_device *pdev)
     *(uint32_t *)(core + 232) = 1;
     *(uint32_t *)(core + 52) = (uint32_t)(uintptr_t)&sclk_name;
     ispcore_sd = (uintptr_t)core;
+    regtrace_t23_core_sd = core;
     sensor_early_init((uint32_t)(uintptr_t)core);
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe core sd=%p base=%p channels=%u\n",
            core, (void *)(uintptr_t)*(uint32_t *)(core + 184), num_channels);
@@ -11422,6 +11787,7 @@ static int regtrace_t23_probe_fs_safe(struct platform_device *pdev)
         *(uint16_t *)(fs + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET);
     *(uint32_t *)(fs + 228) = 1;
     *(uint32_t *)(fs + 52) = (uint32_t)(uintptr_t)&isp_framesource_fops;
+    regtrace_t23_fs_sd = fs;
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe fs sd=%p channels=%u\n",
            fs, *(uint32_t *)(fs + 224));
     return 0;
@@ -11451,6 +11817,7 @@ static int regtrace_t23_probe_ivdc_safe(struct platform_device *pdev)
     *(uint32_t *)(sd + 212) = (uint32_t)(uintptr_t)sd;
     *(uint32_t *)(ivdc + 376) = (uint32_t)(uintptr_t)pdev->dev.platform_data;
     g_ivdc = (uintptr_t)ivdc;
+    regtrace_t23_ivdc_sd = sd;
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe ivdc dev=%p sd=%p base=%p\n",
            ivdc, sd, (void *)(uintptr_t)*(uint32_t *)(sd + 184));
     return 0;
@@ -90570,50 +90937,31 @@ int dump_msca_regs(void) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006a688 origin=fragment_seed original=system_reg_write */
 int32_t system_reg_write(uint32_t a0, uint32_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    uintptr_t sd = ispcore_sd;
+    uintptr_t base;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&ispcore_sd;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&ispcore_sd));
-    v0 = *(uint32_t *)((char *)v0 + 184);
-    a0 = v0 + a0;
-    *(uint32_t *)((char *)a0 + 0) = a1;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
+    if (!sd)
+        return -ENODEV;
+    base = *(uint32_t *)((char *)sd + 184);
+    if (!base)
+        return -ENODEV;
+    *(volatile uint32_t *)(base + a0) = a1;
+    wmb();
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006a6a4 origin=fragment_seed original=system_reg_read */
 int32_t system_reg_read(uint32_t a0)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    uintptr_t sd = ispcore_sd;
+    uintptr_t base;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&ispcore_sd;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&ispcore_sd));
-    v0 = *(uint32_t *)((char *)v0 + 184);
-    a0 = v0 + a0;
-    v0 = *(uint32_t *)((char *)a0 + 0);
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Unknown */
-    /* unmatched fragment 3 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 6a6bc:	00000000 	nop */
-
-    return 0;
+    if (!sd)
+        return 0;
+    base = *(uint32_t *)((char *)sd + 184);
+    if (!base)
+        return 0;
+    return *(volatile uint32_t *)(base + a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006a6c0 origin=model_output original=exception_handle */
