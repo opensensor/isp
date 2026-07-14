@@ -1,0 +1,9 @@
+obj-m += tx_isp_t23_recovered.o
+
+ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
+ccflags-y += -std=gnu99
+ccflags-y += -w
+ccflags-y += -Wno-error=strict-prototypes
+ccflags-y += -Wno-error=implicit-function-declaration
+ccflags-y += -Wno-error=int-conversion
+ccflags-y += -Wno-error=incompatible-pointer-types
