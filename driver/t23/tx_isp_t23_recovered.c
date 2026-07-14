@@ -9812,6 +9812,7 @@ static bool regtrace_t23_source_msca_init;
 static uint regtrace_t23_source_core_bypass = 0xb4000001U;
 static bool regtrace_t23_source_core_bypass_from_tuning = true;
 static bool regtrace_t23_source_park_uninitialized_mdns = true;
+static bool regtrace_t23_source_gib_tuning_init;
 static bool regtrace_t23_source_gamma_tuning_init;
 static bool regtrace_t23_source_awb_static_init;
 static bool regtrace_t23_source_ccm_tuning_init;
@@ -9848,6 +9849,8 @@ module_param_named(source_core_bypass_from_tuning,
                    regtrace_t23_source_core_bypass_from_tuning, bool, 0644);
 module_param_named(source_park_uninitialized_mdns,
                    regtrace_t23_source_park_uninitialized_mdns, bool, 0644);
+module_param_named(source_gib_tuning_init,
+                   regtrace_t23_source_gib_tuning_init, bool, 0644);
 module_param_named(source_gamma_tuning_init,
                    regtrace_t23_source_gamma_tuning_init, bool, 0644);
 module_param_named(source_awb_static_init,
@@ -11251,11 +11254,25 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
     return bypass;
 }
 
+#include "tx_isp_t23_gib_tuning.inc"
 #include "tx_isp_t23_gamma_tuning.inc"
 #include "tx_isp_t23_awb_static_tuning.inc"
 #include "tx_isp_t23_ccm_tuning.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
+
+static void regtrace_t23_source_gib_write_tuning_startup(void)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gib_sc2336_startup); ++i)
+        system_reg_write(regtrace_t23_gib_sc2336_startup[i][0],
+                         regtrace_t23_gib_sc2336_startup[i][1]);
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source GIB SC2336 tuning startup committed (%u writes)\n",
+           (unsigned int)ARRAY_SIZE(regtrace_t23_gib_sc2336_startup));
+}
 
 static void regtrace_t23_source_gamma_write_tuning_startup(void)
 {
@@ -11426,6 +11443,8 @@ static int regtrace_t23_source_core_set_stream(int enable,
     system_reg_write(0xcU, bypass);
     system_reg_write(0x10U, 0xf3U);
     system_reg_write(0x30U, 0xffffffffU);
+    if (regtrace_t23_source_gib_tuning_init)
+        regtrace_t23_source_gib_write_tuning_startup();
     if (regtrace_t23_source_gamma_tuning_init)
         regtrace_t23_source_gamma_write_tuning_startup();
     if (regtrace_t23_source_ccm_tuning_init)
