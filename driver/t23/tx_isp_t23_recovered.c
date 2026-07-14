@@ -9812,7 +9812,11 @@ static bool regtrace_t23_source_msca_init;
 static uint regtrace_t23_source_core_bypass = 0xb4000001U;
 static bool regtrace_t23_source_core_bypass_from_tuning = true;
 static bool regtrace_t23_source_park_uninitialized_mdns = true;
+static bool regtrace_t23_source_gamma_tuning_init;
+static bool regtrace_t23_source_awb_static_init;
+static bool regtrace_t23_source_ccm_tuning_init;
 static bool regtrace_t23_source_dmsc_tuning_init;
+static bool regtrace_t23_source_bcsh_tuning_init;
 static bool regtrace_t23_source_bcsh_neutral;
 static bool regtrace_t23_source_csccr_init;
 static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin";
@@ -9844,8 +9848,16 @@ module_param_named(source_core_bypass_from_tuning,
                    regtrace_t23_source_core_bypass_from_tuning, bool, 0644);
 module_param_named(source_park_uninitialized_mdns,
                    regtrace_t23_source_park_uninitialized_mdns, bool, 0644);
+module_param_named(source_gamma_tuning_init,
+                   regtrace_t23_source_gamma_tuning_init, bool, 0644);
+module_param_named(source_awb_static_init,
+                   regtrace_t23_source_awb_static_init, bool, 0644);
+module_param_named(source_ccm_tuning_init,
+                   regtrace_t23_source_ccm_tuning_init, bool, 0644);
 module_param_named(source_dmsc_tuning_init,
                    regtrace_t23_source_dmsc_tuning_init, bool, 0644);
+module_param_named(source_bcsh_tuning_init,
+                   regtrace_t23_source_bcsh_tuning_init, bool, 0644);
 module_param_named(source_bcsh_neutral,
                    regtrace_t23_source_bcsh_neutral, bool, 0644);
 module_param_named(source_csccr_init,
@@ -11239,7 +11251,70 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
     return bypass;
 }
 
+#include "tx_isp_t23_gamma_tuning.inc"
+#include "tx_isp_t23_awb_static_tuning.inc"
+#include "tx_isp_t23_ccm_tuning.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
+#include "tx_isp_t23_bcsh_tuning.inc"
+
+static void regtrace_t23_source_gamma_write_tuning_startup(void)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gamma_sc2336_linear); ++i) {
+        uint32_t value = regtrace_t23_gamma_sc2336_linear[i];
+        uint32_t offset = (uint32_t)i * 4U;
+
+        system_reg_write(0x40000U + offset, value);
+        system_reg_write(0x48000U + offset, value);
+        system_reg_write(0x50000U + offset, value);
+    }
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source Gamma SC2336 linear tuning committed (%u writes)\n",
+           (unsigned int)(ARRAY_SIZE(regtrace_t23_gamma_sc2336_linear) * 3U));
+}
+
+static void regtrace_t23_source_awb_write_static_startup(void)
+{
+    /* OEM system_reg_write_awb(2, ...) latches 0x1800 before each write. */
+    system_reg_write(0x1800U, 1U);
+    system_reg_write(0x1804U, REGTRACE_T23_AWB_SC2336_REG_GR);
+    system_reg_write(0x1800U, 1U);
+    system_reg_write(0x1808U, REGTRACE_T23_AWB_SC2336_REG_GB);
+    system_reg_write(0x1800U, 1U);
+    system_reg_write(0x180cU, REGTRACE_T23_AWB_SC2336_REG_GR);
+    system_reg_write(0x1800U, 1U);
+    system_reg_write(0x1810U, REGTRACE_T23_AWB_SC2336_REG_GB);
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source AWB SC2336 static startup requested (point=%u mf=%u/%u base=%u/%u shadow=0x%x/0x%x)\n",
+           REGTRACE_T23_AWB_SC2336_POINT_POS,
+           REGTRACE_T23_AWB_SC2336_MF_GR,
+           REGTRACE_T23_AWB_SC2336_MF_GB,
+           REGTRACE_T23_AWB_SC2336_BASE_GR,
+           REGTRACE_T23_AWB_SC2336_BASE_GB,
+           REGTRACE_T23_AWB_SC2336_REG_GR,
+           REGTRACE_T23_AWB_SC2336_REG_GB);
+}
+
+static void regtrace_t23_source_ccm_write_tuning_startup(void)
+{
+    size_t i;
+
+    for (i = 0; i < 5; ++i) {
+        system_reg_write(0x5000U, 1U);
+        system_reg_write(regtrace_t23_ccm_sc2336_daylight[i][0],
+                         regtrace_t23_ccm_sc2336_daylight[i][1]);
+    }
+    for (; i < ARRAY_SIZE(regtrace_t23_ccm_sc2336_daylight); ++i)
+        system_reg_write(regtrace_t23_ccm_sc2336_daylight[i][0],
+                         regtrace_t23_ccm_sc2336_daylight[i][1]);
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source CCM SC2336 daylight tuning committed (%u writes)\n",
+           (unsigned int)ARRAY_SIZE(regtrace_t23_ccm_sc2336_daylight));
+}
 
 static void regtrace_t23_source_dmsc_write_tuning_startup(void)
 {
@@ -11252,6 +11327,19 @@ static void regtrace_t23_source_dmsc_write_tuning_startup(void)
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source DMSC SC2336 tuning startup committed (%u writes)\n",
            (unsigned int)ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup));
+}
+
+static void regtrace_t23_source_bcsh_write_tuning_startup(void)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_bcsh_sc2336_startup); ++i)
+        system_reg_write(regtrace_t23_bcsh_sc2336_startup[i][0],
+                         regtrace_t23_bcsh_sc2336_startup[i][1]);
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source BCSH SC2336 tuning startup committed (%u writes)\n",
+           (unsigned int)ARRAY_SIZE(regtrace_t23_bcsh_sc2336_startup));
 }
 
 static void regtrace_t23_source_bcsh_write_neutral(void)
@@ -11338,8 +11426,14 @@ static int regtrace_t23_source_core_set_stream(int enable,
     system_reg_write(0xcU, bypass);
     system_reg_write(0x10U, 0xf3U);
     system_reg_write(0x30U, 0xffffffffU);
+    if (regtrace_t23_source_gamma_tuning_init)
+        regtrace_t23_source_gamma_write_tuning_startup();
+    if (regtrace_t23_source_ccm_tuning_init)
+        regtrace_t23_source_ccm_write_tuning_startup();
     if (regtrace_t23_source_dmsc_tuning_init)
         regtrace_t23_source_dmsc_write_tuning_startup();
+    if (regtrace_t23_source_bcsh_tuning_init)
+        regtrace_t23_source_bcsh_write_tuning_startup();
     if (regtrace_t23_source_bcsh_neutral)
         regtrace_t23_source_bcsh_write_neutral();
     if (regtrace_t23_source_csccr_init)
@@ -11349,6 +11443,8 @@ static int regtrace_t23_source_core_set_stream(int enable,
     system_reg_write(0x804U, regtrace_t23_source_core_mode);
     system_reg_write(0x1cU, 8U);
     system_reg_write(0x800U, 1U);
+    if (regtrace_t23_source_awb_static_init)
+        regtrace_t23_source_awb_write_static_startup();
     regtrace_t23_core_started = true;
 
     printk(KERN_WARNING "tx_isp_t23_recovered: source core started size=0x%x bayer=0x%x bypass=0x%x main=0x%x irq=0x%x msca_init=0x%x mode=0x%x run=0x%x reason=%s\n",

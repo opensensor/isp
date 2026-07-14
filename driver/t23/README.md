@@ -13,9 +13,13 @@ Current smoke-test status:
 - `/dev/tx-isp`, `/dev/isp-m0`, `/dev/misc-ivdc`, and `/dev/framechan0..3`
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
-- Raptor starts and publishes stream metadata, but the image is still solid
-  green. The next bring-up target is the real interrupt/frame delivery path,
-  using the T31/T40 history as the reference.
+- Raptor starts and publishes stable H.264 streams on both MSCA channels.
+- The source-derived SC2336 DMSC, Gamma, static AWB, and BCSH startup images
+  produce a clean, artifact-free image with working ISP/VIC interrupts.
+- The image still has a broad green cast. The best verified startup keeps the
+  top-level CCM bypassed; pairing it with the current daylight CCM image makes
+  the cast worse. The next bring-up target is the missing GIB/LSC and dynamic
+  3A path, using the T31/T40 source and commit history as the reference.
 
 Build from a compatible Thingino T23 3.10.14 kernel tree with:
 
