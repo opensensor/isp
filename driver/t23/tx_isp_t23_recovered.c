@@ -9091,8 +9091,71 @@ void private_platform_set_drvdata(struct platform_device *pdev, void *data) { pl
 void *private_platform_get_drvdata(const struct platform_device *pdev) { return platform_get_drvdata((struct platform_device *)pdev); }
 int private_platform_device_register(struct platform_device *pdev) { return platform_device_register(pdev); }
 void private_platform_device_unregister(struct platform_device *pdev) { platform_device_unregister(pdev); }
-int private_platform_get_irq(struct platform_device *pdev, unsigned int num) { return platform_get_irq(pdev, num); }
-int private_request_threaded_irq(unsigned int irq, irq_handler_t handler, irq_handler_t thread_fn, unsigned long flags, const char *name, void *dev) { return request_threaded_irq(irq, handler, thread_fn, flags, name, dev); }
+struct resource *private_platform_get_resource(struct platform_device *pdev, unsigned int type, unsigned int num)
+{
+    struct resource *res = platform_get_resource(pdev, type, num);
+
+    if (res) {
+        printk(KERN_INFO "tx_isp_t23_recovered: platform_get_resource dev=%s type=0x%x num=%u name=%s start=0x%08llx end=0x%08llx flags=0x%lx\n",
+               pdev ? pdev->name : "(null)", type, num,
+               res->name ? res->name : "(null)",
+               (unsigned long long)res->start,
+               (unsigned long long)res->end,
+               res->flags);
+    } else {
+        printk(KERN_INFO "tx_isp_t23_recovered: platform_get_resource dev=%s type=0x%x num=%u -> NULL\n",
+               pdev ? pdev->name : "(null)", type, num);
+    }
+    return res;
+}
+int private_platform_get_irq(struct platform_device *pdev, unsigned int num)
+{
+    int irq = platform_get_irq(pdev, num);
+
+    printk(KERN_INFO "tx_isp_t23_recovered: platform_get_irq dev=%s num=%u irq=%d\n",
+           pdev ? pdev->name : "(null)", num, irq);
+    return irq;
+}
+struct resource *private_request_mem_region(resource_size_t start, resource_size_t n, const char *name)
+{
+    struct resource *res;
+
+    if (!name)
+        name = "tx-isp";
+    res = request_mem_region(start, n, name);
+    printk(KERN_INFO "tx_isp_t23_recovered: request_mem_region %s 0x%08llx+0x%08llx -> %p\n",
+           name, (unsigned long long)start, (unsigned long long)n, res);
+    return res;
+}
+void private_release_mem_region(resource_size_t start, resource_size_t n)
+{
+    if (n)
+        release_mem_region(start, n);
+}
+void __iomem *private_ioremap(phys_addr_t offset, unsigned long size)
+{
+    void __iomem *addr;
+
+    if (!offset || !size)
+        return NULL;
+    addr = __ioremap(offset, size, REGTRACE_IOREMAP_UNCACHED);
+    printk(KERN_INFO "tx_isp_t23_recovered: ioremap 0x%08llx+0x%08lx -> %p\n",
+           (unsigned long long)offset, size, addr);
+    return addr;
+}
+void private_iounmap(const volatile void __iomem *addr)
+{
+    if (addr)
+        iounmap((void __iomem *)addr);
+}
+int private_request_threaded_irq(unsigned int irq, irq_handler_t handler, irq_handler_t thread_fn, unsigned long flags, const char *name, void *dev)
+{
+    int ret = request_threaded_irq(irq, handler, thread_fn, flags, name, dev);
+
+    printk(KERN_INFO "tx_isp_t23_recovered: request_threaded_irq irq=%u name=%s flags=0x%lx dev=%p ret=%d\n",
+           irq, name ? name : "(null)", flags, dev, ret);
+    return ret;
+}
 void private_enable_irq(unsigned int irq) { enable_irq(irq); }
 void private_disable_irq(unsigned int irq) { disable_irq(irq); }
 void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags) { if (lock && flags) spin_lock_irqsave(lock, *flags); else if (flags) *flags = 0; }
@@ -9101,6 +9164,7 @@ void private_spin_lock_init(spinlock_t *lock) { if (lock) spin_lock_init(lock); 
 void private_mutex_lock(struct mutex *lock) { if (lock) mutex_lock(lock); }
 void private_mutex_unlock(struct mutex *lock) { if (lock) mutex_unlock(lock); }
 void private_raw_mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key) { if (lock) __mutex_init(lock, name ? name : "regtrace_mutex", key); }
+struct clk *private_clk_get(struct device *dev, const char *id) { return clk_get(dev, id); }
 unsigned long private_clk_get_rate(struct clk *clk) { return clk ? clk_get_rate(clk) : 0; }
 struct i2c_adapter *private_i2c_get_adapter(int nr) { return i2c_get_adapter(nr); }
 void private_i2c_put_adapter(struct i2c_adapter *adap) { if (adap) i2c_put_adapter(adap); }
@@ -9135,14 +9199,128 @@ uintptr_t __moddi3(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3) { (vo
 void call_text_func(void) {}
 void get_isp_priv_mem(unsigned int *phyaddr, unsigned int *size) { if (phyaddr) *phyaddr = 0; if (size) *size = 0; }
 int32_t tx_isp_send_event_to_remote(void *arg1) { (void)arg1; return 0; }
+#define REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET 0xbc
+#define REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET 0x84
+#define REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET 0xc0
 #define REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET 0xc4
+#define REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET 0xc8
+#define REGTRACE_TX_ISP_MODULE_INPAD_COUNT_OFFSET 0xca
+#define REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET 0xcc
+#define REGTRACE_TX_ISP_MODULE_INPADS_OFFSET 0xd0
+#define REGTRACE_TX_ISP_MODULE_SELF_OFFSET 0xd4
+#define REGTRACE_TX_ISP_PAD_STRIDE 36
+#define REGTRACE_TX_ISP_PADTYPE_INPUT 1
+#define REGTRACE_TX_ISP_PADTYPE_OUTPUT 2
+#define REGTRACE_TX_ISP_TYPE_SUBDEV 1
+#define REGTRACE_TX_ISP_TYPE_WIDGET 2
+
+static int regtrace_t23_subdev_init_pads(unsigned char *sd, const unsigned char *pdata)
+{
+    const unsigned char *pads;
+    unsigned int pads_num;
+    unsigned int i;
+    unsigned int out_count = 0;
+    unsigned int in_count = 0;
+    unsigned char *outpads = NULL;
+    unsigned char *inpads = NULL;
+    unsigned int out_index = 0;
+    unsigned int in_index = 0;
+
+    if (!sd || !pdata)
+        return -EINVAL;
+
+    pads_num = pdata[12];
+    pads = *(const unsigned char **)(pdata + 16);
+    if (!pads || !pads_num)
+        return 0;
+
+    for (i = 0; i < pads_num; i++) {
+        if (pads[i * 2] == REGTRACE_TX_ISP_PADTYPE_OUTPUT)
+            out_count++;
+        else if (pads[i * 2] == REGTRACE_TX_ISP_PADTYPE_INPUT)
+            in_count++;
+    }
+
+    if (out_count) {
+        outpads = private_kmalloc(out_count * REGTRACE_TX_ISP_PAD_STRIDE, GFP_KERNEL);
+        if (!outpads)
+            return -ENOMEM;
+        memset(outpads, 0, out_count * REGTRACE_TX_ISP_PAD_STRIDE);
+    }
+
+    if (in_count) {
+        inpads = private_kmalloc(in_count * REGTRACE_TX_ISP_PAD_STRIDE, GFP_KERNEL);
+        if (!inpads) {
+            private_kfree(outpads);
+            return -ENOMEM;
+        }
+        memset(inpads, 0, in_count * REGTRACE_TX_ISP_PAD_STRIDE);
+    }
+
+    for (i = 0; i < pads_num; i++) {
+        unsigned int type = pads[i * 2];
+        unsigned int links = pads[i * 2 + 1];
+        unsigned char *pad = NULL;
+        unsigned int index;
+
+        if (type == REGTRACE_TX_ISP_PADTYPE_OUTPUT) {
+            index = out_index++;
+            pad = outpads + index * REGTRACE_TX_ISP_PAD_STRIDE;
+        } else if (type == REGTRACE_TX_ISP_PADTYPE_INPUT) {
+            index = in_index++;
+            pad = inpads + index * REGTRACE_TX_ISP_PAD_STRIDE;
+        } else {
+            continue;
+        }
+
+        *(uint32_t *)(pad + 0) = (uint32_t)(uintptr_t)sd;
+        *(uint8_t *)(pad + 4) = index;
+        *(uint8_t *)(pad + 5) = type;
+        *(uint8_t *)(pad + 6) = links;
+        *(uint8_t *)(pad + 7) = 2;
+        *(uint32_t *)(pad + 20) = 0;
+    }
+
+    *(uint16_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET) = out_count;
+    *(uint16_t *)(sd + REGTRACE_TX_ISP_MODULE_INPAD_COUNT_OFFSET) = in_count;
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET) = (uint32_t)(uintptr_t)outpads;
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_INPADS_OFFSET) = (uint32_t)(uintptr_t)inpads;
+
+    printk(KERN_INFO "tx_isp_t23_recovered: subdev pads sd=%p out=%u in=%u outpads=%p inpads=%p\n",
+           sd, out_count, in_count, outpads, inpads);
+    return 0;
+}
+
 int32_t tx_isp_subdev_init(uintptr_t a0, uintptr_t a1, uint32_t a2)
 {
+    struct platform_device *pdev = (struct platform_device *)a0;
+    unsigned char *sd = (unsigned char *)a1;
+    unsigned char *pdata;
+    int ret;
+
     if (!a0 || !a1)
         return -EINVAL;
 
-    *(uint32_t *)((char *)a1 + REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET) = a2;
-    private_platform_set_drvdata((struct platform_device *)a0, (void *)a1);
+    pdata = pdev->dev.platform_data;
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET) = a2;
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_SELF_OFFSET) = (uint32_t)(uintptr_t)sd;
+    if (pdata) {
+        *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET) = pdata[4];
+        if (pdata[0] == REGTRACE_TX_ISP_TYPE_SUBDEV ||
+            pdata[0] == REGTRACE_TX_ISP_TYPE_WIDGET) {
+            ret = isp_subdev_init_clks(sd, *(int32_t **)(pdata + 8));
+            if (ret)
+                return ret;
+        }
+        if (pdata[0] == REGTRACE_TX_ISP_TYPE_SUBDEV) {
+            ret = regtrace_t23_subdev_init_pads(sd, pdata);
+            if (ret)
+                return ret;
+        }
+    }
+    private_platform_set_drvdata(pdev, (void *)a1);
+    printk(KERN_INFO "tx_isp_t23_recovered: subdev init dev=%s sd=%p ops=%p pdata=%p\n",
+           pdev->name, sd, (void *)(uintptr_t)a2, pdata);
     return 0;
 }
 int32_t tx_isp_subdev_deinit(uintptr_t arg1)
@@ -11017,10 +11195,275 @@ static int regtrace_child_remove_stub(struct platform_device *pdev)
     return 0;
 }
 
+static int regtrace_t23_map_mem(struct platform_device *pdev,
+                                unsigned char *sd,
+                                unsigned int index,
+                                unsigned int base_offset,
+                                unsigned int res_offset)
+{
+    struct resource *res;
+    struct resource *claimed;
+    void __iomem *base;
+    resource_size_t size;
+    const char *name;
+
+    res = private_platform_get_resource(pdev, IORESOURCE_MEM, index);
+    if (!res)
+        return 0;
+
+    size = resource_size(res);
+    name = dev_name(&pdev->dev);
+    if (!name || !*name)
+        name = pdev->name;
+
+    claimed = private_request_mem_region(res->start, size, name);
+    if (!claimed)
+        return -EBUSY;
+
+    base = private_ioremap(claimed->start, resource_size(claimed));
+    if (!base) {
+        private_release_mem_region(claimed->start, resource_size(claimed));
+        return -ENXIO;
+    }
+
+    if (base_offset)
+        *(uint32_t *)(sd + base_offset) = (uint32_t)(uintptr_t)base;
+    if (res_offset)
+        *(uint32_t *)(sd + res_offset) = (uint32_t)(uintptr_t)claimed;
+    return 0;
+}
+
+static int regtrace_t23_request_irq(struct platform_device *pdev,
+                                    unsigned char *sd)
+{
+    if (!pdev || !pdev->num_resources)
+        return 0;
+    return tx_isp_request_irq(pdev,
+        (struct tx_isp_irq_info *)(sd + REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET));
+}
+
+static int regtrace_t23_probe_vin_safe(struct platform_device *pdev)
+{
+    unsigned char *vin = private_kmalloc(252, GFP_KERNEL);
+    int ret;
+
+    if (!vin)
+        return -ENOMEM;
+    memset(vin, 0, 252);
+    ret = tx_isp_subdev_init((uintptr_t)pdev, (uintptr_t)vin,
+                             (uint32_t)(uintptr_t)&vin_subdev_ops);
+    if (ret) {
+        private_kfree(vin);
+        return ret;
+    }
+    private_raw_mutex_init((struct mutex *)(vin + 232), "&vin->mlock", 0);
+    *(uint32_t *)(vin + 216) = (uint32_t)(uintptr_t)vin;
+    *(uint32_t *)(vin + 220) = (uint32_t)(uintptr_t)(vin + 220);
+    *(uint32_t *)(vin + 224) = (uint32_t)(uintptr_t)(vin + 220);
+    *(uint32_t *)(vin + 244) = 1;
+    *(uint32_t *)(vin + 52) = (uint32_t)(uintptr_t)&video_input_cmd_fops;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe probe vin sd=%p\n", vin);
+    return 0;
+}
+
+static int regtrace_t23_probe_csi_safe(struct platform_device *pdev)
+{
+    unsigned char *csi = private_kmalloc(332, GFP_KERNEL);
+    int ret;
+
+    if (!csi)
+        return -ENOMEM;
+    memset(csi, 0, 332);
+    ret = tx_isp_subdev_init((uintptr_t)pdev, (uintptr_t)csi,
+                             (uint32_t)(uintptr_t)&csi_subdev_ops);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_map_mem(pdev, csi, 0, 184, 316);
+    if (ret)
+        goto fail;
+    *(uint32_t *)(csi + 320) = *(uint32_t *)(csi + 184);
+    *(uint32_t *)(csi + 52) = (uint32_t)(uintptr_t)&isp_csi_fops;
+    *(uint32_t *)(csi + 212) = (uint32_t)(uintptr_t)csi;
+    *(uint32_t *)(csi + 300) = 1;
+    private_spin_lock_init((spinlock_t *)(csi + 304));
+    private_raw_mutex_init((struct mutex *)(csi + 304), "csi->mlock", 0);
+    *(uint32_t *)((char *)&dump_csd) = (uint32_t)(uintptr_t)csi;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe probe csi sd=%p base=%p\n",
+           csi, (void *)(uintptr_t)*(uint32_t *)(csi + 184));
+    return 0;
+
+fail:
+    private_kfree(csi);
+    return ret;
+}
+
+static int regtrace_t23_probe_vic_safe(struct platform_device *pdev)
+{
+    unsigned char *vic = private_kmalloc(544, GFP_KERNEL);
+    int ret;
+
+    if (!vic)
+        return -ENOMEM;
+    memset(vic, 0, 544);
+    ret = tx_isp_subdev_init((uintptr_t)pdev, (uintptr_t)vic,
+                             (uint32_t)(uintptr_t)&vic_subdev_ops);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_request_irq(pdev, vic);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_map_mem(pdev, vic, 0, 184, 0);
+    if (ret)
+        goto fail;
+    *(uint32_t *)(vic + 52) = (uint32_t)(uintptr_t)&isp_vic_frd_fops;
+    *(uint32_t *)(vic + 212) = (uint32_t)(uintptr_t)vic;
+    *(uint32_t *)(vic + 300) = 1;
+    private_spin_lock_init((spinlock_t *)(vic + 308));
+    private_raw_mutex_init((struct mutex *)(vic + 308), "vic->mlock", 0);
+    private_raw_mutex_init((struct mutex *)(vic + 344), "vic->mlock2", 0);
+    private_init_completion((struct completion *)(vic + 332));
+    dump_vsd = (uintptr_t)vic;
+    test_addr = (uintptr_t)(vic + 128);
+    printk(KERN_INFO "tx_isp_t23_recovered: safe probe vic sd=%p base=%p\n",
+           vic, (void *)(uintptr_t)*(uint32_t *)(vic + 184));
+    return 0;
+
+fail:
+    private_kfree(vic);
+    return ret;
+}
+
+static int regtrace_t23_probe_core_safe(struct platform_device *pdev)
+{
+    unsigned char *core = private_kmalloc(0x230, GFP_KERNEL);
+    unsigned char *channels = NULL;
+    uint32_t num_channels;
+    uint32_t pads;
+    uint32_t i;
+    int ret;
+
+    if (!core)
+        return -ENOMEM;
+    memset(core, 0, 0x230);
+    ret = tx_isp_subdev_init((uintptr_t)pdev, (uintptr_t)core,
+                             (uint32_t)(uintptr_t)&core_subdev_ops);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_request_irq(pdev, core);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_map_mem(pdev, core, 0, 184, 0);
+    if (ret)
+        goto fail;
+
+    num_channels = *(uint16_t *)(core + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET);
+    *(uint32_t *)(core + 344) = num_channels;
+    if (num_channels) {
+        channels = private_kmalloc(num_channels * 0xc4, GFP_KERNEL);
+        if (!channels) {
+            ret = -ENOMEM;
+            goto fail;
+        }
+        memset(channels, 0, num_channels * 0xc4);
+        pads = *(uint32_t *)(core + REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET);
+        for (i = 0; i < num_channels; i++) {
+            unsigned char *ch = channels + i * 0xc4;
+            uint32_t pad = pads + i * REGTRACE_TX_ISP_PAD_STRIDE;
+
+            *(uint32_t *)(ch + 112) = i;
+            *(uint32_t *)(ch + 116) = 1;
+            *(uint32_t *)(ch + 120) = pad;
+            *(uint32_t *)(ch + 124) = (uint32_t)(uintptr_t)core;
+            *(uint32_t *)(ch + 128) = (i == 1) ? 2048 : 1920;
+            *(uint32_t *)(ch + 132) = (i == 1) ? 1080 : 1080;
+            *(uint32_t *)(ch + 136) = 128;
+            *(uint32_t *)(ch + 140) = 128;
+            private_spin_lock_init((spinlock_t *)(ch + 156));
+            if (pad) {
+                *(uint32_t *)(pad + 28) = 0;
+                *(uint32_t *)(pad + 32) = (uint32_t)(uintptr_t)ch;
+            }
+        }
+    }
+
+    *(uint32_t *)(core + 316) = (uint32_t)(uintptr_t)pdev->dev.platform_data;
+    *(uint32_t *)(core + 340) = (uint32_t)(uintptr_t)channels;
+    *(uint32_t *)(core + 212) = (uint32_t)(uintptr_t)core;
+    *(uint32_t *)(core + 232) = 1;
+    *(uint32_t *)(core + 52) = (uint32_t)(uintptr_t)&sclk_name;
+    ispcore_sd = (uintptr_t)core;
+    sensor_early_init((uint32_t)(uintptr_t)core);
+    printk(KERN_INFO "tx_isp_t23_recovered: safe probe core sd=%p base=%p channels=%u\n",
+           core, (void *)(uintptr_t)*(uint32_t *)(core + 184), num_channels);
+    return 0;
+
+fail:
+    private_kfree(channels);
+    private_kfree(core);
+    return ret;
+}
+
+static int regtrace_t23_probe_fs_safe(struct platform_device *pdev)
+{
+    unsigned char *fs = private_kmalloc(232, GFP_KERNEL);
+    int ret;
+
+    if (!fs)
+        return -ENOMEM;
+    memset(fs, 0, 232);
+    ret = tx_isp_subdev_init((uintptr_t)pdev, (uintptr_t)fs,
+                             (uint32_t)(uintptr_t)&fs_subdev_ops);
+    if (ret) {
+        private_kfree(fs);
+        return ret;
+    }
+    *(uint32_t *)(fs + 212) = (uint32_t)(uintptr_t)fs;
+    *(uint32_t *)(fs + 224) =
+        *(uint16_t *)(fs + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET);
+    *(uint32_t *)(fs + 228) = 1;
+    *(uint32_t *)(fs + 52) = (uint32_t)(uintptr_t)&isp_framesource_fops;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe probe fs sd=%p channels=%u\n",
+           fs, *(uint32_t *)(fs + 224));
+    return 0;
+}
+
+static int regtrace_t23_probe_ivdc_safe(struct platform_device *pdev)
+{
+    unsigned char *ivdc = private_kmalloc(440, GFP_KERNEL);
+    unsigned char *sd;
+    int ret;
+
+    if (!ivdc)
+        return -ENOMEM;
+    memset(ivdc, 0, 440);
+    sd = ivdc + 36;
+    ret = tx_isp_subdev_init((uintptr_t)pdev, (uintptr_t)sd,
+                             (uint32_t)(uintptr_t)&ivdc_subdev_ops);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_request_irq(pdev, sd);
+    if (ret)
+        goto fail;
+    ret = regtrace_t23_map_mem(pdev, sd, 0, 184, 0);
+    if (ret)
+        goto fail;
+    *(uint32_t *)(sd + 52) = (uint32_t)(uintptr_t)&sclk_name;
+    *(uint32_t *)(sd + 212) = (uint32_t)(uintptr_t)sd;
+    *(uint32_t *)(ivdc + 376) = (uint32_t)(uintptr_t)pdev->dev.platform_data;
+    g_ivdc = (uintptr_t)ivdc;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe probe ivdc dev=%p sd=%p base=%p\n",
+           ivdc, sd, (void *)(uintptr_t)*(uint32_t *)(sd + 184));
+    return 0;
+
+fail:
+    private_kfree(ivdc);
+    return ret;
+}
+
 static int regtrace_tx_isp_vin_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_vin_probe(pdev);
+        return regtrace_t23_probe_vin_safe(pdev);
     return regtrace_child_probe_stub(pdev);
 }
 
@@ -11034,7 +11477,7 @@ static int regtrace_tx_isp_vin_remove(struct platform_device *pdev)
 static int regtrace_tx_isp_csi_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_csi_probe(pdev);
+        return regtrace_t23_probe_csi_safe(pdev);
     return regtrace_child_probe_stub(pdev);
 }
 
@@ -11048,7 +11491,7 @@ static int regtrace_tx_isp_csi_remove(struct platform_device *pdev)
 static int regtrace_tx_isp_vic_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_vic_probe(pdev);
+        return regtrace_t23_probe_vic_safe(pdev);
     return regtrace_child_probe_stub(pdev);
 }
 
@@ -11062,7 +11505,7 @@ static int regtrace_tx_isp_vic_remove(struct platform_device *pdev)
 static int regtrace_tx_isp_core_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_core_probe(pdev);
+        return regtrace_t23_probe_core_safe(pdev);
     return regtrace_child_probe_stub(pdev);
 }
 
@@ -11076,7 +11519,7 @@ static int regtrace_tx_isp_core_remove(struct platform_device *pdev)
 static int regtrace_tx_isp_fs_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_fs_probe(pdev);
+        return regtrace_t23_probe_fs_safe(pdev);
     return regtrace_child_probe_stub(pdev);
 }
 
@@ -11090,7 +11533,7 @@ static int regtrace_tx_isp_fs_remove(struct platform_device *pdev)
 static int regtrace_tx_isp_ivdc_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_ivdc_probe(pdev);
+        return regtrace_t23_probe_ivdc_safe(pdev);
     return regtrace_child_probe_stub(pdev);
 }
 
@@ -16163,8 +16606,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     void *vin;
     uint32_t *s2;
 
-    private_kmalloc(252, 208);
-    vin = 0;
+    vin = private_kmalloc(252, GFP_KERNEL);
     if (!vin) {
         isp_printf(2, "Failed to allocate sensor subdev\n");
         return -12;
@@ -26271,7 +26713,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         private_spin_lock_init(irq_info);
 
         ret = private_request_threaded_irq(irq, isp_irq_handle, isp_irq_thread_handle,
-                                           0x2000, (void *)pdev, irq_info);
+                                           0x2000, dev_name(&pdev->dev), irq_info);
         if (ret != 0) {
             ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s[%d] Failed to request irq(%d).\n"), (uintptr_t)("tx_isp_request_irq"), (uintptr_t)(94), (uintptr_t)(irq));
             *(uint32_t *)irq_info = 0;
@@ -31494,9 +31936,8 @@ int isp_subdev_init_clks(void * arg1, int32_t * arg2) {
     void * i;
 
     if (s5 != 0) {
-        s1 = s5 << 2;
-        private_kmalloc(s1, 0xd0);
-        v0_1 = 0;
+        s1 = (int32_t *)((uintptr_t)s5 << 2);
+        v0_1 = private_kmalloc((size_t)(uintptr_t)s1, GFP_KERNEL);
 
         if (v0_1 == 0) {
             ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("isp_subdev_init_clks[%d] Failed to allocate core's clks\n"), (uintptr_t)(0));
@@ -91393,8 +91834,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     void *output_channels;
     int32_t ret;
 
-    private_kmalloc(0x230, 0xd0);
-    core_dev = 0;
+    core_dev = private_kmalloc(0x230, GFP_KERNEL);
     if (core_dev == 0) {
         isp_printf(2, &LC95);
         return -12;
@@ -91403,7 +91843,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     memset(core_dev, 0, 0x230);
 
     s2 = *(void **)((char *)pdev + 88);
-    if (tx_isp_subdev_init(pdev, core_dev, &sclk_name) != 0) {
+    if (tx_isp_subdev_init(pdev, core_dev, (uint32_t)&core_subdev_ops) != 0) {
         ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)(&LC96), (uintptr_t)(*(uint8_t *)((char *)s2 + 2)), (uintptr_t)(*(uint8_t *)((char *)s2 + 3)));
         return -12;
     }
@@ -91415,8 +91855,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     *(uint32_t *)((char *)core_dev + 344) = num_channels;
     *(uint32_t *)((char *)core_dev + 316) = *(uint32_t *)((char *)pdev + 88);
 
-    private_kmalloc(num_channels * 0xc4, 0xd0);
-    output_channels = 0;
+    output_channels = private_kmalloc(num_channels * 0xc4, GFP_KERNEL);
     if (output_channels == 0) {
         isp_printf(2, &LC95);
         isp_printf(2, &LC98);
