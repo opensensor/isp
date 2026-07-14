@@ -14,12 +14,14 @@ Current smoke-test status:
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
 - Raptor starts and publishes stable H.264 streams on both MSCA channels.
-- The source-derived SC2336 DMSC, Gamma, static AWB, and BCSH startup images
-  produce a clean, artifact-free image with working ISP/VIC interrupts.
+- The source-derived SC2336 GIB, LSC, DMSC, Gamma, static AWB, and BCSH
+  startup images produce a clean, artifact-free image with working ISP/VIC
+  interrupts. The exact LSC image programs all 651 OEM mesh nodes.
 - The image still has a broad green cast. The best verified startup keeps the
   top-level CCM bypassed; pairing it with the current daylight CCM image makes
-  the cast worse. The next bring-up target is the missing GIB/LSC and dynamic
-  3A path, using the T31/T40 source and commit history as the reference.
+  the cast worse, including after GIB and LSC are active. The next bring-up
+  target is the dynamic 3A path, using the T31/T40 source and commit history as
+  the reference.
 
 Build from a compatible Thingino T23 3.10.14 kernel tree with:
 
