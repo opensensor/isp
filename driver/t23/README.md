@@ -41,6 +41,9 @@ Current smoke-test status:
   applies the tuning blob's EV-derived saturation transform instead of writing
   the raw daylight matrix. It is stable and less extreme than the raw matrix,
   but the best verified startup still keeps the top-level CCM bypassed.
+- `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
+  the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
+  indoor color diagnostics.
 - Static initialization has reached the same visual plateau as the T31/T40
   recovery work. Further bring-up uses `tx-isp-t23-hlil.txt` as the behavioral
   specification for the dynamic 3A event path; T31/T40 source and history are

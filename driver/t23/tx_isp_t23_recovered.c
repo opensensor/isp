@@ -9816,6 +9816,7 @@ static bool regtrace_t23_source_park_uninitialized_mdns = true;
 static bool regtrace_t23_source_gib_tuning_init;
 static bool regtrace_t23_source_gamma_tuning_init;
 static bool regtrace_t23_source_lsc_tuning_init;
+static uint regtrace_t23_source_lsc_ct = 5000U;
 static bool regtrace_t23_source_ae_stats_init;
 static uint regtrace_t23_source_ae_stats_irqs;
 static uint regtrace_t23_source_ae_stats_snapshots;
@@ -9884,6 +9885,7 @@ module_param_named(source_gamma_tuning_init,
                    regtrace_t23_source_gamma_tuning_init, bool, 0644);
 module_param_named(source_lsc_tuning_init,
                    regtrace_t23_source_lsc_tuning_init, bool, 0644);
+module_param_named(source_lsc_ct, regtrace_t23_source_lsc_ct, uint, 0644);
 module_param_named(source_ae_stats_init,
                    regtrace_t23_source_ae_stats_init, bool, 0644);
 module_param_named(source_ae_stats_irqs,
@@ -11377,6 +11379,7 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_gib_tuning.inc"
 #include "tx_isp_t23_gamma_tuning.inc"
 #include "tx_isp_t23_lsc_tuning.inc"
+#include "tx_isp_t23_lsc_ct3300.inc"
 #include "tx_isp_t23_ae_stats_tuning.inc"
 #include "tx_isp_t23_awb_static_tuning.inc"
 #include "tx_isp_t23_awb_stats_tuning.inc"
@@ -11423,15 +11426,26 @@ static void regtrace_t23_source_gamma_write_tuning_startup(void)
 
 static void regtrace_t23_source_lsc_write_tuning_startup(void)
 {
+    const uint32_t (*image)[2] = regtrace_t23_lsc_sc2336_startup;
+    size_t count = ARRAY_SIZE(regtrace_t23_lsc_sc2336_startup);
     size_t i;
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_lsc_sc2336_startup); ++i)
-        system_reg_write(regtrace_t23_lsc_sc2336_startup[i][0],
-                         regtrace_t23_lsc_sc2336_startup[i][1]);
+    if (regtrace_t23_source_lsc_ct == 3300U) {
+        image = regtrace_t23_lsc_sc2336_ct3300;
+        count = ARRAY_SIZE(regtrace_t23_lsc_sc2336_ct3300);
+    } else if (regtrace_t23_source_lsc_ct != 5000U) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source LSC CT %u unsupported; using 5000\n",
+               regtrace_t23_source_lsc_ct);
+    }
+
+    for (i = 0; i < count; ++i)
+        system_reg_write(image[i][0], image[i][1]);
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source LSC SC2336 tuning startup committed (%u writes)\n",
-           (unsigned int)ARRAY_SIZE(regtrace_t23_lsc_sc2336_startup));
+           "tx_isp_t23_recovered: source LSC SC2336 CT%u tuning committed (%u writes)\n",
+           regtrace_t23_source_lsc_ct == 3300U ? 3300U : 5000U,
+           (unsigned int)count);
 }
 
 static void regtrace_t23_source_ae_write_stats_startup(void)
