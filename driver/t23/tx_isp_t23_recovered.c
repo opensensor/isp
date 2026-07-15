@@ -9840,6 +9840,7 @@ static uint regtrace_t23_source_awb_last_bgain = 0x858;
 static bool regtrace_t23_source_ccm_tuning_init;
 static bool regtrace_t23_source_dmsc_tuning_init;
 static bool regtrace_t23_source_bcsh_tuning_init;
+static bool regtrace_t23_source_clm_tuning_init;
 static bool regtrace_t23_source_bcsh_neutral;
 static bool regtrace_t23_source_csccr_init;
 static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin";
@@ -9927,6 +9928,8 @@ module_param_named(source_dmsc_tuning_init,
                    regtrace_t23_source_dmsc_tuning_init, bool, 0644);
 module_param_named(source_bcsh_tuning_init,
                    regtrace_t23_source_bcsh_tuning_init, bool, 0644);
+module_param_named(source_clm_tuning_init,
+                   regtrace_t23_source_clm_tuning_init, bool, 0644);
 module_param_named(source_bcsh_neutral,
                    regtrace_t23_source_bcsh_neutral, bool, 0644);
 module_param_named(source_csccr_init,
@@ -11329,6 +11332,7 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_ccm_tuning.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
+#include "tx_isp_t23_clm_tuning.inc"
 
 static void regtrace_t23_source_awb_hlil_reset(void);
 
@@ -11629,6 +11633,30 @@ static void regtrace_t23_source_bcsh_write_tuning_startup(void)
            (unsigned int)ARRAY_SIZE(regtrace_t23_bcsh_sc2336_startup));
 }
 
+static void regtrace_t23_source_clm_write_tuning_startup(void)
+{
+    size_t i;
+
+    system_reg_write(0x6800U, 1U);
+    system_reg_write(0x6804U, REGTRACE_T23_CLM_SC2336_LUT_SHIFT);
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_clm_sc2336_h); ++i) {
+        uint32_t offset = (uint32_t)i * 4U;
+
+        system_reg_write(0x60000U + offset,
+                         regtrace_t23_clm_sc2336_h[i]);
+        system_reg_write(0x68000U + offset,
+                         regtrace_t23_clm_sc2336_h[i]);
+        system_reg_write(0x70000U + offset,
+                         regtrace_t23_clm_sc2336_s[i]);
+        system_reg_write(0x78000U + offset,
+                         regtrace_t23_clm_sc2336_s[i]);
+    }
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source CLM SC2336 CT5000 tuning committed (%u writes)\n",
+           (unsigned int)(ARRAY_SIZE(regtrace_t23_clm_sc2336_h) * 4U + 2U));
+}
+
 static void regtrace_t23_source_bcsh_write_neutral(void)
 {
     static const uint32_t bcsh_cfg[][2] = {
@@ -11727,6 +11755,8 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_source_dmsc_write_tuning_startup();
     if (regtrace_t23_source_bcsh_tuning_init)
         regtrace_t23_source_bcsh_write_tuning_startup();
+    if (regtrace_t23_source_clm_tuning_init)
+        regtrace_t23_source_clm_write_tuning_startup();
     if (regtrace_t23_source_bcsh_neutral)
         regtrace_t23_source_bcsh_write_neutral();
     if (regtrace_t23_source_csccr_init)

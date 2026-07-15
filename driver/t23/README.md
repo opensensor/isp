@@ -14,9 +14,10 @@ Current smoke-test status:
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
 - Raptor starts and publishes stable H.264 streams on both MSCA channels.
-- The source-derived SC2336 GIB, LSC, DMSC, Gamma, static AWB, and BCSH
+- The source-derived SC2336 GIB, LSC, DMSC, Gamma, static AWB, BCSH, and CLM
   startup images produce a clean, artifact-free image with working ISP/VIC
-  interrupts. The exact LSC image programs all 651 OEM mesh nodes.
+  interrupts. The exact LSC image programs all 651 OEM mesh nodes. The CLM
+  image follows the T23 startup CT of 5000 K and programs both OEM LUT banks.
 - The source-derived AWB statistics setup produces valid 15x15-zone data in
   all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
