@@ -25,6 +25,11 @@ Current smoke-test status:
 - Optional `source_ae_stats_init` programs the exact T23 AE0 15x15 statistics
   geometry and thresholds. It only captures diagnostics; sensor exposure
   writes stay disabled until the AE DMA format and event cadence are verified.
+  `source_ae_force_packed` is a zero-default bring-up control that sends one
+  packed integration/gain value through the real sensor-ops ioctl after
+  stream-on; it is not an automatic-exposure loop. For the verified SC2336
+  2x code, `source_total_gain_q16=0x20000` also applies the corresponding OEM
+  GIB and DMSC total-gain interpolation result.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
   distance refinement, history, and OEM gain conversion. It is stable and

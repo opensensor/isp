@@ -9230,6 +9230,7 @@ static void regtrace_t23_release_sensor_client(struct i2c_driver *drv,
 #define REGTRACE_TX_ISP_TYPE_SUBDEV 1
 #define REGTRACE_TX_ISP_TYPE_WIDGET 2
 #define REGTRACE_TX_ISP_SUBDEV_SENSOR_OPS_OFFSET 0x0c
+#define REGTRACE_TX_ISP_EVENT_SENSOR_EXPO 0x02000016U
 
 static int regtrace_t23_ops_has_sensor_table(uintptr_t ops)
 {
@@ -9818,6 +9819,8 @@ static bool regtrace_t23_source_lsc_tuning_init;
 static bool regtrace_t23_source_ae_stats_init;
 static uint regtrace_t23_source_ae_stats_irqs;
 static uint regtrace_t23_source_ae_stats_snapshots;
+static uint regtrace_t23_source_ae_force_packed;
+static uint regtrace_t23_source_total_gain_q16 = 0x10000U;
 static bool regtrace_t23_source_awb_static_init;
 static bool regtrace_t23_source_awb_stats_init;
 static bool regtrace_t23_source_awb_stats_processed_tap;
@@ -9887,6 +9890,10 @@ module_param_named(source_ae_stats_irqs,
                    regtrace_t23_source_ae_stats_irqs, uint, 0444);
 module_param_named(source_ae_stats_snapshots,
                    regtrace_t23_source_ae_stats_snapshots, uint, 0444);
+module_param_named(source_ae_force_packed,
+                   regtrace_t23_source_ae_force_packed, uint, 0644);
+module_param_named(source_total_gain_q16,
+                   regtrace_t23_source_total_gain_q16, uint, 0644);
 module_param_named(source_awb_static_init,
                    regtrace_t23_source_awb_static_init, bool, 0644);
 module_param_named(source_awb_stats_init,
@@ -10411,6 +10418,36 @@ static int regtrace_t23_call_sensor_core_init(const char *reason)
     return ret;
 }
 
+static int regtrace_t23_call_sensor_exposure(uint32_t packed,
+                                             const char *reason)
+{
+    uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
+    uintptr_t ops;
+    uintptr_t sensor_ops;
+    uintptr_t ioctl_fn;
+    int ret;
+
+    if (!packed || !regtrace_t23_valid_ptr(sd))
+        return -EINVAL;
+    ops = *(uint32_t *)(sd + REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET);
+    if (!regtrace_t23_valid_ptr(ops))
+        return -ENODEV;
+    sensor_ops = *(uint32_t *)(ops + REGTRACE_TX_ISP_SUBDEV_SENSOR_OPS_OFFSET);
+    if (!regtrace_t23_valid_ptr(sensor_ops))
+        return -ENODEV;
+    ioctl_fn = *(uint32_t *)(sensor_ops + 8U);
+    if (!regtrace_t23_valid_ptr(ioctl_fn))
+        return -ENOIOCTLCMD;
+
+    ret = ((int (*)(void *, unsigned int, void *))(uintptr_t)ioctl_fn)(
+        (void *)sd, REGTRACE_TX_ISP_EVENT_SENSOR_EXPO, &packed);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: sensor exposure packed=0x%08x again=0x%x int=%u ret=%d reason=%s\n",
+           packed, packed >> 16, packed & 0xffffU, ret,
+           reason ? reason : "?");
+    return ret;
+}
+
 static int regtrace_t23_call_sensor_stream(int enable, const char *reason)
 {
     uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
@@ -10438,8 +10475,13 @@ static int regtrace_t23_call_sensor_stream(int enable, const char *reason)
         return -ENODEV;
 
     ret = ((int (*)(void *, int))(uintptr_t)stream_fn)((void *)sd, enable);
-    if (!ret)
+    if (!ret) {
         regtrace_t23_sensor_streaming = enable ? true : false;
+        if (enable && regtrace_t23_source_ae_force_packed)
+            ret = regtrace_t23_call_sensor_exposure(
+                regtrace_t23_source_ae_force_packed,
+                "source-ae-force-after-stream");
+    }
     printk(KERN_WARNING "tx_isp_t23_recovered: sensor stream %s ret=%d reason=%s\n",
            enable ? "on" : "off", ret, reason ? reason : "?");
     return ret;
@@ -11341,6 +11383,7 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_awb_runtime_tuning.inc"
 #include "tx_isp_t23_ccm_tuning.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
+#include "tx_isp_t23_dmsc_gain2x.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
 #include "tx_isp_t23_clm_tuning.inc"
 
@@ -11721,6 +11764,42 @@ static void regtrace_t23_source_dmsc_write_tuning_startup(void)
            (unsigned int)ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup));
 }
 
+static void regtrace_t23_source_apply_total_gain(void)
+{
+    size_t i;
+    unsigned int dmsc_writes = 0;
+
+    if (regtrace_t23_source_total_gain_q16 == 0x10000U)
+        return;
+    if (regtrace_t23_source_total_gain_q16 != 0x20000U) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source total-gain 0x%x unsupported; keeping unity calibration\n",
+               regtrace_t23_source_total_gain_q16);
+        return;
+    }
+
+    /* Exact active blocks in tisp_long_tgain_update at SC2336 2x gain. */
+    if (regtrace_t23_source_gib_tuning_init) {
+        system_reg_write(0x1070U, 1U);
+        system_reg_write(0x1060U, 0x00000106U);
+        system_reg_write(0x1070U, 1U);
+        system_reg_write(0x1064U, 0x01060106U);
+        system_reg_write(0x1070U, 1U);
+        system_reg_write(0x1068U, 0x00000106U);
+    }
+    if (regtrace_t23_source_dmsc_tuning_init) {
+        for (i = 0;
+             i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta); ++i)
+            system_reg_write(regtrace_t23_dmsc_sc2336_gain2x_delta[i][0],
+                             regtrace_t23_dmsc_sc2336_gain2x_delta[i][1]);
+        dmsc_writes = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta);
+    }
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source total-gain 2x calibration committed (GIB=%u DMSC writes=%u)\n",
+           regtrace_t23_source_gib_tuning_init ? 1U : 0U, dmsc_writes);
+}
+
 static void regtrace_t23_source_bcsh_write_tuning_startup(void)
 {
     size_t i;
@@ -11856,6 +11935,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_source_ccm_write_tuning_startup();
     if (regtrace_t23_source_dmsc_tuning_init)
         regtrace_t23_source_dmsc_write_tuning_startup();
+    regtrace_t23_source_apply_total_gain();
     if (regtrace_t23_source_bcsh_tuning_init)
         regtrace_t23_source_bcsh_write_tuning_startup();
     if (regtrace_t23_source_clm_tuning_init)
