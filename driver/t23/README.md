@@ -17,6 +17,10 @@ Current smoke-test status:
 - The source-derived SC2336 GIB, LSC, DMSC, Gamma, static AWB, and BCSH
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes.
+- The source-derived AWB statistics setup produces valid 15x15-zone data in
+  all four DMA banks when top-bypass bit 25 is cleared. An optional Q12
+  gray-world loop applies T23-format WB gains and stops writing after its
+  convergence deadband is reached.
 - The image still has a broad green cast. The best verified startup keeps the
   top-level CCM bypassed; pairing it with the current daylight CCM image makes
   the cast worse, including after GIB and LSC are active. The next bring-up
