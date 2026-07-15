@@ -21,11 +21,14 @@ Current smoke-test status:
   all four DMA banks when top-bypass bit 25 is cleared. An optional Q12
   gray-world loop applies T23-format WB gains and stops writing after its
   convergence deadband is reached.
-- The image still has a broad green cast. The best verified startup keeps the
-  top-level CCM bypassed; pairing it with the current daylight CCM image makes
-  the cast worse, including after GIB and LSC are active. The next bring-up
-  target is the dynamic 3A path, using the T31/T40 source and commit history as
-  the reference.
+- The image still has a broad green cast. The exact T23 CCM startup path now
+  applies the tuning blob's EV-derived saturation transform instead of writing
+  the raw daylight matrix. It is stable and less extreme than the raw matrix,
+  but the best verified startup still keeps the top-level CCM bypassed.
+- Static initialization has reached the same visual plateau as the T31/T40
+  recovery work. Further bring-up uses `tx-isp-t23-hlil.txt` as the behavioral
+  specification for the dynamic 3A event path; T31/T40 source and history are
+  used only to recover names and intent where the T23 HLIL is ambiguous.
 
 Build from a compatible Thingino T23 3.10.14 kernel tree with:
 
