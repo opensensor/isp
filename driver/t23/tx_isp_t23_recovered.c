@@ -9820,12 +9820,21 @@ static bool regtrace_t23_source_awb_stats_init;
 static bool regtrace_t23_source_awb_stats_processed_tap;
 static bool regtrace_t23_source_awb_stats_wide_thresholds;
 static bool regtrace_t23_source_awb_grayworld;
+static bool regtrace_t23_source_awb_hlil;
 static uint regtrace_t23_source_awb_grayworld_interval = 2;
 static uint regtrace_t23_source_awb_grayworld_rbias = 1024;
 static uint regtrace_t23_source_awb_grayworld_bbias = 1024;
+static uint regtrace_t23_source_awb_hlil_interval = 4;
 static uint regtrace_t23_source_awb_stats_irqs;
 static uint regtrace_t23_source_awb_stats_snapshots;
 static uint regtrace_t23_source_awb_grayworld_updates;
+static uint regtrace_t23_source_awb_hlil_runs;
+static uint regtrace_t23_source_awb_hlil_updates;
+static uint regtrace_t23_source_awb_hlil_drops;
+static uint regtrace_t23_source_awb_hlil_status;
+static uint regtrace_t23_source_awb_hlil_rg;
+static uint regtrace_t23_source_awb_hlil_bg;
+static uint regtrace_t23_source_awb_hlil_ct = 5084;
 static uint regtrace_t23_source_awb_last_rgain = 0x820;
 static uint regtrace_t23_source_awb_last_bgain = 0x858;
 static bool regtrace_t23_source_ccm_tuning_init;
@@ -9878,18 +9887,36 @@ module_param_named(source_awb_stats_wide_thresholds,
                    regtrace_t23_source_awb_stats_wide_thresholds, bool, 0644);
 module_param_named(source_awb_grayworld,
                    regtrace_t23_source_awb_grayworld, bool, 0644);
+module_param_named(source_awb_hlil,
+                   regtrace_t23_source_awb_hlil, bool, 0644);
 module_param_named(source_awb_grayworld_interval,
                    regtrace_t23_source_awb_grayworld_interval, uint, 0644);
 module_param_named(source_awb_grayworld_rbias,
                    regtrace_t23_source_awb_grayworld_rbias, uint, 0644);
 module_param_named(source_awb_grayworld_bbias,
                    regtrace_t23_source_awb_grayworld_bbias, uint, 0644);
+module_param_named(source_awb_hlil_interval,
+                   regtrace_t23_source_awb_hlil_interval, uint, 0644);
 module_param_named(source_awb_stats_irqs,
                    regtrace_t23_source_awb_stats_irqs, uint, 0444);
 module_param_named(source_awb_stats_snapshots,
                    regtrace_t23_source_awb_stats_snapshots, uint, 0444);
 module_param_named(source_awb_grayworld_updates,
                    regtrace_t23_source_awb_grayworld_updates, uint, 0444);
+module_param_named(source_awb_hlil_runs,
+                   regtrace_t23_source_awb_hlil_runs, uint, 0444);
+module_param_named(source_awb_hlil_updates,
+                   regtrace_t23_source_awb_hlil_updates, uint, 0444);
+module_param_named(source_awb_hlil_drops,
+                   regtrace_t23_source_awb_hlil_drops, uint, 0444);
+module_param_named(source_awb_hlil_status,
+                   regtrace_t23_source_awb_hlil_status, uint, 0444);
+module_param_named(source_awb_hlil_rg,
+                   regtrace_t23_source_awb_hlil_rg, uint, 0444);
+module_param_named(source_awb_hlil_bg,
+                   regtrace_t23_source_awb_hlil_bg, uint, 0444);
+module_param_named(source_awb_hlil_ct,
+                   regtrace_t23_source_awb_hlil_ct, uint, 0444);
 module_param_named(source_awb_last_rgain,
                    regtrace_t23_source_awb_last_rgain, uint, 0444);
 module_param_named(source_awb_last_bgain,
@@ -11298,9 +11325,12 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_lsc_tuning.inc"
 #include "tx_isp_t23_awb_static_tuning.inc"
 #include "tx_isp_t23_awb_stats_tuning.inc"
+#include "tx_isp_t23_awb_runtime_tuning.inc"
 #include "tx_isp_t23_ccm_tuning.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
+
+static void regtrace_t23_source_awb_hlil_reset(void);
 
 static void regtrace_t23_source_gib_write_tuning_startup(void)
 {
@@ -11372,6 +11402,7 @@ static void regtrace_t23_source_awb_write_static_startup(void)
 static void regtrace_t23_source_awb_write_stats_startup(void)
 {
     size_t i;
+    bool processed_tap;
 
     for (i = 0; i < ARRAY_SIZE(regtrace_t23_awb_sc2336_stats_startup); ++i)
         system_reg_write(regtrace_t23_awb_sc2336_stats_startup[i][0],
@@ -11381,6 +11412,9 @@ static void regtrace_t23_source_awb_write_stats_startup(void)
         system_reg_write(0xb004U,
                          regtrace_t23_awb_sc2336_stats_startup[0][1] |
                          BIT(16));
+    processed_tap = !!((regtrace_t23_awb_sc2336_stats_startup[0][1] |
+                        (regtrace_t23_source_awb_stats_processed_tap ?
+                         BIT(16) : 0U)) & BIT(16));
     if (regtrace_t23_source_awb_stats_wide_thresholds) {
         system_reg_write(0xb000U, 1U);
         system_reg_write(0xb028U, 0x0fff0001U);
@@ -11399,10 +11433,11 @@ static void regtrace_t23_source_awb_write_stats_startup(void)
         REGTRACE_T23_AWB_SC2336_REG_GR & 0x3fffU;
     regtrace_t23_source_awb_last_bgain =
         REGTRACE_T23_AWB_SC2336_REG_GB & 0x3fffU;
+    regtrace_t23_source_awb_hlil_reset();
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source AWB SC2336 statistics startup committed (%u writes) tap=%s thresholds=%s\n",
            (unsigned int)ARRAY_SIZE(regtrace_t23_awb_sc2336_stats_startup),
-           regtrace_t23_source_awb_stats_processed_tap ? "processed" : "raw",
+           processed_tap ? "t23-selector-1" : "selector-0",
            regtrace_t23_source_awb_stats_wide_thresholds ? "wide" : "tuning");
 }
 
@@ -11429,6 +11464,8 @@ static void regtrace_t23_source_awb_apply_gains(uint32_t rgain,
     regtrace_t23_source_awb_last_rgain = rgain;
     regtrace_t23_source_awb_last_bgain = bgain;
 }
+
+#include "tx_isp_t23_awb_runtime.inc"
 
 static void regtrace_t23_source_awb_stats_snapshot(uint32_t status)
 {
@@ -11486,7 +11523,13 @@ static void regtrace_t23_source_awb_stats_snapshot(uint32_t status)
     ratio_rgain = (uint32_t)div64_u64(green * 0x400ULL, red);
     ratio_bgain = (uint32_t)div64_u64(green * 0x400ULL, blue);
 
+    regtrace_t23_source_awb_hlil_capture(
+        (const uint32_t *)((const unsigned char *)
+            regtrace_t23_core_dma_bufs[2].virt + bank * 0x1000U),
+        bank, regtrace_t23_source_awb_stats_snapshots);
+
     if (regtrace_t23_source_awb_grayworld &&
+        !regtrace_t23_source_awb_hlil &&
         (!regtrace_t23_source_awb_grayworld_interval ||
          !(regtrace_t23_source_awb_stats_snapshots %
            regtrace_t23_source_awb_grayworld_interval))) {
@@ -96117,6 +96160,7 @@ void cleanup_module(void)
     regtrace_framechan_set_streaming(2, false);
     regtrace_framechan_set_streaming(3, false);
     regtrace_t23_source_core_set_stream(0, "module-exit");
+    cancel_work_sync(&regtrace_t23_source_awb_hlil_work_item);
     regtrace_t23_core_dma_free();
     regtrace_unregister_real_platforms();
     regtrace_unregister_framechans();

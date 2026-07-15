@@ -18,9 +18,14 @@ Current smoke-test status:
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes.
 - The source-derived AWB statistics setup produces valid 15x15-zone data in
-  all four DMA banks when top-bypass bit 25 is cleared. An optional Q12
-  gray-world loop applies T23-format WB gains and stops writing after its
-  convergence deadband is reached.
+  all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
+  input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
+  override leaves every T23 AWB DMA bank empty.
+- An optional `source_awb_hlil` workqueue implements the active SC2336 branch
+  of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
+  distance refinement, history, and OEM gain conversion. It is stable and
+  converges after one write, but does not remove the broad green cast. The
+  earlier Q12 gray-world loop remains available only as a diagnostic fallback.
 - The image still has a broad green cast. The exact T23 CCM startup path now
   applies the tuning blob's EV-derived saturation transform instead of writing
   the raw daylight matrix. It is stable and less extreme than the raw matrix,

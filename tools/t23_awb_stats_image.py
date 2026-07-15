@@ -38,10 +38,7 @@ def render(path: Path) -> str:
     words[19:34] = [cell_height] * AWB_ZONE_ROWS
 
     if words[2] != 1:
-        raise ValueError(f"unexpected AWB input selector {words[2]}; expected 1")
-    # T31 commit 7312fa59 established that bit 16 selects the empty/processed
-    # tap on this ISP generation. Clear it to collect raw Bayer statistics.
-    words[2] = 0
+        raise ValueError(f"unexpected T23 AWB input selector {words[2]}; expected 1")
 
     config = [
         (0xB004, (words[3] << 28) | (words[2] << 16) | (words[1] << 12) | words[0]),
@@ -74,7 +71,7 @@ def render(path: Path) -> str:
             f"/* {AWB_ZONE_COLS}x{AWB_ZONE_ROWS} zones; "
             f"half-resolution cells {cell_width}x{cell_height}. */"
         ),
-        "/* Blob parameters with the T31-validated raw-Bayer bit 16 cleared. */",
+        "/* T23 blob input selector preserved at b004 bit 16. */",
         "static const uint32_t regtrace_t23_awb_sc2336_stats_startup[][2] = {",
     ]
     lines.extend(
