@@ -9820,7 +9820,7 @@ static bool regtrace_t23_source_ae_stats_init;
 static uint regtrace_t23_source_ae_stats_irqs;
 static uint regtrace_t23_source_ae_stats_snapshots;
 static uint regtrace_t23_source_ae_force_packed;
-static uint regtrace_t23_source_total_gain_q16 = 0x10000U;
+static uint regtrace_t23_source_total_gain_q16;
 static bool regtrace_t23_source_awb_static_init;
 static bool regtrace_t23_source_awb_stats_init;
 static bool regtrace_t23_source_awb_stats_processed_tap;
@@ -11766,19 +11766,32 @@ static void regtrace_t23_source_dmsc_write_tuning_startup(void)
 
 static void regtrace_t23_source_apply_total_gain(void)
 {
+    uint32_t sensor_again = regtrace_t23_source_ae_force_packed >> 16;
+    uint32_t gain_q16 = regtrace_t23_source_total_gain_q16;
     size_t i;
     unsigned int dmsc_writes = 0;
 
-    if (regtrace_t23_source_total_gain_q16 == 0x10000U)
-        return;
-    if (regtrace_t23_source_total_gain_q16 != 0x20000U) {
+    if (!gain_q16) {
+        if (sensor_again == 0x0880U)
+            gain_q16 = 0x20000U;
+        else
+            gain_q16 = 0x10000U;
+
+        if (sensor_again && sensor_again != 0x0080U &&
+            sensor_again != 0x0880U)
+            printk(KERN_WARNING
+                   "tx_isp_t23_recovered: no automatic ISP calibration for SC2336 again code 0x%x; using unity\n",
+                   sensor_again);
+    }
+
+    if (gain_q16 != 0x10000U && gain_q16 != 0x20000U) {
         printk(KERN_WARNING
                "tx_isp_t23_recovered: source total-gain 0x%x unsupported; keeping unity calibration\n",
-               regtrace_t23_source_total_gain_q16);
+               gain_q16);
         return;
     }
 
-    /* Exact active blocks in tisp_long_tgain_update at SC2336 2x gain. */
+    /* SC2336 GIB BLC indices 1 (unity) and 2 (2x) are both 0x106. */
     if (regtrace_t23_source_gib_tuning_init) {
         system_reg_write(0x1070U, 1U);
         system_reg_write(0x1060U, 0x00000106U);
@@ -11787,7 +11800,7 @@ static void regtrace_t23_source_apply_total_gain(void)
         system_reg_write(0x1070U, 1U);
         system_reg_write(0x1068U, 0x00000106U);
     }
-    if (regtrace_t23_source_dmsc_tuning_init) {
+    if (gain_q16 == 0x20000U && regtrace_t23_source_dmsc_tuning_init) {
         for (i = 0;
              i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta); ++i)
             system_reg_write(regtrace_t23_dmsc_sc2336_gain2x_delta[i][0],
@@ -11796,8 +11809,10 @@ static void regtrace_t23_source_apply_total_gain(void)
     }
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source total-gain 2x calibration committed (GIB=%u DMSC writes=%u)\n",
-           regtrace_t23_source_gib_tuning_init ? 1U : 0U, dmsc_writes);
+           "tx_isp_t23_recovered: source total-gain 0x%x calibration committed (sensor again=0x%x GIB=%u DMSC writes=%u explicit=%u)\n",
+           gain_q16, sensor_again,
+           regtrace_t23_source_gib_tuning_init ? 1U : 0U, dmsc_writes,
+           regtrace_t23_source_total_gain_q16 ? 1U : 0U);
 }
 
 static void regtrace_t23_source_bcsh_write_tuning_startup(void)
