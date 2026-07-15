@@ -11383,6 +11383,7 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_awb_runtime_tuning.inc"
 #include "tx_isp_t23_ccm_tuning.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
+#include "tx_isp_t23_dmsc_gain1p5x.inc"
 #include "tx_isp_t23_dmsc_gain2x.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
 #include "tx_isp_t23_clm_tuning.inc"
@@ -11768,23 +11769,29 @@ static void regtrace_t23_source_apply_total_gain(void)
 {
     uint32_t sensor_again = regtrace_t23_source_ae_force_packed >> 16;
     uint32_t gain_q16 = regtrace_t23_source_total_gain_q16;
+    const uint32_t (*dmsc_delta)[2] = NULL;
+    size_t dmsc_count = 0;
     size_t i;
     unsigned int dmsc_writes = 0;
 
     if (!gain_q16) {
-        if (sensor_again == 0x0880U)
+        if (sensor_again == 0x00c0U)
+            gain_q16 = 0x18000U;
+        else if (sensor_again == 0x0880U)
             gain_q16 = 0x20000U;
         else
             gain_q16 = 0x10000U;
 
         if (sensor_again && sensor_again != 0x0080U &&
+            sensor_again != 0x00c0U &&
             sensor_again != 0x0880U)
             printk(KERN_WARNING
                    "tx_isp_t23_recovered: no automatic ISP calibration for SC2336 again code 0x%x; using unity\n",
                    sensor_again);
     }
 
-    if (gain_q16 != 0x10000U && gain_q16 != 0x20000U) {
+    if (gain_q16 != 0x10000U && gain_q16 != 0x18000U &&
+        gain_q16 != 0x20000U) {
         printk(KERN_WARNING
                "tx_isp_t23_recovered: source total-gain 0x%x unsupported; keeping unity calibration\n",
                gain_q16);
@@ -11800,12 +11807,17 @@ static void regtrace_t23_source_apply_total_gain(void)
         system_reg_write(0x1070U, 1U);
         system_reg_write(0x1068U, 0x00000106U);
     }
-    if (gain_q16 == 0x20000U && regtrace_t23_source_dmsc_tuning_init) {
-        for (i = 0;
-             i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta); ++i)
-            system_reg_write(regtrace_t23_dmsc_sc2336_gain2x_delta[i][0],
-                             regtrace_t23_dmsc_sc2336_gain2x_delta[i][1]);
-        dmsc_writes = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta);
+    if (gain_q16 == 0x18000U) {
+        dmsc_delta = regtrace_t23_dmsc_sc2336_gain1p5x_delta;
+        dmsc_count = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain1p5x_delta);
+    } else if (gain_q16 == 0x20000U) {
+        dmsc_delta = regtrace_t23_dmsc_sc2336_gain2x_delta;
+        dmsc_count = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta);
+    }
+    if (dmsc_delta && regtrace_t23_source_dmsc_tuning_init) {
+        for (i = 0; i < dmsc_count; ++i)
+            system_reg_write(dmsc_delta[i][0], dmsc_delta[i][1]);
+        dmsc_writes = dmsc_count;
     }
 
     printk(KERN_WARNING

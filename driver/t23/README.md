@@ -29,8 +29,8 @@ Current smoke-test status:
   packed integration/gain value through the real sensor-ops ioctl after
   stream-on; it is not an automatic-exposure loop. For the verified SC2336
   gain codes, packed `0x0080059c` is unity gain at maximum integration and
-  packed `0x0880059c` is 2x gain at maximum integration. The matching OEM GIB
-  and DMSC total-gain state is inferred automatically; a nonzero
+  packed `0x00c0059c` and `0x0880059c` select 1.5x and 2x respectively. The
+  matching OEM GIB and DMSC total-gain state is inferred automatically; a nonzero
   `source_total_gain_q16` remains available as an explicit override.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
