@@ -62,8 +62,7 @@ def signed14(value: int) -> int:
 
 
 def fixmul(a: int, b: int, shift: int) -> int:
-    value = (abs(a) * abs(b)) >> shift
-    return -value if (a < 0) != (b < 0) else value
+    return (a * b) >> shift
 
 
 def matmul(a: tuple[int, ...] | list[int], b: tuple[int, ...] | list[int], shift: int) -> list[int]:

@@ -15,7 +15,7 @@ static const uint32_t regtrace_t23_bcsh_sc2336_startup[][2] = {
     { 0x8028U, 0x00003e28U },
     { 0x802cU, 0x0a0a3ffeU },
     { 0x8030U, 0x00000144U },
-    { 0x8034U, 0x00ba3ffcU },
+    { 0x8034U, 0x00b93ffcU },
     { 0x8038U, 0x000008e5U },
     { 0x803cU, 0x00100001U },
     { 0x8040U, 0x00580018U },
