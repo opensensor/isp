@@ -1,10 +1,9 @@
 /*
  * Active T23 Tiziano AWB path reconstructed from tx-isp-t23-hlil.txt.
  *
- * The SC2336 startup tuning disables cluster selection and CT edge weighting,
- * selects the outdoor mesh, and leaves distance refinement enabled. Keeping
- * this implementation limited to those proven branches makes failures
- * observable instead of silently substituting behavior from another SoC.
+ * The SC2336 tuning disables cluster selection and CT edge weighting. The live
+ * EV selects outdoor or indoor CT weights; indoor mode also applies the OEM
+ * light-source distance LUT before the final distance refinement.
  */
 
 #define REGTRACE_T23_AWB_HLIL_COLS 15U
@@ -26,6 +25,7 @@ struct regtrace_t23_awb_hlil_result {
     uint32_t bg;
     uint32_t ct;
     uint32_t active_zones;
+    uint32_t light_source_zones;
 };
 
 static struct regtrace_t23_awb_hlil_snapshot
@@ -132,6 +132,59 @@ static uint32_t regtrace_t23_awb_hlil_mesh_q(const uint32_t *mesh,
         bg_q, bg_pos[bg_index], bg_pos[bg_index + 1U], row0_q, row1_q);
 }
 
+static uint32_t regtrace_t23_awb_hlil_light_source_weight_q(uint32_t rg_q,
+                                                            uint32_t bg_q)
+{
+    const uint32_t q = REGTRACE_T23_AWB_HLIL_POINT_POSITION;
+    const uint32_t rounding = 1U << (q - 1U);
+    uint32_t rg = (rg_q + rounding) >> q;
+    uint32_t bg = (bg_q + rounding) >> q;
+    uint32_t best_weight_q = 0;
+    uint32_t source;
+
+    for (source = 0; source < REGTRACE_T23_AWB_HLIL_LIGHT_SOURCE_COUNT;
+         ++source) {
+        uint32_t ref_rg = regtrace_t23_awb_hlil_light_sources[source * 2U];
+        uint32_t ref_bg =
+            regtrace_t23_awb_hlil_light_sources[source * 2U + 1U];
+        uint32_t delta_rg;
+        uint32_t delta_bg;
+        uint32_t distance;
+        uint32_t weight = 0;
+
+        if (ref_rg)
+            ref_rg--;
+        if (ref_bg)
+            ref_bg--;
+        delta_rg = rg >= ref_rg ? rg - ref_rg : ref_rg - rg;
+        delta_bg = bg >= ref_bg ? bg - ref_bg : ref_bg - bg;
+        distance = delta_rg * delta_rg + delta_bg * delta_bg;
+
+        if (distance < 0x332U) {
+            weight = 1U;
+            if (distance < 0x2a7U) {
+                weight = 2U;
+                if (distance < 0x267U) {
+                    weight = 3U;
+                    if (distance < 0x23cU) {
+                        weight = 4U;
+                        if (distance < 0x21cU) {
+                            weight = 5U;
+                            if (distance < 0x202U)
+                                weight =
+                                    regtrace_t23_awb_hlil_light_source_weight_lut[
+                                        distance];
+                        }
+                    }
+                }
+            }
+        }
+        best_weight_q = max(best_weight_q, weight << q);
+    }
+
+    return best_weight_q;
+}
+
 static int regtrace_t23_awb_hlil_calculate(
     const struct regtrace_t23_awb_hlil_snapshot *snapshot,
     struct regtrace_t23_awb_hlil_result *result)
@@ -150,6 +203,11 @@ static int regtrace_t23_awb_hlil_calculate(
     uint32_t average_rg_q;
     uint32_t average_bg_q;
     uint32_t active_zones = 0;
+    bool indoor = regtrace_t23_source_ae_hlil_ev >=
+                  (REGTRACE_T23_AWB_HLIL_INDOOR_EV << q);
+    const uint32_t *ct_weight_mesh = indoor ?
+        regtrace_t23_awb_hlil_indoor_ct_weight_mesh :
+        regtrace_t23_awb_hlil_outdoor_ct_weight_mesh;
     uint32_t i;
 
     coefficient_rg_q = regtrace_t23_awb_hlil_mul_q(
@@ -198,9 +256,28 @@ static int regtrace_t23_awb_hlil_calculate(
         regtrace_t23_awb_hlil_mesh_weight[i] =
             regtrace_t23_awb_hlil_mesh_q(
                 regtrace_t23_awb_hlil_color_temperature_mesh, rg_q, bg_q);
-        total_mesh_weight += regtrace_t23_awb_hlil_mesh_weight[i];
         active_zones++;
     }
+
+    if (indoor) {
+        for (i = 0; i < total; ++i) {
+            uint32_t light_weight;
+
+            if (!regtrace_t23_awb_hlil_ratio[i] ||
+                !regtrace_t23_awb_hlil_ratio[bg_offset + i] ||
+                !regtrace_t23_awb_hlil_pixel_weight[i])
+                continue;
+            light_weight = regtrace_t23_awb_hlil_light_source_weight_q(
+                regtrace_t23_awb_hlil_ratio[i],
+                regtrace_t23_awb_hlil_ratio[bg_offset + i]);
+            if (light_weight > regtrace_t23_awb_hlil_mesh_weight[i]) {
+                regtrace_t23_awb_hlil_mesh_weight[i] = light_weight;
+                result->light_source_zones++;
+            }
+        }
+    }
+    for (i = 0; i < total; ++i)
+        total_mesh_weight += regtrace_t23_awb_hlil_mesh_weight[i];
 
     if (!active_zones || !total_mesh_weight)
         return -ENODATA;
@@ -317,8 +394,7 @@ static int regtrace_t23_awb_hlil_calculate(
     result->active_zones = active_zones;
     {
         uint32_t inverse_ct_q = regtrace_t23_awb_hlil_mesh_q(
-            regtrace_t23_awb_hlil_outdoor_inverse_ct_mesh,
-            average_rg_q, average_bg_q);
+            ct_weight_mesh, average_rg_q, average_bg_q);
 
         result->ct = inverse_ct_q ?
             (uint32_t)div64_u64(((uint64_t)1000000U << q) +
@@ -438,11 +514,13 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
             !(regtrace_t23_source_awb_hlil_runs &
               (regtrace_t23_source_awb_hlil_runs - 1U)))
             printk(KERN_INFO
-                   "tx_isp_t23_recovered: source AWB HLIL run=%u snapshot=%u bank=%u zones=%u target=%u/%u ct=%u mf=%u/%u gain=0x%x/0x%x updates=%u\n",
+                   "tx_isp_t23_recovered: source AWB HLIL run=%u snapshot=%u bank=%u zones=%u lights=%u ev=%u target=%u/%u ct=%u mf=%u/%u gain=0x%x/0x%x updates=%u\n",
                    regtrace_t23_source_awb_hlil_runs,
                    regtrace_t23_awb_hlil_snapshot_data.snapshot,
                    regtrace_t23_awb_hlil_snapshot_data.bank,
-                   result.active_zones, result.rg, result.bg, result.ct,
+                   result.active_zones, result.light_source_zones,
+                   regtrace_t23_source_ae_hlil_ev,
+                   result.rg, result.bg, result.ct,
                    mf_rg, mf_bg, gain_rg, gain_bg,
                    regtrace_t23_source_awb_hlil_updates);
     } else if (regtrace_t23_source_awb_hlil_runs <= 8U) {

@@ -9831,6 +9831,7 @@ static uint regtrace_t23_source_ae_hlil_updates;
 static uint regtrace_t23_source_ae_hlil_drops;
 static uint regtrace_t23_source_ae_hlil_luma;
 static uint regtrace_t23_source_ae_hlil_state;
+static uint regtrace_t23_source_ae_hlil_ev = 1436U << 10;
 static uint regtrace_t23_source_ae_hlil_status;
 static bool regtrace_t23_source_awb_static_init;
 static bool regtrace_t23_source_awb_stats_init;
@@ -9924,6 +9925,8 @@ module_param_named(source_ae_hlil_luma,
                    regtrace_t23_source_ae_hlil_luma, uint, 0444);
 module_param_named(source_ae_hlil_state,
                    regtrace_t23_source_ae_hlil_state, uint, 0444);
+module_param_named(source_ae_hlil_ev,
+                   regtrace_t23_source_ae_hlil_ev, uint, 0444);
 module_param_named(source_ae_hlil_status,
                    regtrace_t23_source_ae_hlil_status, uint, 0444);
 module_param_named(source_awb_static_init,

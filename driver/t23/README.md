@@ -40,13 +40,16 @@ Current smoke-test status:
   deadband of 5. Sensor I2C never runs in IRQ context, and each transition
   reapplies the base DMSC image before its matching gain delta. Read-only
   counters expose runs, updates, dropped schedules, last luma, current state,
-  and status. This is the proven active branch, not the full recovered OEM AE
-  solver, and requires `source_ae_stats_init=1`.
+  raw Q10 EV, and status. This is the proven active branch, not the full
+  recovered OEM AE solver, and requires `source_ae_stats_init=1`.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
-  distance refinement, history, and OEM gain conversion. It is stable and
-  converges after one write, but does not remove the broad green cast. The
-  earlier Q12 gray-world loop remains available only as a diagnostic fallback.
+  indoor light-source distance-LUT weighting, distance refinement, history,
+  live-EV CT-mesh selection, and OEM gain conversion. The current scene has no
+  zones inside either calibrated light-source radius, so the added OEM stage
+  is intentionally neutral there. The loop is stable but does not remove the
+  broad green cast. The earlier Q12 gray-world loop remains available only as
+  a diagnostic fallback.
 - The image still has a broad green cast. The exact T23 CCM startup path now
   applies the tuning blob's EV-derived saturation transform instead of writing
   the raw daylight matrix. It is stable and less extreme than the raw matrix,

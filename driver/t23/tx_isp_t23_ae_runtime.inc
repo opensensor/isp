@@ -9,12 +9,13 @@
 struct regtrace_t23_ae_hlil_rung {
     uint32_t packed;
     uint32_t gain_q16;
+    uint32_t ev_q10;
 };
 
 static const struct regtrace_t23_ae_hlil_rung regtrace_t23_ae_hlil_rungs[] = {
-    { 0x0080059cU, 0x10000U },
-    { 0x00c0059cU, 0x18000U },
-    { 0x0880059cU, 0x20000U },
+    { 0x0080059cU, 0x10000U, 1436U << 10 },
+    { 0x00c0059cU, 0x18000U, 2154U << 10 },
+    { 0x0880059cU, 0x20000U, 2872U << 10 },
 };
 
 static uint32_t regtrace_t23_ae_hlil_pending_luma;
@@ -73,6 +74,7 @@ static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
                 rung->gain_q16, rung->packed >> 16, false, true);
         if (!ret) {
             regtrace_t23_source_ae_hlil_state = next_state;
+            regtrace_t23_source_ae_hlil_ev = rung->ev_q10;
             regtrace_t23_source_ae_hlil_updates++;
         }
     }
@@ -144,6 +146,8 @@ static void regtrace_t23_source_ae_hlil_reset(void)
         regtrace_t23_source_ae_hlil_state = 1U;
     else
         regtrace_t23_source_ae_hlil_state = 0U;
+    regtrace_t23_source_ae_hlil_ev =
+        regtrace_t23_ae_hlil_rungs[regtrace_t23_source_ae_hlil_state].ev_q10;
     regtrace_t23_source_ae_hlil_runs = 0;
     regtrace_t23_source_ae_hlil_updates = 0;
     regtrace_t23_source_ae_hlil_drops = 0;
@@ -151,10 +155,11 @@ static void regtrace_t23_source_ae_hlil_reset(void)
     regtrace_t23_source_ae_hlil_status = 0;
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source AE HLIL reset target=%u+-%u interval=%u state=%u enabled=%u\n",
+           "tx_isp_t23_recovered: source AE HLIL reset target=%u+-%u interval=%u state=%u ev=%u enabled=%u\n",
            regtrace_t23_source_ae_hlil_target,
            regtrace_t23_source_ae_hlil_deadband,
            regtrace_t23_source_ae_hlil_interval,
            regtrace_t23_source_ae_hlil_state,
+           regtrace_t23_source_ae_hlil_ev,
            regtrace_t23_source_ae_hlil ? 1U : 0U);
 }
