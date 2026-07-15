@@ -9822,6 +9822,16 @@ static uint regtrace_t23_source_ae_stats_irqs;
 static uint regtrace_t23_source_ae_stats_snapshots;
 static uint regtrace_t23_source_ae_force_packed;
 static uint regtrace_t23_source_total_gain_q16;
+static bool regtrace_t23_source_ae_hlil;
+static uint regtrace_t23_source_ae_hlil_interval = 32;
+static uint regtrace_t23_source_ae_hlil_target = 60;
+static uint regtrace_t23_source_ae_hlil_deadband = 5;
+static uint regtrace_t23_source_ae_hlil_runs;
+static uint regtrace_t23_source_ae_hlil_updates;
+static uint regtrace_t23_source_ae_hlil_drops;
+static uint regtrace_t23_source_ae_hlil_luma;
+static uint regtrace_t23_source_ae_hlil_state;
+static uint regtrace_t23_source_ae_hlil_status;
 static bool regtrace_t23_source_awb_static_init;
 static bool regtrace_t23_source_awb_stats_init;
 static bool regtrace_t23_source_awb_stats_processed_tap;
@@ -9896,6 +9906,26 @@ module_param_named(source_ae_force_packed,
                    regtrace_t23_source_ae_force_packed, uint, 0644);
 module_param_named(source_total_gain_q16,
                    regtrace_t23_source_total_gain_q16, uint, 0644);
+module_param_named(source_ae_hlil,
+                   regtrace_t23_source_ae_hlil, bool, 0644);
+module_param_named(source_ae_hlil_interval,
+                   regtrace_t23_source_ae_hlil_interval, uint, 0644);
+module_param_named(source_ae_hlil_target,
+                   regtrace_t23_source_ae_hlil_target, uint, 0644);
+module_param_named(source_ae_hlil_deadband,
+                   regtrace_t23_source_ae_hlil_deadband, uint, 0644);
+module_param_named(source_ae_hlil_runs,
+                   regtrace_t23_source_ae_hlil_runs, uint, 0444);
+module_param_named(source_ae_hlil_updates,
+                   regtrace_t23_source_ae_hlil_updates, uint, 0444);
+module_param_named(source_ae_hlil_drops,
+                   regtrace_t23_source_ae_hlil_drops, uint, 0444);
+module_param_named(source_ae_hlil_luma,
+                   regtrace_t23_source_ae_hlil_luma, uint, 0444);
+module_param_named(source_ae_hlil_state,
+                   regtrace_t23_source_ae_hlil_state, uint, 0444);
+module_param_named(source_ae_hlil_status,
+                   regtrace_t23_source_ae_hlil_status, uint, 0444);
 module_param_named(source_awb_static_init,
                    regtrace_t23_source_awb_static_init, bool, 0644);
 module_param_named(source_awb_stats_init,
@@ -11391,6 +11421,9 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_bcsh_tuning.inc"
 #include "tx_isp_t23_clm_tuning.inc"
 
+static void regtrace_t23_source_ae_hlil_capture(uint32_t luma,
+                                               uint32_t snapshot);
+static void regtrace_t23_source_ae_hlil_reset(void);
 static void regtrace_t23_source_awb_hlil_reset(void);
 
 static void regtrace_t23_source_gib_write_tuning_startup(void)
@@ -11463,6 +11496,7 @@ static void regtrace_t23_source_ae_write_stats_startup(void)
                      regtrace_t23_ae0_sc2336_stats_startup[i][1]);
     regtrace_t23_source_ae_stats_irqs = 0;
     regtrace_t23_source_ae_stats_snapshots = 0;
+    regtrace_t23_source_ae_hlil_reset();
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source AE0 SC2336 statistics startup committed (%u writes)\n",
            (unsigned int)(ARRAY_SIZE(regtrace_t23_ae0_sc2336_stats_startup) +
@@ -11602,6 +11636,9 @@ static void regtrace_t23_source_ae_stats_snapshot(uint32_t status)
     regtrace_t23_source_ae_stats_snapshots++;
     luma = pixels ? div64_u64(red + green * 2U + blue,
                               pixels * 4U) : 0;
+    regtrace_t23_source_ae_hlil_capture(
+        luma > 0xffffffffULL ? 0xffffffffU : (uint32_t)luma,
+        regtrace_t23_source_ae_stats_snapshots);
     if (regtrace_t23_source_ae_stats_snapshots <= 8U ||
         !(regtrace_t23_source_ae_stats_snapshots &
           (regtrace_t23_source_ae_stats_snapshots - 1U)))
@@ -11779,10 +11816,20 @@ static void regtrace_t23_source_dmsc_write_tuning_startup(void)
            (unsigned int)ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup));
 }
 
-static void regtrace_t23_source_apply_total_gain(void)
+static void regtrace_t23_source_dmsc_restore_tuning_image(void)
 {
-    uint32_t sensor_again = regtrace_t23_source_ae_force_packed >> 16;
-    uint32_t gain_q16 = regtrace_t23_source_total_gain_q16;
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup); ++i)
+        system_reg_write(regtrace_t23_dmsc_sc2336_startup[i][0],
+                         regtrace_t23_dmsc_sc2336_startup[i][1]);
+}
+
+static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
+                                                       uint32_t sensor_again,
+                                                       bool explicit,
+                                                       bool restore_dmsc)
+{
     const uint32_t (*dmsc_delta)[2] = NULL;
     size_t dmsc_count = 0;
     size_t i;
@@ -11809,7 +11856,7 @@ static void regtrace_t23_source_apply_total_gain(void)
         printk(KERN_WARNING
                "tx_isp_t23_recovered: source total-gain 0x%x unsupported; keeping unity calibration\n",
                gain_q16);
-        return;
+        return -EINVAL;
     }
 
     /* SC2336 GIB BLC indices 1 (unity) and 2 (2x) are both 0x106. */
@@ -11828,18 +11875,51 @@ static void regtrace_t23_source_apply_total_gain(void)
         dmsc_delta = regtrace_t23_dmsc_sc2336_gain2x_delta;
         dmsc_count = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta);
     }
-    if (dmsc_delta && regtrace_t23_source_dmsc_tuning_init) {
-        for (i = 0; i < dmsc_count; ++i)
-            system_reg_write(dmsc_delta[i][0], dmsc_delta[i][1]);
-        dmsc_writes = dmsc_count;
+    if (regtrace_t23_source_dmsc_tuning_init) {
+        if (restore_dmsc) {
+            regtrace_t23_source_dmsc_restore_tuning_image();
+            dmsc_writes = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup);
+        }
+        if (dmsc_delta) {
+            for (i = 0; i < dmsc_count; ++i)
+                system_reg_write(dmsc_delta[i][0], dmsc_delta[i][1]);
+            dmsc_writes += dmsc_count;
+        }
     }
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source total-gain 0x%x calibration committed (sensor again=0x%x GIB=%u DMSC writes=%u explicit=%u)\n",
+           "tx_isp_t23_recovered: source total-gain 0x%x calibration committed (sensor again=0x%x GIB=%u DMSC writes=%u explicit=%u restore=%u)\n",
            gain_q16, sensor_again,
            regtrace_t23_source_gib_tuning_init ? 1U : 0U, dmsc_writes,
-           regtrace_t23_source_total_gain_q16 ? 1U : 0U);
+           explicit ? 1U : 0U, restore_dmsc ? 1U : 0U);
+    return 0;
 }
+
+static void regtrace_t23_source_apply_total_gain(void)
+{
+    uint32_t sensor_again = regtrace_t23_source_ae_force_packed >> 16;
+    uint32_t gain_q16 = regtrace_t23_source_total_gain_q16;
+
+    if (!gain_q16) {
+        if (sensor_again == 0x00c0U)
+            gain_q16 = 0x18000U;
+        else if (sensor_again == 0x0880U)
+            gain_q16 = 0x20000U;
+        else
+            gain_q16 = 0x10000U;
+
+        if (sensor_again && sensor_again != 0x0080U &&
+            sensor_again != 0x00c0U && sensor_again != 0x0880U)
+            printk(KERN_WARNING
+                   "tx_isp_t23_recovered: no automatic ISP calibration for SC2336 again code 0x%x; using unity\n",
+                   sensor_again);
+    }
+
+    regtrace_t23_source_apply_total_gain_value(
+        gain_q16, sensor_again, regtrace_t23_source_total_gain_q16 != 0, false);
+}
+
+#include "tx_isp_t23_ae_runtime.inc"
 
 static void regtrace_t23_source_bcsh_write_tuning_startup(void)
 {
@@ -14459,6 +14539,199 @@ fail:
     return ret;
 }
 
+static void regtrace_t23_release_subdev_clks_safe(unsigned char *sd,
+                                                  bool *enabled)
+{
+    uintptr_t clk_ptr;
+    uint32_t clk_num;
+    uint32_t i;
+
+    if (!sd)
+        return;
+    clk_ptr = *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET);
+    clk_num = *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET);
+    if (!clk_ptr || clk_num > 8U)
+        goto out;
+
+    for (i = 0; i < clk_num; ++i) {
+        struct clk *clk = *(struct clk **)(clk_ptr + i * sizeof(uint32_t));
+
+        if (!clk || IS_ERR(clk))
+            continue;
+        if (enabled && *enabled)
+            private_clk_disable(clk);
+        private_clk_put(clk);
+    }
+    private_kfree((void *)clk_ptr);
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET) = 0;
+
+out:
+    if (enabled)
+        *enabled = false;
+}
+
+static void regtrace_t23_release_subdev_pads_safe(unsigned char *sd)
+{
+    void *outpads;
+    void *inpads;
+
+    if (!sd)
+        return;
+    outpads = (void *)(uintptr_t)*(uint32_t *)(
+        sd + REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET);
+    inpads = (void *)(uintptr_t)*(uint32_t *)(
+        sd + REGTRACE_TX_ISP_MODULE_INPADS_OFFSET);
+    private_kfree(outpads);
+    private_kfree(inpads);
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET) = 0;
+    *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_INPADS_OFFSET) = 0;
+    *(uint16_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET) = 0;
+    *(uint16_t *)(sd + REGTRACE_TX_ISP_MODULE_INPAD_COUNT_OFFSET) = 0;
+}
+
+static void regtrace_t23_release_subdev_safe(struct platform_device *pdev,
+                                             unsigned char *sd,
+                                             bool release_irq,
+                                             bool release_mem,
+                                             bool *clks_enabled)
+{
+    struct tx_isp_irq_info *irq_info;
+    struct resource *res;
+    void __iomem *base;
+    unsigned int irq;
+
+    if (!sd)
+        return;
+
+    if (release_irq) {
+        irq_info = (struct tx_isp_irq_info *)(
+            sd + REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET);
+        irq = *(uint32_t *)irq_info;
+        if (irq) {
+            free_irq(irq, irq_info);
+            *(uint32_t *)irq_info = 0;
+        }
+    }
+
+    if (release_mem) {
+        base = (void __iomem *)(uintptr_t)*(uint32_t *)(sd + 184);
+        if (base) {
+            private_iounmap(base);
+            *(uint32_t *)(sd + 184) = 0;
+        }
+        res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+        if (res)
+            private_release_mem_region(res->start, resource_size(res));
+    }
+
+    regtrace_t23_release_subdev_clks_safe(sd, clks_enabled);
+    regtrace_t23_release_subdev_pads_safe(sd);
+    tx_isp_subdev_deinit((uintptr_t)sd);
+    platform_set_drvdata(pdev, NULL);
+}
+
+static int regtrace_t23_remove_vin_safe(struct platform_device *pdev)
+{
+    unsigned char *vin = platform_get_drvdata(pdev);
+
+    regtrace_t23_release_subdev_safe(pdev, vin, false, false, NULL);
+    private_kfree(vin);
+    regtrace_t23_vin_sd = NULL;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe remove vin\n");
+    return 0;
+}
+
+static int regtrace_t23_remove_csi_safe(struct platform_device *pdev)
+{
+    unsigned char *csi = platform_get_drvdata(pdev);
+    void __iomem *phy;
+    struct resource *phy_res;
+
+    if (!csi)
+        return 0;
+    phy = (void __iomem *)(uintptr_t)*(uint32_t *)(csi + 320);
+    phy_res = (struct resource *)(uintptr_t)*(uint32_t *)(csi + 316);
+    if (phy)
+        private_iounmap(phy);
+    if (phy_res)
+        private_release_mem_region(REGTRACE_T23_CSI_PHY_PHYS,
+                                   REGTRACE_T23_CSI_PHY_SIZE);
+    *(uint32_t *)(csi + 316) = 0;
+    *(uint32_t *)(csi + 320) = 0;
+    regtrace_t23_release_subdev_safe(
+        pdev, csi, false, true, &regtrace_t23_csi_clks_enabled);
+    private_kfree(csi);
+    regtrace_t23_csi_sd = NULL;
+    *(uint32_t *)((char *)&dump_csd) = 0;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe remove csi\n");
+    return 0;
+}
+
+static int regtrace_t23_remove_vic_safe(struct platform_device *pdev)
+{
+    unsigned char *vic = platform_get_drvdata(pdev);
+
+    regtrace_t23_release_subdev_safe(
+        pdev, vic, true, true, &regtrace_t23_vic_clks_enabled);
+    private_kfree(vic);
+    regtrace_t23_vic_sd = NULL;
+    regtrace_t23_vic_irq_enabled = false;
+    dump_vsd = 0;
+    test_addr = 0;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe remove vic\n");
+    return 0;
+}
+
+static int regtrace_t23_remove_core_safe(struct platform_device *pdev)
+{
+    unsigned char *core = platform_get_drvdata(pdev);
+    void *channels;
+
+    if (!core)
+        return 0;
+    channels = (void *)(uintptr_t)*(uint32_t *)(core + 340);
+    private_kfree(channels);
+    *(uint32_t *)(core + 340) = 0;
+    *(uint32_t *)(core + 344) = 0;
+    regtrace_t23_release_subdev_safe(
+        pdev, core, true, true, &regtrace_t23_core_clks_enabled);
+    private_kfree(core);
+    regtrace_t23_core_sd = NULL;
+    regtrace_t23_core_irq_enabled = false;
+    ispcore_sd = 0;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe remove core\n");
+    return 0;
+}
+
+static int regtrace_t23_remove_fs_safe(struct platform_device *pdev)
+{
+    unsigned char *fs = platform_get_drvdata(pdev);
+
+    regtrace_t23_release_subdev_safe(pdev, fs, false, false, NULL);
+    private_kfree(fs);
+    regtrace_t23_fs_sd = NULL;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe remove fs\n");
+    return 0;
+}
+
+static int regtrace_t23_remove_ivdc_safe(struct platform_device *pdev)
+{
+    unsigned char *sd = platform_get_drvdata(pdev);
+    unsigned char *ivdc;
+
+    if (!sd)
+        return 0;
+    ivdc = sd - 36;
+    regtrace_t23_release_subdev_safe(
+        pdev, sd, true, true, &regtrace_t23_ivdc_clks_enabled);
+    private_kfree(ivdc);
+    regtrace_t23_ivdc_sd = NULL;
+    regtrace_t23_ivdc_irq_enabled = false;
+    g_ivdc = 0;
+    printk(KERN_INFO "tx_isp_t23_recovered: safe remove ivdc\n");
+    return 0;
+}
+
 static int regtrace_tx_isp_vin_probe(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
@@ -14469,7 +14742,7 @@ static int regtrace_tx_isp_vin_probe(struct platform_device *pdev)
 static int regtrace_tx_isp_vin_remove(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_vin_remove(pdev);
+        return regtrace_t23_remove_vin_safe(pdev);
     return regtrace_child_remove_stub(pdev);
 }
 
@@ -14483,7 +14756,7 @@ static int regtrace_tx_isp_csi_probe(struct platform_device *pdev)
 static int regtrace_tx_isp_csi_remove(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_csi_remove(pdev);
+        return regtrace_t23_remove_csi_safe(pdev);
     return regtrace_child_remove_stub(pdev);
 }
 
@@ -14497,7 +14770,7 @@ static int regtrace_tx_isp_vic_probe(struct platform_device *pdev)
 static int regtrace_tx_isp_vic_remove(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_vic_remove(pdev);
+        return regtrace_t23_remove_vic_safe(pdev);
     return regtrace_child_remove_stub(pdev);
 }
 
@@ -14511,7 +14784,7 @@ static int regtrace_tx_isp_core_probe(struct platform_device *pdev)
 static int regtrace_tx_isp_core_remove(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_core_remove(pdev);
+        return regtrace_t23_remove_core_safe(pdev);
     return regtrace_child_remove_stub(pdev);
 }
 
@@ -14525,7 +14798,7 @@ static int regtrace_tx_isp_fs_probe(struct platform_device *pdev)
 static int regtrace_tx_isp_fs_remove(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_fs_remove(pdev);
+        return regtrace_t23_remove_fs_safe(pdev);
     return regtrace_child_remove_stub(pdev);
 }
 
@@ -14539,7 +14812,7 @@ static int regtrace_tx_isp_ivdc_probe(struct platform_device *pdev)
 static int regtrace_tx_isp_ivdc_remove(struct platform_device *pdev)
 {
     if (regtrace_use_recovered_child_probes)
-        return tx_isp_ivdc_remove(pdev);
+        return regtrace_t23_remove_ivdc_safe(pdev);
     return regtrace_child_remove_stub(pdev);
 }
 
@@ -96416,6 +96689,7 @@ void cleanup_module(void)
     regtrace_framechan_set_streaming(2, false);
     regtrace_framechan_set_streaming(3, false);
     regtrace_t23_source_core_set_stream(0, "module-exit");
+    cancel_work_sync(&regtrace_t23_source_ae_hlil_work_item);
     cancel_work_sync(&regtrace_t23_source_awb_hlil_work_item);
     regtrace_t23_core_dma_free();
     regtrace_unregister_real_platforms();

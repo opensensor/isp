@@ -14,6 +14,9 @@ Current smoke-test status:
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
 - Raptor starts and publishes stable H.264 streams on both MSCA channels.
+- The recovered child-platform path has symmetric remove handlers for its
+  allocated subdevices, IRQs, MMIO mappings, clocks, pads, and channel state;
+  the module can be unloaded after the sensor and consumers are stopped.
 - The source-derived SC2336 GIB, LSC, DMSC, Gamma, static AWB, BCSH, and CLM
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes. The CLM
@@ -23,15 +26,22 @@ Current smoke-test status:
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
   override leaves every T23 AWB DMA bank empty.
 - Optional `source_ae_stats_init` programs the exact T23 AE0 15x15 statistics
-  geometry and thresholds. It only captures diagnostics; sensor exposure
-  writes stay disabled until the AE DMA format and event cadence are verified.
+  geometry and thresholds. The DMA format and event cadence are verified.
   `source_ae_force_packed` is a zero-default bring-up control that sends one
   packed integration/gain value through the real sensor-ops ioctl after
-  stream-on; it is not an automatic-exposure loop. For the verified SC2336
-  gain codes, packed `0x0080059c` is unity gain at maximum integration and
+  stream-on. For the verified SC2336 gain codes, packed `0x0080059c` is unity
+  gain at maximum integration and
   packed `0x00c0059c` and `0x0880059c` select 1.5x and 2x respectively. The
-  matching OEM GIB and DMSC total-gain state is inferred automatically; a nonzero
-  `source_total_gain_q16` remains available as an explicit override.
+  matching OEM GIB and DMSC total-gain state is inferred automatically; a
+  nonzero `source_total_gain_q16` remains available as an explicit override.
+- Optional `source_ae_hlil` adds a bounded process-context exposure controller
+  over those three verified states. Every `source_ae_hlil_interval` snapshots
+  it moves one rung toward the tuning-derived luma target of 60, with a default
+  deadband of 5. Sensor I2C never runs in IRQ context, and each transition
+  reapplies the base DMSC image before its matching gain delta. Read-only
+  counters expose runs, updates, dropped schedules, last luma, current state,
+  and status. This is the proven active branch, not the full recovered OEM AE
+  solver, and requires `source_ae_stats_init=1`.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
   distance refinement, history, and OEM gain conversion. It is stable and
