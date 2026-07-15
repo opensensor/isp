@@ -9815,6 +9815,9 @@ static bool regtrace_t23_source_park_uninitialized_mdns = true;
 static bool regtrace_t23_source_gib_tuning_init;
 static bool regtrace_t23_source_gamma_tuning_init;
 static bool regtrace_t23_source_lsc_tuning_init;
+static bool regtrace_t23_source_ae_stats_init;
+static uint regtrace_t23_source_ae_stats_irqs;
+static uint regtrace_t23_source_ae_stats_snapshots;
 static bool regtrace_t23_source_awb_static_init;
 static bool regtrace_t23_source_awb_stats_init;
 static bool regtrace_t23_source_awb_stats_processed_tap;
@@ -9878,6 +9881,12 @@ module_param_named(source_gamma_tuning_init,
                    regtrace_t23_source_gamma_tuning_init, bool, 0644);
 module_param_named(source_lsc_tuning_init,
                    regtrace_t23_source_lsc_tuning_init, bool, 0644);
+module_param_named(source_ae_stats_init,
+                   regtrace_t23_source_ae_stats_init, bool, 0644);
+module_param_named(source_ae_stats_irqs,
+                   regtrace_t23_source_ae_stats_irqs, uint, 0444);
+module_param_named(source_ae_stats_snapshots,
+                   regtrace_t23_source_ae_stats_snapshots, uint, 0444);
 module_param_named(source_awb_static_init,
                    regtrace_t23_source_awb_static_init, bool, 0644);
 module_param_named(source_awb_stats_init,
@@ -11326,6 +11335,7 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
 #include "tx_isp_t23_gib_tuning.inc"
 #include "tx_isp_t23_gamma_tuning.inc"
 #include "tx_isp_t23_lsc_tuning.inc"
+#include "tx_isp_t23_ae_stats_tuning.inc"
 #include "tx_isp_t23_awb_static_tuning.inc"
 #include "tx_isp_t23_awb_stats_tuning.inc"
 #include "tx_isp_t23_awb_runtime_tuning.inc"
@@ -11378,6 +11388,27 @@ static void regtrace_t23_source_lsc_write_tuning_startup(void)
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source LSC SC2336 tuning startup committed (%u writes)\n",
            (unsigned int)ARRAY_SIZE(regtrace_t23_lsc_sc2336_startup));
+}
+
+static void regtrace_t23_source_ae_write_stats_startup(void)
+{
+    size_t i;
+
+    for (i = 0; i + 1 < ARRAY_SIZE(regtrace_t23_ae0_sc2336_stats_startup);
+         ++i)
+        system_reg_write(regtrace_t23_ae0_sc2336_stats_startup[i][0],
+                         regtrace_t23_ae0_sc2336_stats_startup[i][1]);
+
+    /* OEM system_reg_write_ae(1, 0xa028, value) latches the final write. */
+    system_reg_write(0xa000U, 1U);
+    system_reg_write(regtrace_t23_ae0_sc2336_stats_startup[i][0],
+                     regtrace_t23_ae0_sc2336_stats_startup[i][1]);
+    regtrace_t23_source_ae_stats_irqs = 0;
+    regtrace_t23_source_ae_stats_snapshots = 0;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source AE0 SC2336 statistics startup committed (%u writes)\n",
+           (unsigned int)(ARRAY_SIZE(regtrace_t23_ae0_sc2336_stats_startup) +
+                          1U));
 }
 
 static void regtrace_t23_source_awb_write_static_startup(void)
@@ -11470,6 +11501,76 @@ static void regtrace_t23_source_awb_apply_gains(uint32_t rgain,
 }
 
 #include "tx_isp_t23_awb_runtime.inc"
+
+static void regtrace_t23_source_ae_stats_snapshot(uint32_t status)
+{
+    const uint32_t *words;
+    uint64_t red = 0;
+    uint64_t green = 0;
+    uint64_t blue = 0;
+    uint64_t pixels = 0;
+    uint64_t luma;
+    uint32_t bank_reg;
+    uint32_t bank;
+    uint32_t raw[4];
+    unsigned int zone;
+
+    if (!regtrace_t23_core_dma_bufs[0].virt)
+        return;
+
+    bank_reg = system_reg_read(0xa050U);
+    bank = (bank_reg >> 4) & 3U;
+    words = (const uint32_t *)((const unsigned char *)
+        regtrace_t23_core_dma_bufs[0].virt + bank * 0x1000U);
+    private_dma_cache_sync(NULL, (void *)words, 0x1000U, DMA_FROM_DEVICE);
+    raw[0] = words[0];
+    raw[1] = words[1];
+    raw[2] = words[2];
+    raw[3] = words[3];
+
+    for (zone = 0; zone < 225U; ++zone, words += 4) {
+        uint32_t w0 = words[0];
+        uint32_t w1 = words[1];
+        uint32_t w2 = words[2];
+        uint32_t w3 = words[3];
+        uint32_t count = ((w2 & 0xfffU) << 1) | (w1 >> 31);
+
+        red += w0 & 0x1fffffU;
+        green += ((w1 & 0x3ffU) << 11) | (w0 >> 21);
+        blue += (w1 & 0x7ffffc00U) >> 10;
+        pixels += count;
+    }
+
+    regtrace_t23_source_ae_stats_snapshots++;
+    luma = pixels ? div64_u64(red + green * 2U + blue,
+                              pixels * 4U) : 0;
+    if (regtrace_t23_source_ae_stats_snapshots <= 8U ||
+        !(regtrace_t23_source_ae_stats_snapshots &
+          (regtrace_t23_source_ae_stats_snapshots - 1U)))
+        printk(KERN_INFO
+               "tx_isp_t23_recovered: source AE0 stats snapshot=%u irq=%u bank=%u bankreg=0x%x pixels=%llu rgb=%llu/%llu/%llu luma=%llu raw=%08x/%08x/%08x/%08x status=0x%x\n",
+               regtrace_t23_source_ae_stats_snapshots,
+               regtrace_t23_source_ae_stats_irqs, bank, bank_reg,
+               (unsigned long long)pixels, (unsigned long long)red,
+               (unsigned long long)green, (unsigned long long)blue,
+               (unsigned long long)luma, raw[0], raw[1], raw[2], raw[3],
+               status);
+}
+
+static void regtrace_t23_source_ae_stats_irq(uint32_t status,
+                                             uint32_t core_irq_count)
+{
+    bool ae_irq = !!(status & BIT(26));
+
+    if (!regtrace_t23_source_ae_stats_init)
+        return;
+    if (ae_irq)
+        regtrace_t23_source_ae_stats_irqs++;
+    else if (core_irq_count & 0x7fU)
+        return;
+
+    regtrace_t23_source_ae_stats_snapshot(status);
+}
 
 static void regtrace_t23_source_awb_stats_snapshot(uint32_t status)
 {
@@ -11743,6 +11844,8 @@ static int regtrace_t23_source_core_set_stream(int enable,
     system_reg_write(0xcU, bypass);
     system_reg_write(0x10U, 0xf3U);
     system_reg_write(0x30U, 0xffffffffU);
+    if (regtrace_t23_source_ae_stats_init)
+        regtrace_t23_source_ae_write_stats_startup();
     if (regtrace_t23_source_gib_tuning_init)
         regtrace_t23_source_gib_write_tuning_startup();
     if (regtrace_t23_source_gamma_tuning_init)
@@ -29224,6 +29327,8 @@ int32_t isp_irq_handle(int32_t irq, void *dev_id)
                    "tx_isp_t23_recovered: core irq=%d count=%u status=0x%x\n",
                    irq, regtrace_t23_core_irq_count, status0);
 
+        regtrace_t23_source_ae_stats_irq(status0,
+                                         regtrace_t23_core_irq_count);
         regtrace_t23_source_awb_stats_irq(status0,
                                           regtrace_t23_core_irq_count);
 

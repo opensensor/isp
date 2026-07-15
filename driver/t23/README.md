@@ -22,6 +22,9 @@ Current smoke-test status:
   all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
   override leaves every T23 AWB DMA bank empty.
+- Optional `source_ae_stats_init` programs the exact T23 AE0 15x15 statistics
+  geometry and thresholds. It only captures diagnostics; sensor exposure
+  writes stay disabled until the AE DMA format and event cadence are verified.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
   distance refinement, history, and OEM gain conversion. It is stable and
