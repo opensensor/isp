@@ -111,6 +111,16 @@ Current smoke-test status:
   96 integration lines while measured AE luma fell from 216 to 61. The stream
   passed 256 RTSP frames; frame `YAVG` fell from the prior clipped 222.1 to
   116.8 and `YHIGH` from 255 to 188.
+- The T23 integer and 64-bit fixed-point log2 family now follows the HLIL
+  normalization and fractional-bit iteration instead of returning zero. This
+  restores the gain-conversion helper used by sensor analog/digital gain and
+  EV reporting; the private 64-bit entry intentionally forwards to the same
+  recovered implementation. The 32-bit core compiles to 63 instructions
+  versus 65 OEM, and its fixed-point wrapper is 14 versus 14. A default device
+  cycle decoded 257 measured RTSP frames at `YAVG/UAVG/VAVG`
+  `109.6/128.0/126.3`, retained active ISP/VIC interrupts with `ERR 0`, and
+  completed without kernel errors. The binary audit moved from 46 stubs and
+  87 collapses to 45 and 86.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

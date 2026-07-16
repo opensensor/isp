@@ -29280,15 +29280,16 @@ int32_t private_leading_one_position_64(uint32_t arg1, uint32_t arg2) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a204 origin=model_output original=private_log2_int_to_fixed_64 */
 int32_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+	return tisp_log2_int_to_fixed_64(arg1, arg2, arg3, arg4);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a384 origin=model_output original=private_log2_fixed_to_fixed_64 */
 int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, char arg4)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+	uint32_t precision = (uint8_t)arg4;
+
+	return private_log2_int_to_fixed_64(arg1, arg2, arg4, 0) -
+	       (arg3 << (precision & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a93c origin=fragment_seed original=private_copy_to_user */
@@ -38202,158 +38203,147 @@ int32_t tisp_simple_intp(int32_t arg1, int32_t arg2, void *arg3)
 	return base >= next ? base - step : base + step;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013e0c origin=model_output original=tisp_log2_int_to_fixed */
-/* * tisp_log2_int_to_fixed * * Converts an integer to a fixed-point representation using log2-based * normalization. The algorithm: * 1. Mask a1 (arg2) and a2 (arg3) to 8 bits * 2. If arg1 == 0, return 0 * 3. Find the byte position of the most significant byte of arg1 * by checking ranges: >= 0x10000, >= 0x100, >= 0x10, >= 4, >= 2 * 4. Normalize arg1 by shifting to align the MSB * 5. Iterate a1 times: square a0, check sign, shift right by 0xf or 0x10 * 6. Combine: ((v1_1 << (a1 & 0x1f)) + v0_6) << (a2 & 0x1f) | * (a0 & 0x7fff) >> ((0xf - a2) & 0x1f) */ int32_t tisp_log2_int_to_fixed(uint32_t arg1, char arg2, char arg3)
+/* WHOLE_DRIVER_CANDIDATE fn_0000000000013e0c origin=hlil_exact original=tisp_log2_int_to_fixed */
+int32_t tisp_log2_int_to_fixed(uint32_t arg1, char arg2, char arg3)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+	uint32_t precision = (uint8_t)arg2;
+	uint32_t output_shift = (uint8_t)arg3;
+	uint32_t value;
+	uint32_t bit_position;
+	uint32_t normalized;
+	uint32_t fraction = 0;
+	uint32_t i;
+
+	if (arg1 == 0)
+		return 0;
+
+	if (arg1 < 0x10000U) {
+		value = arg1;
+		bit_position = 0;
+	} else {
+		value = arg1 >> 16;
+		bit_position = 16;
+	}
+	if (value >= 0x100U) {
+		value >>= 8;
+		bit_position += 8;
+	}
+	if (value >= 0x10U) {
+		value >>= 4;
+		bit_position += 4;
+	}
+	if (value >= 4U) {
+		value >>= 2;
+		bit_position += 2;
+	}
+	if (value != 1U)
+		bit_position++;
+
+	if (bit_position >= 16U)
+		normalized = arg1 >> ((bit_position - 15U) & 0x1f);
+	else
+		normalized = arg1 << ((15U - bit_position) & 0x1f);
+
+	for (i = 0; i < precision; i++) {
+		uint32_t square = normalized * normalized;
+
+		fraction <<= 1;
+		if ((int32_t)square >= 0) {
+			normalized = square >> 15;
+		} else {
+			fraction++;
+			normalized = square >> 16;
+		}
+	}
+
+	return ((((bit_position << (precision & 0x1f)) + fraction)
+		 << (output_shift & 0x1f)) |
+		((normalized & 0x7fffU) >>
+		 ((15U - output_shift) & 0x1f)));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013f10 origin=fragment_seed original=tisp_log2_fixed_to_fixed */
 int32_t tisp_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2)
 {
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uint32_t t1 = 0;
-    uint32_t t2 = 0;
-    uint32_t *v0 = 0;
+	uint32_t precision = (uint8_t)a2;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    t2 = a2 & 255;
-    t1 = a1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_log2_int_to_fixed)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    t1 = t1 << t2;
-    v0 = v0 - t1;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return tisp_log2_int_to_fixed(a0, (char)precision, 0) -
+	       ((int32_t)a1 << (precision & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013f48 origin=model_output original=tisp_log2_int_to_fixed_64 */
 int32_t tisp_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4)
 {
-    int *i = 0;
-    /* Early exit: if both arg1 and arg2 are zero, return 0 */
-    if ((arg1 | arg2) == 0) {
-        return 0;
-    }
+	uint32_t precision = (uint8_t)arg3;
+	uint32_t output_shift = (uint8_t)arg4;
+	uint32_t value;
+	uint32_t normalized;
+	uint32_t fraction = 0;
+	uint32_t bit_position;
+	uint64_t input;
+	uint32_t i;
 
-    /* s3 = bit count from arg3, s2 = bit count from arg4 */
-    uint32_t s3 = (uint32_t)(unsigned char)arg3;
-    uint32_t s2 = (uint32_t)(unsigned char)arg4;
+	if ((arg1 | arg2) == 0)
+		return 0;
 
-    /* Determine the value to normalize and initial shift count */
-    uint32_t *v0;
-    int32_t *s0;
+	if (arg2 != 0) {
+		value = arg2;
+		bit_position = 32;
+	} else {
+		value = arg1;
+		bit_position = 0;
+	}
+	if (value >= 0x10000U) {
+		value >>= 16;
+		bit_position += 16;
+	}
+	if (value >= 0x100U) {
+		value >>= 8;
+		bit_position += 8;
+	}
+	if (value >= 0x10U) {
+		value >>= 4;
+		bit_position += 4;
+	}
+	if (value >= 4U) {
+		value >>= 2;
+		bit_position += 2;
+	}
+	if (value != 1U)
+		bit_position++;
 
-    if (arg2 == 0) {
-        v0 = arg1;
-        s0 = 0;
-    } else {
-        v0 = arg2;
-        s0 = 0x20;
-    }
+	input = ((uint64_t)arg2 << 32) | arg1;
+	if (bit_position >= 16U)
+		input >>= bit_position - 15U;
+	else
+		input <<= 15U - bit_position;
+	normalized = (uint32_t)input;
 
-    /* Check if v0 >= 0x10000 (i.e., bit 16 or higher set) */
-    if (v0 >= 0x10000u) {
-        v0 = (void *)(uint32_t *)((uintptr_t)v0 >> (16));
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (16));
-    }
+	for (i = 0; i < precision; i++) {
+		uint64_t square = (uint64_t)normalized * normalized;
 
-    /* Check if v0 >= 0x100 */
-    if (v0 >= 0x100u) {
-        v0 = (void *)(uint32_t *)((uintptr_t)v0 >> (8));
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (8));
-    }
+		fraction <<= 1;
+		if ((square & 0x80000000ULL) == 0) {
+			normalized = (uint32_t)(square >> 15);
+		} else {
+			fraction++;
+			normalized = (uint32_t)(square >> 16);
+		}
+	}
 
-    /* Check if v0 >= 0x10 */
-    if (v0 >= 0x10u) {
-        v0 = (void *)(uint32_t *)((uintptr_t)v0 >> (4));
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (4));
-    }
-
-    /* Check if v0 >= 4 */
-    if (v0 >= 4u) {
-        v0 = (void *)(uint32_t *)((uintptr_t)v0 >> (2));
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (2));
-    }
-
-    /* Check if v0 == 1; if not, increment s0 */
-    if (v0 != 1) {
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (1));
-    }
-
-    /* s1 = v0 (the normalized mantissa base) */
-    int32_t s1 = (int32_t)v0;
-
-    /* a0 = 0, a2_4 = 0 (accumulator for the fixed-point result) */
-    int32_t *a0 = 0;
-    int32_t a2_4 = 0;
-
-    /* v1 is initialized from the normalization phase */
-    uint32_t v1 = v0;
-
-    for (int32_t i = 0; i < (int32_t)s3; i++) {
-        /* 64-bit unsigned multiply: hi:lo = s1 * s1 */
-        uint32_t us1 = (uint32_t)s1;
-        uint64_t prod = (uint64_t)us1 * (uint64_t)us1;
-        uint32_t lo_1 = (uint32_t)(prod & 0xFFFFFFFFULL);
-        uint32_t hi_1 = (uint32_t)((prod >> 32) & 0xFFFFFFFFULL);
-
-        /* v1 = (v1 << 1) + hi_1 */
-        uint32_t v1_2 = (v1 << 1) + hi_1;
-
-        /* a2_4 accumulates carry bits from the fixed-point iteration */
-        a2_4 = ((uintptr_t)a0 >> 31) | (a2_4 << 1);
-        a0 = (void *)(uintptr_t)((uintptr_t)a0 << (1));
-
-        /* Check if ((lo_1 & 0x80000000) | v1_2) == 0 */
-        if (((lo_1 & 0x80000000u) | v1_2) == 0) {
-            s1 = (int32_t *)((v1_2 << 11) | (lo_1 >> 11));
-            v1 = v1_2 >> 11;
-        } else {
-            /* a2_4 += a0 + (1 < a0 ? 1 : 0) */
-            a2_4 += (uintptr_t)a0 + ((1u < (uint32_t)a0) ? 1 : 0);
-            s1 = (int32_t *)((v1_2 << 10) | (lo_1 >> 10));
-            a0 = (void *)(uintptr_t)((uintptr_t)a0 + (1));
-            v1 = v1_2 >> 10;
-        }
-    }
-
-    /* Final computation */
-    /* Final computation */
-    int32_t s0_1 = (uintptr_t)s0 << ((int32_t)s3 & 0x1f);
-    int32_t a0_1 = s0_1 + (uintptr_t)a0;
-
-    /* return __ashldi3(a0_1, (a0_1 < s0_1 ? 1 : 0) + (s0_1 >> 31) + a2_4, s2)
-       | __lshrdi3(s1 & 0x7fff, 0, 15 - s2) */
-    
-    uint32_t shift_high = ((uint32_t)a0_1 < (uint32_t)s0_1 ? 1u : 0u);
-    shift_high += ((uint32_t)(a0_1 >> 31));
-    shift_high += (uint32_t)a2_4;
-    
-    uint32_t result_low = (uint32_t)__ashldi3((uint32_t)a0_1, 0, (int32_t)shift_high);
-    uint32_t result_high = (uint32_t)__lshrdi3((uint32_t)(s1 & 0x7fff), 0, 15 - (int32_t)s2);
-
-    return (int32_t)(result_low | result_high);
+	return ((((bit_position << (precision & 0x1f)) + fraction)
+		 << (output_shift & 0x1f)) |
+		((normalized & 0x7fffU) >>
+		 ((15U - output_shift) & 0x1f)));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001414c origin=model_output original=tisp_log2_fixed_to_fixed_64 */
 int32_t tisp_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, char arg4)
 {
-	uint32_t shift = (uint32_t)arg4 & 0xff;
-	int32_t result = tisp_log2_int_to_fixed_64(arg1, arg2, (int32_t)shift, 0);
-	return result - ((int32_t)arg2 << shift);
+	uint32_t precision = (uint8_t)arg4;
+
+	return tisp_log2_int_to_fixed_64(arg1, arg2, arg4, 0) -
+	       (arg3 << (precision & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000141a0 origin=model_output original=ISPAWBInterpolation1 */
