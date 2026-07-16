@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1043 | 1328 |
 | Functions with disassembly | 1043 | 1328 |
-| Executable section bytes | 443376 | 373104 |
+| Executable section bytes | 443376 | 373232 |
 | Initialized writable bytes | 216768 | 46528 |
 | Uninitialized writable bytes | 164688 | 1151232 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
 - unmatched: OEM-only=61 recovered-only=345
-- matched instructions: OEM=106302 recovered=75076 ratio=0.706
-- classes: stub=44 collapsed=84 shorter=194 same_count=201 similar=383 larger=34 expanded=42
+- matched instructions: OEM=106302 recovered=75107 ratio=0.707
+- classes: stub=43 collapsed=84 shorter=194 same_count=201 similar=384 larger=34 expanded=42
 
 ## Allocated Section Delta
 
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 6720 | 75664 | +68944 |
 | `.rodata.str1.4` | 22728 | 21704 | -1024 |
-| `.text` | 442176 | 371776 | -70400 |
+| `.text` | 442176 | 371904 | -70272 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
@@ -45,7 +45,7 @@
 
 ## Function Outliers
 
-Showing 250 of 804 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 803 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -87,7 +87,6 @@ Showing 250 of 804 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `fs_activate_module` | `fs_activate_module` | 43 | 2 | 0.047 | -41 | 1->0 | 7->0 |
 | stub | exact_name | `tx_vic_enable_irq` | `tx_vic_enable_irq` | 42 | 2 | 0.048 | -40 | 3->0 | 5->0 |
 | stub | exact_name | `isp_irq_thread_handle` | `isp_irq_thread_handle` | 39 | 2 | 0.051 | -37 | 2->0 | 7->0 |
-| stub | exact_name | `ae1_interrupt_static` | `ae1_interrupt_static` | 36 | 2 | 0.056 | -34 | 3->0 | 0->0 |
 | stub | exact_name | `tx_isp_vin_remove` | `tx_isp_vin_remove` | 35 | 4 | 0.114 | -31 | 4->0 | 1->1 |
 | stub | exact_name | `__enqueue_in_driver` | `__enqueue_in_driver` | 32 | 5 | 0.156 | -27 | 2->0 | 2->0 |
 | stub | exact_name | `tx_isp_frame_chan_deinit` | `tx_isp_frame_chan_deinit` | 29 | 2 | 0.069 | -27 | 3->0 | 2->0 |
@@ -299,6 +298,7 @@ Showing 250 of 804 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `frame_channel_open` | `frame_channel_open` | 57 | 44 | 0.772 | -13 | 7->4 | 4->3 |
 | shorter | exact_name | `tisp_lsc_judge_ct_update_flag` | `tisp_lsc_judge_ct_update_flag` | 56 | 37 | 0.661 | -19 | 0->0 | 14->8 |
 | shorter | exact_name | `tx_isp_vic_slake_subdev` | `tx_isp_vic_slake_subdev` | 56 | 42 | 0.750 | -14 | 4->2 | 7->7 |
+| shorter | exact_name | `func_zone_ct_weight` | `func_zone_ct_weight` | 54 | 42 | 0.778 | -12 | 2->2 | 7->7 |
 
 ## Replacement Map
 

@@ -145,6 +145,13 @@ Current smoke-test status:
   `108.2/129.5/125.8`, retained `30432/2698` ISP/VIC interrupts without new
   errors, and rebooted cleanly. The binary audit now reports 44 hard stubs and
   84 collapses.
+- The AE1 static interrupt handler now follows the T23 bank-select, 4 KiB DMA
+  synchronization, AE statistics decode, and event-flag sequence. It compiles
+  to 33 instructions versus 36 OEM with all three calls and ten relocations
+  retained, reducing the binary audit to 43 hard stubs. A no-argument linear
+  mode regression decoded 256 RTSP frames at `YAVG/UAVG/VAVG`
+  `108.3/129.3/125.8`, retained `13680/1185` ISP/VIC interrupts without new
+  errors, and rebooted cleanly.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

@@ -76708,8 +76708,17 @@ int32_t tisp_ae1_ctrls_update(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000048144 origin=fragment_seed original=ae1_interrupt_static */
 int32_t ae1_interrupt_static(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t bank_offset = (system_reg_read(0xa850U) << 8) & 0x3000U;
+    uint32_t stats_base = *(uint32_t *)((char *)&tispinfo + 0x24);
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
+
+    private_dma_cache_sync(NULL,
+                           (void *)(uintptr_t)(stats_base + bank_offset),
+                           0x1000U, DMA_FROM_DEVICE);
+    tisp_ae0_get_statistics(
+        (void *)(uintptr_t)(stats_base + bank_offset), 0xf001f001U);
+    flags[3] = 1;
+    return 1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000481d4 origin=fragment_seed original=ae1_interrupt_hist */
