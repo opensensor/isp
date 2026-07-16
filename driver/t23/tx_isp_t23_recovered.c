@@ -9745,6 +9745,7 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_VIDIOC_ENUMINPUT 0xc050561aU
 #define REGTRACE_VIDIOC_GET_SENSOR_INPUT 0x40045626U
 #define REGTRACE_TX_ISP_GET_BUF 0x800c56d5U
+#define REGTRACE_TX_ISP_SET_BUF 0x800c56d4U
 #define REGTRACE_V4L2_INPUT_TYPE_CAMERA 2U
 #define REGTRACE_SC2336_WIDTH 1920U
 #define REGTRACE_SC2336_HEIGHT 1080U
@@ -9808,6 +9809,10 @@ static int regtrace_tx_isp_misc_registered;
 int32_t system_reg_write(uint32_t a0, uint32_t a1);
 int32_t system_reg_read(uint32_t a0);
 int32_t tisp_simple_intp(int32_t arg1, int32_t arg2, void *arg3);
+int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2);
+int32_t tisp_mdns_set_malloc_cfg(uint32_t mode, uint32_t width,
+                                 uint32_t height, uint32_t paddr);
+int32_t tisp_mdns_par_refresh(uint32_t gain_q16, uint32_t threshold);
 int32_t tisp_gib_gain_interpolation(uint32_t gain_q16);
 int32_t tisp_ydns_refresh(uint32_t gain_q16);
 int32_t tiziano_ydns_init(void);
@@ -9830,7 +9835,22 @@ static bool regtrace_t23_source_msca_curves = true;
 static bool regtrace_t23_source_msca_init;
 static uint regtrace_t23_source_core_bypass = 0xffffea0fU;
 static bool regtrace_t23_source_core_bypass_from_tuning;
-static bool regtrace_t23_source_park_uninitialized_mdns = true;
+static bool regtrace_t23_source_park_uninitialized_mdns;
+static bool regtrace_t23_source_mdns_tuning_init = true;
+static bool regtrace_t23_source_mdns_internal_enable = true;
+static bool regtrace_t23_source_mdns_uv = true;
+static bool regtrace_t23_source_mdns_initialized;
+static uint32_t regtrace_t23_source_mdns_gain_old = 0xffffffffU;
+static uint32_t regtrace_t23_mdns_frame_width;
+static uint32_t regtrace_t23_mdns_frame_height;
+static uint regtrace_t23_source_mdns_top_control;
+static uint regtrace_t23_source_mdns_top_override;
+static uint regtrace_t23_source_mdns_mode;
+static uint regtrace_t23_source_mdns_paddr;
+static uint regtrace_t23_source_mdns_size;
+static uint regtrace_t23_source_mdns_used;
+static uint regtrace_t23_source_mdns_set_count;
+static uint regtrace_t23_source_mdns_restore_count;
 static bool regtrace_t23_source_gib_tuning_init = true;
 static bool regtrace_t23_source_gamma_tuning_init = true;
 static bool regtrace_t23_source_lsc_tuning_init = true;
@@ -9913,6 +9933,8 @@ static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin"
 #define REGTRACE_T23_DPC_TUNING_SIZE   0x448U
 #define REGTRACE_T23_DMSC_TUNING_OFFSET 0x91b0U
 #define REGTRACE_T23_DMSC_TUNING_SIZE   0x2098U
+#define REGTRACE_T23_MDNS_TUNING_OFFSET 0xd1d0U
+#define REGTRACE_T23_MDNS_TUNING_SIZE   0x405cU
 #define REGTRACE_T23_BCSH_TUNING_OFFSET 0x15170U
 #define REGTRACE_T23_BCSH_TUNING_SIZE   0x418U
 static uint regtrace_t23_source_core_bayer = 1U;
@@ -9943,6 +9965,30 @@ module_param_named(source_core_bypass_from_tuning,
                    regtrace_t23_source_core_bypass_from_tuning, bool, 0644);
 module_param_named(source_park_uninitialized_mdns,
                    regtrace_t23_source_park_uninitialized_mdns, bool, 0644);
+module_param_named(source_mdns_tuning_init,
+                   regtrace_t23_source_mdns_tuning_init, bool, 0644);
+module_param_named(source_mdns_internal_enable,
+                   regtrace_t23_source_mdns_internal_enable, bool, 0644);
+module_param_named(source_mdns_uv,
+                   regtrace_t23_source_mdns_uv, bool, 0644);
+module_param_named(source_mdns_gain_old,
+                   regtrace_t23_source_mdns_gain_old, uint, 0444);
+module_param_named(source_mdns_top_control,
+                   regtrace_t23_source_mdns_top_control, uint, 0444);
+module_param_named(source_mdns_top_override,
+                   regtrace_t23_source_mdns_top_override, uint, 0644);
+module_param_named(source_mdns_mode,
+                   regtrace_t23_source_mdns_mode, uint, 0444);
+module_param_named(source_mdns_paddr,
+                   regtrace_t23_source_mdns_paddr, uint, 0444);
+module_param_named(source_mdns_size,
+                   regtrace_t23_source_mdns_size, uint, 0444);
+module_param_named(source_mdns_used,
+                   regtrace_t23_source_mdns_used, uint, 0444);
+module_param_named(source_mdns_set_count,
+                   regtrace_t23_source_mdns_set_count, uint, 0444);
+module_param_named(source_mdns_restore_count,
+                   regtrace_t23_source_mdns_restore_count, uint, 0444);
 module_param_named(source_gib_tuning_init,
                    regtrace_t23_source_gib_tuning_init, bool, 0644);
 module_param_named(source_gamma_tuning_init,
@@ -11539,12 +11585,52 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_dmsc_interp.inc"
 #include "tx_isp_t23_dmsc_noref_writes.inc"
 #include "tx_isp_t23_dmsc_ref_writes.inc"
+#include "tx_isp_t23_mdns_layout.inc"
+#include "tx_isp_t23_mdns_interp.inc"
+#include "tx_isp_t23_mdns_writers.inc"
 #include "tx_isp_t23_sharpen_tuning.inc"
 #include "tx_isp_t23_sharpen_gain1p5x.inc"
 #include "tx_isp_t23_sharpen_gain2x.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
 #include "tx_isp_t23_clm_tuning.inc"
 #include "tx_isp_t23_ydns_tuning.inc"
+
+static int regtrace_t23_source_mdns_load_tuning(void)
+{
+    unsigned char *params;
+    int ret;
+
+    params = private_vmalloc(REGTRACE_T23_MDNS_TUNING_SIZE);
+    if (!params)
+        return -ENOMEM;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_MDNS_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_MDNS_TUNING_SIZE);
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: MDNS tuning refresh failed path=%s ret=%d\n",
+               regtrace_t23_source_core_tuning_path, ret);
+        private_vfree(params);
+        return ret;
+    }
+
+#define REGTRACE_T23_MDNS_COPY_FIELD(name, offset, size) \
+    memcpy(&(name), params + (offset), (size));
+    REGTRACE_T23_MDNS_TUNING_FIELDS(REGTRACE_T23_MDNS_COPY_FIELD)
+#undef REGTRACE_T23_MDNS_COPY_FIELD
+
+    private_vfree(params);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: MDNS tuning loaded ctrl=%x/%x/%x uv=%x/%x/%x memopt=%u\n",
+           (uint32_t)mdns_y_filter_en_array,
+           (uint32_t)mdns_y_sf_cur_en_array,
+           (uint32_t)mdns_y_sf_ref_en_array,
+           (uint32_t)mdns_uv_filter_en_array,
+           (uint32_t)mdns_uv_sf_cur_en_array,
+           (uint32_t)mdns_uv_sf_ref_en_array,
+           (uint32_t)isp_memopt);
+    return 0;
+}
 
 /* OEM SC2336 DMSC curves used by tisp_dmsc_sharpness_set. */
 static const uint32_t regtrace_t23_dmsc_sp_d_w_curve[9] = {
@@ -12322,6 +12408,8 @@ static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
         tisp_dpc_refresh(gain_q16);
     if (regtrace_t23_source_ydns_tuning_init)
         tisp_ydns_refresh(gain_q16);
+    if (regtrace_t23_source_mdns_initialized)
+        tisp_mdns_par_refresh(gain_q16, 0x100U);
     if (regtrace_t23_source_sharpen_tuning_init)
         sharpen_writes = regtrace_t23_source_sharpen_write_tuning(
             regtrace_t23_sharpen_sc2336_startup,
@@ -12465,6 +12553,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
             return 0;
         system_reg_write(0x800U, 0);
         regtrace_t23_core_started = false;
+        regtrace_t23_source_mdns_initialized = false;
         printk(KERN_WARNING "tx_isp_t23_recovered: source core stopped r800=0x%x reason=%s\n",
                system_reg_read(0x800U), reason ? reason : "?");
         return 0;
@@ -12481,8 +12570,11 @@ static int regtrace_t23_source_core_set_stream(int enable,
     }
 
     bypass = regtrace_t23_source_core_bypass_value();
-    if (regtrace_t23_source_park_uninitialized_mdns)
+    if (regtrace_t23_source_park_uninitialized_mdns ||
+        !regtrace_t23_source_mdns_tuning_init)
         bypass |= 1U << 16;
+    else
+        bypass &= ~BIT(16);
     if (regtrace_t23_source_awb_stats_init)
         bypass &= ~BIT(25);
     if (regtrace_t23_source_dpc_tuning_init)
@@ -12536,6 +12628,29 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_source_csccr_write_init();
     if (regtrace_t23_source_awb_stats_init)
         regtrace_t23_source_awb_write_stats_startup();
+    if (regtrace_t23_source_mdns_tuning_init)
+        tiziano_mdns_init(REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT);
+    if (regtrace_t23_source_mdns_paddr) {
+        uint32_t used = tisp_mdns_set_malloc_cfg(
+            regtrace_t23_source_mdns_mode,
+            REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT,
+            regtrace_t23_source_mdns_paddr);
+
+        if (used > regtrace_t23_source_mdns_size) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: MDNS DMA restore needs 0x%x > 0x%x\n",
+                   used, regtrace_t23_source_mdns_size);
+            return -ENOMEM;
+        }
+        regtrace_t23_source_mdns_used = used;
+        regtrace_t23_source_mdns_restore_count++;
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: MDNS DMA restored after core reset mode=%u paddr=0x%x size=0x%x used=0x%x count=%u\n",
+               regtrace_t23_source_mdns_mode,
+               regtrace_t23_source_mdns_paddr,
+               regtrace_t23_source_mdns_size, used,
+               regtrace_t23_source_mdns_restore_count);
+    }
     if (regtrace_t23_source_msca_init)
         system_reg_write(0x33cU, 0x20230219U);
     system_reg_write(0x804U, regtrace_t23_source_core_mode);
@@ -12737,6 +12852,47 @@ static long regtrace_tx_isp_getbuf(unsigned long arg)
     return 0;
 }
 
+static long regtrace_tx_isp_setbuf(unsigned long arg)
+{
+    struct regtrace_isp_buf_info info;
+    u32 used;
+
+    if (!arg)
+        return -EINVAL;
+    if (copy_from_user(&info, (const void __user *)arg, sizeof(info)))
+        return -EFAULT;
+    if (!info.paddr || !info.size)
+        return -EINVAL;
+
+    used = tisp_mdns_set_malloc_cfg(info.mode & 0xffU,
+                                    REGTRACE_SC2336_WIDTH,
+                                    REGTRACE_SC2336_HEIGHT,
+                                    info.paddr);
+    if (used > info.size) {
+        tisp_mdns_malloc_reflash();
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: MDNS buffer too small paddr=0x%x size=0x%x need=0x%x\n",
+               info.paddr, info.size, used);
+        return -EINVAL;
+    }
+
+    regtrace_t23_source_mdns_mode = info.mode & 0xffU;
+    regtrace_t23_source_mdns_paddr = info.paddr;
+    regtrace_t23_source_mdns_size = info.size;
+    regtrace_t23_source_mdns_used = used;
+    regtrace_t23_source_mdns_set_count++;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: MDNS DMA mode=%u paddr=0x%x size=0x%x used=0x%x ctrl=0x%x/%x bases=%x/%x/%x/%x/%x/%x/%x/%x/%x\n",
+           info.mode & 0xffU, info.paddr, info.size, used,
+           system_reg_read(0x7810U), system_reg_read(0x7814U),
+           system_reg_read(0x7820U), system_reg_read(0x7828U),
+           system_reg_read(0x7830U), system_reg_read(0x7840U),
+           system_reg_read(0x7848U), system_reg_read(0x7850U),
+           system_reg_read(0x7858U), system_reg_read(0x7860U),
+           system_reg_read(0x7868U));
+    return 0;
+}
+
 static long regtrace_tx_isp_get_sensor_input(unsigned long arg)
 {
     u32 input = 0;
@@ -12863,6 +13019,13 @@ static long regtrace_tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned 
     if (cmd == REGTRACE_TX_ISP_GET_BUF) {
         ret = regtrace_tx_isp_getbuf(arg);
         printk(KERN_INFO "tx_isp_t23_recovered: tx-isp getbuf arg=0x%lx ret=%ld pid=%d comm=%s\n",
+               arg, ret, current->pid, current->comm);
+        return ret;
+    }
+
+    if (cmd == REGTRACE_TX_ISP_SET_BUF) {
+        ret = regtrace_tx_isp_setbuf(arg);
+        printk(KERN_INFO "tx_isp_t23_recovered: tx-isp setbuf arg=0x%lx ret=%ld pid=%d comm=%s\n",
                arg, ret, current->pid, current->comm);
         return ret;
     }
@@ -82098,25 +82261,30 @@ uint32_t tisp_dmsc_sharpness_get(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056540 origin=model_output original=tisp_mdns_top_func_cfg */
 int32_t tisp_mdns_top_func_cfg(int32_t arg1)
 {
-	uint32_t *a1;
+	uint32_t a1;
+	uint32_t isp_memopt_1;
 
 	if (arg1 == 0) {
-		a1 = 0x10001;
+		a1 = 0x10001U;
 	} else {
 		a1 = mdns_y_sf_cur_en_array << 4
 		   | mdns_y_sf_ref_en_array << 8
 		   | 0x10001
 		   | mdns_y_filter_en_array << 0xc
-		   | mdns_uv_sf_cur_en_array << 0x14
-		   | mdns_uv_sf_ref_en_array << 0x18
-		   | mdns_uv_filter_en_array << 0x1c
 		   | mdns_out_adj_mode_y_array << 0x1e
 		   | mdns_out_adj_mode_c_array << 0x1f;
+		if (regtrace_t23_source_mdns_uv)
+			a1 |= mdns_uv_sf_cur_en_array << 0x14
+			   | mdns_uv_sf_ref_en_array << 0x18
+			   | mdns_uv_filter_en_array << 0x1c;
+		if (regtrace_t23_source_mdns_top_override)
+			a1 = regtrace_t23_source_mdns_top_override;
 	}
 
+	regtrace_t23_source_mdns_top_control = a1;
 	system_reg_write(0x7810, a1);
 
-	uint32_t isp_memopt_1 = isp_memopt;
+	isp_memopt_1 = isp_memopt;
 
 	if (isp_memopt_1 == 1) {
 		mdns_ass_enable_array = 0;
@@ -82846,7 +83014,17 @@ int32_t tisp_mdns_c_2d_param_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000584a8 origin=fragment_seed original=tisp_mdns_intp */
 int32_t tisp_mdns_intp(uint32_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    int32_t hi = (int32_t)a0 >> 16;
+    int32_t lo = (int32_t)(a0 & 0xffffU);
+
+#define REGTRACE_T23_MDNS_INTERPOLATE(destination, curve, indirect) do { \
+        void *table = (indirect) \
+            ? (void *)(uintptr_t)(*(uint32_t *)(void *)(curve)) \
+            : (void *)(curve); \
+        (destination) = tisp_simple_intp(hi, lo, table); \
+    } while (0);
+    REGTRACE_T23_MDNS_INTERPOLATED_FIELDS(REGTRACE_T23_MDNS_INTERPOLATE)
+#undef REGTRACE_T23_MDNS_INTERPOLATE
     return 0;
 }
 
@@ -82860,10 +83038,10 @@ int32_t tisp_mdns_all_reg_refresh(int32_t arg1)
 {
     tisp_mdns_intp(arg1);
     system_reg_write(0x7804, 0x110);
-    tisp_mdns_y_3d_param_cfg();
-    tisp_mdns_y_2d_param_cfg();
-    tisp_mdns_c_3d_param_cfg();
-    tisp_mdns_c_2d_param_cfg();
+    regtrace_t23_mdns_y_3d_param_cfg();
+    regtrace_t23_mdns_y_2d_param_cfg();
+    regtrace_t23_mdns_c_3d_param_cfg();
+    regtrace_t23_mdns_c_2d_param_cfg();
     tisp_mdns_top_func_cfg(1);
     return 0;
 }
@@ -82871,55 +83049,13 @@ int32_t tisp_mdns_all_reg_refresh(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005aec8 origin=fragment_seed original=tisp_mdns_top_func_refresh */
 int32_t tisp_mdns_top_func_refresh(void)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)system_reg_write)(30744, 33); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return system_reg_write(0x7818U, 0x21U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005aef4 origin=fragment_seed original=tisp_mdns_reg_trigger */
 int32_t tisp_mdns_reg_trigger(void)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)system_reg_write)(30724, 273); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return system_reg_write(0x7804U, 0x111U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005af20 origin=model_output original=tisp_mdns_intp_reg_refresh */
@@ -82927,41 +83063,32 @@ int32_t tisp_mdns_intp_reg_refresh(int32_t arg1)
 {
     tisp_mdns_intp(arg1);
     system_reg_write(0x7804, 0x110);
-    tisp_mdns_y_3d_param_cfg();
-    tisp_mdns_y_2d_param_cfg();
-    tisp_mdns_c_3d_param_cfg();
-    tisp_mdns_c_2d_param_cfg();
+    regtrace_t23_mdns_y_3d_param_cfg();
+    regtrace_t23_mdns_y_2d_param_cfg();
+    regtrace_t23_mdns_c_3d_param_cfg();
+    regtrace_t23_mdns_c_2d_param_cfg();
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005af9c origin=fragment_seed original=tisp_mdns_par_refresh */
 int32_t tisp_mdns_par_refresh(uint32_t a0, uint32_t a1)
 {
-    uint32_t *v0;
-    uint32_t *t0;
-    uint32_t *a2;
-    uintptr_t *a3;
+    uint32_t delta;
 
-    a3 = (uint32_t *)&get_clk_name;
-    v0 = *(uint32_t *)((char *)&get_clk_name + 18752);
-    a2 = -1;
-
-    if (v0 != a2) {
-        a2 = a0 < v0;
-        t0 = a0 - (uintptr_t)v0;
-        v0 = v0 - a0;
-        if (a2 == 0) {
-            v0 = t0;
-        }
-        if (v0 < a1) {
-            *(uint32_t *)((char *)a3 + 18752) = a0;
-            tisp_mdns_intp_reg_refresh(a0);
-            tisp_mdns_reg_trigger();
-        }
-    } else {
-        *(uint32_t *)((char *)a3 + 18752) = a0;
+    if (regtrace_t23_source_mdns_gain_old == 0xffffffffU) {
+        regtrace_t23_source_mdns_gain_old = a0;
         tisp_mdns_all_reg_refresh(a0);
         tisp_mdns_top_func_refresh();
+        tisp_mdns_reg_trigger();
+        return 0;
+    }
+
+    delta = a0 >= regtrace_t23_source_mdns_gain_old
+        ? a0 - regtrace_t23_source_mdns_gain_old
+        : regtrace_t23_source_mdns_gain_old - a0;
+    if (delta >= a1) {
+        regtrace_t23_source_mdns_gain_old = a0;
+        tisp_mdns_intp_reg_refresh(a0);
         tisp_mdns_reg_trigger();
     }
 
@@ -83046,8 +83173,76 @@ tisp_mdns_get_malloc_cfg0x88:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005b110 origin=fragment_seed original=tisp_mdns_set_malloc_cfg */
 int32_t tisp_mdns_set_malloc_cfg(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t y_stride;
+    uint32_t y_size;
+    uint32_t r_stride;
+    uint32_t r_height;
+    uint32_t r_size;
+    uint32_t r_base;
+    uint32_t used;
+    uint32_t uv_stride;
+    uint32_t uv_size;
+    uint32_t tiny_stride;
+
+    (void)a0;
+    y_stride = (a1 + 7U) & ~7U;
+    y_size = y_stride * a2;
+
+    system_reg_write(0x7820U, a3);
+    system_reg_write(0x7824U, y_stride);
+    system_reg_write(0x7828U, a3 + y_size);
+    system_reg_write(0x782cU, y_stride);
+
+    r_base = a3 + y_size + (y_size >> 1);
+    r_stride = (((a1 + 31U) >> 5) + 7U) & ~7U;
+    r_height = ((a2 + 15U) >> 4) + 1U;
+    r_size = r_stride * r_height;
+    system_reg_write(0x7830U, r_base);
+    system_reg_write(0x7834U, r_stride);
+
+    if (isp_memopt) {
+        system_reg_write(0x7840U, r_base);
+        system_reg_write(0x7844U, 0);
+        system_reg_write(0x7848U, r_base);
+        system_reg_write(0x784cU, 0);
+        system_reg_write(0x7850U, r_base);
+        system_reg_write(0x7854U, 0);
+        used = y_size + (y_size >> 1) + r_size;
+    } else {
+        system_reg_write(0x7840U, r_base + r_size);
+        system_reg_write(0x7844U, r_stride);
+        system_reg_write(0x7848U, r_base + (r_size << 1));
+        system_reg_write(0x784cU, r_stride);
+        system_reg_write(0x7850U, r_base + r_size * 3U);
+        system_reg_write(0x7854U, r_stride);
+        used = y_size + (y_size >> 1) + (r_size << 2);
+    }
+
+    system_reg_write(0x7838U, 0);
+    system_reg_write(0x783cU, 1);
+
+    if (isp_memopt) {
+        system_reg_write(0x7858U, a3);
+        system_reg_write(0x785cU, 0);
+        system_reg_write(0x7860U, a3);
+        system_reg_write(0x7864U, 0);
+        system_reg_write(0x7868U, a3);
+        system_reg_write(0x786cU, 0);
+        return used;
+    }
+
+    uv_stride = ((a1 >> 1) + 7U) & ~7U;
+    uv_size = uv_stride * a2;
+    system_reg_write(0x7858U, a3 + used);
+    system_reg_write(0x785cU, uv_stride);
+    used += uv_size;
+    system_reg_write(0x7860U, a3 + used);
+    system_reg_write(0x7864U, uv_stride);
+    used += uv_size >> 1;
+    tiny_stride = ((a1 >> 5) + 7U) & ~7U;
+    system_reg_write(0x7868U, a3 + used);
+    system_reg_write(0x786cU, tiny_stride);
+    return used + ((a2 * tiny_stride) >> 5);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005b430 origin=model_output original=tisp_mdns_malloc_reflash */
@@ -86702,6 +86897,9 @@ tisp_s_mdns_ratio0x14c:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000617d4 origin=fragment_seed original=tiziano_mdns_params_refresh */
 int32_t tiziano_mdns_params_refresh(void)
 {
+    if (regtrace_t23_source_mdns_tuning_init)
+        return regtrace_t23_source_mdns_load_tuning();
+
     uint32_t *local_10 = 0;
     uint32_t *local_14 = 0;
     uint32_t *a0 = 0;
@@ -88181,6 +88379,8 @@ void tiziano_mdns_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000644e4 origin=fragment_seed original=tiziano_mdns_init */
 int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2)
 {
+    regtrace_t23_mdns_frame_width = arg1;
+    regtrace_t23_mdns_frame_height = arg2;
     *(uint32_t *)((char *)((char *)&mdns_y_sad_ave_thres_array_now)) = (uint32_t)&mdns_y_sad_ave_thres_array;
     *(uint32_t *)((char *)((char *)&mdns_y_sad_ass_thres_array_now)) = (uint32_t)&mdns_y_sad_ass_thres_array;
     *(uint32_t *)((char *)((char *)&mdns_y_sta_ave_thres_array_now)) = (uint32_t)&mdns_y_sta_ave_thres_array;
@@ -88256,12 +88456,14 @@ int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2)
     *(uint32_t *)((char *)((char *)&mdns_c_fiir_fus_wei6_array_now)) = (uint32_t)&mdns_c_fiir_fus_wei6_array;
     *(uint32_t *)((char *)((char *)&mdns_c_fiir_fus_wei7_array_now)) = (uint32_t)&mdns_c_fiir_fus_wei7_array;
     *(uint32_t *)((char *)((char *)&mdns_c_fiir_fus_wei8_array_now)) = (uint32_t)&mdns_c_fiir_fus_wei8_array;
-    *(uint32_t *)((char *)&get_clk_name + 18752) = 0xffffffff;
+    regtrace_t23_source_mdns_gain_old = 0xffffffffU;
     *(uint32_t *)((char *)&get_clk_name + 19064) = arg1;
     *(uint32_t *)((char *)&get_clk_name + 19060) = arg2;
     tiziano_mdns_params_refresh();
-    tisp_mdns_par_refresh((int)(uintptr_t)&get_clk_name, (int)(uintptr_t)&get_clk_name);
-    tisp_mdns_bypass(0);
+    regtrace_t23_source_mdns_initialized = true;
+    tisp_mdns_par_refresh(regtrace_t23_dmsc_gain_q16, 0x10000U);
+    tisp_mdns_bypass(!regtrace_t23_source_park_uninitialized_mdns &&
+                     regtrace_t23_source_mdns_internal_enable ? 0 : 1);
     return 0;
 }
 

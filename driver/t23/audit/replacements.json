@@ -1,0 +1,8 @@
+{
+  "replacements": {
+    "tisp_mdns_c_2d_param_cfg": "regtrace_t23_mdns_c_2d_param_cfg.isra.0",
+    "tisp_mdns_c_3d_param_cfg": "regtrace_t23_mdns_c_3d_param_cfg.isra.0",
+    "tisp_mdns_y_2d_param_cfg": "regtrace_t23_mdns_y_2d_param_cfg.isra.0",
+    "tisp_mdns_y_3d_param_cfg": "regtrace_t23_mdns_y_3d_param_cfg.isra.0"
+  }
+}

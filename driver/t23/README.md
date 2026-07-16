@@ -21,6 +21,15 @@ Current smoke-test status:
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes. The CLM
   image follows the T23 startup CT of 5000 K and programs both OEM LUT banks.
+- The full T23 MDNS temporal/spatial denoise path is enabled by default. Its
+  473 tuning fields and 377 gain interpolations come from the T23 binary and
+  SC2336 tuning blob, while the register packers are shared with the readable
+  T31 implementation. `TX_ISP_SET_BUF` programs all OEM MDNS DMA planes and
+  the stream-on path restores them after the core reset. Runtime total-gain
+  changes refresh MDNS from process context with the OEM `0x100` hysteresis.
+  A no-argument load has passed 256-frame RTSP tests with both luma and chroma
+  filters active; `source_park_uninitialized_mdns=1` remains a diagnostic
+  bypass.
 - The source-derived AWB statistics setup produces valid 15x15-zone data in
   all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
@@ -47,13 +56,12 @@ Current smoke-test status:
   indoor light-source distance-LUT weighting, distance refinement, history,
   live-EV CT-mesh selection, and OEM gain conversion. The current scene has no
   zones inside either calibrated light-source radius, so the added OEM stage
-  is intentionally neutral there. The loop is stable but does not remove the
-  broad green cast. The earlier Q12 gray-world loop remains available only as
-  a diagnostic fallback.
-- The image still has a broad green cast. The exact T23 CCM startup path now
-  applies the tuning blob's EV-derived saturation transform instead of writing
-  the raw daylight matrix. It is stable and less extreme than the raw matrix,
-  but the best verified startup still keeps the top-level CCM bypassed.
+  is intentionally neutral there. The loop is stable, and the earlier Q12
+  gray-world loop remains available only as a diagnostic fallback.
+- The exact T23 CCM startup path applies the tuning blob's EV-derived
+  saturation transform instead of writing the raw daylight matrix. It is
+  stable and less extreme than the raw matrix, but the best verified startup
+  still keeps the top-level CCM bypassed.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics.
