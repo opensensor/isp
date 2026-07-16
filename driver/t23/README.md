@@ -200,6 +200,16 @@ Current smoke-test status:
   `109.6/128.9/126.1/6.5`, retained `37615/3261` ISP/VIC interrupts without
   new faults, and rebooted cleanly. The binary audit now reports 39 hard stubs
   and 83 collapses.
+- Sharpening initialization now selects all nine OEM linear/WDR interpolation
+  tables through live pointer state instead of nulling the threshold table and
+  consulting an unrelated global. Gain refresh consumes those selected tables,
+  and the first full refresh retains its requested Q16 gain. The initializer
+  now compiles to 75 instructions versus 85 OEM and the WDR selector to 59
+  versus 67, moving both out of the collapsed class. A default device cycle
+  decoded 265 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `107.1/128.3/125.6/6.6`, retained `17829/1551` ISP/VIC interrupts without
+  new faults, produced a normal detailed color frame, and rebooted cleanly.
+  The binary audit now reports 39 hard stubs and 81 collapses.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

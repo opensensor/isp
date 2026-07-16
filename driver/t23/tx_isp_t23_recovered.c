@@ -5323,16 +5323,14 @@ static unsigned char __attribute__((aligned(4))) wei20_16_9[128] = {
     0x0b, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 
     0x0d, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x00, 0x00, 
 };
-static uintptr_t gain_old;
-static uintptr_t (*y_sp_b_sl_stren_0_array_now)();
+static uint32_t gain_old;
+static uint32_t *y_sp_b_sl_stren_0_array_now;
 static uintptr_t y_sp_b_sl_stren_0_intp;
-static uintptr_t (*y_sp_b_sl_stren_1_array_now)();
+static uint32_t *y_sp_b_sl_stren_1_array_now;
 static uintptr_t y_sp_b_sl_stren_1_intp;
-static uintptr_t (*y_sp_b_sl_stren_2_array_now)();
+static uint32_t *y_sp_b_sl_stren_2_array_now;
 static uintptr_t y_sp_b_sl_stren_2_intp;
-static unsigned char __attribute__((aligned(4))) y_sp_b_sl_stren_3_array_now[4] = {
-    0x00, 0x00, 0x00, 0x00, 
-};
+static uint32_t *y_sp_b_sl_stren_3_array_now;
 static uintptr_t y_sp_b_sl_stren_3_intp;
 static unsigned char y_sp_fl_min_thres_array[36];
 static uintptr_t y_sp_fl_min_thres_intp;
@@ -5376,17 +5374,17 @@ static unsigned char y_sp_uu_sl_3_array[36];
 static uintptr_t y_sp_uu_sl_3_array_intp;
 static unsigned char y_sp_uu_stren_array[36];
 static uintptr_t y_sp_uu_stren_intp;
-static uintptr_t (*y_sp_uu_thres_array_now)();
+static uint32_t *y_sp_uu_thres_array_now;
 static uintptr_t y_sp_uu_thres_intp;
 static unsigned char y_sp_v2_win5_thres_array[36];
 static uintptr_t y_sp_v2_win5_thres_intp;
-static uintptr_t (*y_sp_w_sl_stren_0_array_now)();
+static uint32_t *y_sp_w_sl_stren_0_array_now;
 static uintptr_t y_sp_w_sl_stren_0_intp;
-static uintptr_t (*y_sp_w_sl_stren_1_array_now)();
+static uint32_t *y_sp_w_sl_stren_1_array_now;
 static uintptr_t y_sp_w_sl_stren_1_intp;
-static uintptr_t (*y_sp_w_sl_stren_2_array_now)();
+static uint32_t *y_sp_w_sl_stren_2_array_now;
 static uintptr_t y_sp_w_sl_stren_2_intp;
-static uintptr_t (*y_sp_w_sl_stren_3_array_now)();
+static uint32_t *y_sp_w_sl_stren_3_array_now;
 static uintptr_t y_sp_w_sl_stren_3_intp;
 static unsigned char y_sp_std_cfg_array[8];
 static unsigned char y_sp_uu_par_cfg_array[16];
@@ -5419,6 +5417,7 @@ static unsigned char y_sp_b_sl_stren_2_array[36];
 static unsigned char y_sp_b_sl_stren_2_wdr_array[36];
 static unsigned char y_sp_b_sl_stren_3_array[36];
 static unsigned char y_sp_b_sl_stren_3_wdr_array[36];
+static uint32_t sharpen_wdr_en;
 /* T23 HLDC tuning block at active-bank offset 0x14b2c (18 u32 words). */
 static uint32_t hldc_con_par_array[18] = {
     0, 0, 0, 1, 0xcc, 0x199, 0x6f1, 0x375,
@@ -8448,7 +8447,6 @@ static unsigned char __attribute__((aligned(4))) weight5_2592_1944[124] = {
     0x9a, 0x0f, 0x00, 0x00, 0x41, 0x11, 0x00, 0x00, 0x3d, 0x13, 0x00, 0x00, 0x82, 0x15, 0x00, 0x00, 
     0x0d, 0x19, 0x00, 0x00, 0x19, 0x1e, 0x00, 0x00, 0xf6, 0x28, 0x00, 0x00, 
 };
-static unsigned char g_arg1_store[16384];
 static unsigned char __attribute__((aligned(4))) IspAeFlag[44] = {
     0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 
@@ -16775,7 +16773,7 @@ static void regtrace_patch_relocated_data(void)
     sdns_grad_zx_thres_array_now = (uintptr_t)(&sdns_grad_zx_thres_array);
     sdns_std_thr2_array_now = (uintptr_t)(&sdns_std_thr2_array);
     sdns_h_mv_wei_now = (uintptr_t)(&sdns_h_mv_wei);
-    *(const void **)((char *)y_sp_b_sl_stren_3_array_now + 0x0) = (const void *)&y_sp_b_sl_stren_3_array;
+    y_sp_b_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_3_array;
     y_sp_b_sl_stren_2_array_now = (uintptr_t)(&y_sp_b_sl_stren_2_array);
     y_sp_b_sl_stren_1_array_now = (uintptr_t)(&y_sp_b_sl_stren_1_array);
     y_sp_b_sl_stren_0_array_now = (uintptr_t)(&y_sp_b_sl_stren_0_array);
@@ -68878,14 +68876,11 @@ int32_t tisp_sharpen_intp(uint32_t a0)
 {
     int hi = a0 >> 16;
     int lo = a0 & 0xffff;
-    bool wdr = !!*(uint32_t *)global_wdr_en;
-
     y_sp_sl_exp_thres_intp = tisp_simple_intp(hi, lo, y_sp_sl_exp_thres_array);
     y_sp_sl_exp_num_intp = tisp_simple_intp(hi, lo, y_sp_sl_exp_num_array);
     y_sp_uu_min_stren_intp = tisp_simple_intp(hi, lo, y_sp_uu_min_stren_array);
     y_sp_uu_min_thres_intp = tisp_simple_intp(hi, lo, y_sp_uu_min_thres_array);
-    y_sp_uu_thres_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_uu_thres_wdr_array : y_sp_uu_thres_array);
+    y_sp_uu_thres_intp = tisp_simple_intp(hi, lo, y_sp_uu_thres_array_now);
     y_sp_mv_uu_thres_intp = tisp_simple_intp(hi, lo, y_sp_mv_uu_thres_array);
     y_sp_mv_uu_stren_intp = tisp_simple_intp(hi, lo, y_sp_mv_uu_stren_array);
     y_sp_uu_stren_intp = tisp_simple_intp(hi, lo, y_sp_uu_stren_array);
@@ -68899,22 +68894,14 @@ int32_t tisp_sharpen_intp(uint32_t a0)
         hi, lo, y_sp_mv_fl_min_thres_array);
     y_sp_v2_win5_thres_intp = tisp_simple_intp(
         hi, lo, y_sp_v2_win5_thres_array);
-    y_sp_w_sl_stren_0_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_w_sl_stren_0_wdr_array : y_sp_w_sl_stren_0_array);
-    y_sp_w_sl_stren_1_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_w_sl_stren_1_wdr_array : y_sp_w_sl_stren_1_array);
-    y_sp_w_sl_stren_2_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_w_sl_stren_2_wdr_array : y_sp_w_sl_stren_2_array);
-    y_sp_w_sl_stren_3_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_w_sl_stren_3_wdr_array : y_sp_w_sl_stren_3_array);
-    y_sp_b_sl_stren_0_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_b_sl_stren_0_wdr_array : y_sp_b_sl_stren_0_array);
-    y_sp_b_sl_stren_1_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_b_sl_stren_1_wdr_array : y_sp_b_sl_stren_1_array);
-    y_sp_b_sl_stren_2_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_b_sl_stren_2_wdr_array : y_sp_b_sl_stren_2_array);
-    y_sp_b_sl_stren_3_intp = tisp_simple_intp(
-        hi, lo, wdr ? y_sp_b_sl_stren_3_wdr_array : y_sp_b_sl_stren_3_array);
+    y_sp_w_sl_stren_0_intp = tisp_simple_intp(hi, lo, y_sp_w_sl_stren_0_array_now);
+    y_sp_w_sl_stren_1_intp = tisp_simple_intp(hi, lo, y_sp_w_sl_stren_1_array_now);
+    y_sp_w_sl_stren_2_intp = tisp_simple_intp(hi, lo, y_sp_w_sl_stren_2_array_now);
+    y_sp_w_sl_stren_3_intp = tisp_simple_intp(hi, lo, y_sp_w_sl_stren_3_array_now);
+    y_sp_b_sl_stren_0_intp = tisp_simple_intp(hi, lo, y_sp_b_sl_stren_0_array_now);
+    y_sp_b_sl_stren_1_intp = tisp_simple_intp(hi, lo, y_sp_b_sl_stren_1_array_now);
+    y_sp_b_sl_stren_2_intp = tisp_simple_intp(hi, lo, y_sp_b_sl_stren_2_array_now);
+    y_sp_b_sl_stren_3_intp = tisp_simple_intp(hi, lo, y_sp_b_sl_stren_3_array_now);
     y_sp_uu_sl_0_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_0_array);
     y_sp_uu_sl_1_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_1_array);
     y_sp_uu_sl_2_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_2_array);
@@ -69202,32 +69189,33 @@ int32_t tisp_y_sp_uu_fl_sl_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042230 origin=model_output original=tisp_sharpen_wdr_en */
 void *tisp_sharpen_wdr_en(int32_t arg1)
 {
-	/* Store arg1 to global side-effect location */
-	*g_arg1_store = (uint32_t)arg1;
+	void *selected;
+
+	sharpen_wdr_en = arg1;
 
 	if (arg1 != 0) {
-		/* WDR path: load wdr array addresses into *_array_now globals */
-		y_sp_uu_thres_array_now = (uintptr_t (*)())(uintptr_t)y_sp_uu_thres_wdr_array;
-		y_sp_w_sl_stren_0_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_0_wdr_array;
-		y_sp_w_sl_stren_1_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_1_wdr_array;
-		y_sp_w_sl_stren_2_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_2_wdr_array;
-		y_sp_w_sl_stren_3_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_3_wdr_array;
-		y_sp_b_sl_stren_0_array_now = (uintptr_t (*)())(uintptr_t)y_sp_b_sl_stren_0_wdr_array;
-		y_sp_b_sl_stren_1_array_now = (uintptr_t (*)())(uintptr_t)y_sp_b_sl_stren_1_wdr_array;
-		y_sp_b_sl_stren_2_array_now = (uintptr_t (*)())(uintptr_t)y_sp_b_sl_stren_2_wdr_array;
-		return y_sp_b_sl_stren_3_wdr_array;
+		y_sp_uu_thres_array_now = (uint32_t *)(void *)y_sp_uu_thres_wdr_array;
+		y_sp_w_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_0_wdr_array;
+		y_sp_w_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_1_wdr_array;
+		y_sp_w_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_2_wdr_array;
+		y_sp_w_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_3_wdr_array;
+		y_sp_b_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_0_wdr_array;
+		y_sp_b_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_1_wdr_array;
+		y_sp_b_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_2_wdr_array;
+		selected = y_sp_b_sl_stren_3_wdr_array;
 	} else {
-		/* Non-WDR path: load non-wdr array addresses into *_array_now globals */
-		y_sp_uu_thres_array_now = (uintptr_t (*)())(uintptr_t)y_sp_uu_thres_array;
-		y_sp_w_sl_stren_0_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_0_array;
-		y_sp_w_sl_stren_1_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_1_array;
-		y_sp_w_sl_stren_2_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_2_array;
-		y_sp_w_sl_stren_3_array_now = (uintptr_t (*)())(uintptr_t)y_sp_w_sl_stren_3_array;
-		y_sp_b_sl_stren_0_array_now = (uintptr_t (*)())(uintptr_t)y_sp_b_sl_stren_0_array;
-		y_sp_b_sl_stren_1_array_now = (uintptr_t (*)())(uintptr_t)y_sp_b_sl_stren_1_array;
-		y_sp_b_sl_stren_2_array_now = (uintptr_t (*)())(uintptr_t)y_sp_b_sl_stren_2_array;
-		return y_sp_b_sl_stren_3_array;
+		y_sp_uu_thres_array_now = (uint32_t *)(void *)y_sp_uu_thres_array;
+		y_sp_w_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_0_array;
+		y_sp_w_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_1_array;
+		y_sp_w_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_2_array;
+		y_sp_w_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_3_array;
+		y_sp_b_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_0_array;
+		y_sp_b_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_1_array;
+		y_sp_b_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_2_array;
+		selected = y_sp_b_sl_stren_3_array;
 	}
+	y_sp_b_sl_stren_3_array_now = (uint32_t *)selected;
+	return selected;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004233c origin=model_output original=tisp_sharpen_all_reg_refresh */
@@ -69277,7 +69265,7 @@ int32_t tisp_sharpen_par_refresh(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 		}
 	} else {
 		*(uint32_t *)base = arg1;
-		tisp_sharpen_all_reg_refresh(0);
+		tisp_sharpen_all_reg_refresh(arg1);
 	}
 
 	if (s0 == 1)
@@ -69462,6 +69450,37 @@ int32_t tiziano_sharpen_params_refresh(void)
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000429d4 origin=fragment_seed original=tiziano_sharpen_init */
 int32_t tiziano_sharpen_init(void)
+{
+    if (sharpen_wdr_en) {
+        y_sp_uu_thres_array_now = (uint32_t *)(void *)y_sp_uu_thres_wdr_array;
+        y_sp_w_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_0_wdr_array;
+        y_sp_w_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_1_wdr_array;
+        y_sp_w_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_2_wdr_array;
+        y_sp_w_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_3_wdr_array;
+        y_sp_b_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_0_wdr_array;
+        y_sp_b_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_1_wdr_array;
+        y_sp_b_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_2_wdr_array;
+        y_sp_b_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_3_wdr_array;
+    } else {
+        y_sp_uu_thres_array_now = (uint32_t *)(void *)y_sp_uu_thres_array;
+        y_sp_w_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_0_array;
+        y_sp_w_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_1_array;
+        y_sp_w_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_2_array;
+        y_sp_w_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_w_sl_stren_3_array;
+        y_sp_b_sl_stren_0_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_0_array;
+        y_sp_b_sl_stren_1_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_1_array;
+        y_sp_b_sl_stren_2_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_2_array;
+        y_sp_b_sl_stren_3_array_now = (uint32_t *)(void *)y_sp_b_sl_stren_3_array;
+    }
+
+    gain_old = 0xffffffffU;
+    tiziano_sharpen_params_refresh();
+    tisp_sharpen_par_refresh(0x10000U, 0x10000U, 1U);
+    return 0;
+}
+
+static int32_t __attribute__((unused))
+regtrace_t23_collapsed_tiziano_sharpen_init(void)
 {
     uint32_t *local_14 = 0;
     uintptr_t *a0 = 0;
