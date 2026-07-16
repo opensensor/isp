@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1043 | 1328 |
 | Functions with disassembly | 1043 | 1328 |
-| Executable section bytes | 443376 | 384320 |
+| Executable section bytes | 443376 | 384640 |
 | Initialized writable bytes | 216768 | 196736 |
 | Uninitialized writable bytes | 164688 | 929888 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
 - unmatched: OEM-only=61 recovered-only=345
-- matched instructions: OEM=106302 recovered=77862 ratio=0.732
-- classes: stub=32 collapsed=76 shorter=186 same_count=199 similar=399 larger=47 expanded=43
+- matched instructions: OEM=106302 recovered=77940 ratio=0.733
+- classes: stub=31 collapsed=76 shorter=186 same_count=199 similar=400 larger=47 expanded=43
 
 ## Allocated Section Delta
 
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 6720 | 75696 | +68976 |
 | `.rodata.str1.4` | 22728 | 21924 | -804 |
-| `.text` | 442176 | 382992 | -59184 |
+| `.text` | 442176 | 383312 | -58864 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
@@ -45,7 +45,7 @@
 
 ## Function Outliers
 
-Showing 250 of 790 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 789 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -65,7 +65,6 @@ Showing 250 of 790 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `isp_frame_done_wait` | `isp_frame_done_wait` | 82 | 4 | 0.049 | -78 | 3->0 | 8->0 |
 | stub | exact_name | `ispcore_irq_fs_work` | `ispcore_irq_fs_work` | 79 | 6 | 0.076 | -73 | 1->0 | 12->0 |
 | stub | exact_name | `isp_malloc_buffer` | `isp_malloc_buffer` | 72 | 2 | 0.028 | -70 | 4->0 | 10->0 |
-| stub | exact_name | `tisp_stream_on` | `tisp_stream_on` | 71 | 2 | 0.028 | -69 | 6->0 | 1->0 |
 | stub | exact_name | `tx_isp_notify` | `tx_isp_notify` | 69 | 2 | 0.029 | -67 | 1->0 | 12->0 |
 | stub | exact_name | `__vb2_queue_cancel` | `__vb2_queue_cancel` | 67 | 2 | 0.030 | -65 | 5->0 | 5->0 |
 | stub | exact_name | `tx_isp_video_link_stream` | `tx_isp_video_link_stream` | 64 | 2 | 0.031 | -62 | 2->0 | 12->0 |
@@ -299,6 +298,7 @@ Showing 250 of 790 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_g_BacklightComp` | `tisp_g_BacklightComp` | 38 | 30 | 0.789 | -8 | 2->1 | 5->5 |
 | shorter | exact_name | `tisp_g_Hilightdepress` | `tisp_g_Hilightdepress` | 38 | 30 | 0.789 | -8 | 2->1 | 5->5 |
 | shorter | exact_name | `tisp_s_ae_it_max` | `tisp_s_ae_it_max` | 37 | 25 | 0.676 | -12 | 2->1 | 2->1 |
+| shorter | exact_name | `tisp_mirror_enable` | `tisp_mirror_enable` | 36 | 21 | 0.583 | -15 | 2->1 | 2->1 |
 
 ## Replacement Map
 

@@ -39264,8 +39264,36 @@ int32_t tisp_ipc_triger(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000163f8 origin=fragment_seed original=tisp_stream_on */
 int32_t tisp_stream_on(uintptr_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    const uint32_t *desc = (const uint32_t *)(uintptr_t)a0;
+    unsigned char *channel_info;
+    uint32_t channel;
+
+    if (!desc)
+        return -EINVAL;
+    channel = desc[0x20];
+    if (channel >= sizeof(tisp_par_info) / 156U)
+        return -EINVAL;
+
+    channel_info = tisp_par_info + channel * 156U;
+    regtrace_t23_put_le32(channel_info + 0, desc[0]);
+    regtrace_t23_put_le32(channel_info + 4, desc[1]);
+    regtrace_t23_put_le32(channel_info + 8, desc[2]);
+    regtrace_t23_put_le32(channel_info + 120, desc[0x1e]);
+    regtrace_t23_put_le32(channel_info + 124, 0);
+    regtrace_t23_put_le32(channel_info + 128, channel);
+    memcpy(sensor_info, &desc[0x21], 0x18);
+    memcpy(channel_info + 13, &desc[0x0d], 0x10);
+
+    tisp_event_set_cb(channel, 4,
+                      (void *)(uintptr_t)tisp_long_tgain_update);
+    tisp_event_set_cb(channel, 5,
+                      (void *)(uintptr_t)tisp_long_again_update);
+    tisp_event_set_cb(channel, 6,
+                      (void *)(uintptr_t)tisp_long_ev_update);
+    tisp_event_set_cb(channel, 8,
+                      (void *)(uintptr_t)tisp_ct_update);
+    return tisp_event_set_cb(channel, 7,
+                             (void *)(uintptr_t)tisp_ae_ir_update);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016514 origin=fragment_seed original=tisp_process_init */

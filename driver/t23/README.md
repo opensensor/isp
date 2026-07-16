@@ -47,6 +47,14 @@ Current smoke-test status:
   A default device cycle decoded 261 measured RTSP frames at
   `YAVG/UAVG/VAVG/SATAVG` `112.5/129.0/124.5/8.1`, reached `13920/1211`
   ISP/VIC interrupts without faults, and rebooted module-clean.
+- Internal TISP stream-on now copies the OEM 156-byte channel descriptor
+  fields, updates the shared sensor-info tail, and registers the total-gain,
+  analog-gain, exposure, color-temperature, and IR event callbacks. The body
+  is 80 versus 71 OEM instructions, replacing a two-instruction hard stub and
+  reducing the audit to 31 hard stubs and 76 collapses. A default device cycle
+  decoded 261 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `110.6/129.1/124.4/8.1`, reached `13673/1188` ISP/VIC interrupts without
+  faults, and rebooted module-clean.
 - Core startup derives the OEM `0xb5742209` non-WDR top-bypass mask from the
   deployed SC2336 tuning blob, with the same value as its read-failure
   fallback. The recovered block overrides produce final mask `0xb5742a89`.
