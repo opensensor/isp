@@ -21,6 +21,16 @@ Current smoke-test status:
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes. The CLM
   image follows the T23 startup CT of 5000 K and programs both OEM LUT banks.
+- Gamma runtime state now uses the OEM 129-entry `u16` table shape and an
+  actual current-table pointer instead of a 16-byte array treated as a
+  pointer. Linear and WDR payloads are exactly `0x102` bytes, the SC2336
+  register image seeds both software tables, WDR selection switches the live
+  table, and API updates refresh ADR's inverse-gamma tone-map data. Gamma init
+  is 21 versus 24 OEM instructions and ADR gamma refresh is 145 versus 119,
+  reducing the audit to 33 hard stubs and 77 collapses. A default device cycle
+  decoded 261 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `114.9/128.4/125.7/6.4`, reached `12058/1048` ISP/VIC interrupts without
+  faults, and rebooted module-clean.
 - Core startup derives the OEM `0xb5742209` non-WDR top-bypass mask from the
   deployed SC2336 tuning blob, with the same value as its read-failure
   fallback. The recovered block overrides produce final mask `0xb5742a89`.

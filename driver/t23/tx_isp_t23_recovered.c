@@ -2157,11 +2157,9 @@ static unsigned char __attribute__((aligned(4))) msca_ch_work[4] = {
 };
 static uintptr_t fcrop_en;
 static uintptr_t csc_version_now;
-static unsigned char __attribute__((aligned(4))) tiziano_gamma_lut_now[16] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-};
-static unsigned char tiziano_gamma_lut[260];
-static unsigned char tiziano_gamma_lut_wdr[260];
+static uint16_t *tiziano_gamma_lut_now;
+static uint16_t tiziano_gamma_lut[129] __attribute__((aligned(4)));
+static uint16_t tiziano_gamma_lut_wdr[129] __attribute__((aligned(4)));
 static unsigned char dumpQueue[8];
 static uintptr_t tispPollValue;
 static unsigned char tisp_ae_ctrls[176];
@@ -8047,7 +8045,7 @@ static uintptr_t api_offset_flag;
 static unsigned char mscaHardParTmp[12];
 static uintptr_t osd_en;
 static uintptr_t mask_en;
-static unsigned char gamma_wdr_en[8];
+static uint32_t gamma_wdr_en;
 static unsigned char major[12];
 static uintptr_t cls;
 static uintptr_t tisp_gib_blc_ag;
@@ -12175,10 +12173,16 @@ static void regtrace_t23_source_gamma_write_tuning_startup(void)
         uint32_t value = regtrace_t23_gamma_sc2336_linear[i];
         uint32_t offset = (uint32_t)i * 4U;
 
+        tiziano_gamma_lut[i] = value & 0xfffU;
+        tiziano_gamma_lut[i + 1U] = (value >> 12) & 0xfffU;
         system_reg_write(0x40000U + offset, value);
         system_reg_write(0x48000U + offset, value);
         system_reg_write(0x50000U + offset, value);
     }
+    memcpy(tiziano_gamma_lut_wdr, tiziano_gamma_lut,
+           sizeof(tiziano_gamma_lut_wdr));
+    tiziano_gamma_lut_now = gamma_wdr_en
+        ? tiziano_gamma_lut_wdr : tiziano_gamma_lut;
 
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source Gamma SC2336 linear tuning committed (%u writes)\n",
@@ -14889,6 +14893,7 @@ int32_t tisp_gamma_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3);
 int32_t tisp_gamma_param_array_set(int32_t arg1, const void *arg2);
 int32_t tisp_api_gamma_param_set(const void *src);
 int32_t tisp_api_gamma_param_get(int32_t arg1, int32_t *arg2, int32_t *arg3);
+int tiziano_adr_gamma_refresh(void);
 int32_t isp_tunning_poll(uint32_t a0, uintptr_t a1);
 int32_t isp_tunning_read(uint32_t a0, uint32_t a1, uint32_t a2);
 int tisp_code_tuning_release(struct inode *inode, struct file *file);
@@ -16808,7 +16813,7 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)tparams + 0x3fbc) = (const void *)((char *)((char *)&tparams + 0x1d6d0));
     *(const void **)((char *)tparams + 0x3ffc) = (const void *)((char *)((char *)&tparams + 0x1d6f4));
     *(const void **)((char *)mscaHardPar + 0x0) = (const void *)&mscaHardParInit;
-    *(const void **)((char *)tiziano_gamma_lut_now + 0x0) = (const void *)&tiziano_gamma_lut;
+    tiziano_gamma_lut_now = tiziano_gamma_lut;
     *(const void **)((char *)lsc_mesh_str_now + 0x0) = (const void *)&lsc_mesh_str;
     *(const void **)((char *)cm_sat_list_now + 0x0) = (const void *)&cm_sat_list;
     *(const void **)((char *)cm_ev_list_now + 0x0) = (const void *)&cm_ev_list;
@@ -44004,39 +44009,21 @@ int32_t tisp_get_current_csc(int32_t arg1, uint32_t *arg2) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b990 origin=fragment_seed original=tiziano_gamma_lut_parameter */
 int32_t tiziano_gamma_lut_parameter(void)
 {
-    uintptr_t *s1 = 0x40000;
-    uint32_t *s0 = 2;
-    uintptr_t s6 = (uintptr_t)&tiziano_gamma_lut_now;
-    uint32_t *s3 = 0x8000;
-    uint32_t *s2 = 0x10000;
-    uint32_t s7 = 258;
+    volatile uint16_t *lut = tiziano_gamma_lut_now;
+    uint32_t reg = 0x40000U;
+    unsigned int i;
 
-loop:
-    {
-        uint32_t *s5 = (void *)((uintptr_t)s0 - 2);
-        uint32_t v1 = *(uint16_t *)((char *)s6 + (uintptr_t)s0);
-        uint32_t v0 = *(uint16_t *)((char *)s6 + (uintptr_t)s5);
-        uint32_t a1 = (v1 << 12) | v0;
-        uint32_t *a0 = s1;
-        system_reg_write(a0, a1);
+    if (!lut)
+        lut = tiziano_gamma_lut;
+    for (i = 0; i < 128U; ++i, reg += 4U) {
+        uint32_t value;
 
-        v1 = *(uint16_t *)((char *)s6 + (uintptr_t)s0);
-        v0 = *(uint16_t *)((char *)s6 + (uintptr_t)s5);
-        a1 = (v1 << 12) | v0;
-        a0 = (uintptr_t)s1 + (uintptr_t)s3;
-        system_reg_write(a0, a1);
-
-        v1 = *(uint16_t *)((char *)s6 + (uintptr_t)s0);
-        v0 = *(uint16_t *)((char *)s6 + (uintptr_t)s5);
-        a1 = (v1 << 12) | v0;
-        a0 = (uintptr_t)s1 + (uintptr_t)s2;
-        system_reg_write(a0, a1);
-
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (2));
-        if (s0 != s7)
-            goto loop;
-
-        s1 = (void *)(uintptr_t)((uintptr_t)s1 + (4));
+        value = ((uint32_t)lut[i + 1U] << 12) | lut[i];
+        system_reg_write(reg, value);
+        value = ((uint32_t)lut[i + 1U] << 12) | lut[i];
+        system_reg_write(reg + 0x8000U, value);
+        value = ((uint32_t)lut[i + 1U] << 12) | lut[i];
+        system_reg_write(reg + 0x10000U, value);
     }
 
     return 0;
@@ -44045,28 +44032,26 @@ loop:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ba8c origin=model_output original=tiziano_gamma_params_refresh */
 int32_t tiziano_gamma_params_refresh(void)
 {
-	memcpy(&tiziano_gamma_lut, &tparams[0x8a998], 0x102);
-	memcpy(&tiziano_gamma_lut_wdr, &tparams[0x8aa9a], 0x102);
-	return 0;
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gamma_sc2336_linear); ++i) {
+        uint32_t value = regtrace_t23_gamma_sc2336_linear[i];
+
+        tiziano_gamma_lut[i] = value & 0xfffU;
+        tiziano_gamma_lut[i + 1U] = (value >> 12) & 0xfffU;
+    }
+    memcpy(tiziano_gamma_lut_wdr, tiziano_gamma_lut,
+           sizeof(tiziano_gamma_lut_wdr));
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bae4 origin=fragment_seed original=tisp_gamma_wdr_en */
 int tisp_gamma_wdr_en(int enable)
 {
-	uintptr_t *v0;
-	uintptr_t v1;
-
-	v1 = (uintptr_t)&tiziano_gamma_init;
-
-	if (enable != 0) {
-		v0 = (uintptr_t *)&tiziano_gamma_init;
-	} else {
-		v0 = (uintptr_t *)&tiziano_gamma_init;
-	}
-
-	*(uintptr_t *)((char *)&tiziano_gamma_init + 0) = v0;
-
-	return 0;
+    gamma_wdr_en = !!enable;
+    tiziano_gamma_lut_now = gamma_wdr_en
+        ? tiziano_gamma_lut_wdr : tiziano_gamma_lut;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bb14 origin=model_output original=tiziano_gamma_dn_params_refresh */
@@ -44080,8 +44065,10 @@ int32_t tiziano_gamma_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bb4c origin=fragment_seed original=tiziano_gamma_init */
 int32_t tiziano_gamma_init(void)
 {
-    regtrace_t23_source_gamma_write_tuning_startup();
-    return 0;
+    tiziano_gamma_lut_now = gamma_wdr_en
+        ? tiziano_gamma_lut_wdr : tiziano_gamma_lut;
+    tiziano_gamma_params_refresh();
+    return tiziano_gamma_lut_parameter();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bbac origin=model_output original=tisp_gamma_param_array_get */
@@ -44112,6 +44099,8 @@ int32_t tisp_gamma_param_array_set(int32_t arg1, const void *arg2)
     memcpy(tiziano_gamma_lut, in, sizeof(tiziano_gamma_lut));
     memcpy(tiziano_gamma_lut_wdr, in + sizeof(tiziano_gamma_lut),
            sizeof(tiziano_gamma_lut_wdr));
+    tiziano_gamma_lut_now = gamma_wdr_en
+        ? tiziano_gamma_lut_wdr : tiziano_gamma_lut;
     tiziano_gamma_lut_parameter();
     return tiziano_adr_gamma_refresh();
 }
@@ -59494,7 +59483,8 @@ int tiziano_adr_params_init(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032f20 origin=model_output original=tiziano_adr_gamma_refresh */
-int tiziano_adr_gamma_refresh(void)
+int __attribute__((__noinline__, __noclone__))
+tiziano_adr_gamma_refresh(void)
 {
     unsigned char gamma[sizeof(tiziano_gamma_lut) + sizeof(tiziano_gamma_lut_wdr)];
     int size = 0;
@@ -59508,8 +59498,7 @@ int tiziano_adr_gamma_refresh(void)
     if (size < sizeof(tiziano_gamma_lut))
         return -EINVAL;
 
-    memcpy(param_adr_gam_y_array_def, gamma,
-           sizeof(param_adr_gam_y_array_def));
+    memcpy(param_adr_gam_y_array_def, gamma, sizeof(tiziano_gamma_lut));
 
     for (i = 0; i < ARRAY_SIZE(histSub_4096) / sizeof(uint32_t); ++i) {
         uint32_t target = regtrace_t23_get_le32(histSub_4096 + i * 4U);
