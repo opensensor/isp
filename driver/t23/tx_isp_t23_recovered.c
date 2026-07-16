@@ -15026,8 +15026,8 @@ int32_t tisp_s_mdns_ratio(uint32_t a0);
 int32_t tiziano_mdns_params_refresh(void);
 void tiziano_mdns_dn_params_refresh(void);
 int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2);
-int32_t tisp_api_mdns_y_filter_get(void);
-int32_t tisp_api_mdns_y_filter_set(void);
+int32_t tisp_api_mdns_y_filter_get(int32_t arg1, uint32_t *arg2);
+int32_t tisp_api_mdns_y_filter_set(int32_t arg1, const uint32_t *arg2);
 int32_t tisp_api_mdns_share_mem(uintptr_t a0);
 int32_t tisp_api_mdns_share_mem_en(uint32_t a0);
 int32_t tisp_ipc_frame_done_interrupt_static(void);
@@ -89510,31 +89510,23 @@ int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064a10 origin=fragment_seed original=tisp_api_mdns_y_filter_get */
-int32_t tisp_api_mdns_y_filter_get(void)
+int32_t tisp_api_mdns_y_filter_get(int32_t arg1, uint32_t *arg2)
 {
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t t9 = 0;
-
-    /* fragment 0: Arithmetic */
-    a0 = a1;
-    t9 = (uintptr_t)&memcpy;
-    a1 = (uint32_t *)&mdns_y_filter_en_array;
-    a2 = 4;
-    t9 = t9;
-
-    /* fragment 1: IndirectTailCall */
-    return memcpy((void *)(uintptr_t)a0, (void *)(uintptr_t)&mdns_y_filter_en_array, a2);
-
+    (void)arg1;
+    if (!arg2)
+        return -EINVAL;
+    memcpy(arg2, &mdns_y_filter_en_array, sizeof(*arg2));
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064a2c origin=model_output original=tisp_api_mdns_y_filter_set */
-int32_t tisp_api_mdns_y_filter_set(void)
+int32_t tisp_api_mdns_y_filter_set(int32_t arg1, const uint32_t *arg2)
 {
-	memcpy(mdns_y_filter_en_array, mdns_y_filter_en_array, 4);
-	return 0;
+    (void)arg1;
+    if (!arg2)
+        return -EINVAL;
+    memcpy(&mdns_y_filter_en_array, arg2, sizeof(*arg2));
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064a44 origin=fragment_seed original=tisp_api_mdns_share_mem */
@@ -91570,15 +91562,29 @@ int tisp_g_wb_frz(void *out_buf)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066c0c origin=model_output original=tisp_s_module_control */
 int32_t tisp_s_module_control(int32_t arg1, int32_t arg2)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t mdns_enable = arg2 >= 0 ? 1U : 0U;
+    uint32_t bypass = system_reg_read(0x0cU);
+
+    bypass = ((uint32_t)arg2 & 0x0007ffffU) |
+             (bypass & 0xfff80000U);
+    tisp_api_mdns_y_filter_set(arg1, &mdns_enable);
+    return system_reg_write(0x0cU, bypass);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066ca0 origin=fragment_seed original=tisp_g_module_control */
 int32_t tisp_g_module_control(int32_t arg1, int32_t *arg2)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t mdns_enable = 0;
+    uint32_t result;
+
+    if (!arg2)
+        return -EINVAL;
+    result = system_reg_read(0x0cU) & 0x0007ffffU;
+    tisp_api_mdns_y_filter_get(arg1, &mdns_enable);
+    if (!mdns_enable)
+        result |= 0x80000000U;
+    *arg2 = (int32_t)result;
+    return (int32_t)result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066d1c origin=model_output original=tisp_s_autozoom_control */

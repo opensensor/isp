@@ -27,6 +27,12 @@ Current smoke-test status:
   A 2026-07-16 no-argument run passed 256 RTSP frames and moved frame
   `UAVG/VAVG` from `122.8/128.2` to `128.2/127.3`, closely matching the OEM
   reference `127.9/126.8` while removing the green/purple spatial cast.
+- Public module-control set/get now preserve the upper 13 top-bypass bits,
+  replace the OEM lower 19-bit control field, and round-trip the MDNS luma
+  filter state through bit 31. Both functions are within `0.92x..1.03x` of
+  their OEM instruction counts. A 256-frame device regression retained live
+  register `0xb5742a89`; the audit improved from 51 stubs/91 collapses to
+  49/90.
 - The CLM color-lookup runtime now implements the T23 HLIL five-region CT
   selector, 200 K transition margins, 32-unit update hysteresis, and exact Q12
   interpolation for all 1,050 hue/saturation entries. The register commit is
