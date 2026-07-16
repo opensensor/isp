@@ -172,6 +172,15 @@ Current smoke-test status:
   decoded 260 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
   `105.0/128.1/125.9/6.7`, retained `26075/2282` ISP/VIC interrupts without
   new faults, and rebooted cleanly.
+- MSCA parameter updates now recalculate each enabled channel, pack both OEM
+  scaler registers, regenerate/write the channel curves, and commit the
+  shadow configuration. The public scaler-level control restores automatic
+  versus fixed-level mode, the `0..128` bound, per-channel level fields, and
+  global curve-mode bits. They compile to 141/130 and 91/131 instructions,
+  reducing the audit to 40 hard stubs with 84 collapses. A default device
+  cycle decoded 257 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `105.7/128.3/125.9/6.5`, retained `15305/1328` ISP/VIC interrupts without
+  new faults, and rebooted cleanly.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

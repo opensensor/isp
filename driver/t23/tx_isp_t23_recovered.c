@@ -43012,8 +43012,55 @@ tisp_msca_deinit0x68:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a24c origin=fragment_seed original=tisp_msca_params_update */
 int32_t tisp_msca_params_update(uint32_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    unsigned char *cfg;
+    const uint32_t *params;
+    uint32_t value;
+
+    cfg = regtrace_t23_msca_hard_param(0);
+    if (cfg && cfg[0] == 1) {
+        tisp_msca_para_calc(a0, 0, (uintptr_t)cfg);
+        params = (const uint32_t *)(const void *)msca_ch0_scale_paras;
+        system_reg_write(0xd170U,
+                         ((params[1] & 0x3ffU) << 16) |
+                         (params[0] & 0x3ffU));
+        value = msca_ch0_scale_paras[8] |
+            ((params[3] << 8) & 0xffffU) |
+            ((params[4] & 0x1ffU) << 16) |
+            (params[5] << 28);
+        system_reg_write(0xd174U, value);
+    }
+
+    cfg = regtrace_t23_msca_hard_param(1);
+    if (cfg && cfg[0] == 1) {
+        tisp_msca_para_calc(a0, 1, (uintptr_t)cfg);
+        params = (const uint32_t *)(const void *)msca_ch1_scale_paras;
+        system_reg_write(0xd270U,
+                         ((params[1] & 0x3ffU) << 16) |
+                         (params[0] & 0x3ffU));
+        value = msca_ch1_scale_paras[8] |
+            ((params[3] << 8) & 0xffffU) |
+            ((params[4] & 0x1ffU) << 16) |
+            (params[5] << 28);
+        system_reg_write(0xd274U, value);
+    }
+
+    cfg = regtrace_t23_msca_hard_param(2);
+    if (cfg && cfg[0] == 1) {
+        tisp_msca_para_calc(a0, 2, (uintptr_t)cfg);
+        params = (const uint32_t *)(const void *)msca_ch2_scale_paras;
+        system_reg_write(0xd370U,
+                         ((params[1] & 0x3ffU) << 16) |
+                         (params[0] & 0x3ffU));
+        value = msca_ch2_scale_paras[8] |
+            ((params[3] << 8) & 0xffffU) |
+            ((params[4] & 0x1ffU) << 16) |
+            (params[5] << 28);
+        system_reg_write(0xd374U, value);
+    }
+
+    tisp_msca_ch_curve_write_ctrl(a0);
+    tisp_msca_scaling_algorithm();
+    return system_reg_write(0xd010U, 1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a454 origin=model_output original=tisp_msca_crop_api */
@@ -43812,7 +43859,47 @@ tisp_msca_api_set_fcrop0x114:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b494 origin=fragment_seed original=tisp_msca_api_set_scaler_level_control */
 int32_t tisp_msca_api_set_scaler_level_control(uint32_t a0, uintptr_t a1, uint32_t a2)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    const unsigned char *control = (const unsigned char *)a1;
+    uint32_t channel;
+    uint32_t mode;
+    uint32_t level;
+    uint32_t address;
+    uint32_t value;
+
+    (void)a2;
+    if (!control)
+        return -EINVAL;
+
+    channel = control[0];
+    if (channel >= 3)
+        return -1;
+    mode = regtrace_t23_get_le32(control + 4);
+
+    if (mode == 1) {
+        msca_ch_ctl_mode[channel * 2U] = 1;
+        msca_ch_ctl_mode[channel * 2U + 1U] = 1;
+    } else if (mode == 0) {
+        level = control[8];
+        if (level > 128)
+            return -1;
+        address = ((channel + 0xd0U) << 8) + 0x174U;
+        value = system_reg_read(address);
+        value = (value & 0xf0000000U) |
+            (value & 0x01ff0000U) | (level << 8) | level;
+        system_reg_write(address, value);
+        msca_ch_ctl_mode[channel * 2U] = 0;
+        msca_ch_ctl_mode[channel * 2U + 1U] = 0;
+    }
+
+    value = (msca_ch_ctl_mode[0] & 1U) |
+        ((msca_ch_ctl_mode[2] & 1U) << 1) |
+        ((msca_ch_ctl_mode[4] & 1U) << 2) |
+        ((msca_ch_ctl_mode[1] & 1U) << 4) |
+        ((msca_ch_ctl_mode[3] & 1U) << 5) |
+        ((msca_ch_ctl_mode[5] & 1U) << 6);
+    system_reg_write(0xd04cU, value);
+    tisp_msca_ch_curve_write_ctrl(a0);
+    system_reg_write(0xd010U, 1);
     return 0;
 }
 
