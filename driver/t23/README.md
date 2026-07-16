@@ -289,6 +289,20 @@ Current smoke-test status:
   decoded 259 frames at `109.8/129.3/125.0/7.2`, retained `17360/1507`
   ISP/VIC interrupts without faults, and rebooted cleanly. The audit now
   reports 38 hard stubs and 79 collapses.
+- The T23 event subsystem now preserves the OEM two-channel shape: each
+  channel has 80 reusable 48-byte records, separate pending/free lists, a
+  20-jiffy completion wait, and ten callback slots. Push and process paths
+  protect only list transitions, so algorithm callbacks run outside the
+  queue lock as in the T23 binary. The recovered callback ABI also retains
+  the OEM channel and duplicated event argument before the eight payload
+  words. AWB, ADR, and defog producers now enqueue initialized records and
+  register their actual interrupt/event functions instead of passing stack
+  addresses or tuning-data offsets as callbacks. `tisp_event_process` is 145
+  instructions versus 129 OEM, replacing its two-instruction hard stub and
+  reducing the audit to 37 hard stubs and 79 collapses. A no-argument device
+  cycle read the SC2336 `0xcb/0x3a` ID, decoded 260 RTSP frames, reached
+  `18303/1590` ISP/VIC interrupts without kernel or Raptor faults, and rebooted
+  module-clean.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics. The recovered transform primitives now use the

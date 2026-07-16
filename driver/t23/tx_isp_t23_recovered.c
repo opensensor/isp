@@ -41,6 +41,7 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/completion.h>
+#include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 #include <linux/workqueue.h>
@@ -2106,8 +2107,8 @@ static uintptr_t data_abcf4;
 static uintptr_t data_abcf8;
 static uintptr_t (*data_abcfc)();
 static uintptr_t data_abd00;
-static unsigned char event_busy[8];
-static unsigned char event_empty[8];
+static uint32_t event_busy[2];
+static uint32_t event_empty[2];
 static unsigned char __attribute__((aligned(4))) msca_ch0_scale_paras[44] = {
     0x96, 0x00, 0x00, 0x00, 0xc2, 0x01, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 
@@ -8010,9 +8011,38 @@ static uintptr_t isp_ch0_pre_dequeue_intc_ahead;
 static uintptr_t isp_ch0_pre_dequeue_flag;
 static unsigned char ch0_pre_dequeue_vb[104];
 static unsigned char g_banks_sum[16];
-static uintptr_t (*cb)();
+typedef int32_t (*tisp_event_callback_t)(uint32_t channel,
+                                         uint32_t callback_arg,
+                                         uint32_t arg0, uint32_t arg1,
+                                         uint32_t arg2, uint32_t arg3,
+                                         uint32_t arg4, uint32_t arg5,
+                                         uint32_t arg6, uint32_t arg7);
+
+struct tisp_event_record {
+    struct list_head link;
+    uint32_t event_id;
+    uint32_t reserved;
+    uint32_t args[8];
+};
+
+#define TISP_EVENT_CHANNELS 2U
+#define TISP_EVENT_CALLBACKS 10U
+#define TISP_EVENT_QUEUE_DEPTH 80U
+#define TISP_EVENT_CHANNEL_SIZE 0xf20U
+
+struct tisp_event_channel {
+    struct completion completion;
+    struct tisp_event_record records[TISP_EVENT_QUEUE_DEPTH];
+    struct list_head pending;
+    struct list_head free;
+};
+
+static tisp_event_callback_t cb[TISP_EVENT_CHANNELS][TISP_EVENT_CALLBACKS];
 static unsigned char ev_last[16];
-static unsigned char tevent_info[7744];
+static unsigned char tevent_info[TISP_EVENT_CHANNELS * TISP_EVENT_CHANNEL_SIZE]
+    __attribute__((aligned(4)));
+static struct tisp_event_channel tisp_event_queues[TISP_EVENT_CHANNELS];
+static DEFINE_SPINLOCK(tisp_event_lock);
 static uintptr_t api_offset_flag;
 static unsigned char mscaHardParTmp[12];
 static uintptr_t osd_en;
@@ -14808,11 +14838,11 @@ int32_t tiziano_load_parameters(uint32_t a0);
 int32_t tisp_init(uint32_t arg1, uintptr_t arg2);
 int32_t tiziano_sync_sensor_attr(uintptr_t a0);
 int32_t tisp_core_switch_bin(uint32_t a0);
-int tisp_event_init(int arg1);
-int tisp_event_set_cb(int event_id, void *callback);
-int32_t tisp_event_push(uint32_t a0, uintptr_t a1);
-int32_t tisp_event_exit(int32_t arg1);
-int tisp_event_process(void);
+int tisp_event_init(uint32_t channel);
+int tisp_event_set_cb(uint32_t channel, uint32_t event_id, void *callback);
+int32_t tisp_event_push(uint32_t channel, const void *event);
+int32_t tisp_event_exit(uint32_t channel);
+int tisp_event_process(uint32_t channel);
 int32_t tisp_msca_normalized(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t tisp_sin(uint32_t a0, uint32_t a1, uintptr_t a2);
 int32_t tisp_msca_para_calc(uint32_t a0, uint32_t a1, uintptr_t a2);
@@ -40894,168 +40924,125 @@ tisp_core_switch_bin0x418:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017f60 origin=fragment_seed original=tisp_event_init */
-int tisp_event_init(int arg1)
+static struct tisp_event_channel *tisp_event_channel_get(uint32_t channel)
 {
-    uint32_t *v0 = 3872;
-    uint32_t v1;
-    uint32_t *a1;
-    uint32_t *a2;
-    uint32_t *a3;
-    uint32_t a1_1;
-    uint32_t *t0;
-    uint32_t *i_1;
-    uint32_t v1_2;
-    uint32_t *v0_2;
-    uint32_t a0_2;
+    if (channel >= TISP_EVENT_CHANNELS)
+        return NULL;
+    return &tisp_event_queues[channel];
+}
 
-    v0 = arg1 * (uintptr_t)v0;
-    v1 = 11968;
-    a1 = v0 + v1;
-    a2 = v0 + 3856;
-    a2 = v1 + (uintptr_t)a2;
-    *(uint32_t *)(a1 + 3856) = a2;
-    *(uint32_t *)(a1 + 3860) = a2;
-    a2 = v0 + 3864;
-    v0 = v0 + 16;
-    a2 = v1 + (uintptr_t)a2;
-    v0 = v1 + (uintptr_t)v0;
-    *(uint32_t *)(a1 + 3864) = a2;
-    *(uint32_t *)(a1 + 3868) = a2;
-    a3 = 80;
-    a1_1 = v0;
+int tisp_event_init(uint32_t channel)
+{
+    struct tisp_event_channel *queue;
+    unsigned long flags;
+    unsigned int i;
 
-loop1:
-    a3 = a3 - 1;
-    *(uint32_t *)(a1_1) = a1_1;
-    *(uint32_t *)(a1_1 + 4) = a1_1;
-    a1_1 = a1_1 + 48;
-    if (a3 != 0) goto loop1;
+    BUILD_BUG_ON(sizeof(struct tisp_event_record) != 48U);
 
-    t0 = arg1 * 3872;
-    i_1 = 80;
-    v1_2 = t0 + v1;
-    v0_2 = v0;
+    queue = tisp_event_channel_get(channel);
+    if (!queue)
+        return -EINVAL;
 
-loop2:
-    a0_2 = *(uint32_t *)(v1_2 + 3868);
-    i_1 = i_1 - 1;
-    *(uint32_t *)(v1_2 + 3868) = v0_2;
-    *(uint32_t *)(v0_2) = a2;
-    *(uint32_t *)(v0_2 + 4) = a0_2;
-    *(uint32_t *)(a0_2) = v0_2;
-    v0_2 = v0_2 + 48;
-    if (i_1 != 0) goto loop2;
-
-    *(uint32_t *)(v1_2) = 0;
-    __init_waitqueue_head((void *)(v1_2 + 4), (const char *)((char *)&tparams), 0);
-    private_spin_lock_init(0);
+    init_completion(&queue->completion);
+    spin_lock_irqsave(&tisp_event_lock, flags);
+    INIT_LIST_HEAD(&queue->pending);
+    INIT_LIST_HEAD(&queue->free);
+    for (i = 0; i < TISP_EVENT_QUEUE_DEPTH; ++i) {
+        INIT_LIST_HEAD(&queue->records[i].link);
+        list_add_tail(&queue->records[i].link, &queue->free);
+    }
+    event_busy[channel] = 0;
+    event_empty[channel] = 0;
+    spin_unlock_irqrestore(&tisp_event_lock, flags);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018038 origin=fragment_seed original=tisp_event_set_cb */
-int tisp_event_set_cb(int event_id, void *callback)
+int tisp_event_set_cb(uint32_t channel, uint32_t event_id, void *callback)
 {
-	int v1 = event_id * 10;
-	int a1 = v1 + (int)callback;
-	int *a0 = a1 << 2;
-	void *addr = (void *)((char *)((char *)&cb));
-	addr = (void *)((uintptr_t)addr + ((uintptr_t)a0 << 2));
-	*(int *)addr = (int)callback;
-	return 0;
+    if (channel >= TISP_EVENT_CHANNELS || event_id >= TISP_EVENT_CALLBACKS)
+        return -EINVAL;
+    cb[channel][event_id] = (tisp_event_callback_t)callback;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018060 origin=fragment_seed original=tisp_event_push */
-int32_t tisp_event_push(uint32_t a0, uintptr_t a1)
+int32_t tisp_event_push(uint32_t channel, const void *event)
 {
-    uint32_t *local_10 = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uintptr_t *s3 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
-    uintptr_t *a2 = 0;
-    uintptr_t *a3 = 0;
+    const struct tisp_event_record *source = event;
+    struct tisp_event_channel *queue;
+    struct tisp_event_record *record;
+    unsigned long flags;
 
-    s1 = 0;
-    s0 = a0;
-    s2 = a1;
-    __private_spin_lock_irqsave(0, (uintptr_t)&local_10);
+    queue = tisp_event_channel_get(channel);
+    if (!queue || !source)
+        return -EINVAL;
 
-    a1 = (uintptr_t)s0 * 3872;
-    v1 = (uintptr_t)((char *)&tevent_info);
-    a0 = a1 + v1;
-    a2 = a1 + 3864;
-
-    v0 = *(uintptr_t *)((char *)a0 + 3864);
-    s3 = (uintptr_t *)&private_spin_unlock_irqrestore;
-    a2 = v1 + (uintptr_t)a2;
-
-    if (v0 != a2) {
-        goto tisp_event_push0x98;
+    spin_lock_irqsave(&tisp_event_lock, flags);
+    if (list_empty(&queue->free)) {
+        ++event_busy[channel];
+        spin_unlock_irqrestore(&tisp_event_lock, flags);
+        return -ENOMEM;
     }
 
-    s0 = (uintptr_t)s0 << 2;
-    s0 = (uintptr_t *)&event_busy + (uintptr_t)s0;
-    *(uint32_t *)s0 = (*(uint32_t *)s0) + 1;
-    private_spin_unlock_irqrestore((spinlock_t *)0, 0);
-    v0 = -1;
-    goto tisp_event_push0x144;
-
-tisp_event_push0x98:
-    a2 = *(uintptr_t *)((char *)v0 + 4);
-    a3 = *(uintptr_t *)((char *)v0 + 0);
-    a1 = a1 + 3856;
-    *(uintptr_t *)((char *)a3 + 4) = a2;
-    *(uintptr_t *)((char *)a2 + 0) = a3;
-    a2 = 0x100100;
-    *(uintptr_t *)((char *)v0 + 0) = a2;
-    a2 = 0x200200;
-    *(uintptr_t *)((char *)v0 + 4) = a2;
-    a2 = *(uintptr_t *)((char *)s2 + 8);
-    v1 = v1 + a1;
-    *(uintptr_t *)((char *)v0 + 8) = a2;
-    a2 = *(uintptr_t *)((char *)s2 + 16);
-    a3 = *(uintptr_t *)((char *)s2 + 20);
-    *(uintptr_t *)((char *)v0 + 16) = a2;
-    *(uintptr_t *)((char *)v0 + 20) = a3;
-    a2 = *(uintptr_t *)((char *)s2 + 24);
-    a3 = *(uintptr_t *)((char *)s2 + 28);
-    *(uintptr_t *)((char *)v0 + 24) = a2;
-    *(uintptr_t *)((char *)v0 + 28) = a3;
-    a2 = *(uintptr_t *)((char *)s2 + 32);
-    a3 = *(uintptr_t *)((char *)s2 + 36);
-    *(uintptr_t *)((char *)v0 + 32) = a2;
-    *(uintptr_t *)((char *)v0 + 36) = a3;
-    a2 = *(uintptr_t *)((char *)s2 + 40);
-    a3 = *(uintptr_t *)((char *)s2 + 44);
-    *(uintptr_t *)((char *)v0 + 40) = a2;
-    *(uintptr_t *)((char *)v0 + 44) = a3;
-
-    *(uintptr_t *)((char *)a0 + 3860) = v0;
-    *(uintptr_t *)((char *)v0 + 0) = v1;
-    a2 = *(uintptr_t *)((char *)a0 + 3860);
-    *(uintptr_t *)((char *)v0 + 4) = a2;
-    *(uintptr_t *)((char *)a2 + 0) = v0;
-    private_complete(a0);
-    private_spin_unlock_irqrestore((spinlock_t *)0, 0);
-    v0 = 0;
-
-tisp_event_push0x144:
+    record = list_first_entry(&queue->free, struct tisp_event_record, link);
+    list_del(&record->link);
+    record->event_id = source->event_id;
+    memcpy(record->args, source->args, sizeof(record->args));
+    list_add_tail(&record->link, &queue->pending);
+    spin_unlock_irqrestore(&tisp_event_lock, flags);
+    complete(&queue->completion);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000181c0 origin=model_output original=tisp_event_exit */
-int32_t tisp_event_exit(int32_t arg1) {
-    void *var_38[0];
-    tisp_event_push(arg1, &var_38);
+int32_t tisp_event_exit(uint32_t channel)
+{
+    struct tisp_event_record event = { .event_id = 0 };
+
+    tisp_event_push(channel, &event);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000181ec origin=fragment_seed original=tisp_event_process */
-int tisp_event_process(void)
+int tisp_event_process(uint32_t channel)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    struct tisp_event_channel *queue;
+    struct tisp_event_record *record;
+    tisp_event_callback_t callback;
+    unsigned long flags;
+    unsigned long waited;
+
+    queue = tisp_event_channel_get(channel);
+    if (!queue)
+        return -EINVAL;
+
+    waited = wait_for_completion_timeout(&queue->completion, 0x14U);
+    if (!waited)
+        return 0;
+
+    spin_lock_irqsave(&tisp_event_lock, flags);
+    if (list_empty(&queue->pending)) {
+        ++event_empty[channel];
+        spin_unlock_irqrestore(&tisp_event_lock, flags);
+        return -ENOENT;
+    }
+
+    record = list_first_entry(&queue->pending, struct tisp_event_record, link);
+    list_del(&record->link);
+    spin_unlock_irqrestore(&tisp_event_lock, flags);
+
+    callback = record->event_id < TISP_EVENT_CALLBACKS
+        ? cb[channel][record->event_id] : NULL;
+    if (callback)
+        callback(channel, record->args[3],
+                 record->args[0], record->args[1], record->args[2],
+                 record->args[3], record->args[4], record->args[5],
+                 record->args[6], record->args[7]);
+
+    spin_lock_irqsave(&tisp_event_lock, flags);
+    list_add_tail(&record->link, &queue->free);
+    spin_unlock_irqrestore(&tisp_event_lock, flags);
     return 0;
 }
 
@@ -49946,16 +49933,14 @@ int32_t awb_interrupt_static(void)
 {
 	uintptr_t *s0;
 	uint32_t *s1;
-	uint32_t *var_38;
-	uint32_t *var_40;
+	struct tisp_event_record event = { .event_id = 9 };
 
 	s0 = tispinfo;
 	s1 = system_reg_read(0xb050) << 12;
 	private_dma_cache_sync(0, s1 + *(uint32_t *)((char *)s0 + 60), ((char *)&tparams), 0);
 	JZ_Isp_Get_Awb_Statistics((void *)(s1 + *(uint32_t *)((char *)s0 + 60)), 0xf001f001);
 	tiziano_awb_set_lum_th_freq();
-	var_38[0] = 9;
-	tisp_event_push(&var_40, 0);
+	tisp_event_push(0, &event);
 	return 1;
 }
 
@@ -50067,11 +50052,9 @@ int32_t tiziano_awb_init(uint32_t a0, uint32_t a1)
         Tiziano_awb_set_gain((void *)((char *)&_awb_parameter + 0x20), *(uint32_t *)&_awb_parameter, (void *)((char *)&_awb_parameter + 0x24));
     }
 
-    /* tisp_event_set_cb(0, JZ_Isp_Awb) - prelude says 2 args */
-    tisp_event_set_cb(0, (void *)((char *)&_awb_parameter + 0xc));
+    tisp_event_set_cb(0, 9, (void *)(uintptr_t)JZ_Isp_Awb);
 
-    /* system_irq_func_set(0, 30, awb_interrupt_static) */
-    system_irq_func_set(0, 30, (void *)((char *)&_awb_parameter + 0x8));
+    system_irq_func_set(0, 30, (void *)(uintptr_t)awb_interrupt_static);
 
     return 0;
 }
@@ -58754,8 +58737,7 @@ int32_t tiziano_adr_interrupt_static(void)
     uint32_t *v0;
     uintptr_t *s0;
     uint32_t *s1;
-    uint32_t *local_10;
-    uint32_t *local_18;
+    struct tisp_event_record event = { .event_id = 2 };
 
     tisp_adr_set_params();
 
@@ -58788,8 +58770,7 @@ int32_t tiziano_adr_interrupt_static(void)
         tiziano_adr_get_data(*(uint32_t *)((char *)s0 + 72) + 0x3000);
     }
 
-    local_18 = 2;
-    tisp_event_push(&local_10, 0);
+    tisp_event_push(0, &event);
 
     return 1;
 }
@@ -61770,7 +61751,7 @@ int32_t tiziano_adr_init(uint32_t arg0, uint32_t width, uint32_t height)
     if (regtrace_t23_source_adr_dynamic) {
         system_irq_func_set(0, 0x12,
                             (int32_t)(uintptr_t)tiziano_adr_interrupt_static);
-        tisp_event_set_cb(2, (void *)(uintptr_t)tisp_adr_process);
+        tisp_event_set_cb(0, 2, (void *)(uintptr_t)tisp_adr_process);
     }
     regtrace_t23_source_adr_initialized = true;
     printk(KERN_WARNING
@@ -61967,8 +61948,10 @@ int32_t tiziano_defog_interrupt_static(void)
         a0 = a0 + 12288;
     }
 
-    var_38[0] = 3;
-    tisp_event_push(&var_40, 0);
+    {
+        struct tisp_event_record event = { .event_id = 3 };
+        tisp_event_push(0, &event);
+    }
 
     return 1;
 }
