@@ -1,8 +1,8 @@
 # Binary Assembly Audit
 
 - schema: `regtrace-binary-audit-v1`
-- OEM: `/home/matteius/re-framework/tx-isp-t23.ko`
-- recovered: `/home/matteius/re-framework/open-tx-isp/driver/t23/tx_isp_t23_recovered.ko`
+- OEM: `tx-isp-t23.ko`
+- recovered: `open-tx-isp/driver/t23/tx_isp_t23_recovered.ko`
 - objdump counts exclude relocation records
 - thresholds: min_oem_insns=24 stub_insns=8 collapse=0.50 similar=0.80..1.25 expansion=2.00
 
@@ -12,22 +12,22 @@
 |---|---:|---:|
 | Function symbols | 1043 | 1328 |
 | Functions with disassembly | 1043 | 1328 |
-| Executable section bytes | 443376 | 373232 |
+| Executable section bytes | 443376 | 373584 |
 | Initialized writable bytes | 216768 | 46528 |
-| Uninitialized writable bytes | 164688 | 1151232 |
+| Uninitialized writable bytes | 164688 | 1151216 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
 - unmatched: OEM-only=61 recovered-only=345
-- matched instructions: OEM=106302 recovered=75107 ratio=0.707
-- classes: stub=43 collapsed=84 shorter=194 same_count=201 similar=384 larger=34 expanded=42
+- matched instructions: OEM=106302 recovered=75187 ratio=0.707
+- classes: stub=43 collapsed=84 shorter=191 same_count=200 similar=383 larger=39 expanded=42
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 164688 | 1151232 | +986544 |
+| `.bss` | 164688 | 1151216 | +986528 |
 | `.data` | 216480 | 46240 | -170240 |
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 6720 | 75664 | +68944 |
 | `.rodata.str1.4` | 22728 | 21704 | -1024 |
-| `.text` | 442176 | 371904 | -70272 |
+| `.text` | 442176 | 372256 | -69920 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
@@ -45,7 +45,7 @@
 
 ## Function Outliers
 
-Showing 250 of 803 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 805 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|

@@ -152,6 +152,16 @@ Current smoke-test status:
   mode regression decoded 256 RTSP frames at `YAVG/UAVG/VAVG`
   `108.3/129.3/125.8`, retained `13680/1185` ISP/VIC interrupts without new
   errors, and rebooted cleanly.
+- AE ROI and zone weighting now preserve the OEM two-argument ABI, 225-word
+  inverse-ROI transform, day/night parameter-bank copies, 900-byte get/set
+  contract, refresh flags, and AE trigger. This removes a latent null access
+  in the generated zone setter, which consumed the context in `a0` instead of
+  the weight pointer in `a1`. The ROI transform compiles to 76 instructions
+  versus 77 OEM and the zone path to 39 versus 41. AWB day/night refresh also
+  restores the OEM first-frame marker, parameter reload, and hardware reload.
+  A default device cycle decoded 258 measured RTSP frames at
+  `YAVG/UAVG/VAVG` `106.2/129.1/124.7`, retained active ISP/VIC interrupts
+  without new errors, and rebooted cleanly.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

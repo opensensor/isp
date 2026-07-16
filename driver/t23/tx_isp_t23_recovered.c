@@ -8021,6 +8021,7 @@ static unsigned char gib_deir_r_35755[132];
 static unsigned char trig_set_deir[12];
 static int32_t awb_num;
 static uintptr_t awb_dn_refresh_flag;
+static volatile uintptr_t first_frame = 1;
 static uintptr_t DumpNum_36209;
 static unsigned char tisp_wb_attr[32];
 static uintptr_t awb_frz;
@@ -15142,10 +15143,10 @@ int tisp_api_ae_deflick_para_set(void);
 int tisp_api_ae_flick_t_set(void *a1);
 int32_t tisp_api_ae_scene_pare_set(uint32_t context, const void *params);
 int32_t tisp_api_ae_scene_pare_get(uint32_t a0, uint32_t a1, uintptr_t a2);
-int32_t tisp_api_ae_roi_weight_set(int32_t src);
+int32_t tisp_api_ae_roi_weight_set(uint32_t context, const void *src);
 int32_t tisp_api_ae_roi_weight_get(uint32_t a0, uint32_t a1, uintptr_t a2);
-int32_t tisp_api_ae_roui_weight_set(void);
-int32_t tisp_api_ae_zone_weight_set(const void *src);
+int32_t tisp_api_ae_roui_weight_set(uint32_t context, const void *src);
+int32_t tisp_api_ae_zone_weight_set(uint32_t context, const void *src);
 int32_t tisp_api_ae_zone_weight_get(uint32_t a0, uint32_t a1, uintptr_t a2);
 int32_t tisp_af_get_statistics(void *arg1, int32_t *arg2, int32_t arg3, char arg4);
 int32_t Tiziano_af_fpga(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uintptr_t arg7, uintptr_t arg8);
@@ -49855,7 +49856,10 @@ int32_t tiziano_awb_set_hardware_param(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000203cc origin=model_output original=tiziano_awb_dn_params_refresh */
 int32_t tiziano_awb_dn_params_refresh(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    first_frame = 1;
+    awb_dn_refresh_flag = 1;
+    tiziano_awb_params_refresh();
+    tiziano_awb_set_hardware_param();
     return 0;
 }
 
@@ -79647,101 +79651,80 @@ int32_t tisp_api_ae_scene_pare_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c3fc origin=model_output original=tisp_api_ae_roi_weight_set */
-int32_t tisp_api_ae_roi_weight_set(int32_t src)
+int32_t tisp_api_ae_roi_weight_set(uint32_t context, const void *src)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
+
+    (void)context;
+    if (!src)
+        return -EINVAL;
+    memcpy(_scene_roi_weight, src, sizeof(_scene_roi_weight));
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c440 origin=fragment_seed original=tisp_api_ae_roi_weight_get */
 int32_t tisp_api_ae_roi_weight_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a2;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)a1, (void *)(uintptr_t)&_scene_roi_weight, 900); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    v0 = 900;
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 0) = v0;
-    v0 = (uintptr_t *)&sclk_name;
-    v0 = v0 + 17084;
-    v1 = 1;
-    *(uint32_t *)((char *)v0 + 16) = v1;
-    *(uint32_t *)((char *)v0 + 20) = v1;
-    *(uint32_t *)((char *)v0 + 28) = 0;
-    ra = local_14;
-    s0 = local_10;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    (void)a0;
+    if (!a1 || !a2)
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)a1, _scene_roi_weight,
+           sizeof(_scene_roi_weight));
+    *(uint32_t *)(uintptr_t)a2 = sizeof(_scene_roi_weight);
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c49c origin=fragment_seed original=tisp_api_ae_roui_weight_set */
-int32_t tisp_api_ae_roui_weight_set(void)
+int32_t tisp_api_ae_roui_weight_set(uint32_t context, const void *src)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
+
+    (void)context;
+    if (!src)
+        return -EINVAL;
+    memcpy(_scene_roui_weight, src, sizeof(_scene_roui_weight));
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c4e0 origin=model_output original=tisp_api_ae_zone_weight_set */
-int32_t tisp_api_ae_zone_weight_set(const void *src)
+int32_t tisp_api_ae_zone_weight_set(uint32_t context, const void *src)
 {
-	memcpy(&_ae_zone_weight, src, 900);
-	uint32_t *p = (uint32_t *)(_data + 17084);
-	((void **)p)[4] = 1;
-	((void **)p)[5] = 1;
-	((void **)p)[7] = 0;
-	return (int32_t)(p);
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
+
+    (void)context;
+    if (!src)
+        return -EINVAL;
+    memcpy(_ae_zone_weight, src, sizeof(_ae_zone_weight));
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c524 origin=fragment_seed original=tisp_api_ae_zone_weight_get */
 int32_t tisp_api_ae_zone_weight_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a2;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)a1, (void *)(uintptr_t)&_ae_zone_weight, 900); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    v0 = 900;
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 0) = v0;
-    v0 = (uintptr_t *)&sclk_name;
-    v0 = v0 + 17084;
-    v1 = 1;
-    *(uint32_t *)((char *)v0 + 16) = v1;
-    *(uint32_t *)((char *)v0 + 20) = v1;
-    *(uint32_t *)((char *)v0 + 28) = 0;
-    ra = local_14;
-    s0 = local_10;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    (void)a0;
+    if (!a1 || !a2)
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)a1, _ae_zone_weight, sizeof(_ae_zone_weight));
+    *(uint32_t *)(uintptr_t)a2 = sizeof(_ae_zone_weight);
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
     return 0;
 }
 
@@ -91208,89 +91191,26 @@ int32_t tisp_g_Gamma(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065e60 origin=fragment_seed original=tisp_s_aeroi_weight */
 int32_t tisp_s_aeroi_weight(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_398 = 0;
-    uint32_t local_39c = 0;
-    uint32_t local_3a0 = 0;
-    uint32_t local_3a4 = 0;
-    uint32_t local_3a8 = 0;
-    uint32_t local_3ac = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t *s3 = 0;
-    uintptr_t *s4 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+    const uint32_t *weights = (const uint32_t *)(uintptr_t)a1;
+    uint32_t inverted[225];
+    unsigned int i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!weights)
+        return -EINVAL;
+    for (i = 0; i < ARRAY_SIZE(inverted); i++)
+        inverted[i] = 8U - weights[i];
 
-    /* fragment 1: Arithmetic */
-    v1 = (uintptr_t)&local_10;
-    v0 = a1;
-
-    /* fragment 2: StackAccess */
-    local_3a4 = s3;
-    local_3a0 = s2;
-    local_39c = s1;
-    local_3ac = ra;
-    s1 = a1;
-    local_3a8 = s4;
-    local_398 = s0;
-    s3 = a0;
-    a1 = a1 + 900;
-    s2 = v1;
-    a2 = 8;
-
-tisp_s_aeroi_weight0x38:
-    /* fragment 3: MemoryAccess */
-    a0 = *(uint32_t *)((char *)v0 + 0);
-    v0 = v0 + 4;
-    a0 = a2 - a0;
-    *(uint32_t *)((char *)v1 + 0) = a0;
-
-    /* fragment 4: Branch */
-    v1 = v1 + 4;
-    if (v0 != a1) { goto tisp_s_aeroi_weight0x38; }
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tparams, (void *)(uintptr_t)s1, 900); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tparams, (void *)(uintptr_t)s2, 900); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)((*(uint32_t *)((char *)((char *)&tparams_day))) + 2640), (void *)(uintptr_t)s1, 900); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)((*(uint32_t *)((char *)((char *)&tparams_day))) + 1740), (void *)(uintptr_t)s2, 900); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)((*(uint32_t *)((char *)((char *)&tparams_night))) + 2640), (void *)(uintptr_t)s1, 900); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)((*(uint32_t *)((char *)((char *)&tparams_night))) + 1740), (void *)(uintptr_t)s2, 900); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)tisp_api_ae_roi_weight_set)(s3, s1); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)tisp_api_ae_roui_weight_set)(s3, s2); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_trig)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 14: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 15: Arithmetic */
-    v0 = 0;
-
-    /* fragment 16: Epilogue */
-    /* function epilogue: restore registers and return */
+    if (tparams_day) {
+        memcpy((void *)(tparams_day + 0xa50), weights, sizeof(inverted));
+        memcpy((void *)(tparams_day + 0x6cc), inverted, sizeof(inverted));
+    }
+    if (tparams_night) {
+        memcpy((void *)(tparams_night + 0xa50), weights, sizeof(inverted));
+        memcpy((void *)(tparams_night + 0x6cc), inverted, sizeof(inverted));
+    }
+    tisp_api_ae_roi_weight_set(a0, weights);
+    tisp_api_ae_roui_weight_set(a0, inverted);
+    tisp_ae_trig();
 
     return 0;
 }
@@ -91298,84 +91218,29 @@ tisp_s_aeroi_weight0x38:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065f94 origin=fragment_seed original=tisp_g_aeroi_weight */
 int32_t tisp_g_aeroi_weight(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    uint32_t size = 0;
+    int ret = tisp_api_ae_roi_weight_get(a0, a1, (uintptr_t)&size);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    local_10 = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_api_ae_roi_weight_get)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: StackAccess */
-    a0 = local_10;
-    v1 = 900;
-
-    /* fragment 3: Branch */
-    v0 = 0;
-    if (a0 == v1) { goto tisp_g_aeroi_weight0x54; }
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC12, 0 + 6152, 773); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v0 = -1;
-
-tisp_g_aeroi_weight0x54:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    if (ret)
+        return ret;
+    return size == sizeof(_scene_roi_weight) ? 0 : -EINVAL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065ff4 origin=fragment_seed original=tisp_s_aezone_weight */
 int32_t tisp_s_aezone_weight(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
+    const void *weights = (const void *)(uintptr_t)a1;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s2 = a0;
-    s1 = a1;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tparams, (void *)(uintptr_t)a1, 900); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)((*(uint32_t *)((char *)((char *)&tparams_day))) + 840), (void *)(uintptr_t)s1, 900); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)((*(uint32_t *)((char *)((char *)&tparams_night))) + 840), (void *)(uintptr_t)s1, 900); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)tisp_api_ae_zone_weight_set)(s2, s1); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_trig)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = 0;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
+    if (!weights)
+        return -EINVAL;
+    if (tparams_day)
+        memcpy((void *)(tparams_day + 0x348), weights,
+               sizeof(_ae_zone_weight));
+    if (tparams_night)
+        memcpy((void *)(tparams_night + 0x348), weights,
+               sizeof(_ae_zone_weight));
+    tisp_api_ae_zone_weight_set(a0, weights);
+    tisp_ae_trig();
 
     return 0;
 }
@@ -91383,40 +91248,12 @@ int32_t tisp_s_aezone_weight(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066098 origin=fragment_seed original=tisp_g_aezone_weight */
 int32_t tisp_g_aezone_weight(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    uint32_t size = 0;
+    int ret = tisp_api_ae_zone_weight_get(a0, a1, (uintptr_t)&size);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    local_10 = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_api_ae_zone_weight_get)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: StackAccess */
-    a0 = local_10;
-    v1 = 900;
-
-    /* fragment 3: Branch */
-    v0 = 0;
-    if (a0 == v1) { goto tisp_g_aezone_weight0x54; }
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC13, 0 + 6128, 803); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v0 = -1;
-
-tisp_g_aezone_weight0x54:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    if (ret)
+        return ret;
+    return size == sizeof(_ae_zone_weight) ? 0 : -EINVAL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000660f8 origin=fragment_seed original=tisp_s_af_weight */
