@@ -1,7 +1,7 @@
 # Binary Assembly Audit
 
 - schema: `regtrace-binary-audit-v1`
-- OEM: `/home/matteius/re-framework/tx-isp-t23.ko`
+- OEM: `../tx-isp-t23.ko`
 - recovered: `driver/t23/tx_isp_t23_recovered.ko`
 - objdump counts exclude relocation records
 - thresholds: min_oem_insns=24 stub_insns=8 collapse=0.50 similar=0.80..1.25 expansion=2.00
@@ -12,40 +12,40 @@
 |---|---:|---:|
 | Function symbols | 1043 | 1322 |
 | Functions with disassembly | 1043 | 1322 |
-| Executable section bytes | 443376 | 356240 |
-| Initialized writable bytes | 216768 | 46480 |
-| Uninitialized writable bytes | 164688 | 1118368 |
+| Executable section bytes | 443376 | 357904 |
+| Initialized writable bytes | 216768 | 46512 |
+| Uninitialized writable bytes | 164688 | 1102000 |
 
 - direct matches: 948
 - replacement matches: 34 (missing=0)
 - unmatched: OEM-only=61 recovered-only=340
-- matched instructions: OEM=106302 recovered=71660 ratio=0.674
-- classes: stub=56 collapsed=95 shorter=202 same_count=197 similar=365 larger=29 expanded=38
+- matched instructions: OEM=106302 recovered=71920 ratio=0.677
+- classes: stub=55 collapsed=95 shorter=200 same_count=198 similar=365 larger=30 expanded=39
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 164688 | 1118368 | +953680 |
-| `.data` | 216480 | 46192 | -170288 |
+| `.bss` | 164688 | 1102000 | +937312 |
+| `.data` | 216480 | 46224 | -170256 |
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 16 | 0 | -16 |
-| `.modinfo` | 1260 | 5488 | +4228 |
+| `.modinfo` | 1260 | 5660 | +4400 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 74544 | +67824 |
-| `.rodata.str1.4` | 22728 | 20412 | -2316 |
-| `.text` | 442176 | 354912 | -87264 |
+| `.rodata` | 6720 | 74656 | +67936 |
+| `.rodata.str1.4` | 22728 | 20696 | -2032 |
+| `.text` | 442176 | 356576 | -85600 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
-| `__param` | 224 | 2112 | +1888 |
+| `__param` | 224 | 2192 | +1968 |
 
 ## Function Outliers
 
-Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -62,7 +62,6 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `tiziano_defog_params_refresh` | `tiziano_defog_params_refresh` | 279 | 2 | 0.007 | -277 | 43->0 | 3->0 |
 | stub | exact_name | `tisp_ae1_process_impl` | `tisp_ae1_process_impl` | 273 | 2 | 0.007 | -271 | 11->0 | 26->0 |
 | stub | exact_name | `tisp_msca_api_set_line` | `tisp_msca_api_set_line` | 273 | 2 | 0.007 | -271 | 22->0 | 23->0 |
-| stub | exact_name | `tisp_clm_interp_by_ct` | `tisp_clm_interp_by_ct` | 254 | 2 | 0.008 | -252 | 8->0 | 35->0 |
 | stub | exact_name | `tx_isp_probe` | `tx_isp_probe` | 235 | 2 | 0.009 | -233 | 23->0 | 25->0 |
 | stub | exact_name | `tisp_sdns_wdr_en` | `tisp_sdns_wdr_en` | 231 | 2 | 0.009 | -229 | 0->0 | 3->0 |
 | stub | exact_name | `csi_core_ops_init` | `csi_core_ops_init` | 188 | 5 | 0.027 | -183 | 6->0 | 22->1 |
@@ -270,6 +269,7 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `subsection` | `subsection` | 372 | 237 | 0.637 | -135 | 20->16 | 17->13 |
 | shorter | exact_name | `tisp_ae1_expt` | `tisp_ae1_expt` | 351 | 183 | 0.521 | -168 | 23->21 | 30->14 |
 | shorter | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 260 | 203 | 0.781 | -57 | 46->38 | 1->1 |
+| shorter | exact_name | `tisp_clm_interp_by_ct` | `tisp_clm_interp_by_ct` | 254 | 145 | 0.571 | -109 | 8->6 | 35->17 |
 | shorter | exact_name | `tiziano_sdns_init` | `tiziano_sdns_init` | 242 | 157 | 0.649 | -85 | 2->4 | 2->2 |
 | shorter | exact_name | `Tiziano_af_fpga` | `Tiziano_af_fpga` | 229 | 156 | 0.681 | -73 | 13->11 | 5->5 |
 | shorter | exact_name | `tisp_ae0_get_hist` | `tisp_ae0_get_hist` | 206 | 158 | 0.767 | -48 | 5->5 | 22->17 |
@@ -295,8 +295,8 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae_algo_init` | `tisp_ae_algo_init` | 99 | 65 | 0.657 | -34 | 2->2 | 2->2 |
 | shorter | exact_name | `Tiziano_awb_set_gain` | `Tiziano_awb_set_gain` | 99 | 66 | 0.667 | -33 | 7->6 | 4->1 |
 | shorter | exact_name | `fix_point_div_64` | `fix_point_div_64` | 94 | 51 | 0.543 | -43 | 3->3 | 9->3 |
+| shorter | exact_name | `tiziano_set_parameter_clm` | `tiziano_set_parameter_clm` | 91 | 49 | 0.538 | -42 | 6->6 | 4->1 |
 | shorter | exact_name | `ispcore_sync_sensor_attr` | `ispcore_sync_sensor_attr` | 91 | 60 | 0.659 | -31 | 4->4 | 7->7 |
-| shorter | exact_name | `tiziano_set_parameter_clm` | `tiziano_set_parameter_clm` | 91 | 72 | 0.791 | -19 | 6->6 | 4->4 |
 | shorter | exact_name | `tisp_event_push` | `tisp_event_push` | 88 | 63 | 0.716 | -25 | 4->1 | 2->1 |
 | shorter | exact_name | `tisp_msca_para_calc` | `tisp_msca_para_calc` | 86 | 62 | 0.721 | -24 | 0->6 | 17->10 |
 

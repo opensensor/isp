@@ -5035,28 +5035,28 @@ static unsigned char __attribute__((aligned(4))) defog_block_sizen[76] = {
 };
 static unsigned char param_defog_col_ct_array[56];
 static const char _PKAK_Z_str[] = "_PKAK_Z_str";
-static unsigned char tiziano_clm_s_itp_lut[2100];
-static unsigned char tiziano_clm_h_itp_lut[1052];
-static unsigned char tiziano_clm_s_reg[1680];
-static unsigned char tiziano_clm_h_reg[1680];
-static uintptr_t tiziano_clm_lut_shift;
-static unsigned char tiziano_clm_ct_list[12];
-static unsigned char tiziano_clm_h_a_lut[1064];
-static unsigned char tiziano_clm_h_d_lut[1052];
-static unsigned char tiziano_clm_h_t_lut[1052];
-static unsigned char tiziano_clm_s_a_lut[2100];
-static unsigned char tiziano_clm_s_d_lut[2100];
-static unsigned char tiziano_clm_s_t_lut[2100];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_s_itp_lut[2100];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_h_itp_lut[1052];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_s_reg[1680];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_h_reg[1680];
+static uint32_t tiziano_clm_lut_shift;
+static unsigned char __attribute__((aligned(4))) tiziano_clm_ct_list[12];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_h_a_lut[1064];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_h_d_lut[1052];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_h_t_lut[1052];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_s_a_lut[2100];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_s_d_lut[2100];
+static unsigned char __attribute__((aligned(4))) tiziano_clm_s_t_lut[2100];
 static unsigned char data_40000[16384];
 static unsigned char data_a6ec8[16384];
 static unsigned char data_a6ecc[16384];
-static uintptr_t (*clm_ct_value_old)();
-static uintptr_t (*clm_ct_value_now)();
-static unsigned char __attribute__((aligned(4))) clm_ct_list[12] = {
-    0xf0, 0x0a, 0x00, 0x00, 0x74, 0x0e, 0x00, 0x00, 0x5c, 0x12, 0x00, 0x00, 
+static uint32_t clm_ct_value_old = 0xffffU;
+static uint32_t clm_ct_value_now = 5000U;
+static uint32_t __attribute__((aligned(4))) clm_ct_list[3] = {
+    2800U, 3700U, 4700U,
 };
-static uintptr_t clm_ct_part_now;
-static uintptr_t (*clm_ct_part_old)();
+static uint32_t clm_ct_part_now;
+static uint32_t clm_ct_part_old = 0xffU;
 static unsigned char data_c3638[16384];
 static unsigned char data_c363c[16384];
 static unsigned char data_c3640[16384];
@@ -9826,6 +9826,9 @@ int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1);
 int32_t tisp_msca_addr_fifo_write(char arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_channel_start(int32_t arg1);
 int64_t tisp_channel_main_attr_set(uint32_t a0, uintptr_t a1);
+int32_t tisp_clm_interp_by_ct(int32_t ignored, uint32_t ct, uint8_t force);
+int32_t tisp_clm_ct_update(int32_t ignored, uint32_t ct);
+int32_t tiziano_set_parameter_clm(void);
 
 static bool regtrace_t23_enable_irqs_on_streamon = true;
 static bool regtrace_t23_log_framechan_payloads;
@@ -9939,6 +9942,11 @@ static uint32_t regtrace_t23_dmsc_gain_q16 = 0x10000U;
 static bool regtrace_t23_source_bcsh_tuning_init = true;
 static bool regtrace_t23_source_bcsh_runtime = true;
 static bool regtrace_t23_source_clm_tuning_init = true;
+static bool regtrace_t23_source_clm_events = true;
+static uint regtrace_t23_source_clm_startup_ct = 5000U;
+static uint regtrace_t23_source_clm_runtime_ct = 5000U;
+static uint regtrace_t23_source_clm_event_count;
+static uint regtrace_t23_source_clm_region = 4U;
 static bool regtrace_t23_source_bcsh_neutral;
 static bool regtrace_t23_source_csccr_init = true;
 static uint32_t regtrace_t23_dpc_gain_old = 0xffffffffU;
@@ -9951,6 +9959,8 @@ static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin"
 #define REGTRACE_T23_MDNS_TUNING_SIZE   0x405cU
 #define REGTRACE_T23_BCSH_TUNING_OFFSET 0x15170U
 #define REGTRACE_T23_BCSH_TUNING_SIZE   0x418U
+#define REGTRACE_T23_CLM_TUNING_OFFSET  0x1122cU
+#define REGTRACE_T23_CLM_TUNING_SIZE    0x24fcU
 static uint regtrace_t23_source_core_bayer = 1U;
 static uint regtrace_t23_source_core_mode = 0x1cU;
 static bool regtrace_t23_direct_csi_start;
@@ -10150,6 +10160,16 @@ module_param_named(source_bcsh_runtime,
                    regtrace_t23_source_bcsh_runtime, bool, 0644);
 module_param_named(source_clm_tuning_init,
                    regtrace_t23_source_clm_tuning_init, bool, 0644);
+module_param_named(source_clm_events,
+                   regtrace_t23_source_clm_events, bool, 0644);
+module_param_named(source_clm_startup_ct,
+                   regtrace_t23_source_clm_startup_ct, uint, 0644);
+module_param_named(source_clm_runtime_ct,
+                   regtrace_t23_source_clm_runtime_ct, uint, 0444);
+module_param_named(source_clm_event_count,
+                   regtrace_t23_source_clm_event_count, uint, 0444);
+module_param_named(source_clm_region,
+                   regtrace_t23_source_clm_region, uint, 0444);
 module_param_named(source_bcsh_neutral,
                    regtrace_t23_source_bcsh_neutral, bool, 0644);
 module_param_named(source_csccr_init,
@@ -11744,6 +11764,48 @@ static int regtrace_t23_source_adr_load_tuning(void)
     return 0;
 }
 
+static __always_inline int regtrace_t23_source_clm_load_tuning(void)
+{
+    unsigned char *params;
+    unsigned int nonzero = 0;
+    unsigned int i;
+    int ret;
+
+    params = private_vmalloc(REGTRACE_T23_CLM_TUNING_SIZE);
+    if (!params)
+        return -ENOMEM;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_CLM_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_CLM_TUNING_SIZE);
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: CLM tuning refresh failed path=%s ret=%d\n",
+               regtrace_t23_source_core_tuning_path, ret);
+        private_vfree(params);
+        return ret;
+    }
+
+    memcpy(tiziano_clm_h_a_lut, params + 0x0000U, 0x41aU);
+    memcpy(tiziano_clm_s_a_lut, params + 0x041aU, 0x834U);
+    memcpy(tiziano_clm_h_t_lut, params + 0x0c4eU, 0x41aU);
+    memcpy(tiziano_clm_s_t_lut, params + 0x1068U, 0x834U);
+    memcpy(tiziano_clm_h_d_lut, params + 0x189cU, 0x41aU);
+    memcpy(tiziano_clm_s_d_lut, params + 0x1cb6U, 0x834U);
+    memcpy(tiziano_clm_ct_list, params + 0x24ecU, 0x0cU);
+    tiziano_clm_lut_shift = regtrace_t23_get_le32(params + 0x24f8U);
+
+    for (i = 0; i < 0x24eaU; ++i)
+        nonzero += params[i] != 0;
+    private_vfree(params);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: CLM tuning loaded anchors=%u/%u/%u shift=%u nonzero=%u\n",
+           regtrace_t23_get_le32(tiziano_clm_ct_list),
+           regtrace_t23_get_le32(tiziano_clm_ct_list + 4U),
+           regtrace_t23_get_le32(tiziano_clm_ct_list + 8U),
+           tiziano_clm_lut_shift, nonzero);
+    return 0;
+}
+
 /* OEM SC2336 DMSC curves used by tisp_dmsc_sharpness_set. */
 static const uint32_t regtrace_t23_dmsc_sp_d_w_curve[9] = {
     0x5aU, 0x5aU, 0x50U, 0x50U, 0x46U, 0x32U, 0x32U, 0x32U, 0x32U,
@@ -12590,7 +12652,37 @@ static void regtrace_t23_source_bcsh_write_tuning_startup(void)
 
 static void regtrace_t23_source_clm_write_tuning_startup(void)
 {
+    uint32_t startup_ct = regtrace_t23_source_clm_startup_ct;
     size_t i;
+    int ret;
+
+    if (startup_ct < 1000U || startup_ct > 10000U) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: invalid source_clm_startup_ct=%u; using 5000\n",
+               startup_ct);
+        startup_ct = 5000U;
+    }
+
+    ret = regtrace_t23_source_clm_load_tuning();
+    if (!ret) {
+        clm_ct_value_old = 0xffffU;
+        clm_ct_part_old = 0xffU;
+        ret = tisp_clm_interp_by_ct(0, startup_ct, 1U);
+        if (ret > 0)
+            ret = tiziano_set_parameter_clm();
+        if (!ret) {
+            regtrace_t23_source_clm_runtime_ct = startup_ct;
+            regtrace_t23_source_clm_region = clm_ct_part_now;
+            regtrace_t23_source_clm_event_count = 0;
+            printk(KERN_WARNING
+                   "tx_isp_t23_recovered: source CLM CT%u initialized region=%u\n",
+                   startup_ct, regtrace_t23_source_clm_region);
+            return;
+        }
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source CLM functional startup failed ret=%d; using static image\n",
+               ret);
+    }
 
     system_reg_write(0x6800U, 1U);
     system_reg_write(0x6804U, REGTRACE_T23_CLM_SC2336_LUT_SHIFT);
@@ -14516,8 +14608,8 @@ int32_t tiziano_set_parameter_clm(void);
 int32_t tiziano_clm_params_refresh(void);
 int32_t tiziano_clm_dn_params_refresh(void);
 int32_t tisp_clm_itp(uint32_t a0, uint32_t a1, uint32_t a2);
-void tisp_clm_interp_by_ct(int arg1, unsigned int arg2, char arg3, int arg4);
-int32_t tisp_clm_ct_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4);
+int32_t tisp_clm_interp_by_ct(int32_t ignored, uint32_t ct, uint8_t force);
+int32_t tisp_clm_ct_update(int32_t ignored, uint32_t ct);
 int32_t tiziano_clm_init(void);
 int32_t tisp_clm_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3);
 int32_t tisp_clm_param_array_set(uint32_t a0, uint32_t a1);
@@ -38310,7 +38402,7 @@ int32_t tisp_ct_update(int32_t arg1, int32_t arg2, uint32_t arg3)
 	}
 
 	if (((uintptr_t)s0 & 0x2000) == 0) {
-		tisp_clm_ct_update(s3, s1, 0, 0, 0);
+		tisp_clm_ct_update((int32_t)(uintptr_t)s3, (uint32_t)(uintptr_t)s1);
 	}
 
 	return 0;
@@ -63450,64 +63542,24 @@ int32_t clm_lut2reg(int16_t *arg1, uint8_t *arg2, void *arg3, int32_t arg4)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b070 origin=fragment_seed original=tiziano_set_parameter_clm */
 int32_t tiziano_set_parameter_clm(void)
 {
-    uint32_t *s0;
-    uint32_t *s1;
-    uint32_t *s2;
-    uint32_t *s3;
-    uint32_t *s4;
-    uint32_t *s5;
-    uint32_t *s6;
-    uint32_t s7;
-    uint32_t *p;
+    const uint32_t *h_reg = (const uint32_t *)(const void *)tiziano_clm_h_reg;
+    const uint32_t *s_reg = (const uint32_t *)(const void *)tiziano_clm_s_reg;
+    unsigned int i;
 
-    clm_lut2reg(&tiziano_clm_s_itp_lut, &tiziano_clm_h_itp_lut,
-                &tiziano_clm_s_reg, &tiziano_clm_h_reg);
+    clm_lut2reg((int16_t *)(void *)tiziano_clm_s_itp_lut,
+                tiziano_clm_h_itp_lut,
+                tiziano_clm_s_reg,
+                (int32_t)(uintptr_t)tiziano_clm_h_reg);
+    system_reg_write_clm(1, 0x6804, (int32_t)tiziano_clm_lut_shift);
 
-    system_reg_write_clm(1, 0x6804, tiziano_clm_lut_shift);
+    for (i = 0; i < sizeof(tiziano_clm_h_reg) / sizeof(*h_reg); ++i) {
+        uint32_t offset = i * sizeof(*h_reg);
 
-    s0 = 0x60000;
-    s6 = s0 + 1680;
-    s1 = (int32_t *)&tiziano_clm_h_reg;
-    s7 = 0xfffa0000;
-
-    do {
-        p = (void *)((uintptr_t)s1 + (uintptr_t)s0 + s7);
-        system_reg_write(s0, *p);
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (4));
-        s5 = s1;
-    } while (s0 != s6);
-
-    s0 = (void *)(uintptr_t)((uintptr_t)s0 + (31088));
-    s1 = 0xfff98000;
-    s3 = s0 + 1680;
-
-    do {
-        p = (void *)((uintptr_t)s5 + (uintptr_t)s0 + (uintptr_t)s1);
-        system_reg_write(s0, *p);
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (4));
-    } while (s0 != s3);
-
-    s0 = ((char *)&g_abs_70000);
-    s1 = (int32_t *)&tiziano_clm_s_reg;
-    s5 = 0xfff98000;
-    s2 = s0 + 1680;
-
-    do {
-        p = (void *)((uintptr_t)s1 + (uintptr_t)s0 + (uintptr_t)s5);
-        system_reg_write(s0, *p);
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (4));
-        s3 = s1;
-    } while (s0 != s2);
-
-    s0 = (void *)(uintptr_t)((uintptr_t)s0 + (31088));
-    s1 = 0xfff88000;
-    s2 = s0 + 1680;
-
-    do {
-        p = (void *)((uintptr_t)s3 + (uintptr_t)s0 + (uintptr_t)s1);
-        system_reg_write(s0, *p);
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (4));
-    } while (s0 != s2);
+        system_reg_write(0x60000U + offset, h_reg[i]);
+        system_reg_write(0x68000U + offset, h_reg[i]);
+        system_reg_write(0x70000U + offset, s_reg[i]);
+        system_reg_write(0x78000U + offset, s_reg[i]);
+    }
 
     return 0;
 }
@@ -63515,52 +63567,7 @@ int32_t tiziano_set_parameter_clm(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b1dc origin=fragment_seed original=tiziano_clm_params_refresh */
 int32_t tiziano_clm_params_refresh(void)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_h_a_lut, (void *)(uintptr_t)&tparams, 1050); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_s_a_lut, (void *)(uintptr_t)&tparams, 2100); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_h_t_lut, (void *)(uintptr_t)&tparams, 1050); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_s_t_lut, (void *)(uintptr_t)&tparams, 2100); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_h_d_lut, (void *)(uintptr_t)&tparams, 1050); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_s_d_lut, (void *)(uintptr_t)&tparams, 2100); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_ct_list, (void *)(uintptr_t)&tparams, 12); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tiziano_clm_lut_shift, (void *)(uintptr_t)&tparams, 4); /* jalr target resolved by relocation */
-
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 10: Arithmetic */
-    v0 = 0;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return regtrace_t23_source_clm_load_tuning();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b2c4 origin=model_output original=tiziano_clm_dn_params_refresh */
@@ -63573,63 +63580,116 @@ int32_t tiziano_clm_dn_params_refresh(void) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b2fc origin=fragment_seed original=tisp_clm_itp */
 int32_t tisp_clm_itp(uint32_t a0, uint32_t a1, uint32_t a2)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int32_t low = (int16_t)a0;
+    int32_t delta = ((int16_t)a1 - low) * (int32_t)a2;
+    uint32_t scaled = (uint32_t)delta;
+
+    return (int16_t)(low + (scaled >> 12) + ((scaled >> 11) & 1U));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b334 origin=model_output original=tisp_clm_interp_by_ct */
-void tisp_clm_interp_by_ct(int arg1, unsigned int arg2, char arg3, int arg4)
+int32_t tisp_clm_interp_by_ct(int32_t ignored, uint32_t ct, uint8_t force)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return;
+    const uint8_t *h_low = NULL;
+    const uint8_t *h_high = NULL;
+    const int16_t *s_low = NULL;
+    const int16_t *s_high = NULL;
+    uint32_t delta = clm_ct_value_old >= ct ?
+                     clm_ct_value_old - ct : ct - clm_ct_value_old;
+    uint32_t part;
+    uint32_t weight = 0;
+    unsigned int i;
+
+    (void)ignored;
+    clm_ct_value_now = ct;
+    if (ct <= clm_ct_list[0] + 200U)
+        part = 0U;
+    else if (ct + 200U < clm_ct_list[1])
+        part = 1U;
+    else if (ct <= clm_ct_list[1] + 200U)
+        part = 2U;
+    else if (ct + 200U < clm_ct_list[2])
+        part = 3U;
+    else
+        part = 4U;
+    clm_ct_part_now = part;
+
+    if (!force) {
+        if (!(part & 1U) && clm_ct_part_old == part)
+            return 0;
+        if (delta < 0x20U)
+            return 0;
+    }
+
+    clm_ct_part_old = part;
+    clm_ct_value_old = ct;
+    switch (part) {
+    case 0:
+        memcpy(tiziano_clm_h_itp_lut, tiziano_clm_h_a_lut, 0x41aU);
+        memcpy(tiziano_clm_s_itp_lut, tiziano_clm_s_a_lut, 0x834U);
+        return 1;
+    case 1:
+        h_low = tiziano_clm_h_a_lut;
+        h_high = tiziano_clm_h_t_lut;
+        s_low = (const int16_t *)(const void *)tiziano_clm_s_a_lut;
+        s_high = (const int16_t *)(const void *)tiziano_clm_s_t_lut;
+        weight = ((ct - clm_ct_list[0] - 200U) << 12) /
+                 (clm_ct_list[1] - clm_ct_list[0] - 400U);
+        break;
+    case 2:
+        memcpy(tiziano_clm_h_itp_lut, tiziano_clm_h_t_lut, 0x41aU);
+        memcpy(tiziano_clm_s_itp_lut, tiziano_clm_s_t_lut, 0x834U);
+        return 1;
+    case 3:
+        h_low = tiziano_clm_h_t_lut;
+        h_high = tiziano_clm_h_d_lut;
+        s_low = (const int16_t *)(const void *)tiziano_clm_s_t_lut;
+        s_high = (const int16_t *)(const void *)tiziano_clm_s_d_lut;
+        weight = ((ct - clm_ct_list[1] - 200U) << 12) /
+                 (clm_ct_list[2] - clm_ct_list[1] - 400U);
+        break;
+    default:
+        memcpy(tiziano_clm_h_itp_lut, tiziano_clm_h_d_lut, 0x41aU);
+        memcpy(tiziano_clm_s_itp_lut, tiziano_clm_s_d_lut, 0x834U);
+        return 1;
+    }
+
+    for (i = 0; i < 1050U; ++i) {
+        int8_t low_h = (int8_t)h_low[i];
+        int8_t high_h = (int8_t)h_high[i];
+
+        tiziano_clm_h_itp_lut[i] =
+            (uint8_t)tisp_clm_itp(low_h, high_h, weight);
+        ((int16_t *)(void *)tiziano_clm_s_itp_lut)[i] =
+            (int16_t)tisp_clm_itp(s_low[i], s_high[i], weight);
+    }
+    return 1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b72c origin=fragment_seed original=tisp_clm_ct_update */
-int32_t tisp_clm_ct_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
+int32_t tisp_clm_ct_update(int32_t ignored, uint32_t ct)
 {
-	int32_t ret;
+    int32_t changed = tisp_clm_interp_by_ct(ignored, ct, 0U);
 
-	tisp_clm_interp_by_ct(a0, a1, 0, 0);
-	ret = 0;
-	if (ret != 0) {
-		tiziano_set_parameter_clm();
-	}
+    if (changed > 0) {
+        tiziano_set_parameter_clm();
+        regtrace_t23_source_clm_runtime_ct = ct;
+        regtrace_t23_source_clm_region = clm_ct_part_now;
+        regtrace_t23_source_clm_event_count++;
+    }
 
-	return 0;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b76c origin=fragment_seed original=tiziano_clm_init */
 int32_t tiziano_clm_init(void)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    int32_t ret = tiziano_clm_params_refresh();
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_clm_params_refresh)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uint32_t *)tisp_clm_interp_by_ct)(0, *(uint32_t *)((char *)((char *)&clm_ct_value_now)), 1); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_set_parameter_clm)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    v0 = 0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    if (ret)
+        return ret;
+    tisp_clm_interp_by_ct(0, clm_ct_value_now, 1U);
+    return tiziano_set_parameter_clm();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003b7c0 origin=model_output original=tisp_clm_param_array_get */
@@ -63695,7 +63755,7 @@ int32_t tisp_clm_param_array_set(uint32_t a0, uint32_t a1)
     v0 = (uintptr_t *)memcpy((void *)(uintptr_t)&tiziano_clm_lut_shift, (void *)(uintptr_t)(s1 + 9464), 4); /* jalr target resolved by relocation */
 
     /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uint32_t *)tisp_clm_interp_by_ct)(0, *(uint32_t *)((char *)((char *)&clm_ct_value_now)), 1); /* jalr target resolved by relocation */
+    tisp_clm_interp_by_ct(0, clm_ct_value_now, 1U);
 
     /* fragment 10: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_set_parameter_clm)(a0); /* jalr target resolved by relocation */

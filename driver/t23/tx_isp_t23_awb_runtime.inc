@@ -538,6 +538,10 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
                 regtrace_t23_source_bcsh_ct_events++;
             }
         }
+        if (regtrace_t23_source_clm_events &&
+            regtrace_t23_source_clm_tuning_init &&
+            result.ct >= 1000U && result.ct <= 10000U)
+            tisp_clm_ct_update(0, result.ct);
         if ((gain_rg > regtrace_t23_source_awb_last_rgain ?
              gain_rg - regtrace_t23_source_awb_last_rgain :
              regtrace_t23_source_awb_last_rgain - gain_rg) > 4U ||

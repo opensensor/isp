@@ -21,6 +21,14 @@ Current smoke-test status:
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes. The CLM
   image follows the T23 startup CT of 5000 K and programs both OEM LUT banks.
+- The CLM color-lookup runtime now implements the T23 HLIL five-region CT
+  selector, 200 K transition margins, 32-unit update hysteresis, and exact Q12
+  interpolation for all 1,050 hue/saturation entries. The register commit is
+  bounded to the four 420-word OEM banks. Default CT5000 and diagnostic CT4200
+  interpolation cycles each passed 256-frame RTSP tests; live AWB moved the
+  latter from region 3 to region 4 with one table update. All three CLM profiles
+  in this SC2336 tuning blob are zero, so this recovery is behaviorally neutral
+  and does not address the remaining green/yellow cast.
 - The full T23 MDNS temporal/spatial denoise path is enabled by default. Its
   473 tuning fields and 377 gain interpolations come from the T23 binary and
   SC2336 tuning blob, while the register packers are shared with the readable
