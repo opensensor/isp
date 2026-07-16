@@ -134,6 +134,17 @@ Current smoke-test status:
   A no-argument device cycle decoded 258 measured RTSP frames at
   `YAVG/UAVG/VAVG` `105.2/129.3/126.1`, retained active ISP/VIC interrupts,
   completed without kernel errors, and rebooted cleanly.
+- Highlight depression and backlight compensation now preserve the OEM
+  44-byte AE scene layout instead of sharing an optimized two-instruction
+  stub. Their setter/getter paths update the correct words, set the OEM AE
+  refresh flags, and are dispatched explicitly for controls `0x0800002a` and
+  `0x08000037`. Highlight round-tripped `0 -> 32 -> 0` through `libimp`;
+  direct OEM-layout ioctls confirmed backlight `0 -> 3 -> 0` (Raptor does not
+  include the backlight getter in its aggregate query). A restored no-argument
+  cycle decoded 256 RTSP frames at `YAVG/UAVG/VAVG`
+  `108.2/129.5/125.8`, retained `30432/2698` ISP/VIC interrupts without new
+  errors, and rebooted cleanly. The binary audit now reports 44 hard stubs and
+  84 collapses.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

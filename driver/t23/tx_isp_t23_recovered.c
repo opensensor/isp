@@ -9801,6 +9801,8 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TISP_CTRL_SATURATION 0x00980902U
 #define REGTRACE_TISP_CTRL_SHARPNESS 0x0098091bU
 #define REGTRACE_TISP_CTRL_BCSH_HUE 0x08000101U
+#define REGTRACE_TISP_CTRL_HIGHLIGHT_DEPRESS 0x0800002aU
+#define REGTRACE_TISP_CTRL_BACKLIGHT_COMP 0x08000037U
 #define REGTRACE_TISP_CTRL_WB_STATIS 0x08000005U
 #define REGTRACE_TISP_CTRL_GET_EXPR 0x08000025U
 #define REGTRACE_TISP_CTRL_GET_EV_ATTR 0x08000026U
@@ -13476,6 +13478,8 @@ static bool regtrace_isp_m0_is_image_control(u32 id)
     case REGTRACE_TISP_CTRL_SATURATION:
     case REGTRACE_TISP_CTRL_SHARPNESS:
     case REGTRACE_TISP_CTRL_BCSH_HUE:
+    case REGTRACE_TISP_CTRL_HIGHLIGHT_DEPRESS:
+    case REGTRACE_TISP_CTRL_BACKLIGHT_COMP:
         return true;
     default:
         return false;
@@ -15136,7 +15140,7 @@ int16_t tisp_ae_get_converge_step(uint32_t a0, uintptr_t a1);
 int64_t tisp_ae_set_converge_step(uint32_t a0, uintptr_t a1);
 int tisp_api_ae_deflick_para_set(void);
 int tisp_api_ae_flick_t_set(void *a1);
-int32_t tisp_api_ae_scene_pare_set(void);
+int32_t tisp_api_ae_scene_pare_set(uint32_t context, const void *params);
 int32_t tisp_api_ae_scene_pare_get(uint32_t a0, uint32_t a1, uintptr_t a2);
 int32_t tisp_api_ae_roi_weight_set(int32_t src);
 int32_t tisp_api_ae_roi_weight_get(uint32_t a0, uint32_t a1, uintptr_t a2);
@@ -23847,6 +23851,10 @@ int32_t apical_isp_core_ops_s_ctrl(uintptr_t a0, uintptr_t a1, uint32_t a2)
             return -EINVAL;
         tisp_set_bcsh_hue(0, (uint8_t)value);
         return 0;
+    case 0x800002a:
+        return tisp_s_Hilightdepress(0, value);
+    case 0x8000037:
+        return tisp_s_BacklightComp(0, value);
     default:
         break;
     }
@@ -27165,6 +27173,12 @@ int32_t apical_isp_core_ops_g_ctrl(uintptr_t a0, uintptr_t a1, uint32_t a2)
         tisp_get_bcsh_hue(0, &hue);
         value = hue;
         break;
+    case 0x800002a:
+        return tisp_g_Hilightdepress(
+            (uint32_t *)(uintptr_t)(a1 + sizeof(uint32_t)));
+    case 0x8000037:
+        return tisp_g_BacklightComp(
+            (uint32_t *)(uintptr_t)(a1 + sizeof(uint32_t)));
     default:
         goto generated_control_dispatch;
     }
@@ -79593,46 +79607,33 @@ int tisp_api_ae_flick_t_set(void *a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c35c origin=fragment_seed original=tisp_api_ae_scene_pare_set */
-int32_t tisp_api_ae_scene_pare_set(void)
+int32_t tisp_api_ae_scene_pare_set(uint32_t context, const void *params)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
+
+    (void)context;
+    if (!params)
+        return -EINVAL;
+    memcpy(_scene_para, params, sizeof(_scene_para));
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c3a0 origin=fragment_seed original=tisp_api_ae_scene_pare_get */
 int32_t tisp_api_ae_scene_pare_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    uint32_t *flags = (uint32_t *)(void *)IspAeFlag;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a2;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)a1, (void *)(uintptr_t)&_scene_para, 44); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    v0 = 44;
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 0) = v0;
-    v0 = (uintptr_t *)&sclk_name;
-    v0 = v0 + 17084;
-    v1 = 1;
-    *(uint32_t *)((char *)v0 + 16) = v1;
-    *(uint32_t *)((char *)v0 + 20) = v1;
-    *(uint32_t *)((char *)v0 + 28) = 0;
-    ra = local_14;
-    s0 = local_10;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    (void)a0;
+    if (!a1 || !a2)
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)a1, _scene_para, sizeof(_scene_para));
+    *(uint32_t *)(uintptr_t)a2 = sizeof(_scene_para);
+    flags[4] = 1;
+    flags[5] = 1;
+    flags[7] = 0;
     return 0;
 }
 
@@ -91080,50 +91081,14 @@ int64_t tisp_s_antiflick(uint32_t a0, uintptr_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065af4 origin=fragment_seed original=tisp_s_Hilightdepress */
 int32_t tisp_s_Hilightdepress(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uint32_t local_50 = 0;
-    uint32_t local_54 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t *s3 = 0;
-    uintptr_t *v0 = 0;
+    uint32_t params[sizeof(_scene_para) / sizeof(uint32_t)];
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s3 = a0;
-    s1 = a1;
-    s1 = s1 + 1;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&local_10, (void *)(uintptr_t)&tparams, 44); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    local_10 = 1;
-    local_24 = 1;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tparams, (void *)(uintptr_t)&local_10, 44); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)tisp_api_ae_scene_pare_set)(s3, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_trig)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = 0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
+    memcpy(params, _scene_para, sizeof(params));
+    params[0] = 1;
+    params[5] = 1;
+    params[6] = a1 + 1;
+    tisp_api_ae_scene_pare_set(a0, params);
+    tisp_ae_trig();
 
     return 0;
 }
@@ -91131,72 +91096,29 @@ int32_t tisp_s_Hilightdepress(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065b98 origin=fragment_seed original=tisp_g_Hilightdepress */
 int tisp_g_Hilightdepress(uint32_t *out)
 {
-	uint32_t *var_38;
-	uint32_t var_c = 0;
+    uint32_t params[sizeof(_scene_para) / sizeof(uint32_t)];
+    uint32_t size = 0;
 
-	tisp_api_ae_scene_pare_get(*out, &var_38, &var_c);
-
-	if (var_c != 0x2c) {
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d:::Get Hilight depress failed!!!\n"), (uintptr_t)("tisp_g_Hilightdepress"), (uintptr_t)(654));
-		return -1;
-	}
-
-	if (var_38 != 0 && *out != 1) {
-		*out = *out - 1;
-	} else {
-		*out = 0;
-	}
-
-	return 0;
+    if (!out)
+        return -EINVAL;
+    tisp_api_ae_scene_pare_get(0, (uintptr_t)params, (uintptr_t)&size);
+    if (size != sizeof(_scene_para))
+        return -EINVAL;
+    *out = params[0] && params[6] != 1 ? params[6] - 1 : 0;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065c30 origin=fragment_seed original=tisp_s_BacklightComp */
 int32_t tisp_s_BacklightComp(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uint32_t local_50 = 0;
-    uint32_t local_54 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t *s3 = 0;
-    uintptr_t *v0 = 0;
+    uint32_t params[sizeof(_scene_para) / sizeof(uint32_t)];
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s3 = a0;
-    s1 = a1;
-    s1 = s1 + 1;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&local_10, (void *)(uintptr_t)&tparams, 44); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    local_10 = 1;
-    local_28 = 1;
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&tparams, (void *)(uintptr_t)&local_10, 44); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)tisp_api_ae_scene_pare_set)(s3, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_trig)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = 0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
+    memcpy(params, _scene_para, sizeof(params));
+    params[0] = 1;
+    params[5] = a1 + 1;
+    params[6] = 1;
+    tisp_api_ae_scene_pare_set(a0, params);
+    tisp_ae_trig();
 
     return 0;
 }
@@ -91204,23 +91126,15 @@ int32_t tisp_s_BacklightComp(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065cd4 origin=fragment_seed original=tisp_g_BacklightComp */
 int tisp_g_BacklightComp(uint32_t *out)
 {
-    uint32_t var_c = 0;
-    uint32_t *var_38;
-    uint32_t var_24;
+    uint32_t params[sizeof(_scene_para) / sizeof(uint32_t)];
+    uint32_t size = 0;
 
-    tisp_api_ae_scene_pare_get(0, &var_38, &var_c);
-
-    if (var_c != 0x2c) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("tisp_g_BacklightComp,%d:::Get Backlight Compensation failed!!!\n"), (uintptr_t)(698));
-        return -1;
-    }
-
-    if (var_38 != 0 && var_24 != 1) {
-        *out = var_24 - 1;
-    } else {
-        *out = 0;
-    }
-
+    if (!out)
+        return -EINVAL;
+    tisp_api_ae_scene_pare_get(0, (uintptr_t)params, (uintptr_t)&size);
+    if (size != sizeof(_scene_para))
+        return -EINVAL;
+    *out = params[0] && params[5] != 1 ? params[5] - 1 : 0;
     return 0;
 }
 
