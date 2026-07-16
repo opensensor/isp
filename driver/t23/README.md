@@ -104,7 +104,10 @@ Current smoke-test status:
 - The exact T23 CCM startup path applies the tuning blob's EV-derived
   saturation transform instead of writing the raw daylight matrix. It is
   stable and less extreme than the raw matrix, but the best verified startup
-  still keeps the top-level CCM bypassed.
+  keeps the top-level CCM bypassed. A 2026-07-16 no-CCM run retained adaptive
+  AE/AWB, passed 256 RTSP frames, and removed much of the recovered path's
+  exaggerated saturation and purple cast. `source_ccm_tuning_init=1` remains
+  available for diagnostics while the pre-CCM spatial color error is repaired.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics.

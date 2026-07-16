@@ -9936,7 +9936,7 @@ static bool regtrace_t23_source_bcsh_events;
 static uint regtrace_t23_source_bcsh_ev_events;
 static uint regtrace_t23_source_bcsh_ct_events;
 static uint regtrace_t23_source_bcsh_last_ct = 3187U;
-static bool regtrace_t23_source_ccm_tuning_init = true;
+static bool regtrace_t23_source_ccm_tuning_init;
 static bool regtrace_t23_source_ccm_events = true;
 static uint regtrace_t23_source_ccm_runtime_ct = 5084U;
 static uint regtrace_t23_source_ccm_last_ct = 5084U;
