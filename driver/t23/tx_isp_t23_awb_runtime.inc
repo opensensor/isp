@@ -205,7 +205,7 @@ static int regtrace_t23_awb_hlil_calculate(
     uint32_t active_zones = 0;
     bool indoor = regtrace_t23_source_ae_hlil_ev >=
                   (REGTRACE_T23_AWB_HLIL_INDOOR_EV << q);
-    const uint32_t *ct_weight_mesh = indoor ?
+    const uint32_t *rgbg_weight_mesh = indoor ?
         regtrace_t23_awb_hlil_indoor_ct_weight_mesh :
         regtrace_t23_awb_hlil_outdoor_ct_weight_mesh;
     uint32_t i;
@@ -255,7 +255,7 @@ static int regtrace_t23_awb_hlil_calculate(
             regtrace_t23_awb_hlil_div_q(pixels, max_pixels);
         regtrace_t23_awb_hlil_mesh_weight[i] =
             regtrace_t23_awb_hlil_mesh_q(
-                regtrace_t23_awb_hlil_color_temperature_mesh, rg_q, bg_q);
+                rgbg_weight_mesh, rg_q, bg_q);
         active_zones++;
     }
 
@@ -394,7 +394,8 @@ static int regtrace_t23_awb_hlil_calculate(
     result->active_zones = active_zones;
     {
         uint32_t inverse_ct_q = regtrace_t23_awb_hlil_mesh_q(
-            ct_weight_mesh, average_rg_q, average_bg_q);
+            regtrace_t23_awb_hlil_color_temperature_mesh,
+            average_rg_q, average_bg_q);
 
         result->ct = inverse_ct_q ?
             (uint32_t)div64_u64(((uint64_t)1000000U << q) +

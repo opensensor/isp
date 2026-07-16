@@ -21,6 +21,12 @@ Current smoke-test status:
   startup images produce a clean, artifact-free image with working ISP/VIC
   interrupts. The exact LSC image programs all 651 OEM mesh nodes. The CLM
   image follows the T23 startup CT of 5000 K and programs both OEM LUT banks.
+- Core startup derives the OEM `0xb5742209` non-WDR top-bypass mask from the
+  deployed SC2336 tuning blob, with the same value as its read-failure
+  fallback. The recovered block overrides produce final mask `0xb5742a89`.
+  A 2026-07-16 no-argument run passed 256 RTSP frames and moved frame
+  `UAVG/VAVG` from `122.8/128.2` to `128.2/127.3`, closely matching the OEM
+  reference `127.9/126.8` while removing the green/purple spatial cast.
 - The CLM color-lookup runtime now implements the T23 HLIL five-region CT
   selector, 200 K transition margins, 32-unit update hysteresis, and exact Q12
   interpolation for all 1,050 hue/saturation entries. The register commit is
@@ -97,10 +103,13 @@ Current smoke-test status:
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
   indoor light-source distance-LUT weighting, distance refinement, history,
-  live-EV CT-mesh selection, and OEM gain conversion. The current scene has no
-  zones inside either calibrated light-source radius, so the added OEM stage
-  is intentionally neutral there. The loop is stable, and the earlier Q12
-  gray-world loop remains available only as a diagnostic fallback.
+  live-EV RGBG-weight selection, inverse-temperature interpolation, and OEM
+  gain conversion. The T23 HLIL call frame supplies `_rgbg_weight[_ot]` as the
+  zone-selection mesh and `_color_temp_mesh` as the final CT mesh; keeping
+  those roles distinct corrected the collapsed port's roughly 61,000 K output
+  to a stable 4,400 K result in the same 256-frame no-argument run.
+  The earlier Q12 gray-world loop remains available only as a diagnostic
+  fallback.
 - The exact T23 CCM startup path applies the tuning blob's EV-derived
   saturation transform instead of writing the raw daylight matrix. It is
   stable and less extreme than the raw matrix, but the best verified startup

@@ -9841,8 +9841,9 @@ static bool regtrace_t23_source_core_start = true;
 static bool regtrace_t23_source_frame_done = true;
 static bool regtrace_t23_source_msca_curves = true;
 static bool regtrace_t23_source_msca_init;
-static uint regtrace_t23_source_core_bypass = 0xffffea0fU;
-static bool regtrace_t23_source_core_bypass_from_tuning;
+/* SC2336 non-WDR mask derived by the OEM T23 tisp_init path. */
+static uint regtrace_t23_source_core_bypass = 0xb5742209U;
+static bool regtrace_t23_source_core_bypass_from_tuning = true;
 static bool regtrace_t23_source_park_uninitialized_mdns;
 static bool regtrace_t23_source_mdns_tuning_init = true;
 static bool regtrace_t23_source_mdns_internal_enable = true;
