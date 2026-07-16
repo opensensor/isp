@@ -12,40 +12,40 @@
 |---|---:|---:|
 | Function symbols | 1043 | 1329 |
 | Functions with disassembly | 1043 | 1329 |
-| Executable section bytes | 443376 | 378112 |
-| Initialized writable bytes | 216768 | 196560 |
-| Uninitialized writable bytes | 164688 | 1134656 |
+| Executable section bytes | 443376 | 379248 |
+| Initialized writable bytes | 216768 | 196736 |
+| Uninitialized writable bytes | 164688 | 905680 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
 - unmatched: OEM-only=61 recovered-only=346
-- matched instructions: OEM=106302 recovered=76355 ratio=0.718
-- classes: stub=38 collapsed=80 shorter=190 same_count=201 similar=389 larger=42 expanded=42
+- matched instructions: OEM=106302 recovered=76466 ratio=0.719
+- classes: stub=38 collapsed=79 shorter=190 same_count=201 similar=390 larger=42 expanded=42
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 164688 | 1134656 | +969968 |
-| `.data` | 216480 | 196272 | -20208 |
+| `.bss` | 164688 | 905680 | +740992 |
+| `.data` | 216480 | 196448 | -20032 |
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 16 | 0 | -16 |
-| `.modinfo` | 1260 | 6200 | +4940 |
+| `.modinfo` | 1260 | 6232 | +4972 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 75632 | +68912 |
-| `.rodata.str1.4` | 22728 | 21788 | -940 |
-| `.text` | 442176 | 376784 | -65392 |
+| `.rodata` | 6720 | 75648 | +68928 |
+| `.rodata.str1.4` | 22728 | 21924 | -804 |
+| `.text` | 442176 | 377920 | -64256 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
-| `__param` | 224 | 2432 | +2208 |
+| `__param` | 224 | 2448 | +2224 |
 
 ## Function Outliers
 
-Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 798 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -120,7 +120,6 @@ Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `tisp_s_osd_block_attr` | `tisp_s_osd_block_attr` | 168 | 59 | 0.351 | -109 | 3->1 | 10->1 |
 | collapsed | exact_name | `tiziano_ae_init_exp_th` | `tiziano_ae_init_exp_th` | 166 | 30 | 0.181 | -136 | 4->1 | 6->2 |
 | collapsed | exact_name | `ispcore_irq_thread_handle` | `ispcore_irq_thread_handle` | 164 | 34 | 0.207 | -130 | 9->2 | 25->5 |
-| collapsed | exact_name | `tiziano_gib_deir_ir_interpolation` | `tiziano_gib_deir_ir_interpolation` | 164 | 34 | 0.207 | -130 | 6->0 | 20->8 |
 | collapsed | exact_name | `subdev_sensor_ops_set_input` | `subdev_sensor_ops_set_input` | 147 | 10 | 0.068 | -137 | 10->0 | 29->3 |
 | collapsed | exact_name | `printf_func0` | `printf_func0` | 139 | 55 | 0.396 | -84 | 12->3 | 14->4 |
 | collapsed | replacement | `tisp_sdns_gaussian_x_cfg` | `regtrace_t23_sdns_gaussian_x_cfg` | 138 | 16 | 0.116 | -122 | 32->1 | 0->1 |
@@ -294,11 +293,12 @@ Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tx_isp_vic_slake_subdev` | `tx_isp_vic_slake_subdev` | 56 | 42 | 0.750 | -14 | 4->2 | 7->7 |
 | shorter | exact_name | `tisp_hldc_strength_adjust_k` | `tisp_hldc_strength_adjust_k` | 54 | 35 | 0.648 | -19 | 2->0 | 0->0 |
 | shorter | exact_name | `func_zone_ct_weight` | `func_zone_ct_weight` | 54 | 42 | 0.778 | -12 | 2->2 | 7->7 |
-| shorter | exact_name | `tiziano_gib_deir_reg` | `tiziano_gib_deir_reg` | 49 | 38 | 0.776 | -11 | 3->3 | 1->1 |
+| shorter | exact_name | `tiziano_gib_deir_reg` | `tiziano_gib_deir_reg` | 49 | 33 | 0.673 | -16 | 3->1 | 1->2 |
 | shorter | exact_name | `tisp_dpc_d_m3_par_cfg` | `tisp_dpc_d_m3_par_cfg` | 49 | 39 | 0.796 | -10 | 3->3 | 0->0 |
 | shorter | exact_name | `tx_isp_core_remove` | `tx_isp_core_remove` | 48 | 37 | 0.771 | -11 | 7->5 | 2->1 |
 | shorter | exact_name | `isp_tunning_read` | `isp_tunning_read` | 45 | 34 | 0.756 | -11 | 2->2 | 4->4 |
 | shorter | exact_name | `tisp_s_ae_attr` | `tisp_s_ae_attr` | 45 | 35 | 0.778 | -10 | 3->3 | 2->1 |
+| shorter | exact_name | `vic_core_ops_init` | `vic_core_ops_init` | 43 | 28 | 0.651 | -15 | 2->1 | 7->4 |
 
 ## Replacement Map
 

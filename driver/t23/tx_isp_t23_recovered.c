@@ -2191,21 +2191,9 @@ static unsigned char __attribute__((aligned(4))) tiziano_gib_deirm_blc_r_linear[
     0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00, 0x00, 
     0x02, 0x01, 0x00, 0x00, 
 };
-static unsigned char data_9de60[16384];
-static unsigned char data_9de64[16384];
-static unsigned char data_9de68[16384];
-static unsigned char data_9de6c[16384];
-static unsigned char data_9de70[16384];
-static unsigned char data_9de74[16384];
-static unsigned char data_9de78[16384];
-static unsigned char data_9de7c[16384];
-static unsigned char data_9de80[16384];
-static unsigned char data_9de84[16384];
-static unsigned char data_9de88[16384];
-static unsigned char data_9de8c[16384];
-static unsigned char data_9de90[16384];
-static unsigned char data_9de94[16384];
-static uintptr_t tiziano_gib_config_line;
+static uint32_t tiziano_gib_config_line[12] = {
+    1, 1, 0, 0, 1, 0, 0, 0, 0, 3, 0xfff, 0xfff,
+};
 static unsigned char __attribute__((aligned(4))) tiziano_gib_r_g_linear[8] = {
     0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 
 };
@@ -2241,7 +2229,13 @@ static unsigned char __attribute__((aligned(4))) tiziano_gib_deir_g_m[132] = {
     0xcd, 0x09, 0x00, 0x00, 0x26, 0x0a, 0x00, 0x00, 0x80, 0x0a, 0x00, 0x00, 0xda, 0x0a, 0x00, 0x00, 
     0x33, 0x0b, 0x00, 0x00, 
 };
-static uintptr_t (*tiziano_gib_deir_b_m)();
+static uint32_t tiziano_gib_deir_b_m[33] = {
+    0x000, 0x073, 0x0e6, 0x15a, 0x1cd, 0x240, 0x2b3, 0x326,
+    0x39a, 0x40d, 0x480, 0x4f3, 0x566, 0x5da, 0x64d, 0x6c0,
+    0x733, 0x7a6, 0x81a, 0x88d, 0x900, 0x973, 0x9e6, 0xa5a,
+    0xacd, 0xb40, 0xbb3, 0xc26, 0xc9a, 0xd0d, 0xd80, 0xdf3,
+    0xe66,
+};
 static unsigned char tiziano_gib_deir_r_l[132];
 static unsigned char tiziano_gib_deir_g_l[132];
 static unsigned char tiziano_gib_deir_b_l[132];
@@ -8031,6 +8025,8 @@ static uintptr_t init_35718;
 static uintptr_t deir_flag_35749;
 static uintptr_t deir_flag_last_35750;
 static unsigned char gib_deir_r_35755[132];
+static unsigned char gib_deir_g_35756[132];
+static unsigned char gib_deir_b_35757[132];
 static unsigned char trig_set_deir[12];
 static int32_t awb_num;
 static uintptr_t awb_dn_refresh_flag;
@@ -9921,6 +9917,7 @@ static bool regtrace_t23_source_adr_initialized;
 static uint regtrace_t23_source_adr_width;
 static uint regtrace_t23_source_adr_height;
 static bool regtrace_t23_source_gib_tuning_init = true;
+static uint regtrace_t23_source_gib_ir_value;
 static bool regtrace_t23_source_gamma_tuning_init = true;
 static bool regtrace_t23_source_lsc_tuning_init = true;
 static bool regtrace_t23_source_lsc_events = true;
@@ -10020,6 +10017,8 @@ static uint32_t regtrace_t23_dpc_gain_old = 0xffffffffU;
 static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin";
 #define REGTRACE_T23_DPC_TUNING_OFFSET 0xbad0U
 #define REGTRACE_T23_DPC_TUNING_SIZE   0x448U
+#define REGTRACE_T23_GIB_TUNING_OFFSET 0x2ab4U
+#define REGTRACE_T23_GIB_TUNING_SIZE   0x698U
 #define REGTRACE_T23_DMSC_TUNING_OFFSET 0x91b0U
 #define REGTRACE_T23_DMSC_TUNING_SIZE   0x2098U
 #define REGTRACE_T23_MDNS_TUNING_OFFSET 0xd1d0U
@@ -10104,6 +10103,8 @@ module_param_named(source_adr_height,
                    regtrace_t23_source_adr_height, uint, 0444);
 module_param_named(source_gib_tuning_init,
                    regtrace_t23_source_gib_tuning_init, bool, 0644);
+module_param_named(source_gib_ir_value,
+                   regtrace_t23_source_gib_ir_value, uint, 0644);
 module_param_named(source_gamma_tuning_init,
                    regtrace_t23_source_gamma_tuning_init, bool, 0644);
 module_param_named(source_lsc_tuning_init,
@@ -11795,6 +11796,56 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_clm_tuning.inc"
 #include "tx_isp_t23_ydns_tuning.inc"
 
+#define REGTRACE_T23_GIB_COPY_PARAMS(params) do { \
+    memcpy(tiziano_gib_config_line, (params) + 0x000U, 48U); \
+    memcpy(tiziano_gib_r_g_linear, (params) + 0x030U, 8U); \
+    memcpy(tiziano_gib_b_ir_linear, (params) + 0x038U, 8U); \
+    memcpy(tiziano_gib_deirm_blc_r_linear, (params) + 0x040U, 36U); \
+    memcpy(tiziano_gib_deirm_blc_gr_linear, (params) + 0x064U, 36U); \
+    memcpy(tiziano_gib_deirm_blc_gb_linear, (params) + 0x088U, 36U); \
+    memcpy(tiziano_gib_deirm_blc_b_linear, (params) + 0x0acU, 36U); \
+    memcpy(tiziano_gib_deirm_blc_ir_linear, (params) + 0x0d0U, 36U); \
+    memcpy(gib_ir_point, (params) + 0x0f4U, 16U); \
+    memcpy(gib_ir_reser, (params) + 0x104U, 60U); \
+    memcpy(tiziano_gib_deir_r_h, (params) + 0x140U, 132U); \
+    memcpy(tiziano_gib_deir_g_h, (params) + 0x1c4U, 132U); \
+    memcpy(tiziano_gib_deir_b_h, (params) + 0x248U, 132U); \
+    memcpy(tiziano_gib_deir_r_m, (params) + 0x2ccU, 132U); \
+    memcpy(tiziano_gib_deir_g_m, (params) + 0x350U, 132U); \
+    memcpy(tiziano_gib_deir_b_m, (params) + 0x3d4U, 132U); \
+    memcpy(tiziano_gib_deir_r_l, (params) + 0x458U, 132U); \
+    memcpy(tiziano_gib_deir_g_l, (params) + 0x4dcU, 132U); \
+    memcpy(tiziano_gib_deir_b_l, (params) + 0x560U, 132U); \
+    memcpy(tiziano_gib_deir_matrix_h, (params) + 0x5e4U, 60U); \
+    memcpy(tiziano_gib_deir_matrix_m, (params) + 0x620U, 60U); \
+    memcpy(tiziano_gib_deir_matrix_l, (params) + 0x65cU, 60U); \
+} while (0)
+
+static int regtrace_t23_source_gib_load_tuning(void)
+{
+    unsigned char *params;
+    const uint32_t *points;
+    int ret;
+
+    params = private_vmalloc(REGTRACE_T23_GIB_TUNING_SIZE);
+    if (!params)
+        return -ENOMEM;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_GIB_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_GIB_TUNING_SIZE);
+    if (!ret)
+        REGTRACE_T23_GIB_COPY_PARAMS(params);
+    private_vfree(params);
+
+    if (ret)
+        return ret;
+    points = (const uint32_t *)gib_ir_point;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: GIB tuning loaded IR points=%u/%u/%u/%u\n",
+           points[0], points[1], points[2], points[3]);
+    return 0;
+}
+
 static void regtrace_t23_source_lsc_initialize_tables(void)
 {
     uint32_t value;
@@ -12051,14 +12102,31 @@ int32_t tisp_lsc_mirror_flip(uint32_t unused, uint32_t width,
                              uint32_t mirror);
 static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10);
 int32_t cm_control(int32_t *arg1, int32_t arg2, int32_t *arg3);
+int32_t tiziano_gib_params_refresh(void);
+int32_t tisp_gib_deir_ir_update(uint32_t ir_value);
 
 static void regtrace_t23_source_gib_write_tuning_startup(void)
 {
+    int tuning_ret;
     size_t i;
 
+    tuning_ret = regtrace_t23_source_gib_load_tuning();
+    if (tuning_ret)
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: GIB tuning load failed ret=%d; using embedded startup only\n",
+               tuning_ret);
     for (i = 0; i < ARRAY_SIZE(regtrace_t23_gib_sc2336_startup); ++i)
         system_reg_write(regtrace_t23_gib_sc2336_startup[i][0],
                          regtrace_t23_gib_sc2336_startup[i][1]);
+
+    if (!tuning_ret && regtrace_t23_source_gib_ir_value) {
+        tiziano_gib_config_line[3] = 1;
+        tisp_gib_deir_ir_update(regtrace_t23_source_gib_ir_value);
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source GIB de-IR value=%u region=%u committed\n",
+               regtrace_t23_source_gib_ir_value,
+               (unsigned int)deir_flag_35749);
+    }
 
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source GIB SC2336 tuning startup committed (%u writes)\n",
@@ -14810,10 +14878,15 @@ int32_t tisp_gib_gain_interpolation(uint32_t a0);
 int32_t tiziano_gib_lut_parameter(void);
 int32_t tiziano_gib_params_refresh(void);
 int tiziano_gib_dn_params_refresh(void);
-int32_t tiziano_gib_deir_reg(uintptr_t a0, uintptr_t a1, uintptr_t a2);
-uint32_t tiziano_gib_deir_interpolate(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uintptr_t arg4, uintptr_t arg5);
-uint32_t tiziano_gib_deir_ir_interpolation(uint32_t a0);
-int32_t tisp_gib_deir_ir_update(uint32_t a0);
+int32_t tiziano_gib_deir_reg(uintptr_t red, uintptr_t green,
+                             uintptr_t blue);
+uint32_t tiziano_gib_deir_interpolate(uint32_t *out, uint32_t sample,
+                                      uint32_t high_point,
+                                      uint32_t low_point,
+                                      const uint32_t *high,
+                                      const uint32_t *low);
+uint32_t tiziano_gib_deir_ir_interpolation(uint32_t ir_value);
+int32_t tisp_gib_deir_ir_update(uint32_t ir_value);
 int32_t tiziano_gib_init(void);
 int32_t tisp_gib_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2);
 int32_t tisp_gib_param_array_set(uint32_t a0, uint32_t a1);
@@ -45953,99 +46026,43 @@ tisp_gib_gain_interpolation0x28c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001d2e4 origin=fragment_seed original=tiziano_gib_lut_parameter */
 int32_t tiziano_gib_lut_parameter(void)
 {
-    uint32_t *v0;
-    uint32_t *a0;
-    uint32_t *a1;
-    uint32_t *a2;
-    uint32_t v1;
+    const uint32_t *rg = (const uint32_t *)tiziano_gib_r_g_linear;
+    const uint32_t *bir = (const uint32_t *)tiziano_gib_b_ir_linear;
+    uint32_t value;
 
-    v0 = data_9de8c;
-    a1 = data_9de88;
-    v0 = (uintptr_t)v0 << 16;
-    a1 = (uintptr_t)v0 | (uintptr_t)a1;
-    system_reg_write(0x1038, a1);
+    system_reg_write(0x1038U,
+                     (tiziano_gib_config_line[11] << 16) |
+                     tiziano_gib_config_line[10]);
 
-    a2 = data_9de7c;
-    a1 = data_9de70;
-    a0 = data_9de60;
-    v1 = data_9de64;
-    v0 = (uintptr_t)a2 << 16;
-    a1 = (uintptr_t)a1 << 14;
-    a2 = (uintptr_t)v0 | (uintptr_t)a1;
-    a0 = (uintptr_t)a0 << 12;
-    v0 = data_9de78;
-    a1 = (uintptr_t)a2 | (uintptr_t)a0;
-    v1 = v1 << 10;
-    a0 = (uintptr_t)a1 | v1;
-    v0 = (uintptr_t)v0 << 8;
-    v1 = (uintptr_t)a0 | (uintptr_t)v0;
-    v0 = data_9de84;
-    a1 = data_9de80;
-    v0 = (uintptr_t)v0 << 4;
-    v0 = v1 | (uintptr_t)v0;
-    a1 = (uintptr_t)a1 << 2;
-    a1 = (uintptr_t)v0 | (uintptr_t)a1;
-    system_reg_write(0x103c, a1);
+    value = (tiziano_gib_config_line[7] << 16) |
+            (tiziano_gib_config_line[4] << 14) |
+            (tiziano_gib_config_line[0] << 12) |
+            (tiziano_gib_config_line[1] << 10) |
+            (tiziano_gib_config_line[6] << 8) |
+            (tiziano_gib_config_line[9] << 4) |
+            (tiziano_gib_config_line[8] << 2);
+    system_reg_write(0x103cU, value);
 
-    v0 = data_9de6c;
-    a2 = data_9de74;
-    v1 = (uintptr_t)v0 << 16;
-    v0 = data_9de68;
-    v0 = (uintptr_t)v0 << 3;
-    v0 = v1 | (uintptr_t)v0;
-    a2 = (uintptr_t)v0 | (uintptr_t)a2;
-    system_reg_write_gib(1, 0x106c, a2);
+    value = (tiziano_gib_config_line[3] << 16) |
+            (tiziano_gib_config_line[2] << 3) |
+            tiziano_gib_config_line[5];
+    system_reg_write_gib(1, 0x106c, value);
+    tisp_gib_gain_interpolation(tisp_gib_blc_ag);
 
-    a0 = tisp_get_blc_attr;
-    tisp_gib_gain_interpolation(a0);
+    if (!init_35718) {
+        system_reg_write_gib(1, 0x1030, (rg[1] << 16) | rg[0]);
+        system_reg_write_gib(1, 0x1034, (bir[1] << 16) | bir[0]);
+        init_35718 = 1;
+    }
 
-    v0 = init_35718;
-    if (v0 != 0)
-        goto cleanup;
-
-    v0 = data_9de90;
-    a2 = data_9de8c;
-    v0 = (uintptr_t)v0 << 16;
-    a2 = (uintptr_t)v0 | (uintptr_t)a2;
-    system_reg_write_gib(1, 0x1030, a2);
-
-    v0 = data_9de94;
-    a2 = data_9de90;
-    v0 = (uintptr_t)v0 << 16;
-    a2 = (uintptr_t)v0 | (uintptr_t)a2;
-    system_reg_write_gib(1, 0x1034, a2);
-
-    init_35718 = 1;
-
-cleanup:
-    v0 = 0;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001d438 origin=model_output original=tiziano_gib_params_refresh */
 int32_t tiziano_gib_params_refresh(void) {
-    memcpy(&tiziano_gib_config_line, &tparams[23452], 48);
-    memcpy(&tiziano_gib_r_g_linear, &tparams[23500], 8);
-    memcpy(&tiziano_gib_b_ir_linear, &tparams[23508], 8);
-    memcpy(&tiziano_gib_deirm_blc_r_linear, &tparams[23516], 36);
-    memcpy(&tiziano_gib_deirm_blc_gr_linear, &tparams[23552], 36);
-    memcpy(&tiziano_gib_deirm_blc_gb_linear, &tparams[23588], 36);
-    memcpy(&tiziano_gib_deirm_blc_b_linear, &tparams[23624], 36);
-    memcpy(&tiziano_gib_deirm_blc_ir_linear, &tparams[23660], 36);
-    memcpy(&gib_ir_point, &tparams[23696], 16);
-    memcpy(&gib_ir_reser, &tparams[23712], 60);
-    memcpy(&tiziano_gib_deir_r_h, &tparams[23772], 132);
-    memcpy(&tiziano_gib_deir_g_h, &tparams[23904], 132);
-    memcpy(&tiziano_gib_deir_b_h, &tparams[24036], 132);
-    memcpy(&tiziano_gib_deir_r_m, &tparams[24168], 132);
-    memcpy(&tiziano_gib_deir_g_m, &tparams[24300], 132);
-    memcpy(&tiziano_gib_deir_b_m, &tparams[24432], 132);
-    memcpy(&tiziano_gib_deir_r_l, &tparams[24564], 132);
-    memcpy(&tiziano_gib_deir_g_l, &tparams[24696], 132);
-    memcpy(&tiziano_gib_deir_b_l, &tparams[24828], 132);
-    memcpy(&tiziano_gib_deir_matrix_h, &tparams[24960], 60);
-    memcpy(&tiziano_gib_deir_matrix_m, &tparams[25020], 60);
-    memcpy(&tiziano_gib_deir_matrix_l, &tparams[25080], 60);
+    const unsigned char *params = tparams + T23_TPARAMS_ACTIVE_OFFSET + 0x5b9cU;
+
+    REGTRACE_T23_GIB_COPY_PARAMS(params);
     return 0;
 }
 
@@ -46053,11 +46070,12 @@ int32_t tiziano_gib_params_refresh(void) {
 int tiziano_gib_dn_params_refresh(void)
 {
 	tiziano_gib_params_refresh();
-	tiziano_gib_config_line = 0;
+	tiziano_gib_config_line[3] = 0;
 	tiziano_gib_lut_parameter();
 	return 0;
 }
 
+#if 0 /* Replaced below by the T23 HLIL de-IR table path. */
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001d6b0 origin=fragment_seed original=tiziano_gib_deir_reg */
 int32_t tiziano_gib_deir_reg(uintptr_t a0, uintptr_t a1, uintptr_t a2)
 {
@@ -46481,6 +46499,158 @@ tisp_gib_deir_ir_update0x90:
 
     return 0;
 }
+#endif
+
+int32_t tiziano_gib_deir_reg(uintptr_t red, uintptr_t green,
+                             uintptr_t blue)
+{
+    const uint32_t *channels[3];
+    unsigned int channel;
+    unsigned int i;
+
+    channels[0] = (const uint32_t *)red;
+    channels[1] = (const uint32_t *)green;
+    channels[2] = (const uint32_t *)blue;
+    for (channel = 0; channel < ARRAY_SIZE(channels); ++channel) {
+        uint32_t base = 0x80000U + channel * 0x80U;
+
+        for (i = 0; i < 32U; ++i)
+            system_reg_write(base + i * 4U,
+                             (channels[channel][i + 1U] << 12) |
+                             channels[channel][i]);
+    }
+    return 0;
+}
+
+uint32_t tiziano_gib_deir_interpolate(uint32_t *out, uint32_t sample,
+                                      uint32_t high_point,
+                                      uint32_t low_point,
+                                      const uint32_t *high,
+                                      const uint32_t *low)
+{
+    uint32_t denominator;
+    uint32_t distance;
+    uint32_t result = 0;
+    unsigned int i;
+
+    denominator = high_point + (high_point == low_point) - low_point;
+    distance = sample - low_point;
+    for (i = 0; i < 33U; ++i) {
+        uint32_t numerator = low[i] * denominator +
+            (high[i] - low[i]) * distance;
+
+        result = numerator / denominator;
+        out[i] = result;
+    }
+    return result;
+}
+
+uint32_t tiziano_gib_deir_ir_interpolation(uint32_t ir_value)
+{
+    const uint32_t *points = (const uint32_t *)gib_ir_point;
+    const uint32_t *red;
+    const uint32_t *green;
+    const uint32_t *blue;
+    uint32_t flag;
+    bool commit = false;
+
+    if (ir_value > points[3])
+        flag = 0;
+    else if (ir_value > points[2])
+        flag = 1;
+    else if (ir_value > points[1])
+        flag = 2;
+    else if (ir_value > points[0])
+        flag = 3;
+    else
+        flag = 4;
+    deir_flag_35749 = flag;
+
+    if (flag == 1 || flag == 3) {
+        deir_flag_last_35750 = flag;
+        commit = true;
+    } else if (deir_flag_last_35750 != flag) {
+        deir_flag_last_35750 = flag;
+        commit = true;
+    }
+    if (!commit)
+        return flag;
+
+    switch (flag) {
+    case 0:
+        red = (const uint32_t *)tiziano_gib_deir_r_h;
+        green = (const uint32_t *)tiziano_gib_deir_g_h;
+        blue = (const uint32_t *)tiziano_gib_deir_b_h;
+        break;
+    case 1:
+        tiziano_gib_deir_interpolate((uint32_t *)gib_deir_r_35755,
+                                     ir_value, points[3], points[2],
+                                     (const uint32_t *)tiziano_gib_deir_r_h,
+                                     (const uint32_t *)tiziano_gib_deir_r_m);
+        tiziano_gib_deir_interpolate((uint32_t *)gib_deir_g_35756,
+                                     ir_value, points[3], points[2],
+                                     (const uint32_t *)tiziano_gib_deir_g_h,
+                                     (const uint32_t *)tiziano_gib_deir_g_m);
+        tiziano_gib_deir_interpolate((uint32_t *)gib_deir_b_35757,
+                                     ir_value, points[3], points[2],
+                                     (const uint32_t *)tiziano_gib_deir_b_h,
+                                     tiziano_gib_deir_b_m);
+        red = (const uint32_t *)gib_deir_r_35755;
+        green = (const uint32_t *)gib_deir_g_35756;
+        blue = (const uint32_t *)gib_deir_b_35757;
+        break;
+    case 2:
+        red = (const uint32_t *)tiziano_gib_deir_r_m;
+        green = (const uint32_t *)tiziano_gib_deir_g_m;
+        blue = tiziano_gib_deir_b_m;
+        break;
+    case 3:
+        tiziano_gib_deir_interpolate((uint32_t *)gib_deir_r_35755,
+                                     ir_value, points[1], points[0],
+                                     (const uint32_t *)tiziano_gib_deir_r_m,
+                                     (const uint32_t *)tiziano_gib_deir_r_l);
+        tiziano_gib_deir_interpolate((uint32_t *)gib_deir_g_35756,
+                                     ir_value, points[1], points[0],
+                                     (const uint32_t *)tiziano_gib_deir_g_m,
+                                     (const uint32_t *)tiziano_gib_deir_g_l);
+        tiziano_gib_deir_interpolate((uint32_t *)gib_deir_b_35757,
+                                     ir_value, points[1], points[0],
+                                     tiziano_gib_deir_b_m,
+                                     (const uint32_t *)tiziano_gib_deir_b_l);
+        red = (const uint32_t *)gib_deir_r_35755;
+        green = (const uint32_t *)gib_deir_g_35756;
+        blue = (const uint32_t *)gib_deir_b_35757;
+        break;
+    default:
+        red = (const uint32_t *)tiziano_gib_deir_r_l;
+        green = (const uint32_t *)tiziano_gib_deir_g_l;
+        blue = (const uint32_t *)tiziano_gib_deir_b_l;
+        break;
+    }
+
+    return tiziano_gib_deir_reg((uintptr_t)red, (uintptr_t)green,
+                                (uintptr_t)blue);
+}
+
+int32_t tisp_gib_deir_ir_update(uint32_t ir_value)
+{
+    uint32_t *mode = (uint32_t *)gib_ir_mode;
+    uint32_t *values = (uint32_t *)gib_ir_value;
+    uint32_t delta;
+
+    values[0] = ir_value;
+    if (tiziano_gib_config_line[3] != 1U || mode[0] != 1U)
+        return 0;
+
+    delta = ir_value >= values[1] ? ir_value - values[1] :
+                                    values[1] - ir_value;
+    if (delta > mode[1] || *(uint32_t *)trig_set_deir == mode[0]) {
+        *(uint32_t *)trig_set_deir = 0;
+        tiziano_gib_deir_ir_interpolation(ir_value);
+        values[1] = values[0];
+    }
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001db04 origin=fragment_seed original=tiziano_gib_init */
 int32_t tiziano_gib_init(void)
@@ -46499,7 +46669,7 @@ int32_t tiziano_gib_init(void)
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_gib_params_refresh)(a0); /* jalr target resolved by relocation */
 
     /* fragment 2: CallSetup */
-    *(uint32_t *)((char *)((char *)&tiziano_gib_config_line + 0xc)) = 0;
+    tiziano_gib_config_line[3] = 0;
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_gib_lut_parameter)(a0); /* jalr target resolved by relocation */
 
     /* fragment 3: CallSetup */

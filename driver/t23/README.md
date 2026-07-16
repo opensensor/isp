@@ -272,7 +272,23 @@ Current smoke-test status:
   instruction count, the show callback is 29 instructions versus 28 OEM, and
   the command parser is 236 versus 308 with 13 of 20 OEM calls retained. This
   removes `video_input_cmd_set` from the hard-stub class and reduces the audit
-  to 38 hard stubs with 80 collapses.
+  to 38 hard stubs. On device, read-only commands returned the SC2336 ID bytes
+  `0xcb/0x3a` from registers `0x3107/0x3108` before streaming.
+- The full GIB de-IR table path now uses the OEM 33-word RGB bank dimensions,
+  32-register channel packers, four-threshold region selector, linear
+  interpolation, transition hysteresis, and update gate. Tuning is loaded
+  from the SC2336 file's exact `0x2ab4..0x314c` range; the active-bank fallback
+  observes the recovered `0x13100` tuning-object offset. This also replaces
+  fourteen mis-typed 16 KiB globals and the four-byte blue table/header that
+  received 132-byte/48-byte copies, reducing recovered BSS by 229,376 bytes.
+  The parameter refresh is exactly 142/142 instructions, the interpolator is
+  25/23, the LUT packer is 82/85, and the region selector is 143/164 versus
+  OEM. Diagnostic `source_gib_ir_value=64` loaded IR points `5/50/51/128`,
+  selected region 1, and decoded 259 measured frames at
+  `YAVG/UAVG/VAVG/SATAVG` `108.0/129.3/125.1/6.8`. The no-argument regression
+  decoded 259 frames at `109.8/129.3/125.0/7.2`, retained `17360/1507`
+  ISP/VIC interrupts without faults, and rebooted cleanly. The audit now
+  reports 38 hard stubs and 79 collapses.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics. The recovered transform primitives now use the
