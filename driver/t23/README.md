@@ -79,14 +79,21 @@ Current smoke-test status:
   packed `0x00c0059c` and `0x0880059c` select 1.5x and 2x respectively. The
   matching OEM GIB and DMSC total-gain state is inferred automatically; a
   nonzero `source_total_gain_q16` remains available as an explicit override.
-- Optional `source_ae_hlil` adds a bounded process-context exposure controller
-  over those three verified states. Every `source_ae_hlil_interval` snapshots
-  it moves one rung toward the tuning-derived luma target of 60, with a default
-  deadband of 5. Sensor I2C never runs in IRQ context, and each transition
-  reapplies the base DMSC image before its matching gain delta. Read-only
-  counters expose runs, updates, dropped schedules, last luma, current state,
-  raw Q10 EV, and status. This is the proven active branch, not the full
-  recovered OEM AE solver, and requires `source_ae_stats_init=1`.
+- Optional `source_ae_hlil` adds a bounded process-context exposure controller.
+  Its sorted ladder covers short unity-gain integration times through the
+  sensor's real 1195-line boot setting and maximum integration, then the nine
+  verified analog-gain states. Every `source_ae_hlil_interval` snapshots it
+  selects the nearest proportional exposure for the tuning-derived luma target
+  of 60, with a default deadband of 5 and a four-rung slew limit. Sensor I2C
+  never runs in IRQ context, and gain-dependent GIB/DMSC/DNS/sharpen tuning is
+  reapplied only when analog gain changes. Read-only counters expose runs,
+  updates, dropped schedules, last luma, current state, raw Q10 EV, and status.
+  This is the proven active branch, not the full recovered OEM AE solver, and
+  requires `source_ae_stats_init=1`.
+  The 2026-07-16 default device smoke converged from 1195 to 600, 256, 128, and
+  96 integration lines while measured AE luma fell from 216 to 61. The stream
+  passed 256 RTSP frames; frame `YAVG` fell from the prior clipped 222.1 to
+  116.8 and `YHIGH` from 255 to 188.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
   indoor light-source distance-LUT weighting, distance refinement, history,

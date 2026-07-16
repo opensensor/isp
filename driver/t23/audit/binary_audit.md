@@ -1,8 +1,8 @@
 # Binary Assembly Audit
 
 - schema: `regtrace-binary-audit-v1`
-- OEM: `tx-isp-t23.ko`
-- recovered: `open-tx-isp/driver/t23/tx_isp_t23_recovered.ko`
+- OEM: `../tx-isp-t23.ko`
+- recovered: `driver/t23/tx_isp_t23_recovered.ko`
 - objdump counts exclude relocation records
 - thresholds: min_oem_insns=24 stub_insns=8 collapse=0.50 similar=0.80..1.25 expansion=2.00
 
@@ -10,15 +10,15 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 1043 | 1324 |
-| Functions with disassembly | 1043 | 1324 |
-| Executable section bytes | 443376 | 363280 |
+| Function symbols | 1043 | 1325 |
+| Functions with disassembly | 1043 | 1325 |
+| Executable section bytes | 443376 | 363488 |
 | Initialized writable bytes | 216768 | 46512 |
 | Uninitialized writable bytes | 164688 | 1102016 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
-- unmatched: OEM-only=61 recovered-only=341
+- unmatched: OEM-only=61 recovered-only=342
 - matched instructions: OEM=106302 recovered=73003 ratio=0.687
 - classes: stub=52 collapsed=93 shorter=199 same_count=198 similar=371 larger=30 expanded=39
 
@@ -35,9 +35,9 @@
 | `.modinfo` | 1260 | 5892 | +4632 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 75168 | +68448 |
+| `.rodata` | 6720 | 75376 | +68656 |
 | `.rodata.str1.4` | 22728 | 21088 | -1640 |
-| `.text` | 442176 | 361952 | -80224 |
+| `.text` | 442176 | 362160 | -80016 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
@@ -45,7 +45,7 @@
 
 ## Function Outliers
 
-Showing 250 of 815 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 816 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|

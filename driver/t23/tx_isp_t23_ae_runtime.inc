@@ -4,8 +4,6 @@
  * run on the system workqueue.
  */
 
-#define REGTRACE_T23_AE_HLIL_STATE_COUNT 9U
-
 struct regtrace_t23_ae_hlil_rung {
     uint32_t packed;
     uint32_t gain_q16;
@@ -13,6 +11,25 @@ struct regtrace_t23_ae_hlil_rung {
 };
 
 static const struct regtrace_t23_ae_hlil_rung regtrace_t23_ae_hlil_rungs[] = {
+    { 0x00800020U, 0x10000U,   32U << 10 },
+    { 0x00800030U, 0x10000U,   48U << 10 },
+    { 0x00800040U, 0x10000U,   64U << 10 },
+    { 0x00800060U, 0x10000U,   96U << 10 },
+    { 0x00800080U, 0x10000U,  128U << 10 },
+    { 0x008000a0U, 0x10000U,  160U << 10 },
+    { 0x008000c0U, 0x10000U,  192U << 10 },
+    { 0x008000e0U, 0x10000U,  224U << 10 },
+    { 0x00800100U, 0x10000U,  256U << 10 },
+    { 0x00800140U, 0x10000U,  320U << 10 },
+    { 0x00800190U, 0x10000U,  400U << 10 },
+    { 0x008001f4U, 0x10000U,  500U << 10 },
+    { 0x00800258U, 0x10000U,  600U << 10 },
+    { 0x008002eeU, 0x10000U,  750U << 10 },
+    { 0x00800384U, 0x10000U,  900U << 10 },
+    { 0x0080041aU, 0x10000U, 1050U << 10 },
+    /* SC2336 init registers 0x3e01/0x3e02 encode 0x4ab lines. */
+    { 0x008004abU, 0x10000U, 1195U << 10 },
+    { 0x00800514U, 0x10000U, 1300U << 10 },
     { 0x0080059cU, 0x10000U, 1436U << 10 },
     { 0x0090059cU, 0x12b80U, 1616U << 10 },
     { 0x00a0059cU, 0x15269U, 1795U << 10 },
@@ -23,6 +40,27 @@ static const struct regtrace_t23_ae_hlil_rung regtrace_t23_ae_hlil_rungs[] = {
     { 0x00f0059cU, 0x1e829U, 2693U << 10 },
     { 0x0880059cU, 0x20000U, 2872U << 10 },
 };
+
+#define REGTRACE_T23_AE_HLIL_STATE_COUNT \
+    ARRAY_SIZE(regtrace_t23_ae_hlil_rungs)
+
+static uint32_t regtrace_t23_ae_hlil_nearest_state(uint32_t ev)
+{
+    uint32_t best = 0;
+    uint32_t best_distance = 0xffffffffU;
+    uint32_t state;
+
+    for (state = 0; state < REGTRACE_T23_AE_HLIL_STATE_COUNT; ++state) {
+        uint32_t rung_ev = regtrace_t23_ae_hlil_rungs[state].ev_q10 >> 10;
+        uint32_t distance = rung_ev > ev ? rung_ev - ev : ev - rung_ev;
+
+        if (distance < best_distance) {
+            best = state;
+            best_distance = distance;
+        }
+    }
+    return best;
+}
 
 static uint32_t regtrace_t23_ae_hlil_pending_luma;
 static uint32_t regtrace_t23_ae_hlil_pending_snapshot;
@@ -43,7 +81,8 @@ static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
     uint32_t next_state;
     uint32_t lower;
     uint32_t upper;
-    uint32_t step;
+    uint32_t desired_ev;
+    uint32_t desired_state;
     int ret = 0;
 
     (void)work;
@@ -66,22 +105,32 @@ static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
 
     if (!regtrace_t23_sensor_streaming || !regtrace_t23_core_started) {
         ret = -EAGAIN;
-    } else if (luma < lower && state + 1U < REGTRACE_T23_AE_HLIL_STATE_COUNT) {
-        step = luma + 3U * regtrace_t23_source_ae_hlil_deadband <
-               regtrace_t23_source_ae_hlil_target ? 2U : 1U;
-        next_state = min(state + step,
-                         REGTRACE_T23_AE_HLIL_STATE_COUNT - 1U);
-    } else if (luma > upper && state > 0U) {
-        step = luma > regtrace_t23_source_ae_hlil_target +
-                      3U * regtrace_t23_source_ae_hlil_deadband ? 2U : 1U;
-        next_state = state > step ? state - step : 0U;
+    } else if (luma && (luma < lower || luma > upper)) {
+        uint32_t current_ev =
+            regtrace_t23_ae_hlil_rungs[state].ev_q10 >> 10;
+
+        desired_ev = (uint32_t)div64_u64(
+            (uint64_t)current_ev * regtrace_t23_source_ae_hlil_target +
+            luma / 2U, luma);
+        desired_ev = clamp(desired_ev,
+            regtrace_t23_ae_hlil_rungs[0].ev_q10 >> 10,
+            regtrace_t23_ae_hlil_rungs[
+                REGTRACE_T23_AE_HLIL_STATE_COUNT - 1U].ev_q10 >> 10);
+        desired_state = regtrace_t23_ae_hlil_nearest_state(desired_ev);
+        if (desired_state > state + 4U)
+            next_state = state + 4U;
+        else if (state > desired_state + 4U)
+            next_state = state - 4U;
+        else
+            next_state = desired_state;
     }
 
     if (!ret && next_state != state) {
         rung = &regtrace_t23_ae_hlil_rungs[next_state];
         ret = regtrace_t23_call_sensor_exposure(rung->packed,
                                                 "source-ae-hlil");
-        if (!ret)
+        if (!ret && rung->gain_q16 !=
+            regtrace_t23_ae_hlil_rungs[state].gain_q16)
             ret = regtrace_t23_source_apply_total_gain_value(
                 rung->gain_q16, rung->packed >> 16, false, true);
         if (!ret) {
@@ -175,7 +224,8 @@ static void regtrace_t23_source_ae_hlil_trigger(void)
 static void regtrace_t23_source_ae_hlil_reset(void)
 {
     unsigned long flags;
-    uint32_t sensor_again = regtrace_t23_source_ae_force_packed >> 16;
+    uint32_t initial_packed = regtrace_t23_source_ae_force_packed ?
+        regtrace_t23_source_ae_force_packed : 0x008004abU;
     uint32_t state;
 
     cancel_work_sync(&regtrace_t23_source_ae_hlil_work_item);
@@ -187,11 +237,14 @@ static void regtrace_t23_source_ae_hlil_reset(void)
 
     regtrace_t23_source_ae_hlil_state = 0U;
     for (state = 0; state < REGTRACE_T23_AE_HLIL_STATE_COUNT; ++state) {
-        if ((regtrace_t23_ae_hlil_rungs[state].packed >> 16) == sensor_again) {
+        if (regtrace_t23_ae_hlil_rungs[state].packed == initial_packed) {
             regtrace_t23_source_ae_hlil_state = state;
             break;
         }
     }
+    if (state == REGTRACE_T23_AE_HLIL_STATE_COUNT)
+        regtrace_t23_source_ae_hlil_state =
+            regtrace_t23_ae_hlil_nearest_state(initial_packed & 0xffffU);
     regtrace_t23_source_ae_hlil_ev =
         regtrace_t23_ae_hlil_rungs[regtrace_t23_source_ae_hlil_state].ev_q10;
     regtrace_t23_source_ae_hlil_runs = 0;
