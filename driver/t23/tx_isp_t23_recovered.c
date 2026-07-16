@@ -2889,19 +2889,19 @@ static unsigned char tiziano_ccm_d_linear[36];
 static unsigned char tiziano_ccm_d_wdr[36];
 static unsigned char tiziano_ccm_t_linear[36];
 static unsigned char tiziano_ccm_t_wdr[36];
-static unsigned char tisp_BCSH_as32CCMMatrix_d2[36];
+static unsigned char __attribute__((aligned(4))) tisp_BCSH_as32CCMMatrix_d2[36];
 static unsigned char __attribute__((aligned(4))) tisp_BCSH_au32CCMMatrix_d2_now[4] = {
     0x00, 0x00, 0x00, 0x00, 
 };
-static uintptr_t tisp_BCSH_as32CCMMatrix_d;
+static unsigned char __attribute__((aligned(4))) tisp_BCSH_as32CCMMatrix_d[36];
 static unsigned char __attribute__((aligned(4))) tisp_BCSH_au32CCMMatrix_d_now[4] = {
     0x00, 0x00, 0x00, 0x00, 
 };
-static unsigned char tisp_BCSH_as32CCMMatrix_t[36];
+static unsigned char __attribute__((aligned(4))) tisp_BCSH_as32CCMMatrix_t[36];
 static unsigned char __attribute__((aligned(4))) tisp_BCSH_au32CCMMatrix_t_now[4] = {
     0x00, 0x00, 0x00, 0x00, 
 };
-static unsigned char tisp_BCSH_as32CCMMatrix_a[36];
+static unsigned char __attribute__((aligned(4))) tisp_BCSH_as32CCMMatrix_a[36];
 static unsigned char __attribute__((aligned(4))) tisp_BCSH_au32CCMMatrix_a_now[4] = {
     0x00, 0x00, 0x00, 0x00, 
 };
@@ -2913,7 +2913,7 @@ static uintptr_t bcsh_ct_part_now;
 static unsigned char __attribute__((aligned(4))) bcsh_ct_part_old[4] = {
     0xff, 0x00, 0x00, 0x00, 
 };
-static unsigned char tisp_BCSH_as32CCMMatrix[36];
+static unsigned char __attribute__((aligned(4))) tisp_BCSH_as32CCMMatrix[36];
 static unsigned char __attribute__((aligned(4))) CosValue[12] = {
     0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x80, 0x00, 0x00, 
 };
@@ -2923,13 +2923,24 @@ static unsigned char __attribute__((aligned(4))) HueIndex[12] = {
 static unsigned char __attribute__((aligned(4))) SinValue[12] = {
     0xb4, 0xdd, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xb4, 0xdd, 0x00, 0x00, 
 };
-static uintptr_t bcsh_hue;
+static uintptr_t bcsh_hue = 0x3c;
 static unsigned char __attribute__((aligned(4))) MMatrix[36] = {
     0xcb, 0x41, 0x00, 0x00, 0x06, 0x81, 0x00, 0x00, 0x17, 0x19, 0x00, 0x00, 0x1d, 0xda, 0xff, 0xff, 
     0x81, 0xb5, 0xff, 0xff, 0x62, 0x70, 0x00, 0x00, 0x62, 0x70, 0x00, 0x00, 0xcb, 0xa1, 0xff, 0xff, 
     0xd3, 0xed, 0xff, 0xff, 
 };
 static unsigned char tisp_BCSH[76];
+static uint32_t tisp_BCSH_ai32Svalue[4];
+static uint32_t tisp_BCSH_ai32C[5];
+static uint8_t bcsh_brightness = 0x80;
+static uint8_t bcsh_contrast = 0x80;
+static uint8_t bcsh_saturation = 0x80;
+static uint8_t bcsh_hue_user = 0x80;
+static uint8_t s_bcsh_mjpeg_mode;
+static uint8_t s_bcsh_mjpeg_y_range_low;
+static uint8_t s_bcsh_mjpeg_y_range_high;
+static uint32_t regtrace_t23_bcsh_ev = 1436U << 10;
+static uint32_t regtrace_t23_bcsh_ct = 3187U;
 static unsigned char __attribute__((aligned(4))) tisp_BCSH_au32C[20] = {
     0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x44, 0x03, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 
     0x4c, 0x03, 0x00, 0x00, 
@@ -3183,36 +3194,36 @@ static unsigned char dpc_d_m1_fthres_wdr_array[36];
 static unsigned char dpc_d_m3_dthres_array[36];
 static unsigned char dpc_d_m3_fthres_array[36];
 static unsigned char dpc_d_m3_fthres_wdr_array[36];
-static uintptr_t ydns_mv_thres1_intp;
-static uintptr_t ydns_mv_thres2_intp;
-static uintptr_t ydns_mv_thres0_intp;
-static uintptr_t ydns_fus_max_thres_intp;
-static uintptr_t ydns_fus_level_intp;
-static uintptr_t ydns_fus_min_thres_intp;
-static uintptr_t ydns_fus_sewei_intp;
-static uintptr_t ydns_fus_mswei_intp;
-static uintptr_t ydns_fus_sswei_intp;
-static uintptr_t ydns_fus_mewei_intp;
-static uintptr_t ydns_fus_uvwei_intp;
-static uintptr_t ydns_edge_div_intp;
-static uintptr_t ydns_edge_thres_intp;
-static uintptr_t ydns_edge_wei_intp;
-static unsigned char ydns_edge_out_array[16];
-static unsigned char ydns_edge_div_array[36];
-static unsigned char ydns_edge_thres_array[36];
-static unsigned char ydns_edge_wei_array[36];
-static unsigned char ydns_fus_level_array[36];
-static unsigned char ydns_fus_max_thres_array[36];
-static unsigned char ydns_fus_mewei_array[36];
-static unsigned char ydns_fus_min_thres_array[36];
-static unsigned char ydns_fus_mswei_array[36];
-static unsigned char ydns_fus_sewei_array[36];
-static unsigned char ydns_fus_sswei_array[36];
-static unsigned char ydns_fus_uvwei_array[36];
-static unsigned char ydns_mv_thres0_array[36];
-static unsigned char ydns_mv_thres1_array[36];
-static unsigned char ydns_mv_thres2_array[36];
-static uintptr_t (*ydns_gain_old)();
+static uint32_t ydns_mv_thres1_intp;
+static uint32_t ydns_mv_thres2_intp;
+static uint32_t ydns_mv_thres0_intp;
+static uint32_t ydns_fus_max_thres_intp;
+static uint32_t ydns_fus_level_intp;
+static uint32_t ydns_fus_min_thres_intp;
+static uint32_t ydns_fus_sewei_intp;
+static uint32_t ydns_fus_mswei_intp;
+static uint32_t ydns_fus_sswei_intp;
+static uint32_t ydns_fus_mewei_intp;
+static uint32_t ydns_fus_uvwei_intp;
+static uint32_t ydns_edge_div_intp;
+static uint32_t ydns_edge_thres_intp;
+static uint32_t ydns_edge_wei_intp;
+static uint32_t ydns_edge_out_array;
+static uint32_t ydns_edge_div_array[9];
+static uint32_t ydns_edge_thres_array[9];
+static uint32_t ydns_edge_wei_array[9];
+static uint32_t ydns_fus_level_array[9];
+static uint32_t ydns_fus_max_thres_array[9];
+static uint32_t ydns_fus_mewei_array[9];
+static uint32_t ydns_fus_min_thres_array[9];
+static uint32_t ydns_fus_mswei_array[9];
+static uint32_t ydns_fus_sewei_array[9];
+static uint32_t ydns_fus_sswei_array[9];
+static uint32_t ydns_fus_uvwei_array[9];
+static uint32_t ydns_mv_thres0_array[9];
+static uint32_t ydns_mv_thres1_array[9];
+static uint32_t ydns_mv_thres2_array[9];
+static uint32_t ydns_gain_old = 0xffffffffU;
 static unsigned char data_bca08[16384];
 static unsigned char data_bca0c[16384];
 static unsigned char adr_block_hist[960];
@@ -9796,6 +9807,13 @@ static int regtrace_tx_isp_misc_registered;
 
 int32_t system_reg_write(uint32_t a0, uint32_t a1);
 int32_t system_reg_read(uint32_t a0);
+int32_t tisp_simple_intp(int32_t arg1, int32_t arg2, void *arg3);
+int32_t tisp_gib_gain_interpolation(uint32_t gain_q16);
+int32_t tisp_ydns_refresh(uint32_t gain_q16);
+int32_t tiziano_ydns_init(void);
+int32_t tiziano_defog_set_reg_params(void);
+int32_t tiziano_defog_params_init(void);
+int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1);
 int32_t tisp_msca_addr_fifo_write(char arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_channel_start(int32_t arg1);
 int64_t tisp_channel_main_attr_set(uint32_t a0, uintptr_t a1);
@@ -9810,14 +9828,21 @@ static bool regtrace_t23_source_core_start = true;
 static bool regtrace_t23_source_frame_done = true;
 static bool regtrace_t23_source_msca_curves = true;
 static bool regtrace_t23_source_msca_init;
-static uint regtrace_t23_source_core_bypass = 0xffffea8fU;
+static uint regtrace_t23_source_core_bypass = 0xffffea0fU;
 static bool regtrace_t23_source_core_bypass_from_tuning;
 static bool regtrace_t23_source_park_uninitialized_mdns = true;
 static bool regtrace_t23_source_gib_tuning_init = true;
 static bool regtrace_t23_source_gamma_tuning_init = true;
 static bool regtrace_t23_source_lsc_tuning_init = true;
+static bool regtrace_t23_source_lsc_events = true;
+static bool regtrace_t23_source_lsc_update_pending;
 static bool regtrace_t23_source_dpc_tuning_init = true;
+static bool regtrace_t23_source_ydns_tuning_init = true;
+static bool regtrace_t23_source_defog_tuning_init;
 static uint regtrace_t23_source_lsc_ct = 5000U;
+static uint regtrace_t23_source_lsc_runtime_ct = 5000U;
+static uint regtrace_t23_source_lsc_last_ct = 5000U;
+static uint regtrace_t23_source_lsc_event_count;
 static bool regtrace_t23_source_ae_stats_init = true;
 static uint regtrace_t23_source_ae_stats_irqs;
 static uint regtrace_t23_source_ae_stats_snapshots;
@@ -9826,7 +9851,7 @@ static uint regtrace_t23_source_total_gain_q16;
 static bool regtrace_t23_source_ae_hlil = true;
 static uint regtrace_t23_source_ae_hlil_interval = 32;
 static uint regtrace_t23_source_ae_hlil_target = 60;
-static uint regtrace_t23_source_ae_hlil_deadband = 20;
+static uint regtrace_t23_source_ae_hlil_deadband = 5;
 static uint regtrace_t23_source_ae_hlil_runs;
 static uint regtrace_t23_source_ae_hlil_updates;
 static uint regtrace_t23_source_ae_hlil_drops;
@@ -9834,16 +9859,23 @@ static uint regtrace_t23_source_ae_hlil_luma;
 static uint regtrace_t23_source_ae_hlil_state;
 static uint regtrace_t23_source_ae_hlil_ev = 1436U << 10;
 static uint regtrace_t23_source_ae_hlil_status;
+static uint regtrace_t23_source_ae_compensation = 128U;
+static uint32_t regtrace_t23_source_ae_scene_luma[8];
+static bool regtrace_t23_source_ae_scene_luma_valid;
 static bool regtrace_t23_source_awb_static_init = true;
 static bool regtrace_t23_source_awb_stats_init = true;
 static bool regtrace_t23_source_awb_stats_processed_tap = true;
-static bool regtrace_t23_source_awb_stats_wide_thresholds = true;
+static bool regtrace_t23_source_awb_stats_wide_thresholds;
 static bool regtrace_t23_source_awb_grayworld;
 static bool regtrace_t23_source_awb_hlil = true;
 static uint regtrace_t23_source_awb_grayworld_interval = 2;
 static uint regtrace_t23_source_awb_grayworld_rbias = 1024;
 static uint regtrace_t23_source_awb_grayworld_bbias = 1024;
 static uint regtrace_t23_source_awb_hlil_interval = 4;
+static uint regtrace_t23_source_awb_hlil_min_pixels = 1;
+/* Stable SC2336 gains captured from the OEM T23 driver in this scene. */
+static uint regtrace_t23_source_awb_bootstrap_rgain = 0x4d4;
+static uint regtrace_t23_source_awb_bootstrap_bgain = 0xbe8;
 static uint regtrace_t23_source_awb_stats_irqs;
 static uint regtrace_t23_source_awb_stats_snapshots;
 static uint regtrace_t23_source_awb_grayworld_updates;
@@ -9856,9 +9888,22 @@ static uint regtrace_t23_source_awb_hlil_bg;
 static uint regtrace_t23_source_awb_hlil_ct = 5084;
 static uint regtrace_t23_source_awb_last_rgain = 0x820;
 static uint regtrace_t23_source_awb_last_bgain = 0x858;
-static bool regtrace_t23_source_ccm_tuning_init;
+static bool regtrace_t23_source_bcsh_events;
+static uint regtrace_t23_source_bcsh_ev_events;
+static uint regtrace_t23_source_bcsh_ct_events;
+static uint regtrace_t23_source_bcsh_last_ct = 3187U;
+static bool regtrace_t23_source_ccm_tuning_init = true;
+static bool regtrace_t23_source_ccm_events = true;
+static uint regtrace_t23_source_ccm_runtime_ct = 5084U;
+static uint regtrace_t23_source_ccm_last_ct = 5084U;
+static uint regtrace_t23_source_ccm_event_count;
+static uint regtrace_t23_source_ccm_last_saturation = 150U;
 static bool regtrace_t23_source_dmsc_tuning_init = true;
+static bool regtrace_t23_source_sharpen_tuning_init = true;
+static uint regtrace_t23_source_dmsc_sharpness = 0x50U;
+static uint32_t regtrace_t23_dmsc_gain_q16 = 0x10000U;
 static bool regtrace_t23_source_bcsh_tuning_init = true;
+static bool regtrace_t23_source_bcsh_runtime = true;
 static bool regtrace_t23_source_clm_tuning_init = true;
 static bool regtrace_t23_source_bcsh_neutral;
 static bool regtrace_t23_source_csccr_init = true;
@@ -9866,6 +9911,10 @@ static uint32_t regtrace_t23_dpc_gain_old = 0xffffffffU;
 static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin";
 #define REGTRACE_T23_DPC_TUNING_OFFSET 0xbad0U
 #define REGTRACE_T23_DPC_TUNING_SIZE   0x448U
+#define REGTRACE_T23_DMSC_TUNING_OFFSET 0x91b0U
+#define REGTRACE_T23_DMSC_TUNING_SIZE   0x2098U
+#define REGTRACE_T23_BCSH_TUNING_OFFSET 0x15170U
+#define REGTRACE_T23_BCSH_TUNING_SIZE   0x418U
 static uint regtrace_t23_source_core_bayer = 1U;
 static uint regtrace_t23_source_core_mode = 0x1cU;
 static bool regtrace_t23_direct_csi_start;
@@ -9900,9 +9949,19 @@ module_param_named(source_gamma_tuning_init,
                    regtrace_t23_source_gamma_tuning_init, bool, 0644);
 module_param_named(source_lsc_tuning_init,
                    regtrace_t23_source_lsc_tuning_init, bool, 0644);
+module_param_named(source_lsc_events,
+                   regtrace_t23_source_lsc_events, bool, 0644);
 module_param_named(source_dpc_tuning_init,
                    regtrace_t23_source_dpc_tuning_init, bool, 0644);
+module_param_named(source_ydns_tuning_init,
+                   regtrace_t23_source_ydns_tuning_init, bool, 0644);
+module_param_named(source_defog_tuning_init,
+                   regtrace_t23_source_defog_tuning_init, bool, 0644);
 module_param_named(source_lsc_ct, regtrace_t23_source_lsc_ct, uint, 0644);
+module_param_named(source_lsc_runtime_ct,
+                   regtrace_t23_source_lsc_runtime_ct, uint, 0444);
+module_param_named(source_lsc_event_count,
+                   regtrace_t23_source_lsc_event_count, uint, 0444);
 module_param_named(source_ae_stats_init,
                    regtrace_t23_source_ae_stats_init, bool, 0644);
 module_param_named(source_ae_stats_irqs,
@@ -9935,6 +9994,8 @@ module_param_named(source_ae_hlil_ev,
                    regtrace_t23_source_ae_hlil_ev, uint, 0444);
 module_param_named(source_ae_hlil_status,
                    regtrace_t23_source_ae_hlil_status, uint, 0444);
+module_param_named(source_ae_compensation,
+                   regtrace_t23_source_ae_compensation, uint, 0444);
 module_param_named(source_awb_static_init,
                    regtrace_t23_source_awb_static_init, bool, 0644);
 module_param_named(source_awb_stats_init,
@@ -9955,6 +10016,12 @@ module_param_named(source_awb_grayworld_bbias,
                    regtrace_t23_source_awb_grayworld_bbias, uint, 0644);
 module_param_named(source_awb_hlil_interval,
                    regtrace_t23_source_awb_hlil_interval, uint, 0644);
+module_param_named(source_awb_hlil_min_pixels,
+                   regtrace_t23_source_awb_hlil_min_pixels, uint, 0644);
+module_param_named(source_awb_bootstrap_rgain,
+                   regtrace_t23_source_awb_bootstrap_rgain, uint, 0644);
+module_param_named(source_awb_bootstrap_bgain,
+                   regtrace_t23_source_awb_bootstrap_bgain, uint, 0644);
 module_param_named(source_awb_stats_irqs,
                    regtrace_t23_source_awb_stats_irqs, uint, 0444);
 module_param_named(source_awb_stats_snapshots,
@@ -9979,12 +10046,30 @@ module_param_named(source_awb_last_rgain,
                    regtrace_t23_source_awb_last_rgain, uint, 0444);
 module_param_named(source_awb_last_bgain,
                    regtrace_t23_source_awb_last_bgain, uint, 0444);
+module_param_named(source_bcsh_events,
+                   regtrace_t23_source_bcsh_events, bool, 0644);
+module_param_named(source_bcsh_ev_events,
+                   regtrace_t23_source_bcsh_ev_events, uint, 0444);
+module_param_named(source_bcsh_ct_events,
+                   regtrace_t23_source_bcsh_ct_events, uint, 0444);
 module_param_named(source_ccm_tuning_init,
                    regtrace_t23_source_ccm_tuning_init, bool, 0644);
+module_param_named(source_ccm_events,
+                   regtrace_t23_source_ccm_events, bool, 0644);
+module_param_named(source_ccm_runtime_ct,
+                   regtrace_t23_source_ccm_runtime_ct, uint, 0444);
+module_param_named(source_ccm_event_count,
+                   regtrace_t23_source_ccm_event_count, uint, 0444);
 module_param_named(source_dmsc_tuning_init,
                    regtrace_t23_source_dmsc_tuning_init, bool, 0644);
+module_param_named(source_sharpen_tuning_init,
+                   regtrace_t23_source_sharpen_tuning_init, bool, 0644);
+module_param_named(source_dmsc_sharpness,
+                   regtrace_t23_source_dmsc_sharpness, uint, 0644);
 module_param_named(source_bcsh_tuning_init,
                    regtrace_t23_source_bcsh_tuning_init, bool, 0644);
+module_param_named(source_bcsh_runtime,
+                   regtrace_t23_source_bcsh_runtime, bool, 0644);
 module_param_named(source_clm_tuning_init,
                    regtrace_t23_source_clm_tuning_init, bool, 0644);
 module_param_named(source_bcsh_neutral,
@@ -11440,16 +11525,43 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_gamma_tuning.inc"
 #include "tx_isp_t23_lsc_tuning.inc"
 #include "tx_isp_t23_lsc_ct3300.inc"
+#include "tx_isp_t23_lsc_runtime.inc"
 #include "tx_isp_t23_ae_stats_tuning.inc"
 #include "tx_isp_t23_awb_static_tuning.inc"
 #include "tx_isp_t23_awb_stats_tuning.inc"
 #include "tx_isp_t23_awb_runtime_tuning.inc"
 #include "tx_isp_t23_ccm_tuning.inc"
+#include "tx_isp_t23_ccm_runtime.inc"
 #include "tx_isp_t23_dmsc_tuning.inc"
 #include "tx_isp_t23_dmsc_gain1p5x.inc"
 #include "tx_isp_t23_dmsc_gain2x.inc"
+#include "tx_isp_t23_dmsc_layout.inc"
+#include "tx_isp_t23_dmsc_interp.inc"
+#include "tx_isp_t23_dmsc_noref_writes.inc"
+#include "tx_isp_t23_dmsc_ref_writes.inc"
+#include "tx_isp_t23_sharpen_tuning.inc"
+#include "tx_isp_t23_sharpen_gain1p5x.inc"
+#include "tx_isp_t23_sharpen_gain2x.inc"
 #include "tx_isp_t23_bcsh_tuning.inc"
 #include "tx_isp_t23_clm_tuning.inc"
+#include "tx_isp_t23_ydns_tuning.inc"
+
+/* OEM SC2336 DMSC curves used by tisp_dmsc_sharpness_set. */
+static const uint32_t regtrace_t23_dmsc_sp_d_w_curve[9] = {
+    0x5aU, 0x5aU, 0x50U, 0x50U, 0x46U, 0x32U, 0x32U, 0x32U, 0x32U,
+};
+static const uint32_t regtrace_t23_dmsc_sp_d_b_curve[9] = {
+    0x64U, 0x5aU, 0x5aU, 0x50U, 0x46U, 0x32U, 0x32U, 0x32U, 0x32U,
+};
+static const uint32_t regtrace_t23_dmsc_sp_ud_w_curve[9] = {
+    0x5aU, 0x5aU, 0x50U, 0x46U, 0x3cU, 0x28U, 0x28U, 0x28U, 0x28U,
+};
+static const uint32_t regtrace_t23_dmsc_sp_ud_b_curve[9] = {
+    0x64U, 0x5aU, 0x50U, 0x46U, 0x3cU, 0x28U, 0x28U, 0x28U, 0x28U,
+};
+static const uint32_t regtrace_t23_dmsc_uu_stren_curve[9] = {
+    0x64U, 0x64U, 0x64U, 0x64U, 0x64U, 0x3cU, 0x32U, 0x3cU, 0x3cU,
+};
 
 static void regtrace_t23_source_ae_hlil_capture(uint32_t luma,
                                                uint32_t snapshot);
@@ -11457,6 +11569,11 @@ static void regtrace_t23_source_ae_hlil_reset(void);
 static void regtrace_t23_source_awb_hlil_reset(void);
 int tiziano_dpc_init(void);
 int32_t tisp_dpc_refresh(uint32_t gain);
+int32_t tisp_bcsh_ev_update(uintptr_t ev, uintptr_t ignored);
+int32_t tisp_bcsh_ct_update(uintptr_t ignored, uint32_t ct);
+int32_t tisp_lsc_ct_update(uint32_t ct);
+int32_t tisp_lsc_write_lut_datas(void);
+static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10);
 
 static void regtrace_t23_source_gib_write_tuning_startup(void)
 {
@@ -11511,6 +11628,11 @@ static void regtrace_t23_source_lsc_write_tuning_startup(void)
            "tx_isp_t23_recovered: source LSC SC2336 CT%u tuning committed (%u writes)\n",
            regtrace_t23_source_lsc_ct == 3300U ? 3300U : 5000U,
            (unsigned int)count);
+    regtrace_t23_source_lsc_runtime_ct =
+        regtrace_t23_source_lsc_ct == 3300U ? 3300U : 5000U;
+    regtrace_t23_source_lsc_last_ct = regtrace_t23_source_lsc_runtime_ct;
+    regtrace_t23_source_lsc_update_pending = false;
+    regtrace_t23_source_lsc_event_count = 0;
 }
 
 static void regtrace_t23_source_ae_write_stats_startup(void)
@@ -11537,25 +11659,30 @@ static void regtrace_t23_source_ae_write_stats_startup(void)
 
 static void regtrace_t23_source_awb_write_static_startup(void)
 {
+    uint32_t rgain = min(regtrace_t23_source_awb_bootstrap_rgain, 0x3fffU);
+    uint32_t bgain = min(regtrace_t23_source_awb_bootstrap_bgain, 0x3fffU);
+    uint32_t rvalue = 0x04000000U | rgain;
+    uint32_t bvalue = 0x04000000U | bgain;
+
     /* OEM system_reg_write_awb(2, ...) latches 0x1800 before each write. */
     system_reg_write(0x1800U, 1U);
-    system_reg_write(0x1804U, REGTRACE_T23_AWB_SC2336_REG_GR);
+    system_reg_write(0x1804U, rvalue);
     system_reg_write(0x1800U, 1U);
-    system_reg_write(0x1808U, REGTRACE_T23_AWB_SC2336_REG_GB);
+    system_reg_write(0x1808U, bvalue);
     system_reg_write(0x1800U, 1U);
-    system_reg_write(0x180cU, REGTRACE_T23_AWB_SC2336_REG_GR);
+    system_reg_write(0x180cU, rvalue);
     system_reg_write(0x1800U, 1U);
-    system_reg_write(0x1810U, REGTRACE_T23_AWB_SC2336_REG_GB);
+    system_reg_write(0x1810U, bvalue);
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source AWB SC2336 static startup requested (point=%u mf=%u/%u base=%u/%u shadow=0x%x/0x%x)\n",
+           "tx_isp_t23_recovered: source AWB SC2336 static startup requested (point=%u mf=%u/%u base=%u/%u tuning=0x%x/0x%x bootstrap=0x%x/0x%x)\n",
            REGTRACE_T23_AWB_SC2336_POINT_POS,
            REGTRACE_T23_AWB_SC2336_MF_GR,
            REGTRACE_T23_AWB_SC2336_MF_GB,
            REGTRACE_T23_AWB_SC2336_BASE_GR,
            REGTRACE_T23_AWB_SC2336_BASE_GB,
            REGTRACE_T23_AWB_SC2336_REG_GR,
-           REGTRACE_T23_AWB_SC2336_REG_GB);
+           REGTRACE_T23_AWB_SC2336_REG_GB, rvalue, bvalue);
 }
 
 static void regtrace_t23_source_awb_write_stats_startup(void)
@@ -11587,10 +11714,10 @@ static void regtrace_t23_source_awb_write_stats_startup(void)
     regtrace_t23_source_awb_stats_irqs = 0;
     regtrace_t23_source_awb_stats_snapshots = 0;
     regtrace_t23_source_awb_grayworld_updates = 0;
-    regtrace_t23_source_awb_last_rgain =
-        REGTRACE_T23_AWB_SC2336_REG_GR & 0x3fffU;
-    regtrace_t23_source_awb_last_bgain =
-        REGTRACE_T23_AWB_SC2336_REG_GB & 0x3fffU;
+    regtrace_t23_source_awb_last_rgain = min(
+        regtrace_t23_source_awb_bootstrap_rgain, 0x3fffU);
+    regtrace_t23_source_awb_last_bgain = min(
+        regtrace_t23_source_awb_bootstrap_bgain, 0x3fffU);
     regtrace_t23_source_awb_hlil_reset();
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source AWB SC2336 statistics startup committed (%u writes) tap=%s thresholds=%s\n",
@@ -11631,7 +11758,9 @@ static void regtrace_t23_source_ae_stats_snapshot(uint32_t status)
     uint64_t red = 0;
     uint64_t green = 0;
     uint64_t blue = 0;
-    uint64_t pixels = 0;
+    uint64_t zone_pixels = 0;
+    uint64_t dark_pixels = 0;
+    uint64_t bright_pixels = 0;
     uint64_t luma;
     uint32_t bank_reg;
     uint32_t bank;
@@ -11656,17 +11785,21 @@ static void regtrace_t23_source_ae_stats_snapshot(uint32_t status)
         uint32_t w1 = words[1];
         uint32_t w2 = words[2];
         uint32_t w3 = words[3];
-        uint32_t count = ((w2 & 0xfffU) << 1) | (w1 >> 31);
+        uint32_t dark = ((w2 & 0xfffU) << 1) | (w1 >> 31);
+        uint32_t bright = (w2 & 0x1fff000U) >> 12;
 
         red += w0 & 0x1fffffU;
         green += ((w1 & 0x3ffU) << 11) | (w0 >> 21);
         blue += (w1 & 0x7ffffc00U) >> 10;
-        pixels += count;
+        dark_pixels += dark;
+        bright_pixels += bright;
+        /* Exact SC2336 AE layout: 15x15 zones, each 64x36 pixels. */
+        zone_pixels += 64U * 36U;
     }
 
     regtrace_t23_source_ae_stats_snapshots++;
-    luma = pixels ? div64_u64(red + green * 2U + blue,
-                              pixels * 4U) : 0;
+    /* OEM ae0_weight_mean2 normalizes R+G+B by each programmed zone area. */
+    luma = zone_pixels ? div64_u64(red + green + blue, zone_pixels) : 0;
     regtrace_t23_source_ae_hlil_capture(
         luma > 0xffffffffULL ? 0xffffffffU : (uint32_t)luma,
         regtrace_t23_source_ae_stats_snapshots);
@@ -11674,10 +11807,13 @@ static void regtrace_t23_source_ae_stats_snapshot(uint32_t status)
         !(regtrace_t23_source_ae_stats_snapshots &
           (regtrace_t23_source_ae_stats_snapshots - 1U)))
         printk(KERN_INFO
-               "tx_isp_t23_recovered: source AE0 stats snapshot=%u irq=%u bank=%u bankreg=0x%x pixels=%llu rgb=%llu/%llu/%llu luma=%llu raw=%08x/%08x/%08x/%08x status=0x%x\n",
+               "tx_isp_t23_recovered: source AE0 stats snapshot=%u irq=%u bank=%u bankreg=0x%x area=%llu dark=%llu bright=%llu rgb=%llu/%llu/%llu luma=%llu raw=%08x/%08x/%08x/%08x status=0x%x\n",
                regtrace_t23_source_ae_stats_snapshots,
                regtrace_t23_source_ae_stats_irqs, bank, bank_reg,
-               (unsigned long long)pixels, (unsigned long long)red,
+               (unsigned long long)zone_pixels,
+               (unsigned long long)dark_pixels,
+               (unsigned long long)bright_pixels,
+               (unsigned long long)red,
                (unsigned long long)green, (unsigned long long)blue,
                (unsigned long long)luma, raw[0], raw[1], raw[2], raw[3],
                status);
@@ -11816,6 +11952,159 @@ static void regtrace_t23_source_awb_stats_irq(uint32_t status,
     system_reg_write(0xb000U, 1U);
 }
 
+static int32_t regtrace_t23_ccm_signed14(uint32_t value)
+{
+    value &= 0x3fffU;
+    return value >= 0x2000U ? (int32_t)value - 0x4000 : (int32_t)value;
+}
+
+static int32_t regtrace_t23_ccm_blend(int32_t low, int32_t high,
+                                     uint32_t weight)
+{
+    return low + (int32_t)(((int64_t)(high - low) * weight) >> 12);
+}
+
+static __always_inline uint32_t
+regtrace_t23_ccm_interpolate(uint32_t ct, int32_t *out)
+{
+    const uint32_t *points = regtrace_t23_ccm_sc2336_ct;
+    const uint32_t *low;
+    const uint32_t *high;
+    uint32_t weight = 0;
+    uint32_t region;
+    unsigned int i;
+
+    if (ct <= points[0] + 200U) {
+        low = high = regtrace_t23_ccm_sc2336_a;
+        region = 0;
+    } else if (ct < points[1] - 200U) {
+        low = regtrace_t23_ccm_sc2336_a;
+        high = regtrace_t23_ccm_sc2336_t;
+        weight = ((ct - points[0] - 200U) << 12) /
+                 (points[1] - points[0] - 400U);
+        region = 1;
+    } else if (ct <= points[1] + 200U) {
+        low = high = regtrace_t23_ccm_sc2336_t;
+        region = 2;
+    } else if (ct < points[2] - 200U) {
+        low = regtrace_t23_ccm_sc2336_t;
+        high = regtrace_t23_ccm_sc2336_d;
+        weight = ((ct - points[1] - 200U) << 12) /
+                 (points[2] - points[1] - 400U);
+        region = 3;
+    } else if (ct <= points[2] + 200U) {
+        low = high = regtrace_t23_ccm_sc2336_d;
+        region = 4;
+    } else if (ct < points[3] - 200U) {
+        low = regtrace_t23_ccm_sc2336_d;
+        high = regtrace_t23_ccm_sc2336_d2;
+        weight = ((ct - points[2] - 200U) << 12) /
+                 (points[3] - points[2] - 400U);
+        region = 5;
+    } else {
+        low = high = regtrace_t23_ccm_sc2336_d2;
+        region = 6;
+    }
+
+    for (i = 0; i < 9; ++i) {
+        int32_t low_value = regtrace_t23_ccm_signed14(low[i]);
+        int32_t high_value = regtrace_t23_ccm_signed14(high[i]);
+
+        out[i] = low == high ? low_value :
+            regtrace_t23_ccm_blend(low_value, high_value, weight);
+    }
+    return region;
+}
+
+static uint32_t regtrace_t23_ccm_saturation(uint32_t ev_q10)
+{
+    uint32_t ev = ev_q10 >> 10;
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_ccm_sc2336_ev); ++i) {
+        uint32_t high_ev = regtrace_t23_ccm_sc2336_ev[i];
+
+        if (ev > high_ev)
+            continue;
+        if (!i)
+            return regtrace_t23_ccm_sc2336_sat[0];
+        if (high_ev == regtrace_t23_ccm_sc2336_ev[i - 1])
+            return regtrace_t23_ccm_sc2336_sat[i];
+        return regtrace_t23_ccm_sc2336_sat[i - 1] +
+            (ev - regtrace_t23_ccm_sc2336_ev[i - 1]) *
+            (regtrace_t23_ccm_sc2336_sat[i] -
+             regtrace_t23_ccm_sc2336_sat[i - 1]) /
+            (high_ev - regtrace_t23_ccm_sc2336_ev[i - 1]);
+    }
+    return regtrace_t23_ccm_sc2336_sat[
+        ARRAY_SIZE(regtrace_t23_ccm_sc2336_sat) - 1U];
+}
+
+static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10)
+{
+    int32_t matrix[9];
+    int32_t saturation_matrix[9];
+    uint32_t registers[9];
+    uint32_t saturation;
+    uint32_t region;
+    unsigned int row;
+    unsigned int column;
+    unsigned int i;
+
+    if (ct < 1500U || ct > 10000U)
+        return -EINVAL;
+    region = regtrace_t23_ccm_interpolate(ct, matrix);
+    saturation = regtrace_t23_ccm_saturation(ev_q10);
+    saturation_matrix[0] = (saturation * 0xb375U >> 8) + 0x4c8bU;
+    saturation_matrix[1] = 0x9646 - (saturation * 0x9646U >> 8);
+    saturation_matrix[2] = 0x1d2f - (saturation * 0x1d2fU >> 8);
+    saturation_matrix[3] = 0x4c8b - (saturation * 0x4c8bU >> 8);
+    saturation_matrix[4] = (saturation * 0x69baU >> 8) + 0x9646U;
+    saturation_matrix[5] = saturation_matrix[2];
+    saturation_matrix[6] = saturation_matrix[3];
+    saturation_matrix[7] = saturation_matrix[1];
+    saturation_matrix[8] = (saturation * 0xe2d1U >> 8) + 0x1d2fU;
+
+    for (row = 0; row < 3; ++row) {
+        for (column = 0; column < 3; ++column) {
+            int64_t accumulator = 0;
+            unsigned int k;
+
+            for (k = 0; k < 3; ++k) {
+                int32_t left = matrix[row * 3U + k];
+                int32_t right = saturation_matrix[k * 3U + column];
+                uint64_t product = ((uint64_t)(left < 0 ? -left : left) << 6) *
+                                   (uint32_t)(right < 0 ? -right : right);
+                int32_t term = (int32_t)(product >> 16);
+
+                accumulator += (left < 0) != (right < 0) ? -term : term;
+            }
+            if (accumulator < 0)
+                accumulator = -((-accumulator) >> 6);
+            else
+                accumulator >>= 6;
+            registers[row * 3U + column] = (uint32_t)accumulator & 0x3fffU;
+        }
+    }
+
+    for (i = 0; i < 9; i += 2) {
+        uint32_t value = registers[i];
+
+        if (i + 1U < 9U)
+            value |= registers[i + 1U] << 16;
+        system_reg_write(0x5000U, 1U);
+        system_reg_write(0x5004U + (i << 1), value);
+    }
+    regtrace_t23_source_ccm_runtime_ct = ct;
+    regtrace_t23_source_ccm_last_ct = ct;
+    regtrace_t23_source_ccm_last_saturation = saturation;
+    regtrace_t23_source_ccm_event_count++;
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: source CCM runtime CT%u region=%u EV=%u saturation=%u committed\n",
+           ct, region, ev_q10 >> 10, saturation);
+    return 0;
+}
+
 static void regtrace_t23_source_ccm_write_tuning_startup(void)
 {
     size_t i;
@@ -11832,6 +12121,10 @@ static void regtrace_t23_source_ccm_write_tuning_startup(void)
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source CCM SC2336 daylight tuning committed (%u writes)\n",
            (unsigned int)ARRAY_SIZE(regtrace_t23_ccm_sc2336_daylight));
+    regtrace_t23_source_ccm_runtime_ct = 5084U;
+    regtrace_t23_source_ccm_last_ct = 5084U;
+    regtrace_t23_source_ccm_last_saturation = 150U;
+    regtrace_t23_source_ccm_event_count = 0;
 }
 
 static void regtrace_t23_source_dmsc_write_tuning_startup(void)
@@ -11856,19 +12149,142 @@ static void regtrace_t23_source_dmsc_restore_tuning_image(void)
                          regtrace_t23_dmsc_sc2336_startup[i][1]);
 }
 
+static unsigned int regtrace_t23_source_sharpen_write_tuning(
+    const uint32_t image[][2], size_t count)
+{
+    size_t i;
+
+    for (i = 0; i < count; ++i)
+        system_reg_write(image[i][0], image[i][1]);
+    return (unsigned int)count;
+}
+
+struct regtrace_t23_gain_calibration {
+    uint32_t gain_q16;
+    uint32_t dmsc[7];
+    uint32_t sharpen_700c;
+};
+
+/* Exact SC2336 tuning images generated from /etc/sensor/sc2336-t23.bin. */
+static const struct regtrace_t23_gain_calibration
+regtrace_t23_gain_calibrations[] = {
+    { 0x10000U, { 0x00000064U, 0x00000000U, 0x00000000U,
+                  0x00000000U, 0x00000000U, 0x005a005aU,
+                  0x005a005aU }, 0x05ff0000U },
+    { 0x12b80U, { 0x00000064U, 0x00000004U, 0x00000006U,
+                  0x00000006U, 0x00000006U, 0x0058005aU,
+                  0x00580058U }, 0x05ff0100U },
+    { 0x15269U, { 0x00020064U, 0x00000008U, 0x0000000aU,
+                  0x0000000aU, 0x0000000aU, 0x0057005aU,
+                  0x00570057U }, 0x05ff0200U },
+    { 0x1759dU, { 0x00020064U, 0x0000000cU, 0x0000000eU,
+                  0x0000000eU, 0x0000000eU, 0x0055005aU,
+                  0x00550055U }, 0x05ff0200U },
+    { 0x195c0U, { 0x00020064U, 0x00000010U, 0x00000012U,
+                  0x00000012U, 0x00000012U, 0x0054005aU,
+                  0x00540054U }, 0x05ff0300U },
+    { 0x1b350U, { 0x00020064U, 0x00000012U, 0x00000016U,
+                  0x00000016U, 0x00000016U, 0x0053005aU,
+                  0x00530053U }, 0x05ff0400U },
+    { 0x1ceaeU, { 0x00040064U, 0x00000014U, 0x00000018U,
+                  0x00000018U, 0x00000018U, 0x0052005aU,
+                  0x00520052U }, 0x05ff0400U },
+    { 0x1e829U, { 0x00040064U, 0x00000018U, 0x0000001cU,
+                  0x0000001cU, 0x0000001cU, 0x0051005aU,
+                  0x00510051U }, 0x05ff0500U },
+    { 0x20000U, { 0x00040064U, 0x0000001aU, 0x0000001eU,
+                  0x0000001eU, 0x0000001eU, 0x0050005aU,
+                  0x00500050U }, 0x05ff0500U },
+};
+
+static const struct regtrace_t23_gain_calibration *
+regtrace_t23_gain_calibration(uint32_t gain_q16)
+{
+    size_t i;
+
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gain_calibrations); ++i) {
+        if (regtrace_t23_gain_calibrations[i].gain_q16 == gain_q16)
+            return &regtrace_t23_gain_calibrations[i];
+    }
+    return NULL;
+}
+
+int32_t tisp_gib_gain_interpolation(uint32_t gain_q16)
+{
+    uint32_t hi = gain_q16 >> 16;
+    uint32_t lo = gain_q16 & 0xffffU;
+    uint32_t blc_r = tisp_simple_intp(
+        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_r);
+    uint32_t blc_gr = tisp_simple_intp(
+        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_gr);
+    uint32_t blc_gb = tisp_simple_intp(
+        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_gb);
+    uint32_t blc_b = tisp_simple_intp(
+        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_b);
+    uint32_t blc_ir = tisp_simple_intp(
+        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_ir);
+    uint32_t bayer = system_reg_read(8U) & 0x1fU;
+    uint32_t ch0;
+    uint32_t ch1;
+    uint32_t ch2;
+    uint32_t ch3;
+    uint32_t ch4;
+
+    switch (bayer) {
+    case 0x00: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_ir; break;
+    case 0x01: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_gr; ch3 = blc_r;  ch4 = blc_ir; break;
+    case 0x02: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_b;  ch3 = blc_gb; ch4 = blc_ir; break;
+    case 0x03: ch0 = blc_gb; ch1 = blc_b;  ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_ir; break;
+    case 0x08: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_ir; ch3 = blc_b;  ch4 = blc_gb; break;
+    case 0x09: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_ir; ch3 = blc_r;  ch4 = blc_gr; break;
+    case 0x0a: ch0 = blc_r;  ch1 = blc_ir; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_gr; break;
+    case 0x0b: ch0 = blc_b;  ch1 = blc_ir; ch2 = blc_gr; ch3 = blc_r;  ch4 = blc_gb; break;
+    case 0x0c: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_b;  ch3 = blc_ir; ch4 = blc_gb; break;
+    case 0x0d: ch0 = blc_gb; ch1 = blc_b;  ch2 = blc_r;  ch3 = blc_ir; ch4 = blc_gr; break;
+    case 0x0e: ch0 = blc_ir; ch1 = blc_r;  ch2 = blc_b;  ch3 = blc_gb; ch4 = blc_gr; break;
+    case 0x0f: ch0 = blc_ir; ch1 = blc_b;  ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_gb; break;
+    case 0x10: ch0 = blc_r;  ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_ir; ch4 = blc_b;  break;
+    case 0x11: ch0 = blc_b;  ch1 = blc_gb; ch2 = blc_gr; ch3 = blc_ir; ch4 = blc_r;  break;
+    case 0x12: ch0 = blc_gr; ch1 = blc_r;  ch2 = blc_ir; ch3 = blc_gb; ch4 = blc_b;  break;
+    case 0x13: ch0 = blc_gb; ch1 = blc_b;  ch2 = blc_ir; ch3 = blc_gr; ch4 = blc_r;  break;
+    case 0x14: ch0 = blc_gb; ch1 = blc_ir; ch2 = blc_r;  ch3 = blc_gr; ch4 = blc_b;  break;
+    case 0x15: ch0 = blc_gr; ch1 = blc_ir; ch2 = blc_b;  ch3 = blc_gb; ch4 = blc_r;  break;
+    case 0x16: ch0 = blc_ir; ch1 = blc_gb; ch2 = blc_gr; ch3 = blc_r;  ch4 = blc_b;  break;
+    case 0x17: ch0 = blc_ir; ch1 = blc_gr; ch2 = blc_gb; ch3 = blc_b;  ch4 = blc_r;  break;
+    default:
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: unsupported GIB Bayer layout 0x%x\n",
+               bayer);
+        return -EINVAL;
+    }
+
+    system_reg_write(0x1070U, 1U);
+    system_reg_write(0x1060U, ch0);
+    system_reg_write(0x1070U, 1U);
+    system_reg_write(0x1064U, (ch2 << 16) | ch1);
+    system_reg_write(0x1070U, 1U);
+    system_reg_write(0x1068U, (ch4 << 16) | ch3);
+    tisp_gib_blc_ag = gain_q16;
+    return 0;
+}
+
 static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
                                                        uint32_t sensor_again,
                                                        bool explicit,
                                                        bool restore_dmsc)
 {
-    const uint32_t (*dmsc_delta)[2] = NULL;
-    size_t dmsc_count = 0;
+    static const uint32_t dmsc_registers[] = {
+        0x4808U, 0x4810U, 0x4814U, 0x4824U,
+        0x482cU, 0x4848U, 0x4860U,
+    };
+    const struct regtrace_t23_gain_calibration *calibration;
     size_t i;
     unsigned int dmsc_writes = 0;
+    unsigned int sharpen_writes = 0;
 
     if (!gain_q16) {
         if (sensor_again == 0x00c0U)
-            gain_q16 = 0x18000U;
+            gain_q16 = 0x195c0U;
         else if (sensor_again == 0x0880U)
             gain_q16 = 0x20000U;
         else
@@ -11882,48 +12298,51 @@ static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
                    sensor_again);
     }
 
-    if (gain_q16 != 0x10000U && gain_q16 != 0x18000U &&
-        gain_q16 != 0x20000U) {
+    calibration = regtrace_t23_gain_calibration(gain_q16);
+    if (!calibration) {
         printk(KERN_WARNING
-               "tx_isp_t23_recovered: source total-gain 0x%x unsupported; keeping unity calibration\n",
+               "tx_isp_t23_recovered: source total-gain 0x%x unsupported\n",
                gain_q16);
         return -EINVAL;
     }
 
-    /* SC2336 GIB BLC indices 1 (unity) and 2 (2x) are both 0x106. */
-    if (regtrace_t23_source_gib_tuning_init) {
-        system_reg_write(0x1070U, 1U);
-        system_reg_write(0x1060U, 0x00000106U);
-        system_reg_write(0x1070U, 1U);
-        system_reg_write(0x1064U, 0x01060106U);
-        system_reg_write(0x1070U, 1U);
-        system_reg_write(0x1068U, 0x00000106U);
-    }
-    if (gain_q16 == 0x18000U) {
-        dmsc_delta = regtrace_t23_dmsc_sc2336_gain1p5x_delta;
-        dmsc_count = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain1p5x_delta);
-    } else if (gain_q16 == 0x20000U) {
-        dmsc_delta = regtrace_t23_dmsc_sc2336_gain2x_delta;
-        dmsc_count = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_gain2x_delta);
-    }
+    if (regtrace_t23_source_gib_tuning_init)
+        tisp_gib_gain_interpolation(gain_q16);
     if (regtrace_t23_source_dmsc_tuning_init) {
         if (restore_dmsc) {
             regtrace_t23_source_dmsc_restore_tuning_image();
             dmsc_writes = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup);
         }
-        if (dmsc_delta) {
-            for (i = 0; i < dmsc_count; ++i)
-                system_reg_write(dmsc_delta[i][0], dmsc_delta[i][1]);
-            dmsc_writes += dmsc_count;
-        }
+        for (i = 0; i < ARRAY_SIZE(dmsc_registers); ++i)
+            system_reg_write(dmsc_registers[i], calibration->dmsc[i]);
+        system_reg_write(0x499cU, 1U);
+        dmsc_writes += ARRAY_SIZE(dmsc_registers) + 1U;
     }
     if (regtrace_t23_source_dpc_tuning_init)
         tisp_dpc_refresh(gain_q16);
+    if (regtrace_t23_source_ydns_tuning_init)
+        tisp_ydns_refresh(gain_q16);
+    if (regtrace_t23_source_sharpen_tuning_init)
+        sharpen_writes = regtrace_t23_source_sharpen_write_tuning(
+            regtrace_t23_sharpen_sc2336_startup,
+            ARRAY_SIZE(regtrace_t23_sharpen_sc2336_startup));
+    if (regtrace_t23_source_sharpen_tuning_init) {
+        system_reg_write(0x700cU, calibration->sharpen_700c);
+        system_reg_write(0x7090U, 1U);
+        sharpen_writes += 2U;
+    }
+
+    regtrace_t23_dmsc_gain_q16 = gain_q16;
+    tparams[0x3934] = regtrace_t23_source_dmsc_sharpness & 0xffU;
+    if (regtrace_t23_source_dmsc_tuning_init &&
+        regtrace_t23_source_dmsc_sharpness != 0x80U)
+        tisp_dmsc_sharpness_set(regtrace_t23_source_dmsc_sharpness, 0);
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source total-gain 0x%x calibration committed (sensor again=0x%x GIB=%u DMSC writes=%u explicit=%u restore=%u)\n",
+           "tx_isp_t23_recovered: source total-gain 0x%x calibration committed (sensor again=0x%x GIB=%u DMSC writes=%u sharpen writes=%u sharpness=0x%x explicit=%u restore=%u)\n",
            gain_q16, sensor_again,
            regtrace_t23_source_gib_tuning_init ? 1U : 0U, dmsc_writes,
+           sharpen_writes, regtrace_t23_source_dmsc_sharpness & 0xffU,
            explicit ? 1U : 0U, restore_dmsc ? 1U : 0U);
     return 0;
 }
@@ -11935,7 +12354,7 @@ static void regtrace_t23_source_apply_total_gain(void)
 
     if (!gain_q16) {
         if (sensor_again == 0x00c0U)
-            gain_q16 = 0x18000U;
+            gain_q16 = 0x195c0U;
         else if (sensor_again == 0x0880U)
             gain_q16 = 0x20000U;
         else
@@ -12068,7 +12487,14 @@ static int regtrace_t23_source_core_set_stream(int enable,
         bypass &= ~BIT(25);
     if (regtrace_t23_source_dpc_tuning_init)
         bypass &= ~BIT(2);
-
+    if (regtrace_t23_source_sharpen_tuning_init)
+        bypass &= ~BIT(14);
+    if (regtrace_t23_source_ydns_tuning_init)
+        bypass &= ~BIT(17);
+    if (regtrace_t23_source_defog_tuning_init)
+        bypass &= ~BIT(11);
+    if (regtrace_t23_source_ccm_tuning_init)
+        bypass &= ~BIT(9);
     /* Recovered T23 tisp_init order and parameter-derived top bypass. */
     system_reg_write(0x800U, 0);
     system_reg_write(0x4U,
@@ -12089,6 +12515,12 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_source_lsc_write_tuning_startup();
     if (regtrace_t23_source_dpc_tuning_init)
         tiziano_dpc_init();
+    if (regtrace_t23_source_ydns_tuning_init)
+        tiziano_ydns_init();
+    if (regtrace_t23_source_defog_tuning_init) {
+        tiziano_defog_params_init();
+        tiziano_defog_set_reg_params();
+    }
     if (regtrace_t23_source_ccm_tuning_init)
         regtrace_t23_source_ccm_write_tuning_startup();
     if (regtrace_t23_source_dmsc_tuning_init)
@@ -13468,7 +13900,7 @@ int32_t tisp_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t tisp_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4);
 int32_t tisp_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, char arg4);
 int32_t ISPAWBInterpolation1(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
-int64_t ISPAWBInterpolation2(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
+int32_t ISPAWBInterpolation2(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t func_zone_ct_weight(uint32_t a0, uintptr_t a1, uintptr_t a2, uint32_t a3, uint32_t arg4);
 int32_t* Tiziano_Awb_Ct_Detect(uintptr_t a0, uintptr_t a1, uintptr_t a2, uint32_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uint32_t arg7, uint32_t arg8, uintptr_t arg9, uintptr_t arg10, uintptr_t arg11, uintptr_t arg12, uintptr_t arg13, uintptr_t arg14, uintptr_t arg15, uintptr_t arg16, uintptr_t arg17, uintptr_t arg18, uintptr_t arg19);
 int32_t crc32(uint32_t a0, uint32_t a1);
@@ -13541,7 +13973,7 @@ int tisp_gamma_wdr_en(int enable);
 int32_t tiziano_gamma_dn_params_refresh(void);
 int32_t tiziano_gamma_init(void);
 int32_t tisp_gamma_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3);
-int32_t tisp_gamma_param_array_set(int32_t arg1, int32_t arg2);
+int32_t tisp_gamma_param_array_set(int32_t arg1, const void *arg2);
 int32_t tisp_api_gamma_param_set(const void *src);
 int32_t tisp_api_gamma_param_get(int32_t arg1, int32_t *arg2, int32_t *arg3);
 int32_t isp_tunning_poll(uint32_t a0, uintptr_t a1);
@@ -13601,7 +14033,12 @@ int32_t tiziano_s_awb_start(int32_t arg1, int32_t arg2, int32_t arg3);
 int32_t tiziano_g_awb_start(int32_t arg0, int32_t *arg2);
 int32_t tiziano_s_wb_algo(int32_t arg1, int32_t arg2);
 int32_t tisp_awb_get_zone(uint32_t a0, uint32_t a1);
-int32_t tisp_awb_set_cluster_awb_params(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4);
+int32_t tisp_awb_set_cluster_awb_params(int32_t arg1,
+                                        uint32_t arg2, uint32_t arg3,
+                                        uint32_t arg4, uint32_t arg5,
+                                        uint32_t arg6, uint32_t arg7,
+                                        uint32_t arg8, uint32_t arg9,
+                                        uint32_t arg10, uint32_t arg11);
 int32_t tisp_awb_get_cluster_awb_params(uint32_t a0, uintptr_t a1);
 int32_t tisp_awb_set_ct_trend(uint32_t a0, uint32_t a1);
 int32_t tisp_awb_get_ct_trend(uint32_t a0, uintptr_t a1);
@@ -13650,7 +14087,8 @@ uint32_t tiziano_bcsh_StrenCal_part_0(int32_t arg1, int32_t arg2, int32_t arg3, 
 uint32_t tiziano_bcsh_StrenCal_part_0(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5);
 int32_t tiziano_bcsh_dump2(int32_t *arg1, int32_t *arg2, int32_t *arg3, int32_t *arg4, int32_t *arg5, int32_t *arg6, int32_t *arg7, int32_t *arg8, int32_t *arg9, int32_t *arg10, int32_t *arg11, int32_t *arg12, int32_t *arg13, int32_t *arg14, int32_t *arg15, int32_t *arg16, int32_t *arg17);
 int32_t tisp_bcsh_sort_ct_list(int32_t *arg1);
-int32_t tiziano_bcsh_lut_parameter(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t* arg5, int32_t* arg6, int32_t* arg7, int32_t* arg8, int32_t* arg9, int32_t* arg10, int32_t* arg11, int32_t* arg12, int32_t* arg13, int32_t* arg14, int32_t* arg15, int32_t* arg16, int32_t* arg17, int32_t* arg18, int32_t* arg19);
+int32_t tiziano_bcsh_lut_parameter(int32_t *clip0, int32_t *clip1,
+                                  int32_t *clip2, int32_t *offset0);
 int32_t tiziano_bcsh_reg2para(uintptr_t a0, uintptr_t a1);
 void* tiziano_bcsh_para2reg(uintptr_t a0, uintptr_t a1);
 int32_t tiziano_bcsh_Tccm_Comp2Orig(void);
@@ -13680,8 +14118,8 @@ uint8_t tisp_bcsh_g_hue(uint32_t a0, uintptr_t a1);
 uint32_t tisp_bcsh_g_brightness(void);
 uint32_t tisp_bcsh_g_saturation(void);
 uint32_t tisp_bcsh_g_contrast(void);
-int32_t tisp_bcsh_get_attr(void *src);
-int64_t tisp_bcsh_set_attr(void);
+int32_t tisp_bcsh_get_attr(uintptr_t context, void *out);
+int32_t tisp_bcsh_set_attr(uintptr_t context, const void *in);
 int32_t tisp_bcsh_s_rgb_coefft(int32_t arg1, int16_t *arg2);
 int16_t tisp_bcsh_g_rgb_coefft(uint32_t a0, uintptr_t a1);
 int32_t tisp_ctr_md_np_cfg(void);
@@ -13709,7 +14147,7 @@ int32_t tisp_ydns_param_cfg(void);
 int32_t tisp_ydns_intp(uint32_t a0);
 int32_t tisp_ydns_all_reg_refresh(int32_t arg1);
 int32_t tisp_ydns_intp_reg_refresh(int32_t arg1);
-int32_t tisp_ydns_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2);
+int32_t tisp_ydns_par_refresh(uint32_t gain_q16);
 int32_t tisp_ydns_gain_update(uint32_t arg1);
 int32_t tiziano_ydns_params_refresh(void);
 int32_t tiziano_ydns_dn_params_refresh(void);
@@ -14056,12 +14494,16 @@ int32_t tisp_s_wb_attr(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint3
 int32_t tisp_g_wb_zone(uint32_t a0, uint32_t a1);
 int32_t tisp_g_wb_ct(uint32_t a0, uintptr_t a1);
 int32_t tisp_s_wb_ct(uint32_t a0, uintptr_t a1);
-int32_t tisp_s_awb_cluster(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4);
+int32_t tisp_s_awb_cluster(int32_t arg1,
+                           uint32_t arg2, uint32_t arg3, uint32_t arg4,
+                           uint32_t arg5, uint32_t arg6, uint32_t arg7,
+                           uint32_t arg8, uint32_t arg9, uint32_t arg10,
+                           uint32_t arg11);
 int32_t tisp_g_awb_cluster(uint32_t a0, uintptr_t a1);
 int32_t tisp_s_awb_ct_trend(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5);
 int32_t tisp_g_awb_ct_trend(uint32_t a0, uintptr_t a1);
 int tisp_g_ccm_attr(uint32_t a0, void *a1);
-int tisp_s_ccm_attr(const void *in);
+int tisp_s_ccm_attr(uintptr_t context, const void *in);
 int32_t tisp_s_ae_converge_step(uint32_t a0, uintptr_t a1);
 int32_t tisp_g_ae_converge_step(char arg1, int16_t *arg2);
 int32_t tisp_g_ae_hist(uint32_t a0, uint32_t a1);
@@ -22573,6 +23015,7 @@ apical_isp_awb_zone_weight_s_attr_isra_680x90:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000006854 origin=fragment_seed original=apical_isp_core_ops_s_ctrl */
 int32_t apical_isp_core_ops_s_ctrl(uintptr_t a0, uintptr_t a1, uint32_t a2)
 {
+    uint32_t awb_cluster_buf[10];
     uint32_t *local_10 = 0;
     uint32_t *local_14 = 0;
     uint32_t *local_18 = 0;
@@ -24453,35 +24896,20 @@ apical_isp_core_ops_s_ctrl0xf04:
 
 apical_isp_core_ops_s_ctrl0xf38:
     /* fragment 441: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_copy_from_user)(&local_420, *(uint32_t *)((char *)(a1) + 4), 40); /* jalr target resolved by relocation */
-
-    /* fragment 442: Arithmetic */
-    v0 = 0;
-    a0 = (uintptr_t *)&local_10;
-
-apical_isp_core_ops_s_ctrl0xf58:
-    /* fragment 443: Arithmetic */
-    v1 = v0 < 28;
-
-    /* fragment 444: Branch */
-    a1 = (uint32_t *)&local_42c;
-    if (v1 == 0) { goto apical_isp_core_ops_s_ctrl0xf7c; }
-
-    /* fragment 445: Arithmetic */
-    a1 = a1 + (uintptr_t)v0;
-
-    /* fragment 446: MemoryAccess */
-    a1 = *(uint8_t *)((char *)a1 + 0);
-    v1 = a0 + (uintptr_t)v0;
-    *(uint8_t *)((char *)v1 + 0) = a1;
-
-    /* fragment 447: Branch */
-    v0 = v0 + 1;
-    goto apical_isp_core_ops_s_ctrl0xf58;
+    if (private_copy_from_user(awb_cluster_buf,
+                               (void __user *)(uintptr_t)(*(uint32_t *)((char *)a1 + 4)),
+                               sizeof(awb_cluster_buf))) {
+        s1 = (uintptr_t *)-EFAULT;
+        goto apical_isp_core_ops_s_ctrl0x141c;
+    }
 
 apical_isp_core_ops_s_ctrl0xf7c:
     /* fragment 448: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uint32_t *)tisp_s_awb_cluster)(0, local_420, local_424, local_428); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)(uintptr_t)tisp_s_awb_cluster(
+        0, awb_cluster_buf[0], awb_cluster_buf[1], awb_cluster_buf[2],
+        awb_cluster_buf[3], awb_cluster_buf[4], awb_cluster_buf[5],
+        awb_cluster_buf[6], awb_cluster_buf[7], awb_cluster_buf[8],
+        awb_cluster_buf[9]);
 
     /* fragment 449: Branch */
     s1 = v0;
@@ -37250,11 +37678,19 @@ int32_t ISPAWBInterpolation1(int32_t arg1, int32_t arg2, int32_t arg3,
     return s1 + div_result;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000014250 origin=fragment_seed original=ISPAWBInterpolation2 */
-int64_t ISPAWBInterpolation2(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6)
+/* WHOLE_DRIVER_CANDIDATE fn_0000000000014250 origin=hlil_exact original=ISPAWBInterpolation2 */
+int32_t ISPAWBInterpolation2(int32_t q, int32_t x, int32_t x0,
+                             int32_t x1, int32_t y0, int32_t y1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int32_t denominator = (x1 - x0) << (q & 0x1f);
+    int32_t x_delta = x - (x0 << (q & 0x1f));
+
+    if (y1 < y0)
+        return y0 - fix_point_div_32(
+            q, fix_point_mult2_32(q, y0 - y1, x_delta), denominator);
+
+    return y0 + fix_point_div_32(
+        q, fix_point_mult2_32(q, y1 - y0, x_delta), denominator);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000142f0 origin=fragment_seed original=func_zone_ct_weight */
@@ -37347,7 +37783,103 @@ func_zone_ct_weight0x98:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000143c8 origin=fragment_seed original=Tiziano_Awb_Ct_Detect */
 int32_t* Tiziano_Awb_Ct_Detect(uintptr_t a0, uintptr_t a1, uintptr_t a2, uint32_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uint32_t arg7, uint32_t arg8, uintptr_t arg9, uintptr_t arg10, uintptr_t arg11, uintptr_t arg12, uintptr_t arg13, uintptr_t arg14, uintptr_t arg15, uintptr_t arg16, uintptr_t arg17, uintptr_t arg18, uintptr_t arg19)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *zone_rg = (uint32_t *)(uintptr_t)a0;
+    const uint32_t *zone_pixels = (const uint32_t *)(uintptr_t)a1;
+    const uint32_t *ct_mesh = (const uint32_t *)(uintptr_t)arg6;
+    const uint32_t *ct_output_mesh = (const uint32_t *)(uintptr_t)arg11;
+    const uint32_t *point_position = (const uint32_t *)(uintptr_t)arg16;
+    uint32_t *out_ct = (uint32_t *)(uintptr_t)arg14;
+    uint32_t *out_rg_bg = (uint32_t *)(uintptr_t)arg18;
+    uint32_t *out_status = (uint32_t *)(uintptr_t)arg19;
+    const uint32_t total = REGTRACE_T23_AWB_HLIL_ZONES;
+    const uint32_t q = REGTRACE_T23_AWB_HLIL_POINT_POSITION;
+    const uint32_t rounding = 1U << (q - 1U);
+    uint32_t max_pixels = 0;
+    uint64_t sum_rg = 0;
+    uint64_t sum_bg = 0;
+    uint64_t sum_weight = 0;
+    uint32_t average_rg_q;
+    uint32_t average_bg_q;
+    uint32_t inverse_ct_q;
+    uint32_t i;
+
+    (void)a2;
+    (void)a3;
+    (void)arg4;
+    (void)arg5;
+    (void)arg9;
+    (void)arg10;
+    (void)arg12;
+    (void)arg13;
+    (void)arg15;
+    (void)arg17;
+
+    if (!zone_rg || !zone_pixels || !ct_mesh || !ct_output_mesh ||
+        !point_position || !out_ct || !out_rg_bg || !out_status ||
+        arg7 != REGTRACE_T23_AWB_HLIL_COLS ||
+        arg8 != REGTRACE_T23_AWB_HLIL_ROWS || *point_position != q)
+        goto no_valid_zones;
+
+    for (i = 0; i < total; ++i)
+        max_pixels = max(max_pixels, zone_pixels[i]);
+    if (!max_pixels)
+        goto no_valid_zones;
+
+    for (i = 0; i < total; ++i) {
+        uint32_t rg_q = zone_rg[i];
+        uint32_t bg_q = zone_rg[total + i];
+        uint32_t pixel_weight;
+        uint32_t mesh_weight;
+        uint32_t weight;
+
+        if (!rg_q || !bg_q || !zone_pixels[i])
+            continue;
+        rg_q = max(rg_q, regtrace_t23_awb_hlil_rg_positions[0] << q);
+        rg_q = min(rg_q, regtrace_t23_awb_hlil_rg_positions[14] << q);
+        bg_q = max(bg_q, regtrace_t23_awb_hlil_bg_positions[0] << q);
+        bg_q = min(bg_q, regtrace_t23_awb_hlil_bg_positions[14] << q);
+        pixel_weight = regtrace_t23_awb_hlil_div_q(
+            zone_pixels[i], max_pixels);
+        mesh_weight = regtrace_t23_awb_hlil_mesh_q(ct_mesh, rg_q, bg_q);
+        weight = regtrace_t23_awb_hlil_mul_q(mesh_weight, pixel_weight);
+        sum_rg += regtrace_t23_awb_hlil_mul_q(rg_q, weight);
+        sum_bg += regtrace_t23_awb_hlil_mul_q(bg_q, weight);
+        sum_weight += weight;
+    }
+    if (!sum_weight)
+        goto no_valid_zones;
+
+    average_rg_q = regtrace_t23_awb_hlil_div_q(sum_rg, sum_weight);
+    average_bg_q = regtrace_t23_awb_hlil_div_q(sum_bg, sum_weight);
+    average_rg_q = max(average_rg_q,
+                       regtrace_t23_awb_hlil_rg_positions[0] << q);
+    average_rg_q = min(average_rg_q,
+                       regtrace_t23_awb_hlil_rg_positions[14] << q);
+    average_bg_q = max(average_bg_q,
+                       regtrace_t23_awb_hlil_bg_positions[0] << q);
+    average_bg_q = min(average_bg_q,
+                       regtrace_t23_awb_hlil_bg_positions[14] << q);
+    inverse_ct_q = regtrace_t23_awb_hlil_mesh_q(
+        ct_output_mesh, average_rg_q, average_bg_q);
+
+    *out_ct = inverse_ct_q ?
+        (uint32_t)div64_u64(((uint64_t)1000000U << q) +
+                            (inverse_ct_q >> 1), inverse_ct_q) :
+        5000U;
+    out_rg_bg[0] = (average_rg_q + rounding) >> q;
+    out_rg_bg[1] = (average_bg_q + rounding) >> q;
+    *out_status = 0;
+    return 0;
+
+no_valid_zones:
+    if (out_ct)
+        *out_ct = 5000U;
+    if (out_rg_bg) {
+        out_rg_bg[0] = 0x100U;
+        out_rg_bg[1] = 0x100U;
+    }
+    if (out_status)
+        *out_status = 1U;
     return 0;
 }
 
@@ -42648,28 +43180,40 @@ int32_t tiziano_gamma_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bb4c origin=fragment_seed original=tiziano_gamma_init */
 int32_t tiziano_gamma_init(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    regtrace_t23_source_gamma_write_tuning_startup();
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bbac origin=model_output original=tisp_gamma_param_array_get */
-int32_t tisp_gamma_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3) {
-	*arg3 = 0;
-	memcpy(arg2, &tiziano_gamma_lut, 0x102);
-	int32_t offset = *arg3 + 0x102;
-	*arg3 = offset;
-	memcpy(arg2 + offset, &tiziano_gamma_lut_wdr, 0x102);
-	*arg3 += 0x102;
-	return 0;
+int32_t tisp_gamma_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3)
+{
+    unsigned char *out = (unsigned char *)arg2;
+
+    (void)arg1;
+    if (!out || !arg3)
+        return -EINVAL;
+
+    memcpy(out, tiziano_gamma_lut, sizeof(tiziano_gamma_lut));
+    memcpy(out + sizeof(tiziano_gamma_lut), tiziano_gamma_lut_wdr,
+           sizeof(tiziano_gamma_lut_wdr));
+    *arg3 = sizeof(tiziano_gamma_lut) + sizeof(tiziano_gamma_lut_wdr);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bc30 origin=model_output original=tisp_gamma_param_array_set */
-int32_t tisp_gamma_param_array_set(int32_t arg1, int32_t arg2) {
-    memcpy(&tiziano_gamma_lut, arg2, 0x102);
-    memcpy(&tiziano_gamma_lut_wdr, arg2 + 0x102, 0x102);
+int32_t tisp_gamma_param_array_set(int32_t arg1, const void *arg2)
+{
+    const unsigned char *in = arg2;
+
+    (void)arg1;
+    if (!in)
+        return -EINVAL;
+
+    memcpy(tiziano_gamma_lut, in, sizeof(tiziano_gamma_lut));
+    memcpy(tiziano_gamma_lut_wdr, in + sizeof(tiziano_gamma_lut),
+           sizeof(tiziano_gamma_lut_wdr));
     tiziano_gamma_lut_parameter();
-    tiziano_adr_gamma_refresh();
-    return 0;
+    return tiziano_adr_gamma_refresh();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bca8 origin=model_output original=tisp_api_gamma_param_set */
@@ -44229,6 +44773,7 @@ int32_t system_reg_write_gib(int32_t arg1, int32_t arg2, int32_t arg3) {
     return system_reg_write(arg2, arg3);
 }
 
+#if 0 /* Replaced above by the T23-HLIL channel mapping over SC2336 tables. */
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001cfdc origin=fragment_seed original=tisp_gib_gain_interpolation */
 int32_t tisp_gib_gain_interpolation(uint32_t a0)
 {
@@ -44572,6 +45117,7 @@ tisp_gib_gain_interpolation0x28c:
 
     return 0;
 }
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001d2e4 origin=fragment_seed original=tiziano_gib_lut_parameter */
 int32_t tiziano_gib_lut_parameter(void)
@@ -48848,78 +49394,33 @@ int32_t tisp_awb_get_zone(uint32_t a0, uint32_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020904 origin=model_output original=tisp_awb_set_cluster_awb_params */
-int32_t tisp_awb_set_cluster_awb_params(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4)
+int32_t tisp_awb_set_cluster_awb_params(int32_t arg1,
+                                        uint32_t arg2, uint32_t arg3,
+                                        uint32_t arg4, uint32_t arg5,
+                                        uint32_t arg6, uint32_t arg7,
+                                        uint32_t arg8, uint32_t arg9,
+                                        uint32_t arg10, uint32_t arg11)
 {
-	int32_t buf[4];
-	int32_t *dst = _awb_cluster;
-	int32_t *src = buf;
+    uint32_t cluster[10] = {
+        arg2, arg3, arg4, arg5, arg6,
+        arg7, arg8, arg9, arg10, arg11,
+    };
 
-	((void **)buf)[0] = arg2;
-	((void **)buf)[1] = arg3;
-	((void **)buf)[2] = arg4;
-	((void **)buf)[3] = (int32_t)(uintptr_t)__builtin_return_address(0);
-
-	do {
-		*dst++ = *src++;
-	} while (src != &buf[4]);
-
-	((void **)_awb_cluster)[0] = arg2;
-	((void **)_awb_cluster)[1] = arg3;
-	((void **)_awb_cluster)[2] = arg4;
-	((int32_t *)&awb_cluster_api_status)[1] = 2;
-
-	if (awb_cluster_api_status != 1) {
-		memcpy(&awb_cluster_api_para, _awb_cluster, 40);
-	}
-
-	return 0;
+    (void)arg1;
+    memcpy(_awb_cluster, cluster, sizeof(cluster));
+    ((uint32_t *)awb_cluster_api_status)[1] = 2;
+    if (((uint32_t *)awb_cluster_api_status)[0] != 1)
+        memcpy(awb_cluster_api_para, _awb_cluster, sizeof(_awb_cluster));
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002099c origin=fragment_seed original=tisp_awb_get_cluster_awb_params */
 int32_t tisp_awb_get_cluster_awb_params(uint32_t a0, uintptr_t a1)
 {
-    uintptr_t *a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&_awb_cluster;
-    v1 = 0;
-    v0 = v0;
-    a0 = 28;
-
-tisp_awb_get_cluster_awb_params0x10:
-    /* fragment 1: Arithmetic */
-    a2 = v0 + v1;
-
-    /* fragment 2: MemoryAccess */
-    a3 = *(uint32_t *)((char *)a2 + 4);
-    a2 = a1 + v1;
-    v1 = v1 + 4;
-
-    /* fragment 3: Branch */
-    *(uint32_t *)((char *)a2 + 12) = a3;
-    if (v1 != a0) { goto tisp_awb_get_cluster_awb_params0x10; }
-
-    /* fragment 4: Arithmetic */
-    v1 = (uintptr_t)&_awb_cluster;
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)((char *)&_awb_cluster));
-    *(uint32_t *)((char *)a1 + 0) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 32);
-    *(uint32_t *)((char *)a1 + 4) = v1;
-    v0 = *(uint32_t *)((char *)v0 + 36);
-    *(uint32_t *)((char *)a1 + 8) = v0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = 0;
-
+    (void)a0;
+    if (!a1)
+        return -EINVAL;
+    memcpy((void *)a1, _awb_cluster, sizeof(_awb_cluster));
     return 0;
 }
 
@@ -49384,42 +49885,22 @@ int tisp_lsc_wdr_en(int arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021400 origin=fragment_seed original=tisp_lsc_ct_update */
 int32_t tisp_lsc_ct_update(uint32_t a0)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-
-    /* fragment 1: MemoryAccess */
-    *(uint32_t *)((char *)&sclk_name + -17492) = a0;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
+    if (a0 < regtrace_t23_lsc_sc2336_ct_points[0] || a0 > 10000U)
+        return -EINVAL;
+    if (a0 != regtrace_t23_source_lsc_runtime_ct) {
+        regtrace_t23_source_lsc_runtime_ct = a0;
+        regtrace_t23_source_lsc_update_pending = true;
+    }
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021410 origin=fragment_seed original=tisp_lsc_gain_update */
 int32_t tisp_lsc_gain_update(uint32_t a0)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&ivdc_threshold_line;
-
-    /* fragment 1: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&lsc_gain_curr)) = a0;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
+    if (a0 != (uint32_t)lsc_gain_curr) {
+        lsc_gain_curr = a0;
+        regtrace_t23_source_lsc_update_pending = true;
+    }
     return 0;
 }
 
@@ -49673,18 +50154,135 @@ int32_t tisp_lsc_judge_gain_update_flag(void)
 	return 1;
 }
 
+static uint32_t regtrace_t23_lsc_clamp12(int32_t value)
+{
+    if (value < 0)
+        return 0;
+    if (value > 0xfff)
+        return 0xfff;
+    return (uint32_t)value;
+}
+
+static uint32_t regtrace_t23_lsc_blend_word(uint32_t low,
+                                            uint32_t high,
+                                            uint32_t weight)
+{
+    int32_t low_lo = low & 0xfffU;
+    int32_t low_hi = (low >> 12) & 0xfffU;
+    int32_t high_lo = high & 0xfffU;
+    int32_t high_hi = (high >> 12) & 0xfffU;
+    int32_t out_lo = low_lo + (((high_lo - low_lo) * (int32_t)weight) >> 12);
+    int32_t out_hi = low_hi + (((high_hi - low_hi) * (int32_t)weight) >> 12);
+
+    return (regtrace_t23_lsc_clamp12(out_hi) << 12) |
+           regtrace_t23_lsc_clamp12(out_lo);
+}
+
+static uint32_t regtrace_t23_lsc_word_for_ct(uint32_t index, uint32_t ct)
+{
+    const uint32_t *points = regtrace_t23_lsc_sc2336_ct_points;
+    uint32_t weight;
+
+    if (ct <= points[0])
+        return regtrace_t23_lsc_sc2336_a_lut[index];
+    if (ct <= points[1]) {
+        weight = ((ct - points[0]) << 12) / (points[1] - points[0]);
+        return regtrace_t23_lsc_blend_word(
+            regtrace_t23_lsc_sc2336_a_lut[index],
+            regtrace_t23_lsc_sc2336_t_lut[index], weight);
+    }
+    if (ct <= points[2])
+        return regtrace_t23_lsc_sc2336_t_lut[index];
+    if (ct <= points[3]) {
+        weight = ((ct - points[2]) << 12) / (points[3] - points[2]);
+        return regtrace_t23_lsc_blend_word(
+            regtrace_t23_lsc_sc2336_t_lut[index],
+            regtrace_t23_lsc_sc2336_d_lut[index], weight);
+    }
+    return regtrace_t23_lsc_sc2336_d_lut[index];
+}
+
+static uint32_t regtrace_t23_lsc_scale_word(uint32_t value,
+                                            uint32_t base,
+                                            uint32_t strength)
+{
+    int32_t low = base +
+        ((((int32_t)(value & 0xfffU) - (int32_t)base) *
+          (int32_t)strength) >> 12);
+    int32_t high = base +
+        ((((int32_t)((value >> 12) & 0xfffU) - (int32_t)base) *
+          (int32_t)strength) >> 12);
+
+    return (regtrace_t23_lsc_clamp12(high) << 12) |
+           regtrace_t23_lsc_clamp12(low);
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021830 origin=fragment_seed original=tisp_lsc_write_lut_datas */
 int32_t tisp_lsc_write_lut_datas(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t gain_q16 = regtrace_t23_dmsc_gain_q16;
+    uint32_t strength;
+    uint32_t base;
+    uint32_t ct;
+    uint32_t i;
+
+    lsc_count++;
+    if (!regtrace_t23_source_lsc_update_pending)
+        return 0;
+
+    if (!gain_q16)
+        gain_q16 = 0x10000U;
+    strength = tisp_simple_intp(
+        gain_q16 >> 16, gain_q16 & 0xffffU,
+        (void *)regtrace_t23_lsc_sc2336_mesh_strength);
+    if (REGTRACE_T23_LSC_SC2336_MESH_SCALE == 0U)
+        base = 0x800U;
+    else if (REGTRACE_T23_LSC_SC2336_MESH_SCALE == 1U)
+        base = 0x400U;
+    else if (REGTRACE_T23_LSC_SC2336_MESH_SCALE == 2U)
+        base = 0x200U;
+    else
+        base = 0x100U;
+
+    ct = regtrace_t23_source_lsc_runtime_ct;
+    for (i = 0; i + 2U < REGTRACE_T23_LSC_SC2336_LUT_NUM; i += 3U) {
+        uint32_t offset = (i / 3U) << 4;
+
+        system_reg_write(0x28000U + offset,
+            regtrace_t23_lsc_scale_word(
+                regtrace_t23_lsc_word_for_ct(i, ct), base, strength));
+        system_reg_write(0x28004U + offset,
+            regtrace_t23_lsc_scale_word(
+                regtrace_t23_lsc_word_for_ct(i + 1U, ct), base, strength));
+        system_reg_write(0x28008U + offset,
+            regtrace_t23_lsc_scale_word(
+                regtrace_t23_lsc_word_for_ct(i + 2U, ct), base, strength));
+    }
+    system_reg_write(0x2800cU, 0);
+    regtrace_t23_source_lsc_update_pending = false;
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: source LSC runtime CT%u gain=0x%x strength=%u committed (%u nodes)\n",
+           ct, gain_q16, strength,
+           REGTRACE_T23_LSC_SC2336_LUT_NUM / 3U);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021d44 origin=model_output original=tiziano_lsc_init */
 int32_t tiziano_lsc_init(uint32_t arg1, uint32_t arg2)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    system_reg_write(0x3800U,
+        (REGTRACE_T23_LSC_SC2336_MESH_HEIGHT << 16) |
+        REGTRACE_T23_LSC_SC2336_MESH_WIDTH);
+    system_reg_write(0x3804U,
+        (REGTRACE_T23_LSC_SC2336_LUT_STRIDE << 16) |
+        (REGTRACE_T23_LSC_SC2336_MEAN_ENABLE << 15) |
+        REGTRACE_T23_LSC_SC2336_MESH_SCALE);
+    regtrace_t23_source_lsc_runtime_ct = regtrace_t23_source_lsc_ct;
+    regtrace_t23_source_lsc_update_pending = true;
+    lsc_last_str = 0;
+    (void)arg1;
+    (void)arg2;
+    return tisp_lsc_write_lut_datas();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021ed8 origin=fragment_seed original=tisp_lsc_param_array_set */
@@ -50312,104 +50910,102 @@ int32_t tisp_ccm_sort_ct_list(int32_t *arg1) {
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022ae0 origin=model_output original=tiziano_ccm_lut_parameter */
 int32_t tiziano_ccm_lut_parameter(void *arg1)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    const uint32_t *matrix = arg1;
+    uint32_t dp[5];
+    uint32_t real;
+    uint32_t i;
+
+    if (!matrix)
+        return -EINVAL;
+
+    for (i = 0; i < 9; i += 2) {
+        uint32_t value = matrix[i];
+
+        if (i != 8)
+            value = (matrix[i + 1] << 16) | (value & 0xffffU);
+        system_reg_write(0x5000U, 1U);
+        system_reg_write(0x5004U + (i << 1), value);
+    }
+
+    memcpy(&real, ccm_real, sizeof(real));
+    if (real == 1U) {
+        uint32_t difference;
+        uint32_t step;
+
+        memcpy(dp, tiziano_ccm_dp_cfg, sizeof(dp));
+        system_reg_write(0x5018U,
+                         (dp[1] << 16) | (dp[0] << 12) | dp[2]);
+        difference = dp[2] >= dp[1] ? dp[2] - dp[1] : dp[1] - dp[2];
+        step = difference ? 0x20U / difference : 1U;
+        system_reg_write(0x501cU, step);
+        system_reg_write(0x5020U, (dp[4] << 16) | dp[3]);
+    }
+
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022c38 origin=fragment_seed original=jz_isp_ccm_reg2par */
 int32_t jz_isp_ccm_reg2par(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    int32_t result = 0;
+    unsigned int i;
 
-    /* fragment 0: Arithmetic */
-    v1 = a0 + 36;
+    for (i = 0; i < 9; ++i) {
+        uint32_t raw;
 
-jz_isp_ccm_reg2par0x4:
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 0);
-    a2 = v0 < 8192;
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 22c44:	50c00001 	beqzl	a2,22c4c <jz_isp_ccm_reg2par+0x14> */
-
-    /* fragment 3: Arithmetic */
-    v0 = v0 - 16384;
-
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 0) = v0;
-    a0 = a0 + 4;
-
-    /* fragment 5: Branch */
-    a1 = a1 + 4;
-    if (a0 != v1) { goto jz_isp_ccm_reg2par0x4; }
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 22c60:	00000000 	nop */
-
-    return 0;
+        memcpy(&raw, (const void *)(a1 + i * sizeof(raw)), sizeof(raw));
+        result = raw >= 0x2000U ? (int32_t)(raw - 0x4000U) :
+                                 (int32_t)raw;
+        memcpy((void *)(a0 + i * sizeof(result)), &result, sizeof(result));
+    }
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022c64 origin=fragment_seed original=jz_isp_ccm_para2reg */
 void* jz_isp_ccm_para2reg(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    uint32_t result = 0;
+    unsigned int i;
 
-    /* fragment 0: Arithmetic */
-    v1 = a0 + 36;
+    for (i = 0; i < 9; ++i) {
+        int32_t value;
 
-jz_isp_ccm_para2reg0x4:
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 0);
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 22c6c:	04420001 	bltzl	v0,22c74 <jz_isp_ccm_para2reg+0x10> */
-
-    /* fragment 3: Arithmetic */
-    v0 = (uintptr_t)v0 & 16383;
-
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 0) = v0;
-    a0 = a0 + 4;
-
-    /* fragment 5: Branch */
-    a1 = a1 + 4;
-    if (a0 != v1) { goto jz_isp_ccm_para2reg0x4; }
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 22c88:	00000000 	nop */
-
-    return (void*)v0;
+        memcpy(&value, (const void *)(a1 + i * sizeof(value)), sizeof(value));
+        result = value < 0 ? (uint32_t)value & 0x3fffU : (uint32_t)value;
+        memcpy((void *)(a0 + i * sizeof(result)), &result, sizeof(result));
+    }
+    return (void *)(uintptr_t)result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022c8c origin=model_output original=jz_isp_ccm_parameter_convert */
 int32_t jz_isp_ccm_parameter_convert(void)
 {
-	int32_t (*fn)(void *, int32_t);
+    uintptr_t source;
+    int32_t result;
 
-	fn = jz_isp_ccm_reg2par(&_ccm_a_parameter, tiziano_ccm_a_now);
-	fn = fn(&_ccm_t_parameter, tiziano_ccm_t_now);
-	fn = fn(&_ccm_d_parameter, tiziano_ccm_d_now);
-	return fn(&_ccm_d2_parameter, tiziano_ccm_d2_now);
+    memcpy(&source, tiziano_ccm_a_now, sizeof(source));
+    result = jz_isp_ccm_reg2par((uintptr_t)_ccm_a_parameter, source);
+    memcpy(&source, tiziano_ccm_t_now, sizeof(source));
+    result = jz_isp_ccm_reg2par((uintptr_t)_ccm_t_parameter, source);
+    memcpy(&source, tiziano_ccm_d_now, sizeof(source));
+    result = jz_isp_ccm_reg2par((uintptr_t)_ccm_d_parameter, source);
+    memcpy(&source, tiziano_ccm_d2_now, sizeof(source));
+    result = jz_isp_ccm_reg2par((uintptr_t)_ccm_d2_parameter, source);
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022cf4 origin=model_output original=tiziano_ct_ccm_interpolation */
 uint32_t tiziano_ct_ccm_interpolation(int32_t arg1)
 {
+    int32_t matrix[9];
+    uint32_t region;
+
+    region = regtrace_t23_ccm_interpolate((uint32_t)arg1, matrix);
+    memcpy(ccm_parameter_itp, matrix, sizeof(matrix));
+    ccm_ct_part_now = region;
+    return region;
+
+#if 0
 
     uint32_t ccm_ct_list_1;
     uint32_t *t3;
@@ -50592,6 +51188,7 @@ label_22e10:
 }
 }
 }
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000230f8 origin=fragment_seed original=jz_isp_ccm */
@@ -51258,21 +51855,15 @@ uint32_t tiziano_bcsh_StrenCal_part_0(int32_t arg1, int32_t arg2, int32_t arg3, 
 #endif
 uint32_t tiziano_bcsh_StrenCal_part_0(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5)
 {
-	int32_t *a0 = arg2 - arg1;
-	if (arg2 < arg1)
-		a0 = arg1 - arg2;
+	uint32_t d21 = (arg2 >= arg1) ? arg2 - arg1 : arg1 - arg2;
+	uint32_t d23 = (arg2 >= arg3) ? arg2 - arg3 : arg3 - arg2;
+	uint32_t d45 = (arg4 >= arg5) ? arg4 - arg5 : arg5 - arg4;
+	uint64_t numerator;
 
-	int32_t *a1 = arg2 - arg3;
-	if (arg2 < arg3)
-		a1 = arg3 - arg2;
-
-	int32_t *t0 = arg4 - arg5;
-	if (arg4 < arg5)
-		t0 = arg5 - arg4;
-
-	int64_t hi_lo = (int64_t)(uintptr_t)a0 * (uintptr_t)t0 + (int64_t)(uintptr_t)a1 * arg4;
-	uint32_t lo = (uint32_t)hi_lo;
-	return lo / (uint32_t)a1;
+	if (!d23)
+		return arg4;
+	numerator = (uint64_t)d21 * d45 + (uint64_t)d23 * (uint32_t)arg4;
+	return (uint32_t)div_u64(numerator, d23);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000023c9c origin=model_output original=tiziano_bcsh_dump2 */
@@ -51383,6 +51974,7 @@ int32_t tisp_bcsh_sort_ct_list(int32_t *arg1) {
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000240f4 origin=model_output original=tiziano_bcsh_lut_parameter */
+#if 0
 int32_t tiziano_bcsh_lut_parameter(int32_t* arg1, int32_t* arg2, int32_t* arg3, int32_t* arg4, int32_t* arg5, int32_t* arg6, int32_t* arg7, int32_t* arg8, int32_t* arg9, int32_t* arg10, int32_t* arg11, int32_t* arg12, int32_t* arg13, int32_t* arg14, int32_t* arg15, int32_t* arg16, int32_t* arg17, int32_t* arg18, int32_t* arg19)
 {
     uintptr_t s0_val;
@@ -51543,103 +52135,131 @@ int32_t tiziano_bcsh_lut_parameter(int32_t* arg1, int32_t* arg2, int32_t* arg3, 
     var_24 = var_24 << 16;
     var_24 = var_24 | a0_hi;
 }
+#endif
+
+int32_t tiziano_bcsh_lut_parameter(int32_t *clip0, int32_t *clip1,
+                                  int32_t *clip2, int32_t *offset0)
+{
+    uint32_t *offset1 = (uint32_t *)(void *)tisp_BCSH_au32Offset1;
+    uint32_t *hmatrix = (uint32_t *)(void *)tisp_BCSH_au32HMatrix;
+    uint32_t *hdp = (uint32_t *)(uintptr_t)tisp_BCSH_au32HDP_now;
+    uint32_t *hbp = (uint32_t *)(uintptr_t)tisp_BCSH_au32HBP_now;
+    uint32_t *hlsp = (uint32_t *)(uintptr_t)tisp_BCSH_au32HLSP_now;
+    uint32_t *sthres = (uint32_t *)(uintptr_t)tisp_BCSH_au32Sthres_now;
+    uint32_t *sstep = (uint32_t *)(void *)tisp_BCSH_u32Sstep;
+
+#define BCSH_PACK16(high, low) \
+    ((((uint32_t)(high) & 0xffffU) << 16) | ((uint32_t)(low) & 0xffffU))
+
+    if (!regtrace_t23_valid_ptr((uintptr_t)hdp))
+        hdp = (uint32_t *)(void *)tisp_BCSH_au32HDP;
+    if (!regtrace_t23_valid_ptr((uintptr_t)hbp))
+        hbp = (uint32_t *)(void *)tisp_BCSH_au32HBP;
+    if (!regtrace_t23_valid_ptr((uintptr_t)hlsp))
+        hlsp = (uint32_t *)(void *)tisp_BCSH_au32HLSP;
+    if (!regtrace_t23_valid_ptr((uintptr_t)sthres))
+        sthres = (uint32_t *)(void *)tisp_BCSH_au32Sthres;
+
+    system_reg_write(0x8000, BCSH_PACK16(clip0[0], clip0[1]));
+    system_reg_write(0x8004, BCSH_PACK16(clip1[0], clip1[1]));
+    system_reg_write(0x8008, BCSH_PACK16(clip2[0], clip2[1]));
+    system_reg_write(0x800c, BCSH_PACK16(clip0[2], clip0[3]));
+    system_reg_write(0x8010, BCSH_PACK16(clip1[2], clip1[3]));
+    system_reg_write(0x8014, BCSH_PACK16(clip2[2], clip2[3]));
+    system_reg_write(0x8018, BCSH_PACK16(offset1[0], offset0[0]));
+    system_reg_write(0x801c, BCSH_PACK16(offset1[1], offset0[1]));
+    system_reg_write(0x8020, BCSH_PACK16(offset1[2], offset0[2]));
+    system_reg_write(0x8024, BCSH_PACK16(hmatrix[1], hmatrix[0]));
+    system_reg_write(0x8028, hmatrix[2]);
+    system_reg_write(0x802c, BCSH_PACK16(hmatrix[4], hmatrix[3]));
+    system_reg_write(0x8030, hmatrix[5]);
+    system_reg_write(0x8034, BCSH_PACK16(hmatrix[7], hmatrix[6]));
+    system_reg_write(0x8038, hmatrix[8]);
+    system_reg_write(0x803c, BCSH_PACK16(tisp_BCSH_u32HDPslope, hdp[0]));
+    system_reg_write(0x8040, BCSH_PACK16(hdp[2], hdp[1]));
+    system_reg_write(0x8044, BCSH_PACK16(tisp_BCSH_u32HBPslope, hbp[0]));
+    system_reg_write(0x8048, BCSH_PACK16(hbp[2], hbp[1]));
+    system_reg_write(0x804c, BCSH_PACK16(tisp_BCSH_u32HLSPslope, hlsp[0]));
+    system_reg_write(0x8050, BCSH_PACK16(hlsp[2], hlsp[1]));
+    system_reg_write(0x8054,
+                     BCSH_PACK16(tisp_BCSH_u32Cslope0,
+                                 tisp_BCSH_ai32C[0]));
+    system_reg_write(0x8058,
+                     BCSH_PACK16(tisp_BCSH_u32Cslope2,
+                                 tisp_BCSH_u32Cslope1));
+    system_reg_write(0x805c,
+                     BCSH_PACK16(tisp_BCSH_ai32C[2],
+                                 tisp_BCSH_ai32C[1]));
+    system_reg_write(0x8060,
+                     BCSH_PACK16(tisp_BCSH_ai32C[4],
+                                 tisp_BCSH_ai32C[3]));
+    system_reg_write(0x8064,
+                     BCSH_PACK16(sstep[1], (sstep[0] << 3) | sthres[0]));
+    system_reg_write(0x8068, BCSH_PACK16(sthres[2], sthres[1]));
+    system_reg_write(0x806c,
+                     BCSH_PACK16(tisp_BCSH_ai32Svalue[0],
+                                 tisp_BCSH_ai32Svalue[1]));
+    system_reg_write(0x8070,
+                     BCSH_PACK16(tisp_BCSH_ai32Svalue[2],
+                                 tisp_BCSH_ai32Svalue[3]));
+
+#undef BCSH_PACK16
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000246c8 origin=fragment_seed original=tiziano_bcsh_reg2para */
 int32_t tiziano_bcsh_reg2para(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	int32_t *dst = (int32_t *)(uintptr_t)a0;
+	const uint32_t *src = (const uint32_t *)(uintptr_t)a1;
+	int32_t value = 0;
+	int i;
 
-    /* fragment 0: Arithmetic */
-    v1 = a0 + 36;
-
-tiziano_bcsh_reg2para0x4:
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 0);
-    a2 = v0 < 8192;
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 246d4:	50c00001 	beqzl	a2,246dc <tiziano_bcsh_reg2para+0x14> */
-
-    /* fragment 3: Arithmetic */
-    v0 = v0 - 16384;
-
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 0) = v0;
-    a0 = a0 + 4;
-
-    /* fragment 5: Branch */
-    a1 = a1 + 4;
-    if (a0 != v1) { goto tiziano_bcsh_reg2para0x4; }
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 246f0:	00000000 	nop */
-
-    return 0;
+	for (i = 0; i < 9; i++) {
+		value = src[i];
+		if ((uint32_t)value >= 0x2000)
+			value -= 0x4000;
+		dst[i] = value;
+	}
+	return value;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000246f4 origin=fragment_seed original=tiziano_bcsh_para2reg */
 void* tiziano_bcsh_para2reg(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	uint32_t *dst = (uint32_t *)(uintptr_t)a0;
+	const int32_t *src = (const int32_t *)(uintptr_t)a1;
+	int32_t value = 0;
+	int i;
 
-    /* fragment 0: Arithmetic */
-    v1 = a0 + 36;
-
-tiziano_bcsh_para2reg0x4:
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 0);
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 246fc:	04420001 	bltzl	v0,24704 <tiziano_bcsh_para2reg+0x10> */
-
-    /* fragment 3: Arithmetic */
-    v0 = (uintptr_t)v0 & 16383;
-
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 0) = v0;
-    a0 = a0 + 4;
-
-    /* fragment 5: Branch */
-    a1 = a1 + 4;
-    if (a0 != v1) { goto tiziano_bcsh_para2reg0x4; }
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 24718:	00000000 	nop */
-
-    return (void*)v0;
+	for (i = 0; i < 9; i++) {
+		value = src[i];
+		dst[i] = value < 0 ? ((uint32_t)value & 0x3fff) : (uint32_t)value;
+	}
+	return (void *)(uintptr_t)value;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002471c origin=model_output original=tiziano_bcsh_Tccm_Comp2Orig */
 int32_t tiziano_bcsh_Tccm_Comp2Orig(void)
 {
-	int32_t (*fn)(void *, void *);
+	const void *d2 = *(const void **)(void *)tisp_BCSH_au32CCMMatrix_d2_now;
+	const void *d = *(const void **)(void *)tisp_BCSH_au32CCMMatrix_d_now;
+	const void *t = *(const void **)(void *)tisp_BCSH_au32CCMMatrix_t_now;
+	const void *a = *(const void **)(void *)tisp_BCSH_au32CCMMatrix_a_now;
 
-	fn = tiziano_bcsh_reg2para(&tisp_BCSH_as32CCMMatrix_d2,
-				    tisp_BCSH_au32CCMMatrix_d2_now);
-	fn = fn(&tisp_BCSH_as32CCMMatrix_d,
-		tisp_BCSH_au32CCMMatrix_d_now);
-	fn = fn(&tisp_BCSH_as32CCMMatrix_t,
-		tisp_BCSH_au32CCMMatrix_t_now);
-	return fn(&tisp_BCSH_as32CCMMatrix_a,
-		  tisp_BCSH_au32CCMMatrix_a_now);
+	if (!regtrace_t23_valid_ptr((uintptr_t)d2)) d2 = tisp_BCSH_au32CCMMatrix_d2;
+	if (!regtrace_t23_valid_ptr((uintptr_t)d)) d = tisp_BCSH_au32CCMMatrix_d;
+	if (!regtrace_t23_valid_ptr((uintptr_t)t)) t = tisp_BCSH_au32CCMMatrix_t;
+	if (!regtrace_t23_valid_ptr((uintptr_t)a)) a = tisp_BCSH_au32CCMMatrix_a;
+
+	tiziano_bcsh_reg2para((uintptr_t)tisp_BCSH_as32CCMMatrix_d2, (uintptr_t)d2);
+	tiziano_bcsh_reg2para((uintptr_t)tisp_BCSH_as32CCMMatrix_d, (uintptr_t)d);
+	tiziano_bcsh_reg2para((uintptr_t)tisp_BCSH_as32CCMMatrix_t, (uintptr_t)t);
+	return tiziano_bcsh_reg2para((uintptr_t)tisp_BCSH_as32CCMMatrix_a, (uintptr_t)a);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024784 origin=fragment_seed original=tiziano_ct_bcsh_interpolation */
+#if 0
 uint32_t tiziano_ct_bcsh_interpolation(uint32_t a0)
 {
     uint32_t *local_10 = 0;
@@ -52178,6 +52798,79 @@ tiziano_ct_bcsh_interpolation0x434:
 
     return (uint32_t)v0;
 }
+#endif
+
+static void regtrace_t23_bcsh_blend_matrix(int32_t *dst,
+                                           const int32_t *low,
+                                           const int32_t *high,
+                                           uint32_t distance,
+                                           uint32_t range)
+{
+    int i;
+
+    if (!range) {
+        memcpy(dst, low, 0x24);
+        return;
+    }
+    if (distance > range)
+        distance = range;
+    for (i = 0; i < 9; i++) {
+        if (high[i] >= low[i])
+            dst[i] = low[i] +
+                ((high[i] - low[i]) * (int32_t)distance) /
+                (int32_t)range;
+        else
+            dst[i] = low[i] -
+                ((low[i] - high[i]) * (int32_t)distance) /
+                (int32_t)range;
+    }
+}
+
+uint32_t tiziano_ct_bcsh_interpolation(uint32_t ct)
+{
+    uint32_t *ct_list = (uint32_t *)(void *)bcsh_ct_list;
+    int32_t *dst = (int32_t *)(void *)tisp_BCSH_as32CCMMatrix;
+    int32_t *a = (int32_t *)(void *)tisp_BCSH_as32CCMMatrix_a;
+    int32_t *t = (int32_t *)(void *)tisp_BCSH_as32CCMMatrix_t;
+    int32_t *d = (int32_t *)(void *)tisp_BCSH_as32CCMMatrix_d;
+    int32_t *d2 = (int32_t *)(void *)tisp_BCSH_as32CCMMatrix_d2;
+    uint32_t start;
+    uint32_t end;
+
+    if (!bcsh_ccm_en) {
+        memset(dst, 0, 0x24);
+        dst[0] = 0x400;
+        dst[4] = 0x400;
+        dst[8] = 0x400;
+        return 0;
+    }
+
+    if (ct <= ct_list[0] + 200) {
+        memcpy(dst, a, 0x24);
+    } else if (ct < ct_list[1] - 200) {
+        start = ct_list[0] + 200;
+        end = ct_list[1] - 200;
+        regtrace_t23_bcsh_blend_matrix(dst, a, t, ct - start,
+                                       end - start);
+    } else if (ct <= ct_list[1] + 200) {
+        memcpy(dst, t, 0x24);
+    } else if (ct < ct_list[2] - 200) {
+        start = ct_list[1] + 200;
+        end = ct_list[2] - 200;
+        regtrace_t23_bcsh_blend_matrix(dst, t, d, ct - start,
+                                       end - start);
+    } else if (ct <= ct_list[2] + 200) {
+        memcpy(dst, d, 0x24);
+    } else if (ct < ct_list[3] - 200) {
+        start = ct_list[2] + 200;
+        end = ct_list[3] - 200;
+        regtrace_t23_bcsh_blend_matrix(dst, d, d2, ct - start,
+                                       end - start);
+    } else {
+        memcpy(dst, d2, 0x24);
+    }
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024bc4 origin=fragment_seed original=tisp_bcsh_wdr_en */
 int32_t tisp_bcsh_wdr_en(void)
@@ -52195,128 +52888,319 @@ int32_t tisp_bcsh_wdr_en(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024bcc origin=fragment_seed original=tiziano_bcsh_Tccm_RGBYUV */
+static int32_t regtrace_t23_bcsh_fixmul(int32_t left, int32_t right, unsigned int shift)
+{
+	uint32_t left_mag = left < 0 ? -(uint32_t)left : (uint32_t)left;
+	uint32_t right_mag = right < 0 ? -(uint32_t)right : (uint32_t)right;
+	uint64_t product = (uint64_t)left_mag * right_mag;
+	int32_t result = product >> shift;
+
+	return (left < 0) ^ (right < 0) ? -result : result;
+}
+
+static int32_t regtrace_t23_bcsh_shift6(int32_t value)
+{
+	return value < 0 ? -((-value) >> 6) : value >> 6;
+}
+
 void* tiziano_bcsh_Tccm_RGBYUV(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3, uint32_t arg4)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+	int32_t *out = (int32_t *)(uintptr_t)a0;
+	const int32_t *m = (const int32_t *)(uintptr_t)a1;
+	const int32_t *ccm = (const int32_t *)(uintptr_t)a2;
+	const int32_t *minv = (const int32_t *)(uintptr_t)a3;
+	int32_t first[9];
+	int32_t second[9];
+	int32_t rotated[9];
+	int32_t cos_value;
+	int32_t sin_value;
+	int direction;
+	int row;
+	int col;
+	int k;
+
+	(void)arg4;
+	for (row = 0; row < 3; row++) {
+		for (col = 0; col < 3; col++) {
+			int32_t sum = 0;
+			for (k = 0; k < 3; k++)
+				sum += regtrace_t23_bcsh_fixmul(m[row * 3 + k], ccm[k * 3 + col], 10);
+			first[row * 3 + col] = sum;
+		}
+	}
+	for (row = 0; row < 3; row++) {
+		for (col = 0; col < 3; col++) {
+			int32_t sum = 0;
+			for (k = 0; k < 3; k++)
+				sum += regtrace_t23_bcsh_fixmul(first[row * 3 + k], minv[k * 3 + col], 16);
+			second[row * 3 + col] = sum;
+		}
+	}
+
+	if (bcsh_hue == 0x3c) {
+		cos_value = 0x10000;
+		sin_value = 0;
+		direction = 1;
+	} else if (bcsh_hue < 0x3c) {
+		cos_value = 0x8000 + (int32_t)div64_s64((int64_t)0x8000 * (0x3c - bcsh_hue), 0x3c);
+		sin_value = 0xddb4 - (int32_t)div64_s64((int64_t)0xddb4 * (0x3c - bcsh_hue), 0x3c);
+		direction = -1;
+	} else {
+		uint32_t delta = min_t(uintptr_t, bcsh_hue, 0x78) - 0x3c;
+		cos_value = 0x10000 - (int32_t)div64_s64((int64_t)0x8000 * delta, 0x3c);
+		sin_value = (int32_t)div64_s64((int64_t)0xddb4 * delta, 0x3c);
+		direction = 1;
+	}
+
+	for (col = 0; col < 3; col++) {
+		rotated[col] = second[col];
+		rotated[3 + col] =
+			regtrace_t23_bcsh_fixmul(cos_value, second[3 + col], 16) +
+			direction * regtrace_t23_bcsh_fixmul(sin_value, second[6 + col], 16);
+		rotated[6 + col] =
+			regtrace_t23_bcsh_fixmul(cos_value, second[6 + col], 16) -
+			direction * regtrace_t23_bcsh_fixmul(sin_value, second[3 + col], 16);
+	}
+	for (k = 0; k < 9; k++)
+		out[k] = regtrace_t23_bcsh_shift6(rotated[k]);
+
+	return &out[9];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025488 origin=fragment_seed original=tiziano_bcsh_Tccm_RGB2YUV */
 void* tiziano_bcsh_Tccm_RGB2YUV(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t local_10[9];
-    uint32_t *s0 = a0;
-    uint32_t *s1 = a1;
+	int32_t converted[9];
 
-    memcpy(local_10, (void*)(((char *)&jump_table_6d900 + 0x1c)), 36);
-
-    tiziano_bcsh_Tccm_RGBYUV(local_10, (const int32_t*)((char *)&MinvMatrix), (const int32_t*)s1, (const int32_t*)((char *)&MinvMatrix), 0);
-
-    return tiziano_bcsh_para2reg(s0, local_10);
+	tiziano_bcsh_Tccm_RGBYUV((uintptr_t)converted, (uintptr_t)MMatrix,
+				    a1, (uintptr_t)MinvMatrix, 0);
+	return tiziano_bcsh_para2reg(a0, (uintptr_t)converted);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025508 origin=model_output original=tiziano_bcsh_Toffset_RGBYUV */
 int32_t tiziano_bcsh_Toffset_RGBYUV(int32_t *arg1, int32_t *arg2, int32_t *arg3)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+	int row;
+	int col;
+
+	for (row = 0; row < 3; row++) {
+		int32_t sum = 0;
+		for (col = 0; col < 3; col++) {
+			int32_t matrix = arg2[row * 3 + col];
+			int32_t input = arg3[col];
+			uint32_t matrix_mag = matrix < 0 ? -(uint32_t)matrix : (uint32_t)matrix;
+			uint32_t input_mag = input < 0 ? -(uint32_t)input : (uint32_t)input;
+			int32_t product = fix_point_mult2_32(16, matrix_mag, input_mag << 6);
+
+			sum += (matrix < 0) ^ (input < 0) ? -product : product;
+		}
+		arg1[row] = regtrace_t23_bcsh_shift6(sum);
+	}
+	return arg1[2];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025770 origin=model_output original=tiziano_bcsh_Toffset_RGB2YUV */
 int32_t tiziano_bcsh_Toffset_RGB2YUV(int32_t *arg1, int32_t *arg2)
 {
-	int32_t var_14 = arg2[0] - 0x400;
-	int32_t var_10 = arg2[1] - 0x400;
-	int32_t var_c  = arg2[2] - 0x400;
-	int32_t var_20 = 0;
-	int32_t *var_1c = 0;
-	int32_t var_18 = 0;
+	int32_t input[3];
+	int32_t output[3];
+	int i;
 
-	tiziano_bcsh_Toffset_RGBYUV(&var_20, MMatrix, &var_14);
-
-	((void **)arg1)[0] = var_20 + 0x400;
-	((void **)arg1)[1] = var_1c + 0x400;
-	((void **)arg1)[2] = var_18 + 0x400;
-
-	return var_18 + 0x400;
+	for (i = 0; i < 3; i++)
+		input[i] = arg2[i] - 0x400;
+	tiziano_bcsh_Toffset_RGBYUV(output, (int32_t *)(void *)MMatrix, input);
+	for (i = 0; i < 3; i++)
+		arg1[i] = output[i] + 0x400;
+	return arg1[2];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025800 origin=fragment_seed original=tiziano_bcsh_StrenCal */
 uint32_t tiziano_bcsh_StrenCal(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uint32_t *t0 = 0;
-    uint32_t t1 = 0;
-    uint32_t t2 = 0;
-    uint32_t *t3 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	uint32_t d31;
+	uint32_t d23;
+	uint32_t d45;
+	uint64_t numerator;
 
-    /* fragment 0: StackAccess */
-    v0 = local_14;
-    t2 = a1;
-    t0 = a2;
-
-    /* fragment 1: Branch */
-    v1 = local_10;
-    if (v0 != 0) { goto tiziano_bcsh_StrenCal0x24; }
-
-    /* fragment 2: ConstantLoad */
-    t9 = 0x23c50;
-
-    /* fragment 3: IndirectTailCall */
-    /* unmatched fragment 3 (IndirectTailCall): indirect tail call target register t9 has no known symbol */
-    /* asm: 2581c:	03200008 	jr	t9 */
-    /* asm: 25820:	00000000 	nop */
-
-tiziano_bcsh_StrenCal0x24:
-    /* fragment 4: Arithmetic */
-    a1 = a0 < a2;
-    t3 = a0 - (uintptr_t)t0;
-    v0 = t0 - t2;
-    a2 = a2 - a0;
-    a0 = t2 < t0;
-    t0 = t2 - (uintptr_t)t0;
-    if (a0 != 0) { t0 = v0; }
-    t1 = a3 - v1;
-    v0 = a3 < v1;
-    a0 = v1 - a3;
-    if (v0 != 0) { t1 = a0; }
-    if (a1 == 0) { a2 = t3; }
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 25858:	71030000 	madd	t0,v1 */
-
-    /* fragment 6: Arithmetic */
-    /* unmatched fragment 6 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 2585c:	00001012 	mflo	v0 */
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 25860:	0048001b 	divu	zero,v0,t0 */
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 9: Arithmetic */
-    /* unmatched fragment 9 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 25868:	00001012 	mflo	v0 */
-
-    return (uint32_t)v0;
+	if (!arg5)
+		return tiziano_bcsh_StrenCal_part_0(a0, a1, a2, a3, arg4);
+	d31 = a2 >= a0 ? a2 - a0 : a0 - a2;
+	d23 = a1 >= a2 ? a1 - a2 : a2 - a1;
+	d45 = a3 >= arg4 ? a3 - arg4 : arg4 - a3;
+	if (!d23)
+		return arg4;
+	numerator = (uint64_t)d31 * d45 + (uint64_t)d23 * arg4;
+	return (uint32_t)div_u64(numerator, d23);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002586c origin=fragment_seed original=tiziano_bcsh_TransitParam */
 int32_t* tiziano_bcsh_TransitParam(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t *base_s = (uint32_t *)(void *)tisp_BCSH_au32Svalue;
+    uint32_t *base_c = (uint32_t *)(void *)tisp_BCSH_au32C;
+    uint32_t *offset0 = (uint32_t *)(void *)tisp_BCSH_au32Offset0;
+    uint32_t *offset1 = (uint32_t *)(void *)tisp_BCSH_au32Offset1;
+    uint32_t *offset_yuv = (uint32_t *)(void *)tisp_BCSH_au32OffsetYUVy;
+    uint32_t *offset_rgb = (uint32_t *)(void *)tisp_BCSH_u32OffsetRGB2yuv;
+    uint32_t *clip0 = (uint32_t *)(void *)tisp_BCSH_au32clip0;
+    uint32_t *fallback_clip = (uint32_t *)(void *)tisp_BCSH_au32clip;
+    uint32_t *sthres = (uint32_t *)(uintptr_t)tisp_BCSH_au32Sthres_now;
+    uint32_t *hdp = (uint32_t *)(uintptr_t)tisp_BCSH_au32HDP_now;
+    uint32_t *hbp = (uint32_t *)(uintptr_t)tisp_BCSH_au32HBP_now;
+    uint32_t *hlsp = (uint32_t *)(uintptr_t)tisp_BCSH_au32HLSP_now;
+    uint32_t *sstep = (uint32_t *)(void *)tisp_BCSH_u32Sstep;
+    uint32_t brightness_scaled;
+    uint32_t clip_high;
+    uint32_t diff;
+    uint32_t range;
+    uint32_t mid;
+    int i;
+
+    if (!regtrace_t23_valid_ptr((uintptr_t)sthres))
+        sthres = (uint32_t *)(void *)tisp_BCSH_au32Sthres;
+    if (!regtrace_t23_valid_ptr((uintptr_t)hdp))
+        hdp = (uint32_t *)(void *)tisp_BCSH_au32HDP;
+    if (!regtrace_t23_valid_ptr((uintptr_t)hbp))
+        hbp = (uint32_t *)(void *)tisp_BCSH_au32HBP;
+    if (!regtrace_t23_valid_ptr((uintptr_t)hlsp))
+        hlsp = (uint32_t *)(void *)tisp_BCSH_au32HLSP;
+
+    offset0[0] = offset_yuv[0];
+    offset0[1] = 0x400;
+    offset0[2] = 0x400;
+
+    if (bcsh_saturation == 0x80) {
+        memcpy(tisp_BCSH_ai32Svalue, base_s,
+               sizeof(tisp_BCSH_ai32Svalue));
+    } else if ((int8_t)bcsh_saturation < 0) {
+        for (i = 0; i < ARRAY_SIZE(tisp_BCSH_ai32Svalue); i++)
+            tisp_BCSH_ai32Svalue[i] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_saturation, 0x80, 0x100, base_s[i], 0x1800);
+    } else {
+        for (i = 0; i < ARRAY_SIZE(tisp_BCSH_ai32Svalue); i++)
+            tisp_BCSH_ai32Svalue[i] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_saturation, 0, 0x80, 0, base_s[i]);
+    }
+
+    brightness_scaled = (bcsh_brightness *
+                         *(uint32_t *)(void *)tisp_BCSH_u32B) >> 7;
+    if (brightness_scaled >= 0x76d)
+        brightness_scaled = 0x76c;
+    if ((int8_t)bcsh_brightness >= 0) {
+        for (i = 0; i < ARRAY_SIZE(tisp_BCSH_ai32Svalue); i++)
+            tisp_BCSH_ai32Svalue[i] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_brightness, 0, 0x80, 0,
+                tisp_BCSH_ai32Svalue[i]);
+    }
+
+    offset1[0] = offset_yuv[1] + offset_rgb[0] - 0x800 +
+                 brightness_scaled;
+    offset1[1] = offset_rgb[1];
+    offset1[2] = offset_rgb[2];
+
+    if (base_c[0] && bcsh_contrast != 0x80) {
+        tisp_BCSH_ai32C[0] = base_c[0];
+        if ((int8_t)bcsh_contrast < 0) {
+            diff = base_c[2] >= base_c[1] ?
+                   base_c[2] - base_c[1] : base_c[1] - base_c[2];
+            mid = (diff >> 1) + base_c[1];
+            tisp_BCSH_ai32C[1] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_contrast, 0x80, 0xff, base_c[1], mid);
+            tisp_BCSH_ai32C[2] = tiziano_bcsh_StrenCal(
+                bcsh_contrast, 0x80, 0xff, base_c[2], mid, 1);
+            tisp_BCSH_ai32C[3] = tiziano_bcsh_StrenCal(
+                bcsh_contrast, 0x80, 0xff, base_c[3], 0, 1);
+            tisp_BCSH_ai32C[4] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_contrast, 0x80, 0xff, base_c[4], 0x3ff);
+        } else {
+            diff = base_c[4] >= base_c[3] ?
+                   base_c[4] - base_c[3] : base_c[3] - base_c[4];
+            mid = (diff >> 1) + base_c[3];
+            tisp_BCSH_ai32C[1] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_contrast, 0, 0x80, 0, base_c[1]);
+            tisp_BCSH_ai32C[2] = tiziano_bcsh_StrenCal(
+                bcsh_contrast, 0, 0x80, 0x3ff, base_c[2], 1);
+            tisp_BCSH_ai32C[3] = tiziano_bcsh_StrenCal(
+                bcsh_contrast, 0, 0x80, mid, base_c[3], 1);
+            tisp_BCSH_ai32C[4] = tiziano_bcsh_StrenCal_part_0(
+                bcsh_contrast, 0, 0x80, mid, base_c[4]);
+            for (i = 0; i < ARRAY_SIZE(tisp_BCSH_ai32Svalue); i++)
+                tisp_BCSH_ai32Svalue[i] = tiziano_bcsh_StrenCal_part_0(
+                    bcsh_contrast, 0, 0x80, 0,
+                    tisp_BCSH_ai32Svalue[i]);
+        }
+    } else {
+        memcpy(tisp_BCSH_ai32C, base_c, sizeof(tisp_BCSH_ai32C));
+    }
+
+    if (s_bcsh_mjpeg_mode == 1) {
+        tisp_BCSH_ai32C[0] = 1;
+        tisp_BCSH_ai32C[1] = (uint32_t)s_bcsh_mjpeg_y_range_low << 2;
+        tisp_BCSH_ai32C[2] =
+            ((uint32_t)s_bcsh_mjpeg_y_range_high << 2) + 3;
+        tisp_BCSH_ai32C[3] = 0;
+        tisp_BCSH_ai32C[4] = 0x3ff;
+    }
+
+    tisp_BCSH_u32Cslope0 = tisp_BCSH_ai32C[1] ?
+        (tisp_BCSH_ai32C[3] << 10) / tisp_BCSH_ai32C[1] : 0;
+    if (tisp_BCSH_ai32C[1] < tisp_BCSH_ai32C[2]) {
+        diff = tisp_BCSH_ai32C[4] >= tisp_BCSH_ai32C[3] ?
+               tisp_BCSH_ai32C[4] - tisp_BCSH_ai32C[3] :
+               tisp_BCSH_ai32C[3] - tisp_BCSH_ai32C[4];
+        tisp_BCSH_u32Cslope1 = (diff << 10) /
+            (tisp_BCSH_ai32C[2] - tisp_BCSH_ai32C[1]);
+    } else {
+        tisp_BCSH_ai32C[1] = tisp_BCSH_ai32C[2];
+        tisp_BCSH_u32Cslope1 = 0;
+    }
+
+    clip_high = clip0[1] ? clip0[1] : fallback_clip[1];
+    if (tisp_BCSH_ai32C[2] < clip_high) {
+        diff = tisp_BCSH_ai32C[4] >= clip_high ?
+               tisp_BCSH_ai32C[4] - clip_high :
+               clip_high - tisp_BCSH_ai32C[4];
+        tisp_BCSH_u32Cslope2 = (diff << 10) /
+            (clip_high - tisp_BCSH_ai32C[2]);
+    } else {
+        tisp_BCSH_ai32C[2] = clip_high;
+        tisp_BCSH_u32Cslope2 = 0;
+    }
+
+    if (sthres[1] < sthres[2]) {
+        range = sthres[2] - sthres[1];
+        diff = tisp_BCSH_ai32Svalue[1] >= tisp_BCSH_ai32Svalue[0] ?
+               tisp_BCSH_ai32Svalue[1] - tisp_BCSH_ai32Svalue[0] :
+               tisp_BCSH_ai32Svalue[0] - tisp_BCSH_ai32Svalue[1];
+        sstep[0] = diff / range;
+        diff = tisp_BCSH_ai32Svalue[3] >= tisp_BCSH_ai32Svalue[2] ?
+               tisp_BCSH_ai32Svalue[3] - tisp_BCSH_ai32Svalue[2] :
+               tisp_BCSH_ai32Svalue[2] - tisp_BCSH_ai32Svalue[3];
+        sstep[1] = diff / range;
+    } else {
+        sthres[1] = sthres[2];
+        sstep[0] = 0;
+        sstep[1] = 0;
+    }
+
+#define BCSH_SET_HUE_SLOPE(values, slope) do { \
+    if ((values)[1] < (values)[2]) \
+        (slope) = 0x400 / ((values)[2] - (values)[1]); \
+    else { \
+        (values)[1] = (values)[2]; \
+        (slope) = 0; \
+    } \
+} while (0)
+    BCSH_SET_HUE_SLOPE(hdp, tisp_BCSH_u32HDPslope);
+    BCSH_SET_HUE_SLOPE(hbp, tisp_BCSH_u32HBPslope);
+    BCSH_SET_HUE_SLOPE(hlsp, tisp_BCSH_u32HLSPslope);
+#undef BCSH_SET_HUE_SLOPE
+
+    return (int32_t *)&tisp_BCSH_u32HLSPslope;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000260a4 origin=fragment_seed original=tiziano_bcsh_update */
+#if 0
 int32_t tiziano_bcsh_update(void)
 {
     uint32_t local_50 = 0;
@@ -53024,8 +53908,121 @@ tiziano_bcsh_update0x6dc:
 
     return 0;
 }
+#endif
+
+static uint32_t regtrace_t23_bcsh_interp_u32(uint32_t low, uint32_t high,
+                                             uint32_t ev_low,
+                                             uint32_t ev_high,
+                                             uint32_t ev)
+{
+    uint32_t distance;
+    uint32_t range;
+    uint32_t delta;
+
+    if (low == high || ev_low == ev_high)
+        return low;
+    distance = ev >= ev_low ? ev - ev_low : ev_low - ev;
+    range = ev_high >= ev_low ? ev_high - ev_low : ev_low - ev_high;
+    if (distance > range)
+        distance = range;
+    delta = distance * (high >= low ? high - low : low - high) / range;
+    return high >= low ? low + delta : low - delta;
+}
+
+int32_t tiziano_bcsh_update(void)
+{
+    uint32_t *ev_list = (uint32_t *)(uintptr_t)tisp_BCSH_au32EvList_now;
+    uint32_t *smin_s = (uint32_t *)(uintptr_t)tisp_BCSH_au32SminListS_now;
+    uint32_t *smax_s = (uint32_t *)(uintptr_t)tisp_BCSH_au32SmaxListS_now;
+    uint32_t *smin_m = (uint32_t *)(uintptr_t)tisp_BCSH_au32SminListM_now;
+    uint32_t *smax_m = (uint32_t *)(uintptr_t)tisp_BCSH_au32SmaxListM_now;
+    uint32_t *offset_rgb = (uint32_t *)(uintptr_t)tisp_BCSH_au32OffsetRGB_now;
+    uint32_t *svalue = (uint32_t *)(void *)tisp_BCSH_au32Svalue;
+    uint32_t *c = (uint32_t *)(void *)tisp_BCSH_au32C;
+    uint32_t *cxl = (uint32_t *)(void *)tisp_BCSH_au32Cxl;
+    uint32_t *cxh = (uint32_t *)(void *)tisp_BCSH_au32Cxh;
+    uint32_t *cyl = (uint32_t *)(void *)tisp_BCSH_au32Cyl;
+    uint32_t *cyh = (uint32_t *)(void *)tisp_BCSH_au32Cyh;
+    uint32_t ev = regtrace_t23_bcsh_ev >> 10;
+    int index;
+
+    if (!regtrace_t23_valid_ptr((uintptr_t)ev_list))
+        ev_list = (uint32_t *)(void *)tisp_BCSH_au32EvList;
+    if (!regtrace_t23_valid_ptr((uintptr_t)smin_s))
+        smin_s = (uint32_t *)(void *)tisp_BCSH_au32SminListS;
+    if (!regtrace_t23_valid_ptr((uintptr_t)smax_s))
+        smax_s = (uint32_t *)(void *)tisp_BCSH_au32SmaxListS;
+    if (!regtrace_t23_valid_ptr((uintptr_t)smin_m))
+        smin_m = (uint32_t *)(void *)tisp_BCSH_au32SminListM;
+    if (!regtrace_t23_valid_ptr((uintptr_t)smax_m))
+        smax_m = (uint32_t *)(void *)tisp_BCSH_au32SmaxListM;
+    if (!regtrace_t23_valid_ptr((uintptr_t)offset_rgb))
+        offset_rgb = (uint32_t *)(void *)tisp_BCSH_au32OffsetRGB;
+
+    if (ev < ev_list[0]) {
+        index = 0;
+    } else if (ev >= ev_list[8]) {
+        index = 8;
+    } else {
+        index = -1;
+    }
+
+    if (index >= 0) {
+        svalue[0] = smin_s[index];
+        svalue[1] = smax_s[index];
+        svalue[2] = smin_m[index];
+        svalue[3] = smax_m[index];
+        c[1] = cxl[index];
+        c[2] = cxh[index];
+        c[3] = cyl[index];
+        c[4] = cyh[index];
+    } else {
+        for (index = 0; index < 8; index++) {
+            uint32_t ev_low = ev_list[index];
+            uint32_t ev_high = ev_list[index + 1];
+
+            if (ev < ev_low || ev > ev_high)
+                continue;
+            svalue[0] = regtrace_t23_bcsh_interp_u32(
+                smin_s[index], smin_s[index + 1], ev_low, ev_high, ev);
+            svalue[1] = regtrace_t23_bcsh_interp_u32(
+                smax_s[index], smax_s[index + 1], ev_low, ev_high, ev);
+            svalue[2] = regtrace_t23_bcsh_interp_u32(
+                smin_m[index], smin_m[index + 1], ev_low, ev_high, ev);
+            svalue[3] = regtrace_t23_bcsh_interp_u32(
+                smax_m[index], smax_m[index + 1], ev_low, ev_high, ev);
+            c[1] = regtrace_t23_bcsh_interp_u32(
+                cxl[index], cxl[index + 1], ev_low, ev_high, ev);
+            c[2] = regtrace_t23_bcsh_interp_u32(
+                cxh[index], cxh[index + 1], ev_low, ev_high, ev);
+            c[3] = regtrace_t23_bcsh_interp_u32(
+                cyl[index], cyl[index + 1], ev_low, ev_high, ev);
+            c[4] = regtrace_t23_bcsh_interp_u32(
+                cyh[index], cyh[index + 1], ev_low, ev_high, ev);
+            break;
+        }
+    }
+
+    tiziano_bcsh_Tccm_Comp2Orig();
+    tiziano_ct_bcsh_interpolation(regtrace_t23_bcsh_ct);
+    tiziano_bcsh_Tccm_RGB2YUV((uintptr_t)tisp_BCSH_au32HMatrix,
+                              (uintptr_t)tisp_BCSH_as32CCMMatrix);
+    tiziano_bcsh_Toffset_RGB2YUV(
+        (int32_t *)(void *)tisp_BCSH_u32OffsetRGB2yuv,
+        (int32_t *)offset_rgb);
+    tiziano_bcsh_TransitParam();
+    if (regtrace_t23_source_bcsh_runtime)
+        tiziano_bcsh_lut_parameter(
+            (int32_t *)(void *)tisp_BCSH_au32clip0,
+            (int32_t *)(void *)tisp_BCSH_au32clip1,
+            (int32_t *)(void *)tisp_BCSH_au32clip2,
+            (int32_t *)(void *)tisp_BCSH_au32Offset0);
+    BCSH_real = 0;
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000267c0 origin=fragment_seed original=tisp_bcsh_ev_update */
+#if 0
 int32_t tisp_bcsh_ev_update(uintptr_t a0, uintptr_t a1)
 {
     uint32_t *s0;
@@ -53130,6 +54127,40 @@ skip_call:
 
     return 0;
 }
+#endif
+
+int32_t tisp_bcsh_ev_update(uintptr_t ev, uintptr_t ignored)
+{
+    static uint32_t previous_ev = 1436U;
+    uint32_t shifted = (uint32_t)ev >> 10;
+    uint32_t delta = previous_ev >= shifted ?
+                     previous_ev - shifted : shifted - previous_ev;
+
+    (void)ignored;
+    regtrace_t23_bcsh_ev = (uint32_t)ev;
+    if (BCSH_real == 1 || delta > 0x28) {
+        tiziano_bcsh_update();
+        BCSH_real = 0;
+        previous_ev = shifted;
+    }
+    return 0;
+}
+
+int32_t tisp_bcsh_ct_update(uintptr_t ignored, uint32_t ct)
+{
+    static uint32_t previous_ct = 3187U;
+    uint32_t delta = previous_ct >= ct ?
+                     previous_ct - ct : ct - previous_ct;
+
+    (void)ignored;
+    regtrace_t23_bcsh_ct = ct;
+    if (BCSH_real == 1 || delta > 0x20) {
+        tiziano_bcsh_update();
+        BCSH_real = 0;
+        previous_ct = ct;
+    }
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000268f8 origin=fragment_seed original=tiziano_bcsh_dump */
 int32_t tiziano_bcsh_dump(void)
@@ -53229,55 +54260,69 @@ int32_t tiziano_bcsh_dump(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026c74 origin=fragment_seed original=tiziano_bcsh_params_refresh */
 void tiziano_bcsh_params_refresh(void)
 {
-    uint8_t sx_d_bcsh_ctrl;
-    uint32_t bcsh_ccm_en_val;
+    unsigned char *params;
+    int ret;
 
-    sx_d_bcsh_ctrl = *(uint8_t *)((char *)((char *)&ispmem + 0x18c));
-    if (sx_d_bcsh_ctrl == 0) {
-        memcpy(&tisp_BCSH_au32CCMMatrix_d2, &tparams, 36);
-        memcpy(&tisp_BCSH_au32CCMMatrix_d, &tparams, 36);
-        memcpy(&tisp_BCSH_au32CCMMatrix_t, &tparams, 36);
-        memcpy(&tisp_BCSH_au32CCMMatrix_a, &tparams, 36);
-        memcpy(&tisp_BCSH_au32Sthres, &tparams, 12);
-        memcpy(&tisp_BCSH_au32CCMMatrix_d_wdr, &tparams, 36);
-        memcpy(&tisp_BCSH_au32CCMMatrix_t_wdr, &tparams, 36);
-        memcpy(&tisp_BCSH_au32CCMMatrix_a_wdr, &tparams, 36);
-        memcpy(&tisp_BCSH_au32Sthres_wdr, &tparams, 12);
+    params = private_vmalloc(REGTRACE_T23_BCSH_TUNING_SIZE);
+    if (!params)
+        return;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_BCSH_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_BCSH_TUNING_SIZE);
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: BCSH tuning refresh failed path=%s ret=%d; keeping embedded defaults\n",
+               regtrace_t23_source_core_tuning_path, ret);
+        private_vfree(params);
+        return;
     }
 
-    bcsh_ccm_en_val = *(uint32_t *)((char *)&tparams - 32024);
-    memcpy(&bcsh_ct_list, &tparams, 16);
-    tisp_bcsh_sort_ct_list(&bcsh_ct_list);
-    memcpy(&tisp_BCSH_au32HDP, &tparams, 12);
-    memcpy(&tisp_BCSH_au32HBP, &tparams, 12);
-    memcpy(&tisp_BCSH_au32HLSP, &tparams, 12);
-    memcpy(&tisp_BCSH_au32EvList, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SminListS, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SmaxListS, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SminListM, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SmaxListM, &tparams, 36);
-    memcpy(&tisp_BCSH_au32C, &tparams, 20);
-    memcpy(&tisp_BCSH_au32Cxl, &tparams, 36);
-    memcpy(&tisp_BCSH_au32Cxh, &tparams, 36);
-    memcpy(&tisp_BCSH_au32Cyl, &tparams, 36);
-    memcpy(&tisp_BCSH_au32Cyh, &tparams, 36);
-    memcpy(&tisp_BCSH_u32B, &tparams, 4);
-    memcpy(&tisp_BCSH_au32OffsetRGB, &tparams, 12);
-    memcpy(&tisp_BCSH_au32OffsetYUVy, &tparams, 8);
-    memcpy(&tisp_BCSH_au32clip0, &tparams, 16);
-    memcpy(&tisp_BCSH_au32clip1, &tparams, 16);
-    memcpy(&tisp_BCSH_au32HDP_wdr, &tparams, 12);
-    memcpy(&tisp_BCSH_au32HBP_wdr, &tparams, 12);
-    memcpy(&tisp_BCSH_au32HLSP_wdr, &tparams, 12);
-    memcpy(&tisp_BCSH_au32EvList_wdr, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SminListS_wdr, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SmaxListS_wdr, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SminListM_wdr, &tparams, 36);
-    memcpy(&tisp_BCSH_au32SmaxListM_wdr, &tparams, 36);
-    memcpy(&tisp_BCSH_au32OffsetRGB_wdr, &tparams, 12);
-    memcpy(&MMatrix, &tparams, 36);
-    memcpy(&MinvMatrix, &tparams, 36);
-    memcpy(&tisp_BCSH_au32clip2, &tparams, 16);
+    if (bcsh_ctrl[0] == 0) {
+        memcpy(tisp_BCSH_au32CCMMatrix_d2, params + 0x000, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_d, params + 0x024, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_t, params + 0x048, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_a, params + 0x06c, 0x24);
+        memcpy(tisp_BCSH_au32Sthres, params + 0x0c8, 0x0c);
+        memcpy(tisp_BCSH_au32CCMMatrix_d_wdr, params + 0x264, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_t_wdr, params + 0x288, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_a_wdr, params + 0x2ac, 0x24);
+        memcpy(tisp_BCSH_au32Sthres_wdr, params + 0x2f4, 0x0c);
+    }
+
+    memcpy(&bcsh_ccm_en, params + 0x090, 4);
+    memcpy(bcsh_ct_list, params + 0x094, 0x10);
+    tisp_bcsh_sort_ct_list((int32_t *)(void *)bcsh_ct_list);
+    memcpy(tisp_BCSH_au32HDP, params + 0x0a4, 0x0c);
+    memcpy(tisp_BCSH_au32HBP, params + 0x0b0, 0x0c);
+    memcpy(tisp_BCSH_au32HLSP, params + 0x0bc, 0x0c);
+    memcpy(tisp_BCSH_au32EvList, params + 0x0d4, 0x24);
+    memcpy(tisp_BCSH_au32SminListS, params + 0x0f8, 0x24);
+    memcpy(tisp_BCSH_au32SmaxListS, params + 0x11c, 0x24);
+    memcpy(tisp_BCSH_au32SminListM, params + 0x140, 0x24);
+    memcpy(tisp_BCSH_au32SmaxListM, params + 0x164, 0x24);
+    memcpy(tisp_BCSH_au32C, params + 0x188, 0x14);
+    memcpy(tisp_BCSH_au32Cxl, params + 0x19c, 0x24);
+    memcpy(tisp_BCSH_au32Cxh, params + 0x1c0, 0x24);
+    memcpy(tisp_BCSH_au32Cyl, params + 0x1e4, 0x24);
+    memcpy(tisp_BCSH_au32Cyh, params + 0x208, 0x24);
+    memcpy(tisp_BCSH_u32B, params + 0x22c, 4);
+    memcpy(tisp_BCSH_au32OffsetRGB, params + 0x230, 0x0c);
+    memcpy(tisp_BCSH_au32OffsetYUVy, params + 0x23c, 8);
+    memcpy(tisp_BCSH_au32clip0, params + 0x244, 0x10);
+    memcpy(tisp_BCSH_au32clip1, params + 0x254, 0x10);
+    memcpy(tisp_BCSH_au32HDP_wdr, params + 0x2d0, 0x0c);
+    memcpy(tisp_BCSH_au32HBP_wdr, params + 0x2dc, 0x0c);
+    memcpy(tisp_BCSH_au32HLSP_wdr, params + 0x2e8, 0x0c);
+    memcpy(tisp_BCSH_au32EvList_wdr, params + 0x300, 0x24);
+    memcpy(tisp_BCSH_au32SminListS_wdr, params + 0x324, 0x24);
+    memcpy(tisp_BCSH_au32SmaxListS_wdr, params + 0x348, 0x24);
+    memcpy(tisp_BCSH_au32SminListM_wdr, params + 0x36c, 0x24);
+    memcpy(tisp_BCSH_au32SmaxListM_wdr, params + 0x390, 0x24);
+    memcpy(tisp_BCSH_au32OffsetRGB_wdr, params + 0x3b4, 0x0c);
+    memcpy(MMatrix, params + 0x3c0, 0x24);
+    memcpy(MinvMatrix, params + 0x3e4, 0x24);
+    memcpy(tisp_BCSH_au32clip2, params + 0x408, 0x10);
+    private_vfree(params);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027094 origin=model_output original=tiziano_bcsh_dn_params_refresh */
@@ -53299,12 +54344,10 @@ int32_t tiziano_bcsh_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000270d8 origin=fragment_seed original=tiziano_bcsh_init */
 int32_t tiziano_bcsh_init(void)
 {
-    uint32_t BCSH_ev_1;
-
-    tisp_BCSH_as32CCMMatrix_d = &tisp_BCSH_as32CCMMatrix_d;
-    tisp_BCSH_as32CCMMatrix_d = &tisp_BCSH_as32CCMMatrix_d;
-    tisp_BCSH_as32CCMMatrix_d = &tisp_BCSH_as32CCMMatrix_d;
-    tisp_BCSH_as32CCMMatrix_d = &tisp_BCSH_as32CCMMatrix_d;
+    *(const void **)(void *)tisp_BCSH_au32CCMMatrix_d2_now = tisp_BCSH_au32CCMMatrix_d2;
+    *(const void **)(void *)tisp_BCSH_au32CCMMatrix_d_now = tisp_BCSH_au32CCMMatrix_d;
+    *(const void **)(void *)tisp_BCSH_au32CCMMatrix_t_now = tisp_BCSH_au32CCMMatrix_t;
+    *(const void **)(void *)tisp_BCSH_au32CCMMatrix_a_now = tisp_BCSH_au32CCMMatrix_a;
     tisp_BCSH_au32HDP_now = &tisp_BCSH_au32HDP;
     tisp_BCSH_au32HBP_now = &tisp_BCSH_au32HBP;
     tisp_BCSH_au32HLSP_now = &tisp_BCSH_au32HLSP;
@@ -53316,24 +54359,21 @@ int32_t tiziano_bcsh_init(void)
     tisp_BCSH_au32SmaxListM_now = &tisp_BCSH_au32SmaxListM;
     tisp_BCSH_au32OffsetRGB_now = &tisp_BCSH_au32OffsetRGB;
 
-    memset(&bcsh_ctrl, 0, 0x28);
-    memset(&BCSH_real, 0, 0x14);
-
-    BCSH_ev_1 = BCSH_ev_1;
+    memset(bcsh_ctrl, 0, 0x28);
+    bcsh_brightness = 0x80;
+    bcsh_contrast = 0x80;
+    bcsh_saturation = 0x80;
+    bcsh_hue_user = 0x80;
+    bcsh_hue = 0x3c;
+    s_bcsh_mjpeg_mode = 0;
+    s_bcsh_mjpeg_y_range_low = 0;
+    s_bcsh_mjpeg_y_range_high = 0;
+    regtrace_t23_bcsh_ev = 1436U << 10;
+    regtrace_t23_bcsh_ct = 3187U;
     BCSH_real = 1;
-
-    ((uintptr_t *)(uintptr_t)(data_b91c8))[0] = (unsigned char)(BCSH_ev_1 >> 0xa);
-    ((uint32_t *)data_b91cc)[0] = 0x28;
-    ((uint32_t *)data_b91d0)[0] = (unsigned char)BCSH_ct;
-    ((uint32_t *)data_b91d4)[0] = 0x20;
-
     tiziano_bcsh_params_refresh();
-
-    memcpy(&tisp_BCSH_as32CCMMatrix_d, &tisp_BCSH_as32CCMMatrix_d, 0x24);
-
-    tiziano_bcsh_update();
-
-    return 0;
+    tiziano_bcsh_Tccm_Comp2Orig();
+    return tiziano_bcsh_update();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027288 origin=fragment_seed original=tisp_bcsh_param_array_get */
@@ -53698,185 +54738,117 @@ int32_t tisp_bcsh_param_array_set(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027b84 origin=fragment_seed original=tisp_bcsh_set_mjpeg_contrast */
 int tisp_bcsh_set_mjpeg_contrast(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-    *(uint8_t *)((char *)((char *)&ispmem + 0x189)) = (uint8_t)a1;
-    *(uint8_t *)((char *)((char *)&ispmem + 0x188)) = (uint8_t)a2;
-    *(uint8_t *)((char *)&sclk_name - 16148) = (uint8_t)a3;
-    return tiziano_bcsh_update();
+    (void)a0;
+    s_bcsh_mjpeg_mode = (uint8_t)a1;
+    s_bcsh_mjpeg_y_range_low = (uint8_t)a2;
+    s_bcsh_mjpeg_y_range_high = (uint8_t)a3;
+    return regtrace_t23_source_bcsh_runtime ? tiziano_bcsh_update() : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027ba8 origin=fragment_seed original=tisp_bcsh_contrast */
 int32_t tisp_bcsh_contrast(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: CallSetup */
-    *(uint8_t *)((char *)&sclk_name + -16146) = a1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_bcsh_update)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v0 = 0;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    (void)a0;
+    bcsh_contrast = (uint8_t)a1;
+    return regtrace_t23_source_bcsh_runtime ? tiziano_bcsh_update() : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027bd8 origin=fragment_seed original=tisp_bcsh_saturation */
 int32_t tisp_bcsh_saturation(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: CallSetup */
-    *(uint8_t *)((char *)&sclk_name + -16147) = a1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_bcsh_update)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v0 = 0;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    (void)a0;
+    bcsh_saturation = (uint8_t)a1;
+    return regtrace_t23_source_bcsh_runtime ? tiziano_bcsh_update() : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027c08 origin=fragment_seed original=tisp_bcsh_brightness */
 int32_t tisp_bcsh_brightness(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: CallSetup */
-    *(uint8_t *)((char *)&sclk_name + -16145) = a1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_bcsh_update)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v0 = 0;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    (void)a0;
+    bcsh_brightness = (uint8_t)a1;
+    return regtrace_t23_source_bcsh_runtime ? tiziano_bcsh_update() : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027c38 origin=model_output original=tisp_bcsh_s_hue */
 int32_t tisp_bcsh_s_hue(int32_t arg1, char arg2) {
     uint32_t s0 = (uint8_t)arg2;
     int32_t tmp = (int32_t)s0 * 120;
+    (void)arg1;
+    bcsh_hue_user = (uint8_t)s0;
     tmp = tmp - 1;
     tmp = tmp / 256;
     tmp = tmp + 1;
     bcsh_hue = (uint8_t)tmp;
-    tiziano_bcsh_update();
-    /* store s0 to .data section at offset -16752 from 0x30000000 */
-    {
-        volatile uint8_t *data_ptr = (volatile uint8_t *)0x30000000;
-        ((void **)data_ptr)[-16752] = (uint8_t)s0;
-    }
-    return 0;
+    return regtrace_t23_source_bcsh_runtime ? tiziano_bcsh_update() : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027c98 origin=fragment_seed original=tisp_bcsh_g_hue */
 uint8_t tisp_bcsh_g_hue(uint32_t a0, uintptr_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint8_t *)((char *)&sclk_name + -16752);
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: MemoryAccess */
-    *(uint8_t *)((char *)a1 + 0) = v0;
-
-    return (uint8_t)v0;
+    (void)a0;
+    if (regtrace_t23_valid_ptr(a1))
+        *(uint8_t *)(uintptr_t)a1 = bcsh_hue_user;
+    return bcsh_hue_user;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027ca8 origin=fragment_seed original=tisp_bcsh_g_brightness */
 uint32_t tisp_bcsh_g_brightness(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint8_t *)((char *)&sclk_name + -16145);
-
-    return (uint32_t)v0;
+    return bcsh_brightness;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027cb4 origin=fragment_seed original=tisp_bcsh_g_saturation */
 uint32_t tisp_bcsh_g_saturation(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint8_t *)((char *)&sclk_name + -16147);
-
-    return (uint32_t)v0;
+    return bcsh_saturation;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027cc0 origin=fragment_seed original=tisp_bcsh_g_contrast */
 uint32_t tisp_bcsh_g_contrast(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint8_t *)((char *)&sclk_name + -16146);
-
-    return (uint32_t)v0;
+    return bcsh_contrast;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027ccc origin=model_output original=tisp_bcsh_get_attr */
-int32_t tisp_bcsh_get_attr(void *src)
+int32_t tisp_bcsh_get_attr(uintptr_t context, void *out)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    (void)context;
+    if (!regtrace_t23_valid_ptr((uintptr_t)out))
+        return -EINVAL;
+    memcpy(out, bcsh_ctrl, 0x28);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027ce8 origin=fragment_seed original=tisp_bcsh_set_attr */
-int64_t tisp_bcsh_set_attr(void)
+int32_t tisp_bcsh_set_attr(uintptr_t context, const void *in)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    static const uint32_t identity[9] = {
+        0x400, 0, 0,
+        0, 0x400, 0,
+        0, 0, 0x400,
+    };
+
+    (void)context;
+    if (!regtrace_t23_valid_ptr((uintptr_t)in))
+        return -EINVAL;
+    memcpy(bcsh_ctrl, in, 0x28);
+    if ((int8_t)bcsh_ctrl[0] != 1) {
+        tiziano_bcsh_params_refresh();
+    } else {
+        memcpy(tisp_BCSH_au32CCMMatrix_d2, identity, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_d, identity, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_t, identity, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_a, identity, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_d_wdr, identity, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_t_wdr, identity, 0x24);
+        memcpy(tisp_BCSH_au32CCMMatrix_a_wdr, identity, 0x24);
+        if ((int8_t)bcsh_ctrl[1] == 0) {
+            memset(tisp_BCSH_au32Sthres, 0, 0x0c);
+            memset(tisp_BCSH_au32Sthres_wdr, 0, 0x0c);
+        }
+    }
+    BCSH_real = 1;
+    return tiziano_bcsh_update();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027ee8 origin=model_output original=tisp_bcsh_s_rgb_coefft */
@@ -54782,14 +55754,48 @@ uint32_t tisp_g_dpc_str_internal(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000299d0 origin=model_output original=tisp_ydns_param_cfg */
 int32_t tisp_ydns_param_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    system_reg_write(0x7af0U,
+                     ydns_mv_thres0_intp |
+                     (ydns_mv_thres1_intp << 8) |
+                     (ydns_mv_thres2_intp << 16));
+    system_reg_write(0x7af4U,
+                     ydns_fus_min_thres_intp |
+                     (ydns_fus_max_thres_intp << 8) |
+                     (ydns_fus_level_intp << 16));
+    system_reg_write(0x7af8U,
+                     ydns_fus_sswei_intp |
+                     (ydns_fus_sewei_intp << 4) |
+                     (ydns_fus_mswei_intp << 8) |
+                     (ydns_fus_mewei_intp << 12) |
+                     (ydns_fus_uvwei_intp << 16));
+    system_reg_write(0x7afcU,
+                     ydns_edge_wei_intp |
+                     (ydns_edge_div_intp << 4) |
+                     (ydns_edge_thres_intp << 8) |
+                     (ydns_edge_out_array << 16));
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029ae8 origin=fragment_seed original=tisp_ydns_intp */
 int32_t tisp_ydns_intp(uint32_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t hi = a0 >> 16;
+    uint32_t lo = a0 & 0xffffU;
+
+    ydns_mv_thres0_intp = tisp_simple_intp(hi, lo, ydns_mv_thres0_array);
+    ydns_mv_thres1_intp = tisp_simple_intp(hi, lo, ydns_mv_thres1_array);
+    ydns_mv_thres2_intp = tisp_simple_intp(hi, lo, ydns_mv_thres2_array);
+    ydns_fus_level_intp = tisp_simple_intp(hi, lo, ydns_fus_level_array);
+    ydns_fus_min_thres_intp = tisp_simple_intp(hi, lo, ydns_fus_min_thres_array);
+    ydns_fus_max_thres_intp = tisp_simple_intp(hi, lo, ydns_fus_max_thres_array);
+    ydns_fus_sswei_intp = tisp_simple_intp(hi, lo, ydns_fus_sswei_array);
+    ydns_fus_sewei_intp = tisp_simple_intp(hi, lo, ydns_fus_sewei_array);
+    ydns_fus_mswei_intp = tisp_simple_intp(hi, lo, ydns_fus_mswei_array);
+    ydns_fus_mewei_intp = tisp_simple_intp(hi, lo, ydns_fus_mewei_array);
+    ydns_fus_uvwei_intp = tisp_simple_intp(hi, lo, ydns_fus_uvwei_array);
+    ydns_edge_wei_intp = tisp_simple_intp(hi, lo, ydns_edge_wei_array);
+    ydns_edge_div_intp = tisp_simple_intp(hi, lo, ydns_edge_div_array);
+    ydns_edge_thres_intp = tisp_simple_intp(hi, lo, ydns_edge_thres_array);
     return 0;
 }
 
@@ -54809,28 +55815,21 @@ int32_t tisp_ydns_intp_reg_refresh(int32_t arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029d20 origin=fragment_seed original=tisp_ydns_par_refresh */
-int32_t tisp_ydns_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
+int32_t tisp_ydns_par_refresh(uint32_t gain_q16)
 {
-	uint32_t ydns_gain_old_1 = ydns_gain_old;
-	uint32_t *v0;
-	uint32_t v1;
+    uint32_t diff;
 
-	if (ydns_gain_old_1 != 0xffffffff) {
-		v0 = ydns_gain_old_1 - a0;
-		v1 = a0 < ydns_gain_old_1;
-		if (v1 == 0) {
-			v0 = a0 - ydns_gain_old_1;
-		}
-		if (v0 >= 0x100) {
-			ydns_gain_old = (uintptr_t (*)())(uintptr_t)a0;
-			tisp_ydns_intp_reg_refresh(a0);
-			return 0;
-		}
-	} else {
-		ydns_gain_old = (uintptr_t (*)())(uintptr_t)a0;
-		tisp_ydns_intp_reg_refresh(a0);
-		return 0;
-	}
+    if (ydns_gain_old == 0xffffffffU) {
+        ydns_gain_old = gain_q16;
+        return tisp_ydns_intp_reg_refresh(gain_q16);
+    }
+
+    diff = gain_q16 >= ydns_gain_old ?
+        gain_q16 - ydns_gain_old : ydns_gain_old - gain_q16;
+    if (diff >= 0x100U) {
+        ydns_gain_old = gain_q16;
+        return tisp_ydns_intp_reg_refresh(gain_q16);
+    }
 
 	return 0;
 }
@@ -54838,60 +55837,84 @@ int32_t tisp_ydns_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029d80 origin=model_output original=tisp_ydns_gain_update */
 int32_t tisp_ydns_gain_update(uint32_t arg1)
 {
-    tisp_ydns_par_refresh(arg1, 0, 0);
+    tisp_ydns_par_refresh(arg1);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029da8 origin=model_output original=tiziano_ydns_params_refresh */
 int32_t tiziano_ydns_params_refresh(void)
 {
-	memcpy(&ydns_edge_out_array, ((char *)&tparams + 0x8670), 4);
-	memcpy(&ydns_mv_thres0_array, ((char *)&tparams + 0x8674), 36);
-	memcpy(&ydns_mv_thres1_array, ((char *)&tparams + 0x8698), 36);
-	memcpy(&ydns_mv_thres2_array, ((char *)&tparams + 0x86bc), 36);
-	memcpy(&ydns_fus_level_array, ((char *)&tparams + 0x86e0), 36);
-	memcpy(&ydns_fus_min_thres_array, ((char *)&tparams + 0x8704), 36);
-	memcpy(&ydns_fus_max_thres_array, ((char *)&tparams + 0x8728), 36);
-	memcpy(&ydns_fus_sswei_array, ((char *)&tparams + 0x874c), 36);
-	memcpy(&ydns_fus_sewei_array, ((char *)&tparams + 0x8770), 36);
-	memcpy(&ydns_fus_mswei_array, ((char *)&tparams + 0x8794), 36);
-	memcpy(&ydns_fus_mewei_array, ((char *)&tparams + 0x87b8), 36);
-	memcpy(&ydns_fus_uvwei_array, ((char *)&tparams + 0x87dc), 36);
-	memcpy(&ydns_edge_wei_array, ((char *)&tparams + 0x8800), 36);
-	memcpy(&ydns_edge_div_array, ((char *)&tparams + 0x8824), 36);
-	memcpy(&ydns_edge_thres_array, ((char *)&tparams + 0x8848), 36);
+    struct regtrace_t23_ydns_tuning_image tuning =
+        regtrace_t23_ydns_sc2336;
+    int ret;
+
+    BUILD_BUG_ON(sizeof(tuning) != 0x1fcU);
+    ret = regtrace_t23_read_tuning_data(
+        REGTRACE_T23_YDNS_TUNING_FILE_OFFSET, &tuning, sizeof(tuning));
+    if (ret)
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source YDNS tuning read failed ret=%d; using embedded SC2336 image\n",
+               ret);
+
+    ydns_edge_out_array = tuning.edge_out;
+    memcpy(ydns_mv_thres0_array, tuning.mv_thres0,
+           sizeof(ydns_mv_thres0_array));
+    memcpy(ydns_mv_thres1_array, tuning.mv_thres1,
+           sizeof(ydns_mv_thres1_array));
+    memcpy(ydns_mv_thres2_array, tuning.mv_thres2,
+           sizeof(ydns_mv_thres2_array));
+    memcpy(ydns_fus_level_array, tuning.fus_level,
+           sizeof(ydns_fus_level_array));
+    memcpy(ydns_fus_min_thres_array, tuning.fus_min_thres,
+           sizeof(ydns_fus_min_thres_array));
+    memcpy(ydns_fus_max_thres_array, tuning.fus_max_thres,
+           sizeof(ydns_fus_max_thres_array));
+    memcpy(ydns_fus_sswei_array, tuning.fus_sswei,
+           sizeof(ydns_fus_sswei_array));
+    memcpy(ydns_fus_sewei_array, tuning.fus_sewei,
+           sizeof(ydns_fus_sewei_array));
+    memcpy(ydns_fus_mswei_array, tuning.fus_mswei,
+           sizeof(ydns_fus_mswei_array));
+    memcpy(ydns_fus_mewei_array, tuning.fus_mewei,
+           sizeof(ydns_fus_mewei_array));
+    memcpy(ydns_fus_uvwei_array, tuning.fus_uvwei,
+           sizeof(ydns_fus_uvwei_array));
+    memcpy(ydns_edge_wei_array, tuning.edge_wei,
+           sizeof(ydns_edge_wei_array));
+    memcpy(ydns_edge_div_array, tuning.edge_div,
+           sizeof(ydns_edge_div_array));
+    memcpy(ydns_edge_thres_array, tuning.edge_thres,
+           sizeof(ydns_edge_thres_array));
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029f38 origin=fragment_seed original=tiziano_ydns_dn_params_refresh */
 int32_t tiziano_ydns_dn_params_refresh(void)
 {
-	uint32_t *gain_ptr;
-	uint32_t gain_val;
-
-	/* s0 = 0x0003xxxx (HI16 of .data), gain_ptr = s0 - 16112 */
-	/* Use a known global pointer: get_clk_name is in prelude */
-	gain_ptr = (uint32_t *)((char *)&get_clk_name - 16112 + 0x1000);
-	gain_val = *gain_ptr + 0x200;
-	*gain_ptr = gain_val;
-	tiziano_ydns_params_refresh();
-	tisp_ydns_intp_reg_refresh(gain_val);
-	return 0;
+    ydns_gain_old += 0x200U;
+    tiziano_ydns_params_refresh();
+    return tisp_ydns_intp_reg_refresh(ydns_gain_old);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029f88 origin=fragment_seed original=tiziano_ydns_init */
 int32_t tiziano_ydns_init(void)
 {
-	(*(void (*)(void))tiziano_ydns_params_refresh)();
-	(*(void (*)(uint32_t))tisp_ydns_par_refresh)(0x10000);
-	return 0;
+    int ret;
+
+    ydns_gain_old = 0xffffffffU;
+    tiziano_ydns_params_refresh();
+    ret = tisp_ydns_par_refresh(0x10000U);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source YDNS initialized ret=%d regs=%08x/%08x/%08x/%08x\n",
+           ret, system_reg_read(0x7af0U), system_reg_read(0x7af4U),
+           system_reg_read(0x7af8U), system_reg_read(0x7afcU));
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029fd0 origin=model_output original=tisp_ydns_refresh */
 int32_t tisp_ydns_refresh(uint32_t arg1)
 {
-    tisp_ydns_par_refresh(arg1, 0, 0);
-    return 0;
+    return tisp_ydns_par_refresh(arg1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029ff8 origin=fragment_seed original=tisp_ydns_param_array_get */
@@ -55329,8 +56352,19 @@ int32_t Tiziano_adr_fpga(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3,
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002dfa4 origin=model_output original=interpolate_adr_x8_y12 */
 int32_t interpolate_adr_x8_y12(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int32_t range = arg2 - arg1;
+    int64_t scaled;
+    int64_t rounded;
+
+    if (!range)
+        return arg3;
+
+    scaled = (int64_t)arg3 << 10;
+    scaled += ((int64_t)(arg5 - arg1) * (arg4 - arg3) << 10) / range;
+    rounded = scaled + 0x200;
+    if (rounded < 0)
+        rounded = scaled + 0x5ff;
+    return (int32_t)(rounded >> 10);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002e030 origin=fragment_seed original=tisp_adr_ev_update */
@@ -55364,8 +56398,45 @@ int32_t tisp_adr_ev_update(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002e058 origin=model_output original=tiziano_adr_get_data */
 int32_t tiziano_adr_get_data(int32_t *arg1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t *input = (uint32_t *)arg1;
+    uint32_t *block_hist = (uint32_t *)adr_block_hist;
+    uint32_t *block_y = (uint32_t *)adr_block_y;
+    uint32_t *hist = (uint32_t *)adr_hist;
+    uint32_t *row = input;
+    unsigned int i;
+    unsigned int j;
+
+    for (i = 0; i != 6; ++i, row += 0x20) {
+        uint16_t *record = (uint16_t *)row;
+        uint32_t *dst = block_hist + i * 5;
+
+        for (j = 0; j != 8; ++j, record += 8, dst += 30) {
+            dst[0] = record[4];
+            dst[1] = record[5];
+            dst[2] = record[6];
+            dst[3] = record[7];
+            dst[4] = record[10];
+            block_y[i + j * 6] = *(uint32_t *)(record + 8) & 0x0fffffffU;
+        }
+    }
+
+    input = (uint32_t *)arg1 + 0xc2;
+    while (input != (uint32_t *)arg1 + 0x216) {
+        uint32_t w0 = input[0];
+        uint32_t w1 = input[1];
+
+        hist[0] = w0 & 0x1fffffU;
+        hist[1] = ((w1 & 0x3ffU) << 11) | (w0 >> 21);
+        hist[2] = (w1 >> 10) & 0x1fffffU;
+        hist += 3;
+        input += 2;
+    }
+
+    *(uint32_t *)data_bca08 = ((uint32_t *)arg1)[0x216] & 0x1fffffU;
+    *(uint32_t *)data_bca0c =
+        ((((uint32_t *)arg1)[0x217] & 0x3ffU) << 11) |
+        (((uint32_t *)arg1)[0x216] >> 21);
+    return *(uint32_t *)data_bca0c;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002e17c origin=model_output original=tiziano_adr_algorithm */
@@ -56369,7 +57440,28 @@ int32_t tisp_adr_process(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000314cc origin=model_output original=tisp_adr_set_params */
 int32_t tisp_adr_set_params(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *values;
+    uint32_t reg;
+
+    values = (uint32_t *)min_kneepoint_y;
+    for (reg = 0x4390U; reg != 0x43a4U; reg += 4U, values += 2)
+        system_reg_write(reg,
+                         ((values[1] & 0xffffU) << 16) |
+                         (values[0] & 0xffffU));
+    system_reg_write(0x43a4U, 0x800U);
+
+    values = (uint32_t *)ctc_kneepoint_y;
+    for (reg = 0x4354U; reg != 0x4364U; reg += 4U, values += 2)
+        system_reg_write(reg,
+                         ((values[1] & 0xffffU) << 16) |
+                         (values[0] & 0xffffU));
+    system_reg_write(0x4364U, 0x400U);
+
+    values = (uint32_t *)map_kneepoint_y;
+    for (reg = 0x4084U; reg != 0x4294U; reg += 4U, values += 2)
+        system_reg_write(reg,
+                         ((values[1] & 0xffffU) << 16) |
+                         (values[0] & 0xffffU));
     return 0;
 }
 
@@ -56750,7 +57842,78 @@ tiziano_adr_params_init0x154:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032f20 origin=model_output original=tiziano_adr_gamma_refresh */
 int tiziano_adr_gamma_refresh(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    unsigned char gamma[sizeof(tiziano_gamma_lut) + sizeof(tiziano_gamma_lut_wdr)];
+    int size = 0;
+    unsigned int i;
+    int ret;
+
+    memset(gamma, 0, sizeof(gamma));
+    ret = tisp_gamma_param_array_get(0, (int32_t *)gamma, &size);
+    if (ret)
+        return ret;
+    if (size < sizeof(tiziano_gamma_lut))
+        return -EINVAL;
+
+    memcpy(param_adr_gam_y_array_def, gamma,
+           sizeof(param_adr_gam_y_array_def));
+
+    for (i = 0; i < ARRAY_SIZE(histSub_4096) / sizeof(uint32_t); ++i) {
+        uint32_t target = regtrace_t23_get_le32(histSub_4096 + i * 4U);
+        uint32_t result =
+            (uint32_t)param_adr_gam_x_array[0] |
+            ((uint32_t)param_adr_gam_x_array[1] << 8);
+        unsigned int j;
+
+        for (j = 0; j < 0x81U; ++j) {
+            uint32_t y =
+                (uint32_t)param_adr_gam_y_array_def[j * 2U] |
+                ((uint32_t)param_adr_gam_y_array_def[j * 2U + 1U] << 8);
+
+            if (y >= target) {
+                if (j != 0U) {
+                    uint32_t y_prev =
+                        (uint32_t)param_adr_gam_y_array_def[(j - 1U) * 2U] |
+                        ((uint32_t)param_adr_gam_y_array_def[(j - 1U) * 2U + 1U] << 8);
+                    uint32_t x_prev =
+                        (uint32_t)param_adr_gam_x_array[(j - 1U) * 2U] |
+                        ((uint32_t)param_adr_gam_x_array[(j - 1U) * 2U + 1U] << 8);
+                    uint32_t x =
+                        (uint32_t)param_adr_gam_x_array[j * 2U] |
+                        ((uint32_t)param_adr_gam_x_array[j * 2U + 1U] << 8);
+                    uint32_t y_delta = y >= y_prev ? y - y_prev : y_prev - y;
+                    uint32_t target_delta =
+                        target >= y_prev ? target - y_prev : y_prev - target;
+
+                    if (y_delta == 0U) {
+                        result = x_prev;
+                    } else if (x >= x_prev) {
+                        result = x_prev + target_delta * (x - x_prev) / y_delta;
+                    } else {
+                        result = x_prev - target_delta * (x_prev - x) / y_delta;
+                    }
+                }
+                break;
+            }
+
+            if (j == 0x80U) {
+                result =
+                    (uint32_t)param_adr_gam_x_array[0x100] |
+                    ((uint32_t)param_adr_gam_x_array[0x101] << 8);
+            }
+        }
+
+        regtrace_t23_put_le32(histSub_4096_out + i * 4U, result);
+        regtrace_t23_put_le32(adr_tm_base_lut + i * 4U, result);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(histSub_4096_diff) / sizeof(uint32_t); ++i) {
+        uint32_t current_value =
+            regtrace_t23_get_le32(histSub_4096_out + i * 4U);
+        uint32_t next = regtrace_t23_get_le32(histSub_4096_out + (i + 1U) * 4U);
+
+        regtrace_t23_put_le32(histSub_4096_diff + i * 4U,
+                              next - current_value);
+    }
     return 0;
 }
 
@@ -59001,8 +60164,27 @@ tiziano_defog_get_data0x34:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000354f4 origin=model_output original=tiziano_defog_set_reg_params */
 int32_t tiziano_defog_set_reg_params(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t i;
+
+    /* OEM layout is 18 columns x 10 rows, with each map cell stored as LE32. */
+    for (i = 0; i != 0x48; i += 4) {
+        uint32_t addr = 0x58000 + i * 0xa;
+        uint32_t j;
+
+        for (j = 0; j != 0x2d0; j += 0x48) {
+            uint32_t index = i + j;
+            uint32_t value =
+                ((uint32_t)defog_block_air_light_r[index] << 24) |
+                ((uint32_t)defog_block_air_light_g[index] << 16) |
+                ((uint32_t)defog_block_air_light_b[index] << 8) |
+                (uint32_t)defog_block_transmit_t[index];
+
+            system_reg_write(addr, value);
+            addr += 4;
+        }
+    }
+
+    return 0x48;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000355fc origin=fragment_seed original=tiziano_defog_interrupt_static */
@@ -59672,7 +60854,153 @@ int32_t tisp_defog_process(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000036de0 origin=fragment_seed original=tiziano_defog_params_init */
 int32_t tiziano_defog_params_init(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    static const uint32_t weight_bases[5] = {
+        0x58c0, 0x58e0, 0x5900, 0x5920, 0x5940,
+    };
+    unsigned char *weight_arrays[5] = {
+        param_defog_weightlut02,
+        param_defog_weightlut20,
+        param_defog_weightlut21,
+        param_defog_weightlut12,
+        param_defog_weightlut22,
+    };
+    const unsigned char *main_params;
+    const unsigned char *fpga_params;
+    uint32_t value;
+    uint32_t base;
+    int i;
+    int lut;
+
+    main_params = *(const unsigned char **)(void *)param_defog_main_para_array_now;
+    if (!regtrace_t23_valid_ptr((uintptr_t)main_params))
+        main_params = param_defog_main_para_array;
+    fpga_params = *(const unsigned char **)(void *)param_defog_fpga_para_array_now;
+    if (!regtrace_t23_valid_ptr((uintptr_t)fpga_params))
+        fpga_params = param_defog_fpga_para_array;
+
+    base = 0x5850;
+    for (i = 0; i < 24; i += 2) {
+        value = (regtrace_t23_get_le32(&param_defog_cent3_w_dis_array[i * 4]) & 0x7fff) |
+                ((regtrace_t23_get_le32(&param_defog_cent3_w_dis_array[(i + 1) * 4]) & 0x7fff) << 16);
+        system_reg_write(base, value);
+        base += 4;
+    }
+
+    base = 0x5880;
+    for (i = 0; i < 30; i += 2) {
+        value = (regtrace_t23_get_le32(&param_defog_cent5_w_dis_array[i * 4]) & 0x7fff) |
+                ((regtrace_t23_get_le32(&param_defog_cent5_w_dis_array[(i + 1) * 4]) & 0x7fff) << 16);
+        system_reg_write(base, value);
+        base += 4;
+    }
+    system_reg_write(0x58bc,
+                     regtrace_t23_get_le32(&param_defog_cent5_w_dis_array[30 * 4]) & 0x7fff);
+
+    for (lut = 0; lut < ARRAY_SIZE(weight_arrays); lut++) {
+        for (i = 0; i < 8; i++) {
+            int index = i * 4;
+            unsigned char *array = weight_arrays[lut];
+
+            value = (regtrace_t23_get_le32(&array[index * 4]) & 0x1f) |
+                    ((regtrace_t23_get_le32(&array[(index + 1) * 4]) & 0x1f) << 8) |
+                    ((regtrace_t23_get_le32(&array[(index + 2) * 4]) & 0x1f) << 16) |
+                    ((regtrace_t23_get_le32(&array[(index + 3) * 4]) & 0x1f) << 24);
+            system_reg_write(weight_bases[lut] + i * 4, value);
+        }
+    }
+
+    value = (regtrace_t23_get_le32(&main_params[0]) & 0xff) |
+            ((regtrace_t23_get_le32(&main_params[4]) & 0xff) << 8);
+    system_reg_write(0x5a00, value);
+    value = (regtrace_t23_get_le32(&main_params[8]) & 1) |
+            ((regtrace_t23_get_le32(&main_params[12]) & 0xf) << 2) |
+            ((regtrace_t23_get_le32(&main_params[16]) & 0x1f) << 8) |
+            ((regtrace_t23_get_le32(&main_params[20]) & 0x1f) << 16) |
+            ((regtrace_t23_get_le32(&main_params[24]) & 0x1f) << 24);
+    system_reg_write(0x5a04, value);
+    value = (regtrace_t23_get_le32(&main_params[28]) & 0x1f) |
+            ((regtrace_t23_get_le32(&main_params[32]) & 0x1f) << 8) |
+            ((regtrace_t23_get_le32(&main_params[36]) & 0x1f) << 16) |
+            ((regtrace_t23_get_le32(&main_params[40]) & 0x1f) << 24);
+    system_reg_write(0x5a08, value);
+
+#define DEFOG_U32(array, index) regtrace_t23_get_le32(&(array)[(index) * 4])
+    value = (DEFOG_U32(param_defog_color_control_array, 0) & 0xff) |
+            ((DEFOG_U32(param_defog_color_control_array, 1) & 0xff) << 8) |
+            ((DEFOG_U32(param_defog_color_control_array, 2) & 0x3f) << 16) |
+            ((DEFOG_U32(param_defog_color_control_array, 3) & 0x3f) << 24);
+    system_reg_write(0x5a10, value);
+    value = (DEFOG_U32(param_defog_color_control_array, 4) & 0x3f) |
+            ((DEFOG_U32(param_defog_color_control_array, 5) & 0x3f) << 8) |
+            ((DEFOG_U32(param_defog_color_control_array, 6) & 0x3f) << 16) |
+            ((DEFOG_U32(param_defog_color_control_array, 7) & 0x3f) << 24);
+    system_reg_write(0x5a14, value);
+    value = (DEFOG_U32(param_defog_color_control_array, 8) & 0x3f) |
+            ((DEFOG_U32(param_defog_color_control_array, 9) & 0x3f) << 16);
+    system_reg_write(0x5a18, value);
+
+    value = (DEFOG_U32(param_defog_col_ct_array, 0) & 7) |
+            ((DEFOG_U32(param_defog_col_ct_array, 1) & 7) << 8) |
+            ((DEFOG_U32(param_defog_col_ct_array, 2) & 7) << 16) |
+            ((DEFOG_U32(param_defog_col_ct_array, 3) & 7) << 24);
+    system_reg_write(0x5a1c, value);
+
+#define DEFOG_PACK10(array, first, second, third) do { \
+    value = (DEFOG_U32(array, 0) & 7) | \
+            ((DEFOG_U32(array, 1) & 7) << 8) | \
+            ((DEFOG_U32(array, 2) & 7) << 16) | \
+            ((DEFOG_U32(array, 3) & 7) << 24); \
+    system_reg_write((first), value); \
+    value = (DEFOG_U32(array, 4) & 0x1f) | \
+            ((DEFOG_U32(array, 5) & 0x1f) << 8) | \
+            ((DEFOG_U32(array, 6) & 0x1f) << 16); \
+    system_reg_write((second), value); \
+    value = (DEFOG_U32(array, 7) & 0x3f) | \
+            ((DEFOG_U32(array, 8) & 0x3f) << 8) | \
+            ((DEFOG_U32(array, 9) & 0x3f) << 16); \
+    system_reg_write((third), value); \
+} while (0)
+    DEFOG_PACK10(param_defog_lc_s_array, 0x5a20, 0x5a24, 0x5a28);
+    DEFOG_PACK10(param_defog_lc_v_array, 0x5a30, 0x5a34, 0x5a38);
+
+    value = (DEFOG_U32(param_defog_cc_s_array, 0) & 7) |
+            ((DEFOG_U32(param_defog_cc_s_array, 1) & 7) << 8);
+    system_reg_write(0x5a40, value);
+    value = (DEFOG_U32(param_defog_cc_s_array, 2) & 0x1f) |
+            ((DEFOG_U32(param_defog_cc_s_array, 3) & 0x1f) << 8) |
+            ((DEFOG_U32(param_defog_cc_s_array, 4) & 0x1f) << 16);
+    system_reg_write(0x5a44, value);
+    value = (DEFOG_U32(param_defog_cc_s_array, 5) & 0x3f) |
+            ((DEFOG_U32(param_defog_cc_s_array, 6) & 0x3f) << 8) |
+            ((DEFOG_U32(param_defog_cc_s_array, 7) & 0x3f) << 16);
+    system_reg_write(0x5a48, value);
+
+    value = (DEFOG_U32(param_defog_cc_v_array, 0) & 7) |
+            ((DEFOG_U32(param_defog_cc_v_array, 1) & 7) << 8) |
+            ((DEFOG_U32(param_defog_cc_v_array, 2) & 7) << 16);
+    system_reg_write(0x5a50, value);
+    value = (DEFOG_U32(param_defog_cc_v_array, 3) & 0x1f) |
+            ((DEFOG_U32(param_defog_cc_v_array, 4) & 0x1f) << 8) |
+            ((DEFOG_U32(param_defog_cc_v_array, 5) & 0x1f) << 16);
+    system_reg_write(0x5a54, value);
+    value = (DEFOG_U32(param_defog_cc_v_array, 6) & 0x3f) |
+            ((DEFOG_U32(param_defog_cc_v_array, 7) & 0x3f) << 8) |
+            ((DEFOG_U32(param_defog_cc_v_array, 8) & 0x3f) << 16);
+    system_reg_write(0x5a58, value);
+
+    DEFOG_PACK10(param_defog_dark_l1_array, 0x5a60, 0x5a64, 0x5a68);
+    value |= (DEFOG_U32(param_defog_dark_l1_array, 9) & 0x3f) << 24;
+    system_reg_write(0x5a68, value);
+    DEFOG_PACK10(param_defog_dark_l2_array, 0x5a70, 0x5a74, 0x5a78);
+    value |= (DEFOG_U32(param_defog_dark_l2_array, 9) & 0x3f) << 24;
+    system_reg_write(0x5a78, value);
+
+    system_reg_write(0x5b10,
+                     (regtrace_t23_get_le32(&fpga_params[4]) & 0xff) |
+                     ((regtrace_t23_get_le32(&fpga_params[8]) & 0xff) << 16));
+#undef DEFOG_PACK10
+#undef DEFOG_U32
+
     return 0;
 }
 
@@ -61822,7 +63150,26 @@ int32_t tisp_sdns_r_s_mv_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003bd64 origin=model_output original=tisp_sdns_h_s_cfg */
 int32_t tisp_sdns_h_s_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    system_reg_write(0x885c,
+        (uint32_t)sdns_h_s_1_intp |
+        ((uint32_t)sdns_h_s_2_intp << 8) |
+        ((uint32_t)sdns_h_s_3_intp << 16) |
+        ((uint32_t)sdns_h_s_4_intp << 24));
+    system_reg_write(0x8860,
+        (uint32_t)sdns_h_s_5_intp |
+        ((uint32_t)sdns_h_s_6_intp << 8) |
+        ((uint32_t)sdns_h_s_7_intp << 16) |
+        ((uint32_t)sdns_h_s_8_intp << 24));
+    system_reg_write(0x8864,
+        (uint32_t)sdns_h_s_9_intp |
+        ((uint32_t)sdns_h_s_10_intp << 8) |
+        ((uint32_t)sdns_h_s_11_intp << 16) |
+        ((uint32_t)sdns_h_s_12_intp << 24));
+    system_reg_write(0x8868,
+        (uint32_t)sdns_h_s_13_intp |
+        ((uint32_t)sdns_h_s_14_intp << 8) |
+        ((uint32_t)sdns_h_s_15_intp << 16) |
+        ((uint32_t)sdns_h_s_16_intp << 24));
     return 0;
 }
 
@@ -62436,7 +63783,31 @@ int32_t tisp_sdns_sp_uu_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c978 origin=model_output original=tisp_sdns_sp_v2_d_w_b_ll_hl_flat_cfg */
 int32_t tisp_sdns_sp_v2_d_w_b_ll_hl_flat_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *slope = (uint32_t *)(void *)sdns_sp_d_v2_sigma_win5_slope;
+    uint32_t *flat = (uint32_t *)(void *)sdns_sp_d_wbhl_flat;
+
+    system_reg_write(0x8a74,
+        slope[0] | ((uint32_t)sdns_sp_d_v2_win5_thres_intp << 8) |
+        (slope[1] << 16) | (flat[0] << 24));
+    system_reg_write(0x8a78,
+        (uint32_t)sdns_sp_d_w_sp_stren_0_intp |
+        ((uint32_t)sdns_sp_d_w_sp_stren_1_intp << 16));
+    system_reg_write(0x8a7c,
+        (uint32_t)sdns_sp_d_w_sp_stren_2_intp |
+        ((uint32_t)sdns_sp_d_w_sp_stren_3_intp << 16));
+    system_reg_write(0x8a80, flat[1] | (flat[2] << 16));
+    system_reg_write(0x8a84,
+        (uint32_t)sdns_sp_d_b_sp_stren_0_intp |
+        ((uint32_t)sdns_sp_d_b_sp_stren_1_intp << 16));
+    system_reg_write(0x8a88,
+        (uint32_t)sdns_sp_d_b_sp_stren_2_intp |
+        ((uint32_t)sdns_sp_d_b_sp_stren_3_intp << 16));
+    system_reg_write(0x8a8c, flat[3] | (flat[4] << 16));
+    system_reg_write(0x8a90, flat[5] | (flat[6] << 16));
+    system_reg_write(0x8a94,
+        flat[7] | ((uint32_t)sdns_sp_d_flat_thres_intp << 16));
+    system_reg_write(0x8a98,
+        flat[8] | ((uint32_t)sdns_sp_d_flat_stren_intp << 16));
     return 0;
 }
 
@@ -65623,7 +66994,53 @@ int32_t tiziano_sdns_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000041730 origin=fragment_seed original=tisp_sharpen_intp */
 int32_t tisp_sharpen_intp(uint32_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    int hi = a0 >> 16;
+    int lo = a0 & 0xffff;
+    bool wdr = !!*(uint32_t *)global_wdr_en;
+
+    y_sp_sl_exp_thres_intp = tisp_simple_intp(hi, lo, y_sp_sl_exp_thres_array);
+    y_sp_sl_exp_num_intp = tisp_simple_intp(hi, lo, y_sp_sl_exp_num_array);
+    y_sp_uu_min_stren_intp = tisp_simple_intp(hi, lo, y_sp_uu_min_stren_array);
+    y_sp_uu_min_thres_intp = tisp_simple_intp(hi, lo, y_sp_uu_min_thres_array);
+    y_sp_uu_thres_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_uu_thres_wdr_array : y_sp_uu_thres_array);
+    y_sp_mv_uu_thres_intp = tisp_simple_intp(hi, lo, y_sp_mv_uu_thres_array);
+    y_sp_mv_uu_stren_intp = tisp_simple_intp(hi, lo, y_sp_mv_uu_stren_array);
+    y_sp_uu_stren_intp = tisp_simple_intp(hi, lo, y_sp_uu_stren_array);
+    y_sp_fl_std_thres_intp = tisp_simple_intp(hi, lo, y_sp_fl_std_thres_array);
+    y_sp_mv_fl_std_thres_intp = tisp_simple_intp(
+        hi, lo, y_sp_mv_fl_std_thres_array);
+    y_sp_fl_thres_intp = tisp_simple_intp(hi, lo, y_sp_fl_thres_array);
+    y_sp_fl_min_thres_intp = tisp_simple_intp(hi, lo, y_sp_fl_min_thres_array);
+    y_sp_mv_fl_thres_intp = tisp_simple_intp(hi, lo, y_sp_mv_fl_thres_array);
+    y_sp_mv_fl_min_thres_intp = tisp_simple_intp(
+        hi, lo, y_sp_mv_fl_min_thres_array);
+    y_sp_v2_win5_thres_intp = tisp_simple_intp(
+        hi, lo, y_sp_v2_win5_thres_array);
+    y_sp_w_sl_stren_0_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_w_sl_stren_0_wdr_array : y_sp_w_sl_stren_0_array);
+    y_sp_w_sl_stren_1_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_w_sl_stren_1_wdr_array : y_sp_w_sl_stren_1_array);
+    y_sp_w_sl_stren_2_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_w_sl_stren_2_wdr_array : y_sp_w_sl_stren_2_array);
+    y_sp_w_sl_stren_3_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_w_sl_stren_3_wdr_array : y_sp_w_sl_stren_3_array);
+    y_sp_b_sl_stren_0_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_b_sl_stren_0_wdr_array : y_sp_b_sl_stren_0_array);
+    y_sp_b_sl_stren_1_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_b_sl_stren_1_wdr_array : y_sp_b_sl_stren_1_array);
+    y_sp_b_sl_stren_2_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_b_sl_stren_2_wdr_array : y_sp_b_sl_stren_2_array);
+    y_sp_b_sl_stren_3_intp = tisp_simple_intp(
+        hi, lo, wdr ? y_sp_b_sl_stren_3_wdr_array : y_sp_b_sl_stren_3_array);
+    y_sp_uu_sl_0_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_0_array);
+    y_sp_uu_sl_1_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_1_array);
+    y_sp_uu_sl_2_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_2_array);
+    y_sp_uu_sl_3_array_intp = tisp_simple_intp(hi, lo, y_sp_uu_sl_3_array);
+    y_sp_fl_sl_0_array_intp = tisp_simple_intp(hi, lo, y_sp_fl_sl_0_array);
+    y_sp_fl_sl_1_array_intp = tisp_simple_intp(hi, lo, y_sp_fl_sl_1_array);
+    y_sp_fl_sl_2_array_intp = tisp_simple_intp(hi, lo, y_sp_fl_sl_2_array);
+    y_sp_fl_sl_3_array_intp = tisp_simple_intp(hi, lo, y_sp_fl_sl_3_array);
     return 0;
 }
 
@@ -65638,68 +67055,66 @@ int32_t tisp_y_sp_sl_exp_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000041b14 origin=model_output original=tisp_y_sp_std_scope_cfg */
 int32_t tisp_y_sp_std_scope_cfg(void)
 {
-	int32_t low = y_sp_std_cfg_array[0];
-	int32_t high = y_sp_std_cfg_array[1];
-	int32_t combined = (high << 16) | (low & 0xFFFF);
+    const uint32_t *config = (const uint32_t *)y_sp_std_cfg_array;
 
-	system_reg_write(0x7004, combined);
-	return 0;
+    system_reg_write(0x7004, (config[0] << 16) | config[1]);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000041b54 origin=model_output original=tisp_y_sp_uu_cfg */
 int32_t tisp_y_sp_uu_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    const uint32_t *config = (const uint32_t *)y_sp_uu_par_cfg_array;
+
+    system_reg_write(0x7008,
+                     (y_sp_uu_min_stren_intp << 16) |
+                     config[0] | (config[1] << 8));
+    system_reg_write(0x700c,
+                     (y_sp_mv_uu_thres_intp << 24) |
+                     (y_sp_uu_thres_intp << 8) |
+                     y_sp_uu_min_thres_intp | (config[2] << 16));
+    system_reg_write(0x7010,
+                     (y_sp_out_opt_array << 28) |
+                     (config[3] << 24) |
+                     (y_sp_uu_stren_intp << 8) |
+                     y_sp_mv_uu_stren_intp);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000041c2c origin=model_output original=tisp_y_sp_fl_thres_cfg */
 int32_t tisp_y_sp_fl_thres_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    const uint32_t *config = (const uint32_t *)y_sp_fl_par_cfg_array;
+
+    system_reg_write(0x7014,
+                     (y_sp_mv_fl_std_thres_intp << 8) |
+                     y_sp_fl_std_thres_intp);
+    system_reg_write(0x7018,
+                     (y_sp_fl_thres_intp << 16) | config[0] |
+                     (y_sp_fl_min_thres_intp << 24));
+    system_reg_write(0x701c,
+                     (y_sp_mv_fl_thres_intp << 16) | config[1] |
+                     (y_sp_mv_fl_min_thres_intp << 24));
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000041cdc origin=model_output original=tisp_y_sp_v1_v2_coef_cfg */
 int32_t tisp_y_sp_v1_v2_coef_cfg(void)
 {
-	uint32_t *v0;
-	uint32_t v1;
-	uint32_t *a1;
-	uint32_t *s0;
+    const uint32_t *coef =
+        (const uint32_t *)y_sp_v1_v2_coef_par_cfg_array;
 
-	s0 = y_sp_v1_v2_coef_par_cfg_array;
-
-	/* Build value for first call (reg 0x7020) */
-	v0 = y_sp_v2_win5_thres_intp << 8;
-	v0 = (void *)(uint32_t *)((uintptr_t)v0 | (s0[0]));
-	a1 = s0[1] << 16;
-	a1 = (void *)(uintptr_t)((uintptr_t)a1 | ((uintptr_t)v0));
-	system_reg_write(0x7020, a1);
-
-	/* Build value for second call (reg 0x7024) */
-	v1 = s0[3] << 4;
-	a1 = s0[2] | v1;
-	v1 = s0[4] << 8;
-	a1 = (void *)(uintptr_t)((uintptr_t)a1 | (v1));
-	v0 = s0[5] << 12;
-	a1 = (void *)(uintptr_t)((uintptr_t)a1 | ((uintptr_t)v0));
-	v0 = s0[6] << 16;
-	v1 = (uintptr_t)a1 | (uintptr_t)v0;
-	a1 = s0[7] << 20;
-	a1 = (void *)(uintptr_t)((uintptr_t)a1 | (v1));
-	system_reg_write(0x7024, a1);
-
-	/* Build value for third call (reg 0x7028) */
-	v0 = s0[9] << 8;
-	a1 = s0[8] | (uintptr_t)v0;
-	v0 = s0[10] << 16;
-	a1 = (void *)(uintptr_t)((uintptr_t)a1 | ((uintptr_t)v0));
-	v0 = s0[11] << 24;
-	a1 = (void *)(uintptr_t)((uintptr_t)a1 | ((uintptr_t)v0));
-	system_reg_write(0x7028, a1);
-
-	return 0;
+    system_reg_write(0x7020,
+                     (y_sp_v2_win5_thres_intp << 8) |
+                     coef[0] | (coef[1] << 16));
+    system_reg_write(0x7024,
+                     coef[2] | (coef[3] << 4) | (coef[4] << 8) |
+                     (coef[5] << 12) | (coef[6] << 16) |
+                     (coef[7] << 20));
+    system_reg_write(0x7028,
+                     coef[8] | (coef[9] << 8) | (coef[10] << 16) |
+                     (coef[11] << 24));
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000041db4 origin=fragment_seed original=tisp_y_sp_w_b_ll_cfg */
@@ -74497,7 +75912,20 @@ tiziano_ae_para_addr0x238:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000499bc origin=fragment_seed original=tiziano_ae_init_exp_th */
 int32_t tiziano_ae_init_exp_th(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t i;
+
+    for (i = 0; i < REGTRACE_T23_AE_HLIL_STATE_COUNT; ++i) {
+        uint32_t integration = regtrace_t23_ae_hlil_rungs[i].packed & 0xffffU;
+
+        if (integration < 2U || integration > 0x59cU) {
+            regtrace_t23_source_ae_hlil_status = ERANGE;
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: source AE rung %u integration %u outside SC2336 limits\n",
+                   i, integration);
+            return -ERANGE;
+        }
+    }
+    regtrace_t23_source_ae_hlil_status = 0;
     return 0;
 }
 
@@ -74549,7 +75977,15 @@ int tisp_ae_wdr_en(int enable)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000049d48 origin=fragment_seed original=tiziano_ae_init */
 int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    int ret;
+
+    ret = tiziano_ae_init_exp_th();
+    if (ret)
+        return ret;
+    regtrace_t23_source_ae_hlil_reset();
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: source AE runtime initialized context=0x%x info=0x%x mode=0x%x states=%u\n",
+           arg1, arg2, arg3, REGTRACE_T23_AE_HLIL_STATE_COUNT);
     return 0;
 }
 
@@ -74825,38 +76261,73 @@ int32_t tisp_ae_get_y_zone(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004a574 origin=fragment_seed original=tisp_ae_s_comp */
 int32_t tisp_ae_s_comp(uint32_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t compensation = a0 & 0xffU;
+    uint32_t target = (60U * compensation + 64U) / 128U;
+
+    regtrace_t23_source_ae_compensation = compensation;
+    regtrace_t23_source_ae_hlil_target = clamp(target, 16U, 120U);
+    regtrace_t23_source_ae_hlil_trigger();
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004a63c origin=fragment_seed original=tiziano_ae_dn_params_refresh */
 int32_t tiziano_ae_dn_params_refresh(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int ret = tiziano_ae_init_exp_th();
+
+    if (ret)
+        return ret;
+    memset(regtrace_t23_source_ae_scene_luma, 0,
+           sizeof(regtrace_t23_source_ae_scene_luma));
+    regtrace_t23_source_ae_scene_luma_valid = false;
+    return tisp_ae_trig();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004a760 origin=fragment_seed original=tisp_ae_g_comp */
 char tisp_ae_g_comp(uint32_t a0, char *arg2)
 {
-    char *result;
-    result = *(char *)(0x30000 + 0x42f0);
-    *(char *)arg2 = result;
+    char result = (char)(regtrace_t23_source_ae_compensation & 0xffU);
+
+    (void)a0;
+    if (arg2)
+        *arg2 = result;
     return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004a770 origin=fragment_seed original=tisp_ae_g_luma */
 uint8_t tisp_ae_g_luma(uint8_t *arg1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint8_t result = (uint8_t)min(regtrace_t23_source_ae_hlil_luma, 255U);
+
+    if (arg1)
+        *arg1 = result;
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004a7cc origin=fragment_seed original=tisp_ae_g_scene_luma */
 int tisp_ae_g_scene_luma(uint32_t *arg1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t luma = regtrace_t23_source_ae_hlil_luma;
+    uint32_t weighted = 0;
+    uint32_t i;
+
+    if (!arg1)
+        return -EINVAL;
+    if (!regtrace_t23_source_ae_scene_luma_valid) {
+        for (i = 0; i < ARRAY_SIZE(regtrace_t23_source_ae_scene_luma); ++i)
+            regtrace_t23_source_ae_scene_luma[i] = luma;
+        regtrace_t23_source_ae_scene_luma_valid = true;
+    } else {
+        for (i = 0; i + 1U < ARRAY_SIZE(regtrace_t23_source_ae_scene_luma); ++i)
+            regtrace_t23_source_ae_scene_luma[i] =
+                regtrace_t23_source_ae_scene_luma[i + 1U];
+        regtrace_t23_source_ae_scene_luma[
+            ARRAY_SIZE(regtrace_t23_source_ae_scene_luma) - 1U] = luma;
+    }
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_source_ae_scene_luma); ++i)
+        weighted += (i + 1U) * regtrace_t23_source_ae_scene_luma[i];
+    *arg1 = weighted / 36U;
+    return (int)*arg1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004a974 origin=fragment_seed original=tisp_ae0_process_impl */
@@ -76026,7 +77497,8 @@ tisp_ae_param_array_set0x46c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bb10 origin=fragment_seed original=tisp_ae_trig */
 int32_t tisp_ae_trig(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    regtrace_t23_source_ae_hlil_status = 0;
+    regtrace_t23_source_ae_hlil_trigger();
     return 0;
 }
 
@@ -78077,8 +79549,20 @@ tisp_csccr_para_refresh_by_mode0x6c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004e610 origin=fragment_seed original=tisp_csccr_write_reg */
 int32_t tisp_csccr_write_reg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    static const uint16_t params[] = {
+        0x400U, 0U, 0xffU, 0U, 0x400U, 0x180U, 0x7fU,
+    };
+
+    system_reg_write(0xc040U, params[0] & 0x7ffU);
+    system_reg_write(0xc044U,
+        (uint32_t)params[1] |
+        ((uint32_t)params[2] << 8) |
+        ((uint32_t)params[3] << 16));
+    system_reg_write(0xc050U, params[4] & 0x7ffU);
+    system_reg_write(0xc054U,
+        ((uint32_t)(params[6] & 0x1ffU) << 16) |
+        (uint32_t)(params[5] & 0x1ffU));
+    return system_reg_write(0xc010U, 0xffffffffU);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004e6c8 origin=fragment_seed original=tisp_csccr_update_para */
@@ -78588,23 +80072,37 @@ int32_t tisp_csccr_api_get(uint32_t a0)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004ec60 origin=fragment_seed original=tisp_dmsc_noref_reg_cfg */
+static uint32_t regtrace_t23_dmsc_field_word(const void *field, size_t offset)
+{
+    uint32_t value;
+
+    memcpy(&value, (const unsigned char *)field + offset, sizeof(value));
+    return value;
+}
+
 int32_t tisp_dmsc_noref_reg_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    REGTRACE_T23_DMSC_NOREF_REG_CFG_BODY();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004efd8 origin=fragment_seed original=tisp_dmsc_ref_reg_cfg */
 int32_t tisp_dmsc_ref_reg_cfg(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    REGTRACE_T23_DMSC_REF_REG_CFG_BODY();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005005c origin=fragment_seed original=tisp_dmsc_intp */
 int32_t tisp_dmsc_intp(uint32_t a0)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t gain_q16 = a0 ? a0 : 0x10000U;
+    uint32_t gain_index = gain_q16 >> 16;
+    uint32_t gain_fraction = gain_q16 & 0xffffU;
+
+#define REGTRACE_T23_DMSC_INTERPOLATE(destination, curve) \
+    (destination) = tisp_simple_intp(gain_index, gain_fraction, &(curve));
+    REGTRACE_T23_DMSC_INTERPOLATED_FIELDS(REGTRACE_T23_DMSC_INTERPOLATE)
+#undef REGTRACE_T23_DMSC_INTERPOLATE
+
     return 0;
 }
 
@@ -80459,294 +81957,85 @@ int32_t tisp_dmsc_param_array_set(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000054c44 origin=fragment_seed original=tisp_dmsc_sharpness_set */
 int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    uint32_t sharpness = a0 & 0xffU;
+    uint32_t gain_index = regtrace_t23_dmsc_gain_q16 >> 16;
+    uint32_t gain_fraction = regtrace_t23_dmsc_gain_q16 & 0xffffU;
+    uint32_t sp_d_w;
+    uint32_t sp_d_b;
+    uint32_t sp_ud_w;
+    uint32_t sp_ud_b;
+    uint32_t uu_stren;
+    uint32_t value;
+
+    (void)a1;
+    sp_d_w = tisp_simple_intp(gain_index, gain_fraction,
+                              (void *)regtrace_t23_dmsc_sp_d_w_curve);
+    sp_d_b = tisp_simple_intp(gain_index, gain_fraction,
+                              (void *)regtrace_t23_dmsc_sp_d_b_curve);
+    sp_ud_w = tisp_simple_intp(gain_index, gain_fraction,
+                               (void *)regtrace_t23_dmsc_sp_ud_w_curve);
+    sp_ud_b = tisp_simple_intp(gain_index, gain_fraction,
+                               (void *)regtrace_t23_dmsc_sp_ud_b_curve);
+    uu_stren = tisp_simple_intp(gain_index, gain_fraction,
+                                (void *)regtrace_t23_dmsc_uu_stren_curve);
+
+    if (sharpness >= 0x81U) {
+        uint32_t scale = sharpness - 0x80U;
+
+        sp_d_w += ((0x258U - sp_d_w) * scale) >> 7;
+        sp_d_b += ((0x258U - sp_d_b) * scale) >> 7;
+        sp_ud_w += ((0x258U - sp_ud_w) * scale) >> 7;
+        sp_ud_b += ((0x258U - sp_ud_b) * scale) >> 7;
+        uu_stren += ((0x320U - uu_stren) * scale) >> 7;
+    } else {
+        sp_d_w = (sharpness * sp_d_w) >> 7;
+        sp_d_b = (sharpness * sp_d_b) >> 7;
+        sp_ud_w = (sharpness * sp_ud_w) >> 7;
+        sp_ud_b = (sharpness * sp_ud_b) >> 7;
+        uu_stren = (sharpness * uu_stren) >> 7;
+    }
+
+    value = system_reg_read(0x4808U);
+    system_reg_write(0x4808U, (value & ~0x1ffffU) | (uu_stren & 0x1ffffU));
+    system_reg_write(0x4848U, (sp_d_w << 16) | (sp_d_b & 0xffffU));
+    system_reg_write(0x4860U, (sp_ud_w << 16) | (sp_ud_b & 0xffffU));
+    tparams[0x3934] = sharpness;
+    return system_reg_write(0x499cU, 1U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000054d94 origin=fragment_seed original=tiziano_dmsc_params_refresh */
 int32_t tiziano_dmsc_params_refresh(void)
 {
-    uint32_t *a0 = 0;
-    uintptr_t *v0 = 0;
-    int _bc_a0_246;
-int32_t tiziano_dmsc_params_refresh(void)
-{
-    uint32_t *a0 = 0;
-    uintptr_t *v0 = 0;
-    int _bc_a0_246;
-    memcpy(&dmsc_out_opt, (void *)((char *)&param_adr_weigth_02_lut_array_tmp_1728_972 + 0x60), 4);
-    memcpy(&dmsc_awb_gain_array, (void *)((char *)&param_adr_weigth_02_lut_array_tmp_1728_972 + 0x64), 12);
-    memcpy(&dmsc_dir_con_par_array, (void *)((char *)&param_adr_weigth_02_lut_array_tmp_1728_972 + 0x70), 24);
-    memcpy(&dmsc_win5_hv_edge_thres_1_array, (void *)((char *)&param_adr_weigth_20_lut_array_tmp_1728_972 + 0x8), 36);
-    memcpy(&dmsc_win5_hv_edge_thres_2_array, (void *)((char *)&param_adr_weigth_20_lut_array_tmp_1728_972 + 0x2c), 36);
-    memcpy(&dmsc_hv_edge_thres_1_array, (void *)((char *)&param_adr_weigth_20_lut_array_tmp_1728_972 + 0x50), 36);
-    memcpy(&dmsc_hv_edge_thres_2_array, (void *)((char *)&param_adr_weigth_20_lut_array_tmp_1728_972 + 0x74), 36);
-    memcpy(&dmsc_hv_edge_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1728_972 + 0x18), 36);
-    memcpy(&dmsc_aa_edge_thres_1_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1728_972 + 0x3c), 36);
-    memcpy(&dmsc_aa_edge_thres_2_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1728_972 + 0x60), 36);
-    memcpy(&dmsc_aa_edge_stren_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_720P + 0x8), 36);
-    memcpy(&dmsc_hvaa_edge_thres_1_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_720P + 0x2c), 36);
-    memcpy(&dmsc_hvaa_edge_thres_2_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_720P + 0x50), 36);
-    memcpy(&dmsc_hvaa_edge_stren_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_720P + 0x74), 36);
-    memcpy(&dmsc_uu_con_par_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_720P + 0x18), 8);
-    memcpy(&dmsc_uu_full_en_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_720P + 0x20), 8);
-    memcpy(&dmsc_g_std_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_720P + 0x28), 36);
-    memcpy(&dmsc_uu_thres_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_720P + 0x4c), 36);
-    memcpy(&dmsc_uu_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_720P + 0x70), 36);
-    memcpy(&dmsc_alias_con_par_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_720P + 0x14), 12);
-    memcpy(&dmsc_alias_stren_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_720P + 0x20), 36);
-    memcpy(&dmsc_alias_thres_1_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_720P + 0x44), 36);
-    memcpy(&dmsc_alias_thres_2_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_720P + 0x68), 36);
-    memcpy(&dmsc_nor_con_par_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_720P + 0xc), 8);
-    memcpy(&dmsc_nor_alias_blur_thres_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_720P + 0x14), 36);
-    memcpy(&dmsc_nor_alias_blur_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_720P + 0x38), 36);
-    memcpy(&dmsc_nor_uu_wei_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_720P + 0x5c), 36);
-    memcpy(&dmsc_alias_dir_diff_thres_rb_array, &param_adr_centre_w_dis_array_tmp_720P, 36);
-    memcpy(&dmsc_alias_dir_diff_thres_g_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_720P + 0x24), 36);
-    memcpy(&dmsc_alias_dir_intp_sp_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_720P + 0x48), 36);
-    memcpy(&dmsc_alias_fusion_thres_1_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_720P + 0x6c), 36);
-    memcpy(&dmsc_alias_fusion_thres_2_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5MA + 0x14), 36);
-    memcpy(&dmsc_alias_fusion_alpha_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5MA + 0x38), 36);
-    memcpy(&dmsc_alias_fusion_slope_2, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5MA + 0x5c), 4);
-    memcpy(&dmsc_sp_nor_alias_thres_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5MA + 0x60), 36);
-    memcpy(&dmsc_sp_d_con_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5MA + 0x4), 8);
-    memcpy(&dmsc_sp_d_con_0_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5MA + 0xc), 8);
-    memcpy(&dmsc_sp_d_limit_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5MA + 0x14), 8);
-    memcpy(&dmsc_sp_d_flat_thres_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5MA + 0x1c), 36);
-    memcpy(&dmsc_sp_d_flat_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5MA + 0x40), 36);
-    memcpy(&dmsc_sp_d_flat_slope_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5MA + 0x64), 36);
-    memcpy(&dmsc_sp_d_v2_win5_thres_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5MA + 0x8), 36);
-    memcpy(&dmsc_sp_d_v2_sigma_1_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5MA + 0x2c), 36);
-    memcpy(&dmsc_sp_d_dir_sigma_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5MA + 0x50), 36);
-    memcpy(&dmsc_sp_d_dir_thres_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5MA + 0x74), 36);
-    memcpy(&dmsc_sp_d_w_sp_stren_array, &data_a17c8, 36);
-    memcpy(&dmsc_sp_d_b_sp_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_5MA + 0x3c), 36);
-    memcpy(&dmsc_sp_d_ll_thres_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_5MA + 0x60), 36);
-    memcpy(&dmsc_sp_d_ll_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5MA + 0x4), 36);
-    memcpy(&dmsc_sp_d_hl_thres_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5MA + 0x28), 36);
-    memcpy(&dmsc_sp_d_hl_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5MA + 0x4c), 36);
-    memcpy(&dmsc_sp_d_oe_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5MA + 0x70), 36);
-    memcpy(&dmsc_sp_ud_con_0_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_4M + 0x18), 68);
-    memcpy(&dmsc_sp_ud_limit_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_4M + 0x5c), 8);
-    memcpy(&dmsc_sp_ud_flat_thres_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_4M + 0x64), 36);
-    memcpy(&dmsc_sp_ud_flat_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_4M + 0x8), 36);
-    memcpy(&dmsc_sp_ud_flat_slope_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_4M + 0x2c), 36);
-    memcpy(&dmsc_sp_ud_v2_sigma_1_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_4M + 0x50), 36);
-    memcpy(&dmsc_sp_ud_w_sp_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_4M + 0x74), 36);
-    memcpy(&dmsc_sp_ud_b_sp_stren_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_4M + 0x18), 36);
-    memcpy(&dmsc_sp_ud_std_thres_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_4M + 0x3c), 36);
-    memcpy(&dmsc_sp_ud_std_stren_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_4M + 0x60), 36);
-    memcpy(&dmsc_sp_ud_ll_thres_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_4M + 0x4), 36);
-    memcpy(&dmsc_sp_ud_ll_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_4M + 0x28), 36);
-    memcpy(&dmsc_sp_ud_hl_thres_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_4M + 0x4c), 36);
-    memcpy(&dmsc_sp_ud_hl_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_4M + 0x70), 36);
-    memcpy(&dmsc_sp_ud_oe_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_4M + 0x14), 36);
-    memcpy(&dmsc_sp_ud_g_lap_3_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_4M + 0x38), 8);
-    memcpy(&dmsc_sp_ud_g_lap_3_std_thres_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_4M + 0x40), 36);
-    memcpy(&dmsc_sp_ud_g_lap_3_std_stren_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_4M + 0x64), 36);
-    memcpy(&dmsc_fc_en_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5M + 0xc), 8);
-    memcpy(&dmsc_fc_slope_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5M + 0x14), 20);
-    memcpy(&dmsc_fc_alias_stren_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5M + 0x28), 36);
-    memcpy(&dmsc_fc_alias_thres_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5M + 0x4c), 36);
-    memcpy(&dmsc_fc_t1_stren_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_5M + 0x70), 36);
-    memcpy(&dmsc_fc_t1_g_std_low_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5M + 0x14), 36);
-    memcpy(&dmsc_fc_t1_g_std_high_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5M + 0x38), 36);
-    memcpy(&dmsc_fc_t1_sat_low_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_5M + 0x5c), 36);
-    memcpy(&dmsc_fc_t1_sat_high_array, &param_adr_weight_02_lut_array_tmp_5M, 36);
-    memcpy(&dmsc_fc_t1_lum_low_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5M + 0x24), 36);
-    memcpy(&dmsc_fc_t1_lum_high_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5M + 0x48), 36);
-    memcpy(&dmsc_fc_t1_h_value_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_5M + 0x6c), 36);
-    memcpy(&dmsc_fc_t1_h_range_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_5M + 0x10), 36);
-    memcpy(&dmsc_fc_t2_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_5M + 0x34), 36);
-    memcpy(&dmsc_fc_t2_g_std_low_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_5M + 0x58), 36);
-    memcpy(&dmsc_fc_t2_g_std_high_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_5M + 0x7c), 36);
-    memcpy(&dmsc_fc_t2_sat_low_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5M + 0x20), 36);
-    memcpy(&dmsc_fc_t2_sat_high_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5M + 0x44), 36);
-    memcpy(&dmsc_fc_t2_lum_low_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_5M + 0x68), 36);
-    memcpy(&dmsc_fc_t2_lum_high_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_3M + 0x10), 36);
-    memcpy(&dmsc_fc_t2_h_value_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_3M + 0x34), 36);
-    memcpy(&dmsc_fc_t2_h_range_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_3M + 0x58), 36);
-    memcpy(&dmsc_fc_oe_value_thres_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_3M + 0x7c), 36);
-    memcpy(&dmsc_fc_oe_num_thres_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_3M + 0x20), 36);
-    memcpy(&dmsc_fc_oe_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_3M + 0x44), 36);
-    memcpy(&dmsc_fc_oe_h_low_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_3M + 0x68), 36);
-    memcpy(&dmsc_fc_oe_h_diff_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_3M + 0xc), 36);
-    memcpy(&dmsc_fc_oe_sat_low_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_3M + 0x30), 36);
-    memcpy(&dmsc_fc_oe_sat_high_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_3M + 0x54), 36);
-    memcpy(&dmsc_fc_lum_thres_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_3M + 0x78), 36);
-    memcpy(&dmsc_fc_lum_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_3M + 0x1c), 36);
-    memcpy(&dmsc_deir_con_par_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_3M + 0x40), 12);
-    memcpy(&dmsc_deir_rgb_oe_h_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_3M + 0x4c), 36);
-    memcpy(&dmsc_deir_rgb_oe_l_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_3M + 0x70), 36);
-    memcpy(&dmsc_deir_ir_oe_h_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_3M + 0x14), 36);
-    memcpy(&dmsc_deir_ir_oe_l_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_3M + 0x38), 36);
-    memcpy(&dmsc_deir_fusion_thres_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_3M + 0x5c), 36);
-    memcpy(&dmsc_deir_fusion_stren_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_1080P + 0x4), 36);
-    memcpy(&dmsc_deir_r_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_1080P + 0x28), 32);
-    memcpy(&dmsc_deir_g_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_1080P + 0x48), 32);
-    memcpy(&dmsc_deir_b_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp_1080P + 0x68), 32);
-    memcpy(&dmsc_h_gain_con_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_1080P + 0x8), 28);
-    memcpy(&dmsc_h_gain_p1_value_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_1080P + 0x24), 36);
-    memcpy(&dmsc_h_gain_p1_range_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_1080P + 0x48), 36);
-    memcpy(&dmsc_h_gain_p1_stren_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp_1080P + 0x6c), 36);
-    memcpy(&dmsc_h_gain_p2_value_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_1080P + 0x10), 36);
-    memcpy(&dmsc_h_gain_p2_range_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_1080P + 0x34), 36);
-    memcpy(&dmsc_h_gain_p2_stren_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_1080P + 0x58), 36);
-    memcpy(&dmsc_h_gain_p3_value_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp_1080P + 0x7c), 36);
-    memcpy(&dmsc_h_gain_p3_range_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_1080P + 0x20), 36);
-    memcpy(&dmsc_h_gain_p3_stren_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_1080P + 0x44), 36);
-    memcpy(&dmsc_uu_np_0_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp_1080P + 0x68), 36);
-    memcpy(&dmsc_uu_np_1_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1080P + 0xc), 36);
-    memcpy(&dmsc_uu_np_2_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1080P + 0x30), 36);
-    memcpy(&dmsc_uu_np_3_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1080P + 0x54), 36);
-    memcpy(&dmsc_uu_np_4_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp_1080P + 0x78), 36);
-    memcpy(&dmsc_uu_np_5_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp + 0x20), 36);
-    memcpy(&dmsc_uu_np_6_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp + 0x44), 36);
-    memcpy(&dmsc_uu_np_7_array, (void *)((char *)&param_adr_weight_21_lut_array_tmp + 0x68), 36);
-    memcpy(&dmsc_uu_np_8_array, (void *)((char *)&param_adr_weight_22_lut_array_tmp + 0xc), 36);
-    memcpy(&dmsc_uu_np_9_array, (void *)((char *)&param_adr_weight_22_lut_array_tmp + 0x30), 36);
-    memcpy(&dmsc_uu_np_10_array, (void *)((char *)&param_adr_weight_22_lut_array_tmp + 0x54), 36);
-    memcpy(&dmsc_uu_np_11_array, (void *)((char *)&param_adr_weight_22_lut_array_tmp + 0x78), 36);
-    memcpy(&dmsc_uu_np_12_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp + 0x1c), 36);
-    memcpy(&dmsc_uu_np_13_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp + 0x40), 36);
-    memcpy(&dmsc_uu_np_14_array, (void *)((char *)&param_adr_weight_12_lut_array_tmp + 0x64), 36);
-    memcpy(&dmsc_uu_np_15_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp + 0x8), 36);
-    memcpy(&dmsc_sp_d_wei_np_0_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp + 0x2c), 36);
-    memcpy(&dmsc_sp_d_wei_np_1_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp + 0x50), 36);
-    memcpy(&dmsc_sp_d_wei_np_2_array, (void *)((char *)&param_adr_weight_02_lut_array_tmp + 0x74), 36);
-    memcpy(&dmsc_sp_d_wei_np_3_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp + 0x18), 36);
-    memcpy(&dmsc_sp_d_wei_np_4_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp + 0x3c), 36);
-    memcpy(&dmsc_sp_d_wei_np_5_array, (void *)((char *)&param_adr_weight_20_lut_array_tmp + 0x60), 36);
-    memcpy(&dmsc_sp_d_wei_np_6_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp + 0x4), 36);
-    memcpy(&dmsc_sp_d_wei_np_7_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp + 0x28), 36);
-    memcpy(&dmsc_sp_d_wei_np_8_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp + 0x4c), 36);
-    memcpy(&dmsc_sp_d_wei_np_9_array, (void *)((char *)&param_adr_centre_w_dis_array_tmp + 0x70), 36);
-    memcpy(&dmsc_sp_d_wei_np_10_array, (void *)((char *)&histSub_4096_diff + 0x18), 36);
-    memcpy(&dmsc_sp_d_wei_np_11_array, (void *)((char *)&histSub_4096 + 0x1c), 36);
-    memcpy(&dmsc_sp_d_wei_np_12_array, (void *)((char *)&min_kneepoint_y_tmp + 0x1c), 36);
-    memcpy(&dmsc_sp_d_wei_np_13_array, (void *)((char *)&map_kneepoint_y_pre + 0x14), 36);
-    memcpy(&dmsc_sp_d_wei_np_14_array, (void *)((char *)&map_kneepoint_y_pre + 0x38), 36);
-    memcpy(&dmsc_sp_d_wei_np_15_array, (void *)((char *)&map_kneepoint_y_pre + 0x5c), 36);
-    memcpy(&dmsc_sp_d_wei_np_16_array, (void *)((char *)&map_kneepoint_y_pre + 0x80), 36);
-    memcpy(&dmsc_sp_d_wei_np_17_array, (void *)((char *)&map_kneepoint_y_pre + 0xa4), 36);
-    memcpy(&dmsc_sp_d_wei_np_18_array, (void *)((char *)&map_kneepoint_y_pre + 0xc8), 36);
-    memcpy(&dmsc_sp_d_wei_np_19_array, (void *)((char *)&map_kneepoint_y_pre + 0xec), 36);
-    memcpy(&dmsc_sp_d_wei_np_20_array, (void *)((char *)&map_kneepoint_y_pre + 0x110), 36);
-    memcpy(&dmsc_sp_d_wei_np_21_array, (void *)((char *)&map_kneepoint_y_pre + 0x134), 36);
-    memcpy(&dmsc_sp_d_wei_np_22_array, (void *)((char *)&map_kneepoint_y_pre + 0x158), 36);
-    memcpy(&dmsc_sp_d_wei_np_23_array, (void *)((char *)&map_kneepoint_y_pre + 0x17c), 36);
-    memcpy(&dmsc_sp_d_wei_np_24_array, (void *)((char *)&map_kneepoint_y_pre + 0x1a0), 36);
-    memcpy(&dmsc_sp_d_wei_np_25_array, (void *)((char *)&map_kneepoint_y_pre + 0x1c4), 36);
-    memcpy(&dmsc_sp_d_wei_np_26_array, (void *)((char *)&map_kneepoint_y_pre + 0x1e8), 36);
-    memcpy(&dmsc_sp_d_wei_np_27_array, (void *)((char *)&map_kneepoint_y_pre + 0x20c), 36);
-    memcpy(&dmsc_sp_d_wei_np_28_array, (void *)((char *)&map_kneepoint_y_pre + 0x230), 36);
-    memcpy(&dmsc_sp_d_wei_np_29_array, (void *)((char *)&map_kneepoint_y_pre + 0x254), 36);
-    memcpy(&dmsc_sp_d_wei_np_30_array, (void *)((char *)&map_kneepoint_y_pre + 0x278), 36);
-    memcpy(&dmsc_sp_d_wei_np_31_array, (void *)((char *)&map_kneepoint_y_pre + 0x29c), 36);
-    memcpy(&dmsc_sp_ud_wei_np_0_array, (void *)((char *)&map_kneepoint_y_pre + 0x2c0), 36);
-    memcpy(&dmsc_sp_ud_wei_np_1_array, (void *)((char *)&map_kneepoint_y_pre + 0x2e4), 36);
-    memcpy(&dmsc_sp_ud_wei_np_2_array, (void *)((char *)&map_kneepoint_y_pre + 0x308), 36);
-    memcpy(&dmsc_sp_ud_wei_np_3_array, (void *)((char *)&map_kneepoint_y_pre + 0x32c), 36);
-    memcpy(&dmsc_sp_ud_wei_np_4_array, (void *)((char *)&map_kneepoint_y_pre + 0x350), 36);
-    memcpy(&dmsc_sp_ud_wei_np_5_array, (void *)((char *)&map_kneepoint_y_pre + 0x374), 36);
-    memcpy(&dmsc_sp_ud_wei_np_6_array, (void *)((char *)&map_kneepoint_y_pre + 0x398), 36);
-    memcpy(&dmsc_sp_ud_wei_np_7_array, (void *)((char *)&map_kneepoint_y_pre + 0x3bc), 36);
-    memcpy(&dmsc_sp_ud_wei_np_8_array, (void *)((char *)&map_kneepoint_y_pre + 0x3e0), 36);
-    memcpy(&dmsc_sp_ud_wei_np_9_array, (void *)((char *)&map_kneepoint_y_pre + 0x404), 36);
-    memcpy(&dmsc_sp_ud_wei_np_10_array, (void *)((char *)&map_kneepoint_y + 0x8), 36);
-    memcpy(&dmsc_sp_ud_wei_np_11_array, (void *)((char *)&map_kneepoint_y + 0x2c), 36);
-    memcpy(&dmsc_sp_ud_wei_np_12_array, (void *)((char *)&map_kneepoint_y + 0x50), 36);
-    memcpy(&dmsc_sp_ud_wei_np_13_array, (void *)((char *)&map_kneepoint_y + 0x74), 36);
-    memcpy(&dmsc_sp_ud_wei_np_14_array, (void *)((char *)&map_kneepoint_y + 0x98), 36);
-    memcpy(&dmsc_sp_ud_wei_np_15_array, (void *)((char *)&map_kneepoint_y + 0xbc), 36);
-    memcpy(&dmsc_sp_ud_wei_np_16_array, (void *)((char *)&map_kneepoint_y + 0xe0), 36);
-    memcpy(&dmsc_sp_ud_wei_np_17_array, (void *)((char *)&map_kneepoint_y + 0x104), 36);
-    memcpy(&dmsc_sp_ud_wei_np_18_array, (void *)((char *)&map_kneepoint_y + 0x128), 36);
-    memcpy(&dmsc_sp_ud_wei_np_19_array, (void *)((char *)&map_kneepoint_y + 0x14c), 36);
-    memcpy(&dmsc_sp_ud_wei_np_20_array, (void *)((char *)&map_kneepoint_y + 0x170), 36);
-    memcpy(&dmsc_sp_ud_wei_np_21_array, (void *)((char *)&map_kneepoint_y + 0x194), 36);
-    memcpy(&dmsc_sp_ud_wei_np_22_array, (void *)((char *)&map_kneepoint_y + 0x1b8), 36);
-    memcpy(&dmsc_sp_ud_wei_np_23_array, (void *)((char *)&map_kneepoint_y + 0x1dc), 36);
-    memcpy(&dmsc_sp_ud_wei_np_24_array, (void *)((char *)&map_kneepoint_y + 0x200), 36);
-    memcpy(&dmsc_sp_ud_wei_np_25_array, (void *)((char *)&map_kneepoint_y + 0x224), 36);
-    memcpy(&dmsc_sp_ud_wei_np_26_array, (void *)((char *)&map_kneepoint_y + 0x248), 36);
-    memcpy(&dmsc_sp_ud_wei_np_27_array, (void *)((char *)&map_kneepoint_y + 0x26c), 36);
-    memcpy(&dmsc_sp_ud_wei_np_28_array, (void *)((char *)&map_kneepoint_y + 0x290), 36);
-    memcpy(&dmsc_sp_ud_wei_np_29_array, (void *)((char *)&map_kneepoint_y + 0x2b4), 36);
-    memcpy(&dmsc_sp_ud_wei_np_30_array, (void *)((char *)&map_kneepoint_y + 0x2d8), 36);
-    memcpy(&dmsc_sp_ud_wei_np_31_array, (void *)((char *)&map_kneepoint_y + 0x2fc), 36);
-    memcpy(&dmsc_r_gain_0_array, (void *)((char *)&map_kneepoint_y + 0x320), 36);
-    memcpy(&dmsc_r_gain_1_array, (void *)((char *)&map_kneepoint_y + 0x344), 36);
-    memcpy(&dmsc_r_gain_2_array, (void *)((char *)&map_kneepoint_y + 0x368), 36);
-    memcpy(&dmsc_r_gain_3_array, (void *)((char *)&map_kneepoint_y + 0x38c), 36);
-    memcpy(&dmsc_r_gain_4_array, (void *)((char *)&map_kneepoint_y + 0x3b0), 36);
-    memcpy(&dmsc_r_gain_5_array, (void *)((char *)&map_kneepoint_y + 0x3d4), 36);
-    memcpy(&dmsc_r_gain_6_array, (void *)((char *)&map_kneepoint_y + 0x3f8), 36);
-    memcpy(&dmsc_r_gain_7_array, (void *)((char *)&map_kneepoint_y + 0x41c), 36);
-    memcpy(&dmsc_r_gain_8_array, (void *)((char *)&min_kneepoint_y + 0x20), 36);
-    memcpy(&dmsc_r_gain_9_array, (void *)((char *)&ctc_kneepoint_y + 0x18), 36);
-    memcpy(&dmsc_r_gain_10_array, (void *)&adr_ev_list_now, 36);
-    memcpy(&dmsc_r_gain_11_array, (void *)((char *)&adr_map_mode + 0x10), 36);
-    memcpy(&dmsc_r_gain_12_array, (void *)((char *)&adr_block_light + 0x8), 36);
-    memcpy(&dmsc_r_gain_13_array, (void *)((char *)&adr_block_light + 0x2c), 36);
-    memcpy(&dmsc_g_gain_0_array, (void *)((char *)&adr_light_end + 0x14), 36);
-    memcpy(&dmsc_g_gain_1_array, (void *)((char *)&adr_light_end + 0x38), 36);
-    memcpy(&dmsc_g_gain_2_array, (void *)((char *)&adr_light_end + 0x5c), 36);
-    memcpy(&dmsc_g_gain_3_array, (void *)((char *)&adr_ctc_map2cut_y + 0xc), 36);
-    memcpy(&dmsc_g_gain_4_array, (void *)((char *)&param_adr_gam_y_array + 0xc), 36);
-    memcpy(&dmsc_g_gain_5_array, (void *)((char *)&param_adr_gam_y_array + 0x30), 36);
-    memcpy(&dmsc_g_gain_6_array, (void *)((char *)&param_adr_gam_y_array + 0x54), 36);
-    memcpy(&dmsc_g_gain_7_array, (void *)((char *)&param_adr_gam_y_array + 0x78), 36);
-    memcpy(&dmsc_g_gain_8_array, (void *)((char *)&param_adr_gam_y_array + 0x9c), 36);
-    memcpy(&dmsc_g_gain_9_array, (void *)((char *)&param_adr_gam_y_array + 0xc0), 36);
-    memcpy(&dmsc_g_gain_10_array, (void *)((char *)&param_adr_gam_y_array + 0xe4), 36);
-    memcpy(&dmsc_g_gain_11_array, (void *)((char *)&param_adr_gam_y_array_def + 0x4), 36);
-    memcpy(&dmsc_g_gain_12_array, (void *)((char *)&param_adr_gam_y_array_def + 0x28), 36);
-    memcpy(&dmsc_g_gain_13_array, (void *)((char *)&param_adr_gam_y_array_def + 0x4c), 36);
-    memcpy(&dmsc_b_gain_0_array, (void *)((char *)&param_adr_gam_y_array_def + 0x70), 36);
-    memcpy(&dmsc_b_gain_1_array, (void *)((char *)&param_adr_gam_y_array_def + 0x94), 36);
-    memcpy(&dmsc_b_gain_2_array, (void *)((char *)&param_adr_gam_y_array_def + 0xb8), 36);
-    memcpy(&dmsc_b_gain_3_array, (void *)((char *)&param_adr_gam_y_array_def + 0xdc), 36);
-    memcpy(&dmsc_b_gain_4_array, (void *)((char *)&param_adr_gam_y_array_def + 0x100), 36);
-    memcpy(&dmsc_b_gain_5_array, (void *)((char *)&param_adr_gam_x_array + 0x20), 36);
-    memcpy(&dmsc_b_gain_6_array, (void *)((char *)&param_adr_gam_x_array + 0x44), 36);
-    memcpy(&dmsc_b_gain_7_array, (void *)((char *)&param_adr_gam_x_array + 0x68), 36);
-    memcpy(&dmsc_b_gain_8_array, (void *)((char *)&param_adr_gam_x_array + 0x8c), 36);
-    memcpy(&dmsc_b_gain_9_array, (void *)((char *)&param_adr_gam_x_array + 0xb0), 36);
-    memcpy(&dmsc_b_gain_10_array, (void *)((char *)&param_adr_gam_x_array + 0xd4), 36);
-    memcpy(&dmsc_b_gain_11_array, (void *)((char *)&param_adr_gam_x_array + 0xf8), 36);
-    memcpy(&dmsc_b_gain_12_array, (void *)((char *)&adr_tm_base_lut + 0x18), 36);
-    memcpy(&dmsc_b_gain_13_array, (void *)((char *)&param_adr_centre_w_dis_array + 0x8), 36);
+    unsigned char *params;
+    uint32_t sharpness;
+    int ret;
 
-    /* fragment 244: Arithmetic */
-    v0 = (uintptr_t *)&get_clk_name;
+    params = private_vmalloc(REGTRACE_T23_DMSC_TUNING_SIZE);
+    if (!params)
+        return -ENOMEM;
 
-    /* fragment 245: MemoryAccess */
-    a0 = *(uint8_t *)((char *)&get_clk_name + 18740);
-    v0 = 128;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_DMSC_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_DMSC_TUNING_SIZE);
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: DMSC tuning refresh failed path=%s ret=%d\n",
+               regtrace_t23_source_core_tuning_path, ret);
+        private_vfree(params);
+        return ret;
+    }
 
-    /* fragment 246: Branch */
-    _bc_a0_246 = a0 == v0;
-    v0 = (uintptr_t *)&tisp_dmsc_sharpness_set;
-    if (_bc_a0_246) { goto tiziano_dmsc_params_refresh0x16fc; }
+#define REGTRACE_T23_DMSC_COPY_FIELD(name, offset, size) \
+    memcpy(&(name), params + (offset), (size));
+    REGTRACE_T23_DMSC_TUNING_FIELDS(REGTRACE_T23_DMSC_COPY_FIELD)
+#undef REGTRACE_T23_DMSC_COPY_FIELD
 
-    /* fragment 247: CallSetup */
-    v0 = (uint32_t *)((uintptr_t (*)(uintptr_t))(tisp_dmsc_sharpness_set))(a0);
-
-tiziano_dmsc_params_refresh0x16fc:
-    /* fragment 248: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 249: Arithmetic */
-    v0 = 0;
-
-    /* fragment 250: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    private_vfree(params);
+    sharpness = tparams[0x3934];
+    if (sharpness != 0x80U)
+        tisp_dmsc_sharpness_set(sharpness, 0);
     return 0;
 }
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000564a4 origin=fragment_seed original=tiziano_dmsc_dn_params_refresh */
 int32_t tiziano_dmsc_dn_params_refresh(void)
 {
@@ -88503,35 +89792,21 @@ int32_t tisp_s_wb_ct(uint32_t a0, uintptr_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000664cc origin=model_output original=tisp_s_awb_cluster */
-int32_t tisp_s_awb_cluster(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4)
+int32_t tisp_s_awb_cluster(int32_t arg1,
+                           uint32_t arg2, uint32_t arg3, uint32_t arg4,
+                           uint32_t arg5, uint32_t arg6, uint32_t arg7,
+                           uint32_t arg8, uint32_t arg9, uint32_t arg10,
+                           uint32_t arg11)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    return tisp_awb_set_cluster_awb_params(arg1, arg2, arg3, arg4,
+                                           arg5, arg6, arg7, arg8,
+                                           arg9, arg10, arg11);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066534 origin=fragment_seed original=tisp_g_awb_cluster */
 int32_t tisp_g_awb_cluster(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_awb_get_cluster_awb_params)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return tisp_awb_get_cluster_awb_params(a0, a1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006655c origin=model_output original=tisp_s_awb_ct_trend */
@@ -88585,93 +89860,43 @@ int32_t tisp_g_awb_ct_trend(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000665cc origin=fragment_seed original=tisp_g_ccm_attr */
 int tisp_g_ccm_attr(uint32_t a0, void *a1)
 {
-    uint32_t s0 = (uint32_t)a1;
-    uint32_t *s2 = a0;
     uint32_t v0 = system_reg_read(12);
-    uint32_t v1 = v0 & 0x10000;
-    uint32_t s1 = (uint32_t)&tisp_bcsh_get_attr;
+    uint8_t bcsh_attr[0x28];
 
-    if (v1 != 0) {
-        tisp_ccm_get_attr(s2, (void *)0, (void *)0, (void *)0, (void *)0, (void *)0);
-        goto out;
+    if (v0 & 0x10000) {
+        tisp_ccm_get_attr((void *)(uintptr_t)a0, a1, NULL, NULL, NULL, NULL);
+    } else if (v0 & 0x200) {
+        tisp_bcsh_get_attr(a0, a1);
+    } else {
+        tisp_ccm_get_attr((void *)(uintptr_t)a0, a1, NULL, NULL, NULL, NULL);
+        tisp_bcsh_get_attr(a0, bcsh_attr);
+        if ((int8_t)bcsh_attr[1] == 1 &&
+            regtrace_t23_valid_ptr((uintptr_t)a1))
+            ((uint8_t *)a1)[1] = 1;
     }
-
-    v0 = v0 & 0x200;
-    if (v0 != 0) {
-        tisp_bcsh_get_attr(s2);
-        goto out;
-    }
-
-    tisp_ccm_get_attr(s2, (void *)0, (void *)0, (void *)0, (void *)0, (void *)0);
-    {
-        uint8_t *var_38;
-        tisp_bcsh_get_attr(s2);
-        int8_t var_37 = (int8_t)var_38;
-
-        if (var_37 == 1) {
-            ((uint8_t *)s0)[1] = (uint8_t)var_37;
-        }
-    }
-
-out:
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066690 origin=fragment_seed original=tisp_s_ccm_attr */
-int tisp_s_ccm_attr(const void *in)
+int tisp_s_ccm_attr(uintptr_t context, const void *in)
 {
-    uint32_t local_38[9];
-    uint32_t local_10[10];
-    uint32_t local_14[9];
-    uint8_t flag_byte;
-    const uint8_t *s0 = in;
-    uint32_t s3 = *(const uint32_t *)in;
-    uint32_t *v0;
-    uint32_t v1;
+    uint8_t ccm_attr[0x28];
+    uint32_t mode;
 
-    /* memcpy(&local_38, 0x6dc70, 36) */
-    memcpy(local_38, (void *)(uintptr_t)((char *)&CSWTCH_12 + 0x1c), 36);
-
-    /* v0 = system_reg_read(12) */
-    v0 = system_reg_read(12);
-
-    /* v1 = v0 & 0x10000 */
-    v1 = (uintptr_t)v0 & 0x10000;
-
-    if (v1 == 0) {
-        /* v0 & 0x200 == 0 branch */
-        v0 = (uintptr_t)v0 & 0x200;
-        if (v0 != 0) {
-            /* tisp_bcsh_set_attr(s3) */
-            tisp_bcsh_set_attr();
-            goto epilogue;
-        }
-
-        /* memcpy(&local_10, s0, 40) */
-        memcpy(local_10, s0, 40);
-
-        /* memcpy(&local_14, &local_38, 36) */
-        memcpy(local_14, local_38, 36);
-
-        /* flag_byte = *(uint8_t *)(s0 + 1) */
-        flag_byte = s0[1];
-
-        if (flag_byte != 0) {
-            /* *(uint8_t *)(s0 + 1) = 0 */
-            *(uint8_t *)((char *)s0 + 1) = 0;
-        }
-
-        /* tisp_ccm_set_attr(s3, s0) */
-        tisp_ccm_set_attr(0, 0);
-
-        /* tisp_bcsh_set_attr(s3) */
-        tisp_bcsh_set_attr();
+    if (!regtrace_t23_valid_ptr((uintptr_t)in))
+        return -EINVAL;
+    mode = system_reg_read(12);
+    if (mode & 0x10000) {
+        tisp_ccm_set_attr((uint32_t)context, (uint32_t)(uintptr_t)in);
+    } else if (mode & 0x200) {
+        tisp_bcsh_set_attr(context, in);
     } else {
-        /* tisp_ccm_set_attr(s3, s0) */
-        tisp_ccm_set_attr(0, 0);
+        memcpy(ccm_attr, in, sizeof(ccm_attr));
+        ccm_attr[1] = 0;
+        tisp_ccm_set_attr((uint32_t)context,
+                          (uint32_t)(uintptr_t)ccm_attr);
+        tisp_bcsh_set_attr(context, in);
     }
-
-epilogue:
     return 0;
 }
 

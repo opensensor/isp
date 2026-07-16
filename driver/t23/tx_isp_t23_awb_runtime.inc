@@ -236,7 +236,7 @@ static int regtrace_t23_awb_hlil_calculate(
             bg_q = regtrace_t23_awb_hlil_mul_q(raw_bg_q, coefficient_bg_q);
         }
 
-        if (pixels < REGTRACE_T23_AWB_HLIL_PIXEL_THRESHOLD ||
+        if (pixels < regtrace_t23_source_awb_hlil_min_pixels ||
             !rg_q || !bg_q) {
             regtrace_t23_awb_hlil_ratio[i] = 0;
             regtrace_t23_awb_hlil_ratio[bg_offset + i] = 0;
@@ -500,6 +500,44 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
         regtrace_t23_source_awb_hlil_rg = result.rg;
         regtrace_t23_source_awb_hlil_bg = result.bg;
         regtrace_t23_source_awb_hlil_ct = result.ct;
+        if (regtrace_t23_source_ccm_events &&
+            regtrace_t23_source_ccm_tuning_init &&
+            result.ct >= 1500U && result.ct <= 10000U) {
+            uint32_t delta = regtrace_t23_source_ccm_last_ct >= result.ct ?
+                regtrace_t23_source_ccm_last_ct - result.ct :
+                result.ct - regtrace_t23_source_ccm_last_ct;
+
+            if (delta > 0x20U)
+                regtrace_t23_source_ccm_commit(
+                    result.ct, regtrace_t23_source_ae_hlil_ev);
+        }
+        if (regtrace_t23_source_lsc_events &&
+            result.ct >= regtrace_t23_lsc_sc2336_ct_points[0] &&
+            result.ct <= 10000U) {
+            uint32_t delta = regtrace_t23_source_lsc_last_ct >= result.ct ?
+                regtrace_t23_source_lsc_last_ct - result.ct :
+                result.ct - regtrace_t23_source_lsc_last_ct;
+
+            if (delta > 0x20U) {
+                tisp_lsc_ct_update(result.ct);
+                if (!tisp_lsc_write_lut_datas()) {
+                    regtrace_t23_source_lsc_last_ct = result.ct;
+                    regtrace_t23_source_lsc_event_count++;
+                }
+            }
+        }
+        if (regtrace_t23_source_bcsh_events &&
+            result.ct >= 2000U && result.ct <= 10000U) {
+            uint32_t delta = regtrace_t23_source_bcsh_last_ct >= result.ct ?
+                regtrace_t23_source_bcsh_last_ct - result.ct :
+                result.ct - regtrace_t23_source_bcsh_last_ct;
+
+            if (delta > 0x20U) {
+                tisp_bcsh_ct_update(0, result.ct);
+                regtrace_t23_source_bcsh_last_ct = result.ct;
+                regtrace_t23_source_bcsh_ct_events++;
+            }
+        }
         if ((gain_rg > regtrace_t23_source_awb_last_rgain ?
              gain_rg - regtrace_t23_source_awb_last_rgain :
              regtrace_t23_source_awb_last_rgain - gain_rg) > 4U ||
@@ -593,6 +631,13 @@ static void regtrace_t23_source_awb_hlil_reset(void)
     regtrace_t23_source_awb_hlil_rg = 0;
     regtrace_t23_source_awb_hlil_bg = 0;
     regtrace_t23_source_awb_hlil_ct = REGTRACE_T23_AWB_HLIL_STARTUP_CT;
+    regtrace_t23_source_ccm_event_count = 0;
+    regtrace_t23_source_ccm_last_ct = regtrace_t23_source_ccm_runtime_ct;
+    regtrace_t23_source_lsc_event_count = 0;
+    regtrace_t23_source_lsc_last_ct = regtrace_t23_source_lsc_runtime_ct;
+    regtrace_t23_source_lsc_update_pending = false;
+    regtrace_t23_source_bcsh_ct_events = 0;
+    regtrace_t23_source_bcsh_last_ct = 3187U;
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source AWB HLIL reset ev=%u ct=%u q=%u mf=%u/%u interval=%u enabled=%u\n",
            REGTRACE_T23_AWB_HLIL_STARTUP_EV,

@@ -96,7 +96,45 @@ def pack16(high: int, low: int) -> int:
     return ((high & 0xFFFF) << 16) | (low & 0xFFFF)
 
 
-def render(path: Path, event_ev_raw: int) -> str:
+def interpolate_ct_matrix(data: dict[str, tuple[int, ...]], ct: int) -> tuple[int, ...]:
+    """Apply the seven-part T23 BCSH CT interpolation state machine."""
+    a = tuple(signed14(value) for value in data["ccm_a"])
+    t = tuple(signed14(value) for value in data["ccm_t"])
+    d = tuple(signed14(value) for value in data["ccm_d"])
+    d2 = tuple(signed14(value) for value in data["ccm_d2"])
+    ct_a, ct_t, ct_d, ct_d2 = data["ct_list"]
+    margin = 200
+
+    def blend(
+        low: tuple[int, ...],
+        high: tuple[int, ...],
+        start: int,
+        end: int,
+    ) -> tuple[int, ...]:
+        distance = min(max(ct - start, 0), end - start)
+        return tuple(
+            lo + (hi - lo) * distance // (end - start)
+            if hi >= lo
+            else lo - (lo - hi) * distance // (end - start)
+            for lo, hi in zip(low, high)
+        )
+
+    if ct <= ct_a + margin:
+        return a
+    if ct < ct_t - margin:
+        return blend(a, t, ct_a + margin, ct_t - margin)
+    if ct <= ct_t + margin:
+        return t
+    if ct < ct_d - margin:
+        return blend(t, d, ct_t + margin, ct_d - margin)
+    if ct <= ct_d + margin:
+        return d
+    if ct < ct_d2 - margin:
+        return blend(d, d2, ct_d + margin, ct_d2 - margin)
+    return d2
+
+
+def render(path: Path, event_ev_raw: int, color_temperature: int | None) -> str:
     blob = path.read_bytes()
     data = {
         name: read_words(blob, offset, count)
@@ -105,20 +143,16 @@ def render(path: Path, event_ev_raw: int) -> str:
 
     ct_list = data["ct_list"]
     settled_ev = event_ev_raw >> 10
-    settled_ct = read_words(blob, AWB_CT_OFFSET, 1)[0]
+    settled_ct = (read_words(blob, AWB_CT_OFFSET, 1)[0]
+                  if color_temperature is None else color_temperature)
     if tuple(sorted(ct_list)) != ct_list:
         raise ValueError(f"BCSH CT list is not sorted: {ct_list!r}")
-    if not (ct_list[2] - 200 <= settled_ct <= ct_list[2] + 200):
-        raise ValueError(
-            f"first-event CT {settled_ct} does not select the OEM D plateau"
-        )
     if data["ccm_en"] != (1,):
         raise ValueError("SC2336 BCSH internal CCM is unexpectedly disabled")
 
-    # The OEM init starts at CT 6000/D2, but the first AWB CT event changes the
-    # active matrix to the tuning blob's current CT. For SC2336 that is the D
-    # plateau. Convert its 14-bit coefficients before applying M * CCM * Minv.
-    ccm = tuple(signed14(value) for value in data["ccm_d"])
+    # The OEM init starts at CT 6000/D2, then AWB selects one of four matrix
+    # anchors or one of the three interpolation bands between them.
+    ccm = interpolate_ct_matrix(data, settled_ct)
     matrix = tuple(signed32(value) for value in data["matrix"])
     matrix_inv = tuple(signed32(value) for value in data["matrix_inv"])
     stage1 = matmul(matrix, ccm, 10)
@@ -235,9 +269,11 @@ def main() -> None:
     parser.add_argument("tuning_blob", type=Path)
     parser.add_argument("--event-ev", type=lambda value: int(value, 0),
                         default=DEFAULT_EVENT_EV)
+    parser.add_argument("--ct", type=lambda value: int(value, 0),
+                        help="override the tuning blob's startup color temperature")
     parser.add_argument("-o", "--output", type=Path)
     args = parser.parse_args()
-    output = render(args.tuning_blob, args.event_ev)
+    output = render(args.tuning_blob, args.event_ev, args.ct)
     if args.output:
         args.output.write_text(output, encoding="ascii")
     else:
