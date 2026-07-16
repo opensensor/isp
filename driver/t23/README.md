@@ -131,7 +131,15 @@ Current smoke-test status:
   available for diagnostics while the pre-CCM spatial color error is repaired.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
-  indoor color diagnostics.
+  indoor color diagnostics. The recovered transform primitives now use the
+  exact 31-row by 42-node padded mesh, reverse its 252-byte packed rows through
+  the OEM-sized `0x190` persistent scratch buffer, and exchange packed 12-bit
+  mirror lanes without corrupting the adjacent coefficient. The public
+  horizontal/vertical flip wrapper also forwards all five arguments. A
+  256-frame device cycle retained neutral `UAVG/VAVG` of `128.2/127.1`; the
+  binary audit moved the row transform out of the hard-stub class, reducing
+  totals from 49 stubs/90 collapses to 48/90. Its recovered instruction count
+  is `0.98x` OEM and the wrapper has the exact OEM instruction count.
 - Static initialization has reached the same visual plateau as the T31/T40
   recovery work. Further bring-up uses `tx-isp-t23-hlil.txt` as the behavioral
   specification for the dynamic 3A event path; T31/T40 source and history are

@@ -50741,6 +50741,11 @@ int32_t tisp_lsc_write_lut_datas(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021d44 origin=model_output original=tiziano_lsc_init */
 int32_t tiziano_lsc_init(uint32_t arg1, uint32_t arg2)
 {
+    if (!tmp_space) {
+        tmp_space = (uintptr_t)private_vmalloc(0x190U);
+        if (!tmp_space)
+            return -ENOMEM;
+    }
     system_reg_write(0x3800U,
         (REGTRACE_T23_LSC_SC2336_MESH_HEIGHT << 16) |
         REGTRACE_T23_LSC_SC2336_MESH_WIDTH);
@@ -50842,30 +50847,64 @@ common_after_memcpy:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000220a8 origin=fragment_seed original=tisp_lsc_upside_down_lut */
 int tisp_lsc_upside_down_lut(uint32_t *lut, int rows, int cols_padded)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    size_t row_bytes;
+    size_t row_stride;
+    uint8_t *top;
+    uint8_t *bottom;
+    int row;
+
+    if (!lut || rows <= 0 || cols_padded <= 0)
+        return -EINVAL;
+    row_bytes = (size_t)cols_padded * 6U;
+    row_stride = ((size_t)cols_padded * 3U / 2U) * sizeof(uint32_t);
+    if (row_bytes > 0x190U)
+        return -E2BIG;
+    if (!tmp_space) {
+        tmp_space = (uintptr_t)private_vmalloc(0x190U);
+        if (!tmp_space)
+            return -ENOMEM;
+    }
+
+    memset((void *)tmp_space, 0, row_bytes);
+    top = (uint8_t *)lut;
+    bottom = top + (size_t)(rows - 1) * row_stride;
+    for (row = 0; row < (rows >> 1); ++row) {
+        memcpy((void *)tmp_space, top, row_bytes);
+        memmove(top, bottom, row_bytes);
+        memcpy(bottom, (void *)tmp_space, row_bytes);
+        top += row_stride;
+        bottom -= row_stride;
+    }
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022204 origin=model_output original=tisp_lsc_lut_mirror_exchange */
 int32_t tisp_lsc_lut_mirror_exchange(void *arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5)
 {
-	int32_t *a1_1 = (void *)((uintptr_t)arg1 + arg2);
-	int32_t *a0 = (void *)((uintptr_t)arg1 + arg3);
+    uint32_t *lut = arg1;
+    uint32_t *left;
+    uint32_t *right;
+    uint32_t left_shift;
+    uint32_t right_shift;
+    uint32_t left_value;
+    uint32_t right_value;
 
-	uint32_t v1 = (uint32_t)arg4 * 12;
-	uint32_t t3 = (uint32_t)arg5 * 12;
-	uint32_t t0 = (uint32_t)*a0;
-	uint32_t v0 = (uint32_t)*a1_1;
-
-	uint32_t result = (((v0 >> (v1 & 0x1f)) & 0xfff) << (t3 & 0x1f)
-			 | (0xfff << (((1 - arg5) * 12) & 0x1f) & t0)) & 0xffffff;
-
-	*a1_1 = (((t0 >> (t3 & 0x1f)) & 0xfff) << (v1 & 0x1f)
-		 | (0xfff << (((1 - arg4) * 12) & 0x1f) & v0)) & 0xffffff;
-
-	*a0 = (int32_t)result;
-
-	return (int32_t)result;
+    if (!lut || arg2 < 0 || arg3 < 0 || (unsigned int)arg4 > 1U ||
+        (unsigned int)arg5 > 1U)
+        return -EINVAL;
+    left = &lut[arg2];
+    right = &lut[arg3];
+    left_shift = (uint32_t)arg4 * 12U;
+    right_shift = (uint32_t)arg5 * 12U;
+    left_value = (*left >> left_shift) & 0xfffU;
+    right_value = (*right >> right_shift) & 0xfffU;
+    *left = (*left & ~(0xfffU << left_shift)) |
+            (right_value << left_shift);
+    *right = (*right & ~(0xfffU << right_shift)) |
+             (left_value << right_shift);
+    *left &= 0x00ffffffU;
+    *right &= 0x00ffffffU;
+    return (int32_t)*right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022290 origin=fragment_seed original=tisp_lsc_mirror_flip */
@@ -92552,15 +92591,7 @@ int tisp_g_rgb_coefft(int32_t *out)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000677cc origin=fragment_seed original=tisp_lsc_hvflip */
 int32_t tisp_lsc_hvflip(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
 {
-    uint32_t t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return tisp_lsc_mirror_flip(a0, a1, a2, a3, 0);
-
-    return 0;
+    return tisp_lsc_mirror_flip(a0, a1, a2, a3, arg4);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000677dc origin=fragment_seed original=tisp_s_mscaler_mask_block_attr */
