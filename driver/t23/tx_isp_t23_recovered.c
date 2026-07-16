@@ -1047,8 +1047,11 @@ static unsigned char global_wdr_en[8];
 static unsigned char sensor_ctrl[180];
 static unsigned char sensor_info[156];
 static uintptr_t (*tispinfo)();
-/* Recovered initialized object tparams: materialized first 16384 of 166224 byte(s). */
-static unsigned char __attribute__((aligned(4))) tparams[16384] = {
+#define T23_TPARAMS_ACTIVE_OFFSET 0x13100U
+#define T23_TPARAMS_BANK_SIZE 0x15844U
+#define T23_TPARAMS_OBJECT_SIZE 0x28944U
+/* The OEM object includes metadata followed by one full active tuning bank. */
+static unsigned char __attribute__((aligned(4))) tparams[T23_TPARAMS_OBJECT_SIZE] = {
     0x54, 0x49, 0x53, 0x50, 0x5f, 0x50, 0x41, 0x52, 0x41, 0x4d, 0x5f, 0x54, 0x4f, 0x50, 0x5f, 0x42, 
     0x59, 0x50, 0x41, 0x53, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -15228,7 +15231,7 @@ int64_t tisp_day_or_night_s_ctrl(uintptr_t a0, uint32_t a1);
 int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2);
 uint32_t tisp_cust_mode_g_ctrl(void);
 int32_t tisp_day_or_night_g_ctrl(uint32_t a0);
-uint32_t tisp_switch_bin(uint32_t a0, unsigned int a1);
+uint32_t tisp_switch_bin(uint32_t a0);
 int32_t tisp_mirror_enable(int32_t arg1, char arg2);
 int32_t tisp_hv_flip_enable(int32_t arg1, char arg2);
 int tisp_hv_flip_get(void);
@@ -90385,8 +90388,10 @@ int32_t tisp_enable_tuning(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064c00 origin=fragment_seed original=tisp_disable_tuning */
 void tisp_disable_tuning(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return;
+    if (tisp_tattr) {
+        private_vfree((void *)tisp_tattr);
+        tisp_tattr = 0;
+    }
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064c3c origin=fragment_seed original=tisp_get_tuning */
@@ -90410,87 +90415,32 @@ uint32_t tisp_get_tuning(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064c48 origin=fragment_seed original=tisp_day_or_night_s_ctrl */
 int64_t tisp_day_or_night_s_ctrl(uintptr_t a0, uint32_t a1)
 {
-    uint32_t *s0;
-    uint32_t *s1;
-    uint32_t *v0;
-    uint32_t v1;
-    uint32_t a0_local;
-    uint32_t a1_local;
-    uint32_t *a2;
-    uint32_t *a3;
-    uint32_t *t0;
-    uint32_t t1;
-    uint32_t *i;
+    uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
+    const void *selected;
+    uint32_t bypass;
+    uint32_t i;
 
-    s0 = a0;
-    if (a1 != 0) {
-        goto err_label;
-    }
+    if (a0 >= sizeof(day_night) / sizeof(uint32_t))
+        return -EINVAL;
+    if (a1 == 0)
+        selected = (const void *)tparams_day;
+    else if (a1 == 1)
+        selected = (const void *)tparams_night;
+    else
+        return -EINVAL;
+    if (!selected)
+        return -ENODEV;
 
-    /* a1 == 0: day mode */
-    v0 = *(uint32_t *)((char *)((char *)&tparams_day));
-    memcpy((void *)&tparams, (void *)v0, 0x15844);
+    memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
+    *(uint32_t *)(void *)(tisp_par_info + a0 * 156U + 124U) = a1;
+    *(uint32_t *)(void *)(day_night + a0 * sizeof(uint32_t)) = 0;
 
-    a0_local = (uintptr_t)s0 * 156;
-    v0 = (uintptr_t *)&tisp_par_info;
-    v0 = a0_local + (uintptr_t)v0;
-    *(uint32_t *)((char *)v0 + 124) = 0;
-    goto set_day_night;
-
-err_label:
-    v0 = 1;
-    if (a1 != v0) {
-        /* a1 != 0 && a1 != 1: error */
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)((const char *)((char *)&g_abs_6f7ec)), (uintptr_t)(175));
-        return 0;
-    }
-
-    /* a1 == 1: night mode */
-    s1 = a1;
-    v0 = *(uint32_t *)((char *)((char *)&tparams_night));
-    memcpy((void *)&tparams, (void *)v0, 0x15844);
-
-    a0_local = (uintptr_t)s0 * 156;
-    v0 = (uintptr_t *)&tisp_par_info;
-    v0 = a0_local + (uintptr_t)v0;
-    *(uint32_t *)((char *)v0 + 124) = s1;
-
-set_day_night:
-    v0 = (uintptr_t *)&day_night;
-    v1 = (uintptr_t)s0 << 2;
-    v0 = v1 + (uintptr_t)v0;
-    *(uint32_t *)((char *)v0 + 0) = 0;
-
-    /* system_reg_read(12) */
-    v0 = system_reg_read(12);
-
-    /* Loop: for (i = 0; i != 32; i++) */
-    a3 = (uint32_t *)((char *)&tparams + 0x3100);
-    a2 = (uint32_t *)&tparams;
-    i = 0;
-    t1 = 1;
-    t0 = 32;
-
-loop_start:
-    a0_local = (uintptr_t)i << 2;
-    a0_local = a0_local + (uintptr_t)a3;
-    a1_local = t1 << (uintptr_t)i;
-    a1_local = ~a1_local;
-    a0_local = a2 + a0_local;
-    v0 = a1_local & (uintptr_t)v0;
-    a1_local = *(uint32_t *)((char *)a0_local + 0);
-    a1_local = a1_local << (uintptr_t)i;
-    i = i + 1;
-    v0 = a1_local + (uintptr_t)v0;
-    if (i != t0) {
-        goto loop_start;
-    }
-
-    /* system_reg_write(12, (v0 & 0xb577fffd) | 0x34000009) */
-    system_reg_write(12, ((uintptr_t)v0 & 0xb577fffd) | 0x34000009);
+    bypass = system_reg_read(12);
+    for (i = 0; i < 32; i++)
+        bypass = (bypass & ~(1U << i)) | (active[i] << i);
+    system_reg_write(12, (bypass & 0xb577fffdU) | 0x34000009U);
 
     tiziano_defog_dn_params_refresh();
-    s0 = (uintptr_t)s0 << 2;
     tiziano_ae_dn_params_refresh();
     tiziano_awb_dn_params_refresh();
     tiziano_dmsc_dn_params_refresh();
@@ -90509,10 +90459,9 @@ loop_start:
     tiziano_ydns_dn_params_refresh();
 
     cust_mode = 0;
-    *(uint8_t *)((char *)((char *)&tispPollValue)) = 1;
-    v0 = (uintptr_t *)&day_night;
-    v0 = (uintptr_t)(uintptr_t)v0 + (uintptr_t)s0;
-    *(uint8_t *)((char *)((char *)&tispPollValue + 0x2)) = *(uint8_t *)((char *)v0 + 0);
+    *(uint8_t *)(void *)&tispPollValue = 1;
+    *((uint8_t *)(void *)&tispPollValue + 2) =
+        day_night[a0 * sizeof(uint32_t)];
     __wake_up(&dumpQueue, 1, 1, 0);
 
     return 0;
@@ -90521,154 +90470,98 @@ loop_start:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064f18 origin=fragment_seed original=tisp_cust_mode_s_ctrl */
 int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2)
 {
-    int *i = 0;
-	uint32_t tparams_cust_1 = *(uint32_t *)((char *)&tparams_cust_1 + 0);
+    uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
+    const void *selected = NULL;
+    uint32_t bypass;
+    uint32_t dn;
+    uint32_t i;
 
-	if (tparams_cust_1 == 0)
-		return -1;
+    if (!tparams_cust)
+        return -1;
 
-	if (arg2 == 1) {
-		memcpy((void *)((char *)&tparams + 0x13100), (void *)(uintptr_t)tparams_cust_1, 0x15844);
-		*(uint32_t *)((char *)&list_move + 0) = arg2;
-		goto after_memcpy;
-	} else if (arg2 == 0) {
-		uint32_t *day_night_ptr = (uint32_t *)((char *)&day_night_ptr + (arg1 << 2));
-		int32_t *v0_1 = *day_night_ptr;
+    if (arg2 == 1) {
+        selected = (const void *)tparams_cust;
+        cust_mode = 1;
+    } else if (arg2 == 0) {
+        if (arg1 >= sizeof(day_night) / sizeof(uint32_t))
+            return -EINVAL;
+        dn = *(uint32_t *)(void *)(day_night + arg1 * sizeof(uint32_t));
+        if (dn == 0)
+            selected = (const void *)tparams_day;
+        else if (dn == 1)
+            selected = (const void *)tparams_night;
+        cust_mode = 0;
+    }
 
-		if (v0_1 == 0) {
-			memcpy((void *)((char *)&tparams + 0x13100), (void *)tparams_day, 0x15844);
-		} else if (v0_1 != 1) {
-			((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s:%d:can not support this mode!!!"), (uintptr_t)("tisp_cust_mode_s_ctrl"), (uintptr_t)(236));
-		} else {
-			memcpy((void *)((char *)&tparams + 0x13100), (void *)tparams_night, 0x15844);
-		}
+    if ((arg2 == 0 || arg2 == 1) && !selected)
+        return -ENODEV;
+    if (selected)
+        memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
 
-		*(uint32_t *)((char *)&list_move + 0) = 0;
-	}
+    bypass = system_reg_read(12);
+    for (i = 0; i < 32; i++)
+        bypass = (bypass & ~(1U << i)) | (active[i] << i);
+    system_reg_write(12, (bypass & 0xb577fffdU) | 0x34000009U);
 
-after_memcpy:
-	{
-		uint32_t v0_2 = system_reg_read(0xc);
-		uint32_t *i;
-
-		for (i = 0; i != 0x20; i++) {
-			uint32_t v0_3 = ~(1 << ((uintptr_t)i & 0x1f)) & v0_2;
-			uint32_t a1_4 = (*(uint32_t *)((char *)((char *)&tparams + 0x23100) + ((uintptr_t)i << 2))) << ((uintptr_t)i & 0x1f);
-			v0_2 = a1_4 + v0_3;
-		}
-
-		system_reg_write(0xc, (v0_2 & 0xb577fffd) | 0x34000009);
-		tiziano_defog_dn_params_refresh();
-		tiziano_ae_dn_params_refresh();
-		tiziano_awb_dn_params_refresh();
-		tiziano_dmsc_dn_params_refresh();
-		tiziano_sharpen_dn_params_refresh();
-		tiziano_mdns_dn_params_refresh();
-		tiziano_sdns_dn_params_refresh();
-		tiziano_gib_dn_params_refresh();
-		tiziano_lsc_dn_params_refresh();
-		tiziano_ccm_dn_params_refresh();
-		tiziano_clm_dn_params_refresh();
-		tiziano_gamma_dn_params_refresh();
-		tiziano_adr_dn_params_refresh();
-		tiziano_dpc_dn_params_refresh();
-		tiziano_af_dn_params_refresh();
-		tiziano_bcsh_dn_params_refresh();
-		tiziano_ydns_dn_params_refresh();
-	}
-
-	return 0;
+    tiziano_defog_dn_params_refresh();
+    tiziano_ae_dn_params_refresh();
+    tiziano_awb_dn_params_refresh();
+    tiziano_dmsc_dn_params_refresh();
+    tiziano_sharpen_dn_params_refresh();
+    tiziano_mdns_dn_params_refresh();
+    tiziano_sdns_dn_params_refresh();
+    tiziano_gib_dn_params_refresh();
+    tiziano_lsc_dn_params_refresh();
+    tiziano_ccm_dn_params_refresh();
+    tiziano_clm_dn_params_refresh();
+    tiziano_gamma_dn_params_refresh();
+    tiziano_adr_dn_params_refresh();
+    tiziano_dpc_dn_params_refresh();
+    tiziano_af_dn_params_refresh();
+    tiziano_bcsh_dn_params_refresh();
+    tiziano_ydns_dn_params_refresh();
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006519c origin=fragment_seed original=tisp_cust_mode_g_ctrl */
 uint32_t tisp_cust_mode_g_ctrl(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&tparams_cust;
-
-    /* fragment 1: MemoryAccess */
-    v1 = *(uint32_t *)((char *)((char *)&tparams_cust));
-
-    /* fragment 2: Branch */
-    v0 = -1;
-    if (v1 == 0) { goto tisp_cust_mode_g_ctrl0x18; }
-
-    /* fragment 3: Arithmetic */
-    v0 = (uintptr_t *)&cust_mode;
-
-    /* fragment 4: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&cust_mode));
-
-tisp_cust_mode_g_ctrl0x18:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 651b8:	00000000 	nop */
-
-    return (uint32_t)v0;
+    return tparams_cust ? (uint32_t)cust_mode : (uint32_t)-1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000651bc origin=fragment_seed original=tisp_day_or_night_g_ctrl */
 int32_t tisp_day_or_night_g_ctrl(uint32_t a0)
 {
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = 156;
-    a1 = a0 * (uintptr_t)v0;
-    v1 = (uintptr_t)&tisp_par_info;
-    v1 = v1;
-    a0 = a1 + v1;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 124);
-
-    return 0;
+    if (a0 >= sizeof(tisp_par_info) / 156U)
+        return -EINVAL;
+    return *(uint32_t *)(void *)(tisp_par_info + a0 * 156U + 124U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000651d8 origin=fragment_seed original=tisp_switch_bin */
-uint32_t tisp_switch_bin(uint32_t a0, unsigned int a1)
+uint32_t tisp_switch_bin(uint32_t a0)
 {
-    uint32_t *s0 = a0;
-    uint32_t *s3;
-    uint32_t *result;
-    uint32_t *v0;
-    uint32_t *i;
-    uint32_t val;
+    uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
+    uint32_t mode = *(uint32_t *)(void *)(tisp_par_info + 124U);
+    const void *selected = NULL;
+    uint32_t bypass;
+    uint32_t i;
+    int32_t result;
 
-    s3 = *(uint32_t *)((char *)((char *)&tisp_par_info + 0x7c));
-    result = ((uintptr_t (*)(uintptr_t, uintptr_t))tisp_core_switch_bin)((int32_t *)(s0), (uintptr_t)((int32_t *)a1));
-
-    if (s3 == 0) {
-        memcpy((void *)((char *)&tparams + 0x13100), *(void **)&tparams_day, 0x15844);
-        *(uint32_t *)((char *)((char *)&tisp_par_info + 0x7c)) = 0;
-    } else if (s3 != 1) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)(&LC1), (uintptr_t)("tisp_switch_bin"), (uintptr_t)(316));
-    } else {
-        memcpy((void *)((char *)&tparams + 0x13100), *(void **)&tparams_night, 0x15844);
-        *(uint32_t *)((char *)((char *)&tisp_par_info + 0x7c)) = s3;
+    (void)system_reg_read(12);
+    result = tisp_core_switch_bin(a0);
+    if (mode == 0)
+        selected = (const void *)tparams_day;
+    else if (mode == 1)
+        selected = (const void *)tparams_night;
+    if (selected) {
+        memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
+        *(uint32_t *)(void *)(tisp_par_info + 124U) = mode;
     }
 
-    v0 = system_reg_read(12);
-
-    for (i = 0; i != 32; i++) {
-        val = *(uint32_t *)((char *)&tparams + ((uintptr_t)i << 2));
-        v0 = (~(1u << (uintptr_t)i) & (uintptr_t)v0) | (val << (uintptr_t)i);
-    }
-
-    system_reg_write(12, ((uintptr_t)v0 & 0xb577fffd) | 0x34000009);
+    bypass = system_reg_read(12);
+    for (i = 0; i < 32; i++)
+        bypass = (bypass & ~(1U << i)) | (active[i] << i);
+    system_reg_write(12, (bypass & 0xb577fffdU) | 0x34000009U);
 
     tiziano_defog_dn_params_refresh();
     tiziano_ae_dn_params_refresh();
@@ -90688,15 +90581,11 @@ uint32_t tisp_switch_bin(uint32_t a0, unsigned int a1)
     tiziano_bcsh_dn_params_refresh();
     tiziano_ydns_dn_params_refresh();
 
-    *(uint8_t *)&tispPollValue = 1;
-    *(uint8_t *)((char *)((char *)&tispPollValue + 0x3)) = 1;
+    *(uint8_t *)(void *)&tispPollValue = 1;
+    *((uint8_t *)(void *)&tispPollValue + 3) = 1;
     __wake_up(&dumpQueue, 1, 1, 0);
 
-    if (result != 0) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)(&LC2), (uintptr_t)("[[ %s:%d ]] no bin file on the system!!!\n"), (uintptr_t)(354));
-    }
-
-    return result;
+    return (uint32_t)result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000654b4 origin=model_output original=tisp_mirror_enable */

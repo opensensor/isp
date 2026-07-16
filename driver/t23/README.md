@@ -162,6 +162,16 @@ Current smoke-test status:
   A default device cycle decoded 258 measured RTSP frames at
   `YAVG/UAVG/VAVG` `106.2/129.1/124.7`, retained active ISP/VIC interrupts
   without new errors, and rebooted cleanly.
+- The shared T23 tuning object now has the OEM `0x28944`-byte extent, so its
+  `0x15844`-byte active bank at offset `0x13100` no longer overwrites adjacent
+  globals. Day/night, custom-mode, and binary switching copy into that bank,
+  derive the top-bypass bits from 32 consecutive active-bank words, and run
+  the OEM refresh sequence. Their recovered sizes are 160/180, 150/161, and
+  151/183 instructions respectively; tuning disable is an exact 15/15. The
+  audit now reports 42 hard stubs and 84 collapses. A default device cycle
+  decoded 260 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `105.0/128.1/125.9/6.7`, retained `26075/2282` ISP/VIC interrupts without
+  new faults, and rebooted cleanly.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel
