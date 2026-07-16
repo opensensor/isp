@@ -29624,7 +29624,42 @@ int32_t private_leading_one_position_64(uint32_t arg1, uint32_t arg2) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a204 origin=model_output original=private_log2_int_to_fixed_64 */
 int32_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, char arg3, char arg4)
 {
-	return tisp_log2_int_to_fixed_64(arg1, arg2, arg3, arg4);
+    uint32_t precision = (uint8_t)arg3;
+    uint32_t output_shift = (uint8_t)arg4;
+    uint32_t normalized;
+    uint32_t fraction = 0;
+    uint32_t bit_position;
+    uint64_t input;
+    uint32_t i;
+
+    if ((arg1 | arg2) == 0)
+        return 0;
+
+    bit_position = private_leading_one_position_64(arg1, arg2);
+
+    input = ((uint64_t)arg2 << 32) | arg1;
+    if (bit_position >= 16U)
+        input >>= bit_position - 15U;
+    else
+        input <<= 15U - bit_position;
+    normalized = (uint32_t)input;
+
+    for (i = 0; i < precision; ++i) {
+        uint64_t square = (uint64_t)normalized * normalized;
+
+        fraction <<= 1;
+        if ((square & 0x80000000ULL) == 0) {
+            normalized = (uint32_t)(square >> 15);
+        } else {
+            ++fraction;
+            normalized = (uint32_t)(square >> 16);
+        }
+    }
+
+    return ((((bit_position << (precision & 31)) + fraction)
+             << (output_shift & 31)) |
+            ((normalized & 0x7fffU) >>
+             ((15U - output_shift) & 31)));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a384 origin=model_output original=private_log2_fixed_to_fixed_64 */

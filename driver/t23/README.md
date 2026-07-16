@@ -31,6 +31,14 @@ Current smoke-test status:
   decoded 261 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
   `114.9/128.4/125.7/6.4`, reached `12058/1048` ISP/VIC interrupts without
   faults, and rebooted module-clean.
+- Both private and public 64-bit fixed-point log2 paths now retain their full
+  normalization and iterative fractional-bit algorithms. The private routine
+  follows the OEM helper-based leading-one path instead of collapsing to a
+  tail wrapper; it is 69 versus 96 OEM instructions while the public routine
+  remains 93 versus 129. This reduces the audit to 32 hard stubs and 77
+  collapses. A default device cycle decoded 262 measured RTSP frames at
+  `YAVG/UAVG/VAVG/SATAVG` `106.8/129.6/123.8/8.7`, reached `14774/1281`
+  ISP/VIC interrupts without faults, and rebooted module-clean.
 - Core startup derives the OEM `0xb5742209` non-WDR top-bypass mask from the
   deployed SC2336 tuning blob, with the same value as its read-failure
   fallback. The recovered block overrides produce final mask `0xb5742a89`.
