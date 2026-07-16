@@ -10,17 +10,17 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 1043 | 1326 |
-| Functions with disassembly | 1043 | 1326 |
-| Executable section bytes | 443376 | 366560 |
+| Function symbols | 1043 | 1328 |
+| Functions with disassembly | 1043 | 1328 |
+| Executable section bytes | 443376 | 367456 |
 | Initialized writable bytes | 216768 | 46528 |
 | Uninitialized writable bytes | 164688 | 1151216 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
-- unmatched: OEM-only=61 recovered-only=343
-- matched instructions: OEM=106302 recovered=73648 ratio=0.693
-- classes: stub=48 collapsed=88 shorter=195 same_count=200 similar=378 larger=31 expanded=42
+- unmatched: OEM-only=61 recovered-only=345
+- matched instructions: OEM=106302 recovered=73766 ratio=0.694
+- classes: stub=47 collapsed=88 shorter=195 same_count=200 similar=378 larger=32 expanded=42
 
 ## Allocated Section Delta
 
@@ -32,20 +32,20 @@
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 16 | 0 | -16 |
-| `.modinfo` | 1260 | 6068 | +4808 |
+| `.modinfo` | 1260 | 6100 | +4840 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 75552 | +68832 |
-| `.rodata.str1.4` | 22728 | 21396 | -1332 |
-| `.text` | 442176 | 365232 | -76944 |
+| `.rodata` | 6720 | 75568 | +68848 |
+| `.rodata.str1.4` | 22728 | 21496 | -1232 |
+| `.text` | 442176 | 366128 | -76048 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
-| `__param` | 224 | 2368 | +2144 |
+| `__param` | 224 | 2384 | +2160 |
 
 ## Function Outliers
 
-Showing 250 of 808 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 810 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -72,7 +72,6 @@ Showing 250 of 808 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `ispcore_slake_module` | `ispcore_slake_module` | 114 | 2 | 0.018 | -112 | 6->0 | 18->0 |
 | stub | exact_name | `dump_csi_reg` | `dump_csi_reg` | 100 | 2 | 0.020 | -98 | 14->0 | 1->0 |
 | stub | exact_name | `private_log2_int_to_fixed_64` | `private_log2_int_to_fixed_64` | 96 | 2 | 0.021 | -94 | 4->0 | 8->0 |
-| stub | exact_name | `tisp_set_fps` | `tisp_set_fps` | 94 | 2 | 0.021 | -92 | 5->0 | 3->0 |
 | stub | exact_name | `isp_frame_done_wait` | `isp_frame_done_wait` | 82 | 4 | 0.049 | -78 | 3->0 | 8->0 |
 | stub | exact_name | `ispcore_irq_fs_work` | `ispcore_irq_fs_work` | 79 | 6 | 0.076 | -73 | 1->0 | 12->0 |
 | stub | exact_name | `isp_malloc_buffer` | `isp_malloc_buffer` | 72 | 2 | 0.028 | -70 | 4->0 | 10->0 |
@@ -299,6 +298,7 @@ Showing 250 of 808 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tx_isp_vin_slake_subdev` | `tx_isp_vin_slake_subdev` | 68 | 54 | 0.794 | -14 | 6->5 | 7->6 |
 | shorter | exact_name | `tisp_adr_set_params` | `tisp_adr_set_params` | 67 | 50 | 0.746 | -17 | 5->5 | 3->3 |
 | shorter | exact_name | `tiziano_defog_set_reg_params` | `tiziano_defog_set_reg_params` | 66 | 49 | 0.742 | -17 | 1->1 | 2->2 |
+| shorter | exact_name | `subdev_sensor_ops_enum_input` | `subdev_sensor_ops_enum_input` | 64 | 38 | 0.594 | -26 | 2->0 | 10->8 |
 
 ## Replacement Map
 

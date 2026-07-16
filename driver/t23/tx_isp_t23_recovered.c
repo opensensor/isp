@@ -9221,6 +9221,7 @@ static bool regtrace_t23_csi_initialized;
 static bool regtrace_t23_valid_ptr(uintptr_t ptr);
 static void regtrace_t23_seed_sensor_caches(const char *reason);
 static int regtrace_t23_call_sensor_chip_ident(const char *reason);
+uint32_t tisp_set_fps(uint32_t unused, uint32_t fps);
 static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
                                              unsigned short addr,
                                              const char *reason);
@@ -9988,6 +9989,7 @@ static bool regtrace_t23_source_csi_stream = true;
 static bool regtrace_t23_source_sensor_stream = true;
 static bool regtrace_t23_source_vic_stream = true;
 static bool regtrace_t23_direct_enable_clks = true;
+static uint regtrace_t23_source_sensor_fps;
 static uint regtrace_t23_csi_rate_override;
 static int regtrace_t23_sensor_i2c_adapter = 0;
 module_param_named(enable_irqs_on_streamon, regtrace_t23_enable_irqs_on_streamon, bool, 0644);
@@ -10225,6 +10227,7 @@ module_param_named(source_csi_stream, regtrace_t23_source_csi_stream, bool, 0644
 module_param_named(source_sensor_stream, regtrace_t23_source_sensor_stream, bool, 0644);
 module_param_named(source_vic_stream, regtrace_t23_source_vic_stream, bool, 0644);
 module_param_named(direct_enable_clks, regtrace_t23_direct_enable_clks, bool, 0644);
+module_param_named(source_sensor_fps, regtrace_t23_source_sensor_fps, uint, 0644);
 module_param_named(csi_rate_override, regtrace_t23_csi_rate_override, uint, 0644);
 module_param_named(sensor_i2c_adapter, regtrace_t23_sensor_i2c_adapter, int, 0644);
 
@@ -10710,6 +10713,50 @@ static int regtrace_t23_call_sensor_exposure(uint32_t packed,
     return ret;
 }
 
+static int regtrace_t23_sensor_read_u8(uint16_t reg, uint8_t *value)
+{
+    struct i2c_msg msgs[2];
+    uint8_t addr[2];
+    int ret;
+
+    if (!value || !regtrace_t23_sensor_client ||
+        !regtrace_t23_sensor_client->adapter)
+        return -ENODEV;
+
+    addr[0] = reg >> 8;
+    addr[1] = reg & 0xffU;
+    memset(msgs, 0, sizeof(msgs));
+    msgs[0].addr = regtrace_t23_sensor_client->addr;
+    msgs[0].len = sizeof(addr);
+    msgs[0].buf = addr;
+    msgs[1].addr = regtrace_t23_sensor_client->addr;
+    msgs[1].flags = I2C_M_RD;
+    msgs[1].len = 1;
+    msgs[1].buf = value;
+    ret = private_i2c_transfer(regtrace_t23_sensor_client->adapter, msgs, 2);
+    return ret == 2 ? 0 : (ret < 0 ? ret : -EIO);
+}
+
+static int regtrace_t23_sensor_write_u8(uint16_t reg, uint8_t value)
+{
+    struct i2c_msg msg;
+    uint8_t data[3];
+    int ret;
+
+    if (!regtrace_t23_sensor_client || !regtrace_t23_sensor_client->adapter)
+        return -ENODEV;
+
+    data[0] = reg >> 8;
+    data[1] = reg & 0xffU;
+    data[2] = value;
+    memset(&msg, 0, sizeof(msg));
+    msg.addr = regtrace_t23_sensor_client->addr;
+    msg.len = sizeof(data);
+    msg.buf = data;
+    ret = private_i2c_transfer(regtrace_t23_sensor_client->adapter, &msg, 1);
+    return ret == 1 ? 0 : (ret < 0 ? ret : -EIO);
+}
+
 static int regtrace_t23_call_sensor_stream(int enable, const char *reason)
 {
     uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
@@ -10739,6 +10786,8 @@ static int regtrace_t23_call_sensor_stream(int enable, const char *reason)
     ret = ((int (*)(void *, int))(uintptr_t)stream_fn)((void *)sd, enable);
     if (!ret) {
         regtrace_t23_sensor_streaming = enable ? true : false;
+        if (enable && regtrace_t23_source_sensor_fps)
+            ret = (int)tisp_set_fps(0, regtrace_t23_source_sensor_fps);
         if (enable && regtrace_t23_source_ae_force_packed)
             ret = regtrace_t23_call_sensor_exposure(
                 regtrace_t23_source_ae_force_packed,
@@ -90335,7 +90384,74 @@ int32_t tisp_flip_enable(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000655f8 origin=fragment_seed original=tisp_set_fps */
 uint32_t tisp_set_fps(uint32_t a0, uint32_t a1)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    unsigned char *attr;
+    uint32_t numerator = a1 >> 16;
+    uint32_t denominator = a1 & 0xffffU;
+    uint32_t fps_q8;
+    uint32_t hts;
+    uint32_t vts;
+    uint32_t total_height;
+    uint32_t max_integration;
+    uint8_t value;
+    int ret;
+
+    (void)a0;
+    if (!numerator || !denominator)
+        return (uint32_t)-EINVAL;
+    fps_q8 = (numerator / denominator) << 8;
+    fps_q8 += ((numerator % denominator) << 8) / denominator;
+    if (fps_q8 < (5U << 8) || fps_q8 > (30U << 8))
+        return (uint32_t)-ERANGE;
+
+    ret = regtrace_t23_sensor_read_u8(0x320cU, &value);
+    if (ret)
+        return (uint32_t)ret;
+    hts = (uint32_t)value << 8;
+    ret = regtrace_t23_sensor_read_u8(0x320dU, &value);
+    if (ret)
+        return (uint32_t)ret;
+    hts |= value;
+    if (!hts)
+        return (uint32_t)-EIO;
+
+    vts = (81000000U / hts) * denominator / numerator;
+    if (vts < 5U || vts > 0xffffU)
+        return (uint32_t)-ERANGE;
+    ret = regtrace_t23_sensor_write_u8(0x320fU, vts & 0xffU);
+    if (!ret)
+        ret = regtrace_t23_sensor_write_u8(0x320eU, vts >> 8);
+    if (ret)
+        return (uint32_t)ret;
+
+    max_integration = vts - 4U;
+    attr = regtrace_t23_sensor_owned_attr();
+    if (attr) {
+        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_MAX_IT_NATIVE,
+                              max_integration);
+        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_IT_LIMIT,
+                              max_integration);
+        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_TOTAL_HEIGHT, vts);
+        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_MAX_IT,
+                              max_integration);
+    }
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
+                          REGTRACE_T23_ATTR_MAX_IT_NATIVE, max_integration);
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
+                          REGTRACE_T23_ATTR_IT_LIMIT, max_integration);
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
+                          REGTRACE_T23_ATTR_TOTAL_HEIGHT, vts);
+    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
+                          REGTRACE_T23_ATTR_MAX_IT, max_integration);
+
+    regtrace_t23_seed_sensor_caches("tisp-set-fps");
+    attr = regtrace_t23_sensor_owned_attr();
+    if (!attr)
+        attr = regtrace_t23_sc2336_attr;
+    total_height = *(uint16_t *)(attr + REGTRACE_T23_ATTR_TOTAL_HEIGHT);
+    max_integration = *(uint16_t *)(attr + REGTRACE_T23_ATTR_MAX_IT);
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: sensor fps=%u/%u hts=%u vts=%u total_height=%u max_it=%u\n",
+           numerator, denominator, hts, vts, total_height, max_integration);
     return 0;
 }
 

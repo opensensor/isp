@@ -106,6 +106,14 @@ Current smoke-test status:
   96 integration lines while measured AE luma fell from 216 to 61. The stream
   passed 256 RTSP frames; frame `YAVG` fell from the prior clipped 222.1 to
   116.8 and `YHIGH` from 255 to 188.
+- `tisp_set_fps` now implements the SC2336 timing contract directly because
+  the deployed T23 sensor module has no functional FPS ioctl slot. It reads
+  HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel
+  clock, writes `0x320e/0x320f`, and synchronizes all four integration-limit
+  fields. `source_sensor_fps=0x190001` exercised 25/1 fps and reported the
+  expected `HTS=2250`, `VTS=1440`, and `max_it=1436`; the stream passed 256
+  frames at `UAVG/VAVG` `128.5/126.5`. The recovered API is `1.28x` OEM size
+  and reduces the audit from 48 to 47 hard stubs without adding a collapse.
 - An optional `source_awb_hlil` workqueue implements the active SC2336 branch
   of the T23 AWB algorithm: calibrated zone ratios, tuning-mesh weighting,
   indoor light-source distance-LUT weighting, distance refinement, history,
