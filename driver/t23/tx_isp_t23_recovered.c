@@ -2909,10 +2909,8 @@ static uintptr_t bcsh_ccm_en;
 static unsigned char __attribute__((aligned(4))) bcsh_ct_list[16] = {
     0x8c, 0x0a, 0x00, 0x00, 0x74, 0x0e, 0x00, 0x00, 0xf8, 0x11, 0x00, 0x00, 0x38, 0x18, 0x00, 0x00, 
 };
-static uintptr_t bcsh_ct_part_now;
-static unsigned char __attribute__((aligned(4))) bcsh_ct_part_old[4] = {
-    0xff, 0x00, 0x00, 0x00, 
-};
+static uint32_t bcsh_ct_part_now;
+static uint32_t bcsh_ct_part_old = 0xffU;
 static unsigned char __attribute__((aligned(4))) tisp_BCSH_as32CCMMatrix[36];
 static unsigned char __attribute__((aligned(4))) CosValue[12] = {
     0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x80, 0x00, 0x00, 
@@ -9943,7 +9941,7 @@ static uint regtrace_t23_source_awb_last_mf_bg = 0x100;
 static uint regtrace_t23_source_wb_mode;
 static uint regtrace_t23_source_wb_mode_rg = 0x100;
 static uint regtrace_t23_source_wb_mode_bg = 0x100;
-static bool regtrace_t23_source_bcsh_events;
+static bool regtrace_t23_source_bcsh_events = true;
 static uint regtrace_t23_source_bcsh_ev_events;
 static uint regtrace_t23_source_bcsh_ct_events;
 static uint regtrace_t23_source_bcsh_last_ct = 3187U;
@@ -9959,6 +9957,7 @@ static uint regtrace_t23_source_dmsc_sharpness = 0x50U;
 static uint32_t regtrace_t23_dmsc_gain_q16 = 0x10000U;
 static bool regtrace_t23_source_bcsh_tuning_init = true;
 static bool regtrace_t23_source_bcsh_runtime = true;
+static bool regtrace_t23_source_bcsh_trace;
 static bool regtrace_t23_source_clm_tuning_init = true;
 static bool regtrace_t23_source_clm_events = true;
 static uint regtrace_t23_source_clm_startup_ct = 5000U;
@@ -10183,6 +10182,8 @@ module_param_named(source_bcsh_ev_events,
                    regtrace_t23_source_bcsh_ev_events, uint, 0444);
 module_param_named(source_bcsh_ct_events,
                    regtrace_t23_source_bcsh_ct_events, uint, 0444);
+module_param_named(source_bcsh_ct_region,
+                   bcsh_ct_part_now, uint, 0444);
 module_param_named(source_ccm_tuning_init,
                    regtrace_t23_source_ccm_tuning_init, bool, 0644);
 module_param_named(source_ccm_events,
@@ -10201,6 +10202,8 @@ module_param_named(source_bcsh_tuning_init,
                    regtrace_t23_source_bcsh_tuning_init, bool, 0644);
 module_param_named(source_bcsh_runtime,
                    regtrace_t23_source_bcsh_runtime, bool, 0644);
+module_param_named(source_bcsh_trace,
+                   regtrace_t23_source_bcsh_trace, bool, 0644);
 module_param_named(source_clm_tuning_init,
                    regtrace_t23_source_clm_tuning_init, bool, 0644);
 module_param_named(source_clm_events,
@@ -11989,6 +11992,7 @@ int tiziano_dpc_init(void);
 int32_t tisp_dpc_refresh(uint32_t gain);
 int32_t tisp_bcsh_ev_update(uintptr_t ev, uintptr_t ignored);
 int32_t tisp_bcsh_ct_update(uintptr_t ignored, uint32_t ct);
+int32_t tiziano_bcsh_init(void);
 int32_t tisp_lsc_ct_update(uint32_t ct);
 int32_t tisp_lsc_write_lut_datas(void);
 int32_t tisp_lsc_mirror_flip(uint32_t unused, uint32_t width,
@@ -12815,6 +12819,13 @@ static void regtrace_t23_source_apply_total_gain(void)
 static void regtrace_t23_source_bcsh_write_tuning_startup(void)
 {
     size_t i;
+    int ret;
+
+    ret = tiziano_bcsh_init();
+    if (ret)
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source BCSH runtime initialization failed ret=%d\n",
+               ret);
 
     for (i = 0; i < ARRAY_SIZE(regtrace_t23_bcsh_sc2336_startup); ++i)
         system_reg_write(regtrace_t23_bcsh_sc2336_startup[i][0],
@@ -52678,69 +52689,35 @@ int32_t tiziano_bcsh_dump2(int32_t *arg1, int32_t *arg2, int32_t *arg3,
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024014 origin=model_output original=tisp_bcsh_sort_ct_list */
-int32_t tisp_bcsh_sort_ct_list(int32_t *arg1) {
-    int *i = 0;
-    int32_t *a1 = arg1;
-    int32_t *a2 = arg1;
+int32_t tisp_bcsh_sort_ct_list(int32_t *ct_list)
+{
+    uint32_t minimum = 0x400U;
+    unsigned int i;
+    unsigned int j;
 
-    /* Outer loop: i goes 0->1->2->3 (byte-wrap increment) */
-    for (uint32_t i = 0; i != 3; ) {
-        i = zx_d(i + 1);
-        uint32_t j = i;
-        uint32_t a3_idx = j << 2;
+    for (i = 0; i < 3U; ++i) {
+        for (j = i + 1U; j < 4U; ++j) {
+            uint32_t current_ct = (uint32_t)ct_list[i];
+            uint32_t candidate = (uint32_t)ct_list[j];
 
-        /* Inner do-while: j goes until it wraps to 4 */
-        do {
-            int32_t *a3_2 = &arg1[a3_idx];
-            int32_t *t0 = *a2;
-            int32_t t1 = *a3_2;
-
-            if ((uint32_t)t1 < (uint32_t)t0) {
-                *a2 = t1;
-                *a3_2 = (uintptr_t)t0 & 0xffff;
+            if (candidate < current_ct) {
+                ct_list[i] = (int32_t)candidate;
+                ct_list[j] = (int32_t)(current_ct & 0xffffU);
             }
-
-            j = zx_d(j + 1);
-            a3_idx = j << 2;
-        } while (j != 4);
-
-        a2 = &a2[1];
-    }
-
-    /* Second loop: i_1 from 0x400 to 0x1400 stepping 0x400 */
-    for (int32_t i_1 = 0x400; i_1 != ((char *)&jump_table_6d900); ) {
-        if ((uint32_t)*a1 < (uint32_t)i_1) {
-            *a1 = i_1;
         }
-        i_1 += 0x400;
-        a1 = &a1[1];
     }
 
-    int32_t v0_1 = arg1[2];
-    int32_t v1_6;
-
-    if ((uint32_t)arg1[3] >= (uint32_t)(v0_1 + 0x190)) {
-        v1_6 = arg1[1];
-    } else {
-        ((void **)arg1)[3] = v0_1 + 0x192;
-        v1_6 = arg1[1];
+    for (i = 0; i < 4U; ++i, minimum += 0x400U) {
+        if ((uint32_t)ct_list[i] < minimum)
+            ct_list[i] = (int32_t)minimum;
     }
 
-    int32_t *v0_2;
-
-    if ((uint32_t)v0_1 >= (uint32_t)(v1_6 + 0x190)) {
-        v0_2 = *arg1;
-    } else {
-        ((void **)arg1)[1] = v0_1 - 0x192;
-        v0_2 = *arg1;
-    }
-
-    int32_t v1_10 = arg1[1];
-
-    if ((uint32_t)v1_10 < (uint32_t)(v0_2 + 0x190)) {
-        *arg1 = v1_10 - 0x192;
-    }
-
+    if ((uint32_t)ct_list[3] < (uint32_t)ct_list[2] + 0x190U)
+        ct_list[3] = ct_list[2] + 0x192;
+    if ((uint32_t)ct_list[2] < (uint32_t)ct_list[1] + 0x190U)
+        ct_list[1] = ct_list[2] - 0x192;
+    if ((uint32_t)ct_list[1] < (uint32_t)ct_list[0] + 0x190U)
+        ct_list[0] = ct_list[1] - 0x192;
     return 0;
 }
 
@@ -53571,11 +53548,10 @@ tiziano_ct_bcsh_interpolation0x434:
 }
 #endif
 
-static void regtrace_t23_bcsh_blend_matrix(int32_t *dst,
-                                           const int32_t *low,
-                                           const int32_t *high,
-                                           uint32_t distance,
-                                           uint32_t range)
+static __always_inline void
+regtrace_t23_bcsh_blend_matrix(int32_t *dst, const int32_t *low,
+                               const int32_t *high, uint32_t distance,
+                               uint32_t range)
 {
     int i;
 
@@ -53588,12 +53564,10 @@ static void regtrace_t23_bcsh_blend_matrix(int32_t *dst,
     for (i = 0; i < 9; i++) {
         if (high[i] >= low[i])
             dst[i] = low[i] +
-                ((high[i] - low[i]) * (int32_t)distance) /
-                (int32_t)range;
+                (uint32_t)(high[i] - low[i]) * distance / range;
         else
             dst[i] = low[i] -
-                ((low[i] - high[i]) * (int32_t)distance) /
-                (int32_t)range;
+                (uint32_t)(low[i] - high[i]) * distance / range;
     }
 }
 
@@ -53607,40 +53581,69 @@ uint32_t tiziano_ct_bcsh_interpolation(uint32_t ct)
     int32_t *d2 = (int32_t *)(void *)tisp_BCSH_as32CCMMatrix_d2;
     uint32_t start;
     uint32_t end;
+    uint32_t region;
+
+    if (ct <= ct_list[0] + 200) {
+        region = 0;
+    } else if (ct < ct_list[1] - 200) {
+        region = 1;
+    } else if (ct <= ct_list[1] + 200) {
+        region = 2;
+    } else if (ct < ct_list[2] - 200) {
+        region = 3;
+    } else if (ct <= ct_list[2] + 200) {
+        region = 4;
+    } else if (ct < ct_list[3] - 200) {
+        region = 5;
+    } else {
+        region = 6;
+    }
+
+    bcsh_ct_part_now = region;
+    if (!BCSH_real && !(region & 1U) && bcsh_ct_part_old == region)
+        return region;
+    bcsh_ct_part_old = region;
+
+    switch (region) {
+    case 0:
+        memcpy(dst, a, 0x24);
+        break;
+    case 1:
+        start = ct_list[0] + 200;
+        end = ct_list[1] - 200;
+        regtrace_t23_bcsh_blend_matrix(dst, a, t, ct - start,
+                                       end - start);
+        break;
+    case 2:
+        memcpy(dst, t, 0x24);
+        break;
+    case 3:
+        start = ct_list[1] + 200;
+        end = ct_list[2] - 200;
+        regtrace_t23_bcsh_blend_matrix(dst, t, d, ct - start,
+                                       end - start);
+        break;
+    case 4:
+        memcpy(dst, d, 0x24);
+        break;
+    case 5:
+        start = ct_list[2] + 200;
+        end = ct_list[3] - 200;
+        regtrace_t23_bcsh_blend_matrix(dst, d, d2, ct - start,
+                                       end - start);
+        break;
+    default:
+        memcpy(dst, d2, 0x24);
+        break;
+    }
 
     if (!bcsh_ccm_en) {
         memset(dst, 0, 0x24);
         dst[0] = 0x400;
         dst[4] = 0x400;
         dst[8] = 0x400;
-        return 0;
     }
-
-    if (ct <= ct_list[0] + 200) {
-        memcpy(dst, a, 0x24);
-    } else if (ct < ct_list[1] - 200) {
-        start = ct_list[0] + 200;
-        end = ct_list[1] - 200;
-        regtrace_t23_bcsh_blend_matrix(dst, a, t, ct - start,
-                                       end - start);
-    } else if (ct <= ct_list[1] + 200) {
-        memcpy(dst, t, 0x24);
-    } else if (ct < ct_list[2] - 200) {
-        start = ct_list[1] + 200;
-        end = ct_list[2] - 200;
-        regtrace_t23_bcsh_blend_matrix(dst, t, d, ct - start,
-                                       end - start);
-    } else if (ct <= ct_list[2] + 200) {
-        memcpy(dst, d, 0x24);
-    } else if (ct < ct_list[3] - 200) {
-        start = ct_list[2] + 200;
-        end = ct_list[3] - 200;
-        regtrace_t23_bcsh_blend_matrix(dst, d, d2, ct - start,
-                                       end - start);
-    } else {
-        memcpy(dst, d2, 0x24);
-    }
-    return 0;
+    return region;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024bc4 origin=fragment_seed original=tisp_bcsh_wdr_en */
@@ -54702,6 +54705,7 @@ static uint32_t regtrace_t23_bcsh_interp_u32(uint32_t low, uint32_t high,
 
 int32_t tiziano_bcsh_update(void)
 {
+    static unsigned int trace_count;
     uint32_t *ev_list = (uint32_t *)(uintptr_t)tisp_BCSH_au32EvList_now;
     uint32_t *smin_s = (uint32_t *)(uintptr_t)tisp_BCSH_au32SminListS_now;
     uint32_t *smax_s = (uint32_t *)(uintptr_t)tisp_BCSH_au32SmaxListS_now;
@@ -54782,6 +54786,26 @@ int32_t tiziano_bcsh_update(void)
         (int32_t *)(void *)tisp_BCSH_u32OffsetRGB2yuv,
         (int32_t *)offset_rgb);
     tiziano_bcsh_TransitParam();
+    if (regtrace_t23_source_bcsh_trace && trace_count++ < 4U) {
+        uint32_t *hmatrix = (uint32_t *)(void *)tisp_BCSH_au32HMatrix;
+        uint32_t *offset0 = (uint32_t *)(void *)tisp_BCSH_au32Offset0;
+        uint32_t *offset1 = (uint32_t *)(void *)tisp_BCSH_au32Offset1;
+
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: BCSH trace ev=%u ct=%u region=%u H=%04x/%04x/%04x/%04x/%04x/%04x/%04x/%04x/%04x\n",
+               ev, regtrace_t23_bcsh_ct, bcsh_ct_part_now,
+               hmatrix[0], hmatrix[1], hmatrix[2], hmatrix[3],
+               hmatrix[4], hmatrix[5], hmatrix[6], hmatrix[7],
+               hmatrix[8]);
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: BCSH trace O0=%04x/%04x/%04x O1=%04x/%04x/%04x C=%04x/%04x/%04x/%04x/%04x S=%04x/%04x/%04x/%04x\n",
+               offset0[0], offset0[1], offset0[2], offset1[0],
+               offset1[1], offset1[2], tisp_BCSH_ai32C[0],
+               tisp_BCSH_ai32C[1], tisp_BCSH_ai32C[2],
+               tisp_BCSH_ai32C[3], tisp_BCSH_ai32C[4],
+               tisp_BCSH_ai32Svalue[0], tisp_BCSH_ai32Svalue[1],
+               tisp_BCSH_ai32Svalue[2], tisp_BCSH_ai32Svalue[3]);
+    }
     if (regtrace_t23_source_bcsh_runtime)
         tiziano_bcsh_lut_parameter(
             (int32_t *)(void *)tisp_BCSH_au32clip0,
