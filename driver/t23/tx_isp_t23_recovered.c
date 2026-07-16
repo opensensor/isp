@@ -12024,6 +12024,7 @@ int32_t tisp_lsc_mirror_flip(uint32_t unused, uint32_t width,
                              uint32_t height, uint32_t flip,
                              uint32_t mirror);
 static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10);
+int32_t cm_control(int32_t *arg1, int32_t arg2, int32_t *arg3);
 
 static void regtrace_t23_source_gib_write_tuning_startup(void)
 {
@@ -12507,49 +12508,19 @@ static uint32_t regtrace_t23_ccm_saturation(uint32_t ev_q10)
 static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10)
 {
     int32_t matrix[9];
-    int32_t saturation_matrix[9];
+    int32_t saturated_matrix[9];
     uint32_t registers[9];
     uint32_t saturation;
     uint32_t region;
-    unsigned int row;
-    unsigned int column;
     unsigned int i;
 
     if (ct < 1500U || ct > 10000U)
         return -EINVAL;
     region = regtrace_t23_ccm_interpolate(ct, matrix);
     saturation = regtrace_t23_ccm_saturation(ev_q10);
-    saturation_matrix[0] = (saturation * 0xb375U >> 8) + 0x4c8bU;
-    saturation_matrix[1] = 0x9646 - (saturation * 0x9646U >> 8);
-    saturation_matrix[2] = 0x1d2f - (saturation * 0x1d2fU >> 8);
-    saturation_matrix[3] = 0x4c8b - (saturation * 0x4c8bU >> 8);
-    saturation_matrix[4] = (saturation * 0x69baU >> 8) + 0x9646U;
-    saturation_matrix[5] = saturation_matrix[2];
-    saturation_matrix[6] = saturation_matrix[3];
-    saturation_matrix[7] = saturation_matrix[1];
-    saturation_matrix[8] = (saturation * 0xe2d1U >> 8) + 0x1d2fU;
-
-    for (row = 0; row < 3; ++row) {
-        for (column = 0; column < 3; ++column) {
-            int64_t accumulator = 0;
-            unsigned int k;
-
-            for (k = 0; k < 3; ++k) {
-                int32_t left = matrix[row * 3U + k];
-                int32_t right = saturation_matrix[k * 3U + column];
-                uint64_t product = ((uint64_t)(left < 0 ? -left : left) << 6) *
-                                   (uint32_t)(right < 0 ? -right : right);
-                int32_t term = (int32_t)(product >> 16);
-
-                accumulator += (left < 0) != (right < 0) ? -term : term;
-            }
-            if (accumulator < 0)
-                accumulator = -((-accumulator) >> 6);
-            else
-                accumulator >>= 6;
-            registers[row * 3U + column] = (uint32_t)accumulator & 0x3fffU;
-        }
-    }
+    cm_control(matrix, saturation, saturated_matrix);
+    for (i = 0; i < ARRAY_SIZE(registers); ++i)
+        registers[i] = (uint32_t)saturated_matrix[i] & 0x3fffU;
 
     for (i = 0; i < 9; i += 2) {
         uint32_t value = registers[i];
@@ -51592,6 +51563,71 @@ int32_t tisp_lsc_deinit(void)
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022660 origin=model_output original=cm_control */
 int32_t cm_control(int32_t *arg1, int32_t arg2, int32_t *arg3)
+{
+    static const uint32_t luma[3] = { 0x4c8bU, 0x9646U, 0x1d2fU };
+    static const uint32_t complement[3] = { 0xb375U, 0x69baU, 0xe2d1U };
+    int32_t saturation[9];
+    int32_t cm_sign[9];
+    uint32_t cm_magnitude[9];
+    int32_t saturation_sign[9];
+    uint32_t saturation_magnitude[9];
+    int row;
+    int column;
+    int term;
+
+    saturation[0] = ((uint32_t)arg2 * complement[0] >> 8) + luma[0];
+    saturation[1] = luma[1] - ((uint32_t)arg2 * luma[1] >> 8);
+    saturation[2] = luma[2] - ((uint32_t)arg2 * luma[2] >> 8);
+    saturation[3] = luma[0] - ((uint32_t)arg2 * luma[0] >> 8);
+    saturation[4] = ((uint32_t)arg2 * complement[1] >> 8) + luma[1];
+    saturation[5] = luma[2] - ((uint32_t)arg2 * luma[2] >> 8);
+    saturation[6] = luma[0] - ((uint32_t)arg2 * luma[0] >> 8);
+    saturation[7] = luma[1] - ((uint32_t)arg2 * luma[1] >> 8);
+    saturation[8] = ((uint32_t)arg2 * complement[2] >> 8) + luma[2];
+
+    for (term = 0; term < 9; ++term) {
+        if (arg1[term] < 0) {
+            cm_sign[term] = -1;
+            cm_magnitude[term] = (uint32_t)-arg1[term];
+        } else {
+            cm_sign[term] = 1;
+            cm_magnitude[term] = (uint32_t)arg1[term];
+        }
+
+        if (saturation[term] < 0) {
+            saturation_sign[term] = -1;
+            saturation_magnitude[term] = (uint32_t)-saturation[term];
+        } else {
+            saturation_sign[term] = 1;
+            saturation_magnitude[term] = (uint32_t)saturation[term];
+        }
+    }
+
+    for (row = 0; row < 3; ++row) {
+        for (column = 0; column < 3; ++column) {
+            int32_t accumulator = 0;
+
+            for (term = 0; term < 3; ++term) {
+                int cm_index = row * 3 + term;
+                int saturation_index = term * 3 + column;
+                int32_t product = fix_point_mult2_32(
+                    16, (int32_t)(cm_magnitude[cm_index] << 6),
+                    (int32_t)saturation_magnitude[saturation_index]);
+
+                accumulator += cm_sign[cm_index] *
+                    saturation_sign[saturation_index] * product;
+            }
+
+            arg3[row * 3 + column] = accumulator < 0 ?
+                -((-accumulator) >> 6) : accumulator >> 6;
+        }
+    }
+
+    return arg3[8];
+}
+
+static int32_t __attribute__((unused))
+regtrace_t23_collapsed_cm_control(int32_t *arg1, int32_t arg2, int32_t *arg3)
 {
 	/* Phase 1: process arg1 array into paired flag/data arrays */
 	int32_t *v0_1 = cm_in;

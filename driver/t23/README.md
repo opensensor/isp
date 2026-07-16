@@ -254,6 +254,17 @@ Current smoke-test status:
   AE/AWB, passed 256 RTSP frames, and removed much of the recovered path's
   exaggerated saturation and purple cast. `source_ccm_tuning_init=1` remains
   available for diagnostics while the pre-CCM spatial color error is repaired.
+  The shared `cm_control` now implements the T23/T31 sign-decomposed 3x3
+  fixed-point saturation multiply instead of byte-stepping through globals
+  and consuming an uninitialized matrix. The active CCM diagnostic exercised
+  two runtime CT updates and decoded 258 frames at
+  `YAVG/UAVG/VAVG/SATAVG` `106.0/128.2/125.0/9.3`; the expected saturation
+  increase confirms the matrix was committed. The no-argument regression
+  retained the preferred bypassed image for 258 frames at
+  `107.5/128.5/125.4/6.7`. Both runs had active ISP/VIC interrupts, no new
+  faults, and clean reboots. `cm_control` now compiles to 135 instructions
+  versus 229 OEM and moves out of the collapsed class, reducing the audit to
+  39 hard stubs and 80 collapses.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics. The recovered transform primitives now use the
