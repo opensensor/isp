@@ -1050,6 +1050,7 @@ static uintptr_t (*tispinfo)();
 #define T23_TPARAMS_ACTIVE_OFFSET 0x13100U
 #define T23_TPARAMS_BANK_SIZE 0x15844U
 #define T23_TPARAMS_OBJECT_SIZE 0x28944U
+#define T23_TPARAMS_HLDC_OFFSET 0x14b2cU
 /* The OEM object includes metadata followed by one full active tuning bank. */
 static unsigned char __attribute__((aligned(4))) tparams[T23_TPARAMS_OBJECT_SIZE] = {
     0x54, 0x49, 0x53, 0x50, 0x5f, 0x50, 0x41, 0x52, 0x41, 0x4d, 0x5f, 0x54, 0x4f, 0x50, 0x5f, 0x42, 
@@ -5418,9 +5419,18 @@ static unsigned char y_sp_b_sl_stren_2_array[36];
 static unsigned char y_sp_b_sl_stren_2_wdr_array[36];
 static unsigned char y_sp_b_sl_stren_3_array[36];
 static unsigned char y_sp_b_sl_stren_3_wdr_array[36];
-static uintptr_t (*hldc_con_par_array)();
-static const int16_t _rodata_table_a[16];
-static const int16_t _rodata_table_b[16];
+/* T23 HLDC tuning block at active-bank offset 0x14b2c (18 u32 words). */
+static uint32_t hldc_con_par_array[18] = {
+    0, 0, 0, 1, 0xcc, 0x199, 0x6f1, 0x375,
+    0, 0, 0, 0xcc, 0x199, 0x6f1, 0, 0x375,
+    0, 0,
+};
+static const int16_t _rodata_table_a[9] = {
+    0, 0, 0, 0, 0, 130, 270, 360, 500,
+};
+static const int16_t _rodata_table_b[9] = {
+    500, 380, 260, 125, 0, 0, 0, 30, 100,
+};
 static uintptr_t data_c3dc8;
 static uintptr_t data_c3dcc;
 static uintptr_t data_c3dd0;
@@ -9835,6 +9845,9 @@ int32_t tiziano_ydns_init(void);
 int32_t tiziano_defog_set_reg_params(void);
 int32_t tiziano_defog_params_init(void);
 int32_t defog_3x3_5x5_params_init(uint32_t width, uint32_t height);
+int32_t tisp_hldc_con_par_cfg(void);
+int32_t tisp_hldc_par_refresh_part_1(void);
+int32_t tiziano_hldc_init(void);
 int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1);
 int32_t tisp_msca_addr_fifo_write(char arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_channel_start(int32_t arg1);
@@ -9991,6 +10004,7 @@ static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin"
 #define REGTRACE_T23_BCSH_TUNING_SIZE   0x418U
 #define REGTRACE_T23_CLM_TUNING_OFFSET  0x1122cU
 #define REGTRACE_T23_CLM_TUNING_SIZE    0x24fcU
+#define REGTRACE_T23_HLDC_TUNING_OFFSET 0x14b44U
 static uint regtrace_t23_source_core_bayer = 1U;
 static uint regtrace_t23_source_core_mode = 0x1cU;
 static bool regtrace_t23_direct_csi_start;
@@ -13052,6 +13066,29 @@ static void regtrace_t23_source_csccr_write_init(void)
            "tx_isp_t23_recovered: source CSCCR mode-0 parameters committed\n");
 }
 
+static void regtrace_t23_source_hldc_write_tuning_startup(void)
+{
+    int ret;
+
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_HLDC_TUNING_OFFSET,
+                                        hldc_con_par_array,
+                                        sizeof(hldc_con_par_array));
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: HLDC tuning load failed ret=%d; using embedded parameters\n",
+               ret);
+    }
+    tisp_hldc_con_par_cfg();
+    tisp_hldc_par_refresh_part_1();
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source HLDC tuning startup committed params=%x/%x/%x/%x\n",
+           hldc_con_par_array[0] | (hldc_con_par_array[1] << 16),
+           hldc_con_par_array[2] | (hldc_con_par_array[3] << 16),
+           hldc_con_par_array[4] | (hldc_con_par_array[5] << 16),
+           hldc_con_par_array[15]);
+}
+
 static int regtrace_t23_source_core_set_stream(int enable,
                                                const char *reason)
 {
@@ -13163,6 +13200,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
         }
     }
     regtrace_t23_source_apply_total_gain();
+    regtrace_t23_source_hldc_write_tuning_startup();
     if (regtrace_t23_source_bcsh_tuning_init)
         regtrace_t23_source_bcsh_write_tuning_startup();
     if (regtrace_t23_source_clm_tuning_init)
@@ -15060,14 +15098,16 @@ int32_t tisp_hldc_con_par_cfg(void);
 int16_t tisp_hldc_strength_adjust_k(char arg1, int16_t *arg2, int16_t *arg3);
 int32_t tisp_hldc_para_validity_judge(int32_t arg1, int32_t arg2);
 int32_t tisp_hldc_quadratic_func(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
-int32_t tisp_hldc_calc_para(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uintptr_t arg6);
+int32_t tisp_hldc_calc_para(int32_t k1, int32_t k2, int32_t width,
+                            int32_t height, int32_t center_x,
+                            int32_t center_y, int32_t out[4]);
 int32_t tisp_hldc_par_refresh(uint32_t a0);
-int32_t tisp_hldc_set_attr(int32_t arg1, char *arg2);
-int32_t tisp_hldc_get_attr(uint32_t a0, uint32_t a1);
+int32_t tisp_hldc_set_attr(int32_t arg1, const void *arg2);
+int32_t tisp_hldc_get_attr(int32_t arg1, void *arg2);
 int32_t tiziano_hldc_params_refresh(void);
 int32_t tiziano_hldc_init(void);
 int32_t tisp_hldc_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3);
-int32_t tisp_hldc_param_array_set(void);
+int32_t tisp_hldc_param_array_set(int32_t arg1, const void *arg2);
 void tisp_set_sensor_integration_time(uint32_t arg1);
 int32_t tisp_set_sensor_integration_time_short(uint32_t a0);
 uint32_t tisp_set_sensor_analog_gain(int32_t arg1);
@@ -44849,7 +44889,7 @@ case_20007401:
             tisp_sdns_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             return 0;
         case 21:
-            tisp_hldc_param_array_set();
+            tisp_hldc_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             return 0;
         case 22:
             tisp_ae_param_array_set(0, (void *)(tisp_par_ptr + 0x1B), (uintptr_t)0);
@@ -45067,7 +45107,7 @@ case_20007406:
             tisp_sdns_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             break;
         case 21:
-            tisp_hldc_param_array_set();
+            tisp_hldc_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             break;
         case 22:
             tisp_ae_param_array_set(0, (void *)(tisp_par_ptr + 0x1B), (uintptr_t)0);
@@ -45194,7 +45234,7 @@ case_20007407:
             tisp_sdns_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             break;
         case 21:
-            tisp_hldc_param_array_set();
+            tisp_hldc_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             break;
         case 22:
             tisp_ae_param_array_set(0, (void *)(tisp_par_ptr + 0x1B), (uintptr_t)0);
@@ -45322,7 +45362,7 @@ case_20007408:
             tisp_sdns_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             break;
         case 21:
-            tisp_hldc_param_array_set();
+            tisp_hldc_param_array_set(0, (void *)(tisp_par_ptr + 0x1B));
             break;
         case 22:
             tisp_ae_param_array_set(0, (void *)(tisp_par_ptr + 0x1B), (uintptr_t)0);
@@ -69967,213 +70007,63 @@ int32_t tisp_hldc_par_refresh_part_1(void) __asm__("tisp_hldc_par_refresh.part.1
 #endif
 int32_t tisp_hldc_par_refresh_part_1(void)
 {
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t t9 = 0;
-
-    /* fragment 0: Arithmetic */
-    t9 = (uintptr_t)&system_reg_write;
-    a1 = 3;
-    t9 = t9;
-
-    /* fragment 1: IndirectTailCall */
-    return system_reg_write(36932, 0);
-
-    return 0;
+    return system_reg_write(0x9044U, 3);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043634 origin=model_output original=tisp_hldc_con_par_cfg */
-int32_t tisp_hldc_con_par_cfg(void) {
-    uint32_t s0 = (uint32_t)hldc_con_par_array;
-    uint32_t *v0;
-    uint32_t *a1;
+int32_t tisp_hldc_con_par_cfg(void)
+{
+    uint32_t reg9024 = hldc_con_par_array[14];
+    uint32_t reg9028 = hldc_con_par_array[15];
 
-    /* Call 0: 0x9000 */
-    v0 = *(uint32_t *)(s0 + 4);
-    a1 = *(uint32_t *)(s0 + 0);
-    system_reg_write(0x9000, ((uintptr_t)v0 << 16) | (uintptr_t)a1);
-
-    /* Call 1: 0x9004 */
-    v0 = *(uint32_t *)(s0 + 12);
-    a1 = *(uint32_t *)(s0 + 8);
-    system_reg_write(0x9004, ((uintptr_t)v0 << 16) | (uintptr_t)a1);
-
-    /* Call 2: 0x9004 */
-    v0 = *(uint32_t *)(s0 + 20);
-    a1 = *(uint32_t *)(s0 + 16);
-    system_reg_write(0x9004, ((uintptr_t)v0 << 16) | (uintptr_t)a1);
-
-    /* Call 3: 0x9008 */
-    a1 = *(uint32_t *)(s0 + 24);
-    system_reg_write(0x9008, a1);
-
-    /* Call 4: 0x900c */
-    a1 = *(uint32_t *)(s0 + 28);
-    system_reg_write(0x900c, a1);
-
-    /* Call 5: 0x9010 */
-    a1 = *(uint32_t *)(s0 + 32);
-    system_reg_write(0x9010, a1);
-
-    /* Call 6: 0x9014 */
-    a1 = *(uint32_t *)(s0 + 36);
-    system_reg_write(0x9014, a1);
-
-    /* Call 7: 0x9018 */
-    v0 = *(uint32_t *)(s0 + 44);
-    a1 = *(uint32_t *)(s0 + 40);
-    system_reg_write(0x9018, ((uintptr_t)v0 << 16) | (uintptr_t)a1);
-
-    /* Call 8: 0x901c */
-    v0 = *(uint32_t *)(s0 + 52);
-    a1 = *(uint32_t *)(s0 + 48);
-    system_reg_write(0x901c, ((uintptr_t)v0 << 16) | (uintptr_t)a1);
-
-    /* Call 9: 0x9020 */
-    a1 = *(uint32_t *)(s0 + 56);
-    system_reg_write(0x9020, a1);
-
-    /* Call 10: 0x9024 */
-    a1 = *(uint32_t *)(s0 + 60);
-    if (a1 == 0)
-        a1 = 32;
-    system_reg_write(0x9024, a1);
-
-    /* Call 11: 0x9028 */
-    a1 = *(uint32_t *)(s0 + 64);
-    if (a1 == 0)
-        a1 = 32;
-    system_reg_write(0x9028, a1);
-
+    system_reg_write(0x9000U, hldc_con_par_array[0] |
+                              (hldc_con_par_array[1] << 16));
+    system_reg_write(0x9004U, hldc_con_par_array[2] |
+                              (hldc_con_par_array[3] << 16));
+    system_reg_write(0x9008U, hldc_con_par_array[4] |
+                              (hldc_con_par_array[5] << 16));
+    system_reg_write(0x900cU, hldc_con_par_array[6]);
+    system_reg_write(0x9010U, hldc_con_par_array[7]);
+    system_reg_write(0x9014U, hldc_con_par_array[8]);
+    system_reg_write(0x9018U, hldc_con_par_array[9]);
+    system_reg_write(0x901cU, hldc_con_par_array[10] |
+                              (hldc_con_par_array[11] << 16));
+    system_reg_write(0x9020U, hldc_con_par_array[12] |
+                              (hldc_con_par_array[13] << 16));
+    system_reg_write(0x9024U, reg9024 ? reg9024 : 0x20U);
+    system_reg_write(0x9028U, reg9028 ? reg9028 : 0x20U);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043740 origin=model_output original=tisp_hldc_strength_adjust_k */
-int16_t tisp_hldc_strength_adjust_k(char arg1, int16_t *arg2, int16_t *arg3) {
-    /* 80-byte stack frame: saved regs s0-s3 (4*4=16), ra (4), locals */
-    uint32_t s0 = (uint8_t)arg1;          /* andi s0, a0, 0xff */
-    int16_t var_40[10];                   /* local table buffer, 18 bytes copied */
-    int16_t var_2c[9];                    /* another local, 18 bytes copied */
+int16_t tisp_hldc_strength_adjust_k(char arg1, int16_t *arg2, int16_t *arg3)
+{
+    uint32_t strength = (uint8_t)arg1;
+    uint32_t index = strength >> 5;
+    int32_t fraction = strength & 0x1fU;
+    int32_t inverse = 0x20 - fraction;
 
-    /* memcpy(&var_2c, 0x6dbc0, 18) */
-    memcpy(var_2c, _rodata_table_a, 18);
-
-    /* memcpy(&var_40, 0x6dbd4, 18) */
-    memcpy(var_40, _rodata_table_b, 18);
-
-    /* a1 = s0 >> 5  (index into table) */
-    uint32_t *a1 = s0 >> 5;
-    /* a0 = s0 & 0x1f  (fractional part for multiply) */
-    uint32_t *a0 = s0 & 0x1f;
-
-    /* t0 = &var_40[a1 + 1] */
-    int16_t *t0 = &var_40[(uintptr_t)a1 + 1];
-    /* a1_2 = &var_40[a1] */
-    int16_t *a1_2 = &var_40[(uintptr_t)a1];
-
-    /* 
-     * First multiply-accumulate (for arg2 output):
-     * lo_1:hi_1 = muls_dp_q(t0[10], (uintptr_t)a0) + muls_dp_d(a1_2[10], 32 - (uintptr_t)a0)
-     * lo_3:hi_3 = muls_dp_q(*t0, (uintptr_t)a0) + muls_dp_d(*a1_2, 32 - (uintptr_t)a0)
-     * result = (int16_t)((lo_3 + 16) >> 5)   (arithmetic right shift)
-     * *arg2 = (int16_t)((lo_1 + 16) >> 5)
-     */
-
-    /* Compute t0[10] and a1_2[10] - these are at offset 20 from base */
-    int32_t t0_10 = (int32_t)t0[10];
-    int32_t a1_2_10 = (int32_t)a1_2[10];
-
-    /* First muls.dp: t0_10 * a0  -> 64-bit result in hi:lo */
-    int64_t prod1_hi, prod1_lo;
-    {
-        int64_t p = (int64_t)t0_10 * (int64_t)(uintptr_t)a0;
-        prod1_hi = p >> 32;
-        prod1_lo = p & 0xFFFFFFFF;
-    }
-
-    /* Second muls.dp: a1_2_10 * (32 - a0) */
-    int32_t t1 = 32 - (int32_t)a0;
-    int64_t prod2_hi, prod2_lo;
-    {
-        int64_t p = (int64_t)a1_2_10 * (int64_t)t1;
-        prod2_hi = p >> 32;
-        prod2_lo = p & 0xFFFFFFFF;
-    }
-
-    /* Accumulate: lo_1 = lo1 + lo2, hi_1 = hi1 + hi2 + carry */
-    int64_t lo_1 = prod1_lo + prod2_lo;
-    int64_t hi_1 = prod1_hi + prod2_hi + (lo_1 < prod1_lo ? 1 : 0);
-    /* But MIPS madd adds to the hi:lo pair, so we need signed accumulation */
-    /* Actually madd adds (hi,lo) += (a3,t1) where t1 = 32-a0 */
-    /* The madd is signed: hi:lo += (int64_t)a3 * (int64_t)t1 */
-    /* Let me redo this properly with signed 64-bit */
-
-    /* Recompute with proper signed madd semantics */
-    int64_t acc1 = (int64_t)t0_10 * (int64_t)(uintptr_t)a0;
-    int64_t acc2 = (int64_t)a1_2_10 * (int64_t)t1;
-    int64_t sum1 = acc1 + acc2;
-    int32_t lo_1_signed = (int32_t)(sum1 & 0xFFFFFFFF);
-
-    /* Now second multiply for result */
-    int32_t t0_0 = (int32_t)t0[0];
-    int32_t a1_2_0 = (int32_t)a1_2[0];
-
-    int64_t acc3 = (int64_t)t0_0 * (int64_t)(uintptr_t)a0;
-    int64_t acc4 = (int64_t)a1_2_0 * (int64_t)t1;
-    int64_t sum3 = acc3 + acc4;
-    int32_t lo_3_signed = (int32_t)(sum3 & 0xFFFFFFFF);
-
-    /* Arithmetic right shift by 5 with rounding: (lo + 16) >> 5 */
-    int16_t result = (int16_t)((lo_3_signed + 16) >> 5);
-    *arg2 = (int16_t)((lo_1_signed + 16) >> 5);
-    *arg3 = result;
-
-    return result;
+    *arg2 = (int16_t)((_rodata_table_a[index + 1] * fraction +
+                       _rodata_table_a[index] * inverse + 0x10) >> 5);
+    *arg3 = (int16_t)((_rodata_table_b[index + 1] * fraction +
+                       _rodata_table_b[index] * inverse + 0x10) >> 5);
+    return *arg3;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043818 origin=model_output original=tisp_hldc_para_validity_judge */
-int32_t tisp_hldc_para_validity_judge(int32_t arg1, int32_t arg2) {
-    /* Compute lo = muls_dp(arg1, -20480) + arg0 * 9 * arg0
-     * mult a1, v1(-20480) -> hi:lo
-     * sll v0, a0, 3 -> v0 = arg0*8
-     * addu v0, v0, a0 -> v0 = arg0*9
-     * madd v0, a0 -> adds v0*a0 = arg0*9*arg0 to lo:hi
-     * mflo v1 -> lo result */
-    int32_t *v0;
-    int32_t v1;
-    __asm__ volatile (
-        "li %1, -20480\n\t"
-        "mult %2, %1\n\t"
-        "sll %0, %3, 3\n\t"
-        "addu %0, %0, %3\n\t"
-        "madd %0, %3\n\t"
-        "mflo %1\n\t"
-        : "=&r"(v0), "=&r"(v1)
-        : "r"(arg1), "r"(arg2)
-        :
-    );
+int32_t tisp_hldc_para_validity_judge(int32_t arg1, int32_t arg2)
+{
+    int32_t discriminant;
 
-    /* Check: arg2 u< 512 */
-    if ((uint32_t)arg2 >= 512)
+    if ((uint32_t)arg1 >= 0x200U || (uint32_t)arg2 >= 0x200U)
         return -1;
 
-    /* Check: arg1 u< 512 */
-    if ((uint32_t)arg1 >= 512)
-        return -1;
-
-    /* Check: lo > 0 (signed) */
-    if (v1 <= 0)
-        return -1;
-
-    /* Check: arg2 * 10 < arg1 * 3 */
+    discriminant = arg1 * 9 * arg1 - arg2 * 0x5000;
+    if (discriminant <= 0)
+        return 1;
     if (arg2 * 10 >= arg1 * 3)
         return -1;
-
-    /* Check: arg1 * (-3) + arg2 * 5 + 1024 >= 1 */
-    if (arg1 * (-3) + arg2 * 5 + 1024 >= 1)
-        return 1;
-
-    return -1;
+    return (-arg1 * 3 + arg2 * 5 + 0x400) >= 1 ? 1 : -1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004389c origin=model_output original=tisp_hldc_quadratic_func */
@@ -70278,183 +70168,168 @@ int32_t tisp_hldc_quadratic_func(int32_t arg1, int32_t arg2, int32_t arg3,
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043928 origin=fragment_seed original=tisp_hldc_calc_para */
-int32_t tisp_hldc_calc_para(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uintptr_t arg6)
+int32_t tisp_hldc_calc_para(int32_t k1, int32_t k2, int32_t width,
+                            int32_t height, int32_t center_x,
+                            int32_t center_y, int32_t out[4])
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int32_t far_x = width - center_x - 1;
+    int32_t near_x = center_x - 1;
+    int32_t far_y = height - center_y - 1;
+    int32_t near_y = center_y - 1;
+    uint32_t radius_sq;
+    uint32_t scale;
+    uint64_t normalized;
+    uint64_t normalized_sq;
+    int64_t outer_value;
+    int64_t inner_value;
+    int64_t selected;
+
+    if (!out)
+        return -EINVAL;
+    if (far_y < near_y)
+        far_y = near_y;
+    if (far_x < near_x) {
+        int32_t tmp = far_x;
+
+        far_x = near_x;
+        near_x = tmp;
+    }
+
+    radius_sq = (uint32_t)(far_x * far_x + far_y * far_y);
+    if (!radius_sq)
+        return -EINVAL;
+    scale = 0x3fffffffU / radius_sq;
+
+    normalized = (uint64_t)radius_sq * scale;
+    normalized_sq = (normalized * normalized) >> 30;
+    outer_value = (1LL << 40) - (int64_t)k1 * normalized +
+                  (int64_t)k2 * normalized_sq;
+
+    normalized = (uint64_t)(near_x * near_x) * scale;
+    normalized_sq = (normalized * normalized) >> 30;
+    inner_value = (1LL << 40) - (int64_t)k1 * normalized +
+                  (int64_t)k2 * normalized_sq;
+    selected = outer_value >= inner_value ? outer_value : inner_value;
+    if (selected <= 0)
+        return -ERANGE;
+
+    out[0] = scale;
+    out[1] = (int32_t)div64_u64(1ULL << 51, (uint64_t)selected) - 5;
+    if (out[1] <= 0)
+        out[1] = 1;
+    out[2] = center_x - width / 2;
+    out[3] = center_y - height / 2;
+    return 2;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043b24 origin=fragment_seed original=tisp_hldc_par_refresh */
 int32_t tisp_hldc_par_refresh(uint32_t a0)
 {
-    uint32_t *s0;
-
     tisp_hldc_con_par_cfg();
-
-    s0 = a0;
-
-    if (s0 == 1)
-        system_reg_write(36932, 0);
-
+    if (a0 == 1)
+        tisp_hldc_par_refresh_part_1();
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043b70 origin=model_output original=tisp_hldc_set_attr */
-int32_t tisp_hldc_set_attr(int32_t arg1, char *arg2)
+int32_t tisp_hldc_set_attr(int32_t arg1, const void *arg2)
 {
-	char first_byte = arg2[0];
-	int16_t var_16, var_18;
-	int32_t var_34[8];
-	int32_t *var_28;
-	int32_t *var_38;
-	int32_t var_24;
-	int32_t var_20;
-	int32_t *var_1c;
-	int32_t var_30;
-	int32_t *var_2c;
+    const uint8_t *attr = arg2;
+    int16_t k1;
+    int16_t k2;
+    int16_t dimensions[4];
+    int32_t full[4] = { 0 };
+    int32_t half[4] = { 0 };
+    int32_t validity;
+    int32_t result;
 
-	/* Clear local variables */
-	var_38[0] = 0;
-	memset(var_34, 0, sizeof(var_34));
+    (void)arg1;
+    if (!attr)
+        return -EINVAL;
+    memcpy(dimensions, attr + 2, sizeof(dimensions));
+    tisp_hldc_strength_adjust_k(attr[0], &k1, &k2);
+    validity = tisp_hldc_para_validity_judge((uint16_t)k1, (uint16_t)k2);
+    if (validity < 0)
+        return validity;
 
-	/* Call strength adjust */
-	tisp_hldc_strength_adjust_k(first_byte, &var_16, &var_18);
+    result = tisp_hldc_calc_para((uint16_t)k1, (uint16_t)k2,
+                                  dimensions[0], dimensions[1],
+                                  dimensions[2], dimensions[3], full);
+    if (result < 0)
+        return result;
+    result = tisp_hldc_calc_para((uint16_t)k1, (uint16_t)k2,
+                                  dimensions[0] / 2, dimensions[1] / 2,
+                                  dimensions[2] / 2, dimensions[3] / 2,
+                                  half);
+    if (result < 0)
+        return result;
 
-	/* Validate parameters */
-	int32_t result = tisp_hldc_para_validity_judge((int32_t)var_16, (int32_t)var_18);
-
-	if (result >= 0) {
-		/* Happy path */
-		memcpy(hldc_attr_para, arg2, 10);
-
-		/* First calc_para call */
-		tisp_hldc_calc_para((int32_t)var_16, (int32_t)var_18,
-			(int32_t)(int16_t)arg2[2], (int32_t)(int16_t)arg2[4],
-			(int32_t)(int16_t)arg2[6], (int32_t)(int16_t)arg2[8],
-			&var_28);
-
-		/* Second calc_para call with divided values */
-		tisp_hldc_calc_para((int32_t)var_16, (int32_t)var_18,
-			(int32_t)(int16_t)arg2[2] / 2, (int32_t)(int16_t)arg2[4] / 2,
-			(int32_t)(int16_t)arg2[6] / 2, (int32_t)(int16_t)arg2[8] / 2,
-			&var_38);
-
-		/* Store global data */
-		data_c3dcc = (uint32_t)var_18;
-		data_c3dd4 = (uint32_t)var_18;
-		data_c3dd8 = (uintptr_t (*)())(uintptr_t)var_24;
-		data_c3dc8 = (uint32_t)var_16;
-		data_c3ddc = var_34[0];
-		data_c3dd0 = (uint32_t)var_16;
-		data_c3de0 = (uintptr_t (*)())(uintptr_t)var_28;
-		data_c3de4 = (uintptr_t (*)())(uintptr_t)var_38;
-		data_c3de8 = (uintptr_t (*)())(uintptr_t)var_20;
-		data_c3dec = (uintptr_t (*)())(uintptr_t)var_1c;
-		data_c3df0 = (uintptr_t (*)())(uintptr_t)var_30;
-		data_c3df4 = (uintptr_t (*)())(uintptr_t)var_2c;
-
-		/* Store into hldc_con_par_array (matches assembly stores at 0x43ccc-0x43d1c) */
-		((void **)hldc_con_par_array)[3] = (uint32_t)var_18;
-		((void **)hldc_con_par_array)[5] = (uint32_t)var_18;
-		((void **)hldc_con_par_array)[6] = var_34[3];
-		((void **)hldc_con_par_array)[2] = (uint32_t)arg2[0];
-		((void **)hldc_con_par_array)[7] = var_24;
-		((void **)hldc_con_par_array)[4] = (uint32_t)var_16;
-		((void **)hldc_con_par_array)[8] = var_28;
-		((void **)hldc_con_par_array)[9] = (uint32_t)var_16;
-		((void **)hldc_con_par_array)[10] = var_28;
-		((void **)hldc_con_par_array)[11] = var_38;
-
-		/* Configuration and refresh */
-		tisp_hldc_con_par_cfg();
-
-		/* Indirect call to .text function pointer */
-		call_text_func();
-	} else {
-		/* Error path - print message and return result */
-		isp_printf("\n < %20s %5d > %20s  value is %10d ",
-			"tisp_hldc_set_attr", 0, "work_en", result);
-	}
-
-	return result;
+    memcpy(hldc_attr_para, attr, 10);
+    hldc_con_par_array[2] = (uint16_t)k1;
+    hldc_con_par_array[3] = (uint16_t)k2;
+    hldc_con_par_array[4] = (uint16_t)k1;
+    hldc_con_par_array[5] = (uint16_t)k2;
+    hldc_con_par_array[6] = full[1];
+    hldc_con_par_array[7] = half[1];
+    hldc_con_par_array[8] = full[0];
+    hldc_con_par_array[9] = half[0];
+    hldc_con_par_array[10] = full[2];
+    hldc_con_par_array[11] = full[3];
+    hldc_con_par_array[12] = half[2];
+    hldc_con_par_array[13] = half[3];
+    tisp_hldc_con_par_cfg();
+    tisp_hldc_par_refresh_part_1();
+    return validity;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043d5c origin=fragment_seed original=tisp_hldc_get_attr */
-int32_t tisp_hldc_get_attr(uint32_t a0, uint32_t a1)
+int32_t tisp_hldc_get_attr(int32_t arg1, void *arg2)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)a1, (void *)(uintptr_t)&sclk_name, 10); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    (void)arg1;
+    if (!arg2)
+        return -EINVAL;
+    memcpy(arg2, hldc_attr_para, 10);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043d90 origin=fragment_seed original=tiziano_hldc_params_refresh */
 int32_t tiziano_hldc_params_refresh(void)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uint32_t *)&hldc_con_par_array, (void *)(uintptr_t)&tparams, 72); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    memcpy(hldc_con_par_array,
+           tparams + T23_TPARAMS_ACTIVE_OFFSET + T23_TPARAMS_HLDC_OFFSET,
+           sizeof(hldc_con_par_array));
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043dc8 origin=fragment_seed original=tiziano_hldc_init */
 int32_t tiziano_hldc_init(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    tiziano_hldc_params_refresh();
+    tisp_hldc_con_par_cfg();
+    tisp_hldc_par_refresh_part_1();
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043e10 origin=model_output original=tisp_hldc_param_array_get */
 int32_t tisp_hldc_param_array_get(int32_t arg1, int32_t *arg2, int32_t *arg3)
 {
-	int32_t *s0;
-
-	s0 = (uintptr_t *)arg3;
-	memcpy(arg2, &hldc_con_par_array, 0x48);
-	*arg3 = 0x48;
-	return 0;
+    (void)arg1;
+    if (!arg2 || !arg3)
+        return -EINVAL;
+    memcpy(arg2, hldc_con_par_array, sizeof(hldc_con_par_array));
+    *arg3 = sizeof(hldc_con_par_array);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000043e58 origin=fragment_seed original=tisp_hldc_param_array_set */
-int32_t tisp_hldc_param_array_set(void)
+int32_t tisp_hldc_param_array_set(int32_t arg1, const void *arg2)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    (void)arg1;
+    if (!arg2)
+        return -EINVAL;
+    memcpy(hldc_con_par_array, arg2, sizeof(hldc_con_par_array));
+    tisp_hldc_con_par_cfg();
+    tisp_hldc_par_refresh_part_1();
     return 0;
 }
 

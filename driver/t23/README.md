@@ -189,6 +189,17 @@ Current smoke-test status:
   40 hard stubs and 83 collapses. A default device cycle decoded 262 measured
   RTSP frames at `YAVG/UAVG/VAVG/SATAVG` `112.4/129.4/124.9/7.0`, retained
   `19594/1698` ISP/VIC interrupts without new faults, and rebooted cleanly.
+- The T23 HLDC path now loads its exact 72-byte SC2336 tuning block from file
+  offset `0x14b44`, packs all eleven `0x9000..0x9028` parameter registers,
+  and commits shadow register `0x9044` from the direct source startup path.
+  The recovered strength interpolation, validity check, radial fixed-point
+  calculation, attribute controls, and parameter-array controls replace the
+  generated hard stubs and unsafe pointer bodies. Every live HLDC register
+  matched the OEM module in a same-device comparison. A default recovered
+  cycle decoded 264 RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `109.6/128.9/126.1/6.5`, retained `37615/3261` ISP/VIC interrupts without
+  new faults, and rebooted cleanly. The binary audit now reports 39 hard stubs
+  and 83 collapses.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel
