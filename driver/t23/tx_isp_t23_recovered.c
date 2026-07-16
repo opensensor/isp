@@ -9816,6 +9816,7 @@ int32_t tisp_mdns_par_refresh(uint32_t gain_q16, uint32_t threshold);
 int32_t tisp_sdns_refresh(uint32_t gain_q16);
 int32_t tisp_s_sdns_ratio(uint32_t ratio);
 int tiziano_sdns_init(void);
+int32_t tiziano_adr_init(uint32_t arg0, uint32_t width, uint32_t height);
 int32_t tisp_gib_gain_interpolation(uint32_t gain_q16);
 int32_t tisp_ydns_refresh(uint32_t gain_q16);
 int32_t tiziano_ydns_init(void);
@@ -9858,6 +9859,12 @@ static bool regtrace_t23_source_sdns_tuning_init = true;
 static bool regtrace_t23_source_sdns_internal_enable = true;
 static bool regtrace_t23_source_sdns_initialized;
 static uint regtrace_t23_source_sdns_gain_old = 0xffffffffU;
+static bool regtrace_t23_source_adr_tuning_init = true;
+static bool regtrace_t23_source_adr_internal_enable;
+static bool regtrace_t23_source_adr_dynamic;
+static bool regtrace_t23_source_adr_initialized;
+static uint regtrace_t23_source_adr_width;
+static uint regtrace_t23_source_adr_height;
 static bool regtrace_t23_source_gib_tuning_init = true;
 static bool regtrace_t23_source_gamma_tuning_init = true;
 static bool regtrace_t23_source_lsc_tuning_init = true;
@@ -10002,6 +10009,18 @@ module_param_named(source_sdns_internal_enable,
                    regtrace_t23_source_sdns_internal_enable, bool, 0644);
 module_param_named(source_sdns_gain_old,
                    regtrace_t23_source_sdns_gain_old, uint, 0444);
+module_param_named(source_adr_tuning_init,
+                   regtrace_t23_source_adr_tuning_init, bool, 0644);
+module_param_named(source_adr_internal_enable,
+                   regtrace_t23_source_adr_internal_enable, bool, 0644);
+module_param_named(source_adr_dynamic,
+                   regtrace_t23_source_adr_dynamic, bool, 0644);
+module_param_named(source_adr_initialized,
+                   regtrace_t23_source_adr_initialized, bool, 0444);
+module_param_named(source_adr_width,
+                   regtrace_t23_source_adr_width, uint, 0444);
+module_param_named(source_adr_height,
+                   regtrace_t23_source_adr_height, uint, 0444);
 module_param_named(source_gib_tuning_init,
                    regtrace_t23_source_gib_tuning_init, bool, 0644);
 module_param_named(source_gamma_tuning_init,
@@ -11601,6 +11620,7 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_sdns_layout.inc"
 #include "tx_isp_t23_sdns_writers.inc"
 #include "tx_isp_t23_mdns_layout.inc"
+#include "tx_isp_t23_adr_layout.inc"
 #include "tx_isp_t23_mdns_interp.inc"
 #include "tx_isp_t23_mdns_writers.inc"
 #include "tx_isp_t23_sharpen_tuning.inc"
@@ -11682,6 +11702,45 @@ static int regtrace_t23_source_sdns_load_tuning(void)
            *(const uint32_t *)(const void *)&sdns_aa_mv_det_opt[0],
            *(const uint32_t *)(const void *)&sdns_aa_mv_det_opt[4],
            *(const uint32_t *)(const void *)&sdns_aa_mv_det_opt[8]);
+    return 0;
+}
+
+static int regtrace_t23_source_adr_load_tuning(void)
+{
+    unsigned char *params;
+    uint32_t tool_control_1;
+    int ret;
+
+    params = private_vmalloc(REGTRACE_T23_ADR_TUNING_SIZE);
+    if (!params)
+        return -ENOMEM;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_ADR_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_ADR_TUNING_SIZE);
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: ADR tuning refresh failed path=%s ret=%d\n",
+               regtrace_t23_source_core_tuning_path, ret);
+        private_vfree(params);
+        return ret;
+    }
+
+    tool_control_1 = regtrace_t23_get_le32(param_adr_tool_control_array + 4U);
+#define REGTRACE_T23_ADR_COPY_FIELD(name, offset, size) \
+    memcpy(&(name), params + (offset), (size));
+    REGTRACE_T23_ADR_TUNING_FIELDS(REGTRACE_T23_ADR_COPY_FIELD)
+#undef REGTRACE_T23_ADR_COPY_FIELD
+    regtrace_t23_put_le32(param_adr_tool_control_array + 4U, tool_control_1);
+
+    private_vfree(params);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: ADR tuning loaded ctl=%u para=%x/%x/%x map=%x/%x\n",
+           regtrace_t23_get_le32(param_adr_tool_control_array),
+           regtrace_t23_get_le32(param_adr_para_array),
+           regtrace_t23_get_le32(param_adr_para_array + 4U),
+           regtrace_t23_get_le32(param_adr_para_array + 28U),
+           regtrace_t23_get_le32(param_adr_map_kneepoint_array),
+           regtrace_t23_get_le32(param_adr_map_kneepoint_array + 88U));
     return 0;
 }
 
@@ -12610,6 +12669,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_core_started = false;
         regtrace_t23_source_mdns_initialized = false;
         regtrace_t23_source_sdns_initialized = false;
+        regtrace_t23_source_adr_initialized = false;
         printk(KERN_WARNING "tx_isp_t23_recovered: source core stopped r800=0x%x reason=%s\n",
                system_reg_read(0x800U), reason ? reason : "?");
         return 0;
@@ -12636,6 +12696,11 @@ static int regtrace_t23_source_core_set_stream(int enable,
         bypass |= BIT(15);
     else
         bypass &= ~BIT(15);
+    if (!regtrace_t23_source_adr_tuning_init ||
+        !regtrace_t23_source_adr_internal_enable)
+        bypass |= BIT(7);
+    else
+        bypass &= ~BIT(7);
     if (regtrace_t23_source_awb_stats_init)
         bypass &= ~BIT(25);
     if (regtrace_t23_source_dpc_tuning_init)
@@ -12678,6 +12743,16 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_source_ccm_write_tuning_startup();
     if (regtrace_t23_source_dmsc_tuning_init)
         regtrace_t23_source_dmsc_write_tuning_startup();
+    if (regtrace_t23_source_adr_tuning_init) {
+        ret = tiziano_adr_init(0, REGTRACE_SC2336_WIDTH,
+                               REGTRACE_SC2336_HEIGHT);
+        if (ret) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: ADR source init failed ret=%d\n",
+                   ret);
+            return ret;
+        }
+    }
     regtrace_t23_source_apply_total_gain();
     if (regtrace_t23_source_bcsh_tuning_init)
         regtrace_t23_source_bcsh_write_tuning_startup();
@@ -57747,47 +57822,170 @@ int32_t tiziano_adr_interrupt_static(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031748 origin=model_output original=tiziano_adr_5x5_param_distance */
 int32_t tiziano_adr_5x5_param_distance(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, void* arg5)
 {
-    int32_t lo;
-    
-    if (arg3 >= arg1)
-        lo = (arg3 - arg1) / 8;
-    else
-        lo = (arg1 - arg3) / 8;
+    const uint32_t *distance = arg5;
+    int32_t dx = arg3 >= arg1 ? (arg3 - arg1) / 8 : (arg1 - arg3) / 8;
+    int32_t dy = arg4 >= arg2 ? (arg4 - arg2) / 8 : (arg2 - arg4) / 8;
+    uint32_t distance_squared = (uint32_t)(dx * dx + dy * dy);
+    int i;
 
-    int32_t lo_1;
-    
-    if (arg4 >= arg2)
-        lo_1 = (arg4 - arg2) / 8;
-    else
-        lo_1 = (arg2 - arg4) / 8;
-
-    int32_t* v1_1 = (int32_t*)((char*)arg5 + 0x78);
-    int32_t *i = 30;
-    int32_t lo_3;
-    int32_t hi_5;
-    hi_5:lo_3 = (int64_t)lo_1 * (int64_t)lo_1 + (int64_t)lo * (int64_t)lo;
-
-    do
-    {
-        if (*v1_1 >= lo_3)
+    for (i = 30; i >= 0; --i)
+        if (distance[i] >= distance_squared)
             return i + 1;
-        
-        i = (void *)(uintptr_t)((uintptr_t)i - (1));
-        v1_1 = &v1_1[-1];
-    }
-    while (i != -1);
-
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000317dc origin=fragment_seed original=tiziano_adr_5x5_param */
+static uint32_t regtrace_t23_adr_isqrt(uint64_t value)
+{
+    uint64_t result = 0;
+    uint64_t bit = 1ULL << 62;
+
+    while (bit > value)
+        bit >>= 2;
+    while (bit) {
+        if (value >= result + bit) {
+            value -= result + bit;
+            result = (result >> 1) + bit;
+        } else {
+            result >>= 1;
+        }
+        bit >>= 2;
+    }
+    return (uint32_t)result;
+}
+
 int32_t tiziano_adr_5x5_param(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    static const uint32_t centre_base[31] = {
+        0x8411U, 0x60eaU, 0x5091U, 0x45cdU, 0x3dc2U, 0x3756U,
+        0x31fdU, 0x2d69U, 0x2968U, 0x25d9U, 0x22a5U, 0x1fbcU,
+        0x1d10U, 0x1a9aU, 0x1851U, 0x162eU, 0x142eU, 0x124cU,
+        0x1085U, 0x0ed6U, 0x0d3cU, 0x0bb6U, 0x0a41U, 0x08ddU,
+        0x0788U, 0x0640U, 0x0505U, 0x03d5U, 0x02b1U, 0x0196U,
+        0x0085U,
+    };
+    uint32_t counter_main[32] = { 0 };
+    uint32_t counter_02[32] = { 0 };
+    uint32_t counter_20[32] = { 0 };
+    uint32_t sum_22[32] = { 0 };
+    uint32_t sum_12[32] = { 0 };
+    uint32_t sum_02[32] = { 0 };
+    uint32_t sum_21[32] = { 0 };
+    uint32_t sum_20[32] = { 0 };
+    uint32_t col_step, row_step;
+    uint32_t row_start, row_stop, col_start, col_stop;
+    uint32_t row_half, col_half, row_mid, col_mid, row_far, col_far;
+    uint32_t scale, scale_squared;
+    uint32_t distance[31];
+    uint32_t x, y;
+    unsigned int i;
+
+    if (!regtrace_t23_source_adr_width || !regtrace_t23_source_adr_height)
+        return -EINVAL;
+
+    col_step = (regtrace_t23_source_adr_width + 3U) / 6U;
+    row_step = (regtrace_t23_source_adr_height + 2U) >> 2;
+    row_start = row_step << 1;
+    row_stop = row_start + row_step;
+    col_start = col_step << 1;
+    col_stop = col_start + col_step;
+    row_half = (row_step + 1U) >> 1;
+    col_half = (col_step + 1U) >> 1;
+    row_mid = row_step + row_half;
+    col_mid = col_step + col_half;
+    row_far = row_step + row_mid;
+    col_far = col_step + col_mid;
+
+    scale = regtrace_t23_adr_isqrt((uint64_t)row_mid * row_mid +
+                                   (uint64_t)col_mid * col_mid) / 3U;
+    scale_squared = scale * scale;
+    for (i = 0; i < ARRAY_SIZE(distance); ++i) {
+        uint64_t scaled = (uint64_t)centre_base[i] * scale_squared +
+                          0x20000U;
+
+        distance[i] = (uint32_t)(scaled >> 18);
+        regtrace_t23_put_le32(param_adr_centre_w_dis_array_tmp + i * 4U,
+                              distance[i]);
+    }
+
+    for (y = row_start; y <= row_stop; ++y) {
+        for (x = col_start; x <= col_stop; ++x) {
+            uint32_t bin_main = (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_mid, col_mid, distance);
+            uint32_t bin_02 = (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_far, col_mid, distance);
+            uint32_t bin_20 = (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_mid, col_far, distance);
+
+            counter_main[bin_main]++;
+            sum_22[bin_main] += (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_half, col_half, distance);
+            sum_12[bin_main] += (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_mid, col_half, distance);
+            sum_21[bin_main] += (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_half, col_mid, distance);
+            counter_02[bin_02]++;
+            sum_02[bin_02] += (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_far, col_half, distance);
+            counter_20[bin_20]++;
+            sum_20[bin_20] += (uint32_t)tiziano_adr_5x5_param_distance(
+                y, x, row_half, col_far, distance);
+        }
+    }
+
+    for (i = 0; i < 32U; ++i) {
+        uint32_t count = counter_main[i];
+        uint32_t w22, w12, w21, w02, w20;
+
+        if (count) {
+            w22 = (sum_22[i] + count / 2U) / count;
+            w12 = (sum_12[i] + count / 2U) / count;
+            w21 = (sum_21[i] + count / 2U) / count;
+        } else if (i) {
+            w22 = regtrace_t23_get_le32(param_adr_weight_22_lut_array_tmp +
+                                        (i - 1U) * 4U);
+            w12 = regtrace_t23_get_le32(param_adr_weight_12_lut_array_tmp +
+                                        (i - 1U) * 4U);
+            w21 = regtrace_t23_get_le32(param_adr_weight_21_lut_array_tmp +
+                                        (i - 1U) * 4U);
+        } else {
+            w22 = w12 = w21 = 0;
+        }
+
+        count = counter_02[i];
+        if (count)
+            w02 = (sum_02[i] + count / 2U) / count;
+        else if (i)
+            w02 = regtrace_t23_get_le32(param_adr_weight_02_lut_array_tmp +
+                                        (i - 1U) * 4U);
+        else
+            w02 = 0;
+
+        count = counter_20[i];
+        if (count)
+            w20 = (sum_20[i] + count / 2U) / count;
+        else if (i)
+            w20 = regtrace_t23_get_le32(param_adr_weight_20_lut_array_tmp +
+                                        (i - 1U) * 4U);
+        else
+            w20 = 0;
+
+        regtrace_t23_put_le32(param_adr_weight_22_lut_array_tmp + i * 4U,
+                              w22);
+        regtrace_t23_put_le32(param_adr_weight_12_lut_array_tmp + i * 4U,
+                              w12);
+        regtrace_t23_put_le32(param_adr_weight_21_lut_array_tmp + i * 4U,
+                              w21);
+        regtrace_t23_put_le32(param_adr_weight_02_lut_array_tmp + i * 4U,
+                              w02);
+        regtrace_t23_put_le32(param_adr_weight_20_lut_array_tmp + i * 4U,
+                              w20);
+    }
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031d08 origin=fragment_seed original=tiziano_adr_params_init */
+#if 0 /* Replaced below by the source-derived T23 static register writer. */
 int tiziano_adr_params_init(void)
 {
     uint32_t *local_14 = 0;
@@ -58069,6 +58267,144 @@ tiziano_adr_params_init0x154:
     /* fragment 136: Epilogue */
     /* function epilogue: restore registers and return */
 
+    return 0;
+}
+
+#endif
+
+static void regtrace_t23_adr_store_pointer(unsigned char *slot,
+                                           const void *value)
+{
+    *(uintptr_t *)(void *)slot = (uintptr_t)value;
+}
+
+static void regtrace_t23_adr_write_pairs16(uint32_t reg,
+                                          const unsigned char *values,
+                                          unsigned int count)
+{
+    unsigned int i;
+
+    for (i = 0; i < count; i += 2U, reg += 4U) {
+        uint32_t word = regtrace_t23_get_le32(values + i * 4U) & 0xffffU;
+
+        if (i + 1U < count)
+            word |= (regtrace_t23_get_le32(values + (i + 1U) * 4U) &
+                     0xffffU) << 16;
+        system_reg_write(reg, word);
+    }
+}
+
+static void regtrace_t23_adr_write_bytes4(uint32_t reg,
+                                         const unsigned char *values,
+                                         unsigned int count)
+{
+    unsigned int i;
+
+    for (i = 0; i < count; i += 4U, reg += 4U) {
+        uint32_t word = regtrace_t23_get_le32(values + i * 4U) & 0xffU;
+
+        if (i + 1U < count)
+            word |= (regtrace_t23_get_le32(values + (i + 1U) * 4U) &
+                     0xffU) << 8;
+        if (i + 2U < count)
+            word |= (regtrace_t23_get_le32(values + (i + 2U) * 4U) &
+                     0xffU) << 16;
+        if (i + 3U < count)
+            word |= (regtrace_t23_get_le32(values + (i + 3U) * 4U) &
+                     0xffU) << 24;
+        system_reg_write(reg, word);
+    }
+}
+
+int tiziano_adr_params_init(void)
+{
+    uint32_t p0 = regtrace_t23_get_le32(param_adr_para_array);
+    uint32_t p1 = regtrace_t23_get_le32(param_adr_para_array + 4U);
+    uint32_t p2 = regtrace_t23_get_le32(param_adr_para_array + 8U);
+    uint32_t p3 = regtrace_t23_get_le32(param_adr_para_array + 12U);
+    uint32_t p4 = regtrace_t23_get_le32(param_adr_para_array + 16U);
+    uint32_t p5 = regtrace_t23_get_le32(param_adr_para_array + 20U);
+    uint32_t p6 = regtrace_t23_get_le32(param_adr_para_array + 24U);
+    uint32_t p7 = regtrace_t23_get_le32(param_adr_para_array + 28U);
+    uint32_t a10 = regtrace_t23_get_le32(param_adr_coc_adjust_array + 40U);
+    uint32_t a11 = regtrace_t23_get_le32(param_adr_coc_adjust_array + 44U);
+    uint32_t a12 = regtrace_t23_get_le32(param_adr_coc_adjust_array + 48U);
+    uint32_t a13 = regtrace_t23_get_le32(param_adr_coc_adjust_array + 52U);
+
+    /* The recovered T23 path is linear-only; preserve the OEM pointer state. */
+    regtrace_t23_adr_store_pointer(adr_ctc_map2cut_y_now,
+                                  adr_ctc_map2cut_y);
+    regtrace_t23_adr_store_pointer(adr_light_end_now, adr_light_end);
+    regtrace_t23_adr_store_pointer(adr_map_mode_now, adr_map_mode);
+    regtrace_t23_adr_store_pointer(adr_ev_list_now, adr_ev_list);
+    regtrace_t23_adr_store_pointer(adr_ligb_list_now, adr_ligb_list);
+    regtrace_t23_adr_store_pointer(adr_mapb1_list_now, adr_mapb1_list);
+    regtrace_t23_adr_store_pointer(adr_mapb2_list_now, adr_mapb2_list);
+    regtrace_t23_adr_store_pointer(adr_mapb3_list_now, adr_mapb3_list);
+    regtrace_t23_adr_store_pointer(adr_mapb4_list_now, adr_mapb4_list);
+    regtrace_t23_adr_store_pointer(adr_block_light_now, adr_block_light);
+    regtrace_t23_adr_store_pointer(adr_blp2_list_now, adr_blp2_list);
+
+    system_reg_write(0x4004U, ((p7 & 0xffffU) << 16) |
+                     ((p0 & 0xffffU) << 4) | (p1 & 0xfU));
+    system_reg_write(0x4448U, ((p3 & 0xffffU) << 16) |
+                     (p2 & 0xffffU));
+    system_reg_write(0x444cU, ((p5 & 0xffffU) << 16) |
+                     (p4 & 0xffffU));
+    system_reg_write(0x4450U, p6 & 0xffffU);
+
+    regtrace_t23_adr_write_pairs16(0x402cU,
+                                   param_adr_centre_w_dis_array, 31U);
+    regtrace_t23_adr_write_pairs16(0x4340U,
+                                   param_adr_ctc_kneepoint_array, 9U);
+    regtrace_t23_adr_write_pairs16(0x4368U,
+                                   param_adr_ctc_kneepoint_array + 36U, 8U);
+    regtrace_t23_adr_write_pairs16(0x406cU,
+                                   param_adr_map_kneepoint_array, 11U);
+    regtrace_t23_adr_write_bytes4(0x4334U,
+                                  param_adr_map_kneepoint_array + 44U, 12U);
+
+    regtrace_t23_adr_write_bytes4(0x4294U,
+                                  param_adr_weight_20_lut_array, 32U);
+    regtrace_t23_adr_write_bytes4(0x42b4U,
+                                  param_adr_weight_02_lut_array, 32U);
+    regtrace_t23_adr_write_bytes4(0x42d4U,
+                                  param_adr_weight_12_lut_array, 32U);
+    regtrace_t23_adr_write_bytes4(0x4314U,
+                                  param_adr_weight_22_lut_array, 32U);
+    regtrace_t23_adr_write_bytes4(0x42f4U,
+                                  param_adr_weight_21_lut_array, 32U);
+
+    regtrace_t23_adr_write_pairs16(0x4378U,
+                                   param_adr_min_kneepoint_array_def, 11U);
+    regtrace_t23_adr_write_bytes4(0x43a8U,
+                                  param_adr_min_kneepoint_array_def + 44U,
+                                  12U);
+    regtrace_t23_adr_write_pairs16(0x43b4U,
+                                   param_adr_coc_kneepoint_y1_array, 12U);
+    regtrace_t23_adr_write_pairs16(0x43ccU,
+                                   param_adr_coc_kneepoint_y2_array, 12U);
+    regtrace_t23_adr_write_pairs16(0x43e4U,
+                                   param_adr_coc_kneepoint_y3_array, 12U);
+    regtrace_t23_adr_write_pairs16(0x43fcU,
+                                   param_adr_coc_kneepoint_y4_array, 12U);
+    regtrace_t23_adr_write_pairs16(0x4414U,
+                                   param_adr_coc_kneepoint_y5_array, 12U);
+
+    regtrace_t23_adr_write_pairs16(0x442cU,
+                                   param_adr_coc_adjust_array, 4U);
+    system_reg_write(0x4434U,
+                     regtrace_t23_get_le32(param_adr_coc_adjust_array + 16U));
+    regtrace_t23_adr_write_pairs16(0x4438U,
+                                   param_adr_coc_adjust_array + 20U, 4U);
+    system_reg_write(0x4440U,
+                     regtrace_t23_get_le32(param_adr_coc_adjust_array + 36U));
+    system_reg_write(0x4444U, (a10 & 0xffU) |
+                     ((a11 & 0xffU) << 8) |
+                     ((a12 & 0xffU) << 16) |
+                     ((a13 & 0xffU) << 24));
+    regtrace_t23_adr_write_pairs16(0x4484U,
+                                   param_adr_stat_block_hist_diff_array, 4U);
     return 0;
 }
 
@@ -58829,6 +59165,7 @@ tisp_s_adr_str_internal0x19c:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033dac origin=fragment_seed original=tiziano_adr_params_refresh */
+#if 0 /* Replaced below by the relocation-derived T23 tuning loader. */
 int32_t tiziano_adr_params_refresh(void)
 {
     uint32_t *local_10 = 0;
@@ -59084,6 +59421,50 @@ tiziano_adr_params_refresh0x564:
     return 0;
 }
 
+#endif
+
+int32_t tiziano_adr_params_refresh(void)
+{
+    uint32_t tool_control;
+    int ret;
+
+    ret = regtrace_t23_source_adr_load_tuning();
+    if (ret)
+        return ret;
+
+    tool_control = regtrace_t23_get_le32(param_adr_tool_control_array);
+    if (tool_control == 0U) {
+        memcpy(param_adr_centre_w_dis_array,
+               param_adr_centre_w_dis_array_tmp,
+               sizeof(param_adr_centre_w_dis_array));
+        memcpy(param_adr_weight_20_lut_array,
+               param_adr_weight_20_lut_array_tmp,
+               sizeof(param_adr_weight_20_lut_array));
+        memcpy(param_adr_weight_02_lut_array,
+               param_adr_weight_02_lut_array_tmp,
+               sizeof(param_adr_weight_02_lut_array));
+        memcpy(param_adr_weight_12_lut_array,
+               param_adr_weight_12_lut_array_tmp,
+               sizeof(param_adr_weight_12_lut_array));
+        memcpy(param_adr_weight_22_lut_array,
+               param_adr_weight_22_lut_array_tmp,
+               sizeof(param_adr_weight_22_lut_array));
+        memcpy(param_adr_weight_21_lut_array,
+               param_adr_weight_21_lut_array_tmp,
+               sizeof(param_adr_weight_21_lut_array));
+    } else if (tool_control != 1U) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: ADR tool control overflow value=%u\n",
+               tool_control);
+        return -EINVAL;
+    }
+
+    ret = tiziano_adr_gamma_refresh();
+    if (!ret)
+        ev_changed = 1U;
+    return ret;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034320 origin=model_output original=tiziano_adr_dn_params_refresh */
 int32_t tiziano_adr_dn_params_refresh(void)
 {
@@ -59160,6 +59541,7 @@ int32_t tisp_adr_wdr_en(uint32_t arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000344c4 origin=fragment_seed original=tiziano_adr_init */
+#if 0 /* Replaced below by the source-derived linear T23 ADR initialization. */
 int32_t tiziano_adr_init(uint32_t a0, uint32_t a1, uint32_t a2)
 {
     uint32_t *local_10 = 0;
@@ -60297,6 +60679,133 @@ tiziano_adr_init0xed8:
     /* fragment 194: Epilogue */
     /* function epilogue: restore registers and return */
 
+    return 0;
+}
+
+#endif
+
+int32_t tiziano_adr_init(uint32_t arg0, uint32_t width, uint32_t height)
+{
+    uint32_t width_div = width / 6U;
+    uint32_t height_div = height >> 2;
+    uint32_t width_sub;
+    uint32_t height_sub;
+    uint32_t width_calc;
+    uint32_t height_calc;
+    uint32_t tool_control;
+    int ret;
+
+    (void)arg0;
+    if (!width || !height)
+        return -EINVAL;
+
+    regtrace_t23_source_adr_width = width;
+    regtrace_t23_source_adr_height = height;
+    regtrace_t23_source_adr_initialized = false;
+
+    width_div &= ~1U;
+    height_div &= ~1U;
+    width_sub = (width_div >> 2) & ~1U;
+    height_sub = (height_div >> 2) & ~1U;
+    if (width_sub < 0x14U)
+        width_sub = 0x14U;
+    if (height_sub < 0x14U)
+        height_sub = 0x14U;
+
+    system_reg_write(0x4000U, width_div | (height_div << 16));
+    system_reg_write(0x4010U, height_div << 16);
+    system_reg_write(0x4014U, (height_div * 3U << 16) |
+                     (height_div * 2U));
+    system_reg_write(0x4018U, height);
+    system_reg_write(0x401cU, width_div << 16);
+    system_reg_write(0x4020U, (width_div * 3U << 16) |
+                     (width_div * 2U));
+    system_reg_write(0x4024U, (width_div * 5U << 16) |
+                     (width_div * 4U));
+    system_reg_write(0x4028U, width);
+    system_reg_write(0x4454U, ((height - height_sub) << 16) | height_sub);
+    system_reg_write(0x4458U, ((width - width_sub) << 16) | width_sub);
+
+    ret = tiziano_adr_params_refresh();
+    if (ret)
+        return ret;
+    ret = tisp_adr_set_params();
+    if (ret)
+        return ret;
+
+    width_calc = (width_div + 1U) >> 1;
+    height_calc = (height_div + 1U) >> 1;
+    if (width_calc >= height_calc)
+        width_calc = (height_calc * 3U + 1U) >> 1;
+    else
+        width_calc = (width_calc * 3U + 1U) >> 1;
+    regtrace_t23_put_le32(param_adr_tool_control_array + 4U, width_calc);
+
+    if (width == 1920U && height == 1080U) {
+        memcpy(param_adr_centre_w_dis_array_tmp,
+               param_adr_centre_w_dis_array_tmp_1080P,
+               sizeof(param_adr_centre_w_dis_array_tmp));
+        memcpy(param_adr_weight_20_lut_array_tmp,
+               param_adr_weight_20_lut_array_tmp_1080P,
+               sizeof(param_adr_weight_20_lut_array_tmp));
+        memcpy(param_adr_weight_02_lut_array_tmp,
+               param_adr_weight_02_lut_array_tmp_1080P,
+               sizeof(param_adr_weight_02_lut_array_tmp));
+        memcpy(param_adr_weight_12_lut_array_tmp,
+               param_adr_weight_12_lut_array_tmp_1080P,
+               sizeof(param_adr_weight_12_lut_array_tmp));
+        memcpy(param_adr_weight_22_lut_array_tmp,
+               param_adr_weight_22_lut_array_tmp_1080P,
+               sizeof(param_adr_weight_22_lut_array_tmp));
+        memcpy(param_adr_weight_21_lut_array_tmp,
+               param_adr_weight_21_lut_array_tmp_1080P,
+               sizeof(param_adr_weight_21_lut_array_tmp));
+    } else {
+        ret = tiziano_adr_5x5_param();
+        if (ret)
+            return ret;
+    }
+
+    tool_control = regtrace_t23_get_le32(param_adr_tool_control_array);
+    if (tool_control == 0U) {
+        memcpy(param_adr_centre_w_dis_array,
+               param_adr_centre_w_dis_array_tmp,
+               sizeof(param_adr_centre_w_dis_array));
+        memcpy(param_adr_weight_20_lut_array,
+               param_adr_weight_20_lut_array_tmp,
+               sizeof(param_adr_weight_20_lut_array));
+        memcpy(param_adr_weight_02_lut_array,
+               param_adr_weight_02_lut_array_tmp,
+               sizeof(param_adr_weight_02_lut_array));
+        memcpy(param_adr_weight_12_lut_array,
+               param_adr_weight_12_lut_array_tmp,
+               sizeof(param_adr_weight_12_lut_array));
+        memcpy(param_adr_weight_22_lut_array,
+               param_adr_weight_22_lut_array_tmp,
+               sizeof(param_adr_weight_22_lut_array));
+        memcpy(param_adr_weight_21_lut_array,
+               param_adr_weight_21_lut_array_tmp,
+               sizeof(param_adr_weight_21_lut_array));
+    }
+
+    ret = tiziano_adr_params_init();
+    if (ret)
+        return ret;
+
+    if (regtrace_t23_source_adr_dynamic) {
+        system_irq_func_set(0, 0x12,
+                            (int32_t)(uintptr_t)tiziano_adr_interrupt_static);
+        tisp_event_set_cb(2, (void *)(uintptr_t)tisp_adr_process);
+    }
+    regtrace_t23_source_adr_initialized = true;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: ADR initialized %ux%u active=%u dynamic=%u ctl=%u radius=%u cwd=%u/%u\n",
+           width, height,
+           regtrace_t23_source_adr_internal_enable ? 1U : 0U,
+           regtrace_t23_source_adr_dynamic ? 1U : 0U,
+           tool_control, width_calc,
+           regtrace_t23_get_le32(param_adr_centre_w_dis_array),
+           regtrace_t23_get_le32(param_adr_centre_w_dis_array + 120U));
     return 0;
 }
 

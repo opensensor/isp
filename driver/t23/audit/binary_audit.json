@@ -113,7 +113,7 @@
     ]
   },
   "oem": {
-    "path": "tx-isp-t23.ko",
+    "path": "/home/matteius/re-framework/tx-isp-t23.ko",
     "file_bytes": 1163028,
     "elf_class": "elf32",
     "endianness": "little",
@@ -424,16 +424,16 @@
     ]
   },
   "recovered": {
-    "path": "open-tx-isp/driver/t23/tx_isp_t23_recovered.ko",
-    "file_bytes": 969188,
+    "path": "driver/t23/tx_isp_t23_recovered.ko",
+    "file_bytes": 975684,
     "elf_class": "elf32",
     "endianness": "little",
     "machine": "0x8",
-    "function_symbols": 1320,
-    "functions_with_disassembly": 1320,
-    "executable_section_bytes": 356096,
-    "initialized_writable_bytes": 44992,
-    "uninitialized_writable_bytes": 1134624,
+    "function_symbols": 1322,
+    "functions_with_disassembly": 1322,
+    "executable_section_bytes": 356240,
+    "initialized_writable_bytes": 46480,
+    "uninitialized_writable_bytes": 1118368,
     "sections": [
       {
         "name": ".MIPS.abiflags",
@@ -447,7 +447,7 @@
       {
         "name": ".bss",
         "address": "0x0",
-        "bytes": 1134624,
+        "bytes": 1118368,
         "alloc": true,
         "executable": false,
         "writable": true,
@@ -465,7 +465,7 @@
       {
         "name": ".data",
         "address": "0x0",
-        "bytes": 44704,
+        "bytes": 46192,
         "alloc": true,
         "executable": false,
         "writable": true,
@@ -501,7 +501,7 @@
       {
         "name": ".modinfo",
         "address": "0x0",
-        "bytes": 5276,
+        "bytes": 5488,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -528,7 +528,7 @@
       {
         "name": ".pdr",
         "address": "0x0",
-        "bytes": 42240,
+        "bytes": 42304,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -564,7 +564,7 @@
       {
         "name": ".rel.pdr",
         "address": "0x0",
-        "bytes": 10560,
+        "bytes": 10576,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -582,7 +582,7 @@
       {
         "name": ".rel.text",
         "address": "0x0",
-        "bytes": 212096,
+        "bytes": 213648,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -609,7 +609,7 @@
       {
         "name": ".rel__param",
         "address": "0x0",
-        "bytes": 3024,
+        "bytes": 3168,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -618,7 +618,7 @@
       {
         "name": ".rodata",
         "address": "0x0",
-        "bytes": 74288,
+        "bytes": 74544,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -627,7 +627,7 @@
       {
         "name": ".rodata.str1.4",
         "address": "0x0",
-        "bytes": 20012,
+        "bytes": 20412,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -654,7 +654,7 @@
       {
         "name": ".strtab",
         "address": "0x0",
-        "bytes": 112768,
+        "bytes": 114171,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -663,7 +663,7 @@
       {
         "name": ".symtab",
         "address": "0x0",
-        "bytes": 80752,
+        "bytes": 81472,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -672,7 +672,7 @@
       {
         "name": ".text",
         "address": "0x0",
-        "bytes": 354768,
+        "bytes": 354912,
         "alloc": true,
         "executable": true,
         "writable": false,
@@ -708,7 +708,7 @@
       {
         "name": "__param",
         "address": "0x0",
-        "bytes": 2016,
+        "bytes": 2112,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -718,22 +718,22 @@
   },
   "summary": {
     "oem_functions": 1043,
-    "recovered_functions": 1320,
+    "recovered_functions": 1322,
     "direct_matches": 948,
     "replacement_matches": 34,
     "replacement_missing": 0,
     "oem_only": 61,
-    "recovered_only": 338,
+    "recovered_only": 340,
     "same_instruction_count": 197,
-    "similar": 362,
-    "shorter": 205,
-    "stub": 57,
-    "collapsed": 94,
+    "similar": 365,
+    "shorter": 202,
+    "stub": 56,
+    "collapsed": 95,
     "larger": 29,
     "expanded": 38,
     "matched_oem_instructions": 106302,
-    "matched_recovered_instructions": 71725,
-    "matched_instruction_ratio": 0.674728603412918
+    "matched_recovered_instructions": 71660,
+    "matched_instruction_ratio": 0.6741171379654193
   },
   "functions": [
     {
@@ -795,7 +795,7 @@
         {
           "name": "tisp_defog_soft_process",
           "section": ".text",
-          "address": "0x19b10",
+          "address": "0x1a1a4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -915,7 +915,7 @@
         {
           "name": "ispcore_pad_event_handle",
           "section": ".text",
-          "address": "0x30558",
+          "address": "0x30bec",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -995,7 +995,7 @@
         {
           "name": "defog_3x3_5x5_params_init",
           "section": ".text",
-          "address": "0x19d08",
+          "address": "0x1a39c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1060,46 +1060,6 @@
       "match_kind": "exact_name",
       "classification": "stub",
       "oem": {
-        "name": "tiziano_adr_5x5_param",
-        "section": ".text",
-        "address": "0x317dc",
-        "binding": "global",
-        "symbol_bytes": 1324,
-        "instructions": 331,
-        "branches": 19,
-        "calls": 9,
-        "returns": 1,
-        "relocations": 45
-      },
-      "recovered": [
-        {
-          "name": "tiziano_adr_5x5_param",
-          "section": ".text",
-          "address": "0x18958",
-          "binding": "global",
-          "symbol_bytes": 8,
-          "instructions": 2,
-          "branches": 0,
-          "calls": 0,
-          "returns": 1,
-          "relocations": 0
-        }
-      ],
-      "instruction_ratio": 0.006042296072507553,
-      "instruction_delta": -329,
-      "recovered_totals": {
-        "symbol_bytes": 8,
-        "instructions": 2,
-        "branches": 0,
-        "calls": 0,
-        "returns": 1,
-        "relocations": 0
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "stub",
-      "oem": {
         "name": "tisp_ae_algo_handle",
         "section": ".text",
         "address": "0x4bd58",
@@ -1115,7 +1075,7 @@
         {
           "name": "tisp_ae_algo_handle",
           "section": ".text",
-          "address": "0x20498",
+          "address": "0x20b2c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1195,7 +1155,7 @@
         {
           "name": "tiziano_defog_params_refresh",
           "section": ".text",
-          "address": "0x19d00",
+          "address": "0x1a394",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1235,7 +1195,7 @@
         {
           "name": "tisp_ae1_process_impl",
           "section": ".text",
-          "address": "0x1f3d8",
+          "address": "0x1fa6c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1315,7 +1275,7 @@
         {
           "name": "tisp_clm_interp_by_ct",
           "section": ".text",
-          "address": "0x1a554",
+          "address": "0x1abe8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1395,7 +1355,7 @@
         {
           "name": "tisp_sdns_wdr_en",
           "section": ".text",
-          "address": "0x1c108",
+          "address": "0x1c79c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1475,7 +1435,7 @@
         {
           "name": "tisp_cust_mode_s_ctrl",
           "section": ".text",
-          "address": "0x4ff7c",
+          "address": "0x4fed4",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -1675,7 +1635,7 @@
         {
           "name": "tisp_hldc_calc_para",
           "section": ".text",
-          "address": "0x1d228",
+          "address": "0x1d8bc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1835,7 +1795,7 @@
         {
           "name": "tisp_set_fps",
           "section": ".text",
-          "address": "0x2e344",
+          "address": "0x2e9d8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1995,7 +1955,7 @@
         {
           "name": "tisp_defog_max_filter3",
           "section": ".text",
-          "address": "0x19a68",
+          "address": "0x1a0fc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -2595,7 +2555,7 @@
         {
           "name": "tisp_s_BacklightComp",
           "section": ".text",
-          "address": "0x2e6e0",
+          "address": "0x2ed74",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -2675,7 +2635,7 @@
         {
           "name": "tisp_s_module_control",
           "section": ".text",
-          "address": "0x2f3e8",
+          "address": "0x2fa7c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -2715,7 +2675,7 @@
         {
           "name": "ae1_interrupt_static",
           "section": ".text",
-          "address": "0x1ed4c",
+          "address": "0x1f3e0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -2755,7 +2715,7 @@
         {
           "name": "tx_isp_vin_remove",
           "section": ".text",
-          "address": "0x567d0",
+          "address": "0x56860",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -2835,7 +2795,7 @@
         {
           "name": "tisp_g_module_control",
           "section": ".text",
-          "address": "0x2f3f0",
+          "address": "0x2fa84",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -2955,7 +2915,7 @@
         {
           "name": "tisp_s_awb_cluster",
           "section": ".text",
-          "address": "0x2efb8",
+          "address": "0x2f64c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -3115,7 +3075,7 @@
         {
           "name": "ae0_tune2",
           "section": ".text",
-          "address": "0x1e1bc",
+          "address": "0x1e850",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -3155,22 +3115,22 @@
         {
           "name": "apical_isp_core_ops_s_ctrl",
           "section": ".text",
-          "address": "0x4ff94",
+          "address": "0x4feec",
           "binding": "global",
-          "symbol_bytes": 2060,
-          "instructions": 515,
-          "branches": 113,
+          "symbol_bytes": 2112,
+          "instructions": 528,
+          "branches": 117,
           "calls": 26,
           "returns": 1,
           "relocations": 70
         }
       ],
-      "instruction_ratio": 0.39768339768339767,
-      "instruction_delta": -780,
+      "instruction_ratio": 0.40772200772200773,
+      "instruction_delta": -767,
       "recovered_totals": {
-        "symbol_bytes": 2060,
-        "instructions": 515,
-        "branches": 113,
+        "symbol_bytes": 2112,
+        "instructions": 528,
+        "branches": 117,
         "calls": 26,
         "returns": 1,
         "relocations": 70
@@ -3195,7 +3155,7 @@
         {
           "name": "tiziano_defog_init",
           "section": ".text",
-          "address": "0x4c2f0",
+          "address": "0x4bc70",
           "binding": "global",
           "symbol_bytes": 1704,
           "instructions": 426,
@@ -3220,6 +3180,46 @@
       "match_kind": "exact_name",
       "classification": "collapsed",
       "oem": {
+        "name": "tiziano_adr_params_init",
+        "section": ".text",
+        "address": "0x31d08",
+        "binding": "global",
+        "symbol_bytes": 4632,
+        "instructions": 1158,
+        "branches": 2,
+        "calls": 126,
+        "returns": 1,
+        "relocations": 135
+      },
+      "recovered": [
+        {
+          "name": "tiziano_adr_params_init",
+          "section": ".text",
+          "address": "0x35c74",
+          "binding": "global",
+          "symbol_bytes": 968,
+          "instructions": 242,
+          "branches": 0,
+          "calls": 41,
+          "returns": 1,
+          "relocations": 120
+        }
+      ],
+      "instruction_ratio": 0.20898100172711573,
+      "instruction_delta": -916,
+      "recovered_totals": {
+        "symbol_bytes": 968,
+        "instructions": 242,
+        "branches": 0,
+        "calls": 41,
+        "returns": 1,
+        "relocations": 120
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "collapsed",
+      "oem": {
         "name": "tiziano_adr_init",
         "section": ".text",
         "address": "0x344c4",
@@ -3235,25 +3235,25 @@
         {
           "name": "tiziano_adr_init",
           "section": ".text",
-          "address": "0x36698",
+          "address": "0x420a4",
           "binding": "global",
-          "symbol_bytes": 244,
-          "instructions": 61,
-          "branches": 0,
-          "calls": 11,
-          "returns": 0,
-          "relocations": 8
+          "symbol_bytes": 1048,
+          "instructions": 262,
+          "branches": 12,
+          "calls": 31,
+          "returns": 1,
+          "relocations": 98
         }
       ],
-      "instruction_ratio": 0.06218144750254842,
-      "instruction_delta": -920,
+      "instruction_ratio": 0.2670744138634047,
+      "instruction_delta": -719,
       "recovered_totals": {
-        "symbol_bytes": 244,
-        "instructions": 61,
-        "branches": 0,
-        "calls": 11,
-        "returns": 0,
-        "relocations": 8
+        "symbol_bytes": 1048,
+        "instructions": 262,
+        "branches": 12,
+        "calls": 31,
+        "returns": 1,
+        "relocations": 98
       }
     },
     {
@@ -3275,7 +3275,7 @@
         {
           "name": "apical_isp_core_ops_g_ctrl",
           "section": ".text",
-          "address": "0x50884",
+          "address": "0x50810",
           "binding": "global",
           "symbol_bytes": 1856,
           "instructions": 464,
@@ -3315,7 +3315,7 @@
         {
           "name": "tisp_msca_ch_curve_write",
           "section": ".text",
-          "address": "0x3094c",
+          "address": "0x30fe0",
           "binding": "global",
           "symbol_bytes": 408,
           "instructions": 102,
@@ -3475,25 +3475,25 @@
         {
           "name": "tisp_init",
           "section": ".text",
-          "address": "0x4bae4",
+          "address": "0x4d08c",
           "binding": "global",
-          "symbol_bytes": 1048,
-          "instructions": 262,
+          "symbol_bytes": 1172,
+          "instructions": 293,
           "branches": 24,
-          "calls": 32,
+          "calls": 39,
           "returns": 0,
-          "relocations": 73
+          "relocations": 87
         }
       ],
-      "instruction_ratio": 0.43305785123966944,
-      "instruction_delta": -343,
+      "instruction_ratio": 0.484297520661157,
+      "instruction_delta": -312,
       "recovered_totals": {
-        "symbol_bytes": 1048,
-        "instructions": 262,
+        "symbol_bytes": 1172,
+        "instructions": 293,
         "branches": 24,
-        "calls": 32,
+        "calls": 39,
         "returns": 0,
-        "relocations": 73
+        "relocations": 87
       }
     },
     {
@@ -3555,7 +3555,7 @@
         {
           "name": "ispcore_interrupt_service_routine",
           "section": ".text",
-          "address": "0x53b04",
+          "address": "0x53b94",
           "binding": "global",
           "symbol_bytes": 816,
           "instructions": 204,
@@ -3715,7 +3715,7 @@
         {
           "name": "tisp_ae0_process_impl",
           "section": ".text",
-          "address": "0x1fb04",
+          "address": "0x20198",
           "binding": "global",
           "symbol_bytes": 196,
           "instructions": 49,
@@ -3795,7 +3795,7 @@
         {
           "name": "ae0_weight_mean2",
           "section": ".text",
-          "address": "0x1de44",
+          "address": "0x1e4d8",
           "binding": "global",
           "symbol_bytes": 444,
           "instructions": 111,
@@ -3835,7 +3835,7 @@
         {
           "name": "tisp_lsc_write_lut_datas",
           "section": ".text",
-          "address": "0x32c14",
+          "address": "0x333e0",
           "binding": "global",
           "symbol_bytes": 372,
           "instructions": 93,
@@ -3875,7 +3875,7 @@
         {
           "name": "tisp_adr_param_array_set",
           "section": ".text",
-          "address": "0x1911c",
+          "address": "0x196d0",
           "binding": "global",
           "symbol_bytes": 556,
           "instructions": 139,
@@ -4075,7 +4075,7 @@
         {
           "name": "tiziano_ae_init",
           "section": ".text",
-          "address": "0x1f6a4",
+          "address": "0x1fd38",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -4115,7 +4115,7 @@
         {
           "name": "Tiziano_ae0_fpga",
           "section": ".text",
-          "address": "0x1e310",
+          "address": "0x1e9a4",
           "binding": "global",
           "symbol_bytes": 412,
           "instructions": 103,
@@ -4195,7 +4195,7 @@
         {
           "name": "tisp_lsc_mirror_flip",
           "section": ".text",
-          "address": "0x4ae0c",
+          "address": "0x4ac3c",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -4275,7 +4275,7 @@
         {
           "name": "tisp_ae_manual_set",
           "section": ".text",
-          "address": "0x1f78c",
+          "address": "0x1fe20",
           "binding": "global",
           "symbol_bytes": 356,
           "instructions": 89,
@@ -4355,7 +4355,7 @@
         {
           "name": "regtrace_t23_sdns_gaussian_k_cfg",
           "section": ".text",
-          "address": "0x31158",
+          "address": "0x31924",
           "binding": "local",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -4395,7 +4395,7 @@
         {
           "name": "tisp_s_osd_block_attr",
           "section": ".text",
-          "address": "0x2fb84",
+          "address": "0x30218",
           "binding": "global",
           "symbol_bytes": 236,
           "instructions": 59,
@@ -4435,7 +4435,7 @@
         {
           "name": "tiziano_ae_init_exp_th",
           "section": ".text",
-          "address": "0x1f62c",
+          "address": "0x1fcc0",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -4475,7 +4475,7 @@
         {
           "name": "ispcore_irq_thread_handle",
           "section": ".text",
-          "address": "0x4a6ec",
+          "address": "0x4a51c",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -4635,7 +4635,7 @@
         {
           "name": "tisp_msca_write_reg",
           "section": ".text",
-          "address": "0x4a0a8",
+          "address": "0x49ed8",
           "binding": "global",
           "symbol_bytes": 192,
           "instructions": 48,
@@ -4675,7 +4675,7 @@
         {
           "name": "printf_func0",
           "section": ".text",
-          "address": "0x1d74c",
+          "address": "0x1dde0",
           "binding": "global",
           "symbol_bytes": 220,
           "instructions": 55,
@@ -4715,7 +4715,7 @@
         {
           "name": "regtrace_t23_sdns_gaussian_x_cfg",
           "section": ".text",
-          "address": "0x31118",
+          "address": "0x318e4",
           "binding": "local",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -4835,7 +4835,7 @@
         {
           "name": "isp_core_cmd_set",
           "section": ".text",
-          "address": "0x30394",
+          "address": "0x30a28",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -4875,7 +4875,7 @@
         {
           "name": "tiziano_adr_gamma_refresh",
           "section": ".text",
-          "address": "0x18960",
+          "address": "0x18f14",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -4955,7 +4955,7 @@
         {
           "name": "tisp_ae_target",
           "section": ".text",
-          "address": "0x1e110",
+          "address": "0x1e7a4",
           "binding": "global",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -5035,7 +5035,7 @@
         {
           "name": "tisp_af_set_attr_refresh",
           "section": ".text",
-          "address": "0x20fa4",
+          "address": "0x21638",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -5075,7 +5075,7 @@
         {
           "name": "tisp_s_defog_str_internal",
           "section": ".text",
-          "address": "0x1a194",
+          "address": "0x1a828",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -5115,7 +5115,7 @@
         {
           "name": "regtrace_t23_sdns_r_s_mv_cfg",
           "section": ".text",
-          "address": "0x30ce0",
+          "address": "0x314ac",
           "binding": "local",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -5155,7 +5155,7 @@
         {
           "name": "tisp_ae_g_scene_luma",
           "section": ".text",
-          "address": "0x1fa5c",
+          "address": "0x200f0",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -5275,7 +5275,7 @@
         {
           "name": "tiziano_lsc_init",
           "section": ".text",
-          "address": "0x32d88",
+          "address": "0x33554",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -5435,7 +5435,7 @@
         {
           "name": "tiziano_sharpen_init",
           "section": ".text",
-          "address": "0x3c08c",
+          "address": "0x3baa4",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -5475,7 +5475,7 @@
         {
           "name": "tisp_defog_img_filter5",
           "section": ".text",
-          "address": "0x19a70",
+          "address": "0x1a104",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -5515,7 +5515,7 @@
         {
           "name": "tisp_defog_wdr_en",
           "section": ".text",
-          "address": "0x373b0",
+          "address": "0x36dc8",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -5555,7 +5555,7 @@
         {
           "name": "regtrace_t23_sdns_sp_d_b_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x3180c",
+          "address": "0x31fd8",
           "binding": "local",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -5595,7 +5595,7 @@
         {
           "name": "regtrace_t23_sdns_sp_d_w_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x31790",
+          "address": "0x31f5c",
           "binding": "local",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -5635,7 +5635,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_b_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x31904",
+          "address": "0x320d0",
           "binding": "local",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -5675,7 +5675,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_w_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x31888",
+          "address": "0x32054",
           "binding": "local",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -5715,7 +5715,7 @@
         {
           "name": "tisp_msca_set_omi_api",
           "section": ".text",
-          "address": "0x4a618",
+          "address": "0x4a448",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -5755,7 +5755,7 @@
         {
           "name": "tiziano_ae_dn_params_refresh",
           "section": ".text",
-          "address": "0x1f9a8",
+          "address": "0x2003c",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -5835,7 +5835,7 @@
         {
           "name": "tisp_sharpen_wdr_en",
           "section": ".text",
-          "address": "0x1c420",
+          "address": "0x1cab4",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -5915,7 +5915,7 @@
         {
           "name": "regtrace_t23_sdns_w_thres_cfg",
           "section": ".text",
-          "address": "0x31048",
+          "address": "0x31814",
           "binding": "local",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -5955,7 +5955,7 @@
         {
           "name": "regtrace_t23_sdns_sp_uu_np_array_cfg",
           "section": ".text",
-          "address": "0x3172c",
+          "address": "0x31ef8",
           "binding": "local",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -5995,7 +5995,7 @@
         {
           "name": "tisp_ctr_md_np_cfg",
           "section": ".text",
-          "address": "0x349d0",
+          "address": "0x3519c",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -6035,7 +6035,7 @@
         {
           "name": "tisp_ctr_std_np_cfg",
           "section": ".text",
-          "address": "0x34a38",
+          "address": "0x35204",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -6075,7 +6075,7 @@
         {
           "name": "tx_isp_csi_remove",
           "section": ".text",
-          "address": "0x567e0",
+          "address": "0x56870",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -6155,7 +6155,7 @@
         {
           "name": "regtrace_t23_sdns_d_s1_thres_cfg",
           "section": ".text",
-          "address": "0x30ff0",
+          "address": "0x317bc",
           "binding": "local",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -6195,7 +6195,7 @@
         {
           "name": "tisp_ae_s_comp",
           "section": ".text",
-          "address": "0x1f950",
+          "address": "0x1ffe4",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -6275,7 +6275,7 @@
         {
           "name": "tisp_csccr_write_reg",
           "section": ".text",
-          "address": "0x3dc2c",
+          "address": "0x3d644",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -6315,7 +6315,7 @@
         {
           "name": "tx_isp_fs_remove",
           "section": ".text",
-          "address": "0x56854",
+          "address": "0x568e4",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -6475,7 +6475,7 @@
         {
           "name": "tisp_set_sensor_analog_gain_short",
           "section": ".text",
-          "address": "0x1d524",
+          "address": "0x1dbb8",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -6595,7 +6595,7 @@
         {
           "name": "tisp_ae0_process",
           "section": ".text",
-          "address": "0x1fbc8",
+          "address": "0x2025c",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -6715,7 +6715,7 @@
         {
           "name": "tisp_ae_trig",
           "section": ".text",
-          "address": "0x20128",
+          "address": "0x207bc",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -6755,7 +6755,7 @@
         {
           "name": "tiziano_gamma_init",
           "section": ".text",
-          "address": "0x31a04",
+          "address": "0x321d0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -8381,7 +8381,7 @@
         {
           "name": "tisp_mdns_intp",
           "section": ".text",
-          "address": "0x253f8",
+          "address": "0x25a8c",
           "binding": "global",
           "symbol_bytes": 7240,
           "instructions": 1810,
@@ -8421,7 +8421,7 @@
         {
           "name": "tiziano_defog_params_init",
           "section": ".text",
-          "address": "0x369b4",
+          "address": "0x363cc",
           "binding": "global",
           "symbol_bytes": 2556,
           "instructions": 639,
@@ -8461,7 +8461,7 @@
         {
           "name": "JZ_Isp_Awb",
           "section": ".text",
-          "address": "0x327a4",
+          "address": "0x32f70",
           "binding": "global",
           "symbol_bytes": 996,
           "instructions": 249,
@@ -8501,7 +8501,7 @@
         {
           "name": "tiziano_bcsh_update",
           "section": ".text",
-          "address": "0x33bd8",
+          "address": "0x343a4",
           "binding": "global",
           "symbol_bytes": 1080,
           "instructions": 270,
@@ -8541,7 +8541,7 @@
         {
           "name": "regtrace_t23_mdns_c_2d_param_cfg.isra.0",
           "section": ".text",
-          "address": "0x438f0",
+          "address": "0x43720",
           "binding": "local",
           "symbol_bytes": 1336,
           "instructions": 334,
@@ -8581,7 +8581,7 @@
         {
           "name": "tiziano_bcsh_lut_parameter",
           "section": ".text",
-          "address": "0x33820",
+          "address": "0x33fec",
           "binding": "global",
           "symbol_bytes": 952,
           "instructions": 238,
@@ -8661,7 +8661,7 @@
         {
           "name": "tisp_ae1_expt",
           "section": ".text",
-          "address": "0x1e750",
+          "address": "0x1ede4",
           "binding": "global",
           "symbol_bytes": 732,
           "instructions": 183,
@@ -8686,46 +8686,6 @@
       "match_kind": "exact_name",
       "classification": "shorter",
       "oem": {
-        "name": "tiziano_adr_params_refresh",
-        "section": ".text",
-        "address": "0x33dac",
-        "binding": "global",
-        "symbol_bytes": 1396,
-        "instructions": 349,
-        "branches": 8,
-        "calls": 52,
-        "returns": 1,
-        "relocations": 214
-      },
-      "recovered": [
-        {
-          "name": "tiziano_adr_params_refresh",
-          "section": ".text",
-          "address": "0x19484",
-          "binding": "global",
-          "symbol_bytes": 964,
-          "instructions": 241,
-          "branches": 1,
-          "calls": 38,
-          "returns": 0,
-          "relocations": 154
-        }
-      ],
-      "instruction_ratio": 0.6905444126074498,
-      "instruction_delta": -108,
-      "recovered_totals": {
-        "symbol_bytes": 964,
-        "instructions": 241,
-        "branches": 1,
-        "calls": 38,
-        "returns": 0,
-        "relocations": 154
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "shorter",
-      "oem": {
         "name": "tisp_defog_param_array_set",
         "section": ".text",
         "address": "0x3a764",
@@ -8741,7 +8701,7 @@
         {
           "name": "tisp_defog_param_array_set",
           "section": ".text",
-          "address": "0x3741c",
+          "address": "0x36e34",
           "binding": "global",
           "symbol_bytes": 812,
           "instructions": 203,
@@ -8781,7 +8741,7 @@
         {
           "name": "tiziano_sdns_init",
           "section": ".text",
-          "address": "0x4cb08",
+          "address": "0x4c488",
           "binding": "global",
           "symbol_bytes": 628,
           "instructions": 157,
@@ -8821,7 +8781,7 @@
         {
           "name": "Tiziano_af_fpga",
           "section": ".text",
-          "address": "0x208b4",
+          "address": "0x20f48",
           "binding": "global",
           "symbol_bytes": 624,
           "instructions": 156,
@@ -8861,7 +8821,7 @@
         {
           "name": "tisp_ae0_get_hist",
           "section": ".text",
-          "address": "0x1da38",
+          "address": "0x1e0cc",
           "binding": "global",
           "symbol_bytes": 632,
           "instructions": 158,
@@ -8901,7 +8861,7 @@
         {
           "name": "tiziano_ae_set_hardware_param",
           "section": ".text",
-          "address": "0x3cbc0",
+          "address": "0x3c5d8",
           "binding": "global",
           "symbol_bytes": 648,
           "instructions": 162,
@@ -8941,7 +8901,7 @@
         {
           "name": "tisp_mdns_set_malloc_cfg",
           "section": ".text",
-          "address": "0x423e4",
+          "address": "0x41dfc",
           "binding": "global",
           "symbol_bytes": 580,
           "instructions": 145,
@@ -8981,7 +8941,7 @@
         {
           "name": "tisp_msca_init_chx_cfg",
           "section": ".text",
-          "address": "0x30654",
+          "address": "0x30ce8",
           "binding": "global",
           "symbol_bytes": 588,
           "instructions": 147,
@@ -9046,86 +9006,6 @@
       "match_kind": "exact_name",
       "classification": "shorter",
       "oem": {
-        "name": "tisp_switch_bin",
-        "section": ".text",
-        "address": "0x651d8",
-        "binding": "global",
-        "symbol_bytes": 732,
-        "instructions": 183,
-        "branches": 6,
-        "calls": 26,
-        "returns": 1,
-        "relocations": 75
-      },
-      "recovered": [
-        {
-          "name": "tisp_switch_bin",
-          "section": ".text",
-          "address": "0x4fc48",
-          "binding": "global",
-          "symbol_bytes": 472,
-          "instructions": 118,
-          "branches": 5,
-          "calls": 17,
-          "returns": 0,
-          "relocations": 51
-        }
-      ],
-      "instruction_ratio": 0.644808743169399,
-      "instruction_delta": -65,
-      "recovered_totals": {
-        "symbol_bytes": 472,
-        "instructions": 118,
-        "branches": 5,
-        "calls": 17,
-        "returns": 0,
-        "relocations": 51
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "shorter",
-      "oem": {
-        "name": "tisp_day_or_night_s_ctrl",
-        "section": ".text",
-        "address": "0x64c48",
-        "binding": "global",
-        "symbol_bytes": 720,
-        "instructions": 180,
-        "branches": 5,
-        "calls": 23,
-        "returns": 1,
-        "relocations": 75
-      },
-      "recovered": [
-        {
-          "name": "tisp_day_or_night_s_ctrl",
-          "section": ".text",
-          "address": "0x4f8ec",
-          "binding": "global",
-          "symbol_bytes": 548,
-          "instructions": 137,
-          "branches": 4,
-          "calls": 16,
-          "returns": 1,
-          "relocations": 50
-        }
-      ],
-      "instruction_ratio": 0.7611111111111111,
-      "instruction_delta": -43,
-      "recovered_totals": {
-        "symbol_bytes": 548,
-        "instructions": 137,
-        "branches": 4,
-        "calls": 16,
-        "returns": 1,
-        "relocations": 50
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "shorter",
-      "oem": {
         "name": "tisp_af_param_array_get",
         "section": ".text",
         "address": "0x4e044",
@@ -9141,7 +9021,7 @@
         {
           "name": "tisp_af_param_array_get",
           "section": ".text",
-          "address": "0x210bc",
+          "address": "0x21750",
           "binding": "global",
           "symbol_bytes": 456,
           "instructions": 114,
@@ -9181,7 +9061,7 @@
         {
           "name": "tisp_s_adr_str_internal",
           "section": ".text",
-          "address": "0x19358",
+          "address": "0x1990c",
           "binding": "global",
           "symbol_bytes": 300,
           "instructions": 75,
@@ -9261,7 +9141,7 @@
         {
           "name": "tisp_bcsh_set_attr",
           "section": ".text",
-          "address": "0x34824",
+          "address": "0x34ff0",
           "binding": "global",
           "symbol_bytes": 368,
           "instructions": 92,
@@ -9301,7 +9181,7 @@
         {
           "name": "jz_isp_ccm",
           "section": ".text",
-          "address": "0x330f4",
+          "address": "0x338c0",
           "binding": "global",
           "symbol_bytes": 396,
           "instructions": 99,
@@ -9341,7 +9221,7 @@
         {
           "name": "tiziano_af_params_refresh",
           "section": ".text",
-          "address": "0x20c14",
+          "address": "0x212a8",
           "binding": "global",
           "symbol_bytes": 372,
           "instructions": 93,
@@ -9381,7 +9261,7 @@
         {
           "name": "tisp_msca_api_set_mask",
           "section": ".text",
-          "address": "0x31ff0",
+          "address": "0x327bc",
           "binding": "global",
           "symbol_bytes": 300,
           "instructions": 75,
@@ -9421,7 +9301,7 @@
         {
           "name": "tisp_hldc_set_attr",
           "section": ".text",
-          "address": "0x3c224",
+          "address": "0x3bc3c",
           "binding": "global",
           "symbol_bytes": 304,
           "instructions": 76,
@@ -9501,7 +9381,7 @@
         {
           "name": "tisp_ae0_ctrls_update",
           "section": ".text",
-          "address": "0x1ebc0",
+          "address": "0x1f254",
           "binding": "global",
           "symbol_bytes": 388,
           "instructions": 97,
@@ -9541,7 +9421,7 @@
         {
           "name": "tisp_msca_api_set_osd",
           "section": ".text",
-          "address": "0x31edc",
+          "address": "0x326a8",
           "binding": "global",
           "symbol_bytes": 276,
           "instructions": 69,
@@ -9581,7 +9461,7 @@
         {
           "name": "tisp_g_ev_attr",
           "section": ".text",
-          "address": "0x2ec90",
+          "address": "0x2f324",
           "binding": "global",
           "symbol_bytes": 312,
           "instructions": 78,
@@ -9621,7 +9501,7 @@
         {
           "name": "tisp_set_ae0_ag",
           "section": ".text",
-          "address": "0x1e4ac",
+          "address": "0x1eb40",
           "binding": "global",
           "symbol_bytes": 328,
           "instructions": 82,
@@ -9741,7 +9621,7 @@
         {
           "name": "tisp_ae_algo_init",
           "section": ".text",
-          "address": "0x20394",
+          "address": "0x20a28",
           "binding": "global",
           "symbol_bytes": 260,
           "instructions": 65,
@@ -9781,7 +9661,7 @@
         {
           "name": "Tiziano_awb_set_gain",
           "section": ".text",
-          "address": "0x3269c",
+          "address": "0x32e68",
           "binding": "global",
           "symbol_bytes": 264,
           "instructions": 66,
@@ -9901,7 +9781,7 @@
         {
           "name": "tiziano_set_parameter_clm",
           "section": ".text",
-          "address": "0x37794",
+          "address": "0x371ac",
           "binding": "global",
           "symbol_bytes": 288,
           "instructions": 72,
@@ -10021,7 +9901,7 @@
         {
           "name": "tisp_s_dpc_str_internal",
           "section": ".text",
-          "address": "0x4b884",
+          "address": "0x4b6b4",
           "binding": "global",
           "symbol_bytes": 196,
           "instructions": 49,
@@ -10061,7 +9941,7 @@
         {
           "name": "tisp_msca_api_set_fcrop",
           "section": ".text",
-          "address": "0x49e98",
+          "address": "0x49cc8",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -10101,7 +9981,7 @@
         {
           "name": "tisp_csccr_update_para",
           "section": ".text",
-          "address": "0x213fc",
+          "address": "0x21a90",
           "binding": "global",
           "symbol_bytes": 232,
           "instructions": 58,
@@ -10141,7 +10021,7 @@
         {
           "name": "tisp_dpc_s_par_cfg",
           "section": ".text",
-          "address": "0x4b2c4",
+          "address": "0x4b0f4",
           "binding": "global",
           "symbol_bytes": 248,
           "instructions": 62,
@@ -10221,7 +10101,7 @@
         {
           "name": "tisp_ae_s_min",
           "section": ".text",
-          "address": "0x1e258",
+          "address": "0x1e8ec",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -10341,7 +10221,7 @@
         {
           "name": "tisp_adr_set_params",
           "section": ".text",
-          "address": "0x353e0",
+          "address": "0x35bac",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -10381,7 +10261,7 @@
         {
           "name": "tiziano_defog_set_reg_params",
           "section": ".text",
-          "address": "0x3678c",
+          "address": "0x361a4",
           "binding": "global",
           "symbol_bytes": 196,
           "instructions": 49,
@@ -10461,7 +10341,7 @@
         {
           "name": "tiziano_gamma_lut_parameter",
           "section": ".text",
-          "address": "0x323f4",
+          "address": "0x32bc0",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -10501,7 +10381,7 @@
         {
           "name": "tiziano_csccr_init",
           "section": ".text",
-          "address": "0x2160c",
+          "address": "0x21ca0",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -10541,7 +10421,7 @@
         {
           "name": "tisp_csccr_para_refresh_by_mode",
           "section": ".text",
-          "address": "0x21348",
+          "address": "0x219dc",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -10821,7 +10701,7 @@
         {
           "name": "tiziano_gib_deir_reg",
           "section": ".text",
-          "address": "0x30ae4",
+          "address": "0x31178",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -10861,7 +10741,7 @@
         {
           "name": "tisp_dpc_d_m3_par_cfg",
           "section": ".text",
-          "address": "0x34dd8",
+          "address": "0x355a4",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -10901,7 +10781,7 @@
         {
           "name": "tx_isp_core_remove",
           "section": ".text",
-          "address": "0x56938",
+          "address": "0x569c8",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -10981,7 +10861,7 @@
         {
           "name": "tisp_s_ae_attr",
           "section": ".text",
-          "address": "0x2f144",
+          "address": "0x2f7d8",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -11101,7 +10981,7 @@
         {
           "name": "AePweightCalculate",
           "section": ".text",
-          "address": "0x1ddc4",
+          "address": "0x1e458",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -11141,7 +11021,7 @@
         {
           "name": "tisp_hv_flip_enable",
           "section": ".text",
-          "address": "0x4a838",
+          "address": "0x4a668",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -11181,7 +11061,7 @@
         {
           "name": "tisp_s_Hilightdepress",
           "section": ".text",
-          "address": "0x2e5cc",
+          "address": "0x2ec60",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -11221,7 +11101,7 @@
         {
           "name": "tisp_csccr_api_set",
           "section": ".text",
-          "address": "0x21804",
+          "address": "0x21e98",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -11301,7 +11181,7 @@
         {
           "name": "mbus_to_bayer_write",
           "section": ".text",
-          "address": "0x54234",
+          "address": "0x542c4",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -11341,7 +11221,7 @@
         {
           "name": "tisp_s_ae_it_max",
           "section": ".text",
-          "address": "0x2f720",
+          "address": "0x2fdb4",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -11381,7 +11261,7 @@
         {
           "name": "tisp_mirror_enable",
           "section": ".text",
-          "address": "0x4a988",
+          "address": "0x4a7b8",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -11421,7 +11301,7 @@
         {
           "name": "tx_isp_vic_remove",
           "section": ".text",
-          "address": "0x5677c",
+          "address": "0x5680c",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -11461,7 +11341,7 @@
         {
           "name": "JZ_Isp_Ae_Dg2reg",
           "section": ".text",
-          "address": "0x1d6f4",
+          "address": "0x1dd88",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -11501,7 +11381,7 @@
         {
           "name": "tisp_mdns_malloc_reflash",
           "section": ".text",
-          "address": "0x42628",
+          "address": "0x42040",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -11661,7 +11541,7 @@
         {
           "name": "tisp_set_sensor_digital_gain_short",
           "section": ".text",
-          "address": "0x1d55c",
+          "address": "0x1dbf0",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -11701,7 +11581,7 @@
         {
           "name": "tisp_set_sensor_analog_gain",
           "section": ".text",
-          "address": "0x1d4bc",
+          "address": "0x1db50",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -11781,7 +11661,7 @@
         {
           "name": "tisp_dpc_d_m1_par_cfg",
           "section": ".text",
-          "address": "0x34aa0",
+          "address": "0x3526c",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -11821,7 +11701,7 @@
         {
           "name": "tisp_msca_addr_fifo_read",
           "section": ".text",
-          "address": "0x4a5cc",
+          "address": "0x4a3fc",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -11861,7 +11741,7 @@
         {
           "name": "system_reg_write_awb",
           "section": ".text",
-          "address": "0x32644",
+          "address": "0x32e10",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -11941,7 +11821,7 @@
         {
           "name": "tx_isp_ivdc_remove",
           "section": ".text",
-          "address": "0x56808",
+          "address": "0x56898",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -12021,7 +11901,7 @@
         {
           "name": "tisp_s_ae_hist",
           "section": ".text",
-          "address": "0x2f098",
+          "address": "0x2f72c",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -12061,7 +11941,7 @@
         {
           "name": "tisp_channel_main_fifo_clear",
           "section": ".text",
-          "address": "0x31b08",
+          "address": "0x322d4",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -12101,7 +11981,7 @@
         {
           "name": "tisp_get_frame_drop",
           "section": ".text",
-          "address": "0x510a0",
+          "address": "0x5102c",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -12141,7 +12021,7 @@
         {
           "name": "tisp_g_Gamma",
           "section": ".text",
-          "address": "0x2e7fc",
+          "address": "0x2ee90",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -12181,7 +12061,7 @@
         {
           "name": "tisp_g_aeroi_weight",
           "section": ".text",
-          "address": "0x2e9a4",
+          "address": "0x2f038",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -12221,7 +12101,7 @@
         {
           "name": "tisp_g_aezone_weight",
           "section": ".text",
-          "address": "0x2ea90",
+          "address": "0x2f124",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -12261,7 +12141,7 @@
         {
           "name": "tisp_g_af_weight",
           "section": ".text",
-          "address": "0x2ec48",
+          "address": "0x2f2dc",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -12301,7 +12181,7 @@
         {
           "name": "regtrace_t23_sdns_dark_light_tt_opt_cfg",
           "section": ".text",
-          "address": "0x30fa8",
+          "address": "0x31774",
           "binding": "local",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -12341,7 +12221,7 @@
         {
           "name": "defog_itp",
           "section": ".text",
-          "address": "0x1a17c",
+          "address": "0x1a810",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -12381,7 +12261,7 @@
         {
           "name": "tisp_ae_g_luma",
           "section": ".text",
-          "address": "0x1fa34",
+          "address": "0x200c8",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -12461,7 +12341,7 @@
         {
           "name": "tisp_s_wb_attr",
           "section": ".text",
-          "address": "0x2ef40",
+          "address": "0x2f5d4",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -12501,7 +12381,7 @@
         {
           "name": "regtrace_t23_sdns_hls_en_ave_filter_cfg",
           "section": ".text",
-          "address": "0x31094",
+          "address": "0x31860",
           "binding": "local",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -12541,7 +12421,7 @@
         {
           "name": "tisp_set_csc_attr",
           "section": ".text",
-          "address": "0x323b0",
+          "address": "0x32b7c",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -12581,7 +12461,7 @@
         {
           "name": "tisp_ae_get_antiflicker_step",
           "section": ".text",
-          "address": "0x1fc14",
+          "address": "0x202a8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -12661,7 +12541,7 @@
         {
           "name": "tisp_ae_s_at_list",
           "section": ".text",
-          "address": "0x1f15c",
+          "address": "0x1f7f0",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -12701,7 +12581,7 @@
         {
           "name": "tisp_msca_addr_fifo_write",
           "section": ".text",
-          "address": "0x31ea4",
+          "address": "0x32670",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -12741,7 +12621,7 @@
         {
           "name": "regtrace_t23_sdns_gaussian_y_cfg",
           "section": ".text",
-          "address": "0x310d8",
+          "address": "0x318a4",
           "binding": "local",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -12781,7 +12661,7 @@
         {
           "name": "regtrace_t23_sdns_h_mv_wei_opt_cfg",
           "section": ".text",
-          "address": "0x30c00",
+          "address": "0x313cc",
           "binding": "local",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -12821,7 +12701,7 @@
         {
           "name": "isp_fw_process",
           "section": ".text",
-          "address": "0x30084",
+          "address": "0x30718",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -12861,7 +12741,7 @@
         {
           "name": "tisp_set_ae_attr",
           "section": ".text",
-          "address": "0x2f874",
+          "address": "0x2ff08",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -12981,7 +12861,7 @@
         {
           "name": "tiziano_clm_init",
           "section": ".text",
-          "address": "0x378e0",
+          "address": "0x372f8",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -13061,7 +12941,7 @@
         {
           "name": "tisp_hldc_param_array_set",
           "section": ".text",
-          "address": "0x1d2ec",
+          "address": "0x1d980",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13101,7 +12981,7 @@
         {
           "name": "tiziano_dpc_dn_params_refresh",
           "section": ".text",
-          "address": "0x4b958",
+          "address": "0x4b788",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -13341,7 +13221,7 @@
         {
           "name": "tiziano_hldc_init",
           "section": ".text",
-          "address": "0x1d29c",
+          "address": "0x1d930",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13381,7 +13261,7 @@
         {
           "name": "tisp_s_awb_ct_trend",
           "section": ".text",
-          "address": "0x2efd8",
+          "address": "0x2f66c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -13421,7 +13301,7 @@
         {
           "name": "tiziano_defog_dn_params_refresh",
           "section": ".text",
-          "address": "0x373e4",
+          "address": "0x36dfc",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -13501,7 +13381,7 @@
         {
           "name": "tisp_api_ae_deflick_para_set",
           "section": ".text",
-          "address": "0x2051c",
+          "address": "0x20bb0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13541,7 +13421,7 @@
         {
           "name": "tisp_api_ae_roi_weight_set",
           "section": ".text",
-          "address": "0x205d4",
+          "address": "0x20c68",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13581,7 +13461,7 @@
         {
           "name": "tisp_api_ae_roui_weight_set",
           "section": ".text",
-          "address": "0x2063c",
+          "address": "0x20cd0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13621,7 +13501,7 @@
         {
           "name": "tisp_api_ae_scene_pare_set",
           "section": ".text",
-          "address": "0x2056c",
+          "address": "0x20c00",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13701,7 +13581,7 @@
         {
           "name": "tisp_g_ae_min",
           "section": ".text",
-          "address": "0x2f29c",
+          "address": "0x2f930",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -13741,7 +13621,7 @@
         {
           "name": "tisp_clm_ct_update",
           "section": ".text",
-          "address": "0x1a55c",
+          "address": "0x1abf0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13781,7 +13661,7 @@
         {
           "name": "regtrace_t23_sdns_g_det_val_div_cfg",
           "section": ".text",
-          "address": "0x30cb8",
+          "address": "0x31484",
           "binding": "local",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -13821,7 +13701,7 @@
         {
           "name": "regtrace_t23_sdns_sp_std_en_seg_opt_cfg",
           "section": ".text",
-          "address": "0x311f0",
+          "address": "0x319bc",
           "binding": "local",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -13861,7 +13741,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_w_limit_b_wei_opt_cfg",
           "section": ".text",
-          "address": "0x31518",
+          "address": "0x31ce4",
           "binding": "local",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -13901,7 +13781,7 @@
         {
           "name": "ispcore_frame_channel_dqbuf",
           "section": ".text",
-          "address": "0x3007c",
+          "address": "0x30710",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -13981,7 +13861,7 @@
         {
           "name": "tisp_disable_tuning",
           "section": ".text",
-          "address": "0x2e2f8",
+          "address": "0x2e98c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -14021,7 +13901,7 @@
         {
           "name": "Tiziano_ae1_fpga",
           "section": ".text",
-          "address": "0x1eb98",
+          "address": "0x1f22c",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -14141,7 +14021,7 @@
         {
           "name": "tisp_clm_itp",
           "section": ".text",
-          "address": "0x1a54c",
+          "address": "0x1abe0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -14221,7 +14101,7 @@
         {
           "name": "tisp_s_ae_min",
           "section": ".text",
-          "address": "0x2f2c4",
+          "address": "0x2f958",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -14246,46 +14126,6 @@
       "match_kind": "exact_name",
       "classification": "shorter",
       "oem": {
-        "name": "tiziano_adr_dn_params_refresh",
-        "section": ".text",
-        "address": "0x34320",
-        "binding": "global",
-        "symbol_bytes": 56,
-        "instructions": 14,
-        "branches": 0,
-        "calls": 2,
-        "returns": 1,
-        "relocations": 4
-      },
-      "recovered": [
-        {
-          "name": "tiziano_adr_dn_params_refresh",
-          "section": ".text",
-          "address": "0x19848",
-          "binding": "global",
-          "symbol_bytes": 24,
-          "instructions": 6,
-          "branches": 0,
-          "calls": 1,
-          "returns": 0,
-          "relocations": 2
-        }
-      ],
-      "instruction_ratio": 0.42857142857142855,
-      "instruction_delta": -8,
-      "recovered_totals": {
-        "symbol_bytes": 24,
-        "instructions": 6,
-        "branches": 0,
-        "calls": 1,
-        "returns": 0,
-        "relocations": 2
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "shorter",
-      "oem": {
         "name": "tisp_mdns_refresh",
         "section": ".text",
         "address": "0x5b4c0",
@@ -14301,7 +14141,7 @@
         {
           "name": "tisp_mdns_refresh",
           "section": ".text",
-          "address": "0x45774",
+          "address": "0x455a4",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -14341,7 +14181,7 @@
         {
           "name": "tisp_ydns_all_reg_refresh",
           "section": ".text",
-          "address": "0x35144",
+          "address": "0x35910",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -14381,7 +14221,7 @@
         {
           "name": "tisp_ydns_intp_reg_refresh",
           "section": ".text",
-          "address": "0x353b8",
+          "address": "0x35b84",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -14396,6 +14236,46 @@
       "recovered_totals": {
         "symbol_bytes": 40,
         "instructions": 10,
+        "branches": 1,
+        "calls": 1,
+        "returns": 0,
+        "relocations": 4
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "shorter",
+      "oem": {
+        "name": "tiziano_adr_dn_params_refresh",
+        "section": ".text",
+        "address": "0x34320",
+        "binding": "global",
+        "symbol_bytes": 56,
+        "instructions": 14,
+        "branches": 0,
+        "calls": 2,
+        "returns": 1,
+        "relocations": 4
+      },
+      "recovered": [
+        {
+          "name": "tiziano_adr_dn_params_refresh",
+          "section": ".text",
+          "address": "0x3603c",
+          "binding": "global",
+          "symbol_bytes": 44,
+          "instructions": 11,
+          "branches": 1,
+          "calls": 1,
+          "returns": 0,
+          "relocations": 4
+        }
+      ],
+      "instruction_ratio": 0.7857142857142857,
+      "instruction_delta": -3,
+      "recovered_totals": {
+        "symbol_bytes": 44,
+        "instructions": 11,
         "branches": 1,
         "calls": 1,
         "returns": 0,
@@ -14421,7 +14301,7 @@
         {
           "name": "tiziano_clm_dn_params_refresh",
           "section": ".text",
-          "address": "0x378b4",
+          "address": "0x372cc",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -14461,7 +14341,7 @@
         {
           "name": "tiziano_gamma_dn_params_refresh",
           "section": ".text",
-          "address": "0x32478",
+          "address": "0x32c44",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -14541,7 +14421,7 @@
         {
           "name": "tisp_s_scaler_level_control",
           "section": ".text",
-          "address": "0x2f4bc",
+          "address": "0x2fb50",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -14661,7 +14541,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_stren_shift_opt_cfg",
           "section": ".text",
-          "address": "0x31714",
+          "address": "0x31ee0",
           "binding": "local",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -14701,7 +14581,7 @@
         {
           "name": "tisp_set_bcsh_fixed_contrast",
           "section": ".text",
-          "address": "0x346e4",
+          "address": "0x34eb0",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -14781,7 +14661,7 @@
         {
           "name": "tisp_dmsc_refresh",
           "section": ".text",
-          "address": "0x407e0",
+          "address": "0x401f8",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -14821,7 +14701,7 @@
         {
           "name": "tisp_dpc_refresh",
           "section": ".text",
-          "address": "0x4b510",
+          "address": "0x4b340",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -14861,7 +14741,7 @@
         {
           "name": "tisp_mdns_reg_trigger",
           "section": ".text",
-          "address": "0x31980",
+          "address": "0x3214c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -14901,7 +14781,7 @@
         {
           "name": "tisp_mdns_top_func_refresh",
           "section": ".text",
-          "address": "0x42388",
+          "address": "0x41da0",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -14941,7 +14821,7 @@
         {
           "name": "tisp_sdns_refresh",
           "section": ".text",
-          "address": "0x3b34c",
+          "address": "0x3ad64",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -14981,7 +14861,7 @@
         {
           "name": "tisp_sharpen_refresh",
           "section": ".text",
-          "address": "0x3c100",
+          "address": "0x3bb18",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -15101,7 +14981,7 @@
         {
           "name": "tisp_g_drc_strength",
           "section": ".text",
-          "address": "0x2f514",
+          "address": "0x2fba8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -15141,7 +15021,7 @@
         {
           "name": "tisp_g_wb_attr",
           "section": ".text",
-          "address": "0x2ef38",
+          "address": "0x2f5cc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -15181,7 +15061,7 @@
         {
           "name": "tisp_g_wb_ct",
           "section": ".text",
-          "address": "0x2ef9c",
+          "address": "0x2f630",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -15221,7 +15101,7 @@
         {
           "name": "tisp_get_defog_strength",
           "section": ".text",
-          "address": "0x2f8e8",
+          "address": "0x2ff7c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -15261,7 +15141,7 @@
         {
           "name": "tisp_defog_process",
           "section": ".text",
-          "address": "0x19cf0",
+          "address": "0x1a384",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -15301,7 +15181,7 @@
         {
           "name": "tisp_g_awb_cluster",
           "section": ".text",
-          "address": "0x2efc8",
+          "address": "0x2f65c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -15341,7 +15221,7 @@
         {
           "name": "tisp_s_dpc_strength",
           "section": ".text",
-          "address": "0x4b948",
+          "address": "0x4b778",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -15381,7 +15261,7 @@
         {
           "name": "tisp_ydns_gain_update",
           "section": ".text",
-          "address": "0x351dc",
+          "address": "0x359a8",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -15421,7 +15301,7 @@
         {
           "name": "tisp_ydns_refresh",
           "section": ".text",
-          "address": "0x351cc",
+          "address": "0x35998",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -15461,7 +15341,7 @@
         {
           "name": "tisp_s_wb_ct",
           "section": ".text",
-          "address": "0x2efa4",
+          "address": "0x2f638",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -15501,7 +15381,7 @@
         {
           "name": "tisp_ae1_process",
           "section": ".text",
-          "address": "0x1fbfc",
+          "address": "0x20290",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -15541,7 +15421,7 @@
         {
           "name": "tisp_g_awb_ct_trend",
           "section": ".text",
-          "address": "0x2efe8",
+          "address": "0x2f67c",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -15581,7 +15461,7 @@
         {
           "name": "tisp_s_3dns_ratio",
           "section": ".text",
-          "address": "0x2f12c",
+          "address": "0x2f7c0",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -15621,7 +15501,7 @@
         {
           "name": "tisp_s_drc_strength",
           "section": ".text",
-          "address": "0x2f51c",
+          "address": "0x2fbb0",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -15741,7 +15621,7 @@
         {
           "name": "tisp_day_or_night_g_ctrl",
           "section": ".text",
-          "address": "0x2e32c",
+          "address": "0x2e9c0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -15861,7 +15741,7 @@
         {
           "name": "tiziano_ae_s_ev_start",
           "section": ".text",
-          "address": "0x1f724",
+          "address": "0x1fdb8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -15981,7 +15861,7 @@
         {
           "name": "tisp_mscaler_mask_setreg",
           "section": ".text",
-          "address": "0x2f53c",
+          "address": "0x2fbd0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -16021,7 +15901,7 @@
         {
           "name": "tisp_s_awb_start",
           "section": ".text",
-          "address": "0x2f564",
+          "address": "0x2fbf8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -16061,7 +15941,7 @@
         {
           "name": "tisp_s_mscaler_mask_attr",
           "section": ".text",
-          "address": "0x2f544",
+          "address": "0x2fbd8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -16181,7 +16061,7 @@
         {
           "name": "tisp_ae_min_max_set",
           "section": ".text",
-          "address": "0x1f71c",
+          "address": "0x1fdb0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -16221,7 +16101,7 @@
         {
           "name": "tisp_get_antiflicker_step",
           "section": ".text",
-          "address": "0x2f86c",
+          "address": "0x2ff00",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -16261,7 +16141,7 @@
         {
           "name": "tisp_s_ev_start",
           "section": ".text",
-          "address": "0x2f55c",
+          "address": "0x2fbf0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -16381,7 +16261,7 @@
         {
           "name": "tisp_g_wb_frz",
           "section": ".text",
-          "address": "0x2f3dc",
+          "address": "0x2fa70",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -16421,7 +16301,7 @@
         {
           "name": "tisp_get_brightness",
           "section": ".text",
-          "address": "0x2e398",
+          "address": "0x2ea2c",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -16461,7 +16341,7 @@
         {
           "name": "tisp_get_contrast",
           "section": ".text",
-          "address": "0x2e3bc",
+          "address": "0x2ea50",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -16501,7 +16381,7 @@
         {
           "name": "tisp_get_saturation",
           "section": ".text",
-          "address": "0x2e3b0",
+          "address": "0x2ea44",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -16541,7 +16421,7 @@
         {
           "name": "tisp_get_sharpness",
           "section": ".text",
-          "address": "0x2e3a4",
+          "address": "0x2ea38",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -16581,7 +16461,7 @@
         {
           "name": "tisp_msca_chx_cfg_load",
           "section": ".text",
-          "address": "0x4a168",
+          "address": "0x49f98",
           "binding": "global",
           "symbol_bytes": 736,
           "instructions": 184,
@@ -16621,7 +16501,7 @@
         {
           "name": "isp_irq_handle",
           "section": ".text",
-          "address": "0x48708",
+          "address": "0x48538",
           "binding": "global",
           "symbol_bytes": 4032,
           "instructions": 1008,
@@ -16741,7 +16621,7 @@
         {
           "name": "tiziano_ydns_init",
           "section": ".text",
-          "address": "0x4ba4c",
+          "address": "0x4b87c",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -16981,7 +16861,7 @@
         {
           "name": "tisp_api_mdns_y_filter_set",
           "section": ".text",
-          "address": "0x2e21c",
+          "address": "0x2e8b0",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -17581,7 +17461,7 @@
         {
           "name": "init_module",
           "section": ".text",
-          "address": "0x54298",
+          "address": "0x54328",
           "binding": "global",
           "symbol_bytes": 9132,
           "instructions": 2283,
@@ -17621,7 +17501,7 @@
         {
           "name": "cleanup_module",
           "section": ".text",
-          "address": "0x56644",
+          "address": "0x566d4",
           "binding": "global",
           "symbol_bytes": 312,
           "instructions": 78,
@@ -17701,7 +17581,7 @@
         {
           "name": "tisp_get_ae_attr",
           "section": ".text",
-          "address": "0x2f87c",
+          "address": "0x2ff10",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -17861,7 +17741,7 @@
         {
           "name": "tisp_g_rgb_coefft",
           "section": ".text",
-          "address": "0x2f920",
+          "address": "0x2ffb4",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17901,7 +17781,7 @@
         {
           "name": "tisp_get_ae_luma",
           "section": ".text",
-          "address": "0x2e374",
+          "address": "0x2ea08",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -18101,7 +17981,7 @@
         {
           "name": "tisp_dmsc_noref_reg_cfg",
           "section": ".text",
-          "address": "0x3dc84",
+          "address": "0x3d69c",
           "binding": "global",
           "symbol_bytes": 1364,
           "instructions": 341,
@@ -18381,7 +18261,7 @@
         {
           "name": "tisp_g_autozoom_control",
           "section": ".text",
-          "address": "0x2f3f8",
+          "address": "0x2fa8c",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -18501,7 +18381,7 @@
         {
           "name": "tisp_bcsh_set_mjpeg_contrast",
           "section": ".text",
-          "address": "0x346a4",
+          "address": "0x34e70",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -18541,7 +18421,7 @@
         {
           "name": "system_reg_write",
           "section": ".text",
-          "address": "0x30570",
+          "address": "0x30c04",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -18581,7 +18461,7 @@
         {
           "name": "system_reg_read",
           "section": ".text",
-          "address": "0x486dc",
+          "address": "0x4850c",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -18621,7 +18501,7 @@
         {
           "name": "tisp_api_af_weight_set",
           "section": ".text",
-          "address": "0x212d8",
+          "address": "0x2196c",
           "binding": "global",
           "symbol_bytes": 32,
           "instructions": 8,
@@ -19101,7 +18981,7 @@
         {
           "name": "tisp_g_awb_start",
           "section": ".text",
-          "address": "0x2f56c",
+          "address": "0x2fc00",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -19141,7 +19021,7 @@
         {
           "name": "tisp_ae_g_comp",
           "section": ".text",
-          "address": "0x1fa1c",
+          "address": "0x200b0",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -19181,7 +19061,7 @@
         {
           "name": "tisp_get_ae_comp",
           "section": ".text",
-          "address": "0x2e35c",
+          "address": "0x2e9f0",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -19327,7 +19207,7 @@
         {
           "name": "apical_isp_ae_hist_origin_g_attr_isra_95",
           "section": ".text",
-          "address": "0x1dce0",
+          "address": "0x1e374",
           "binding": "global",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -19379,7 +19259,7 @@
         {
           "name": "apical_isp_ae_zone_g_ctrl_isra_87",
           "section": ".text",
-          "address": "0x1f924",
+          "address": "0x1ffb8",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -19405,7 +19285,7 @@
         {
           "name": "apical_isp_ae_zone_weight_g_attr_isra_92",
           "section": ".text",
-          "address": "0x2ead8",
+          "address": "0x2f16c",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -19561,7 +19441,7 @@
         {
           "name": "apical_isp_af_zone_g_ctrl_isra_88",
           "section": ".text",
-          "address": "0x212a0",
+          "address": "0x21934",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -19587,7 +19467,7 @@
         {
           "name": "apical_isp_autozoom_g_attr_isra_71",
           "section": ".text",
-          "address": "0x2f488",
+          "address": "0x2fb1c",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -19613,7 +19493,7 @@
         {
           "name": "apical_isp_autozoom_s_attr_isra_28",
           "section": ".text",
-          "address": "0x31dd0",
+          "address": "0x3259c",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -19691,7 +19571,7 @@
         {
           "name": "apical_isp_awb_zone_weight_s_attr_isra_68",
           "section": ".text",
-          "address": "0x2f62c",
+          "address": "0x2fcc0",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -19717,7 +19597,7 @@
         {
           "name": "apical_isp_ev_g_attr_isra_78",
           "section": ".text",
-          "address": "0x2eed4",
+          "address": "0x2f568",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -19743,7 +19623,7 @@
         {
           "name": "apical_isp_expr_g_ctrl_isra_75",
           "section": ".text",
-          "address": "0x2edc8",
+          "address": "0x2f45c",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -19769,7 +19649,7 @@
         {
           "name": "apical_isp_expr_s_ctrl_isra_33",
           "section": ".text",
-          "address": "0x2f1d0",
+          "address": "0x2f864",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -19795,7 +19675,7 @@
         {
           "name": "apical_isp_gamma_g_attr_isra_79",
           "section": ".text",
-          "address": "0x2e830",
+          "address": "0x2eec4",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -19847,7 +19727,7 @@
         {
           "name": "apical_isp_max_again_g_ctrl_isra_76",
           "section": ".text",
-          "address": "0x2ee04",
+          "address": "0x2f498",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -19873,7 +19753,7 @@
         {
           "name": "apical_isp_max_dgain_g_ctrl_isra_77",
           "section": ".text",
-          "address": "0x2ee6c",
+          "address": "0x2f500",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -19951,7 +19831,7 @@
         {
           "name": "isp_info_show_isra_1",
           "section": ".text",
-          "address": "0x510e8",
+          "address": "0x51074",
           "binding": "global",
           "symbol_bytes": 1748,
           "instructions": 437,
@@ -19977,7 +19857,7 @@
         {
           "name": "ispcore_set_clk_parent_isra_0",
           "section": ".text",
-          "address": "0x30444",
+          "address": "0x30ad8",
           "binding": "global",
           "symbol_bytes": 276,
           "instructions": 69,
@@ -20133,7 +20013,7 @@
         {
           "name": "regtrace_framechan_ioctl",
           "section": ".text",
-          "address": "0x52900",
+          "address": "0x52990",
           "binding": "local",
           "symbol_bytes": 2704,
           "instructions": 676,
@@ -20618,6 +20498,58 @@
         "calls": 3,
         "returns": 1,
         "relocations": 14
+      }
+    },
+    {
+      "match_kind": "recovered_only",
+      "classification": "recovered_only",
+      "recovered": [
+        {
+          "name": "regtrace_t23_adr_write_bytes4",
+          "section": ".text",
+          "address": "0x31210",
+          "binding": "local",
+          "symbol_bytes": 192,
+          "instructions": 48,
+          "branches": 4,
+          "calls": 5,
+          "returns": 1,
+          "relocations": 4
+        }
+      ],
+      "recovered_totals": {
+        "symbol_bytes": 192,
+        "instructions": 48,
+        "branches": 4,
+        "calls": 5,
+        "returns": 1,
+        "relocations": 4
+      }
+    },
+    {
+      "match_kind": "recovered_only",
+      "classification": "recovered_only",
+      "recovered": [
+        {
+          "name": "regtrace_t23_adr_write_pairs16",
+          "section": ".text",
+          "address": "0x312d0",
+          "binding": "local",
+          "symbol_bytes": 120,
+          "instructions": 30,
+          "branches": 2,
+          "calls": 3,
+          "returns": 1,
+          "relocations": 4
+        }
+      ],
+      "recovered_totals": {
+        "symbol_bytes": 120,
+        "instructions": 30,
+        "branches": 2,
+        "calls": 3,
+        "returns": 1,
+        "relocations": 4
       }
     },
     {
@@ -21407,7 +21339,7 @@
         {
           "name": "regtrace_t23_msca_write_curve_axis",
           "section": ".text",
-          "address": "0x308a0",
+          "address": "0x30f34",
           "binding": "local",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -21719,7 +21651,7 @@
         {
           "name": "regtrace_t23_set_msca_stream",
           "section": ".text",
-          "address": "0x4a4a8",
+          "address": "0x4a2d8",
           "binding": "local",
           "symbol_bytes": 292,
           "instructions": 73,
@@ -21797,7 +21729,7 @@
         {
           "name": "regtrace_t23_source_ae_hlil_work",
           "section": ".text",
-          "address": "0x4f4e8",
+          "address": "0x4f2fc",
           "binding": "local",
           "symbol_bytes": 1028,
           "instructions": 257,
@@ -21823,7 +21755,7 @@
         {
           "name": "regtrace_t23_source_apply_total_gain_value",
           "section": ".text",
-          "address": "0x4f1dc",
+          "address": "0x4eff0",
           "binding": "local",
           "symbol_bytes": 780,
           "instructions": 195,
@@ -21849,7 +21781,7 @@
         {
           "name": "regtrace_t23_source_awb_apply_gains",
           "section": ".text",
-          "address": "0x305a4",
+          "address": "0x30c38",
           "binding": "local",
           "symbol_bytes": 176,
           "instructions": 44,
@@ -21875,7 +21807,7 @@
         {
           "name": "regtrace_t23_source_awb_hlil_work",
           "section": ".text",
-          "address": "0x42ab8",
+          "address": "0x428e8",
           "binding": "local",
           "symbol_bytes": 3640,
           "instructions": 910,
@@ -21901,7 +21833,7 @@
         {
           "name": "regtrace_t23_source_ccm_commit.part.0.isra.0",
           "section": ".text",
-          "address": "0x4268c",
+          "address": "0x424bc",
           "binding": "local",
           "symbol_bytes": 1068,
           "instructions": 267,
@@ -21953,23 +21885,23 @@
         {
           "name": "regtrace_t23_source_core_set_stream.isra.0",
           "section": ".text",
-          "address": "0x5188c",
+          "address": "0x518c0",
           "binding": "local",
-          "symbol_bytes": 3904,
-          "instructions": 976,
-          "branches": 72,
-          "calls": 137,
+          "symbol_bytes": 3996,
+          "instructions": 999,
+          "branches": 78,
+          "calls": 138,
           "returns": 2,
-          "relocations": 294
+          "relocations": 312
         }
       ],
       "recovered_totals": {
-        "symbol_bytes": 3904,
-        "instructions": 976,
-        "branches": 72,
-        "calls": 137,
+        "symbol_bytes": 3996,
+        "instructions": 999,
+        "branches": 78,
+        "calls": 138,
         "returns": 2,
-        "relocations": 294
+        "relocations": 312
       }
     },
     {
@@ -21979,7 +21911,7 @@
         {
           "name": "regtrace_t23_source_gamma_write_tuning_startup",
           "section": ".text",
-          "address": "0x31994",
+          "address": "0x32160",
           "binding": "local",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -22109,7 +22041,7 @@
         {
           "name": "regtrace_t23_tisp_stream_regs",
           "section": ".text",
-          "address": "0x527cc",
+          "address": "0x5285c",
           "binding": "local",
           "symbol_bytes": 308,
           "instructions": 77,
@@ -22369,7 +22301,7 @@
         {
           "name": "regtrace_tx_isp_ioctl",
           "section": ".text",
-          "address": "0x53390",
+          "address": "0x53420",
           "binding": "local",
           "symbol_bytes": 1796,
           "instructions": 449,
@@ -23955,7 +23887,7 @@
         {
           "name": "sub_68e08",
           "section": ".text",
-          "address": "0x4a8a4",
+          "address": "0x4a6d4",
           "binding": "global",
           "symbol_bytes": 228,
           "instructions": 57,
@@ -23981,7 +23913,7 @@
         {
           "name": "sub_68f3c",
           "section": ".text",
-          "address": "0x3043c",
+          "address": "0x30ad0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26633,7 +26565,7 @@
         {
           "name": "tisp_hldc_par_refresh_part_1",
           "section": ".text",
-          "address": "0x3c114",
+          "address": "0x3bb2c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -26659,7 +26591,7 @@
         {
           "name": "tisp_mdns_c_2d_param_cfg",
           "section": ".text",
-          "address": "0x41e80",
+          "address": "0x41898",
           "binding": "global",
           "symbol_bytes": 1288,
           "instructions": 322,
@@ -26685,7 +26617,7 @@
         {
           "name": "tisp_mdns_c_3d_param_cfg",
           "section": ".text",
-          "address": "0x418cc",
+          "address": "0x412e4",
           "binding": "global",
           "symbol_bytes": 1460,
           "instructions": 365,
@@ -26711,7 +26643,7 @@
         {
           "name": "tisp_mdns_y_2d_param_cfg",
           "section": ".text",
-          "address": "0x414b8",
+          "address": "0x40ed0",
           "binding": "global",
           "symbol_bytes": 1044,
           "instructions": 261,
@@ -26737,7 +26669,7 @@
         {
           "name": "tisp_mdns_y_3d_param_cfg",
           "section": ".text",
-          "address": "0x40974",
+          "address": "0x4038c",
           "binding": "global",
           "symbol_bytes": 2884,
           "instructions": 721,
@@ -26763,7 +26695,7 @@
         {
           "name": "tisp_sdns_d_s1_thres_cfg",
           "section": ".text",
-          "address": "0x37fe0",
+          "address": "0x379f8",
           "binding": "global",
           "symbol_bytes": 220,
           "instructions": 55,
@@ -26789,7 +26721,7 @@
         {
           "name": "tisp_sdns_dark_light_tt_opt_cfg",
           "section": ".text",
-          "address": "0x37f80",
+          "address": "0x37998",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -26815,7 +26747,7 @@
         {
           "name": "tisp_sdns_g_det_val_div_cfg",
           "section": ".text",
-          "address": "0x37b68",
+          "address": "0x37580",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -26841,7 +26773,7 @@
         {
           "name": "tisp_sdns_gaussian_k_cfg",
           "section": ".text",
-          "address": "0x38468",
+          "address": "0x37e80",
           "binding": "global",
           "symbol_bytes": 800,
           "instructions": 200,
@@ -26867,7 +26799,7 @@
         {
           "name": "tisp_sdns_gaussian_x_cfg",
           "section": ".text",
-          "address": "0x38248",
+          "address": "0x37c60",
           "binding": "global",
           "symbol_bytes": 544,
           "instructions": 136,
@@ -26893,7 +26825,7 @@
         {
           "name": "tisp_sdns_gaussian_y_cfg",
           "section": ".text",
-          "address": "0x38200",
+          "address": "0x37c18",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -26919,7 +26851,7 @@
         {
           "name": "tisp_sdns_grad_thres_opt_cfg",
           "section": ".text",
-          "address": "0x37a04",
+          "address": "0x3741c",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -26945,7 +26877,7 @@
         {
           "name": "tisp_sdns_h_line_cfg",
           "section": ".text",
-          "address": "0x38788",
+          "address": "0x381a0",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -26971,7 +26903,7 @@
         {
           "name": "tisp_sdns_h_mv_cfg",
           "section": ".text",
-          "address": "0x37e60",
+          "address": "0x37878",
           "binding": "global",
           "symbol_bytes": 288,
           "instructions": 72,
@@ -26997,7 +26929,7 @@
         {
           "name": "tisp_sdns_h_mv_wei_opt_cfg",
           "section": ".text",
-          "address": "0x37a90",
+          "address": "0x374a8",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -27023,7 +26955,7 @@
         {
           "name": "tisp_sdns_h_s_cfg",
           "section": ".text",
-          "address": "0x37d40",
+          "address": "0x37758",
           "binding": "global",
           "symbol_bytes": 288,
           "instructions": 72,
@@ -27049,7 +26981,7 @@
         {
           "name": "tisp_sdns_hls_en_ave_filter_cfg",
           "section": ".text",
-          "address": "0x381a4",
+          "address": "0x37bbc",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -27075,7 +27007,7 @@
         {
           "name": "tisp_sdns_mv_seg_number_num_thres_cfg",
           "section": ".text",
-          "address": "0x37ae8",
+          "address": "0x37500",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -27101,7 +27033,7 @@
         {
           "name": "tisp_sdns_r_s_mv_cfg",
           "section": ".text",
-          "address": "0x37ba8",
+          "address": "0x375c0",
           "binding": "global",
           "symbol_bytes": 408,
           "instructions": 102,
@@ -27127,7 +27059,7 @@
         {
           "name": "tisp_sdns_sp_d_b_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x38ee4",
+          "address": "0x388fc",
           "binding": "global",
           "symbol_bytes": 304,
           "instructions": 76,
@@ -27153,7 +27085,7 @@
         {
           "name": "tisp_sdns_sp_d_w_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x38db4",
+          "address": "0x387cc",
           "binding": "global",
           "symbol_bytes": 304,
           "instructions": 76,
@@ -27179,7 +27111,7 @@
         {
           "name": "tisp_sdns_sp_std_en_seg_opt_cfg",
           "section": ".text",
-          "address": "0x387e8",
+          "address": "0x38200",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -27205,7 +27137,7 @@
         {
           "name": "tisp_sdns_sp_ud_b_limit_srd_ll_hl_flat_cfg",
           "section": ".text",
-          "address": "0x38be4",
+          "address": "0x385fc",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -27231,7 +27163,7 @@
         {
           "name": "tisp_sdns_sp_ud_b_stren_cfg",
           "section": ".text",
-          "address": "0x38b84",
+          "address": "0x3859c",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -27257,7 +27189,7 @@
         {
           "name": "tisp_sdns_sp_ud_b_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x39144",
+          "address": "0x38b5c",
           "binding": "global",
           "symbol_bytes": 372,
           "instructions": 93,
@@ -27283,7 +27215,7 @@
         {
           "name": "tisp_sdns_sp_ud_stren_shift_opt_cfg",
           "section": ".text",
-          "address": "0x38c9c",
+          "address": "0x386b4",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -27309,7 +27241,7 @@
         {
           "name": "tisp_sdns_sp_ud_v2_v1_coef_w_wei_opt_cfg",
           "section": ".text",
-          "address": "0x38a4c",
+          "address": "0x38464",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -27335,7 +27267,7 @@
         {
           "name": "tisp_sdns_sp_ud_w_limit_b_wei_opt_cfg",
           "section": ".text",
-          "address": "0x38b44",
+          "address": "0x3855c",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -27361,7 +27293,7 @@
         {
           "name": "tisp_sdns_sp_ud_w_stren_cfg",
           "section": ".text",
-          "address": "0x38ae4",
+          "address": "0x384fc",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -27387,7 +27319,7 @@
         {
           "name": "tisp_sdns_sp_ud_w_wei_np_array_cfg",
           "section": ".text",
-          "address": "0x39014",
+          "address": "0x38a2c",
           "binding": "global",
           "symbol_bytes": 304,
           "instructions": 76,
@@ -27413,7 +27345,7 @@
         {
           "name": "tisp_sdns_sp_uu_cfg",
           "section": ".text",
-          "address": "0x38828",
+          "address": "0x38240",
           "binding": "global",
           "symbol_bytes": 192,
           "instructions": 48,
@@ -27439,7 +27371,7 @@
         {
           "name": "tisp_sdns_sp_uu_np_array_cfg",
           "section": ".text",
-          "address": "0x38ccc",
+          "address": "0x386e4",
           "binding": "global",
           "symbol_bytes": 232,
           "instructions": 58,
@@ -27465,7 +27397,7 @@
         {
           "name": "tisp_sdns_sp_v2_d_w_b_ll_hl_flat_cfg",
           "section": ".text",
-          "address": "0x388e8",
+          "address": "0x38300",
           "binding": "global",
           "symbol_bytes": 356,
           "instructions": 89,
@@ -27491,7 +27423,7 @@
         {
           "name": "tisp_sdns_w_thres_cfg",
           "section": ".text",
-          "address": "0x380bc",
+          "address": "0x37ad4",
           "binding": "global",
           "symbol_bytes": 232,
           "instructions": 58,
@@ -27595,7 +27527,7 @@
         {
           "name": "tiziano_sdns_params_refresh",
           "section": ".text",
-          "address": "0x3b238",
+          "address": "0x3ac50",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -27673,7 +27605,7 @@
         {
           "name": "tx_isp_disable_irq_1",
           "section": ".text",
-          "address": "0x53e9c",
+          "address": "0x53f2c",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -27699,7 +27631,7 @@
         {
           "name": "tx_isp_enable_irq_1",
           "section": ".text",
-          "address": "0x53e34",
+          "address": "0x53ec4",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -28049,7 +27981,7 @@
         {
           "name": "tisp_mdns_param_array_get",
           "section": ".text",
-          "address": "0x270f4",
+          "address": "0x27788",
           "binding": "global",
           "symbol_bytes": 19020,
           "instructions": 4755,
@@ -28089,7 +28021,7 @@
         {
           "name": "tiziano_mdns_params_refresh",
           "section": ".text",
-          "address": "0x2bc98",
+          "address": "0x2c32c",
           "binding": "global",
           "symbol_bytes": 9576,
           "instructions": 2394,
@@ -28129,7 +28061,7 @@
         {
           "name": "tisp_mdns_param_array_set",
           "section": ".text",
-          "address": "0x45cec",
+          "address": "0x45b1c",
           "binding": "global",
           "symbol_bytes": 10640,
           "instructions": 2660,
@@ -28169,7 +28101,7 @@
         {
           "name": "tisp_dmsc_param_array_get",
           "section": ".text",
-          "address": "0x22da8",
+          "address": "0x2343c",
           "binding": "global",
           "symbol_bytes": 9796,
           "instructions": 2449,
@@ -28209,7 +28141,7 @@
         {
           "name": "tisp_dmsc_intp",
           "section": ".text",
-          "address": "0x218a8",
+          "address": "0x21f3c",
           "binding": "global",
           "symbol_bytes": 5376,
           "instructions": 1344,
@@ -28249,7 +28181,7 @@
         {
           "name": "tiziano_dmsc_params_refresh",
           "section": ".text",
-          "address": "0x4dd7c",
+          "address": "0x4db90",
           "binding": "global",
           "symbol_bytes": 5088,
           "instructions": 1272,
@@ -28289,7 +28221,7 @@
         {
           "name": "tisp_dmsc_param_array_set",
           "section": ".text",
-          "address": "0x3f39c",
+          "address": "0x3edb4",
           "binding": "global",
           "symbol_bytes": 4948,
           "instructions": 1237,
@@ -28314,46 +28246,6 @@
       "match_kind": "exact_name",
       "classification": "similar",
       "oem": {
-        "name": "tiziano_adr_params_init",
-        "section": ".text",
-        "address": "0x31d08",
-        "binding": "global",
-        "symbol_bytes": 4632,
-        "instructions": 1158,
-        "branches": 2,
-        "calls": 126,
-        "returns": 1,
-        "relocations": 135
-      },
-      "recovered": [
-        {
-          "name": "tiziano_adr_params_init",
-          "section": ".text",
-          "address": "0x354a8",
-          "binding": "global",
-          "symbol_bytes": 4592,
-          "instructions": 1148,
-          "branches": 2,
-          "calls": 129,
-          "returns": 1,
-          "relocations": 117
-        }
-      ],
-      "instruction_ratio": 0.9913644214162349,
-      "instruction_delta": -10,
-      "recovered_totals": {
-        "symbol_bytes": 4592,
-        "instructions": 1148,
-        "branches": 2,
-        "calls": 129,
-        "returns": 1,
-        "relocations": 117
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "similar",
-      "oem": {
         "name": "tisp_dmsc_ref_reg_cfg",
         "section": ".text",
         "address": "0x4efd8",
@@ -28369,7 +28261,7 @@
         {
           "name": "tisp_dmsc_ref_reg_cfg",
           "section": ".text",
-          "address": "0x3e1d8",
+          "address": "0x3dbf0",
           "binding": "global",
           "symbol_bytes": 4456,
           "instructions": 1114,
@@ -28409,7 +28301,7 @@
         {
           "name": "tisp_sdns_param_array_get",
           "section": ".text",
-          "address": "0x1ad94",
+          "address": "0x1b428",
           "binding": "global",
           "symbol_bytes": 4980,
           "instructions": 1245,
@@ -28449,7 +28341,7 @@
         {
           "name": "regtrace_t23_mdns_y_3d_param_cfg.isra.0",
           "section": ".text",
-          "address": "0x447d4",
+          "address": "0x44604",
           "binding": "local",
           "symbol_bytes": 3592,
           "instructions": 898,
@@ -28489,7 +28381,7 @@
         {
           "name": "regtrace_t23_source_sdns_load_tuning",
           "section": ".text",
-          "address": "0x3a774",
+          "address": "0x3a18c",
           "binding": "local",
           "symbol_bytes": 2756,
           "instructions": 689,
@@ -28529,7 +28421,7 @@
         {
           "name": "tisp_s_sdns_ratio",
           "section": ".text",
-          "address": "0x39ea8",
+          "address": "0x398c0",
           "binding": "global",
           "symbol_bytes": 2252,
           "instructions": 563,
@@ -28609,7 +28501,7 @@
         {
           "name": "tisp_sdns_intp",
           "section": ".text",
-          "address": "0x1a6c4",
+          "address": "0x1ad58",
           "binding": "global",
           "symbol_bytes": 1744,
           "instructions": 436,
@@ -28689,7 +28581,7 @@
         {
           "name": "tiziano_af_set_hardware_param",
           "section": ".text",
-          "address": "0x3d384",
+          "address": "0x3cd9c",
           "binding": "global",
           "symbol_bytes": 1676,
           "instructions": 419,
@@ -28729,7 +28621,7 @@
         {
           "name": "tisp_sharpen_param_array_get",
           "section": ".text",
-          "address": "0x1c85c",
+          "address": "0x1cef0",
           "binding": "global",
           "symbol_bytes": 2020,
           "instructions": 505,
@@ -28769,7 +28661,7 @@
         {
           "name": "tisp_adr_param_array_get",
           "section": ".text",
-          "address": "0x18a00",
+          "address": "0x18fb4",
           "binding": "global",
           "symbol_bytes": 1820,
           "instructions": 455,
@@ -28809,7 +28701,7 @@
         {
           "name": "regtrace_t23_mdns_c_3d_param_cfg.isra.0",
           "section": ".text",
-          "address": "0x43e28",
+          "address": "0x43c58",
           "binding": "local",
           "symbol_bytes": 1452,
           "instructions": 363,
@@ -28868,6 +28760,46 @@
         "calls": 11,
         "returns": 2,
         "relocations": 55
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "similar",
+      "oem": {
+        "name": "tiziano_adr_params_refresh",
+        "section": ".text",
+        "address": "0x33dac",
+        "binding": "global",
+        "symbol_bytes": 1396,
+        "instructions": 349,
+        "branches": 8,
+        "calls": 52,
+        "returns": 1,
+        "relocations": 214
+      },
+      "recovered": [
+        {
+          "name": "tiziano_adr_params_refresh",
+          "section": ".text",
+          "address": "0x19a38",
+          "binding": "global",
+          "symbol_bytes": 1508,
+          "instructions": 377,
+          "branches": 7,
+          "calls": 67,
+          "returns": 1,
+          "relocations": 147
+        }
+      ],
+      "instruction_ratio": 1.0802292263610316,
+      "instruction_delta": 28,
+      "recovered_totals": {
+        "symbol_bytes": 1508,
+        "instructions": 377,
+        "branches": 7,
+        "calls": 67,
+        "returns": 1,
+        "relocations": 147
       }
     },
     {
@@ -28969,7 +28901,7 @@
         {
           "name": "tiziano_ae_dump",
           "section": ".text",
-          "address": "0x4d018",
+          "address": "0x4c998",
           "binding": "global",
           "symbol_bytes": 1364,
           "instructions": 341,
@@ -29009,7 +28941,7 @@
         {
           "name": "tisp_ae_param_array_get",
           "section": ".text",
-          "address": "0x1fc1c",
+          "address": "0x202b0",
           "binding": "global",
           "symbol_bytes": 1292,
           "instructions": 323,
@@ -29034,6 +28966,46 @@
       "match_kind": "exact_name",
       "classification": "similar",
       "oem": {
+        "name": "tiziano_adr_5x5_param",
+        "section": ".text",
+        "address": "0x317dc",
+        "binding": "global",
+        "symbol_bytes": 1324,
+        "instructions": 331,
+        "branches": 19,
+        "calls": 9,
+        "returns": 1,
+        "relocations": 45
+      },
+      "recovered": [
+        {
+          "name": "tiziano_adr_5x5_param",
+          "section": ".text",
+          "address": "0x18958",
+          "binding": "global",
+          "symbol_bytes": 1468,
+          "instructions": 367,
+          "branches": 26,
+          "calls": 27,
+          "returns": 1,
+          "relocations": 26
+        }
+      ],
+      "instruction_ratio": 1.108761329305136,
+      "instruction_delta": 36,
+      "recovered_totals": {
+        "symbol_bytes": 1468,
+        "instructions": 367,
+        "branches": 26,
+        "calls": 27,
+        "returns": 1,
+        "relocations": 26
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "similar",
+      "oem": {
         "name": "tiziano_mdns_init",
         "section": ".text",
         "address": "0x644e4",
@@ -29049,7 +29021,7 @@
         {
           "name": "tiziano_mdns_init",
           "section": ".text",
-          "address": "0x4579c",
+          "address": "0x455cc",
           "binding": "global",
           "symbol_bytes": 1360,
           "instructions": 340,
@@ -29089,7 +29061,7 @@
         {
           "name": "tisp_defog_param_array_get",
           "section": ".text",
-          "address": "0x19d10",
+          "address": "0x1a3a4",
           "binding": "global",
           "symbol_bytes": 1132,
           "instructions": 283,
@@ -29129,7 +29101,7 @@
         {
           "name": "regtrace_t23_mdns_y_2d_param_cfg.isra.0",
           "section": ".text",
-          "address": "0x443d4",
+          "address": "0x44204",
           "binding": "local",
           "symbol_bytes": 1024,
           "instructions": 256,
@@ -29169,7 +29141,7 @@
         {
           "name": "tisp_ae_param_array_set",
           "section": ".text",
-          "address": "0x3cf2c",
+          "address": "0x3c944",
           "binding": "global",
           "symbol_bytes": 1036,
           "instructions": 259,
@@ -29209,7 +29181,7 @@
         {
           "name": "tiziano_sharpen_params_refresh",
           "section": ".text",
-          "address": "0x1c454",
+          "address": "0x1cae8",
           "binding": "global",
           "symbol_bytes": 1032,
           "instructions": 258,
@@ -29329,7 +29301,7 @@
         {
           "name": "tiziano_ae_params_refresh",
           "section": ".text",
-          "address": "0x1ed54",
+          "address": "0x1f3e8",
           "binding": "global",
           "symbol_bytes": 824,
           "instructions": 206,
@@ -29409,7 +29381,7 @@
         {
           "name": "tisp_sharpen_intp",
           "section": ".text",
-          "address": "0x1c110",
+          "address": "0x1c7a4",
           "binding": "global",
           "symbol_bytes": 784,
           "instructions": 196,
@@ -29449,7 +29421,7 @@
         {
           "name": "tisp_bcsh_param_array_set",
           "section": ".text",
-          "address": "0x34304",
+          "address": "0x34ad0",
           "binding": "global",
           "symbol_bytes": 928,
           "instructions": 232,
@@ -29489,7 +29461,7 @@
         {
           "name": "tx_isp_core_probe",
           "section": ".text",
-          "address": "0x53f10",
+          "address": "0x53fa0",
           "binding": "global",
           "symbol_bytes": 776,
           "instructions": 194,
@@ -29609,7 +29581,7 @@
         {
           "name": "tisp_dpc_d_m2_par_cfg",
           "section": ".text",
-          "address": "0x34b04",
+          "address": "0x352d0",
           "binding": "global",
           "symbol_bytes": 724,
           "instructions": 181,
@@ -29689,7 +29661,7 @@
         {
           "name": "tiziano_awb_set_hardware_param",
           "section": ".text",
-          "address": "0x3c39c",
+          "address": "0x3bdb4",
           "binding": "global",
           "symbol_bytes": 760,
           "instructions": 190,
@@ -29729,7 +29701,7 @@
         {
           "name": "tisp_gib_gain_interpolation",
           "section": ".text",
-          "address": "0x496c8",
+          "address": "0x494f8",
           "binding": "global",
           "symbol_bytes": 708,
           "instructions": 177,
@@ -29809,7 +29781,7 @@
         {
           "name": "tisp_awb_param_array_set",
           "section": ".text",
-          "address": "0x3c72c",
+          "address": "0x3c144",
           "binding": "global",
           "symbol_bytes": 748,
           "instructions": 187,
@@ -29849,7 +29821,7 @@
         {
           "name": "tiziano_awb_dump",
           "section": ".text",
-          "address": "0x4aae4",
+          "address": "0x4a914",
           "binding": "global",
           "symbol_bytes": 736,
           "instructions": 184,
@@ -29914,6 +29886,86 @@
       "match_kind": "exact_name",
       "classification": "similar",
       "oem": {
+        "name": "tisp_switch_bin",
+        "section": ".text",
+        "address": "0x651d8",
+        "binding": "global",
+        "symbol_bytes": 732,
+        "instructions": 183,
+        "branches": 6,
+        "calls": 26,
+        "returns": 1,
+        "relocations": 75
+      },
+      "recovered": [
+        {
+          "name": "tisp_switch_bin",
+          "section": ".text",
+          "address": "0x4fae0",
+          "binding": "global",
+          "symbol_bytes": 664,
+          "instructions": 166,
+          "branches": 6,
+          "calls": 23,
+          "returns": 1,
+          "relocations": 72
+        }
+      ],
+      "instruction_ratio": 0.907103825136612,
+      "instruction_delta": -17,
+      "recovered_totals": {
+        "symbol_bytes": 664,
+        "instructions": 166,
+        "branches": 6,
+        "calls": 23,
+        "returns": 1,
+        "relocations": 72
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "similar",
+      "oem": {
+        "name": "tisp_day_or_night_s_ctrl",
+        "section": ".text",
+        "address": "0x64c48",
+        "binding": "global",
+        "symbol_bytes": 720,
+        "instructions": 180,
+        "branches": 5,
+        "calls": 23,
+        "returns": 1,
+        "relocations": 75
+      },
+      "recovered": [
+        {
+          "name": "tisp_day_or_night_s_ctrl",
+          "section": ".text",
+          "address": "0x4f700",
+          "binding": "global",
+          "symbol_bytes": 680,
+          "instructions": 170,
+          "branches": 5,
+          "calls": 21,
+          "returns": 1,
+          "relocations": 67
+        }
+      ],
+      "instruction_ratio": 0.9444444444444444,
+      "instruction_delta": -10,
+      "recovered_totals": {
+        "symbol_bytes": 680,
+        "instructions": 170,
+        "branches": 5,
+        "calls": 21,
+        "returns": 1,
+        "relocations": 67
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "similar",
+      "oem": {
         "name": "tiziano_ae_para_addr",
         "section": ".text",
         "address": "0x496f0",
@@ -29929,7 +29981,7 @@
         {
           "name": "tiziano_ae_para_addr",
           "section": ".text",
-          "address": "0x1f3e0",
+          "address": "0x1fa74",
           "binding": "global",
           "symbol_bytes": 588,
           "instructions": 147,
@@ -29969,7 +30021,7 @@
         {
           "name": "tisp_y_sp_uu_w_b_wei_cfg",
           "section": ".text",
-          "address": "0x3b6a4",
+          "address": "0x3b0bc",
           "binding": "global",
           "symbol_bytes": 664,
           "instructions": 166,
@@ -30049,7 +30101,7 @@
         {
           "name": "tisp_set_csc_version",
           "section": ".text",
-          "address": "0x3211c",
+          "address": "0x328e8",
           "binding": "global",
           "symbol_bytes": 660,
           "instructions": 165,
@@ -30129,7 +30181,7 @@
         {
           "name": "tiziano_defog_algorithm",
           "section": ".text",
-          "address": "0x19b18",
+          "address": "0x1a1ac",
           "binding": "global",
           "symbol_bytes": 472,
           "instructions": 118,
@@ -30169,7 +30221,7 @@
         {
           "name": "tisp_s_antiflick",
           "section": ".text",
-          "address": "0x2e3d8",
+          "address": "0x2ea6c",
           "binding": "global",
           "symbol_bytes": 500,
           "instructions": 125,
@@ -30289,7 +30341,7 @@
         {
           "name": "tisp_af_get_attr",
           "section": ".text",
-          "address": "0x20da8",
+          "address": "0x2143c",
           "binding": "global",
           "symbol_bytes": 508,
           "instructions": 127,
@@ -30329,7 +30381,7 @@
         {
           "name": "tisp_ccm_set_attr",
           "section": ".text",
-          "address": "0x334c8",
+          "address": "0x33c94",
           "binding": "global",
           "symbol_bytes": 496,
           "instructions": 124,
@@ -30369,7 +30421,7 @@
         {
           "name": "tisp_gib_param_array_set",
           "section": ".text",
-          "address": "0x49b88",
+          "address": "0x499b8",
           "binding": "global",
           "symbol_bytes": 520,
           "instructions": 130,
@@ -30409,7 +30461,7 @@
         {
           "name": "ispcore_video_s_stream",
           "section": ".text",
-          "address": "0x301ac",
+          "address": "0x30840",
           "binding": "global",
           "symbol_bytes": 416,
           "instructions": 104,
@@ -30569,7 +30621,7 @@
         {
           "name": "tisp_s_draw_block_attr",
           "section": ".text",
-          "address": "0x2fd30",
+          "address": "0x303c4",
           "binding": "global",
           "symbol_bytes": 484,
           "instructions": 121,
@@ -30649,7 +30701,7 @@
         {
           "name": "tisp_lsc_param_array_set",
           "section": ".text",
-          "address": "0x32de4",
+          "address": "0x335b0",
           "binding": "global",
           "symbol_bytes": 448,
           "instructions": 112,
@@ -30769,7 +30821,7 @@
         {
           "name": "tiziano_bcsh_init",
           "section": ".text",
-          "address": "0x3415c",
+          "address": "0x34928",
           "binding": "global",
           "symbol_bytes": 424,
           "instructions": 106,
@@ -30809,7 +30861,7 @@
         {
           "name": "tisp_deinit",
           "section": ".text",
-          "address": "0x201b4",
+          "address": "0x20848",
           "binding": "global",
           "symbol_bytes": 480,
           "instructions": 120,
@@ -30889,7 +30941,7 @@
         {
           "name": "tiziano_deflicker_expt",
           "section": ".text",
-          "address": "0x1f1e8",
+          "address": "0x1f87c",
           "binding": "global",
           "symbol_bytes": 436,
           "instructions": 109,
@@ -30929,7 +30981,7 @@
         {
           "name": "tisp_af_get_statistics",
           "section": ".text",
-          "address": "0x206f4",
+          "address": "0x20d88",
           "binding": "global",
           "symbol_bytes": 448,
           "instructions": 112,
@@ -30969,7 +31021,7 @@
         {
           "name": "tisp_s_mdns_ratio",
           "section": ".text",
-          "address": "0x2bb40",
+          "address": "0x2c1d4",
           "binding": "global",
           "symbol_bytes": 344,
           "instructions": 86,
@@ -31009,7 +31061,7 @@
         {
           "name": "tisp_set_ae1_ag",
           "section": ".text",
-          "address": "0x1e5f4",
+          "address": "0x1ec88",
           "binding": "global",
           "symbol_bytes": 348,
           "instructions": 87,
@@ -31129,7 +31181,7 @@
         {
           "name": "regtrace_t23_sdns_sp_v2_d_w_b_ll_hl_flat_cfg",
           "section": ".text",
-          "address": "0x312d4",
+          "address": "0x31aa0",
           "binding": "local",
           "symbol_bytes": 348,
           "instructions": 87,
@@ -31169,7 +31221,7 @@
         {
           "name": "tisp_ydns_param_array_set",
           "section": ".text",
-          "address": "0x35240",
+          "address": "0x35a0c",
           "binding": "global",
           "symbol_bytes": 376,
           "instructions": 94,
@@ -31209,7 +31261,7 @@
         {
           "name": "tiziano_defog_interrupt_static",
           "section": ".text",
-          "address": "0x4c1bc",
+          "address": "0x4bb3c",
           "binding": "global",
           "symbol_bytes": 308,
           "instructions": 77,
@@ -31249,7 +31301,7 @@
         {
           "name": "tiziano_adr_interrupt_static",
           "section": ".text",
-          "address": "0x4befc",
+          "address": "0x4b914",
           "binding": "global",
           "symbol_bytes": 328,
           "instructions": 82,
@@ -31329,25 +31381,25 @@
         {
           "name": "tisp_adr_wdr_en",
           "section": ".text",
-          "address": "0x19860",
+          "address": "0x36068",
           "binding": "global",
-          "symbol_bytes": 296,
-          "instructions": 74,
-          "branches": 2,
+          "symbol_bytes": 316,
+          "instructions": 79,
+          "branches": 3,
           "calls": 1,
           "returns": 0,
-          "relocations": 68
+          "relocations": 70
         }
       ],
-      "instruction_ratio": 0.8131868131868132,
-      "instruction_delta": -17,
+      "instruction_ratio": 0.8681318681318682,
+      "instruction_delta": -12,
       "recovered_totals": {
-        "symbol_bytes": 296,
-        "instructions": 74,
-        "branches": 2,
+        "symbol_bytes": 316,
+        "instructions": 79,
+        "branches": 3,
         "calls": 1,
         "returns": 0,
-        "relocations": 68
+        "relocations": 70
       }
     },
     {
@@ -31369,7 +31421,7 @@
         {
           "name": "tisp_mdns_top_func_cfg",
           "section": ".text",
-          "address": "0x407f4",
+          "address": "0x4020c",
           "binding": "global",
           "symbol_bytes": 384,
           "instructions": 96,
@@ -31529,7 +31581,7 @@
         {
           "name": "tisp_ccm_param_array_set",
           "section": ".text",
-          "address": "0x336b8",
+          "address": "0x33e84",
           "binding": "global",
           "symbol_bytes": 360,
           "instructions": 90,
@@ -31569,7 +31621,7 @@
         {
           "name": "tiziano_ccm_lut_parameter",
           "section": ".text",
-          "address": "0x32fa4",
+          "address": "0x33770",
           "binding": "global",
           "symbol_bytes": 336,
           "instructions": 84,
@@ -31649,7 +31701,7 @@
         {
           "name": "tiziano_gib_lut_parameter",
           "section": ".text",
-          "address": "0x4998c",
+          "address": "0x497bc",
           "binding": "global",
           "symbol_bytes": 356,
           "instructions": 89,
@@ -31689,7 +31741,7 @@
         {
           "name": "tisp_dmsc_sharpness_set",
           "section": ".text",
-          "address": "0x4dbd8",
+          "address": "0x4d9ec",
           "binding": "global",
           "symbol_bytes": 400,
           "instructions": 100,
@@ -31729,7 +31781,7 @@
         {
           "name": "tiziano_awb_init",
           "section": ".text",
-          "address": "0x3ca18",
+          "address": "0x3c430",
           "binding": "global",
           "symbol_bytes": 300,
           "instructions": 75,
@@ -31769,7 +31821,7 @@
         {
           "name": "tisp_clm_param_array_get",
           "section": ".text",
-          "address": "0x1a564",
+          "address": "0x1abf8",
           "binding": "global",
           "symbol_bytes": 352,
           "instructions": 88,
@@ -31929,7 +31981,7 @@
         {
           "name": "tisp_s_autozoom_control",
           "section": ".text",
-          "address": "0x31cbc",
+          "address": "0x32488",
           "binding": "global",
           "symbol_bytes": 276,
           "instructions": 69,
@@ -32009,7 +32061,7 @@
         {
           "name": "tisp_msca_scaling_algorithm",
           "section": ".text",
-          "address": "0x49f8c",
+          "address": "0x49dbc",
           "binding": "global",
           "symbol_bytes": 284,
           "instructions": 71,
@@ -32049,7 +32101,7 @@
         {
           "name": "tisp_s_aeroi_weight",
           "section": ".text",
-          "address": "0x2e8a4",
+          "address": "0x2ef38",
           "binding": "global",
           "symbol_bytes": 256,
           "instructions": 64,
@@ -32089,7 +32141,7 @@
         {
           "name": "tisp_s_mscaler_mask_block_attr",
           "section": ".text",
-          "address": "0x2f944",
+          "address": "0x2ffd8",
           "binding": "global",
           "symbol_bytes": 296,
           "instructions": 74,
@@ -32129,7 +32181,7 @@
         {
           "name": "tiziano_ccm_init",
           "section": ".text",
-          "address": "0x333a0",
+          "address": "0x33b6c",
           "binding": "global",
           "symbol_bytes": 296,
           "instructions": 74,
@@ -32369,7 +32421,7 @@
         {
           "name": "tisp_csccr_sync_api_para",
           "section": ".text",
-          "address": "0x214e4",
+          "address": "0x21b78",
           "binding": "global",
           "symbol_bytes": 296,
           "instructions": 74,
@@ -32409,7 +32461,7 @@
         {
           "name": "regtrace_t23_sdns_h_mv_cfg",
           "section": ".text",
-          "address": "0x30e90",
+          "address": "0x3165c",
           "binding": "local",
           "symbol_bytes": 280,
           "instructions": 70,
@@ -32449,7 +32501,7 @@
         {
           "name": "regtrace_t23_sdns_h_s_cfg",
           "section": ".text",
-          "address": "0x30d78",
+          "address": "0x31544",
           "binding": "local",
           "symbol_bytes": 280,
           "instructions": 70,
@@ -32569,7 +32621,7 @@
         {
           "name": "ispcore_frame_channel_streamoff",
           "section": ".text",
-          "address": "0x3008c",
+          "address": "0x30720",
           "binding": "global",
           "symbol_bytes": 288,
           "instructions": 72,
@@ -32609,7 +32661,7 @@
         {
           "name": "JZ_Isp_Ae_Reg2par",
           "section": ".text",
-          "address": "0x1d5d0",
+          "address": "0x1dc64",
           "binding": "global",
           "symbol_bytes": 292,
           "instructions": 73,
@@ -32649,7 +32701,7 @@
         {
           "name": "tisp_ydns_param_cfg",
           "section": ".text",
-          "address": "0x35034",
+          "address": "0x35800",
           "binding": "global",
           "symbol_bytes": 272,
           "instructions": 68,
@@ -32729,7 +32781,7 @@
         {
           "name": "tisp_ae_tune",
           "section": ".text",
-          "address": "0x1e000",
+          "address": "0x1e694",
           "binding": "global",
           "symbol_bytes": 272,
           "instructions": 68,
@@ -32769,7 +32821,7 @@
         {
           "name": "tiziano_af_init",
           "section": ".text",
-          "address": "0x4d614",
+          "address": "0x4cf94",
           "binding": "global",
           "symbol_bytes": 248,
           "instructions": 62,
@@ -32809,7 +32861,7 @@
         {
           "name": "apical_isp_sensor_hvflip_update",
           "section": ".text",
-          "address": "0x4ae70",
+          "address": "0x4aca0",
           "binding": "global",
           "symbol_bytes": 216,
           "instructions": 54,
@@ -32849,7 +32901,7 @@
         {
           "name": "tisp_set_sensor_integration_time",
           "section": ".text",
-          "address": "0x1d2f4",
+          "address": "0x1d988",
           "binding": "global",
           "symbol_bytes": 232,
           "instructions": 58,
@@ -32889,7 +32941,7 @@
         {
           "name": "tisp_hldc_con_par_cfg",
           "section": ".text",
-          "address": "0x3c128",
+          "address": "0x3bb40",
           "binding": "global",
           "symbol_bytes": 252,
           "instructions": 63,
@@ -32929,7 +32981,7 @@
         {
           "name": "tisp_set_sensor_integration_time_short",
           "section": ".text",
-          "address": "0x1d3dc",
+          "address": "0x1da70",
           "binding": "global",
           "symbol_bytes": 224,
           "instructions": 56,
@@ -32969,7 +33021,7 @@
         {
           "name": "tisp_s_ccm_attr",
           "section": ".text",
-          "address": "0x50fc4",
+          "address": "0x50f50",
           "binding": "global",
           "symbol_bytes": 220,
           "instructions": 55,
@@ -33049,7 +33101,7 @@
         {
           "name": "tisp_clm_param_array_set",
           "section": ".text",
-          "address": "0x37918",
+          "address": "0x37330",
           "binding": "global",
           "symbol_bytes": 236,
           "instructions": 59,
@@ -33169,7 +33221,7 @@
         {
           "name": "tisp_msca_init",
           "section": ".text",
-          "address": "0x31b54",
+          "address": "0x32320",
           "binding": "global",
           "symbol_bytes": 228,
           "instructions": 57,
@@ -33209,7 +33261,7 @@
         {
           "name": "tisp_af_process_impl",
           "section": ".text",
-          "address": "0x20b24",
+          "address": "0x211b8",
           "binding": "global",
           "symbol_bytes": 240,
           "instructions": 60,
@@ -33289,7 +33341,7 @@
         {
           "name": "tisp_set_ae_freeze",
           "section": ".text",
-          "address": "0x2f798",
+          "address": "0x2fe2c",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -33369,7 +33421,7 @@
         {
           "name": "tisp_ae_wdr_en",
           "section": ".text",
-          "address": "0x3ce48",
+          "address": "0x3c860",
           "binding": "global",
           "symbol_bytes": 228,
           "instructions": 57,
@@ -33409,7 +33461,7 @@
         {
           "name": "tisp_ae0_get_statistics",
           "section": ".text",
-          "address": "0x1d828",
+          "address": "0x1debc",
           "binding": "global",
           "symbol_bytes": 248,
           "instructions": 62,
@@ -33449,7 +33501,7 @@
         {
           "name": "tisp_long_ev_update",
           "section": ".text",
-          "address": "0x4c0dc",
+          "address": "0x4ba5c",
           "binding": "global",
           "symbol_bytes": 224,
           "instructions": 56,
@@ -33529,7 +33581,7 @@
         {
           "name": "tisp_msca_ch_curve_write_ctrl",
           "section": ".text",
-          "address": "0x49d90",
+          "address": "0x49bc0",
           "binding": "global",
           "symbol_bytes": 264,
           "instructions": 66,
@@ -33569,7 +33621,7 @@
         {
           "name": "tisp_clm_sort_ct_list",
           "section": ".text",
-          "address": "0x1a2b0",
+          "address": "0x1a944",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -33609,7 +33661,7 @@
         {
           "name": "tiziano_clm_params_refresh",
           "section": ".text",
-          "address": "0x1a478",
+          "address": "0x1ab0c",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -33689,7 +33741,7 @@
         {
           "name": "tisp_msca_api_set_mirr_flip",
           "section": ".text",
-          "address": "0x4a774",
+          "address": "0x4a5a4",
           "binding": "global",
           "symbol_bytes": 196,
           "instructions": 49,
@@ -33849,7 +33901,7 @@
         {
           "name": "tisp_ct_update",
           "section": ".text",
-          "address": "0x4ca54",
+          "address": "0x4c3d4",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -33889,7 +33941,7 @@
         {
           "name": "tisp_s_defog_enable",
           "section": ".text",
-          "address": "0x4c998",
+          "address": "0x4c318",
           "binding": "global",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -33929,7 +33981,7 @@
         {
           "name": "tisp_csccr_param_array_set",
           "section": ".text",
-          "address": "0x21744",
+          "address": "0x21dd8",
           "binding": "global",
           "symbol_bytes": 192,
           "instructions": 48,
@@ -34049,7 +34101,7 @@
         {
           "name": "tisp_y_sp_uu_cfg",
           "section": ".text",
-          "address": "0x3b3e0",
+          "address": "0x3adf8",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -34089,7 +34141,7 @@
         {
           "name": "tisp_y_sp_v1_v2_coef_cfg",
           "section": ".text",
-          "address": "0x3b548",
+          "address": "0x3af60",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -34129,7 +34181,7 @@
         {
           "name": "tisp_hldc_strength_adjust_k",
           "section": ".text",
-          "address": "0x1d040",
+          "address": "0x1d6d4",
           "binding": "global",
           "symbol_bytes": 228,
           "instructions": 57,
@@ -34169,7 +34221,7 @@
         {
           "name": "tisp_ae1_get_statistics",
           "section": ".text",
-          "address": "0x1d920",
+          "address": "0x1dfb4",
           "binding": "global",
           "symbol_bytes": 208,
           "instructions": 52,
@@ -34209,7 +34261,7 @@
         {
           "name": "tisp_g_draw_block_attr",
           "section": ".text",
-          "address": "0x2ff1c",
+          "address": "0x305b0",
           "binding": "global",
           "symbol_bytes": 224,
           "instructions": 56,
@@ -34289,7 +34341,7 @@
         {
           "name": "regtrace_t23_sdns_sp_uu_cfg",
           "section": ".text",
-          "address": "0x31218",
+          "address": "0x319e4",
           "binding": "local",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -34369,7 +34421,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_b_limit_srd_ll_hl_flat_cfg",
           "section": ".text",
-          "address": "0x31598",
+          "address": "0x31d64",
           "binding": "local",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -34409,7 +34461,7 @@
         {
           "name": "tisp_dpc_cor_par_cfg",
           "section": ".text",
-          "address": "0x34e74",
+          "address": "0x35640",
           "binding": "global",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -34449,7 +34501,7 @@
         {
           "name": "tiziano_dpc_init",
           "section": ".text",
-          "address": "0x4b994",
+          "address": "0x4b7c4",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -34529,7 +34581,7 @@
         {
           "name": "isp_core_debug_show",
           "section": ".text",
-          "address": "0x517bc",
+          "address": "0x51748",
           "binding": "global",
           "symbol_bytes": 208,
           "instructions": 52,
@@ -34569,7 +34621,7 @@
         {
           "name": "tisp_g_osd_block_attr",
           "section": ".text",
-          "address": "0x2fc70",
+          "address": "0x30304",
           "binding": "global",
           "symbol_bytes": 192,
           "instructions": 48,
@@ -34609,7 +34661,7 @@
         {
           "name": "tisp_g_ccm_attr",
           "section": ".text",
-          "address": "0x507e4",
+          "address": "0x50770",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -34689,7 +34741,7 @@
         {
           "name": "tisp_ctr_par_cfg",
           "section": ".text",
-          "address": "0x34f30",
+          "address": "0x356fc",
           "binding": "global",
           "symbol_bytes": 176,
           "instructions": 44,
@@ -34769,21 +34821,21 @@
         {
           "name": "tisp_s_adr_enable",
           "section": ".text",
-          "address": "0x4c044",
+          "address": "0x51818",
           "binding": "global",
-          "symbol_bytes": 152,
-          "instructions": 38,
+          "symbol_bytes": 168,
+          "instructions": 42,
           "branches": 3,
           "calls": 4,
           "returns": 1,
           "relocations": 13
         }
       ],
-      "instruction_ratio": 0.8085106382978723,
-      "instruction_delta": -9,
+      "instruction_ratio": 0.8936170212765957,
+      "instruction_delta": -5,
       "recovered_totals": {
-        "symbol_bytes": 152,
-        "instructions": 38,
+        "symbol_bytes": 168,
+        "instructions": 42,
         "branches": 3,
         "calls": 4,
         "returns": 1,
@@ -34809,7 +34861,7 @@
         {
           "name": "ae0_interrupt_static",
           "section": ".text",
-          "address": "0x4cd7c",
+          "address": "0x4c6fc",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -34889,7 +34941,7 @@
         {
           "name": "tisp_long_tgain_update",
           "section": ".text",
-          "address": "0x4b524",
+          "address": "0x4b354",
           "binding": "global",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -34929,7 +34981,7 @@
         {
           "name": "tiziano_defog_get_data",
           "section": ".text",
-          "address": "0x199a4",
+          "address": "0x1a038",
           "binding": "global",
           "symbol_bytes": 196,
           "instructions": 49,
@@ -35009,7 +35061,7 @@
         {
           "name": "ae1_weight_mean2",
           "section": ".text",
-          "address": "0x1eae0",
+          "address": "0x1f174",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -35049,7 +35101,7 @@
         {
           "name": "tisp_api_mdns_share_mem_en",
           "section": ".text",
-          "address": "0x4fe20",
+          "address": "0x4fd78",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -35089,7 +35141,7 @@
         {
           "name": "tisp_comn_param_array_set",
           "section": ".text",
-          "address": "0x4fbb4",
+          "address": "0x4fa4c",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -35129,7 +35181,7 @@
         {
           "name": "tisp_y_sp_fl_thres_cfg",
           "section": ".text",
-          "address": "0x3b4a8",
+          "address": "0x3aec0",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -35209,7 +35261,7 @@
         {
           "name": "tisp_set_frame_drop",
           "section": ".text",
-          "address": "0x31a2c",
+          "address": "0x321f8",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -35249,7 +35301,7 @@
         {
           "name": "awb_interrupt_static",
           "section": ".text",
-          "address": "0x4ced4",
+          "address": "0x4c854",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -35289,7 +35341,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_v2_v1_coef_w_wei_opt_cfg",
           "section": ".text",
-          "address": "0x31430",
+          "address": "0x31bfc",
           "binding": "local",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -35329,7 +35381,7 @@
         {
           "name": "tisp_ae_mean_update",
           "section": ".text",
-          "address": "0x1ea2c",
+          "address": "0x1f0c0",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -35369,7 +35421,7 @@
         {
           "name": "tisp_y_sp_uu_fl_sl_cfg",
           "section": ".text",
-          "address": "0x3ba40",
+          "address": "0x3b458",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -35409,7 +35461,7 @@
         {
           "name": "tisp_y_sp_w_b_sl_cfg",
           "section": ".text",
-          "address": "0x3b93c",
+          "address": "0x3b354",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -35529,7 +35581,7 @@
         {
           "name": "tisp_y_sp_w_b_ll_cfg",
           "section": ".text",
-          "address": "0x3b610",
+          "address": "0x3b028",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -35569,7 +35621,7 @@
         {
           "name": "tisp_s_af_weight",
           "section": ".text",
-          "address": "0x2ebac",
+          "address": "0x2f240",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -35649,7 +35701,7 @@
         {
           "name": "tisp_mdns_get_malloc_cfg",
           "section": ".text",
-          "address": "0x27048",
+          "address": "0x276dc",
           "binding": "global",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -35689,7 +35741,7 @@
         {
           "name": "isp_core_tuning_event",
           "section": ".text",
-          "address": "0x4fb10",
+          "address": "0x4f9a8",
           "binding": "global",
           "symbol_bytes": 164,
           "instructions": 41,
@@ -35729,7 +35781,7 @@
         {
           "name": "isp_tlib_api_s_awb_zone_weight",
           "section": ".text",
-          "address": "0x2f588",
+          "address": "0x2fc1c",
           "binding": "global",
           "symbol_bytes": 164,
           "instructions": 41,
@@ -35809,7 +35861,7 @@
         {
           "name": "tisp_bcsh_ct_update",
           "section": ".text",
-          "address": "0x34098",
+          "address": "0x34864",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -35889,7 +35941,7 @@
         {
           "name": "regtrace_t23_sdns_grad_thres_opt_cfg",
           "section": ".text",
-          "address": "0x30b7c",
+          "address": "0x31348",
           "binding": "local",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -35929,7 +35981,7 @@
         {
           "name": "tisp_bcsh_ev_update",
           "section": ".text",
-          "address": "0x34010",
+          "address": "0x347dc",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -36009,7 +36061,7 @@
         {
           "name": "tisp_g_BacklightComp",
           "section": ".text",
-          "address": "0x2e6f0",
+          "address": "0x2ed84",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -36049,7 +36101,7 @@
         {
           "name": "af_interrupt_static",
           "section": ".text",
-          "address": "0x4d56c",
+          "address": "0x4ceec",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -36129,7 +36181,7 @@
         {
           "name": "tisp_round_int64",
           "section": ".text",
-          "address": "0x1a208",
+          "address": "0x1a89c",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -36169,7 +36221,7 @@
         {
           "name": "ae1_interrupt_hist",
           "section": ".text",
-          "address": "0x4cf8c",
+          "address": "0x4c90c",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -36209,7 +36261,7 @@
         {
           "name": "tisp_g_Hilightdepress",
           "section": ".text",
-          "address": "0x2e644",
+          "address": "0x2ecd8",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -36289,7 +36341,7 @@
         {
           "name": "tisp_dmsc_par_refresh",
           "section": ".text",
-          "address": "0x4073c",
+          "address": "0x40154",
           "binding": "global",
           "symbol_bytes": 164,
           "instructions": 41,
@@ -36329,7 +36381,7 @@
         {
           "name": "tx_isp_remove",
           "section": ".text",
-          "address": "0x568b0",
+          "address": "0x56940",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -36409,7 +36461,7 @@
         {
           "name": "tisp_s_Gamma",
           "section": ".text",
-          "address": "0x2e770",
+          "address": "0x2ee04",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -36489,7 +36541,7 @@
         {
           "name": "tisp_dpc_par_refresh",
           "section": ".text",
-          "address": "0x4b478",
+          "address": "0x4b2a8",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -36529,7 +36581,7 @@
         {
           "name": "tisp_sdns_par_refresh",
           "section": ".text",
-          "address": "0x3b2bc",
+          "address": "0x3acd4",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -36569,7 +36621,7 @@
         {
           "name": "tisp_sharpen_par_refresh",
           "section": ".text",
-          "address": "0x3bffc",
+          "address": "0x3ba14",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -36689,7 +36741,7 @@
         {
           "name": "tiziano_awb_set_lum_th_freq",
           "section": ".text",
-          "address": "0x32b88",
+          "address": "0x33354",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -36729,7 +36781,7 @@
         {
           "name": "system_reg_write_ae",
           "section": ".text",
-          "address": "0x3cb44",
+          "address": "0x3c55c",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -36769,7 +36821,7 @@
         {
           "name": "tisp_mdns_par_refresh",
           "section": ".text",
-          "address": "0x456dc",
+          "address": "0x4550c",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -36809,7 +36861,7 @@
         {
           "name": "tisp_hldc_quadratic_func",
           "section": ".text",
-          "address": "0x1d194",
+          "address": "0x1d828",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -36889,7 +36941,7 @@
         {
           "name": "tisp_mdns_all_reg_refresh",
           "section": ".text",
-          "address": "0x45658",
+          "address": "0x45488",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -36929,7 +36981,7 @@
         {
           "name": "tiziano_s_wb_algo",
           "section": ".text",
-          "address": "0x3c694",
+          "address": "0x3c0ac",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -36969,7 +37021,7 @@
         {
           "name": "regtrace_t23_sdns_mv_seg_number_num_thres_cfg",
           "section": ".text",
-          "address": "0x30c40",
+          "address": "0x3140c",
           "binding": "local",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -37089,7 +37141,7 @@
         {
           "name": "tisp_hldc_para_validity_judge",
           "section": ".text",
-          "address": "0x1d124",
+          "address": "0x1d7b8",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -37209,7 +37261,7 @@
         {
           "name": "tisp_reg_map_get",
           "section": ".text",
-          "address": "0x4aa5c",
+          "address": "0x4a88c",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -37249,7 +37301,7 @@
         {
           "name": "tisp_top_param_array_get",
           "section": ".text",
-          "address": "0x4a9dc",
+          "address": "0x4a80c",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -37369,7 +37421,7 @@
         {
           "name": "exception_handle",
           "section": ".text",
-          "address": "0x53a94",
+          "address": "0x53b24",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -37449,7 +37501,7 @@
         {
           "name": "tisp_sharpen_intp_reg_refresh",
           "section": ".text",
-          "address": "0x3b9dc",
+          "address": "0x3b3f4",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -37689,7 +37741,7 @@
         {
           "name": "tisp_reg_map_set",
           "section": ".text",
-          "address": "0x32588",
+          "address": "0x32d54",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -37729,7 +37781,7 @@
         {
           "name": "tiziano_mdns_dn_params_refresh",
           "section": ".text",
-          "address": "0x4867c",
+          "address": "0x484ac",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -37809,7 +37861,7 @@
         {
           "name": "isp_tlib_api_g_awb_zone_weight",
           "section": ".text",
-          "address": "0x2f6c0",
+          "address": "0x2fd54",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -37929,7 +37981,7 @@
         {
           "name": "tisp_dpc_intp_reg_refresh",
           "section": ".text",
-          "address": "0x34fe0",
+          "address": "0x357ac",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -37969,7 +38021,7 @@
         {
           "name": "tisp_s_ae_at_list",
           "section": ".text",
-          "address": "0x2f0d8",
+          "address": "0x2f76c",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -38009,7 +38061,7 @@
         {
           "name": "tisp_s_af_attr",
           "section": ".text",
-          "address": "0x2f374",
+          "address": "0x2fa08",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -38049,7 +38101,7 @@
         {
           "name": "regtrace_t23_sdns_h_line_cfg",
           "section": ".text",
-          "address": "0x31198",
+          "address": "0x31964",
           "binding": "local",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -38089,7 +38141,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_b_stren_cfg",
           "section": ".text",
-          "address": "0x31540",
+          "address": "0x31d0c",
           "binding": "local",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -38129,7 +38181,7 @@
         {
           "name": "regtrace_t23_sdns_sp_ud_w_stren_cfg",
           "section": ".text",
-          "address": "0x314c0",
+          "address": "0x31c8c",
           "binding": "local",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -38209,7 +38261,7 @@
         {
           "name": "tisp_bcsh_s_hue",
           "section": ".text",
-          "address": "0x347bc",
+          "address": "0x34f88",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -38249,7 +38301,7 @@
         {
           "name": "system_reg_write_af",
           "section": ".text",
-          "address": "0x3d338",
+          "address": "0x3cd50",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -38289,7 +38341,7 @@
         {
           "name": "system_reg_write_clm",
           "section": ".text",
-          "address": "0x37748",
+          "address": "0x37160",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -38329,7 +38381,7 @@
         {
           "name": "system_reg_write_gib",
           "section": ".text",
-          "address": "0x325f8",
+          "address": "0x32dc4",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -38409,7 +38461,7 @@
         {
           "name": "tisp_api_ae_roi_weight_get",
           "section": ".text",
-          "address": "0x205dc",
+          "address": "0x20c70",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -38449,7 +38501,7 @@
         {
           "name": "tisp_api_ae_scene_pare_get",
           "section": ".text",
-          "address": "0x20574",
+          "address": "0x20c08",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -38489,7 +38541,7 @@
         {
           "name": "tisp_api_ae_zone_weight_get",
           "section": ".text",
-          "address": "0x20694",
+          "address": "0x20d28",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -38609,7 +38661,7 @@
         {
           "name": "tisp_s_osd_attr",
           "section": ".text",
-          "address": "0x2fb08",
+          "address": "0x3019c",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -38649,7 +38701,7 @@
         {
           "name": "tiziano_af_dn_params_refresh",
           "section": ".text",
-          "address": "0x3da10",
+          "address": "0x3d428",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -38689,7 +38741,7 @@
         {
           "name": "lib_tisp_debug_info",
           "section": ".text",
-          "address": "0x2e27c",
+          "address": "0x2e910",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -38929,7 +38981,7 @@
         {
           "name": "tisp_ae_deinit",
           "section": ".text",
-          "address": "0x20158",
+          "address": "0x207ec",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -38969,7 +39021,7 @@
         {
           "name": "tiziano_ydns_dn_params_refresh",
           "section": ".text",
-          "address": "0x351ec",
+          "address": "0x359b8",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -39009,7 +39061,7 @@
         {
           "name": "tisp_ipc_triger",
           "section": ".text",
-          "address": "0x31ac8",
+          "address": "0x32294",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -39129,7 +39181,7 @@
         {
           "name": "tisp_hldc_par_refresh",
           "section": ".text",
-          "address": "0x3c354",
+          "address": "0x3bd6c",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -39369,7 +39421,7 @@
         {
           "name": "tisp_api_ae_zone_weight_set",
           "section": ".text",
-          "address": "0x20644",
+          "address": "0x20cd8",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -39409,7 +39461,7 @@
         {
           "name": "tiziano_ccm_dn_params_refresh",
           "section": ".text",
-          "address": "0x33368",
+          "address": "0x33b34",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -39489,7 +39541,7 @@
         {
           "name": "tisp_api_ae_flick_t_set",
           "section": ".text",
-          "address": "0x20524",
+          "address": "0x20bb8",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -39529,7 +39581,7 @@
         {
           "name": "tisp_api_af_weight_get",
           "section": ".text",
-          "address": "0x212f8",
+          "address": "0x2198c",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -39569,7 +39621,7 @@
         {
           "name": "tisp_ipc_frame_done_interrupt_static",
           "section": ".text",
-          "address": "0x4adc4",
+          "address": "0x4abf4",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -39649,7 +39701,7 @@
         {
           "name": "tiziano_dmsc_dn_params_refresh",
           "section": ".text",
-          "address": "0x4f15c",
+          "address": "0x4ef70",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -39689,7 +39741,7 @@
         {
           "name": "tiziano_gib_dn_params_refresh",
           "section": ".text",
-          "address": "0x49af0",
+          "address": "0x49920",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -39729,7 +39781,7 @@
         {
           "name": "tiziano_sdns_dn_params_refresh",
           "section": ".text",
-          "address": "0x3b288",
+          "address": "0x3aca0",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -39769,7 +39821,7 @@
         {
           "name": "tiziano_sharpen_dn_params_refresh",
           "section": ".text",
-          "address": "0x3bbac",
+          "address": "0x3b5c4",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -39809,7 +39861,7 @@
         {
           "name": "tisp_ae1_get_hist",
           "section": ".text",
-          "address": "0x1d9f0",
+          "address": "0x1e084",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -39849,7 +39901,7 @@
         {
           "name": "tisp_ae_set_hist_custome",
           "section": ".text",
-          "address": "0x1dd8c",
+          "address": "0x1e420",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -39889,7 +39941,7 @@
         {
           "name": "tisp_ae_get_converge_step",
           "section": ".text",
-          "address": "0x204a0",
+          "address": "0x20b34",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -40089,7 +40141,7 @@
         {
           "name": "tisp_top_sel",
           "section": ".text",
-          "address": "0x507a0",
+          "address": "0x5072c",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -40289,7 +40341,7 @@
         {
           "name": "tisp_bcsh_s_rgb_coefft",
           "section": ".text",
-          "address": "0x34994",
+          "address": "0x35160",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -40489,7 +40541,7 @@
         {
           "name": "tisp_ae_g_at_list",
           "section": ".text",
-          "address": "0x1f190",
+          "address": "0x1f824",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -40529,7 +40581,7 @@
         {
           "name": "tisp_ae_g_min",
           "section": ".text",
-          "address": "0x1e238",
+          "address": "0x1e8cc",
           "binding": "global",
           "symbol_bytes": 32,
           "instructions": 8,
@@ -40649,7 +40701,7 @@
         {
           "name": "tisp_s_fcrop_control",
           "section": ".text",
-          "address": "0x2f4c4",
+          "address": "0x2fb58",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -42329,7 +42381,7 @@
         {
           "name": "tisp_api_mdns_share_mem",
           "section": ".text",
-          "address": "0x2e250",
+          "address": "0x2e8e4",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -42449,7 +42501,7 @@
         {
           "name": "tisp_s_wb_frz",
           "section": ".text",
-          "address": "0x2f3c8",
+          "address": "0x2fa5c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -42489,7 +42541,7 @@
         {
           "name": "tisp_set_sharpness",
           "section": ".text",
-          "address": "0x4dd68",
+          "address": "0x4db7c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -42529,7 +42581,7 @@
         {
           "name": "tisp_sdns_param_array_set",
           "section": ".text",
-          "address": "0x394c4",
+          "address": "0x38edc",
           "binding": "global",
           "symbol_bytes": 2532,
           "instructions": 633,
@@ -42569,7 +42621,7 @@
         {
           "name": "tiziano_af_dump",
           "section": ".text",
-          "address": "0x4d70c",
+          "address": "0x4d520",
           "binding": "global",
           "symbol_bytes": 1228,
           "instructions": 307,
@@ -42609,7 +42661,7 @@
         {
           "name": "tisp_sharpen_param_array_set",
           "section": ".text",
-          "address": "0x3bbe0",
+          "address": "0x3b5f8",
           "binding": "global",
           "symbol_bytes": 1052,
           "instructions": 263,
@@ -42689,7 +42741,7 @@
         {
           "name": "tiziano_bcsh_dump",
           "section": ".text",
-          "address": "0x4af48",
+          "address": "0x4ad78",
           "binding": "global",
           "symbol_bytes": 892,
           "instructions": 223,
@@ -42729,7 +42781,7 @@
         {
           "name": "tisp_dpc_param_array_set",
           "section": ".text",
-          "address": "0x4b5d0",
+          "address": "0x4b400",
           "binding": "global",
           "symbol_bytes": 692,
           "instructions": 173,
@@ -42809,7 +42861,7 @@
         {
           "name": "tisp_sdns_all_reg_refresh",
           "section": ".text",
-          "address": "0x392b8",
+          "address": "0x38cd0",
           "binding": "global",
           "symbol_bytes": 524,
           "instructions": 131,
@@ -42849,7 +42901,7 @@
         {
           "name": "tisp_af_param_array_set",
           "section": ".text",
-          "address": "0x3da70",
+          "address": "0x3d488",
           "binding": "global",
           "symbol_bytes": 444,
           "instructions": 111,
@@ -42889,7 +42941,7 @@
         {
           "name": "defog_wei_interpcot",
           "section": ".text",
-          "address": "0x36850",
+          "address": "0x36268",
           "binding": "global",
           "symbol_bytes": 356,
           "instructions": 89,
@@ -43049,7 +43101,7 @@
         {
           "name": "clm_lut2reg",
           "section": ".text",
-          "address": "0x1a384",
+          "address": "0x1aa18",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -43129,7 +43181,7 @@
         {
           "name": "tisp_sharpen_all_reg_refresh",
           "section": ".text",
-          "address": "0x3bae0",
+          "address": "0x3b4f8",
           "binding": "global",
           "symbol_bytes": 204,
           "instructions": 51,
@@ -43169,7 +43221,7 @@
         {
           "name": "tisp_vic_ctrl_release",
           "section": ".text",
-          "address": "0x4feb0",
+          "address": "0x4fe08",
           "binding": "global",
           "symbol_bytes": 204,
           "instructions": 51,
@@ -43209,7 +43261,7 @@
         {
           "name": "tisp_sdns_intp_reg_refresh",
           "section": ".text",
-          "address": "0x3164c",
+          "address": "0x31e18",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -43249,7 +43301,7 @@
         {
           "name": "tisp_dpc_all_reg_refresh",
           "section": ".text",
-          "address": "0x4b3bc",
+          "address": "0x4b1ec",
           "binding": "global",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -43329,7 +43381,7 @@
         {
           "name": "tisp_s_aezone_weight",
           "section": ".text",
-          "address": "0x2e9ec",
+          "address": "0x2f080",
           "binding": "global",
           "symbol_bytes": 164,
           "instructions": 41,
@@ -43369,7 +43421,7 @@
         {
           "name": "ae0_interrupt_hist",
           "section": ".text",
-          "address": "0x4ce34",
+          "address": "0x4c7b4",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -43409,7 +43461,7 @@
         {
           "name": "tisp_g_mscaler_mask_block_attr",
           "section": ".text",
-          "address": "0x2fa6c",
+          "address": "0x30100",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -43569,7 +43621,7 @@
         {
           "name": "tisp_csccr_param_array_get",
           "section": ".text",
-          "address": "0x216c0",
+          "address": "0x21d54",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -43609,7 +43661,7 @@
         {
           "name": "tisp_msca_crop_api",
           "section": ".text",
-          "address": "0x31c38",
+          "address": "0x32404",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -43649,7 +43701,7 @@
         {
           "name": "tiziano_ae_s_max_again",
           "section": ".text",
-          "address": "0x1f08c",
+          "address": "0x1f720",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -43689,7 +43741,7 @@
         {
           "name": "tisp_g_hldc_attr",
           "section": ".text",
-          "address": "0x2fffc",
+          "address": "0x30690",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -43769,7 +43821,7 @@
         {
           "name": "tisp_mdns_intp_reg_refresh",
           "section": ".text",
-          "address": "0x455dc",
+          "address": "0x4540c",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -43849,7 +43901,7 @@
         {
           "name": "tisp_gamma_param_array_set",
           "section": ".text",
-          "address": "0x324a4",
+          "address": "0x32c70",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -43889,7 +43941,7 @@
         {
           "name": "tisp_ccm_ct_update",
           "section": ".text",
-          "address": "0x332f4",
+          "address": "0x33ac0",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -43929,7 +43981,7 @@
         {
           "name": "tisp_ccm_ev_update",
           "section": ".text",
-          "address": "0x33280",
+          "address": "0x33a4c",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -43969,7 +44021,7 @@
         {
           "name": "tisp_top_param_array_set",
           "section": ".text",
-          "address": "0x3251c",
+          "address": "0x32ce8",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -44049,7 +44101,7 @@
         {
           "name": "tisp_af_set_attr",
           "section": ".text",
-          "address": "0x21058",
+          "address": "0x216ec",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -44089,7 +44141,7 @@
         {
           "name": "tiziano_gib_init",
           "section": ".text",
-          "address": "0x49b24",
+          "address": "0x49954",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -44129,7 +44181,7 @@
         {
           "name": "tisp_channel_start",
           "section": ".text",
-          "address": "0x4a448",
+          "address": "0x4a278",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -44169,7 +44221,7 @@
         {
           "name": "tisp_ydns_par_refresh",
           "section": ".text",
-          "address": "0x3516c",
+          "address": "0x35938",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -44249,7 +44301,7 @@
         {
           "name": "tisp_dmsc_all_reg_refresh",
           "section": ".text",
-          "address": "0x3f340",
+          "address": "0x3ed58",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -44449,7 +44501,7 @@
         {
           "name": "tisp_dmsc_intp_reg_refresh",
           "section": ".text",
-          "address": "0x406f0",
+          "address": "0x40108",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -44489,7 +44541,7 @@
         {
           "name": "tiziano_ae_s_max_isp_dgain",
           "section": ".text",
-          "address": "0x1f110",
+          "address": "0x1f7a4",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -44529,7 +44581,7 @@
         {
           "name": "tiziano_dmsc_init",
           "section": ".text",
-          "address": "0x4f190",
+          "address": "0x4efa4",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -44649,7 +44701,7 @@
         {
           "name": "dump_isp_info_open",
           "section": ".text",
-          "address": "0x3034c",
+          "address": "0x309e0",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -44809,7 +44861,7 @@
         {
           "name": "tisp_hldc_param_array_get",
           "section": ".text",
-          "address": "0x1d2a4",
+          "address": "0x1d938",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -44849,7 +44901,7 @@
         {
           "name": "tisp_mdns_bypass",
           "section": ".text",
-          "address": "0x4239c",
+          "address": "0x41db4",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -44969,7 +45021,7 @@
         {
           "name": "tisp_g_ae_attr",
           "section": ".text",
-          "address": "0x2f258",
+          "address": "0x2f8ec",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -45009,7 +45061,7 @@
         {
           "name": "tiziano_bcsh_dn_params_refresh",
           "section": ".text",
-          "address": "0x34118",
+          "address": "0x348e4",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -45089,7 +45141,7 @@
         {
           "name": "tisp_msca_Shd_ctrl",
           "section": ".text",
-          "address": "0x4a6ac",
+          "address": "0x4a4dc",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -45129,7 +45181,7 @@
         {
           "name": "tisp_y_sp_sl_exp_cfg",
           "section": ".text",
-          "address": "0x3b360",
+          "address": "0x3ad78",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -45169,7 +45221,7 @@
         {
           "name": "tisp_y_sp_std_scope_cfg",
           "section": ".text",
-          "address": "0x3b3a0",
+          "address": "0x3adb8",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -45289,7 +45341,7 @@
         {
           "name": "tiziano_deflicker_expt_tune",
           "section": ".text",
-          "address": "0x1f39c",
+          "address": "0x1fa30",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -45369,7 +45421,7 @@
         {
           "name": "tisp_ae_set_converge_step",
           "section": ".text",
-          "address": "0x204e4",
+          "address": "0x20b78",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -45409,7 +45461,7 @@
         {
           "name": "tisp_g_ae_converge_step",
           "section": ".text",
-          "address": "0x2f038",
+          "address": "0x2f6cc",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -45489,7 +45541,7 @@
         {
           "name": "tisp_s_ae_converge_step",
           "section": ".text",
-          "address": "0x2f000",
+          "address": "0x2f694",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -45569,7 +45621,7 @@
         {
           "name": "tiziano_hldc_params_refresh",
           "section": ".text",
-          "address": "0x1d264",
+          "address": "0x1d8f8",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -45609,7 +45661,7 @@
         {
           "name": "tisp_ae_get_y_zone",
           "section": ".text",
-          "address": "0x1f8f0",
+          "address": "0x1ff84",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -45649,7 +45701,7 @@
         {
           "name": "tisp_ae_manual_get",
           "section": ".text",
-          "address": "0x1f758",
+          "address": "0x1fdec",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -45729,7 +45781,7 @@
         {
           "name": "tisp_hldc_get_attr",
           "section": ".text",
-          "address": "0x1d230",
+          "address": "0x1d8c4",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -45769,7 +45821,7 @@
         {
           "name": "tisp_ae_get_hist_custome",
           "section": ".text",
-          "address": "0x1dcb0",
+          "address": "0x1e344",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -45809,7 +45861,7 @@
         {
           "name": "tisp_bcsh_brightness",
           "section": ".text",
-          "address": "0x3477c",
+          "address": "0x34f48",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -45849,7 +45901,7 @@
         {
           "name": "tisp_bcsh_contrast",
           "section": ".text",
-          "address": "0x346fc",
+          "address": "0x34ec8",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -45889,7 +45941,7 @@
         {
           "name": "tisp_bcsh_saturation",
           "section": ".text",
-          "address": "0x3473c",
+          "address": "0x34f08",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -45929,7 +45981,7 @@
         {
           "name": "tisp_csccr_api_get",
           "section": ".text",
-          "address": "0x21878",
+          "address": "0x21f0c",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -45969,7 +46021,7 @@
         {
           "name": "tisp_enable_tuning",
           "section": ".text",
-          "address": "0x2e2c8",
+          "address": "0x2e95c",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -46049,7 +46101,7 @@
         {
           "name": "tisp_ae_state_get",
           "section": ".text",
-          "address": "0x1f72c",
+          "address": "0x1fdc0",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -46249,7 +46301,7 @@
         {
           "name": "tisp_g_ae_at_list",
           "section": ".text",
-          "address": "0x1f1c0",
+          "address": "0x1f854",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46289,7 +46341,7 @@
         {
           "name": "tisp_g_ae_hist",
           "section": ".text",
-          "address": "0x2f070",
+          "address": "0x2f704",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46329,7 +46381,7 @@
         {
           "name": "tisp_g_ae_zone",
           "section": ".text",
-          "address": "0x2f2d4",
+          "address": "0x2f968",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46369,7 +46421,7 @@
         {
           "name": "tisp_g_af_attr",
           "section": ".text",
-          "address": "0x2f34c",
+          "address": "0x2f9e0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46409,7 +46461,7 @@
         {
           "name": "tisp_g_af_metric",
           "section": ".text",
-          "address": "0x2f324",
+          "address": "0x2f9b8",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46449,7 +46501,7 @@
         {
           "name": "tisp_g_af_zone",
           "section": ".text",
-          "address": "0x2f2fc",
+          "address": "0x2f990",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46489,7 +46541,7 @@
         {
           "name": "tisp_g_osd_attr",
           "section": ".text",
-          "address": "0x2fb5c",
+          "address": "0x301f0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46529,7 +46581,7 @@
         {
           "name": "tisp_g_wb_zone",
           "section": ".text",
-          "address": "0x2ef74",
+          "address": "0x2f608",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46649,7 +46701,7 @@
         {
           "name": "tisp_s_2dns_ratio",
           "section": ".text",
-          "address": "0x3b260",
+          "address": "0x3ac78",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46689,7 +46741,7 @@
         {
           "name": "tisp_s_awb_algo",
           "section": ".text",
-          "address": "0x3c704",
+          "address": "0x3c11c",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46729,7 +46781,7 @@
         {
           "name": "tisp_set_defog_strength",
           "section": ".text",
-          "address": "0x2f8c0",
+          "address": "0x2ff54",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -46769,7 +46821,7 @@
         {
           "name": "tisp_af_get_metric",
           "section": ".text",
-          "address": "0x20d88",
+          "address": "0x2141c",
           "binding": "global",
           "symbol_bytes": 32,
           "instructions": 8,
@@ -46849,7 +46901,7 @@
         {
           "name": "tisp_cust_mode_g_ctrl",
           "section": ".text",
-          "address": "0x2e30c",
+          "address": "0x2e9a0",
           "binding": "global",
           "symbol_bytes": 32,
           "instructions": 8,
@@ -46929,7 +46981,7 @@
         {
           "name": "system_irq_func_set",
           "section": ".text",
-          "address": "0x54218",
+          "address": "0x542a8",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -46969,7 +47021,7 @@
         {
           "name": "tisp_af_get_zone",
           "section": ".text",
-          "address": "0x21284",
+          "address": "0x21918",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -47009,7 +47061,7 @@
         {
           "name": "tisp_api_mdns_y_filter_get",
           "section": ".text",
-          "address": "0x2e200",
+          "address": "0x2e894",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -47049,7 +47101,7 @@
         {
           "name": "tisp_defog_ev_update",
           "section": ".text",
-          "address": "0x19988",
+          "address": "0x1a01c",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -47129,7 +47181,7 @@
         {
           "name": "tisp_top_init",
           "section": ".text",
-          "address": "0x2e264",
+          "address": "0x2e8f8",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -47169,7 +47221,7 @@
         {
           "name": "tisp_g_ae_it_max",
           "section": ".text",
-          "address": "0x2f784",
+          "address": "0x2fe18",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -47409,7 +47461,7 @@
         {
           "name": "tisp_ae_algo_deinit",
           "section": ".text",
-          "address": "0x2f8f0",
+          "address": "0x2ff84",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47449,7 +47501,7 @@
         {
           "name": "tisp_awb_algo_deinit",
           "section": ".text",
-          "address": "0x2f900",
+          "address": "0x2ff94",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47569,7 +47621,7 @@
         {
           "name": "tisp_g_adr_str_internal",
           "section": ".text",
-          "address": "0x19348",
+          "address": "0x198fc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47609,7 +47661,7 @@
         {
           "name": "tisp_g_defog_str_internal",
           "section": ".text",
-          "address": "0x1a184",
+          "address": "0x1a818",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47689,7 +47741,7 @@
         {
           "name": "tisp_get_ae_state",
           "section": ".text",
-          "address": "0x2f8b0",
+          "address": "0x2ff44",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47729,7 +47781,7 @@
         {
           "name": "tisp_get_bcsh_hue",
           "section": ".text",
-          "address": "0x2e3c8",
+          "address": "0x2ea5c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47769,7 +47821,7 @@
         {
           "name": "tisp_lsc_hvflip",
           "section": ".text",
-          "address": "0x4ae60",
+          "address": "0x4ac90",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47809,7 +47861,7 @@
         {
           "name": "tisp_s_max_again",
           "section": ".text",
-          "address": "0x2f4f4",
+          "address": "0x2fb88",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47849,7 +47901,7 @@
         {
           "name": "tisp_s_max_isp_dgain",
           "section": ".text",
-          "address": "0x2f504",
+          "address": "0x2fb98",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47889,7 +47941,7 @@
         {
           "name": "tisp_s_rgb_coefft",
           "section": ".text",
-          "address": "0x349c0",
+          "address": "0x3518c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47929,7 +47981,7 @@
         {
           "name": "tisp_set_ae_comp",
           "section": ".text",
-          "address": "0x2e34c",
+          "address": "0x2e9e0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -47969,7 +48021,7 @@
         {
           "name": "tisp_set_bcsh_hue",
           "section": ".text",
-          "address": "0x34814",
+          "address": "0x34fe0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -48009,7 +48061,7 @@
         {
           "name": "tisp_set_brightness",
           "section": ".text",
-          "address": "0x347ac",
+          "address": "0x34f78",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -48049,7 +48101,7 @@
         {
           "name": "tisp_set_contrast",
           "section": ".text",
-          "address": "0x3472c",
+          "address": "0x34ef8",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -48089,7 +48141,7 @@
         {
           "name": "tisp_set_saturation",
           "section": ".text",
-          "address": "0x3476c",
+          "address": "0x34f38",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -48129,7 +48181,7 @@
         {
           "name": "tisp_set_sensor_digital_gain",
           "section": ".text",
-          "address": "0x1d5c0",
+          "address": "0x1dc54",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -48169,7 +48221,7 @@
         {
           "name": "tisp_top_read",
           "section": ".text",
-          "address": "0x507d4",
+          "address": "0x50760",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -48489,7 +48541,7 @@
         {
           "name": "tisp_dmsc_sharpness_get",
           "section": ".text",
-          "address": "0x253ec",
+          "address": "0x25a80",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -48529,7 +48581,7 @@
         {
           "name": "tisp_get_tuning",
           "section": ".text",
-          "address": "0x2e300",
+          "address": "0x2e994",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -48569,7 +48621,7 @@
         {
           "name": "dump_msca_regs",
           "section": ".text",
-          "address": "0x30568",
+          "address": "0x30bfc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49289,7 +49341,7 @@
         {
           "name": "tisp_ae1_ctrls_update",
           "section": ".text",
-          "address": "0x1ed44",
+          "address": "0x1f3d8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49409,7 +49461,7 @@
         {
           "name": "tisp_csccr_print_para",
           "section": ".text",
-          "address": "0x21340",
+          "address": "0x219d4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49449,7 +49501,7 @@
         {
           "name": "tisp_deinit_free",
           "section": ".text",
-          "address": "0x2f718",
+          "address": "0x2fdac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49489,7 +49541,7 @@
         {
           "name": "tisp_flip_enable",
           "section": ".text",
-          "address": "0x2e33c",
+          "address": "0x2e9d0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49569,7 +49621,7 @@
         {
           "name": "tisp_g_mscaler_mask_attr",
           "section": ".text",
-          "address": "0x2f54c",
+          "address": "0x2fbe0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49609,7 +49661,7 @@
         {
           "name": "tisp_g_wdr_en",
           "section": ".text",
-          "address": "0x2f4ec",
+          "address": "0x2fb80",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49689,7 +49741,7 @@
         {
           "name": "tisp_get_wdr_output_mode",
           "section": ".text",
-          "address": "0x2f918",
+          "address": "0x2ffac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49729,7 +49781,7 @@
         {
           "name": "tisp_hv_flip_get",
           "section": ".text",
-          "address": "0x2e334",
+          "address": "0x2e9c8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49809,7 +49861,7 @@
         {
           "name": "tisp_mdns_wdr_en",
           "section": ".text",
-          "address": "0x27040",
+          "address": "0x276d4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -49969,7 +50021,7 @@
         {
           "name": "tisp_msca_state",
           "section": ".text",
-          "address": "0x2ff14",
+          "address": "0x305a8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -50009,7 +50061,7 @@
         {
           "name": "tisp_mscaler_mask_change",
           "section": ".text",
-          "address": "0x2f534",
+          "address": "0x2fbc8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -50049,7 +50101,7 @@
         {
           "name": "tisp_s_mscaler_hvflip_mask",
           "section": ".text",
-          "address": "0x2f554",
+          "address": "0x2fbe8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -50089,7 +50141,7 @@
         {
           "name": "tisp_s_wdr_en",
           "section": ".text",
-          "address": "0x2f4dc",
+          "address": "0x2fb70",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -50129,7 +50181,7 @@
         {
           "name": "tisp_s_wdr_init_en",
           "section": ".text",
-          "address": "0x2f4e4",
+          "address": "0x2fb78",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -50169,7 +50221,7 @@
         {
           "name": "tisp_set_wdr_output_mode",
           "section": ".text",
-          "address": "0x2f910",
+          "address": "0x2ffa4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,

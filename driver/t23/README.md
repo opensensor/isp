@@ -41,6 +41,14 @@ Current smoke-test status:
   cycles passed full Raptor startup and RTSP checks; `source_sdns_internal_enable=0`
   retains a diagnostic top-level bypass while still validating register
   programming.
+- The T23 ADR front end now loads all 44 tuning regions from the exact
+  `0x13f7c..0x14b44` SC2336 payload, reconstructs the 5x5 geometry, and writes
+  the static tone-map register image. Parked and explicitly active cycles both
+  passed 256-frame RTSP tests. Static activation increased contrast and
+  highlight clipping without correcting the remaining color cast, so
+  `source_adr_internal_enable=0` is the default. The large recovered
+  `tiziano_adr_algorithm` and `Tiziano_adr_fpga` bodies remain unsuitable for
+  dynamic use; `source_adr_dynamic=0` prevents their event registration.
 - The source-derived AWB statistics setup produces valid 15x15-zone data in
   all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
