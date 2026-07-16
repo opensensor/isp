@@ -15073,9 +15073,14 @@ int32_t tiziano_ydns_init(void);
 int32_t tisp_ydns_refresh(uint32_t arg1);
 int32_t tisp_ydns_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2);
 int32_t tisp_ydns_param_array_set(uint32_t a0, uint32_t a1);
-int64_t subsection_map(uint32_t a0, uint32_t a1, uint32_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9);
+int32_t subsection_map(int32_t target, int32_t mapped_value,
+                       int32_t blend_percent, int16_t *gamma_x,
+                       int16_t *gamma_y, int32_t *lookup,
+                       int32_t bins, int32_t output_precision,
+                       int32_t internal_precision, int32_t blend_mode);
 int32_t subsection(int32_t *arg1, int32_t arg2, int16_t *arg3, int16_t *arg4, int32_t *arg5, int32_t arg6, int32_t arg7, int32_t arg8, int32_t arg9);
-int64_t subsection_up(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7, uint32_t arg8);
+int32_t subsection_up(int32_t *output, const uint32_t *targets,
+                      const int32_t *lookup, int32_t scale);
 int32_t subsection_light(void *arg1, void *arg2, int32_t arg3, int32_t *arg4);
 int32_t Tiziano_adr_fpga(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uintptr_t arg7, uintptr_t arg8, uintptr_t arg9, uintptr_t arg10, uintptr_t arg11, uintptr_t arg12, uintptr_t arg13, uintptr_t arg14, uintptr_t arg15);
 int32_t interpolate_adr_x8_y12(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5);
@@ -57358,10 +57363,95 @@ int32_t tisp_ydns_param_array_set(uint32_t a0, uint32_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a390 origin=fragment_seed original=subsection_map */
-int64_t subsection_map(uint32_t a0, uint32_t a1, uint32_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9)
+int32_t subsection_map(int32_t target, int32_t mapped_value,
+                       int32_t blend_percent, int16_t *gamma_x,
+                       int16_t *gamma_y, int32_t *lookup,
+                       int32_t bins, int32_t output_precision,
+                       int32_t internal_precision, int32_t blend_mode)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int32_t best_distance = 10000;
+    int32_t best_sum = 0;
+    int32_t best_count = 0;
+    int32_t half;
+    int32_t table_position;
+    int32_t interpolated;
+    int32_t blended;
+    int i;
+
+    if (!gamma_x || !gamma_y || !lookup || bins <= 0)
+        return mapped_value;
+
+    for (i = 0; i < 512; ++i) {
+        int32_t distance = target >= lookup[i]
+            ? target - lookup[i] : lookup[i] - target;
+
+        if (distance < best_distance) {
+            best_distance = distance;
+            best_sum = i;
+            best_count = 1;
+        } else if (distance == best_distance) {
+            best_sum += i;
+            ++best_count;
+        }
+    }
+    if (best_sum <= 0)
+        best_sum = 1;
+    if (best_count <= 0)
+        best_count = 1;
+
+    half = (1U << (internal_precision & 31)) >> 1;
+    table_position =
+        ((fix_point_div_32(internal_precision,
+                           best_sum << (internal_precision & 31),
+                           best_count << (internal_precision & 31)) + half) >>
+         (internal_precision & 31)) * bins - 1;
+
+    interpolated = gamma_y[128];
+    for (i = 0; i < 129; ++i) {
+        int32_t x = gamma_x[i];
+
+        if (table_position < x) {
+            int32_t previous_x;
+            int32_t previous_y;
+            int32_t slope;
+            int32_t delta;
+
+            if (!i) {
+                interpolated = gamma_y[0];
+                break;
+            }
+            previous_x = gamma_x[i - 1];
+            previous_y = gamma_y[i - 1];
+            if (x == previous_x) {
+                interpolated = gamma_y[i];
+                break;
+            }
+            slope = fix_point_div_32(
+                internal_precision,
+                ((int32_t)gamma_y[i] - previous_y) <<
+                    (internal_precision & 31),
+                (x - previous_x) << (internal_precision & 31));
+            delta = fix_point_mult2_32(
+                internal_precision, slope,
+                (x - table_position) << (internal_precision & 31));
+            interpolated = gamma_y[i] -
+                ((delta + half) >> (internal_precision & 31));
+            break;
+        }
+    }
+
+    if (blend_mode == 1 || mapped_value >= interpolated)
+        blended = mapped_value * 100 +
+                  (interpolated - mapped_value) * blend_percent;
+    else
+        blended = mapped_value * 100;
+
+    half = (1U << (output_precision & 31)) >> 1;
+    return (half + fix_point_div_32(
+                       output_precision,
+                       blended << (output_precision & 31),
+                       100 << (output_precision & 31))) >>
+           (output_precision & 31);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a5fc origin=fragment_seed original=subsection */
@@ -57523,10 +57613,45 @@ int32_t subsection(int32_t *arg1, int32_t arg2, int16_t *arg3, int16_t *arg4, in
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002abcc origin=fragment_seed original=subsection_up */
-int64_t subsection_up(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7, uint32_t arg8)
+int32_t subsection_up(int32_t *output, const uint32_t *targets,
+                      const int32_t *lookup, int32_t scale)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    int32_t result = 0;
+    int i;
+
+    if (!output || !targets || !lookup || scale <= 0)
+        return -EINVAL;
+
+    output[0] = 0;
+    output[8] = 0xfff;
+    for (i = 1; i < 8; ++i) {
+        int32_t best_distance = 10000;
+        int32_t best_sum = 0;
+        int32_t best_count = 0;
+        int j;
+
+        for (j = 0; j < 512; ++j) {
+            int32_t distance = (int32_t)targets[i] >= lookup[j]
+                ? (int32_t)targets[i] - lookup[j]
+                : lookup[j] - (int32_t)targets[i];
+
+            if (distance < best_distance) {
+                best_distance = distance;
+                best_sum = j;
+                best_count = 1;
+            } else if (distance == best_distance) {
+                best_sum += j;
+                ++best_count;
+            }
+        }
+        if (best_count <= 0)
+            best_count = 1;
+        result = (best_sum << 12) / best_count;
+        result = ((result + (result < 0 ? 0x17ff : 0x800)) >> 12) *
+                 scale - 1;
+        output[i] = result;
+    }
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002acc0 origin=model_output original=subsection_light */
@@ -91669,15 +91794,22 @@ int32_t tisp_s_wb_ct(uint32_t a0, uintptr_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000664cc origin=model_output original=tisp_s_awb_cluster */
-int32_t tisp_s_awb_cluster(int32_t arg1,
-                           uint32_t arg2, uint32_t arg3, uint32_t arg4,
-                           uint32_t arg5, uint32_t arg6, uint32_t arg7,
-                           uint32_t arg8, uint32_t arg9, uint32_t arg10,
-                           uint32_t arg11)
+int32_t __attribute__((__noinline__, __noclone__))
+tisp_s_awb_cluster(int32_t arg1,
+                   uint32_t arg2, uint32_t arg3, uint32_t arg4,
+                   uint32_t arg5, uint32_t arg6, uint32_t arg7,
+                   uint32_t arg8, uint32_t arg9, uint32_t arg10,
+                   uint32_t arg11)
 {
-    return tisp_awb_set_cluster_awb_params(arg1, arg2, arg3, arg4,
-                                           arg5, arg6, arg7, arg8,
-                                           arg9, arg10, arg11);
+    volatile uint32_t stack_args[7] = {
+        arg5, arg6, arg7, arg8, arg9, arg10, arg11,
+    };
+
+    tisp_awb_set_cluster_awb_params(
+        arg1, arg2, arg3, arg4,
+        stack_args[0], stack_args[1], stack_args[2], stack_args[3],
+        stack_args[4], stack_args[5], stack_args[6]);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066534 origin=fragment_seed original=tisp_g_awb_cluster */

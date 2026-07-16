@@ -316,6 +316,18 @@ Current smoke-test status:
   device cycle decoded 262 measured frames at `YAVG/UAVG/VAVG/SATAVG`
   `107.8/129.2/124.5/7.3`, reached `12917/1120` ISP/VIC interrupts without
   current-cycle faults, and rebooted module-clean.
+- The ADR image interpolation helpers now use the T23/T31 bounded lookup
+  algorithms instead of hard stubs. `subsection_map` finds the nearest entries
+  in the 512-word response table, interpolates the selected point through the
+  129-node gamma curve, and applies the requested fixed-point blend;
+  `subsection_up` reconstructs all seven rounded interior breakpoints between
+  the fixed 0 and `0xfff` endpoints. The AWB cluster ioctl wrapper also
+  preserves all seven o32 stack arguments when forwarding its eleven-argument
+  call. Their recovered/OEM instruction counts are `150/155`, `60/61`, and
+  `55/26`, reducing the audit to 33 hard stubs and 79 collapses. A default
+  device cycle decoded 261 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
+  `111.6/128.9/124.9/6.9`, reached `13101/1138` ISP/VIC interrupts without
+  faults, and rebooted module-clean.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics. The recovered transform primitives now use the
