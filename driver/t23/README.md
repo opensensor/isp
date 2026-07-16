@@ -39,6 +39,14 @@ Current smoke-test status:
   collapses. A default device cycle decoded 262 measured RTSP frames at
   `YAVG/UAVG/VAVG/SATAVG` `106.8/129.6/123.8/8.7`, reached `14774/1281`
   ISP/VIC interrupts without faults, and rebooted module-clean.
+- The active LSC LUT writer now retains its CT-region interpolation, packed
+  12-bit mesh blending, gain-strength scaling, and clamping in the matched
+  function instead of having GCC outline that work into recovered-only helper
+  symbols. Its emitted body is 337 versus 325 OEM instructions, reducing the
+  audit to 32 hard stubs and 76 collapses without changing the register image.
+  A default device cycle decoded 261 measured RTSP frames at
+  `YAVG/UAVG/VAVG/SATAVG` `112.5/129.0/124.5/8.1`, reached `13920/1211`
+  ISP/VIC interrupts without faults, and rebooted module-clean.
 - Core startup derives the OEM `0xb5742209` non-WDR top-bypass mask from the
   deployed SC2336 tuning blob, with the same value as its read-failure
   fallback. The recovered block overrides produce final mask `0xb5742a89`.

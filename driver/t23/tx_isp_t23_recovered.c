@@ -51113,7 +51113,8 @@ int32_t tisp_lsc_judge_gain_update_flag(void)
 	return 1;
 }
 
-static uint32_t regtrace_t23_lsc_clamp12(int32_t value)
+static inline __attribute__((__always_inline__))
+uint32_t regtrace_t23_lsc_clamp12(int32_t value)
 {
     if (value < 0)
         return 0;
@@ -51122,9 +51123,10 @@ static uint32_t regtrace_t23_lsc_clamp12(int32_t value)
     return (uint32_t)value;
 }
 
-static uint32_t regtrace_t23_lsc_blend_word(uint32_t low,
-                                            uint32_t high,
-                                            uint32_t weight)
+static inline __attribute__((__always_inline__))
+uint32_t regtrace_t23_lsc_blend_word(uint32_t low,
+                                     uint32_t high,
+                                     uint32_t weight)
 {
     int32_t low_lo = low & 0xfffU;
     int32_t low_hi = (low >> 12) & 0xfffU;
@@ -51137,7 +51139,8 @@ static uint32_t regtrace_t23_lsc_blend_word(uint32_t low,
            regtrace_t23_lsc_clamp12(out_lo);
 }
 
-static uint32_t regtrace_t23_lsc_word_for_ct(uint32_t index, uint32_t ct)
+static inline __attribute__((__always_inline__))
+uint32_t regtrace_t23_lsc_word_for_ct(uint32_t index, uint32_t ct)
 {
     const uint32_t *points = regtrace_t23_lsc_sc2336_ct_points;
     const uint32_t *a_lut = (const uint32_t *)(const void *)data_c6d1c;
@@ -51162,9 +51165,10 @@ static uint32_t regtrace_t23_lsc_word_for_ct(uint32_t index, uint32_t ct)
     return d_lut[index];
 }
 
-static uint32_t regtrace_t23_lsc_scale_word(uint32_t value,
-                                            uint32_t base,
-                                            uint32_t strength)
+static inline __attribute__((__always_inline__))
+uint32_t regtrace_t23_lsc_scale_word(uint32_t value,
+                                     uint32_t base,
+                                     uint32_t strength)
 {
     int32_t low = base +
         ((((int32_t)(value & 0xfffU) - (int32_t)base) *
