@@ -10,24 +10,24 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 1043 | 1329 |
-| Functions with disassembly | 1043 | 1329 |
-| Executable section bytes | 443376 | 380304 |
+| Function symbols | 1043 | 1333 |
+| Functions with disassembly | 1043 | 1333 |
+| Executable section bytes | 443376 | 381760 |
 | Initialized writable bytes | 216768 | 196736 |
-| Uninitialized writable bytes | 164688 | 913504 |
+| Uninitialized writable bytes | 164688 | 929904 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
-- unmatched: OEM-only=61 recovered-only=346
-- matched instructions: OEM=106302 recovered=76728 ratio=0.722
-- classes: stub=37 collapsed=79 shorter=188 same_count=201 similar=389 larger=46 expanded=42
+- unmatched: OEM-only=61 recovered-only=350
+- matched instructions: OEM=106302 recovered=77012 ratio=0.724
+- classes: stub=36 collapsed=79 shorter=188 same_count=201 similar=390 larger=46 expanded=42
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 164688 | 913504 | +748816 |
+| `.bss` | 164688 | 929904 | +765216 |
 | `.data` | 216480 | 196448 | -20032 |
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
@@ -35,9 +35,9 @@
 | `.modinfo` | 1260 | 6232 | +4972 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 75648 | +68928 |
+| `.rodata` | 6720 | 75696 | +68976 |
 | `.rodata.str1.4` | 22728 | 21924 | -804 |
-| `.text` | 442176 | 378976 | -63200 |
+| `.text` | 442176 | 380432 | -61744 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
@@ -45,7 +45,7 @@
 
 ## Function Outliers
 
-Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 802 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -56,7 +56,6 @@ Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `ispcore_pad_event_handle` | `ispcore_pad_event_handle` | 548 | 4 | 0.007 | -544 | 26->0 | 87->1 |
 | stub | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 501 | 8 | 0.016 | -493 | 18->0 | 129->2 |
 | stub | exact_name | `dump_ivdc_regs` | `dump_ivdc_regs` | 433 | 2 | 0.005 | -431 | 46->0 | 1->0 |
-| stub | exact_name | `tisp_ae_algo_handle` | `tisp_ae_algo_handle` | 322 | 2 | 0.006 | -320 | 40->0 | 8->0 |
 | stub | exact_name | `tisp_ae1_process_impl` | `tisp_ae1_process_impl` | 273 | 2 | 0.007 | -271 | 11->0 | 26->0 |
 | stub | exact_name | `tisp_msca_api_set_line` | `tisp_msca_api_set_line` | 273 | 2 | 0.007 | -271 | 22->0 | 23->0 |
 | stub | exact_name | `tx_isp_probe` | `tx_isp_probe` | 235 | 2 | 0.009 | -233 | 23->0 | 25->0 |
@@ -235,13 +234,13 @@ Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tiziano_bcsh_lut_parameter` | `tiziano_bcsh_lut_parameter` | 373 | 238 | 0.638 | -135 | 29->29 | 13->4 |
 | shorter | exact_name | `subsection` | `subsection` | 372 | 237 | 0.637 | -135 | 20->16 | 17->13 |
 | shorter | exact_name | `tisp_ae1_expt` | `tisp_ae1_expt` | 351 | 183 | 0.521 | -168 | 23->21 | 30->14 |
+| shorter | exact_name | `tisp_ae_algo_handle` | `tisp_ae_algo_handle` | 322 | 240 | 0.745 | -82 | 40->32 | 8->13 |
 | shorter | exact_name | `video_input_cmd_set` | `video_input_cmd_set` | 308 | 236 | 0.766 | -72 | 20->13 | 50->39 |
 | shorter | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 260 | 203 | 0.781 | -57 | 46->38 | 1->1 |
 | shorter | exact_name | `tisp_clm_interp_by_ct` | `tisp_clm_interp_by_ct` | 254 | 145 | 0.571 | -109 | 8->6 | 35->17 |
 | shorter | exact_name | `cm_control` | `cm_control` | 229 | 135 | 0.590 | -94 | 9->1 | 15->9 |
 | shorter | exact_name | `Tiziano_af_fpga` | `Tiziano_af_fpga` | 229 | 156 | 0.681 | -73 | 13->11 | 5->5 |
 | shorter | exact_name | `tisp_ae0_get_hist` | `tisp_ae0_get_hist` | 206 | 158 | 0.767 | -48 | 5->5 | 22->17 |
-| shorter | exact_name | `tiziano_ae_set_hardware_param` | `tiziano_ae_set_hardware_param` | 206 | 162 | 0.786 | -44 | 19->19 | 7->5 |
 | shorter | exact_name | `tisp_mdns_set_malloc_cfg` | `tisp_mdns_set_malloc_cfg` | 200 | 145 | 0.725 | -55 | 32->32 | 4->4 |
 | shorter | exact_name | `tisp_msca_init_chx_cfg` | `tisp_msca_init_chx_cfg` | 199 | 147 | 0.739 | -52 | 17->26 | 8->9 |
 | shorter | exact_name | `tisp_msca_normalized` | `tisp_msca_normalized` | 196 | 138 | 0.704 | -58 | 4->1 | 22->15 |
@@ -262,7 +261,6 @@ Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `fix_point_intp` | `fix_point_intp` | 102 | 54 | 0.529 | -48 | 4->4 | 12->4 |
 | shorter | exact_name | `tisp_lsc_lut_valid_judge` | `tisp_lsc_lut_valid_judge` | 102 | 70 | 0.686 | -32 | 2->1 | 14->10 |
 | shorter | exact_name | `vic_mdma_enable` | `vic_mdma_enable` | 100 | 79 | 0.790 | -21 | 0->0 | 6->3 |
-| shorter | exact_name | `tisp_ae_algo_init` | `tisp_ae_algo_init` | 99 | 65 | 0.657 | -34 | 2->2 | 2->2 |
 | shorter | exact_name | `Tiziano_awb_set_gain` | `Tiziano_awb_set_gain` | 99 | 71 | 0.717 | -28 | 7->6 | 4->2 |
 | shorter | exact_name | `fix_point_div_64` | `fix_point_div_64` | 94 | 51 | 0.543 | -43 | 3->3 | 9->3 |
 | shorter | exact_name | `tiziano_set_parameter_clm` | `tiziano_set_parameter_clm` | 91 | 49 | 0.538 | -42 | 6->6 | 4->1 |
@@ -299,6 +297,8 @@ Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `vic_core_ops_init` | `vic_core_ops_init` | 43 | 28 | 0.651 | -15 | 2->1 | 7->4 |
 | shorter | exact_name | `vin_s_stream` | `vin_s_stream` | 42 | 26 | 0.619 | -16 | 1->1 | 11->5 |
 | shorter | exact_name | `tisp_hv_flip_enable` | `tisp_hv_flip_enable` | 41 | 27 | 0.659 | -14 | 2->1 | 2->1 |
+| shorter | exact_name | `tisp_gib_deir_ir_update` | `tisp_gib_deir_ir_update` | 41 | 30 | 0.732 | -11 | 1->1 | 4->4 |
+| shorter | exact_name | `tisp_s_BacklightComp` | `tisp_s_BacklightComp` | 41 | 31 | 0.756 | -10 | 4->3 | 0->0 |
 
 ## Replacement Map
 

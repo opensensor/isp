@@ -1046,7 +1046,7 @@ static uintptr_t tparams_day;
 static uintptr_t tparams_night;
 static unsigned char deir_en[8];
 static unsigned char global_wdr_en[8];
-static unsigned char sensor_ctrl[180];
+static unsigned char sensor_ctrl[180] __attribute__((aligned(4)));
 static unsigned char sensor_info[156];
 static uintptr_t (*tispinfo)();
 #define T23_TPARAMS_ACTIVE_OFFSET 0x13100U
@@ -8521,6 +8521,10 @@ static uintptr_t scene_luma_wmean;
 static uintptr_t scene_luma_weight;
 static unsigned char ae_algo_comp[12];
 static uintptr_t ta_custom_en;
+static uint32_t regtrace_t23_ta_custom_ev;
+static uint32_t regtrace_t23_ta_custom_tgain;
+static uint32_t regtrace_t23_ta_custom_again;
+static uint32_t regtrace_t23_ae_wdr_en;
 static unsigned char data_982bc[16384];
 static unsigned char Cluster_rgbg_weight[900];
 static unsigned char __attribute__((aligned(4))) AFParam_Tilt[20] = {
@@ -77594,15 +77598,10 @@ int32_t tiziano_deflicker_expt_tune(int32_t arg1, int32_t arg2, int32_t arg3, in
 int32_t system_reg_write_ae(int32_t arg1, int32_t arg2, int32_t arg3) {
     if (arg1 == 1) {
         system_reg_write((const void *)0xa000, 1);
-        return 0;
-    }
-    if (arg1 == 2) {
-        system_reg_write((const void *)&private_seq_lseek, 1);
-        return 0;
-    }
-    if (arg1 == 3) {
+    } else if (arg1 == 2) {
+        system_reg_write((const void *)0xa800, 1);
+    } else if (arg1 == 3) {
         system_reg_write((const void *)0x4208, 1);
-        return 0;
     }
     return system_reg_write((const void *)(uintptr_t)arg2, arg3);
 }
@@ -77650,9 +77649,9 @@ int32_t tiziano_ae_set_hardware_param(uint32_t arg1, uint32_t *arg2, uint32_t ar
 			system_reg_write(0xa01c, s1);
 			system_reg_write(0xa020, s0);
 			system_reg_write(0xa024, s6);
-			system_reg_write_ae(1, (uint32_t)&data_a028, a2);
+			system_reg_write_ae(1, 0xa028, a2);
 		} else {
-			system_reg_write_ae(1, (uint32_t)&data_a028, a2);
+			system_reg_write_ae(1, 0xa028, a2);
 		}
 	} else if (arg1 == 1) {
 		if (arg3 != 0) {
@@ -77665,9 +77664,9 @@ int32_t tiziano_ae_set_hardware_param(uint32_t arg1, uint32_t *arg2, uint32_t ar
 			system_reg_write(0xa81c, s1);
 			system_reg_write(0xa820, s0);
 			system_reg_write(0xa824, s6);
-			system_reg_write_ae(2, (uint32_t)&private_single_open_size, a2);
+			system_reg_write_ae(2, 0xa828, a2);
 		} else {
-			system_reg_write_ae(2, (uint32_t)&private_single_open_size, a2);
+			system_reg_write_ae(2, 0xa828, a2);
 		}
 	}
 
@@ -77937,6 +77936,7 @@ int tisp_ae_wdr_en(int enable)
     uint32_t *a3;
     uint32_t *s0;
 
+    regtrace_t23_ae_wdr_en = enable ? 1U : 0U;
     v1 = 1;
     v0 = (uintptr_t *)&sclk_name;
     *(uint32_t *)((char *)((char *)&tparams + 0x32bc)) = v1;
@@ -79545,57 +79545,220 @@ done:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bbcc origin=model_output original=tisp_ae_algo_init */
 int32_t tisp_ae_algo_init(uint32_t arg1, void *arg2)
 {
-    private_kmalloc(0x41c, 0xd0);
-    uintptr_t ptr = 0;
-    *(uint32_t *)((char *)&ta_custom_en + 0xf270) = arg1;
-    if (arg1 != 1) {
-        private_kfree((void *)ptr);
+    uint8_t *out = arg2;
+    uint8_t *hist;
+    uint32_t *ctrl = (uint32_t *)(void *)tisp_ae_ctrls;
+    static const uint8_t out_offsets[] = {
+        0x0c, 0x10, 0x18, 0x3c, 0x40, 0x48, 0x30, 0x2c,
+        0x38, 0x60, 0x5c, 0x68, 0x20, 0x1c, 0x28, 0x50,
+        0x4c, 0x58
+    };
+    static const uint8_t ctrl_offsets[] = {
+        0x0c, 0x04, 0x10, 0x54, 0x50, 0x74, 0x14, 0x1c,
+        0x20, 0x58, 0x5c, 0x64, 0x78, 0x80, 0x84, 0x88,
+        0x8c, 0x94
+    };
+    unsigned int i;
+
+    ta_custom_en = arg1;
+    if (arg1 != 1U)
         return 0;
-    }
-    *(uint32_t *)((char *)arg2 + 8) = 0;
-    *(uint32_t *)((char *)arg2 + 0xc) = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0xc) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x10) = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x4) + 0x0);
-    uint32_t val_14 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x10) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x14) = 0x400;
-    *(uint32_t *)((char *)arg2 + 0x18) = val_14;
-    uint32_t val_3c = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x54) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x3c) = val_3c;
-    uint32_t val_40 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x50) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x44) = 0x400;
-    *(uint32_t *)((char *)arg2 + 0x40) = val_40;
-    uint32_t val_48 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x74) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x34) = 0x400;
-    *(uint32_t *)((char *)arg2 + 0x48) = val_48;
-    uint32_t val_30 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x14) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x64) = 0x400;
-    *(uint32_t *)((char *)arg2 + 0x30) = val_30;
-    uint32_t val_2c = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x1c) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x2c) = val_2c;
-    uint32_t val_38 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x20) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x38) = val_38;
-    uint32_t val_60 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x58) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x60) = val_60;
-    uint32_t val_5c = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x5c) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x5c) = val_5c;
-    uint32_t val_68 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x64) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x68) = val_68;
-    uint32_t val_20 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x78) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x24) = 0x400;
-    *(uint32_t *)((char *)arg2 + 0x20) = val_20;
-    uint32_t val_1c = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x80) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x1c) = val_1c;
-    uint32_t val_28 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x84) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x28) = val_28;
-    uint32_t val_50 = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x88) + 0x0);
-    *(uint32_t *)((char *)arg2 + 0x50) = val_50;
-    uint32_t val_4c = *(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x8c) + 0x0);
+    if (!out)
+        return -EINVAL;
+
+    hist = private_kmalloc(0x41cU, GFP_KERNEL);
+    if (!hist)
+        return -ENOMEM;
+    memset(hist, 0, 0x41cU);
+
+    *(uint32_t *)(void *)(out + 0x08) = 0;
+    for (i = 0; i < ARRAY_SIZE(out_offsets); ++i)
+        *(uint32_t *)(void *)(out + out_offsets[i]) =
+            ctrl[ctrl_offsets[i] / sizeof(uint32_t)];
+    *(uint32_t *)(void *)(out + 0x14) = 0x400U;
+    *(uint32_t *)(void *)(out + 0x24) = 0x400U;
+    *(uint32_t *)(void *)(out + 0x34) = 0x400U;
+    *(uint32_t *)(void *)(out + 0x44) = 0x400U;
+    *(uint32_t *)(void *)(out + 0x54) = 0x400U;
+    *(uint32_t *)(void *)(out + 0x64) = 0x400U;
+
+    tisp_ae_get_hist_custome((uint32_t)(uintptr_t)hist);
+    memcpy(out + 0x70, hist + 0x414, 4);
+    for (i = 0; i < 5; ++i)
+        *(uint16_t *)(void *)(out + 0x74 + i * 2U) =
+            (uint16_t)*(uint32_t *)(void *)(hist + 0x400 + i * 4U);
+    out[0x7e] = hist[0x418];
+    out[0x7f] = hist[0x419];
+    private_kfree(hist);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bd58 origin=fragment_seed original=tisp_ae_algo_handle */
+typedef uint32_t (*regtrace_t23_ae_alloc_fn)(uint32_t value,
+                                             uint16_t *sensor_value);
+typedef int32_t (*regtrace_t23_ae_apply_fn)(uint32_t sensor_value,
+                                            void *context);
+
+static uint32_t regtrace_t23_q10_mul(uint32_t left, uint32_t right)
+{
+    return (uint32_t)fix_point_mult2_32(10, left, right);
+}
+
+static uint32_t regtrace_t23_q10_div(uint32_t numerator,
+                                     uint32_t denominator)
+{
+    if (!denominator)
+        return 0;
+    return (uint32_t)fix_point_div_32(10, numerator, denominator);
+}
+
+static uint32_t regtrace_t23_ae_quantize_integration(uint32_t requested,
+                                                      unsigned int alloc_offset,
+                                                      unsigned int apply_offset,
+                                                      uint16_t *sensor_value)
+{
+    regtrace_t23_ae_alloc_fn alloc =
+        *(regtrace_t23_ae_alloc_fn *)(void *)(sensor_ctrl + alloc_offset);
+    regtrace_t23_ae_apply_fn apply =
+        *(regtrace_t23_ae_apply_fn *)(void *)(sensor_ctrl + apply_offset);
+    uint32_t actual = requested;
+
+    *sensor_value = (uint16_t)requested;
+    if (alloc)
+        actual = alloc(requested, sensor_value);
+    if (apply)
+        apply(*sensor_value, NULL);
+    return actual;
+}
+
+static uint32_t regtrace_t23_ae_quantize_gain(uint32_t requested,
+                                               unsigned int alloc_offset,
+                                               unsigned int apply_offset)
+{
+    regtrace_t23_ae_alloc_fn alloc =
+        *(regtrace_t23_ae_alloc_fn *)(void *)(sensor_ctrl + alloc_offset);
+    regtrace_t23_ae_apply_fn apply =
+        *(regtrace_t23_ae_apply_fn *)(void *)(sensor_ctrl + apply_offset);
+    uint16_t sensor_value = 0;
+    uint32_t logarithmic;
+
+    if (!requested)
+        requested = 1;
+    logarithmic = tisp_log2_fixed_to_fixed(requested << 6, 16, 16);
+    if (alloc)
+        logarithmic = alloc(logarithmic, &sensor_value);
+    if (apply)
+        apply(sensor_value, NULL);
+    return tisp_math_exp2(logarithmic, 16, 16) >> 6;
+}
+
+static int regtrace_t23_ae_emit_event(uint32_t event_id, uint32_t value)
+{
+    struct tisp_event_record event = { .event_id = event_id };
+
+    event.args[0] = value;
+    return tisp_event_push(0, &event);
+}
+
 int32_t tisp_ae_algo_handle(uintptr_t arg1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    const uint32_t *input = (const uint32_t *)(uintptr_t)arg1;
+    uint32_t *ctrl = (uint32_t *)(void *)tisp_ae_ctrls;
+    uint16_t integration_code;
+    uint16_t short_integration_code;
+    uint32_t integration;
+    uint32_t analog_gain;
+    uint32_t isp_gain;
+    uint32_t exposure;
+    uint32_t total_gain;
+    uint32_t short_integration = 0;
+    uint32_t short_analog_gain = 0;
+    uint32_t short_isp_gain = 0;
+    uint32_t numerator;
+    uint32_t denominator;
+    int ret = 0;
+
+    if (!input)
+        return -EINVAL;
+
+    integration = regtrace_t23_ae_quantize_integration(
+        input[4], 0x70U, 0x78U, &integration_code);
+    analog_gain = input[5];
+    if (input[4] != integration && integration)
+        analog_gain = regtrace_t23_q10_div(
+            regtrace_t23_q10_mul(analog_gain, input[4] << 10),
+            integration << 10);
+    analog_gain = regtrace_t23_ae_quantize_gain(analog_gain, 0x64U, 0x88U);
+
+    numerator = regtrace_t23_q10_mul(input[5], input[6]);
+    denominator = regtrace_t23_q10_mul(analog_gain, 0x400U);
+    isp_gain = regtrace_t23_q10_mul(
+        input[7], regtrace_t23_q10_div(numerator, denominator));
+    system_reg_write_ae(3, regtrace_t23_ae_wdr_en ? 0x1000 : 0x1030,
+                        (isp_gain << 16) | (isp_gain & 0xffffU));
+    system_reg_write_ae(3, regtrace_t23_ae_wdr_en ? 0x1004 : 0x1034,
+                        (isp_gain << 16) | (isp_gain & 0xffffU));
+
+    ctrl[2] = 0x400U;
+    ctrl[3] = integration;
+    ctrl[4] = isp_gain;
+    exposure = regtrace_t23_q10_mul(
+        regtrace_t23_q10_mul(integration << 10, analog_gain), isp_gain);
+    total_gain = regtrace_t23_q10_mul(
+        regtrace_t23_q10_mul(analog_gain, 0x400U), isp_gain);
+
+    if (regtrace_t23_ae_wdr_en) {
+        short_integration = regtrace_t23_ae_quantize_integration(
+            input[8], 0x74U, 0x7cU, &short_integration_code);
+        short_analog_gain = input[9];
+        if (input[8] != short_integration && short_integration)
+            short_analog_gain = regtrace_t23_q10_div(
+                regtrace_t23_q10_mul(short_analog_gain, input[8] << 10),
+                short_integration << 10);
+        short_analog_gain = regtrace_t23_ae_quantize_gain(
+            short_analog_gain, 0x68U, 0x8cU);
+        numerator = regtrace_t23_q10_mul(input[9], input[10]);
+        denominator = regtrace_t23_q10_mul(short_analog_gain, 0x400U);
+        short_isp_gain = regtrace_t23_q10_mul(
+            input[11], regtrace_t23_q10_div(numerator, denominator));
+        system_reg_write_ae(3, 0x100c,
+                            (short_isp_gain << 16) |
+                            (short_isp_gain & 0xffffU));
+        system_reg_write_ae(3, 0x1010,
+                            (short_isp_gain << 16) |
+                            (short_isp_gain & 0xffffU));
+        ctrl[21] = short_integration;
+        ctrl[27] = 0x400U;
+        ctrl[29] = short_isp_gain;
+    }
+
+    if (exposure != regtrace_t23_ta_custom_ev) {
+        ret = regtrace_t23_ae_emit_event(6, exposure);
+        ctrl[10] = exposure;
+        ctrl[11] = 0;
+        regtrace_t23_ta_custom_ev = exposure;
+        regtrace_t23_put_le32(data_c8068, exposure);
+        regtrace_t23_put_le32(data_c806c, 0);
+    }
+    if (total_gain != regtrace_t23_ta_custom_tgain) {
+        uint32_t logarithmic =
+            tisp_log2_fixed_to_fixed(total_gain << 6, 16, 16);
+
+        ret = regtrace_t23_ae_emit_event(4, logarithmic);
+        ctrl[12] = logarithmic;
+        regtrace_t23_ta_custom_tgain = total_gain;
+    }
+    if (analog_gain != regtrace_t23_ta_custom_again) {
+        uint32_t logarithmic =
+            tisp_log2_fixed_to_fixed(analog_gain << 6, 16, 16);
+
+        ret = regtrace_t23_ae_emit_event(5, logarithmic);
+        ctrl[1] = analog_gain;
+        ctrl[13] = logarithmic;
+        regtrace_t23_ta_custom_again = analog_gain;
+        regtrace_t23_put_le32(data_c8044, analog_gain);
+    }
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c260 origin=fragment_seed original=tisp_ae_get_converge_step */

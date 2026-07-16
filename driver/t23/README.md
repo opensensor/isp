@@ -303,6 +303,19 @@ Current smoke-test status:
   cycle read the SC2336 `0xcb/0x3a` ID, decoded 260 RTSP frames, reached
   `18303/1590` ISP/VIC interrupts without kernel or Raptor faults, and rebooted
   module-clean.
+- The custom-AE ioctl path now retains the OEM control snapshot and histogram
+  metadata layout, normalizes long/short integration and gain through the
+  sensor callbacks, computes the compensating ISP gains, and emits events
+  4/5/6 only when analog gain, total gain, or exposure changes. Its init and
+  handle functions audit at 86/99 and 240/322 OEM instructions instead of
+  leaving the handle as a two-instruction stub. The shared AE register writer
+  now performs both halves of the OEM transaction: it opens the `0xa000`,
+  `0xa800`, or `0x1070` write gate and then writes the requested register.
+  Hardware setup consequently commits the missing `0xa028/0xa828` terminal
+  words. This reduces the audit to 36 hard stubs and 79 collapses. A default
+  device cycle decoded 262 measured frames at `YAVG/UAVG/VAVG/SATAVG`
+  `107.8/129.2/124.5/7.3`, reached `12917/1120` ISP/VIC interrupts without
+  current-cycle faults, and rebooted module-clean.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics. The recovered transform primitives now use the
