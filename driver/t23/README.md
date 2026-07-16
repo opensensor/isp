@@ -121,6 +121,19 @@ Current smoke-test status:
   `109.6/128.0/126.3`, retained active ISP/VIC interrupts with `ERR 0`, and
   completed without kernel errors. The binary audit moved from 46 stubs and
   87 collapses to 45 and 86.
+- The active BCSH RGB/YUV transforms now implement the T23 HLIL sign/magnitude
+  expansion, both fixed-point matrix products, hue interpolation, and signed
+  chroma rotation. `tiziano_bcsh_Tccm_RGBYUV` now compiles to 453 instructions
+  versus 559 OEM, and `tiziano_bcsh_Toffset_RGBYUV` to 107 versus 154; both
+  moved out of the collapsed audit class, reducing the total to 84. The
+  `/dev/isp-m0` shim also dispatches the OEM 8-byte basic and 16-byte extended
+  set/get ioctl layouts instead of returning success without touching the
+  driver. Brightness, contrast, saturation, sharpness, and hue now initialize
+  and round-trip at 128 through `libimp`; a live `112/144/160/140/64` test
+  visibly exercised the recovered matrix path before restoring neutral state.
+  A no-argument device cycle decoded 258 measured RTSP frames at
+  `YAVG/UAVG/VAVG` `105.2/129.3/126.1`, retained active ISP/VIC interrupts,
+  completed without kernel errors, and rebooted cleanly.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

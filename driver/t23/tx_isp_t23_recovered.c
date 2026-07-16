@@ -9754,6 +9754,8 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_SC2336_MIPI_CLK 405U
 #define REGTRACE_T23_SENSOR_IOCTL_561B 0xc008561bU
 #define REGTRACE_T23_SENSOR_IOCTL_561C 0xc008561cU
+#define REGTRACE_ISP_M0_GET_CONTROL REGTRACE_T23_SENSOR_IOCTL_561B
+#define REGTRACE_ISP_M0_SET_CONTROL REGTRACE_T23_SENSOR_IOCTL_561C
 #define REGTRACE_T23_SENSOR_ATTR_SIZE 0x100U
 #define REGTRACE_T23_SENSOR_VIDEO_ATTR_OFFSET 0x270U
 #define REGTRACE_T23_CSI_PHY_PHYS 0x10022000U
@@ -9794,6 +9796,11 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TX_SENSOR_RAW10 1U
 #define REGTRACE_RAW10_DT 0x2bU
 #define REGTRACE_ISP_M0_EXT_CONTROL 0xc01056c6U
+#define REGTRACE_TISP_CTRL_BRIGHTNESS 0x00980900U
+#define REGTRACE_TISP_CTRL_CONTRAST 0x00980901U
+#define REGTRACE_TISP_CTRL_SATURATION 0x00980902U
+#define REGTRACE_TISP_CTRL_SHARPNESS 0x0098091bU
+#define REGTRACE_TISP_CTRL_BCSH_HUE 0x08000101U
 #define REGTRACE_TISP_CTRL_WB_STATIS 0x08000005U
 #define REGTRACE_TISP_CTRL_GET_EXPR 0x08000025U
 #define REGTRACE_TISP_CTRL_GET_EV_ATTR 0x08000026U
@@ -13300,6 +13307,11 @@ struct regtrace_tisp_ext_control {
     u32 sensor;
 };
 
+struct regtrace_tisp_control {
+    u32 id;
+    u32 value;
+};
+
 struct regtrace_impisp_expr {
     u32 mode;
     u16 integration_time;
@@ -13456,6 +13468,42 @@ static long regtrace_tx_isp_sensor_geometry(unsigned long arg)
     return 0;
 }
 
+static bool regtrace_isp_m0_is_image_control(u32 id)
+{
+    switch (id) {
+    case REGTRACE_TISP_CTRL_BRIGHTNESS:
+    case REGTRACE_TISP_CTRL_CONTRAST:
+    case REGTRACE_TISP_CTRL_SATURATION:
+    case REGTRACE_TISP_CTRL_SHARPNESS:
+    case REGTRACE_TISP_CTRL_BCSH_HUE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static long regtrace_isp_m0_control(unsigned int cmd, unsigned long arg)
+{
+    struct regtrace_tisp_control ctrl;
+    long ret;
+
+    if (!arg)
+        return -EINVAL;
+    if (copy_from_user(&ctrl, (const void __user *)arg, sizeof(ctrl)))
+        return -EFAULT;
+    if (!regtrace_isp_m0_is_image_control(ctrl.id))
+        return 0;
+
+    if (cmd == REGTRACE_ISP_M0_SET_CONTROL) {
+        ret = apical_isp_core_ops_s_ctrl(0, (uintptr_t)&ctrl, 0);
+    } else {
+        ret = apical_isp_core_ops_g_ctrl(0, (uintptr_t)&ctrl, 0);
+        if (!ret && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl)))
+            return -EFAULT;
+    }
+    return ret;
+}
+
 static long regtrace_isp_m0_ext_control(unsigned long arg)
 {
     struct regtrace_tisp_ext_control ctrl;
@@ -13465,6 +13513,20 @@ static long regtrace_isp_m0_ext_control(unsigned long arg)
         return -EINVAL;
     if (copy_from_user(&ctrl, (const void __user *)arg, sizeof(ctrl)))
         return -EFAULT;
+
+    if (regtrace_isp_m0_is_image_control(ctrl.id)) {
+        if (ctrl.count == 0)
+            ret = apical_isp_core_ops_s_ctrl(0, (uintptr_t)&ctrl.id,
+                                             ctrl.sensor);
+        else if (ctrl.count == 1)
+            ret = apical_isp_core_ops_g_ctrl(0, (uintptr_t)&ctrl.id,
+                                             ctrl.sensor);
+        else
+            ret = -EINVAL;
+        if (ret)
+            return ret;
+        goto copy_out;
+    }
 
     switch (ctrl.id) {
     case REGTRACE_TISP_CTRL_TOTAL_GAIN:
@@ -13510,6 +13572,7 @@ static long regtrace_isp_m0_ext_control(unsigned long arg)
         break;
     }
 
+copy_out:
     if (copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl)))
         ret = -EFAULT;
     return ret;
@@ -13672,6 +13735,9 @@ static long regtrace_isp_m0_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     if (file && !file->private_data)
         file->private_data = regtrace_isp_m0_private;
+    if (cmd == REGTRACE_ISP_M0_GET_CONTROL ||
+        cmd == REGTRACE_ISP_M0_SET_CONTROL)
+        return regtrace_isp_m0_control(cmd, arg);
     if (cmd == REGTRACE_ISP_M0_EXT_CONTROL)
         return regtrace_isp_m0_ext_control(arg);
 
@@ -23748,6 +23814,42 @@ int32_t apical_isp_core_ops_s_ctrl(uintptr_t a0, uintptr_t a1, uint32_t a2)
     uint32_t *s3 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+    uint32_t control;
+    uint32_t value;
+
+    /*
+     * These controls share an OEM tail-call path that passes (0, value).
+     * The generated graph lost the second argument at that join point.
+     */
+    if (!regtrace_t23_valid_ptr(a1))
+        return -EINVAL;
+    control = *(uint32_t *)(uintptr_t)a1;
+    value = *(uint32_t *)(uintptr_t)(a1 + sizeof(uint32_t));
+    if (regtrace_t23_source_bcsh_trace)
+        printk(KERN_INFO
+               "tx_isp_t23_recovered: BCSH s_ctrl cmd=0x%x value=%u\n",
+               control, value);
+    switch (control) {
+    case 0x980900:
+        tisp_set_brightness(0, (uint8_t)value);
+        return 0;
+    case 0x980901:
+        tisp_set_contrast(0, (uint8_t)value);
+        return 0;
+    case 0x980902:
+        tisp_set_saturation(0, (uint8_t)value);
+        return 0;
+    case 0x98091b:
+        tisp_set_sharpness(0, (uint8_t)value);
+        return 0;
+    case 0x8000101:
+        if (value >= 0x100)
+            return -EINVAL;
+        tisp_set_bcsh_hue(0, (uint8_t)value);
+        return 0;
+    default:
+        break;
+    }
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -27035,6 +27137,41 @@ int32_t apical_isp_core_ops_g_ctrl(uintptr_t a0, uintptr_t a1, uint32_t a2)
     uintptr_t *s1 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+    uint32_t control;
+    uint32_t value;
+    uint8_t hue;
+
+    if (!regtrace_t23_valid_ptr(a1))
+        return -EINVAL;
+    control = *(uint32_t *)(uintptr_t)a1;
+    if (regtrace_t23_source_bcsh_trace)
+        printk(KERN_INFO "tx_isp_t23_recovered: BCSH g_ctrl cmd=0x%x\n",
+               control);
+    switch (control) {
+    case 0x980900:
+        value = tisp_get_brightness();
+        break;
+    case 0x980901:
+        value = tisp_get_contrast();
+        break;
+    case 0x980902:
+        value = tisp_get_saturation();
+        break;
+    case 0x98091b:
+        value = tisp_get_sharpness();
+        break;
+    case 0x8000101:
+        hue = 0;
+        tisp_get_bcsh_hue(0, &hue);
+        value = hue;
+        break;
+    default:
+        goto generated_control_dispatch;
+    }
+    *(uint32_t *)(uintptr_t)(a1 + sizeof(uint32_t)) = value;
+    return 0;
+
+generated_control_dispatch:
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -53673,60 +53810,163 @@ void* tiziano_bcsh_Tccm_RGBYUV(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr
 	const int32_t *m = (const int32_t *)(uintptr_t)a1;
 	const int32_t *ccm = (const int32_t *)(uintptr_t)a2;
 	const int32_t *minv = (const int32_t *)(uintptr_t)a3;
+	int32_t m_sm[18];
+	int32_t ccm_sm[18];
+	int32_t minv_sm[18];
 	int32_t first[9];
+	int32_t first_sm[18];
 	int32_t second[9];
-	int32_t rotated[9];
+	int32_t second_sm[18];
 	int32_t cos_value;
 	int32_t sin_value;
 	int direction;
+	uint32_t hue = (uint8_t)bcsh_hue;
+	int base;
+	int i;
 	int row;
-	int col;
-	int k;
 
 	(void)arg4;
-	for (row = 0; row < 3; row++) {
-		for (col = 0; col < 3; col++) {
-			int32_t sum = 0;
-			for (k = 0; k < 3; k++)
-				sum += regtrace_t23_bcsh_fixmul(m[row * 3 + k], ccm[k * 3 + col], 10);
-			first[row * 3 + col] = sum;
-		}
-	}
-	for (row = 0; row < 3; row++) {
-		for (col = 0; col < 3; col++) {
-			int32_t sum = 0;
-			for (k = 0; k < 3; k++)
-				sum += regtrace_t23_bcsh_fixmul(first[row * 3 + k], minv[k * 3 + col], 16);
-			second[row * 3 + col] = sum;
-		}
+	for (i = 0; i < 9; i++) {
+		int32_t value = m[i];
+
+		m_sm[i * 2] = value < 0 ? -1 : 1;
+		m_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
+
+		value = ccm[i];
+		ccm_sm[i * 2] = value < 0 ? -1 : 1;
+		ccm_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
+
+		value = minv[i];
+		minv_sm[i * 2] = value < 0 ? -1 : 1;
+		minv_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
 	}
 
-	if (bcsh_hue == 0x3c) {
+	for (row = 0; row < 3; row++) {
+		base = row * 3;
+		first[base] =
+			m_sm[(base + 0) * 2] * ccm_sm[0 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 0) * 2 + 1],
+						 ccm_sm[0 * 2 + 1], 10) +
+			m_sm[(base + 1) * 2] * ccm_sm[3 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 1) * 2 + 1],
+						 ccm_sm[3 * 2 + 1], 10) +
+			m_sm[(base + 2) * 2] * ccm_sm[6 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 2) * 2 + 1],
+						 ccm_sm[6 * 2 + 1], 10);
+		first[base + 1] =
+			m_sm[(base + 0) * 2] * ccm_sm[1 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 0) * 2 + 1],
+						 ccm_sm[1 * 2 + 1], 10) +
+			m_sm[(base + 1) * 2] * ccm_sm[4 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 1) * 2 + 1],
+						 ccm_sm[4 * 2 + 1], 10) +
+			m_sm[(base + 2) * 2] * ccm_sm[7 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 2) * 2 + 1],
+						 ccm_sm[7 * 2 + 1], 10);
+		first[base + 2] =
+			m_sm[(base + 0) * 2] * ccm_sm[2 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 0) * 2 + 1],
+						 ccm_sm[2 * 2 + 1], 10) +
+			m_sm[(base + 1) * 2] * ccm_sm[5 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 1) * 2 + 1],
+						 ccm_sm[5 * 2 + 1], 10) +
+			m_sm[(base + 2) * 2] * ccm_sm[8 * 2] *
+			regtrace_t23_bcsh_fixmul(m_sm[(base + 2) * 2 + 1],
+						 ccm_sm[8 * 2 + 1], 10);
+	}
+
+	for (i = 0; i < 9; i++) {
+		int32_t value = first[i];
+
+		first_sm[i * 2] = value < 0 ? -1 : 1;
+		first_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
+	}
+
+	for (row = 0; row < 3; row++) {
+		base = row * 3;
+		second[base] =
+			first_sm[(base + 0) * 2] * minv_sm[0 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 0) * 2 + 1],
+						 minv_sm[0 * 2 + 1], 16) +
+			first_sm[(base + 1) * 2] * minv_sm[3 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 1) * 2 + 1],
+						 minv_sm[3 * 2 + 1], 16) +
+			first_sm[(base + 2) * 2] * minv_sm[6 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 2) * 2 + 1],
+						 minv_sm[6 * 2 + 1], 16);
+		second[base + 1] =
+			first_sm[(base + 0) * 2] * minv_sm[1 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 0) * 2 + 1],
+						 minv_sm[1 * 2 + 1], 16) +
+			first_sm[(base + 1) * 2] * minv_sm[4 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 1) * 2 + 1],
+						 minv_sm[4 * 2 + 1], 16) +
+			first_sm[(base + 2) * 2] * minv_sm[7 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 2) * 2 + 1],
+						 minv_sm[7 * 2 + 1], 16);
+		second[base + 2] =
+			first_sm[(base + 0) * 2] * minv_sm[2 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 0) * 2 + 1],
+						 minv_sm[2 * 2 + 1], 16) +
+			first_sm[(base + 1) * 2] * minv_sm[5 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 1) * 2 + 1],
+						 minv_sm[5 * 2 + 1], 16) +
+			first_sm[(base + 2) * 2] * minv_sm[8 * 2] *
+			regtrace_t23_bcsh_fixmul(first_sm[(base + 2) * 2 + 1],
+						 minv_sm[8 * 2 + 1], 16);
+	}
+
+	if (hue == 0x3cU) {
 		cos_value = 0x10000;
 		sin_value = 0;
 		direction = 1;
-	} else if (bcsh_hue < 0x3c) {
-		cos_value = 0x8000 + (int32_t)div64_s64((int64_t)0x8000 * (0x3c - bcsh_hue), 0x3c);
-		sin_value = 0xddb4 - (int32_t)div64_s64((int64_t)0xddb4 * (0x3c - bcsh_hue), 0x3c);
+	} else if (hue < 0x3cU) {
+		uint32_t distance = 0x3cU - hue;
+
+		cos_value = 0x8000 + distance * (0x10000 - 0x8000) / 0x3cU;
+		sin_value = 0xddb4 - distance * 0xddb4 / 0x3cU;
 		direction = -1;
 	} else {
-		uint32_t delta = min_t(uintptr_t, bcsh_hue, 0x78) - 0x3c;
-		cos_value = 0x10000 - (int32_t)div64_s64((int64_t)0x8000 * delta, 0x3c);
-		sin_value = (int32_t)div64_s64((int64_t)0xddb4 * delta, 0x3c);
+		uint32_t distance = hue - 0x3cU;
+
+		cos_value = 0x10000 - distance * (0x10000 - 0x8000) / 0x3cU;
+		sin_value = distance * 0xddb4 / 0x3cU;
 		direction = 1;
 	}
 
-	for (col = 0; col < 3; col++) {
-		rotated[col] = second[col];
-		rotated[3 + col] =
-			regtrace_t23_bcsh_fixmul(cos_value, second[3 + col], 16) +
-			direction * regtrace_t23_bcsh_fixmul(sin_value, second[6 + col], 16);
-		rotated[6 + col] =
-			regtrace_t23_bcsh_fixmul(cos_value, second[6 + col], 16) -
-			direction * regtrace_t23_bcsh_fixmul(sin_value, second[3 + col], 16);
+	for (i = 0; i < 9; i++) {
+		int32_t value = second[i];
+
+		second_sm[i * 2] = value < 0 ? -1 : 1;
+		second_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
 	}
-	for (k = 0; k < 9; k++)
-		out[k] = regtrace_t23_bcsh_shift6(rotated[k]);
+
+	for (i = 0; i < 9; i++) {
+		if (i < 3) {
+			out[i] = second_sm[i * 2] * second_sm[i * 2 + 1];
+		} else if (i < 6) {
+			out[i] = second_sm[i * 2] *
+				 regtrace_t23_bcsh_fixmul(cos_value,
+							 second_sm[i * 2 + 1], 16) +
+				 direction * second_sm[(i + 3) * 2] *
+				 regtrace_t23_bcsh_fixmul(sin_value,
+							 second_sm[(i + 3) * 2 + 1], 16);
+		} else {
+			out[i] = second_sm[i * 2] *
+				 regtrace_t23_bcsh_fixmul(cos_value,
+							 second_sm[i * 2 + 1], 16) -
+				 direction * second_sm[(i - 3) * 2] *
+				 regtrace_t23_bcsh_fixmul(sin_value,
+							 second_sm[(i - 3) * 2 + 1], 16);
+		}
+	}
+	for (i = 0; i < 9; i++)
+		out[i] = regtrace_t23_bcsh_shift6(out[i]);
 
 	return &out[9];
 }
@@ -53744,21 +53984,41 @@ void* tiziano_bcsh_Tccm_RGB2YUV(uintptr_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025508 origin=model_output original=tiziano_bcsh_Toffset_RGBYUV */
 int32_t tiziano_bcsh_Toffset_RGBYUV(int32_t *arg1, int32_t *arg2, int32_t *arg3)
 {
+	int32_t matrix_sm[18];
+	int32_t input_sm[6];
+	int32_t result;
 	int row;
-	int col;
+	int i;
+
+	for (i = 0; i < 9; i++) {
+		int32_t value = arg2[i];
+
+		matrix_sm[i * 2] = value < 0 ? -1 : 1;
+		matrix_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
+	}
+	for (i = 0; i < 3; i++) {
+		int32_t value = arg3[i];
+
+		input_sm[i * 2] = value < 0 ? -1 : 1;
+		input_sm[i * 2 + 1] = value < 0 ?
+			(int32_t)(-(uint32_t)value) : value;
+	}
 
 	for (row = 0; row < 3; row++) {
-		int32_t sum = 0;
-		for (col = 0; col < 3; col++) {
-			int32_t matrix = arg2[row * 3 + col];
-			int32_t input = arg3[col];
-			uint32_t matrix_mag = matrix < 0 ? -(uint32_t)matrix : (uint32_t)matrix;
-			uint32_t input_mag = input < 0 ? -(uint32_t)input : (uint32_t)input;
-			int32_t product = fix_point_mult2_32(16, matrix_mag, input_mag << 6);
+		int base = row * 3;
 
-			sum += (matrix < 0) ^ (input < 0) ? -product : product;
-		}
-		arg1[row] = regtrace_t23_bcsh_shift6(sum);
+		result =
+			input_sm[0] * matrix_sm[(base + 0) * 2] *
+			regtrace_t23_bcsh_fixmul(matrix_sm[(base + 0) * 2 + 1],
+						 input_sm[1], 10) +
+			input_sm[2] * matrix_sm[(base + 1) * 2] *
+			regtrace_t23_bcsh_fixmul(matrix_sm[(base + 1) * 2 + 1],
+						 input_sm[3], 10) +
+			input_sm[4] * matrix_sm[(base + 2) * 2] *
+			regtrace_t23_bcsh_fixmul(matrix_sm[(base + 2) * 2 + 1],
+						 input_sm[5], 10);
+		arg1[row] = regtrace_t23_bcsh_shift6(result);
 	}
 	return arg1[2];
 }
