@@ -181,6 +181,14 @@ Current smoke-test status:
   cycle decoded 257 measured RTSP frames at `YAVG/UAVG/VAVG/SATAVG`
   `105.7/128.3/125.9/6.5`, retained `15305/1328` ISP/VIC interrupts without
   new faults, and rebooted cleanly.
+- The MSCA global output-window writer now derives the active bounds from all
+  three enabled channel geometries, falls back to the sensor dimensions when
+  no channel is active, writes the T23 `0xd090/0xd094` extent registers, and
+  reruns scaling before the shadow commit. It compiles to 113 instructions
+  versus 143 OEM and moves out of the collapsed class, reducing the audit to
+  40 hard stubs and 83 collapses. A default device cycle decoded 262 measured
+  RTSP frames at `YAVG/UAVG/VAVG/SATAVG` `112.4/129.4/124.9/7.0`, retained
+  `19594/1698` ISP/VIC interrupts without new faults, and rebooted cleanly.
 - `tisp_set_fps` now implements the SC2336 timing contract directly because
   the deployed T23 sensor module has no functional FPS ioctl slot. It reads
   HTS over the captured sensor I2C client, derives VTS from the 81 MHz pixel

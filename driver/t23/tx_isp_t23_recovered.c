@@ -42287,233 +42287,56 @@ int32_t tisp_msca_scaling_algorithm(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019a70 origin=fragment_seed original=tisp_msca_write_reg */
 int32_t tisp_msca_write_reg(void)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uintptr_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uintptr_t *a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t *s3 = 0;
-    uint32_t *s4 = 0;
-    uint32_t *s5 = 0;
-    uint32_t *t0 = 0;
-    uint32_t t1 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+    uint32_t min_left = 0xffffU;
+    uint32_t min_top = 0xffffU;
+    uint32_t max_right = 0;
+    uint32_t max_bottom = 0;
+    uint32_t source_width;
+    uint32_t source_height;
+    uint32_t channel;
+    bool active = false;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
+    for (channel = 0; channel < 3; channel++) {
+        unsigned char *cfg = regtrace_t23_msca_hard_param(channel);
+        uint32_t left;
+        uint32_t top;
+        uint32_t right;
+        uint32_t bottom;
 
-    /* fragment 1: MemoryAccess */
-    a2 = *(uint32_t *)((char *)&sclk_name + -26284);
-    local_1c = s2;
-    local_2c = ra;
-    local_28 = s5;
-    local_24 = s4;
-    local_20 = s3;
-    local_18 = s1;
-    local_14 = s0;
-    t1 = *(uint8_t *)((char *)a2 + 0);
-    s2 = a0;
+        if (!cfg || !cfg[0])
+            continue;
+        active = true;
+        left = regtrace_t23_get_le32(cfg + 0x10) & 0xffffU;
+        top = regtrace_t23_get_le32(cfg + 0x14) & 0xffffU;
+        right = (left + regtrace_t23_get_le32(cfg + 0x18)) & 0xffffU;
+        bottom = (top + regtrace_t23_get_le32(cfg + 0x1c)) & 0xffffU;
+        if (left < min_left)
+            min_left = left;
+        if (top < min_top)
+            min_top = top;
+        if (right > max_right)
+            max_right = right;
+        if (bottom > max_bottom)
+            max_bottom = bottom;
+    }
 
-    /* fragment 2: Branch */
-    v0 = (uintptr_t *)&sclk_name - 26284;
-    if (t1 != 0) { goto tisp_msca_write_reg0x60; }
+    if (!active) {
+        source_width = regtrace_t23_get_le32(tisp_par_info + 0);
+        source_height = regtrace_t23_get_le32(tisp_par_info + 4);
+        min_left = 0;
+        min_top = 0;
+        max_right = source_width ? source_width : REGTRACE_SC2336_WIDTH;
+        max_bottom = source_height ? source_height : REGTRACE_SC2336_HEIGHT;
+    }
 
-    /* fragment 3: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v0 + 4);
-    v1 = *(uint8_t *)((char *)v1 + 0);
-
-    /* fragment 4: Branch */
-    s5 = 65535;
-    if (v1 != 0) { goto tisp_msca_write_reg0x78; }
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v0 + 8);
-    v1 = *(uint8_t *)((char *)v1 + 0);
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 19ac0:	5460000a 	bnezl	v1,19aec <tisp_msca_write_reg+0x7c> */
-
-    /* fragment 7: MemoryAccess */
-    a0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 8: Branch */
-    v0 = (uintptr_t *)&sclk_name;
-    goto tisp_msca_write_reg0x1a4;
-
-tisp_msca_write_reg0x60:
-    /* fragment 9: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a2 + 16);
-    a0 = 65535;
-    s0 = v1 < a0;
-    v1 = v1 & 65535;
-    s5 = a0;
-
-tisp_msca_write_reg0x78:
-    /* fragment 10: MemoryAccess */
-    a0 = *(uint32_t *)((char *)v0 + 4);
-    t0 = *(uint8_t *)((char *)a0 + 0);
-
-    /* fragment 11: Unknown */
-    /* unmatched fragment 11 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 19af0:	51000006 	beqzl	t0,19b0c <tisp_msca_write_reg+0x9c> */
-
-    /* fragment 12: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v0 + 8);
-    v1 = *(uint32_t *)((char *)a0 + 16);
-    a1 = v1 < s5;
-    v1 = v1 & 65535;
-    v1 = *(uint32_t *)((char *)v0 + 8);
-    a3 = *(uint8_t *)((char *)v1 + 0);
-
-    /* fragment 13: Branch */
-    if (a3 == 0) { goto tisp_msca_write_reg0xb8; }
-
-    /* fragment 14: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 16);
-    a1 = v0 < s5;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0xb8:
-    /* fragment 15: Branch */
-    s4 = 65535;
-    if (t1 == 0) { goto tisp_msca_write_reg0xd0; }
-
-    /* fragment 16: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 20);
-    a1 = v0 < s4;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0xd0:
-    /* fragment 17: Branch */
-    if (t0 == 0) { goto tisp_msca_write_reg0xe8; }
-
-    /* fragment 18: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 20);
-    a1 = v0 < s4;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0xe8:
-    /* fragment 19: Branch */
-    if (a3 == 0) { goto tisp_msca_write_reg0x100; }
-
-    /* fragment 20: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 20);
-    a1 = v0 < s4;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0x100:
-    /* fragment 21: Branch */
-    s0 = 0;
-    if (t1 == 0) { goto tisp_msca_write_reg0x118; }
-
-    /* fragment 22: MemoryAccess */
-    s0 = *(uint32_t *)((char *)a2 + 24);
-    v0 = (uintptr_t)(uintptr_t)s5 + (uintptr_t)s0;
-    s0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0x118:
-    /* fragment 23: Branch */
-    if (t0 == 0) { goto tisp_msca_write_reg0x134; }
-
-    /* fragment 24: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 24);
-    v0 = (uintptr_t)(uintptr_t)s5 + (uintptr_t)v0;
-    a1 = s0 < v0;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0x134:
-    /* fragment 25: Branch */
-    if (a3 == 0) { goto tisp_msca_write_reg0x150; }
-
-    /* fragment 26: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 24);
-    v0 = (uintptr_t)(uintptr_t)s5 + (uintptr_t)v0;
-    a1 = s0 < v0;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0x150:
-    /* fragment 27: Branch */
-    s1 = 0;
-    if (t1 == 0) { goto tisp_msca_write_reg0x168; }
-
-    /* fragment 28: MemoryAccess */
-    s1 = *(uint32_t *)((char *)a2 + 28);
-    v0 = (uintptr_t)(uintptr_t)s4 + (uintptr_t)s1;
-    s1 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0x168:
-    /* fragment 29: Branch */
-    if (t0 == 0) { goto tisp_msca_write_reg0x184; }
-
-    /* fragment 30: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 28);
-    v0 = (uintptr_t)(uintptr_t)s4 + (uintptr_t)v0;
-    a0 = s1 < v0;
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_msca_write_reg0x184:
-    /* fragment 31: Branch */
-    v0 = (uintptr_t)s5 & 8191;
-    if (a3 == 0) { goto tisp_msca_write_reg0x1bc; }
-
-    /* fragment 32: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 28);
-    v0 = (uintptr_t)(uintptr_t)s4 + (uintptr_t)v0;
-    v1 = s1 < v0;
-    v0 = (uintptr_t)v0 & 65535;
-
-    /* fragment 33: Branch */
-    goto tisp_msca_write_reg0x1b8;
-
-tisp_msca_write_reg0x1a4:
-    /* fragment 34: CallSetup */
-    s0 = *(uint16_t *)((char *)&sclk_name + -26288);
-    v0 = (uintptr_t *)&sclk_name;
-    s1 = *(uint16_t *)((char *)&sclk_name + -26286);
-    s4 = 0;
-    s5 = 0;
-
-tisp_msca_write_reg0x1b8:
-    /* fragment 35: CallSetup */
-    v0 = (uintptr_t)s5 & 8191;
-
-tisp_msca_write_reg0x1bc:
-    /* fragment 36: CallSetup */
-    s0 = (uintptr_t)s0 - (uintptr_t)s5;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(53392, ((uintptr_t)v0 << 16) | ((uintptr_t)s4 & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 37: CallSetup */
-    s0 = (uintptr_t)s0 & 8191;
-    s0 = (uintptr_t)s0 << 16;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(53396, (((uintptr_t)s0 & 8191) << 16) | ((uintptr_t)s1 - (uintptr_t)s4 & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 38: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_msca_scaling_algorithm)(s2); /* jalr target resolved by relocation */
-
-    /* fragment 39: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)system_reg_write)(53264, 1); /* jalr target resolved by relocation */
-
-    /* fragment 40: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 41: Arithmetic */
-    v0 = 0;
-
-    /* fragment 42: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    system_reg_write(0xd090U,
+                     ((min_left & 0x1fffU) << 16) |
+                     (min_top & 0x0fffU));
+    system_reg_write(0xd094U,
+                     (((max_right - min_left) & 0x1fffU) << 16) |
+                     ((max_bottom - min_top) & 0x0fffU));
+    tisp_msca_scaling_algorithm();
+    system_reg_write(0xd010U, 1);
     return 0;
 }
 
