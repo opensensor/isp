@@ -139,7 +139,14 @@ Current smoke-test status:
   256-frame device cycle retained neutral `UAVG/VAVG` of `128.2/127.1`; the
   binary audit moved the row transform out of the hard-stub class, reducing
   totals from 49 stubs/90 collapses to 48/90. Its recovered instruction count
-  is `0.98x` OEM and the wrapper has the exact OEM instruction count.
+  is `0.98x` OEM and the wrapper has the exact OEM instruction count. The full
+  mirror/flip routine now seeds aligned mutable A/T/D tables, applies the OEM
+  state-change transforms across all 1,953 words, and keeps that orientation
+  through later CT and gain refreshes. It is `0.92x` the OEM instruction count
+  and reduces the remaining collapse total from 90 to 89. Default and forced
+  `source_lsc_initial_flip=1 source_lsc_initial_mirror=1` cycles each passed
+  256 RTSP frames; the forced path retained neutral `UAVG/VAVG` of
+  `127.9/126.6` without new shading or packed-coefficient artifacts.
 - Static initialization has reached the same visual plateau as the T31/T40
   recovery work. Further bring-up uses `tx-isp-t23-hlil.txt` as the behavioral
   specification for the dynamic 3A event path; T31/T40 source and history are

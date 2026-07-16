@@ -2806,17 +2806,17 @@ typedef struct {
 static unsigned char data_a0000[16384];
 static unsigned char data_c2cdc[16384];
 static unsigned char data_c2d00[16384];
-static unsigned char data_c2d24[16384];
-static unsigned char data_c4d20[16384];
-static unsigned char data_c6d1c[16384];
+static unsigned char __attribute__((aligned(4))) data_c2d24[16384];
+static unsigned char __attribute__((aligned(4))) data_c4d20[16384];
+static unsigned char __attribute__((aligned(4))) data_c6d1c[16384];
 static unsigned char __attribute__((aligned(4))) lsc_lut_num[8] = {
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 };
-static unsigned char lsc_mesh_scale[16];
+static unsigned char __attribute__((aligned(4))) lsc_mesh_scale[16];
 static unsigned char __attribute__((aligned(4))) lsc_lut_stride[4] = {
     0x01, 0x00, 0x00, 0x00, 
 };
-static unsigned char lsc_mesh_size[8];
+static unsigned char __attribute__((aligned(4))) lsc_mesh_size[8];
 static unsigned char __attribute__((aligned(4))) lsc_ct_points[16] = {
     0xf4, 0x01, 0x00, 0x00, 0xd0, 0x07, 0x00, 0x00, 0xc4, 0x09, 0x00, 0x00, 0xac, 0x0d, 0x00, 0x00, 
 };
@@ -9875,6 +9875,9 @@ static bool regtrace_t23_source_gamma_tuning_init = true;
 static bool regtrace_t23_source_lsc_tuning_init = true;
 static bool regtrace_t23_source_lsc_events = true;
 static bool regtrace_t23_source_lsc_update_pending;
+static bool regtrace_t23_source_lsc_tables_initialized;
+static bool regtrace_t23_source_lsc_initial_flip;
+static bool regtrace_t23_source_lsc_initial_mirror;
 static bool regtrace_t23_source_dpc_tuning_init = true;
 static bool regtrace_t23_source_ydns_tuning_init = true;
 static bool regtrace_t23_source_defog_tuning_init = true;
@@ -10052,6 +10055,10 @@ module_param_named(source_lsc_tuning_init,
                    regtrace_t23_source_lsc_tuning_init, bool, 0644);
 module_param_named(source_lsc_events,
                    regtrace_t23_source_lsc_events, bool, 0644);
+module_param_named(source_lsc_initial_flip,
+                   regtrace_t23_source_lsc_initial_flip, bool, 0644);
+module_param_named(source_lsc_initial_mirror,
+                   regtrace_t23_source_lsc_initial_mirror, bool, 0644);
 module_param_named(source_dpc_tuning_init,
                    regtrace_t23_source_dpc_tuning_init, bool, 0644);
 module_param_named(source_ydns_tuning_init,
@@ -11682,6 +11689,36 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_clm_tuning.inc"
 #include "tx_isp_t23_ydns_tuning.inc"
 
+static void regtrace_t23_source_lsc_initialize_tables(void)
+{
+    uint32_t value;
+    uint32_t mesh_size[2];
+
+    if (regtrace_t23_source_lsc_tables_initialized)
+        return;
+
+    memcpy(data_c6d1c, regtrace_t23_lsc_sc2336_a_lut,
+           sizeof(regtrace_t23_lsc_sc2336_a_lut));
+    memcpy(data_c4d20, regtrace_t23_lsc_sc2336_t_lut,
+           sizeof(regtrace_t23_lsc_sc2336_t_lut));
+    memcpy(data_c2d24, regtrace_t23_lsc_sc2336_d_lut,
+           sizeof(regtrace_t23_lsc_sc2336_d_lut));
+
+    value = REGTRACE_T23_LSC_SC2336_MESH_SCALE;
+    memcpy(lsc_mesh_scale, &value, sizeof(value));
+    value = REGTRACE_T23_LSC_SC2336_LUT_STRIDE;
+    memcpy(lsc_lut_stride, &value, sizeof(value));
+    mesh_size[0] = REGTRACE_T23_LSC_SC2336_MESH_WIDTH;
+    mesh_size[1] = REGTRACE_T23_LSC_SC2336_MESH_HEIGHT;
+    memcpy(lsc_mesh_size, mesh_size, sizeof(mesh_size));
+    memcpy(lsc_ct_points, regtrace_t23_lsc_sc2336_ct_points,
+           sizeof(regtrace_t23_lsc_sc2336_ct_points));
+
+    last_status_flip_en = 0;
+    last_status_mirror_en = 0;
+    regtrace_t23_source_lsc_tables_initialized = true;
+}
+
 static int regtrace_t23_source_mdns_load_tuning(void)
 {
     unsigned char *params;
@@ -11902,6 +11939,9 @@ int32_t tisp_bcsh_ev_update(uintptr_t ev, uintptr_t ignored);
 int32_t tisp_bcsh_ct_update(uintptr_t ignored, uint32_t ct);
 int32_t tisp_lsc_ct_update(uint32_t ct);
 int32_t tisp_lsc_write_lut_datas(void);
+int32_t tisp_lsc_mirror_flip(uint32_t unused, uint32_t width,
+                             uint32_t height, uint32_t flip,
+                             uint32_t mirror);
 static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10);
 
 static void regtrace_t23_source_gib_write_tuning_startup(void)
@@ -11940,6 +11980,9 @@ static void regtrace_t23_source_lsc_write_tuning_startup(void)
     const uint32_t (*image)[2] = regtrace_t23_lsc_sc2336_startup;
     size_t count = ARRAY_SIZE(regtrace_t23_lsc_sc2336_startup);
     size_t i;
+    int ret;
+
+    regtrace_t23_source_lsc_initialize_tables();
 
     if (regtrace_t23_source_lsc_ct == 3300U) {
         image = regtrace_t23_lsc_sc2336_ct3300;
@@ -11962,6 +12005,17 @@ static void regtrace_t23_source_lsc_write_tuning_startup(void)
     regtrace_t23_source_lsc_last_ct = regtrace_t23_source_lsc_runtime_ct;
     regtrace_t23_source_lsc_update_pending = false;
     regtrace_t23_source_lsc_event_count = 0;
+    if (regtrace_t23_source_lsc_initial_flip ||
+        regtrace_t23_source_lsc_initial_mirror) {
+        ret = tisp_lsc_mirror_flip(
+            0, REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT,
+            regtrace_t23_source_lsc_initial_flip,
+            regtrace_t23_source_lsc_initial_mirror);
+        if (ret)
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: initial LSC transform failed ret=%d\n",
+                   ret);
+    }
 }
 
 static void regtrace_t23_source_ae_write_stats_startup(void)
@@ -50652,25 +50706,26 @@ static uint32_t regtrace_t23_lsc_blend_word(uint32_t low,
 static uint32_t regtrace_t23_lsc_word_for_ct(uint32_t index, uint32_t ct)
 {
     const uint32_t *points = regtrace_t23_lsc_sc2336_ct_points;
+    const uint32_t *a_lut = (const uint32_t *)(const void *)data_c6d1c;
+    const uint32_t *t_lut = (const uint32_t *)(const void *)data_c4d20;
+    const uint32_t *d_lut = (const uint32_t *)(const void *)data_c2d24;
     uint32_t weight;
 
     if (ct <= points[0])
-        return regtrace_t23_lsc_sc2336_a_lut[index];
+        return a_lut[index];
     if (ct <= points[1]) {
         weight = ((ct - points[0]) << 12) / (points[1] - points[0]);
         return regtrace_t23_lsc_blend_word(
-            regtrace_t23_lsc_sc2336_a_lut[index],
-            regtrace_t23_lsc_sc2336_t_lut[index], weight);
+            a_lut[index], t_lut[index], weight);
     }
     if (ct <= points[2])
-        return regtrace_t23_lsc_sc2336_t_lut[index];
+        return t_lut[index];
     if (ct <= points[3]) {
         weight = ((ct - points[2]) << 12) / (points[3] - points[2]);
         return regtrace_t23_lsc_blend_word(
-            regtrace_t23_lsc_sc2336_t_lut[index],
-            regtrace_t23_lsc_sc2336_d_lut[index], weight);
+            t_lut[index], d_lut[index], weight);
     }
-    return regtrace_t23_lsc_sc2336_d_lut[index];
+    return d_lut[index];
 }
 
 static uint32_t regtrace_t23_lsc_scale_word(uint32_t value,
@@ -50697,6 +50752,7 @@ int32_t tisp_lsc_write_lut_datas(void)
     uint32_t ct;
     uint32_t i;
 
+    regtrace_t23_source_lsc_initialize_tables();
     lsc_count++;
     if (!regtrace_t23_source_lsc_update_pending)
         return 0;
@@ -50741,6 +50797,7 @@ int32_t tisp_lsc_write_lut_datas(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021d44 origin=model_output original=tiziano_lsc_init */
 int32_t tiziano_lsc_init(uint32_t arg1, uint32_t arg2)
 {
+    regtrace_t23_source_lsc_initialize_tables();
     if (!tmp_space) {
         tmp_space = (uintptr_t)private_vmalloc(0x190U);
         if (!tmp_space)
@@ -50910,6 +50967,100 @@ int32_t tisp_lsc_lut_mirror_exchange(void *arg1, int32_t arg2, int32_t arg3, int
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022290 origin=fragment_seed original=tisp_lsc_mirror_flip */
 int32_t tisp_lsc_mirror_flip(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
 {
+    uint32_t *a_lut = (uint32_t *)(void *)data_c6d1c;
+    uint32_t *t_lut = (uint32_t *)(void *)data_c4d20;
+    uint32_t *d_lut = (uint32_t *)(void *)data_c2d24;
+    uint32_t rows;
+    uint32_t cols;
+    uint32_t cols_padded;
+    uint32_t row;
+    uint32_t row_base = 0;
+    int ret;
+
+    (void)a0;
+    if (!a1 || !a2 || a3 > 1U || arg4 > 1U)
+        return -EINVAL;
+
+    rows = a2 / REGTRACE_T23_LSC_SC2336_MESH_HEIGHT + 1U;
+    if (a2 % REGTRACE_T23_LSC_SC2336_MESH_HEIGHT)
+        rows++;
+    cols = a1 / REGTRACE_T23_LSC_SC2336_MESH_WIDTH + 1U;
+    if (a1 % REGTRACE_T23_LSC_SC2336_MESH_WIDTH)
+        cols++;
+    cols_padded = cols + (cols & 1U);
+
+    if ((cols_padded >> 1) != REGTRACE_T23_LSC_SC2336_LUT_STRIDE ||
+        rows * (cols_padded >> 1) * 3U >
+            REGTRACE_T23_LSC_SC2336_LUT_NUM)
+        return -EINVAL;
+    if (system_reg_read(0xcU) & BIT(6))
+        return 0;
+
+    regtrace_t23_source_lsc_initialize_tables();
+    if ((uint32_t)last_status_flip_en != a3) {
+        ret = tisp_lsc_upside_down_lut(a_lut, rows, cols_padded);
+        if (ret)
+            return ret;
+        ret = tisp_lsc_upside_down_lut(t_lut, rows, cols_padded);
+        if (ret)
+            return ret;
+        ret = tisp_lsc_upside_down_lut(d_lut, rows, cols_padded);
+        if (ret)
+            return ret;
+    }
+
+    if ((uint32_t)last_status_mirror_en != arg4) {
+        for (row = 0; row < rows; ++row) {
+            uint32_t left = 0;
+            uint32_t right = cols - 1U;
+
+            while (left < (cols >> 1)) {
+                int left_word = (int)(((left + row_base) >> 1) * 3U);
+                int right_word = (int)(((right + row_base) >> 1) * 3U);
+                int left_lane = left & 1U;
+                int right_lane = right & 1U;
+
+                tisp_lsc_lut_mirror_exchange(a_lut, left_word,
+                                             right_word,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(a_lut, left_word + 2,
+                                             right_word + 2,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(a_lut, left_word + 1,
+                                             right_word + 1,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(t_lut, left_word,
+                                             right_word,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(t_lut, left_word + 2,
+                                             right_word + 2,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(t_lut, left_word + 1,
+                                             right_word + 1,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(d_lut, left_word,
+                                             right_word,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(d_lut, left_word + 2,
+                                             right_word + 2,
+                                             left_lane, right_lane);
+                tisp_lsc_lut_mirror_exchange(d_lut, left_word + 1,
+                                             right_word + 1,
+                                             left_lane, right_lane);
+                left++;
+                right--;
+            }
+            row_base += cols_padded;
+        }
+    }
+
+    regtrace_t23_source_lsc_update_pending = true;
+    ret = tisp_lsc_write_lut_datas();
+    last_status_mirror_en = arg4;
+    last_status_flip_en = a3;
+    return ret;
+
+#if 0 /* Retain the generated body below as recovery provenance. */
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -51212,6 +51363,7 @@ tisp_lsc_mirror_flip0x364:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022624 origin=model_output original=tisp_lsc_deinit */
