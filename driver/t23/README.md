@@ -60,7 +60,12 @@ Current smoke-test status:
   `0x100` hysteresis. Parked, explicitly active, and no-argument active device
   cycles passed full Raptor startup and RTSP checks; `source_sdns_internal_enable=0`
   retains a diagnostic top-level bypass while still validating register
-  programming.
+  programming. The OEM 16-channel ratio scaler and complete linear/WDR table
+  selector are recovered; their assembly sizes are 785/703 and 221/231 versus
+  OEM. Both the default linear bank and diagnostic `source_sdns_wdr=1` bank
+  passed 256-frame RTSP cycles with active ISP interrupts and no kernel errors.
+  The latter changes only SDNS tuning tables; it does not enable sensor or core
+  WDR mode.
 - The T23 ADR front end now loads all 44 tuning regions from the exact
   `0x13f7c..0x14b44` SC2336 payload, reconstructs the 5x5 geometry, and writes
   the static tone-map register image. Parked and explicitly active cycles both

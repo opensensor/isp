@@ -5226,7 +5226,7 @@ static unsigned char sdns_sp_ud_b_sp_stren_3_array[36];
 static unsigned char sdns_sp_ud_std_thres_array[36];
 static unsigned char sdns_sp_ud_std_stren_array[36];
 static unsigned char sdns_sp_ud_flat_thres_array[36];
-static uintptr_t (*sdns_ave_thres_array_now)();
+static uintptr_t sdns_ave_thres_array_now;
 static unsigned char sdns_sp_ud_flat_stren_array[36];
 static unsigned char sdns_ave_fliter[12];
 static unsigned char sdns_ave_fliter_wdr[12];
@@ -9863,6 +9863,7 @@ static uint regtrace_t23_source_mdns_set_count;
 static uint regtrace_t23_source_mdns_restore_count;
 static bool regtrace_t23_source_sdns_tuning_init = true;
 static bool regtrace_t23_source_sdns_internal_enable = true;
+static bool regtrace_t23_source_sdns_wdr;
 static bool regtrace_t23_source_sdns_initialized;
 static uint regtrace_t23_source_sdns_gain_old = 0xffffffffU;
 static bool regtrace_t23_source_adr_tuning_init = true;
@@ -10035,6 +10036,8 @@ module_param_named(source_sdns_tuning_init,
                    regtrace_t23_source_sdns_tuning_init, bool, 0644);
 module_param_named(source_sdns_internal_enable,
                    regtrace_t23_source_sdns_internal_enable, bool, 0644);
+module_param_named(source_sdns_wdr,
+                   regtrace_t23_source_sdns_wdr, bool, 0644);
 module_param_named(source_sdns_gain_old,
                    regtrace_t23_source_sdns_gain_old, uint, 0444);
 module_param_named(source_adr_tuning_init,
@@ -66763,8 +66766,80 @@ int32_t tisp_sdns_param_array_set(uint32_t a0, uint32_t a1)
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000003f8b8 origin=fragment_seed original=tisp_s_sdns_ratio */
-int32_t tisp_s_sdns_ratio(uint32_t a0)
+static __always_inline uint32_t
+regtrace_t23_sdns_scale_ratio(uint32_t value, uint32_t ratio,
+                              uint32_t ceiling)
+{
+    if (ratio < 0x81U)
+        return (ratio * value) >> 7;
+    if (value < ceiling)
+        value += ((ceiling - value) * (ratio - 0x80U)) >> 7;
+    return value;
+}
+
+/* WHOLE_DRIVER_CANDIDATE fn_000000000003f8b8 origin=manual_recovery original=tisp_s_sdns_ratio */
+int32_t tisp_s_sdns_ratio(uint32_t ratio)
+{
+    uint32_t *ave_destination = (uint32_t *)sdns_ave_thres_array_now;
+    unsigned int point;
+
+    memcpy(sdns_ratio, &ratio, sizeof(ratio));
+    for (point = 0; point < 9; point++) {
+#define REGTRACE_T23_SCALE_SDNS_CHANNEL(index, suffix) \
+        ((uint32_t *)sdns_h_s_##index##_array_now)[point] = \
+            regtrace_t23_sdns_scale_ratio( \
+                ((uint32_t *)(void *)sdns_h_s_##index##suffix##_array)[point], \
+                ratio, 0x10U)
+        if (regtrace_t23_source_sdns_wdr) {
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(1, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(2, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(3, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(4, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(5, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(6, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(7, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(8, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(9, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(10, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(11, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(12, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(13, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(14, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(15, _wdr);
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(16, _wdr);
+            ave_destination[point] = regtrace_t23_sdns_scale_ratio(
+                ((uint32_t *)(void *)sdns_ave_thres_wdr_array)[point],
+                ratio, 0xc8U);
+        } else {
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(1, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(2, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(3, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(4, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(5, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(6, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(7, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(8, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(9, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(10, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(11, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(12, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(13, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(14, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(15, );
+            REGTRACE_T23_SCALE_SDNS_CHANNEL(16, );
+            ave_destination[point] = regtrace_t23_sdns_scale_ratio(
+                ((uint32_t *)(void *)sdns_ave_thres_array)[point],
+                ratio, 0xc8U);
+        }
+#undef REGTRACE_T23_SCALE_SDNS_CHANNEL
+    }
+
+    return tisp_sdns_all_reg_refresh(
+        regtrace_t23_source_sdns_gain_old + 0x200U);
+}
+
+static int32_t __attribute__((unused))
+regtrace_t23_recovered_sdns_ratio(uint32_t a0)
 {
     uint32_t local_0 = 0;
     uint32_t local_4 = 0;
@@ -68160,67 +68235,85 @@ tisp_s_sdns_ratio0xaa8:
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000403b4 origin=fragment_seed original=tisp_sdns_wdr_en */
+/* WHOLE_DRIVER_CANDIDATE fn_00000000000403b4 origin=manual_recovery original=tisp_sdns_wdr_en */
 int tisp_sdns_wdr_en(int enable)
 {
-    uint32_t *sdns_h_mv_wei_now;
-    uint32_t *sdns_std_thr2_array_now;
-    uint32_t *sdns_grad_zx_thres_array_now;
-    uint32_t *sdns_grad_zy_thres_array_now;
-    uint32_t *sdns_std_thr1_array_now;
-    uint32_t *sdns_h_s_1_array_now;
-    uint32_t *sdns_h_s_2_array_now;
-    uint32_t *sdns_h_s_3_array_now;
-    uint32_t *sdns_h_s_4_array_now;
-    uint32_t *sdns_h_s_5_array_now;
-    uint32_t *sdns_h_s_6_array_now;
-    uint32_t *sdns_h_s_7_array_now;
-    uint32_t *sdns_h_s_8_array_now;
-    uint32_t *sdns_h_s_9_array_now;
-    uint32_t *sdns_h_s_10_array_now;
-    uint32_t *sdns_h_s_11_array_now;
-    uint32_t *sdns_h_s_12_array_now;
-    uint32_t *sdns_h_s_13_array_now;
-    uint32_t *sdns_h_s_14_array_now;
-    uint32_t *sdns_h_s_15_array_now;
-    uint32_t *sdns_h_s_16_array_now;
-    uint32_t *sdns_sharpen_tt_opt_array_now;
-    uint32_t *sdns_ave_fliter_now;
-    uint32_t *sdns_sp_uu_thres_array_now;
-    uint32_t *sdns_sp_uu_stren_array_now;
-    uint32_t *sdns_sp_mv_uu_thres_array_now;
-    uint32_t *sdns_sp_mv_uu_stren_array_now;
-    uint32_t *sdns_ave_thres_array_now;
-    uint32_t *v0_1;
-        sdns_h_mv_wei_now = &sdns_h_mv_wei_wdr;
-        sdns_std_thr2_array_now = &sdns_std_thr2_wdr_array;
-        sdns_grad_zx_thres_array_now = &sdns_grad_zx_thres_wdr_array;
-        sdns_grad_zy_thres_array_now = &sdns_grad_zy_thres_wdr_array;
-        sdns_std_thr1_array_now = &sdns_std_thr1_wdr_array;
-        sdns_h_s_1_array_now = &sdns_h_s_1_wdr_array;
-        sdns_h_s_2_array_now = &sdns_h_s_2_wdr_array;
-        sdns_h_s_3_array_now = &sdns_h_s_3_wdr_array;
-        sdns_h_s_4_array_now = &sdns_h_s_4_wdr_array;
-        sdns_h_s_5_array_now = &sdns_h_s_5_wdr_array;
-        sdns_h_s_6_array_now = &sdns_h_s_6_wdr_array;
-        sdns_h_s_7_array_now = &sdns_h_s_7_wdr_array;
-        sdns_h_s_8_array_now = &sdns_h_s_8_wdr_array;
-        sdns_h_s_9_array_now = &sdns_h_s_9_wdr_array;
-        sdns_h_s_10_array_now = &sdns_h_s_10_wdr_array;
-        sdns_h_s_11_array_now = &sdns_h_s_11_wdr_array;
-        sdns_h_s_12_array_now = &sdns_h_s_12_wdr_array;
-        sdns_h_s_13_array_now = &sdns_h_s_13_wdr_array;
-        sdns_h_s_14_array_now = &sdns_h_s_14_wdr_array;
-        sdns_h_s_15_array_now = &sdns_h_s_15_wdr_array;
-        sdns_h_s_16_array_now = &sdns_h_s_16_wdr_array;
-        sdns_sharpen_tt_opt_array_now = &sdns_sharpen_tt_opt_wdr_array;
-        sdns_ave_fliter_now = &sdns_ave_fliter_wdr;
-        sdns_sp_uu_thres_array_now = &sdns_sp_uu_thres_wdr_array;
-        sdns_sp_uu_stren_array_now = &sdns_sp_uu_stren_wdr_array;
-        sdns_sp_mv_uu_thres_array_now = &sdns_sp_mv_uu_thres_wdr_array;
-        sdns_sp_mv_uu_stren_array_now = &sdns_sp_mv_uu_stren_wdr_array;
-        v0_1 = &sdns_ave_thres_wdr_array;
+    uint32_t ratio;
+
+    regtrace_t23_source_sdns_wdr = enable != 0;
+    if (regtrace_t23_source_sdns_wdr) {
+        sdns_h_mv_wei_now = (uintptr_t)&sdns_h_mv_wei_wdr;
+        sdns_std_thr2_array_now = (uintptr_t)&sdns_std_thr2_wdr_array;
+        sdns_grad_zx_thres_array_now =
+            (uintptr_t)&sdns_grad_zx_thres_wdr_array;
+        sdns_grad_zy_thres_array_now =
+            (uintptr_t)&sdns_grad_zy_thres_wdr_array;
+        sdns_std_thr1_array_now = (uintptr_t)&sdns_std_thr1_wdr_array;
+        sdns_h_s_1_array_now = (uintptr_t)&sdns_h_s_1_wdr_array;
+        sdns_h_s_2_array_now = (uintptr_t)&sdns_h_s_2_wdr_array;
+        sdns_h_s_3_array_now = (uintptr_t)&sdns_h_s_3_wdr_array;
+        sdns_h_s_4_array_now = (uintptr_t)&sdns_h_s_4_wdr_array;
+        sdns_h_s_5_array_now = (uintptr_t)&sdns_h_s_5_wdr_array;
+        sdns_h_s_6_array_now = (uintptr_t)&sdns_h_s_6_wdr_array;
+        sdns_h_s_7_array_now = (uintptr_t)&sdns_h_s_7_wdr_array;
+        sdns_h_s_8_array_now = (uintptr_t)&sdns_h_s_8_wdr_array;
+        sdns_h_s_9_array_now = (uintptr_t)&sdns_h_s_9_wdr_array;
+        sdns_h_s_10_array_now = (uintptr_t)&sdns_h_s_10_wdr_array;
+        sdns_h_s_11_array_now = (uintptr_t)&sdns_h_s_11_wdr_array;
+        sdns_h_s_12_array_now = (uintptr_t)&sdns_h_s_12_wdr_array;
+        sdns_h_s_13_array_now = (uintptr_t)&sdns_h_s_13_wdr_array;
+        sdns_h_s_14_array_now = (uintptr_t)&sdns_h_s_14_wdr_array;
+        sdns_h_s_15_array_now = (uintptr_t)&sdns_h_s_15_wdr_array;
+        sdns_h_s_16_array_now = (uintptr_t)&sdns_h_s_16_wdr_array;
+        sdns_sharpen_tt_opt_array_now =
+            (uintptr_t)&sdns_sharpen_tt_opt_wdr_array;
+        sdns_ave_fliter_now = (uintptr_t)&sdns_ave_fliter_wdr;
+        sdns_sp_uu_thres_array_now =
+            (uintptr_t)&sdns_sp_uu_thres_wdr_array;
+        sdns_sp_uu_stren_array_now =
+            (uintptr_t)&sdns_sp_uu_stren_wdr_array;
+        sdns_sp_mv_uu_thres_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_thres_wdr_array;
+        sdns_sp_mv_uu_stren_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_stren_wdr_array;
+        sdns_ave_thres_array_now = (uintptr_t)&sdns_ave_thres_wdr_array;
+    } else {
+        sdns_h_mv_wei_now = (uintptr_t)&sdns_h_mv_wei;
+        sdns_std_thr2_array_now = (uintptr_t)&sdns_std_thr2_array;
+        sdns_grad_zx_thres_array_now = (uintptr_t)&sdns_grad_zx_thres_array;
+        sdns_grad_zy_thres_array_now = (uintptr_t)&sdns_grad_zy_thres_array;
+        sdns_std_thr1_array_now = (uintptr_t)&sdns_std_thr1_array;
+        sdns_h_s_1_array_now = (uintptr_t)&sdns_h_s_1_array;
+        sdns_h_s_2_array_now = (uintptr_t)&sdns_h_s_2_array;
+        sdns_h_s_3_array_now = (uintptr_t)&sdns_h_s_3_array;
+        sdns_h_s_4_array_now = (uintptr_t)&sdns_h_s_4_array;
+        sdns_h_s_5_array_now = (uintptr_t)&sdns_h_s_5_array;
+        sdns_h_s_6_array_now = (uintptr_t)&sdns_h_s_6_array;
+        sdns_h_s_7_array_now = (uintptr_t)&sdns_h_s_7_array;
+        sdns_h_s_8_array_now = (uintptr_t)&sdns_h_s_8_array;
+        sdns_h_s_9_array_now = (uintptr_t)&sdns_h_s_9_array;
+        sdns_h_s_10_array_now = (uintptr_t)&sdns_h_s_10_array;
+        sdns_h_s_11_array_now = (uintptr_t)&sdns_h_s_11_array;
+        sdns_h_s_12_array_now = (uintptr_t)&sdns_h_s_12_array;
+        sdns_h_s_13_array_now = (uintptr_t)&sdns_h_s_13_array;
+        sdns_h_s_14_array_now = (uintptr_t)&sdns_h_s_14_array;
+        sdns_h_s_15_array_now = (uintptr_t)&sdns_h_s_15_array;
+        sdns_h_s_16_array_now = (uintptr_t)&sdns_h_s_16_array;
+        sdns_sharpen_tt_opt_array_now =
+            (uintptr_t)&sdns_sharpen_tt_opt_array;
+        sdns_ave_fliter_now = (uintptr_t)&sdns_ave_fliter;
+        sdns_sp_uu_thres_array_now = (uintptr_t)&sdns_sp_uu_thres_array;
+        sdns_sp_uu_stren_array_now = (uintptr_t)&sdns_sp_uu_stren_array;
+        sdns_sp_mv_uu_thres_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_thres_array;
+        sdns_sp_mv_uu_stren_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_stren_array;
+        sdns_ave_thres_array_now = (uintptr_t)&sdns_ave_thres_array;
     }
+
+    memcpy(&ratio, sdns_ratio, sizeof(ratio));
+    return tisp_s_sdns_ratio(ratio);
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000040750 origin=fragment_seed original=tiziano_sdns_params_refresh */
 void tiziano_sdns_params_refresh(void)
@@ -68368,35 +68461,77 @@ int tiziano_sdns_init(void) {
     if (!regtrace_t23_source_sdns_tuning_init)
         return 0;
 
-    sdns_h_mv_wei_now = (uintptr_t)&sdns_h_mv_wei;
-    sdns_std_thr2_array_now = (uintptr_t)&sdns_std_thr2_array;
-    sdns_grad_zx_thres_array_now = (uintptr_t)&sdns_grad_zx_thres_array;
-    sdns_grad_zy_thres_array_now = (uintptr_t)&sdns_grad_zy_thres_array;
-    sdns_std_thr1_array_now = (uintptr_t)&sdns_std_thr1_array;
-    sdns_h_s_1_array_now = (uintptr_t)&sdns_h_s_1_array;
-    sdns_h_s_2_array_now = (uintptr_t)&sdns_h_s_2_array;
-    sdns_h_s_3_array_now = (uintptr_t)&sdns_h_s_3_array;
-    sdns_h_s_4_array_now = (uintptr_t)&sdns_h_s_4_array;
-    sdns_h_s_5_array_now = (uintptr_t)&sdns_h_s_5_array;
-    sdns_h_s_6_array_now = (uintptr_t)&sdns_h_s_6_array;
-    sdns_h_s_7_array_now = (uintptr_t)&sdns_h_s_7_array;
-    sdns_h_s_8_array_now = (uintptr_t)&sdns_h_s_8_array;
-    sdns_h_s_9_array_now = (uintptr_t)&sdns_h_s_9_array;
-    sdns_h_s_10_array_now = (uintptr_t)&sdns_h_s_10_array;
-    sdns_h_s_11_array_now = (uintptr_t)&sdns_h_s_11_array;
-    sdns_h_s_12_array_now = (uintptr_t)&sdns_h_s_12_array;
-    sdns_h_s_13_array_now = (uintptr_t)&sdns_h_s_13_array;
-    sdns_h_s_14_array_now = (uintptr_t)&sdns_h_s_14_array;
-    sdns_h_s_15_array_now = (uintptr_t)&sdns_h_s_15_array;
-    sdns_h_s_16_array_now = (uintptr_t)&sdns_h_s_16_array;
-    sdns_sharpen_tt_opt_array_now = (uintptr_t)&sdns_sharpen_tt_opt_array;
-    sdns_ave_fliter_now = (uintptr_t)&sdns_ave_fliter;
-    sdns_sp_uu_thres_array_now = (uintptr_t)&sdns_sp_uu_thres_array;
-    sdns_sp_uu_stren_array_now = (uintptr_t)&sdns_sp_uu_stren_array;
-    sdns_sp_mv_uu_thres_array_now = (uintptr_t)&sdns_sp_mv_uu_thres_array;
-    sdns_sp_mv_uu_stren_array_now = (uintptr_t)&sdns_sp_mv_uu_stren_array;
-    sdns_ave_thres_array_now =
-        (uintptr_t (*)())(uintptr_t)&sdns_ave_thres_array;
+    if (regtrace_t23_source_sdns_wdr) {
+        sdns_h_mv_wei_now = (uintptr_t)&sdns_h_mv_wei_wdr;
+        sdns_std_thr2_array_now = (uintptr_t)&sdns_std_thr2_wdr_array;
+        sdns_grad_zx_thres_array_now =
+            (uintptr_t)&sdns_grad_zx_thres_wdr_array;
+        sdns_grad_zy_thres_array_now =
+            (uintptr_t)&sdns_grad_zy_thres_wdr_array;
+        sdns_std_thr1_array_now = (uintptr_t)&sdns_std_thr1_wdr_array;
+        sdns_h_s_1_array_now = (uintptr_t)&sdns_h_s_1_wdr_array;
+        sdns_h_s_2_array_now = (uintptr_t)&sdns_h_s_2_wdr_array;
+        sdns_h_s_3_array_now = (uintptr_t)&sdns_h_s_3_wdr_array;
+        sdns_h_s_4_array_now = (uintptr_t)&sdns_h_s_4_wdr_array;
+        sdns_h_s_5_array_now = (uintptr_t)&sdns_h_s_5_wdr_array;
+        sdns_h_s_6_array_now = (uintptr_t)&sdns_h_s_6_wdr_array;
+        sdns_h_s_7_array_now = (uintptr_t)&sdns_h_s_7_wdr_array;
+        sdns_h_s_8_array_now = (uintptr_t)&sdns_h_s_8_wdr_array;
+        sdns_h_s_9_array_now = (uintptr_t)&sdns_h_s_9_wdr_array;
+        sdns_h_s_10_array_now = (uintptr_t)&sdns_h_s_10_wdr_array;
+        sdns_h_s_11_array_now = (uintptr_t)&sdns_h_s_11_wdr_array;
+        sdns_h_s_12_array_now = (uintptr_t)&sdns_h_s_12_wdr_array;
+        sdns_h_s_13_array_now = (uintptr_t)&sdns_h_s_13_wdr_array;
+        sdns_h_s_14_array_now = (uintptr_t)&sdns_h_s_14_wdr_array;
+        sdns_h_s_15_array_now = (uintptr_t)&sdns_h_s_15_wdr_array;
+        sdns_h_s_16_array_now = (uintptr_t)&sdns_h_s_16_wdr_array;
+        sdns_sharpen_tt_opt_array_now =
+            (uintptr_t)&sdns_sharpen_tt_opt_wdr_array;
+        sdns_ave_fliter_now = (uintptr_t)&sdns_ave_fliter_wdr;
+        sdns_sp_uu_thres_array_now =
+            (uintptr_t)&sdns_sp_uu_thres_wdr_array;
+        sdns_sp_uu_stren_array_now =
+            (uintptr_t)&sdns_sp_uu_stren_wdr_array;
+        sdns_sp_mv_uu_thres_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_thres_wdr_array;
+        sdns_sp_mv_uu_stren_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_stren_wdr_array;
+        sdns_ave_thres_array_now = (uintptr_t)&sdns_ave_thres_wdr_array;
+    } else {
+        sdns_h_mv_wei_now = (uintptr_t)&sdns_h_mv_wei;
+        sdns_std_thr2_array_now = (uintptr_t)&sdns_std_thr2_array;
+        sdns_grad_zx_thres_array_now =
+            (uintptr_t)&sdns_grad_zx_thres_array;
+        sdns_grad_zy_thres_array_now =
+            (uintptr_t)&sdns_grad_zy_thres_array;
+        sdns_std_thr1_array_now = (uintptr_t)&sdns_std_thr1_array;
+        sdns_h_s_1_array_now = (uintptr_t)&sdns_h_s_1_array;
+        sdns_h_s_2_array_now = (uintptr_t)&sdns_h_s_2_array;
+        sdns_h_s_3_array_now = (uintptr_t)&sdns_h_s_3_array;
+        sdns_h_s_4_array_now = (uintptr_t)&sdns_h_s_4_array;
+        sdns_h_s_5_array_now = (uintptr_t)&sdns_h_s_5_array;
+        sdns_h_s_6_array_now = (uintptr_t)&sdns_h_s_6_array;
+        sdns_h_s_7_array_now = (uintptr_t)&sdns_h_s_7_array;
+        sdns_h_s_8_array_now = (uintptr_t)&sdns_h_s_8_array;
+        sdns_h_s_9_array_now = (uintptr_t)&sdns_h_s_9_array;
+        sdns_h_s_10_array_now = (uintptr_t)&sdns_h_s_10_array;
+        sdns_h_s_11_array_now = (uintptr_t)&sdns_h_s_11_array;
+        sdns_h_s_12_array_now = (uintptr_t)&sdns_h_s_12_array;
+        sdns_h_s_13_array_now = (uintptr_t)&sdns_h_s_13_array;
+        sdns_h_s_14_array_now = (uintptr_t)&sdns_h_s_14_array;
+        sdns_h_s_15_array_now = (uintptr_t)&sdns_h_s_15_array;
+        sdns_h_s_16_array_now = (uintptr_t)&sdns_h_s_16_array;
+        sdns_sharpen_tt_opt_array_now =
+            (uintptr_t)&sdns_sharpen_tt_opt_array;
+        sdns_ave_fliter_now = (uintptr_t)&sdns_ave_fliter;
+        sdns_sp_uu_thres_array_now = (uintptr_t)&sdns_sp_uu_thres_array;
+        sdns_sp_uu_stren_array_now = (uintptr_t)&sdns_sp_uu_stren_array;
+        sdns_sp_mv_uu_thres_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_thres_array;
+        sdns_sp_mv_uu_stren_array_now =
+            (uintptr_t)&sdns_sp_mv_uu_stren_array;
+        sdns_ave_thres_array_now = (uintptr_t)&sdns_ave_thres_array;
+    }
 
     regtrace_t23_source_sdns_gain_old = 0xffffffffU;
     ret = regtrace_t23_source_sdns_load_tuning();

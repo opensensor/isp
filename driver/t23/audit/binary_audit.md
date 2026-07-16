@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1043 | 1328 |
 | Functions with disassembly | 1043 | 1328 |
-| Executable section bytes | 443376 | 367456 |
+| Executable section bytes | 443376 | 369536 |
 | Initialized writable bytes | 216768 | 46528 |
 | Uninitialized writable bytes | 164688 | 1151216 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
 - unmatched: OEM-only=61 recovered-only=345
-- matched instructions: OEM=106302 recovered=73766 ratio=0.694
-- classes: stub=47 collapsed=88 shorter=195 same_count=200 similar=378 larger=32 expanded=42
+- matched instructions: OEM=106302 recovered=74286 ratio=0.699
+- classes: stub=46 collapsed=88 shorter=195 same_count=200 similar=379 larger=32 expanded=42
 
 ## Allocated Section Delta
 
@@ -32,20 +32,20 @@
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 16 | 0 | -16 |
-| `.modinfo` | 1260 | 6100 | +4840 |
+| `.modinfo` | 1260 | 6132 | +4872 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 75568 | +68848 |
+| `.rodata` | 6720 | 75584 | +68864 |
 | `.rodata.str1.4` | 22728 | 21496 | -1232 |
-| `.text` | 442176 | 366128 | -76048 |
+| `.text` | 442176 | 368208 | -73968 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
-| `__param` | 224 | 2384 | +2160 |
+| `__param` | 224 | 2400 | +2176 |
 
 ## Function Outliers
 
-Showing 250 of 810 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 809 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -61,7 +61,6 @@ Showing 250 of 810 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `tisp_ae1_process_impl` | `tisp_ae1_process_impl` | 273 | 2 | 0.007 | -271 | 11->0 | 26->0 |
 | stub | exact_name | `tisp_msca_api_set_line` | `tisp_msca_api_set_line` | 273 | 2 | 0.007 | -271 | 22->0 | 23->0 |
 | stub | exact_name | `tx_isp_probe` | `tx_isp_probe` | 235 | 2 | 0.009 | -233 | 23->0 | 25->0 |
-| stub | exact_name | `tisp_sdns_wdr_en` | `tisp_sdns_wdr_en` | 231 | 2 | 0.009 | -229 | 0->0 | 3->0 |
 | stub | exact_name | `csi_core_ops_init` | `csi_core_ops_init` | 188 | 5 | 0.027 | -183 | 6->0 | 22->1 |
 | stub | exact_name | `tisp_cust_mode_s_ctrl` | `tisp_cust_mode_s_ctrl` | 161 | 6 | 0.037 | -155 | 22->0 | 9->0 |
 | stub | exact_name | `subsection_map` | `subsection_map` | 155 | 3 | 0.019 | -152 | 4->0 | 15->0 |
@@ -256,7 +255,6 @@ Showing 250 of 810 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae1_expt` | `tisp_ae1_expt` | 351 | 183 | 0.521 | -168 | 23->21 | 30->14 |
 | shorter | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 260 | 203 | 0.781 | -57 | 46->38 | 1->1 |
 | shorter | exact_name | `tisp_clm_interp_by_ct` | `tisp_clm_interp_by_ct` | 254 | 145 | 0.571 | -109 | 8->6 | 35->17 |
-| shorter | exact_name | `tiziano_sdns_init` | `tiziano_sdns_init` | 242 | 157 | 0.649 | -85 | 2->4 | 2->2 |
 | shorter | exact_name | `Tiziano_af_fpga` | `Tiziano_af_fpga` | 229 | 156 | 0.681 | -73 | 13->11 | 5->5 |
 | shorter | exact_name | `tisp_ae0_get_hist` | `tisp_ae0_get_hist` | 206 | 158 | 0.767 | -48 | 5->5 | 22->17 |
 | shorter | exact_name | `tiziano_ae_set_hardware_param` | `tiziano_ae_set_hardware_param` | 206 | 162 | 0.786 | -44 | 19->19 | 7->5 |
@@ -299,6 +297,8 @@ Showing 250 of 810 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_adr_set_params` | `tisp_adr_set_params` | 67 | 50 | 0.746 | -17 | 5->5 | 3->3 |
 | shorter | exact_name | `tiziano_defog_set_reg_params` | `tiziano_defog_set_reg_params` | 66 | 49 | 0.742 | -17 | 1->1 | 2->2 |
 | shorter | exact_name | `subdev_sensor_ops_enum_input` | `subdev_sensor_ops_enum_input` | 64 | 38 | 0.594 | -26 | 2->0 | 10->8 |
+| shorter | exact_name | `tiziano_gamma_lut_parameter` | `tiziano_gamma_lut_parameter` | 63 | 33 | 0.524 | -30 | 3->3 | 1->1 |
+| shorter | exact_name | `tiziano_csccr_init` | `tiziano_csccr_init` | 62 | 45 | 0.726 | -17 | 4->2 | 0->0 |
 
 ## Replacement Map
 
