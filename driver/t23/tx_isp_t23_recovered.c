@@ -9933,6 +9933,11 @@ static uint regtrace_t23_source_awb_hlil_bg;
 static uint regtrace_t23_source_awb_hlil_ct = 5084;
 static uint regtrace_t23_source_awb_last_rgain = 0x820;
 static uint regtrace_t23_source_awb_last_bgain = 0x858;
+static uint regtrace_t23_source_awb_last_mf_rg = 0x100;
+static uint regtrace_t23_source_awb_last_mf_bg = 0x100;
+static uint regtrace_t23_source_wb_mode;
+static uint regtrace_t23_source_wb_mode_rg = 0x100;
+static uint regtrace_t23_source_wb_mode_bg = 0x100;
 static bool regtrace_t23_source_bcsh_events;
 static uint regtrace_t23_source_bcsh_ev_events;
 static uint regtrace_t23_source_bcsh_ct_events;
@@ -10154,6 +10159,12 @@ module_param_named(source_awb_last_rgain,
                    regtrace_t23_source_awb_last_rgain, uint, 0444);
 module_param_named(source_awb_last_bgain,
                    regtrace_t23_source_awb_last_bgain, uint, 0444);
+module_param_named(source_awb_last_mf_rg,
+                   regtrace_t23_source_awb_last_mf_rg, uint, 0444);
+module_param_named(source_awb_last_mf_bg,
+                   regtrace_t23_source_awb_last_mf_bg, uint, 0444);
+module_param_named(source_wb_mode,
+                   regtrace_t23_source_wb_mode, uint, 0444);
 module_param_named(source_bcsh_events,
                    regtrace_t23_source_bcsh_events, bool, 0644);
 module_param_named(source_bcsh_ev_events,
@@ -49651,209 +49662,66 @@ int32_t tiziano_awb_init(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020560 origin=fragment_seed original=tisp_g_wb_mode */
 int32_t tisp_g_wb_mode(void *arg1)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *out = arg1;
+
+    if (!out)
+        return -EINVAL;
+    memcpy(out, tisp_wb_attr, 0x1c);
+    if (out[0] == 0U) {
+        out[1] = ACCESS_ONCE(regtrace_t23_source_awb_last_mf_rg);
+        out[2] = ACCESS_ONCE(regtrace_t23_source_awb_last_mf_bg);
+    }
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000205d4 origin=fragment_seed original=tisp_awb_set_frz */
 int32_t tisp_awb_set_frz(uint32_t a0, uint32_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    a1 = a1 & 255;
-    v0 = (uintptr_t *)&ivdc_threshold_line;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&awb_frz)) = a1;
-
+    (void)a0;
+    ACCESS_ONCE(awb_frz) = a1 & 0xffU;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000205e4 origin=fragment_seed original=tisp_awb_get_frz */
 int32_t tisp_awb_get_frz(uint32_t a0, uintptr_t a1)
 {
-	uint8_t awb_frz_value;
-	awb_frz_value = *(uint8_t *)((char *)current_thread_info() + 31524);
-	*(uint8_t *)a1 = awb_frz_value;
-	return awb_frz_value;
+    uint8_t value = (uint8_t)ACCESS_ONCE(awb_frz);
+
+    (void)a0;
+    if (!a1)
+        return -EINVAL;
+    *(uint8_t *)a1 = value;
+    return value;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000205f4 origin=fragment_seed original=tisp_s_wb_mode */
 int32_t tisp_s_wb_mode(uint32_t a0, uint32_t a1, uint32_t a2)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    static const uint16_t presets[7][2] = {
+        { 0x180, 0x180 },
+        { 0x1b6, 0x12f },
+        { 0x0db, 0x2b2 },
+        { 0x0f0, 0x234 },
+        { 0x13b, 0x1cb },
+        { 0x1d4, 0x117 },
+        { 0x0f0, 0x178 },
+    };
+    uint32_t attr[3] = { a0, a1, a2 };
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v0 = a0 < 10;
-
-    /* fragment 2: StackAccess */
-    local_14 = ra;
-    local_18 = a0;
-    local_1c = a1;
-    local_20 = a2;
-
-    /* fragment 3: Branch */
-    local_24 = a3;
-    if (v0 == 0) { goto tisp_s_wb_mode0x128; }
-
-    /* fragment 4: ConstantLoad */
-    v0 = ((char *)&jump_table_6d860);
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a0 + 0);
-
-    /* fragment 6: IndirectTailCall */
-    /* unmatched fragment 6 (IndirectTailCall): indirect tail call target register v1 has no known symbol */
-    /* asm: 20628:	00600008 	jr	v1 */
-    /* asm: 2062c:	3c020000 	lui	v0,0x0 */
-
-    /* fragment 7: Branch */
-    *(uint32_t *)((char *)v0 + 32208) = 0;
-    goto tisp_s_wb_mode0x14c;
-
-    /* fragment 8: Branch */
-    v1 = 1;
-    goto tisp_s_wb_mode0x114;
-
-    /* fragment 9: Arithmetic */
-    v1 = 2;
-
-    /* fragment 10: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v0 = v0 + 32208;
-    v1 = 384;
-
-    /* fragment 11: Branch */
-    *(uint32_t *)((char *)v0 + 4) = v1;
-    goto tisp_s_wb_mode0x7c;
-
-    /* fragment 12: Arithmetic */
-    v1 = 3;
-
-    /* fragment 13: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v1 = 438;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = v1;
-    v1 = 303;
-
-tisp_s_wb_mode0x7c:
-    /* fragment 14: Branch */
-    *(uint32_t *)((char *)v0 + 8) = v1;
-    goto tisp_s_wb_mode0x14c;
-
-    /* fragment 15: Arithmetic */
-    v1 = 4;
-
-    /* fragment 16: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v1 = 219;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = v1;
-
-    /* fragment 17: Branch */
-    v1 = 690;
-    goto tisp_s_wb_mode0x7c;
-
-    /* fragment 18: Arithmetic */
-    v1 = 5;
-
-    /* fragment 19: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v1 = 240;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = v1;
-
-    /* fragment 20: Branch */
-    v1 = 564;
-    goto tisp_s_wb_mode0x7c;
-
-    /* fragment 21: Arithmetic */
-    v1 = 6;
-
-    /* fragment 22: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v1 = 315;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = v1;
-
-    /* fragment 23: Branch */
-    v1 = 459;
-    goto tisp_s_wb_mode0x7c;
-
-    /* fragment 24: Arithmetic */
-    v1 = 7;
-
-    /* fragment 25: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v1 = 468;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = v1;
-
-    /* fragment 26: Branch */
-    v1 = 279;
-    goto tisp_s_wb_mode0x7c;
-
-    /* fragment 27: Arithmetic */
-    v1 = 8;
-
-    /* fragment 28: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v1 = 240;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = v1;
-
-    /* fragment 29: Branch */
-    v1 = 376;
-    goto tisp_s_wb_mode0x7c;
-
-    /* fragment 30: Arithmetic */
-    v1 = 9;
-
-tisp_s_wb_mode0x114:
-    /* fragment 31: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tisp_wb_attr)) = v1;
-    v0 = v0 + 32208;
-    *(uint32_t *)((char *)v0 + 4) = a1;
-
-    /* fragment 32: Branch */
-    *(uint32_t *)((char *)v0 + 8) = a2;
-    goto tisp_s_wb_mode0x14c;
-
-tisp_s_wb_mode0x128:
-    /* fragment 33: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC2, 0 + 5020, 1367); /* jalr target resolved by relocation */
-
-tisp_s_wb_mode0x14c:
-    /* fragment 34: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 35: Arithmetic */
-    v0 = (uintptr_t *)&ivdc_threshold_line;
-    v1 = 1;
-
-    /* fragment 36: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&awb_moa)) = v1;
-    v0 = 0;
-
-    /* fragment 37: Epilogue */
-    /* function epilogue: restore registers and return */
+    if (a0 >= 10U) {
+        isp_printf(2, "%s:%d::Can not support this mode!!!\n",
+                   "tisp_s_wb_mode", 1367);
+        return 0;
+    }
+    if (a0 >= 2U && a0 <= 8U) {
+        attr[1] = presets[a0 - 2U][0];
+        attr[2] = presets[a0 - 2U][1];
+    }
+    memcpy(tisp_wb_attr, attr, sizeof(attr));
+    ACCESS_ONCE(regtrace_t23_source_wb_mode_rg) = attr[1];
+    ACCESS_ONCE(regtrace_t23_source_wb_mode_bg) = attr[2];
+    ACCESS_ONCE(regtrace_t23_source_wb_mode) = a0;
+    ACCESS_ONCE(awb_moa) = 1U;
 
     return 0;
 }
@@ -49906,18 +49774,45 @@ int32_t tisp_api_awb_zone_weight_get(int32_t arg1, int32_t *arg2, int32_t *arg3)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000207d8 origin=model_output original=tiziano_s_awb_start */
 int32_t tiziano_s_awb_start(int32_t arg1, int32_t arg2, int32_t arg3)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    uint32_t *mf = (uint32_t *)(void *)_awb_mf_para;
+    uint32_t rg = (uint32_t)arg2;
+    uint32_t bg = (uint32_t)arg3;
+    uint32_t gain_rg;
+    uint32_t gain_bg;
+
+    (void)arg1;
+    if (tparams_day) {
+        uint32_t *start = (uint32_t *)(tparams_day + 0x10e8U);
+
+        start[0] = rg;
+        start[1] = bg;
+        start[2] = rg;
+        start[3] = bg;
+    }
+    mf[2] = rg;
+    mf[3] = bg;
+    mf[4] = rg;
+    mf[5] = bg;
+    regtrace_t23_source_awb_last_mf_rg = rg;
+    regtrace_t23_source_awb_last_mf_bg = bg;
+    gain_rg = ((rg * regtrace_t23_awb_hlil_wb_static[0] + 0x80U) >> 8) << 2;
+    gain_bg = ((bg * regtrace_t23_awb_hlil_wb_static[1] + 0x80U) >> 8) << 2;
+    if (!ACCESS_ONCE(awb_frz))
+        regtrace_t23_source_awb_apply_gains(gain_rg, gain_bg);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002082c origin=model_output original=tiziano_g_awb_start */
 int32_t tiziano_g_awb_start(int32_t arg0, int32_t *arg2)
 {
-    int32_t *p = _awb_mf_para;
-    ((void **)arg2)[0] = p[2];
-    int32_t result = p[3];
-    ((void **)arg2)[1] = result;
-    return result;
+    int32_t *p = (int32_t *)(void *)_awb_mf_para;
+
+    (void)arg0;
+    if (!arg2)
+        return -EINVAL;
+    arg2[0] = p[2];
+    arg2[1] = p[3];
+    return p[3];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020848 origin=model_output original=tiziano_s_wb_algo */

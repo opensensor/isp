@@ -471,8 +471,11 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
 {
     struct regtrace_t23_awb_hlil_result result;
     unsigned long flags;
+    uint32_t auto_mf_rg;
+    uint32_t auto_mf_bg;
     uint32_t mf_rg;
     uint32_t mf_bg;
+    uint32_t wb_mode;
     uint32_t gain_rg;
     uint32_t gain_bg;
     int ret;
@@ -487,8 +490,25 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
     if (!ret) {
         regtrace_t23_awb_hlil_history_update(
             &result.rg, &result.bg, &result.ct);
-        mf_rg = regtrace_t23_awb_hlil_ratio_to_mf(result.rg);
-        mf_bg = regtrace_t23_awb_hlil_ratio_to_mf(result.bg);
+        auto_mf_rg = regtrace_t23_awb_hlil_ratio_to_mf(result.rg);
+        auto_mf_bg = regtrace_t23_awb_hlil_ratio_to_mf(result.bg);
+        regtrace_t23_source_awb_last_mf_rg = auto_mf_rg;
+        regtrace_t23_source_awb_last_mf_bg = auto_mf_bg;
+        ((uint32_t *)(void *)_awb_mf_para)[4] = auto_mf_rg;
+        ((uint32_t *)(void *)_awb_mf_para)[5] = auto_mf_bg;
+
+        wb_mode = ACCESS_ONCE(regtrace_t23_source_wb_mode);
+        mf_rg = auto_mf_rg;
+        mf_bg = auto_mf_bg;
+        if (wb_mode == 9U) {
+            mf_rg = ((ACCESS_ONCE(regtrace_t23_source_wb_mode_rg) + 0x40U) *
+                     auto_mf_rg) >> 6;
+            mf_bg = ((ACCESS_ONCE(regtrace_t23_source_wb_mode_bg) + 0x40U) *
+                     auto_mf_bg) >> 6;
+        } else if (wb_mode != 0U) {
+            mf_rg = ACCESS_ONCE(regtrace_t23_source_wb_mode_rg);
+            mf_bg = ACCESS_ONCE(regtrace_t23_source_wb_mode_bg);
+        }
         gain_rg = (mf_rg * regtrace_t23_awb_hlil_wb_static[0] +
                    (1U << (REGTRACE_T23_AWB_HLIL_POINT_POSITION - 1U))) >>
                   REGTRACE_T23_AWB_HLIL_POINT_POSITION;
@@ -543,12 +563,13 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
             regtrace_t23_source_clm_tuning_init &&
             result.ct >= 1000U && result.ct <= 10000U)
             tisp_clm_ct_update(0, result.ct);
-        if ((gain_rg > regtrace_t23_source_awb_last_rgain ?
+        if (!ACCESS_ONCE(awb_frz) &&
+            ((gain_rg > regtrace_t23_source_awb_last_rgain ?
              gain_rg - regtrace_t23_source_awb_last_rgain :
              regtrace_t23_source_awb_last_rgain - gain_rg) > 4U ||
             (gain_bg > regtrace_t23_source_awb_last_bgain ?
              gain_bg - regtrace_t23_source_awb_last_bgain :
-             regtrace_t23_source_awb_last_bgain - gain_bg) > 4U) {
+             regtrace_t23_source_awb_last_bgain - gain_bg) > 4U)) {
             regtrace_t23_source_awb_apply_gains(gain_rg, gain_bg);
             regtrace_t23_source_awb_hlil_updates++;
         }
@@ -557,13 +578,13 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
             !(regtrace_t23_source_awb_hlil_runs &
               (regtrace_t23_source_awb_hlil_runs - 1U)))
             printk(KERN_INFO
-                   "tx_isp_t23_recovered: source AWB HLIL run=%u snapshot=%u bank=%u zones=%u lights=%u ev=%u target=%u/%u ct=%u mf=%u/%u gain=0x%x/0x%x updates=%u\n",
+                   "tx_isp_t23_recovered: source AWB HLIL run=%u snapshot=%u bank=%u zones=%u lights=%u ev=%u target=%u/%u ct=%u mode=%u mf=%u/%u gain=0x%x/0x%x updates=%u\n",
                    regtrace_t23_source_awb_hlil_runs,
                    regtrace_t23_awb_hlil_snapshot_data.snapshot,
                    regtrace_t23_awb_hlil_snapshot_data.bank,
                    result.active_zones, result.light_source_zones,
                    regtrace_t23_source_ae_hlil_ev,
-                   result.rg, result.bg, result.ct,
+                   result.rg, result.bg, result.ct, wb_mode,
                    mf_rg, mf_bg, gain_rg, gain_bg,
                    regtrace_t23_source_awb_hlil_updates);
     } else if (regtrace_t23_source_awb_hlil_runs <= 8U) {

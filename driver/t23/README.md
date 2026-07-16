@@ -108,6 +108,12 @@ Current smoke-test status:
   zone-selection mesh and `_color_temp_mesh` as the final CT mesh; keeping
   those roles distinct corrected the collapsed port's roughly 61,000 K output
   to a stable 4,400 K result in the same 256-frame no-argument run.
+  Public WB controls now implement the T23 mode table, auto-gain reporting,
+  relative-manual mode, start-gain accessors, and a freeze state honored by
+  the live workqueue. A second 256-frame no-argument run retained neutral
+  `UAVG/VAVG` of `128.0/127.1`. The binary audit moved `tisp_g_wb_mode` from a
+  hard stub to the OEM instruction count and `tisp_s_wb_mode` out of the
+  collapsed class, reducing totals from 52 stubs/93 collapses to 51/91.
   The earlier Q12 gray-world loop remains available only as a diagnostic
   fallback.
 - The exact T23 CCM startup path applies the tuning blob's EV-derived
