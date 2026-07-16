@@ -50188,6 +50188,56 @@ int32_t tisp_awb_deinit(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021230 origin=fragment_seed original=tisp_lsc_lut_valid_judge */
 int32_t tisp_lsc_lut_valid_judge(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
 {
+    static const uint8_t supported_mesh_sizes[10] = {
+        0x10U, 0x14U, 0x18U, 0x1cU, 0x20U,
+        0x24U, 0x28U, 0x30U, 0x40U, 0x50U,
+    };
+    uint32_t mesh_height = a2 & 0xffffU;
+    uint32_t mesh_width = a3 & 0xffffU;
+    uint32_t stride = arg4 & 0xffffU;
+    uint32_t rows;
+    uint32_t cols;
+    uint32_t cols_padded;
+    bool height_valid = false;
+    bool width_valid = false;
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(supported_mesh_sizes); ++i) {
+        if (mesh_height == supported_mesh_sizes[i])
+            height_valid = true;
+        if (mesh_width == supported_mesh_sizes[i])
+            width_valid = true;
+    }
+    if (!height_valid || !width_valid || !stride) {
+        isp_printf(1,
+                   "\n---- [func:%s] LSC mesh size is error ----\n",
+                   "tisp_lsc_lut_valid_judge");
+        return -EINVAL;
+    }
+
+    rows = a0 / mesh_height + 1U;
+    if (a0 % mesh_height)
+        rows++;
+    cols = a1 / mesh_width + 1U;
+    if (a1 % mesh_width)
+        cols++;
+    cols_padded = cols + (cols & 1U);
+
+    if (cols_padded != stride * 2U) {
+        isp_printf(1,
+                   "\n---- [func:%s] LSC mesh line offset is error ----\n",
+                   "tisp_lsc_lut_valid_judge");
+        return -EINVAL;
+    }
+    if (rows * stride >= 0x481U) {
+        isp_printf(1,
+                   "\n---- [func:%s] LSC mesh lut size is error ----\n",
+                   "tisp_lsc_lut_valid_judge");
+        return -EINVAL;
+    }
+    return 1;
+
+#if 0 /* Retain the generated body below as recovery provenance. */
     uint32_t *local_10 = 0;
     uint32_t local_20 = 0;
     uint32_t local_24 = 0;
@@ -50384,6 +50434,7 @@ tisp_lsc_lut_valid_judge0x178:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000213c8 origin=fragment_seed original=tisp_lsc_wdr_en */
@@ -50460,7 +50511,11 @@ void tiziano_lsc_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021550 origin=fragment_seed original=tiziano_lsc_dn_params_refresh */
 int32_t tiziano_lsc_dn_params_refresh(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
+    regtrace_t23_source_lsc_tables_initialized = false;
+    regtrace_t23_source_lsc_initialize_tables();
+    last_status_mirror_en = 0;
+    last_status_flip_en = 0;
+    regtrace_t23_source_lsc_update_pending = true;
     return 0;
 }
 
@@ -50989,10 +51044,12 @@ int32_t tisp_lsc_mirror_flip(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3,
         cols++;
     cols_padded = cols + (cols & 1U);
 
-    if ((cols_padded >> 1) != REGTRACE_T23_LSC_SC2336_LUT_STRIDE ||
-        rows * (cols_padded >> 1) * 3U >
-            REGTRACE_T23_LSC_SC2336_LUT_NUM)
-        return -EINVAL;
+    ret = tisp_lsc_lut_valid_judge(
+        a2, a1, REGTRACE_T23_LSC_SC2336_MESH_HEIGHT,
+        REGTRACE_T23_LSC_SC2336_MESH_WIDTH,
+        REGTRACE_T23_LSC_SC2336_LUT_STRIDE);
+    if (ret < 0)
+        return ret;
     if (system_reg_read(0xcU) & BIT(6))
         return 0;
 

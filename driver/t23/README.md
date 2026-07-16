@@ -146,7 +146,13 @@ Current smoke-test status:
   and reduces the remaining collapse total from 90 to 89. Default and forced
   `source_lsc_initial_flip=1 source_lsc_initial_mirror=1` cycles each passed
   256 RTSP frames; the forced path retained neutral `UAVG/VAVG` of
-  `127.9/126.6` without new shading or packed-coefficient artifacts.
+  `127.9/126.6` without new shading or packed-coefficient artifacts. The exact
+  T23 mesh-size allowlist, padded-stride check, and LUT-capacity check now
+  guard that transform path, while day/night refresh resets the mutable tables
+  and orientation state before forcing an update. The validator moved from
+  `0.24x` to `0.69x` OEM size and the refresh is `1.12x`; a forced validator
+  cycle passed 256 frames at `UAVG/VAVG` `128.5/126.7` and reduced the audit
+  total from 89 to 88 collapses.
 - Static initialization has reached the same visual plateau as the T31/T40
   recovery work. Further bring-up uses `tx-isp-t23-hlil.txt` as the behavioral
   specification for the dynamic 3A event path; T31/T40 source and history are
