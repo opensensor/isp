@@ -10,25 +10,25 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 1043 | 1328 |
-| Functions with disassembly | 1043 | 1328 |
-| Executable section bytes | 443376 | 376976 |
-| Initialized writable bytes | 216768 | 196432 |
-| Uninitialized writable bytes | 164688 | 1134784 |
+| Function symbols | 1043 | 1329 |
+| Functions with disassembly | 1043 | 1329 |
+| Executable section bytes | 443376 | 378112 |
+| Initialized writable bytes | 216768 | 196560 |
+| Uninitialized writable bytes | 164688 | 1134656 |
 
 - direct matches: 947
 - replacement matches: 35 (missing=0)
-- unmatched: OEM-only=61 recovered-only=345
-- matched instructions: OEM=106302 recovered=76091 ratio=0.716
-- classes: stub=39 collapsed=80 shorter=189 same_count=201 similar=389 larger=42 expanded=42
+- unmatched: OEM-only=61 recovered-only=346
+- matched instructions: OEM=106302 recovered=76355 ratio=0.718
+- classes: stub=38 collapsed=80 shorter=190 same_count=201 similar=389 larger=42 expanded=42
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 164688 | 1134784 | +970096 |
-| `.data` | 216480 | 196144 | -20336 |
+| `.bss` | 164688 | 1134656 | +969968 |
+| `.data` | 216480 | 196272 | -20208 |
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 16 | 0 | -16 |
@@ -36,8 +36,8 @@
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 6720 | 75632 | +68912 |
-| `.rodata.str1.4` | 22728 | 21688 | -1040 |
-| `.text` | 442176 | 375648 | -66528 |
+| `.rodata.str1.4` | 22728 | 21788 | -940 |
+| `.text` | 442176 | 376784 | -65392 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
@@ -45,7 +45,7 @@
 
 ## Function Outliers
 
-Showing 250 of 798 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 799 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -57,7 +57,6 @@ Showing 250 of 798 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 501 | 8 | 0.016 | -493 | 18->0 | 129->2 |
 | stub | exact_name | `dump_ivdc_regs` | `dump_ivdc_regs` | 433 | 2 | 0.005 | -431 | 46->0 | 1->0 |
 | stub | exact_name | `tisp_ae_algo_handle` | `tisp_ae_algo_handle` | 322 | 2 | 0.006 | -320 | 40->0 | 8->0 |
-| stub | exact_name | `video_input_cmd_set` | `video_input_cmd_set` | 308 | 3 | 0.010 | -305 | 20->0 | 50->0 |
 | stub | exact_name | `tisp_ae1_process_impl` | `tisp_ae1_process_impl` | 273 | 2 | 0.007 | -271 | 11->0 | 26->0 |
 | stub | exact_name | `tisp_msca_api_set_line` | `tisp_msca_api_set_line` | 273 | 2 | 0.007 | -271 | 22->0 | 23->0 |
 | stub | exact_name | `tx_isp_probe` | `tx_isp_probe` | 235 | 2 | 0.009 | -233 | 23->0 | 25->0 |
@@ -238,6 +237,7 @@ Showing 250 of 798 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tiziano_bcsh_lut_parameter` | `tiziano_bcsh_lut_parameter` | 373 | 238 | 0.638 | -135 | 29->29 | 13->4 |
 | shorter | exact_name | `subsection` | `subsection` | 372 | 237 | 0.637 | -135 | 20->16 | 17->13 |
 | shorter | exact_name | `tisp_ae1_expt` | `tisp_ae1_expt` | 351 | 183 | 0.521 | -168 | 23->21 | 30->14 |
+| shorter | exact_name | `video_input_cmd_set` | `video_input_cmd_set` | 308 | 236 | 0.766 | -72 | 20->13 | 50->39 |
 | shorter | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 260 | 203 | 0.781 | -57 | 46->38 | 1->1 |
 | shorter | exact_name | `tisp_clm_interp_by_ct` | `tisp_clm_interp_by_ct` | 254 | 145 | 0.571 | -109 | 8->6 | 35->17 |
 | shorter | exact_name | `cm_control` | `cm_control` | 229 | 135 | 0.590 | -94 | 9->1 | 15->9 |

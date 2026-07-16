@@ -939,7 +939,8 @@ static uintptr_t data_a8f60;
 static uintptr_t data_a8f64;
 static uintptr_t data_a8f68;
 static struct file_operations video_input_cmd_fops;
-static unsigned char video_input_cmd_buf[128];
+static unsigned char video_input_cmd_buf[128] = "null";
+static struct proc_dir_entry *regtrace_t23_isp_proc_root;
 static const char LC5[] = "The parameter is invalid!\n";
 static const char LC6[] = "get %s failed!\n";
 static const char LC7[] = "The %s was not found!\n";
@@ -8665,9 +8666,10 @@ int32_t tx_isp_vin_init(void *arg1, int32_t arg2);
 int32_t subdev_sensor_ops_set_input(uintptr_t a0, uintptr_t a1, uint32_t a2);
 int32_t tx_isp_vin_reset(void *arg1);
 int tx_isp_vin_probe(struct platform_device *pdev);
-int32_t video_input_cmd_open(uint32_t a0, uint32_t a1);
-int64_t video_input_cmd_set(uint32_t a0, uint32_t a1, uint32_t a2);
-int video_input_cmd_show(void *arg1);
+int video_input_cmd_open(struct inode *inode, struct file *file);
+ssize_t video_input_cmd_set(struct file *file, const char __user *buffer,
+                            size_t count, loff_t *ppos);
+int video_input_cmd_show(struct seq_file *m, void *unused);
 int32_t subdev_sensor_ops_release_all_sensor(void *arg1);
 int tx_isp_vin_slake_subdev(uintptr_t a0);
 int32_t isp_i2c_new_subdev_board(uint32_t a0, uintptr_t a1, uint32_t a2);
@@ -9736,6 +9738,30 @@ static int tx_isp_sinfo_init(void)
     }
     proc_create("count", 0444, regtrace_sinfo_root, &regtrace_sinfo_count_fops);
     return 0;
+}
+
+static int regtrace_t23_vin_proc_init(void)
+{
+    regtrace_t23_isp_proc_root = proc_mkdir("jz/isp", NULL);
+    if (!regtrace_t23_isp_proc_root)
+        return -ENOMEM;
+
+    if (!proc_create("vin", 0644, regtrace_t23_isp_proc_root,
+                     &video_input_cmd_fops)) {
+        remove_proc_subtree("jz/isp", NULL);
+        regtrace_t23_isp_proc_root = NULL;
+        return -ENOMEM;
+    }
+
+    return 0;
+}
+
+static void regtrace_t23_vin_proc_exit(void)
+{
+    if (regtrace_t23_isp_proc_root) {
+        remove_proc_subtree("jz/isp", NULL);
+        regtrace_t23_isp_proc_root = NULL;
+    }
 }
 
 static void tx_isp_sinfo_exit(void)
@@ -16887,7 +16913,11 @@ static struct file_operations tx_isp_fops = {
 };
 static struct file_operations video_input_cmd_fops = {
     .owner = THIS_MODULE,
-    .open = (int (*)(struct inode *, struct file *))video_input_cmd_open,
+    .open = video_input_cmd_open,
+    .read = seq_read,
+    .write = video_input_cmd_set,
+    .llseek = seq_lseek,
+    .release = single_release,
 };
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000000 origin=fragment_seed original=isp_printf */
 int32_t isp_printf(uint32_t level, const char *fmt, ...)
@@ -21121,73 +21151,106 @@ int tx_isp_vin_probe(struct platform_device *pdev)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000040e0 origin=fragment_seed original=video_input_cmd_open */
-int32_t video_input_cmd_open(uint32_t a0, uint32_t a1)
+int video_input_cmd_open(struct inode *inode, struct file *file)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_14 = 0;
-    uint32_t *a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t t9 = 0;
-    uint32_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a1;
-    v0 = (uintptr_t *)PDE_DATA((void *)(uint32_t *)a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    a1 = (uint32_t *)&slock_af_hist;
-    a0 = s0;
-    t9 = (uintptr_t)&private_single_open_size;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    a3 = 512;
-    a2 = v0;
-    a1 = a1 + 17912;
-    t9 = t9;
-
-    /* fragment 6: IndirectTailCall */
-    return private_single_open_size(a0, a1, a2, a3);
-
-    return 0;
+    return private_single_open_size(file, video_input_cmd_show,
+                                    PDE_DATA(inode), 0x200U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000004128 origin=fragment_seed original=video_input_cmd_set */
-int64_t video_input_cmd_set(uint32_t a0, uint32_t a1, uint32_t a2)
+ssize_t __attribute__((__noinline__, __noclone__))
+video_input_cmd_set(struct file *file, const char __user *buffer,
+                    size_t count, loff_t *ppos)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    char stack_buffer[129];
+    char *command = stack_buffer;
+    char *cursor;
+    char *end;
+    unsigned long address;
+    unsigned long value;
+    uint8_t register_value;
+    int ret;
+
+    (void)file;
+    (void)ppos;
+    if (!count)
+        return 0;
+    if (count > PAGE_SIZE)
+        return -E2BIG;
+    if (count > sizeof(stack_buffer) - 1U) {
+        command = private_kmalloc(count + 1U, GFP_KERNEL);
+        if (!command)
+            return -ENOMEM;
+    }
+    if (copy_from_user(command, buffer, count)) {
+        ret = -EFAULT;
+        goto out;
+    }
+    command[count] = '\0';
+
+    if (!regtrace_t23_sensor_client) {
+        scnprintf(video_input_cmd_buf, sizeof(video_input_cmd_buf),
+                  "sensor doesn't work, please enable sensor\n");
+        ret = count;
+        goto out;
+    }
+
+    if (!strncmp(command, "r sen_reg", 9)) {
+        cursor = command + 9;
+        while (isspace(*cursor))
+            ++cursor;
+        address = simple_strtoul(cursor, NULL, 0);
+        ret = regtrace_t23_sensor_read_u8((uint16_t)address,
+                                         &register_value);
+        if (ret)
+            scnprintf(video_input_cmd_buf, sizeof(video_input_cmd_buf),
+                      "failed %d\n", ret);
+        else
+            scnprintf(video_input_cmd_buf, sizeof(video_input_cmd_buf),
+                      "0x%x\n", register_value);
+        ret = count;
+    } else if (!strncmp(command, "w sen_reg", 9)) {
+        cursor = command + 9;
+        while (isspace(*cursor))
+            ++cursor;
+        address = simple_strtoul(cursor, &end, 0);
+        while (isspace(*end))
+            ++end;
+        value = simple_strtoul(end, NULL, 0);
+        ret = regtrace_t23_sensor_write_u8((uint16_t)address,
+                                          (uint8_t)value);
+        scnprintf(video_input_cmd_buf, sizeof(video_input_cmd_buf),
+                  ret ? "failed %d\n" : "successful\n", ret);
+        ret = count;
+    } else if (!strncmp(command, "r list", 6) ||
+               !strncmp(command, "r all", 5)) {
+        scnprintf(video_input_cmd_buf, sizeof(video_input_cmd_buf),
+                  "unsupported\n");
+        ret = count;
+    } else {
+        scnprintf(video_input_cmd_buf, sizeof(video_input_cmd_buf), "null");
+        ret = count;
+    }
+
+out:
+    if (command != stack_buffer)
+        private_kfree(command);
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000045f8 origin=fragment_seed original=video_input_cmd_show */
-int video_input_cmd_show(void *arg1)
+int video_input_cmd_show(struct seq_file *m, void *unused)
 {
-	void **ptr = *(void ***)((char *)arg1 + 0x3c);
-	void *v0 = NULL;
-
-	if (ptr && (unsigned long)ptr < 0xfffff001UL)
-		v0 = *(void ***)((char *)ptr + 0xd8);
-
-	if (v0) {
-		int val = *(int *)((char *)v0 + 0xf4);
-		if (val >= 4) {
-			private_seq_printf((int)arg1, (int)&LC17, (int)&video_input_cmd_buf);
-			return 0;
-		}
-	}
-
-	private_seq_printf((int)arg1, (int)"sensor doesn't work, please enable sensor\n", 0);
-	return 0;
+    (void)unused;
+    if (!m)
+        return -EINVAL;
+    if (!regtrace_t23_sensor_client ||
+        !regtrace_t23_sensor_client->adapter)
+        private_seq_printf(m,
+            "sensor doesn't work, please enable sensor\n");
+    else
+        private_seq_printf(m, "%s", video_input_cmd_buf);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000004668 origin=fragment_seed original=subdev_sensor_ops_release_all_sensor */
@@ -99258,14 +99321,21 @@ int32_t init_module(void)
     ret = tx_isp_sinfo_init();
     if (ret != 0)
         return ret;
+    ret = regtrace_t23_vin_proc_init();
+    if (ret != 0) {
+        tx_isp_sinfo_exit();
+        return ret;
+    }
     ret = regtrace_register_tx_isp_miscdev();
     if (ret != 0) {
+        regtrace_t23_vin_proc_exit();
         tx_isp_sinfo_exit();
         return ret;
     }
     ret = regtrace_register_isp_m0_miscdev();
     if (ret != 0) {
         regtrace_unregister_tx_isp_miscdev();
+        regtrace_t23_vin_proc_exit();
         tx_isp_sinfo_exit();
         return ret;
     }
@@ -99273,6 +99343,7 @@ int32_t init_module(void)
     if (ret != 0) {
         regtrace_unregister_isp_m0_miscdev();
         regtrace_unregister_tx_isp_miscdev();
+        regtrace_t23_vin_proc_exit();
         tx_isp_sinfo_exit();
         return ret;
     }
@@ -99281,6 +99352,7 @@ int32_t init_module(void)
         regtrace_unregister_misc_ivdc();
         regtrace_unregister_isp_m0_miscdev();
         regtrace_unregister_tx_isp_miscdev();
+        regtrace_t23_vin_proc_exit();
         tx_isp_sinfo_exit();
         return ret;
     }
@@ -99290,6 +99362,7 @@ int32_t init_module(void)
         regtrace_unregister_misc_ivdc();
         regtrace_unregister_isp_m0_miscdev();
         regtrace_unregister_tx_isp_miscdev();
+        regtrace_t23_vin_proc_exit();
         tx_isp_sinfo_exit();
     }
     return ret;
@@ -99314,6 +99387,7 @@ void cleanup_module(void)
     regtrace_unregister_misc_ivdc();
     regtrace_unregister_isp_m0_miscdev();
     regtrace_unregister_tx_isp_miscdev();
+    regtrace_t23_vin_proc_exit();
     tx_isp_sinfo_exit();
     return;
 #endif

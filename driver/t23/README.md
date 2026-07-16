@@ -265,6 +265,14 @@ Current smoke-test status:
   faults, and clean reboots. `cm_control` now compiles to 135 instructions
   versus 229 OEM and moves out of the collapsed class, reducing the audit to
   39 hard stubs and 80 collapses.
+- The VIN sensor-command interface now exposes the reconstructed file
+  operations at `/proc/jz/isp/vin`, including bounded user-buffer handling,
+  read-only sensor-register access, sensor-register writes, and complete
+  procfs init/unwind/exit ownership. The open callback has the exact OEM
+  instruction count, the show callback is 29 instructions versus 28 OEM, and
+  the command parser is 236 versus 308 with 13 of 20 OEM calls retained. This
+  removes `video_input_cmd_set` from the hard-stub class and reduces the audit
+  to 38 hard stubs with 80 collapses.
 - `source_lsc_ct` selects a generated SC2336 lens-shading image. The default is
   the OEM 5000 K startup; 3300 K is an exact A-to-T interpolation retained for
   indoor color diagnostics. The recovered transform primitives now use the
