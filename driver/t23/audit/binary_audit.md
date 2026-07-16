@@ -1,8 +1,8 @@
 # Binary Assembly Audit
 
 - schema: `regtrace-binary-audit-v1`
-- OEM: `/home/matteius/re-framework/tx-isp-t23.ko`
-- recovered: `driver/t23/tx_isp_t23_recovered.ko`
+- OEM: `tx-isp-t23.ko`
+- recovered: `open-tx-isp/driver/t23/tx_isp_t23_recovered.ko`
 - objdump counts exclude relocation records
 - thresholds: min_oem_insns=24 stub_insns=8 collapse=0.50 similar=0.80..1.25 expansion=2.00
 
@@ -10,17 +10,17 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 1043 | 1290 |
-| Functions with disassembly | 1043 | 1290 |
-| Executable section bytes | 443376 | 353008 |
-| Initialized writable bytes | 216768 | 49696 |
+| Function symbols | 1043 | 1320 |
+| Functions with disassembly | 1043 | 1320 |
+| Executable section bytes | 443376 | 356096 |
+| Initialized writable bytes | 216768 | 44992 |
 | Uninitialized writable bytes | 164688 | 1134624 |
 
-- direct matches: 978
-- replacement matches: 4 (missing=0)
-- unmatched: OEM-only=61 recovered-only=308
-- matched instructions: OEM=106302 recovered=72589 ratio=0.683
-- classes: stub=57 collapsed=84 shorter=196 same_count=204 similar=374 larger=29 expanded=38
+- direct matches: 948
+- replacement matches: 34 (missing=0)
+- unmatched: OEM-only=61 recovered-only=338
+- matched instructions: OEM=106302 recovered=71725 ratio=0.675
+- classes: stub=57 collapsed=94 shorter=205 same_count=197 similar=362 larger=29 expanded=38
 
 ## Allocated Section Delta
 
@@ -28,24 +28,24 @@
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
 | `.bss` | 164688 | 1134624 | +969936 |
-| `.data` | 216480 | 49408 | -167072 |
+| `.data` | 216480 | 44704 | -171776 |
 | `.exit.text` | 1184 | 0 | -1184 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 16 | 0 | -16 |
-| `.modinfo` | 1260 | 5160 | +3900 |
+| `.modinfo` | 1260 | 5276 | +4016 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 6720 | 73824 | +67104 |
-| `.rodata.str1.4` | 22728 | 19764 | -2964 |
-| `.text` | 442176 | 351680 | -90496 |
+| `.rodata` | 6720 | 74288 | +67568 |
+| `.rodata.str1.4` | 22728 | 20012 | -2716 |
+| `.text` | 442176 | 354768 | -87408 |
 | `.text.unlikely` | 0 | 1328 | +1328 |
 | `__ksymtab` | 208 | 176 | -32 |
 | `__ksymtab_strings` | 537 | 477 | -60 |
-| `__param` | 224 | 1968 | +1744 |
+| `__param` | 224 | 2016 | +1792 |
 
 ## Function Outliers
 
-Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 822 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -139,6 +139,7 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `cm_control` | `cm_control` | 229 | 25 | 0.109 | -204 | 9->0 | 15->3 |
 | collapsed | exact_name | `tisp_ae_manual_set` | `tisp_ae_manual_set` | 227 | 89 | 0.392 | -138 | 10->8 | 12->12 |
 | collapsed | exact_name | `tisp_vic_ctrl_ioctl` | `tisp_vic_ctrl_ioctl` | 206 | 10 | 0.049 | -196 | 16->1 | 31->0 |
+| collapsed | replacement | `tisp_sdns_gaussian_k_cfg` | `regtrace_t23_sdns_gaussian_k_cfg` | 202 | 16 | 0.079 | -186 | 64->1 | 0->1 |
 | collapsed | exact_name | `tisp_s_osd_block_attr` | `tisp_s_osd_block_attr` | 168 | 59 | 0.351 | -109 | 3->1 | 10->1 |
 | collapsed | exact_name | `tiziano_ae_init_exp_th` | `tiziano_ae_init_exp_th` | 166 | 30 | 0.181 | -136 | 4->1 | 6->2 |
 | collapsed | exact_name | `ispcore_irq_thread_handle` | `ispcore_irq_thread_handle` | 164 | 34 | 0.207 | -130 | 9->2 | 25->5 |
@@ -147,6 +148,7 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `subdev_sensor_ops_set_input` | `subdev_sensor_ops_set_input` | 147 | 10 | 0.068 | -137 | 10->0 | 29->3 |
 | collapsed | exact_name | `tisp_msca_write_reg` | `tisp_msca_write_reg` | 143 | 48 | 0.336 | -95 | 4->4 | 16->5 |
 | collapsed | exact_name | `printf_func0` | `printf_func0` | 139 | 55 | 0.396 | -84 | 12->3 | 14->4 |
+| collapsed | replacement | `tisp_sdns_gaussian_x_cfg` | `regtrace_t23_sdns_gaussian_x_cfg` | 138 | 16 | 0.116 | -122 | 32->1 | 0->1 |
 | collapsed | exact_name | `tx_isp_ivdc_probe` | `tx_isp_ivdc_probe` | 135 | 17 | 0.126 | -118 | 13->2 | 9->0 |
 | collapsed | exact_name | `tx_isp_csi_probe` | `tx_isp_csi_probe` | 134 | 17 | 0.127 | -117 | 14->2 | 9->0 |
 | collapsed | exact_name | `isp_core_cmd_set` | `isp_core_cmd_set` | 131 | 42 | 0.321 | -89 | 8->4 | 22->3 |
@@ -156,6 +158,7 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `ispcore_core_ops_ioctl` | `ispcore_core_ops_ioctl` | 116 | 37 | 0.319 | -79 | 3->2 | 27->7 |
 | collapsed | exact_name | `tisp_af_set_attr_refresh` | `tisp_af_set_attr_refresh` | 112 | 45 | 0.402 | -67 | 0->5 | 1->0 |
 | collapsed | exact_name | `tisp_s_defog_str_internal` | `tisp_s_defog_str_internal` | 110 | 29 | 0.264 | -81 | 9->0 | 3->1 |
+| collapsed | replacement | `tisp_sdns_r_s_mv_cfg` | `regtrace_t23_sdns_r_s_mv_cfg` | 106 | 38 | 0.358 | -68 | 16->3 | 0->3 |
 | collapsed | exact_name | `tisp_ae_g_scene_luma` | `tisp_ae_g_scene_luma` | 106 | 42 | 0.396 | -64 | 4->0 | 4->5 |
 | collapsed | exact_name | `fix_point_mult2_64` | `fix_point_mult2_64` | 104 | 41 | 0.394 | -63 | 5->5 | 0->0 |
 | collapsed | exact_name | `tisp_lsc_lut_valid_judge` | `tisp_lsc_lut_valid_judge` | 102 | 24 | 0.235 | -78 | 2->2 | 14->1 |
@@ -166,15 +169,22 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `tiziano_sharpen_init` | `tiziano_sharpen_init` | 85 | 29 | 0.341 | -56 | 2->2 | 2->2 |
 | collapsed | exact_name | `tisp_defog_img_filter5` | `tisp_defog_img_filter5` | 85 | 40 | 0.471 | -45 | 0->0 | 5->4 |
 | collapsed | exact_name | `tisp_defog_wdr_en` | `tisp_defog_wdr_en` | 81 | 13 | 0.160 | -68 | 2->1 | 3->1 |
+| collapsed | replacement | `tisp_sdns_sp_d_b_wei_np_array_cfg` | `regtrace_t23_sdns_sp_d_b_wei_np_array_cfg` | 80 | 31 | 0.388 | -49 | 6->1 | 0->2 |
+| collapsed | replacement | `tisp_sdns_sp_d_w_wei_np_array_cfg` | `regtrace_t23_sdns_sp_d_w_wei_np_array_cfg` | 80 | 31 | 0.388 | -49 | 6->1 | 0->2 |
+| collapsed | replacement | `tisp_sdns_sp_ud_b_wei_np_array_cfg` | `regtrace_t23_sdns_sp_ud_b_wei_np_array_cfg` | 80 | 31 | 0.388 | -49 | 6->1 | 0->2 |
+| collapsed | replacement | `tisp_sdns_sp_ud_w_wei_np_array_cfg` | `regtrace_t23_sdns_sp_ud_w_wei_np_array_cfg` | 80 | 31 | 0.388 | -49 | 6->1 | 0->2 |
 | collapsed | exact_name | `tisp_msca_set_omi_api` | `tisp_msca_set_omi_api` | 79 | 37 | 0.468 | -42 | 9->5 | 5->1 |
 | collapsed | exact_name | `tiziano_ae_dn_params_refresh` | `tiziano_ae_dn_params_refresh` | 73 | 29 | 0.397 | -44 | 7->3 | 0->1 |
 | collapsed | exact_name | `frame_channel_vidioc_get_fmt` | `frame_channel_vidioc_get_fmt` | 69 | 30 | 0.435 | -39 | 5->2 | 7->2 |
 | collapsed | exact_name | `tisp_sharpen_wdr_en` | `tisp_sharpen_wdr_en` | 67 | 13 | 0.194 | -54 | 0->0 | 2->2 |
 | collapsed | exact_name | `isp_csi_show` | `isp_csi_show` | 64 | 12 | 0.188 | -52 | 4->1 | 9->0 |
+| collapsed | replacement | `tisp_sdns_w_thres_cfg` | `regtrace_t23_sdns_w_thres_cfg` | 62 | 19 | 0.306 | -43 | 8->1 | 0->1 |
+| collapsed | replacement | `tisp_sdns_sp_uu_np_array_cfg` | `regtrace_t23_sdns_sp_uu_np_array_cfg` | 62 | 25 | 0.403 | -37 | 4->1 | 0->1 |
 | collapsed | exact_name | `tisp_ctr_md_np_cfg` | `tisp_ctr_md_np_cfg` | 62 | 26 | 0.419 | -36 | 4->1 | 0->1 |
 | collapsed | exact_name | `tisp_ctr_std_np_cfg` | `tisp_ctr_std_np_cfg` | 62 | 26 | 0.419 | -36 | 4->1 | 0->1 |
 | collapsed | exact_name | `tx_isp_csi_remove` | `tx_isp_csi_remove` | 61 | 10 | 0.164 | -51 | 6->1 | 1->0 |
 | collapsed | exact_name | `sensor_set_mode` | `sensor_set_mode` | 60 | 13 | 0.217 | -47 | 2->1 | 4->0 |
+| collapsed | replacement | `tisp_sdns_d_s1_thres_cfg` | `regtrace_t23_sdns_d_s1_thres_cfg` | 59 | 22 | 0.373 | -37 | 8->1 | 0->2 |
 | collapsed | exact_name | `tisp_ae_s_comp` | `tisp_ae_s_comp` | 50 | 22 | 0.440 | -28 | 1->1 | 3->0 |
 | collapsed | exact_name | `isp_pre_frame_dequeue` | `isp_pre_frame_dequeue` | 48 | 15 | 0.312 | -33 | 4->2 | 0->0 |
 | collapsed | exact_name | `tisp_csccr_write_reg` | `tisp_csccr_write_reg` | 46 | 22 | 0.478 | -24 | 4->4 | 1->1 |
@@ -261,6 +271,7 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae1_expt` | `tisp_ae1_expt` | 351 | 183 | 0.521 | -168 | 23->21 | 30->14 |
 | shorter | exact_name | `tiziano_adr_params_refresh` | `tiziano_adr_params_refresh` | 349 | 241 | 0.691 | -108 | 52->38 | 8->1 |
 | shorter | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 260 | 203 | 0.781 | -57 | 46->38 | 1->1 |
+| shorter | exact_name | `tiziano_sdns_init` | `tiziano_sdns_init` | 242 | 157 | 0.649 | -85 | 2->4 | 2->2 |
 | shorter | exact_name | `Tiziano_af_fpga` | `Tiziano_af_fpga` | 229 | 156 | 0.681 | -73 | 13->11 | 5->5 |
 | shorter | exact_name | `tisp_ae0_get_hist` | `tisp_ae0_get_hist` | 206 | 158 | 0.767 | -48 | 5->5 | 22->17 |
 | shorter | exact_name | `tiziano_ae_set_hardware_param` | `tiziano_ae_set_hardware_param` | 206 | 162 | 0.786 | -44 | 19->19 | 7->5 |
@@ -288,17 +299,6 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `Tiziano_awb_set_gain` | `Tiziano_awb_set_gain` | 99 | 66 | 0.667 | -33 | 7->6 | 4->1 |
 | shorter | exact_name | `fix_point_div_64` | `fix_point_div_64` | 94 | 51 | 0.543 | -43 | 3->3 | 9->3 |
 | shorter | exact_name | `ispcore_sync_sensor_attr` | `ispcore_sync_sensor_attr` | 91 | 60 | 0.659 | -31 | 4->4 | 7->7 |
-| shorter | exact_name | `tiziano_set_parameter_clm` | `tiziano_set_parameter_clm` | 91 | 72 | 0.791 | -19 | 6->6 | 4->4 |
-| shorter | exact_name | `tisp_event_push` | `tisp_event_push` | 88 | 63 | 0.716 | -25 | 4->1 | 2->1 |
-| shorter | exact_name | `tisp_msca_para_calc` | `tisp_msca_para_calc` | 86 | 62 | 0.721 | -24 | 0->6 | 17->10 |
-| shorter | exact_name | `tisp_s_dpc_str_internal` | `tisp_s_dpc_str_internal` | 85 | 49 | 0.576 | -36 | 0->0 | 6->2 |
-| shorter | exact_name | `tisp_msca_api_set_fcrop` | `tisp_msca_api_set_fcrop` | 82 | 61 | 0.744 | -21 | 6->5 | 3->3 |
-| shorter | exact_name | `tisp_csccr_update_para` | `tisp_csccr_update_para` | 80 | 58 | 0.725 | -22 | 0->0 | 6->7 |
-| shorter | exact_name | `tisp_dpc_s_par_cfg` | `tisp_dpc_s_par_cfg` | 79 | 62 | 0.785 | -17 | 5->5 | 4->4 |
-| shorter | exact_name | `isp_vic_frd_show` | `isp_vic_frd_show` | 78 | 48 | 0.615 | -30 | 3->3 | 6->5 |
-| shorter | exact_name | `tisp_ae_s_min` | `tisp_ae_s_min` | 72 | 46 | 0.639 | -26 | 3->3 | 6->1 |
-| shorter | exact_name | `tx_isp_subdev_pipo` | `tx_isp_subdev_pipo` | 70 | 45 | 0.643 | -25 | 1->0 | 5->3 |
-| shorter | exact_name | `tx_isp_vin_slake_subdev` | `tx_isp_vin_slake_subdev` | 68 | 54 | 0.794 | -14 | 6->5 | 7->6 |
 
 ## Replacement Map
 
@@ -308,3 +308,33 @@ Showing 250 of 773 outliers. JSON and CSV contain every comparison row.
 | `tisp_mdns_c_3d_param_cfg` | `regtrace_t23_mdns_c_3d_param_cfg.isra.0` |
 | `tisp_mdns_y_2d_param_cfg` | `regtrace_t23_mdns_y_2d_param_cfg.isra.0` |
 | `tisp_mdns_y_3d_param_cfg` | `regtrace_t23_mdns_y_3d_param_cfg.isra.0` |
+| `tisp_sdns_d_s1_thres_cfg` | `regtrace_t23_sdns_d_s1_thres_cfg` |
+| `tisp_sdns_dark_light_tt_opt_cfg` | `regtrace_t23_sdns_dark_light_tt_opt_cfg` |
+| `tisp_sdns_g_det_val_div_cfg` | `regtrace_t23_sdns_g_det_val_div_cfg` |
+| `tisp_sdns_gaussian_k_cfg` | `regtrace_t23_sdns_gaussian_k_cfg` |
+| `tisp_sdns_gaussian_x_cfg` | `regtrace_t23_sdns_gaussian_x_cfg` |
+| `tisp_sdns_gaussian_y_cfg` | `regtrace_t23_sdns_gaussian_y_cfg` |
+| `tisp_sdns_grad_thres_opt_cfg` | `regtrace_t23_sdns_grad_thres_opt_cfg` |
+| `tisp_sdns_h_line_cfg` | `regtrace_t23_sdns_h_line_cfg` |
+| `tisp_sdns_h_mv_cfg` | `regtrace_t23_sdns_h_mv_cfg` |
+| `tisp_sdns_h_mv_wei_opt_cfg` | `regtrace_t23_sdns_h_mv_wei_opt_cfg` |
+| `tisp_sdns_h_s_cfg` | `regtrace_t23_sdns_h_s_cfg` |
+| `tisp_sdns_hls_en_ave_filter_cfg` | `regtrace_t23_sdns_hls_en_ave_filter_cfg` |
+| `tisp_sdns_mv_seg_number_num_thres_cfg` | `regtrace_t23_sdns_mv_seg_number_num_thres_cfg` |
+| `tisp_sdns_r_s_mv_cfg` | `regtrace_t23_sdns_r_s_mv_cfg` |
+| `tisp_sdns_sp_d_b_wei_np_array_cfg` | `regtrace_t23_sdns_sp_d_b_wei_np_array_cfg` |
+| `tisp_sdns_sp_d_w_wei_np_array_cfg` | `regtrace_t23_sdns_sp_d_w_wei_np_array_cfg` |
+| `tisp_sdns_sp_std_en_seg_opt_cfg` | `regtrace_t23_sdns_sp_std_en_seg_opt_cfg` |
+| `tisp_sdns_sp_ud_b_limit_srd_ll_hl_flat_cfg` | `regtrace_t23_sdns_sp_ud_b_limit_srd_ll_hl_flat_cfg` |
+| `tisp_sdns_sp_ud_b_stren_cfg` | `regtrace_t23_sdns_sp_ud_b_stren_cfg` |
+| `tisp_sdns_sp_ud_b_wei_np_array_cfg` | `regtrace_t23_sdns_sp_ud_b_wei_np_array_cfg` |
+| `tisp_sdns_sp_ud_stren_shift_opt_cfg` | `regtrace_t23_sdns_sp_ud_stren_shift_opt_cfg` |
+| `tisp_sdns_sp_ud_v2_v1_coef_w_wei_opt_cfg` | `regtrace_t23_sdns_sp_ud_v2_v1_coef_w_wei_opt_cfg` |
+| `tisp_sdns_sp_ud_w_limit_b_wei_opt_cfg` | `regtrace_t23_sdns_sp_ud_w_limit_b_wei_opt_cfg` |
+| `tisp_sdns_sp_ud_w_stren_cfg` | `regtrace_t23_sdns_sp_ud_w_stren_cfg` |
+| `tisp_sdns_sp_ud_w_wei_np_array_cfg` | `regtrace_t23_sdns_sp_ud_w_wei_np_array_cfg` |
+| `tisp_sdns_sp_uu_cfg` | `regtrace_t23_sdns_sp_uu_cfg` |
+| `tisp_sdns_sp_uu_np_array_cfg` | `regtrace_t23_sdns_sp_uu_np_array_cfg` |
+| `tisp_sdns_sp_v2_d_w_b_ll_hl_flat_cfg` | `regtrace_t23_sdns_sp_v2_d_w_b_ll_hl_flat_cfg` |
+| `tisp_sdns_w_thres_cfg` | `regtrace_t23_sdns_w_thres_cfg` |
+| `tiziano_sdns_params_refresh` | `regtrace_t23_source_sdns_load_tuning` |

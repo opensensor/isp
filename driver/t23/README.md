@@ -30,6 +30,17 @@ Current smoke-test status:
   A no-argument load has passed 256-frame RTSP tests with both luma and chroma
   filters active; `source_park_uninitialized_mdns=1` remains a diagnostic
   bypass.
+- The T23 SDNS spatial denoise path is enabled by default. Its 123 tuning
+  fields occupy the exact contiguous `0xbf18..0xd1d0` SC2336 payload that ends
+  where MDNS begins. The register writers use the readable T31 packing with
+  the T23 Gaussian-Y constant, and replace generated bodies that performed
+  unaligned or out-of-bounds loads. Startup selects the non-WDR tables,
+  commits the complete `0x8800..0x8b4c` image, and clears top-bypass bit 15.
+  Runtime total-gain changes refresh the interpolation subset with OEM
+  `0x100` hysteresis. Parked, explicitly active, and no-argument active device
+  cycles passed full Raptor startup and RTSP checks; `source_sdns_internal_enable=0`
+  retains a diagnostic top-level bypass while still validating register
+  programming.
 - The source-derived AWB statistics setup produces valid 15x15-zone data in
   all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0
