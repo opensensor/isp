@@ -33,6 +33,10 @@
     "tisp_mdns_c_3d_param_cfg": "regtrace_t23_mdns_c_3d_param_cfg.isra.0",
     "tisp_mdns_y_2d_param_cfg": "regtrace_t23_mdns_y_2d_param_cfg.isra.0",
     "tisp_mdns_y_3d_param_cfg": "regtrace_t23_mdns_y_3d_param_cfg.isra.0",
-    "tiziano_sdns_params_refresh": "regtrace_t23_source_sdns_load_tuning"
+    "tiziano_sdns_params_refresh": "regtrace_t23_source_sdns_load_tuning",
+    "tiziano_defog_params_refresh": [
+      "tiziano_defog_params_refresh",
+      "regtrace_t23_source_defog_load_tuning"
+    ]
   }
 }

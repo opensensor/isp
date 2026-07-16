@@ -57,6 +57,15 @@ Current smoke-test status:
   `source_adr_internal_enable=0` is the default. The large recovered
   `tiziano_adr_algorithm` and `Tiziano_adr_fpga` bodies remain unsuitable for
   dynamic use; `source_adr_dynamic=0` prevents their event registration.
+- The T23 defog front end loads its exact `0x13728..0x13f7c` SC2336 payload,
+  programs the OEM 10x18 block boundaries, and recovers the 3x3 max filter,
+  weighted spatial filter, 32-bin LUT reducer, strength interpolation, and
+  arbitrary-resolution radial geometry builder. Default parked, dynamic
+  geometry, and static-active cycles each passed 256-frame RTSP tests. Static
+  activation did not materially change channel means or the severe highlight
+  clipping, so `source_defog_internal_enable=0` remains the default. The large
+  statistics-driven `tisp_defog_soft_process` is still a hard stub and is not
+  registered on the source event path.
 - The source-derived AWB statistics setup produces valid 15x15-zone data in
   all four DMA banks when top-bypass bit 25 is cleared. The T23 tuning blob's
   input selector (`0xb004` bit 16 set) is required; the T31-derived selector-0

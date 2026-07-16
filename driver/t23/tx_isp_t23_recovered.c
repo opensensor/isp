@@ -9822,6 +9822,7 @@ int32_t tisp_ydns_refresh(uint32_t gain_q16);
 int32_t tiziano_ydns_init(void);
 int32_t tiziano_defog_set_reg_params(void);
 int32_t tiziano_defog_params_init(void);
+int32_t defog_3x3_5x5_params_init(uint32_t width, uint32_t height);
 int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1);
 int32_t tisp_msca_addr_fifo_write(char arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_channel_start(int32_t arg1);
@@ -9875,7 +9876,13 @@ static bool regtrace_t23_source_lsc_events = true;
 static bool regtrace_t23_source_lsc_update_pending;
 static bool regtrace_t23_source_dpc_tuning_init = true;
 static bool regtrace_t23_source_ydns_tuning_init = true;
-static bool regtrace_t23_source_defog_tuning_init;
+static bool regtrace_t23_source_defog_tuning_init = true;
+static bool regtrace_t23_source_defog_internal_enable;
+static bool regtrace_t23_source_defog_geometry_init;
+static bool regtrace_t23_source_defog_initialized;
+static uint regtrace_t23_source_defog_width;
+static uint regtrace_t23_source_defog_height;
+static uint regtrace_t23_source_defog_geometry_runs;
 static uint regtrace_t23_source_lsc_ct = 5000U;
 static uint regtrace_t23_source_lsc_runtime_ct = 5000U;
 static uint regtrace_t23_source_lsc_last_ct = 5000U;
@@ -10045,6 +10052,18 @@ module_param_named(source_ydns_tuning_init,
                    regtrace_t23_source_ydns_tuning_init, bool, 0644);
 module_param_named(source_defog_tuning_init,
                    regtrace_t23_source_defog_tuning_init, bool, 0644);
+module_param_named(source_defog_internal_enable,
+                   regtrace_t23_source_defog_internal_enable, bool, 0644);
+module_param_named(source_defog_geometry_init,
+                   regtrace_t23_source_defog_geometry_init, bool, 0644);
+module_param_named(source_defog_initialized,
+                   regtrace_t23_source_defog_initialized, bool, 0444);
+module_param_named(source_defog_width,
+                   regtrace_t23_source_defog_width, uint, 0444);
+module_param_named(source_defog_height,
+                   regtrace_t23_source_defog_height, uint, 0444);
+module_param_named(source_defog_geometry_runs,
+                   regtrace_t23_source_defog_geometry_runs, uint, 0444);
 module_param_named(source_lsc_ct, regtrace_t23_source_lsc_ct, uint, 0644);
 module_param_named(source_lsc_runtime_ct,
                    regtrace_t23_source_lsc_runtime_ct, uint, 0444);
@@ -11641,6 +11660,7 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_sdns_writers.inc"
 #include "tx_isp_t23_mdns_layout.inc"
 #include "tx_isp_t23_adr_layout.inc"
+#include "tx_isp_t23_defog_layout.inc"
 #include "tx_isp_t23_mdns_interp.inc"
 #include "tx_isp_t23_mdns_writers.inc"
 #include "tx_isp_t23_sharpen_tuning.inc"
@@ -11761,6 +11781,43 @@ static int regtrace_t23_source_adr_load_tuning(void)
            regtrace_t23_get_le32(param_adr_para_array + 28U),
            regtrace_t23_get_le32(param_adr_map_kneepoint_array),
            regtrace_t23_get_le32(param_adr_map_kneepoint_array + 88U));
+    return 0;
+}
+
+static int regtrace_t23_source_defog_load_tuning(void)
+{
+    unsigned char *params;
+    int ret;
+
+    params = private_vmalloc(REGTRACE_T23_DEFOG_TUNING_SIZE);
+    if (!params)
+        return -ENOMEM;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_DEFOG_TUNING_OFFSET,
+                                        params,
+                                        REGTRACE_T23_DEFOG_TUNING_SIZE);
+    if (ret) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: defog tuning refresh failed path=%s ret=%d\n",
+               regtrace_t23_source_core_tuning_path, ret);
+        private_vfree(params);
+        return ret;
+    }
+
+#define REGTRACE_T23_DEFOG_COPY_FIELD(name, offset, size) \
+    memcpy(&(name), params + (offset), (size));
+    REGTRACE_T23_DEFOG_TUNING_FIELDS(REGTRACE_T23_DEFOG_COPY_FIELD)
+#undef REGTRACE_T23_DEFOG_COPY_FIELD
+
+    private_vfree(params);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: defog tuning loaded main=%x/%x/%x rgbra=%x fpga=%x/%x/%x\n",
+           regtrace_t23_get_le32(param_defog_main_para_array),
+           regtrace_t23_get_le32(param_defog_main_para_array + 4U),
+           regtrace_t23_get_le32(param_defog_main_para_array + 8U),
+           regtrace_t23_get_le32(defog_rgbra_list),
+           regtrace_t23_get_le32(param_defog_fpga_para_array),
+           regtrace_t23_get_le32(param_defog_fpga_para_array + 4U),
+           regtrace_t23_get_le32(param_defog_fpga_para_array + 8U));
     return 0;
 }
 
@@ -12704,6 +12761,114 @@ static void regtrace_t23_source_clm_write_tuning_startup(void)
            (unsigned int)(ARRAY_SIZE(regtrace_t23_clm_sc2336_h) * 4U + 2U));
 }
 
+static void regtrace_t23_source_defog_write_geometry(uint32_t width,
+                                                     uint32_t height)
+{
+    uint32_t row_boundaries[11];
+    uint32_t col_boundaries[19];
+    unsigned int i;
+
+    row_boundaries[0] = 0;
+    for (i = 1; i < ARRAY_SIZE(row_boundaries); ++i)
+        row_boundaries[i] = row_boundaries[i - 1U] + height / 10U +
+                            (i <= height % 10U);
+    col_boundaries[0] = 0;
+    for (i = 1; i < ARRAY_SIZE(col_boundaries); ++i)
+        col_boundaries[i] = col_boundaries[i - 1U] + width / 18U +
+                            (i <= width % 18U);
+
+    for (i = 0; i < 10U; i += 2U)
+        system_reg_write(0x5800U + i * 2U,
+                         (row_boundaries[i + 1U] & 0xfffU) << 16 |
+                         (row_boundaries[i] & 0xfffU));
+    system_reg_write(0x5814U, row_boundaries[10] & 0xfffU);
+
+    for (i = 0; i < 18U; i += 2U)
+        system_reg_write(0x5820U + i * 2U,
+                         (col_boundaries[i + 1U] & 0xfffU) << 16 |
+                         (col_boundaries[i] & 0xfffU));
+    system_reg_write(0x5844U, col_boundaries[18] & 0xfffU);
+    system_reg_write(0x5b04U, 0U);
+    system_reg_write(0x5b0cU, 0xffffffffU);
+    system_reg_write(0x5b00U, 0U);
+}
+
+static int regtrace_t23_source_defog_prepare(uint32_t width, uint32_t height)
+{
+    int ret;
+
+    regtrace_t23_put_le32(defog_ev_list_now,
+                          (uint32_t)(uintptr_t)defog_ev_list);
+    regtrace_t23_put_le32(defog_trsy0_list_now,
+                          (uint32_t)(uintptr_t)defog_trsy0_list);
+    regtrace_t23_put_le32(defog_trsy1_list_now,
+                          (uint32_t)(uintptr_t)defog_trsy1_list);
+    regtrace_t23_put_le32(defog_trsy2_list_now,
+                          (uint32_t)(uintptr_t)defog_trsy2_list);
+    regtrace_t23_put_le32(defog_trsy3_list_now,
+                          (uint32_t)(uintptr_t)defog_trsy3_list);
+    regtrace_t23_put_le32(defog_trsy4_list_now,
+                          (uint32_t)(uintptr_t)defog_trsy4_list);
+    regtrace_t23_put_le32(param_defog_main_para_array_now,
+                          (uint32_t)(uintptr_t)param_defog_main_para_array);
+    regtrace_t23_put_le32(param_defog_fpga_para_array_now,
+                          (uint32_t)(uintptr_t)param_defog_fpga_para_array);
+    regtrace_t23_put_le32(param_defog_block_t_x_array_now,
+                          (uint32_t)(uintptr_t)param_defog_block_t_x_array);
+
+    ret = regtrace_t23_source_defog_load_tuning();
+    if (ret)
+        return ret;
+
+    if (regtrace_t23_source_defog_geometry_init) {
+        ret = defog_3x3_5x5_params_init(width, height);
+        if (ret)
+            return ret;
+        regtrace_t23_source_defog_geometry_runs++;
+    }
+
+    /* A zero RGBRA selector tells the OEM init to use its geometry LUTs. */
+    if (!regtrace_t23_get_le32(defog_rgbra_list)) {
+        memcpy(param_defog_cent3_w_dis_array,
+               param_defog_cent3_w_dis_array_tmp,
+               sizeof(param_defog_cent3_w_dis_array));
+        memcpy(param_defog_cent5_w_dis_array,
+               param_defog_cent5_w_dis_array_tmp,
+               sizeof(param_defog_cent5_w_dis_array));
+        memcpy(param_defog_weightlut22, param_defog_weightlut22_tmp,
+               sizeof(param_defog_weightlut22));
+        memcpy(param_defog_weightlut12, param_defog_weightlut12_tmp,
+               sizeof(param_defog_weightlut12));
+        memcpy(param_defog_weightlut21, param_defog_weightlut21_tmp,
+               sizeof(param_defog_weightlut21));
+        memcpy(param_defog_weightlut20, param_defog_weightlut20_tmp,
+               sizeof(param_defog_weightlut20));
+        memcpy(param_defog_weightlut02, param_defog_weightlut02_tmp,
+               sizeof(param_defog_weightlut02));
+    }
+
+    regtrace_t23_source_defog_write_geometry(width, height);
+    tiziano_defog_params_init();
+    tiziano_defog_set_reg_params();
+    regtrace_t23_source_defog_width = width;
+    regtrace_t23_source_defog_height = height;
+    regtrace_t23_source_defog_initialized = true;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source defog initialized %ux%u bypass=%u geometry=%u cent=%x/%x-%x/%x lut=%x/%x-%x/%x\n",
+           width, height,
+           regtrace_t23_source_defog_internal_enable ? 0U : 1U,
+           regtrace_t23_source_defog_geometry_init ? 1U : 0U,
+           regtrace_t23_get_le32(param_defog_cent3_w_dis_array),
+           regtrace_t23_get_le32(param_defog_cent5_w_dis_array),
+           regtrace_t23_get_le32(param_defog_cent3_w_dis_array + 92U),
+           regtrace_t23_get_le32(param_defog_cent5_w_dis_array + 120U),
+           regtrace_t23_get_le32(param_defog_weightlut02),
+           regtrace_t23_get_le32(param_defog_weightlut22),
+           regtrace_t23_get_le32(param_defog_weightlut02 + 124U),
+           regtrace_t23_get_le32(param_defog_weightlut22 + 124U));
+    return 0;
+}
+
 static void regtrace_t23_source_bcsh_write_neutral(void)
 {
     static const uint32_t bcsh_cfg[][2] = {
@@ -12762,6 +12927,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
         regtrace_t23_source_mdns_initialized = false;
         regtrace_t23_source_sdns_initialized = false;
         regtrace_t23_source_adr_initialized = false;
+        regtrace_t23_source_defog_initialized = false;
         printk(KERN_WARNING "tx_isp_t23_recovered: source core stopped r800=0x%x reason=%s\n",
                system_reg_read(0x800U), reason ? reason : "?");
         return 0;
@@ -12801,8 +12967,11 @@ static int regtrace_t23_source_core_set_stream(int enable,
         bypass &= ~BIT(14);
     if (regtrace_t23_source_ydns_tuning_init)
         bypass &= ~BIT(17);
-    if (regtrace_t23_source_defog_tuning_init)
+    if (regtrace_t23_source_defog_tuning_init &&
+        regtrace_t23_source_defog_internal_enable)
         bypass &= ~BIT(11);
+    else
+        bypass |= BIT(11);
     if (regtrace_t23_source_ccm_tuning_init)
         bypass &= ~BIT(9);
     /* Recovered T23 tisp_init order and parameter-derived top bypass. */
@@ -12828,8 +12997,14 @@ static int regtrace_t23_source_core_set_stream(int enable,
     if (regtrace_t23_source_ydns_tuning_init)
         tiziano_ydns_init();
     if (regtrace_t23_source_defog_tuning_init) {
-        tiziano_defog_params_init();
-        tiziano_defog_set_reg_params();
+        ret = regtrace_t23_source_defog_prepare(REGTRACE_SC2336_WIDTH,
+                                                REGTRACE_SC2336_HEIGHT);
+        if (ret) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: defog source init failed ret=%d\n",
+                   ret);
+            return ret;
+        }
     }
     if (regtrace_t23_source_ccm_tuning_init)
         regtrace_t23_source_ccm_write_tuning_startup();
@@ -61093,6 +61268,38 @@ int32_t tiziano_defog_interrupt_static(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003576c origin=fragment_seed original=tisp_defog_max_filter3 */
 char tisp_defog_max_filter3(uintptr_t a0, uint32_t a1)
 {
+    uint8_t *input = (uint8_t *)a0;
+    uint8_t *output = (uint8_t *)(uintptr_t)a1;
+    uint8_t filtered[180];
+    int row;
+    int col;
+
+    for (row = 0; row < 10; ++row) {
+        int first_row = row ? row - 1 : 0;
+        int last_row = row != 9 ? row + 1 : 9;
+
+        for (col = 0; col < 18; ++col) {
+            int first_col = col ? col - 1 : 0;
+            int last_col = col != 17 ? col + 1 : 17;
+            uint8_t maximum = 0;
+            int scan_row;
+            int scan_col;
+
+            for (scan_row = first_row; scan_row <= last_row; ++scan_row) {
+                for (scan_col = first_col; scan_col <= last_col; ++scan_col) {
+                    uint8_t value = input[scan_row * 18 + scan_col];
+
+                    if (value > maximum)
+                        maximum = value;
+                }
+            }
+            filtered[row * 18 + col] = maximum;
+        }
+    }
+    memcpy(output, filtered, sizeof(filtered));
+    return 0;
+
+#if 0
     uint32_t local_b8 = 0;
     uint32_t local_bc = 0;
     uint32_t local_c0 = 0;
@@ -61276,11 +61483,52 @@ tisp_defog_max_filter30x104:
     /* function epilogue: restore registers and return */
 
     return (char)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000358a4 origin=fragment_seed original=tisp_defog_img_filter5 */
 char tisp_defog_img_filter5(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
+    uint8_t *input = (uint8_t *)a0;
+    uint8_t *output = (uint8_t *)(uintptr_t)a1;
+    const int32_t *kernel = (const int32_t *)a2;
+    uint8_t filtered[180];
+    int row;
+    int col;
+
+    for (row = 0; row < 10; ++row) {
+        int first_row = row ? -1 : 0;
+        int last_row = row != 9 ? 1 : 0;
+
+        for (col = 0; col < 18; ++col) {
+            int first_col = col ? -1 : 0;
+            int last_col = col != 17 ? 1 : 0;
+            uint32_t weighted_sum = 0;
+            uint32_t weight_sum = 0;
+            int row_offset;
+            int col_offset;
+
+            for (row_offset = first_row;
+                 row_offset <= last_row; ++row_offset) {
+                for (col_offset = first_col;
+                     col_offset <= last_col; ++col_offset) {
+                    uint32_t weight =
+                        kernel[(row_offset + 1) * 3 + col_offset + 1];
+                    uint32_t value =
+                        input[(row + row_offset) * 18 + col + col_offset];
+
+                    weight_sum += weight;
+                    weighted_sum += value * weight;
+                }
+            }
+            filtered[row * 18 + col] =
+                (weighted_sum + (weight_sum >> 1)) / weight_sum;
+        }
+    }
+    memcpy(output, filtered, sizeof(filtered));
+    return 0;
+
+#if 0
     uint32_t local_bc = 0;
     uint32_t local_c0 = 0;
     uint32_t local_c4 = 0;
@@ -61441,6 +61689,7 @@ tisp_defog_img_filter50x114:
     /* function epilogue: restore registers and return */
 
     return (char)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000359f8 origin=fragment_seed original=tisp_defog_soft_process */
@@ -61841,8 +62090,12 @@ int32_t tiziano_defog_params_init(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038114 origin=fragment_seed original=tiziano_defog_params_refresh */
 void tiziano_defog_params_refresh(void)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return;
+    int ret = regtrace_t23_source_defog_load_tuning();
+
+    if (ret)
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: retaining compiled defog defaults ret=%d\n",
+               ret);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038570 origin=fragment_seed original=tisp_defog_wdr_en */
@@ -61950,6 +62203,44 @@ int32_t tiziano_defog_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000386fc origin=model_output original=defog_wei_interpcot */
 uint32_t *defog_wei_interpcot(int32_t arg1, int32_t arg2, void *arg3, void *arg4, uint32_t *arg5)
 {
+    const uint32_t *average_map = arg3;
+    const uint32_t *raw_map = arg4;
+    uint32_t sums[32];
+    uint32_t counts[32];
+    int row;
+    int col;
+
+    memset(sums, 0, sizeof(sums));
+    memset(counts, 0, sizeof(counts));
+    tiziano_defog_set_reg_params();
+
+    for (row = 0; row < arg1; ++row) {
+        for (col = 0; col < arg2; ++col) {
+            uint32_t index = row * arg2 + col;
+            uint32_t bin = average_map[index];
+
+            if (bin >= ARRAY_SIZE(sums))
+                bin = ARRAY_SIZE(sums) - 1;
+            sums[bin] += raw_map[index];
+            counts[bin]++;
+        }
+    }
+
+    for (row = 0; row < ARRAY_SIZE(sums); ++row) {
+        uint32_t value = 0;
+
+        if (counts[row]) {
+            value = (sums[row] + (counts[row] >> 1)) / counts[row];
+            if (value >= 0x20)
+                value = 0x1f;
+        }
+        if (row && value < arg5[row - 1])
+            value = arg5[row - 1];
+        arg5[row] = value;
+    }
+    return arg5 + ARRAY_SIZE(sums);
+
+#if 0
     int *i = 0;
 	/* Local buffers: 128 bytes each, zeroed via memset */
 	uint8_t var_98[128];
@@ -62032,13 +62323,176 @@ uint32_t *defog_wei_interpcot(int32_t arg1, int32_t arg2, void *arg3, void *arg4
 	}
 
 	return result;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038860 origin=fragment_seed original=defog_3x3_5x5_params_init */
 int32_t defog_3x3_5x5_params_init(uint32_t a0, uint32_t a1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    static const uint32_t cent3_base[24] = {
+        0xff, 0x209, 0x31f, 0x442, 0x573, 0x6b5, 0x809, 0x971,
+        0xaef, 0xc87, 0xe3b, 0x1012, 0x1210, 0x143c, 0x16a0, 0x1947,
+        0x1c45, 0x1faf, 0x23ad, 0x2877, 0x2e78, 0x3681, 0x42b3, 0x5cf0,
+    };
+    static const uint32_t cent5_dense_base[63] = {
+        0x85, 0x10d, 0x197, 0x223, 0x2b1, 0x342, 0x3d6, 0x46c,
+        0x505, 0x5a0, 0x63f, 0x6e1, 0x786, 0x82e, 0x8da, 0x98a,
+        0xa3d, 0xaf4, 0xbaf, 0xc6f, 0xd33, 0xdfc, 0xec9, 0xf9c,
+        0x1075, 0x1153, 0x1237, 0x1322, 0x1414, 0x150d, 0x160d, 0x1716,
+        0x1827, 0x1941, 0x1a66, 0x1b95, 0x1ccf, 0x1e16, 0x1f6a, 0x20cd,
+        0x223f, 0x23c3, 0x255a, 0x2705, 0x28c8, 0x2aa4, 0x2c9d, 0x2eb7,
+        0x30f6, 0x3360, 0x35fb, 0x38d0, 0x3bea, 0x3f58, 0x432d, 0x46d2,
+        0x4c8b, 0x527a, 0x59be, 0x631b, 0x704e, 0x86de, 0x9db0,
+    };
+    uint32_t rows;
+    uint32_t cols;
+    uint32_t row_bytes;
+    uint32_t block_scale;
+    uint32_t total_blocks;
+    uint32_t bytes;
+    uint32_t *raw22 = NULL;
+    uint32_t *raw21 = NULL;
+    uint32_t *raw20 = NULL;
+    uint32_t *raw12 = NULL;
+    uint32_t *raw11 = NULL;
+    uint32_t *raw10 = NULL;
+    uint32_t *raw02 = NULL;
+    uint32_t *raw01 = NULL;
+    uint32_t *avg22 = NULL;
+    uint32_t *avg21 = NULL;
+    uint32_t *avg12 = NULL;
+    uint32_t *avg20 = NULL;
+    uint32_t *avg02 = NULL;
+    uint32_t i;
+    int row;
+    int col;
+    int ret = 0;
+
+    if (!a0 || !a1)
+        return -EINVAL;
+    rows = (a1 + 5U) / 10U;
+    cols = (a0 + 9U) / 18U;
+    row_bytes = cols << 2;
+    block_scale = ((((a0 * a1) + 0x3f4U) / 0x7e9U) * 100U +
+                   0x32U) / 0x64U;
+
+    for (i = 0; i < ARRAY_SIZE(cent3_base); ++i)
+        regtrace_t23_put_le32(param_defog_cent3_w_dis_array_tmp + i * 4U,
+                              (block_scale * cent3_base[i] + 0x2000U) >> 14);
+    for (i = 0; i < ARRAY_SIZE(cent5_dense_base); ++i) {
+        uint32_t scaled =
+            (block_scale * cent5_dense_base[i] + 0x1000U) >> 13;
+
+        if (i & 1U)
+            regtrace_t23_put_le32(
+                param_defog_cent5_w_dis_array_tmp + (i >> 1) * 4U,
+                scaled);
+    }
+
+    total_blocks = rows * cols;
+    bytes = total_blocks * sizeof(uint32_t);
+#define REGTRACE_T23_DEFOG_ALLOC(name) do { \
+    (name) = private_vmalloc(bytes); \
+    if (!(name)) { ret = -ENOMEM; goto out; } \
+} while (0)
+    REGTRACE_T23_DEFOG_ALLOC(raw22);
+    REGTRACE_T23_DEFOG_ALLOC(raw21);
+    REGTRACE_T23_DEFOG_ALLOC(raw20);
+    REGTRACE_T23_DEFOG_ALLOC(raw12);
+    REGTRACE_T23_DEFOG_ALLOC(raw11);
+    REGTRACE_T23_DEFOG_ALLOC(raw10);
+    REGTRACE_T23_DEFOG_ALLOC(raw02);
+    REGTRACE_T23_DEFOG_ALLOC(raw01);
+    REGTRACE_T23_DEFOG_ALLOC(avg22);
+    REGTRACE_T23_DEFOG_ALLOC(avg21);
+    REGTRACE_T23_DEFOG_ALLOC(avg12);
+    REGTRACE_T23_DEFOG_ALLOC(avg20);
+    REGTRACE_T23_DEFOG_ALLOC(avg02);
+#undef REGTRACE_T23_DEFOG_ALLOC
+
+    memset(raw22, 0, bytes);
+    memset(raw21, 0, bytes);
+    memset(raw20, 0, bytes);
+    memset(raw12, 0, bytes);
+    memset(raw11, 0, bytes);
+    memset(raw10, 0, bytes);
+    memset(raw02, 0, bytes);
+    memset(raw01, 0, bytes);
+
+    for (row = 0; row < rows; ++row) {
+        int y2 = (int)(rows * 5U - 1U) - row * 2;
+        int y1 = y2 - ((int)rows << 1);
+        int y0 = y1 - ((int)rows << 1);
+        int y2_squared = y2 * y2;
+        int y1_squared = y1 * y1;
+        int y0_squared = y0 * y0;
+
+        for (col = 0; col < cols; ++col) {
+            int x2 = (int)(row_bytes + cols - 1U) - col * 2;
+            int x1 = x2 - ((int)cols << 1);
+            int x0 = x1 - ((int)cols << 1);
+            int x2_squared = x2 * x2;
+            int x1_squared = x1 * x1;
+            int x0_squared = x0 * x0;
+            uint32_t index = row * cols + col;
+            uint32_t distance;
+            int bin;
+
+#define REGTRACE_T23_DEFOG_FIND_BIN(target, distance_expr) do { \
+    distance = ((uint32_t)(distance_expr) + 0x20U) >> 6; \
+    for (bin = 0; bin < ARRAY_SIZE(cent5_dense_base); ++bin) { \
+        uint32_t limit = (block_scale * cent5_dense_base[bin] + \
+                          0x1000U) >> 13; \
+        if (distance < limit) { \
+            (target)[index] = 0x3fU - bin; \
+            break; \
+        } \
+    } \
+} while (0)
+            REGTRACE_T23_DEFOG_FIND_BIN(raw22, y2_squared + x2_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw21, y2_squared + x1_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw20, y2_squared + x0_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw12, y1_squared + x2_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw11, y1_squared + x1_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw10, y1_squared + x0_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw02, y0_squared + x2_squared);
+            REGTRACE_T23_DEFOG_FIND_BIN(raw01, y0_squared + x1_squared);
+#undef REGTRACE_T23_DEFOG_FIND_BIN
+
+            avg22[index] = raw11[index] >> 1;
+            avg21[index] = (raw11[index] + raw10[index]) >> 2;
+            avg12[index] = (raw11[index] + raw01[index]) >> 2;
+            avg20[index] = raw10[index] >> 1;
+            avg02[index] = raw01[index] >> 1;
+        }
+    }
+
+    defog_wei_interpcot(rows, cols, avg22, raw22,
+                        (uint32_t *)param_defog_weightlut22_tmp);
+    defog_wei_interpcot(rows, cols, avg21, raw21,
+                        (uint32_t *)param_defog_weightlut21_tmp);
+    defog_wei_interpcot(rows, cols, avg12, raw12,
+                        (uint32_t *)param_defog_weightlut12_tmp);
+    defog_wei_interpcot(rows, cols, avg20, raw20,
+                        (uint32_t *)param_defog_weightlut20_tmp);
+    defog_wei_interpcot(rows, cols, avg02, raw02,
+                        (uint32_t *)param_defog_weightlut02_tmp);
+
+out:
+    private_vfree(raw22);
+    private_vfree(raw21);
+    private_vfree(raw20);
+    private_vfree(raw12);
+    private_vfree(raw11);
+    private_vfree(raw10);
+    private_vfree(raw02);
+    private_vfree(raw01);
+    private_vfree(avg22);
+    private_vfree(avg21);
+    private_vfree(avg12);
+    private_vfree(avg20);
+    private_vfree(avg02);
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038fec origin=fragment_seed original=tiziano_defog_init */
@@ -63217,8 +63671,10 @@ int32_t tisp_defog_param_array_set(int32_t arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003ab74 origin=model_output original=defog_itp */
 int32_t defog_itp(int32_t arg1, int32_t arg2, int32_t arg3)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    if (arg1 < 0x80)
+        return (arg1 * arg3 + (0x80 - arg1) * 100) >> 7;
+    return ((0x180 - arg1) * arg3 +
+            (arg2 * 100 / 0xff) * (arg1 - 0x80)) >> 8;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003abd0 origin=fragment_seed original=tisp_g_defog_str_internal */
