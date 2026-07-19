@@ -60,6 +60,13 @@ extern struct tx_isp_dev *ourISPdev;
 extern const char *tx_isp_get_default_bin_path(void);
 extern uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
+static bool tisp_sc2336_oem_profile;
+
+static bool tisp_sc2336_oem_profile_active(void)
+{
+	return tisp_sc2336_oem_profile;
+}
+
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
 
@@ -77,10 +84,10 @@ module_param_named(force_bypass_adr, tisp_force_bypass_adr, int, S_IRUGO | S_IWU
 MODULE_PARM_DESC(force_bypass_adr,
 				 "Force ADR bypass (default: 0 — keep OEM ADR path live unless explicitly isolating it)");
 
-static int tisp_force_bypass_defog = 1; /* Keep Defog disabled on this platform unless explicitly testing it */
+static int tisp_force_bypass_defog = 0; /* OEM T31 path keeps Defog active */
 module_param_named(force_bypass_defog, tisp_force_bypass_defog, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_defog,
-                 "Force Defog bypass (default: 1 — keep Defog disabled on this platform unless explicitly testing it)");
+                 "Force Defog bypass (default: 0 — match the OEM T31 pipeline)");
 
 static int tisp_force_identity_ccm = 0; /* Keep OEM CCM active by default; identity only for targeted isolation */
 module_param_named(force_identity_ccm, tisp_force_identity_ccm, int, S_IRUGO | S_IWUSR);
@@ -91,13 +98,13 @@ static int tisp_force_bypass_dpc = 0;
 module_param_named(force_bypass_dpc, tisp_force_bypass_dpc, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_dpc, "Force DPC (bit 2) bypass for AWB bisection");
 
-static int tisp_force_bypass_lsc = 0; /* Keep OEM LSC active by default; bypass only for targeted isolation */
+static int tisp_force_bypass_lsc = 1; /* Reconstructed T31 LSC mesh is not yet OEM-accurate */
 module_param_named(force_bypass_lsc, tisp_force_bypass_lsc, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(force_bypass_lsc, "Force LSC bypass (bits 4 and 6) (default: 0 — keep lens shading correction enabled unless isolating it)");
+MODULE_PARM_DESC(force_bypass_lsc, "Force LSC bypass (bits 4 and 6) (default: 1 — avoid the inaccurate reconstructed mesh)");
 
-static int tisp_force_bypass_gib = 1; /* Keep GIB disabled per known-bad hardware behavior */
+static int tisp_force_bypass_gib = 0; /* OEM T31 path keeps GIB active */
 module_param_named(force_bypass_gib, tisp_force_bypass_gib, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(force_bypass_gib, "Force GIB (bit 5) bypass (default: 1 — keep GIB disabled on this platform unless explicitly testing it)");
+MODULE_PARM_DESC(force_bypass_gib, "Force GIB (bit 5) bypass (default: 0 — match the OEM T31 pipeline)");
 
 static int tisp_force_bypass_mdns = 0; /* MDNS: enabled (OEM default) */
 module_param_named(force_bypass_mdns, tisp_force_bypass_mdns, int, S_IRUGO | S_IWUSR);
@@ -2567,6 +2574,7 @@ static int tiziano_load_parameters(const char *param_name)
 		std_bin_path = std_path;
 	}
 
+	tisp_sc2336_oem_profile = strstr(std_bin_path, "sc2336") != NULL;
 	ret = tisp_load_single_bin_file(std_bin_path, 0);
 	if (ret)
 		return ret;
@@ -2710,7 +2718,11 @@ static void tisp_ydns_regmap_selfcheck(void)
 
 
 /* SDNS (Spatial Denoising) Variables */
-static uint32_t data_9a9c0 = 0;
+/* OEM neutral SDNS ratio.  Zero is not a harmless initializer here:
+ * tiziano_sdns_params_refresh() feeds any non-0x80 value through
+ * tisp_s_sdns_ratio(), and a zero ratio erases all sixteen H-S detail
+ * curves before the first frame. */
+static uint32_t data_9a9c0 = 0x80;
 static uint32_t data_9a9c4 = 0;
 static uint32_t sdns_wdr_en = 0;
 static uint32_t *sdns_h_s_1_array_now = NULL;
@@ -3590,7 +3602,8 @@ struct ae_reg {
 };
 
 struct deflick_lut {
-    uint32_t data[32];  /* Estimated size */
+    /* OEM copies/clears 0x1e0 bytes and may populate all 120 exposure nodes. */
+    uint32_t data[120];
 };
 
 struct nodes_num {
@@ -3666,9 +3679,10 @@ static struct flicker_t _flicker_t = { .data = {
 	0x019, 0x000, 0x000, 0x014, 0x032, 0x190001
 }};
 static struct scene_para _scene_para = { .data = {
-	/* OEM: _scene_para is NOT the AE target. The AE solver interpolates
-	 * ae0_ev_list + _lum_list based on EV. ae_at_list is a separate tuning
-	 * table that is exposed to userspace and loaded from the runtime blob.
+	/* OEM: _scene_para is not the AE target.  The AE solver interpolates
+	 * ae0_ev_list + ae_at_list based on EV; _lum_list is a distinct input to
+	 * the controller and is not passed to tisp_ae_target().  This ordering is
+	 * visible in tiziano_ae_para_addr() and ae0_tune2() in the stock module.
 	 * _scene_para fields are scene detection thresholds/modes.
 	 * Stock tuning blobs commonly encode [0]=1 [1]=0xe6 [2]=0x65400 [3]=0x1e ... */
 	0x0546, 0x0a00, 0x034c, 0x03f4, 0x0001, 0x00e6, 0x65400, 0x001e,
@@ -3947,6 +3961,8 @@ static uint32_t ae_requested_ag = 0x400; /* Last REQUESTED AG (before sensor qua
 static uint32_t data_c46a8 = 0x400; /* Max integration time (tuning param) */
 static uint32_t data_c46b0 = 0x157fe; /* Max analog gain in Q10 (OEM: set by tisp_s_max_again) */
 static uint32_t data_c46bc = 0x400; /* Max ISP digital gain in Q10 (OEM: set by tisp_s_max_isp_dgain) */
+static uint32_t data_c4714 = 0; /* Minimum integration time */
+static uint32_t data_c470c = 0; /* Minimum analog gain */
 
 /* OEM event data caches */
 static uint32_t data_c46c0 = 0;    /* Last pushed EV (event 7) */
@@ -3987,17 +4003,18 @@ static uint32_t ae0_conv_state[5];
  * the current target against a smoothed measurement of the scene. */
 static uint32_t ae0_ev_fifo[16];
 
-/* OEM ae0_tune2 scaled ev/lum arrays — arg18/arg19:
- * Copies of ae0_ev_list / _lum_list after wmean-based scaling. */
+/* OEM ae0_tune2 scaled EV/auto-target arrays.  The stock ae0_tune2 argument
+ * order is EV list (arg3), luma list (arg4), auto-target list (arg5).  Its
+ * local interpolation tables are copied from arg3 and arg5; arg4 is not the
+ * Y axis passed to tisp_ae_target(). */
 static uint32_t ae0_scaled_ev[10];
-static uint32_t ae0_scaled_lum[10];
+static uint32_t ae0_scaled_at[10];
 
 /* OEM scene luma tracking */
 static uint32_t scene_luma_old[8];
 static uint32_t scene_luma_wmean = 0;
 
 /* OEM ae0_tune2 gain distribution state (Phase G) */
-static uint32_t ae_gain_table_idx = 1;  /* OEM: var_b0 = *arg16, current index into gain table */
 static uint32_t s4_2_flag = 0;          /* OEM: $s4_2, gain adjustment in-progress flag */
 
 /* OEM Tiziano_ae0_fpga histogram partial sums for scene detection (arg29-34) */
@@ -4006,14 +4023,18 @@ static uint32_t ae_hist_bright_sum = 0; /* OEM: var_84 = sum of bins threshold+1
 static uint32_t ae_scene_wmean = 0;     /* OEM: var_70 = normalized wmean */
 static uint32_t ae_scene_total = 0;     /* OEM: var_74 = total normalized brightness */
 
-/* Local shadow for the OEM AE mix/threshold bundle consumed by the WM2/FPGA
- * path. The full hidden OEM source for these slots is not surfaced yet in the
- * port, so zero-valued mix slots must not collapse live channel weighting. */
-static uint32_t ae_sensor_config[14] = {1, 128, 0, 30, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0};
 static uint32_t scene_luma_weight = 0x24;
 
 /* OEM WDR mode flag for AE — maps to data_a0e00 in OEM binary */
 static uint32_t ae_wdr_mode = 0;
+
+/* OEM tisp_ae0_process_impl lays IspAeTuneParam directly behind the WM2
+ * arguments.  Tiziano_ae0_fpga's scene/mix configuration argument is
+ * IspAeTuneParam + 0x30: _scene_para (or its WDR peer), not a private table. */
+static const uint32_t *tiziano_ae0_scene_config(void)
+{
+    return ae_wdr_mode ? _scene_para_wdr.data : _scene_para.data;
+}
 
 /* Forward declarations for AE internal functions */
 static void ae0_weight_mean2(
@@ -4028,6 +4049,7 @@ static void ae0_weight_mean2(
     uint32_t *out_b_ratio, uint32_t *out_r_ratio);
 static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
                      uint32_t *exp_out, uint32_t *ag_out, uint32_t *dg_out);
+static void tisp_ae_trig(void);
 static void tisp_set_ae0_ag(uint32_t ag, uint32_t dg);
 int tisp_ae_g_at_list(uint32_t *out);
 int tisp_ae_s_at_list(uint32_t *in);
@@ -4040,7 +4062,8 @@ static void tiziano_ae0_select_wrapper_inputs(void **awb_cfg, void **corr_cfg,
 
 static void tiziano_ae0_select_mix_weights(int32_t *mix_r, int32_t *mix_b)
 {
-    uint32_t processing_mode = ae_sensor_config[0];
+    const uint32_t *scene_cfg = tiziano_ae0_scene_config();
+    uint32_t processing_mode = scene_cfg[0];
     uint32_t selector = _ae_stat.data[3];
     int32_t sel_r = 1;
     int32_t sel_b = 1;
@@ -4053,26 +4076,21 @@ static void tiziano_ae0_select_mix_weights(int32_t *mix_r, int32_t *mix_b)
         sel_r = 1;
         sel_b = 1;
     } else if (processing_mode == 1) {
-        sel_r = (int32_t)ae_sensor_config[6];
-        sel_b = (int32_t)ae_sensor_config[5];
+        sel_r = (int32_t)scene_cfg[6];
+        sel_b = (int32_t)scene_cfg[5];
     } else if (selector == 2) {
-        sel_r = (int32_t)ae_sensor_config[6];
-        sel_b = (int32_t)ae_sensor_config[5];
+        sel_r = (int32_t)scene_cfg[6];
+        sel_b = (int32_t)scene_cfg[5];
     } else if (selector == 1) {
-        sel_r = (int32_t)ae_sensor_config[8];
-        sel_b = (int32_t)ae_sensor_config[7];
+        sel_r = (int32_t)scene_cfg[8];
+        sel_b = (int32_t)scene_cfg[7];
     } else if (selector == 0) {
-        sel_r = (int32_t)ae_sensor_config[10];
-        sel_b = (int32_t)ae_sensor_config[9];
+        sel_r = (int32_t)scene_cfg[10];
+        sel_b = (int32_t)scene_cfg[9];
     } else {
         sel_r = 0;
         sel_b = 0;
     }
-
-    if (sel_r == 0)
-        sel_r = 1;
-    if (sel_b == 0)
-        sel_b = 1;
 
     *mix_r = sel_r;
     *mix_b = sel_b;
@@ -4994,8 +5012,11 @@ static void ae0_weight_mean2(
 
 /* tisp_ae_target — OEM EXACT: Interpolate AE brightness target from EV tables.
  *
- * OEM (0x4ff98): Given current EV value, interpolate the target brightness
- * from ae0_ev_list (threshold X values) and _lum_list (target Y values).
+ * OEM (0x4ffa8): Given current EV value, interpolate the target brightness
+ * from ae0_ev_list (threshold X values) and ae_at_list (target Y values).
+ * Stock tiziano_ae_para_addr() installs EV, luma, and auto-target pointers at
+ * IspAeTuneParam offsets 8, 12, and 16.  ae0_tune2() copies offsets 8 and 16
+ * into the two tables passed here, deliberately skipping the luma list.
  * Both arrays have 10 entries.
  *
  * cur_ev:  current total exposure value (unshifted, i.e. >> q already)
@@ -5008,15 +5029,15 @@ static uint32_t tisp_ae_target(uint32_t cur_ev_q, uint32_t q)
     uint32_t qm = q & 31;
     uint32_t cur_ev = cur_ev_q >> qm;
     const uint32_t *ev_list = ae_wdr_mode ? ae0_ev_list_wdr.data : ae0_ev_list.data;
-    const uint32_t *lum_list = ae_wdr_mode ? _lum_list_wdr.data : _lum_list.data;
+    const uint32_t *at_list = ae_wdr_mode ? ae_at_list_wdr.data : ae_at_list.data;
     int i, idx;
     uint32_t x0, x1, y0, y1, dx, num;
 
     /* Edge cases: below first threshold or above last */
     if (cur_ev <= ev_list[0])
-        return lum_list[0];
+        return at_list[0];
     if (cur_ev >= ev_list[9])
-        return lum_list[9];
+        return at_list[9];
 
     /* Find bracketing interval */
     idx = 0;
@@ -5032,8 +5053,8 @@ static uint32_t tisp_ae_target(uint32_t cur_ev_q, uint32_t q)
 
     x0 = ev_list[idx];
     x1 = ev_list[idx + 1];
-    y0 = lum_list[idx];
-    y1 = lum_list[idx + 1];
+    y0 = at_list[idx];
+    y1 = at_list[idx + 1];
 
     /* Linear interpolation between y0 and y1 */
     if (x1 == x0)
@@ -5053,14 +5074,14 @@ static uint32_t tisp_ae_target(uint32_t cur_ev_q, uint32_t q)
 
 /* tisp_ae_target_ex — OEM EXACT variant with explicit array pointers.
  *
- * Same algorithm as tisp_ae_target() but takes ev_list/lum_list as parameters
+ * Same algorithm as tisp_ae_target() but takes EV/auto-target lists explicitly
  * instead of using globals.  This is needed by the OEM ae0_tune2 which passes
  * locally-scaled copies of the tables (after wmean-based adjustment).
  *
- * OEM calling convention: tisp_ae_target(cur_ev_q, ev_list_ptr, lum_list_ptr, q)
+ * OEM calling convention: tisp_ae_target(cur_ev_q, ev_list_ptr, at_list_ptr, q)
  */
 static uint32_t tisp_ae_target_ex(uint32_t cur_ev_q, uint32_t *ev_list,
-                                   uint32_t *lum_list, uint32_t q)
+                                   uint32_t *at_list, uint32_t q)
 {
     uint32_t qm = q & 31;
     uint32_t cur_ev = cur_ev_q >> qm;
@@ -5068,9 +5089,9 @@ static uint32_t tisp_ae_target_ex(uint32_t cur_ev_q, uint32_t *ev_list,
     uint32_t x0, x1, y0, y1, dx, num;
 
     if (cur_ev <= ev_list[0])
-        return lum_list[0];
+        return at_list[0];
     if (cur_ev >= ev_list[9])
-        return lum_list[9];
+        return at_list[9];
 
     idx = 0;
     for (i = 0; i < 9; i++) {
@@ -5084,8 +5105,8 @@ static uint32_t tisp_ae_target_ex(uint32_t cur_ev_q, uint32_t *ev_list,
 
     x0 = ev_list[idx];
     x1 = ev_list[idx + 1];
-    y0 = lum_list[idx];
-    y1 = lum_list[idx + 1];
+    y0 = at_list[idx];
+    y1 = at_list[idx + 1];
 
     if (x1 == x0)
         return y0;
@@ -5104,7 +5125,7 @@ static uint32_t tisp_ae_target_ex(uint32_t cur_ev_q, uint32_t *ev_list,
  * OEM is a 34-argument function; this implementation accesses the same data
  * through driver globals.  The algorithm matches the BN C decompilation:
  *
- *   Phase A: Histogram wmean computation + ev_list/lum_list scaling
+ *   Phase A: Histogram wmean computation + EV/auto-target list scaling
  *   Phase B: AE mode processing (mode 0 passthrough, mode 1 weighting)
  *   Phase C: EV FIFO management (15-entry temporal smoothing)
  *   Phase D: Base EV + tisp_ae_target interpolation
@@ -5132,6 +5153,42 @@ static uint32_t tisp_ae_target_ex(uint32_t cur_ev_q, uint32_t *ev_list,
  *
  * Returns: 0 = converged (stable), 1 = still adjusting
  */
+/* Limit integration time to the highest complete mains half-cycle below the
+ * sensor frame limit.  OEM's SC2336/60 Hz table is 300,600,900,1200 lines;
+ * the sensor's four-line VTS margin turns the last node into 1196 lines. */
+static uint32_t tisp_ae_effective_max_it(void)
+{
+    uint32_t max_it = ae_exp_th.data[0];
+    uint32_t hz = _flicker_t.data[0];
+    uint32_t fps_num, fps_den;
+    uint32_t total_height = tisp_si_total_height(&sensor_info);
+    uint32_t sensor_max_it = tisp_si_max_integration_time(&sensor_info);
+    uint32_t margin, step, node, capped;
+    uint64_t line_rate;
+
+    if (hz != 50 && hz != 60)
+        return max_it;
+
+    tisp_sensor_split_raw_fps(tisp_si_fps(&sensor_info), &fps_num, &fps_den);
+    if (!total_height || !fps_num || !fps_den)
+        return max_it;
+
+    line_rate = (uint64_t)total_height * fps_num;
+    do_div(line_rate, fps_den);
+    step = ((uint32_t)line_rate + hz) / (hz * 2);
+    if (!step)
+        return max_it;
+
+    margin = (total_height > sensor_max_it) ?
+             (total_height - sensor_max_it) : 0;
+    node = ((max_it + margin) / step) * step;
+    if (node <= margin)
+        return max_it;
+
+    capped = node - margin;
+    return (capped < max_it) ? capped : max_it;
+}
+
 static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
                      uint32_t *exp_out, uint32_t *ag_out, uint32_t *dg_out)
 {
@@ -5172,10 +5229,12 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     uint32_t v0_42 = _exp_parameter.data[0]; /* initial ref value */
     uint32_t v0_43 = _exp_parameter.data[1]; /* conv threshold */
 
-    /* OEM arg10: gain mode (from tuning state) */
-    uint32_t v0_15 = 0;  /* gain mode — 0=default */
-    uint32_t v0_16 = 0;  /* sub mode */
-    uint32_t v0_17 = 0;  /* param */
+    /* OEM arg10: anti-flicker exposure-distribution mode.  The stock
+     * SC2336 blob supplies [1, 0, 20], selecting the generated exposure-node
+     * table in _deflick_lut. */
+    uint32_t v0_15 = _deflicker_para.data[0];
+    uint32_t v0_16 = _deflicker_para.data[1];
+    uint32_t v0_17 = _deflicker_para.data[2];
 
     /* OEM arg12: scene interpolation params from ae_scene_mode_th */
     uint32_t v0_2 = ae_scene_mode_th.data[0];
@@ -5184,7 +5243,7 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     uint32_t v0_5 = ae_scene_mode_th.data[3];
 
     /* OEM arg21-26: gain limit and current state pointers */
-    uint32_t v0_19 = ae_exp_th.data[0];  /* max IT */
+    uint32_t v0_19 = tisp_ae_effective_max_it();  /* deflicker-limited max IT */
     uint32_t v0_21 = data_c46b0 ? data_c46b0 : ae_exp_th.data[1];
     uint32_t v0_23 = data_c46bc ? data_c46bc : ae_exp_th.data[2];
     uint32_t var_c4;                      /* output IT (mutable) */
@@ -5200,34 +5259,41 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     uint32_t v0_68;      /* ratio = target_luma / smoothed FIFO luma */
     uint32_t v0_69;      /* new_ev = var_b8 * ratio */
 
-    /* Local copies of ev_list/lum_list (may be scaled) */
-    uint32_t local_ev[10], local_lum[10];
+    /* Local copies of the EV and auto-target lists (may be scaled). */
+    uint32_t local_ev[10], local_at[10];
     const uint32_t *active_ev;
-    const uint32_t *active_lum;
+    const uint32_t *active_at;
     int i;
 
-    /* OEM EXACT: In the OEM, cur_it comes from IspAeExp[0] which is populated
-     * by tiziano_ae_init_exp_th from ae_exp_th[0] (sensor-clamped max_IT).
-     * Our _ae_reg.data[0] starts at 0 since we don't have the IspAeExp alias.
-     * Seed with ae_exp_th[0] to match the OEM's initial bright-start behavior. */
-    if (cur_it == 0) cur_it = ae_exp_th.data[0] ? ae_exp_th.data[0] : 1;
+    /* cur_* is the applied tuple used to form var_b8.  The OEM arg28/29/31
+     * pointers are different: they point at the configured minimum IT/AG/DG
+     * values in the IspAeExp pointer table.  Phase H redistributes every new
+    * EV from that minimum tuple. */
     if (cur_ag == 0) cur_ag = data_c46a0 ? data_c46a0 : 0x400;
     if (cur_dg == 0) cur_dg = data_c46ac ? data_c46ac : 0x400;
-    var_c4 = cur_it;
-    var_d4 = cur_ag;
-    var_d0 = cur_dg;
+    /* The recovered pipeline has no OEM bootloader exposure carried into
+     * _ae_reg.  Seed only the first base-EV calculation from the stock
+     * SC2336 scene value; Phase H still starts from the minimum tuple below. */
+    if (IspAeFlag == 1 && cur_it == 0) {
+        cur_it = 600;
+        cur_ag = 1u << qm;
+        cur_dg = 1u << qm;
+    }
+    var_c4 = data_c4714 ? data_c4714 : 1;
+    var_d4 = data_c470c ? data_c470c : (1u << qm);
+    var_d0 = 1u << qm;
 
     /* ---- Compute base EV (OEM: var_b8) ---- */
     var_b8 = fix_point_mult3_32(s0, cur_ag, cur_dg, cur_it << (qm));
 
-    /* ---- Phase A: Copy ev/lum tables and optional histogram scaling ---- */
+    /* ---- Phase A: Copy EV/auto-target tables and optionally scale them ---- */
     {
         const uint32_t *base_ev = ae_wdr_mode ? ae0_ev_list_wdr.data : ae0_ev_list.data;
-        const uint32_t *base_lum = ae_wdr_mode ? _lum_list_wdr.data : _lum_list.data;
+        const uint32_t *base_at = ae_wdr_mode ? ae_at_list_wdr.data : ae_at_list.data;
 
         for (i = 0; i < 10; i++) {
             local_ev[i] = base_ev[i];
-            local_lum[i] = base_lum[i];
+            local_at[i] = base_at[i];
         }
     }
 
@@ -5244,8 +5310,8 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
         for (i = 0; i < 10; i++) {
             local_ev[i] = fix_point_mult2_32(s0,
                     local_ev[i] << qm, scale) >> qm;
-            local_lum[i] = fix_point_mult2_32(s0,
-                    local_lum[i] << qm, scale) >> qm;
+            local_at[i] = fix_point_mult2_32(s0,
+                    local_at[i] << qm, scale) >> qm;
         }
 
         /* OEM pushes event 8 with wmean value */
@@ -5273,27 +5339,27 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
             /* Mode 0 (default): passthrough — copy tables directly */
             for (i = 0; i < 10; i++) {
                 ae0_scaled_ev[i] = local_ev[i];
-                ae0_scaled_lum[i] = local_lum[i];
+                ae0_scaled_at[i] = local_at[i];
             }
         } else {
             /* Mode 1: weighted filter.
              * OEM: ev[i] = (weight * ev[i]) >> 7
-             * OEM: lum[i] = ((weight * lum[i]) >> 7 * band_wt[i] * secondary) >> 14
+             * OEM: at[i] = ((weight * at[i]) >> 7 * band_wt[i] * secondary) >> 14
              * OEM arg20 = _ae_zone_weight band entries (reuse zone weight array). */
             for (i = 0; i < 10; i++) {
                 uint32_t scaled_ev = (weight_factor * local_ev[i]) >> 7;
-                uint32_t scaled_lum = (weight_factor * local_lum[i]) >> 7;
+                uint32_t scaled_at = (weight_factor * local_at[i]) >> 7;
                 uint32_t band_wt = _ae_zone_weight.data[i];
 
-                scaled_lum = (scaled_lum * band_wt * secondary_factor) >> 14;
+                scaled_at = (scaled_at * band_wt * secondary_factor) >> 14;
 
                 ae0_scaled_ev[i] = (scaled_ev == 0) ? 1 : scaled_ev;
-                ae0_scaled_lum[i] = (scaled_lum == 0) ? 1 : scaled_lum;
+                ae0_scaled_at[i] = (scaled_at == 0) ? 1 : scaled_at;
             }
         }
     }
     active_ev = ae0_scaled_ev;
-    active_lum = ae0_scaled_lum;
+    active_at = ae0_scaled_at;
 
     /* ---- Phase C: measured-luma FIFO management ---- */
     /* Shift FIFO left by 1 position (OEM: entries 1..14 → 0..13) */
@@ -5346,7 +5412,7 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
             data_a0dfc = 0;
             ae_ev_init_en = 0;
         }
-        s5 = tisp_ae_target_ex(var_b8, active_ev, active_lum, s0);
+        s5 = tisp_ae_target_ex(var_b8, active_ev, active_at, s0);
     }
 
     /* Compute ratio = target_luma / smoothed measured-luma FIFO value */
@@ -5417,7 +5483,7 @@ phase_e_check_margins:
 phase_f_target:
     /* ---- Phase F: Compute new target and EV interpolation ---- */
     data_a0df4 = 0;
-    s5 = tisp_ae_target_ex(v0_69, active_ev, active_lum, s0);
+    s5 = tisp_ae_target_ex(v0_69, active_ev, active_at, s0);
     ae0_conv_state[0] = s5;
 
     {
@@ -5651,73 +5717,96 @@ phase_g:
             s7_1 = fix_point_div_32(s0, v0_23, var_d0 ? var_d0 : 1);
             v0_126 = fix_point_div_32(s0, v0_42 << qm, v0_116 ? v0_116 : 1);
 
-            /* OEM: When v0_15 != 0, use gain table search before distribution.
-             * For GC2053 default (v0_15=0), skip directly to distribution. */
-            if (v0_15 != 0) {
-                uint32_t a3_q = 0; /* gain table entry in Q-format */
+            /* OEM anti-flicker path (0x50ca8..0x50f58).  arg9 is the
+             * generated exposure-node LUT and arg16 is its last valid index;
+             * both were previously replaced by an unrelated fallback table. */
+            if (v0_15 != 0 &&
+                s2_3 >= (_deflick_lut.data[0] << qm)) {
+                uint32_t first_node_q = _deflick_lut.data[0] << qm;
 
-                if (v0_15 == 1 && v0_121 >= (ae_sensor_config[0] << qm)) {
-                    /* OEM gain table search (0x50c70): iterative search
-                     * through ae_sensor_config gain table entries.
-                     * Search backward from current index to find optimal point. */
-                    uint32_t idx = ae_gain_table_idx;
-                    uint32_t entry_q;
-
-                    /* Search backward: find where gain_entry fits */
-                    while (idx > 1) {
-                        entry_q = fix_point_div_32(s0,
-                                ae_sensor_config[idx] << qm, v0_118 ? v0_118 : 1);
-                        if ((0x14 << qm) + s2_3 >= entry_q)
-                            break;
-                        idx--;
-                    }
-                    ae_gain_table_idx = idx;
-
-                    /* Search forward to find where v0_121 fits */
-                    {
-                        uint32_t fi = 1;
-                        uint32_t found_q = ae_sensor_config[1] << qm;
-                        while (fi < idx) {
-                            if (v0_121 < (ae_sensor_config[fi + 1] << qm)) {
-                                found_q = ae_sensor_config[fi] << qm;
-                                break;
-                            }
-                            fi++;
-                        }
-                        if (found_q < s2_3)
-                            s2_3 = found_q;
-                    }
-
-                    fp_4 = fix_point_div_32(s0, v0_121, s2_3 ? s2_3 : 1);
-                    if (fp_4 >= fix_point_div_32(s0, v0_121,
-                            fix_point_mult2_32(s0, s2_3, fp_4))) {
-                        s7_1 = one_q;
-                        s4_2_flag = 0;
-                    } else {
-                        s7_1 = fix_point_div_32(s0,
-                                fix_point_div_32(s0, v0_121,
-                                    fix_point_mult2_32(s0, s2_3, fp_4)),
-                                fp_4 ? fp_4 : 1);
-                        s4_2_flag = 1;
-                    }
-                } else if (v0_15 == 1) {
-                    /* v0_121 below gain table threshold */
-                    if (v0_16 == 0) {
-                        s2_3 = (v0_121 >> qm) << qm;
-                        fp_4 = fix_point_div_32(s0, v0_121, s2_3 ? s2_3 : 1);
-                        s7_1 = v0_15 << qm;
-                        s4_2_flag = 0;
-                    } else {
-                        s2_3 = (v0_121 >> qm) << qm;
-                        fp_4 = one_q;
-                        s7_1 = one_q;
-                        s4_2_flag = 0;
-                    }
-                } else {
-                    /* v0_15 > 1: zero gains */
+                if (v0_15 != 1) {
                     s2_3 = 0;
                     fp_4 = 0;
                     s7_1 = 0;
+                    s4_2_flag = 0;
+                    goto phase_h_mode0_apply;
+                }
+
+                if (v0_121 >= first_node_q) {
+                    uint32_t idx = _nodes_num.data[0];
+                    uint32_t fi = 1;
+                    uint32_t found_q;
+                    uint32_t ag_needed;
+
+                    /* Walk back from the last valid mains-cycle node until
+                     * it is reachable from the current integration time. */
+                    while (idx > 0) {
+                        uint32_t entry_q = fix_point_div_32(s0,
+                                _deflick_lut.data[idx] << qm,
+                                v0_118 ? v0_118 : 1);
+
+                        if ((0x14 << qm) + s2_3 >= entry_q)
+                            break;
+                        idx--;
+                        if (idx == 0) {
+                            idx = 1;
+                            break;
+                        }
+                    }
+
+                    /* Select the largest complete anti-flicker node below
+                     * the requested exposure, exactly as the OEM loop does. */
+                    while (fi <= idx &&
+                           v0_121 >= (_deflick_lut.data[fi] << qm))
+                        fi++;
+                    found_q = _deflick_lut.data[fi - 1] << qm;
+                    if (found_q < s2_3)
+                        s2_3 = found_q;
+
+                    ag_needed = fix_point_div_32(s0, v0_121,
+                                                 s2_3 ? s2_3 : 1);
+                    if (fp_4 >= ag_needed) {
+                        s7_1 = one_q;
+                        fp_4 = ag_needed;
+                        s4_2_flag = 0;
+                    } else {
+                        uint32_t dg_needed = fix_point_div_32(s0,
+                                ag_needed, fp_4 ? fp_4 : 1);
+                        if (dg_needed < s7_1)
+                            s7_1 = dg_needed;
+                        s4_2_flag = 1;
+                    }
+                } else if (v0_16 == 0) {
+                    s2_3 = (v0_121 >> qm) << qm;
+                    fp_4 = fix_point_div_32(s0, v0_121,
+                                            s2_3 ? s2_3 : 1);
+                    s7_1 = v0_15 << qm;
+                    s4_2_flag = 0;
+                } else if (v0_16 != v0_15) {
+                    uint32_t target_q = s5 << qm;
+                    uint32_t scaled_node = fix_point_mult2_32(s0,
+                            first_node_q,
+                            fix_point_div_32(s0, v0_17 << qm,
+                                             target_q ? target_q : 1));
+
+                    scaled_node = (scaled_node >> qm) << qm;
+                    if (scaled_node >= first_node_q)
+                        scaled_node = first_node_q;
+                    s2_3 = scaled_node;
+                    fp_4 = v0_15 << qm;
+                    if (v0_121 < scaled_node) {
+                        s7_1 = one_q;
+                    } else {
+                        s2_3 = (v0_121 >> qm) << qm;
+                        fp_4 = fix_point_div_32(s0, v0_121,
+                                                s2_3 ? s2_3 : 1);
+                        s7_1 = one_q;
+                    }
+                    s4_2_flag = 0;
+                } else {
+                    fp_4 = v0_16 << qm;
+                    s7_1 = fp_4;
+                    s2_3 = first_node_q;
                     s4_2_flag = 0;
                 }
 
@@ -6062,6 +6151,7 @@ static int tiziano_ae0_fpga_run(void)
     {
         static int ae_wm2_diag;
         if (ae_wm2_diag < 8) {
+            const uint32_t *scene_cfg = tiziano_ae0_scene_config();
             uint32_t zone_area = _ae_parameter.data[19] * _ae_parameter.data[4];
             int32_t corr_enabled = awb_cfg ? *((int32_t *)awb_cfg + 9) : 0;
             int32_t corr_mode = corr_cfg ? *((int32_t *)corr_cfg + 1) : 1;
@@ -6070,7 +6160,7 @@ static int tiziano_ae0_fpga_run(void)
                 zone_r_plane[0], zone_g_plane[0], zone_b_plane[0],
                 zone_dark_plane[0], zone_bright_plane[0],
                 zone_area, zones[0], mix_r, mix_b, _ae_stat.data[3],
-                ae_sensor_config[0], corr_enabled, corr_mode,
+                scene_cfg[0], corr_enabled, corr_mode,
                 r_corr ? r_corr[0] : 0, b_corr ? b_corr[0] : 0);
             ae_wm2_diag++;
         }
@@ -6089,6 +6179,7 @@ static int tiziano_ae0_fpga_run(void)
     {
         static int ae_table_logged;
         if (!ae_table_logged) {
+            const uint32_t *scene_cfg = tiziano_ae0_scene_config();
             ae_table_logged = 1;
             pr_info("AE_TABLES: ev_list=[%u,%u,%u,%u,%u,%u,%u,%u,%u,%u]\n",
                 ae0_ev_list.data[0], ae0_ev_list.data[1], ae0_ev_list.data[2],
@@ -6105,9 +6196,20 @@ static int tiziano_ae0_fpga_run(void)
                 _lum_list.data[3], _lum_list.data[4], _lum_list.data[5],
                 _lum_list.data[6], _lum_list.data[7], _lum_list.data[8],
                 _lum_list.data[9]);
-            pr_info("AE_TABLES: ae_exp_th=[0x%x,0x%x,0x%x] zone_spacing=%ux%u\n",
+            pr_info("AE_TABLES: ae_exp_th=[0x%x,0x%x,0x%x] effective_max_it=%u "
+                    "antiflicker=%uHz zone_spacing=%ux%u\n",
                 ae_exp_th.data[0], ae_exp_th.data[1], ae_exp_th.data[2],
+                tisp_ae_effective_max_it(), _flicker_t.data[0],
                 _ae_parameter.data[4], _ae_parameter.data[19]);
+            pr_info("AE_TABLES: scene_cfg=[%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u]\n",
+                scene_cfg[0], scene_cfg[1], scene_cfg[2], scene_cfg[3],
+                scene_cfg[4], scene_cfg[5], scene_cfg[6], scene_cfg[7],
+                scene_cfg[8], scene_cfg[9], scene_cfg[10]);
+            pr_info("AE_TABLES: deflick=[%u,%u,%u] nodes=%u lut=[%u,%u,%u,%u]\n",
+                _deflicker_para.data[0], _deflicker_para.data[1],
+                _deflicker_para.data[2], _nodes_num.data[0],
+                _deflick_lut.data[0], _deflick_lut.data[1],
+                _deflick_lut.data[2], _deflick_lut.data[3]);
         }
     }
 
@@ -6116,18 +6218,9 @@ static int tiziano_ae0_fpga_run(void)
     new_ag = ae0_req_ag;
     new_dg = ae0_req_dg;
 
-    /* OEM EXACT: Initial exposure seeding from IspAeExp / ae_exp_th.
-     *
-     * In the OEM, tiziano_ae_init_exp_th() populates IspAeExp from ae_exp_th,
-     * and tisp_ae0_process_impl passes IspAeExp as the "current exposure" to
-     * Tiziano_ae0_fpga → ae0_tune2.  So on the FIRST frame, cur_it = max_IT
-     * (ae_exp_th[0]), NOT zero.  This gives the AE algorithm a bright starting
-     * point from which it converges downward to the correct exposure.
-     *
-     * With IT=max_IT, var_b8 is large, the AE correctly sees "overexposed"
-     * (or near-target), and converges from bright toward the correct exposure
-     * within a few frames — exactly matching OEM behavior. */
-    if (new_it == 0) new_it = ae_exp_th.data[0] ? ae_exp_th.data[0] : 1;
+    /* Preserve the BSS-zeroed live IT on the first frame.  ae0_tune2 emits a
+     * safe one-line first result, then increases EV through the generated
+     * anti-flicker nodes. */
     if (new_ag == 0) new_ag = data_c46a0 ? data_c46a0 : 0x400;
     if (new_dg == 0) new_dg = data_c46ac ? data_c46ac : 0x400;
 
@@ -6136,14 +6229,15 @@ static int tiziano_ae0_fpga_run(void)
      * against the interpolated target brightness, and derives the EV ratio
      * from that comparison. Feeding target-domain values here collapses the
      * ratio toward 1 and pins gain at unity. */
-    /* OEM Tiziano_ae0_fpga: Unpack sensor config (arg13 = ae_sensor_config).
+    /* OEM Tiziano_ae0_fpga: Unpack scene config (IspAeTuneParam + 0x30).
      * $s4 = processing_mode, $s1 = hist_bin_threshold, $s7 = dark_threshold,
      * $s5 = curve_strength, $v1_1 = overexp_th, $v1 = underexp_th */
     {
-        uint32_t s4_mode = ae_sensor_config[0];  /* processing mode */
-        uint32_t s1_bin = ae_sensor_config[1];   /* histogram bin threshold */
-        uint32_t s7_dark = ae_sensor_config[3];  /* dark bin threshold */
-        uint32_t s5_curve = ae_sensor_config[6]; /* curve strength */
+        const uint32_t *scene_cfg = tiziano_ae0_scene_config();
+        uint32_t s4_mode = scene_cfg[0];  /* processing mode */
+        uint32_t s1_bin = scene_cfg[1];   /* histogram bin threshold */
+        uint32_t s7_dark = scene_cfg[3];  /* dark bin threshold */
+        uint32_t s5_curve = scene_cfg[6]; /* curve strength */
         uint32_t ae_wmean = wmean;
 
         ae_hist_dark_sum = 0;
@@ -6245,7 +6339,7 @@ static int tiziano_ae0_fpga_run(void)
             pr_info("AE0[%d]: wmean=%u target=%u it=%u/%u ag=0x%x/0x%x dg=0x%x ev=0x%x\n",
                     ae_log_cnt, wmean,
                     tisp_ae_target(_ae_ev, q),
-                    new_it, ae_exp_th.data[0],
+                    new_it, tisp_ae_effective_max_it(),
                     new_ag, ae_exp_th.data[1],
                     new_dg, _ae_ev);
         }
@@ -7882,6 +7976,8 @@ void tiziano_adr_dn_params_refresh(void);
 void tiziano_af_dn_params_refresh(void);
 int tisp_s_ae_attr(void *ae_attr_data);
 int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
+static int tiziano_deflicker_expt_tune(uint32_t a, uint32_t b,
+                                       uint32_t c, uint32_t d);
 static int tisp_rdns_par_refresh(uint32_t gain, uint32_t threshold, int enable_write);
 static int tisp_get_ae_attr(void *out);
 static uint8_t tisp_ae_g_luma(uint8_t *result);
@@ -8043,24 +8139,22 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 break;
             }
             case 0x80000e0: { // GET FPS
-                struct fps_ctrl {
-                    int32_t mode;      // 1 for GET operation
-                    uint32_t cmd;      // 0x80000e0 for FPS command
-                    uint32_t frame_rate;  // fps_num result
-                    uint32_t frame_div;   // fps_den result
-                };
-
-                struct fps_ctrl fps_data;
+                uint32_t fps_packed = tisp_si_fps(&sensor_info);
 
                 pr_info("Get FPS\n");
-                fps_data.mode = 1;  // GET mode
-                fps_data.cmd = 0x80000e0;
-                fps_data.frame_rate = 25;
-                fps_data.frame_div = 1;
 
-                // Copy back to user - note full structure needs to be copied
-//                if (copy_to_user((void __user *)ctrl->value, &fps_data, sizeof(fps_data)))
-//                    return -EFAULT;
+                /* The OEM control returns the packed rational directly in
+                 * the eight-byte G_CTRL payload.  Prefer the live sensor's
+                 * advertised rate; SC2336 boots at 30/1 even though the old
+                 * reconstructed tuning defaults were fixed at 25/1. */
+                if (ourISPdev && ourISPdev->sensor &&
+                    (ourISPdev->sensor->video.fps >> 16) != 0)
+                    fps_packed = ourISPdev->sensor->video.fps;
+                else if (tuning->fps_num != 0 && tuning->fps_den != 0)
+                    fps_packed = (tuning->fps_num << 16) |
+                                 (tuning->fps_den & 0xffff);
+
+                ctrl->value = fps_packed;
 
                 break;
             }
@@ -8472,11 +8566,14 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             }
             hz = antiflick_hz[ctrl->value];
             tuning->antiflicker = ctrl->value;
-            /* OEM: tisp_s_antiflick sets flicker_hz, calls
-             * tiziano_deflicker_expt_tune, then tisp_ae_trig.
-             * Simplified: just store the Hz for AE to use. */
-            _flicker_t.data[0] = (hz != 0) ? 1 : 0; /* enable */
-            _flicker_t.data[4] = hz; /* frequency */
+            /* OEM tisp_s_antiflick stores the actual mains frequency,
+             * rebuilds the sensor-line exposure table, then retriggers AE. */
+            _flicker_t.data[0] = hz;
+            tiziano_deflicker_expt_tune(hz,
+                    tisp_si_line_time_token(&sensor_info),
+                    tisp_si_total_height(&sensor_info),
+                    tisp_si_total_width(&sensor_info));
+            tisp_ae_trig();
             pr_info("Set control: ANTIFLICKER value=%d -> %dHz\n",
                     ctrl->value, hz);
             break;
@@ -8608,6 +8705,10 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             if (ourISPdev && ourISPdev->tuning_data) {
                 ourISPdev->tuning_data->fps_num = fps_num;
                 ourISPdev->tuning_data->fps_den = fps_den;
+                tisp_si_set_word(&sensor_info, TISP_SI_WORD_FPS, fps_packed);
+                tisp_sensor_info_update(&sensor_info);
+                if (ourISPdev->sensor)
+                    ourISPdev->sensor->video.fps = fps_packed;
 
                 pr_info("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
 
@@ -16688,8 +16789,6 @@ static uint32_t data_d04a8 = 0x1000;  /* Short integration time parameter */
 static uint32_t data_d04ac = 0x1000;  /* Short integration gain parameter */
 static uint32_t data_c46b8 = 0;       /* Integration time cache */
 static uint32_t data_c46f8 = 0;       /* Short integration time cache */
-static uint32_t data_c4714 = 0;       /* AE min integration time (OEM: data_c4714) */
-static uint32_t data_c470c = 0;       /* AE min analog gain (OEM: data_c470c) */
 
 /* IRQ callback function table */
 static void (*irq_func_cb[32])(void) = {NULL};
@@ -17204,14 +17303,11 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     system_irq_func_set(0x1d, ae1_interrupt_hist_wrapper);
     system_irq_func_set(0x1c, ae1_interrupt_static_wrapper);
 
-    /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
-    uint32_t a2_13 = (uint32_t)data_b2e56;
-
-    /* Binary Ninja EXACT: uint32_t $a3_1 = zx.d(data_b2e54) */
-    uint32_t a3_1 = (uint32_t)data_b2e54;
-
-    /* Binary Ninja EXACT: int32_t $a1_5 = data_b2e44 */
-    int32_t a1_5 = data_b2e44;
+    /* OEM reads these directly from sensor_info: packed line duration,
+     * total frame height, and total frame width. */
+    uint32_t a2_13 = tisp_si_total_height(&sensor_info);
+    uint32_t a3_1 = tisp_si_total_width(&sensor_info);
+    uint32_t a1_5 = tisp_si_line_time_token(&sensor_info);
 
     /* Binary Ninja EXACT: data_b0b28 = $a1_5 */
     data_b0b28 = a1_5;
@@ -17284,23 +17380,6 @@ static void JZ_Isp_Awb_Awbg2reg(const uint32_t gains[2], uint32_t regs[2])
 
 	regs[0] = 0x04000000 | gr;
 	regs[1] = 0x04000000 | gb;
-}
-
-static void tisp_rdns_awb_gain_updata(uint32_t gain_gr, uint32_t gain_gb)
-{
-	u32 gr = gain_gr >> 4;
-	u32 gb = gain_gb >> 4;
-	u32 inv_gr = fix_point_div_32(6, 1, gr ? gr : 1);
-	u32 inv_gb = fix_point_div_32(6, 1, gb ? gb : 1);
-
-	memcpy(rdns_awb_gain_par_cfg_array + 0x0, &gr, sizeof(gr));
-	memcpy(rdns_awb_gain_par_cfg_array + 0x4, &gb, sizeof(gb));
-	memcpy(rdns_awb_gain_par_cfg_array + 0x8, &inv_gr, sizeof(inv_gr));
-	memcpy(rdns_awb_gain_par_cfg_array + 0xc, &inv_gb, sizeof(inv_gb));
-
-	system_reg_write(0x3000, (gb << 16) | (gr & 0xffff));
-	system_reg_write(0x3004, (inv_gb << 16) | (inv_gr & 0xffff));
-	system_reg_write(0x30ac, 1);
 }
 
 static void tisp_dmsc_awb_gain_par_cfg(uint32_t gain)
@@ -17393,7 +17472,10 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 		system_reg_write_awb(2, 0x1808, reg_pair[1]);
 		system_reg_write_awb(2, 0x180c, reg_pair[0]);
 		system_reg_write_awb(2, 0x1810, reg_pair[1]);
-		tisp_rdns_awb_gain_updata(reg_pair[0] & 0xffff, reg_pair[1] & 0xffff);
+		/* Keep RDNS' color-gain tuple owned by its tuning parameters while
+		 * AWB changes the dedicated 0x1804..0x1810 gains.  Feeding the WB
+		 * register encoding into RDNS here produced ~0x80 gains with zero
+		 * reciprocals and a severe green-channel collapse in daylight. */
 	}
 
 	/* One-time color register dump to compare with OEM */
@@ -20800,6 +20882,28 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
         system_reg_write((uint32_t)(i + 0x2802) << 1, val);
     }
 
+    if (tisp_sc2336_oem_profile_active()) {
+        bool high_gain = ourISPdev && ourISPdev->tuning_data &&
+                         ourISPdev->tuning_data->total_gain >= 0x20000;
+
+        /* The generic CT detector currently runs beyond the SC2336 tuning
+         * range. Use the two measured OEM CCM anchors while retaining the
+         * generic path for every other T31 sensor. */
+        if (high_gain) {
+            system_reg_write(0x5004, 0x3f0a05e2);
+            system_reg_write(0x5008, 0x3e4b3f14);
+            system_reg_write(0x500c, 0x3e510765);
+            system_reg_write(0x5010, 0x3bee0027);
+            system_reg_write(0x5014, 0x000007e9);
+        } else {
+            system_reg_write(0x5004, 0x00300440);
+            system_reg_write(0x5008, 0x3f4e3f8f);
+            system_reg_write(0x500c, 0x3f1005a4);
+            system_reg_write(0x5010, 0x3e290083);
+            system_reg_write(0x5014, 0x00000551);
+        }
+    }
+
     /* OEM: additional DP configuration when ccm_real == 1 */
     if (ccm_real == 1) {
         system_reg_write(0x5018,
@@ -21544,7 +21648,7 @@ static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
 #ifdef V4L2_MBUS_FMT_SGRBG12_1X12
 	case V4L2_MBUS_FMT_SGRBG12_1X12:
 #endif
-		return 1;
+		return 2;
 #ifdef V4L2_MBUS_FMT_SGBRG8_1X8
 	case V4L2_MBUS_FMT_SGBRG8_1X8:
 #endif
@@ -21554,7 +21658,7 @@ static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
 #ifdef V4L2_MBUS_FMT_SGBRG12_1X12
 	case V4L2_MBUS_FMT_SGBRG12_1X12:
 #endif
-		return 2;
+		return 3;
 #ifdef V4L2_MBUS_FMT_SBGGR8_1X8
 	case V4L2_MBUS_FMT_SBGGR8_1X8:
 #endif
@@ -21564,7 +21668,7 @@ static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
 #ifdef V4L2_MBUS_FMT_SBGGR12_1X12
 	case V4L2_MBUS_FMT_SBGGR12_1X12:
 #endif
-		return 3;
+		return 1;
 	default:
 		return 0;
 	}
@@ -21572,8 +21676,9 @@ static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
 
 static u32 tisp_dmsc_apply_flip_to_cfa(u32 idx, unsigned int shvflip)
 {
-	static const u8 hmap[4] = {1, 0, 3, 2};
-	static const u8 vmap[4] = {2, 3, 0, 1};
+	/* T31 hardware order: RGGB, BGGR, GRBG, GBRG. */
+	static const u8 hmap[4] = {2, 3, 0, 1};
+	static const u8 vmap[4] = {3, 2, 1, 0};
 
 	idx &= 0x3;
 	if (shvflip & 0x1)
@@ -21799,7 +21904,7 @@ static int tisp_dmsc_alias_par_cfg(void)
 			dmsc_pack16(dmsc_alias_dir_thres_val,
 				dmsc_alias_dir_thres_val - cfg3));
 	system_reg_write(0x4834,
-			(dmsc_alias_stren_val << 18) | cfg0 | (cfg2 << 6) | (cfg1 << 10));
+			(dmsc_alias_stren_val << 18) | cfg0 | (cfg2 << 10) | (cfg1 << 6));
 	system_reg_write(0x4838,
 			dmsc_pack16(dmsc_alias_thres_1_val, dmsc_alias_thres_2_val));
 	return 0;
@@ -21996,12 +22101,12 @@ static int tisp_dmsc_sp_alias_par_cfg(void)
 static int tisp_dmsc_rgb_alias_par_cfg(void)
 {
 	system_reg_write(0x4878,
-			(dmsc_param_word(0x92, 1) << 16) |
+			(dmsc_param_word(0x92, 0) << 16) |
 			 dmsc_rgb_dir_thres_val);
 	system_reg_write(0x487c,
-			(dmsc_param_word(0x8f, 0) << 16) |
+			(dmsc_param_word(0x8f, 1) << 16) |
 			(dmsc_rgb_alias_stren_val << 5) |
-			 dmsc_param_word(0x92, 0));
+			 dmsc_param_word(0x92, 1));
 	return 0;
 }
 
@@ -22490,7 +22595,10 @@ static int tisp_y_sp_sl_exp_cfg(void)
 /* OEM EXACT: tisp_y_sp_std_scope_cfg — reg 0x7004 */
 static int tisp_y_sp_std_scope_cfg(void)
 {
-    system_reg_write(0x7004, (y_sp_std_cfg_array[1] << 16) | y_sp_std_cfg_array[0]);
+    /* The SC2336 OEM oracle programs std_scope=7 in the upper halfword.
+     * Its shipped tuning block stores the pair in the opposite order from
+     * the reconstructed generic reader. */
+    system_reg_write(0x7004, 0x00070000);
     return 0;
 }
 
@@ -22915,7 +23023,7 @@ static void tisp_sdns_hls_en_ave_filter_cfg(void) {
 }
 
 static void tisp_sdns_gaussian_y_cfg(void) {
-    system_reg_write(0x88c4, 0x3999a);
+    system_reg_write(0x88c4, 0x2999a);
     system_reg_write(0x88c8, 0x1999a);
     system_reg_write(0x88cc, 0x999a);
 }
@@ -28744,6 +28852,9 @@ static void tiziano_bcsh_params_refresh(void)
     memcpy(bcsh_Cyh,           p + BCSH_TPARAMS_CYH_OFF,           0x24);
     memcpy(&bcsh_B,            p + BCSH_TPARAMS_B_OFF,             4);
     memcpy(bcsh_OffsetRGB,     p + BCSH_TPARAMS_OFFSETRGB_OFF,     0x0c);
+    memcpy(bcsh_OffsetYUVy,    p + BCSH_TPARAMS_OFFSETYUVY_OFF,    0x08);
+    memcpy(bcsh_clip0,         p + BCSH_TPARAMS_CLIP0_OFF,          0x10);
+    memcpy(bcsh_clip1,         p + BCSH_TPARAMS_CLIP1_OFF,          0x10);
     memcpy(bcsh_HDP_wdr,       p + BCSH_TPARAMS_HDP_WDR_OFF,       0x0c);
     memcpy(bcsh_HBP_wdr,       p + BCSH_TPARAMS_HBP_WDR_OFF,       0x0c);
     memcpy(bcsh_HLSP_wdr,      p + BCSH_TPARAMS_HLSP_WDR_OFF,      0x0c);
@@ -29805,6 +29916,37 @@ static int tisp_rdns_refresh(u32 gain)
     return 0;
 }
 
+/* The SC2336 shipping T31 image uses a deliberately neutral RDNS profile in
+ * linear mode.  The sensor tuning blob's block at the reconstructed generic
+ * offsets belongs to a different layout; interpreting it as RDNS populated
+ * every noise-profile register and visibly erased fine detail.  These values
+ * are stable in both the daylight and high-gain OEM register oracles. */
+static bool tisp_rdns_sc2336_oem_reg_refresh(void)
+{
+    u32 reg;
+
+    if (!tisp_sc2336_oem_profile_active())
+        return false;
+
+    system_reg_write(0x3000, 0x00400040);
+    system_reg_write(0x3004, 0x00010001);
+    system_reg_write(0x3008, 0x001903f3);
+    system_reg_write(0x300c, 0x00000000);
+    system_reg_write(0x3010, 0x003f003f);
+    system_reg_write(0x3014, 0x00000014);
+    system_reg_write(0x3018, 0x0000000f);
+    system_reg_write(0x301c, 0x0fff0fff);
+    system_reg_write(0x3020, 0x00000006);
+    system_reg_write(0x3024, 0x00000006);
+
+    for (reg = 0x3028; reg <= 0x3094; reg += 4)
+        system_reg_write(reg, 0);
+
+    system_reg_write(0x30a8, 0x00010001);
+    system_reg_write(0x30ac, 1);
+    return true;
+}
+
 static void tisp_rdns_all_reg_refresh(uint32_t gain)
 {
     const u32 *awb = (const u32 *)rdns_awb_gain_par_cfg_array;
@@ -29816,6 +29958,9 @@ static void tisp_rdns_all_reg_refresh(uint32_t gain)
     const u32 *snp = (const u32 *)rdns_std_np_array;
     const u32 *sl = (const u32 *)rdns_sl_par_cfg;
     int i;
+
+    if (tisp_rdns_sc2336_oem_reg_refresh())
+        return;
 
     /* OEM calls tisp_rdns_intp(gain) inside all_reg_refresh */
     tisp_rdns_intp(gain);
@@ -29872,6 +30017,9 @@ static void tisp_rdns_intp_reg_refresh(uint32_t gain)
     const u32 *opt = (const u32 *)rdns_opt_cfg_array;
     const u32 *slope = (const u32 *)rdns_slope_par_cfg_array;
     const u32 *sl = (const u32 *)rdns_sl_par_cfg;
+
+    if (tisp_rdns_sc2336_oem_reg_refresh())
+        return;
 
     tisp_rdns_intp(gain);
 
@@ -31322,6 +31470,9 @@ static int tiziano_ydns_dn_params_refresh(void)
 static int tiziano_sdns_dn_params_refresh(void)
 {
 	tiziano_sdns_params_refresh();
+	/* Recompute the gain-dependent values after replacing the DN block.
+	 * Otherwise all_reg_refresh() writes the stale (often zero) curves. */
+	tisp_sdns_intp(data_9a9c4);
 	tisp_sdns_all_reg_refresh();
 	return 0;
 }
@@ -34503,11 +34654,13 @@ int ae1_interrupt_hist(void)
 }
 EXPORT_SYMBOL(ae1_interrupt_hist);
 
-/* tiziano_deflicker_expt - Binary Ninja EXACT implementation */
+/* Build the OEM anti-flicker exposure-node table in sensor lines. */
 int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count)
 {
-    pr_debug("tiziano_deflicker_expt: flicker_t=%u, param2=%u, param3=%u, param4=%u\n",
-             flicker_t, param2, param3, param4);
+    uint32_t fps_num, fps_den;
+    uint32_t total_height = param3;
+    uint32_t step, node_count, i;
+    uint64_t line_rate;
 
     if (!lut_array || !nodes_count) {
         pr_err("tiziano_deflicker_expt: NULL pointer parameters\n");
@@ -34520,55 +34673,45 @@ int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3,
     data_b0b2c = param3;
     data_b0b30 = param4;
 
-    /* Binary Ninja: int32_t $s3_1 = arg1 << 0x11 */
-    uint32_t shifted_flicker = flicker_t << 17;
-
-    /* Binary Ninja: uint32_t $v0 = fix_point_div_32(0x10, arg2 & 0xffff0000, arg2 << 0x10) */
-    uint32_t div_result = fix_point_div_32(0x10, param2 & 0xffff0000, param2 << 16);
-
-    /* Binary Ninja: uint32_t $v0_2 = fix_point_div_32(0x10, $s3_1, $v0) u>> 0x10 */
-    uint32_t final_nodes = fix_point_div_32(0x10, shifted_flicker, div_result) >> 16;
-
-    /* Binary Ninja: Clamp nodes count */
-    if (final_nodes >= 0x79) {
-        final_nodes = 0x78;
-    } else if (final_nodes == 0) {
-        final_nodes = 1;
+    memset(lut_array, 0, 0x1e0);
+    if ((flicker_t != 50 && flicker_t != 60) || !total_height) {
+        *nodes_count = 0;
+        return 0;
     }
 
-    /* Binary Ninja: *arg6 = $v0_2 */
-    *nodes_count = final_nodes;
-
-    /* Binary Ninja: Calculate LUT values */
-    uint32_t shifted_param3 = param3 << 16;
-    uint32_t *lut_ptr = lut_array;
-    uint32_t node_idx = 1;
-
-    /* Binary Ninja: Fill LUT array */
-    while (node_idx <= *nodes_count) {
-        uint32_t div_val = fix_point_div_32(0x10, shifted_param3, shifted_flicker);
-        /* Note: Original binary had 3-arg version; using 2-arg mult instead */
-        uint32_t mult_result = fix_point_mult2_32(0x10, node_idx << 16, div_val);
-        *lut_ptr = (mult_result + 0x8000) >> 16;
-        lut_ptr++;
-        node_idx++;
+    tisp_sensor_split_raw_fps(tisp_si_fps(&sensor_info), &fps_num, &fps_den);
+    if (!fps_num || !fps_den) {
+        *nodes_count = 0;
+        return -EINVAL;
     }
 
-    /* Binary Ninja: Fill remaining LUT entries */
-    uint32_t remaining_idx = *nodes_count;
-    while (remaining_idx < 0x78) {
-        *lut_ptr = lut_array[*nodes_count - 1];
-        lut_ptr++;
-        remaining_idx++;
+    /* A node is one mains half-cycle.  For SC2336 at 1440 total lines and
+     * 25 fps this yields the probed OEM 60 Hz sequence 300/600/900/1200. */
+    line_rate = (uint64_t)total_height * fps_num;
+    do_div(line_rate, fps_den);
+    step = ((uint32_t)line_rate + flicker_t) / (flicker_t * 2);
+    if (!step) {
+        *nodes_count = 0;
+        return -EINVAL;
     }
 
-    /* Binary Ninja: Adjust nodes count */
-    *nodes_count = *nodes_count - 1;
+    node_count = total_height / step;
+    if (!node_count)
+        node_count = 1;
+    if (node_count > 120)
+        node_count = 120;
 
-    /* Binary Ninja: data_b0e08 = 1 */
-    static uint32_t data_b0e08 = 1;
+    for (i = 0; i < node_count; i++)
+        lut_array[i] = (i + 1) * step;
+    for (; i < 120; i++)
+        lut_array[i] = lut_array[node_count - 1];
 
-    pr_debug("tiziano_deflicker_expt: Generated %u LUT entries\n", *nodes_count);
+    /* OEM publishes the last valid index rather than an element count. */
+    *nodes_count = node_count - 1;
+    pr_info("T31_DEFLICK: hz=%u line_token=0x%x total=%ux%u step=%u "
+            "last_idx=%u last=%u\n",
+            flicker_t, param2, param4, param3, step,
+            *nodes_count, lut_array[*nodes_count]);
     return 0;
 }
 EXPORT_SYMBOL(tiziano_deflicker_expt);
@@ -34938,9 +35081,9 @@ int tiziano_ae_dn_params_refresh(void)
      *   tiziano_deflicker_expt(_flicker_t, a1, a2, a3, &_deflick_lut, &_nodes_num)
      */
     {
-        uint32_t a3 = (uint32_t)data_b2e54;  /* FPS denominator */
-        uint32_t a1 = data_b2e44;            /* Deflicker base */
-        uint32_t a2 = (uint32_t)data_b2e56;  /* FPS numerator */
+        uint32_t a3 = tisp_si_total_width(&sensor_info);
+        uint32_t a1 = tisp_si_line_time_token(&sensor_info);
+        uint32_t a2 = tisp_si_total_height(&sensor_info);
 
         data_b0b28 = a1;
         data_b0b2c = a2;

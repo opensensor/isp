@@ -466,24 +466,24 @@ static u32 tisp_fps_from_raw(u32 raw_fps)
 
 static u32 tisp_cfa_base_from_mbus(u32 mbus_code)
 {
-    /* CFA indices must match the tuning demosaic module (tisp_dmsc_cfa_base_from_mbus).
-     * Mapping verified against Ingenic SDK v4l2 enum (tx_isp_common.h):
+    /* These are T31 ISP hardware indices, not the usual enum ordering.
+     * The OEM mbus_to_bayer_write jump table at 0x696e8 encodes:
      *   RGGB=0: 0x300d(SRGGB10_DPCM8) 0x300f(SRGGB10_1X10) 0x3012(SRGGB12) 0x3014(SRGGB8)
-     *   GRBG=1: 0x3002(SGRBG8) 0x3009(SGRBG10_DPCM8) 0x300a(SGRBG10_1X10) 0x3011(SGRBG12)
-     *   GBRG=2: 0x300c(SGBRG10_DPCM8) 0x300e(SGBRG10_1X10) 0x3010(SGBRG12) 0x3013(SGBRG8)
-     *   BGGR=3: 0x3001(SBGGR8) 0x3003-0x3006(SBGGR10_2X8) 0x3007(SBGGR10_1X10)
-     *           0x3008(SBGGR12) 0x300b(SBGGR10_DPCM8)
+     *   BGGR=1: 0x3001(SBGGR8) 0x3003-0x3008(SBGGR variants) 0x300b(SBGGR10_DPCM8)
+     *   GRBG=2: 0x3002(SGRBG8) 0x3009(SGRBG10_DPCM8) 0x300a(SGRBG10_1X10) 0x3011(SGRBG12)
+     *   GBRG=3: 0x300c(SGBRG10_DPCM8) 0x300e(SGBRG10_1X10) 0x3010(SGBRG12) 0x3013(SGBRG8)
+     * SC2336 reports SBGGR10_1X10 (0x3007), for which OEM writes 1.
      */
     switch (mbus_code) {
     case 0x300d: case 0x300f: case 0x3012: case 0x3014:
         return 0;  /* RGGB */
     case 0x3002: case 0x3009: case 0x300a: case 0x3011:
-        return 1;  /* GRBG */
+        return 2;  /* GRBG */
     case 0x300c: case 0x300e: case 0x3010: case 0x3013:
-        return 2;  /* GBRG */
+        return 3;  /* GBRG */
     case 0x3001: case 0x3003: case 0x3004: case 0x3005:
     case 0x3006: case 0x3007: case 0x3008: case 0x300b:
-        return 3;  /* BGGR */
+        return 1;  /* BGGR */
     default:
         return 0;
     }
@@ -491,8 +491,9 @@ static u32 tisp_cfa_base_from_mbus(u32 mbus_code)
 
 static u32 tisp_cfa_apply_flip(u32 idx, unsigned int shvflip)
 {
-    static const u8 hmap[4] = {1, 0, 3, 2};
-    static const u8 vmap[4] = {2, 3, 0, 1};
+    /* T31 order: RGGB, BGGR, GRBG, GBRG. */
+    static const u8 hmap[4] = {2, 3, 0, 1};
+    static const u8 vmap[4] = {3, 2, 1, 0};
 
     idx &= 0x3;
     if (shvflip & 0x1)
