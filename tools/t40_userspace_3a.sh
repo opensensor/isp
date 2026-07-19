@@ -1,12 +1,19 @@
 #!/bin/sh
 # Userspace 3A loop for the T40 recovered driver. Runs ON the camera.
 # Proportional AE on the NV12 Y plane + gray-world WB trim on the UV plane,
-# sampled via /dev/mem (phys_memdump). Drives the recovered module's 0644
+# sampled via /dev/mem (phys_memdump compact statistics modes). Drives the
+# recovered module's 0644
 # params only - cannot crash the kernel.
 P=/sys/module/tx_isp_t40_recovered/parameters
 PM=/tmp/phys_memdump
-Y_PHYS=${Y_PHYS:-0x6a3e500}
-UV_PHYS=${UV_PHYS:-0x6c3c500}
+# By default, take a sequence-consistent Y/UV pair from the driver's latest
+# completed MSCA frame.  Fixed setup-time addresses are not stable: rvd queues
+# rotating buffers, and sampling an address from an old boot/queue makes AE see
+# zeros and drive the sensor to maximum exposure.  DYNAMIC_PHYS=0 retains an
+# explicit diagnostic override only.
+DYNAMIC_PHYS=${DYNAMIC_PHYS:-1}
+Y_PHYS=${Y_PHYS:-0}
+UV_PHYS=${UV_PHYS:-0}
 TARGET=${TARGET:-105}
 DEADBAND_PCT=${DEADBAND_PCT:-5}
 MAX_IT=${MAX_IT:-1919}
@@ -20,6 +27,35 @@ FLICKER_STEP=${FLICKER_STEP:-400}
 # UV neutral window for the WB trim; set UV_LO=0 UV_HI=255 to freeze gains
 UV_LO=${UV_LO:-121}
 UV_HI=${UV_HI:-133}
+# Fractional AWB gain step. 48 is the conservative long-running default
+# (~2.1% per update); smaller values are useful for a short forensic settle.
+# Clamp away zero/one so a bad harness value cannot collapse a channel.
+AWB_STEP_DIV=${AWB_STEP_DIV:-48}
+[ "$AWB_STEP_DIV" -lt 2 ] && AWB_STEP_DIV=2
+AWB_FROZEN=0
+[ "$UV_LO" -le 0 ] && [ "$UV_HI" -ge 255 ] && AWB_FROZEN=1
+
+read_completed_phys() {
+	tries=0
+	while [ "$tries" -lt 8 ]; do
+		s1=$(cat "$P/frame_3a_completed_seq" 2>/dev/null || echo x)
+		case "$s1" in *[!0-9]*|'') tries=$((tries + 1)); continue;; esac
+		[ $((s1 & 1)) -ne 0 ] && { tries=$((tries + 1)); continue; }
+		y=$(cat "$P/frame_3a_completed_y_phys" 2>/dev/null || echo x)
+		uv=$(cat "$P/frame_3a_completed_uv_phys" 2>/dev/null || echo x)
+		s2=$(cat "$P/frame_3a_completed_seq" 2>/dev/null || echo x)
+		case "$y:$uv:$s2" in *[!0-9:]*|'') tries=$((tries + 1)); continue;; esac
+		if [ "$s1" = "$s2" ] && [ $((s2 & 1)) -eq 0 ] &&
+		   [ "$y" -ge $((0x100000)) ] && [ "$y" -lt $((0x10000000)) ] &&
+		   [ "$uv" -gt "$y" ] && [ "$uv" -lt $((0x10000000)) ] &&
+		   [ $((uv - y)) -le $((0x400000)) ]; then
+			printf '%s %s %s\n' "$s2" "$y" "$uv"
+			return 0
+		fi
+		tries=$((tries + 1))
+	done
+	return 1
+}
 
 # resume from the last applied exposure so a restart doesn't slam the sensor
 prev=$(cat $P/ae_sensor_apply_force_packed 2>/dev/null || echo 0)
@@ -40,17 +76,12 @@ bgain=$(cat $P/awb_grayworld_last_bgain 2>/dev/null || echo 1480)
 [ "$rgain" -le 0 ] 2>/dev/null && rgain=1280
 [ "$bgain" -le 0 ] 2>/dev/null && bgain=1480
 
-# busybox od has no -t/-A; use -d (unsigned 16-bit LE words), skip addr column
 mean_of() {  # phys len -> byte mean
-	$PM "$1" "$2" 2>/dev/null | od -v -d | awk '
-		{ for (i = 2; i <= NF; i += 4) { s += $i % 256 + int($i / 256); n += 2 } }
-		END { if (n) printf "%d", s / n; else print -1 }'
+	$PM --mean8 "$1" "$2" 2>/dev/null || printf '%s\n' -1
 }
 
 uv_means() {  # phys len -> "umean vmean" (NV12: word = U | V<<8)
-	$PM "$1" "$2" 2>/dev/null | od -v -d | awk '
-		{ for (i = 2; i <= NF; i += 4) { u += $i % 256; v += int($i / 256); n++ } }
-		END { if (n) printf "%d %d", u / n, v / n; else print "-1 -1" }'
+	$PM --uvmean "$1" "$2" 2>/dev/null || printf '%s\n' '-1 -1'
 }
 
 apply_expo() {
@@ -66,6 +97,25 @@ apply_expo() {
 	dns_ev=$(( again * 49152 ))
 	[ "$dns_ev" -gt 491520 ] && dns_ev=491520
 	echo "$dns_ev" > $P/dns_gain_ev 2>/dev/null
+	# LSC uses the sensor driver's actual 16.16 log2 gain.  Do not feed it
+	# dns_ev: DNS is intentionally over-driven to match OEM temporal noise,
+	# while the lens mesh must track the real GC4653 gain interpolation point.
+	case "$again" in
+		0) lsc_ev=0;; 1) lsc_ev=14995;; 2) lsc_ev=31177;;
+		3) lsc_ev=47704;; 4) lsc_ev=65535;; 5) lsc_ev=81158;;
+		6) lsc_ev=97241;; 7) lsc_ev=113239;; 8) lsc_ev=131070;;
+		9) lsc_ev=147006;; 10) lsc_ev=162776;; 11) lsc_ev=178774;;
+		12) lsc_ev=196605;; 13) lsc_ev=212541;; 14) lsc_ev=228311;;
+		15) lsc_ev=244420;; 16) lsc_ev=262140;; 17) lsc_ev=278154;;
+		18) lsc_ev=293912;; 19) lsc_ev=309955;; 20) lsc_ev=327675;;
+		21) lsc_ev=343689;; 22) lsc_ev=359480;; 23) lsc_ev=375518;;
+		24) lsc_ev=393210;; *) lsc_ev=409243;;
+	esac
+	echo "$lsc_ev" > $P/lsc_lit_gain 2>/dev/null
+	# CCM consumes the same real sensor log-gain in a coarser fixed-point
+	# domain.  Stock row 13 was 13423 for GC4653 gain 212541; the 2240 bias
+	# accounts for the OEM long-EV packing offset before the >>4 conversion.
+	echo $(( (lsc_ev + 2240) / 16 )) > $P/ccm_ev 2>/dev/null
 }
 
 apply_expo
@@ -73,8 +123,20 @@ echo "$rgain" > $P/awb_manual_rgain 2>/dev/null
 echo "$bgain" > $P/awb_manual_bgain 2>/dev/null
 
 i=0
+sample_seq=-1
 while true; do
 	sleep "$PERIOD"
+	if [ "$DYNAMIC_PHYS" = "1" ]; then
+		pair=$(read_completed_phys) || {
+			echo "3a: waiting for stable completed MSCA buffer"
+			continue
+		}
+		set -- $pair
+		new_seq=$1; Y_PHYS=$2; UV_PHYS=$3
+		# Never adjust exposure repeatedly from a frozen last frame.
+		[ "$new_seq" = "$sample_seq" ] && continue
+		sample_seq=$new_seq
+	fi
 	luma=$(mean_of $Y_PHYS 0x40000)
 	[ "$luma" -lt 0 ] && continue
 	[ "$luma" -lt 1 ] && luma=1
@@ -115,8 +177,7 @@ while true; do
 		fi
 	fi
 
-	# AWB trim every other tick; EMA the UV means (the fixed-phys sample
-	# alternates ring buffers and jitters) and use a tight neutral window.
+	# AWB trim every other tick; EMA the UV means and use a tight neutral window.
 	# Bright-gated gray-world: average UV only over blocks whose Y mean is
 	# bright-but-not-clipped. White surfaces are the only trustworthy gray
 	# references — a whole-frame mean lets a dominant colored wall pull the
@@ -125,6 +186,10 @@ while true; do
 	# all-block mean when nothing qualifies (e.g. night).
 	i=$((i + 1))
 	if [ $((i % 2)) -eq 0 ]; then
+		if [ "$AWB_FROZEN" = "1" ]; then
+			echo "3a: seq=$sample_seq y=$Y_PHYS uv=$UV_PHYS luma=$luma ema=$luma_ema awb=frozen it=$it again=$again rgain=$rgain bgain=$bgain"
+			continue
+		fi
 		# Near-gray candidate selection (what the OEM AWB's regional
 		# thresholds do): a gray reference block is bright-ish (>= frame
 		# mean, not clipped) AND already near-neutral in chroma. A
@@ -173,7 +238,7 @@ while true; do
 			u=$(( au / an )); v=$(( av / an )); bn=0; hold=0
 		else
 			hold=$(( ${hold:-0} + 1 ))
-			echo "3a: luma=$luma ema=$luma_ema bn=0 hold=$hold it=$it again=$again rgain=$rgain bgain=$bgain"
+			echo "3a: seq=$sample_seq y=$Y_PHYS uv=$UV_PHYS luma=$luma ema=$luma_ema bn=0 hold=$hold it=$it again=$again rgain=$rgain bgain=$bgain"
 			continue
 		fi
 		if [ "${u_ema:--1}" -lt 0 ]; then u_ema=$u; v_ema=$v; fi
@@ -181,19 +246,19 @@ while true; do
 		v_ema=$(( (v_ema * 3 + v) / 4 ))
 		ch=0
 		if [ "$v_ema" -gt "$UV_HI" ] && [ "$rgain" -gt 512 ]; then
-			rgain=$((rgain - rgain / 48)); ch=1
+			rgain=$((rgain - rgain / AWB_STEP_DIV)); ch=1
 		elif [ "$v_ema" -lt "$UV_LO" ] && [ "$rgain" -lt 6144 ]; then
-			rgain=$((rgain + rgain / 48)); ch=1
+			rgain=$((rgain + rgain / AWB_STEP_DIV)); ch=1
 		fi
 		if [ "$u_ema" -gt "$UV_HI" ] && [ "$bgain" -gt 512 ]; then
-			bgain=$((bgain - bgain / 48)); ch=1
+			bgain=$((bgain - bgain / AWB_STEP_DIV)); ch=1
 		elif [ "$u_ema" -lt "$UV_LO" ] && [ "$bgain" -lt 6144 ]; then
-			bgain=$((bgain + bgain / 48)); ch=1
+			bgain=$((bgain + bgain / AWB_STEP_DIV)); ch=1
 		fi
 		if [ "$ch" -eq 1 ]; then
 			echo "$rgain" > $P/awb_manual_rgain
 			echo "$bgain" > $P/awb_manual_bgain
 		fi
-		echo "3a: luma=$luma ema=$luma_ema u=$u_ema v=$v_ema bn=$bn it=$it again=$again rgain=$rgain bgain=$bgain"
+		echo "3a: seq=$sample_seq y=$Y_PHYS uv=$UV_PHYS luma=$luma ema=$luma_ema u=$u_ema v=$v_ema bn=$bn it=$it again=$again rgain=$rgain bgain=$bgain"
 	fi
 done

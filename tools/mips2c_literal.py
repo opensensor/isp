@@ -13,7 +13,20 @@ BSSMAP = {}
 if len(sys.argv) > 3:
     exec(open(sys.argv[3]).read())  # defines BSSMAP = {offset: "symbol"}
 
-lines = open(ASM).read().splitlines()
+all_lines = open(ASM).read().splitlines()
+start = next(
+    (index for index, line in enumerate(all_lines)
+     if re.match(rf"\s*[0-9a-f]+\s+<{re.escape(FNAME)}>", line)),
+    None,
+)
+if start is None:
+    raise SystemExit(f"function {FNAME!r} not found in {ASM}")
+end = next(
+    (index for index in range(start + 1, len(all_lines))
+     if re.match(r"\s*[0-9a-f]+\s+<[^>]+>:\s*$", all_lines[index])),
+    len(all_lines),
+)
+lines = all_lines[start:end]
 insns = []
 for ln in lines:
     m = re.match(r'\s*([0-9a-f]+):\s+([0-9a-f]{8})\s+(\S+)\s*(.*)', ln)
@@ -140,6 +153,9 @@ while i < len(insns):
         emit(f"{r(a[0])} = (uint32_t)(int8_t)({r(a[1])} & 0xffU);")
     elif op == "seh":
         emit(f"{r(a[0])} = (uint32_t)(int16_t)({r(a[1])} & 0xffffU);")
+    elif op == "wsbh":
+        emit(f"{r(a[0])} = (({r(a[1])} & 0x00ff00ffU) << 8) | "
+             f"(({r(a[1])} & 0xff00ff00U) >> 8);")
     elif op in ("lw","lbu","lhu","lb","lh"):
         size = 4 if op=="lw" else (1 if op in ("lbu","lb") else 2)
         base, off, isanchor = memref(a[1], ins, size)

@@ -5,8 +5,12 @@
  */
 static bool regtrace_enable_bcsh;
 static uint32_t regtrace_bcsh_mode = 2; /* OEM tisp_main_init passes 2 */
+static uint32_t regtrace_bcsh_ev = 400;
+static uint32_t regtrace_bcsh_ct = 6000;
 module_param_named(enable_bcsh, regtrace_enable_bcsh, bool, 0644);
 module_param_named(bcsh_mode, regtrace_bcsh_mode, uint, 0644);
+module_param_named(bcsh_ev, regtrace_bcsh_ev, uint, 0644);
+module_param_named(bcsh_ct, regtrace_bcsh_ct, uint, 0644);
 
 static uint32_t pstMainBcshOri_lit[72];
 static uintptr_t stMainBcshOuter_lit;
@@ -3720,12 +3724,26 @@ static int32_t regtrace_bcsh_main_init_lit(uint32_t mode)
     (void)tisp_bcsh_params_refresh_lit((uint32_t)(uintptr_t)pstMainBcshOri_lit,
                                        (uint32_t)stMainBcshOuter_lit,
                                        nbuf + 0x11e38U);
+    /*
+     * OEM 3A refreshes these live inputs before BCSH interpolation.  The
+     * recovered event fanout does not yet do that, so make the state explicit
+     * instead of pinning the block to its EV 400 / CT 6000 bootstrap forever.
+     */
+    if (pstMainBcshOri_lit[38])
+        *(uint32_t *)(uintptr_t)pstMainBcshOri_lit[38] = regtrace_bcsh_ev;
+    if (pstMainBcshOri_lit[41])
+        *(uint16_t *)(uintptr_t)pstMainBcshOri_lit[41] =
+            (uint16_t)regtrace_bcsh_ct;
     (void)tisp_bcsh_ev_update_lit((uint32_t)(uintptr_t)pstMainBcshOri_lit, 0);
     (void)tisp_bcsh_ct_update_lit((uint32_t)(uintptr_t)pstMainBcshOri_lit, 0);
     flag = (uint8_t *)(uintptr_t)pstMainBcshOri_lit[6];
     if (flag)
         *flag = 0;
-    printk(KERN_WARNING "tx_isp_t40_recovered: bcsh-main-init-lit done outer=%p mode=%u\n",
-           (void *)(uintptr_t)stMainBcshOuter_lit, mode);
+    printk(KERN_WARNING "tx_isp_t40_recovered: bcsh-main-init-lit done outer=%p mode=%u ev=%u ct=%u regs4c=%08x regs50=%08x regs64=%08x regs6c=%08x regs70=%08x\n",
+           (void *)(uintptr_t)stMainBcshOuter_lit, mode,
+           regtrace_bcsh_ev, regtrace_bcsh_ct,
+           system_reg_read(0x1104c), system_reg_read(0x11050),
+           system_reg_read(0x11064), system_reg_read(0x1106c),
+           system_reg_read(0x11070));
     return 0;
 }

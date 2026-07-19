@@ -8841,11 +8841,46 @@ static bool regtrace_enable_frame_3a;
 static bool regtrace_enable_soft_gamma;
 static bool regtrace_enable_ydns;
 static bool regtrace_enable_gib_blc;
+/*
+ * Source-derived T40 raw-domain calibration.  The old enable_gib_blc knob
+ * below is retained only for reproducibility: it writes an artificial core
+ * pedestal that is zero in the stock image.  These two literal paths instead
+ * consume the OEM BLC/GIB tables at tparamsN+0x2350/+0xd610 and program the
+ * actual T40 units at 0x2000/0x8000.
+ */
+static bool regtrace_enable_blc_lit;
+static uint regtrace_blc_lit_gain = 212541U;
+static uint32_t regtrace_blc_lit_gain_now;
+static bool regtrace_enable_gib_lit;
+static uint regtrace_gib_lit_gain = 212541U;
+static uint32_t regtrace_gib_lit_gain_now;
+/* Stock AE event fanout supplies this live; expose its settled oracle value. */
+static uint regtrace_gib_lit_final_gain = 1261U;
 static bool regtrace_enable_ysp;
 static bool regtrace_enable_ccm;
+/*
+ * The literal CCM init starts from the OEM 6000 K bootstrap value.  Stock
+ * immediately replaces that value from AWB (the night oracle carried 2372 K),
+ * but the recovered userspace-AWB path previously updated only WBG/LSC.  Keep
+ * a forensic override and, by default, derive the live CCM CT from the same
+ * WB-gain anchors used by the literal LSC chain.
+ */
+static bool regtrace_ccm_ct_track = true;
+static uint regtrace_ccm_ct = 5000;
+static uint32_t regtrace_ccm_ct_now;
+static uint regtrace_ccm_ev = 400;
+static uint32_t regtrace_ccm_ev_now;
 static bool regtrace_enable_mdns;
-/* userspace 3A: gain EV (log2(total_gain) in 16.16) drives DNS/sharpen strength */
+/* userspace 3A: gain EV (log2(total_gain) in 16.16) drives DNS strength */
 static uint regtrace_dns_gain_ev;
+/*
+ * The recovered userspace loop may deliberately bias DNS above the sensor's
+ * real gain to match stock noise.  YSP must still interpolate at the real
+ * gain or the high-gain sharpening profile suppresses detail.  Zero keeps
+ * the historical coupled behavior; a nonzero value is an explicit YSP EV.
+ */
+static uint regtrace_ysp_gain_ev;
+static uint32_t regtrace_ysp_gain_ev_now;
 /* debug: bitmap of 32-bit words written in the MDNS unit window 0xF000-0xF3FF */
 static uint regtrace_mdns_wr_bitmap[8];
 static uint regtrace_gib_blc_offset = 0x100;
@@ -8869,6 +8904,15 @@ static uint32_t regtrace_frame_3a_samples;
 static uint32_t regtrace_frame_3a_last_luma;
 static uint32_t regtrace_frame_3a_last_u;
 static uint32_t regtrace_frame_3a_last_v;
+/*
+ * Read-only userspace 3A sampling ABI.  The MSCA output buffers rotate, so a
+ * physical address learned at stream setup quickly becomes an unsafe/stale
+ * sampling source.  Publish the most recently completed channel-0 Y/UV pair
+ * behind an even/odd sequence counter so userspace can reject a torn pair.
+ */
+static uint32_t regtrace_frame_3a_completed_seq;
+static uint32_t regtrace_frame_3a_completed_y_phys;
+static uint32_t regtrace_frame_3a_completed_uv_phys;
 static uint regtrace_awb_grayworld_rbias = 1193;
 static uint regtrace_awb_grayworld_bbias = 1448;
 static bool regtrace_enable_adr_reg_writes = true;
@@ -9131,10 +9175,24 @@ module_param_named(enable_awb_set_gain, regtrace_enable_awb_set_gain, bool, 0644
 module_param_named(enable_soft_gamma, regtrace_enable_soft_gamma, bool, 0644);
 module_param_named(enable_ydns, regtrace_enable_ydns, bool, 0644);
 module_param_named(enable_gib_blc, regtrace_enable_gib_blc, bool, 0644);
+module_param_named(enable_blc_lit, regtrace_enable_blc_lit, bool, 0644);
+module_param_named(blc_lit_gain, regtrace_blc_lit_gain, uint, 0644);
+module_param_named(blc_lit_gain_now, regtrace_blc_lit_gain_now, uint, 0444);
+module_param_named(enable_gib_lit, regtrace_enable_gib_lit, bool, 0644);
+module_param_named(gib_lit_gain, regtrace_gib_lit_gain, uint, 0644);
+module_param_named(gib_lit_gain_now, regtrace_gib_lit_gain_now, uint, 0444);
+module_param_named(gib_lit_final_gain, regtrace_gib_lit_final_gain, uint, 0644);
 module_param_named(enable_ysp, regtrace_enable_ysp, bool, 0644);
 module_param_named(enable_ccm, regtrace_enable_ccm, bool, 0644);
+module_param_named(ccm_ct_track, regtrace_ccm_ct_track, bool, 0644);
+module_param_named(ccm_ct, regtrace_ccm_ct, uint, 0644);
+module_param_named(ccm_ct_now, regtrace_ccm_ct_now, uint, 0444);
+module_param_named(ccm_ev, regtrace_ccm_ev, uint, 0644);
+module_param_named(ccm_ev_now, regtrace_ccm_ev_now, uint, 0444);
 module_param_named(enable_mdns, regtrace_enable_mdns, bool, 0644);
 module_param_named(dns_gain_ev, regtrace_dns_gain_ev, uint, 0644);
+module_param_named(ysp_gain_ev, regtrace_ysp_gain_ev, uint, 0644);
+module_param_named(ysp_gain_ev_now, regtrace_ysp_gain_ev_now, uint, 0444);
 module_param_array_named(mdns_wr_bitmap, regtrace_mdns_wr_bitmap, uint, NULL, 0444);
 module_param_named(gib_blc_offset, regtrace_gib_blc_offset, uint, 0644);
 module_param_named(enable_awb_grayworld, regtrace_enable_awb_grayworld, bool, 0644);
@@ -9294,6 +9352,9 @@ module_param_named(irq_frame_done_event_limit, regtrace_irq_frame_done_event_lim
 module_param_named(irq_frame_done_delay_ms, regtrace_irq_frame_done_delay_ms, uint, 0644);
 module_param_named(irq_frame_done_min_nonzero_words, regtrace_irq_frame_done_min_nonzero_words, uint, 0644);
 module_param_named(irq_frame_done_min_change_words, regtrace_irq_frame_done_min_change_words, uint, 0644);
+module_param_named(frame_3a_completed_seq, regtrace_frame_3a_completed_seq, uint, 0444);
+module_param_named(frame_3a_completed_y_phys, regtrace_frame_3a_completed_y_phys, uint, 0444);
+module_param_named(frame_3a_completed_uv_phys, regtrace_frame_3a_completed_uv_phys, uint, 0444);
 module_param_named(framechan_wait_irq_timeout_ms, regtrace_framechan_wait_irq_timeout_ms, uint, 0644);
 module_param_named(framechan_dma_sync_qbuf_dir, regtrace_framechan_dma_sync_qbuf_dir, uint, 0644);
 module_param_named(framechan_dma_sync_dqbuf_dir, regtrace_framechan_dma_sync_dqbuf_dir, uint, 0644);
@@ -9402,6 +9463,24 @@ static void regtrace_bcsh_static_write(void)
  */
 static bool regtrace_enable_dmsc_static;
 module_param_named(enable_dmsc_static, regtrace_enable_dmsc_static, bool, 0644);
+/*
+ * Overlay the gain-10 values that were stable across two reads of the
+ * 2026-07-18 stock oracle.  Keeping this separate from the older static
+ * image makes the register-forensics A/B reversible while the proper DMSC
+ * gain interpolation chain is being recovered.
+ */
+static bool regtrace_dmsc_stock_current_overlay;
+module_param_named(dmsc_stock_current_overlay,
+                   regtrace_dmsc_stock_current_overlay, bool, 0644);
+static bool regtrace_dmsc_stock_high_gain_overlay;
+module_param_named(dmsc_stock_high_gain_overlay,
+                   regtrace_dmsc_stock_high_gain_overlay, bool, 0644);
+/* bit0=base thresholds, bit1=primary filter LUT, bit2=late thresholds,
+ * bit3=secondary LUT.  The split is a forensic bisection aid until the
+ * tuning-record interpolation is translated. */
+static uint regtrace_dmsc_stock_overlay_mask = 0xf;
+module_param_named(dmsc_stock_overlay_mask,
+                   regtrace_dmsc_stock_overlay_mask, uint, 0644);
 
 static void regtrace_dmsc_static_write(void)
 {
@@ -9571,6 +9650,84 @@ static void regtrace_dmsc_static_write(void)
 
     for (k = 0; k < sizeof(dmsc_cfg) / sizeof(dmsc_cfg[0]); k++)
         (void)system_reg_write(dmsc_cfg[k][0], dmsc_cfg[k][1]);
+    if (regtrace_dmsc_stock_current_overlay ||
+        regtrace_dmsc_stock_high_gain_overlay) {
+        static const uint32_t current_cfg[][2] = {
+            { 0x0a014, 0x00500028 }, { 0x0a024, 0x00500028 },
+            { 0x0a02c, 0x00500028 }, { 0x0a034, 0x03a193ff },
+            { 0x0a038, 0x012c0118 }, { 0x0a044, 0x00080504 },
+            { 0x0a048, 0x0034003d }, { 0x0a04c, 0x00000000 },
+            { 0x0a05c, 0x00080084 }, { 0x0a060, 0x00490044 },
+            { 0x0a080, 0x078d4000 }, { 0x0a084, 0x0014034e },
+            { 0x0a08c, 0x00002faf }, { 0x0a0ac, 0x00010020 },
+            { 0x0a0b8, 0x0fff0818 }, { 0x0a0c4, 0x08000003 },
+            { 0x0a0f4, 0x195543c2 }, { 0x0a0f8, 0x2082079b },
+            { 0x0a104, 0x1b75e820 }, { 0x0a108, 0x0e51765b },
+            { 0x0a10c, 0x00000088 }, { 0x0a11c, 0x1e655348 },
+            { 0x0a130, 0x0631059f }, { 0x0a134, 0x00000043 },
+            { 0x0a1bc, 0x00000014 }, { 0x0a1c0, 0x000a0014 },
+            { 0x0a1cc, 0x00080078 }, { 0x0a1d8, 0x000800f0 },
+            { 0x0a1fc, 0x00000270 }, { 0x0a204, 0x1fff002c },
+            { 0x0a218, 0x00000001 }, { 0x0a220, 0x0fff012c },
+            { 0x0a224, 0x0fff0190 }, { 0x0a228, 0x001e00fa },
+            { 0x0a24c, 0x17100800 }, { 0x0a250, 0x201f1e1c },
+            { 0x0a260, 0x20202020 }, { 0x0a264, 0x15191d1f },
+            { 0x0a268, 0x01040a10 }, { 0x0a278, 0x00000b30 },
+        };
+        static const uint32_t high_gain_cfg[][2] = {
+            { 0x0a014, 0x00560036 }, { 0x0a024, 0x005e0036 },
+            { 0x0a02c, 0x005e0036 }, { 0x0a038, 0x012c0118 },
+            { 0x0a044, 0x00080504 }, { 0x0a048, 0x003c003f },
+            { 0x0a04c, 0x00000000 }, { 0x0a05c, 0x00080084 },
+            { 0x0a060, 0x003f003a }, { 0x0a080, 0x056ac000 },
+            { 0x0a084, 0x001403e8 }, { 0x0a08c, 0x00005faf },
+            { 0x0a0ac, 0x00010020 }, { 0x0a0b8, 0x0fff0818 },
+            { 0x0a0c4, 0x08000003 }, { 0x0a0f4, 0x08000000 },
+            { 0x0a0f8, 0x1e71b58f }, { 0x0a0fc, 0x2082081f },
+            { 0x0a104, 0x155db820 }, { 0x0a108, 0x0830f453 },
+            { 0x0a10c, 0x000000c5 }, { 0x0a11c, 0x1444e245 },
+            { 0x0a120, 0x185d6595 }, { 0x0a124, 0x1f79c6d9 },
+            { 0x0a130, 0x0a41465f }, { 0x0a134, 0x00000106 },
+            { 0x0a1bc, 0x00000014 }, { 0x0a1c0, 0x00090014 },
+            { 0x0a1cc, 0x00090078 }, { 0x0a1d8, 0x000800f0 },
+            { 0x0a1fc, 0x00000230 }, { 0x0a204, 0x1fff0028 },
+            { 0x0a218, 0x00000001 }, { 0x0a220, 0x0fff012c },
+            { 0x0a224, 0x0fff0190 }, { 0x0a228, 0x001e00fa },
+            { 0x0a24c, 0x08030100 }, { 0x0a250, 0x201d160f },
+            { 0x0a260, 0x1c1e2020 }, { 0x0a264, 0x1014181b },
+            { 0x0a268, 0x0103070b }, { 0x0a278, 0x00000630 },
+        };
+        const uint32_t (*overlay)[2];
+        unsigned int overlay_count;
+        unsigned int j;
+
+        if (regtrace_dmsc_stock_high_gain_overlay) {
+            overlay = high_gain_cfg;
+            overlay_count = ARRAY_SIZE(high_gain_cfg);
+        } else {
+            overlay = current_cfg;
+            overlay_count = ARRAY_SIZE(current_cfg);
+        }
+        for (j = 0; j < overlay_count; j++) {
+            uint32_t off = overlay[j][0];
+            uint32_t group;
+
+            if (off < 0x0a0f4)
+                group = 1U;
+            else if (off <= 0x0a134)
+                group = 2U;
+            else if (off < 0x0a24c)
+                group = 4U;
+            else
+                group = 8U;
+            if (regtrace_dmsc_stock_overlay_mask & group)
+                (void)system_reg_write(off, overlay[j][1]);
+        }
+        printk(KERN_WARNING
+               "tx_isp_t40_recovered: dmsc-static stock overlay profile=%s mask=0x%x candidates=%u\n",
+               regtrace_dmsc_stock_high_gain_overlay ? "gain13" : "gain10",
+               regtrace_dmsc_stock_overlay_mask, j);
+    }
     (void)system_reg_write(0x0a19c, 0x00000001);
     printk(KERN_WARNING "tx_isp_t40_recovered: dmsc-static %u regs written + trig\n", k);
 }
@@ -9610,6 +9767,7 @@ static void regtrace_soft_gamma_write(void)
 }
 
 #include "tx_isp_t40_bcsh_lit.inc"
+#include "tx_isp_t40_dmsc_lit.inc"
 #include "tx_isp_t40_clm_lit.inc"
 #include "tx_isp_t40_lsc_lit.inc"
 #include "tx_isp_t40_sdns_lit.inc"
@@ -10903,6 +11061,220 @@ static int32_t regtrace_ccm_main_init_lit(void)
         *flag = 0;
     printk(KERN_WARNING "tx_isp_t40_recovered: ccm-main-init-lit done outer=%p\n",
            (void *)(uintptr_t)stMainCcmOuter_lit);
+    return 0;
+}
+
+/* OEM tisp_ccm_main_ct_update, expressed against the self-contained literal
+ * state.  pstMainCcmOri_lit[6]/[7]/[8] are current CT, last-applied CT, and
+ * the update threshold respectively.  Calling the literal ev/ct chain writes
+ * the CT-interpolated 3x3 matrix through the OEM LUT hardware path. */
+static void regtrace_ccm_main_ct_update_lit(uint32_t ct, bool force)
+{
+    uint16_t *current_ct, *last, *threshold;
+    uint32_t *current_ev, *last_ev, *ev_threshold;
+    uint32_t delta, ev_delta;
+
+    if (!stMainCcmOuter_lit || !pstMainCcmOri_lit[3] ||
+        !pstMainCcmOri_lit[4] || !pstMainCcmOri_lit[5] ||
+        !pstMainCcmOri_lit[6] ||
+        !pstMainCcmOri_lit[7] || !pstMainCcmOri_lit[8])
+        return;
+    if (ct < 1500U)
+        ct = 1500U;
+    if (ct > 15000U)
+        ct = 15000U;
+    current_ev = (uint32_t *)(uintptr_t)pstMainCcmOri_lit[3];
+    last_ev = (uint32_t *)(uintptr_t)pstMainCcmOri_lit[4];
+    ev_threshold = (uint32_t *)(uintptr_t)pstMainCcmOri_lit[5];
+    current_ct = (uint16_t *)(uintptr_t)pstMainCcmOri_lit[6];
+    last = (uint16_t *)(uintptr_t)pstMainCcmOri_lit[7];
+    threshold = (uint16_t *)(uintptr_t)pstMainCcmOri_lit[8];
+    *current_ev = regtrace_ccm_ev;
+    *current_ct = (uint16_t)ct;
+    ev_delta = (*last_ev < regtrace_ccm_ev) ?
+        (regtrace_ccm_ev - *last_ev) : (*last_ev - regtrace_ccm_ev);
+    delta = (*last < ct) ? (ct - *last) : (*last - ct);
+    if (force || ev_delta > *ev_threshold || delta > *threshold) {
+        (void)tisp_ccm_ev_ct_update_lit(
+            (uint32_t)(uintptr_t)pstMainCcmOri_lit, 0);
+        *last_ev = regtrace_ccm_ev;
+        *last = (uint16_t)ct;
+    }
+    regtrace_ccm_ev_now = regtrace_ccm_ev;
+    regtrace_ccm_ct_now = ct;
+}
+
+static uint16_t regtrace_t40_tuning_u16(const uint8_t *p, uint32_t off)
+{
+    return (uint16_t)((uint16_t)p[off] | ((uint16_t)p[off + 1U] << 8));
+}
+
+/* Exact tisp_simple_intp_int16 rounding, without depending on recovered state. */
+static uint16_t regtrace_t40_tuning_intp16(uint32_t gain,
+                                           const uint8_t *table)
+{
+    uint32_t index = gain >> 16;
+    uint32_t fract = gain & 0xffffU;
+    uint32_t left, right, diff, product, step;
+
+    if (index >= 10U)
+        return regtrace_t40_tuning_u16(table, 20U);
+    left = regtrace_t40_tuning_u16(table, index * 2U);
+    right = regtrace_t40_tuning_u16(table, (index + 1U) * 2U);
+    if (left == right)
+        return (uint16_t)left;
+    diff = left < right ? right - left : left - right;
+    product = diff * fract;
+    step = (product >> 16) + ((product >> 15) & 1U);
+    return (uint16_t)(left < right ? left + step : left - step);
+}
+
+/* OEM Bayer order: 0=RGGB, 1=BGGR, 2=GRBG, 3=GBRG. */
+static void regtrace_t40_bayer_map(uint32_t bayer, uint16_t r, uint16_t gr,
+                                   uint16_t gb, uint16_t b, uint16_t out[4])
+{
+    switch (bayer & 3U) {
+    case 0:
+        out[0] = r;  out[1] = gr; out[2] = gb; out[3] = b;
+        break;
+    case 1:
+        out[0] = b;  out[1] = gb; out[2] = gr; out[3] = r;
+        break;
+    case 2:
+        out[0] = gr; out[1] = r;  out[2] = b;  out[3] = gb;
+        break;
+    default:
+        out[0] = gb; out[1] = b;  out[2] = r;  out[3] = gr;
+        break;
+    }
+}
+
+/* OEM 0x2000000/(4096-max), divide-by-two with quotient rounding. */
+static uint16_t regtrace_t40_blc_self_gain(uint16_t max_blc)
+{
+    uint32_t quotient;
+
+    if ((max_blc >> 11) == 1U)
+        return 8192U;
+    if (max_blc >= 4096U)
+        return 8192U;
+    quotient = 33554432U / (4096U - max_blc);
+    return (uint16_t)((quotient >> 1) + (quotient & 1U));
+}
+
+/*
+ * Source-faithful main-channel T40 BLC init.  tisp_blc_init consumes the
+ * 252-byte tool block at +0x2350, interpolates four 11-entry gain tables,
+ * derives a pedestal-compensating self gain, and commits the main and short
+ * frame banks at (0+64)<<7 = 0x2000.
+ */
+static int regtrace_blc_main_init_lit(void)
+{
+    uint32_t nbuf = *(uint32_t *)((char *)&tparamsN);
+    const uint8_t *tool;
+    uint16_t r, gr, gb, b, chan[4], max_blc, self_gain, final_gain;
+    uint32_t bayer;
+
+    if (!nbuf)
+        return -ENOENT;
+    tool = (const uint8_t *)(uintptr_t)(nbuf + 0x2350U);
+    r = regtrace_t40_tuning_intp16(regtrace_blc_lit_gain, tool + 36U);
+    gr = regtrace_t40_tuning_intp16(regtrace_blc_lit_gain, tool + 58U);
+    gb = regtrace_t40_tuning_intp16(regtrace_blc_lit_gain, tool + 80U);
+    b = regtrace_t40_tuning_intp16(regtrace_blc_lit_gain, tool + 102U);
+    bayer = (uint32_t)system_reg_read(0x88U) & 3U;
+    regtrace_t40_bayer_map(bayer, r, gr, gb, b, chan);
+    max_blc = max(max(r, gr), max(gb, b));
+    self_gain = regtrace_t40_blc_self_gain(max_blc);
+    final_gain = (uint16_t)(((uint32_t)self_gain * 1024U) >> 12);
+
+    /* Retire the non-OEM soft-pedestal experiment when the real block is on. */
+    system_reg_write(0x1030U, 0);
+    system_reg_write(0x1034U, 0);
+    system_reg_write(0x1038U, 0);
+    system_reg_write(0x103cU, 0);
+    system_reg_write(0x2010U, 0);
+    system_reg_write(0x2020U, 0);
+    system_reg_write(0x2004U, ((uint32_t)chan[1] << 16) | chan[0]);
+    system_reg_write(0x2008U, ((uint32_t)chan[3] << 16) | chan[2]);
+    system_reg_write(0x2014U, ((uint32_t)chan[1] << 16) | chan[0]);
+    system_reg_write(0x2018U, ((uint32_t)chan[3] << 16) | chan[2]);
+    system_reg_write(0x2024U, ((uint32_t)final_gain << 16) | final_gain);
+    system_reg_write(0x2028U, 0x04000000U | final_gain);
+    system_reg_write(0x202cU, 0);
+    system_reg_write(0x2030U, ((uint32_t)final_gain << 16) | final_gain);
+    system_reg_write(0x2034U, 0x04000000U | final_gain);
+    system_reg_write(0x2038U, 0);
+    system_reg_write(0x2000U, 1);
+    regtrace_blc_lit_gain_now = regtrace_blc_lit_gain;
+    printk(KERN_WARNING
+           "tx_isp_t40_recovered: blc-lit gain=%u bayer=%u values=%u/%u/%u/%u self=0x%x final=0x%x regs=%08x/%08x\n",
+           regtrace_blc_lit_gain, bayer, chan[0], chan[1], chan[2], chan[3],
+           self_gain, final_gain, (uint32_t)system_reg_read(0x2004U),
+           (uint32_t)system_reg_read(0x2024U));
+    return 0;
+}
+
+/*
+ * Source-faithful main-channel GIB BLC/config program.  The recovered native
+ * call graph has dropped arguments, so this reconstructs the verified OEM
+ * writes from the 872-byte +0xd610 tool block.  Stock AE supplies final_gain
+ * asynchronously; the override preserves that independently until event
+ * fanout can own it.
+ */
+static int regtrace_gib_main_init_lit(void)
+{
+    uint32_t nbuf = *(uint32_t *)((char *)&tparamsN);
+    const uint8_t *tool;
+    uint16_t r, gr, gb, b, ir, chan[4], max_blc, self_gain, final_gain;
+    uint32_t bayer, config0, config1;
+
+    if (!nbuf)
+        return -ENOENT;
+    tool = (const uint8_t *)(uintptr_t)(nbuf + 0xd610U);
+    r = regtrace_t40_tuning_intp16(regtrace_gib_lit_gain, tool + 40U);
+    gr = regtrace_t40_tuning_intp16(regtrace_gib_lit_gain, tool + 62U);
+    gb = regtrace_t40_tuning_intp16(regtrace_gib_lit_gain, tool + 84U);
+    b = regtrace_t40_tuning_intp16(regtrace_gib_lit_gain, tool + 106U);
+    ir = regtrace_t40_tuning_intp16(regtrace_gib_lit_gain, tool + 128U);
+    bayer = (uint32_t)system_reg_read(0x88U) & 3U;
+    regtrace_t40_bayer_map(bayer, r, gr, gb, b, chan);
+    max_blc = max(max(r, gr), max(gb, b));
+    self_gain = regtrace_t40_blc_self_gain(max_blc);
+    final_gain = (uint16_t)min(regtrace_gib_lit_final_gain, 0x7fffU);
+    if (!final_gain)
+        final_gain = (uint16_t)(((uint32_t)self_gain * 1024U) >> 12);
+
+    /* tisp_gib_tool_2_real followed by tisp_gib_write_reg config packing. */
+    config0 = ((uint32_t)(regtrace_t40_tuning_u16(tool, 34U) & 0x0fffU)
+               << 16) |
+              (regtrace_t40_tuning_u16(tool, 32U) & 0x0fffU);
+    config1 = ((regtrace_t40_tuning_u16(tool, 28U) << 2) & 0x4U) |
+              ((regtrace_t40_tuning_u16(tool, 30U) << 4) & 0xffU) |
+              ((regtrace_t40_tuning_u16(tool, 24U) << 8) & 0x100U) |
+              (((uint32_t)tool[1] << 10) & 0x400U) |
+              (((uint32_t)tool[0] << 12) & 0x1000U) |
+              (((uint32_t)tool[8] << 14) & 0x4000U) |
+              ((regtrace_t40_tuning_u16(tool, 26U) << 16) & 0x10000U);
+
+    system_reg_write(0x8000U, ((uint32_t)final_gain << 16) | final_gain);
+    system_reg_write(0x8004U, ((uint32_t)final_gain << 16) | final_gain);
+    system_reg_write(0x8008U, config0);
+    system_reg_write(0x800cU, config1);
+    system_reg_write(0x8030U, chan[0] & 0x0fffU);
+    system_reg_write(0x8034U, ((uint32_t)(chan[2] & 0x0fffU) << 16) |
+                     (chan[1] & 0x0fffU));
+    system_reg_write(0x8038U, ((uint32_t)(ir & 0x0fffU) << 16) |
+                     (chan[3] & 0x0fffU));
+    system_reg_write(0x803cU, 0);
+    system_reg_write(0x8040U, 1);
+    regtrace_gib_lit_gain_now = regtrace_gib_lit_gain;
+    printk(KERN_WARNING
+           "tx_isp_t40_recovered: gib-lit gain=%u bayer=%u values=%u/%u/%u/%u/%u self=0x%x final=0x%x regs=%08x/%08x/%08x\n",
+           regtrace_gib_lit_gain, bayer, chan[0], chan[1], chan[2], chan[3],
+           ir, self_gain, final_gain, (uint32_t)system_reg_read(0x8000U),
+           (uint32_t)system_reg_read(0x8008U),
+           (uint32_t)system_reg_read(0x8030U));
     return 0;
 }
 
@@ -14221,6 +14593,27 @@ static int regtrace_isp_block_init_once(const char *where)
     if (regtrace_enable_dmsc_static)
         regtrace_dmsc_static_write();
 
+    if (regtrace_enable_dmsc_lit) {
+        int dmsc_ret = (int)regtrace_dmsc_main_init_lit();
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init dmsc-lit ret=%d\n",
+               dmsc_ret);
+    }
+
+    if (regtrace_enable_blc_lit) {
+        int blc_ret = regtrace_blc_main_init_lit();
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init blc-lit ret=%d\n",
+               blc_ret);
+    }
+
+    if (regtrace_enable_gib_lit) {
+        int gib_ret = regtrace_gib_main_init_lit();
+
+        printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init gib-lit ret=%d\n",
+               gib_ret);
+    }
+
     if (regtrace_enable_ydns) {
         int ydns_ret = (int)tisp_ydns_main_init();
 
@@ -14246,6 +14639,8 @@ static int regtrace_isp_block_init_once(const char *where)
     if (regtrace_enable_ccm) {
         int ccm_ret = (int)regtrace_ccm_main_init_lit();
 
+        if (!ccm_ret)
+            regtrace_ccm_main_ct_update_lit(regtrace_ccm_ct, true);
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init ccm ret=%d\n",
                ccm_ret);
     }
@@ -14267,11 +14662,9 @@ static int regtrace_isp_block_init_once(const char *where)
 
     if (regtrace_enable_gib_blc) {
         /*
-         * Soft GIB black-level: program the four per-channel BLC offsets
-         * (regs 0x1030..0x103c) with the sensor pedestal so the gamma toe
-         * lands on real blacks instead of the pedestal haze. The faithful
-         * gain-tracking GIB chain (tisp_gib_init, blob +0xd610) remains
-         * future work; GIB block itself is activated by top40 bit5.
+         * Retained only to reproduce the early soft-pedestal experiment.
+         * Stock has zeros here; enable_blc_lit/enable_gib_lit are the
+         * source-derived replacements and should be used for quality work.
          */
         (void)system_reg_write(0x1030, regtrace_gib_blc_offset);
         (void)system_reg_write(0x1034, regtrace_gib_blc_offset);
@@ -45713,6 +46106,22 @@ static long regtrace_irq_frame_done_send(int channel, uint32_t source,
     regtrace_framechan_neutralize_uv_on_done(channel, y, uv, index,
                                              deferred_context);
 
+    /*
+     * A channel-0 completion is the only point at which both rotating plane
+     * addresses describe the same finished frame.  Keep the counter odd while
+     * replacing the pair and even while it is stable; sysfs readers sample
+     * seq/y/uv/seq and retry when the sequence changed or is odd.
+     */
+    if (channel == 0 && regtrace_phys_is_dram(y) &&
+        regtrace_phys_is_dram(uv)) {
+        regtrace_frame_3a_completed_seq++;
+        wmb();
+        regtrace_frame_3a_completed_y_phys = regtrace_untag_phys(y);
+        regtrace_frame_3a_completed_uv_phys = regtrace_untag_phys(uv);
+        wmb();
+        regtrace_frame_3a_completed_seq++;
+    }
+
     if (regtrace_irq_frame_done_delivery_mode ==
         REGTRACE_IRQ_FD_DELIVERY_LOCAL ||
         regtrace_irq_frame_done_delivery_mode ==
@@ -46103,25 +46512,64 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
          */
         regtrace_isp_block_init_retry("frame-done");
 
-        /* userspace 3A: retune DNS/sharpen strength when the gain EV moves */
+        /* userspace 3A: retune DNS and independently retune YSP sharpening. */
         if (regtrace_enable_ydns || regtrace_enable_ysp || regtrace_enable_mdns ||
             regtrace_enable_sdns) {
             static uint32_t dns_ev_applied;
+            static uint32_t ysp_ev_applied;
+            uint32_t ysp_ev = regtrace_ysp_gain_ev ?
+                              regtrace_ysp_gain_ev : regtrace_dns_gain_ev;
 
             if (regtrace_dns_gain_ev != dns_ev_applied) {
                 dns_ev_applied = regtrace_dns_gain_ev;
                 if (regtrace_enable_ydns)
                     (void)tisp_ydns_par_refresh(0, dns_ev_applied, 256);
-                if (regtrace_enable_ysp)
-                    (void)tisp_ysp_par_refresh(0, dns_ev_applied, 256);
                 if (regtrace_enable_mdns && main_mdns &&
                     !regtrace_mdns_dbg_init_ret)
                     (void)tisp_mdns_par_refresh_lit(0, dns_ev_applied, 256);
                 if (regtrace_enable_sdns && main_sdns &&
                     !regtrace_sdns_dbg_init_ret)
                     (void)tisp_sdns_par_refresh_lit(0, dns_ev_applied, 256);
-                if (regtrace_enable_lsc_lit)
-                    regtrace_lsc_lit_gain_update(0, dns_ev_applied);
+            }
+            if (regtrace_enable_ysp && ysp_ev != ysp_ev_applied) {
+                ysp_ev_applied = ysp_ev;
+                (void)tisp_ysp_par_refresh(0, ysp_ev_applied, 256);
+                regtrace_ysp_gain_ev_now = ysp_ev_applied;
+            }
+        }
+
+        if (regtrace_enable_dmsc_lit)
+            regtrace_dmsc_lit_gain_update(regtrace_dmsc_lit_gain);
+
+        /*
+         * LSC consumes the sensor's real 16.16 log2 gain, not the stronger
+         * empirical EV used to make the recovered DNS blocks match stock
+         * noise.  Keeping these controls coupled over-corrected the mesh
+         * corners (for example GC4653 LUT index 4 is 65535, while userspace
+         * deliberately drives DNS at 196608).
+         */
+        if (regtrace_enable_lsc_lit) {
+            static uint32_t lsc_gain_applied;
+            static uint32_t lsc_ct_applied;
+
+            if (regtrace_lsc_lit_gain != lsc_gain_applied) {
+                lsc_gain_applied = regtrace_lsc_lit_gain;
+                regtrace_lsc_lit_gain_update(0, lsc_gain_applied);
+            }
+
+            /*
+             * With WB-derived CT tracking disabled, lsc_lit_ct is the
+             * explicit forensic control.  The old module parameter changed
+             * only the backing integer after init, so apparent live CT
+             * sweeps all captured the same LUT.  Apply a changed value at a
+             * completed-frame boundary, using the same immediate LUT flush
+             * as the OEM CT update path.
+             */
+            if (!regtrace_lsc_lit_ct_track &&
+                regtrace_lsc_lit_ct != lsc_ct_applied) {
+                lsc_ct_applied = regtrace_lsc_lit_ct;
+                regtrace_lsc_lit_ct_update(0, lsc_ct_applied);
+                regtrace_lsc_lit_ct_now = lsc_ct_applied;
             }
         }
 
@@ -46139,8 +46587,27 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
                                              manual_applied_b);
                 regtrace_lsc_lit_track_wb_gains(manual_applied_r,
                                                 manual_applied_b);
+                if (regtrace_enable_ccm && regtrace_ccm_ct_track)
+                    regtrace_ccm_main_ct_update_lit(
+                        regtrace_lsc_lit_ct_from_gains(manual_applied_r,
+                                                       manual_applied_b),
+                        false);
             }
         }
+
+        /* Explicit forensic CT remains live when automatic gain-derived
+         * tracking is disabled. */
+        if (regtrace_enable_ccm && !regtrace_ccm_ct_track &&
+            (regtrace_ccm_ct != regtrace_ccm_ct_now ||
+             regtrace_ccm_ev != regtrace_ccm_ev_now))
+            regtrace_ccm_main_ct_update_lit(regtrace_ccm_ct, false);
+        else if (regtrace_enable_ccm && regtrace_ccm_ct_track &&
+                 regtrace_ccm_ev != regtrace_ccm_ev_now)
+            regtrace_ccm_main_ct_update_lit(
+                regtrace_lsc_lit_ct_from_gains(
+                    regtrace_awb_grayworld_last_rgain,
+                    regtrace_awb_grayworld_last_bgain),
+                false);
 
         /*
          * userspace 3A: apply BCSH saturation override when it changes.
@@ -59827,56 +60294,36 @@ int32_t sub_164b4(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000164c0 origin=model_output original=fix_point_div_32 */
 int32_t fix_point_div_32(int32_t arg1, int32_t arg2, int32_t arg3)
 {
-#ifdef REGTRACE_KERNEL_TREE_BUILD
-    return 0;
-#else
-
-    uint32_t *v1 = 0;
-    uint32_t *s0 = 0;
-    uint32_t *v0;
+    uint32_t precision = (uint32_t)arg1;
+    uint32_t numerator = (uint32_t)arg2;
+    uint32_t denominator = (uint32_t)arg3;
     uint32_t quotient;
-    uint32_t *a1;
-    
-    /* Compute remainder and quotient */
-    v0 = ((uintptr_t)arg2 % (uint32_t))arg3;
-    quotient = (uint32_t)arg2 / (uint32_t)arg3;
-    
-    while (1) {
-        if (v1 == (uint32_t)arg1) {
+    uint32_t remainder;
+    uint32_t fractional = 0;
+    uint32_t bit = 0;
+
+    if (!denominator || precision > 31U)
+        return 0;
+
+    quotient = numerator / denominator;
+    remainder = numerator % denominator;
+
+    while (bit != precision) {
+        remainder <<= 1;
+        fractional <<= 1;
+
+        if (denominator < remainder) {
+            fractional |= 1U;
+            remainder -= denominator;
+        } else if (denominator == remainder) {
+            fractional |= 1U;
+            fractional <<= precision - 1U - bit;
             break;
         }
-        
-        v0 = (uintptr_t)v0 << 1;
-        
-        a1 = (uint32_t *)arg3 < v0 ? 1 : 0;
-        
-        if (a1 == 0) {
-            /* Check for equality case */
-            if ((uint32_t)arg3 == v0) {
-                /* Use a loop to avoid __ashldi3 for 32-bit shift */
-                uint32_t temp = (uintptr_t)s0 | 1;
-                uint32_t shift_count = ((uint32_t)arg1 - 1 - (uintptr_t)v1) & 0x1f;
-                while (shift_count > 0) {
-                    temp = temp << 1;
-                    shift_count--;
-                }
-                s0 = temp;
-                break;
-            }
-            v1 = v1 + 1;
-            continue;
-        }
-        
-        s0 = (uintptr_t)s0 << 1;
-        s0 = (uintptr_t)s0 | 1;
-        v0 = v0 - (uintptr_t *)arg3;
-        v1 = v1 + 1;
+        bit++;
     }
-    
-    /* Call __ashldi3 once for the final shift of quotient */
-    return (int32_t)((uintptr_t)s0 | __ashldi3((long long)quotient, arg1));
 
-#endif
+    return (int32_t)(fractional | (quotient << precision));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016548 origin=model_output original=tisp_math_exp2 */
@@ -61155,37 +61602,20 @@ int32_t tisp_log2_fixed_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint3
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000174ec origin=model_output original=tisp_round_int64 */
-int32_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3) {
-#ifdef REGTRACE_KERNEL_TREE_BUILD
-    return 0;
-#else
+int32_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3)
+{
+    uint64_t bits = ((uint64_t)(uint32_t)arg2 << 32) | (uint32_t)arg1;
+    int64_t value = (int64_t)bits;
+    uint32_t shift = (uint32_t)arg3;
 
-    int32_t *result = arg1;
-    int32_t *v0;
-    int32_t *s2;
-    volatile int32_t first_result;
+    if ((uint32_t)(shift - 1U) < 62U) {
+        int64_t rounded;
 
-    if ((unsigned int)(arg3 - 1) < 62) {
-        int32_t *s1 = arg2;
-        int32_t *s4 = arg3;
-
-        /* First call to __ashrdi3: a0=arg1, a1=arg2, a2=arg3-1 */
-        /* Use volatile to prevent optimization */
-        first_result = __ashrdi3(((int64_t)arg2 << 32) | (uint32_t)arg1, arg3 - 1);
-        
-        /* Second call to __ashrdi3: a0=arg1, a1=arg2, a2=arg3 */
-        v0 = __ashrdi3(((int64_t)arg2 << 32) | (uintptr_t *)arg1, arg3);
-        
-        /* Use the first call's result: s2 = first_result & 1 */
-        s2 = first_result & 1;
-        
-        /* Rounding logic: result = s2 + v0 */
-        result = (uintptr_t)s2 + (uintptr_t)v0;
+        rounded = (value >> shift) + ((value >> (shift - 1U)) & 1);
+        return (int32_t)rounded;
     }
 
-    return result;
-
-#endif
+    return arg1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017580 origin=model_output original=isp_tunning_poll */
@@ -134030,71 +134460,40 @@ tisp_defog_img_filter250x15c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004e01c origin=model_output original=defog_wei_interpcot */
 int32_t (*defog_wei_interpcot(int32_t arg1, char *arg2, char *arg3, char *arg4))[0x20]
 {
-#ifdef REGTRACE_KERNEL_TREE_BUILD
-    return 0;
-#else
-    int32_t var_98[32];
-    int32_t var_118[32];
-    char *i = arg2;
-    char *a2 = arg3;
-    int32_t *v0_7;
-    int32_t *v1_1 = var_98;
-    char *a3 = arg4;
-    int32_t (*result)[0x20];
-    int32_t *i_1;
-    int32_t *a1;
-    int32_t *a0;
-    int32_t *v1;
-    int32_t t0 = 32;
-    int32_t *t1 = 31;
+    uint32_t sums[32];
+    uint32_t counts[32];
+    uint8_t *bins = (uint8_t *)arg2;
+    uint8_t *samples = (uint8_t *)arg3;
+    uint8_t *output = (uint8_t *)arg4;
+    uint32_t count = arg1 > 0 ? (uint32_t)arg1 : 0;
+    uint32_t i;
 
-    memset(var_98, 0, 128);
-    memset(var_118, 0, 128);
+    memset(sums, 0, sizeof(sums));
+    memset(counts, 0, sizeof(counts));
 
-    while (i != &arg2[arg1]) {
-        a0 = (uint32_t *)*a2;
-        v0_7 = &var_118[(int32_t *)*(uintptr_t *)(uintptr_t)i];
-        i++;
-        a2++;
-        v0_7[32] += 1;
-        *v0_7 += (uintptr_t)a0;
+    for (i = 0; i < count; ++i) {
+        uint32_t bin = bins[i];
+
+        if (bin >= ARRAY_SIZE(sums))
+            bin = ARRAY_SIZE(sums) - 1U;
+        sums[bin] += samples[i];
+        counts[bin]++;
     }
 
-    v1_1 = var_98;
-    i_1 = 0;
-    while (i_1 != 32) {
-        a1 = *v1_1;
-        result = &var_118;
+    for (i = 0; i < ARRAY_SIZE(sums); ++i) {
+        uint32_t value = 0;
 
-        if (a1 == 0) {
-            *a3 = 0;
-        } else {
-            a0 = (uint32_t *)*a3;
-            v1 = (((uintptr_t)a1 >> 1) + var_118[(uintptr_t)i_1]) / (uintptr_t)a1;
-            a0 = (uint32_t *)((uintptr_t)v1 & 0xff);
-
-            if ((unsigned int)a0 >= 32) {
-                *a3 = 0x1f;
-            } else {
-                *a3 = (char)a0;
-            }
+        if (counts[i]) {
+            value = (sums[i] + (counts[i] >> 1)) / counts[i];
+            if (value >= 0x20U)
+                value = 0x1fU;
         }
-
-        if (i_1 != 0) {
-            a1 = (uintptr_t)*(a3 - 1);
-            a0 = (uint32_t *)*a3;
-            if ((unsigned int)a0 < (unsigned int)a1) {
-                *a3 = (char)a1;
-            }
-        }
-
-        i_1++;
-        v1_1++;
-        a3++;
+        if (i && value < output[i - 1])
+            value = output[i - 1];
+        output[i] = (uint8_t)value;
     }
 
-    return result;
-#endif
+    return NULL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004e168 origin=fragment_seed original=defog_count_weight35abc */
@@ -134139,6 +134538,7 @@ int64_t defog_count_weight35abc(uint32_t a0, uint32_t a1, uint32_t a2, uintptr_t
     uint32_t local_1d4 = 0;
     uint32_t local_1d8 = 0;
     uint32_t local_1dc = 0;
+    uint32_t interp_count = 0;
     uint32_t ra = 0;
     uint32_t *s0 = 0;
     uint32_t *s1 = 0;
@@ -134472,68 +134872,41 @@ defog_count_weight35abc0x3a8:
     v1 = v1 + 1;
     if (s0 != v0) { goto defog_count_weight35abc0x794; }
 
-    /* fragment 62: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)defog_wei_interpcot)(s0, local_148, s8, local_17c); /* jalr target resolved by relocation */
+    /*
+     * OEM 0x4e518-0x4e584 calls the reducer five times with the same sample
+     * count in a0.  The final jalr's delay slot loads private_kfree into s0;
+     * the reconstruction moved that load ahead of the C call and accidentally
+     * passed the function address as the count.  Preserve the count explicitly
+     * and restore the complete OEM cleanup sequence, including the first (s8)
+     * and final (s2) allocations that the translated delay slots lost.
+     */
+    interp_count = (uint32_t)(uintptr_t)s0;
+    defog_wei_interpcot(interp_count, (char *)(uintptr_t)local_148,
+                        (char *)(uintptr_t)s8, (char *)(uintptr_t)local_17c);
+    defog_wei_interpcot(interp_count, (char *)(uintptr_t)local_14c,
+                        (char *)(uintptr_t)s7, (char *)(uintptr_t)local_180);
+    defog_wei_interpcot(interp_count, (char *)(uintptr_t)local_150,
+                        (char *)(uintptr_t)s5, (char *)(uintptr_t)local_184);
+    defog_wei_interpcot(interp_count, (char *)(uintptr_t)local_154,
+                        (char *)(uintptr_t)s6, (char *)(uintptr_t)local_188);
+    defog_wei_interpcot(interp_count, (char *)(uintptr_t)s2,
+                        (char *)(uintptr_t)local_140,
+                        (char *)(uintptr_t)local_18c);
 
-    /* fragment 63: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)defog_wei_interpcot)(s0, local_14c, s7, local_180); /* jalr target resolved by relocation */
-
-    /* fragment 64: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)defog_wei_interpcot)(s0, local_150, s5, local_184); /* jalr target resolved by relocation */
-
-    /* fragment 65: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)defog_wei_interpcot)(s0, local_154, s6, local_188); /* jalr target resolved by relocation */
-
-    /* fragment 66: CallSetup */
-    s0 = (uintptr_t *)&private_kfree;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)defog_wei_interpcot)(s0, s2, local_140, local_18c); /* jalr target resolved by relocation */
-
-    /* fragment 67: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(0); /* jalr target resolved by relocation */
-
-    /* fragment 68: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(s7); /* jalr target resolved by relocation */
-
-    /* fragment 69: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(s6); /* jalr target resolved by relocation */
-
-    /* fragment 70: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(s5); /* jalr target resolved by relocation */
-
-    /* fragment 71: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(s4); /* jalr target resolved by relocation */
-
-    /* fragment 72: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 73: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(local_140); /* jalr target resolved by relocation */
-
-    /* fragment 74: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(local_144); /* jalr target resolved by relocation */
-
-    /* fragment 75: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(local_148); /* jalr target resolved by relocation */
-
-    /* fragment 76: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(local_14c); /* jalr target resolved by relocation */
-
-    /* fragment 77: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(local_150); /* jalr target resolved by relocation */
-
-    /* fragment 78: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(local_154); /* jalr target resolved by relocation */
-
-    /* fragment 79: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 80: Arithmetic */
-    a0 = s2;
-    t9 = s0;
-
-    /* fragment 81: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
+    private_kfree((void *)(uintptr_t)s8);
+    private_kfree((void *)(uintptr_t)s7);
+    private_kfree((void *)(uintptr_t)s6);
+    private_kfree((void *)(uintptr_t)s5);
+    private_kfree(s4);
+    private_kfree(s3);
+    private_kfree((void *)(uintptr_t)local_140);
+    private_kfree((void *)(uintptr_t)local_144);
+    private_kfree((void *)(uintptr_t)local_148);
+    private_kfree((void *)(uintptr_t)local_14c);
+    private_kfree((void *)(uintptr_t)local_150);
+    private_kfree((void *)(uintptr_t)local_154);
+    private_kfree(s2);
+    return 0;
 
     /* fragment 82: Unknown */
     /* unmatched fragment 82 (Unknown): no deterministic matcher for Unknown */
@@ -195306,6 +195679,7 @@ void cleanup_module(void)
     cancel_work_sync(&regtrace_irq_frame_done_work[3].work);
     cancel_work_sync(&regtrace_isp_block_init_work);
     regtrace_tisp_event_threads_stop();
+    regtrace_dmsc_lit_cleanup();
     regtrace_lsc_lit_cleanup();
     regtrace_tisp_main_init_param_free();
     regtrace_tisp_dma_free();

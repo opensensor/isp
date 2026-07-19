@@ -27,7 +27,8 @@ PRESTREAM_EXPO_IT="${PRESTREAM_EXPO_IT:-0}"
 AWB_MANUAL_RGAIN="${AWB_MANUAL_RGAIN:-0}"
 AWB_MANUAL_BGAIN="${AWB_MANUAL_BGAIN:-0}"
 DNS_GAIN_EV_INIT="${DNS_GAIN_EV_INIT:-0}"
-RTSP_PATH="${RTSP_PATH:-main}"
+YSP_GAIN_EV_INIT="${YSP_GAIN_EV_INIT:-0}"
+RTSP_PATH="${RTSP_PATH:-ch0}"
 FRAMECHAN_NEUTRAL_UV_ON_DONE="${FRAMECHAN_NEUTRAL_UV_ON_DONE:-0}"
 # Keep the LCE/top40 bit21 set. With 0x7fdfeeff the recovered MSCA output keeps
 # a luma diamond pattern even after UV is neutralized; 0x7fffeeff removes it.
@@ -98,15 +99,33 @@ ENABLE_AE_SOFT="${ENABLE_AE_SOFT:-0}"
 ENABLE_FRAME_3A="${ENABLE_FRAME_3A:-0}"
 ENABLE_SOFT_GAMMA="${ENABLE_SOFT_GAMMA:-1}"
 ENABLE_YDNS="${ENABLE_YDNS:-1}"
-ENABLE_GIB_BLC="${ENABLE_GIB_BLC:-1}"
+# Legacy non-stock 0x1030 pedestal experiment; keep off for quality profiles.
+ENABLE_GIB_BLC="${ENABLE_GIB_BLC:-0}"
+ENABLE_BLC_LIT="${ENABLE_BLC_LIT:-0}"
+BLC_LIT_GAIN="${BLC_LIT_GAIN:-212541}"
+ENABLE_GIB_LIT="${ENABLE_GIB_LIT:-0}"
+GIB_LIT_GAIN="${GIB_LIT_GAIN:-212541}"
+GIB_LIT_FINAL_GAIN="${GIB_LIT_FINAL_GAIN:-1261}"
 ENABLE_YSP="${ENABLE_YSP:-1}"
 ENABLE_CCM="${ENABLE_CCM:-1}"
+CCM_CT_TRACK="${CCM_CT_TRACK:-1}"
+CCM_CT="${CCM_CT:-5000}"
+CCM_EV="${CCM_EV:-400}"
 ENABLE_BCSH="${ENABLE_BCSH:-0}"
+BCSH_SATURATION="${BCSH_SATURATION:-0}"
+BCSH_EV="${BCSH_EV:-400}"
+BCSH_CT="${BCSH_CT:-6000}"
 ENABLE_DMSC_STATIC="${ENABLE_DMSC_STATIC:-0}"
+ENABLE_DMSC_LIT="${ENABLE_DMSC_LIT:-0}"
+DMSC_LIT_GAIN="${DMSC_LIT_GAIN:-212541}"
+DMSC_STOCK_CURRENT_OVERLAY="${DMSC_STOCK_CURRENT_OVERLAY:-0}"
+DMSC_STOCK_HIGH_GAIN_OVERLAY="${DMSC_STOCK_HIGH_GAIN_OVERLAY:-0}"
+DMSC_STOCK_OVERLAY_MASK="${DMSC_STOCK_OVERLAY_MASK:-15}"
 BCSH_MODE="${BCSH_MODE:-2}"
 ENABLE_CLM="${ENABLE_CLM:-0}"
 CLM_STAGE_LIMIT="${CLM_STAGE_LIMIT:-0}"
 CLM_DEFER_TRIG="${CLM_DEFER_TRIG:-0}"
+CLM_CT="${CLM_CT:-5000}"
 ENABLE_MDNS="${ENABLE_MDNS:-1}"
 ENABLE_SDNS="${ENABLE_SDNS:-0}"
 # MDNS temporal-reference buffer. The old driver default (0x8000000) sits
@@ -128,6 +147,12 @@ LSC_LIT_CT_COOL_X="${LSC_LIT_CT_COOL_X:-730}"
 LSC_LIT_CT_COOL_CT="${LSC_LIT_CT_COOL_CT:-6500}"
 ENABLE_USERSPACE_3A="${ENABLE_USERSPACE_3A:-1}"
 USERSPACE_3A_SETTLE_SECS="${USERSPACE_3A_SETTLE_SECS:-12}"
+USERSPACE_3A_TARGET="${USERSPACE_3A_TARGET:-105}"
+USERSPACE_3A_DEADBAND_PCT="${USERSPACE_3A_DEADBAND_PCT:-5}"
+USERSPACE_3A_PERIOD="${USERSPACE_3A_PERIOD:-1}"
+USERSPACE_3A_UV_LO="${USERSPACE_3A_UV_LO:-121}"
+USERSPACE_3A_UV_HI="${USERSPACE_3A_UV_HI:-133}"
+USERSPACE_3A_AWB_STEP_DIV="${USERSPACE_3A_AWB_STEP_DIV:-48}"
 ISP_BLOCK_INIT_STAGE_LIMIT="${ISP_BLOCK_INIT_STAGE_LIMIT:-0}"
 AWB_MAIN_INIT_STAGE_LIMIT="${AWB_MAIN_INIT_STAGE_LIMIT:-0}"
 ADR_MAIN_INIT_STAGE_LIMIT="${ADR_MAIN_INIT_STAGE_LIMIT:-0}"
@@ -177,7 +202,7 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	SKIP_BUILD SKIP_QBUF_DUMP SKIP_RTSP SKIP_REG_SNAPSHOT RTSP_FIRST FAST_RTSP_ONLY \
 	FAST_STATS_SNAPSHOT FAST_STATS_SAMPLE_SECS FAST_STATS_SAMPLE_INTERVAL \
 	REMOTE_PROBE_TIMEOUT_SECS RTSP_TIMEOUT_SECS PRESTREAM_EXPO_IT \
-	AWB_MANUAL_RGAIN AWB_MANUAL_BGAIN DNS_GAIN_EV_INIT \
+	AWB_MANUAL_RGAIN AWB_MANUAL_BGAIN DNS_GAIN_EV_INIT YSP_GAIN_EV_INIT \
 	TISP_MAIN_INIT_COLOR_INIT_MASK CSI_SETTLE_OVERRIDE \
 	T40_STOCK_HOST_INIT_MASK OEM_EVENT_PRE_CSI_STREAM \
 	OEM_EVENT_PRE_CSI_STAGE_LIMIT OEM_EVENT_PRE_CSI_DELAY_MS \
@@ -194,11 +219,16 @@ for numeric in TISP_MAIN_INIT_TOP40_VALUE TISP_MAIN_INIT_CSC_VERSION_VALUE \
 	ENABLE_ADR_PROCESS_WORK \
 	ENABLE_ISP_BLOCK_INIT ENABLE_ISP_BLOCK_INIT_AE ENABLE_ISP_BLOCK_INIT_AWB \
 	ENABLE_AWB_REG_WRITES ENABLE_AWB_SET_GAIN ENABLE_AWB_GRAYWORLD ENABLE_AE_SOFT ENABLE_FRAME_3A \
-	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC ENABLE_YSP ENABLE_CCM ENABLE_BCSH ENABLE_DMSC_STATIC BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT CLM_DEFER_TRIG ENABLE_MDNS ENABLE_SDNS \
+	ENABLE_SOFT_GAMMA ENABLE_YDNS ENABLE_GIB_BLC \
+	ENABLE_BLC_LIT BLC_LIT_GAIN ENABLE_GIB_LIT GIB_LIT_GAIN GIB_LIT_FINAL_GAIN \
+	ENABLE_YSP ENABLE_CCM CCM_CT_TRACK CCM_CT CCM_EV ENABLE_BCSH BCSH_SATURATION BCSH_EV BCSH_CT ENABLE_DMSC_STATIC ENABLE_DMSC_LIT DMSC_LIT_GAIN DMSC_STOCK_CURRENT_OVERLAY DMSC_STOCK_HIGH_GAIN_OVERLAY DMSC_STOCK_OVERLAY_MASK BCSH_MODE ENABLE_CLM CLM_STAGE_LIMIT CLM_DEFER_TRIG CLM_CT ENABLE_MDNS ENABLE_SDNS \
 	ENABLE_LSC_LIT LSC_LIT_CT LSC_LIT_GAIN \
 	LSC_LIT_CT_TRACK LSC_LIT_CT_WARM_X LSC_LIT_CT_WARM_CT \
 	LSC_LIT_CT_COOL_X LSC_LIT_CT_COOL_CT \
 	ENABLE_USERSPACE_3A USERSPACE_3A_SETTLE_SECS \
+	USERSPACE_3A_TARGET USERSPACE_3A_DEADBAND_PCT USERSPACE_3A_PERIOD \
+	USERSPACE_3A_UV_LO USERSPACE_3A_UV_HI \
+	USERSPACE_3A_AWB_STEP_DIV \
 	ISP_BLOCK_INIT_STAGE_LIMIT AWB_MAIN_INIT_STAGE_LIMIT ADR_MAIN_INIT_STAGE_LIMIT \
 	ENABLE_ADR_REG_WRITES \
 	ENABLE_MSCA_REARM_GUARD MSCA_REARM_GUARD_MAX_SKIPS IRQ_FRAME_DONE_DELAY_MS \
@@ -275,6 +305,7 @@ timeout "$REMOTE_PROBE_TIMEOUT_SECS" "${SSH[@]}" \
 	"AWB_MANUAL_RGAIN=$AWB_MANUAL_RGAIN" \
 	"AWB_MANUAL_BGAIN=$AWB_MANUAL_BGAIN" \
 	"DNS_GAIN_EV_INIT=$DNS_GAIN_EV_INIT" \
+	"YSP_GAIN_EV_INIT=$YSP_GAIN_EV_INIT" \
 	"FRAMECHAN_NEUTRAL_UV_ON_DONE=$FRAMECHAN_NEUTRAL_UV_ON_DONE" \
 	"TISP_MAIN_INIT_TOP40_VALUE=$TISP_MAIN_INIT_TOP40_VALUE" \
 	"TISP_MAIN_INIT_CSC_VERSION_VALUE=$TISP_MAIN_INIT_CSC_VERSION_VALUE" \
@@ -313,14 +344,31 @@ timeout "$REMOTE_PROBE_TIMEOUT_SECS" "${SSH[@]}" \
 	"ENABLE_SOFT_GAMMA=$ENABLE_SOFT_GAMMA" \
 	"ENABLE_YDNS=$ENABLE_YDNS" \
 	"ENABLE_GIB_BLC=$ENABLE_GIB_BLC" \
+	"ENABLE_BLC_LIT=$ENABLE_BLC_LIT" \
+	"BLC_LIT_GAIN=$BLC_LIT_GAIN" \
+	"ENABLE_GIB_LIT=$ENABLE_GIB_LIT" \
+	"GIB_LIT_GAIN=$GIB_LIT_GAIN" \
+	"GIB_LIT_FINAL_GAIN=$GIB_LIT_FINAL_GAIN" \
 	"ENABLE_YSP=$ENABLE_YSP" \
 	"ENABLE_CCM=$ENABLE_CCM" \
+	"CCM_CT_TRACK=$CCM_CT_TRACK" \
+	"CCM_CT=$CCM_CT" \
+	"CCM_EV=$CCM_EV" \
 	"ENABLE_BCSH=$ENABLE_BCSH" \
+	"BCSH_SATURATION=$BCSH_SATURATION" \
+	"BCSH_EV=$BCSH_EV" \
+	"BCSH_CT=$BCSH_CT" \
 	"ENABLE_DMSC_STATIC=$ENABLE_DMSC_STATIC" \
+	"ENABLE_DMSC_LIT=$ENABLE_DMSC_LIT" \
+	"DMSC_LIT_GAIN=$DMSC_LIT_GAIN" \
+	"DMSC_STOCK_CURRENT_OVERLAY=$DMSC_STOCK_CURRENT_OVERLAY" \
+	"DMSC_STOCK_HIGH_GAIN_OVERLAY=$DMSC_STOCK_HIGH_GAIN_OVERLAY" \
+	"DMSC_STOCK_OVERLAY_MASK=$DMSC_STOCK_OVERLAY_MASK" \
 	"BCSH_MODE=$BCSH_MODE" \
 	"ENABLE_CLM=$ENABLE_CLM" \
 	"CLM_STAGE_LIMIT=$CLM_STAGE_LIMIT" \
 	"CLM_DEFER_TRIG=$CLM_DEFER_TRIG" \
+	"CLM_CT=$CLM_CT" \
 	"ENABLE_MDNS=$ENABLE_MDNS" \
 	"ENABLE_SDNS=$ENABLE_SDNS" \
 	"MDNS_BUF_PHYS=$MDNS_BUF_PHYS" \
@@ -361,6 +409,7 @@ set -x
 : "${AWB_MANUAL_RGAIN:=0}"
 : "${AWB_MANUAL_BGAIN:=0}"
 : "${DNS_GAIN_EV_INIT:=0}"
+: "${YSP_GAIN_EV_INIT:=0}"
 : "${TISP_MAIN_INIT_TOP40_VALUE:=0x7fffeeff}"
 : "${TISP_MAIN_INIT_CSC_VERSION_VALUE:=2}"
 : "${ENABLE_TISP_MAIN_INIT_COLOR_INITS:=0}"
@@ -397,15 +446,27 @@ set -x
 : "${ENABLE_FRAME_3A:=0}"
 : "${ENABLE_SOFT_GAMMA:=1}"
 : "${ENABLE_YDNS:=1}"
-: "${ENABLE_GIB_BLC:=1}"
+: "${ENABLE_GIB_BLC:=0}"
+: "${ENABLE_BLC_LIT:=0}"
+: "${BLC_LIT_GAIN:=212541}"
+: "${ENABLE_GIB_LIT:=0}"
+: "${GIB_LIT_GAIN:=212541}"
+: "${GIB_LIT_FINAL_GAIN:=1261}"
 : "${ENABLE_YSP:=1}"
 : "${ENABLE_CCM:=1}"
+: "${CCM_CT_TRACK:=1}"
+: "${CCM_CT:=5000}"
+: "${CCM_EV:=400}"
 : "${ENABLE_BCSH:=0}"
+: "${BCSH_SATURATION:=0}"
+: "${BCSH_EV:=400}"
+: "${BCSH_CT:=6000}"
 : "${ENABLE_DMSC_STATIC:=0}"
 : "${BCSH_MODE:=2}"
 : "${ENABLE_CLM:=0}"
 : "${CLM_STAGE_LIMIT:=0}"
 : "${CLM_DEFER_TRIG:=0}"
+: "${CLM_CT:=5000}"
 : "${ENABLE_MDNS:=1}"
 : "${ENABLE_SDNS:=0}"
 : "${MDNS_BUF_PHYS:=0xc000000}"
@@ -516,14 +577,31 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	enable_soft_gamma="$ENABLE_SOFT_GAMMA" \
 	enable_ydns="$ENABLE_YDNS" \
 	enable_gib_blc="$ENABLE_GIB_BLC" \
+	enable_blc_lit="$ENABLE_BLC_LIT" \
+	blc_lit_gain="$BLC_LIT_GAIN" \
+	enable_gib_lit="$ENABLE_GIB_LIT" \
+	gib_lit_gain="$GIB_LIT_GAIN" \
+	gib_lit_final_gain="$GIB_LIT_FINAL_GAIN" \
 	enable_ysp="$ENABLE_YSP" \
 	enable_ccm="$ENABLE_CCM" \
+	ccm_ct_track="$CCM_CT_TRACK" \
+	ccm_ct="$CCM_CT" \
+	ccm_ev="$CCM_EV" \
 	enable_bcsh="$ENABLE_BCSH" \
+	bcsh_saturation="$BCSH_SATURATION" \
+	bcsh_ev="$BCSH_EV" \
+	bcsh_ct="$BCSH_CT" \
 	enable_dmsc_static="$ENABLE_DMSC_STATIC" \
+	enable_dmsc_lit="$ENABLE_DMSC_LIT" \
+	dmsc_lit_gain="$DMSC_LIT_GAIN" \
+	dmsc_stock_current_overlay="$DMSC_STOCK_CURRENT_OVERLAY" \
+	dmsc_stock_high_gain_overlay="$DMSC_STOCK_HIGH_GAIN_OVERLAY" \
+	dmsc_stock_overlay_mask="$DMSC_STOCK_OVERLAY_MASK" \
 	bcsh_mode="$BCSH_MODE" \
 	enable_clm="$ENABLE_CLM" \
 	clm_stage_limit="$CLM_STAGE_LIMIT" \
 	clm_defer_trig="$CLM_DEFER_TRIG" \
+	clm_ct="$CLM_CT" \
 	enable_mdns="$ENABLE_MDNS" \
 	enable_sdns="$ENABLE_SDNS" \
 	mdns_buf_phys="$MDNS_BUF_PHYS" \
@@ -550,6 +628,7 @@ insmod /tmp/tx_isp_t40_recovered.ko \
 	awb_manual_rgain="$AWB_MANUAL_RGAIN" \
 	awb_manual_bgain="$AWB_MANUAL_BGAIN" \
 	dns_gain_ev="$DNS_GAIN_EV_INIT" \
+	ysp_gain_ev="$YSP_GAIN_EV_INIT" \
 	force_core_bayer_reg8_value=1 \
 	core_bayer_reg8_value="$CORE_BAYER_REG8_VALUE" \
 	tisp_main_init_reg88_override=0xffffffff \
@@ -717,7 +796,12 @@ else
 	}
 	for pass in 1 2 3 4 5; do
 		printf 'pass=%s ' "$pass"
-		for reg in 0x0202 0x0203 0x0205 0x0218 0x0219 0x0340 0x0341; do
+		# Capture the complete GC4653 combined-exposure footprint.  The EXPO
+		# ioctl selects a ten-register analog/digital-gain LUT row; sampling
+		# only 0x02b3/0x02b4 can make two different rows look deceptively alike.
+		for reg in 0x0202 0x0203 0x0205 \
+			0x02b3 0x02b4 0x02b8 0x02b9 0x0515 0x0519 0x02d9 0x020e 0x020f \
+			0x0218 0x0219 0x0340 0x0341; do
 			printf '%s=' "$reg"
 			read_reg16 "$reg"
 			printf ' '
@@ -792,11 +876,27 @@ dmesg > /tmp/t40-dmesg-full.txt
 EOS
 
 capture_rtsp_frame() {
-	timeout "$RTSP_TIMEOUT_SECS" ffmpeg -hide_banner -loglevel info -y \
+	timeout "$RTSP_TIMEOUT_SECS" ffmpeg -nostdin -hide_banner -loglevel info -y \
 		-rtsp_transport tcp \
 		-i "rtsp://thingino:thingino@$IP:554/$RTSP_PATH" -frames:v 1 \
 		"$LOG/rtsp-frame.jpg" >"$LOG/ffmpeg.log" 2>&1 || true
 }
+
+start_userspace_3a() {
+	"${SSH[@]}" "sh -c 'TARGET=$USERSPACE_3A_TARGET DEADBAND_PCT=$USERSPACE_3A_DEADBAND_PCT PERIOD=$USERSPACE_3A_PERIOD UV_LO=$USERSPACE_3A_UV_LO UV_HI=$USERSPACE_3A_UV_HI AWB_STEP_DIV=$USERSPACE_3A_AWB_STEP_DIV DYNAMIC_PHYS=1 nohup sh /tmp/3a.sh > /tmp/3a.log 2>&1 < /dev/null &' ; echo 3a-agent-started; sleep 1; ps | grep '[3]a.sh' || true"
+}
+
+if [[ "$FAST_RTSP_ONLY" == "1" && "$ENABLE_USERSPACE_3A" == "1" ]]; then
+	{
+		echo "# starting dynamic-buffer userspace 3A before fast RTSP capture"
+		start_userspace_3a
+	} >"$LOG/3a-start.log" 2>&1 || true
+	if [[ "$USERSPACE_3A_SETTLE_SECS" != "0" ]]; then
+		sleep "$USERSPACE_3A_SETTLE_SECS"
+	fi
+elif [[ "$FAST_RTSP_ONLY" == "1" ]]; then
+	echo "userspace 3A disabled (ENABLE_USERSPACE_3A=0)" >"$LOG/3a-start.log"
+fi
 
 if [[ "$RTSP_FIRST" == "1" || "$FAST_RTSP_ONLY" == "1" ]]; then
 	if [[ "$SKIP_RTSP" == "1" ]]; then
@@ -819,6 +919,8 @@ if [[ "$FAST_RTSP_ONLY" == "1" ]]; then
 	"${SSH[@]}" 'kill "$(cat /tmp/kmsg.pid 2>/dev/null)" 2>/dev/null; true' || true
 	scp_fetch_optional /tmp/k.log "$LOG/kmsg.log"
 	scp_fetch_optional /tmp/t40-dmesg-full.txt "$LOG/dmesg-full.txt"
+	scp_fetch_optional /tmp/3a.log "$LOG/3a.log"
+	scp_fetch_optional /tmp/t40-forensic-state.txt "$LOG/forensic-state.txt"
 	printf 'log=%s\n' "$LOG"
 	sed -n '1,40p' "$LOG/ffmpeg.log"
 	exit 0
@@ -844,7 +946,7 @@ scp_fetch_optional /tmp/t40-prestream-expo.txt "$LOG/prestream-expo.txt"
 if [[ "$ENABLE_USERSPACE_3A" == "1" ]]; then
 	{
 		echo "# starting userspace 3A before qbuf/RTSP capture"
-		"${SSH[@]}" 'sh -c "nohup sh /tmp/3a.sh > /tmp/3a.log 2>&1 < /dev/null &"; echo 3a-agent-started; sleep 1; ps | grep "[3]a.sh" || true'
+		start_userspace_3a
 	} >"$LOG/3a-start.log" 2>&1 || true
 	if [[ "$USERSPACE_3A_SETTLE_SECS" != "0" ]]; then
 		sleep "$USERSPACE_3A_SETTLE_SECS"
@@ -926,7 +1028,7 @@ fi
 "${SSH[@]}" 'P=/sys/module/tx_isp_t40_recovered/parameters; \
 	echo "# 3A process"; ps | grep "[3]a.sh" || true; \
 	echo "# 3A params"; \
-	for p in ae_sensor_apply_force_packed dns_gain_ev awb_manual_rgain awb_manual_bgain awb_grayworld_last_rgain awb_grayworld_last_bgain lsc_lit_ct lsc_lit_ct_now isp_block_init_ran isp_block_init_count isp_block_init_skip_no_blob isp_block_init_adr_ret isp_block_init_clm_ret clm_stage_limit clm_defer_trig clm_stage_reached clm_last_ret; do \
+	for p in ae_sensor_apply_force_packed dns_gain_ev ysp_gain_ev ysp_gain_ev_now dmsc_lit_gain dmsc_lit_gain_now awb_manual_rgain awb_manual_bgain awb_grayworld_last_rgain awb_grayworld_last_bgain lsc_lit_ct lsc_lit_ct_now isp_block_init_ran isp_block_init_count isp_block_init_skip_no_blob isp_block_init_adr_ret isp_block_init_clm_ret clm_stage_limit clm_defer_trig clm_ct clm_ct_now clm_ct_region clm_stage_reached clm_last_ret; do \
 		printf "%s=" "$p"; cat "$P/$p" 2>/dev/null || echo NA; \
 	done; \
 	echo "# 3A log tail"; tail -80 /tmp/3a.log 2>/dev/null || true' \
