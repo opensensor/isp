@@ -1263,6 +1263,11 @@ static unsigned char tparams_night_storage[8] __attribute__((aligned(4)));
 static unsigned char tsbin_storage[8] __attribute__((aligned(4)));
 #define tsbin (*(uint32_t *)(void *)tsbin_storage)
 static uint32_t init_load_bin;
+static unsigned char bin_version[8];
+static const uint32_t crc_table[8] = {
+    0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419,
+    0x706af48f, 0xe963a535, 0x9e6495a3, 0x00000000,
+};
 static unsigned char msca_storage[78] __attribute__((aligned(4)));
 #define msca (*(uint32_t *)(void *)msca_storage)
 static unsigned char mscaler_storage[2656] __attribute__((aligned(4)));
@@ -2876,9 +2881,10 @@ void private_kfree();
 int32_t private_copy_from_user(void *to, const void __user *from,
                                unsigned long n);
 int32_t private_copy_to_user(uint32_t a0, uint32_t a1, uint32_t a2);
-int32_t private_filp_open(void);
-int private_filp_close(void);
-int32_t private_vfs_read(void);
+struct file *private_filp_open(const char *filename, int flags, umode_t mode);
+int private_filp_close(struct file *filp, fl_owner_t id);
+ssize_t private_vfs_read(struct file *file, char __user *buf, size_t count,
+                         loff_t *pos);
 int32_t private_vfs_write(struct file *file, const char *buf, size_t count, loff_t *pos);
 int32_t private_vfs_llseek(void);
 int64_t private_get_fs(uintptr_t a0);
@@ -2911,8 +2917,8 @@ int32_t private_dma_free_coherent(void *dev, int32_t size, int32_t handle, int32
 int32_t private_virt_to_phys(uint32_t a0);
 int32_t private_phys_to_virt(uint32_t a0);
 int private_remap_pfn_range(struct vm_area_struct *vma, unsigned long addr, unsigned long pfn, unsigned long size, struct vm_fault *vmf);
-int32_t private_file_inode(uintptr_t a0);
-int32_t private_i_size_read(void* arg1);
+struct inode *private_file_inode(struct file *file);
+loff_t private_i_size_read(const struct inode *inode);
 int private_class_create(void);
 int32_t private_class_destroy(void);
 int32_t private_device_create(uint32_t a0);
@@ -3480,7 +3486,7 @@ int32_t tisp_channel_main_fifo_clear(uint32_t a0);
 int64_t tisp_channel_main_attr_set(uint32_t a0, uintptr_t a1);
 int32_t tisp_sync_ivdc_state(uint32_t a0, uint32_t a1);
 void* tiziano_reserve_reg_write(uint32_t a0, uintptr_t a1, uint32_t a2);
-uint32_t tiziano_load_parameters(uint32_t a0, uintptr_t a1, uintptr_t a2);
+int tiziano_load_parameters(uint32_t channel, uintptr_t load_request);
 int64_t tisp_init(uint32_t a0, uintptr_t a1, uint32_t a2);
 int64_t tisp_core_switch_bin(uint32_t a0, uint32_t a1);
 int32_t tiziano_sync_sensor_attr(uintptr_t a0);
@@ -5850,44 +5856,22 @@ private_copy_to_user0x34:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000cf4 origin=fragment_seed original=private_filp_open */
-int32_t private_filp_open(void)
+struct file *private_filp_open(const char *filename, int flags, umode_t mode)
 {
-    int32_t *a0 = 0;
-    int32_t a1 = 0;
-    int32_t a2 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return filp_open((const char *)(uintptr_t)a0, a1, a2);
-
-    return 0;
+    return filp_open(filename, flags, mode);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000d04 origin=model_output original=private_filp_close */
-int private_filp_close(void)
+int private_filp_close(struct file *filp, fl_owner_t id)
 {
-	return filp_close(NULL, 0);
+	return filp_close(filp, id);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000d14 origin=fragment_seed original=private_vfs_read */
-int32_t private_vfs_read(void)
+ssize_t private_vfs_read(struct file *file, char __user *buf, size_t count,
+                         loff_t *pos)
 {
-    int32_t *a0 = 0;
-    int32_t a1 = 0;
-    int32_t a2 = 0;
-    int32_t *a3 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return vfs_read((void *)(uintptr_t)a0, (const char *)(uintptr_t)a1, a2, (void *)(uintptr_t)a3);
-
-    return 0;
+    return vfs_read(file, buf, count, pos);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000d24 origin=model_output original=private_vfs_write */
@@ -6497,40 +6481,15 @@ int private_remap_pfn_range(struct vm_area_struct *vma, unsigned long addr,
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000011fc origin=fragment_seed original=private_file_inode */
-int32_t private_file_inode(uintptr_t a0)
+struct inode *private_file_inode(struct file *file)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 16);
-
-    return 0;
+    return file_inode(file);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000001204 origin=model_output original=private_i_size_read */
-int32_t private_i_size_read(void* arg1) {
-    int32_t result;
-
-    while (1) {
-        int32_t v1 = *(int32_t*)((char*)arg1 + 0x60);
-
-        if ((v1 & 1) == 0) {
-            __sync_synchronize();
-            result = *(int32_t*)((char*)arg1 + 0x30);
-            *(int32_t*)((char*)arg1 + 0x34) = result;
-            __sync_synchronize();
-
-            int32_t v0 = *(int32_t*)((char*)arg1 + 0x60);
-            if (v1 == v0)
-                break;
-        }
-    }
-
-    return result;
+loff_t private_i_size_read(const struct inode *inode)
+{
+    return i_size_read(inode);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000001240 origin=model_output original=private_class_create */
@@ -50655,6 +50614,7 @@ tiziano_reserve_reg_write0x58:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001fe90 origin=fragment_seed original=tiziano_load_parameters */
+#if 0
 uint32_t tiziano_load_parameters(uint32_t a0, uintptr_t a1, uintptr_t a2)
 {
     struct file *filp;
@@ -50855,6 +50815,172 @@ read_bin:;
             return 0xffffffff;
         }
     }
+}
+#endif
+
+int tiziano_load_parameters(uint32_t channel, uintptr_t load_request)
+{
+    unsigned char *manager;
+    unsigned char *payload;
+    unsigned char *day_params;
+    unsigned char *night_params;
+    unsigned char *payload_end;
+    unsigned char *sensor_info;
+    const char *requested_path;
+    struct file *filp;
+    loff_t file_size;
+    uint32_t declared_size;
+    uint32_t night_offset;
+    uint32_t expected_crc;
+    uint32_t crc = 0;
+    uint32_t offset;
+    uint32_t old_fs = 0;
+    ssize_t bytes_read;
+    char path[64];
+    int ret = -EINVAL;
+
+    if (channel >= ARRAY_SIZE(tparams_day_storage) / sizeof(uint32_t) ||
+        !load_request)
+        return -EINVAL;
+
+    requested_path = (const char *)(load_request + sizeof(uint32_t));
+    if (!requested_path[0] || strnlen(requested_path, sizeof(path)) >= sizeof(path))
+        return -ENAMETOOLONG;
+
+    manager = (unsigned char *)(uintptr_t)m_bin;
+    if (!manager) {
+        manager = private_kmalloc(76, GFP_KERNEL);
+        if (!manager)
+            return -ENOMEM;
+        memset(manager, 0, 76);
+        m_bin = (uint32_t)(uintptr_t)manager;
+    }
+
+    snprintf(manager, 8, "%s", "1.00");
+    snprintf(bin_version, sizeof(bin_version), "%s", "2.00");
+    snprintf(manager + 8, 8, "%s", "2.00");
+    snprintf(path, sizeof(path), "%s", requested_path);
+    memcpy((void *)&st_tisp_com_par, path, sizeof(path));
+
+    filp = private_filp_open(path, O_RDONLY, 0);
+    if (IS_ERR(filp)) {
+        isp_printf(2, "tiziano_load_parameters: open %s failed (%ld)\n",
+                   path, PTR_ERR(filp));
+        return PTR_ERR(filp);
+    }
+
+    file_size = private_i_size_read(private_file_inode(filp));
+    if (file_size < 64 || file_size > INT_MAX) {
+        ret = -EINVAL;
+        goto close_file;
+    }
+
+    private_get_fs((uintptr_t)&old_fs);
+    private_set_fs(0);
+
+    payload = *(unsigned char **)(manager + 64);
+    if (!payload) {
+        payload = private_vmalloc((size_t)file_size);
+        if (!payload) {
+            ret = -ENOMEM;
+            goto restore_fs;
+        }
+        *(uint32_t *)(manager + 64) = (uint32_t)(uintptr_t)payload;
+    }
+
+    *(uint32_t *)(manager + 68) = (uint32_t)file_size;
+    bytes_read = private_vfs_read(filp, (char __user *)payload,
+                                  (size_t)file_size, &filp->f_pos);
+    if (bytes_read != file_size) {
+        ret = bytes_read < 0 ? (int)bytes_read : -EIO;
+        goto restore_fs;
+    }
+
+    private_filp_close(filp, NULL);
+    filp = NULL;
+    private_set_fs(old_fs);
+
+    if (memcmp(manager, payload, 8) != 0 &&
+        (!init_load_bin || memcmp(bin_version, payload, 8) != 0)) {
+        isp_printf(2, "tiziano_load_parameters: bin version mismatch\n");
+        goto free_binary;
+    }
+
+    memcpy(bin_version, payload, sizeof(bin_version));
+    if (memcmp(manager + 8, payload + 8, 8) != 0) {
+        isp_printf(2, "tiziano_load_parameters: SoC type mismatch\n");
+        goto free_binary;
+    }
+
+    declared_size = *(uint32_t *)(payload + 48);
+    night_offset = *(uint32_t *)(payload + 52);
+    expected_crc = *(uint32_t *)(payload + 60);
+    if (declared_size < 64 || declared_size > file_size ||
+        night_offset > declared_size - 64) {
+        isp_printf(2, "tiziano_load_parameters: invalid parameter extents\n");
+        goto free_binary;
+    }
+
+    for (offset = 64; offset < (declared_size & ~3U); offset += 4) {
+        uint32_t word = *(uint32_t *)(payload + offset);
+
+        crc ^= word;
+        crc ^= crc_table[crc & 7];
+    }
+    if (crc != expected_crc) {
+        isp_printf(2, "tiziano_load_parameters: CRC mismatch\n");
+        goto free_binary;
+    }
+
+    sensor_info = *(unsigned char **)((char *)&tsbin + channel * sizeof(uint32_t));
+    if (!sensor_info) {
+        ret = -ENOMEM;
+        goto free_binary;
+    }
+
+    snprintf(sensor_info, 8, "%s", manager);
+    snprintf(sensor_info + 8, 72, "%s", path);
+    day_params = payload + 64;
+    night_params = day_params + night_offset;
+    payload_end = payload + file_size;
+    *(uint32_t *)(manager + 72) = (uint32_t)(uintptr_t)day_params;
+    *(uint32_t *)((char *)&tparams_day + channel * sizeof(uint32_t)) =
+        (uint32_t)(uintptr_t)day_params;
+    *(uint32_t *)((char *)&tparams_night + channel * sizeof(uint32_t)) =
+        (uint32_t)(uintptr_t)night_params;
+    memcpy((void *)&dnw, payload + 16, sizeof(dnw));
+
+    if (payload + 0xf94 + 452 <= payload_end)
+        tiziano_reserve_reg_write((int8_t)((unsigned char *)&dnw)[0],
+                                  (uintptr_t)(payload + 0xf94),
+                                  (uintptr_t)night_params);
+    if (night_params + 0x1ee40 + 452 <= payload_end)
+        tiziano_reserve_reg_write((int8_t)((unsigned char *)&dnw)[2],
+                                  (uintptr_t)(night_params + 0x1ee40),
+                                  (uintptr_t)night_params);
+
+    if (night_params + 0x1efc0 < payload_end && night_params[0x1efc0]) {
+        printk("[CVersion] %ls\n", night_params + 0x1efc0);
+        snprintf(sensor_info + 80, 68, "%ls", night_params + 0x1efc0);
+    }
+
+    init_load_bin = 1;
+    return 0;
+
+restore_fs:
+    private_set_fs(old_fs);
+close_file:
+    if (filp && !IS_ERR(filp))
+        private_filp_close(filp, NULL);
+free_binary:
+    payload = *(unsigned char **)(manager + 64);
+    if (payload)
+        private_vfree(payload);
+    private_kfree(manager);
+    m_bin = 0;
+    *(uint32_t *)((char *)&tparams_day + channel * sizeof(uint32_t)) = 0;
+    *(uint32_t *)((char *)&tparams_night + channel * sizeof(uint32_t)) = 0;
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020570 origin=fragment_seed original=tisp_init */
