@@ -123,6 +123,10 @@ Those paths and the collapsed module deinitializer are restored from OEM
 control flow. The smoke harness now also treats `Kernel bug detected` as a
 fatal signature.
 
+The sixth level-0 run is clean: module insertion, `/dev/tx-isp` creation,
+parent/child removal, and module unload all return zero with no kernel fatal
+signature. This clears the shallow-platform gate for device-graph testing.
+
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.
