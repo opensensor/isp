@@ -2869,8 +2869,8 @@ int32_t private_init_waitqueue_head();
 int32_t private_misc_register();
 int32_t private_misc_deregister();
 int32_t private_proc_create_data();
-int32_t private_vmalloc(void);
-int32_t private_vfree(void);
+void *private_vmalloc(size_t size);
+void private_vfree(const void *addr);
 void *private_kmalloc();
 void private_kfree();
 int32_t private_copy_from_user(void *to, const void __user *from,
@@ -3472,7 +3472,7 @@ int32_t tisp_slake_all(void);
 int64_t tisp_suspend_all(uint32_t a0);
 int32_t tisp_resume_all(uint32_t a0);
 int32_t tisp_function_clear(void);
-int tisp_deinit(void);
+int tisp_deinit(int channel);
 int32_t tisp_fw_process(uint32_t a0);
 int32_t tisp_channel_main_start(uint32_t a0);
 int32_t tisp_channel_main_stop(uint32_t a0);
@@ -5773,24 +5773,15 @@ int32_t private_proc_create_data(name, mode, parent, fops, data)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000c04 origin=model_output original=private_vmalloc */
-int32_t private_vmalloc(void)
+void *private_vmalloc(size_t size)
 {
-    return (int32_t)vmalloc(0);
+    return vmalloc(size);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000c14 origin=fragment_seed original=private_vfree */
-int32_t private_vfree(void)
+void private_vfree(const void *addr)
 {
-    int32_t *a0 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return ((int32_t (*)())kfree)((void *)(uintptr_t)a0);
-
-    return 0;
+    vfree(addr);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000c24 origin=fragment_seed original=private_kmalloc */
@@ -50240,122 +50231,72 @@ int32_t tisp_function_clear(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f8e8 origin=fragment_seed original=tisp_deinit */
-int tisp_deinit(void)
+int tisp_deinit(int channel)
 {
-    uint32_t s0 = 0;
-    uint32_t s3 = s0 << 2;
-    uint32_t *v0;
-    v0 = (unsigned int *)tisp_ae_deinit;
-    ((void (*)(uint32_t))v0)(s0);
+    unsigned int slot = (unsigned int)channel * sizeof(uint32_t);
+    void *bin;
+    void **params;
+    void **sensor_bin;
 
-    v0 = (unsigned int *)tisp_awb_deinit;
-    ((void (*)(uint32_t))v0)(s0);
+    tisp_ae_deinit(channel);
+    tisp_awb_deinit(channel);
+    tisp_gib_deinit(channel);
+    tisp_blc_deinit(channel);
+    tisp_wdr_deinit(channel);
+    tisp_lsc_deinit(channel);
+    tisp_dpc_deinit(channel);
+    tisp_adr_deinit(channel);
+    tisp_defog_deinit(channel);
+    tisp_dmsc_deinit(channel);
+    tisp_gamma_deinit(channel);
+    tisp_mdns_deinit(channel);
+    tisp_af_deinit(channel);
+    tisp_ydns_deinit(channel);
+    tisp_cdns_deinit(channel);
+    tisp_bcsh_deinit(channel);
+    tisp_ysp_deinit(channel);
+    tisp_sdns_deinit(channel);
+    tisp_hldc_deinit(channel);
+    ((int (*)(uint32_t))(uintptr_t)tisp_tstp_deinit)(channel);
+    tisp_clm_deinit(channel);
+    tisp_ccm_deinit(channel);
+    tisp_tmo_deinit(channel);
+    tisp_lce_deinit(channel);
+    tisp_msca_deinit(channel);
+    ((int (*)(uint32_t))(uintptr_t)tisp_raw_deinit)(channel);
 
-    v0 = (unsigned int *)tisp_gib_deinit;
-    ((void (*)(uint32_t))v0)(s0);
+    bin = (void *)(uintptr_t)m_bin;
+    if (bin) {
+        void *payload = *(void **)((char *)bin + 64);
 
-    v0 = (unsigned int *)tisp_blc_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_wdr_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_lsc_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_dpc_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_adr_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_defog_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_dmsc_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_gamma_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_mdns_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_af_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_ydns_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_cdns_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_bcsh_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_ysp_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_sdns_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_hldc_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_tstp_deinit;
-    ((void (*)(void))v0)();
-
-    v0 = (unsigned int *)tisp_clm_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_ccm_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_tmo_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_lce_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_msca_deinit;
-    ((void (*)(uint32_t))v0)(s0);
-
-    v0 = (unsigned int *)tisp_raw_deinit;
-    ((void (*)(void))v0)();
-
-  uint32_t m_bin_1 = m_bin;
-    if (m_bin_1 != 0) {
-        uint32_t a0_23 = *(uint32_t *)((char *)m_bin_1 + 0x40);
-        if (a0_23 != 0) {
-            private_vfree();
-            *(uint32_t *)((char *)m_bin_1 + 0x40) = 0;
-            *(uint32_t *)((char *)&tparams_day + s3) = 0;
-            *(uint32_t *)((char *)&tparams_night + s3) = 0;
+        if (payload) {
+            private_vfree(payload);
+            *(void **)((char *)bin + 64) = NULL;
+            *(uint32_t *)((char *)&tparams_day + slot) = 0;
+            *(uint32_t *)((char *)&tparams_night + slot) = 0;
         }
-        private_kfree();
+        private_kfree(bin);
         m_bin = 0;
     }
-   uint32_t a0_25 = *(uint32_t *)((char *)&tparamsP + s3);
-    if (a0_25 != 0) {
-        private_vfree();
-        *(uint32_t *)((char *)&tparamsP + s3) = 0;
+
+    params = (void **)((char *)&tparamsP + slot);
+    if (*params) {
+        private_vfree(*params);
+        *params = NULL;
     }
 
-    uint32_t tsbin_1 = *(uint32_t *)((char *)((char *)&tsbin));
-    if (tsbin_1 != 0) {
-        private_vfree();
-        *(uint32_t *)((char *)((char *)&tsbin)) = 0;
+    sensor_bin = (void **)&tsbin;
+    if (*sensor_bin) {
+        private_vfree(*sensor_bin);
+        *sensor_bin = NULL;
     }
 
-    if (s0 == 0) {
-        v0 = (unsigned int *)tisp_code_destroy_tuning_node;
-        ((void (*)(void))v0)();
-    }
+    if (channel == 0)
+        tisp_code_destroy_tuning_node();
 
     init_load_bin = 0;
     return 0;
 }
-
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001fb8c origin=fragment_seed original=tisp_fw_process */
 int32_t tisp_fw_process(uint32_t a0)
 {
@@ -50760,12 +50701,13 @@ uint32_t tiziano_load_parameters(uint32_t a0, uintptr_t a1, uintptr_t a2)
         goto read_bin;
     }
 
-    *(uint32_t *)((char *)m_bin + 0x40) = (uintptr_t)private_vmalloc();
+    *(uint32_t *)((char *)m_bin + 0x40) =
+        (uintptr_t)private_vmalloc(file_size);
     if (*(uint32_t *)((char *)m_bin + 0x40) == 0) {
         file_size_high = (int32_t)filp >> 10;
         isp_printf(2, "[%s %d] [[ %s:%d ]]: Failed to alloc %lld KB buffer!\n", "tiziano_load_parameters");
-        private_vfree();
-        private_kfree();
+        private_vfree(*(void **)((char *)m_bin + 0x40));
+        private_kfree(m_bin);
         private_vfs_read();
         private_set_fs(old_fs);
         return 0xffffffff;
@@ -96783,7 +96725,7 @@ int32_t tisp_dmsc_deinit(int32_t arg1)
         int32_t a0 = *(int32_t *)((uintptr_t)v0 + 4);
 
         if (a0 != 0) {
-            private_vfree();
+            private_vfree((void *)(uintptr_t)a0);
             *(int32_t *)((uintptr_t)v0 + 4) = 0;
         }
 
@@ -108523,7 +108465,7 @@ tisp_defog_deinit0x9c:
 
     if (a0_1 == 0) { goto tisp_defog_deinit0xc8; }
 
-    private_vfree();
+    private_vfree((void *)(uintptr_t)a0_1);
     v0 = *(uint32_t *)((char *)s3 + 0);
     *(uint32_t *)((char *)v0 + 52) = 0;
     s3 = (uintptr_t)s0 + (uintptr_t)s2;
@@ -108534,7 +108476,7 @@ tisp_defog_deinit0xc8:
 
     if (a0_1 == 0) { goto tisp_defog_deinit0xec; }
 
-    private_vfree();
+    private_vfree((void *)(uintptr_t)a0_1);
     v0 = *(uint32_t *)((char *)s3 + 0);
     *(uint32_t *)((char *)v0 + 56) = 0;
 
@@ -122031,7 +121973,7 @@ int32_t tisp_mdns_deinit(int32_t arg1)
 
 		a0 = *(void **)((uintptr_t)v0 + 4);
 		if (a0 != NULL) {
-			private_vfree();
+			private_vfree(a0);
 			*(void **)((uintptr_t)v0 + 4) = NULL;
 		}
 
@@ -128026,7 +127968,7 @@ int tisp_ysp_deinit(int arg1) {
     if (ptr != NULL) {
         void *sub = *(void **)((char *)ptr + 4);
         if (sub != NULL) {
-            private_vfree();
+            private_vfree(sub);
             *(void **)((char *)ptr + 4) = NULL;
         }
         private_kfree();
@@ -128034,7 +127976,7 @@ int tisp_ysp_deinit(int arg1) {
     }
 
     if (ysp_paramsP != NULL) {
-        private_vfree();
+        private_vfree((void *)(uintptr_t)ysp_paramsP);
         ysp_paramsP = NULL;
     }
 
@@ -162384,7 +162326,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
 
 	tx_isp_subdev_deinit(module);
 	if (tx_isp_bringup_level >= 3)
-		tisp_deinit();
+		tisp_deinit(0);
 
 	private_platform_set_drvdata(pdev, NULL);
 	private_kfree(core);

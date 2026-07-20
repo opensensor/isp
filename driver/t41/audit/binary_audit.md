@@ -12,14 +12,14 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 338384 |
+| Executable section bytes | 479556 | 338416 |
 | Initialized writable bytes | 25120 | 16032 |
 | Uninitialized writable bytes | 20592 | 383664 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=82185 ratio=0.708
+- matched instructions: OEM=116036 recovered=82193 ratio=0.708
 - classes: stub=18 collapsed=91 shorter=386 same_count=265 similar=472 larger=24 expanded=17
 
 ## Allocated Section Delta
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3392 | -12368 |
 | `.rodata.str1.4` | 25860 | 4968 | -20892 |
-| `.text` | 478400 | 338384 | -140016 |
+| `.text` | 478400 | 338416 | -139984 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
@@ -68,7 +68,7 @@ Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `tisp_g_hv_flip` | `tisp_g_hv_flip` | 27 | 2 | 0.074 | -25 | 0->0 | 0->0 |
 | collapsed | exact_name | `tisp_awb_ct_detect` | `tisp_awb_ct_detect` | 3100 | 1079 | 0.348 | -2021 | 41->32 | 362->144 |
 | collapsed | exact_name | `tx_isp_core_ops_s_ctrl` | `tx_isp_core_ops_s_ctrl` | 1768 | 257 | 0.145 | -1511 | 150->23 | 226->40 |
-| collapsed | exact_name | `tx_isp_core_ops_g_ctrl` | `tx_isp_core_ops_g_ctrl` | 1386 | 620 | 0.447 | -766 | 100->46 | 201->125 |
+| collapsed | exact_name | `tx_isp_core_ops_g_ctrl` | `tx_isp_core_ops_g_ctrl` | 1386 | 619 | 0.447 | -767 | 100->46 | 201->124 |
 | collapsed | exact_name | `tisp_ae_ev_list_alloc_calc` | `tisp_ae_ev_list_alloc_calc` | 1332 | 401 | 0.301 | -931 | 67->18 | 201->65 |
 | collapsed | exact_name | `tisp_mdns_reg_cfg` | `tisp_mdns_reg_cfg` | 1308 | 305 | 0.233 | -1003 | 102->43 | 4->0 |
 | collapsed | exact_name | `Tiziano_adr_fpga` | `Tiziano_adr_fpga` | 1152 | 366 | 0.318 | -786 | 18->9 | 115->47 |
@@ -215,8 +215,8 @@ Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `isp_save_cmd_set` | `isp_save_cmd_set` | 431 | 252 | 0.585 | -179 | 35->22 | 42->18 |
 | shorter | exact_name | `tx_isp_subdev_init` | `tx_isp_subdev_init` | 420 | 306 | 0.729 | -114 | 27->19 | 43->40 |
 | shorter | exact_name | `tisp_lce_init` | `tisp_lce_init` | 412 | 246 | 0.597 | -166 | 19->13 | 9->5 |
-| shorter | exact_name | `tiziano_adr_5x5_init` | `tiziano_adr_5x5_init` | 394 | 251 | 0.637 | -143 | 37->30 | 24->22 |
-| shorter | exact_name | `tisp_defog_init` | `tisp_defog_init` | 391 | 276 | 0.706 | -115 | 34->14 | 11->13 |
+| shorter | exact_name | `tiziano_adr_5x5_init` | `tiziano_adr_5x5_init` | 394 | 252 | 0.640 | -142 | 37->30 | 24->22 |
+| shorter | exact_name | `tisp_defog_init` | `tisp_defog_init` | 391 | 277 | 0.708 | -114 | 34->14 | 11->13 |
 | shorter | exact_name | `tisp_lsc_mirror_flip` | `tisp_lsc_mirror_flip` | 386 | 263 | 0.681 | -123 | 41->22 | 26->13 |
 | shorter | exact_name | `tisp_ae_weight_mean` | `tisp_ae_weight_mean` | 369 | 247 | 0.669 | -122 | 11->6 | 10->8 |
 | shorter | exact_name | `tisp_ae_init` | `tisp_ae_init` | 325 | 185 | 0.569 | -140 | 27->17 | 9->6 |
@@ -238,7 +238,7 @@ Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `func_gauss_local` | `func_gauss_local` | 215 | 144 | 0.670 | -71 | 10->9 | 13->7 |
 | shorter | exact_name | `tisp_gib_ae_write_dgain` | `tisp_gib_ae_write_dgain` | 212 | 114 | 0.538 | -98 | 28->1 | 7->6 |
 | shorter | exact_name | `tisp_tmo_ev_interp` | `tisp_tmo_ev_interp` | 211 | 106 | 0.502 | -105 | 2->2 | 42->18 |
-| shorter | exact_name | `tisp_msca_normalized` | `tisp_msca_normalized` | 210 | 165 | 0.786 | -45 | 5->5 | 20->10 |
+| shorter | exact_name | `tisp_msca_normalized` | `tisp_msca_normalized` | 210 | 164 | 0.781 | -46 | 5->5 | 20->10 |
 | shorter | exact_name | `Tiziano_Awb_Ct_Cal` | `Tiziano_Awb_Ct_Cal` | 206 | 111 | 0.539 | -95 | 4->4 | 22->17 |
 | shorter | exact_name | `func_map_y_filter_sp` | `func_map_y_filter_sp` | 205 | 127 | 0.620 | -78 | 4->2 | 8->6 |
 | shorter | exact_name | `func_map_y_filter` | `func_map_y_filter` | 201 | 133 | 0.662 | -68 | 1->1 | 9->11 |
@@ -251,7 +251,7 @@ Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `ispcore_frame_channel_set_fmt` | `ispcore_frame_channel_set_fmt` | 180 | 92 | 0.511 | -88 | 7->5 | 26->15 |
 | shorter | exact_name | `tisp_ccm_interp_by_ct` | `tisp_ccm_interp_by_ct` | 179 | 124 | 0.693 | -55 | 2->1 | 34->26 |
 | shorter | exact_name | `tisp_sdns_ref_reg_cfg` | `tisp_sdns_ref_reg_cfg` | 172 | 134 | 0.779 | -38 | 26->26 | 0->0 |
-| shorter | exact_name | `tisp_deinit` | `tisp_deinit` | 169 | 102 | 0.604 | -67 | 31->25 | 5->0 |
+| shorter | exact_name | `tisp_deinit` | `tisp_deinit` | 169 | 103 | 0.609 | -66 | 31->25 | 5->0 |
 | shorter | exact_name | `tisp_clm_write_lut` | `tisp_clm_write_lut` | 167 | 106 | 0.635 | -61 | 18->11 | 2->1 |
 | shorter | exact_name | `tisp_lsc_init` | `tisp_lsc_init` | 161 | 123 | 0.764 | -38 | 11->8 | 5->3 |
 | shorter | exact_name | `tiziano_adr_stat_calc` | `tiziano_adr_stat_calc` | 159 | 98 | 0.616 | -61 | 0->0 | 3->3 |
@@ -259,7 +259,7 @@ Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_cdns_reg_cfg` | `tisp_cdns_reg_cfg` | 156 | 113 | 0.724 | -43 | 11->11 | 3->1 |
 | shorter | exact_name | `tisp_tstp_mark1_func` | `tisp_tstp_mark1_func` | 154 | 95 | 0.617 | -59 | 18->17 | 9->7 |
 | shorter | exact_name | `tisp_clm_ct_interp` | `tisp_clm_ct_interp` | 154 | 121 | 0.786 | -33 | 6->4 | 19->19 |
-| shorter | exact_name | `tisp_suspend_all` | `tisp_suspend_all` | 137 | 84 | 0.613 | -53 | 9->7 | 9->6 |
+| shorter | exact_name | `tisp_suspend_all` | `tisp_suspend_all` | 137 | 85 | 0.620 | -52 | 9->7 | 9->6 |
 | shorter | exact_name | `tiziano_adr_base_pars` | `tiziano_adr_base_pars` | 136 | 73 | 0.537 | -63 | 4->2 | 5->4 |
 | shorter | exact_name | `tisp_lsc_lut_valid_judge` | `tisp_lsc_lut_valid_judge` | 134 | 105 | 0.784 | -29 | 2->2 | 19->16 |
 | shorter | exact_name | `func_adr_reg_write_every` | `func_adr_reg_write_every` | 131 | 98 | 0.748 | -33 | 10->9 | 7->5 |
