@@ -1138,6 +1138,23 @@ static unsigned char __attribute__((aligned(4))) fs_subdev_ops[20] = {
 static unsigned char __attribute__((aligned(4))) isp_nv12_hbit[4] = {
     0x10, 0x00, 0x00, 0x00, 
 };
+struct t41_isp_output_fmt {
+    char description[32];
+    uint32_t index;
+    uint32_t depth;
+    uint32_t flags;
+};
+static const struct t41_isp_output_fmt isp_output_fmt[9] = {
+    { "YUV 4:2:0 semi planar, Y/CbCr", 0, 12, 0 },
+    { "YUV 4:2:0 semi planar, Y/CrCb", 1, 12, 0 },
+    { "YUV 4:2:2 semi planar, Y/CrCb", 2, 16, 0 },
+    { "YUV 4:2:2 semi planar, Y/CbCr", 3, 16, 0 },
+    { "YUV 4:2:2 semi planar, CrCb/Y", 4, 16, 0 },
+    { "YUV 4:2:2 semi planar, CbCr/Y", 5, 16, 0 },
+    { "RAW8, BGGR", 6, 8, 0 },
+    { "RAW16, BGGR", 7, 16, 0 },
+    { "undetermine", 0, 0, 0 },
+};
 static unsigned char __attribute__((aligned(4))) isp_nv12_wbit[12] = {
     0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 };
@@ -2895,8 +2912,8 @@ int32_t private_set_fs(uint32_t a0);
 int32_t private_dma_cache_sync(void);
 int32_t private_getrawmonotonic(uintptr_t a0);
 int32_t private_kthread_should_stop(void);
-int32_t private_kthread_run(uint32_t a0, uint32_t a1, uint32_t a2);
-int32_t private_kthread_stop();
+struct task_struct *private_kthread_run();
+int private_kthread_stop();
 int32_t private_seq_read(void);
 int32_t private_seq_lseek(void);
 int32_t private_single_release(struct inode *inode, struct file *file);
@@ -6001,49 +6018,24 @@ int32_t private_kthread_should_stop(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000dbc origin=fragment_seed original=private_kthread_run */
-int32_t private_kthread_run(uint32_t a0, uint32_t a1, uint32_t a2)
+struct task_struct *private_kthread_run(threadfn, data, name)
+    int (*threadfn)(void *);
+    void *data;
+    const char *name;
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    struct task_struct *task;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)kthread_create_on_node((void *)(uintptr_t)a0, (void *)(uintptr_t)a1, -1, (const char *)(uintptr_t)a2); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    a0 = v0;
-    v0 = v0 < -4095;
-
-    /* fragment 3: Branch */
-    if (v0 == 0) { goto private_kthread_run0x44; }
-
-    /* fragment 4: CallSetup */
-    local_10 = a0;
-    v0 = (unsigned int *)wake_up_process((void *)(uintptr_t)a0); /* jalr target resolved by relocation */
-
-    /* fragment 5: StackAccess */
-    a0 = local_10;
-    ra = local_1c;
-
-private_kthread_run0x44:
-    /* fragment 6: Arithmetic */
-    v0 = a0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    task = kthread_create_on_node(threadfn, data, -1, name);
+    if (!IS_ERR(task))
+        wake_up_process(task);
+    return task;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000e0c origin=model_output original=private_kthread_stop */
-int32_t private_kthread_stop()
+int private_kthread_stop(task)
+    struct task_struct *task;
 {
-    return kthread_stop(NULL);
+    return kthread_stop(task);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000e1c origin=fragment_seed original=private_seq_read */
@@ -159915,6 +159907,7 @@ int ispcore_video_s_stream(void * arg1, int32_t * arg2) {
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000072f28 origin=fragment_seed original=ispcore_core_ops_init */
+#if 0
 int64_t ispcore_core_ops_init(uintptr_t a0, uintptr_t a1)
 {
     uint32_t *local_10 = 0;
@@ -160566,6 +160559,233 @@ ispcore_core_ops_init0x794:
     goto ispcore_core_ops_init0x6c4;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+int64_t ispcore_core_ops_init(uintptr_t subdev_ptr, uintptr_t init_ptr)
+{
+    unsigned char *subdev = (unsigned char *)subdev_ptr;
+    unsigned char *init = (unsigned char *)init_ptr;
+    unsigned char *core;
+    unsigned char *video;
+    unsigned char *attr;
+    unsigned char *sensor_info;
+    unsigned char *channels;
+    uint32_t *state;
+    struct task_struct *thread;
+    unsigned long flags = 0;
+    uint32_t vinum;
+    uint32_t enable;
+    uint32_t width;
+    uint32_t height;
+    uint32_t channel_count;
+    uint32_t fmt_index;
+    uint32_t i;
+    int bayer;
+    int ret;
+    unsigned char config[160];
+
+    if (!subdev || IS_ERR(subdev) || !init || IS_ERR(init))
+        return -EINVAL;
+
+    core = *(unsigned char **)(subdev + 268);
+    if (!core || IS_ERR(core))
+        return -EINVAL;
+
+    enable = *(uint32_t *)(init + 0);
+    vinum = *(uint32_t *)(init + 4);
+    if (vinum >= 3)
+        return -EINVAL;
+
+    state = (uint32_t *)(core + 296 + vinum * sizeof(uint32_t));
+    if (*state == 1)
+        return 0;
+
+    video = core + 308 + vinum * 96;
+    attr = *(unsigned char **)(video + 52);
+
+    if (!enable) {
+        int stop_ret = 0;
+
+        if (*state == 4)
+            ispcore_video_s_stream(subdev, (int32_t *)init);
+
+        if (*state == 3) {
+            *state = 2;
+            (*(uint32_t *)(core + 304))++;
+            (*(uint32_t *)(core + 300))--;
+        }
+
+        if (vinum == 2)
+            return 0;
+
+        if (vinum == 0) {
+            thread = *(struct task_struct **)(core + 556);
+            if (thread && !IS_ERR(thread)) {
+                stop_ret = private_kthread_stop(thread);
+                if (!stop_ret)
+                    *(uint32_t *)(core + 556) = 0;
+                else
+                    isp_printf(2, "ispcore_core_ops_init: firmware thread stop failed (%d)\n",
+                               stop_ret);
+            }
+        }
+
+        tisp_process_deinit(vinum);
+        if (*(uint32_t *)(core + 296) < 3)
+            tisp_disable_tuning();
+
+        if (attr && !IS_ERR(attr)) {
+            *(uint32_t *)(attr + 160) = 0;
+            *(uint32_t *)(attr + 176) = 0;
+        }
+        *(uint32_t *)(core + 472) = 0;
+        tisp_deinit(vinum);
+
+        core = *(unsigned char **)(subdev + 268);
+        if (*(uint8_t *)(core + 876))
+            *(uint32_t *)(core + 608) =
+                (uint32_t)(uintptr_t)ispcore_frame_channel_qbuf;
+        *(uint16_t *)(core + 868) = 0;
+        *(uint8_t *)(core + 876) = 0;
+        memset(core + 736 + vinum * 132, 0, 132);
+        return stop_ret;
+    }
+
+    memset(config, 0, sizeof(config));
+    ret = private_reset_tx_isp_module(0);
+    if (ret) {
+        isp_printf(2, "ispcore_core_ops_init: ISP reset failed (%d)\n", ret);
+        return -EINVAL;
+    }
+
+    __private_spin_lock_irqsave((uint32_t)(uintptr_t)(core + 276),
+                                (uintptr_t)&flags);
+    if (*state != 2) {
+        uint32_t observed = *state;
+
+        private_spin_unlock_irqrestore(core + 276, flags);
+        isp_printf(2, "ispcore_core_ops_init: state %u, expected 2\n",
+                   observed);
+        return -1;
+    }
+    private_spin_unlock_irqrestore(core + 276, flags);
+
+    width = *(uint32_t *)(video + 0);
+    height = *(uint32_t *)(video + 4);
+    if (width <= 4096 && height <= 4096) {
+        *(uint16_t *)(core + 412) = (uint16_t)width;
+        *(uint16_t *)(core + 414) = (uint16_t)height;
+
+        if (*state == 4) {
+            *(volatile uint32_t *)(mips_io_port_base + 0x1301206c) = 0;
+            *(volatile uint32_t *)(mips_io_port_base + 0x13012028) =
+                0x8840400f;
+        } else {
+            fmt_index = *(uint32_t *)(core + 424);
+            if (fmt_index >= ARRAY_SIZE(isp_output_fmt))
+                fmt_index = ARRAY_SIZE(isp_output_fmt) - 1;
+            channels = *(unsigned char **)(core + 428);
+            channel_count = *(uint32_t *)(core + 432);
+            if (channels && !IS_ERR(channels)) {
+                for (i = 0; i < channel_count; i++) {
+                    unsigned char *channel = channels + i * 232;
+                    uint32_t stride;
+
+                    if (!*(uint32_t *)(channel + 128))
+                        continue;
+                    *(uint32_t *)(channel + 4) = width;
+                    *(uint32_t *)(channel + 8) = height;
+                    *(uint32_t *)(channel + 12) =
+                        isp_output_fmt[fmt_index].index;
+                    stride = (width * isp_output_fmt[fmt_index].depth) >> 3;
+                    *(uint32_t *)(channel + 20) = stride;
+                    *(uint32_t *)(channel + 24) = height * stride;
+                }
+            }
+        }
+    } else {
+        isp_printf(2, "ispcore_core_ops_init: invalid dimensions %ux%u\n",
+                   width, height);
+    }
+
+    (*(uint32_t *)(core + 300))++;
+    bayer = (int)isp_mbus_to_bayer_isra_1((uintptr_t)(video + 8), 0, 0);
+    if (bayer < 0)
+        isp_printf(2, "ispcore_core_ops_init: unsupported Bayer code (%d)\n",
+                   bayer);
+
+    attr = *(unsigned char **)(video + 52);
+    sensor_info = *(unsigned char **)(video + 56);
+    if (!attr || IS_ERR(attr) || !sensor_info || IS_ERR(sensor_info))
+        return -EINVAL;
+
+    *(uint32_t *)(config + 0) = *(uint32_t *)(video + 60);
+    *(uint32_t *)(config + 4) = *(uint32_t *)(video + 64);
+    *(uint32_t *)(config + 8) = (uint32_t)bayer;
+    strlcpy((char *)config + 13, *(char **)(attr + 0), 19);
+    *(uint32_t *)(config + 32) = *(uint32_t *)(attr + 152);
+    *(uint32_t *)(config + 36) = *(uint32_t *)(attr + 156);
+    *(uint32_t *)(config + 40) = *(uint32_t *)(attr + 160);
+    *(uint32_t *)(config + 44) = *(uint32_t *)(attr + 164);
+    *(uint32_t *)(config + 48) = *(uint32_t *)(video + 68);
+    *(uint32_t *)(config + 52) = *(uint32_t *)(video + 72);
+    *(uint32_t *)(config + 56) = *(uint32_t *)(video + 76);
+    *(uint16_t *)(config + 60) = *(uint16_t *)(attr + 168);
+    *(uint16_t *)(config + 62) = *(uint16_t *)(attr + 170);
+    *(uint16_t *)(config + 64) = *(uint16_t *)(attr + 172);
+    *(uint16_t *)(config + 66) = *(uint16_t *)(attr + 174);
+    *(uint32_t *)(config + 68) = *(uint32_t *)(attr + 176);
+    *(uint16_t *)(config + 72) = *(uint16_t *)(attr + 180);
+    *(uint16_t *)(config + 74) = *(uint16_t *)(attr + 182);
+    *(uint16_t *)(config + 76) = *(uint16_t *)(attr + 184);
+    *(uint16_t *)(config + 78) = *(uint16_t *)(attr + 186);
+    *(uint16_t *)(config + 80) = *(uint16_t *)(attr + 188);
+    *(uint16_t *)(config + 82) = *(uint16_t *)(attr + 190);
+    *(uint16_t *)(config + 84) = *(uint16_t *)(attr + 192);
+    *(uint16_t *)(config + 86) = *(uint16_t *)(attr + 268);
+    *(uint16_t *)(config + 88) = *(uint16_t *)(attr + 270);
+    *(uint32_t *)(config + 92) = *(uint32_t *)(attr + 272);
+    *(uint32_t *)(config + 96) = *(uint32_t *)(attr + 276);
+    *(uint32_t *)(config + 100) = *(uint32_t *)(attr + 280);
+    *(uint32_t *)(config + 120) = *(uint8_t *)(core + 868) ? 2 : 0;
+    if (*(uint32_t *)(core + 472 + vinum * sizeof(uint32_t)))
+        *(uint32_t *)(config + 120) = 1;
+    if (*(uint32_t *)(core + 468 + vinum * sizeof(uint32_t)) == 10)
+        *(uint32_t *)(config + 124) = 1;
+    *(uint32_t *)(config + 128) = *(uint16_t *)(sensor_info + 84);
+    *(uint32_t *)(config + 156) = direct_mode;
+
+    ret = (int)tisp_init(*(uint16_t *)(sensor_info + 84),
+                         (uintptr_t)config,
+                         (uintptr_t)(core + 740 + vinum * 132));
+    if (ret) {
+        memset(core + 736 + vinum * 132, 0, 132);
+        isp_printf(2, "ispcore_core_ops_init: TISP init failed (%d)\n", ret);
+        return -1;
+    }
+
+    if (*(uint32_t *)(core + 296) == 2)
+        tisp_process_init();
+    if (vinum < 2)
+        tisp_stream_on((uintptr_t)config);
+
+    if (vinum == 0) {
+        thread = *(struct task_struct **)(core + 556);
+        if (!thread || IS_ERR(thread)) {
+            thread = private_kthread_run(
+                (int (*)(void *))(uintptr_t)isp_fw_process,
+                NULL, "isp_fw_process");
+            *(uint32_t *)(core + 556) = (uint32_t)(uintptr_t)thread;
+        }
+        if (!thread || IS_ERR(thread)) {
+            isp_printf(2, "ispcore_core_ops_init: firmware thread start failed\n");
+            return -EINVAL;
+        }
+    }
+
+    *state = 3;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000736c4 origin=fragment_seed original=ispcore_slake_module */

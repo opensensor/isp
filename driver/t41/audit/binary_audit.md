@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 339056 |
+| Executable section bytes | 479556 | 339264 |
 | Initialized writable bytes | 25120 | 16032 |
 | Uninitialized writable bytes | 20592 | 334528 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=82352 ratio=0.710
-- classes: stub=18 collapsed=90 shorter=386 same_count=268 similar=472 larger=22 expanded=17
+- matched instructions: OEM=116036 recovered=82405 ratio=0.710
+- classes: stub=18 collapsed=90 shorter=386 same_count=269 similar=471 larger=22 expanded=17
 
 ## Allocated Section Delta
 
@@ -35,9 +35,9 @@
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 3424 | -12336 |
-| `.rodata.str1.4` | 25860 | 4736 | -21124 |
-| `.text` | 478400 | 339056 | -139344 |
+| `.rodata` | 15760 | 3568 | -12192 |
+| `.rodata.str1.4` | 25860 | 5044 | -20816 |
+| `.text` | 478400 | 339264 | -139136 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
@@ -209,7 +209,7 @@ Showing 250 of 817 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `proc_ivdc_writel` | `proc_ivdc_writel` | 543 | 294 | 0.541 | -249 | 42->25 | 68->31 |
 | shorter | exact_name | `subsection_up` | `subsection_up` | 530 | 298 | 0.562 | -232 | 31->31 | 20->17 |
 | shorter | exact_name | `tisp_ae_algo_handle` | `tisp_ae_algo_handle` | 504 | 384 | 0.762 | -120 | 49->43 | 12->13 |
-| shorter | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 487 | 292 | 0.600 | -195 | 25->18 | 43->30 |
+| shorter | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 487 | 344 | 0.706 | -143 | 25->19 | 43->38 |
 | shorter | exact_name | `tisp_af_set_hardware_param` | `tisp_af_set_hardware_param` | 483 | 385 | 0.797 | -98 | 50->48 | 7->7 |
 | shorter | exact_name | `isp_save_cmd_set` | `isp_save_cmd_set` | 431 | 253 | 0.587 | -178 | 35->22 | 42->18 |
 | shorter | exact_name | `tx_isp_subdev_init` | `tx_isp_subdev_init` | 420 | 306 | 0.729 | -114 | 27->19 | 43->40 |
