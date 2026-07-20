@@ -29,7 +29,7 @@ Expected artifact:
 
 The recovered module is a bring-up artifact, not a production-ready driver.
 The current linked-binary audit finds 18 stub functions, 93 collapsed
-functions, 388 shorter functions, and 41 OEM-only symbols. Critical deficits
+functions, 386 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -108,6 +108,12 @@ skip TISP initialization. Core removal now mirrors that bring-up gate, while
 still deinitializing the registered subdevice, and passes the OEM channel-buffer
 and core pointers to the two recovered no-argument frees. This repair also
 requires a fresh level-0 hardware retest.
+
+The fourth level-0 run completed core teardown and reached CSI removal. It
+exposed another scaled pointer (`0x40` instead of the OEM byte offset `0x10`)
+and missing iounmap, resource-release, and free arguments. The CSI path and the
+same statically visible VIN, IVDC, and frame-source teardown defects are now
+restored from OEM disassembly. The VIC path was normalized at the same time.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after

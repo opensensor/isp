@@ -162628,180 +162628,103 @@ void cleanup_module(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074ce0 origin=fragment_seed original=tx_isp_vic_remove */
 int tx_isp_vic_remove(struct platform_device *pdev)
 {
-    uintptr_t a0 = (uintptr_t)pdev;
+	void *module = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
+	void *vic = NULL;
 
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
+	if (module && (uint32_t)(uintptr_t)module < 0xfffff001)
+		vic = *(void **)((char *)module + 0x10c);
+	else
+		module = NULL;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s2 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_platform_get_drvdata)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    s0 = v0;
-
-    /* fragment 3: Branch */
-    s1 = 0;
-    if (v0 == 0) { goto tx_isp_vic_remove0x40; }
-
-    /* fragment 4: Arithmetic */
-    v0 = v0 < -4095;
-
-    /* fragment 5: Branch */
-    if (v0 == 0) { goto tx_isp_vic_remove0x90; }
-
-    /* fragment 6: CallSetup */
-    s1 = *(uint32_t *)((char *)s0 + 268);
-
-tx_isp_vic_remove0x40:
-    /* fragment 7: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_platform_set_drvdata)(s2, 0); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tx_isp_subdev_deinit)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(s1); /* jalr target resolved by relocation */
-
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 11: Arithmetic */
-    v0 = 0;
-
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int)v0;
-
-tx_isp_vic_remove0x90:
-    /* fragment 13: Arithmetic */
-    s0 = 0;
-
-    /* fragment 14: Branch */
-    s1 = 0;
-    goto tx_isp_vic_remove0x40;
-
-    return 0;
+	private_platform_set_drvdata(pdev, NULL);
+	tx_isp_subdev_deinit(module);
+	private_kfree(vic);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074d7c origin=model_output original=tx_isp_vin_remove */
 int tx_isp_vin_remove(struct platform_device *pdev)
 {
-	struct platform_device *arg1 = pdev;
+	void *module = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
 
-	void (*get_drv)(int32_t, int32_t, int32_t) = private_platform_get_drvdata((int32_t)arg1);
-	void *s0 = get_drv;
+	if (module && (uint32_t)(uintptr_t)module >= 0xfffff001)
+		module = NULL;
 
-	if (get_drv != 0 && (uint32_t)get_drv >= 0xfffff001)
-		s0 = NULL;
-
-	private_platform_set_drvdata((int32_t)arg1, 0);
-	tx_isp_subdev_deinit(s0);
-	private_kfree();
+	private_platform_set_drvdata(pdev, NULL);
+	tx_isp_subdev_deinit(module);
+	private_kfree(module);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074df8 origin=model_output original=tx_isp_csi_remove */
 int tx_isp_csi_remove(struct platform_device *pdev)
 {
-	struct platform_device *arg1 = pdev;
+	void *csi = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
+	uint32_t *phy;
+	uint32_t *resource;
 
-	uint32_t (*get_drvdata)(int32_t, int32_t, int32_t);
-	void *s0;
-	int32_t *s1;
-	uint32_t *v0;
+	if (!csi || (uint32_t)(uintptr_t)csi >= 0xfffff001) {
+		private_platform_set_drvdata(pdev, NULL);
+		return 0;
+	}
 
-	get_drvdata = (uint32_t (*)(int32_t, int32_t, int32_t))private_platform_get_drvdata(arg1);
+	phy = *(uint32_t **)((char *)csi + 0xe8);
+	resource = *(uint32_t **)((char *)csi + 0x18c);
+	if (phy) {
+		*(uint32_t *)((char *)phy + 0x10) = 0;
+		*(uint32_t *)((char *)phy + 0x10) = 1;
+	}
 
-	if (get_drvdata == 0 || (uint32_t)get_drvdata >= 0xfffff001)
-		s0 = 0;
-	else
-		s0 = (void *)get_drvdata;
-
-	s1 = *(int32_t **)((uintptr_t)s0 + 0x18c);
-
-	/* Write 0 to *(s0 + 0xe8) + 0x10 */
-	*(*(int32_t **)((uint32_t)s0 + 0xe8) + 0x10) = 0;
-
-	/* Write 1 to *(s0 + 0xe8) + 0x10 */
-	*(*(int32_t **)((uint32_t)s0 + 0xe8) + 0x10) = 1;
-
-	private_platform_set_drvdata((int32_t)arg1, 0);
-
-	private_iounmap();
-
-	int32_t *a0 = *s1;
-	int32_t a1 = s1[1] + 1 - (uintptr_t)a0;
-	private_release_mem_region();
-
-	tx_isp_subdev_deinit(s0);
-
-	private_kfree();
-
+	private_platform_set_drvdata(pdev, NULL);
+	private_iounmap(*(void **)((char *)csi + 0x190));
+	if (resource)
+		private_release_mem_region(resource[0],
+			resource[1] + 1 - resource[0]);
+	tx_isp_subdev_deinit(csi);
+	private_kfree(csi);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074ec4 origin=model_output original=tx_isp_ivdc_remove */
 int tx_isp_ivdc_remove(struct platform_device *pdev)
 {
-	struct platform_device *arg1 = pdev;
+	void *module = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
+	void *ivdc;
 
-	void* v0 = private_platform_get_drvdata(arg1);
-	int32_t* s0 = (void *)((int32_t*)((uintptr_t)v0 + 0x10c));
+	if (!module)
+		return 0;
+
+	ivdc = *(void **)((char *)module + 0x10c);
 	g_ivdc = 0;
-	private_misc_deregister();
-	tx_isp_subdev_deinit(v0);
-	private_kfree();
+	private_misc_deregister(ivdc);
+	tx_isp_subdev_deinit(module);
+	private_kfree(ivdc);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074f38 origin=fragment_seed original=tx_isp_fs_remove */
 int tx_isp_fs_remove(struct platform_device *pdev)
 {
-    unsigned int *v0;
-    unsigned int *s1;
-    unsigned int *s0;
-    unsigned int *s2;
-    unsigned int s3;
-    unsigned int *s4;
-    unsigned int *v1;
-    unsigned int *a0;
+	void *module = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
+	void *fs;
+	void *channels;
+	uint32_t i;
 
-    v0 = (unsigned int *)private_platform_get_drvdata((unsigned int)pdev);
-    s1 = (unsigned int *)((char *)v0 + 0x10c);
-    s3 = v0;
-    s0 = 0;
-    s4 = 820;
-    s2 = 0x10000 - 556;
-    v1 = *(unsigned int *)((char *)s1 + 0x118);
+	if (!module)
+		return 0;
 
-    while (1) {
-        if (s0 >= v1)
-            break;
-        a0 = *(unsigned int *)((char *)s1 + 0x114);
-        v0 = (uintptr_t)s0 * (uintptr_t)s4;
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 + (1));
-        tx_isp_frame_chan_deinit((unsigned int)((uintptr_t)v0 + (uintptr_t)a0));
-        v1 = *(unsigned int *)((char *)s1 + 0x118);
-    }
+	fs = *(void **)((char *)module + 0x10c);
+	if (!fs)
+		return 0;
 
-    if (a0 != 0)
-        private_kfree();
+	channels = *(void **)((char *)fs + 0x114);
+	for (i = 0; i < *(uint32_t *)((char *)fs + 0x118); i++)
+		tx_isp_frame_chan_deinit((uintptr_t)channels + i * 820);
 
-    tx_isp_subdev_deinit((struct device *)s3);
-    private_kfree();
-    return 0;
+	private_kfree(channels);
+	tx_isp_subdev_deinit(module);
+	private_kfree(fs);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074ff0 origin=fragment_seed original=tx_isp_remove */
