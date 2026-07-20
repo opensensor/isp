@@ -1216,7 +1216,8 @@ static struct platform_device tx_isp_ivdc_platform_device;
 static struct platform_device tx_isp_fs_platform_device;
 struct tx_isp_subdev;
 struct v4l2_format;
-static uint32_t FrameSize, WDRMODE, __bss_start, _awb_base, _awb_bss_base, _bss_anchor, _cb_base;
+static uint16_t FrameSize[5];
+static uint32_t WDRMODE, __bss_start, _awb_base, _awb_bss_base, _bss_anchor, _cb_base;
 static uint32_t _tisp_tmo_detailen_base, adr_ctc1_y_change, adr_ev, adr_ev_changed, adr_ev_top;
 static uint32_t adr_info, adr_tg_f_top, adr_tgain_changed, adr_tgain_top, ae_info;
 static uint32_t af_buf_info[2], af_info[2];
@@ -1251,7 +1252,7 @@ static uint32_t tisp_par_ioctl, tiziano_adr_tgain_table, tmo_info[2], tmp_addr, 
 static uint32_t tv_frame_start, tv_frame_start_next, vaddr, vic_cmd_buf, vic_err, video_input_cmd_buf;
 static uint32_t vpu0_end, vpu0_half_end, vpu1_end, vpu1_half_end, vpu_discard_over, vpu_err, vpu_stop_over;
 static uint32_t wdr_en_adr, wdr_ev_changed, wdr_frm_num, wdr_hist_B0, wdr_hist_B1, wdr_hist_G0, wdr_hist_G1;
-static uint32_t wdr_hist_R0, wdr_hist_R1, wdr_info, wdr_sum_block, width_adr, ydns_info;
+static uint32_t wdr_hist_R0, wdr_hist_R1, wdr_info[2], wdr_sum_block, width_adr, ydns_info;
 static inline uint32_t zx_d(uint8_t b) {
     return (uint32_t)b;
 }
@@ -83922,62 +83923,14 @@ int32_t tisp_wdr_maxFun(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000370e8 origin=fragment_seed original=tisp_wdr_log2 */
 int32_t tisp_wdr_log2(uint32_t a0)
 {
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    uint32_t result = 1;
+    uint32_t threshold = 2;
 
-    /* fragment 0: Arithmetic */
-    a1 = 2;
-    a3 = 17;
-    v1 = 1;
-
-tisp_wdr_log20xc:
-    /* fragment 1: Arithmetic */
-    a2 = 1;
-
-    /* fragment 2: Branch */
-    v0 = a1 - 1;
-    goto tisp_wdr_log20x20;
-
-tisp_wdr_log20x18:
-    /* fragment 3: Arithmetic */
-    v1 = (uintptr_t)v1 << 1;
-    a2 = a2 + 1;
-
-tisp_wdr_log20x20:
-    /* fragment 4: Arithmetic */
-    t0 = a2 < a1;
-
-    /* fragment 5: Branch */
-    if (t0 != 0) { goto tisp_wdr_log20x18; }
-
-    /* fragment 6: Arithmetic */
-    v1 = v1 < a0;
-
-    /* fragment 7: Branch */
-    a1 = a1 + 1;
-    if (v1 == 0) { goto tisp_wdr_log20x44; }
-
-    /* fragment 8: Branch */
-    v1 = 1;
-    if (a1 != a3) { goto tisp_wdr_log20xc; }
-
-    /* fragment 9: Arithmetic */
-    v0 = 15;
-
-tisp_wdr_log20x44:
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 11: Unknown */
-    /* unmatched fragment 11 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 37130:	00000000 	nop */
-
-    return 0;
+    while (threshold < a0 && result < 15) {
+        threshold <<= 1;
+        ++result;
+    }
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000037134 origin=fragment_seed original=tisp_wdr_degweight_ev */
@@ -88990,338 +88943,159 @@ u3bw0x24:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003a934 origin=fragment_seed original=tisp_wdr_default_reg_refresh */
 int32_t tisp_wdr_default_reg_refresh(uint32_t a0)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_48 = 0;
-    uint32_t *local_68 = 0;
-    uint32_t local_6c = 0;
-    uint32_t *local_70 = 0;
-    uint32_t local_74 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    static const uint16_t default_curve[27] = {
+        0, 31, 63, 95, 127, 191, 255, 383, 511,
+        639, 767, 895, 1023, 1151, 1279, 1407, 1535,
+        1663, 1791, 1919, 2047, 2175, 2303, 2431, 2559,
+        2687, 2815,
+    };
+    static const uint8_t default_log2[26] = {
+        5, 5, 5, 5, 6, 6, 7, 7, 7, 7, 7, 7, 7,
+        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+    };
+    uint8_t *info;
+    uint8_t *runtime;
+    uint8_t *params;
+    unsigned int i;
 
-    /* fragment 0: CallSetup */
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 20);
-    s2 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 12);
-    v0 = (unsigned int *)memcpy((void *)(uintptr_t)&local_10, (void *)(uintptr_t)&__pow2_lut, 54); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(wdr_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return -EINVAL;
+    runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    if (!runtime || !params)
+        return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)memcpy((void *)(uintptr_t)&local_48, (void *)(uintptr_t)&__pow2_lut, 26); /* jalr target resolved by relocation */
+    memcpy(runtime + 646, default_curve, sizeof(default_curve));
+    memcpy(runtime + 996, default_log2, sizeof(default_log2));
+    deghost_en = params[1827];
 
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 646), (void *)(uintptr_t)&local_10, 54); /* jalr target resolved by relocation */
+    if (deghost_en == 1) {
+        for (i = 0; i < 13; ++i) {
+            uint32_t value =
+                ((uint32_t)(default_curve[i * 2 + 1] & 0x0fff) << 16) |
+                (default_curve[i * 2] & 0x0fff);
+            system_reg_write(25164 + i * 4, value);
+        }
+        system_reg_write(25216, default_curve[26] & 0x0fff);
 
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 996), (void *)(uintptr_t)&local_48, 26); /* jalr target resolved by relocation */
+        for (i = 0; i < 13; ++i) {
+            uint32_t value =
+                ((uint32_t)(default_log2[i * 2 + 1] & 0x0f) << 16) |
+                (default_log2[i * 2] & 0x0f);
+            system_reg_write(25220 + i * 4, value);
+        }
+    }
 
-    /* fragment 4: MemoryAccess */
-    v0 = *(uint8_t *)((char *)s2 + 1827);
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    s1 = (uint32_t *)&system_reg_write;
-    *(uint8_t *)((char *)((char *)&deghost_en)) = v0;
-    v1 = 1;
-
-    /* fragment 5: Branch */
-    s1 = (uint32_t *)&system_reg_write;
-    if (v0 != v1) { goto tisp_wdr_default_reg_refresh0x3f4; }
-
-    /* fragment 6: CallSetup */
-    s2 = 268369920;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25164, (((*(uint16_t *)((char *)((uintptr_t)s0) + 648)) << 16) & 268369920) | (*(uint16_t *)((char *)((uintptr_t)s0) + 646) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25168, (((*(uint16_t *)((char *)((uintptr_t)s0) + 652)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 650) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25172, (((*(uint16_t *)((char *)((uintptr_t)s0) + 656)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 654) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25176, (((*(uint16_t *)((char *)((uintptr_t)s0) + 660)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 658) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25180, (((*(uint16_t *)((char *)((uintptr_t)s0) + 664)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 662) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25184, (((*(uint16_t *)((char *)((uintptr_t)s0) + 668)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 666) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25188, (((*(uint16_t *)((char *)((uintptr_t)s0) + 672)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 670) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25192, (((*(uint16_t *)((char *)((uintptr_t)s0) + 676)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 674) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25196, (((*(uint16_t *)((char *)((uintptr_t)s0) + 680)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 678) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25200, (((*(uint16_t *)((char *)((uintptr_t)s0) + 684)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 682) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25204, (((*(uint16_t *)((char *)((uintptr_t)s0) + 688)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 686) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25208, (((*(uint16_t *)((char *)((uintptr_t)s0) + 692)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 690) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    s2 = ((*(uint16_t *)((char *)((uintptr_t)s0) + 696)) << 16) & (uintptr_t)s2;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25212, (((*(uint16_t *)((char *)((uintptr_t)s0) + 696)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 694) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    s2 = 983040;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25216, *(uint16_t *)((char *)((uintptr_t)s0) + 698) & 4095); /* jalr target resolved by relocation */
-
-    /* fragment 20: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25220, (((*(uint8_t *)((char *)((uintptr_t)s0) + 997)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 996) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 21: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25224, (((*(uint8_t *)((char *)((uintptr_t)s0) + 999)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 998) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 22: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25228, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1001)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1000) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 23: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25232, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1003)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1002) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 24: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25236, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1005)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1004) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 25: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25240, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1007)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1006) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 26: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25244, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1009)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1008) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 27: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25248, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1011)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1010) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 28: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25252, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1013)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1012) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 29: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25256, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1015)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1014) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 30: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25260, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1017)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1016) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 31: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25264, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1019)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1018) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 32: CallSetup */
-    s2 = ((*(uint8_t *)((char *)((uintptr_t)s0) + 1021)) << 16) & (uintptr_t)s2;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25268, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1021)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1020) & 15)); /* jalr target resolved by relocation */
-
-tisp_wdr_default_reg_refresh0x3f4:
-    /* fragment 33: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24620, (((*(uint16_t *)((char *)((uintptr_t)s0) + 828)) << 16) & 33488896) | (*(uint8_t *)((char *)((uintptr_t)s0) + 826))); /* jalr target resolved by relocation */
-
-    /* fragment 34: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 35: Arithmetic */
-    v0 = 0;
-
-    /* fragment 36: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    system_reg_write(24620,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 828) & 0x01ff) << 16) |
+        runtime[826]);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003ad64 origin=fragment_seed original=tisp_wdr_direct_reg_refresh */
 int32_t tisp_wdr_direct_reg_refresh(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *t1 = 0;
-    uintptr_t *t2 = 0;
-    uint32_t *t3 = 0;
-    uint32_t *t4 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    uint8_t *info;
+    uint8_t *runtime;
+    uint8_t *params;
+    uint16_t *curve;
+    unsigned int i;
 
-    /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16248;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
+    if (a0 >= ARRAY_SIZE(wdr_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return -EINVAL;
+    runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    if (!runtime || !params)
+        return -EINVAL;
 
-    /* fragment 1: StackAccess */
-    local_24 = ra;
-    local_20 = s3;
-    local_1c = s2;
-    local_18 = s1;
-    local_14 = s0;
-    v0 = *(uint32_t *)((char *)a0 + 0);
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    s0 = *(uint32_t *)((char *)v0 + 20);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-    v0 = *(uint8_t *)((char *)v0 + 1827);
-    *(uint8_t *)((char *)((char *)&deghost_en)) = v0;
-    v1 = 1;
+    deghost_en = params[1827];
+    if (deghost_en == 1) {
+        curve = (uint16_t *)(void *)(runtime + 754);
+        for (i = 0; i < 4; ++i)
+            runtime[1022 + i] = tisp_wdr_log2(curve[i + 1] - curve[i]);
 
-    /* fragment 2: Branch */
-    t3 = (uint32_t *)&tisp_wdr_log2;
-    if (v0 != v1) { goto tisp_wdr_direct_reg_refresh0x238; }
+        system_reg_write(24652,
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 148) & 0x0fff) << 16) |
+            (*(uint16_t *)(void *)(runtime + 146) & 0x0fff));
+        system_reg_write(24656,
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 152) & 0x00ff) << 16) |
+            (*(uint16_t *)(void *)(runtime + 150) & 0x0fff));
+        system_reg_write(24660,
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 156) & 0x03ff) << 16) |
+            (*(uint16_t *)(void *)(runtime + 154) & 0x01ff));
+        system_reg_write(24664,
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 144) & 0x3f) << 8) |
+            (*(uint16_t *)(void *)(runtime + 136) & 0x3f));
+        system_reg_write(24668,
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 158) & 0x3f) << 24) |
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 142) & 0x0f) << 16) |
+            ((uint32_t)(*(uint16_t *)(void *)(runtime + 140) & 0x1f) << 8) |
+            runtime[138]);
 
-    /* fragment 3: CallSetup */
-    t3 = t3;
-    t1 = s0 + 754;
-    t2 = s0 + 1022;
-    t4 = s0 + 762;
+        for (i = 0; i < 2; ++i)
+            system_reg_write(25436 + i * 4,
+                ((uint32_t)(curve[i * 2 + 1] & 0x0fff) << 16) |
+                (curve[i * 2] & 0x0fff));
+        system_reg_write(25444, curve[4] & 0x0fff);
 
-tisp_wdr_direct_reg_refresh0x5c:
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_wdr_log2)((*(uint16_t *)((char *)(t1) + 2)) - (*(uint16_t *)((char *)(t1) + 0))); /* jalr target resolved by relocation */
+        system_reg_write(25448,
+            ((uint32_t)(runtime[1023] & 0x0f) << 16) |
+            (runtime[1022] & 0x0f));
+        system_reg_write(25452,
+            ((uint32_t)(runtime[1025] & 0x0f) << 16) |
+            (runtime[1024] & 0x0f));
+        system_reg_write(25456,
+            ((uint32_t)(runtime[1027] & 0x1f) << 16) |
+            (runtime[1026] & 0x1f));
+        system_reg_write(25460,
+            ((uint32_t)(runtime[1029] & 0x1f) << 16) |
+            (runtime[1028] & 0x1f));
+        system_reg_write(25464, runtime[1030] & 0x1f);
+    }
 
-    /* fragment 5: Arithmetic */
-    t1 = t1 + 2;
+    system_reg_write(24588,
+        ((uint32_t)(runtime[1033] & 1) << 8) |
+        ((uint32_t)(runtime[1032] & 1) << 4) |
+        (runtime[1031] & 1));
+    system_reg_write(24584, 1);
+    system_reg_write(24640, *(uint16_t *)(void *)(runtime + 790) & 3);
+    system_reg_write(24648,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 822) & 0x0fff) << 16) |
+        (*(uint16_t *)(void *)(runtime + 824) & 0x0fff));
+    system_reg_write(25700,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 782) & 0x0fff) << 16) |
+        (*(uint16_t *)(void *)(runtime + 780) & 0x0fff));
+    system_reg_write(25704,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 786) & 0x07ff) << 16) |
+        (*(uint16_t *)(void *)(runtime + 784) & 0x07ff));
+    system_reg_write(25708, *(uint16_t *)(void *)(runtime + 788) & 0x0f);
+    system_reg_write(25712,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 806) & 0x0f) << 28) |
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 804) & 0x0fff) << 16) |
+        (*(uint16_t *)(void *)(runtime + 802) & 0x0fff));
+    system_reg_write(25716,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 820) & 0x7f) << 16) |
+        (*(uint16_t *)(void *)(runtime + 818) & 0x0f));
+    system_reg_write(25720,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 810) & 0x7f) << 16) |
+        (*(uint16_t *)(void *)(runtime + 808) & 0x7f));
+    system_reg_write(25724,
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 816) & 0x0f) << 28) |
+        ((uint32_t)(*(uint16_t *)(void *)(runtime + 814) & 0x0fff) << 16) |
+        (*(uint16_t *)(void *)(runtime + 812) & 0x0fff));
 
-    /* fragment 6: MemoryAccess */
-    *(uint8_t *)((char *)t2 + 0) = v0;
-
-    /* fragment 7: Branch */
-    t2 = t2 + 1;
-    if (t4 != t1) { goto tisp_wdr_direct_reg_refresh0x5c; }
-
-    /* fragment 8: CallSetup */
-    s3 = 268369920;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24652, (((*(uint16_t *)((char *)((uintptr_t)s0) + 148)) << 16) & 268369920) | (*(uint16_t *)((char *)((uintptr_t)s0) + 146) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    s2 = 983040;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24656, (((*(uint16_t *)((char *)((uintptr_t)s0) + 152)) << 16) & 16711680) | (*(uint16_t *)((char *)((uintptr_t)s0) + 150) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24660, (((*(uint16_t *)((char *)((uintptr_t)s0) + 156)) << 16) & 67043328) | (*(uint16_t *)((char *)((uintptr_t)s0) + 154) & 511)); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24664, ((*(uint16_t *)((char *)((uintptr_t)s0) + 144)) << 8 & 16128) | (*(uint16_t *)((char *)((uintptr_t)s0) + 136) & 63)); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24668, ((*(uint16_t *)((char *)((uintptr_t)s0) + 140)) << 8 & 7936) | (((*(uint16_t *)((char *)((uintptr_t)s0) + 142)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 138)) | (((*(uint16_t *)((char *)((uintptr_t)s0) + 158)) << 24) & 1056964608)); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25436, (((*(uint16_t *)((char *)((uintptr_t)s0) + 756)) << 16) & s3) | (*(uint16_t *)((char *)((uintptr_t)s0) + 754) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25440, (((*(uint16_t *)((char *)((uintptr_t)s0) + 760)) << 16) & s3) | (*(uint16_t *)((char *)((uintptr_t)s0) + 758) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25444, *(uint16_t *)((char *)((uintptr_t)s0) + 762) & 4095); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25448, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1023)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1022) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25452, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1025)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1024) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    s2 = 2031616;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25456, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1027)) << 16) & 2031616) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1026) & 31)); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25460, (((*(uint8_t *)((char *)((uintptr_t)s0) + 1029)) << 16) & (uintptr_t)s2) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1028) & 31)); /* jalr target resolved by relocation */
-
-    /* fragment 20: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25464, *(uint8_t *)((char *)((uintptr_t)s0) + 1030) & 31); /* jalr target resolved by relocation */
-
-tisp_wdr_direct_reg_refresh0x238:
-    /* fragment 21: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24588, ((*(uint8_t *)((char *)((uintptr_t)s0) + 1032)) << 4 & 16) | ((*(uint8_t *)((char *)((uintptr_t)s0) + 1033)) << 8 & 256) | (*(uint8_t *)((char *)((uintptr_t)s0) + 1031) & 1)); /* jalr target resolved by relocation */
-
-    /* fragment 22: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24584, 1); /* jalr target resolved by relocation */
-
-    /* fragment 23: CallSetup */
-    s2 = 268369920;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24640, *(uint16_t *)((char *)((uintptr_t)s0) + 790) & 3); /* jalr target resolved by relocation */
-
-    /* fragment 24: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24648, (((*(uint16_t *)((char *)((uintptr_t)s0) + 822)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 824) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 25: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25700, (((*(uint16_t *)((char *)((uintptr_t)s0) + 782)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 780) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 26: CallSetup */
-    s3 = 8323072;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25704, (((*(uint16_t *)((char *)((uintptr_t)s0) + 786)) << 16) & 134152192) | (*(uint16_t *)((char *)((uintptr_t)s0) + 784) & 2047)); /* jalr target resolved by relocation */
-
-    /* fragment 27: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25708, *(uint16_t *)((char *)((uintptr_t)s0) + 788) & 15); /* jalr target resolved by relocation */
-
-    /* fragment 28: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25712, (*(uint16_t *)((char *)((uintptr_t)s0) + 802) & 4095) | ((*(uint16_t *)((char *)((uintptr_t)s0) + 806)) << 28) | (((*(uint16_t *)((char *)((uintptr_t)s0) + 804)) << 16) & (uintptr_t)s2)); /* jalr target resolved by relocation */
-
-    /* fragment 29: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25716, (((*(uint16_t *)((char *)((uintptr_t)s0) + 820)) << 16) & s3) | (*(uint16_t *)((char *)((uintptr_t)s0) + 818) & 15)); /* jalr target resolved by relocation */
-
-    /* fragment 30: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25720, (((*(uint16_t *)((char *)((uintptr_t)s0) + 810)) << 16) & s3) | (*(uint16_t *)((char *)((uintptr_t)s0) + 808) & 127)); /* jalr target resolved by relocation */
-
-    /* fragment 31: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25724, (*(uint16_t *)((char *)((uintptr_t)s0) + 812) & 4095) | ((*(uint16_t *)((char *)((uintptr_t)s0) + 816)) << 28) | (((*(uint16_t *)((char *)((uintptr_t)s0) + 814)) << 16) & (uintptr_t)s2)); /* jalr target resolved by relocation */
-
-    /* fragment 32: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25472, (((*(uint16_t *)((char *)((uintptr_t)s0) + 832)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 830) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 33: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25476, (((*(uint16_t *)((char *)((uintptr_t)s0) + 836)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 834) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 34: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25480, (((*(uint16_t *)((char *)((uintptr_t)s0) + 840)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 838) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 35: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25484, (((*(uint16_t *)((char *)((uintptr_t)s0) + 844)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 842) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 36: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25488, (((*(uint16_t *)((char *)((uintptr_t)s0) + 848)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 846) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 37: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25492, (((*(uint16_t *)((char *)((uintptr_t)s0) + 852)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 850) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 38: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25496, (((*(uint16_t *)((char *)((uintptr_t)s0) + 856)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 854) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 39: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25500, (((*(uint16_t *)((char *)((uintptr_t)s0) + 860)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 858) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 40: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25504, (((*(uint16_t *)((char *)((uintptr_t)s0) + 864)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 862) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 41: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25508, (((*(uint16_t *)((char *)((uintptr_t)s0) + 868)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 866) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 42: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25512, (((*(uint16_t *)((char *)((uintptr_t)s0) + 872)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 870) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 43: CallSetup */
-    s2 = ((*(uint16_t *)((char *)((uintptr_t)s0) + 876)) << 16) & (uintptr_t)s2;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25516, (((*(uint16_t *)((char *)((uintptr_t)s0) + 876)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 874) & 4095)); /* jalr target resolved by relocation */
-
-    /* fragment 44: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(25520, *(uint16_t *)((char *)((uintptr_t)s0) + 878) & 4095); /* jalr target resolved by relocation */
-
-    /* fragment 45: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 46: Arithmetic */
-    v0 = 0;
-
-    /* fragment 47: Epilogue */
-    /* function epilogue: restore registers and return */
+    curve = (uint16_t *)(void *)(runtime + 830);
+    for (i = 0; i < 12; ++i)
+        system_reg_write(25472 + i * 4,
+            ((uint32_t)(curve[i * 2 + 1] & 0x0fff) << 16) |
+            (curve[i * 2] & 0x0fff));
+    system_reg_write(25520, curve[24] & 0x0fff);
 
     return 0;
 }
@@ -89897,71 +89671,37 @@ int32_t tisp_wdr_hardware_reg_refresh(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003bacc origin=fragment_seed original=tisp_wdr_params_hard_refresh */
 int32_t tisp_wdr_params_hard_refresh(uint32_t a0)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *info;
+    uint8_t *runtime;
+    uint8_t *params;
 
-    /* fragment 0: CallSetup */
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 20);
-    s1 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 12);
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 136), (void *)(uintptr_t)(s1 + 164), 24); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(wdr_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return -EINVAL;
+    runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    if (!runtime || !params)
+        return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 754), (void *)(uintptr_t)(s1 + 242), 10); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 1022), (void *)(uintptr_t)(s1 + 1774), 4); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 1026), (void *)(uintptr_t)(s1 + 1814), 5); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 764), (void *)(uintptr_t)(s1 + 252), 12); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    *(uint32_t *)((char *)s0 + 0) = (*(uint32_t *)((char *)(s1) + 0));
-    *(uint32_t *)((char *)s0 + 4) = (*(uint32_t *)((char *)(s1) + 4));
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 780), (void *)(uintptr_t)(s1 + 264), 10); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 790), (void *)(uintptr_t)(s1 + 274), 12); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 802), (void *)(uintptr_t)(s1 + 286), 20); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 822), (void *)(uintptr_t)(s1 + 306), 8); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s0 + 830), (void *)(uintptr_t)(s1 + 314), 50); /* jalr target resolved by relocation */
-
-    /* fragment 10: MemoryAccess */
-    v0 = *(uint8_t *)((char *)s1 + 1827);
-    *(uint8_t *)((char *)s0 + 1031) = v0;
-    v0 = *(uint8_t *)((char *)s1 + 1828);
-    *(uint8_t *)((char *)s0 + 1032) = v0;
-    v0 = *(uint32_t *)((char *)s1 + 80);
-    *(uint8_t *)((char *)s0 + 1033) = v0;
-    ra = local_1c;
-    s2 = local_18;
-    s1 = local_14;
-    s0 = local_10;
-    v0 = 0;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
+    memcpy(runtime + 136, params + 164, 24);
+    memcpy(runtime + 754, params + 242, 10);
+    memcpy(runtime + 1022, params + 1774, 4);
+    memcpy(runtime + 1026, params + 1814, 5);
+    memcpy(runtime + 764, params + 252, 12);
+    memcpy(runtime, params, 8);
+    memcpy(runtime + 780, params + 264, 10);
+    memcpy(runtime + 790, params + 274, 12);
+    memcpy(runtime + 802, params + 286, 20);
+    memcpy(runtime + 822, params + 306, 8);
+    memcpy(runtime + 830, params + 314, 50);
+    runtime[1031] = params[1827];
+    runtime[1032] = params[1828];
+    runtime[1033] = *(uint32_t *)(void *)(params + 80);
 
     return 0;
 }
-
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003bbe8 origin=fragment_seed original=tisp_wdr_process */
 int64_t tisp_wdr_process(uint32_t a0)
 {
@@ -90761,87 +90501,49 @@ tisp_wdr_get_data0x5bc:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c4bc origin=fragment_seed original=tisp_wdr_interrupt_static */
 int32_t tisp_wdr_interrupt_static(uint32_t a0)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *info;
+    uint8_t *runtime;
+    uint32_t bank;
+    uint32_t offset;
+    uint32_t event[4] = { 0, 0, 13, 0 };
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (a0 >= ARRAY_SIZE(wdr_info))
+        return 1;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return 1;
+    runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    if (!runtime || !runtime[1031])
+        return 1;
 
-    /* fragment 1: CallSetup */
-    s2 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_read)(24624); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s0 = 6144;
-    s0 = (uintptr_t)v0 * (uintptr_t)s0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_dma_cache_sync)(0, ((uintptr_t)v0 * 6144) + (*(uint32_t *)((char *)(*(uint32_t *)((char *)(uintptr_t)&wdr_info)) + 4)), 6144, 0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_wdr_get_data)(s2, s0 + (*(uint32_t *)((char *)(*(uint32_t *)((char *)((char *)&wdr_info))) + 4))); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    local_18 = 13;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_event_push)(0, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = 1;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    bank = system_reg_read(24624) & 3;
+    offset = bank * 6144;
+    ((int32_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))
+        (uintptr_t)private_dma_cache_sync)(0,
+        *(uint32_t *)(void *)(info + 4) + offset, 6144, 0);
+    tisp_wdr_get_data(a0,
+        *(uint32_t *)(void *)(info + 4) + offset);
+    tisp_event_push(0, (uintptr_t)event);
+    return 1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c568 origin=fragment_seed original=tisp_wdr_frame_out */
 int32_t tisp_wdr_frame_out(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *info;
+    uint8_t *params;
 
-    /* fragment 0: CallSetup */
-    s1 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 12);
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24640, 1); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(wdr_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return -EINVAL;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    if (!params)
+        return -EINVAL;
 
-    /* fragment 1: MemoryAccess */
-    a1 = *(uint8_t *)((char *)s1 + 1828);
-    ra = local_1c;
-    s1 = local_18;
-    t9 = s0;
-    s0 = local_14;
-    a1 = a1 << 4;
-    a1 = a1 & 16;
-    a0 = 24588;
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 3c5c4:	03200408 	jr.hb	t9 */
-
-    /* fragment 3: Arithmetic */
-    /* unmatched fragment 3 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 3c5c8:	27bd0020 	addiu	sp,sp,32 */
-
+    system_reg_write(24640, 1);
+    system_reg_write(24588, (uint32_t)(params[1828] & 1) << 4);
     return 0;
 }
 
@@ -90894,670 +90596,259 @@ int32_t tisp_wdr_dn_params_refresh(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c624 origin=fragment_seed original=tisp_wdr_deinit */
 int32_t tisp_wdr_deinit(uint32_t a0)
 {
-    uintptr_t *s0;
-    uint32_t *s2;
-    uintptr_t s3;
-    uintptr_t *v0;
-    uint32_t a0_local;
-    uint32_t *v1;
+    uint8_t *info;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+    uint32_t *histograms[] = {
+        &wdr_hist_R0, &wdr_hist_G0, &wdr_hist_B0,
+        &wdr_hist_R1, &wdr_hist_G1, &wdr_hist_B1,
+    };
+    static const unsigned int owned_offsets[] = { 16, 20, 24, 4 };
+    unsigned int i;
 
-    s0 = (unsigned int *)&ivdc_threshold_line;
-    s2 = a0 << 2;
-    s3 = (uintptr_t)s2 + (uintptr_t)s0;
-    v0 = *(uint32_t *)((char *)s3 + 0);
+    if (a0 >= ARRAY_SIZE(wdr_info))
+        return -EINVAL;
 
-    if (v0 == 0) goto tisp_wdr_deinit0xd0;
-
-    a0_local = *(uint32_t *)((char *)v0 + 16);
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        v0 = *(uint32_t *)((char *)s3 + 0);
-        *(uint32_t *)((char *)v0 + 16) = 0;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (info) {
+        for (i = 0; i < ARRAY_SIZE(owned_offsets); ++i) {
+            uint32_t *slot =
+                (uint32_t *)(void *)(info + owned_offsets[i]);
+            if (*slot) {
+                private_kfree((void *)(uintptr_t)*slot);
+                *slot = 0;
+            }
+        }
+        *(uint32_t *)(void *)(info + 8) = 0;
+        private_kfree(info);
+        wdr_info[a0] = 0;
     }
 
-tisp_wdr_deinit0x50:
-    s3 = (uintptr_t)s0 + (uintptr_t)s2;
-    v0 = *(uint32_t *)((char *)s3 + 0);
-    a0_local = *(uint32_t *)((char *)v0 + 20);
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        v0 = *(uint32_t *)((char *)s3 + 0);
-        *(uint32_t *)((char *)v0 + 20) = 0;
-        s3 = (uintptr_t)s0 + (uintptr_t)s2;
-        v0 = *(uint32_t *)((char *)s3 + 0);
+    for (i = 0; i < ARRAY_SIZE(histograms); ++i) {
+        if (*histograms[i]) {
+            private_kfree((void *)(uintptr_t)*histograms[i]);
+            *histograms[i] = 0;
+        }
     }
+    tisp_wdr_process_deinit();
 
-tisp_wdr_deinit0x7c:
-    a0_local = *(uint32_t *)((char *)v0 + 24);
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        v0 = *(uint32_t *)((char *)s3 + 0);
-        *(uint32_t *)((char *)v0 + 24) = 0;
-    }
-
-tisp_wdr_deinit0x98:
-    s3 = (uintptr_t)s0 + (uintptr_t)s2;
-    v0 = *(uint32_t *)((char *)s3 + 0);
-    a0_local = *(uint32_t *)((char *)v0 + 4);
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        v0 = *(uint32_t *)((char *)s3 + 0);
-        *(uint32_t *)((char *)v0 + 4) = 0;
-        *(uint32_t *)((char *)v0 + 8) = 0;
-    }
-
-tisp_wdr_deinit0xc0:
-    s0 = (uintptr_t)s0 + (uintptr_t)s2;
-    kfree((void *)*(uint32_t *)((char *)s0 + 0));
-    *(uint32_t *)((char *)s0 + 0) = 0;
-
-tisp_wdr_deinit0xd0:
-    a0_local = *(uint32_t *)((char *)((char *)&wdr_hist_R0));
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        *(uint32_t *)((char *)((char *)&wdr_hist_R0)) = 0;
-    }
-
-    a0_local = *(uint32_t *)((char *)((char *)&wdr_hist_G0));
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        *(uint32_t *)((char *)((char *)&wdr_hist_G0)) = 0;
-    }
-
-    a0_local = *(uint32_t *)((char *)((char *)&wdr_hist_B0));
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        *(uint32_t *)((char *)((char *)&wdr_hist_B0)) = 0;
-    }
-
-    a0_local = *(uint32_t *)((char *)((char *)&wdr_hist_R1));
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        *(uint32_t *)((char *)((char *)&wdr_hist_R1)) = 0;
-    }
-
-    a0_local = *(uint32_t *)((char *)((char *)&wdr_hist_G1));
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        *(uint32_t *)((char *)((char *)&wdr_hist_G1)) = 0;
-    }
-
-    a0_local = *(uint32_t *)((char *)((char *)&wdr_hist_B1));
-
-    if (a0_local != 0) {
-        kfree((void *)a0_local);
-        *(uint32_t *)((char *)((char *)&wdr_hist_B1)) = 0;
-    }
-
-    v0 = (unsigned int *)&tpm_cb;
-    v1 = *(uint32_t *)((char *)v0 + 324);
-
-    if (v1 != 0) {
-        *(uint32_t *)((char *)v0 + 324) = 0;
-    }
-
-    v1 = *(uint32_t *)((char *)v0 + 328);
-
-    if (v1 != 0) {
-        *(uint32_t *)((char *)v0 + 328) = 0;
-    }
-
-    v1 = *(uint32_t *)((char *)v0 + 332);
-
-    if (v1 != 0) {
-        *(uint32_t *)((char *)v0 + 332) = 0;
-    }
-
+    callbacks[324 / 4] = 0;
+    callbacks[328 / 4] = 0;
+    callbacks[332 / 4] = 0;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c80c origin=fragment_seed original=tisp_wdr_param_array_get */
 int32_t tisp_wdr_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *info;
+    uint8_t *params;
+    uint8_t *config;
 
-    /* fragment 0: CallSetup */
-    s1 = a1;
-    s3 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 16);
-    s2 = a2;
-    v0 = (uintptr_t)memcpy((uintptr_t)s1, (void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 12)), 1836); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(wdr_info) || !a1 || !a2)
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return -EINVAL;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    config = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 16);
+    if (!params || !config)
+        return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s1 + 1836), (void *)(uintptr_t)s3, 112); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    v0 = 1948;
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)s2 + 0) = v0;
-    ra = local_24;
-    s3 = local_20;
-    s2 = local_1c;
-    s1 = local_18;
-    s0 = local_14;
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    memcpy((void *)(uintptr_t)a1, params, 1836);
+    memcpy((void *)(uintptr_t)(a1 + 1836), config, 112);
+    *(uint32_t *)(uintptr_t)a2 = 1948;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c894 origin=fragment_seed original=tisp_wdr_param_array_set */
 int32_t tisp_wdr_param_array_set(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    uint8_t *info;
+    uint8_t *params;
+    int ret;
 
-    /* fragment 0: CallSetup */
-    s0 = a0;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 12)), (void *)(uintptr_t)a1, 1836); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(wdr_info) || !a1)
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)wdr_info[a0];
+    if (!info)
+        return -EINVAL;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    if (!params)
+        return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_wdr_params_hard_refresh)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_wdr_direct_reg_refresh)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Arithmetic */
-    v0 = 0;
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    memcpy(params, (void *)(uintptr_t)a1, 1836);
+    ret = tisp_wdr_params_hard_refresh(a0);
+    if (ret)
+        return ret;
+    return tisp_wdr_direct_reg_refresh(a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003c900 origin=fragment_seed original=tisp_wdr_process_init */
 int32_t tisp_wdr_process_init(void)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
+    struct wdr_allocation {
+        uint32_t *slot;
+        size_t size;
+    };
+    static const struct wdr_allocation allocations[] = {
+        { &wdr_sum_block, 1800 },
+        { &maxvalue_short_last, 16 },
+        { &rate_long_last, 8 },
+        { &maxvalue_short, 16 },
+        { &rate_long, 8 },
+        { &sum_block_long, 900 },
+        { &sum_block_short, 900 },
+        { &hist_short, 640 },
+    };
+    unsigned int i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&wdr_sum_block));
-
-    /* fragment 3: Branch */
-    if (v0 != 0) { goto tisp_wdr_process_init0x34; }
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1800, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 5: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&wdr_sum_block)) = v0;
-
-tisp_wdr_process_init0x34:
-    /* fragment 6: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 7: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&maxvalue_short_last));
-
-    /* fragment 8: Branch */
-    int _bc_v0_8 = v0 != 0;
-    v0 = (unsigned int *)&private_kmalloc;
-    if (_bc_v0_8) { goto tisp_wdr_process_init0x5c; }
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(16, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 10: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&maxvalue_short_last)) = v0;
-
-tisp_wdr_process_init0x5c:
-    /* fragment 11: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 12: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&rate_long_last));
-
-    /* fragment 13: Branch */
-    int _bc_v0_13 = v0 != 0;
-    v0 = (unsigned int *)&private_kmalloc;
-    if (_bc_v0_13) { goto tisp_wdr_process_init0x84; }
-
-    /* fragment 14: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(8, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 15: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&rate_long_last)) = v0;
-
-tisp_wdr_process_init0x84:
-    /* fragment 16: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 17: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&maxvalue_short));
-
-    /* fragment 18: Branch */
-    int _bc_v0_18 = v0 != 0;
-    v0 = (unsigned int *)&private_kmalloc;
-    if (_bc_v0_18) { goto tisp_wdr_process_init0xac; }
-
-    /* fragment 19: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(16, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 20: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&maxvalue_short)) = v0;
-
-tisp_wdr_process_init0xac:
-    /* fragment 21: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 22: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&rate_long));
-
-    /* fragment 23: Branch */
-    int _bc_v0_23 = v0 != 0;
-    v0 = (unsigned int *)&private_kmalloc;
-    if (_bc_v0_23) { goto tisp_wdr_process_init0xd4; }
-
-    /* fragment 24: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(8, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 25: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&rate_long)) = v0;
-
-tisp_wdr_process_init0xd4:
-    /* fragment 26: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 27: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&sum_block_long));
-
-    /* fragment 28: Branch */
-    int _bc_v0_28 = v0 != 0;
-    v0 = (unsigned int *)&private_kmalloc;
-    if (_bc_v0_28) { goto tisp_wdr_process_init0xfc; }
-
-    /* fragment 29: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(900, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 30: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&sum_block_long)) = v0;
-
-tisp_wdr_process_init0xfc:
-    /* fragment 31: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 32: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&sum_block_short));
-
-    /* fragment 33: Branch */
-    int _bc_v0_33 = v0 != 0;
-    v0 = (unsigned int *)&private_kmalloc;
-    if (_bc_v0_33) { goto tisp_wdr_process_init0x124; }
-
-    /* fragment 34: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(900, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 35: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&sum_block_short)) = v0;
-
-tisp_wdr_process_init0x124:
-    /* fragment 36: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
-
-    /* fragment 37: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&hist_short));
-
-    /* fragment 38: Branch */
-    if (v0 != 0) { goto tisp_wdr_process_init0x154; }
-
-    /* fragment 39: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(640, 37748736 + 192); /* jalr target resolved by relocation */
-
-    /* fragment 40: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&hist_short)) = v0;
-    ra = local_14;
-
-tisp_wdr_process_init0x154:
-    /* fragment 41: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    for (i = 0; i < ARRAY_SIZE(allocations); ++i) {
+        if (!*allocations[i].slot)
+            *allocations[i].slot = (uint32_t)(uintptr_t)
+                private_kmalloc(allocations[i].size, 0x024000c0);
+        if (!*allocations[i].slot) {
+            tisp_wdr_process_deinit();
+            return -ENOMEM;
+        }
+    }
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003ca60 origin=fragment_seed original=tisp_wdr_init */
 int32_t tisp_wdr_init(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t local_30 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uintptr_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uint32_t s5 = 0;
-    uintptr_t *s6 = 0;
-    uintptr_t s7 = 0;
-    uint32_t s8 = 0;
-    uintptr_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    uint8_t *info;
+    uint8_t *params;
+    void *dma_buffer;
+    uint32_t dma_addr;
+    uint32_t width;
+    uint32_t height;
+    uint16_t tile_width;
+    uint16_t tile_height;
+    uint16_t width_remainder;
+    uint16_t height_remainder;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+    uint32_t *histograms[] = {
+        &wdr_hist_R0, &wdr_hist_G0, &wdr_hist_B0,
+        &wdr_hist_R1, &wdr_hist_G1, &wdr_hist_B1,
+    };
+    unsigned int i;
+    int ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (a0 >= ARRAY_SIZE(wdr_info) || !a1)
+        return -EINVAL;
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    s1 = *(uint32_t *)((char *)(a1) + 0);
-    s8 = *(uint32_t *)((char *)(a1) + 4);
-    s4 = a0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(28, 37748736 + 192); /* jalr target resolved by relocation */
+    width = *(uint32_t *)(uintptr_t)a1;
+    height = *(uint32_t *)(uintptr_t)(a1 + 4);
+    if (!width || !height)
+        return -EINVAL;
 
-    /* fragment 2: ConstantLoad */
-    v1 = ((char *)&wdr_info);
+    info = private_kmalloc(28, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 28);
+    wdr_info[a0] = (uint32_t)(uintptr_t)info;
 
-    /* fragment 3: StackAccess */
-    local_10 = v1;
-    v1 = s7 + (uintptr_t)v1;
+    dma_buffer = private_kmalloc(24576, 0x024000c0);
+    if (!dma_buffer) {
+        ret = -ENOMEM;
+        goto fail;
+    }
+    dma_addr = (uint32_t)(uintptr_t)dma_buffer + 0x80000000U;
+    *(uint32_t *)(void *)info = 4;
+    *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)dma_buffer;
+    *(uint32_t *)(void *)(info + 8) = dma_addr;
+    *(uint32_t *)(void *)(info + 12) =
+        (uint32_t)(uintptr_t)(params + 7436);
 
-    /* fragment 4: Branch */
-    int _bc_v0_4 = v0 != 0;
-    *(uint32_t *)((char *)v1 + 0) = v0;
-    if (_bc_v0_4) { goto tisp_wdr_init0x90; }
+    system_reg_write(24592, dma_addr);
+    system_reg_write(24596, dma_addr + 6144);
+    system_reg_write(24600, dma_addr + 12288);
+    system_reg_write(24604, dma_addr + 18432);
+    system_reg_write(24624, 3);
 
-    /* fragment 5: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC6, &__pow2_lut, 2605); /* jalr target resolved by relocation */
+    *(uint32_t *)(void *)(info + 16) =
+        (uint32_t)(uintptr_t)private_kmalloc(112, 0x024000c0);
+    *(uint32_t *)(void *)(info + 20) =
+        (uint32_t)(uintptr_t)private_kmalloc(1036, 0x024000c0);
+    *(uint32_t *)(void *)(info + 24) =
+        (uint32_t)(uintptr_t)private_kmalloc(10200, 0x024000c0);
+    if (!*(uint32_t *)(void *)(info + 16) ||
+        !*(uint32_t *)(void *)(info + 20) ||
+        !*(uint32_t *)(void *)(info + 24)) {
+        ret = -ENOMEM;
+        goto fail;
+    }
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 16), 0, 112);
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 20), 0, 1036);
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 24), 0, 10200);
 
-tisp_wdr_init0x90:
-    /* fragment 6: CallSetup */
-    s2 = 37748736;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(24576, 37748736 + 192); /* jalr target resolved by relocation */
+    ret = tisp_wdr_process_init();
+    if (ret)
+        goto fail;
+    for (i = 0; i < ARRAY_SIZE(histograms); ++i) {
+        *histograms[i] = (uint32_t)(uintptr_t)
+            private_kmalloc(1024, 0x024000c0);
+        if (!*histograms[i]) {
+            ret = -ENOMEM;
+            goto fail;
+        }
+    }
 
-    /* fragment 7: Arithmetic */
-    s5 = v0;
+    tile_height = (uint16_t)(((height - 1) / 15) + 1);
+    tile_width = (uint16_t)(((width - 1) / 15) + 1);
+    height_remainder = (uint16_t)(height - tile_height * 14);
+    width_remainder = (uint16_t)(width - tile_width * 14);
 
-    /* fragment 8: Branch */
-    v0 = -1;
-    if (s5 == 0) { goto tisp_wdr_init0x468; }
+    *(uint16_t *)(void *)(params + 7436 + 310) = tile_height;
+    *(uint16_t *)(void *)(params + 7436 + 312) = tile_width;
+    if (*(uint16_t *)(void *)(params + 7436 + 1604) >= 2)
+        *(uint16_t *)(void *)(params + 7436 + 1604) = 0;
+    if ((uint16_t)(*(uint16_t *)(void *)(params + 7436 + 1606) - 8) >= 72)
+        *(uint16_t *)(void *)(params + 7436 + 1606) = 80;
+    if ((uint16_t)(*(uint16_t *)(void *)(params + 7436 + 1608) - 1) >= 9)
+        *(uint16_t *)(void *)(params + 7436 + 1608) = 10;
+    if (*(uint16_t *)(void *)(params + 7436 + 1610) >= 2)
+        *(uint16_t *)(void *)(params + 7436 + 1610) = 0;
+    if (*(uint16_t *)(void *)(params + 7436 + 1612) >= 4095)
+        *(uint16_t *)(void *)(params + 7436 + 1612) = 4095;
 
-    /* fragment 9: CallSetup */
-    s6 = 2147483648;
-    local_14 = s5 + (uintptr_t)s6;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24592, s5 + 2147483648, s5 + 2147483648); /* jalr target resolved by relocation */
+    FrameSize[0] = tile_height * width_remainder;
+    FrameSize[1] = tile_width * height_remainder;
+    FrameSize[2] = height_remainder * width_remainder;
+    FrameSize[3] = tile_height * tile_width;
+    FrameSize[4] = (uint16_t)((width * height + 5000) / 10000);
+    WDRMODE = 3;
 
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24596, s5 + (s6 + 6144)); /* jalr target resolved by relocation */
+    ret = tisp_wdr_params_hard_refresh(a0);
+    if (ret)
+        goto fail;
+    ((uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20))[1031] = 0;
+    *(uint16_t *)(void *)((uint8_t *)(uintptr_t)
+        *(uint32_t *)(void *)(info + 20) + 790) = 3;
+    ret = tisp_wdr_default_reg_refresh(a0);
+    if (ret)
+        goto fail;
+    ret = tisp_wdr_direct_reg_refresh(a0);
+    if (ret)
+        goto fail;
 
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24600, s5 + (s6 + 12288)); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24604, s5 + (s6 + 18432)); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(24624, 3); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    s6 = local_10 + s7;
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 0) = 4;
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 4) = s5;
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 8) = local_14;
-    local_14 = *(uint32_t *)((char *)(s6) + 0);
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 12) = ((*(uint32_t *)((char *)&tparamsP + s7 + 0)) + 7436);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(112, (uintptr_t)s2 | 192, local_14); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    *(uint32_t *)((char *)local_14 + 16) = v0;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 16)), 0, 112); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    local_14 = *(uint32_t *)((char *)(s6) + 0);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1036, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    *(uint32_t *)((char *)local_14 + 20) = v0;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 20)), 0, 1036); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    local_14 = *(uint32_t *)((char *)(s6) + 0);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(10200, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    *(uint32_t *)((char *)local_14 + 24) = v0;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(s6) + 0)) + 24)), 0, 10200); /* jalr target resolved by relocation */
-
-    /* fragment 20: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_wdr_process_init)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 21: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 22: CallSetup */
-    *(uint32_t *)((char *)((char *)&wdr_hist_R0)) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 23: CallSetup */
-    *(uint32_t *)((char *)((char *)&wdr_hist_G0)) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 24: CallSetup */
-    *(uint32_t *)((char *)((char *)&wdr_hist_B0)) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 25: CallSetup */
-    *(uint32_t *)((char *)((char *)&wdr_hist_R1)) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 26: CallSetup */
-    *(uint32_t *)((char *)((char *)&wdr_hist_G1)) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, (uintptr_t)s2 | 192); /* jalr target resolved by relocation */
-
-    /* fragment 27: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    a0 = 15;
-
-    /* fragment 28: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&wdr_hist_B1)) = v0;
-    v0 = s8 - 1;
-
-    /* fragment 29: Unknown */
-    /* unmatched fragment 29 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 3ccc8:	0044001a 	div	zero,v0,a0 */
-
-    /* fragment 30: Arithmetic */
-    v1 = s1 - 1;
-    v0 = v0 + 1;
-    v0 = (uintptr_t)v0 & 65535;
-
-    /* fragment 31: Unknown */
-    /* unmatched fragment 31 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 3ccdc:	0064001a 	div	zero,v1,a0 */
-
-    /* fragment 32: Arithmetic */
-    a0 = -14;
-    v1 = v1 + 1;
-    v1 = (uintptr_t)v1 & 65535;
-    a2 = (uintptr_t)v0 * a0;
-    a1 = a2 + s8;
-    a3 = a1 & 65535;
-    a1 = (uintptr_t)v1 * a0;
-    a0 = a1 + (uintptr_t)s1;
-    a1 = a0 & 65535;
-
-    /* fragment 33: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s6 + 0);
-    a2 = *(uint32_t *)((char *)a0 + 12);
-    *(uint16_t *)((char *)a2 + 310) = v0;
-    a2 = *(uint32_t *)((char *)a0 + 12);
-    *(uint16_t *)((char *)a2 + 312) = v1;
-    t0 = *(uint32_t *)((char *)a0 + 12);
-    a2 = *(uint16_t *)((char *)t0 + 1604);
-    a2 = a2 < 2;
-
-    /* fragment 34: Branch */
-    if (a2 != 0) { goto tisp_wdr_init0x2d8; }
-
-    /* fragment 35: MemoryAccess */
-    *(uint16_t *)((char *)t0 + 1604) = 0;
-    t0 = *(uint32_t *)((char *)a0 + 12);
-
-tisp_wdr_init0x2d8:
-    /* fragment 36: MemoryAccess */
-    a2 = *(uint16_t *)((char *)t0 + 1606);
-    a2 = a2 - 8;
-    a2 = a2 < 72;
-
-    /* fragment 37: Branch */
-    int _bc_a2_37 = a2 != 0;
-    a2 = 80;
-    if (_bc_a2_37) { goto tisp_wdr_init0x2f0; }
-
-    /* fragment 38: MemoryAccess */
-    *(uint16_t *)((char *)t0 + 1606) = a2;
-
-tisp_wdr_init0x2f0:
-    /* fragment 39: MemoryAccess */
-    t0 = *(uint32_t *)((char *)a0 + 12);
-    a2 = *(uint16_t *)((char *)t0 + 1608);
-    a2 = a2 - 1;
-    a2 = a2 < 9;
-
-    /* fragment 40: Branch */
-    int _bc_a2_40 = a2 != 0;
-    a2 = 10;
-    if (_bc_a2_40) { goto tisp_wdr_init0x310; }
-
-    /* fragment 41: MemoryAccess */
-    *(uint16_t *)((char *)t0 + 1608) = a2;
-    t0 = *(uint32_t *)((char *)a0 + 12);
-
-tisp_wdr_init0x310:
-    /* fragment 42: MemoryAccess */
-    a2 = *(uint16_t *)((char *)t0 + 1610);
-    a2 = a2 < 2;
-
-    /* fragment 43: Branch */
-    if (a2 != 0) { goto tisp_wdr_init0x324; }
-
-    /* fragment 44: MemoryAccess */
-    *(uint16_t *)((char *)t0 + 1610) = 0;
-
-tisp_wdr_init0x324:
-    /* fragment 45: MemoryAccess */
-    a2 = *(uint32_t *)((char *)a0 + 12);
-    a0 = *(uint16_t *)((char *)a2 + 1612);
-    a0 = a0 < 4095;
-
-    /* fragment 46: Branch */
-    if (a0 != 0) { goto tisp_wdr_init0x340; }
-
-    /* fragment 47: Arithmetic */
-    a0 = 4095;
-
-    /* fragment 48: MemoryAccess */
-    *(uint16_t *)((char *)a2 + 1612) = a0;
-
-tisp_wdr_init0x340:
-    /* fragment 49: Arithmetic */
-    s1 = (uintptr_t)s1 * s8;
-    a0 = (unsigned int *)&ivdc_threshold_line;
-    s8 = 10000;
-    a2 = (uintptr_t)v0 * a1;
-    s1 = s1 + 5000;
-    a1 = (uintptr_t)a3 * a1;
-
-    /* fragment 50: CallSetup */
-    *(uint16_t *)((char *)a0 + 16232) = a2;
-    *(uint16_t *)((char *)((char *)&ivdc_mem_line)) = a1;
-    *(uint16_t *)((char *)((char *)&ivdc_threshold_line + 0x2)) = ((uintptr_t)v1 * (uintptr_t)a3);
-    *(uint16_t *)((char *)((char *)&ivdc_mem_line + 0x2)) = ((uintptr_t)v0 * (uintptr_t)v1);
-    *(uint8_t *)((char *)((char *)&WDRMODE)) = 3;
-    *(uint16_t *)((char *)((char *)&direct_mode)) = s1;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_wdr_params_hard_refresh)((uintptr_t)s4, a1, (uintptr_t)v1 * (uintptr_t)a3); /* jalr target resolved by relocation */
-
-    /* fragment 51: CallSetup */
-    s7 = local_10 + s7;
-    *(uint8_t *)((char *)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(s7) + 0)) + 20)) + 1031) = 0;
-    *(uint16_t *)((char *)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(s7) + 0)) + 20)) + 790) = 3;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_wdr_default_reg_refresh)(s4); /* jalr target resolved by relocation */
-
-    /* fragment 52: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_wdr_direct_reg_refresh)(s4); /* jalr target resolved by relocation */
-
-    /* fragment 53: CallSetup */
-    *(uint8_t *)((char *)((char *)&deghost_en_flag_tmp)) = 1;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_wdr_interrupt_static)((uintptr_t)s4, ((uintptr_t)s4 * 42) + 11, &tisp_wdr_interrupt_static); /* jalr target resolved by relocation */
-
-    /* fragment 54: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_wdr_process)(s4, 13, &tisp_wdr_process); /* jalr target resolved by relocation */
-
-    /* fragment 55: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(792, 539099136 + 1794); /* jalr target resolved by relocation */
-
-    /* fragment 56: Arithmetic */
-    v0 = (unsigned int *)&tpm_cb;
-    v1 = (unsigned int *)&tisp_wdr_pm_get_regsize;
-    v0 = v0;
-    v1 = v1;
-
-    /* fragment 57: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 324) = v1;
-    v1 = (unsigned int *)&tisp_wdr_pm_suspend;
-    v1 = v1;
-    *(uint32_t *)((char *)v0 + 328) = v1;
-    v1 = (unsigned int *)&tisp_wdr_pm_resume;
-    v1 = v1;
-    *(uint32_t *)((char *)v0 + 332) = v1;
-    v0 = 0;
-
-tisp_wdr_init0x468:
-    /* fragment 58: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    deghost_en_flag_tmp = 1;
+    system_irq_func_set(a0, a0 * 42 + 11, tisp_wdr_interrupt_static);
+    tisp_event_set_cb(a0, 13, tisp_wdr_process);
+    system_reg_write(792, 0x20220702);
+    callbacks[324 / 4] = (uint32_t)(uintptr_t)tisp_wdr_pm_get_regsize;
+    callbacks[328 / 4] = (uint32_t)(uintptr_t)tisp_wdr_pm_suspend;
+    callbacks[332 / 4] = (uint32_t)(uintptr_t)tisp_wdr_pm_resume;
     return 0;
+
+fail:
+    tisp_wdr_deinit(a0);
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003cef8 origin=fragment_seed original=tisp_wdr_process_deinit */
