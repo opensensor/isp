@@ -20,7 +20,7 @@
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=252
 - matched instructions: OEM=116036 recovered=82513 ratio=0.711
-- classes: stub=18 collapsed=86 shorter=391 same_count=264 similar=472 larger=24 expanded=18
+- classes: stub=18 collapsed=86 shorter=391 same_count=265 similar=471 larger=24 expanded=18
 
 ## Allocated Section Delta
 

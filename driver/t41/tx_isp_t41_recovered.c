@@ -30756,68 +30756,44 @@ sensor_early_init0x1c:
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000012e30 origin=model_output original=tx_isp_open */
-int32_t tx_isp_open(int32_t arg1, void *arg2) {
-    void **v0_4 = (void **)(arg2 + 0x88);
-    int32_t v1 = *(int32_t *)(v0_4 + 0x114);
+/* WHOLE_DRIVER_CANDIDATE fn_0000000000012e30 origin=manual original=tx_isp_open */
+int32_t tx_isp_open(int32_t arg1, void *arg2)
+{
+	char *miscdev;
+	char *slot;
+	char *end;
+	int result = 0;
 
-    if (v1 != 0) {
-        *(int32_t *)(v0_4 + 0x114) = v1 + 1;
-        return 0;
-    }
+	(void)arg1;
+	/* misc_open leaves the embedded miscdevice in file->private_data. */
+	miscdev = *(char **)((char *)arg2 + 0x88);
+	if (!miscdev)
+		return -ENODEV;
 
-    int32_t **s1 = (void *)((int32_t **)((uintptr_t)v0_4 + 0x30));
-    /* inline memset: zero 20 bytes at v0_4 + 0x118 */
-    {
-        int32_t *p = (int32_t *)(v0_4 + 0x118);
-        ((void **)p)[0] = 0;
-        ((void **)p)[1] = 0;
-        ((void **)p)[2] = 0;
-        ((void **)p)[3] = 0;
-        ((void **)p)[4] = 0;
-    }
-    int32_t *result = 0;
-    int32_t s0 = (int32_t)(v0_4 + 0x70);
-    int32_t *s2 = -515;
+	if (*(int32_t *)(miscdev + 0x114) != 0) {
+		++*(int32_t *)(miscdev + 0x114);
+		return 0;
+	}
 
-    while (1) {
-        void *a0 = *s1;
+	memset(miscdev + 0x118, 0, 5 * sizeof(uint32_t));
+	end = miscdev + 0x70;
+	for (slot = miscdev + 0x30; slot != end; slot += sizeof(void *)) {
+		char *subdev = *(char **)slot;
+		char *ops;
+		char *internal_ops;
+		int (*open)(void *);
 
-        if (a0 != 0) {
-            void **tmp = (void *)(*(void ***)((uintptr_t)a0 + 0xfc));
-            int32_t **v0_1 = (void *)((int32_t **)((uintptr_t)tmp + 0x10));
+		if (!subdev)
+			continue;
+		ops = *(char **)(subdev + 0xfc);
+		internal_ops = ops ? *(char **)(ops + 0x10) : NULL;
+		open = internal_ops ? *(int (**)(void *))(internal_ops + 0) : NULL;
+		result = open ? open(subdev) : -ENOIOCTLCMD;
+		if (result && result != -ENOIOCTLCMD)
+			return result;
+	}
 
-            if (v0_1 != 0) {
-                int32_t *v0_3 = *v0_1;
-
-                if (v0_3 == 0) {
-                    result = -515;
-                } else {
-                    result = ((int32_t (*)(void))v0_3)();
-
-                    if (result != 0) {
-                        if (result != -515) {
-                            break;
-                        }
-                        result = -515;
-                    }
-                }
-            } else {
-                result = -515;
-            }
-        }
-
-        s1++;
-
-        if ((int32_t)(s1) == s0) {
-            if (result == -515) {
-                return 0;
-            }
-            break;
-        }
-    }
-
-    return result;
+	return result == -ENOIOCTLCMD ? 0 : result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012f00 origin=fragment_seed original=tx_isp_notify */
@@ -32113,141 +32089,48 @@ tx_isp_video_link_destroy_isra_30xf4:
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013c24 origin=fragment_seed original=tx_isp_release */
+/* WHOLE_DRIVER_CANDIDATE fn_0000000000013c24 origin=manual original=tx_isp_release */
 int32_t tx_isp_release(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	char *miscdev;
+	char *slot;
+	char *end;
+	int result = 0;
+	unsigned int i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	(void)a0;
+	miscdev = *(char **)((char *)a1 + 0x88);
+	if (!miscdev)
+		return -ENODEV;
 
-    /* fragment 1: MemoryAccess */
-    s0 = *(uint32_t *)((char *)a1 + 136);
-    v0 = *(uint32_t *)((char *)s0 + 276);
+	if (*(int32_t *)(miscdev + 0x114) != 0) {
+		--*(int32_t *)(miscdev + 0x114);
+		return 0;
+	}
 
-    /* fragment 2: Branch */
-    s1 = s0 + 48;
-    if (v0 == 0) { goto tx_isp_release0x3c; }
+	end = miscdev + 0x70;
+	for (slot = miscdev + 0x30; slot != end; slot += sizeof(void *)) {
+		char *subdev = *(char **)slot;
+		char *ops;
+		char *internal_ops;
+		int (*release)(void *);
 
-    /* fragment 3: Arithmetic */
-    v0 = v0 - 1;
+		if (!subdev)
+			continue;
+		ops = *(char **)(subdev + 0xfc);
+		internal_ops = ops ? *(char **)(ops + 0x10) : NULL;
+		release = internal_ops ?
+			*(int (**)(void *))(internal_ops + sizeof(void *)) : NULL;
+		result = release ? release(subdev) : -ENOIOCTLCMD;
+		if (result && result != -ENOIOCTLCMD)
+			return result;
+	}
 
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 276) = v0;
+	for (i = 0; i < 5; ++i)
+		if (*(uint32_t *)(miscdev + 0x118 + i * sizeof(uint32_t)))
+			tx_isp_video_link_destroy_isra_3((uintptr_t)(miscdev - 0x0c), i);
 
-    /* fragment 5: Branch */
-    v0 = 0;
-    goto tx_isp_release0xe4;
-
-tx_isp_release0x3c:
-    /* fragment 6: Arithmetic */
-    s2 = s0 + 112;
-    v0 = 0;
-    s3 = -515;
-
-tx_isp_release0x48:
-    /* fragment 7: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s1 + 0);
-
-    /* fragment 8: Branch */
-    if (a0 == 0) { goto tx_isp_release0x68; }
-
-    /* fragment 9: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 16);
-
-    /* fragment 10: Branch */
-    if (v0 != 0) { goto tx_isp_release0xc0; }
-
-tx_isp_release0x64:
-    /* fragment 11: Arithmetic */
-    v0 = -515;
-
-tx_isp_release0x68:
-    /* fragment 12: Arithmetic */
-    s1 = s1 + 4;
-
-    /* fragment 13: Branch */
-    v1 = -515;
-    if (s2 != s1) { goto tx_isp_release0x48; }
-
-    /* fragment 14: Branch */
-    s3 = 65536;
-    if (v0 == v1) { goto tx_isp_release0x84; }
-
-    /* fragment 15: Branch */
-    if (v0 != 0) { goto tx_isp_release0xe8; }
-
-tx_isp_release0x84:
-    /* fragment 16: Arithmetic */
-    s2 = s0 + 280;
-    s1 = 0;
-    s0 = s0 - 12;
-    s3 = s3 + 15104;
-    s4 = 5;
-
-tx_isp_release0x98:
-    /* fragment 17: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 0);
-
-    /* fragment 18: Branch */
-    a1 = s1;
-    if (v0 == 0) { goto tx_isp_release0xac; }
-
-    /* fragment 19: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tx_isp_video_link_destroy_isra_3)(s0); /* jalr target resolved by relocation */
-
-tx_isp_release0xac:
-    /* fragment 20: Arithmetic */
-    s1 = s1 + 1;
-
-    /* fragment 21: Branch */
-    s2 = s2 + 4;
-    if (s1 != s4) { goto tx_isp_release0x98; }
-
-    /* fragment 22: Branch */
-    v0 = 0;
-    goto tx_isp_release0xe4;
-
-tx_isp_release0xc0:
-    /* fragment 23: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 24: Branch */
-    if (v0 == 0) { goto tx_isp_release0x64; }
-
-    /* fragment 25: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 26: Branch */
-    if (v0 == 0) { goto tx_isp_release0x68; }
-
-    /* fragment 27: Branch */
-    if (v0 == s3) { goto tx_isp_release0x64; }
-
-tx_isp_release0xe4:
-    /* fragment 28: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_release0xe8:
-    /* fragment 29: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013d28 origin=fragment_seed original=tx_isp_init */

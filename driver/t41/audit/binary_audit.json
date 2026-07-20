@@ -603,8 +603,8 @@
     "replacement_missing": 0,
     "oem_only": 41,
     "recovered_only": 252,
-    "same_instruction_count": 264,
-    "similar": 472,
+    "same_instruction_count": 265,
+    "similar": 471,
     "shorter": 391,
     "stub": 18,
     "collapsed": 86,
@@ -674,7 +674,7 @@
         {
           "name": "ispcore_core_ops_ioctl",
           "section": ".text",
-          "address": "0x37dc",
+          "address": "0x37e0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -1874,7 +1874,7 @@
         {
           "name": "subdev_sensor_ops_ioctl",
           "section": ".text",
-          "address": "0x7450",
+          "address": "0x7454",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -2314,7 +2314,7 @@
         {
           "name": "vic_core_ops_ioctl",
           "section": ".text",
-          "address": "0x31a4",
+          "address": "0x31a8",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -2874,7 +2874,7 @@
         {
           "name": "ispcore_irq_main_fd_work",
           "section": ".text",
-          "address": "0x13f0",
+          "address": "0x13f4",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -2954,7 +2954,7 @@
         {
           "name": "fs_core_ops_ioctl",
           "section": ".text",
-          "address": "0x2d0c",
+          "address": "0x2d10",
           "binding": "global",
           "symbol_bytes": 192,
           "instructions": 48,
@@ -3154,7 +3154,7 @@
         {
           "name": "ispcore_irq_main_fs_work",
           "section": ".text",
-          "address": "0xa24",
+          "address": "0x958",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -3634,7 +3634,7 @@
         {
           "name": "isp_frame_done_wait",
           "section": ".text",
-          "address": "0x834c",
+          "address": "0x8350",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -6220,7 +6220,7 @@
         {
           "name": "proc_ivdc_writel",
           "section": ".text",
-          "address": "0x9200",
+          "address": "0x9204",
           "binding": "global",
           "symbol_bytes": 1176,
           "instructions": 294,
@@ -7140,7 +7140,7 @@
         {
           "name": "isp_framesource_show",
           "section": ".text",
-          "address": "0x97a4",
+          "address": "0x97a8",
           "binding": "global",
           "symbol_bytes": 720,
           "instructions": 180,
@@ -7820,7 +7820,7 @@
         {
           "name": "tx_isp_ivdc_show",
           "section": ".text",
-          "address": "0x8ff4",
+          "address": "0x8ff8",
           "binding": "global",
           "symbol_bytes": 524,
           "instructions": 131,
@@ -9020,7 +9020,7 @@
         {
           "name": "isp_core_tuning_event",
           "section": ".text",
-          "address": "0x2840",
+          "address": "0x2844",
           "binding": "global",
           "symbol_bytes": 248,
           "instructions": 62,
@@ -9140,7 +9140,7 @@
         {
           "name": "ivdc_misc_unlocked_ioctl",
           "section": ".text",
-          "address": "0x29dc",
+          "address": "0x29e0",
           "binding": "global",
           "symbol_bytes": 324,
           "instructions": 81,
@@ -9180,7 +9180,7 @@
         {
           "name": "vic_mdma_enable",
           "section": ".text",
-          "address": "0x69cc",
+          "address": "0x69d0",
           "binding": "global",
           "symbol_bytes": 328,
           "instructions": 82,
@@ -9220,7 +9220,7 @@
         {
           "name": "sensor_init",
           "section": ".text",
-          "address": "0xa2b4",
+          "address": "0xa2b8",
           "binding": "global",
           "symbol_bytes": 352,
           "instructions": 88,
@@ -9260,7 +9260,7 @@
         {
           "name": "ispcore_frame_channel_qbuf",
           "section": ".text",
-          "address": "0x493c",
+          "address": "0x4940",
           "binding": "global",
           "symbol_bytes": 328,
           "instructions": 82,
@@ -9460,7 +9460,7 @@
         {
           "name": "isp_malloc_buffer",
           "section": ".text",
-          "address": "0x877c",
+          "address": "0x8780",
           "binding": "global",
           "symbol_bytes": 288,
           "instructions": 72,
@@ -9580,7 +9580,7 @@
         {
           "name": "isp_vic_frd_show",
           "section": ".text",
-          "address": "0x650c",
+          "address": "0x6510",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -9940,7 +9940,7 @@
         {
           "name": "ispcore_frame_channel_ir_qbuf",
           "section": ".text",
-          "address": "0x4a84",
+          "address": "0x4a88",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -10700,7 +10700,7 @@
         {
           "name": "private_wait_event_interruptible",
           "section": ".text",
-          "address": "0x4ecc",
+          "address": "0x4ed0",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -11420,7 +11420,7 @@
         {
           "name": "ispcore_pad_event_handle",
           "section": ".text",
-          "address": "0x2e14",
+          "address": "0x2e18",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -11780,7 +11780,7 @@
         {
           "name": "isp_frame_done_wakeup",
           "section": ".text",
-          "address": "0x83c4",
+          "address": "0x83c8",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -11900,7 +11900,7 @@
         {
           "name": "ispcore_sensor_ops_ioctl",
           "section": ".text",
-          "address": "0x1368",
+          "address": "0x136c",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -12020,7 +12020,7 @@
         {
           "name": "vic_core_ops_init",
           "section": ".text",
-          "address": "0x3218",
+          "address": "0x321c",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -12820,7 +12820,7 @@
         {
           "name": "fix_point_div_32",
           "section": ".text",
-          "address": "0x2dcc",
+          "address": "0x2dd0",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -13420,7 +13420,7 @@
         {
           "name": "isp_printf",
           "section": ".text",
-          "address": "0x1594",
+          "address": "0x1598",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -13700,7 +13700,7 @@
         {
           "name": "tx_isp_enable_irq",
           "section": ".text",
-          "address": "0x249c",
+          "address": "0x24a0",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -13780,7 +13780,7 @@
         {
           "name": "ivdc_disable_irq",
           "section": ".text",
-          "address": "0x971c",
+          "address": "0x9720",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -13900,7 +13900,7 @@
         {
           "name": "tx_isp_disable_irq",
           "section": ".text",
-          "address": "0x24f4",
+          "address": "0x24f8",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -13940,7 +13940,7 @@
         {
           "name": "aisp_core_debug_show",
           "section": ".text",
-          "address": "0x8184",
+          "address": "0x8188",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -14380,7 +14380,7 @@
         {
           "name": "fs_suspend_module",
           "section": ".text",
-          "address": "0x1aa8",
+          "address": "0x1aac",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -14580,7 +14580,7 @@
         {
           "name": "sensor_alloc_digital_gain_short",
           "section": ".text",
-          "address": "0x9c28",
+          "address": "0x9c2c",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -14740,7 +14740,7 @@
         {
           "name": "private_gpio_direction_output",
           "section": ".text",
-          "address": "0x1560",
+          "address": "0x1564",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -14940,7 +14940,7 @@
         {
           "name": "sensor_alloc_analog_gain",
           "section": ".text",
-          "address": "0x9b98",
+          "address": "0x9b9c",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -14980,7 +14980,7 @@
         {
           "name": "sensor_alloc_analog_gain_short",
           "section": ".text",
-          "address": "0x9bc8",
+          "address": "0x9bcc",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -15020,7 +15020,7 @@
         {
           "name": "sensor_alloc_digital_gain",
           "section": ".text",
-          "address": "0x9bf8",
+          "address": "0x9bfc",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -15780,7 +15780,7 @@
         {
           "name": "sensor_get_normal_fps",
           "section": ".text",
-          "address": "0xa058",
+          "address": "0xa05c",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -15820,7 +15820,7 @@
         {
           "name": "private_request_module",
           "section": ".text",
-          "address": "0x4e34",
+          "address": "0x4e38",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -16140,7 +16140,7 @@
         {
           "name": "dump_aisp_info_open",
           "section": ".text",
-          "address": "0x815c",
+          "address": "0x8160",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16180,7 +16180,7 @@
         {
           "name": "dump_isp_csi_open",
           "section": ".text",
-          "address": "0x75ec",
+          "address": "0x75f0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16220,7 +16220,7 @@
         {
           "name": "dump_isp_framesource_open",
           "section": ".text",
-          "address": "0x977c",
+          "address": "0x9780",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16260,7 +16260,7 @@
         {
           "name": "dump_isp_info_open",
           "section": ".text",
-          "address": "0x385c",
+          "address": "0x3860",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16300,7 +16300,7 @@
         {
           "name": "dump_isp_vic_frd_open",
           "section": ".text",
-          "address": "0x64e4",
+          "address": "0x64e8",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16340,7 +16340,7 @@
         {
           "name": "proc_ivdc_open",
           "section": ".text",
-          "address": "0x8fcc",
+          "address": "0x8fd0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16460,7 +16460,7 @@
         {
           "name": "video_input_cmd_open",
           "section": ".text",
-          "address": "0x3980",
+          "address": "0x3984",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16500,7 +16500,7 @@
         {
           "name": "private_seq_printf",
           "section": ".text",
-          "address": "0x5598",
+          "address": "0x559c",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -16700,7 +16700,7 @@
         {
           "name": "private_copy_to_user",
           "section": ".text",
-          "address": "0x29b4",
+          "address": "0x29b8",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -16780,7 +16780,7 @@
         {
           "name": "lce_compress_data",
           "section": ".text",
-          "address": "0x6b8",
+          "address": "0x5ec",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -17020,7 +17020,7 @@
         {
           "name": "tisp_csc_pm_resume",
           "section": ".text",
-          "address": "0x8d4",
+          "address": "0x808",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -17540,7 +17540,7 @@
         {
           "name": "private_ktime_set",
           "section": ".text",
-          "address": "0x5608",
+          "address": "0x560c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -17620,7 +17620,7 @@
         {
           "name": "tisp_wdr_pm_get_regsize",
           "section": ".text",
-          "address": "0x60c",
+          "address": "0x540",
           "binding": "global",
           "symbol_bytes": 32,
           "instructions": 8,
@@ -17700,7 +17700,7 @@
         {
           "name": "tisp_af_pm_resume",
           "section": ".text",
-          "address": "0x438",
+          "address": "0x36c",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17740,7 +17740,7 @@
         {
           "name": "tisp_cdns_pm_resume",
           "section": ".text",
-          "address": "0x7a8",
+          "address": "0x6dc",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17780,7 +17780,7 @@
         {
           "name": "tisp_hldc_pm_resume",
           "section": ".text",
-          "address": "0x850",
+          "address": "0x784",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17820,7 +17820,7 @@
         {
           "name": "tisp_msca_pm_resume",
           "section": ".text",
-          "address": "0x888",
+          "address": "0x7bc",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17860,7 +17860,7 @@
         {
           "name": "tisp_sdns_pm_resume",
           "section": ".text",
-          "address": "0x7e0",
+          "address": "0x714",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17900,7 +17900,7 @@
         {
           "name": "tisp_ysp_pm_resume",
           "section": ".text",
-          "address": "0x818",
+          "address": "0x74c",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -17940,7 +17940,7 @@
         {
           "name": "check_state",
           "section": ".text",
-          "address": "0x9b88",
+          "address": "0x9b8c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -18300,7 +18300,7 @@
         {
           "name": "tisp_mdns_pm_resume",
           "section": ".text",
-          "address": "0x38c0",
+          "address": "0x38c4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -18380,7 +18380,7 @@
         {
           "name": "tisp_ydns_pm_resume",
           "section": ".text",
-          "address": "0x38c8",
+          "address": "0x38cc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -19220,7 +19220,7 @@
         {
           "name": "tisp_g_module_control",
           "section": ".text",
-          "address": "0x904",
+          "address": "0x838",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -19740,7 +19740,7 @@
         {
           "name": "private_get_isp_priv_mem",
           "section": ".text",
-          "address": "0x55f8",
+          "address": "0x55fc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -20140,7 +20140,7 @@
         {
           "name": "private_class_create",
           "section": ".text",
-          "address": "0x590c",
+          "address": "0x5910",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -20700,7 +20700,7 @@
         {
           "name": "tisp_g_coefft_wb",
           "section": ".text",
-          "address": "0x38b8",
+          "address": "0x38bc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -21380,7 +21380,7 @@
         {
           "name": "private_atomic_read",
           "section": ".text",
-          "address": "0x5688",
+          "address": "0x568c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -21420,7 +21420,7 @@
         {
           "name": "private_phys_to_virt",
           "section": ".text",
-          "address": "0x58b0",
+          "address": "0x58b4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -21460,7 +21460,7 @@
         {
           "name": "private_virt_to_phys",
           "section": ".text",
-          "address": "0x58a8",
+          "address": "0x58ac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -21540,7 +21540,7 @@
         {
           "name": "private_wake_up_all",
           "section": ".text",
-          "address": "0x4f84",
+          "address": "0x4f88",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -21620,7 +21620,7 @@
         {
           "name": "private_gpio_free",
           "section": ".text",
-          "address": "0x2370",
+          "address": "0x2374",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -21660,7 +21660,7 @@
         {
           "name": "private_raw_mutex_init",
           "section": ".text",
-          "address": "0x4d2c",
+          "address": "0x4d30",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -21700,7 +21700,7 @@
         {
           "name": "private_seq_lseek",
           "section": ".text",
-          "address": "0x5514",
+          "address": "0x5518",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -21740,7 +21740,7 @@
         {
           "name": "private_vfs_llseek",
           "section": ".text",
-          "address": "0x5410",
+          "address": "0x5414",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -21820,7 +21820,7 @@
         {
           "name": "private_simple_strtoull",
           "section": ".text",
-          "address": "0x55cc",
+          "address": "0x55d0",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -21860,7 +21860,7 @@
         {
           "name": "private_misc_deregister",
           "section": ".text",
-          "address": "0x2818",
+          "address": "0x281c",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -21900,7 +21900,7 @@
         {
           "name": "private_mutex_lock",
           "section": ".text",
-          "address": "0x4b84",
+          "address": "0x4b88",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -21940,7 +21940,7 @@
         {
           "name": "private_mutex_unlock",
           "section": ".text",
-          "address": "0x4bac",
+          "address": "0x4bb0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -21980,7 +21980,7 @@
         {
           "name": "private_platform_device_unregister",
           "section": ".text",
-          "address": "0x4014",
+          "address": "0x4018",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -22020,7 +22020,7 @@
         {
           "name": "private_platform_driver_unregister",
           "section": ".text",
-          "address": "0x3fd0",
+          "address": "0x3fd4",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -22060,7 +22060,7 @@
         {
           "name": "private_spin_unlock_irqrestore",
           "section": ".text",
-          "address": "0x416c",
+          "address": "0x4170",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -22100,7 +22100,7 @@
         {
           "name": "private_capable",
           "section": ".text",
-          "address": "0x2414",
+          "address": "0x2418",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -22140,7 +22140,7 @@
         {
           "name": "private_kthread_should_stop",
           "section": ".text",
-          "address": "0x5474",
+          "address": "0x5478",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -22180,7 +22180,7 @@
         {
           "name": "private_proc_remove",
           "section": ".text",
-          "address": "0x5574",
+          "address": "0x5578",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -22540,7 +22540,7 @@
         {
           "name": "tx_isp_unregister_platforms",
           "section": ".text",
-          "address": "0xa800",
+          "address": "0xa804",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -22660,7 +22660,7 @@
         {
           "name": "tx_isp_exit",
           "section": ".text",
-          "address": "0x3644",
+          "address": "0x3648",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -22780,7 +22780,7 @@
         {
           "name": "private_release_mem_region",
           "section": ".text",
-          "address": "0x40a8",
+          "address": "0x40ac",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -22820,7 +22820,7 @@
         {
           "name": "private_init_waitqueue_head",
           "section": ".text",
-          "address": "0x5370",
+          "address": "0x5374",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -22860,7 +22860,7 @@
         {
           "name": "private_schedule_work",
           "section": ".text",
-          "address": "0x563c",
+          "address": "0x5640",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -22940,7 +22940,7 @@
         {
           "name": "isp_core_tuning_clear",
           "section": ".text",
-          "address": "0x86a4",
+          "address": "0x86a8",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -22980,7 +22980,7 @@
         {
           "name": "private_dma_cache_sync",
           "section": ".text",
-          "address": "0x5458",
+          "address": "0x545c",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -23020,7 +23020,7 @@
         {
           "name": "private_seq_read",
           "section": ".text",
-          "address": "0x54f8",
+          "address": "0x54fc",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -23060,7 +23060,7 @@
         {
           "name": "private_dev_set_drvdata",
           "section": ".text",
-          "address": "0x404c",
+          "address": "0x4050",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -23100,7 +23100,7 @@
         {
           "name": "private_platform_set_drvdata",
           "section": ".text",
-          "address": "0x3ff8",
+          "address": "0x3ffc",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -23140,7 +23140,7 @@
         {
           "name": "private_spin_lock_init",
           "section": ".text",
-          "address": "0x4b78",
+          "address": "0x4b7c",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -23194,7 +23194,7 @@
         {
           "name": "__divdi3",
           "section": ".text",
-          "address": "0x39bc",
+          "address": "0x39c0",
           "binding": "global",
           "symbol_bytes": 360,
           "instructions": 90,
@@ -23220,7 +23220,7 @@
         {
           "name": "csi_sensor_ops_sync_sensor_attr_part_2",
           "section": ".text",
-          "address": "0x7710",
+          "address": "0x7714",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -23246,7 +23246,7 @@
         {
           "name": "fix_point_div_32.constprop.0",
           "section": ".text",
-          "address": "0x3814",
+          "address": "0x3818",
           "binding": "local",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -23402,7 +23402,7 @@
         {
           "name": "lce_compress_data.constprop.0",
           "section": ".text",
-          "address": "0x37e4",
+          "address": "0x37e8",
           "binding": "local",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -23480,7 +23480,7 @@
         {
           "name": "mipi_phy_stream_on_constprop_3",
           "section": ".text",
-          "address": "0x774c",
+          "address": "0x7750",
           "binding": "global",
           "symbol_bytes": 756,
           "instructions": 189,
@@ -23506,7 +23506,7 @@
         {
           "name": "private_seq_printf.constprop.0",
           "section": ".text",
-          "address": "0x3884",
+          "address": "0x3888",
           "binding": "local",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -23584,7 +23584,7 @@
         {
           "name": "regtrace_seq_printf",
           "section": ".text",
-          "address": "0xcf0",
+          "address": "0xcf4",
           "binding": "local",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -25716,7 +25716,7 @@
         {
           "name": "sub_d180",
           "section": ".text",
-          "address": "0x89a8",
+          "address": "0x89ac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25742,7 +25742,7 @@
         {
           "name": "sub_d190",
           "section": ".text",
-          "address": "0x89b0",
+          "address": "0x89b4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25768,7 +25768,7 @@
         {
           "name": "sub_d198",
           "section": ".text",
-          "address": "0x89b8",
+          "address": "0x89bc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25794,7 +25794,7 @@
         {
           "name": "sub_d1a0",
           "section": ".text",
-          "address": "0x89c0",
+          "address": "0x89c4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25820,7 +25820,7 @@
         {
           "name": "sub_d1a8",
           "section": ".text",
-          "address": "0x89c8",
+          "address": "0x89cc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25846,7 +25846,7 @@
         {
           "name": "sub_d1b0",
           "section": ".text",
-          "address": "0x89d0",
+          "address": "0x89d4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25872,7 +25872,7 @@
         {
           "name": "sub_d1b8",
           "section": ".text",
-          "address": "0x89d8",
+          "address": "0x89dc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25898,7 +25898,7 @@
         {
           "name": "sub_d1c0",
           "section": ".text",
-          "address": "0x89e0",
+          "address": "0x89e4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25924,7 +25924,7 @@
         {
           "name": "sub_d1c8",
           "section": ".text",
-          "address": "0x89e8",
+          "address": "0x89ec",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25950,7 +25950,7 @@
         {
           "name": "sub_d1d0",
           "section": ".text",
-          "address": "0x89f0",
+          "address": "0x89f4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25976,7 +25976,7 @@
         {
           "name": "sub_d1d8",
           "section": ".text",
-          "address": "0x89f8",
+          "address": "0x89fc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26002,7 +26002,7 @@
         {
           "name": "sub_d1e0",
           "section": ".text",
-          "address": "0x8a00",
+          "address": "0x8a04",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26028,7 +26028,7 @@
         {
           "name": "sub_d1e8",
           "section": ".text",
-          "address": "0x8a08",
+          "address": "0x8a0c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26054,7 +26054,7 @@
         {
           "name": "sub_d1f0",
           "section": ".text",
-          "address": "0x8a10",
+          "address": "0x8a14",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26080,7 +26080,7 @@
         {
           "name": "sub_d1f8",
           "section": ".text",
-          "address": "0x8a18",
+          "address": "0x8a1c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26106,7 +26106,7 @@
         {
           "name": "sub_d200",
           "section": ".text",
-          "address": "0x8a20",
+          "address": "0x8a24",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26132,7 +26132,7 @@
         {
           "name": "sub_d208",
           "section": ".text",
-          "address": "0x8a28",
+          "address": "0x8a2c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26158,7 +26158,7 @@
         {
           "name": "sub_d210",
           "section": ".text",
-          "address": "0x8a30",
+          "address": "0x8a34",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26184,7 +26184,7 @@
         {
           "name": "sub_d218",
           "section": ".text",
-          "address": "0x8a38",
+          "address": "0x8a3c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26210,7 +26210,7 @@
         {
           "name": "sub_d220",
           "section": ".text",
-          "address": "0x8a40",
+          "address": "0x8a44",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26236,7 +26236,7 @@
         {
           "name": "sub_d228",
           "section": ".text",
-          "address": "0x8a48",
+          "address": "0x8a4c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26262,7 +26262,7 @@
         {
           "name": "sub_d230",
           "section": ".text",
-          "address": "0x8a50",
+          "address": "0x8a54",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26288,7 +26288,7 @@
         {
           "name": "sub_d238",
           "section": ".text",
-          "address": "0x8a58",
+          "address": "0x8a5c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26314,7 +26314,7 @@
         {
           "name": "sub_d240",
           "section": ".text",
-          "address": "0x8a60",
+          "address": "0x8a64",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26340,7 +26340,7 @@
         {
           "name": "sub_d248",
           "section": ".text",
-          "address": "0x8a68",
+          "address": "0x8a6c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26366,7 +26366,7 @@
         {
           "name": "sub_d250",
           "section": ".text",
-          "address": "0x8a70",
+          "address": "0x8a74",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26392,7 +26392,7 @@
         {
           "name": "sub_d25c",
           "section": ".text",
-          "address": "0x8a78",
+          "address": "0x8a7c",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -26418,7 +26418,7 @@
         {
           "name": "sub_d2a0",
           "section": ".text",
-          "address": "0x8ac0",
+          "address": "0x8ac4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26444,7 +26444,7 @@
         {
           "name": "sub_d2a8",
           "section": ".text",
-          "address": "0x8ac8",
+          "address": "0x8acc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26470,7 +26470,7 @@
         {
           "name": "sub_d2b0",
           "section": ".text",
-          "address": "0x8ad0",
+          "address": "0x8ad4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26496,7 +26496,7 @@
         {
           "name": "sub_d2c0",
           "section": ".text",
-          "address": "0x8ae0",
+          "address": "0x8ae4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26522,7 +26522,7 @@
         {
           "name": "sub_d2c8",
           "section": ".text",
-          "address": "0x8ae8",
+          "address": "0x8aec",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26548,7 +26548,7 @@
         {
           "name": "sub_d2d0",
           "section": ".text",
-          "address": "0x8af0",
+          "address": "0x8af4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26574,7 +26574,7 @@
         {
           "name": "sub_d2d8",
           "section": ".text",
-          "address": "0x8af8",
+          "address": "0x8afc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26600,7 +26600,7 @@
         {
           "name": "sub_d2e0",
           "section": ".text",
-          "address": "0x8b00",
+          "address": "0x8b04",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26626,7 +26626,7 @@
         {
           "name": "sub_d2e8",
           "section": ".text",
-          "address": "0x8b08",
+          "address": "0x8b0c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26652,7 +26652,7 @@
         {
           "name": "sub_d2f0",
           "section": ".text",
-          "address": "0x8b10",
+          "address": "0x8b14",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26678,7 +26678,7 @@
         {
           "name": "sub_d2f8",
           "section": ".text",
-          "address": "0x8b18",
+          "address": "0x8b1c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26704,7 +26704,7 @@
         {
           "name": "sub_d300",
           "section": ".text",
-          "address": "0x8b20",
+          "address": "0x8b24",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26730,7 +26730,7 @@
         {
           "name": "sub_d308",
           "section": ".text",
-          "address": "0x8b28",
+          "address": "0x8b2c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26756,7 +26756,7 @@
         {
           "name": "sub_d310",
           "section": ".text",
-          "address": "0x8b30",
+          "address": "0x8b34",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26782,7 +26782,7 @@
         {
           "name": "sub_d318",
           "section": ".text",
-          "address": "0x8b38",
+          "address": "0x8b3c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26808,7 +26808,7 @@
         {
           "name": "sub_d320",
           "section": ".text",
-          "address": "0x8b40",
+          "address": "0x8b44",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26834,7 +26834,7 @@
         {
           "name": "sub_d328",
           "section": ".text",
-          "address": "0x8b48",
+          "address": "0x8b4c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26860,7 +26860,7 @@
         {
           "name": "sub_d330",
           "section": ".text",
-          "address": "0x8b50",
+          "address": "0x8b54",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26886,7 +26886,7 @@
         {
           "name": "sub_d338",
           "section": ".text",
-          "address": "0x8b58",
+          "address": "0x8b5c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26912,7 +26912,7 @@
         {
           "name": "sub_d340",
           "section": ".text",
-          "address": "0x8b60",
+          "address": "0x8b64",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26938,7 +26938,7 @@
         {
           "name": "sub_d348",
           "section": ".text",
-          "address": "0x8b68",
+          "address": "0x8b6c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26964,7 +26964,7 @@
         {
           "name": "sub_d350",
           "section": ".text",
-          "address": "0x8b70",
+          "address": "0x8b74",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -26990,7 +26990,7 @@
         {
           "name": "sub_d358",
           "section": ".text",
-          "address": "0x8b78",
+          "address": "0x8b7c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27016,7 +27016,7 @@
         {
           "name": "sub_d360",
           "section": ".text",
-          "address": "0x8b80",
+          "address": "0x8b84",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27042,7 +27042,7 @@
         {
           "name": "sub_d368",
           "section": ".text",
-          "address": "0x8b88",
+          "address": "0x8b8c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27068,7 +27068,7 @@
         {
           "name": "sub_d370",
           "section": ".text",
-          "address": "0x8b90",
+          "address": "0x8b94",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27094,7 +27094,7 @@
         {
           "name": "sub_d378",
           "section": ".text",
-          "address": "0x8b98",
+          "address": "0x8b9c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27120,7 +27120,7 @@
         {
           "name": "sub_d380",
           "section": ".text",
-          "address": "0x8ba0",
+          "address": "0x8ba4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27146,7 +27146,7 @@
         {
           "name": "sub_d388",
           "section": ".text",
-          "address": "0x8ba8",
+          "address": "0x8bac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27172,7 +27172,7 @@
         {
           "name": "sub_d390",
           "section": ".text",
-          "address": "0x8bb0",
+          "address": "0x8bb4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27198,7 +27198,7 @@
         {
           "name": "sub_d398",
           "section": ".text",
-          "address": "0x8bb8",
+          "address": "0x8bbc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27224,7 +27224,7 @@
         {
           "name": "sub_d3a0",
           "section": ".text",
-          "address": "0x8bc0",
+          "address": "0x8bc4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27250,7 +27250,7 @@
         {
           "name": "sub_d3a8",
           "section": ".text",
-          "address": "0x8bc8",
+          "address": "0x8bcc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27276,7 +27276,7 @@
         {
           "name": "sub_d3b0",
           "section": ".text",
-          "address": "0x8bd0",
+          "address": "0x8bd4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27302,7 +27302,7 @@
         {
           "name": "sub_d3b8",
           "section": ".text",
-          "address": "0x8bd8",
+          "address": "0x8bdc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27328,7 +27328,7 @@
         {
           "name": "sub_d3c0",
           "section": ".text",
-          "address": "0x8be0",
+          "address": "0x8be4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27354,7 +27354,7 @@
         {
           "name": "sub_d3c8",
           "section": ".text",
-          "address": "0x8be8",
+          "address": "0x8bec",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27380,7 +27380,7 @@
         {
           "name": "sub_d3d0",
           "section": ".text",
-          "address": "0x8bf0",
+          "address": "0x8bf4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27406,7 +27406,7 @@
         {
           "name": "sub_d3d8",
           "section": ".text",
-          "address": "0x8bf8",
+          "address": "0x8bfc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27432,7 +27432,7 @@
         {
           "name": "sub_d3e0",
           "section": ".text",
-          "address": "0x8c00",
+          "address": "0x8c04",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27458,7 +27458,7 @@
         {
           "name": "sub_d3e8",
           "section": ".text",
-          "address": "0x8c08",
+          "address": "0x8c0c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27484,7 +27484,7 @@
         {
           "name": "sub_d3f0",
           "section": ".text",
-          "address": "0x8c10",
+          "address": "0x8c14",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27510,7 +27510,7 @@
         {
           "name": "sub_d3f8",
           "section": ".text",
-          "address": "0x8c18",
+          "address": "0x8c1c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27536,7 +27536,7 @@
         {
           "name": "sub_d400",
           "section": ".text",
-          "address": "0x8c20",
+          "address": "0x8c24",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27562,7 +27562,7 @@
         {
           "name": "sub_d408",
           "section": ".text",
-          "address": "0x8c28",
+          "address": "0x8c2c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27588,7 +27588,7 @@
         {
           "name": "sub_d410",
           "section": ".text",
-          "address": "0x8c30",
+          "address": "0x8c34",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27614,7 +27614,7 @@
         {
           "name": "sub_d418",
           "section": ".text",
-          "address": "0x8c38",
+          "address": "0x8c3c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27640,7 +27640,7 @@
         {
           "name": "sub_d420",
           "section": ".text",
-          "address": "0x8c40",
+          "address": "0x8c44",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27666,7 +27666,7 @@
         {
           "name": "sub_d428",
           "section": ".text",
-          "address": "0x8c48",
+          "address": "0x8c4c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27692,7 +27692,7 @@
         {
           "name": "sub_d434",
           "section": ".text",
-          "address": "0x8c50",
+          "address": "0x8c54",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27718,7 +27718,7 @@
         {
           "name": "sub_d43c",
           "section": ".text",
-          "address": "0x8c58",
+          "address": "0x8c5c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27744,7 +27744,7 @@
         {
           "name": "sub_d44c",
           "section": ".text",
-          "address": "0x8c60",
+          "address": "0x8c64",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27770,7 +27770,7 @@
         {
           "name": "sub_d454",
           "section": ".text",
-          "address": "0x8c68",
+          "address": "0x8c6c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27796,7 +27796,7 @@
         {
           "name": "sub_d45c",
           "section": ".text",
-          "address": "0x8c70",
+          "address": "0x8c74",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27822,7 +27822,7 @@
         {
           "name": "sub_d464",
           "section": ".text",
-          "address": "0x8c78",
+          "address": "0x8c7c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27848,7 +27848,7 @@
         {
           "name": "sub_d46c",
           "section": ".text",
-          "address": "0x8c80",
+          "address": "0x8c84",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27874,7 +27874,7 @@
         {
           "name": "sub_d474",
           "section": ".text",
-          "address": "0x8c88",
+          "address": "0x8c8c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27900,7 +27900,7 @@
         {
           "name": "sub_d480",
           "section": ".text",
-          "address": "0x8c90",
+          "address": "0x8c94",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27926,7 +27926,7 @@
         {
           "name": "sub_d488",
           "section": ".text",
-          "address": "0x8c98",
+          "address": "0x8c9c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27952,7 +27952,7 @@
         {
           "name": "sub_d490",
           "section": ".text",
-          "address": "0x8ca0",
+          "address": "0x8ca4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -27978,7 +27978,7 @@
         {
           "name": "sub_d498",
           "section": ".text",
-          "address": "0x8ca8",
+          "address": "0x8cac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28004,7 +28004,7 @@
         {
           "name": "sub_d4a0",
           "section": ".text",
-          "address": "0x8cb0",
+          "address": "0x8cb4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28030,7 +28030,7 @@
         {
           "name": "sub_d4ac",
           "section": ".text",
-          "address": "0x8cb8",
+          "address": "0x8cbc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28056,7 +28056,7 @@
         {
           "name": "sub_d4b8",
           "section": ".text",
-          "address": "0x8cc0",
+          "address": "0x8cc4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28082,7 +28082,7 @@
         {
           "name": "sub_d4c0",
           "section": ".text",
-          "address": "0x8cc8",
+          "address": "0x8ccc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28108,7 +28108,7 @@
         {
           "name": "sub_d4c8",
           "section": ".text",
-          "address": "0x8cd0",
+          "address": "0x8cd4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28134,7 +28134,7 @@
         {
           "name": "sub_d4d0",
           "section": ".text",
-          "address": "0x8cd8",
+          "address": "0x8cdc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28160,7 +28160,7 @@
         {
           "name": "sub_d4d8",
           "section": ".text",
-          "address": "0x8ce0",
+          "address": "0x8ce4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28186,7 +28186,7 @@
         {
           "name": "sub_d4e0",
           "section": ".text",
-          "address": "0x8ce8",
+          "address": "0x8cec",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28212,7 +28212,7 @@
         {
           "name": "sub_d4e8",
           "section": ".text",
-          "address": "0x8cf0",
+          "address": "0x8cf4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28238,7 +28238,7 @@
         {
           "name": "sub_d4f0",
           "section": ".text",
-          "address": "0x8cf8",
+          "address": "0x8cfc",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -28264,7 +28264,7 @@
         {
           "name": "sub_d53c",
           "section": ".text",
-          "address": "0x8d40",
+          "address": "0x8d44",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28290,7 +28290,7 @@
         {
           "name": "sub_d544",
           "section": ".text",
-          "address": "0x8d48",
+          "address": "0x8d4c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28316,7 +28316,7 @@
         {
           "name": "sub_d54c",
           "section": ".text",
-          "address": "0x8d50",
+          "address": "0x8d54",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28342,7 +28342,7 @@
         {
           "name": "sub_d554",
           "section": ".text",
-          "address": "0x8d58",
+          "address": "0x8d5c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28368,7 +28368,7 @@
         {
           "name": "sub_d55c",
           "section": ".text",
-          "address": "0x8d60",
+          "address": "0x8d64",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28394,7 +28394,7 @@
         {
           "name": "sub_d564",
           "section": ".text",
-          "address": "0x8d68",
+          "address": "0x8d6c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28420,7 +28420,7 @@
         {
           "name": "sub_d56c",
           "section": ".text",
-          "address": "0x8d70",
+          "address": "0x8d74",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28446,7 +28446,7 @@
         {
           "name": "sub_d574",
           "section": ".text",
-          "address": "0x8d78",
+          "address": "0x8d7c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28472,7 +28472,7 @@
         {
           "name": "sub_d57c",
           "section": ".text",
-          "address": "0x8d80",
+          "address": "0x8d84",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28498,7 +28498,7 @@
         {
           "name": "sub_d590",
           "section": ".text",
-          "address": "0x8d88",
+          "address": "0x8d8c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28524,7 +28524,7 @@
         {
           "name": "sub_d598",
           "section": ".text",
-          "address": "0x8d90",
+          "address": "0x8d94",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28550,7 +28550,7 @@
         {
           "name": "sub_d5a0",
           "section": ".text",
-          "address": "0x8d98",
+          "address": "0x8d9c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28576,7 +28576,7 @@
         {
           "name": "sub_d5a8",
           "section": ".text",
-          "address": "0x8da0",
+          "address": "0x8da4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28602,7 +28602,7 @@
         {
           "name": "sub_d5b0",
           "section": ".text",
-          "address": "0x8da8",
+          "address": "0x8dac",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28628,7 +28628,7 @@
         {
           "name": "sub_d5b8",
           "section": ".text",
-          "address": "0x8db0",
+          "address": "0x8db4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -28654,7 +28654,7 @@
         {
           "name": "t41_sinfo_count_open",
           "section": ".text",
-          "address": "0xcd4",
+          "address": "0xcd8",
           "binding": "local",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -28680,7 +28680,7 @@
         {
           "name": "t41_sinfo_count_show",
           "section": ".text",
-          "address": "0xe68",
+          "address": "0xe6c",
           "binding": "local",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -28706,7 +28706,7 @@
         {
           "name": "t41_sinfo_open",
           "section": ".text",
-          "address": "0xc90",
+          "address": "0xc94",
           "binding": "local",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -28732,7 +28732,7 @@
         {
           "name": "t41_sinfo_show",
           "section": ".text",
-          "address": "0xd24",
+          "address": "0xd28",
           "binding": "local",
           "symbol_bytes": 324,
           "instructions": 81,
@@ -28888,7 +28888,7 @@
         {
           "name": "tx_isp_ae_g_at_list_isra_70",
           "section": ".text",
-          "address": "0x833c",
+          "address": "0x8340",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -28914,7 +28914,7 @@
         {
           "name": "tx_isp_ae_g_ev_list_isra_69",
           "section": ".text",
-          "address": "0x8304",
+          "address": "0x8308",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -28940,7 +28940,7 @@
         {
           "name": "tx_isp_ae_g_explist_isra_63",
           "section": ".text",
-          "address": "0x82cc",
+          "address": "0x82d0",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -28966,7 +28966,7 @@
         {
           "name": "tx_isp_ae_s_explist_isra_24",
           "section": ".text",
-          "address": "0x823c",
+          "address": "0x8240",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -29044,7 +29044,7 @@
         {
           "name": "tx_isp_af_weight_g_attr_isra_49",
           "section": ".text",
-          "address": "0x8294",
+          "address": "0x8298",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -29070,7 +29070,7 @@
         {
           "name": "tx_isp_af_weight_s_attr_isra_16",
           "section": ".text",
-          "address": "0x81e4",
+          "address": "0x81e8",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -29460,7 +29460,7 @@
         {
           "name": "tx_isp_sinfo_driver_add",
           "section": ".text",
-          "address": "0x2f60",
+          "address": "0x2f64",
           "binding": "global",
           "symbol_bytes": 448,
           "instructions": 112,
@@ -29486,7 +29486,7 @@
         {
           "name": "tx_isp_sinfo_driver_del",
           "section": ".text",
-          "address": "0xef4",
+          "address": "0xef8",
           "binding": "global",
           "symbol_bytes": 192,
           "instructions": 48,
@@ -29512,7 +29512,7 @@
         {
           "name": "tx_isp_sinfo_sensor_bind",
           "section": ".text",
-          "address": "0x2e88",
+          "address": "0x2e8c",
           "binding": "global",
           "symbol_bytes": 216,
           "instructions": 54,
@@ -29538,7 +29538,7 @@
         {
           "name": "tx_isp_sinfo_sensor_unbind",
           "section": ".text",
-          "address": "0xb9c",
+          "address": "0xba0",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -29590,7 +29590,7 @@
         {
           "name": "tx_isp_t41_sinfo_exit",
           "section": ".text",
-          "address": "0x3120",
+          "address": "0x3124",
           "binding": "local",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -29668,7 +29668,7 @@
         {
           "name": "tx_isp_video_link_destroy_isra_3",
           "section": ".text",
-          "address": "0xad74",
+          "address": "0xad78",
           "binding": "global",
           "symbol_bytes": 264,
           "instructions": 66,
@@ -29694,7 +29694,7 @@
         {
           "name": "vic_sensor_ops_sync_sensor_attr_part_4",
           "section": ".text",
-          "address": "0x6600",
+          "address": "0x6604",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -30092,7 +30092,7 @@
         {
           "name": "tx_isp_vic_start",
           "section": ".text",
-          "address": "0x5ba4",
+          "address": "0x5ba8",
           "binding": "global",
           "symbol_bytes": 2368,
           "instructions": 592,
@@ -31132,7 +31132,7 @@
         {
           "name": "video_input_cmd_set",
           "section": ".text",
-          "address": "0x6ed8",
+          "address": "0x6edc",
           "binding": "global",
           "symbol_bytes": 916,
           "instructions": 229,
@@ -31292,7 +31292,7 @@
         {
           "name": "frame_chan_event",
           "section": ".text",
-          "address": "0x4fd0",
+          "address": "0x4fd4",
           "binding": "global",
           "symbol_bytes": 928,
           "instructions": 232,
@@ -31452,7 +31452,7 @@
         {
           "name": "tisp_gsm_process",
           "section": ".text",
-          "address": "0x451c",
+          "address": "0x4520",
           "binding": "global",
           "symbol_bytes": 924,
           "instructions": 231,
@@ -32012,7 +32012,7 @@
         {
           "name": "ivdc_core_interrupt_service_routine",
           "section": ".text",
-          "address": "0x254c",
+          "address": "0x2550",
           "binding": "global",
           "symbol_bytes": 700,
           "instructions": 175,
@@ -32252,7 +32252,7 @@
         {
           "name": "tx_isp_create_graph_and_nodes",
           "section": ".text",
-          "address": "0x1c88",
+          "address": "0x1c8c",
           "binding": "global",
           "symbol_bytes": 788,
           "instructions": 197,
@@ -32492,7 +32492,7 @@
         {
           "name": "subdev_sensor_ops_set_input",
           "section": ".text",
-          "address": "0x6b14",
+          "address": "0x6b18",
           "binding": "global",
           "symbol_bytes": 700,
           "instructions": 175,
@@ -32892,7 +32892,7 @@
         {
           "name": "vic_frame_channel_streamon",
           "section": ".text",
-          "address": "0x1f9c",
+          "address": "0x1fa0",
           "binding": "global",
           "symbol_bytes": 508,
           "instructions": 127,
@@ -33132,7 +33132,7 @@
         {
           "name": "isp_subdev_init_clks",
           "section": ".text",
-          "address": "0xa564",
+          "address": "0xa568",
           "binding": "global",
           "symbol_bytes": 528,
           "instructions": 132,
@@ -33452,7 +33452,7 @@
         {
           "name": "vic_frame_channel_qbuf",
           "section": ".text",
-          "address": "0x59c4",
+          "address": "0x59c8",
           "binding": "global",
           "symbol_bytes": 480,
           "instructions": 120,
@@ -34212,7 +34212,7 @@
         {
           "name": "isp_csi_cmd_set",
           "section": ".text",
-          "address": "0x7dc4",
+          "address": "0x7dc8",
           "binding": "global",
           "symbol_bytes": 420,
           "instructions": 105,
@@ -34532,7 +34532,7 @@
         {
           "name": "tx_isp_request_irq",
           "section": ".text",
-          "address": "0x8db8",
+          "address": "0x8dbc",
           "binding": "global",
           "symbol_bytes": 364,
           "instructions": 91,
@@ -34852,7 +34852,7 @@
         {
           "name": "dump_csi_reg",
           "section": ".text",
-          "address": "0x7f68",
+          "address": "0x7f6c",
           "binding": "global",
           "symbol_bytes": 380,
           "instructions": 95,
@@ -35372,7 +35372,7 @@
         {
           "name": "private_log2_int_to_fixed_64",
           "section": ".text",
-          "address": "0x3d4c",
+          "address": "0x3d50",
           "binding": "global",
           "symbol_bytes": 368,
           "instructions": 92,
@@ -35412,7 +35412,7 @@
         {
           "name": "tx_isp_vin_resume_module",
           "section": ".text",
-          "address": "0x16bc",
+          "address": "0x16c0",
           "binding": "global",
           "symbol_bytes": 360,
           "instructions": 90,
@@ -35652,7 +35652,7 @@
         {
           "name": "__fill_tisp_buffer",
           "section": ".text",
-          "address": "0x9a74",
+          "address": "0x9a78",
           "binding": "global",
           "symbol_bytes": 276,
           "instructions": 69,
@@ -35812,7 +35812,7 @@
         {
           "name": "subdev_sensor_ops_release_all_sensor",
           "section": ".text",
-          "address": "0x369c",
+          "address": "0x36a0",
           "binding": "global",
           "symbol_bytes": 320,
           "instructions": 80,
@@ -35932,7 +35932,7 @@
         {
           "name": "tx_isp_video_link_stream",
           "section": ".text",
-          "address": "0xabd4",
+          "address": "0xabd8",
           "binding": "global",
           "symbol_bytes": 324,
           "instructions": 81,
@@ -35972,7 +35972,7 @@
         {
           "name": "private_dma_free_coherent",
           "section": ".text",
-          "address": "0x5790",
+          "address": "0x5794",
           "binding": "global",
           "symbol_bytes": 280,
           "instructions": 70,
@@ -36132,7 +36132,7 @@
         {
           "name": "tx_isp_csi_slake_subdev",
           "section": ".text",
-          "address": "0x7ca4",
+          "address": "0x7ca8",
           "binding": "global",
           "symbol_bytes": 288,
           "instructions": 72,
@@ -36252,7 +36252,7 @@
         {
           "name": "isp_csi_show",
           "section": ".text",
-          "address": "0x7614",
+          "address": "0x7618",
           "binding": "global",
           "symbol_bytes": 252,
           "instructions": 63,
@@ -36492,7 +36492,7 @@
         {
           "name": "ivdc_core_ops_init",
           "section": ".text",
-          "address": "0x18b4",
+          "address": "0x18b8",
           "binding": "global",
           "symbol_bytes": 300,
           "instructions": 75,
@@ -36532,7 +36532,7 @@
         {
           "name": "find_subdev_link_pad",
           "section": ".text",
-          "address": "0xa438",
+          "address": "0xa43c",
           "binding": "global",
           "symbol_bytes": 300,
           "instructions": 75,
@@ -36812,7 +36812,7 @@
         {
           "name": "tx_isp_vin_slake_subdev",
           "section": ".text",
-          "address": "0x6dd0",
+          "address": "0x6dd4",
           "binding": "global",
           "symbol_bytes": 264,
           "instructions": 66,
@@ -36852,7 +36852,7 @@
         {
           "name": "subdev_sensor_ops_enum_input",
           "section": ".text",
-          "address": "0x7340",
+          "address": "0x7344",
           "binding": "global",
           "symbol_bytes": 272,
           "instructions": 68,
@@ -36892,7 +36892,7 @@
         {
           "name": "vic_core_s_stream",
           "section": ".text",
-          "address": "0x67ac",
+          "address": "0x67b0",
           "binding": "global",
           "symbol_bytes": 296,
           "instructions": 74,
@@ -36972,7 +36972,7 @@
         {
           "name": "isp_free_buffer",
           "section": ".text",
-          "address": "0x889c",
+          "address": "0x88a0",
           "binding": "global",
           "symbol_bytes": 268,
           "instructions": 67,
@@ -37012,7 +37012,7 @@
         {
           "name": "csi_core_ops_init",
           "section": ".text",
-          "address": "0x2198",
+          "address": "0x219c",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -37172,7 +37172,7 @@
         {
           "name": "ivdc_slake_module",
           "section": ".text",
-          "address": "0x4428",
+          "address": "0x442c",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -37212,7 +37212,7 @@
         {
           "name": "tisp_blc_rgb2channel",
           "section": ".text",
-          "address": "0x510",
+          "address": "0x444",
           "binding": "global",
           "symbol_bytes": 252,
           "instructions": 63,
@@ -37357,6 +37357,46 @@
       "match_kind": "exact_name",
       "classification": "similar",
       "oem": {
+        "name": "tx_isp_release",
+        "section": ".text",
+        "address": "0x13c24",
+        "binding": "local",
+        "symbol_bytes": 260,
+        "instructions": 65,
+        "branches": 13,
+        "calls": 2,
+        "returns": 1,
+        "relocations": 2
+      },
+      "recovered": [
+        {
+          "name": "tx_isp_release",
+          "section": ".text",
+          "address": "0xae80",
+          "binding": "global",
+          "symbol_bytes": 252,
+          "instructions": 63,
+          "branches": 14,
+          "calls": 2,
+          "returns": 1,
+          "relocations": 2
+        }
+      ],
+      "instruction_ratio": 0.9692307692307692,
+      "instruction_delta": -2,
+      "recovered_totals": {
+        "symbol_bytes": 252,
+        "instructions": 63,
+        "branches": 14,
+        "calls": 2,
+        "returns": 1,
+        "relocations": 2
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "similar",
+      "oem": {
         "name": "tx_isp_notify",
         "section": ".text",
         "address": "0x12f00",
@@ -37372,7 +37412,7 @@
         {
           "name": "tx_isp_notify",
           "section": ".text",
-          "address": "0x11e0",
+          "address": "0x11e4",
           "binding": "global",
           "symbol_bytes": 256,
           "instructions": 64,
@@ -37389,46 +37429,6 @@
         "instructions": 64,
         "branches": 12,
         "calls": 1,
-        "returns": 1,
-        "relocations": 4
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "similar",
-      "oem": {
-        "name": "tx_isp_release",
-        "section": ".text",
-        "address": "0x13c24",
-        "binding": "local",
-        "symbol_bytes": 260,
-        "instructions": 65,
-        "branches": 13,
-        "calls": 2,
-        "returns": 1,
-        "relocations": 2
-      },
-      "recovered": [
-        {
-          "name": "tx_isp_release",
-          "section": ".text",
-          "address": "0xae7c",
-          "binding": "global",
-          "symbol_bytes": 256,
-          "instructions": 64,
-          "branches": 12,
-          "calls": 2,
-          "returns": 1,
-          "relocations": 4
-        }
-      ],
-      "instruction_ratio": 0.9846153846153847,
-      "instruction_delta": -1,
-      "recovered_totals": {
-        "symbol_bytes": 256,
-        "instructions": 64,
-        "branches": 12,
-        "calls": 2,
         "returns": 1,
         "relocations": 4
       }
@@ -37572,7 +37572,7 @@
         {
           "name": "tx_isp_csi_activate_subdev",
           "section": ".text",
-          "address": "0x4260",
+          "address": "0x4264",
           "binding": "global",
           "symbol_bytes": 220,
           "instructions": 55,
@@ -37652,7 +37652,7 @@
         {
           "name": "isp_i2c_new_subdev_board",
           "section": ".text",
-          "address": "0x74f8",
+          "address": "0x74fc",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -37732,7 +37732,7 @@
         {
           "name": "sensor_set_mode",
           "section": ".text",
-          "address": "0xa184",
+          "address": "0xa188",
           "binding": "global",
           "symbol_bytes": 280,
           "instructions": 70,
@@ -37972,7 +37972,7 @@
         {
           "name": "tx_isp_sensor_release_sensor",
           "section": ".text",
-          "address": "0xa984",
+          "address": "0xa988",
           "binding": "global",
           "symbol_bytes": 232,
           "instructions": 58,
@@ -38012,7 +38012,7 @@
         {
           "name": "ivdc_activate_module",
           "section": ".text",
-          "address": "0x433c",
+          "address": "0x4340",
           "binding": "global",
           "symbol_bytes": 236,
           "instructions": 59,
@@ -38092,7 +38092,7 @@
         {
           "name": "isp_core_tuning_init",
           "section": ".text",
-          "address": "0x8588",
+          "address": "0x858c",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -38252,7 +38252,7 @@
         {
           "name": "tx_vic_enable_irq",
           "section": ".text",
-          "address": "0x663c",
+          "address": "0x6640",
           "binding": "global",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -38412,7 +38412,7 @@
         {
           "name": "tx_isp_sensor_register_sensor",
           "section": ".text",
-          "address": "0xa898",
+          "address": "0xa89c",
           "binding": "global",
           "symbol_bytes": 236,
           "instructions": 59,
@@ -38532,7 +38532,7 @@
         {
           "name": "video_input_cmd_show",
           "section": ".text",
-          "address": "0x726c",
+          "address": "0x7270",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -38612,7 +38612,7 @@
         {
           "name": "tx_isp_vic_slake_subdev",
           "section": ".text",
-          "address": "0x4c64",
+          "address": "0x4c68",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -38652,7 +38652,7 @@
         {
           "name": "vic_frame_channel_freebufs",
           "section": ".text",
-          "address": "0x4194",
+          "address": "0x4198",
           "binding": "global",
           "symbol_bytes": 204,
           "instructions": 51,
@@ -38692,7 +38692,7 @@
         {
           "name": "vin_s_stream",
           "section": ".text",
-          "address": "0x1090",
+          "address": "0x1094",
           "binding": "global",
           "symbol_bytes": 236,
           "instructions": 59,
@@ -38812,7 +38812,7 @@
         {
           "name": "csi_video_s_stream",
           "section": ".text",
-          "address": "0x7bdc",
+          "address": "0x7be0",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -38892,7 +38892,7 @@
         {
           "name": "vic_sensor_ops_sync_sensor_attr",
           "section": ".text",
-          "address": "0x3574",
+          "address": "0x3578",
           "binding": "global",
           "symbol_bytes": 208,
           "instructions": 52,
@@ -39132,7 +39132,7 @@
         {
           "name": "tx_isp_vin_init",
           "section": ".text",
-          "address": "0x15e4",
+          "address": "0x15e8",
           "binding": "global",
           "symbol_bytes": 216,
           "instructions": 54,
@@ -39231,46 +39231,6 @@
         "calls": 2,
         "returns": 1,
         "relocations": 17
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "similar",
-      "oem": {
-        "name": "tx_isp_open",
-        "section": ".text",
-        "address": "0x12e30",
-        "binding": "local",
-        "symbol_bytes": 208,
-        "instructions": 52,
-        "branches": 9,
-        "calls": 1,
-        "returns": 2,
-        "relocations": 0
-      },
-      "recovered": [
-        {
-          "name": "tx_isp_open",
-          "section": ".text",
-          "address": "0x358",
-          "binding": "global",
-          "symbol_bytes": 204,
-          "instructions": 51,
-          "branches": 9,
-          "calls": 1,
-          "returns": 2,
-          "relocations": 0
-        }
-      ],
-      "instruction_ratio": 0.9807692307692307,
-      "instruction_delta": -1,
-      "recovered_totals": {
-        "symbol_bytes": 204,
-        "instructions": 51,
-        "branches": 9,
-        "calls": 1,
-        "returns": 2,
-        "relocations": 0
       }
     },
     {
@@ -39452,7 +39412,7 @@
         {
           "name": "private_math_exp2",
           "section": ".text",
-          "address": "0xfb4",
+          "address": "0xfb8",
           "binding": "global",
           "symbol_bytes": 220,
           "instructions": 55,
@@ -39692,7 +39652,7 @@
         {
           "name": "tisp_math_exp2",
           "section": ".text",
-          "address": "0x148c",
+          "address": "0x1490",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -40052,7 +40012,7 @@
         {
           "name": "tisp_g_osd_block_attr",
           "section": ".text",
-          "address": "0xae8",
+          "address": "0xaec",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -40132,7 +40092,7 @@
         {
           "name": "ispcore_frame_channel_ir_get_fmt",
           "section": ".text",
-          "address": "0x964",
+          "address": "0x898",
           "binding": "global",
           "symbol_bytes": 160,
           "instructions": 40,
@@ -40212,7 +40172,7 @@
         {
           "name": "csi_phy_start",
           "section": ".text",
-          "address": "0x7ae4",
+          "address": "0x7ae8",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -40332,7 +40292,7 @@
         {
           "name": "fs_activate_module",
           "section": ".text",
-          "address": "0x343c",
+          "address": "0x3440",
           "binding": "global",
           "symbol_bytes": 164,
           "instructions": 41,
@@ -40572,7 +40532,7 @@
         {
           "name": "csi_sensor_ops_sync_sensor_attr",
           "section": ".text",
-          "address": "0x2bdc",
+          "address": "0x2be0",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -40652,7 +40612,7 @@
         {
           "name": "tx_vic_disable_irq",
           "section": ".text",
-          "address": "0x66f8",
+          "address": "0x66fc",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -41012,7 +40972,7 @@
         {
           "name": "tx_isp_csi_resume_module",
           "section": ".text",
-          "address": "0x7a40",
+          "address": "0x7a44",
           "binding": "global",
           "symbol_bytes": 164,
           "instructions": 41,
@@ -41052,7 +41012,7 @@
         {
           "name": "tisp_raw_wdma_fd_interrupt",
           "section": ".text",
-          "address": "0x34e0",
+          "address": "0x34e4",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -41212,7 +41172,7 @@
         {
           "name": "isp_mem_init",
           "section": ".text",
-          "address": "0x86c0",
+          "address": "0x86c4",
           "binding": "global",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -41292,7 +41252,7 @@
         {
           "name": "tx_isp_init",
           "section": ".text",
-          "address": "0x3f14",
+          "address": "0x3f18",
           "binding": "global",
           "symbol_bytes": 188,
           "instructions": 47,
@@ -41332,7 +41292,7 @@
         {
           "name": "ispint_adr_16",
           "section": ".text",
-          "address": "0x6e8",
+          "address": "0x61c",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -41372,7 +41332,7 @@
         {
           "name": "ivdc_enable_irq",
           "section": ".text",
-          "address": "0x9698",
+          "address": "0x969c",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -41652,7 +41612,7 @@
         {
           "name": "ispcore_sensor_ops_release_all_sensor",
           "section": ".text",
-          "address": "0x12e0",
+          "address": "0x12e4",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -41692,7 +41652,7 @@
         {
           "name": "isp_subdev_release_clks",
           "section": ".text",
-          "address": "0xa774",
+          "address": "0xa778",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -41932,7 +41892,7 @@
         {
           "name": "vic_frame_channel_get_fmt",
           "section": ".text",
-          "address": "0x2b64",
+          "address": "0x2b68",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -41972,7 +41932,7 @@
         {
           "name": "find_new_buffer",
           "section": ".text",
-          "address": "0xa68",
+          "address": "0x99c",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -42132,7 +42092,7 @@
         {
           "name": "isp_core_create_aisp",
           "section": ".text",
-          "address": "0x8498",
+          "address": "0x849c",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -42292,7 +42252,7 @@
         {
           "name": "ispcore_frame_channel_get_fmt",
           "section": ".text",
-          "address": "0x2c84",
+          "address": "0x2c88",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -42372,7 +42332,7 @@
         {
           "name": "sensor_set_integration_time",
           "section": ".text",
-          "address": "0x9d48",
+          "address": "0x9d4c",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -42412,7 +42372,7 @@
         {
           "name": "sensor_set_integration_time_short",
           "section": ".text",
-          "address": "0x9ddc",
+          "address": "0x9de0",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -42492,7 +42452,7 @@
         {
           "name": "tx_isp_vic_resume_module",
           "section": ".text",
-          "address": "0x68d4",
+          "address": "0x68d8",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -42572,7 +42532,7 @@
         {
           "name": "sensor_set_analog_gain",
           "section": ".text",
-          "address": "0x9e70",
+          "address": "0x9e74",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -42612,7 +42572,7 @@
         {
           "name": "sensor_set_analog_gain_short",
           "section": ".text",
-          "address": "0x9f04",
+          "address": "0x9f08",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -42692,7 +42652,7 @@
         {
           "name": "tx_isp_free_irq",
           "section": ".text",
-          "address": "0x8f24",
+          "address": "0x8f28",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -42812,7 +42772,7 @@
         {
           "name": "tx_isp_vic_suspend_module",
           "section": ".text",
-          "address": "0x6950",
+          "address": "0x6954",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -42892,7 +42852,7 @@
         {
           "name": "check_csi_error",
           "section": ".text",
-          "address": "0x80e4",
+          "address": "0x80e8",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -43492,7 +43452,7 @@
         {
           "name": "ispcore_frame_channel_reqbufs",
           "section": ".text",
-          "address": "0x48b8",
+          "address": "0x48bc",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -43612,7 +43572,7 @@
         {
           "name": "ivdc_resume_module",
           "section": ".text",
-          "address": "0x19e0",
+          "address": "0x19e4",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -43652,7 +43612,7 @@
         {
           "name": "ivdc_suspend_module",
           "section": ".text",
-          "address": "0x1a44",
+          "address": "0x1a48",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -43732,7 +43692,7 @@
         {
           "name": "private_leading_one_position",
           "section": ".text",
-          "address": "0x3b6c",
+          "address": "0x3b70",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -44172,7 +44132,7 @@
         {
           "name": "tx_isp_vin_activate_subdev",
           "section": ".text",
-          "address": "0xc14",
+          "address": "0xc18",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -44532,7 +44492,7 @@
         {
           "name": "sensor_alloc_integration_time",
           "section": ".text",
-          "address": "0x9c70",
+          "address": "0x9c74",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -44612,7 +44572,7 @@
         {
           "name": "tx_isp_csi_suspend_module",
           "section": ".text",
-          "address": "0x33d0",
+          "address": "0x33d4",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -46052,7 +46012,7 @@
         {
           "name": "csi_sensor_ops_ioctl",
           "section": ".text",
-          "address": "0x7b8c",
+          "address": "0x7b90",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -46092,7 +46052,7 @@
         {
           "name": "sensor_set_digital_gain",
           "section": ".text",
-          "address": "0x9f98",
+          "address": "0x9f9c",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -46132,7 +46092,7 @@
         {
           "name": "sensor_set_digital_gain_short",
           "section": ".text",
-          "address": "0x9ff8",
+          "address": "0x9ffc",
           "binding": "global",
           "symbol_bytes": 96,
           "instructions": 24,
@@ -46372,7 +46332,7 @@
         {
           "name": "tisp_awb_pm_resume",
           "section": ".text",
-          "address": "0x470",
+          "address": "0x3a4",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -46412,7 +46372,7 @@
         {
           "name": "tisp_dpc_pm_resume",
           "section": ".text",
-          "address": "0x640",
+          "address": "0x574",
           "binding": "global",
           "symbol_bytes": 64,
           "instructions": 16,
@@ -46532,7 +46492,7 @@
         {
           "name": "sensor_set_fps",
           "section": ".text",
-          "address": "0xa124",
+          "address": "0xa128",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -46652,7 +46612,7 @@
         {
           "name": "isp_core_delete_aisp",
           "section": ".text",
-          "address": "0x8534",
+          "address": "0x8538",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -47212,7 +47172,7 @@
         {
           "name": "private_dma_sync_single_for_device",
           "section": ".text",
-          "address": "0x5754",
+          "address": "0x5758",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -47252,7 +47212,7 @@
         {
           "name": "tisp_g_autozoom_control",
           "section": ".text",
-          "address": "0x91c",
+          "address": "0x850",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -47372,7 +47332,7 @@
         {
           "name": "private_getrawmonotonic",
           "section": ".text",
-          "address": "0x2b20",
+          "address": "0x2b24",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -47652,7 +47612,7 @@
         {
           "name": "private_device_create",
           "section": ".text",
-          "address": "0x5924",
+          "address": "0x5928",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -47892,7 +47852,7 @@
         {
           "name": "private_clk_disable_unprepare",
           "section": ".text",
-          "address": "0x22b0",
+          "address": "0x22b4",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -47932,7 +47892,7 @@
         {
           "name": "tisp_blc_pm_resume",
           "section": ".text",
-          "address": "0x4ec",
+          "address": "0x420",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -48012,7 +47972,7 @@
         {
           "name": "tisp_dmsc_pm_resume",
           "section": ".text",
-          "address": "0x694",
+          "address": "0x5c8",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -48052,7 +48012,7 @@
         {
           "name": "__private_spin_lock_irqsave",
           "section": ".text",
-          "address": "0x413c",
+          "address": "0x4140",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -48372,7 +48332,7 @@
         {
           "name": "system_reg_write",
           "section": ".text",
-          "address": "0xa04",
+          "address": "0x938",
           "binding": "global",
           "symbol_bytes": 32,
           "instructions": 8,
@@ -48412,7 +48372,7 @@
         {
           "name": "private_wake_up",
           "section": ".text",
-          "address": "0x4fb4",
+          "address": "0x4fb8",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -48492,7 +48452,7 @@
         {
           "name": "private_clk_get",
           "section": ".text",
-          "address": "0x228c",
+          "address": "0x2290",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -48532,7 +48492,7 @@
         {
           "name": "private_device_destroy",
           "section": ".text",
-          "address": "0x5958",
+          "address": "0x595c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -48572,7 +48532,7 @@
         {
           "name": "private_schedule_hrtimeout",
           "section": ".text",
-          "address": "0x5628",
+          "address": "0x562c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -48732,7 +48692,7 @@
         {
           "name": "tx_isp_video_s_stream",
           "section": ".text",
-          "address": "0xaa6c",
+          "address": "0xaa70",
           "binding": "global",
           "symbol_bytes": 360,
           "instructions": 90,
@@ -48772,7 +48732,7 @@
         {
           "name": "tx_isp_vin_suspend_module",
           "section": ".text",
-          "address": "0x329c",
+          "address": "0x32a0",
           "binding": "global",
           "symbol_bytes": 308,
           "instructions": 77,
@@ -48997,6 +48957,46 @@
       "match_kind": "exact_name",
       "classification": "same_instruction_count",
       "oem": {
+        "name": "tx_isp_open",
+        "section": ".text",
+        "address": "0x12e30",
+        "binding": "local",
+        "symbol_bytes": 208,
+        "instructions": 52,
+        "branches": 9,
+        "calls": 1,
+        "returns": 2,
+        "relocations": 0
+      },
+      "recovered": [
+        {
+          "name": "tx_isp_open",
+          "section": ".text",
+          "address": "0xa1c",
+          "binding": "global",
+          "symbol_bytes": 208,
+          "instructions": 52,
+          "branches": 11,
+          "calls": 2,
+          "returns": 1,
+          "relocations": 2
+        }
+      ],
+      "instruction_ratio": 1.0,
+      "instruction_delta": 0,
+      "recovered_totals": {
+        "symbol_bytes": 208,
+        "instructions": 52,
+        "branches": 11,
+        "calls": 2,
+        "returns": 1,
+        "relocations": 2
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "same_instruction_count",
+      "oem": {
         "name": "tx_isp_resume",
         "section": ".text",
         "address": "0x13128",
@@ -49012,7 +49012,7 @@
         {
           "name": "tx_isp_resume",
           "section": ".text",
-          "address": "0x1af8",
+          "address": "0x1afc",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -49052,7 +49052,7 @@
         {
           "name": "tx_isp_suspend",
           "section": ".text",
-          "address": "0x1bc0",
+          "address": "0x1bc4",
           "binding": "global",
           "symbol_bytes": 200,
           "instructions": 50,
@@ -49092,7 +49092,7 @@
         {
           "name": "private_wait_event_interruptible_timeout",
           "section": ".text",
-          "address": "0x5690",
+          "address": "0x5694",
           "binding": "global",
           "symbol_bytes": 196,
           "instructions": 49,
@@ -49212,7 +49212,7 @@
         {
           "name": "private_log2_int_to_fixed",
           "section": ".text",
-          "address": "0x3bd8",
+          "address": "0x3bdc",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -49332,7 +49332,7 @@
         {
           "name": "private_leading_one_position_64",
           "section": ".text",
-          "address": "0x3cb4",
+          "address": "0x3cb8",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -49492,7 +49492,7 @@
         {
           "name": "tx_isp_vic_activate_subdev",
           "section": ".text",
-          "address": "0x4bd4",
+          "address": "0x4bd8",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -49532,7 +49532,7 @@
         {
           "name": "tx_isp_vin_reset",
           "section": ".text",
-          "address": "0x1824",
+          "address": "0x1828",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -49932,7 +49932,7 @@
         {
           "name": "private_copy_from_user",
           "section": ".text",
-          "address": "0x2948",
+          "address": "0x294c",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -49972,7 +49972,7 @@
         {
           "name": "sensor_alloc_integration_time_short",
           "section": ".text",
-          "address": "0x9cdc",
+          "address": "0x9ce0",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -50132,7 +50132,7 @@
         {
           "name": "isp_module_frame_done_wakeup",
           "section": ".text",
-          "address": "0x8430",
+          "address": "0x8434",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -50212,7 +50212,7 @@
         {
           "name": "ivdc_core_ops_ioctl",
           "section": ".text",
-          "address": "0x117c",
+          "address": "0x1180",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -50252,7 +50252,7 @@
         {
           "name": "private_clk_prepare_enable",
           "section": ".text",
-          "address": "0x2438",
+          "address": "0x243c",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -50292,7 +50292,7 @@
         {
           "name": "sensor_fps_control",
           "section": ".text",
-          "address": "0xa0c0",
+          "address": "0xa0c4",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -50412,7 +50412,7 @@
         {
           "name": "subdev_video_destroy_link",
           "section": ".text",
-          "address": "0xad18",
+          "address": "0xad1c",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -50652,7 +50652,7 @@
         {
           "name": "private_kthread_run",
           "section": ".text",
-          "address": "0x5498",
+          "address": "0x549c",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -50732,7 +50732,7 @@
         {
           "name": "isp_core_tuning_deinit",
           "section": ".text",
-          "address": "0x865c",
+          "address": "0x8660",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -50772,7 +50772,7 @@
         {
           "name": "private_mdelay",
           "section": ".text",
-          "address": "0x23cc",
+          "address": "0x23d0",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -50972,7 +50972,7 @@
         {
           "name": "private_log2_fixed_to_fixed_64",
           "section": ".text",
-          "address": "0x3ebc",
+          "address": "0x3ec0",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -51132,7 +51132,7 @@
         {
           "name": "private_i_size_read",
           "section": ".text",
-          "address": "0x58d0",
+          "address": "0x58d4",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -51292,7 +51292,7 @@
         {
           "name": "pop_buffer_fifo",
           "section": ".text",
-          "address": "0x598c",
+          "address": "0x5990",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -51332,7 +51332,7 @@
         {
           "name": "private_request_mem_region",
           "section": ".text",
-          "address": "0x4070",
+          "address": "0x4074",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -51452,7 +51452,7 @@
         {
           "name": "private_gpio_set_debounce",
           "section": ".text",
-          "address": "0x4de0",
+          "address": "0x4de4",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -51492,7 +51492,7 @@
         {
           "name": "private_log2_fixed_to_fixed",
           "section": ".text",
-          "address": "0x3c80",
+          "address": "0x3c84",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -51572,7 +51572,7 @@
         {
           "name": "private_gpio_direction_input",
           "section": ".text",
-          "address": "0x4db0",
+          "address": "0x4db4",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -52892,7 +52892,7 @@
         {
           "name": "private_init_completion",
           "section": ".text",
-          "address": "0x4e78",
+          "address": "0x4e7c",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -52932,7 +52932,7 @@
         {
           "name": "sensor_early_init",
           "section": ".text",
-          "address": "0xa414",
+          "address": "0xa418",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -52972,7 +52972,7 @@
         {
           "name": "sensor_get_id",
           "section": ".text",
-          "address": "0xa094",
+          "address": "0xa098",
           "binding": "global",
           "symbol_bytes": 36,
           "instructions": 9,
@@ -53212,7 +53212,7 @@
         {
           "name": "private_i2c_add_driver",
           "section": ".text",
-          "address": "0x2338",
+          "address": "0x233c",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -53252,7 +53252,7 @@
         {
           "name": "private_platform_driver_register",
           "section": ".text",
-          "address": "0x3f00",
+          "address": "0x3f04",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53372,7 +53372,7 @@
         {
           "name": "tisp_af_pm_get_regsize",
           "section": ".text",
-          "address": "0x424",
+          "address": "0x358",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53412,7 +53412,7 @@
         {
           "name": "tisp_awb_pm_get_regsize",
           "section": ".text",
-          "address": "0x45c",
+          "address": "0x390",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53492,7 +53492,7 @@
         {
           "name": "tisp_blc_pm_get_regsize",
           "section": ".text",
-          "address": "0x4d8",
+          "address": "0x40c",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53572,7 +53572,7 @@
         {
           "name": "tisp_cdns_pm_get_regsize",
           "section": ".text",
-          "address": "0x794",
+          "address": "0x6c8",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53652,7 +53652,7 @@
         {
           "name": "tisp_csc_pm_get_regsize",
           "section": ".text",
-          "address": "0x39a8",
+          "address": "0x39ac",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53732,7 +53732,7 @@
         {
           "name": "tisp_dmsc_pm_get_regsize",
           "section": ".text",
-          "address": "0x680",
+          "address": "0x5b4",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53772,7 +53772,7 @@
         {
           "name": "tisp_dpc_pm_get_regsize",
           "section": ".text",
-          "address": "0x62c",
+          "address": "0x560",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53852,7 +53852,7 @@
         {
           "name": "tisp_gib_pm_get_regsize",
           "section": ".text",
-          "address": "0x4b0",
+          "address": "0x3e4",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53892,7 +53892,7 @@
         {
           "name": "tisp_gsm_pm_get_regsize",
           "section": ".text",
-          "address": "0x8c0",
+          "address": "0x7f4",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -53932,7 +53932,7 @@
         {
           "name": "tisp_hldc_pm_get_regsize",
           "section": ".text",
-          "address": "0x83c",
+          "address": "0x770",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54012,7 +54012,7 @@
         {
           "name": "tisp_lsc_pm_get_regsize",
           "section": ".text",
-          "address": "0x4c4",
+          "address": "0x3f8",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54052,7 +54052,7 @@
         {
           "name": "tisp_mdns_pm_get_regsize",
           "section": ".text",
-          "address": "0x76c",
+          "address": "0x6a0",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54092,7 +54092,7 @@
         {
           "name": "tisp_msca_pm_get_regsize",
           "section": ".text",
-          "address": "0x874",
+          "address": "0x7a8",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54132,7 +54132,7 @@
         {
           "name": "tisp_sdns_pm_get_regsize",
           "section": ".text",
-          "address": "0x7cc",
+          "address": "0x700",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54212,7 +54212,7 @@
         {
           "name": "tisp_tstp_pm_get_regsize",
           "section": ".text",
-          "address": "0x8ac",
+          "address": "0x7e0",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54252,7 +54252,7 @@
         {
           "name": "tisp_ydns_pm_get_regsize",
           "section": ".text",
-          "address": "0x780",
+          "address": "0x6b4",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54292,7 +54292,7 @@
         {
           "name": "tisp_ysp_pm_get_regsize",
           "section": ".text",
-          "address": "0x804",
+          "address": "0x738",
           "binding": "global",
           "symbol_bytes": 20,
           "instructions": 5,
@@ -54332,7 +54332,7 @@
         {
           "name": "private_class_destroy",
           "section": ".text",
-          "address": "0x5914",
+          "address": "0x5918",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54372,7 +54372,7 @@
         {
           "name": "private_clk_get_rate",
           "section": ".text",
-          "address": "0x22e8",
+          "address": "0x22ec",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54412,7 +54412,7 @@
         {
           "name": "private_clk_put",
           "section": ".text",
-          "address": "0x22f8",
+          "address": "0x22fc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54452,7 +54452,7 @@
         {
           "name": "private_clk_set_parent",
           "section": ".text",
-          "address": "0x596c",
+          "address": "0x5970",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54492,7 +54492,7 @@
         {
           "name": "private_clk_set_rate",
           "section": ".text",
-          "address": "0x2318",
+          "address": "0x231c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54532,7 +54532,7 @@
         {
           "name": "private_complete",
           "section": ".text",
-          "address": "0x4e9c",
+          "address": "0x4ea0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54572,7 +54572,7 @@
         {
           "name": "private_devm_clk_get",
           "section": ".text",
-          "address": "0x22a0",
+          "address": "0x22a4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54612,7 +54612,7 @@
         {
           "name": "private_devm_clk_put",
           "section": ".text",
-          "address": "0x2308",
+          "address": "0x230c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54652,7 +54652,7 @@
         {
           "name": "private_disable_irq",
           "section": ".text",
-          "address": "0x411c",
+          "address": "0x4120",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54692,7 +54692,7 @@
         {
           "name": "private_do_gettimeofday",
           "section": ".text",
-          "address": "0x566c",
+          "address": "0x5670",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54732,7 +54732,7 @@
         {
           "name": "private_enable_irq",
           "section": ".text",
-          "address": "0x410c",
+          "address": "0x4110",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54772,7 +54772,7 @@
         {
           "name": "private_filp_close",
           "section": ".text",
-          "address": "0x53e0",
+          "address": "0x53e4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54812,7 +54812,7 @@
         {
           "name": "private_filp_open",
           "section": ".text",
-          "address": "0x53d0",
+          "address": "0x53d4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54852,7 +54852,7 @@
         {
           "name": "private_free_irq",
           "section": ".text",
-          "address": "0x412c",
+          "address": "0x4130",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54892,7 +54892,7 @@
         {
           "name": "private_get_fs",
           "section": ".text",
-          "address": "0x5440",
+          "address": "0x5444",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54932,7 +54932,7 @@
         {
           "name": "private_gpio_request",
           "section": ".text",
-          "address": "0x2360",
+          "address": "0x2364",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -54972,7 +54972,7 @@
         {
           "name": "private_i2c_del_driver",
           "section": ".text",
-          "address": "0x2350",
+          "address": "0x2354",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55012,7 +55012,7 @@
         {
           "name": "private_i2c_get_adapter",
           "section": ".text",
-          "address": "0x4d60",
+          "address": "0x4d64",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55052,7 +55052,7 @@
         {
           "name": "private_i2c_new_device",
           "section": ".text",
-          "address": "0x4d90",
+          "address": "0x4d94",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55092,7 +55092,7 @@
         {
           "name": "private_i2c_put_adapter",
           "section": ".text",
-          "address": "0x4d70",
+          "address": "0x4d74",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55132,7 +55132,7 @@
         {
           "name": "private_i2c_register_driver",
           "section": ".text",
-          "address": "0x4d80",
+          "address": "0x4d84",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55172,7 +55172,7 @@
         {
           "name": "private_i2c_transfer",
           "section": ".text",
-          "address": "0x2328",
+          "address": "0x232c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55212,7 +55212,7 @@
         {
           "name": "private_i2c_unregister_device",
           "section": ".text",
-          "address": "0x4da0",
+          "address": "0x4da4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55252,7 +55252,7 @@
         {
           "name": "private_ioremap",
           "section": ".text",
-          "address": "0x40dc",
+          "address": "0x40e0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55292,7 +55292,7 @@
         {
           "name": "private_iounmap",
           "section": ".text",
-          "address": "0x40ec",
+          "address": "0x40f0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55332,7 +55332,7 @@
         {
           "name": "private_jz_proc_mkdir",
           "section": ".text",
-          "address": "0x5564",
+          "address": "0x5568",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55372,7 +55372,7 @@
         {
           "name": "private_jzgpio_set_func",
           "section": ".text",
-          "address": "0x23ac",
+          "address": "0x23b0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55412,7 +55412,7 @@
         {
           "name": "private_kfree",
           "section": ".text",
-          "address": "0x2938",
+          "address": "0x293c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55452,7 +55452,7 @@
         {
           "name": "private_kmalloc",
           "section": ".text",
-          "address": "0x53c0",
+          "address": "0x53c4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55492,7 +55492,7 @@
         {
           "name": "private_kthread_stop",
           "section": ".text",
-          "address": "0x54e8",
+          "address": "0x54ec",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55532,7 +55532,7 @@
         {
           "name": "private_misc_register",
           "section": ".text",
-          "address": "0x2808",
+          "address": "0x280c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55572,7 +55572,7 @@
         {
           "name": "private_module_put",
           "section": ".text",
-          "address": "0x4e68",
+          "address": "0x4e6c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55612,7 +55612,7 @@
         {
           "name": "private_msleep",
           "section": ".text",
-          "address": "0x23bc",
+          "address": "0x23c0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55652,7 +55652,7 @@
         {
           "name": "private_platform_device_register",
           "section": ".text",
-          "address": "0x4004",
+          "address": "0x4008",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55692,7 +55692,7 @@
         {
           "name": "private_platform_get_irq",
           "section": ".text",
-          "address": "0x4060",
+          "address": "0x4064",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55732,7 +55732,7 @@
         {
           "name": "private_platform_get_resource",
           "section": ".text",
-          "address": "0x403c",
+          "address": "0x4040",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55772,7 +55772,7 @@
         {
           "name": "private_proc_create_data",
           "section": ".text",
-          "address": "0xc80",
+          "address": "0xc84",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55812,7 +55812,7 @@
         {
           "name": "private_remap_pfn_range",
           "section": ".text",
-          "address": "0x58b8",
+          "address": "0x58bc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55852,7 +55852,7 @@
         {
           "name": "private_request_threaded_irq",
           "section": ".text",
-          "address": "0x40fc",
+          "address": "0x4100",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55892,7 +55892,7 @@
         {
           "name": "private_sched_clock",
           "section": ".text",
-          "address": "0x4e14",
+          "address": "0x4e18",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55932,7 +55932,7 @@
         {
           "name": "private_set_current_state",
           "section": ".text",
-          "address": "0x5618",
+          "address": "0x561c",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -55972,7 +55972,7 @@
         {
           "name": "private_single_open_size",
           "section": ".text",
-          "address": "0x5554",
+          "address": "0x5558",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56012,7 +56012,7 @@
         {
           "name": "private_single_release",
           "section": ".text",
-          "address": "0x5544",
+          "address": "0x5548",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56052,7 +56052,7 @@
         {
           "name": "private_try_module_get",
           "section": ".text",
-          "address": "0x4e24",
+          "address": "0x4e28",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56092,7 +56092,7 @@
         {
           "name": "private_vfree",
           "section": ".text",
-          "address": "0x53b0",
+          "address": "0x53b4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56132,7 +56132,7 @@
         {
           "name": "private_vfs_read",
           "section": ".text",
-          "address": "0x53f0",
+          "address": "0x53f4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56172,7 +56172,7 @@
         {
           "name": "private_vfs_write",
           "section": ".text",
-          "address": "0x5400",
+          "address": "0x5404",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56212,7 +56212,7 @@
         {
           "name": "private_vmalloc",
           "section": ".text",
-          "address": "0x53a0",
+          "address": "0x53a4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56252,7 +56252,7 @@
         {
           "name": "private_wait_for_completion_interruptible",
           "section": ".text",
-          "address": "0x4eac",
+          "address": "0x4eb0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56292,7 +56292,7 @@
         {
           "name": "private_wait_for_completion_timeout",
           "section": ".text",
-          "address": "0x4ebc",
+          "address": "0x4ec0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56372,7 +56372,7 @@
         {
           "name": "get_clk_name",
           "section": ".text",
-          "address": "0x3b24",
+          "address": "0x3b28",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56412,7 +56412,7 @@
         {
           "name": "get_clka_name",
           "section": ".text",
-          "address": "0x3b3c",
+          "address": "0x3b40",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56452,7 +56452,7 @@
         {
           "name": "get_clks_name",
           "section": ".text",
-          "address": "0x3b30",
+          "address": "0x3b34",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56492,7 +56492,7 @@
         {
           "name": "get_isp_clk",
           "section": ".text",
-          "address": "0x3b48",
+          "address": "0x3b4c",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56532,7 +56532,7 @@
         {
           "name": "get_isp_clka",
           "section": ".text",
-          "address": "0x3b60",
+          "address": "0x3b64",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56572,7 +56572,7 @@
         {
           "name": "get_isp_clks",
           "section": ".text",
-          "address": "0x3b54",
+          "address": "0x3b58",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56652,7 +56652,7 @@
         {
           "name": "private_atomic_set",
           "section": ".text",
-          "address": "0x567c",
+          "address": "0x5680",
           "binding": "global",
           "symbol_bytes": 12,
           "instructions": 3,
@@ -56732,7 +56732,7 @@
         {
           "name": "aisp_core_tunning_open",
           "section": ".text",
-          "address": "0x38d8",
+          "address": "0x38dc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56772,7 +56772,7 @@
         {
           "name": "aisp_core_tunning_release",
           "section": ".text",
-          "address": "0x38e0",
+          "address": "0x38e4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56812,7 +56812,7 @@
         {
           "name": "aisp_save_cmd_set",
           "section": ".text",
-          "address": "0x8154",
+          "address": "0x8158",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56932,7 +56932,7 @@
         {
           "name": "ispcore_frame_channel_ir_freebufs",
           "section": ".text",
-          "address": "0x3968",
+          "address": "0x396c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56972,7 +56972,7 @@
         {
           "name": "ispcore_frame_channel_ir_reqbufs",
           "section": ".text",
-          "address": "0x3958",
+          "address": "0x395c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57012,7 +57012,7 @@
         {
           "name": "ispcore_frame_channel_ir_set_fmt",
           "section": ".text",
-          "address": "0x3970",
+          "address": "0x3974",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57052,7 +57052,7 @@
         {
           "name": "ispcore_frame_channel_ir_streamoff",
           "section": ".text",
-          "address": "0x3978",
+          "address": "0x397c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57092,7 +57092,7 @@
         {
           "name": "ispcore_frame_channel_ir_streamon",
           "section": ".text",
-          "address": "0x3960",
+          "address": "0x3964",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57132,7 +57132,7 @@
         {
           "name": "ispcore_irq_thread_handle",
           "section": ".text",
-          "address": "0x3950",
+          "address": "0x3954",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57172,7 +57172,7 @@
         {
           "name": "ispcore_link_setup",
           "section": ".text",
-          "address": "0x3948",
+          "address": "0x394c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57212,7 +57212,7 @@
         {
           "name": "ivdc_link_setup",
           "section": ".text",
-          "address": "0x38f0",
+          "address": "0x38f4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57252,7 +57252,7 @@
         {
           "name": "ivdc_misc_open",
           "section": ".text",
-          "address": "0x3900",
+          "address": "0x3904",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57292,7 +57292,7 @@
         {
           "name": "ivdc_misc_read",
           "section": ".text",
-          "address": "0x38f8",
+          "address": "0x38fc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57332,7 +57332,7 @@
         {
           "name": "ivdc_misc_release",
           "section": ".text",
-          "address": "0x3908",
+          "address": "0x390c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57372,7 +57372,7 @@
         {
           "name": "ivdc_video_s_stream",
           "section": ".text",
-          "address": "0x38e8",
+          "address": "0x38ec",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57412,7 +57412,7 @@
         {
           "name": "private_dev_get_drvdata",
           "section": ".text",
-          "address": "0x4058",
+          "address": "0x405c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57452,7 +57452,7 @@
         {
           "name": "private_file_inode",
           "section": ".text",
-          "address": "0x58c8",
+          "address": "0x58cc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57492,7 +57492,7 @@
         {
           "name": "private_get_init_net",
           "section": ".text",
-          "address": "0x8ad8",
+          "address": "0x8adc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57652,7 +57652,7 @@
         {
           "name": "private_set_fs",
           "section": ".text",
-          "address": "0x5450",
+          "address": "0x5454",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57692,7 +57692,7 @@
         {
           "name": "sensor_disable_isp",
           "section": ".text",
-          "address": "0xa29c",
+          "address": "0xa2a0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57732,7 +57732,7 @@
         {
           "name": "sensor_end_changes",
           "section": ".text",
-          "address": "0xa2a4",
+          "address": "0xa2a8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57772,7 +57772,7 @@
         {
           "name": "sensor_get_lines_per_second",
           "section": ".text",
-          "address": "0xa17c",
+          "address": "0xa180",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57812,7 +57812,7 @@
         {
           "name": "sensor_hw_reset_disable",
           "section": ".text",
-          "address": "0xa2ac",
+          "address": "0xa2b0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57852,7 +57852,7 @@
         {
           "name": "sensor_hw_reset_enable",
           "section": ".text",
-          "address": "0x9b90",
+          "address": "0x9b94",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57892,7 +57892,7 @@
         {
           "name": "sensor_read_black_pedestal",
           "section": ".text",
-          "address": "0xa084",
+          "address": "0xa088",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57932,7 +57932,7 @@
         {
           "name": "sensor_set_wdr_mode",
           "section": ".text",
-          "address": "0xa0b8",
+          "address": "0xa0bc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -57972,7 +57972,7 @@
         {
           "name": "sensor_start_changes",
           "section": ".text",
-          "address": "0xa08c",
+          "address": "0xa090",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58412,7 +58412,7 @@
         {
           "name": "tisp_gamma_pm_get_regsize",
           "section": ".text",
-          "address": "0x3910",
+          "address": "0x3914",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58452,7 +58452,7 @@
         {
           "name": "tisp_gamma_pm_suspend",
           "section": ".text",
-          "address": "0x3918",
+          "address": "0x391c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58572,7 +58572,7 @@
         {
           "name": "tisp_gsm_pm_resume",
           "section": ".text",
-          "address": "0x3928",
+          "address": "0x392c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58812,7 +58812,7 @@
         {
           "name": "tisp_raw_pm_get_regsize",
           "section": ".text",
-          "address": "0x3930",
+          "address": "0x3934",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58852,7 +58852,7 @@
         {
           "name": "tisp_raw_pm_resume",
           "section": ".text",
-          "address": "0x3940",
+          "address": "0x3944",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58892,7 +58892,7 @@
         {
           "name": "tisp_raw_pm_suspend",
           "section": ".text",
-          "address": "0x3938",
+          "address": "0x393c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -58972,7 +58972,7 @@
         {
           "name": "tisp_tstp_pm_resume",
           "section": ".text",
-          "address": "0x3920",
+          "address": "0x3924",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -59052,7 +59052,7 @@
         {
           "name": "tx_isp_release_device",
           "section": ".text",
-          "address": "0x597c",
+          "address": "0x5980",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -59092,7 +59092,7 @@
         {
           "name": "tx_isp_release_ldc_device",
           "section": ".text",
-          "address": "0x5984",
+          "address": "0x5988",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -59132,7 +59132,7 @@
         {
           "name": "vic_frame_channel_reqbufs",
           "section": ".text",
-          "address": "0x38d0",
+          "address": "0x38d4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
