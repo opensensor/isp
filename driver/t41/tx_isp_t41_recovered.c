@@ -3372,7 +3372,7 @@ int32_t fix_point_div_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uin
 uint32_t fix_point_add_32(uint32_t a0, uint32_t a1, uint32_t a2);
 uint32_t fix_point_sub_32(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t fix_point_mult2_32(int32_t arg1, int32_t arg2, int32_t arg3);
-int32_t fix_point_mult3_32(uint32_t a0, uint32_t a1, uint32_t a2);
+uint32_t fix_point_mult3_32(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 int32_t fix_point_intp(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4);
 int32_t table_intp(uint32_t a0, uintptr_t a1, uint32_t a2, uint32_t a3);
 int64_t tisp_simple_intp(uint32_t a0, uint32_t a1, uintptr_t a2);
@@ -3382,9 +3382,9 @@ int32_t tisp_log2_int_to_fixed(uint32_t arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t tisp_log2_int_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 int32_t tisp_log2_fixed_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
-int32_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3);
-int32_t tisp_max(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
-int32_t tisp_min(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
+int64_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3);
+int64_t tisp_max(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
+int64_t tisp_min(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 uint32_t tisp_ratio(int32_t arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_code_tuning_release(void);
 int32_t tisp_code_tuning_open(void);
@@ -38713,35 +38713,11 @@ int32_t fix_point_mult2_32(int32_t arg1, int32_t arg2, int32_t arg3) {
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017d88 origin=fragment_seed original=fix_point_mult3_32 */
-int32_t fix_point_mult3_32(uint32_t a0, uint32_t a1, uint32_t a2)
+uint32_t fix_point_mult3_32(uint32_t pointpos, uint32_t first,
+			    uint32_t second, uint32_t third)
 {
-    uint32_t local_14 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *t2 = 0;
-    uint32_t *t9 = 0;
-    uint32_t *v0 = 0;
-
-    /* fragment 0: CallSetup */
-    t2 = a3;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)fix_point_mult2_32)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    a2 = t2;
-    a1 = v0;
-
-    /* fragment 3: Unknown */
-    /* unmatched fragment 3 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 17dac:	03200408 	jr.hb	t9 */
-
-    /* fragment 4: Arithmetic */
-    /* unmatched fragment 4 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 17db0:	27bd0018 	addiu	sp,sp,24 */
-
-    return 0;
+	return fix_point_mult2_32(pointpos,
+		fix_point_mult2_32(pointpos, first, second), third);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017db4 origin=fragment_seed original=fix_point_intp */
@@ -39275,106 +39251,38 @@ int32_t tisp_log2_fixed_to_fixed_64(uint32_t value_low,
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000184cc origin=model_output original=tisp_round_int64 */
-int32_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3)
+int64_t tisp_round_int64(int32_t value_low, int32_t value_high,
+			 int32_t precision)
 {
-	int32_t *result = arg1;
-	int32_t carry = 0;
+	int64_t value = (int64_t)(((uint64_t)(uint32_t)value_high << 32) |
+				  (uint32_t)value_low);
+	int64_t shifted;
 
-	/* Check if (arg3 - 1) < 62 unsigned */
-	if ((uint32_t)(arg3 - 1) < 62) {
-		/* First call: get shifted result */
-		uint64_t shift_result = __ashrdi3((uint64_t)(uint32_t)result,
-						  (uint64_t)(uint32_t)arg2,
-						  (uint64_t)(uint32_t)arg3);
-		/* Extract LSB and add to result */
-		int32_t lsb = (int32_t)(shift_result & 1);
-		result = lsb + (uintptr_t)shift_result;
+	if ((uint32_t)(precision - 1) >= 62)
+		return value;
 
-		/* Second call: compute carry */
-		uint64_t carry_result = __ashrdi3((uint64_t)(uint32_t)result,
-						  (uint64_t)(uint32_t)arg2,
-						  (uint64_t)(uint32_t)arg3);
-		/* sltu(result, lsb) + v1 from second call */
-		carry = (((uintptr_t)result < lsb) ? 1 : 0) + (int32_t)(carry_result >> 32);
-	}
-
-	return result;
+	shifted = value >> precision;
+	return shifted + (shifted & 1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018558 origin=fragment_seed original=tisp_max */
-int32_t tisp_max(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
+int64_t tisp_max(uint32_t first_low, uint32_t first_high,
+		 uint32_t second_low, uint32_t second_high)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	int64_t first = (int64_t)(((uint64_t)first_high << 32) | first_low);
+	int64_t second = (int64_t)(((uint64_t)second_high << 32) | second_low);
 
-    /* fragment 0: Arithmetic */
-    v1 = a3;
-    a3 = a3 < a1;
-
-    /* fragment 1: Branch */
-    v0 = a2;
-    if (a3 != 0) { goto tisp_max0x20; }
-
-    /* fragment 2: Branch */
-    a2 = a2 < a0;
-    if (a1 != v1) { goto tisp_max0x28; }
-
-    /* fragment 3: Branch */
-    if (a2 == 0) { goto tisp_max0x28; }
-
-tisp_max0x20:
-    /* fragment 4: Arithmetic */
-    v0 = a0;
-    v1 = a1;
-
-tisp_max0x28:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 18584:	00000000 	nop */
-
-    return 0;
+	return first > second ? first : second;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018588 origin=fragment_seed original=tisp_min */
-int32_t tisp_min(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
+int64_t tisp_min(uint32_t first_low, uint32_t first_high,
+		 uint32_t second_low, uint32_t second_high)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	int64_t first = (int64_t)(((uint64_t)first_high << 32) | first_low);
+	int64_t second = (int64_t)(((uint64_t)second_high << 32) | second_low);
 
-    /* fragment 0: Arithmetic */
-    v1 = a3;
-    a3 = a1 < a3;
-
-    /* fragment 1: Branch */
-    v0 = a2;
-    if (a3 != 0) { goto tisp_min0x20; }
-
-    /* fragment 2: Branch */
-    a2 = a0 < a2;
-    if (v1 != a1) { goto tisp_min0x28; }
-
-    /* fragment 3: Branch */
-    if (a2 == 0) { goto tisp_min0x28; }
-
-tisp_min0x20:
-    /* fragment 4: Arithmetic */
-    v0 = a0;
-    v1 = a1;
-
-tisp_min0x28:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 185b4:	00000000 	nop */
-
-    return 0;
+	return first < second ? first : second;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000185b8 origin=model_output original=tisp_ratio */
@@ -42205,8 +42113,10 @@ int32_t Tiziano_Awb_Ct_Detect_GrayWorld_mode(void *arg1, int32_t arg2, void *arg
                                 v0_63 = (int32_t)(a3_3 - a1_12);
                             }
 
-                            int32_t lo_2, hi_2;
-                            hi_2:lo_2 = muls_dp_q(v0_63, v0_63) + muls_dp_d(t6_2, t6_2);
+                            uint64_t distance_sq =
+                                (uint64_t)(uint32_t)v0_63 * (uint32_t)v0_63 +
+                                (uint64_t)(uint32_t)t6_2 * (uint32_t)t6_2;
+                            uint32_t lo_2 = (uint32_t)distance_sq;
                             uint32_t v0_64 = 0;
 
                             if (lo_2 < 0x332) {
