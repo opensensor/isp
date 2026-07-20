@@ -12,22 +12,22 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1517 |
 | Functions with disassembly | 1314 | 1517 |
-| Executable section bytes | 479556 | 333696 |
+| Executable section bytes | 479556 | 333952 |
 | Initialized writable bytes | 25120 | 15808 |
-| Uninitialized writable bytes | 20592 | 383104 |
+| Uninitialized writable bytes | 20592 | 383088 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=244
-- matched instructions: OEM=116036 recovered=80978 ratio=0.698
-- classes: stub=26 collapsed=92 shorter=399 same_count=246 similar=471 larger=22 expanded=17
+- matched instructions: OEM=116036 recovered=81040 ratio=0.698
+- classes: stub=25 collapsed=91 shorter=397 same_count=250 similar=471 larger=22 expanded=17
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 20592 | 383104 | +362512 |
+| `.bss` | 20592 | 383088 | +362496 |
 | `.data` | 24768 | 15456 | -9312 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
@@ -37,14 +37,14 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3488 | -12272 |
 | `.rodata.str1.4` | 25860 | 4608 | -21252 |
-| `.text` | 478400 | 333696 | -144704 |
+| `.text` | 478400 | 333952 | -144448 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 841 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -59,7 +59,6 @@ Showing 250 of 841 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `mbus_to_bayer_write` | `mbus_to_bayer_write` | 46 | 4 | 0.087 | -42 | 3->0 | 4->0 |
 | stub | exact_name | `func_zone_ct_weight` | `func_zone_ct_weight` | 42 | 2 | 0.048 | -40 | 0->0 | 6->1 |
 | stub | exact_name | `ISPAWBInterpolation2` | `ISPAWBInterpolation2` | 42 | 4 | 0.095 | -38 | 4->0 | 2->1 |
-| stub | exact_name | `private_log2_int_to_fixed` | `private_log2_int_to_fixed` | 42 | 6 | 0.143 | -36 | 1->0 | 6->2 |
 | stub | exact_name | `tisp_irsca_para_calc` | `tisp_irsca_para_calc` | 41 | 8 | 0.195 | -33 | 0->0 | 4->1 |
 | stub | exact_name | `tisp_ae_max_exp_calc_fps` | `tisp_ae_max_exp_calc_fps` | 38 | 2 | 0.053 | -36 | 1->0 | 0->0 |
 | stub | exact_name | `tisp_bcsh_dn_params_refresh` | `tisp_bcsh_dn_params_refresh` | 38 | 6 | 0.158 | -32 | 3->1 | 0->0 |
@@ -150,7 +149,6 @@ Showing 250 of 841 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `ISPAWBInterpolation1` | `ISPAWBInterpolation1` | 45 | 12 | 0.267 | -33 | 4->1 | 2->0 |
 | collapsed | exact_name | `tisp_bcsh_refresh_by_csc` | `tisp_bcsh_refresh_by_csc` | 44 | 19 | 0.432 | -25 | 4->4 | 0->0 |
 | collapsed | exact_name | `tisp_mdns_param_array_set` | `tisp_mdns_param_array_set` | 39 | 18 | 0.462 | -21 | 5->2 | 0->0 |
-| collapsed | exact_name | `private_leading_one_position_64` | `private_leading_one_position_64` | 38 | 13 | 0.342 | -25 | 0->1 | 7->2 |
 | collapsed | exact_name | `isp_subdev_release_clks` | `isp_subdev_release_clks` | 38 | 14 | 0.368 | -24 | 2->1 | 3->2 |
 | collapsed | exact_name | `tisp_bcsh_wdr_en` | `tisp_bcsh_wdr_en` | 38 | 15 | 0.395 | -23 | 3->3 | 0->0 |
 | collapsed | exact_name | `tisp_ccm_wdr_en` | `tisp_ccm_wdr_en` | 38 | 15 | 0.395 | -23 | 4->3 | 0->0 |
@@ -298,3 +296,5 @@ Showing 250 of 841 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae_api_get_scene_luma` | `tisp_ae_api_get_scene_luma` | 105 | 60 | 0.571 | -45 | 4->3 | 5->1 |
 | shorter | exact_name | `tisp_lsc_param_array_set` | `tisp_lsc_param_array_set` | 103 | 53 | 0.515 | -50 | 8->5 | 5->2 |
 | shorter | exact_name | `isp_vic_frd_show` | `isp_vic_frd_show` | 103 | 61 | 0.592 | -42 | 4->4 | 6->6 |
+| shorter | exact_name | `frame_channel_vidioc_get_fmt` | `frame_channel_vidioc_get_fmt` | 97 | 59 | 0.608 | -38 | 7->5 | 9->7 |
+| shorter | exact_name | `tisp_gib_interp_by_again` | `tisp_gib_interp_by_again` | 93 | 69 | 0.742 | -24 | 6->5 | 4->4 |

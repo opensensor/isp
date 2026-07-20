@@ -2764,12 +2764,16 @@ uint32_t get_isp_clk(void);
 uint32_t get_isp_clks(void);
 uint32_t get_isp_clka(void);
 uint32_t get_isp_memopt(void);
-int32_t private_leading_one_position(uint32_t a0);
-uint32_t private_log2_int_to_fixed(uint32_t a0);
-int32_t private_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2);
-int32_t private_leading_one_position_64(uint32_t a0, uint32_t a1);
-int64_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4);
-int32_t private_log2_fixed_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
+uint8_t private_leading_one_position(uint32_t val);
+uint32_t private_log2_int_to_fixed(uint32_t val, uint8_t out_precision,
+                                   uint8_t shift_out);
+uint32_t private_log2_fixed_to_fixed(uint32_t val, int in_fix_point,
+                                     uint8_t out_fix_point);
+int private_leading_one_position_64(uint64_t val);
+uint32_t private_log2_int_to_fixed_64(uint64_t val, uint8_t out_precision,
+                                      uint8_t shift_out);
+int32_t private_log2_fixed_to_fixed_64(uint64_t val, int32_t in_fix_point,
+                                       uint8_t out_fix_point);
 int private_platform_driver_register(void *drv);
 int32_t private_platform_driver_unregister(void *drv);
 int32_t private_platform_set_drvdata(uintptr_t a0, uint32_t a1);
@@ -5144,7 +5148,7 @@ uint32_t get_isp_memopt(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000003d0 origin=fragment_seed original=private_leading_one_position */
-int32_t private_leading_one_position(uint32_t a0)
+uint8_t private_leading_one_position(uint32_t a0)
 {
     int32_t result = 0;
 
@@ -5167,264 +5171,116 @@ int32_t private_leading_one_position(uint32_t a0)
     if (a0 >= 2U)
         result++;
 
-    return result;
+    return (uint8_t)result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000044c origin=fragment_seed original=private_log2_int_to_fixed */
-uint32_t private_log2_int_to_fixed(uint32_t a0)
+uint32_t private_log2_int_to_fixed(uint32_t val, uint8_t out_precision,
+                                   uint8_t shift_out)
 {
-    uint32_t local_14 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    uint32_t normalized;
+    uint32_t fraction = 0;
+    int pos;
+    int i;
 
-    /* fragment 0: Branch */
-    a3 = a0;
-    if (a0 == 0) { goto private_log2_int_to_fixed0xa0; }
+    if (!val)
+        return 0;
 
-    /* fragment 1: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    pos = private_leading_one_position(val);
+    normalized = pos <= 15 ? val << (15 - pos) : val >> (pos - 15);
 
-    /* fragment 2: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_leading_one_position)(a0); /* jalr target resolved by relocation */
+    for (i = 0; i < out_precision; i++) {
+        uint32_t square = normalized * normalized;
 
-    /* fragment 3: Arithmetic */
-    v1 = v0 < 16;
+        if (square & (1U << 31)) {
+            fraction = (fraction << 1) + 1;
+            normalized = square >> 16;
+        } else {
+            fraction <<= 1;
+            normalized = square >> 15;
+        }
+    }
 
-    /* fragment 4: Branch */
-    int _bc_v1_4 = v1 == 0;
-    v1 = 15;
-    if (_bc_v1_4) { goto private_log2_int_to_fixed0x74; }
-
-    /* fragment 5: Arithmetic */
-    v1 = (uintptr_t)v1 - (uintptr_t)v0;
-    a0 = (uintptr_t)a3 << (uintptr_t)v1;
-
-private_log2_int_to_fixed0x34:
-    /* fragment 6: Arithmetic */
-    v1 = 0;
-    a3 = 0;
-
-private_log2_int_to_fixed0x3c:
-    /* fragment 7: Arithmetic */
-    t0 = a3 < a1;
-
-    /* fragment 8: Branch */
-    if (t0 != 0) { goto private_log2_int_to_fixed0x80; }
-
-    /* fragment 9: Arithmetic */
-    v0 = (uintptr_t)v0 << a1;
-    a0 = a0 & 32767;
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-    v1 = 15;
-    v0 = (uintptr_t)v0 << a2;
-    v1 = v1 - a2;
-    a0 = a0 >> (uintptr_t)v1;
-    a3 = (uintptr_t)v0 | a0;
-
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 11: Arithmetic */
-    v0 = a3;
-
-private_log2_int_to_fixed0x74:
-    /* fragment 12: Arithmetic */
-    v1 = v0 - 15;
-
-    /* fragment 13: Branch */
-    a0 = (uintptr_t)a3 >> (uintptr_t)v1;
-    goto private_log2_int_to_fixed0x34;
-
-private_log2_int_to_fixed0x80:
-    /* fragment 14: Arithmetic */
-    t0 = a0 * a0;
-    v1 = (uintptr_t)v1 << 1;
-
-    /* fragment 15: Branch */
-    a0 = t0 >> 15;
-    if (t0 >= 0) { goto private_log2_int_to_fixed0x98; }
-
-    /* fragment 16: Arithmetic */
-    v1 = v1 + 1;
-    a0 = t0 >> 16;
-
-private_log2_int_to_fixed0x98:
-    /* fragment 17: Branch */
-    a3 = a3 + 1;
-    goto private_log2_int_to_fixed0x3c;
-
-private_log2_int_to_fixed0xa0:
-    /* fragment 18: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 19: Arithmetic */
-    v0 = a0;
-
-    return (uint32_t)v0;
+    return ((((pos << out_precision) + fraction) << shift_out) |
+            ((normalized & 0x7fffU) >> (15 - shift_out)));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000004f4 origin=fragment_seed original=private_log2_fixed_to_fixed */
-int32_t private_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2)
+uint32_t private_log2_fixed_to_fixed(uint32_t val, int in_fix_point,
+                                     uint8_t out_fix_point)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uint32_t *t1 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    t1 = a1;
-    t1 = (uintptr_t)t1 << a2;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_log2_int_to_fixed)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = (uintptr_t)v0 - (uintptr_t)t1;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return private_log2_int_to_fixed(val, out_fix_point, 0) -
+           (in_fix_point << out_fix_point);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000528 origin=fragment_seed original=private_leading_one_position_64 */
-int32_t private_leading_one_position_64(uint32_t a0, uint32_t a1)
+int private_leading_one_position_64(uint64_t val)
 {
-    if (a1)
-        return 32 + private_leading_one_position(a1);
+    int pos = 0;
 
-    return private_leading_one_position(a0);
+    if (val >= (1ULL << 32)) {
+        val >>= 32;
+        pos += 32;
+    }
+    if (val >= (1U << 16)) {
+        val >>= 16;
+        pos += 16;
+    }
+    if (val >= (1U << 8)) {
+        val >>= 8;
+        pos += 8;
+    }
+    if (val >= (1U << 4)) {
+        val >>= 4;
+        pos += 4;
+    }
+    if (val >= (1U << 2)) {
+        val >>= 2;
+        pos += 2;
+    }
+    if (val >= (1U << 1))
+        pos++;
+
+    return pos;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000005c0 origin=fragment_seed original=private_log2_int_to_fixed_64 */
-int64_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
+uint32_t private_log2_int_to_fixed_64(uint64_t val, uint8_t out_precision,
+                                      uint8_t shift_out)
 {
-    uint32_t *s0;
-    uint32_t *s1;
-    uint32_t s3;
-    uint32_t t0;
-    uint32_t *a0;
-    uint32_t a1;
-    uint32_t *a3;
-    uint32_t a2_tmp;
-    uint32_t *v0;
-    uint32_t *v1;
-    uint32_t lo, hi;
+    uint64_t normalized;
+    uint64_t fraction = 0;
+    int pos;
+    int i;
 
-    s3 = arg3;
-
-    if ((arg1 | arg2) == 0)
+    if (!val)
         return 0;
 
-    s1 = private_leading_one_position_64(arg1, arg2);
-    t0 = arg1;
+    pos = private_leading_one_position_64(val);
+    normalized = pos <= 15 ? val << (15 - pos) : val >> (pos - 15);
 
-    if (s1 >= 16) {
-        v0 = __lshrdi3(arg1, arg2, arg4);
-        v1 = 0;
-    } else {
-        a2_tmp = 15 - (uintptr_t)s1;
-        v0 = __ashldi3(arg1, a2_tmp, arg4);
-        v1 = 0;
-    }
+    for (i = 0; i < out_precision; i++) {
+        uint64_t square = normalized * normalized;
 
-    a0 = 0;
-    s0 = v0;
-    a1 = 0;
-    v0 = v1;
-    v1 = 0;
-
-    while (1) {
-        if (a1 >= s3)
-            break;
-
-        t0 = (uintptr_t)a0 >> 31;
-        s1 = (uintptr_t)s1 << s3;
-        multu(s0, s0);
-        a0 = (uintptr_t)a0 << 1;
-        lo = mflo();
-        hi = mfhi();
-        v0 = lo * (uintptr_t)s0;
-        v0 = (uintptr_t)v0 << 1;
-        a3 = v0 + hi;
-        v0 = (uintptr_t)v1 << 1;
-        v0 = t0 + (uintptr_t)v0;
-        v1 = v0;
-
-        if (a3 == 0) {
-            s0 = lo >> 15;
-            if (lo >= 0) {
-                v0 = 0;
-                goto loop_end;
-            }
+        if (square & (1ULL << 31)) {
+            fraction = (fraction << 1) + 1;
+            normalized = square >> 16;
+        } else {
+            fraction <<= 1;
+            normalized = square >> 15;
         }
-
-        t0 = a0 + 1;
-        s0 = lo >> 16;
-        v0 = t0 < a0 ? 1 : 0;
-        v0 = (uintptr_t)v0 + (uintptr_t)v1;
-        v1 = v0;
-        a0 = t0;
-        v0 = (uintptr_t)a3 << 16;
-        s0 = (uintptr_t)v0 + (uintptr_t)s0;
-        v0 = (uintptr_t)a3 >> 16;
-
-        a1 = a1 + 1;
-        continue;
-
-    loop_end:;
     }
 
-    s1 = (uintptr_t)s1 << (arg3 & 31);
-    a0 = (uintptr_t)s1 + (uintptr_t)a0;
-    v0 = a0 < s1 ? 1 : 0;
-    v0 = (uintptr_t)v0 + ((uintptr_t)((uintptr_t)s1 >> 31)) + (uintptr_t)v1;
-    v0 = __ashldi3(a0, v0, arg4);
-    v0 = (uintptr_t)v0 | __lshrdi3((uintptr_t)s0 & 0x7fff, 0, 15 - arg3);
-
-    return (int64_t)v0;
+    return (uint32_t)((((pos << out_precision) + fraction) << shift_out) |
+                      ((normalized & 0x7fffU) >> (15 - shift_out)));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000072c origin=fragment_seed original=private_log2_fixed_to_fixed_64 */
-int32_t private_log2_fixed_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
+int32_t private_log2_fixed_to_fixed_64(uint64_t val, int32_t in_fix_point,
+                                       uint8_t out_fix_point)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a2;
-    local_10 = a3;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_log2_int_to_fixed_64)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: StackAccess */
-    a2 = local_10;
-    ra = local_1c;
-    a2 = (uintptr_t)s0 << a2;
-    s0 = local_18;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Arithmetic */
-    v0 = v0 - a2;
-
-    return 0;
+    return private_log2_int_to_fixed_64(val, out_fix_point, 0) -
+           (in_fix_point << out_fix_point);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000770 origin=model_output original=private_platform_driver_register */

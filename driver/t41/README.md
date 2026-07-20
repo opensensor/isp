@@ -28,8 +28,8 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 26 stub functions, 92 collapsed
-functions, 399 shorter functions, and 41 OEM-only symbols. Critical deficits
+The current linked-binary audit finds 25 stub functions, 91 collapsed
+functions, 397 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -43,6 +43,11 @@ The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the
 many ioctl paths that consume userspace structures.
+
+The complete T41 fixed-point log helper family was restored from the local
+Ingenic Linux 4.4.94 T41 SDK source. Four helpers now have exact OEM
+instruction-count parity and the 64-bit log conversion is within one
+instruction of OEM.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
