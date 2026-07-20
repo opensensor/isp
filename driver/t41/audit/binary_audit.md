@@ -10,41 +10,41 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 1314 | 1516 |
-| Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 339520 |
-| Initialized writable bytes | 25120 | 17072 |
-| Uninitialized writable bytes | 20592 | 301792 |
+| Function symbols | 1314 | 1525 |
+| Functions with disassembly | 1314 | 1525 |
+| Executable section bytes | 479556 | 341360 |
+| Initialized writable bytes | 25120 | 17088 |
+| Uninitialized writable bytes | 20592 | 302432 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
-- unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=82471 ratio=0.711
-- classes: stub=18 collapsed=86 shorter=391 same_count=265 similar=472 larger=24 expanded=17
+- unmatched: OEM-only=41 recovered-only=252
+- matched instructions: OEM=116036 recovered=82513 ratio=0.711
+- classes: stub=18 collapsed=86 shorter=391 same_count=264 similar=472 larger=24 expanded=18
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 20592 | 301792 | +281200 |
-| `.data` | 24768 | 16720 | -8048 |
+| `.bss` | 20592 | 302432 | +281840 |
+| `.data` | 24768 | 16736 | -8032 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
 | `.init.text` | 16 | 0 | -16 |
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 3968 | -11792 |
-| `.rodata.str1.4` | 25860 | 5092 | -20768 |
-| `.text` | 478400 | 339520 | -138880 |
-| `__ksymtab` | 248 | 248 | +0 |
-| `__ksymtab_strings` | 637 | 637 | +0 |
+| `.rodata` | 15760 | 4304 | -11456 |
+| `.rodata.str1.4` | 25860 | 5356 | -20504 |
+| `.text` | 478400 | 341360 | -137040 |
+| `__ksymtab` | 248 | 280 | +32 |
+| `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 830 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|

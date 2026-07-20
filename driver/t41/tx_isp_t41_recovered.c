@@ -701,6 +701,11 @@ extern struct module __this_module;
 #define module_exit(fn)
 #endif
 #endif
+
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+#include "tx_isp_t41_sinfo.c"
+#endif
+
 #ifndef _IOC
 #define _IOC(dir,type,nr,size) (((dir)<<30)|((size)<<16)|((type)<<8)|(nr))
 #define _IOWR(type,nr,datatype) _IOC(3,type,nr,sizeof(datatype))
@@ -160541,8 +160546,16 @@ ispcore_interrupt_service_routine0x824:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074cc0 origin=fragment_seed original=init_module */
 int32_t init_module(void)
 {
+	int ret;
+
     regtrace_patch_relocated_data();
-    return tx_isp_init();
+	ret = tx_isp_t41_sinfo_init();
+	if (ret)
+		return ret;
+	ret = tx_isp_init();
+	if (ret)
+		tx_isp_t41_sinfo_exit();
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074cd0 origin=fragment_seed original=cleanup_module */
@@ -160550,6 +160563,7 @@ void cleanup_module(void)
 {
     uintptr_t t9 = (uintptr_t)&tx_isp_exit;
     ((void (*)(void))(uintptr_t)t9)();
+	tx_isp_t41_sinfo_exit();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074ce0 origin=fragment_seed original=tx_isp_vic_remove */
