@@ -2888,7 +2888,7 @@ int private_gpio_direction_input(unsigned int gpio);
 int32_t private_gpio_set_debounce(uint32_t a0, uint32_t a1);
 unsigned long long private_sched_clock(void);
 bool private_try_module_get(struct module *module);
-int32_t private_request_module(int32_t arg1, int32_t arg2, int32_t arg3);
+int private_request_module(bool wait, const char *fmt, ...);
 void private_module_put(struct module *module);
 void private_init_completion(struct completion *completion);
 void private_complete(struct completion *completion);
@@ -3006,8 +3006,10 @@ int32_t video_input_cmd_show(uintptr_t a0);
 int32_t subdev_sensor_ops_release_all_sensor(uintptr_t a0);
 int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd);
 int64_t subdev_sensor_ops_enum_input(uintptr_t a0, uintptr_t a1);
-int32_t isp_i2c_new_subdev_board(uint32_t a0, uintptr_t a1, uint32_t a2);
-int64_t subdev_sensor_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2);
+struct tx_isp_subdev *isp_i2c_new_subdev_board(
+	struct i2c_adapter *adapter, struct i2c_board_info *info,
+	const unsigned short *probe_addrs);
+int32_t subdev_sensor_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t tx_isp_csi_suspend_module(uintptr_t a0);
 int tx_isp_csi_probe(struct platform_device *pdev);
 int32_t dump_isp_csi_open(uint32_t a0, uint32_t a1);
@@ -5634,11 +5636,21 @@ bool private_try_module_get(struct module *module)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000009f0 origin=model_output original=private_request_module */
-int32_t private_request_module(int32_t arg1, int32_t arg2, int32_t arg3) {
-    int32_t var_18 = arg2;
-    (void)arg1;
-    (void)arg3;
-    return __request_module(1, "", &var_18);
+int private_request_module(bool wait, const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+	int ret;
+
+	if (!fmt)
+		return -EINVAL;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+	ret = __request_module(wait, "%pV", &vaf);
+	va_end(args);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000a3c origin=fragment_seed original=private_module_put */
@@ -14112,895 +14124,378 @@ subdev_sensor_ops_enum_input0x110:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000006734 origin=fragment_seed original=isp_i2c_new_subdev_board */
-int32_t isp_i2c_new_subdev_board(uint32_t a0, uintptr_t a1, uint32_t a2)
+struct tx_isp_subdev *isp_i2c_new_subdev_board(
+	struct i2c_adapter *adapter, struct i2c_board_info *info,
+	const unsigned short *probe_addrs)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	struct tx_isp_subdev *sd = NULL;
+	struct i2c_client *client;
+	struct module *owner;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	(void)probe_addrs;
+	if (!adapter || !info)
+		return NULL;
 
-    /* fragment 1: CallSetup */
-    s0 = a1;
-    s1 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_request_module)(1); /* jalr target resolved by relocation */
+	/* The OEM passes info->type as the request_module format string. */
+	private_request_module(true, info->type);
+	if (!info->addr) {
+		isp_printf(1, "I2C address is not set for %s\n", info->type);
+		return NULL;
+	}
 
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint16_t *)((char *)s0 + 22);
+	client = private_i2c_new_device(adapter, info);
+	if (!client || !client->dev.driver)
+		goto error;
 
-    /* fragment 3: Branch */
-    int _bc_v0_3 = v0 != 0;
-    v0 = 0;
-    if (_bc_v0_3) { goto isp_i2c_new_subdev_board0x70; }
+	owner = client->dev.driver->owner;
+	if (!private_try_module_get(owner))
+		goto error;
 
-    /* fragment 4: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(1, &LC28, &__pow2_lut, 304); /* jalr target resolved by relocation */
+	sd = private_i2c_get_clientdata(client);
+	private_module_put(owner);
 
-    /* fragment 5: Arithmetic */
-    v0 = 0;
-
-isp_i2c_new_subdev_board0x5c:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-isp_i2c_new_subdev_board0x60:
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-isp_i2c_new_subdev_board0x70:
-    /* fragment 8: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_i2c_new_device)(s1, s0); /* jalr target resolved by relocation */
-
-    /* fragment 9: Arithmetic */
-    s0 = v0;
-
-    /* fragment 10: Branch */
-    v0 = 0;
-    if (s0 == 0) { goto isp_i2c_new_subdev_board0x5c; }
-
-    /* fragment 11: MemoryAccess */
-    s1 = *(uint32_t *)((char *)s0 + 104);
-    v0 = s1 - 28;
-
-    /* fragment 12: Branch */
-    int _bc_v0_12 = v0 == 0;
-    v0 = 0;
-    if (_bc_v0_12) { goto isp_i2c_new_subdev_board0xe8; }
-
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_try_module_get)(*(uint32_t *)((char *)(s1) + 8)); /* jalr target resolved by relocation */
-
-    /* fragment 14: Branch */
-    int _bc_v0_14 = v0 == 0;
-    v0 = 0;
-    if (_bc_v0_14) { goto isp_i2c_new_subdev_board0xe8; }
-
-    /* fragment 15: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_get_clientdata)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    local_10 = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_module_put)(*(uint32_t *)((char *)(s1) + 8)); /* jalr target resolved by relocation */
-
-    /* fragment 17: StackAccess */
-    v0 = local_10;
-
-    /* fragment 18: Branch */
-    if (v0 != 0) { goto isp_i2c_new_subdev_board0x60; }
-
-    /* fragment 19: CallSetup */
-    v0 = 0;
-
-isp_i2c_new_subdev_board0xe8:
-    /* fragment 20: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_unregister_device)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 21: Branch */
-    v0 = 0;
-    goto isp_i2c_new_subdev_board0x5c;
-
-    return 0;
+error:
+	if (client && !sd)
+		private_i2c_unregister_device(client);
+	return sd;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000006830 origin=fragment_seed original=subdev_sensor_ops_ioctl */
-int64_t subdev_sensor_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2)
+/*
+ * VIN owns a list of probed sensor objects and one active sensor pointer per
+ * VIN.  These offsets are taken from the T41 OEM binary; the public SDK
+ * headers describe the sensor subdevice ABI but not the private VIN object.
+ */
+#define T41_VIN_SENSOR_LIST_OFF       276
+#define T41_VIN_ACTIVE_SENSOR_OFF     284
+#define T41_VIN_SENSOR_LOCK_OFF       288
+#define T41_VIN_SENSOR_STATE_OFF      304
+#define T41_VIN_DUAL_MODE_OFF         312
+#define T41_SENSOR_LIST_OFF           288
+#define T41_SENSOR_INFO_OFF           296
+#define T41_SENSOR_VIDEO_INFO_OFF     780
+#define T41_SUBDEV_NOTIFY_OFF         124
+#define T41_SUBDEV_EVENT_OFF          128
+#define T41_SUBDEV_OPS_OFF            252
+#define T41_SUBDEV_CLIENT_OFF         268
+#define T41_SUBDEV_HOSTDATA_OFF       272
+#define T41_SENSOR_INFO_SIZE          100
+#define T41_SENSOR_MAX_VIN            3
+
+#define T41_EVENT_SUBDEV_INIT         0x01000000U
+#define T41_EVENT_SYNC_SENSOR_ATTR    0x01000001U
+#define T41_EVENT_CREATE_FRAME_CHAN   0x01000002U
+#define T41_EVENT_SENSOR_REGISTER     0x02000000U
+#define T41_EVENT_SENSOR_RELEASE      0x02000001U
+#define T41_EVENT_SENSOR_ENUM_INPUT   0x02000002U
+#define T41_EVENT_SENSOR_GET_INPUT    0x02000003U
+#define T41_EVENT_SENSOR_SET_INPUT    0x02000004U
+#define T41_EVENT_SENSOR_WDR          0x0200000cU
+#define T41_EVENT_SENSOR_S_REGISTER   0x02000011U
+#define T41_EVENT_SENSOR_G_REGISTER   0x02000012U
+#define T41_EVENT_SENSOR_WDR_STOP     0x02000013U
+#define T41_EVENT_DUAL_MODE           0x02000018U
+
+static inline uintptr_t t41_load_ptr(uintptr_t base, unsigned int offset)
 {
-    int32_t *a3 = 0;
-{
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    char local_28[44];
-    uint32_t local_3e = 0;
-    uint32_t local_54 = 0;
-    uint32_t local_58 = 0;
-    uint32_t local_5c = 0;
-    uint32_t local_60 = 0;
-    uint32_t local_64 = 0;
-    uint32_t *local_68 = 0;
-    uint32_t local_6c = 0;
-    uint32_t *local_70 = 0;
-    uint32_t local_74 = 0;
-    uint32_t at = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uintptr_t s3 = 0;
-    uint32_t *s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t *s6 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = 4261412864;
-    v0 = a1 + (uintptr_t)v0;
-    v1 = v0 < 25;
-
-    /* fragment 1: StackAccess */
-    local_5c = s1;
-    local_58 = s0;
-    local_74 = ra;
-    local_70 = s6;
-    local_6c = s5;
-    local_68 = s4;
-    local_64 = s3;
-    local_60 = s2;
-    s1 = a0;
-
-    /* fragment 2: Branch */
-    s0 = a2;
-    if (v1 == 0) { goto subdev_sensor_ops_ioctl0x780; }
-
-    /* fragment 3: CallSetup */
-    v1 = (unsigned int *)&__pow2_lut;
-    v0 = (uintptr_t)v0 << 2;
-    v1 = v1 + 864;
-    v0 = (uintptr_t)v1 + (uintptr_t)v0;
-    v0 = *(uint32_t *)((char *)v0 + 0);
-    v0 = (unsigned int *)&subdev_sensor_ops_enum_input;
-    a1 = a2;
-    v0 = v0;
-
-subdev_sensor_ops_ioctl0x64:
-    /* fragment 4: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)subdev_sensor_ops_enum_input)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v1 = -515;
-
-subdev_sensor_ops_ioctl0x70:
-    /* fragment 6: Branch */
-    if (v0 == v1) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 7: Branch */
-    s6 = local_70;
-    goto subdev_sensor_ops_ioctl0x1ac;
-
-    /* fragment 8: Branch */
-    v0 = -22;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x1a4; }
-
-    /* fragment 9: Branch */
-    if (a2 == 0) { goto subdev_sensor_ops_ioctl0x1a8; }
-
-    /* fragment 10: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 4);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = a0 + (uintptr_t)v0;
-    v1 = *(uint32_t *)((char *)s1 + 4);
-
-    /* fragment 11: Branch */
-    v0 = -1;
-    if (v1 == 0) { goto subdev_sensor_ops_ioctl0xbc; }
-
-    /* fragment 12: Arithmetic */
-    a0 = v1 < -4095;
-
-    /* fragment 13: Branch */
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0xbc; }
-
-    /* fragment 14: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 280);
-
-subdev_sensor_ops_ioctl0xbc:
-    /* fragment 15: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 4) = v0;
-
-subdev_sensor_ops_ioctl0xc0:
-    /* fragment 16: Branch */
-    v0 = 0;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-    /* fragment 17: Arithmetic */
-    v0 = 0;
-    a1 = a2;
-
-    /* fragment 18: Branch */
-    v0 = v0 + 22232;
-    goto subdev_sensor_ops_ioctl0x64;
-
-    /* fragment 19: Branch */
-    v0 = -22;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x1a4; }
-
-    /* fragment 20: Branch */
-    local_54 = 0;
-    if (a2 == 0) { goto subdev_sensor_ops_ioctl0x1a4; }
-
-    /* fragment 21: MemoryAccess */
-    a0 = *(uint16_t *)((char *)a2 + 84);
-    v1 = 1;
-    v0 = a0 + 76;
-    v0 = (uintptr_t)v0 << 2;
-    v0 = (uintptr_t)s1 + (uintptr_t)v0;
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 22: Branch */
-    a1 = (uintptr_t)&LC29;
-    if (v0 != v1) { goto subdev_sensor_ops_ioctl0x144; }
-
-    /* fragment 23: CallSetup */
-    local_1c = v0;
-    local_14 = 366;
-    local_18 = a0;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC29, &__pow2_lut, 366); /* jalr target resolved by relocation */
-
-    /* fragment 24: Branch */
-    v0 = -1;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x144:
-    /* fragment 25: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 32);
-
-    /* fragment 26: Branch */
-    int _bc_v0_26 = v0 != v1;
-    v1 = 2;
-    if (_bc_v0_26) { goto subdev_sensor_ops_ioctl0x2a4; }
-
-    /* fragment 27: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_get_adapter)(*(uint32_t *)((char *)(a2) + 60)); /* jalr target resolved by relocation */
-
-    /* fragment 28: Arithmetic */
-    s4 = (unsigned int *)&isp_printf;
-    s6 = v0;
-    s3 = (uintptr_t)&__pow2_lut;
-
-    /* fragment 29: Branch */
-    s4 = (unsigned int *)&isp_printf;
-    if (v0 != 0) { goto subdev_sensor_ops_ioctl0x1cc; }
-
-    /* fragment 30: CallSetup */
-    v0 = *(uint32_t *)((char *)s0 + 60);
-    a2 = s3 + 1048;
-    a1 = (uintptr_t)&LC30;
-    local_18 = v0;
-    v0 = 377;
-    local_14 = v0;
-    local_10 = a2;
-    s3 = 377;
-    a1 = a1;
-
-subdev_sensor_ops_ioctl0x198:
-    /* fragment 31: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)isp_printf)(2); /* jalr target resolved by relocation */
-
-    /* fragment 32: Arithmetic */
-    v0 = -22;
-
-subdev_sensor_ops_ioctl0x1a4:
-    /* fragment 33: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-subdev_sensor_ops_ioctl0x1a8:
-    /* fragment 34: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-subdev_sensor_ops_ioctl0x1ac:
-    /* fragment 35: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-subdev_sensor_ops_ioctl0x1cc:
-    /* fragment 36: CallSetup */
-    s2 = (unsigned int *)&local_28;
-    v0 = (unsigned int *)memset((void *)(uintptr_t)&local_28, 0, 44); /* jalr target resolved by relocation */
-
-    /* fragment 37: CallSetup */
-    s5 = s0 + 36;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)s2, (void *)(uintptr_t)(s0 + 36), 20); /* jalr target resolved by relocation */
-
-    /* fragment 38: CallSetup */
-    local_1c = *(uint32_t *)((char *)(s0) + 56);
-    local_3e = *(uint32_t *)((char *)(s0) + 56);
-    local_20 = *(uint32_t *)((char *)(s0) + 60);
-    local_14 = 20;
-    local_10 = *(uint16_t *)((char *)(s0) + 84);
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(0, &LC31, &__pow2_lut, 383); /* jalr target resolved by relocation */
-
-    /* fragment 39: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_i2c_new_subdev_board)(s6, s2, 0); /* jalr target resolved by relocation */
-
-    /* fragment 40: Branch */
-    s2 = v0;
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0x270; }
-
-    /* fragment 41: Arithmetic */
-    v0 = v0 < -4095;
-
-    /* fragment 42: Branch */
-    if (v0 != 0) { goto subdev_sensor_ops_ioctl0x2d8; }
-
-subdev_sensor_ops_ioctl0x270:
-    /* fragment 43: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_put_adapter)(s6); /* jalr target resolved by relocation */
-
-    /* fragment 44: Arithmetic */
-    v0 = 388;
-    a2 = s3 + 1048;
-    a1 = (uintptr_t)&LC32;
-
-    /* fragment 45: StackAccess */
-    local_18 = s5;
-    local_14 = v0;
-    local_10 = a2;
-    s3 = 388;
-
-    /* fragment 46: Branch */
-    a1 = (uintptr_t)&LC32;
-    goto subdev_sensor_ops_ioctl0x198;
-
-subdev_sensor_ops_ioctl0x2a4:
-    /* fragment 47: Branch */
-    s2 = 0;
-    if (v0 == v1) { goto subdev_sensor_ops_ioctl0x2d8; }
-
-    /* fragment 48: CallSetup */
-    a2 = (uintptr_t)&__pow2_lut;
-    s3 = 394;
-    a2 = a2 + 1048;
-
-subdev_sensor_ops_ioctl0x2b8:
-    /* fragment 49: CallSetup */
-    a1 = (uintptr_t)&LC33;
-    a1 = a1;
-
-subdev_sensor_ops_ioctl0x2c0:
-    /* fragment 50: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)isp_printf)(1); /* jalr target resolved by relocation */
-
-    /* fragment 51: Branch */
-    v0 = -22;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x2d8:
-    /* fragment 52: CallSetup */
-    s3 = *(uint32_t *)((char *)(s2) + 272);
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s3 + 296), (void *)(uintptr_t)s0, 100); /* jalr target resolved by relocation */
-
-    /* fragment 53: Branch */
-    *(uint32_t *)((char *)s3 + 780) = v0;
-    if (s2 != 0) { goto subdev_sensor_ops_ioctl0x358; }
-
-subdev_sensor_ops_ioctl0x300:
-    /* fragment 54: MemoryAccess */
-    v1 = *(uint32_t *)((char *)s0 + 32);
-    v0 = 1;
-
-    /* fragment 55: Branch */
-    int _bc_v1_55 = v1 != v0;
-    v0 = (unsigned int *)&tx_isp_subdev_deinit;
-    if (_bc_v1_55) { goto subdev_sensor_ops_ioctl0x344; }
-
-    /* fragment 56: MemoryAccess */
-    s0 = *(uint32_t *)((char *)s2 + 268);
-    a0 = *(uint32_t *)((char *)s0 + 24);
-
-    /* fragment 57: Branch */
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x330; }
-
-    /* fragment 58: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_put_adapter)(a0); /* jalr target resolved by relocation */
-
-subdev_sensor_ops_ioctl0x330:
-    /* fragment 59: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_unregister_device)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 60: CallSetup */
-    v0 = (unsigned int *)&tx_isp_subdev_deinit;
-
-subdev_sensor_ops_ioctl0x344:
-    /* fragment 61: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tx_isp_subdev_deinit)(s2); /* jalr target resolved by relocation */
-
-    /* fragment 62: Branch */
-    v0 = -22;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x358:
-    /* fragment 63: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 64: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0x300; }
-
-    /* fragment 65: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 66: Branch */
-    a1 = s2 + 180;
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0x300; }
-
-    /* fragment 67: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(s2); /* jalr target resolved by relocation */
-
-    /* fragment 68: Branch */
-    s4 = s1 + 288;
-    if (v0 != 0) { goto subdev_sensor_ops_ioctl0x300; }
-
-    /* fragment 69: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_lock)(s4); /* jalr target resolved by relocation */
-
-    /* fragment 70: CallSetup */
-    *(uint32_t *)((char *)s1 + 280) = (s3 + 288);
-    *(uint32_t *)((char *)s3 + 288) = (s1 + 276);
-    *(uint32_t *)((char *)s3 + 292) = (*(uint32_t *)((char *)(s1) + 280));
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s1) + 280)) + 0) = (s3 + 288);
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_unlock)(s4); /* jalr target resolved by relocation */
-
-    /* fragment 71: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s1 + 124);
-    v1 = 1;
-    *(uint32_t *)((char *)s2 + 124) = v0;
-    v0 = *(uint16_t *)((char *)s0 + 84);
-
-    /* fragment 72: Branch */
-    if (v0 == v1) { goto subdev_sensor_ops_ioctl0x440; }
-
-    /* fragment 73: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0x438; }
-
-    /* fragment 74: Arithmetic */
-    v1 = 2;
-
-    /* fragment 75: Branch */
-    int _bc_v0_75 = v0 == v1;
-    v0 = 3;
-    if (_bc_v0_75) { goto subdev_sensor_ops_ioctl0x444; }
-
-subdev_sensor_ops_ioctl0x3ec:
-    /* fragment 76: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s1 + 128);
-
-    /* fragment 77: Branch */
-    a1 = 16777216;
-    if (v0 != 0) { goto subdev_sensor_ops_ioctl0x44c; }
-
-    /* fragment 78: CallSetup */
-    v0 = local_54;
-
-subdev_sensor_ops_ioctl0x3fc:
-    /* fragment 79: CallSetup */
-    local_18 = v0;
-    local_14 = 443;
-   local_10 = 0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC34, &__pow2_lut, 443); /* jalr target resolved by relocation */
-
-    /* fragment 80: Branch */
-    v0 = -1;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x438:
-    /* fragment 81: Branch */
-    local_54 = v1;
-    goto subdev_sensor_ops_ioctl0x3ec;
-
-subdev_sensor_ops_ioctl0x440:
-    /* fragment 82: Arithmetic */
-    v0 = 2;
-
-subdev_sensor_ops_ioctl0x444:
-    /* fragment 83: Branch */
-    local_54 = v0;
-    goto subdev_sensor_ops_ioctl0x3ec;
-
-subdev_sensor_ops_ioctl0x44c:
-    /* fragment 84: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_math_exp2)(s1, a1 + 2, &local_54); /* jalr target resolved by relocation */
-
-    /* fragment 85: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0x1a8; }
-
-    /* fragment 86: Branch */
-    v0 = local_54;
-    goto subdev_sensor_ops_ioctl0x3fc;
-
-    /* fragment 87: Branch */
-    v0 = -22;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x1a4; }
-
-    /* fragment 88: Branch */
-    if (a2 == 0) { goto subdev_sensor_ops_ioctl0x1a8; }
-
-    /* fragment 89: MemoryAccess */
-    v0 = *(uint16_t *)((char *)a2 + 84);
-    v0 = v0 + 76;
-    v0 = (uintptr_t)v0 << 2;
-    v0 = a0 + (uintptr_t)v0;
-    v1 = *(uint32_t *)((char *)v0 + 0);
-    v0 = 1;
-
-    /* fragment 90: Branch */
-    s3 = a0 + 288;
-    if (v1 != v0) { goto subdev_sensor_ops_ioctl0x4d4; }
-
-    /* fragment 91: CallSetup */
-    local_14 = 461;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC26, &__pow2_lut, 461); /* jalr target resolved by relocation */
-
-    /* fragment 92: Branch */
-    v0 = -1;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x4d4:
-    /* fragment 93: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_lock)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 94: MemoryAccess */
-    s2 = *(uint32_t *)((char *)s1 + 276);
-    a0 = s1 + 276;
-    s2 = s2 - 288;
-
-subdev_sensor_ops_ioctl0x4f0:
-    /* fragment 95: Arithmetic */
-    v0 = s2 + 288;
-
-    /* fragment 96: Branch */
-    v1 = s0;
-    if (v0 == a0) { goto subdev_sensor_ops_ioctl0x534; }
-
-    /* fragment 97: Arithmetic */
-    v0 = s2 + 296;
-
-    /* fragment 98: MemoryAccess */
-    a1 = *(uint8_t *)((char *)v0 + 0);
-
-subdev_sensor_ops_ioctl0x504:
-    /* fragment 99: MemoryAccess */
-    at = *(uint8_t *)((char *)v1 + 0);
-    v0 = v0 + 1;
-
-    /* fragment 100: Branch */
-    v1 = v1 + 1;
-    if (at != a1) { goto subdev_sensor_ops_ioctl0x520; }
-
-    /* fragment 101: Branch */
-    int _bc_a1_101 = a1 != 0;
-    a1 = *(uint8_t *)((char *)(v0) + 0);
-    if (_bc_a1_101) { goto subdev_sensor_ops_ioctl0x504; }
-
-    /* fragment 102: Arithmetic */
-    a1 = at;
-
-subdev_sensor_ops_ioctl0x520:
-    /* fragment 103: Arithmetic */
-    a1 = a1 - at;
-
-    /* fragment 104: Branch */
-    if (a1 != 0) { goto subdev_sensor_ops_ioctl0x550; }
-
-    /* fragment 105: Branch */
-    if (s2 != 0) { goto subdev_sensor_ops_ioctl0x55c; }
-
-subdev_sensor_ops_ioctl0x534:
-    /* fragment 106: CallSetup */
-    v0 = (unsigned int *)&private_mutex_unlock;
-    a0 = s3;
-    v0 = v0;
-
-subdev_sensor_ops_ioctl0x540:
-    /* fragment 107: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_unlock)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 108: Branch */
-    v0 = 0;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x550:
-    /* fragment 109: MemoryAccess */
-    s2 = *(uint32_t *)((char *)s2 + 288);
-
-    /* fragment 110: Branch */
-    s2 = s2 - 288;
-    goto subdev_sensor_ops_ioctl0x4f0;
-
-subdev_sensor_ops_ioctl0x55c:
-    /* fragment 111: MemoryAccess */
-    v0 = *(uint16_t *)((char *)s0 + 84);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = (uintptr_t)s1 + (uintptr_t)v0;
-    v1 = *(uint32_t *)((char *)s1 + 4);
-    v0 = (unsigned int *)&private_mutex_unlock;
-
-    /* fragment 112: Branch */
-    v0 = (unsigned int *)&private_mutex_unlock;
-    if (s2 != v1) { goto subdev_sensor_ops_ioctl0x59c; }
-
-    /* fragment 113: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_unlock)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 114: Arithmetic */
-    a2 = (uintptr_t)&__pow2_lut;
-    a1 = (uintptr_t)&LC35;
-    s3 = 480;
-    a2 = a2 + 1012;
-
-    /* fragment 115: Branch */
-    a1 = (uintptr_t)&LC35;
-    goto subdev_sensor_ops_ioctl0x2c0;
-
-subdev_sensor_ops_ioctl0x59c:
-    /* fragment 116: CallSetup */
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s2) + 288)) + 4) = (*(uint32_t *)((char *)(s2) + 292));
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)(s2) + 292)) + 0) = (*(uint32_t *)((char *)(s2) + 288));
-    *(uint32_t *)((char *)s2 + 288) = 256;
-    *(uint32_t *)((char *)s2 + 292) = 512;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_unlock)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 117: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 328);
-    v1 = 1;
-
-    /* fragment 118: Branch */
-    int _bc_v0_118 = v0 != v1;
-    v1 = 2;
-    if (_bc_v0_118) { goto subdev_sensor_ops_ioctl0x604; }
-
-    /* fragment 119: MemoryAccess */
-    s0 = *(uint32_t *)((char *)s2 + 268);
-    a0 = *(uint32_t *)((char *)s0 + 24);
-
-    /* fragment 120: Branch */
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x5f4; }
-
-    /* fragment 121: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_i2c_put_adapter)(a0); /* jalr target resolved by relocation */
-
-subdev_sensor_ops_ioctl0x5f4:
-    /* fragment 122: Arithmetic */
-    v0 = 0;
-    a0 = s0;
-
-    /* fragment 123: Branch */
-    v0 = v0;
-    goto subdev_sensor_ops_ioctl0x540;
-
-subdev_sensor_ops_ioctl0x604:
-    /* fragment 124: Branch */
-    a2 = (uintptr_t)&__pow2_lut;
-    if (v0 == v1) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 125: Arithmetic */
-    s3 = 496;
-
-    /* fragment 126: Branch */
-    a2 = (uintptr_t)&__pow2_lut + 1012;
-    goto subdev_sensor_ops_ioctl0x2b8;
-
-    /* fragment 127: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 32);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = a0 + (uintptr_t)v0;
-    a0 = *(uint32_t *)((char *)s1 + 4);
-
-    /* fragment 128: Branch */
-    s3 = 527;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x660; }
-
-    /* fragment 129: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 130: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 131: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 28);
-
-subdev_sensor_ops_ioctl0x648:
-    /* fragment 132: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 133: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 134: Branch */
-    v1 = -515;
-    goto subdev_sensor_ops_ioctl0x70;
-
-subdev_sensor_ops_ioctl0x660:
-    /* fragment 135: CallSetup */
-    a2 = (uintptr_t)&__pow2_lut;
-    a2 = a2 + 988;
-
-subdev_sensor_ops_ioctl0x668:
-    /* fragment 136: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)isp_printf)(1, &LC0); /* jalr target resolved by relocation */
-
-    /* fragment 137: Branch */
-    v0 = -1;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-    /* fragment 138: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 32);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = a0 + (uintptr_t)v0;
-    a0 = *(uint32_t *)((char *)s1 + 4);
-
-    /* fragment 139: Branch */
-    s3 = 511;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x6bc; }
-
-    /* fragment 140: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 141: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 142: Branch */
-    v0 = *(uint32_t *)((char *)(v0) + 16);
-    goto subdev_sensor_ops_ioctl0x648;
-
-subdev_sensor_ops_ioctl0x6bc:
-    /* fragment 143: Arithmetic */
-    a2 = (uintptr_t)&__pow2_lut;
-
-    /* fragment 144: Branch */
-    a2 = (uintptr_t)&__pow2_lut + 964;
-    goto subdev_sensor_ops_ioctl0x668;
-
-    /* fragment 145: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(a0 + 312), (void *)(uintptr_t)s0, 24); /* jalr target resolved by relocation */
-
-    /* fragment 146: Branch */
-    v0 = 0;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-    /* fragment 147: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 4);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = a0 + (uintptr_t)v0;
-    a0 = *(uint32_t *)((char *)s1 + 4);
-
-    /* fragment 148: Branch */
-    s3 = 571;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x734; }
-
-    /* fragment 149: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 150: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 151: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 8);
-
-    /* fragment 152: Branch */
-    a1 = 33554432;
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 153: CallSetup */
-    a1 = a1 + 19;
-
-subdev_sensor_ops_ioctl0x724:
-    /* fragment 154: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 155: Branch */
-    v1 = -515;
-    goto subdev_sensor_ops_ioctl0x70;
-
-subdev_sensor_ops_ioctl0x734:
-    /* fragment 156: Arithmetic */
-    a2 = (uintptr_t)&__pow2_lut;
-
-    /* fragment 157: Branch */
-    a2 = (uintptr_t)&__pow2_lut + 1084;
-    goto subdev_sensor_ops_ioctl0x668;
-
-    /* fragment 158: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 4);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = a0 + (uintptr_t)v0;
-    a0 = *(uint32_t *)((char *)s1 + 4);
-
-    /* fragment 159: Branch */
-    s3 = 580;
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x734; }
-
-    /* fragment 160: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 161: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 162: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 8);
-
-    /* fragment 163: Branch */
-    a1 = 33554432;
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 164: Branch */
-    a1 = a1 + 12;
-    goto subdev_sensor_ops_ioctl0x724;
-
-subdev_sensor_ops_ioctl0x780:
-    /* fragment 165: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 0);
-    v0 = v0 + 70;
-    v0 = (uintptr_t)v0 << 2;
-    s1 = (uintptr_t)s1 + (uintptr_t)v0;
-    a0 = *(uint32_t *)((char *)s1 + 4);
-
-    /* fragment 166: Branch */
-    if (a0 == 0) { goto subdev_sensor_ops_ioctl0x7c0; }
-
-    /* fragment 167: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 168: Branch */
-    if (v0 == 0) { goto subdev_sensor_ops_ioctl0xc0; }
-
-    /* fragment 169: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 8);
-
-    /* fragment 170: Branch */
-    a2 = s0;
-    if (v0 != 0) { goto subdev_sensor_ops_ioctl0x724; }
-
-    /* fragment 171: Branch */
-    v0 = 0;
-    goto subdev_sensor_ops_ioctl0x1a4;
-
-subdev_sensor_ops_ioctl0x7c0:
-    /* fragment 172: Branch */
-    s3 = 591;
-    goto subdev_sensor_ops_ioctl0x734;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
-}
+	return *(uintptr_t *)(base + offset);
 }
 
+static inline void t41_store_ptr(uintptr_t base, unsigned int offset,
+				 uintptr_t value)
+{
+	*(uintptr_t *)(base + offset) = value;
+}
+
+static inline int t41_sensor_result(int ret)
+{
+	return ret == -ENOIOCTLCMD ? 0 : ret;
+}
+
+static inline uintptr_t t41_vin_active_sensor(uintptr_t vin,
+					      unsigned int vinum)
+{
+	if (vinum >= T41_SENSOR_MAX_VIN)
+		return 0;
+	return t41_load_ptr(vin, T41_VIN_ACTIVE_SENSOR_OFF +
+				  vinum * sizeof(uintptr_t));
+}
+
+static int t41_call_sensor_ioctl(uintptr_t sensor_sd, unsigned int cmd,
+				 uintptr_t arg)
+{
+	uintptr_t ops;
+	uintptr_t sensor_ops;
+	uintptr_t ioctl_fn;
+
+	if (!sensor_sd)
+		return -ENODEV;
+	ops = t41_load_ptr(sensor_sd, T41_SUBDEV_OPS_OFF);
+	if (!ops)
+		return 0;
+	sensor_ops = t41_load_ptr(ops, 3 * sizeof(uintptr_t));
+	if (!sensor_ops)
+		return 0;
+	ioctl_fn = t41_load_ptr(sensor_ops, 2 * sizeof(uintptr_t));
+	if (!ioctl_fn)
+		return 0;
+	return t41_sensor_result(((int (*)(uintptr_t, unsigned int, uintptr_t))
+		ioctl_fn)(sensor_sd, cmd, arg));
+}
+
+static int t41_call_sensor_core_register(uintptr_t sensor_sd, uintptr_t arg,
+					 unsigned int callback_index)
+{
+	uintptr_t ops;
+	uintptr_t core_ops;
+	uintptr_t callback;
+
+	if (!sensor_sd)
+		return -ENODEV;
+	ops = t41_load_ptr(sensor_sd, T41_SUBDEV_OPS_OFF);
+	if (!ops)
+		return 0;
+	core_ops = t41_load_ptr(ops, 0);
+	if (!core_ops)
+		return 0;
+	callback = t41_load_ptr(core_ops, callback_index * sizeof(uintptr_t));
+	if (!callback)
+		return 0;
+	return t41_sensor_result(((int (*)(uintptr_t, uintptr_t))callback)
+		(sensor_sd, arg));
+}
+
+static void t41_unregister_i2c_sensor(uintptr_t sensor_sd)
+{
+	struct i2c_client *client;
+
+	if (!sensor_sd)
+		return;
+	client = (struct i2c_client *)t41_load_ptr(sensor_sd,
+						   T41_SUBDEV_CLIENT_OFF);
+	if (client) {
+		if (client->adapter)
+			private_i2c_put_adapter(client->adapter);
+		private_i2c_unregister_device(client);
+	}
+}
+
+static int t41_register_sensor(uintptr_t vin, uintptr_t arg)
+{
+	struct i2c_board_info board_info;
+	struct i2c_adapter *adapter;
+	struct tx_isp_subdev *sensor_sd;
+	struct list_head *sensor_list;
+	uintptr_t sensor;
+	uintptr_t ops;
+	uintptr_t core_ops;
+	uintptr_t chip_ident;
+	uintptr_t notify;
+	unsigned int sensor_id;
+	unsigned int cbus_type;
+	unsigned int interface;
+	int ret;
+
+	if (!vin || !arg)
+		return -EINVAL;
+
+	sensor_id = *(uint16_t *)(arg + 84);
+	if (sensor_id >= T41_SENSOR_MAX_VIN)
+		return -EINVAL;
+	if (*(uint32_t *)(vin + T41_VIN_SENSOR_STATE_OFF +
+			 sensor_id * sizeof(uint32_t)) == 1) {
+		isp_printf(2, "sensor %u is already registered\n", sensor_id);
+		return -1;
+	}
+
+	cbus_type = *(uint32_t *)(arg + 32);
+	if (cbus_type != 1) {
+		isp_printf(1, "unsupported sensor control bus %u\n", cbus_type);
+		return -EINVAL;
+	}
+
+	adapter = private_i2c_get_adapter(*(uint32_t *)(arg + 60));
+	if (!adapter) {
+		isp_printf(2, "failed to get I2C adapter %u\n",
+			   *(uint32_t *)(arg + 60));
+		return -EINVAL;
+	}
+
+	memset(&board_info, 0, sizeof(board_info));
+	memcpy(board_info.type, (void *)(arg + 36), sizeof(board_info.type));
+	board_info.addr = *(uint32_t *)(arg + 56);
+	sensor_sd = isp_i2c_new_subdev_board(adapter, &board_info, NULL);
+	if (!sensor_sd || IS_ERR(sensor_sd)) {
+		private_i2c_put_adapter(adapter);
+		isp_printf(2, "failed to acquire sensor subdev %s\n",
+			   (char *)(arg + 36));
+		return -EINVAL;
+	}
+
+	sensor = t41_load_ptr((uintptr_t)sensor_sd, T41_SUBDEV_HOSTDATA_OFF);
+	if (!sensor) {
+		t41_unregister_i2c_sensor((uintptr_t)sensor_sd);
+		return -EINVAL;
+	}
+
+	memcpy((void *)(sensor + T41_SENSOR_INFO_OFF), (void *)arg,
+	       T41_SENSOR_INFO_SIZE);
+	t41_store_ptr(sensor, T41_SENSOR_VIDEO_INFO_OFF,
+		      sensor + T41_SENSOR_INFO_OFF);
+
+	ops = t41_load_ptr((uintptr_t)sensor_sd, T41_SUBDEV_OPS_OFF);
+	core_ops = ops ? t41_load_ptr(ops, 0) : 0;
+	chip_ident = core_ops ? t41_load_ptr(core_ops, 0) : 0;
+	ret = chip_ident ?
+		((int (*)(uintptr_t, uintptr_t))chip_ident)
+		((uintptr_t)sensor_sd, (uintptr_t)sensor_sd + 180) :
+		-ENOIOCTLCMD;
+	if (ret) {
+		t41_unregister_i2c_sensor((uintptr_t)sensor_sd);
+		return -EINVAL;
+	}
+
+	private_mutex_lock((void *)(vin + T41_VIN_SENSOR_LOCK_OFF));
+	sensor_list = (struct list_head *)(sensor + T41_SENSOR_LIST_OFF);
+	list_add_tail(sensor_list,
+		      (struct list_head *)(vin + T41_VIN_SENSOR_LIST_OFF));
+	private_mutex_unlock((void *)(vin + T41_VIN_SENSOR_LOCK_OFF));
+
+	/* Sensor notifications must return through the owning VIN subdevice. */
+	t41_store_ptr((uintptr_t)sensor_sd, T41_SUBDEV_NOTIFY_OFF,
+		      t41_load_ptr(vin, T41_SUBDEV_NOTIFY_OFF));
+
+	interface = sensor_id + 1;
+	notify = t41_load_ptr(vin, T41_SUBDEV_EVENT_OFF);
+	if (!notify) {
+		isp_printf(2, "VIN has no event callback for sensor %u\n", sensor_id);
+		return -1;
+	}
+	ret = ((int (*)(uintptr_t, unsigned int, uintptr_t))notify)
+		(vin, T41_EVENT_CREATE_FRAME_CHAN, (uintptr_t)&interface);
+	return ret ? -1 : 0;
+}
+
+static int t41_release_sensor(uintptr_t vin, uintptr_t arg)
+{
+	struct list_head *head;
+	struct list_head *node;
+	uintptr_t sensor = 0;
+	uintptr_t sensor_sd;
+	unsigned int sensor_id;
+	unsigned int cbus_type;
+
+	if (!vin || !arg)
+		return -EINVAL;
+
+	sensor_id = *(uint16_t *)(arg + 84);
+	if (sensor_id >= T41_SENSOR_MAX_VIN)
+		return -EINVAL;
+	if (*(uint32_t *)(vin + T41_VIN_SENSOR_STATE_OFF +
+			 sensor_id * sizeof(uint32_t)) == 1)
+		return -1;
+
+	head = (struct list_head *)(vin + T41_VIN_SENSOR_LIST_OFF);
+	private_mutex_lock((void *)(vin + T41_VIN_SENSOR_LOCK_OFF));
+	for (node = head->next; node != head; node = node->next) {
+		uintptr_t candidate = (uintptr_t)node - T41_SENSOR_LIST_OFF;
+
+		if (!strcmp((char *)(candidate + T41_SENSOR_INFO_OFF),
+			    (char *)arg)) {
+			sensor = candidate;
+			break;
+		}
+	}
+
+	if (!sensor) {
+		private_mutex_unlock((void *)(vin + T41_VIN_SENSOR_LOCK_OFF));
+		return 0;
+	}
+	if (sensor == t41_vin_active_sensor(vin, sensor_id)) {
+		private_mutex_unlock((void *)(vin + T41_VIN_SENSOR_LOCK_OFF));
+		isp_printf(1, "sensor is active; stop it before release\n");
+		return -1;
+	}
+
+	list_del((struct list_head *)(sensor + T41_SENSOR_LIST_OFF));
+	private_mutex_unlock((void *)(vin + T41_VIN_SENSOR_LOCK_OFF));
+
+	sensor_sd = sensor;
+	cbus_type = *(uint32_t *)(sensor + T41_SENSOR_INFO_OFF + 32);
+	if (cbus_type == 1) {
+		t41_unregister_i2c_sensor(sensor_sd);
+		return 0;
+	}
+	if (cbus_type == 2)
+		return 0;
+	return -EINVAL;
+}
+
+int32_t subdev_sensor_ops_ioctl(uintptr_t vin, uint32_t cmd, uintptr_t arg)
+{
+	uintptr_t sensor;
+	unsigned int vinum;
+	int ret;
+
+	switch (cmd) {
+	case T41_EVENT_SENSOR_REGISTER:
+		return t41_register_sensor(vin, arg);
+	case T41_EVENT_SENSOR_RELEASE:
+		return t41_release_sensor(vin, arg);
+	case T41_EVENT_SENSOR_ENUM_INPUT:
+		ret = (int)subdev_sensor_ops_enum_input(vin, arg);
+		return t41_sensor_result(ret);
+	case T41_EVENT_SENSOR_GET_INPUT:
+		if (!vin || !arg)
+			return -EINVAL;
+		vinum = *(uint32_t *)(arg + 4);
+		sensor = t41_vin_active_sensor(vin, vinum);
+		*(uint32_t *)(arg + 4) = sensor ?
+			*(uint32_t *)(sensor + 280) : (uint32_t)-1;
+		return 0;
+	case T41_EVENT_SENSOR_SET_INPUT:
+		ret = subdev_sensor_ops_set_input((void *)vin, (int32_t *)arg, 0);
+		return t41_sensor_result(ret);
+	case T41_EVENT_SENSOR_S_REGISTER:
+		if (!vin || !arg)
+			return -EINVAL;
+		vinum = *(uint32_t *)(arg + 32);
+		sensor = t41_vin_active_sensor(vin, vinum);
+		if (!sensor)
+			return -1;
+		return t41_call_sensor_core_register(sensor, arg, 7);
+	case T41_EVENT_SENSOR_G_REGISTER:
+		if (!vin || !arg)
+			return -EINVAL;
+		vinum = *(uint32_t *)(arg + 32);
+		sensor = t41_vin_active_sensor(vin, vinum);
+		if (!sensor)
+			return -1;
+		return t41_call_sensor_core_register(sensor, arg, 4);
+	case T41_EVENT_DUAL_MODE:
+		if (!vin || !arg)
+			return -EINVAL;
+		memcpy((void *)(vin + T41_VIN_DUAL_MODE_OFF), (void *)arg, 24);
+		return 0;
+	case T41_EVENT_SENSOR_WDR:
+	case T41_EVENT_SENSOR_WDR_STOP:
+		if (!vin || !arg)
+			return -EINVAL;
+		vinum = *(uint32_t *)(arg + 4);
+		sensor = t41_vin_active_sensor(vin, vinum);
+		if (!sensor)
+			return -1;
+		return t41_call_sensor_ioctl(sensor, cmd, arg);
+	default:
+		if (!vin || !arg)
+			return -EINVAL;
+		vinum = *(uint32_t *)arg;
+		sensor = t41_vin_active_sensor(vin, vinum);
+		if (!sensor)
+			return -1;
+		return t41_call_sensor_ioctl(sensor, cmd, arg);
+	}
+}
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000007000 origin=fragment_seed original=tx_isp_csi_suspend_module */
 int32_t tx_isp_csi_suspend_module(uintptr_t a0)
 {
