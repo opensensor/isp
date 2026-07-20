@@ -8938,107 +8938,45 @@ int32_t tx_isp_vic_activate_subdev(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002cdc origin=fragment_seed original=vic_sensor_ops_ioctl */
 int32_t vic_sensor_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t ra = 0;
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	uintptr_t vic;
+	uintptr_t base;
+	unsigned int vinum;
 
-    /* fragment 0: Branch */
-    if (a0 == 0) { goto vic_sensor_ops_ioctl0x6c; }
+	if (!a0 || IS_ERR((void *)a0))
+		return 0;
+	vic = *(uintptr_t *)(a0 + 268);
+	if (!vic || IS_ERR((void *)vic))
+		return 0;
 
-    /* fragment 1: Arithmetic */
-    v0 = a0 < -4095;
-
-    /* fragment 2: Branch */
-    if (v0 == 0) { goto vic_sensor_ops_ioctl0x6c; }
-
-    /* fragment 3: MemoryAccess */
-    a0 = *(uint32_t *)((char *)a0 + 268);
-
-    /* fragment 4: Branch */
-    if (a0 == 0) { goto vic_sensor_ops_ioctl0x6c; }
-
-    /* fragment 5: Arithmetic */
-    v0 = a0 < -4095;
-
-    /* fragment 6: Branch */
-    if (v0 == 0) { goto vic_sensor_ops_ioctl0x6c; }
-
-    /* fragment 7: ConstantLoad */
-    v0 = 0xfdfffff4;
-
-    /* fragment 8: Branch */
-    if (v0 == 0) { goto vic_sensor_ops_ioctl0x6c; }
-
-    /* fragment 9: ConstantLoad */
-    v0 = 0x180;
-
-    /* fragment 10: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 0);
-
-    /* fragment 11: Unknown */
-    /* unmatched fragment 11 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2d34:	00400408 	jr.hb	v0 */
-
-    /* fragment 12: Unknown */
-    /* unmatched fragment 12 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2d38:	00000000 	nop */
-
-    /* fragment 13: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 232);
-    v1 = 16;
-
-vic_sensor_ops_ioctl0x68:
-    /* fragment 14: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = v1;
-
-vic_sensor_ops_ioctl0x6c:
-    /* fragment 15: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 16: Arithmetic */
-    v0 = 0;
-    a1 = 0;
-
-vic_sensor_ops_ioctl0x78:
-    /* fragment 17: ConstantLoad */
-    t9 = 0x14dc;
-
-    /* fragment 18: Unknown */
-    /* unmatched fragment 18 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2d5c:	03200408 	jr.hb	t9 */
-
-    /* fragment 19: Unknown */
-    /* unmatched fragment 19 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2d60:	00000000 	nop */
-
-    /* fragment 20: Branch */
-    a1 = *(uint32_t *)((char *)(a2) + 4);
-    goto vic_sensor_ops_ioctl0x78;
-
-    /* fragment 21: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 4);
-    v1 = (uintptr_t)v0 << 16;
-    v0 = *(uint32_t *)((char *)a0 + 232);
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-    *(uint32_t *)((char *)v0 + 0) = 0;
-    v0 = *(uint32_t *)((char *)a2 + 4);
-    v1 = (uintptr_t)v0 << 16;
-    v0 = *(uint32_t *)((char *)a0 + 232);
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-
-    /* fragment 22: Branch */
-    v1 = 4;
-    goto vic_sensor_ops_ioctl0x68;
-
-    /* fragment 23: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 0);
-
-    /* fragment 24: Branch */
-    *(uint32_t *)((char *)a0 + 376) = v0;
-    goto vic_sensor_ops_ioctl0x6c;
-
-    return 0;
+	switch (a1) {
+	case 0x0200000c: /* SENSOR_WDR */
+		if (!a2)
+			return -EINVAL;
+		return (int32_t)tx_isp_vic_start(vic,
+					       *(uint32_t *)(a2 + 4));
+	case 0x0200000e: /* SENSOR_PREPARE_CHANGE */
+		base = *(uintptr_t *)(vic + 232);
+		*(uint32_t *)base = 16;
+		break;
+	case 0x0200000f: /* SENSOR_FINISH_CHANGE */
+		return (int32_t)tx_isp_vic_start(vic, 0);
+	case 0x02000013: /* SENSOR_WDR_STOP */
+		if (!a2)
+			return -EINVAL;
+		vinum = *(uint32_t *)(a2 + 4);
+		base = *(uintptr_t *)(vic + 232) + (vinum << 16);
+		*(uint32_t *)base = 0;
+		*(uint32_t *)base = 4;
+		break;
+	case 0x02000019: /* BYPASS_MODE */
+		if (!a2)
+			return -EINVAL;
+		*(uint32_t *)(vic + 376) = *(uint32_t *)a2;
+		break;
+	default:
+		break;
+	}
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002da4 origin=fragment_seed original=vic_core_ops_init */
