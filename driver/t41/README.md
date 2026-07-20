@@ -147,6 +147,22 @@ slots. The resulting level-0 run at
 cleanly with no kernel fatal signature, clearing the updated initializer for a
 fresh level-1 graph test.
 
+The fresh level-1 run at
+`logs/20260720-2019-t41-level1-restored-graph-117` inserts cleanly and no longer
+reports the missing IVDC subdevice. Core, VIC, and IVDC IRQs 39, 38, and 21 are
+registered, and `/dev/misc-ivdc` is now present alongside `/dev/tx-isp`.
+
+Static review held level 2 because the recovered private-memory initializer
+aliased unrelated IVDC and frame-counter globals and both mutex wrappers used a
+null lock. The restored allocator uses the OEM 20-entry block pool, the
+reserved ISP base/size, and a real mutex; it includes split and coalescing
+paths for later core use. `isp_mem_init` is now 47 instructions against OEM
+40, `find_new_buffer` is 32 against OEM 37, and `isp_free_buffer` remains 67
+against OEM 70. The level-2 run at
+`logs/20260720-2025-t41-level2-private-memory-117` inserts cleanly with no
+kernel fatal signature, clearing private-memory setup for level-3 static
+review.
+
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.

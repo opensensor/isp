@@ -1099,6 +1099,19 @@ static unsigned char __attribute__((aligned(4))) frame_done_wq_mdns[12] = {
 };
 static uint32_t proc_isp;
 static int32_t ispmem;
+struct t41_isp_mem_block {
+	uint8_t used;
+	uint8_t allocated;
+	uint16_t reserved;
+	struct t41_isp_mem_block *prev;
+	struct t41_isp_mem_block *next;
+	uint32_t address;
+	uint32_t size;
+};
+static uint32_t t41_ispmem_size;
+static struct t41_isp_mem_block t41_isp_mem_blocks[20];
+static struct t41_isp_mem_block *t41_isp_mem_head;
+static struct mutex t41_isp_mem_mutex;
 static unsigned char data_8621c[16384];
 static int32_t g_ivdc;
 static unsigned char __attribute__((aligned(4))) ivdc_subdev_ops[20] = {
@@ -2797,8 +2810,8 @@ void private_free_irq(unsigned int irq, void *dev_id);
 int32_t __private_spin_lock_irqsave(uint32_t a0, uintptr_t a1);
 int32_t private_spin_unlock_irqrestore();
 int32_t private_spin_lock_init(int32_t *arg1);
-int32_t private_mutex_lock(void);
-int32_t private_mutex_unlock(void);
+int32_t private_mutex_lock();
+int32_t private_mutex_unlock();
 int32_t private_raw_mutex_init();
 struct i2c_adapter *private_i2c_get_adapter(int nr);
 void private_i2c_put_adapter(struct i2c_adapter *adap);
@@ -5484,25 +5497,19 @@ int32_t private_spin_lock_init(int32_t *arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000008ec origin=model_output original=private_mutex_lock */
-int32_t private_mutex_lock(void)
+int32_t private_mutex_lock(lock)
+	struct mutex *lock;
 {
-   mutex_lock(NULL);
-    return 0;
+	mutex_lock(lock);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000008fc origin=fragment_seed original=private_mutex_unlock */
-int32_t private_mutex_unlock(void)
+int32_t private_mutex_unlock(lock)
+	struct mutex *lock;
 {
-    int32_t *a0 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return ((int32_t (*)())mutex_unlock)((void *)(uintptr_t)a0);
-
-    return 0;
+	mutex_unlock(lock);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000090c origin=model_output original=private_raw_mutex_init */
@@ -21280,263 +21287,115 @@ int32_t isp_core_tuning_clear(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000cd80 origin=fragment_seed original=find_new_buffer */
 int64_t find_new_buffer(uintptr_t a0, uint32_t a1, uint32_t a2)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+	unsigned int i;
 
-    /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    v1 = v1 + 416;
-    v0 = 0;
+	(void)a0;
+	(void)a1;
+	(void)a2;
+	for (i = 0; i < ARRAY_SIZE(t41_isp_mem_blocks); i++) {
+		struct t41_isp_mem_block *block = &t41_isp_mem_blocks[i];
 
-    /* fragment 1: StackAccess */
-    local_18 = s2;
-    local_1c = ra;
-    local_14 = s1;
-    local_10 = s0;
-    s2 = v1;
-    a0 = 20;
-
-find_new_buffer0x28:
-    /* fragment 2: MemoryAccess */
-    a1 = *(uint8_t *)((char *)v1 + 13);
-
-    /* fragment 3: Branch */
-    v0 = v0 + 1;
-    if (a1 != 0) { goto find_new_buffer0x84; }
-
-    /* fragment 4: CallSetup */
-    s0 = 20;
-    s0 = ((uintptr_t)v0 - 1) * (uintptr_t)s0;
-    s1 = s0 + 12;
-    s1 = (uintptr_t)s2 + (uintptr_t)s1;
-    v0 = (unsigned int *)memset((void *)(uintptr_t)s1, a1, 20); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v0 = (uintptr_t)s2 + (uintptr_t)s0;
-    v1 = 1;
-
-    /* fragment 6: MemoryAccess */
-    *(uint8_t *)((char *)v0 + 13) = v1;
-
-find_new_buffer0x68:
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 8: Arithmetic */
-    v0 = s1;
-
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-find_new_buffer0x84:
-    /* fragment 10: Branch */
-    v1 = v1 + 20;
-    if (v0 != a0) { goto find_new_buffer0x28; }
-
-    /* fragment 11: Branch */
-    s1 = 0;
-    goto find_new_buffer0x68;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+		if (block->allocated)
+			continue;
+		memset(block, 0, sizeof(*block));
+		block->allocated = 1;
+		return (int64_t)(uintptr_t)block;
+	}
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000ce14 origin=fragment_seed original=isp_mem_init */
 void* isp_mem_init(void)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+	struct t41_isp_mem_block *block;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	private_get_isp_priv_mem((uint32_t *)&ispmem, &t41_ispmem_size);
+	private_raw_mutex_init(&t41_isp_mem_mutex, "isp_mem_mutex", NULL);
+	memset(t41_isp_mem_blocks, 0, sizeof(t41_isp_mem_blocks));
+	block = (void *)(uintptr_t)find_new_buffer(0, 0, 0);
+	if (!block) {
+		t41_isp_mem_head = NULL;
+		return NULL;
+	}
 
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_get_isp_priv_mem)(&ivdc_threshold_line, &ivdc_threshold_line); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)(&ivdc_threshold_line, &LC0, 0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)find_new_buffer)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 4: Arithmetic */
-    v1 = s0 + 416;
-
-    /* fragment 5: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&frame_done_cnt + 0x14)) = v0;
-    *(uint8_t *)((char *)&ivdc_threshold_line) = 0;
-    v0 = *(uint32_t *)((char *)((char *)&frame_done_cnt + 0x14));
-    a0 = *(uint32_t *)((char *)((char *)&ispmem));
-    *(uint32_t *)((char *)v0 + 4) = 0;
-    v0 = *(uint32_t *)((char *)((char *)&frame_done_cnt + 0x14));
-    *(uint32_t *)((char *)v0 + 8) = 0;
-    v0 = *(uint32_t *)((char *)((char *)&frame_done_cnt + 0x14));
-    *(uint32_t *)((char *)v0 + 12) = a0;
-    v0 = *(uint32_t *)((char *)((char *)&frame_done_cnt + 0x14));
-    v1 = *(uint32_t *)((char *)&ivdc_mem_line);
-    *(uint32_t *)((char *)v0 + 16) = v1;
-    ra = local_14;
-    s0 = local_10;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (void*)v0;
+	block->used = 0;
+	block->prev = NULL;
+	block->next = NULL;
+	block->address = ispmem;
+	block->size = t41_ispmem_size;
+	t41_isp_mem_head = block;
+	find_new_buffer_fn = (uint32_t)(uintptr_t)find_new_buffer;
+	return block;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000ceb4 origin=model_output original=isp_malloc_buffer */
-int32_t isp_malloc_buffer(int32_t arg1) {
-    int *i = 0;
-    int32_t ispmem_val = ispmem;
+int32_t isp_malloc_buffer(int32_t arg1)
+{
+	struct t41_isp_mem_block *block;
+	uint32_t size;
+	uint32_t address = 0;
 
-    isp_printf(0, "##### %s %d  addr = 0x%08x  size is %d#####\n", "isp_malloc_buffer");
+	if (!ispmem || arg1 <= 0)
+		return 0;
+	size = (arg1 + 0xfffU) & 0xfffff000U;
+	private_mutex_lock(&t41_isp_mem_mutex);
 
-    if (ispmem_val != 0) {
-        if (arg1 == 0) {
-            return 0;
-        }
+	for (block = t41_isp_mem_head; block; block = block->next) {
+		if (block->used || block->size < size)
+			continue;
 
-        /* Align arg1 up to 4096 boundary */
-        int32_t s1_2 = (arg1 + 0xfff) & 0xfffff000;
+		if (block->size > size) {
+			struct t41_isp_mem_block *split =
+				(void *)(uintptr_t)find_new_buffer(0, 0, 0);
 
-        private_mutex_lock();
+			if (!split)
+				break;
+			split->address = block->address + size;
+			split->size = block->size - size;
+			split->prev = block;
+			split->next = block->next;
+			if (split->next)
+				split->next->prev = split;
+			block->next = split;
+		}
+		block->size = size;
+		block->used = 1;
+		address = block->address;
+		break;
+	}
 
-        char *i = data_8621c;
-
-        isp_printf(0, "##### %s %d  addr = 0x%08x  size is %d, %d#####\n", "isp_malloc_buffer");
-
-        /* Loop: iterate through linked buffer entries */
-        for (; i != 0; i = *(char **)(i + 8)) {
-            if (*(uint32_t *)i == 0) {
-                int32_t v0_4 = *(int32_t *)(i + 0x10);
-
-                if (v0_4 >= s1_2) {
-                    if (s1_2 < v0_4) {
-                        /* Load function pointer for find_new_buffer */
-                        int (*v0_6)(void) = find_new_buffer_fn;
-
-                        if (v0_6 == 0) {
-                            private_mutex_unlock();
-                            return 0;
-                        }
-
-                        /* Call find_new_buffer indirectly */
-                        int32_t new_buf = v0_6();
-
-                        if (new_buf == 0) {
-                            private_mutex_unlock();
-                            return 0;
-                        }
-
-                        /* Set up the new buffer entry */
-                        *(int32_t *)(new_buf + 0xc) = *(int32_t *)(i + 0xc) + s1_2;
-                        int32_t v1_4 = *(int32_t *)(i + 0x10);
-                        *(int32_t *)(new_buf + 4) = (int32_t)i;
-                        *(int32_t *)(new_buf + 0x10) = v1_4 - s1_2;
-                        int32_t v1_6 = *(int32_t *)(i + 8);
-
-                        if (v1_6 != 0) {
-                            *(int32_t *)(v1_6 + 4) = new_buf;
-                            v1_6 = *(int32_t *)(i + 8);
-                        }
-
-                        *(int32_t *)(new_buf + 8) = v1_6;
-                        *(char **)(i + 8) = (char *)new_buf;
-                    }
-
-                    /* Update the current entry */
-                    *(int32_t *)(i + 0x10) = s1_2;
-                    *(uint8_t *)i = 1;
-                    break;
-                }
-            }
-        }
-
-        private_mutex_unlock();
-
-        if (i != 0) {
-            return *(int32_t *)(i + 0xc);
-        }
-    }
-
-    return 0;
+	private_mutex_unlock(&t41_isp_mem_mutex);
+	return address;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d05c origin=fragment_seed original=isp_free_buffer */
 int isp_free_buffer(int32_t arg1)
 {
-	uintptr_t *s0;
-	uintptr_t *s1;
-	uintptr_t *s2;
-	uintptr_t s3;
-	uintptr_t *v0;
-	uintptr_t *v1;
-	uintptr_t *i;
-	uintptr_t *i_1;
-	uintptr_t *i_2;
+	struct t41_isp_mem_block *block;
 
-	s1 = arg1;
-	private_mutex_lock();
-
-	s2 = *(uintptr_t *)((char *)((char *)&ispmem + 0x19c) + 832);
-	v1 = *(uintptr_t *)((char *)((char *)&ispmem + 0x19c) + 412);
-
-	for (i = v1; i != 0; i = *(uintptr_t *)((char *)i + 8)) {
-		if (*(uint8_t *)i != 0 && *(uint32_t *)((char *)i + 12) == s1) {
-			*(uint8_t *)i = 0;
+	private_mutex_lock(&t41_isp_mem_mutex);
+	for (block = t41_isp_mem_head; block; block = block->next) {
+		if (block->used && block->address == (uint32_t)arg1) {
+			block->used = 0;
 			break;
 		}
 	}
 
-	s0 = v1;
-	s3 = (uintptr_t)memset;
+	for (block = t41_isp_mem_head; block && block->next; ) {
+		struct t41_isp_mem_block *next = block->next;
 
-	for (i_1 = s0; i_1 != 0; i_1 = i_2) {
-		i_2 = *(uintptr_t *)((char *)i_1 + 8);
-
-		if (*(uint8_t *)i_1 == 0) {
-			if (i_2 == 0) {
-				break;
-			}
-
-			if (*(uint8_t *)i_2 == 0) {
-				uint32_t a0_val = *(uint32_t *)((char *)i_1 + 16);
-				uint32_t v1_val = *(uint32_t *)((char *)i_1 + 12);
-				uint32_t v0_val = *(uint32_t *)((char *)i_2 + 12);
-
-				if (a0_val + v1_val == v0_val) {
-					*(uint32_t *)((char *)i_1 + 16) = *(uint32_t *)((char *)i_2 + 16) + a0_val;
-					*(uintptr_t *)((char *)i_1 + 8) = *(uintptr_t *)((char *)i_2 + 8);
-					v0 = *(uintptr_t *)((char *)i_2 + 8);
-
-					if (v0 != 0) {
-						*(uintptr_t *)((char *)v0 + 4) = i_1;
-					}
-
-					memset((void *)i_2, 0, 20);
-					*(uint8_t *)((char *)i_2 + 1) = 0;
-					i_2 = i_1;
-				}
-			}
+		if (!block->used && !next->used &&
+		    block->address + block->size == next->address) {
+			block->size += next->size;
+			block->next = next->next;
+			if (block->next)
+				block->next->prev = block;
+			memset(next, 0, sizeof(*next));
+			continue;
 		}
+		block = next;
 	}
-
-	private_mutex_unlock();
+	private_mutex_unlock(&t41_isp_mem_mutex);
 	return 0;
 }
 
@@ -36697,7 +36556,8 @@ int tx_isp_probe(struct platform_device *pdev)
     if (tx_isp_bringup_level >= 2)
         isp_mem_init();
     *(char **)((char *)v0 + 0x108) = "H20250310a";
-    isp_printf(1, "@@@@ tx-isp-probe ok (version %s) compiler date: %s @@@@\n", "H20250310a");
+    isp_printf(1, "@@@@ tx-isp-probe ok (version %s) compiler date: %s @@@@\n",
+	       "H20250310a", __DATE__);
     asm volatile("" ::: "memory");
     return 0;
 

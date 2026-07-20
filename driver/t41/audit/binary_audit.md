@@ -12,22 +12,22 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 338128 |
+| Executable section bytes | 479556 | 338272 |
 | Initialized writable bytes | 25120 | 15808 |
-| Uninitialized writable bytes | 20592 | 383088 |
+| Uninitialized writable bytes | 20592 | 367136 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=82121 ratio=0.708
-- classes: stub=18 collapsed=91 shorter=386 same_count=264 similar=474 larger=24 expanded=16
+- matched instructions: OEM=116036 recovered=82156 ratio=0.708
+- classes: stub=18 collapsed=91 shorter=386 same_count=264 similar=473 larger=24 expanded=17
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 20592 | 383088 | +362496 |
+| `.bss` | 20592 | 367136 | +346544 |
 | `.data` | 24768 | 15456 | -9312 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
@@ -36,15 +36,15 @@
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3504 | -12256 |
-| `.rodata.str1.4` | 25860 | 4884 | -20976 |
-| `.text` | 478400 | 338128 | -140272 |
+| `.rodata.str1.4` | 25860 | 4792 | -21068 |
+| `.text` | 478400 | 338272 | -140128 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -284,7 +284,7 @@ Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae_par_update_trig` | `tisp_ae_par_update_trig` | 107 | 80 | 0.748 | -27 | 7->6 | 5->3 |
 | shorter | exact_name | `tisp_ccm_init` | `tisp_ccm_init` | 107 | 81 | 0.757 | -26 | 9->7 | 0->0 |
 | shorter | exact_name | `ispcore_sync_sensor_attr` | `ispcore_sync_sensor_attr` | 106 | 61 | 0.575 | -45 | 5->5 | 7->6 |
-| shorter | exact_name | `isp_malloc_buffer` | `isp_malloc_buffer` | 106 | 66 | 0.623 | -40 | 6->5 | 12->8 |
+| shorter | exact_name | `isp_malloc_buffer` | `isp_malloc_buffer` | 106 | 72 | 0.679 | -34 | 6->3 | 12->10 |
 | shorter | exact_name | `tisp_ae_api_get_scene_luma` | `tisp_ae_api_get_scene_luma` | 105 | 60 | 0.571 | -45 | 4->3 | 5->1 |
 | shorter | exact_name | `tisp_lsc_param_array_set` | `tisp_lsc_param_array_set` | 103 | 53 | 0.515 | -50 | 8->5 | 5->2 |
 | shorter | exact_name | `isp_vic_frd_show` | `isp_vic_frd_show` | 103 | 61 | 0.592 | -42 | 4->4 | 6->6 |
