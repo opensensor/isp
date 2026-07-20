@@ -162844,15 +162844,17 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074ff0 origin=fragment_seed original=tx_isp_remove */
 int tx_isp_remove(struct platform_device *pdev)
 {
-    unsigned int s1 = (unsigned int)(uintptr_t)pdev;
-    unsigned int v0 = (unsigned int)((unsigned int (*)(unsigned int))(unsigned int)private_platform_get_drvdata)(s1);
-    unsigned int *s0 = v0;
-    (void)((unsigned int (*)(unsigned int))(unsigned int)private_misc_deregister)(s0 + 12);
-    (void)((unsigned int (*)(unsigned int))(unsigned int)private_proc_remove)(*(unsigned int *)((char *)s0 + 312));
-    (void)((unsigned int (*)(unsigned int))(unsigned int)tx_isp_unregister_platforms)(s0 + 136);
-    (void)((unsigned int (*)(unsigned int, unsigned int))(unsigned int)private_platform_set_drvdata)(s1, 0);
-    (void)((unsigned int (*)(unsigned int))(unsigned int)private_kfree)(s0);
-    return 0;
+	void *ispdev = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
+
+	if (!ispdev)
+		return 0;
+
+	private_misc_deregister((char *)ispdev + 0x0c);
+	private_proc_remove(*(void **)((char *)ispdev + 0x138));
+	tx_isp_unregister_platforms((int32_t *)((char *)ispdev + 0x88));
+	private_platform_set_drvdata(pdev, NULL);
+	private_kfree(ispdev);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000075084 origin=model_output original=tx_isp_core_remove */

@@ -19,8 +19,8 @@
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=81745 ratio=0.704
-- classes: stub=18 collapsed=93 shorter=390 same_count=263 similar=472 larger=22 expanded=15
+- matched instructions: OEM=116036 recovered=81746 ratio=0.704
+- classes: stub=18 collapsed=93 shorter=389 same_count=263 similar=473 larger=22 expanded=15
 
 ## Allocated Section Delta
 
@@ -44,7 +44,7 @@
 
 ## Function Outliers
 
-Showing 250 of 822 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|

@@ -29,7 +29,7 @@ Expected artifact:
 
 The recovered module is a bring-up artifact, not a production-ready driver.
 The current linked-binary audit finds 18 stub functions, 93 collapsed
-functions, 390 shorter functions, and 41 OEM-only symbols. Critical deficits
+functions, 389 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -86,6 +86,14 @@ The media-bus Bayer writer now preserves the upper bits of ISP register
 `0x88`, clears its low five bits, and applies the OEM `{1,3,2,0}` Bayer-order
 mapping across codes `0x5200` through `0x5213`. Unsupported formats retain the
 OEM diagnostic/no-op behavior.
+
+The exports-only (`-1`) hardware smoke level inserts and removes cleanly on the
+Wyze Cam v4 target. The first shallow-platform (`0`) run inserted successfully,
+created `/dev/tx-isp`, and reached the recovered probe, but exposed word-scaled
+decompiler offsets in `tx_isp_remove` during unload. The teardown now uses the
+OEM byte offsets `0x0c` and `0x88`, preserves the proc pointer at `0x138`, and
+guards an absent parent device before deregistration. This repair requires a
+fresh level-0 hardware retest before advancing to the device graph.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after

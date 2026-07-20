@@ -604,15 +604,15 @@
     "oem_only": 41,
     "recovered_only": 243,
     "same_instruction_count": 263,
-    "similar": 472,
-    "shorter": 390,
+    "similar": 473,
+    "shorter": 389,
     "stub": 18,
     "collapsed": 93,
     "larger": 22,
     "expanded": 15,
     "matched_oem_instructions": 116036,
-    "matched_recovered_instructions": 81745,
-    "matched_instruction_ratio": 0.7044796442483368
+    "matched_recovered_instructions": 81746,
+    "matched_instruction_ratio": 0.7044882622634355
   },
   "functions": [
     {
@@ -12845,46 +12845,6 @@
       "match_kind": "exact_name",
       "classification": "shorter",
       "oem": {
-        "name": "tx_isp_remove",
-        "section": ".exit.text",
-        "address": "0x320",
-        "binding": "local",
-        "symbol_bytes": 148,
-        "instructions": 37,
-        "branches": 0,
-        "calls": 6,
-        "returns": 1,
-        "relocations": 12
-      },
-      "recovered": [
-        {
-          "name": "tx_isp_remove",
-          "section": ".text",
-          "address": "0x52264",
-          "binding": "global",
-          "symbol_bytes": 116,
-          "instructions": 29,
-          "branches": 0,
-          "calls": 4,
-          "returns": 1,
-          "relocations": 8
-        }
-      ],
-      "instruction_ratio": 0.7837837837837838,
-      "instruction_delta": -8,
-      "recovered_totals": {
-        "symbol_bytes": 116,
-        "instructions": 29,
-        "branches": 0,
-        "calls": 4,
-        "returns": 1,
-        "relocations": 8
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "shorter",
-      "oem": {
         "name": "tisp_round_int64",
         "section": ".text",
         "address": "0x184cc",
@@ -23598,7 +23558,7 @@
         {
           "name": "regtrace_recovered_platform_remove",
           "section": ".text",
-          "address": "0x522d8",
+          "address": "0x522dc",
           "binding": "local",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -41597,6 +41557,46 @@
         "calls": 2,
         "returns": 1,
         "relocations": 6
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "similar",
+      "oem": {
+        "name": "tx_isp_remove",
+        "section": ".exit.text",
+        "address": "0x320",
+        "binding": "local",
+        "symbol_bytes": 148,
+        "instructions": 37,
+        "branches": 0,
+        "calls": 6,
+        "returns": 1,
+        "relocations": 12
+      },
+      "recovered": [
+        {
+          "name": "tx_isp_remove",
+          "section": ".text",
+          "address": "0x52264",
+          "binding": "global",
+          "symbol_bytes": 120,
+          "instructions": 30,
+          "branches": 1,
+          "calls": 4,
+          "returns": 1,
+          "relocations": 8
+        }
+      ],
+      "instruction_ratio": 0.8108108108108109,
+      "instruction_delta": -7,
+      "recovered_totals": {
+        "symbol_bytes": 120,
+        "instructions": 30,
+        "branches": 1,
+        "calls": 4,
+        "returns": 1,
+        "relocations": 8
       }
     },
     {
