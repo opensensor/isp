@@ -1052,8 +1052,10 @@ static const char LC98[] = "AeMode : %d\n";
 static const char LC99[] = "AeIntegrationTimeMode : %d\n";
 static int32_t ae_kthread_num;
 static uint32_t ae_process_end_flag;
-static uint32_t fs_work_comp;
-static uint32_t globe_wait_attr;
+static unsigned char fs_work_comp_storage[16] __attribute__((aligned(4)));
+#define fs_work_comp (*(uint32_t *)(void *)fs_work_comp_storage)
+static unsigned char globe_wait_attr_storage[20] __attribute__((aligned(4)));
+#define globe_wait_attr (*(uint32_t *)(void *)globe_wait_attr_storage)
 static unsigned char __attribute__((aligned(4))) main_fs_work[28] = {
     0xe0, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -1083,7 +1085,8 @@ static const char LC17[] = "#########    WARNING : savenum value exceed the limi
 static const char LC18[] = "[ %s:%d ] Please wait !!!%d \n";
 static const char LC19[] = "[ %s:%d ] save vaddr is 0x%x\n";
 static const char LC20[] = "/tmp/savenv12-%d.%s";
-static uint32_t frame_done_cnt;
+static unsigned char frame_done_cnt_storage[16] __attribute__((aligned(4)));
+#define frame_done_cnt (*(uint32_t *)(void *)frame_done_cnt_storage)
 static uint32_t frame_done_cond;
 static uint32_t frame_done_cond_sec;
 static unsigned char __attribute__((aligned(4))) frame_done_wq[20] = {
@@ -1177,7 +1180,8 @@ static struct platform_device tx_isp_platform_device = {
 #else
 static struct platform_device tx_isp_platform_device;
 #endif
-static uint32_t ae_algo_comp;
+static unsigned char ae_algo_comp_storage[16] __attribute__((aligned(4)));
+#define ae_algo_comp (*(uint32_t *)(void *)ae_algo_comp_storage)
 static uint32_t ae_info_mine;
 static struct file_operations tx_isp_fops;
 #define tx_isp_driver regtrace_recovered_platform_driver
@@ -1211,8 +1215,16 @@ static uint32_t mdns_equation_dif_cutval, mdns_equation_dif_segopt, mdns_equatio
 static uint32_t mdns_equation_dif_yval2, mdns_equation_dif_yval3, mdns_equation_dif_yval4, mdns_equation_dif_yval5;
 static uint32_t mdns_equation_dif_yval6, mdns_equation_dif_yval7, mdns_equation_smp_yval0, mdns_equation_smp_yval1;
 static uint32_t mdns_equation_smp_yval2, mdns_equation_smp_yval3, mdns_equation_smp_yval4, mdns_equation_smp_yval5;
-static uint32_t mdns_equation_smp_yval6, mdns_equation_smp_yval7, mdns_info, mscaHardPar, mscaHardParTmp;
-static uint32_t msca_info, msca_pm_work_en, osd_en, rate_long, rate_long_last, reg_list, s_gsm_hist0, s_gsm_hist1;
+static uint32_t mdns_equation_smp_yval6, mdns_equation_smp_yval7, mdns_info;
+static unsigned char mscaHardPar_storage[12] __attribute__((aligned(4)));
+#define mscaHardPar (*(uint32_t *)(void *)mscaHardPar_storage)
+static unsigned char mscaHardParTmp_storage[12] __attribute__((aligned(4)));
+#define mscaHardParTmp (*(uint32_t *)(void *)mscaHardParTmp_storage)
+static uint32_t msca_info, msca_pm_work_en, osd_en, rate_long, rate_long_last, reg_list;
+static unsigned char s_gsm_hist0_storage[1024] __attribute__((aligned(4)));
+#define s_gsm_hist0 (*(uint32_t *)(void *)s_gsm_hist0_storage)
+static unsigned char s_gsm_hist1_storage[1024] __attribute__((aligned(4)));
+#define s_gsm_hist1 (*(uint32_t *)(void *)s_gsm_hist1_storage)
 static uint32_t saveflag, savenum, snapyuv_mode, st_vic_save_par, statYNum, statYNumLast, statYOut, statYSum;
 static uint32_t stat_en, sum_block_long, sum_block_short, ta_custom_again, ta_custom_en, ta_custom_ev, ta_custom_ev_short;
 static uint32_t ta_custom_tgain, tawb_custom_en, tgain_wdr_s, thr_maxvalue_tmp, tisp_mdns_wdr_en_table;
@@ -1224,9 +1236,12 @@ static uint32_t wdr_hist_R0, wdr_hist_R1, wdr_info, wdr_sum_block, width_adr, yd
 static inline uint32_t zx_d(uint8_t b) {
     return (uint32_t)b;
 }
-static uint32_t st_tisp_com_par;
-static uint32_t tisp_par_info;
-static uint32_t tparamsP;
+static unsigned char st_tisp_com_par_storage[212] __attribute__((aligned(4)));
+#define st_tisp_com_par (*(uint32_t *)(void *)st_tisp_com_par_storage)
+static unsigned char tisp_par_info_storage[504] __attribute__((aligned(4)));
+#define tisp_par_info (*(uint32_t *)(void *)tisp_par_info_storage)
+static unsigned char tparamsP_storage[8] __attribute__((aligned(4)));
+#define tparamsP (*(uint32_t *)(void *)tparamsP_storage)
 static uint32_t pos_en;
 static uint32_t pos_value;
 static unsigned char top_bypass_global[8];
@@ -1238,14 +1253,20 @@ static unsigned char __attribute__((aligned(4))) tgain_last[16] = {
 };
 static uint32_t sev_last;
 static uint32_t stgain_last;
-static uint32_t tpm_cb;
+static unsigned char tpm_cb_storage[336] __attribute__((aligned(4)));
+#define tpm_cb (*(uint32_t *)(void *)tpm_cb_storage)
 static uint32_t m_bin;
-static uint32_t tparams_day;
-static uint32_t tparams_night;
-static uint32_t tsbin;
+static unsigned char tparams_day_storage[8] __attribute__((aligned(4)));
+#define tparams_day (*(uint32_t *)(void *)tparams_day_storage)
+static unsigned char tparams_night_storage[8] __attribute__((aligned(4)));
+#define tparams_night (*(uint32_t *)(void *)tparams_night_storage)
+static unsigned char tsbin_storage[8] __attribute__((aligned(4)));
+#define tsbin (*(uint32_t *)(void *)tsbin_storage)
 static uint32_t init_load_bin;
-static uint32_t msca;
-static uint32_t mscaler;
+static unsigned char msca_storage[78] __attribute__((aligned(4)));
+#define msca (*(uint32_t *)(void *)msca_storage)
+static unsigned char mscaler_storage[2656] __attribute__((aligned(4)));
+#define mscaler (*(uint32_t *)(void *)mscaler_storage)
 static unsigned char data_1ee40[16384];
 static unsigned char data_74b0[16384];
 static unsigned char data_80000[16384];
@@ -1253,16 +1274,24 @@ static uint32_t day_night;
 static uint32_t deir_en;
 static uint32_t dnw;
 static uint32_t global_wdr_en;
-static uint32_t sensor_ctrl_main;
-static int tevent_info;
-static int event_slock;
-static int event_empty;
-static int cb;
-static int32_t st_top_cfg[16];
-static uint32_t ae_process_comp;
-static uint32_t y_arr;
+static unsigned char sensor_ctrl_main_storage[424] __attribute__((aligned(4)));
+#define sensor_ctrl_main (*(uint32_t *)(void *)sensor_ctrl_main_storage)
+static unsigned char tevent_info_storage[7744] __attribute__((aligned(4)));
+#define tevent_info (*(int32_t *)(void *)tevent_info_storage)
+static unsigned char event_slock_storage[8] __attribute__((aligned(4)));
+#define event_slock (*(int32_t *)(void *)event_slock_storage)
+static unsigned char event_empty_storage[8] __attribute__((aligned(4)));
+#define event_empty (*(int32_t *)(void *)event_empty_storage)
+static unsigned char cb_storage[152] __attribute__((aligned(4)));
+#define cb (*(int32_t *)(void *)cb_storage)
+static unsigned char st_top_cfg[66] __attribute__((aligned(4)));
+static unsigned char ae_process_comp_storage[16] __attribute__((aligned(4)));
+#define ae_process_comp (*(uint32_t *)(void *)ae_process_comp_storage)
+static unsigned char y_arr_storage[900] __attribute__((aligned(4)));
+#define y_arr (*(uint32_t *)(void *)y_arr_storage)
 static uint32_t fliker_ae_stable;
-static uint32_t ae_api_tmp;
+static unsigned char ae_api_tmp_storage[1028] __attribute__((aligned(4)));
+#define ae_api_tmp (*(uint32_t *)(void *)ae_api_tmp_storage)
 static unsigned char __attribute__((aligned(4))) tisp_ae_hist_last[2104] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -1476,7 +1505,8 @@ static uint32_t awb_list_cluster_rg;
 static uint32_t awb_algo_comp;
 static unsigned char rodata[16384];
 static unsigned char data_119f8[16384];
-static uint32_t lsc_slock;
+static unsigned char lsc_slock_storage[8] __attribute__((aligned(4)));
+#define lsc_slock (*(uint32_t *)(void *)lsc_slock_storage)
 static uintptr_t data_864e0;
 static uintptr_t data_864e4;
 static uintptr_t data_864e8;
@@ -1733,7 +1763,8 @@ static uintptr_t (*data_8657c)(void);
 static uintptr_t (*data_86580)(void);
 static uintptr_t (*data_86584)(void);
 static unsigned char _bss_globals[16384];
-static uint32_t msca_slock;
+static unsigned char msca_slock_storage[8] __attribute__((aligned(4)));
+#define msca_slock (*(uint32_t *)(void *)msca_slock_storage)
 static uintptr_t (*data_84a60)(void);
 static unsigned char __attribute__((aligned(4))) gsm_hist_para[3080] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -2019,7 +2050,8 @@ static uint32_t timeratio_curve_adjust_flag;
 static void *const jump_table_68140[16];
 static void *entry_gp_base;
 static uint32_t rpars;
-static uint32_t tisp_raw_info;
+static unsigned char tisp_raw_info_storage[32] __attribute__((aligned(4)));
+#define tisp_raw_info (*(uint32_t *)(void *)tisp_raw_info_storage)
 static uint32_t cust_mode;
 static uint32_t tisp_tattr;
 static uint32_t ispcore_sd;
@@ -2092,7 +2124,7 @@ static uint32_t event_busy;
 static const char LC168[] = "ISP[0]==>>frame_interival:%ld, valid:%ld, vb:%ld\n";
 static const char LC169[] = "This ISP[0] Don't Wrok\n";
 static const char LC170[] = "ISP[0]==>>vb measure error\n";
-static int32_t irq_func_cb[16];
+static int32_t irq_func_cb[96];
 static const char LC171[] = "[%s %d] Enter the resume ... \n";
 static const char LC172[] = "[%s %d] [ %s:%d ] Failed to resume %s\n";
 static const char LC173[] = "[%s %d] Enter the suspend ... \n";
@@ -72267,15 +72299,15 @@ int tisp_awb_deinit(int arg1) {
         *s3 = 0;
     }
 
-    void *tpm_cb = (void *)(*(void **)((char *)&tpm_cb + 0xc));
-    if (tpm_cb != 0) {
-        *(void **)((char *)tpm_cb + 12) = 0;
+    void *callback = (void *)(*(void **)((char *)&tpm_cb + 0xc));
+    if (callback != 0) {
+        *(void **)((char *)callback + 12) = 0;
     }
-    if (tpm_cb != 0) {
-        *(void **)((char *)tpm_cb + 16) = 0;
+    if (callback != 0) {
+        *(void **)((char *)callback + 16) = 0;
     }
-    if (tpm_cb != 0) {
-        *(void **)((char *)tpm_cb + 20) = 0;
+    if (callback != 0) {
+        *(void **)((char *)callback + 20) = 0;
     }
 
     return 0;

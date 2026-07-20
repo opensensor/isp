@@ -12,14 +12,14 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 338352 |
+| Executable section bytes | 479556 | 338384 |
 | Initialized writable bytes | 25120 | 16032 |
-| Uninitialized writable bytes | 20592 | 367152 |
+| Uninitialized writable bytes | 20592 | 383664 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=82178 ratio=0.708
+- matched instructions: OEM=116036 recovered=82185 ratio=0.708
 - classes: stub=18 collapsed=91 shorter=386 same_count=265 similar=472 larger=24 expanded=17
 
 ## Allocated Section Delta
@@ -27,7 +27,7 @@
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 20592 | 367152 | +346560 |
+| `.bss` | 20592 | 383664 | +363072 |
 | `.data` | 24768 | 15680 | -9088 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3392 | -12368 |
 | `.rodata.str1.4` | 25860 | 4968 | -20892 |
-| `.text` | 478400 | 338352 | -140048 |
+| `.text` | 478400 | 338384 | -140016 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
@@ -292,8 +292,8 @@ Showing 250 of 820 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_gib_interp_by_again` | `tisp_gib_interp_by_again` | 93 | 69 | 0.742 | -24 | 6->5 | 4->4 |
 | shorter | exact_name | `tisp_s_module_ratio_attr` | `tisp_s_module_ratio_attr` | 84 | 44 | 0.524 | -40 | 3->2 | 15->8 |
 | shorter | exact_name | `tisp_s_raw_rw_control` | `tisp_s_raw_rw_control` | 84 | 53 | 0.631 | -31 | 5->5 | 8->1 |
-| shorter | exact_name | `tisp_awb_deinit` | `tisp_awb_deinit` | 83 | 52 | 0.627 | -31 | 6->6 | 9->6 |
 | shorter | exact_name | `tisp_bypass_update` | `tisp_bypass_update` | 83 | 56 | 0.675 | -27 | 5->5 | 0->0 |
+| shorter | exact_name | `tisp_awb_deinit` | `tisp_awb_deinit` | 83 | 59 | 0.711 | -24 | 6->6 | 9->7 |
 | shorter | exact_name | `tisp_clm_init` | `tisp_clm_init` | 83 | 59 | 0.711 | -24 | 7->6 | 0->0 |
 | shorter | exact_name | `tisp_mdns_func_en` | `tisp_mdns_func_en` | 82 | 46 | 0.561 | -36 | 2->1 | 3->3 |
 | shorter | exact_name | `ispcore_frame_channel_ir_qbuf` | `ispcore_frame_channel_ir_qbuf` | 79 | 61 | 0.772 | -18 | 4->3 | 12->11 |

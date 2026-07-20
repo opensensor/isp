@@ -190,6 +190,17 @@ keeps core/VIC/IVDC IRQs 39/38/21 active, and reports no kernel warning or fatal
 signature. Live unload and a sensor/Raptor consumer remain gated on repair of
 the shorter recovered TISP deinitializer and review of the stream-init path.
 
+Stream-init review found that several OEM firmware objects had been recovered
+as single words even though the code indexes or clears them as structures and
+per-channel arrays. The active storage now has the OEM symbol-table extents,
+including 504-byte TISP parameters, 2,656-byte scaler state, 78-byte scaler
+channel state, 7,744-byte event state, two-entry parameter/day/night tables,
+and the corresponding callback, histogram, sensor-control, lock, completion,
+and scratch objects. This prevents `tisp_init` from overwriting neighboring
+globals before the stream path is enabled. The level-3 regression at
+`logs/20260720-level3-tisp-storage-117` again registers cleanly with no warning
+or fatal signature.
+
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.
