@@ -29407,92 +29407,34 @@ int32_t sensor_init(uintptr_t a0, uint32_t a1)
     *(uint32_t *)((char *)a1 + 96) = v1;
     v0 = *(uint32_t *)((char *)v0 + 304);
     *(uint32_t *)((char *)a1 + 100) = v0;
-    v0 = 65536;
-    v0 = v0 + 11324;
-    *(uint32_t *)((char *)a0 + 324) = v0;
-    v0 = 65536;
-    v0 = v0 + 9408;
-    *(uint32_t *)((char *)a0 + 328) = v0;
-    v0 = 65536;
-    v0 = v0 + 9416;
-    *(uint32_t *)((char *)a0 + 332) = v0;
-    v0 = 65536;
-    v0 = v0 + 9504;
-    *(uint32_t *)((char *)a0 + 336) = v0;
-    v0 = 65536;
-    v0 = v0 + 9592;
-    *(uint32_t *)((char *)a0 + 340) = v0;
-    v0 = 65536;
-    v0 = v0 + 9680;
-    *(uint32_t *)((char *)a0 + 344) = v0;
-    v0 = 65536;
-    v0 = v0 + 9780;
-    *(uint32_t *)((char *)a0 + 348) = v0;
-    v0 = 65536;
-    v0 = v0 + 9884;
-    *(uint32_t *)((char *)a0 + 352) = v0;
-    v0 = 65536;
-    v0 = v0 + 9992;
+    /* OEM stores relocatable text symbols in the shared callback tail. */
+    *(void **)(a0 + 324) = sensor_hw_reset_disable;
+    *(void **)(a0 + 328) = sensor_hw_reset_enable;
+    *(void **)(a0 + 332) = sensor_alloc_analog_gain;
+    *(void **)(a0 + 336) = sensor_alloc_analog_gain_short;
+    *(void **)(a0 + 340) = sensor_alloc_digital_gain;
+    *(void **)(a0 + 344) = sensor_alloc_digital_gain_short;
+    *(void **)(a0 + 348) = sensor_alloc_integration_time;
+    *(void **)(a0 + 352) = sensor_alloc_integration_time_short;
+    *(void **)(a0 + 356) = sensor_set_integration_time;
+    *(void **)(a0 + 360) = sensor_set_integration_time_short;
+    *(void **)(a0 + 364) = sensor_start_changes;
+    *(void **)(a0 + 368) = sensor_end_changes;
+    *(void **)(a0 + 372) = sensor_set_analog_gain;
+    *(void **)(a0 + 376) = sensor_set_analog_gain_short;
+    *(void **)(a0 + 380) = sensor_set_digital_gain;
+    *(void **)(a0 + 384) = sensor_set_digital_gain_short;
+    *(void **)(a0 + 388) = sensor_get_normal_fps;
+    *(void **)(a0 + 392) = sensor_read_black_pedestal;
+    *(void **)(a0 + 396) = sensor_set_mode;
+    *(void **)(a0 + 400) = sensor_set_wdr_mode;
+    *(void **)(a0 + 404) = sensor_fps_control;
+    *(void **)(a0 + 408) = sensor_get_id;
+    *(void **)(a0 + 412) = sensor_disable_isp;
+    *(void **)(a0 + 416) = sensor_get_lines_per_second;
+    *(void **)(a0 + 420) = sensor_set_fps;
 
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 356) = v0;
-    v0 = 65536;
-    v0 = v0 + 10136;
-    *(uint32_t *)((char *)a0 + 360) = v0;
-    v0 = 65536;
-    v0 = v0 + 10820;
-    *(uint32_t *)((char *)a0 + 364) = v0;
-    v0 = 65536;
-    v0 = v0 + 11316;
-    *(uint32_t *)((char *)a0 + 368) = v0;
-    v0 = 65536;
-    v0 = v0 + 10280;
-    *(uint32_t *)((char *)a0 + 372) = v0;
-    v0 = 65536;
-    v0 = v0 + 10420;
-    *(uint32_t *)((char *)a0 + 376) = v0;
-    v0 = 65536;
-    v0 = v0 + 10560;
-    *(uint32_t *)((char *)a0 + 380) = v0;
-    v0 = 65536;
-    v0 = v0 + 10648;
-    *(uint32_t *)((char *)a0 + 384) = v0;
-    v0 = 65536;
-    v0 = v0 + 10736;
-    *(uint32_t *)((char *)a0 + 388) = v0;
-    v0 = 65536;
-    v0 = v0 + 10812;
-    *(uint32_t *)((char *)a0 + 392) = v0;
-    v0 = 65536;
-    v0 = v0 + 11060;
-
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 396) = v0;
-    v0 = 65536;
-    v0 = v0 + 10864;
-    *(uint32_t *)((char *)a0 + 400) = v0;
-    v0 = 65536;
-    v0 = v0 + 10872;
-    *(uint32_t *)((char *)a0 + 404) = v0;
-    v0 = 65536;
-    v0 = v0 + 10828;
-    *(uint32_t *)((char *)a0 + 408) = v0;
-    v0 = 65536;
-    v0 = v0 + 11308;
-    *(uint32_t *)((char *)a0 + 412) = v0;
-    v0 = 65536;
-    v0 = v0 + 11052;
-    *(uint32_t *)((char *)a0 + 416) = v0;
-    v0 = 65536;
-    v0 = v0 + 10972;
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 420) = v0;
-
-    return 0;
+    return (int32_t)(uintptr_t)sensor_set_fps;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012e00 origin=fragment_seed original=sensor_early_init */
