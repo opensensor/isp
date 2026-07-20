@@ -28,8 +28,8 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 23 stub functions, 92 collapsed
-functions, 395 shorter functions, and 41 OEM-only symbols. Critical deficits
+The current linked-binary audit finds 23 stub functions, 91 collapsed
+functions, 393 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -48,6 +48,12 @@ The complete T41 fixed-point log helper family was restored from the local
 Ingenic Linux 4.4.94 T41 SDK source. Four helpers now have exact OEM
 instruction-count parity and the 64-bit log conversion is within one
 instruction of OEM.
+
+The corresponding internal TISP fixed-point log family now returns its
+calculated values instead of zero. The 32-bit integer helper is within one
+instruction of OEM and both exported conversion wrappers are classified as
+similar by the linked audit; the 64-bit integer helper is semantically restored
+but remains shorter than OEM and needs runtime coverage during tuning bring-up.
 
 Twelve more vendor shim functions covering I2C, GPIO input, module references,
 completion handling, and interruptible timeout waits were restored from that

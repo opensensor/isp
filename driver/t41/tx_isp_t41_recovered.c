@@ -39374,377 +39374,145 @@ tisp_simple_intp_int160x6c:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018154 origin=fragment_seed original=tisp_log2_int_to_fixed */
-int32_t tisp_log2_int_to_fixed(uint32_t arg1, int32_t arg2, int32_t arg3)
+int32_t tisp_log2_int_to_fixed(uint32_t value, int32_t precision,
+			       int32_t shift)
 {
-    uint32_t *a3 = 0;
-    uint32_t *v0 = 0;
-    uint32_t *v1 = 0;
+	uint32_t normalized;
+	uint32_t scan;
+	uint32_t square;
+	uint32_t bit_pos = 0;
+	int32_t result = 0;
+	int32_t i;
 
-    if (arg1 == 0)
-        return 0;
+	if (!value)
+		return 0;
 
-    v1 = arg1 < 65536;
-    if (v1) {
-        v1 = arg1;
-        goto tisp_log2_int_to_fixed0x20;
-    }
+	if (value < 0x10000) {
+		scan = value;
+	} else {
+		scan = value >> 16;
+		bit_pos = 16;
+	}
 
-    v1 = arg1 >> 16;
-    v0 = 16;
+	if (scan >= 0x100) {
+		scan >>= 8;
+		bit_pos += 8;
+	}
+	if (scan >= 0x10) {
+		scan >>= 4;
+		bit_pos += 4;
+	}
+	if (scan >= 4) {
+		scan >>= 2;
+		bit_pos += 2;
+	}
+	if (scan != 1)
+		bit_pos++;
 
-tisp_log2_int_to_fixed0x20:
-    a3 = v1 < 256;
-    if (!a3) {
-        a3 = v1 < 16;
-        if (!a3) {
-            v0 = v0 + 8;
-            v1 = (uintptr_t)v1 >> 8;
-            v0 = (uintptr_t)v0 & 255;
-            a3 = v1 < 16;
-        }
-    }
+	if (bit_pos >= 16)
+		normalized = value >> ((bit_pos - 15) & 0x1f);
+	else
+		normalized = value << ((15 - bit_pos) & 0x1f);
 
-    if (!a3) {
-        a3 = v1 < 4;
-        if (!a3) {
-            v0 = v0 + 4;
-            v1 = (uintptr_t)v1 >> 4;
-            v0 = (uintptr_t)v0 & 255;
-            a3 = v1 < 4;
-        }
-    }
+	for (i = 0; i < precision; i++) {
+		square = normalized * normalized;
+		result <<= 1;
 
-    if (!a3) {
-        a3 = 1;
-        if (!a3) {
-            v0 = v0 + 2;
-            v1 = (uintptr_t)v1 >> 2;
-            v0 = (uintptr_t)v0 & 255;
-        }
-    }
+		if (!(square & 0x80000000U)) {
+			normalized = square >> 15;
+		} else {
+			result++;
+			normalized = square >> 16;
+		}
+	}
 
-    if (v1 == a3) {
-        v1 = v0 < 16;
-        if (!v1) {
-            v0 = v0 + 1;
-            v0 = (uintptr_t)v0 & 255;
-            v1 = v0 < 16;
-        }
-    }
-
-    if (!v1) {
-        v1 = v0 - 15;
-        arg1 = arg1 >> (uintptr_t)v1;
-        goto tisp_log2_int_to_fixed0x90;
-    }
-
-    v1 = 15;
-    v1 = (uintptr_t)v1 - (uintptr_t)v0;
-    arg1 = arg1 << (uintptr_t)v1;
-
-tisp_log2_int_to_fixed0x90:
-    v1 = 0;
-    a3 = 0;
-
-tisp_log2_int_to_fixed0x98:
-    if (a3 >= arg2)
-        goto tisp_log2_int_to_fixed0xc4;
-
-    v1 = (uintptr_t)v1 << 1;
-    uint32_t t0 = arg1 * arg1;
-    arg1 = t0 >> 15;
-    if (t0 < 0x80000000) {
-        arg1 = t0 >> 16;
-        v1 = v1 + 1;
-    }
-    a3 = a3 + 1;
-    goto tisp_log2_int_to_fixed0x98;
-
-tisp_log2_int_to_fixed0xc4:
-    return (((uintptr_t)v0 << (arg2 & 0x1f)) + (uintptr_t)v1) << (arg3 & 0x1f) | (arg1 & 0x7fff) >> ((15 - arg3) & 0x1f);
+	return (((bit_pos << (precision & 0x1f)) + result)
+		<< (shift & 0x1f)) |
+		((normalized & 0x7fff) >> ((15 - shift) & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001824c origin=fragment_seed original=tisp_log2_fixed_to_fixed */
-int32_t tisp_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2)
+int32_t tisp_log2_fixed_to_fixed(uint32_t value, uint32_t in_precision,
+				 uint32_t out_precision)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uint32_t *t1 = 0;
-    uint32_t *t2 = 0;
-    uint32_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    t2 = a2;
-    t1 = a1;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_log2_int_to_fixed)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    t1 = (uintptr_t)t1 << (uintptr_t)t2;
-    v0 = (uintptr_t)v0 - (uintptr_t)t1;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return tisp_log2_int_to_fixed(value, out_precision, 0) -
+		(in_precision << (out_precision & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018284 origin=fragment_seed original=tisp_log2_int_to_fixed_64 */
-int32_t tisp_log2_int_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
+int32_t tisp_log2_int_to_fixed_64(uint32_t value_low, uint32_t value_high,
+				  uint32_t precision, uint32_t shift)
 {
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t t0 = 0;
-    uint32_t *t1 = 0;
-    uint32_t *t2 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	uint64_t value = ((uint64_t)value_high << 32) | value_low;
+	uint64_t square;
+	uint32_t normalized;
+	uint32_t scan;
+	uint32_t bit_pos;
+	int32_t result = 0;
+	uint32_t i;
 
-    /* fragment 0: Arithmetic */
-    v1 = a0 | a1;
+	if (!value)
+		return 0;
 
-    /* fragment 1: Branch */
-    if (v1 == 0) { goto tisp_log2_int_to_fixed_640x1f8; }
+	if (value_high) {
+		scan = value_high;
+		bit_pos = 32;
+	} else {
+		scan = value_low;
+		bit_pos = 0;
+	}
 
-    /* fragment 2: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (scan >= 0x10000) {
+		scan >>= 16;
+		bit_pos += 16;
+	}
+	if (scan >= 0x100) {
+		scan >>= 8;
+		bit_pos += 8;
+	}
+	if (scan >= 0x10) {
+		scan >>= 4;
+		bit_pos += 4;
+	}
+	if (scan >= 4) {
+		scan >>= 2;
+		bit_pos += 2;
+	}
+	if (scan != 1)
+		bit_pos++;
 
-    /* fragment 3: Branch */
-    if (a1 == 0) { goto tisp_log2_int_to_fixed_640x168; }
+	if (bit_pos >= 16)
+		value >>= bit_pos - 15;
+	else
+		value <<= 15 - bit_pos;
+	normalized = value;
 
-    /* fragment 4: Arithmetic */
-    v0 = a1;
-    v1 = 0;
-    s0 = 32;
+	for (i = 0; i < precision; i++) {
+		square = (uint64_t)normalized * normalized;
+		result <<= 1;
 
-tisp_log2_int_to_fixed_640x34:
-    /* fragment 5: Arithmetic */
-    t0 = 65536;
-    t0 = v0 < t0;
+		if (!(square & (1ULL << 31))) {
+			normalized = square >> 15;
+		} else {
+			result++;
+			normalized = square >> 16;
+		}
+	}
 
-    /* fragment 6: Branch */
-    int _bc_t0_6 = t0 != 0;
-    t0 = v0 < 256;
-    if (_bc_t0_6) { goto tisp_log2_int_to_fixed_640x54; }
-
-    /* fragment 7: Arithmetic */
-    v0 = (uintptr_t)v0 >> 16;
-    v1 = 0;
-    s0 = s0 + 16;
-    t0 = v0 < 256;
-
-tisp_log2_int_to_fixed_640x54:
-    /* fragment 8: Branch */
-    int _bc_t0_8 = t0 != 0;
-    t0 = v0 < 16;
-    if (_bc_t0_8) { goto tisp_log2_int_to_fixed_640x6c; }
-
-    /* fragment 9: Arithmetic */
-    v0 = (uintptr_t)v0 >> 8;
-    v1 = 0;
-    s0 = s0 + 8;
-    t0 = v0 < 16;
-
-tisp_log2_int_to_fixed_640x6c:
-    /* fragment 10: Branch */
-    int _bc_t0_10 = t0 != 0;
-    t0 = v0 < 4;
-    if (_bc_t0_10) { goto tisp_log2_int_to_fixed_640x84; }
-
-    /* fragment 11: Arithmetic */
-    v0 = (uintptr_t)v0 >> 4;
-    v1 = 0;
-    s0 = s0 + 4;
-    t0 = v0 < 4;
-
-tisp_log2_int_to_fixed_640x84:
-    /* fragment 12: Branch */
-    int _bc_t0_12 = t0 != 0;
-    t0 = 1;
-    if (_bc_t0_12) { goto tisp_log2_int_to_fixed_640xa4; }
-
-    /* fragment 13: Arithmetic */
-    t0 = (uintptr_t)v1 << 30;
-    v0 = (uintptr_t)v0 >> 2;
-    v0 = t0 | (uintptr_t)v0;
-    v1 = (uintptr_t)v1 >> 2;
-    s0 = s0 + 2;
-    t0 = 1;
-
-tisp_log2_int_to_fixed_640xa4:
-    /* fragment 14: Branch */
-    if (v0 != t0) { goto tisp_log2_int_to_fixed_640xb4; }
-
-    /* fragment 15: Branch */
-    v0 = s0 < 16;
-    if (v1 == 0) { goto tisp_log2_int_to_fixed_640xbc; }
-
-tisp_log2_int_to_fixed_640xb4:
-    /* fragment 16: Arithmetic */
-    s0 = s0 + 1;
-    v0 = s0 < 16;
-
-tisp_log2_int_to_fixed_640xbc:
-    /* fragment 17: Arithmetic */
-    s2 = a3;
-
-    /* fragment 18: Branch */
-    s3 = a2;
-    if (v0 == 0) { goto tisp_log2_int_to_fixed_640x178; }
-
-    /* fragment 19: CallSetup */
-    a2 = 15;
-    v0 = (unsigned int *)&__ashldi3;
-    a2 = a2 - (uintptr_t)s0;
-    v0 = v0;
-
-tisp_log2_int_to_fixed_640xd8:
-    /* fragment 20: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)__ashldi3)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 21: Arithmetic */
-    s1 = v0;
-    a0 = 0;
-    a1 = 0;
-    t0 = 0;
-    t2 = 2147483648;
-
-tisp_log2_int_to_fixed_640xf4:
-    /* fragment 22: Arithmetic */
-    v0 = t0 < s3;
-
-    /* fragment 23: Branch */
-    v1 = (uintptr_t)v1 * (uintptr_t)s1;
-    if (v0 != 0) { goto tisp_log2_int_to_fixed_640x188; }
-
-    /* fragment 24: CallSetup */
-    s0 = (uintptr_t)s0 << s3;
-   s0 = (s0 + a0) < s0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)__ashldi3)(((uintptr_t)s0 << s3) + a0, (((uintptr_t)s0 << s3) + a0) < ((uintptr_t)s0 << s3) + (((uintptr_t)((uintptr_t)s0 << s3) >> 31) + a1), (uintptr_t)s2); /* jalr target resolved by relocation */
-
-    /* fragment 25: CallSetup */
-    s0 = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)__lshrdi3)((uintptr_t)s1 & 32767, 0, 15 - (uintptr_t)s2); /* jalr target resolved by relocation */
-
-    /* fragment 26: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 27: Arithmetic */
-    v0 = (uintptr_t)s0 | (uintptr_t)v0;
-
-    /* fragment 28: Epilogue */
-    /* function epilogue: restore registers and return */
-    return 0;
-
-tisp_log2_int_to_fixed_640x168:
-    /* fragment 29: Arithmetic */
-    v0 = a0;
-    v1 = 0;
-
-    /* fragment 30: Branch */
-    s0 = 0;
-    goto tisp_log2_int_to_fixed_640x34;
-
-tisp_log2_int_to_fixed_640x178:
-    /* fragment 31: ConstantLoad */
-    v0 = 0x0;
-
-    /* fragment 32: Branch */
-    a2 = s0 - 15;
-    goto tisp_log2_int_to_fixed_640xd8;
-
-tisp_log2_int_to_fixed_640x188:
-    /* fragment 33: Arithmetic */
-    t1 = a0 >> 31;
-    v0 = a1 << 1;
-    a1 = (uintptr_t)t1 | (uintptr_t)v0;
-    v1 = (uintptr_t)v1 << 1;
-    v1 = v1 + a3;
-    a3 = v1;
-    v0 = (uintptr_t)t2 & a2;
-    v1 = (uintptr_t)v0 | (uintptr_t)v1;
-
-    /* fragment 34: Branch */
-    a0 = a0 << 1;
-    if (v1 == 0) { goto tisp_log2_int_to_fixed_640x1e4; }
-
-    /* fragment 35: Arithmetic */
-    v0 = a0 + 1;
-    v1 = v0 < a0;
-    s1 = a2 >> 16;
-    a0 = v0;
-    v0 = a3 << 16;
-    a1 = v1 + a1;
-    s1 = (uintptr_t)v0 | (uintptr_t)s1;
-    v1 = a3 >> 16;
-
-tisp_log2_int_to_fixed_640x1dc:
-    /* fragment 36: Branch */
-    t0 = t0 + 1;
-    goto tisp_log2_int_to_fixed_640xf4;
-
-tisp_log2_int_to_fixed_640x1e4:
-    /* fragment 37: Arithmetic */
-    v0 = a3 << 17;
-    s1 = a2 >> 15;
-    s1 = (uintptr_t)v0 | (uintptr_t)s1;
-
-    /* fragment 38: Branch */
-    v1 = a3 >> 15;
-    goto tisp_log2_int_to_fixed_640x1dc;
-
-tisp_log2_int_to_fixed_640x1f8:
-    /* fragment 39: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 40: Arithmetic */
-    v0 = 0;
-
-    return 0;
+	return (((bit_pos << (precision & 0x1f)) + result)
+		<< (shift & 0x1f)) |
+		((normalized & 0x7fff) >> ((15 - shift) & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018484 origin=fragment_seed original=tisp_log2_fixed_to_fixed_64 */
-int32_t tisp_log2_fixed_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
+int32_t tisp_log2_fixed_to_fixed_64(uint32_t value_low,
+				    uint32_t value_high,
+				    uint32_t in_precision,
+				    uint32_t out_precision)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s1 = a3;
-    s0 = a2;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_log2_int_to_fixed_64)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    s0 = (uintptr_t)s0 << (uintptr_t)s1;
-    v0 = (uintptr_t)v0 - (uintptr_t)s0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return tisp_log2_int_to_fixed_64(value_low, value_high,
+					out_precision, 0) -
+		(in_precision << (out_precision & 0x1f));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000184cc origin=model_output original=tisp_round_int64 */
