@@ -3359,18 +3359,18 @@ int32_t sub_17490(void);
 int32_t sub_17498(void);
 int32_t fix_point_div_32(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t tisp_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3);
-int64_t fix_point_add(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
-int32_t fix_point_sub(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
+uint64_t fix_point_add(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
+uint64_t fix_point_sub(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
 uint32_t fix_point_mult2(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 int32_t fix_point_mult3(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7);
 int32_t fix_point_div(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
-int64_t fix_point_add_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
-int32_t fix_point_sub_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
+uint64_t fix_point_add_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
+uint64_t fix_point_sub_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
 int32_t fix_point_mult2_64(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 int32_t fix_point_mult3_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7);
 int32_t fix_point_div_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
-int32_t fix_point_add_32(uint32_t a0, uint32_t a1, uint32_t a2);
-int32_t fix_point_sub_32(uint32_t a0, uint32_t a1, uint32_t a2);
+uint32_t fix_point_add_32(uint32_t a0, uint32_t a1, uint32_t a2);
+uint32_t fix_point_sub_32(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t fix_point_mult2_32(int32_t arg1, int32_t arg2, int32_t arg3);
 int32_t fix_point_mult3_32(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t fix_point_intp(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4);
@@ -37817,100 +37817,31 @@ int32_t tisp_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000175ec origin=fragment_seed original=fix_point_add */
-int64_t fix_point_add(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
+uint64_t fix_point_add(uint32_t pointpos, uint32_t padding,
+		       uint32_t left_low, uint32_t left_high,
+		       uint32_t right_low, uint32_t right_high)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	uint64_t left = ((uint64_t)left_high << 32) | left_low;
+	uint64_t right = ((uint64_t)right_high << 32) | right_low;
 
-    /* fragment 0: StackAccess */
-    v0 = local_10;
-    v1 = local_14;
-    v0 = a2 + (uintptr_t)v0;
-    a2 = v0 < a2;
-    v1 = a3 + (uintptr_t)v1;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v1 = a2 + (uintptr_t)v1;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	(void)pointpos;
+	(void)padding;
+	return left + right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017608 origin=fragment_seed original=fix_point_sub */
-int32_t fix_point_sub(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
+uint64_t fix_point_sub(uint32_t pointpos, uint32_t padding,
+		       uint32_t left_low, uint32_t left_high,
+		       uint32_t right_low, uint32_t right_high)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	uint64_t left = ((uint64_t)left_high << 32) | left_low;
+	uint64_t right = ((uint64_t)right_high << 32) | right_low;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: StackAccess */
-    local_1c = s2;
-    local_18 = s1;
-    v0 = a3 < s3;
-    local_14 = s0;
-    local_24 = ra;
-    s2 = a2;
-    s0 = a3;
-
-    /* fragment 3: Branch */
-    s1 = local_38;
-    if (v0 != 0) { goto fix_point_sub0x44; }
-
-    /* fragment 4: Branch */
-    if (s3 != a3) { goto fix_point_sub0x6c; }
-
-    /* fragment 5: Arithmetic */
-    v0 = a2 < s1;
-
-    /* fragment 6: Branch */
-    int _bc_v0_6 = v0 == 0;
-    v0 = (uintptr_t)s2 - (uintptr_t)s1;
-    if (_bc_v0_6) { goto fix_point_sub0x70; }
-
-fix_point_sub0x44:
-    /* fragment 7: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC0, &__pow2_lut, 21); /* jalr target resolved by relocation */
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-fix_point_sub0x6c:
-    /* fragment 9: Arithmetic */
-    v0 = (uintptr_t)s2 - (uintptr_t)s1;
-
-fix_point_sub0x70:
-    /* fragment 10: Arithmetic */
-    s0 = s0 - s3;
-    v1 = s2 < v0;
-    v1 = (uintptr_t)s0 - (uintptr_t)v1;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	(void)pointpos;
+	(void)padding;
+	if (left < right)
+		isp_printf(2, "fix_point_sub: unsigned underflow\n");
+	return left - right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001769c origin=fragment_seed original=fix_point_mult2 */
@@ -38463,100 +38394,27 @@ int32_t fix_point_div(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017a1c origin=fragment_seed original=fix_point_add_64 */
-int64_t fix_point_add_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
+uint64_t fix_point_add_64(uint32_t pointpos, uint32_t padding,
+			  uint32_t left_low, uint32_t left_high,
+			  uint32_t right_low, uint32_t right_high)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: StackAccess */
-    v0 = local_10;
-    v1 = local_14;
-    v0 = a2 + (uintptr_t)v0;
-    a2 = v0 < a2;
-    v1 = a3 + (uintptr_t)v1;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v1 = a2 + (uintptr_t)v1;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	return fix_point_add(pointpos, padding, left_low, left_high,
+			     right_low, right_high);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017a38 origin=fragment_seed original=fix_point_sub_64 */
-int32_t fix_point_sub_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
+uint64_t fix_point_sub_64(uint32_t pointpos, uint32_t padding,
+			  uint32_t left_low, uint32_t left_high,
+			  uint32_t right_low, uint32_t right_high)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	uint64_t left = ((uint64_t)left_high << 32) | left_low;
+	uint64_t right = ((uint64_t)right_high << 32) | right_low;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: StackAccess */
-    local_1c = s2;
-    local_18 = s1;
-    v0 = a3 < s3;
-    local_14 = s0;
-    local_24 = ra;
-    s2 = a2;
-    s0 = a3;
-
-    /* fragment 3: Branch */
-    s1 = local_38;
-    if (v0 != 0) { goto fix_point_sub_640x44; }
-
-    /* fragment 4: Branch */
-    if (s3 != a3) { goto fix_point_sub_640x6c; }
-
-    /* fragment 5: Arithmetic */
-    v0 = a2 < s1;
-
-    /* fragment 6: Branch */
-    int _bc_v0_6 = v0 == 0;
-    v0 = (uintptr_t)s2 - (uintptr_t)s1;
-    if (_bc_v0_6) { goto fix_point_sub_640x70; }
-
-fix_point_sub_640x44:
-    /* fragment 7: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC0, &__pow2_lut, 106); /* jalr target resolved by relocation */
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-fix_point_sub_640x6c:
-    /* fragment 9: Arithmetic */
-    v0 = (uintptr_t)s2 - (uintptr_t)s1;
-
-fix_point_sub_640x70:
-    /* fragment 10: Arithmetic */
-    s0 = s0 - s3;
-    v1 = s2 < v0;
-    v1 = (uintptr_t)s0 - (uintptr_t)v1;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	(void)pointpos;
+	(void)padding;
+	if (left < right)
+		isp_printf(2, "fix_point_sub_64: unsigned underflow\n");
+	return left - right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017acc origin=fragment_seed original=fix_point_mult2_64 */
@@ -38817,62 +38675,19 @@ int32_t fix_point_div_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uin
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017ce0 origin=fragment_seed original=fix_point_add_32 */
-int32_t fix_point_add_32(uint32_t a0, uint32_t a1, uint32_t a2)
+uint32_t fix_point_add_32(uint32_t pointpos, uint32_t left, uint32_t right)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 1: Arithmetic */
-    v0 = a1 + a2;
-
-    return 0;
+	(void)pointpos;
+	return left + right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017ce8 origin=fragment_seed original=fix_point_sub_32 */
-int32_t fix_point_sub_32(uint32_t a0, uint32_t a1, uint32_t a2)
+uint32_t fix_point_sub_32(uint32_t pointpos, uint32_t left, uint32_t right)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v0 = a1 < a2;
-
-    /* fragment 2: StackAccess */
-    local_18 = s1;
-    local_14 = s0;
-    local_1c = ra;
-    s1 = a1;
-
-    /* fragment 3: Branch */
-    s0 = a2;
-    if (v0 == 0) { goto fix_point_sub_320x44; }
-
-    /* fragment 4: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC0, &__pow2_lut, 185); /* jalr target resolved by relocation */
-
-fix_point_sub_320x44:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = (uintptr_t)s1 - (uintptr_t)s0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	(void)pointpos;
+	if (left < right)
+		isp_printf(2, "fix_point_sub_32: unsigned underflow\n");
+	return left - right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017d44 origin=model_output original=fix_point_mult2_32 */

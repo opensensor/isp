@@ -28,8 +28,8 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 22 stub functions, 91 collapsed
-functions, 393 shorter functions, and 41 OEM-only symbols. Critical deficits
+The current linked-binary audit finds 20 stub functions, 91 collapsed
+functions, 391 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -64,6 +64,12 @@ iterations and performs both completion writes at that same address. Recovered
 pointer types had shortened the poll to 125 iterations and redirected the
 completion pulse to `0xb0000310`; the repaired helper is within three
 instructions of OEM.
+
+The six fixed-point add/subtract entry points now implement the OEM 32-bit and
+64-bit arithmetic instead of returning zero or one input operand. All three
+add helpers have exact instruction-count parity; the subtract helpers preserve
+OEM unsigned wraparound and underflow diagnostics and are classified as
+similar.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
