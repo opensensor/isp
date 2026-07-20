@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1528 |
 | Functions with disassembly | 1314 | 1528 |
-| Executable section bytes | 479556 | 346336 |
-| Initialized writable bytes | 25120 | 17104 |
+| Executable section bytes | 479556 | 346560 |
+| Initialized writable bytes | 25120 | 17200 |
 | Uninitialized writable bytes | 20592 | 302432 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=255
-- matched instructions: OEM=116036 recovered=83645 ratio=0.721
-- classes: stub=17 collapsed=79 shorter=390 same_count=268 similar=478 larger=23 expanded=18
+- matched instructions: OEM=116036 recovered=83702 ratio=0.721
+- classes: stub=17 collapsed=79 shorter=388 same_count=268 similar=480 larger=23 expanded=18
 
 ## Allocated Section Delta
 
@@ -28,23 +28,23 @@
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
 | `.bss` | 20592 | 302432 | +281840 |
-| `.data` | 24768 | 16752 | -8016 |
+| `.data` | 24768 | 16848 | -7920 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
 | `.init.text` | 16 | 0 | -16 |
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 4528 | -11232 |
-| `.rodata.str1.4` | 25860 | 6068 | -19792 |
-| `.text` | 478400 | 346336 | -132064 |
+| `.rodata` | 15760 | 4560 | -11200 |
+| `.rodata.str1.4` | 25860 | 6136 | -19724 |
+| `.text` | 478400 | 346560 | -131840 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 823 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -266,7 +266,6 @@ Showing 250 of 823 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_mdns_addr_alloc` | `tisp_mdns_addr_alloc` | 114 | 77 | 0.675 | -37 | 9->7 | 4->2 |
 | shorter | exact_name | `tisp_tmo_deinit` | `tisp_tmo_deinit` | 114 | 78 | 0.684 | -36 | 10->4 | 13->6 |
 | shorter | exact_name | `tisp_ae_clac_deflicker_cfg` | `tisp_ae_clac_deflicker_cfg` | 114 | 85 | 0.746 | -29 | 3->3 | 7->4 |
-| shorter | exact_name | `isp_core_tuning_event` | `isp_core_tuning_event` | 113 | 62 | 0.549 | -51 | 7->5 | 10->5 |
 | shorter | exact_name | `tisp_top_write_bypass` | `tisp_top_write_bypass` | 113 | 78 | 0.690 | -35 | 7->5 | 11->10 |
 | shorter | exact_name | `tisp_lce_get_data` | `tisp_lce_get_data` | 112 | 68 | 0.607 | -44 | 8->6 | 5->6 |
 | shorter | exact_name | `ivdc_misc_unlocked_ioctl` | `ivdc_misc_unlocked_ioctl` | 112 | 81 | 0.723 | -31 | 6->4 | 17->14 |
@@ -298,3 +297,4 @@ Showing 250 of 823 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ccm_interp_by_ev` | `tisp_ccm_interp_by_ev` | 74 | 47 | 0.635 | -27 | 0->0 | 14->8 |
 | shorter | exact_name | `tisp_tmo_params_hard_refresh` | `tisp_tmo_params_hard_refresh` | 73 | 48 | 0.658 | -25 | 13->1 | 0->5 |
 | shorter | exact_name | `tisp_wdr_get_lum_s` | `tisp_wdr_get_lum_s` | 73 | 52 | 0.712 | -21 | 0->0 | 9->7 |
+| shorter | exact_name | `tisp_gsm_init` | `tisp_gsm_init` | 71 | 55 | 0.775 | -16 | 6->2 | 0->0 |

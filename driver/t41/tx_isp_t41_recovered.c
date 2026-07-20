@@ -4264,7 +4264,7 @@ int32_t tisp_day_or_night_event(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t 
 int32_t tisp_enable_tuning(void);
 void tisp_disable_tuning(void);
 uint32_t tisp_get_tuning(void);
-int32_t tisp_day_or_night_s_ctrl(uint32_t a0);
+int32_t tisp_day_or_night_s_ctrl(uint32_t a0, uint32_t a1);
 int32_t tisp_day_or_night_g_ctrl(uint32_t a0);
 int32_t tisp_s_module_control(uint32_t a0, uint32_t a1);
 int32_t tisp_g_module_control(int32_t arg1, int32_t *arg2);
@@ -20051,158 +20051,72 @@ int32_t isp_module_frame_done_wakeup(int32_t arg1) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000c990 origin=fragment_seed original=isp_core_tuning_event */
 int64_t isp_core_tuning_event(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    char *tuning = (char *)a0;
+    uint32_t vinum;
+    uint32_t index;
+    char *slot;
+    void *buffer;
 
-    /* fragment 0: Arithmetic */
-    v0 = 4227858432;
-    a1 = a1 + (uintptr_t)v0;
-    v0 = a1 < 6;
+    if (!tuning)
+        return -EINVAL;
 
-    /* fragment 1: StackAccess */
-    local_1c = s1;
-    local_24 = ra;
-    local_20 = s2;
-    local_18 = s0;
+    switch (a1) {
+    case 0x04000000: /* TX_ISP_EVENT_ACTIVATE_MODULE */
+        *(uint32_t *)(tuning + 148) = 2;
+        memset(tuning + 28, 0, 100);
 
-    /* fragment 2: Branch */
-    s1 = 0;
-    if (v0 == 0) { goto isp_core_tuning_event0xb8; }
+        buffer = *(void **)(tuning + 200);
+        if (!buffer) {
+            buffer = private_kmalloc(1024, GFP_KERNEL);
+            *(void **)(tuning + 200) = buffer;
+        }
+        if (!buffer) {
+            isp_printf(2,
+                "isp_core_tuning_event: failed to allocate tuning buffer\n");
+            return -ENOMEM;
+        }
+        memset(buffer, 0, 1024);
 
-    /* fragment 3: CallSetup */
-    s0 = a0;
-    *(uint32_t *)((char *)s0 + 148) = 2;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)(s0 + 28), 0, 100); /* jalr target resolved by relocation */
+        if (proc_isp) {
+            private_proc_create_data("isp-m2", 0444,
+                (void *)(uintptr_t)proc_isp,
+                &aisp_info_proc_fops, tuning);
+            proc_isp = 0;
+        }
+        return 0;
 
-    /* fragment 4: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 200);
+    case 0x04000001: /* TX_ISP_EVENT_SLAVE_MODULE */
+        *(uint32_t *)(tuning + 148) = 1;
+        return 0;
 
-    /* fragment 5: Branch */
-    a1 = 37748736;
-    if (v0 != 0) { goto isp_core_tuning_event0xd4; }
+    case 0x04000002: /* TX_ISP_EVENT_CORE_FRAME_DONE */
+        return isp_frame_done_wakeup(a2);
 
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(1024, a1 + 192); /* jalr target resolved by relocation */
+    case 0x04000003: /* TX_ISP_EVENT_CORE_DAY_NIGHT */
+        if (!a2)
+            return -EINVAL;
+        vinum = *(uint32_t *)(a2 + 4);
+        slot = tuning + vinum * 124;
+        tisp_day_or_night_s_ctrl(vinum, *(uint32_t *)(slot + 24));
+        return 0;
 
-    /* fragment 7: Branch */
-    *(uint32_t *)((char *)s0 + 200) = v0;
-    if (s0 != 0) { goto isp_core_tuning_event0xd4; }
+    case 0x04000004: /* TX_ISP_EVENT_CORE_CH1_QBUF_FOR_AISP */
+        if (!a2)
+            return -EINVAL;
+        index = *(uint32_t *)(tuning + 124);
+        slot = tuning + 52 + index * 12;
+        *(uint32_t *)(slot + 0) = *(uint32_t *)(a2 + 0);
+        *(uint32_t *)(slot + 4) = *(uint32_t *)(a2 + 4);
+        *(uint32_t *)(slot + 8) = *(uint32_t *)(a2 + 8);
+        *(uint32_t *)(tuning + 124) = (index + 1) % 5;
+        return 0;
 
-    /* fragment 8: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC31, &__pow2_lut, 2433); /* jalr target resolved by relocation */
+    case 0x04000005: /* TX_ISP_EVENT_CORE_MODULE_FRAME_DONE */
+        return isp_module_frame_done_wakeup((int32_t)a2);
 
-    /* fragment 9: Arithmetic */
-    s1 = -1;
-
-isp_core_tuning_event0xb8:
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-isp_core_tuning_event0xbc:
-    /* fragment 11: Arithmetic */
-    v0 = s1;
-
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-isp_core_tuning_event0xd4:
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t)memset((void *)(uintptr_t)(*(uint32_t *)((char *)(s0) + 200)), 0, 1024); /* jalr target resolved by relocation */
-
-    /* fragment 14: MemoryAccess */
-    a2 = *(uint32_t *)((char *)((char *)&proc_isp));
-
-    /* fragment 15: Branch */
-    s1 = 0;
-    if (a2 == 0) { goto isp_core_tuning_event0xb8; }
-
-    /* fragment 16: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_proc_create_data)(&LC32, 292); /* jalr target resolved by relocation */
-
-    /* fragment 17: Branch */
-    *(uint32_t *)((char *)s2 + 0) = 0;
-    goto isp_core_tuning_event0xb8;
-
-    /* fragment 18: Arithmetic */
-    v0 = 1;
-
-    /* fragment 19: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 148) = v0;
-
-isp_core_tuning_event0x128:
-    /* fragment 20: Arithmetic */
-    s1 = 0;
-
-    /* fragment 21: Branch */
-    goto isp_core_tuning_event0xbc;
-
-    /* fragment 22: CallSetup */
-    v0 = (unsigned int *)&isp_frame_done_wakeup;
-    v0 = v0;
-
-isp_core_tuning_event0x13c:
-    /* fragment 23: CallSetup */
-    s1 = 0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)isp_frame_done_wakeup)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 24: Branch */
-    goto isp_core_tuning_event0xbc;
-
-    /* fragment 25: Arithmetic */
-    v0 = (unsigned int *)&isp_module_frame_done_wakeup;
-
-    /* fragment 26: Branch */
-    v0 = (unsigned int *)&isp_module_frame_done_wakeup;
-    goto isp_core_tuning_event0x13c;
-
-    /* fragment 27: CallSetup */
-    s0 = ((*(uint32_t *)((char *)(a2) + 4)) * 124) + (uintptr_t)s0;
-    s1 = *(uint32_t *)((char *)(s0) + 24);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_day_or_night_s_ctrl)(*(uint32_t *)((char *)(a2) + 4), s1); /* jalr target resolved by relocation */
-
-    /* fragment 28: Branch */
-    *(uint32_t *)((char *)s0 + 24) = s1;
-    goto isp_core_tuning_event0x128;
-
-    /* fragment 29: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 124);
-    v1 = 12;
-    a1 = *(uint32_t *)((char *)a2 + 0);
-    a2 = (uintptr_t)v0 * (uintptr_t)v1;
-    v0 = v0 + 1;
-    v1 = a2 + (uintptr_t)s0;
-    *(uint32_t *)((char *)v1 + 52) = a1;
-    a1 = *(uint32_t *)((char *)a0 + 4);
-    *(uint32_t *)((char *)v1 + 56) = a1;
-    a0 = *(uint32_t *)((char *)a0 + 8);
-    *(uint32_t *)((char *)v1 + 60) = a0;
-    v1 = 5;
-
-    /* fragment 30: Unknown */
-    /* unmatched fragment 30 (Unknown): no deterministic matcher for Unknown */
-    /* asm: cb44:	0043001b 	divu	zero,v0,v1 */
-
-    /* fragment 31: Arithmetic */
-    /* unmatched fragment 31 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: cb48:	00001010 	mfhi	v0 */
-
-    /* fragment 32: Branch */
-    *(uint32_t *)((char *)s0 + 124) = v0;
-    goto isp_core_tuning_event0x128;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+    default:
+        return 0;
+    }
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000cb54 origin=fragment_seed original=isp_core_create_aisp */
@@ -145286,34 +145200,14 @@ uint32_t tisp_get_tuning(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c178 origin=fragment_seed original=tisp_day_or_night_s_ctrl */
-int32_t tisp_day_or_night_s_ctrl(uint32_t a0)
+int32_t tisp_day_or_night_s_ctrl(uint32_t a0, uint32_t a1)
 {
-    uint32_t *local_18 = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_44 = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    uint32_t event[12];
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    local_18 = 18;
-    local_20 = a1;
-    local_24 = 0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_event_push)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    event[2] = 18;
+    event[4] = a1;
+    event[5] = 0;
+    tisp_event_push(a0, (uintptr_t)event);
     return 0;
 }
 
