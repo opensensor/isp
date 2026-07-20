@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 336800 |
+| Executable section bytes | 479556 | 336928 |
 | Initialized writable bytes | 25120 | 15808 |
 | Uninitialized writable bytes | 20592 | 383088 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=81791 ratio=0.705
-- classes: stub=18 collapsed=93 shorter=386 same_count=263 similar=475 larger=23 expanded=15
+- matched instructions: OEM=116036 recovered=81823 ratio=0.705
+- classes: stub=18 collapsed=92 shorter=385 same_count=263 similar=477 larger=23 expanded=15
 
 ## Allocated Section Delta
 
@@ -37,14 +37,14 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3504 | -12256 |
 | `.rodata.str1.4` | 25860 | 4784 | -21076 |
-| `.text` | 478400 | 336800 | -141600 |
+| `.text` | 478400 | 336928 | -141472 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 817 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -144,7 +144,6 @@ Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `ISPAWBInterpolation1` | `ISPAWBInterpolation1` | 45 | 12 | 0.267 | -33 | 4->1 | 2->0 |
 | collapsed | exact_name | `tisp_bcsh_refresh_by_csc` | `tisp_bcsh_refresh_by_csc` | 44 | 19 | 0.432 | -25 | 4->4 | 0->0 |
 | collapsed | exact_name | `tisp_mdns_param_array_set` | `tisp_mdns_param_array_set` | 39 | 18 | 0.462 | -21 | 5->2 | 0->0 |
-| collapsed | exact_name | `isp_subdev_release_clks` | `isp_subdev_release_clks` | 38 | 14 | 0.368 | -24 | 2->1 | 3->2 |
 | collapsed | exact_name | `tisp_bcsh_wdr_en` | `tisp_bcsh_wdr_en` | 38 | 15 | 0.395 | -23 | 3->3 | 0->0 |
 | collapsed | exact_name | `tisp_ccm_wdr_en` | `tisp_ccm_wdr_en` | 38 | 15 | 0.395 | -23 | 4->3 | 0->0 |
 | collapsed | exact_name | `tisp_defog_strength_itp` | `tisp_defog_strength_itp` | 36 | 11 | 0.306 | -25 | 0->0 | 4->1 |
@@ -298,3 +297,4 @@ Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_clm_init` | `tisp_clm_init` | 83 | 59 | 0.711 | -24 | 7->6 | 0->0 |
 | shorter | exact_name | `tisp_mdns_func_en` | `tisp_mdns_func_en` | 82 | 46 | 0.561 | -36 | 2->1 | 3->3 |
 | shorter | exact_name | `ispcore_frame_channel_ir_qbuf` | `ispcore_frame_channel_ir_qbuf` | 79 | 61 | 0.772 | -18 | 4->3 | 12->11 |
+| shorter | exact_name | `tisp_ae_sepc_area` | `tisp_ae_sepc_area` | 78 | 46 | 0.590 | -32 | 1->1 | 4->4 |

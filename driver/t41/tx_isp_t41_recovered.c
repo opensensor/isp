@@ -31640,28 +31640,18 @@ cleanup:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000134d8 origin=model_output original=isp_subdev_release_clks */
 int32_t isp_subdev_release_clks(void *arg1)
 {
-    void *s2 = *(void **)((char *)arg1 + 0xf4);
+	void **clks = *(void ***)((char *)arg1 + 0xf4);
+	int32_t i;
 
-    if (s2 != NULL) {
-        int32_t s0_1 = *(int32_t *)((char *)arg1 + 0xf8);
-        int32_t *s3_1 = s0_1 - 1;
-        int32_t *s0_3 = (int32_t *)((char *)s2 + (s0_1 << 2));
+	if (!clks)
+		return 0;
 
-        do {
-            s0_3 = (int32_t *)((char *)s0_3 - 4);
+	for (i = *(int32_t *)((char *)arg1 + 0xf8) - 1; i >= 0; i--)
+		private_devm_clk_put(*(void **)((char *)arg1 + 4), clks[i]);
 
-            if (s3_1 < 0)
-                break;
-
-            s3_1 = (void *)(uintptr_t)((uintptr_t)s3_1 - (1));
-            private_devm_clk_put();
-        } while (1);
-
-        private_kfree();
-        *(void **)((char *)arg1 + 0xf4) = NULL;
-    }
-
-    return 0;
+	private_kfree(clks);
+	*(void **)((char *)arg1 + 0xf4) = NULL;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013570 origin=fragment_seed original=tx_isp_unregister_platforms */
@@ -36344,35 +36334,10 @@ tx_isp_module_init0x84:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016368 origin=fragment_seed original=tx_isp_module_deinit */
 int32_t tx_isp_module_deinit(uint32_t a0)
 {
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *t9 = 0;
+	if (!a0)
+		return 0;
 
-    /* fragment 0: Branch */
-    t9 = (uint32_t *)&memset;
-    if (a0 == 0) { goto tx_isp_module_deinit0x18; }
-
-    /* fragment 1: Arithmetic */
-    a2 = 132;
-    t9 = t9;
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 16378:	03200408 	jr.hb	t9 */
-
-    /* fragment 3: Arithmetic */
-    a1 = 0;
-
-tx_isp_module_deinit0x18:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 16384:	00000000 	nop */
-
-    return 0;
+	return (int32_t)(uintptr_t)memset((void *)(uintptr_t)a0, 0, 0x84);
 }
 
 int tx_isp_subdev_init(int32_t *arg1, void *arg2, int arg3)
@@ -36410,77 +36375,39 @@ int tx_isp_subdev_init(int32_t *arg1, void *arg2, int arg3)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016a18 origin=fragment_seed original=tx_isp_subdev_deinit */
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
 {
-    uintptr_t s0 = (uintptr_t)sd;
-    uint32_t *v0;
-    uint32_t *a0;
-    uint32_t a1;
+	uint32_t *resource;
+	unsigned int offset;
 
-    v0 = *(uint32_t *)((char *)s0 + 0x34);
-    if (v0 != 0) {
-        private_misc_deregister();
-    }
+	if (!sd)
+		return;
 
-    isp_subdev_release_clks(s0);
+	if (*(void **)((char *)sd + 0x34))
+		private_misc_deregister((char *)sd + 0x0c);
 
-    a0 = *(uint32_t *)((char *)s0 + 0x104);
-    if (a0 != 0) {
-        private_kfree();
-    }
+	isp_subdev_release_clks(sd);
+	private_kfree(*(void **)((char *)sd + 0x104));
+	private_kfree(*(void **)((char *)sd + 0x108));
 
-    a0 = *(uint32_t *)((char *)s0 + 0x108);
-    if (a0 != 0) {
-        private_kfree();
-    }
+	if (*(void **)((char *)sd + 0xe8))
+		private_iounmap(*(void **)((char *)sd + 0xe8));
+	if (*(void **)((char *)sd + 0xec))
+		private_iounmap(*(void **)((char *)sd + 0xec));
+	if (*(void **)((char *)sd + 0xf0))
+		private_iounmap(*(void **)((char *)sd + 0xf0));
 
-    a0 = *(uint32_t *)((char *)s0 + 0xe8);
-    if (a0 != 0) {
-        private_iounmap();
-    }
+	for (offset = 0xdc; offset <= 0xe4; offset += 4) {
+		resource = *(uint32_t **)((char *)sd + offset);
+		if (!resource)
+			continue;
 
-    a0 = *(uint32_t *)((char *)s0 + 0xec);
-    if (a0 != 0) {
-        private_iounmap();
-    }
+		private_release_mem_region(resource[0],
+			resource[1] + 1 - resource[0]);
+		*(void **)((char *)sd + offset) = NULL;
+	}
 
-    a0 = *(uint32_t *)((char *)s0 + 0xf0);
-    if (a0 != 0) {
-        private_iounmap();
-    }
-
-    v0 = *(uint32_t *)((char *)s0 + 0xdc);
-    if (v0 != 0) {
-        a0 = *(uint32_t *)((char *)v0 + 0);
-        a1 = *(uint32_t *)((char *)v0 + 4);
-        a1 = a1 + 1 - (uintptr_t)a0;
-        private_release_mem_region();
-        *(uint32_t *)((char *)s0 + 0xdc) = 0;
-    }
-
-    v0 = *(uint32_t *)((char *)s0 + 0xe0);
-    if (v0 != 0) {
-        a0 = *(uint32_t *)((char *)v0 + 0);
-        a1 = *(uint32_t *)((char *)v0 + 4);
-        a1 = a1 + 1 - (uintptr_t)a0;
-        private_release_mem_region();
-        *(uint32_t *)((char *)s0 + 0xe0) = 0;
-    }
-
-    v0 = *(uint32_t *)((char *)s0 + 0xe4);
-    if (v0 != 0) {
-        a0 = *(uint32_t *)((char *)v0 + 0);
-        a1 = *(uint32_t *)((char *)v0 + 4);
-        a1 = a1 + 1 - (uintptr_t)a0;
-        private_release_mem_region();
-        *(uint32_t *)((char *)s0 + 0xe4) = 0;
-    }
-
-    v0 = s0 + 0x90;
-    if (v0 != 0) {
-        tx_isp_free_irq(s0 + 0x84);
-    }
-
-    tx_isp_module_deinit(s0);
-    *(uint32_t *)((char *)s0 + 0xfc) = 0;
+	tx_isp_free_irq((char *)sd + 0x84);
+	tx_isp_module_deinit((uintptr_t)sd);
+	*(void **)((char *)sd + 0xfc) = NULL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016b88 origin=fragment_seed original=tx_isp_create_graph_and_nodes */
