@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1525 |
 | Functions with disassembly | 1314 | 1525 |
-| Executable section bytes | 479556 | 342784 |
+| Executable section bytes | 479556 | 343600 |
 | Initialized writable bytes | 25120 | 17104 |
 | Uninitialized writable bytes | 20592 | 302432 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=252
-- matched instructions: OEM=116036 recovered=82824 ratio=0.714
-- classes: stub=17 collapsed=86 shorter=391 same_count=265 similar=473 larger=23 expanded=18
+- matched instructions: OEM=116036 recovered=83027 ratio=0.716
+- classes: stub=17 collapsed=84 shorter=391 same_count=265 similar=475 larger=23 expanded=18
 
 ## Allocated Section Delta
 
@@ -35,16 +35,16 @@
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 4240 | -11520 |
-| `.rodata.str1.4` | 25860 | 5664 | -20196 |
-| `.text` | 478400 | 342784 | -135616 |
+| `.rodata` | 15760 | 4288 | -11472 |
+| `.rodata.str1.4` | 25860 | 5764 | -20096 |
+| `.text` | 478400 | 343600 | -134800 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 828 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 826 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -89,7 +89,6 @@ Showing 250 of 828 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `tisp_ae_par_calc` | `tisp_ae_par_calc` | 239 | 90 | 0.377 | -149 | 8->6 | 23->1 |
 | collapsed | exact_name | `tisp_tmo_ev_interp` | `tisp_tmo_ev_interp` | 211 | 99 | 0.469 | -112 | 2->1 | 42->14 |
 | collapsed | exact_name | `tisp_clm_write_csc_para` | `tisp_clm_write_csc_para` | 198 | 71 | 0.359 | -127 | 16->5 | 0->0 |
-| collapsed | exact_name | `vic_core_ops_ioctl` | `vic_core_ops_ioctl` | 192 | 29 | 0.151 | -163 | 7->1 | 33->5 |
 | collapsed | exact_name | `tisp_g_module_attr` | `tisp_g_module_attr` | 189 | 44 | 0.233 | -145 | 4->2 | 29->3 |
 | collapsed | exact_name | `tisp_s_module_attr` | `tisp_s_module_attr` | 189 | 51 | 0.270 | -138 | 4->3 | 29->4 |
 | collapsed | exact_name | `tisp_blc_ae_write_dgain` | `tisp_blc_ae_write_dgain` | 184 | 77 | 0.418 | -107 | 22->4 | 6->5 |
@@ -105,7 +104,6 @@ Showing 250 of 828 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `func_local_info` | `func_local_info` | 121 | 46 | 0.380 | -75 | 10->5 | 2->2 |
 | collapsed | exact_name | `ispcore_irq_main_fd_work` | `ispcore_irq_main_fd_work` | 118 | 39 | 0.331 | -79 | 5->1 | 20->8 |
 | collapsed | exact_name | `tisp_ae_calc_process` | `tisp_ae_calc_process` | 104 | 48 | 0.462 | -56 | 6->1 | 9->6 |
-| collapsed | exact_name | `fs_core_ops_ioctl` | `fs_core_ops_ioctl` | 96 | 48 | 0.500 | -48 | 5->3 | 8->3 |
 | collapsed | exact_name | `tisp_tmo_interrupt_static` | `tisp_tmo_interrupt_static` | 95 | 28 | 0.295 | -67 | 6->3 | 1->0 |
 | collapsed | exact_name | `tisp_defog_img_filter25` | `tisp_defog_img_filter25` | 92 | 34 | 0.370 | -58 | 0->0 | 11->5 |
 | collapsed | exact_name | `tisp_lce_interrupt_static` | `tisp_lce_interrupt_static` | 91 | 26 | 0.286 | -65 | 11->2 | 8->1 |
@@ -298,3 +296,5 @@ Showing 250 of 828 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae_sepc_area` | `tisp_ae_sepc_area` | 78 | 46 | 0.590 | -32 | 1->1 | 4->4 |
 | shorter | exact_name | `tisp_lce_process` | `tisp_lce_process` | 76 | 54 | 0.711 | -22 | 6->5 | 2->2 |
 | shorter | exact_name | `tisp_wdr_degweight_ev` | `tisp_wdr_degweight_ev` | 76 | 59 | 0.776 | -17 | 0->0 | 13->11 |
+| shorter | exact_name | `tisp_set_ae_long_ag` | `tisp_set_ae_long_ag` | 75 | 54 | 0.720 | -21 | 3->2 | 5->6 |
+| shorter | exact_name | `tisp_set_ae_short_ag` | `tisp_set_ae_short_ag` | 75 | 54 | 0.720 | -21 | 3->2 | 5->6 |
