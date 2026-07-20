@@ -164162,8 +164162,18 @@ int tx_isp_core_remove(struct platform_device *pdev)
 }
 
 EXPORT_SYMBOL(isp_printf);
+EXPORT_SYMBOL(fix_point_div_32);
+EXPORT_SYMBOL(private_math_exp2);
+EXPORT_SYMBOL(private_log2_int_to_fixed);
+EXPORT_SYMBOL(private_log2_fixed_to_fixed);
+EXPORT_SYMBOL(tisp_math_exp2);
+EXPORT_SYMBOL(tisp_log2_fixed_to_fixed);
 EXPORT_SYMBOL(tx_isp_subdev_init);
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
+EXPORT_SYMBOL(tx_isp_init);
+EXPORT_SYMBOL(tx_isp_exit);
+EXPORT_SYMBOL(private_clk_get);
+EXPORT_SYMBOL(private_clk_put);
 EXPORT_SYMBOL(private_clk_set_rate);
 EXPORT_SYMBOL(private_clk_get_rate);
 EXPORT_SYMBOL(private_clk_disable_unprepare);
@@ -164180,6 +164190,7 @@ EXPORT_SYMBOL(private_gpio_free);
 EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_jzgpio_set_func);
 EXPORT_SYMBOL(private_msleep);
+EXPORT_SYMBOL(private_mdelay);
 EXPORT_SYMBOL(private_capable);
 
 MODULE_LICENSE("GPL");

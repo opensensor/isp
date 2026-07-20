@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1517 |
 | Functions with disassembly | 1314 | 1517 |
-| Executable section bytes | 479556 | 333280 |
+| Executable section bytes | 479556 | 333296 |
 | Initialized writable bytes | 25120 | 15808 |
 | Uninitialized writable bytes | 20592 | 383104 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=244
-- matched instructions: OEM=116036 recovered=80874 ratio=0.697
-- classes: stub=31 collapsed=91 shorter=400 same_count=246 similar=465 larger=22 expanded=18
+- matched instructions: OEM=116036 recovered=80879 ratio=0.697
+- classes: stub=31 collapsed=91 shorter=398 same_count=245 similar=468 larger=22 expanded=18
 
 ## Allocated Section Delta
 
@@ -37,14 +37,14 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3488 | -12272 |
 | `.rodata.str1.4` | 25860 | 4516 | -21344 |
-| `.text` | 478400 | 333280 | -145120 |
-| `__ksymtab` | 248 | 160 | -88 |
-| `__ksymtab_strings` | 637 | 437 | -200 |
+| `.text` | 478400 | 333296 | -145104 |
+| `__ksymtab` | 248 | 248 | +0 |
+| `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 500 of 847 outliers. JSON and CSV contain every comparison row.
+Showing 500 of 845 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -408,8 +408,6 @@ Showing 500 of 847 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `ivdc_disable_irq` | `ivdc_disable_irq` | 32 | 24 | 0.750 | -8 | 3->1 | 2->3 |
 | shorter | exact_name | `tisp_g_ccm_attr` | `tisp_g_ccm_attr` | 32 | 24 | 0.750 | -8 | 2->2 | 5->4 |
 | shorter | exact_name | `tx_isp_vin_remove` | `tx_isp_vin_remove` | 31 | 20 | 0.645 | -11 | 4->2 | 1->0 |
-| shorter | exact_name | `ivdc_resume_module` | `ivdc_resume_module` | 31 | 24 | 0.774 | -7 | 1->0 | 5->5 |
-| shorter | exact_name | `ivdc_suspend_module` | `ivdc_suspend_module` | 31 | 24 | 0.774 | -7 | 1->0 | 5->5 |
 | shorter | exact_name | `tisp_gsm_api_set` | `tisp_gsm_api_set` | 30 | 23 | 0.767 | -7 | 3->2 | 0->1 |
 | shorter | exact_name | `ispcore_s_wdr_en` | `ispcore_s_wdr_en` | 29 | 19 | 0.655 | -10 | 1->1 | 2->1 |
 | shorter | exact_name | `tx_isp_ivdc_remove` | `tx_isp_ivdc_remove` | 29 | 19 | 0.655 | -10 | 4->3 | 0->0 |
@@ -421,7 +419,7 @@ Showing 500 of 847 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ysp_param_array_set` | `tisp_ysp_param_array_set` | 27 | 21 | 0.778 | -6 | 2->2 | 0->0 |
 | shorter | exact_name | `func_matrix_check_short` | `func_matrix_check_short` | 26 | 17 | 0.654 | -9 | 1->1 | 3->1 |
 | shorter | exact_name | `tisp_ydns_refresh` | `tisp_ydns_refresh` | 26 | 18 | 0.692 | -8 | 2->3 | 0->0 |
-| shorter | exact_name | `fs_suspend_module` | `fs_suspend_module` | 26 | 19 | 0.731 | -7 | 1->0 | 3->4 |
+| shorter | exact_name | `fs_suspend_module` | `fs_suspend_module` | 26 | 20 | 0.769 | -6 | 1->0 | 3->4 |
 | shorter | exact_name | `tisp_defog_get_data` | `tisp_defog_get_data` | 26 | 20 | 0.769 | -6 | 0->0 | 1->1 |
 | shorter | exact_name | `tisp_adr_faceae_refresh` | `tisp_adr_faceae_refresh` | 25 | 13 | 0.520 | -12 | 1->1 | 0->0 |
 | shorter | exact_name | `tisp_msca_addr_fifo_write` | `tisp_msca_addr_fifo_write` | 25 | 14 | 0.560 | -11 | 1->1 | 0->0 |
@@ -548,3 +546,5 @@ Showing 500 of 847 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tx_isp_module_deinit` | `tx_isp_module_deinit` | 8 | 2 | 0.250 | -6 | 0->0 | 1->0 |
 | shorter | exact_name | `tisp_mdns_wdr_en` | `tisp_mdns_wdr_en` | 8 | 4 | 0.500 | -4 | 0->0 | 0->0 |
 | shorter | exact_name | `cdns_remove` | `cdns_remove` | 8 | 5 | 0.625 | -3 | 0->0 | 0->0 |
+| shorter | exact_name | `tisp_ae_par_sensor_trig` | `tisp_ae_par_sensor_trig` | 8 | 5 | 0.625 | -3 | 0->0 | 0->0 |
+| shorter | exact_name | `tisp_bcsh_set_write_reg_event` | `tisp_bcsh_set_write_reg_event` | 8 | 5 | 0.625 | -3 | 0->0 | 0->0 |
