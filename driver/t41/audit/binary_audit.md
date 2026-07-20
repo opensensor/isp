@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1525 |
 | Functions with disassembly | 1314 | 1525 |
-| Executable section bytes | 479556 | 341360 |
-| Initialized writable bytes | 25120 | 17088 |
+| Executable section bytes | 479556 | 341680 |
+| Initialized writable bytes | 25120 | 17104 |
 | Uninitialized writable bytes | 20592 | 302432 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=252
-- matched instructions: OEM=116036 recovered=82513 ratio=0.711
-- classes: stub=18 collapsed=86 shorter=391 same_count=265 similar=471 larger=24 expanded=18
+- matched instructions: OEM=116036 recovered=82547 ratio=0.711
+- classes: stub=18 collapsed=86 shorter=391 same_count=264 similar=472 larger=24 expanded=18
 
 ## Allocated Section Delta
 
@@ -28,16 +28,16 @@
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
 | `.bss` | 20592 | 302432 | +281840 |
-| `.data` | 24768 | 16736 | -8032 |
+| `.data` | 24768 | 16752 | -8016 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
 | `.init.text` | 16 | 0 | -16 |
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 4304 | -11456 |
-| `.rodata.str1.4` | 25860 | 5356 | -20504 |
-| `.text` | 478400 | 341360 | -137040 |
+| `.rodata` | 15760 | 4176 | -11584 |
+| `.rodata.str1.4` | 25860 | 5608 | -20252 |
+| `.text` | 478400 | 341680 | -136720 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
