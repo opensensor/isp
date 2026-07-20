@@ -36208,86 +36208,30 @@ tx_isp_unlocked_ioctl0x1cb0:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016148 origin=fragment_seed original=private_reset_tx_isp_module */
 int32_t private_reset_tx_isp_module(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+	volatile uint32_t *reset_reg =
+		(volatile uint32_t *)(uintptr_t)0xb00000c4U;
+	uint32_t value;
+	int timeout = 500;
 
-    /* fragment 0: Branch */
-    v1 = 2952790016;
-    if (a0 != 0) { goto private_reset_tx_isp_module0xbc; }
+	if (a0)
+		return 0;
 
-    /* fragment 1: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	value = *reset_reg;
+	*reset_reg = value | 0x00200000U;
 
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 196);
-    a0 = 2097152;
-    s1 = (uint32_t *)&private_msleep;
-    v0 = (uintptr_t)v0 | a0;
-    *(uint32_t *)((char *)v1 + 196) = v0;
-    s0 = 500;
-    s2 = 2952790016;
-    s3 = 1048576;
-    s1 = s1;
+	while (timeout--) {
+		value = *reset_reg;
+		if (value & 0x00100000U) {
+			value = *reset_reg;
+			*reset_reg = (value & 0xffdfffffU) | 0x00400000U;
+			value = *reset_reg;
+			*reset_reg = value & 0xffbfffffU;
+			return 0;
+		}
+		private_msleep(2);
+	}
 
-private_reset_tx_isp_module0x44:
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 196);
-    v0 = (uintptr_t)v0 & s3;
-
-    /* fragment 4: Branch */
-    v1 = s2 + 196;
-    if (v0 == 0) { goto private_reset_tx_isp_module0x8c; }
-
-    /* fragment 5: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 0);
-    a0 = 4292804608;
-    a0 = a0 | 65535;
-    v0 = (uintptr_t)v0 & a0;
-    a0 = 4194304;
-    v0 = (uintptr_t)v0 | a0;
-    *(uint32_t *)((char *)v1 + 0) = v0;
-    v0 = *(uint32_t *)((char *)v1 + 0);
-    a0 = 4290707456;
-    a0 = a0 | 65535;
-    v0 = (uintptr_t)v0 & a0;
-    *(uint32_t *)((char *)v1 + 0) = v0;
-
-    /* fragment 6: Branch */
-    v0 = 0;
-    goto private_reset_tx_isp_module0xa0;
-
-private_reset_tx_isp_module0x8c:
-    /* fragment 7: CallSetup */
-    s0 = s0 - 1;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_msleep)(2); /* jalr target resolved by relocation */
-
-    /* fragment 8: Branch */
-    v0 = -1;
-    if (s0 != 0) { goto private_reset_tx_isp_module0x44; }
-
-private_reset_tx_isp_module0xa0:
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-private_reset_tx_isp_module0xbc:
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 11: Arithmetic */
-    v0 = 0;
-
-    return 0;
+	return -1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001620c origin=fragment_seed original=tx_isp_reg_set */

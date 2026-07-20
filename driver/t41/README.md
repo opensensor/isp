@@ -28,7 +28,7 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 23 stub functions, 91 collapsed
+The current linked-binary audit finds 22 stub functions, 91 collapsed
 functions, 393 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
@@ -58,6 +58,12 @@ but remains shorter than OEM and needs runtime coverage during tuning bring-up.
 Twelve more vendor shim functions covering I2C, GPIO input, module references,
 completion handling, and interruptible timeout waits were restored from that
 same SDK source. Each now has OEM instruction-count parity.
+
+The CPM reset helper now polls the OEM `0xb00000c4` register for all 500
+iterations and performs both completion writes at that same address. Recovered
+pointer types had shortened the poll to 125 iterations and redirected the
+completion pulse to `0xb0000310`; the repaired helper is within three
+instructions of OEM.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
