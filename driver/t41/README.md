@@ -28,10 +28,9 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 18 stub functions, 92 collapsed
-functions, 385 shorter functions, and 41 OEM-only symbols. Critical deficits
-include subdevice initialization, core control/ioctl dispatch, and tuning
-paths.
+The current linked-binary audit finds 18 stub functions, 91 collapsed
+functions, 386 shorter functions, and 41 OEM-only symbols. Critical deficits
+remain in core control/ioctl dispatch and tuning paths.
 
 Completed static repairs restore all 31 OEM exports and replace the recovered
 IRQ wrappers that previously requested IRQ 0 with null handlers and disabled
@@ -126,6 +125,27 @@ fatal signature.
 The sixth level-0 run is clean: module insertion, `/dev/tx-isp` creation,
 parent/child removal, and module unload all return zero with no kernel fatal
 signature. This clears the shallow-platform gate for device-graph testing.
+
+The first level-1 run then showed that the graph was incomplete: IVDC probe
+rejected zero input/output pad counts and graph creation reported that subdev
+index 4 was missing. The common subdevice initializer was only 65 instructions
+against the OEM's 420 and skipped IRQ, MMIO, clock, and pad setup. Its restored
+implementation is now 306 instructions, the clock initializer is 132 against
+OEM 136, and the module initializer is 48 against OEM 51. This lowers the
+linked audit's collapsed count from 92 to 91.
+
+Activating the recovered pad setup exposed two additional dormant teardown
+chains at level 0. Frame-source probe used the address of its pad-pointer field
+as the pad array, freed its live channel array on the success path, and used a
+scaled loop index. The repaired probe is 204 instructions against OEM 206.
+The VB2 queue cancel/free chain also unlocked a null spinlock and used scaled
+list offsets; queue cancel now has exact OEM instruction-count parity and
+queue free is within two instructions. Finally, child teardown is bounded by
+the six platform entries actually registered instead of walking ten unused
+slots. The resulting level-0 run at
+`logs/20260720-2015-t41-level0-platform-table-dump-117` inserts and unloads
+cleanly with no kernel fatal signature, clearing the updated initializer for a
+fresh level-1 graph test.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after

@@ -2795,7 +2795,7 @@ void private_enable_irq(unsigned int irq);
 void private_disable_irq(unsigned int irq);
 void private_free_irq(unsigned int irq, void *dev_id);
 int32_t __private_spin_lock_irqsave(uint32_t a0, uintptr_t a1);
-int32_t private_spin_unlock_irqrestore(void);
+int32_t private_spin_unlock_irqrestore();
 int32_t private_spin_lock_init(int32_t *arg1);
 int32_t private_mutex_lock(void);
 int32_t private_mutex_unlock(void);
@@ -2818,7 +2818,7 @@ int32_t private_wait_for_completion_interruptible(struct completion *c);
 unsigned long private_wait_for_completion_timeout(struct completion *completion,
                                                   unsigned long timeout);
 int32_t private_wait_event_interruptible(wait_queue_head_t *arg1, int (*arg2)(wait_queue_t *wait, unsigned mode, int flags), int arg3);
-int32_t private_wake_up_all(void);
+int32_t private_wake_up_all(wait_queue_head_t *queue);
 int32_t private_wake_up(void);
 int32_t private_init_waitqueue_head();
 int32_t private_misc_register();
@@ -3257,7 +3257,7 @@ int32_t tx_isp_notify(uint32_t a0, uint32_t a1, uint32_t a2);
 int64_t find_subdev_link_pad(uintptr_t a0, uintptr_t a1);
 int32_t tx_isp_resume(uintptr_t a0);
 int32_t tx_isp_suspend(uintptr_t a0);
-int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+int isp_subdev_init_clks(struct tx_isp_subdev *sd, void *clk_info);
 int32_t isp_subdev_release_clks(void *arg1);
 void tx_isp_unregister_platforms(uintptr_t a0);
 int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1);
@@ -3298,7 +3298,7 @@ int64_t tx_isp_reg_set(uintptr_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint
 int32_t tx_isp_send_event_to_remote(void* arg1);
 int32_t tx_isp_module_init(uintptr_t a0, uintptr_t a1);
 int32_t tx_isp_module_deinit(uint32_t a0);
-int tx_isp_subdev_init(int32_t * arg1, void * arg2, int arg3);
+int tx_isp_subdev_init(struct platform_device *pdev, void *sd, void *ops);
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
 int64_t tx_isp_create_graph_and_nodes(uintptr_t a0);
 int tx_isp_probe(struct platform_device *pdev);
@@ -5468,9 +5468,11 @@ int32_t __private_spin_lock_irqsave(uint32_t a0, uintptr_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000008d4 origin=fragment_seed original=private_spin_unlock_irqrestore */
-int32_t private_spin_unlock_irqrestore(void)
+int32_t private_spin_unlock_irqrestore(lock, flags)
+	void *lock;
+	unsigned long flags;
 {
-	regtrace_raw_spin_unlock_irqrestore(NULL, 0);
+	regtrace_raw_spin_unlock_irqrestore(lock, flags);
 	return 0;
 }
 
@@ -5669,24 +5671,10 @@ int32_t private_wait_event_interruptible(wait_queue_head_t *arg1, int (*arg2)(wa
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000b88 origin=fragment_seed original=private_wake_up_all */
-int32_t private_wake_up_all(void)
+int32_t private_wake_up_all(wait_queue_head_t *queue)
 {
-    int32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: Arithmetic */
-    t9 = (uint32_t *)&__wake_up;
-    a3 = 0;
-    a2 = 0;
-    t9 = t9;
-
-    /* fragment 1: IndirectTailCall */
-    return ((int32_t (*)())__wake_up)((void *)(uintptr_t)a3, 3, a2, (void *)(uintptr_t)a3);
-
-    return 0;
+	__wake_up(queue, TASK_NORMAL, 0, NULL);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000ba0 origin=fragment_seed original=private_wake_up */
@@ -26442,133 +26430,75 @@ fs_resume_module0x114:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000fbb0 origin=fragment_seed original=__vb2_queue_cancel */
 void __vb2_queue_cancel(void *arg1)
 {
-    uint32_t var_18 = 0;
-    uint32_t *s0;
-    uint32_t *s1;
-    uint32_t *s2;
-    uint32_t *v0;
-    uint32_t *v1;
-    uint32_t *a0_5;
-    uint32_t *i;
+	unsigned long flags = 0;
+	void *lock;
+	unsigned int i;
 
-    if (arg1 == NULL)
-        return;
+	if (!arg1 || (uintptr_t)arg1 >= 0xfffff001U)
+		return;
 
-    v0 = (unsigned int *)arg1;
-    if ((int32_t)v0 >= -4095)
-        return;
+	if (*(uint8_t *)((char *)arg1 + 0x224) & 1)
+		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))
+		 tx_isp_send_event_to_remote)(
+			*(uintptr_t *)((char *)arg1 + 0x2ac), 0x3000004, 0);
+	*(uint8_t *)((char *)arg1 + 0x224) &= 0xfe;
 
-    s2 = (unsigned int *)&tx_isp_send_event_to_remote;
-    s0 = (unsigned int *)arg1;
-    v0 = *(uint8_t *)((char *)arg1 + 0x224);
-    v0 = (uintptr_t)v0 & 1;
+	*(void **)((char *)arg1 + 0x1f0) = (char *)arg1 + 0x1f0;
+	*(void **)((char *)arg1 + 0x1f4) = (char *)arg1 + 0x1f0;
+	lock = (char *)arg1 + 0x204;
+	__private_spin_lock_irqsave((uintptr_t)lock, (uintptr_t)&flags);
+	*(void **)((char *)arg1 + 0x1fc) = (char *)arg1 + 0x1fc;
+	*(void **)((char *)arg1 + 0x200) = (char *)arg1 + 0x1fc;
+	*(uint32_t *)((char *)arg1 + 0x1f8) = 0;
+	*(uint32_t *)((char *)arg1 + 0x208) = 0;
+	private_spin_unlock_irqrestore(lock, flags);
 
-    if (v0 != 0) {
-        v0 = *(uint32_t *)((char *)arg1 + 0x2ac);
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(v0), (uintptr_t)(0x3000004), (uintptr_t)(0));
-    }
+	((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))
+	 tx_isp_send_event_to_remote)(
+		*(uintptr_t *)((char *)arg1 + 0x2ac), 0x3000008, 0);
+	private_wake_up_all((wait_queue_head_t *)((char *)arg1 + 0x20c));
 
-    v0 = *(uint8_t *)((char *)s0 + 0x224);
-    v0 = (uintptr_t)v0 & 0xfe;
-    *(uint8_t *)((char *)s0 + 0x224) = v0;
+	for (i = 0; i < *(uint32_t *)((char *)arg1 + 0x1ec); i++) {
+		void *buf = *(void **)((char *)arg1 + 0xec + i * 4);
 
-    s1 = s0 + 0x204;
-    *(uint32_t *)((char *)s0 + 0x1f0) = s0 + 0x1f0;
-    *(uint32_t *)((char *)s0 + 0x1f4) = s0 + 0x1f0;
-
-    __private_spin_lock_irqsave((void *)(s0 + 0x204), &var_18);
-
-    *(uint32_t *)((char *)s0 + 0x1fc) = s0 + 0x1fc;
-    *(uint32_t *)((char *)s0 + 0x200) = s0 + 0x1fc;
-    *(uint32_t *)((char *)s0 + 0x1f8) = 0;
-    *(uint32_t *)((char *)s0 + 0x208) = 0;
-
-    private_spin_unlock_irqrestore();
-
-    v0 = *(uint32_t *)((char *)s0 + 0x2ac);
-    ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(v0), (uintptr_t)(0x3000008), (uintptr_t)(0));
-
-    private_wake_up_all();
-
-    a0_5 = (uint32_t *)((char *)s0 + 0xec);
-    i = 0;
-    v1 = 0;
-
-    while (i < *(uint32_t *)((char *)s0 + 0x1ec)) {
-        v0 = *a0_5;
-        i++;
-        a0_5++;
-        *(uint32_t *)((char *)(uint32_t)v0 + 0x48) = 0;
-    }
+		if (buf)
+			*(uint32_t *)((char *)buf + 0x48) = 0;
+	}
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000fcc0 origin=model_output original=__vb2_queue_free */
 int32_t __vb2_queue_free(void *arg1, int32_t arg2)
 {
-    int32_t *s2;
-    void *s1;
-    int32_t *v0;
-    unsigned long flags;
+	unsigned long flags = 0;
+	unsigned int count = *(uint32_t *)((char *)arg1 + 0x1ec);
+	unsigned int first = arg2 > count ? 0 : count - arg2;
+	unsigned int i;
+	void *lock;
 
-    /* s2 = queue->count - arg2 */
-    s2 = (*(int32_t *)((char *)arg1 + 0x1ec)) - arg2;
-    
-    /* s1 = arg1 + (s2 << 2) */
-    s1 = (void *)((char *)arg1 + ((uintptr_t)s2 << 2));
+	for (i = first; i < count; i++) {
+		void **slot = (void **)((char *)arg1 + 0xec + i * 4);
+		void *buf = *slot;
 
-    /* Loop: iterate while s2 < queue->count */
-    while (1) {
-        v0 = *(int32_t *)((char *)arg1 + 0x1ec);
-        
-        if (s2 >= v0)
-            break;
-        
-        /* void *buf = *(s1 + 0xec) */
-        void *buf = (void *)(*(void **)((uintptr_t)s1 + 0xec));
-        
-        if (buf != NULL) {
-            /* void *payload = *(buf + 0x3c) */
-            void *payload = (void *)(*(void **)((uintptr_t)buf + 0x3c));
-            
-            if (payload != NULL) {
-                private_kfree();
-                /* *(buf + 0x3c) = 0 */
-                *(void **)(buf + 0x3c) = NULL;
-            }
-            
-            /* private_kfree(buf) */
-            private_kfree();
-            /* *(s1 + 0xec) = 0 */
-            *(void **)(s1 + 0xec) = NULL;
-        }
-        
-        s2 = (void *)(uintptr_t)((uintptr_t)s2 + (1));
-        s1 = (void *)((char *)s1 + 4);
-    }
+		if (!buf)
+			continue;
+		private_kfree(*(void **)((char *)buf + 0x3c));
+		*(void **)((char *)buf + 0x3c) = NULL;
+		private_kfree(buf);
+		*slot = NULL;
+	}
 
-    /* queue->count = v0 - arg2 */
-    *(int32_t *)((char *)arg1 + 0x1ec) = v0 - arg2;
-    
-    /* queue->last_free = arg1 + 0x1f0 */
-    *(void **)((char *)arg1 + 0x1f0) = (void *)((char *)arg1 + 0x1f0);
-    
-    /* queue->mem_plat_priv = arg1 + 0x1f0 */
-    *(void **)((char *)arg1 + 0x1f4) = (void *)((char *)arg1 + 0x1f0);
+	*(uint32_t *)((char *)arg1 + 0x1ec) = first;
+	*(void **)((char *)arg1 + 0x1f0) = (char *)arg1 + 0x1f0;
+	*(void **)((char *)arg1 + 0x1f4) = (char *)arg1 + 0x1f0;
+	lock = (char *)arg1 + 0x204;
+	__private_spin_lock_irqsave((uintptr_t)lock, (uintptr_t)&flags);
+	*(void **)((char *)arg1 + 0x1fc) = (char *)arg1 + 0x1fc;
+	*(void **)((char *)arg1 + 0x200) = (char *)arg1 + 0x1fc;
+	private_spin_unlock_irqrestore(lock, flags);
 
-    /* __private_spin_lock_irqsave(arg1 + 0x204, &flags) */
-    __private_spin_lock_irqsave((char *)arg1 + 0x204, &flags);
-    
-    /* queue->lock_count = arg1 + 0x1fc */
-    *(void **)((char *)arg1 + 0x1fc) = (void *)((char *)arg1 + 0x1fc);
-    
-    /* queue->lock_owner = arg1 + 0x1fc */
-    *(void **)((char *)arg1 + 0x200) = (void *)((char *)arg1 + 0x1fc);
-
-    /* private_spin_unlock_irqrestore(arg1 + 0x204, flags) */
-    private_spin_unlock_irqrestore();
-
-    /* return tx_isp_send_event_to_remote(*(arg1 + 0x2ac), 0x3000008, 0) */
-    return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)arg1 + 0x2ac)), (uintptr_t)(0x3000008), (uintptr_t)(0));
+	return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))
+		tx_isp_send_event_to_remote)(
+			*(uintptr_t *)((char *)arg1 + 0x2ac), 0x3000008, 0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000fdd4 origin=fragment_seed original=tx_isp_frame_chan_deinit */
@@ -27732,8 +27662,8 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 	int ret;
 	uint32_t chan_count;
 	void *chan_base;
-	int *i;
-	int j;
+	uint32_t i;
+	uint32_t j;
 	void *q;
 	void *chan;
 	uint32_t val;
@@ -27757,22 +27687,21 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 
 	chan_count = *(uint16_t *)((char *)mem + 256);
 	*(uint32_t *)((char *)mem + 280) = chan_count;
-	if (!chan_count) {
-		*(uint32_t *)((char *)mem + 284) = 1;
-		private_platform_set_drvdata(pdev, mem);
-		*(uint32_t *)((char *)mem + 56) = (uintptr_t)&isp_framesource_fops;
-		*(uint32_t *)((char *)mem + 268) = (uintptr_t)mem;
-		return 0;
+	chan_base = NULL;
+	if (chan_count) {
+		chan_base = private_kmalloc(chan_count * 820, 0x24000c0);
+		if (!chan_base) {
+			tx_isp_subdev_deinit(mem);
+			private_kfree(mem);
+			return -ENOMEM;
+		}
+		*(void **)((char *)mem + 276) = chan_base;
+		memset(chan_base, 0, chan_count * 820);
 	}
 
-	*(uint32_t *)((char *)mem + 280) = chan_count;
-	chan_base = private_kmalloc(chan_count * 820, 0x24000c0);
-	*(uint32_t *)((char *)mem + 276) = (uintptr_t)chan_base;
-	memset((uintptr_t)chan_base, 0, chan_count * 820);
-
 	for (i = 0; i < chan_count; i++) {
-		q = (void *)((uintptr_t)chan_base + (uintptr_t)i * 820);
-		chan = (void *)((uintptr_t)mem + 260 + (uintptr_t)i * 36);
+		q = (void *)((uintptr_t)chan_base + i * 820);
+		chan = (void *)(*(uintptr_t *)((char *)mem + 260) + i * 36);
 
 		if (q && (uintptr_t)q < 0xfffff001 && chan && (uintptr_t)chan < 0xfffff001) {
 			val = *(uint8_t *)((char *)chan + 4);
@@ -27805,15 +27734,19 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 				*(uint32_t *)((char *)q + 756) = 1;
 			}
 		} else {
-			for (j = 0; j <= i; j++) {
-				tx_isp_frame_chan_deinit((void *)((uintptr_t)chan_base + ((uintptr_t)i - j) * 820));
-			}
+			for (j = 0; j < i; j++)
+				tx_isp_frame_chan_deinit((uintptr_t)chan_base + j * 820);
 			private_kfree(chan_base);
+			tx_isp_subdev_deinit(mem);
+			private_kfree(mem);
 			return -22;
 		}
 	}
 
-	private_kfree(chan_base);
+	*(uint32_t *)((char *)mem + 284) = 1;
+	private_platform_set_drvdata(pdev, mem);
+	*(uint32_t *)((char *)mem + 56) = (uintptr_t)&isp_framesource_fops;
+	*(uint32_t *)((char *)mem + 268) = (uintptr_t)mem;
 	return 0;
 }
 
@@ -31563,78 +31496,70 @@ tx_isp_suspend0xb8:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000132b8 origin=fragment_seed original=isp_subdev_init_clks */
-int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num)
+int isp_subdev_init_clks(struct tx_isp_subdev *sd, void *clk_info)
 {
-    int *i = 0;
-    uint32_t *s5 = (uint32_t *)((char *)sd + 0xf8);
-    int *s1 = (int *)clk_num;
-    uint32_t *v0;
-    uint32_t s0_cnt;
-    int ret;
+	uint32_t *info = clk_info;
+	struct clk **clks;
+	struct device *dev;
+	unsigned int num;
+	unsigned int acquired = 0;
+	unsigned int i;
+	int ret = 0;
 
-    if (*s5 != 0) {
-        uint32_t *s0 = *s5 << 2;
-        v0 = private_kmalloc();
+	if (!sd)
+		return -EINVAL;
 
-        if (!v0) {
-            isp_printf(2, "[%s %d] [ %s:%d ] Failed to allocate core's clks\n",
-                       "isp_subdev_init_clks", __LINE__, "isp_subdev_init_clks", __LINE__);
-            return -12;
-        }
+	num = *(uint32_t *)((char *)sd + 0xf8);
+	if (!num) {
+		*(void **)((char *)sd + 0xf4) = NULL;
+		return 0;
+	}
+	if (!info)
+		return -EINVAL;
 
-        memset(v0, 0, s0);
-        uint32_t *s4 = v0;
-        s0_cnt = 0;
+	clks = private_kmalloc(num * sizeof(*clks), 0x24000c0);
+	if (!clks) {
+		isp_printf(2, "[%s %d] Failed to allocate core's clks\n",
+			   "isp_subdev_init_clks", __LINE__);
+		return -ENOMEM;
+	}
+	memset(clks, 0, num * sizeof(*clks));
+	dev = *(struct device **)((char *)sd + 4);
 
-        while (1) {
-            uint32_t clk = private_devm_clk_get(*(uint32_t *)((char *)sd + 4), *s1);
-            *s4 = clk;
+	for (i = 0; i < num; i++) {
+		const char *name = (const char *)(uintptr_t)info[i * 2];
+		unsigned long rate = info[i * 2 + 1];
 
-            if ((uint32_t)clk < (uint32_t)0xfffff001) {
-                uint32_t rate = s1[1];
+		clks[i] = private_devm_clk_get(dev, name);
+		if ((uintptr_t)clks[i] >= 0xfffff001U) {
+			ret = (int32_t)(uintptr_t)clks[i];
+			isp_printf(2, "[%s %d] i %d Failed to get %s clock %ld\n",
+				   "isp_subdev_init_clks", __LINE__, i,
+				   name, (long)ret);
+			goto failed;
+		}
+		acquired++;
 
-                if (rate != 0xffff) {
-                    ret = private_clk_set_rate(clk, rate);
-                    if (ret != 0) {
-                        isp_printf(2, "[%s %d] [ %s:%d ] Failed to set %s clock rate(%ld)\n",
-                                   "isp_subdev_init_clks", __LINE__, "isp_subdev_init_clks", __LINE__,
-                                   "isp_subdev_init_clks", (long)rate);
-                        s0_cnt <<= 2;
-                        goto cleanup;
-                    }
-                }
+		if (rate != 0xffff) {
+			ret = private_clk_set_rate(clks[i], rate);
+			if (ret) {
+				isp_printf(2,
+					   "[%s %d] Failed to set %s clock rate(%ld)\n",
+					   "isp_subdev_init_clks", __LINE__,
+					   name, rate);
+				goto failed;
+			}
+		}
+	}
 
-                s0_cnt++;
-                s1 = (void *)(uintptr_t)((uintptr_t)s1 + (2));
-                s4 = (void *)(uintptr_t)((uintptr_t)s4 + (1));
+	*(struct clk ***)((char *)sd + 0xf4) = clks;
+	return 0;
 
-                if (s0_cnt == *s5) {
-                    *(uint32_t *)((char *)sd + 0xf4) = (uint32_t)v0;
-                    return 0;
-                }
-            } else {
-                isp_printf(2, "[%s %d] [ %s:%d ] i %d Failed to get %s clock %ld\n",
-                           "isp_subdev_init_clks", __LINE__, "isp_subdev_init_clks", __LINE__,
-                           (int)s0_cnt, "isp_subdev_init_clks", (long)clk);
-                ret = *s4;
-                s0_cnt <<= 2;
-                goto cleanup;
-            }
-        }
-    } else {
-        *(uint32_t *)((char *)sd + 0xf4) = 0;
-        return 0;
-    }
-
-cleanup:
-    uint32_t *end = (void *)((uintptr_t)v0 + s0_cnt);
-    while (v0 != end) {
-        uint32_t clk = *(uint32_t *)((char *)end - 4);
-        end = (void *)(uintptr_t)((uintptr_t)end - (1));
-        private_devm_clk_put();
-    }
-    private_kfree();
-    return ret;
+failed:
+	while (acquired)
+		private_devm_clk_put(dev, clks[--acquired]);
+	private_kfree(clks);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000134d8 origin=model_output original=isp_subdev_release_clks */
@@ -31658,7 +31583,15 @@ int32_t isp_subdev_release_clks(void *arg1)
 void tx_isp_unregister_platforms(uintptr_t a0)
 {
 	uint32_t *entry = (uint32_t *)a0;
-	uint32_t *end = (uint32_t *)((char *)entry + 0x80);
+	uint32_t count;
+	uint32_t *end;
+
+	if (!entry)
+		return;
+	count = *(uint32_t *)((char *)entry - 4);
+	if (count > 16)
+		count = 16;
+	end = entry + count * 2;
 
 	for (; entry != end; entry += 2) {
 		struct platform_device *pdev =
@@ -36259,76 +36192,26 @@ int32_t tx_isp_send_event_to_remote(void* arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001629c origin=fragment_seed original=tx_isp_module_init */
 int32_t tx_isp_module_init(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *v0 = 0;
+	struct platform_device *pdev = (struct platform_device *)a0;
+	char *module = (char *)a1;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (!pdev || !module) {
+		isp_printf(2, "[%s %d] The parameter is invalid!\n",
+			   "tx_isp_module_init", __LINE__);
+		return -EINVAL;
+	}
 
-    /* fragment 1: Branch */
-    if (a1 != 0) { goto tx_isp_module_init0x5c; }
+	if (pdev->dev.platform_data)
+		memcpy(module, pdev->dev.platform_data, 4);
 
-    /* fragment 2: CallSetup */
-    local_14 = 2495;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC26, &__pow2_lut, 2495); /* jalr target resolved by relocation */
-
-    /* fragment 3: Arithmetic */
-    v0 = -22;
-
-tx_isp_module_init0x48:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_module_init0x5c:
-    /* fragment 5: Arithmetic */
-    s1 = a0;
-
-    /* fragment 6: Branch */
-    s0 = a1;
-    if (a0 == 0) { goto tx_isp_module_init0x84; }
-
-    /* fragment 7: MemoryAccess */
-    a1 = *(uint32_t *)((char *)a0 + 92);
-
-    /* fragment 8: Branch */
-    a2 = 4;
-    if (a1 == 0) { goto tx_isp_module_init0x84; }
-
-    /* fragment 9: CallSetup */
-    v0 = (unsigned int *)memcpy((void *)(uintptr_t)s0, (void *)(uintptr_t)a1, a2); /* jalr target resolved by relocation */
-
-tx_isp_module_init0x84:
-    /* fragment 10: CallSetup */
-    *(uint32_t *)((char *)s0 + 124) = 0;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)(s0 + 60), 0, 64); /* jalr target resolved by relocation */
-
-    /* fragment 11: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s1 + 0);
-    s1 = s1 + 16;
-    *(uint32_t *)((char *)s0 + 52) = 0;
-    *(uint32_t *)((char *)s0 + 8) = v0;
-    v0 = 65536;
-    v0 = v0 + 12032;
-    *(uint32_t *)((char *)s0 + 128) = v0;
-    *(uint32_t *)((char *)s0 + 56) = 0;
-    *(uint32_t *)((char *)s0 + 4) = s1;
-
-    /* fragment 12: Branch */
-    v0 = 0;
-    goto tx_isp_module_init0x48;
-
-    return 0;
+	*(void **)(module + 124) = NULL;
+	memset(module + 60, 0, 64);
+	*(void **)(module + 52) = NULL;
+	*(const char **)(module + 8) = pdev->name;
+	*(void **)(module + 128) = tx_isp_notify;
+	*(void **)(module + 56) = NULL;
+	*(struct device **)(module + 4) = &pdev->dev;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016368 origin=fragment_seed original=tx_isp_module_deinit */
@@ -36340,36 +36223,161 @@ int32_t tx_isp_module_deinit(uint32_t a0)
 	return (int32_t)(uintptr_t)memset((void *)(uintptr_t)a0, 0, 0x84);
 }
 
-int tx_isp_subdev_init(int32_t *arg1, void *arg2, int arg3)
+int tx_isp_subdev_init(struct platform_device *pdev, void *sd, void *ops)
 {
-    uintptr_t pdev = (uintptr_t)arg1;
-    uintptr_t sd = (uintptr_t)arg2;
-    uintptr_t pdata;
-    int ret;
+	unsigned char *desc;
+	unsigned char *pads;
+	unsigned int resources;
+	unsigned int pads_num;
+	unsigned int out_count = 0;
+	unsigned int in_count = 0;
+	unsigned int i;
+	void *outpads = NULL;
+	void *inpads = NULL;
+	int ret;
 
-    if (pdev == 0 || sd == 0) {
-        isp_printf(2, "[%s %d] The parameter is invalid!\n", "tx_isp_subdev_init", 2765);
-        return -22;
-    }
+	if (!pdev || !sd) {
+		isp_printf(2, "[%s %d] The parameter is invalid!\n",
+			   "tx_isp_subdev_init", __LINE__);
+		return -EINVAL;
+	}
 
-    *(uint32_t *)((char *)sd + 0xfc) = (uint32_t)arg3;
-    ret = tx_isp_module_init(pdev, sd);
-    if (ret != 0) {
-        isp_printf(2, "[%s %d] Failed to init isp module(%s)\n",
-                   "tx_isp_subdev_init", 2772, *(char **)pdev);
-        return -12;
-    }
+	*(void **)((char *)sd + 0xfc) = ops;
+	ret = tx_isp_module_init((uintptr_t)pdev, (uintptr_t)sd);
+	if (ret) {
+		isp_printf(2, "[%s %d] Failed to init isp module(%s)\n",
+			   "tx_isp_subdev_init", __LINE__, pdev->name);
+		return -ENOMEM;
+	}
 
-    pdata = *(uint32_t *)((char *)pdev + 0x5c);
-    if (pdata != 0) {
-        memcpy((void *)sd, (void *)pdata, 4);
-        *(uint32_t *)((char *)sd + 0xc0) = *(uint8_t *)((char *)pdata + 4);
-    }
+	desc = pdev->dev.platform_data;
+	if (!desc)
+		return 0;
 
-    *(uint32_t *)((char *)sd + 0xfc) = (uint32_t)arg3;
-    *(uint32_t *)((char *)sd + 0x80) = (uint32_t)tx_isp_notify;
+	ret = tx_isp_request_irq((uintptr_t)pdev,
+				 (uintptr_t)((char *)sd + 0x84));
+	if (ret) {
+		isp_printf(2, "[%s %d] Failed to request irq!\n",
+			   "tx_isp_subdev_init", __LINE__);
+		goto failed;
+	}
 
-    return 0;
+	resources = pdev->num_resources;
+	if (resources > 3)
+		resources = 3;
+	for (i = 0; i < resources; i++) {
+		struct resource *res;
+		struct resource *claimed;
+		void __iomem *base;
+		resource_size_t size;
+
+		res = (struct resource *)(uintptr_t)
+			private_platform_get_resource(pdev, IORESOURCE_MEM, i);
+		if (!res || !res->name || strcmp(res->name, "isp-device"))
+			continue;
+
+		size = resource_size(res);
+		claimed = private_request_mem_region(res->start, size,
+						     dev_name(&pdev->dev));
+		if (!claimed) {
+			isp_printf(2, "[%s %d] Not enough memory for resources\n",
+				   "tx_isp_subdev_init", __LINE__);
+			ret = -EBUSY;
+			goto failed;
+		}
+		*(struct resource **)((char *)sd + 0xdc + i * 4) = claimed;
+
+		base = private_ioremap(claimed->start, resource_size(claimed));
+		if (!base) {
+			isp_printf(2, "[%s %d] Unable to ioremap registers\n",
+				   "tx_isp_subdev_init", __LINE__);
+			ret = -ENXIO;
+			goto failed;
+		}
+		*(void __iomem **)((char *)sd + 0xe8 + i * 4) = base;
+	}
+
+	if (desc[0] != 1 && desc[0] != 2)
+		return 0;
+
+	*(uint32_t *)((char *)sd + 0xf8) = desc[4];
+	ret = isp_subdev_init_clks(sd, *(void **)(desc + 8));
+	if (ret) {
+		isp_printf(2, "[%s %d] Failed to init %s's clks!\n",
+			   "tx_isp_subdev_init", __LINE__,
+			   *(const char **)((char *)sd + 8));
+		goto failed;
+	}
+
+	if (desc[0] == 2)
+		return 0;
+
+	pads_num = desc[12];
+	pads = *(unsigned char **)(desc + 16);
+	if (pads_num && !pads) {
+		ret = -EINVAL;
+		goto failed;
+	}
+
+	*(uint16_t *)((char *)sd + 0x100) = 0;
+	*(uint16_t *)((char *)sd + 0x102) = 0;
+	for (i = 0; i < pads_num; i++) {
+		if (pads[i * 2] == 2)
+			out_count++;
+		else
+			in_count++;
+	}
+	*(uint16_t *)((char *)sd + 0x100) = out_count;
+	*(uint16_t *)((char *)sd + 0x102) = in_count;
+
+	if (out_count) {
+		outpads = private_kmalloc(out_count * 36, 0x24000c0);
+		if (!outpads) {
+			ret = -ENOMEM;
+			goto failed;
+		}
+		memset(outpads, 0, out_count * 36);
+	}
+	if (in_count) {
+		inpads = private_kmalloc(in_count * 36, 0x24000c0);
+		if (!inpads) {
+			ret = -ENOMEM;
+			goto failed;
+		}
+		memset(inpads, 0, in_count * 36);
+	}
+
+	out_count = 0;
+	in_count = 0;
+	for (i = 0; i < pads_num; i++) {
+		unsigned char *pad;
+		unsigned int index;
+
+		if (pads[i * 2] == 2) {
+			index = out_count++;
+			pad = (unsigned char *)outpads + index * 36;
+		} else {
+			index = in_count++;
+			pad = (unsigned char *)inpads + index * 36;
+		}
+
+		*(void **)pad = sd;
+		pad[4] = index;
+		pad[5] = pads[i * 2];
+		pad[6] = pads[i * 2 + 1];
+		pad[7] = 2;
+		*(uint32_t *)(pad + 20) = 0;
+	}
+
+	*(void **)((char *)sd + 0x104) = outpads;
+	*(void **)((char *)sd + 0x108) = inpads;
+	return 0;
+
+failed:
+	private_kfree(outpads);
+	private_kfree(inpads);
+	tx_isp_subdev_deinit(sd);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016a18 origin=fragment_seed original=tx_isp_subdev_deinit */
