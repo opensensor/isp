@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1525 |
 | Functions with disassembly | 1314 | 1525 |
-| Executable section bytes | 479556 | 341680 |
+| Executable section bytes | 479556 | 342784 |
 | Initialized writable bytes | 25120 | 17104 |
 | Uninitialized writable bytes | 20592 | 302432 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=252
-- matched instructions: OEM=116036 recovered=82547 ratio=0.711
-- classes: stub=18 collapsed=86 shorter=391 same_count=264 similar=472 larger=24 expanded=18
+- matched instructions: OEM=116036 recovered=82824 ratio=0.714
+- classes: stub=17 collapsed=86 shorter=391 same_count=265 similar=473 larger=23 expanded=18
 
 ## Allocated Section Delta
 
@@ -35,21 +35,20 @@
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 4176 | -11584 |
-| `.rodata.str1.4` | 25860 | 5608 | -20252 |
-| `.text` | 478400 | 341680 | -136720 |
+| `.rodata` | 15760 | 4240 | -11520 |
+| `.rodata.str1.4` | 25860 | 5664 | -20196 |
+| `.text` | 478400 | 342784 | -135616 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 830 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 828 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
 | stub | exact_name | `tisp_bcsh_BCS_adjust` | `tisp_bcsh_BCS_adjust` | 355 | 2 | 0.006 | -353 | 17->0 | 28->1 |
-| stub | exact_name | `ispcore_core_ops_ioctl` | `ispcore_core_ops_ioctl` | 309 | 2 | 0.006 | -307 | 8->0 | 55->0 |
 | stub | exact_name | `ispint_adr_64` | `ispint_adr_64` | 101 | 3 | 0.030 | -98 | 2->0 | 14->0 |
 | stub | exact_name | `func_interp1_short` | `func_interp1_short` | 67 | 2 | 0.030 | -65 | 0->0 | 10->0 |
 | stub | exact_name | `func_zone_ct_weight` | `func_zone_ct_weight` | 42 | 2 | 0.048 | -40 | 0->0 | 6->1 |
@@ -298,3 +297,4 @@ Showing 250 of 830 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `ispcore_frame_channel_ir_qbuf` | `ispcore_frame_channel_ir_qbuf` | 79 | 61 | 0.772 | -18 | 4->3 | 12->11 |
 | shorter | exact_name | `tisp_ae_sepc_area` | `tisp_ae_sepc_area` | 78 | 46 | 0.590 | -32 | 1->1 | 4->4 |
 | shorter | exact_name | `tisp_lce_process` | `tisp_lce_process` | 76 | 54 | 0.711 | -22 | 6->5 | 2->2 |
+| shorter | exact_name | `tisp_wdr_degweight_ev` | `tisp_wdr_degweight_ev` | 76 | 59 | 0.776 | -17 | 0->0 | 13->11 |

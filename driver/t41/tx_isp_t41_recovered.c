@@ -3374,7 +3374,7 @@ int64_t tx_isp_get_default_bin_path_isra_25(uintptr_t a0, uint32_t a1);
 int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2);
 int32_t private_reset_tx_isp_module(uint32_t a0);
 int64_t tx_isp_reg_set(uintptr_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4);
-int32_t tx_isp_send_event_to_remote(void* arg1);
+int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data);
 int32_t tx_isp_module_init(uintptr_t a0, uintptr_t a1);
 int32_t tx_isp_module_deinit(uint32_t a0);
 int tx_isp_subdev_init(struct platform_device *pdev, void *sd, void *ops);
@@ -4438,7 +4438,7 @@ int64_t ispcore_core_ops_init(uintptr_t a0, uintptr_t a1);
 int32_t ispcore_slake_module(uintptr_t a0);
 int tx_isp_core_probe(struct platform_device *pdev);
 int32_t ispcore_s_wdr_en(uintptr_t a0, uintptr_t a1);
-int32_t ispcore_core_ops_ioctl(uintptr_t a0, uint32_t a1);
+int32_t ispcore_core_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t sub_73fa8(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7, uint32_t arg8);
 int32_t sub_7408c(void);
 int32_t sub_740c0(uint32_t a0, uintptr_t a1, uintptr_t a2);
@@ -35556,18 +35556,21 @@ tx_isp_reg_set0x4c:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001626c origin=model_output original=tx_isp_send_event_to_remote */
-int32_t tx_isp_send_event_to_remote(void* arg1)
+int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 {
-    if (arg1 != 0) {
-        void* a0 = *(void**)(arg1 + 0xc);
-        if (a0 != 0) {
-            int32_t (*t9_1)(void) = *(int32_t (**)(void))(a0 + 0x1c);
-            if (t9_1 != 0) {
-                t9_1();
-            }
-        }
-    }
-    return -0x2003;
+	void *remote;
+	int32_t (*handle)(void *, uint32_t, void *);
+
+	if (!arg1)
+		return -ENOIOCTLCMD;
+	remote = *(void **)((char *)arg1 + 0x0c);
+	if (!remote)
+		return -ENOIOCTLCMD;
+	handle = *(int32_t (**)(void *, uint32_t, void *))
+		((char *)remote + 0x1c);
+	if (!handle)
+		return -ENOIOCTLCMD;
+	return handle(remote, event, data);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001629c origin=fragment_seed original=tx_isp_module_init */
@@ -158986,112 +158989,177 @@ ispcore_s_wdr_en0x28:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000073f08 origin=fragment_seed original=ispcore_core_ops_ioctl */
-int32_t ispcore_core_ops_ioctl(uintptr_t a0, uint32_t a1)
+int32_t ispcore_core_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uint32_t local_50 = 0;
-    uint32_t local_54 = 0;
-    uint32_t local_58 = 0;
-    uint32_t local_5c = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t *s6 = 0;
-    uint32_t s7 = 0;
-    uint32_t s8 = 0;
-    uintptr_t *v0 = 0;
+	char *subdev = (char *)a0;
+	char *core = NULL;
+	void *arg = (void *)a2;
+	char *slot;
+	int ret = 0;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (subdev && !IS_ERR(subdev))
+		core = *(char **)(subdev + 0x10c);
 
-    /* fragment 1: Arithmetic */
-    s1 = a0;
-    s3 = a1;
+	/* Handle the ISP core's own part of each 0x01000000 event first. */
+	switch (a1) {
+	case 0x01000000: {
+		char *ops = subdev ? *(char **)(subdev + 0xfc) : NULL;
+		char *core_ops = ops ? *(char **)(ops + 0x00) : NULL;
+		int (*init)(void *, void *) = core_ops ?
+			*(int (**)(void *, void *))(core_ops + 0x04) : NULL;
 
-    /* fragment 2: Branch */
-    s6 = a2;
-    if (a0 == 0) { goto ispcore_core_ops_ioctl0x49c; }
+		ret = init ? init(subdev, arg) : -ENOIOCTLCMD;
+		break;
+	}
+	case 0x01000001: {
+		char *ops = subdev ? *(char **)(subdev + 0xfc) : NULL;
+		char *sensor_ops = ops ? *(char **)(ops + 0x0c) : NULL;
+		int (*sync)(void *, void *) = sensor_ops ?
+			*(int (**)(void *, void *))(sensor_ops + 0x04) : NULL;
 
-    /* fragment 3: Arithmetic */
-    a0 = a0 < -4095;
+		ret = sync ? sync(subdev, arg) : -ENOIOCTLCMD;
+		break;
+	}
+	case 0x01000003:
+		if (core && !IS_ERR(core) && arg) {
+			uint32_t *format = arg;
+			uint32_t index = format[0];
+			char *channels = *(char **)(core + 0x1ac);
+			char *channel = channels + index * 232;
 
-    /* fragment 4: Branch */
-    s2 = 0;
-    if (a0 == 0) { goto ispcore_core_ops_ioctl0x4c; }
+			format[1] = *(uint32_t *)(channel + 0x04);
+			format[2] = *(uint32_t *)(channel + 0x08);
+			ispcore_frame_channel_s_fmt(
+				(uintptr_t)(channel + 0xcc),
+				(uintptr_t)(format + 1));
+			*(uint32_t *)(channel + 0x18) = format[7];
+			memcpy(format + 1, channel, 116);
+		}
+		break;
+	case 0x01000005:
+		if (core && !IS_ERR(core) && arg) {
+			uint32_t i;
+			char *channels = *(char **)(core + 0x1ac);
+			uint32_t *inputs = arg;
 
-    /* fragment 5: MemoryAccess */
-    s2 = *(uint32_t *)((char *)s1 + 268);
+			for (i = 0; i < 3; ++i) {
+				uint32_t input = inputs[i * 4];
 
-ispcore_core_ops_ioctl0x4c:
-    /* fragment 6: Arithmetic */
-    v0 = 4278190080;
-    v0 = s3 + (uintptr_t)v0;
-    a1 = v0 < 12;
+				if (input >= 3)
+					*(void **)(channels + i * 232 + 0xd4) =
+						core + 0x234 + input * 28;
+			}
+		}
+		break;
+	case 0x01000007:
+		if (arg && !*(uint32_t *)arg) {
+			uint32_t *value = *(uint32_t **)((char *)arg + 4);
 
-    /* fragment 7: Branch */
-    v0 = (uintptr_t)v0 << 2;
-    if (a1 == 0) { goto ispcore_core_ops_ioctl0x204; }
+			if (value)
+				ret = tisp_sync_ivdc_state(0, *value);
+		}
+		break;
+	case 0x01000008:
+		ret = ispcore_s_wdr_en((uintptr_t)subdev, (uintptr_t)arg);
+		break;
+	case 0x01000009:
+		if (core && !IS_ERR(core) && arg) {
+			uint32_t *values = arg;
+			char *tuning = *(char **)(core + 0x230);
+			char *entry = tuning + values[0] * 124;
 
-    /* fragment 8: ConstantLoad */
-    a1 = 0x3ad0;
+			*(uint32_t *)(entry + 0x1c) = values[1];
+			*(uint32_t *)(entry + 0x20) = values[2];
+			*(uint32_t *)(entry + 0x24) = values[3];
+			*(uint32_t *)(entry + 0x28) = values[4];
+			*(uint32_t *)(entry + 0x2c) = values[5];
+			*(uint32_t *)(entry + 0x30) = values[6];
+		}
+		break;
+	case 0x0100000a:
+		if (core && !IS_ERR(core)) {
+			char *channels = *(char **)(core + 0x1ac);
+			char *debug = channels ? *(char **)(channels + 0x1bc) : NULL;
 
-    /* fragment 9: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 0);
+			if (debug)
+				*(void **)(debug + 0x10) =
+					(void *)ispcore_frame_channel1_debug_qbuf;
+			*(uint8_t *)(core + 0x36c) = 1;
+		}
+		break;
+	case 0x0100000b:
+		if (core && !IS_ERR(core) && arg && *(uint32_t *)arg) {
+			uint32_t event_data[10] = { 0 };
+			char *channels = *(char **)(core + 0x1ac);
+			int32_t (*volatile get_fps)(uint32_t, uintptr_t) =
+				tisp_ae_get_fps;
 
-    /* fragment 10: Unknown */
-    /* unmatched fragment 10 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 73f78:	00400408 	jr.hb	v0 */
+			event_data[2] = *(uint32_t *)arg;
+			event_data[3] = *(uint32_t *)((char *)arg + 4);
+			++isp_ch0_frm_done;
+			get_fps(0, (uintptr_t)&event_data[6]);
+			ret = tx_isp_send_event_to_remote(
+				*(void **)(channels + 0x16c),
+				0x03000006, event_data);
+		}
+		break;
+	default:
+		break;
+	}
 
-    /* fragment 11: Unknown */
-    /* unmatched fragment 11 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 73f7c:	00000000 	nop */
+	if (ret && ret != -ENOIOCTLCMD) {
+		isp_printf(2, "ispcore_core_ops_ioctl: core event 0x%x failed (%d)\n",
+			a1, ret);
+		return ret;
+	}
 
-    /* fragment 12: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s1 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 0);
+	/* Then fan the same event out through every child widget. */
+	if (!subdev)
+		return ret == -ENOIOCTLCMD ? 0 : ret;
+	for (slot = subdev + 0x3c; slot != subdev + 0x7c;
+	     slot += sizeof(void *)) {
+		char *widget = *(char **)slot;
+		char *ops;
+		char *group;
+		int (*callback)(void *, uint32_t, void *);
+		void *child_arg = arg;
 
-    /* fragment 13: Branch */
-    if (v0 != 0) { goto ispcore_core_ops_ioctl0x90; }
+		if (!widget || IS_ERR(widget))
+			continue;
+		ops = *(char **)(widget + 0xfc);
+		if (!ops)
+			continue;
+		if (a1 == 0x01000001) {
+			group = *(char **)(ops + 0x0c);
+			callback = group ?
+				*(int (**)(void *, uint32_t, void *))(group + 0x04) :
+				NULL;
+		} else {
+			group = *(char **)(ops + 0x00);
+			if (a1 == 0x01000000)
+				callback = group ?
+					*(int (**)(void *, uint32_t, void *))
+					(group + 0x04) : NULL;
+			else
+				callback = group ?
+					*(int (**)(void *, uint32_t, void *))
+					(group + 0x20) : NULL;
+		}
+		if (!callback) {
+			ret = -ENOIOCTLCMD;
+			continue;
+		}
+		if (a1 == 0x01000004 && core)
+			child_arg = core + 0x234;
+		if (a1 == 0x01000000 || a1 == 0x01000001)
+			ret = ((int (*)(void *, void *))callback)(widget, child_arg);
+		else
+			ret = callback(widget, a1, child_arg);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+	}
 
-ispcore_core_ops_ioctl0x88:
-    /* fragment 14: Branch */
-    s0 = -515;
-    goto ispcore_core_ops_ioctl0x208;
-
-ispcore_core_ops_ioctl0x90:
-    /* fragment 15: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 16: Branch */
-    a0 = s1;
-    if (v0 == 0) { goto ispcore_core_ops_ioctl0x88; }
-
-    /* fragment 17: CallSetup */
-    /* unmatched fragment 17 (CallSetup): call fragment did not include a relocated symbol */
-    /* asm: 73fa4:	02c02825 	move	a1,s6 */
-    /* asm: 73fa8:	0040f809 	jalr	v0 */
-    /* asm: 73fac:	00000000 	nop */
-
-    /* fragment 18: Branch */
-    if (v0 == 0) { goto ispcore_core_ops_ioctl0x208; }
-
-ispcore_core_ops_ioctl0x204:
-    ;
-ispcore_core_ops_ioctl0x208:
-    ;
-ispcore_core_ops_ioctl0x49c:
-    ;
-    return 0;
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000073fa8 origin=fragment_seed original=sub_73fa8 */
