@@ -2822,7 +2822,8 @@ int32_t private_vmalloc(void);
 int32_t private_vfree(void);
 void *private_kmalloc();
 void private_kfree();
-int32_t private_copy_from_user(uint32_t a0, uint32_t a1, uint32_t a2);
+int32_t private_copy_from_user(void *to, const void __user *from,
+                               unsigned long n);
 int32_t private_copy_to_user(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t private_filp_open(void);
 int private_filp_close(void);
@@ -5145,78 +5146,28 @@ uint32_t get_isp_memopt(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000003d0 origin=fragment_seed original=private_leading_one_position */
 int32_t private_leading_one_position(uint32_t a0)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    int32_t result = 0;
 
-    /* fragment 0: Arithmetic */
-    v1 = 65536;
-    v1 = a0 < v1;
+    if (a0 >= 0x10000U) {
+        a0 >>= 16;
+        result = 16;
+    }
+    if (a0 >= 0x100U) {
+        a0 >>= 8;
+        result += 8;
+    }
+    if (a0 >= 0x10U) {
+        a0 >>= 4;
+        result += 4;
+    }
+    if (a0 >= 4U) {
+        a0 >>= 2;
+        result += 2;
+    }
+    if (a0 >= 2U)
+        result++;
 
-    /* fragment 1: Branch */
-    v0 = 0;
-    if (v1 != 0) { goto private_leading_one_position0x18; }
-
-    /* fragment 2: Arithmetic */
-    a0 = a0 >> 16;
-    v0 = 16;
-
-private_leading_one_position0x18:
-    /* fragment 3: Arithmetic */
-    v1 = a0 < 256;
-
-    /* fragment 4: Branch */
-    if (v1 != 0) { goto private_leading_one_position0x30; }
-
-    /* fragment 5: Arithmetic */
-    v0 = v0 + 8;
-    a0 = a0 >> 8;
-    v0 = (uintptr_t)v0 & 255;
-
-private_leading_one_position0x30:
-    /* fragment 6: Arithmetic */
-    v1 = a0 < 16;
-
-    /* fragment 7: Branch */
-    if (v1 != 0) { goto private_leading_one_position0x48; }
-
-    /* fragment 8: Arithmetic */
-    v0 = v0 + 4;
-    a0 = a0 >> 4;
-    v0 = (uintptr_t)v0 & 255;
-
-private_leading_one_position0x48:
-    /* fragment 9: Arithmetic */
-    v1 = a0 < 4;
-
-    /* fragment 10: Branch */
-    if (v1 != 0) { goto private_leading_one_position0x60; }
-
-    /* fragment 11: Arithmetic */
-    v0 = v0 + 2;
-    a0 = a0 >> 2;
-    v0 = (uintptr_t)v0 & 255;
-
-private_leading_one_position0x60:
-    /* fragment 12: Arithmetic */
-    a0 = a0 < 2;
-
-    /* fragment 13: Branch */
-    if (a0 != 0) { goto private_leading_one_position0x74; }
-
-    /* fragment 14: Arithmetic */
-    v0 = v0 + 1;
-    v0 = (uintptr_t)v0 & 255;
-
-private_leading_one_position0x74:
-    /* fragment 15: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 16: Unknown */
-    /* unmatched fragment 16 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 448:	00000000 	nop */
-
-    return 0;
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000044c origin=fragment_seed original=private_log2_int_to_fixed */
@@ -5348,94 +5299,10 @@ int32_t private_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000528 origin=fragment_seed original=private_leading_one_position_64 */
 int32_t private_leading_one_position_64(uint32_t a0, uint32_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    if (a1)
+        return 32 + private_leading_one_position(a1);
 
-    /* fragment 0: Branch */
-    v0 = 0;
-    if (a1 == 0) { goto private_leading_one_position_640x14; }
-
-    /* fragment 1: Arithmetic */
-    a0 = a1;
-    v0 = 32;
-    a1 = 0;
-
-private_leading_one_position_640x14:
-    /* fragment 2: Arithmetic */
-    v1 = 65536;
-    v1 = a0 < v1;
-
-    /* fragment 3: Branch */
-    if (v1 != 0) { goto private_leading_one_position_640x30; }
-
-    /* fragment 4: Arithmetic */
-    a0 = a0 >> 16;
-    a1 = 0;
-    v0 = v0 + 16;
-
-private_leading_one_position_640x30:
-    /* fragment 5: Arithmetic */
-    v1 = a0 < 256;
-
-    /* fragment 6: Branch */
-    if (v1 != 0) { goto private_leading_one_position_640x48; }
-
-    /* fragment 7: Arithmetic */
-    a0 = a0 >> 8;
-    a1 = 0;
-    v0 = v0 + 8;
-
-private_leading_one_position_640x48:
-    /* fragment 8: Arithmetic */
-    v1 = a0 < 16;
-
-    /* fragment 9: Branch */
-    if (v1 != 0) { goto private_leading_one_position_640x60; }
-
-    /* fragment 10: Arithmetic */
-    a0 = a0 >> 4;
-    a1 = 0;
-    v0 = v0 + 4;
-
-private_leading_one_position_640x60:
-    /* fragment 11: Arithmetic */
-    v1 = a0 < 4;
-
-    /* fragment 12: Branch */
-    int _bc_v1_12 = v1 != 0;
-    v1 = a1 << 30;
-    if (_bc_v1_12) { goto private_leading_one_position_640x80; }
-
-    /* fragment 13: Arithmetic */
-    a0 = a0 >> 2;
-    a1 = a1 >> 2;
-    a0 = v1 + a0;
-
-    /* fragment 14: Branch */
-    v0 = v0 + 2;
-    if (a1 != 0) { goto private_leading_one_position_640x8c; }
-
-private_leading_one_position_640x80:
-    /* fragment 15: Arithmetic */
-    a0 = a0 < 2;
-
-    /* fragment 16: Branch */
-    if (a0 != 0) { goto private_leading_one_position_640x90; }
-
-private_leading_one_position_640x8c:
-    /* fragment 17: Arithmetic */
-    v0 = v0 + 1;
-
-private_leading_one_position_640x90:
-    /* fragment 18: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 19: Unknown */
-    /* unmatched fragment 19 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 5bc:	00000000 	nop */
-
-    return 0;
+    return private_leading_one_position(a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000005c0 origin=fragment_seed original=private_log2_int_to_fixed_64 */
@@ -6152,61 +6019,10 @@ void private_kfree(objp)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000c44 origin=fragment_seed original=private_copy_from_user */
-int32_t private_copy_from_user(uint32_t a0, uint32_t a1, uint32_t a2)
+int32_t private_copy_from_user(void *to, const void __user *from,
+                               unsigned long n)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t at = 0;
-    uintptr_t gp = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v0 = a1 + a2;
-    v1 = a1 | a2;
-
-    /* fragment 2: StackAccess */
-    local_14 = ra;
-    v0 = (uintptr_t)v0 | (uintptr_t)v1;
-    local_10 = s0;
-    v1 = 0;
-    v0 = (uintptr_t)v0 & (uintptr_t)v1;
-
-    /* fragment 3: Branch */
-    if (v0 != 0) { goto private_copy_from_user0x50; }
-
-    /* fragment 4: CallSetup */
-    v0 = (unsigned int *)__copy_user((void *)(uintptr_t)a0, (void *)(uintptr_t)a1, a2); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    s0 = a2;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-private_copy_from_user0x40:
-    /* fragment 7: Arithmetic */
-    v0 = s0;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-private_copy_from_user0x50:
-    /* fragment 9: CallSetup */
-    s0 = a2;
-    v0 = (unsigned int *)memset((void *)(uintptr_t)a0, 0, a2); /* jalr target resolved by relocation */
-
-    /* fragment 10: Branch */
-    goto private_copy_from_user0x40;
-
-    return 0;
+    return copy_from_user(to, from, n);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000cb0 origin=fragment_seed original=private_copy_to_user */
