@@ -36,3 +36,15 @@ helpers, and tuning paths.
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.
+
+Use the staged smoke harness after boot-time stock loading has been disabled:
+
+```sh
+T41_BRINGUP_LEVEL=-1 tools/t41_smoke_cycle.sh
+```
+
+The levels are intentionally incremental: `-1` exports only, `0` performs a
+shallow platform probe, `1` adds the device graph, `2` adds ISP memory setup,
+and `3` enables the recovered core/tuning path. The harness refuses to run if
+any `tx_isp*` module is already loaded and reboots the camera after every
+experiment.
