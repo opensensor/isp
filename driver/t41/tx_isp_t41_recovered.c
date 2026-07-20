@@ -2800,21 +2800,23 @@ int32_t private_spin_lock_init(int32_t *arg1);
 int32_t private_mutex_lock(void);
 int32_t private_mutex_unlock(void);
 int32_t private_raw_mutex_init();
-int32_t private_i2c_get_adapter(void);
-void private_i2c_put_adapter(void);
-int32_t private_i2c_register_driver(void);
+struct i2c_adapter *private_i2c_get_adapter(int nr);
+void private_i2c_put_adapter(struct i2c_adapter *adap);
+int private_i2c_register_driver(struct module *owner,
+                                struct i2c_driver *driver);
 struct i2c_client * private_i2c_new_device(struct i2c_adapter *adap, struct i2c_board_info const *info);
-int32_t private_i2c_unregister_device(void);
-int32_t private_gpio_direction_input(void);
+void private_i2c_unregister_device(struct i2c_client *client);
+int private_gpio_direction_input(unsigned int gpio);
 int32_t private_gpio_set_debounce(uint32_t a0, uint32_t a1);
-int32_t private_sched_clock(void);
-int32_t private_try_module_get(void);
+unsigned long long private_sched_clock(void);
+bool private_try_module_get(struct module *module);
 int32_t private_request_module(int32_t arg1, int32_t arg2, int32_t arg3);
-int32_t private_module_put(void);
-int32_t private_init_completion(int32_t *arg1);
-int32_t private_complete(void);
+void private_module_put(struct module *module);
+void private_init_completion(struct completion *completion);
+void private_complete(struct completion *completion);
 int32_t private_wait_for_completion_interruptible(struct completion *c);
-int32_t private_wait_for_completion_timeout();
+unsigned long private_wait_for_completion_timeout(struct completion *completion,
+                                                  unsigned long timeout);
 int32_t private_wait_event_interruptible(wait_queue_head_t *arg1, int (*arg2)(wait_queue_t *wait, unsigned mode, int flags), int arg3);
 int32_t private_wake_up_all(void);
 int32_t private_wake_up(void);
@@ -2857,7 +2859,8 @@ int32_t private_schedule_work(void);
 int32_t private_do_gettimeofday(void);
 int32_t private_atomic_set(int32_t *arg1, int32_t arg2);
 int32_t private_atomic_read(int32_t* arg1);
-int32_t private_wait_event_interruptible_timeout(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4);
+long private_wait_event_interruptible_timeout(wait_queue_head_t queue,
+                                              int condition, long timeout);
 void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, size_t size, enum dma_data_direction dir);
 int32_t private_dma_free_coherent(void *dev, int32_t size, int32_t handle, int32_t flags);
 int32_t private_virt_to_phys(uint32_t a0);
@@ -5511,40 +5514,22 @@ int32_t private_raw_mutex_init(lock, name, key)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000091c origin=fragment_seed original=private_i2c_get_adapter */
-int32_t private_i2c_get_adapter(void)
+struct i2c_adapter *private_i2c_get_adapter(int nr)
 {
-    int32_t *a0 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return i2c_get_adapter(a0);
-
-    return 0;
+    return i2c_get_adapter(nr);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000092c origin=model_output original=private_i2c_put_adapter */
-void private_i2c_put_adapter(void)
+void private_i2c_put_adapter(struct i2c_adapter *adap)
 {
-    i2c_put_adapter(NULL);
+    i2c_put_adapter(adap);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000093c origin=fragment_seed original=private_i2c_register_driver */
-int32_t private_i2c_register_driver(void)
+int private_i2c_register_driver(struct module *owner,
+                                struct i2c_driver *driver)
 {
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    /* unmatched fragment 1 (IndirectTailCall): indirect tail call target register t9 has no known symbol */
-    /* asm: 944:	03200008 	jr	t9 */
-    /* asm: 948:	00000000 	nop */
-
-    return 0;
+    return i2c_register_driver(owner, driver);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000094c origin=fragment_seed original=private_i2c_new_device */
@@ -5554,49 +5539,15 @@ struct i2c_client *private_i2c_new_device(struct i2c_adapter *adap, struct i2c_b
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000095c origin=fragment_seed original=private_i2c_unregister_device */
-int32_t private_i2c_unregister_device(void)
+void private_i2c_unregister_device(struct i2c_client *client)
 {
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    /* unmatched fragment 1 (IndirectTailCall): indirect tail call target register t9 has no known symbol */
-    /* asm: 964:	03200008 	jr	t9 */
-    /* asm: 968:	00000000 	nop */
-
-    return 0;
+    i2c_unregister_device(client);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000096c origin=fragment_seed original=private_gpio_direction_input */
-int32_t private_gpio_direction_input(void)
+int private_gpio_direction_input(unsigned int gpio)
 {
-    uint32_t local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t ra = 0;
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)gpio_to_desc(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    t9 = (uint32_t *)&gpiod_direction_input;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Arithmetic */
-    t9 = t9;
-
-    /* fragment 5: IndirectTailCall */
-    return gpiod_direction_input((void *)(uintptr_t)v0);
-
-    return 0;
+    return gpio_direction_input(gpio);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000099c origin=fragment_seed original=private_gpio_set_debounce */
@@ -5631,32 +5582,15 @@ int32_t private_gpio_set_debounce(uint32_t a0, uint32_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000009d0 origin=fragment_seed original=private_sched_clock */
-int32_t private_sched_clock(void)
+unsigned long long private_sched_clock(void)
 {
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
     return sched_clock();
-
-    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000009e0 origin=fragment_seed original=private_try_module_get */
-int32_t private_try_module_get(void)
+bool private_try_module_get(struct module *module)
 {
-    int32_t *a0 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return try_module_get((void *)(uintptr_t)a0);
-
-    return 0;
+    return try_module_get(module);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000009f0 origin=model_output original=private_request_module */
@@ -5668,40 +5602,21 @@ int32_t private_request_module(int32_t arg1, int32_t arg2, int32_t arg3) {
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000a3c origin=fragment_seed original=private_module_put */
-int32_t private_module_put(void)
+void private_module_put(struct module *module)
 {
-    int32_t *a0 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return ((int32_t (*)())module_put)((void *)(uintptr_t)a0);
-
-    return 0;
+    module_put(module);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000a4c origin=model_output original=private_init_completion */
-int32_t private_init_completion(int32_t *arg1)
+void private_init_completion(struct completion *completion)
 {
-	*arg1 = 0;
-__init_waitqueue_head(arg1, NULL, NULL);
+	init_completion(completion);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000a70 origin=fragment_seed original=private_complete */
-int32_t private_complete(void)
+void private_complete(struct completion *completion)
 {
-    int32_t *a0 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return ((int32_t (*)())complete)((void *)(uintptr_t)a0);
-
-    return 0;
+    complete(completion);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000a80 origin=model_output original=private_wait_for_completion_interruptible */
@@ -5711,19 +5626,10 @@ int32_t private_wait_for_completion_interruptible(struct completion *c)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000a90 origin=fragment_seed original=private_wait_for_completion_timeout */
-int32_t private_wait_for_completion_timeout()
+unsigned long private_wait_for_completion_timeout(struct completion *completion,
+                                                  unsigned long timeout)
 {
-    int32_t *a0 = 0;
-    int32_t a1 = 0;
-    uint32_t *t9 = 0;
-
-    /* fragment 0: ConstantLoad */
-    t9 = 0x0;
-
-    /* fragment 1: IndirectTailCall */
-    return wait_for_completion_timeout((void *)(uintptr_t)a0, a1);
-
-    return 0;
+    return wait_for_completion_timeout(completion, timeout);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000aa0 origin=model_output original=private_wait_event_interruptible */
@@ -6392,92 +6298,10 @@ int32_t private_atomic_read(int32_t* arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000f84 origin=fragment_seed original=private_wait_event_interruptible_timeout */
-int32_t private_wait_event_interruptible_timeout(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
+long private_wait_event_interruptible_timeout(wait_queue_head_t queue,
+                                              int condition, long timeout)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t *local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t local_30 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_48 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t s1 = 0;
-    uintptr_t s2 = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: StackAccess */
-    local_38 = a0;
-    local_3c = a1;
-    local_40 = a2;
-
-    /* fragment 2: Branch */
-    s0 = local_48;
-    if (a3 == 0) { goto private_wait_event_interruptible_timeout0x4c; }
-
-    /* fragment 3: Arithmetic */
-    v0 = 1;
-    if (s0 == 0) { s0 = v0; }
-    v0 = s0;
-
-private_wait_event_interruptible_timeout0x34:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-private_wait_event_interruptible_timeout0x4c:
-    /* fragment 5: Branch */
-    v0 = s0;
-    if (s0 == 0) { goto private_wait_event_interruptible_timeout0x34; }
-
-    /* fragment 6: CallSetup */
-    s2 = (unsigned int *)&prepare_to_wait_event;
-    local_10 = 0;
-    s1 = (uint32_t *)&schedule_timeout;
-    v0 = (unsigned int *)&local_1c;
-    s2 = s2;
-    s1 = s1;
-    local_1c = v0;
-    local_20 = v0;
-
-private_wait_event_interruptible_timeout0x74:
-    /* fragment 7: CallSetup */
-    v0 = (unsigned int *)prepare_to_wait_event((void *)(uintptr_t)&local_38, (void *)(uintptr_t)&local_10, 1); /* jalr target resolved by relocation */
-
-    /* fragment 8: Branch */
-    if (s0 == 0) { goto private_wait_event_interruptible_timeout0xa8; }
-
-    /* fragment 9: Branch */
-    if (v0 != 0) { goto private_wait_event_interruptible_timeout0xa4; }
-
-    /* fragment 10: CallSetup */
-    v0 = (unsigned int *)schedule_timeout(s0); /* jalr target resolved by relocation */
-
-    /* fragment 11: Branch */
-    s0 = v0;
-    goto private_wait_event_interruptible_timeout0x74;
-
-private_wait_event_interruptible_timeout0xa4:
-    /* fragment 12: CallSetup */
-    s0 = v0;
-
-private_wait_event_interruptible_timeout0xa8:
-    /* fragment 13: CallSetup */
-    finish_wait((void *)(uintptr_t)&local_38, (void *)(uintptr_t)&local_10); /* jalr target resolved by relocation */
-
-    /* fragment 14: Branch */
-    v0 = s0;
-    goto private_wait_event_interruptible_timeout0x34;
-
-    return 0;
+    return wait_event_interruptible_timeout(queue, condition, timeout);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000001048 origin=fragment_seed original=private_dma_sync_single_for_device */

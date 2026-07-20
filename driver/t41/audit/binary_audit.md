@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1517 |
 | Functions with disassembly | 1314 | 1517 |
-| Executable section bytes | 479556 | 333952 |
+| Executable section bytes | 479556 | 334272 |
 | Initialized writable bytes | 25120 | 15808 |
 | Uninitialized writable bytes | 20592 | 383088 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=244
-- matched instructions: OEM=116036 recovered=81040 ratio=0.698
-- classes: stub=25 collapsed=91 shorter=397 same_count=250 similar=471 larger=22 expanded=17
+- matched instructions: OEM=116036 recovered=81122 ratio=0.699
+- classes: stub=23 collapsed=92 shorter=395 same_count=258 similar=468 larger=22 expanded=15
 
 ## Allocated Section Delta
 
@@ -36,15 +36,15 @@
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3488 | -12272 |
-| `.rodata.str1.4` | 25860 | 4608 | -21252 |
-| `.text` | 478400 | 333952 | -144448 |
+| `.rodata.str1.4` | 25860 | 4620 | -21240 |
+| `.text` | 478400 | 334272 | -144128 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 832 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -52,8 +52,6 @@ Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `ispcore_core_ops_ioctl` | `ispcore_core_ops_ioctl` | 309 | 2 | 0.006 | -307 | 8->0 | 55->0 |
 | stub | exact_name | `ispint_adr_64` | `ispint_adr_64` | 101 | 3 | 0.030 | -98 | 2->0 | 14->0 |
 | stub | exact_name | `func_interp1_short` | `func_interp1_short` | 67 | 2 | 0.030 | -65 | 0->0 | 10->0 |
-| stub | exact_name | `isp_frame_done_wait` | `isp_frame_done_wait` | 67 | 7 | 0.104 | -60 | 5->0 | 3->0 |
-| stub | exact_name | `private_wait_event_interruptible_timeout` | `private_wait_event_interruptible_timeout` | 49 | 2 | 0.041 | -47 | 3->0 | 6->0 |
 | stub | exact_name | `private_reset_tx_isp_module` | `private_reset_tx_isp_module` | 49 | 8 | 0.163 | -41 | 1->0 | 4->2 |
 | stub | exact_name | `ispcore_pad_event_handle` | `ispcore_pad_event_handle` | 48 | 2 | 0.042 | -46 | 0->0 | 9->0 |
 | stub | exact_name | `mbus_to_bayer_write` | `mbus_to_bayer_write` | 46 | 4 | 0.087 | -42 | 3->0 | 4->0 |
@@ -131,6 +129,7 @@ Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `tisp_ae_calc_convergence_speed` | `tisp_ae_calc_convergence_speed` | 70 | 30 | 0.429 | -40 | 4->2 | 2->0 |
 | collapsed | exact_name | `tisp_awb_process` | `tisp_awb_process` | 69 | 10 | 0.145 | -59 | 6->2 | 3->0 |
 | collapsed | exact_name | `tisp_s_raw_row_control` | `tisp_s_raw_row_control` | 68 | 30 | 0.441 | -38 | 5->3 | 4->0 |
+| collapsed | exact_name | `isp_frame_done_wait` | `isp_frame_done_wait` | 67 | 30 | 0.448 | -37 | 5->1 | 3->2 |
 | collapsed | exact_name | `tisp_dpc_pm_suspend` | `tisp_dpc_pm_suspend` | 62 | 17 | 0.274 | -45 | 3->1 | 3->1 |
 | collapsed | exact_name | `tisp_ae_lib_bilinear_intp` | `tisp_ae_lib_bilinear_intp` | 62 | 20 | 0.323 | -42 | 1->1 | 10->4 |
 | collapsed | exact_name | `tisp_msca_crop_api` | `tisp_msca_crop_api` | 60 | 20 | 0.333 | -40 | 4->3 | 1->0 |
@@ -212,7 +211,7 @@ Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `Tiziano_wdr_deghost_fpga` | `Tiziano_wdr_deghost_fpga` | 679 | 419 | 0.617 | -260 | 40->34 | 49->26 |
 | shorter | exact_name | `tisp_lsc_ct_interp` | `tisp_lsc_ct_interp` | 666 | 362 | 0.544 | -304 | 19->5 | 32->33 |
 | shorter | exact_name | `isp_vic_cmd_set` | `isp_vic_cmd_set` | 609 | 446 | 0.732 | -163 | 54->46 | 74->52 |
-| shorter | exact_name | `isp_vic_interrupt_service_routine` | `isp_vic_interrupt_service_routine` | 555 | 370 | 0.667 | -185 | 33->30 | 49->29 |
+| shorter | exact_name | `isp_vic_interrupt_service_routine` | `isp_vic_interrupt_service_routine` | 555 | 369 | 0.665 | -186 | 33->30 | 49->29 |
 | shorter | exact_name | `proc_ivdc_writel` | `proc_ivdc_writel` | 543 | 293 | 0.540 | -250 | 42->25 | 68->31 |
 | shorter | exact_name | `subsection_up` | `subsection_up` | 530 | 298 | 0.562 | -232 | 31->31 | 20->17 |
 | shorter | exact_name | `tisp_ae_algo_handle` | `tisp_ae_algo_handle` | 504 | 284 | 0.563 | -220 | 49->29 | 12->11 |
@@ -232,7 +231,7 @@ Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_msca_init_chx_cfg` | `tisp_msca_init_chx_cfg` | 295 | 216 | 0.732 | -79 | 17->8 | 8->8 |
 | shorter | exact_name | `lce_self_light_correct` | `lce_self_light_correct` | 286 | 184 | 0.643 | -102 | 6->5 | 29->19 |
 | shorter | exact_name | `tisp_tstp_reg_cfg` | `tisp_tstp_reg_cfg` | 276 | 171 | 0.620 | -105 | 30->29 | 0->0 |
-| shorter | exact_name | `tisp_vic_ctrl_ioctl` | `tisp_vic_ctrl_ioctl` | 268 | 162 | 0.604 | -106 | 15->12 | 39->24 |
+| shorter | exact_name | `tisp_vic_ctrl_ioctl` | `tisp_vic_ctrl_ioctl` | 268 | 165 | 0.616 | -103 | 15->12 | 39->24 |
 | shorter | exact_name | `tisp_ccm_matrix_trans_by_sat` | `tisp_ccm_matrix_trans_by_sat` | 268 | 184 | 0.687 | -84 | 20->19 | 14->7 |
 | shorter | exact_name | `tisp_af_alogrithm` | `tisp_af_alogrithm` | 256 | 197 | 0.770 | -59 | 8->8 | 15->13 |
 | shorter | exact_name | `isp_framesource_show` | `isp_framesource_show` | 249 | 180 | 0.723 | -69 | 24->23 | 21->13 |
@@ -298,3 +297,4 @@ Showing 250 of 837 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `isp_vic_frd_show` | `isp_vic_frd_show` | 103 | 61 | 0.592 | -42 | 4->4 | 6->6 |
 | shorter | exact_name | `frame_channel_vidioc_get_fmt` | `frame_channel_vidioc_get_fmt` | 97 | 59 | 0.608 | -38 | 7->5 | 9->7 |
 | shorter | exact_name | `tisp_gib_interp_by_again` | `tisp_gib_interp_by_again` | 93 | 69 | 0.742 | -24 | 6->5 | 4->4 |
+| shorter | exact_name | `tisp_s_module_ratio_attr` | `tisp_s_module_ratio_attr` | 84 | 44 | 0.524 | -40 | 3->2 | 15->8 |
