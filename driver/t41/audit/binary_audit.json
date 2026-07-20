@@ -322,13 +322,13 @@
   },
   "recovered": {
     "path": "driver/t41/tx_isp_t41_recovered.ko",
-    "file_bytes": 588700,
+    "file_bytes": 588836,
     "elf_class": "elf32",
     "endianness": "little",
     "machine": "0x8",
     "function_symbols": 1516,
     "functions_with_disassembly": 1516,
-    "executable_section_bytes": 336608,
+    "executable_section_bytes": 336720,
     "initialized_writable_bytes": 15808,
     "uninitialized_writable_bytes": 383088,
     "sections": [
@@ -479,7 +479,7 @@
       {
         "name": ".rel.text",
         "address": "0x0",
-        "bytes": 83712,
+        "bytes": 83736,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -560,7 +560,7 @@
       {
         "name": ".text",
         "address": "0x0",
-        "bytes": 336608,
+        "bytes": 336720,
         "alloc": true,
         "executable": true,
         "writable": false,
@@ -605,14 +605,14 @@
     "recovered_only": 243,
     "same_instruction_count": 263,
     "similar": 473,
-    "shorter": 389,
+    "shorter": 388,
     "stub": 18,
     "collapsed": 93,
-    "larger": 22,
+    "larger": 23,
     "expanded": 15,
     "matched_oem_instructions": 116036,
-    "matched_recovered_instructions": 81743,
-    "matched_instruction_ratio": 0.7044624082181392
+    "matched_recovered_instructions": 81769,
+    "matched_instruction_ratio": 0.704686476610707
   },
   "functions": [
     {
@@ -11525,46 +11525,6 @@
       "match_kind": "exact_name",
       "classification": "shorter",
       "oem": {
-        "name": "tx_isp_core_remove",
-        "section": ".exit.text",
-        "address": "0x3b4",
-        "binding": "local",
-        "symbol_bytes": 192,
-        "instructions": 48,
-        "branches": 2,
-        "calls": 7,
-        "returns": 1,
-        "relocations": 12
-      },
-      "recovered": [
-        {
-          "name": "tx_isp_core_remove",
-          "section": ".text",
-          "address": "0x50f78",
-          "binding": "global",
-          "symbol_bytes": 140,
-          "instructions": 35,
-          "branches": 2,
-          "calls": 5,
-          "returns": 0,
-          "relocations": 10
-        }
-      ],
-      "instruction_ratio": 0.7291666666666666,
-      "instruction_delta": -13,
-      "recovered_totals": {
-        "symbol_bytes": 140,
-        "instructions": 35,
-        "branches": 2,
-        "calls": 5,
-        "returns": 0,
-        "relocations": 10
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "shorter",
-      "oem": {
         "name": "tisp_mdns_api_ai_par_push",
         "section": ".text",
         "address": "0x57124",
@@ -11700,7 +11660,7 @@
         {
           "name": "mbus_to_bayer_write",
           "section": ".text",
-          "address": "0x511b0",
+          "address": "0x51218",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -14140,7 +14100,7 @@
         {
           "name": "ispcore_s_wdr_en",
           "section": ".text",
-          "address": "0x51004",
+          "address": "0x5106c",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -21740,7 +21700,7 @@
         {
           "name": "init_module",
           "section": ".text",
-          "address": "0x518f4",
+          "address": "0x5195c",
           "binding": "global",
           "symbol_bytes": 2388,
           "instructions": 597,
@@ -22519,6 +22479,46 @@
         "calls": 0,
         "returns": 1,
         "relocations": 0
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "larger",
+      "oem": {
+        "name": "tx_isp_core_remove",
+        "section": ".exit.text",
+        "address": "0x3b4",
+        "binding": "local",
+        "symbol_bytes": 192,
+        "instructions": 48,
+        "branches": 2,
+        "calls": 7,
+        "returns": 1,
+        "relocations": 12
+      },
+      "recovered": [
+        {
+          "name": "tx_isp_core_remove",
+          "section": ".text",
+          "address": "0x50f78",
+          "binding": "global",
+          "symbol_bytes": 244,
+          "instructions": 61,
+          "branches": 6,
+          "calls": 6,
+          "returns": 1,
+          "relocations": 13
+        }
+      ],
+      "instruction_ratio": 1.2708333333333333,
+      "instruction_delta": 13,
+      "recovered_totals": {
+        "symbol_bytes": 244,
+        "instructions": 61,
+        "branches": 6,
+        "calls": 6,
+        "returns": 1,
+        "relocations": 13
       }
     },
     {
@@ -23558,7 +23558,7 @@
         {
           "name": "regtrace_recovered_platform_remove",
           "section": ".text",
-          "address": "0x522d0",
+          "address": "0x52338",
           "binding": "local",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -25378,7 +25378,7 @@
         {
           "name": "sub_73fa8",
           "section": ".text",
-          "address": "0x51050",
+          "address": "0x510b8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25404,7 +25404,7 @@
         {
           "name": "sub_7408c",
           "section": ".text",
-          "address": "0x51058",
+          "address": "0x510c0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25430,7 +25430,7 @@
         {
           "name": "sub_740c0",
           "section": ".text",
-          "address": "0x51060",
+          "address": "0x510c8",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -25456,7 +25456,7 @@
         {
           "name": "sub_7410c",
           "section": ".text",
-          "address": "0x510a8",
+          "address": "0x51110",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25482,7 +25482,7 @@
         {
           "name": "sub_74114",
           "section": ".text",
-          "address": "0x510b0",
+          "address": "0x51118",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25508,7 +25508,7 @@
         {
           "name": "sub_74178",
           "section": ".text",
-          "address": "0x510b8",
+          "address": "0x51120",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25534,7 +25534,7 @@
         {
           "name": "sub_741d0",
           "section": ".text",
-          "address": "0x510c0",
+          "address": "0x51128",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -25560,7 +25560,7 @@
         {
           "name": "sub_74260",
           "section": ".text",
-          "address": "0x5115c",
+          "address": "0x511c4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25586,7 +25586,7 @@
         {
           "name": "sub_74274",
           "section": ".text",
-          "address": "0x51164",
+          "address": "0x511cc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25612,7 +25612,7 @@
         {
           "name": "sub_7427c",
           "section": ".text",
-          "address": "0x5116c",
+          "address": "0x511d4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25638,7 +25638,7 @@
         {
           "name": "sub_74280",
           "section": ".text",
-          "address": "0x51174",
+          "address": "0x511dc",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -25664,7 +25664,7 @@
         {
           "name": "sub_742a0",
           "section": ".text",
-          "address": "0x511a0",
+          "address": "0x51208",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25690,7 +25690,7 @@
         {
           "name": "sub_742bc",
           "section": ".text",
-          "address": "0x511a8",
+          "address": "0x51210",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -29938,7 +29938,7 @@
         {
           "name": "ispcore_interrupt_service_routine",
           "section": ".text",
-          "address": "0x51234",
+          "address": "0x5129c",
           "binding": "global",
           "symbol_bytes": 1728,
           "instructions": 432,
@@ -41578,7 +41578,7 @@
         {
           "name": "tx_isp_remove",
           "section": ".text",
-          "address": "0x52258",
+          "address": "0x522c0",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -54138,7 +54138,7 @@
         {
           "name": "cleanup_module",
           "section": ".text",
-          "address": "0x52248",
+          "address": "0x522b0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,

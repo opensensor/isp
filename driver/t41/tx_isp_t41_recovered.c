@@ -162823,29 +162823,39 @@ int tx_isp_remove(struct platform_device *pdev)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000075084 origin=model_output original=tx_isp_core_remove */
 int tx_isp_core_remove(struct platform_device *pdev)
 {
-    struct platform_device *arg1 = pdev;
+	void *module = (void *)(uintptr_t)private_platform_get_drvdata(pdev);
+	void *core;
 
-    void* v0 = private_platform_get_drvdata(arg1);
-    void* s0 = *(void**)((char*)v0 + 0x10c);
-    void* a0 = *(void**)((char*)s0 + 0x230);
+	if (!module)
+		return 0;
 
-    if (a0 != NULL) {
-        isp_core_tuning_deinit(a0);
-        *(void**)((char*)s0 + 0x230) = NULL;
-    }
+	core = *(void **)((char *)module + 0x10c);
+	if (!core)
+		return 0;
 
-    if (*(int32_t*)((char*)s0 + 0x128) >= 2) {
-        ispcore_slake_module(s0);
-    }
+	if (tx_isp_bringup_level >= 3) {
+		void *tuning = *(void **)((char *)core + 0x230);
 
-    private_kfree();
-    *(int32_t*)((char*)s0 + 0x1b4) = 1;
-    *(void**)((char*)s0 + 0x1ac) = NULL;
-    tx_isp_subdev_deinit(v0);
-    tisp_deinit();
-    private_kfree();
+		if (tuning) {
+			isp_core_tuning_deinit(tuning);
+			*(void **)((char *)core + 0x230) = NULL;
+		}
 
-    return 0;
+		if (*(int32_t *)((char *)core + 0x128) >= 2)
+			ispcore_slake_module(core);
+
+		private_kfree(*(void **)((char *)core + 0x1ac));
+		*(int32_t *)((char *)core + 0x1b4) = 1;
+		*(void **)((char *)core + 0x1ac) = NULL;
+	}
+
+	tx_isp_subdev_deinit(module);
+	if (tx_isp_bringup_level >= 3)
+		tisp_deinit();
+
+	private_platform_set_drvdata(pdev, NULL);
+	private_kfree(core);
+	return 0;
 }
 
 EXPORT_SYMBOL(isp_printf);

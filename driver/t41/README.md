@@ -29,7 +29,7 @@ Expected artifact:
 
 The recovered module is a bring-up artifact, not a production-ready driver.
 The current linked-binary audit finds 18 stub functions, 93 collapsed
-functions, 389 shorter functions, and 41 OEM-only symbols. Critical deficits
+functions, 388 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -101,6 +101,13 @@ place of each child driver's remove callback. The repaired loop visits all 16
 entries and invokes the callback at driver offset `0x04` before unregistering
 each platform device. This repair requires a fresh level-0 hardware retest
 before advancing to the device graph.
+
+The next level-0 run reached the restored core remove callback and showed that
+it unconditionally deinitialized TISP even though levels below 3 deliberately
+skip TISP initialization. Core removal now mirrors that bring-up gate, while
+still deinitializing the registered subdevice, and passes the OEM channel-buffer
+and core pointers to the two recovered no-argument frees. This repair also
+requires a fresh level-0 hardware retest.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
