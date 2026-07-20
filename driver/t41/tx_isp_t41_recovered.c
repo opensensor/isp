@@ -4261,7 +4261,7 @@ int64_t tisp_raw_set_rw_control(uint32_t a0, uintptr_t a1);
 int64_t tisp_raw_set_row_control(uint32_t a0, uintptr_t a1);
 int32_t lib_tisp_debug_info(uint32_t a0);
 int32_t tisp_day_or_night_event(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
-int64_t tisp_enable_tuning(void);
+int32_t tisp_enable_tuning(void);
 void tisp_disable_tuning(void);
 uint32_t tisp_get_tuning(void);
 int32_t tisp_day_or_night_s_ctrl(uint32_t a0);
@@ -145186,247 +145186,110 @@ tisp_day_or_night_event0x478:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006be68 origin=fragment_seed original=tisp_enable_tuning */
-int64_t tisp_enable_tuning(void)
+int32_t tisp_enable_tuning(void)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t *a0 = 0;
-    uintptr_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uint32_t t0 = 0;
-    uint32_t *t1 = 0;
-    uint32_t *t2 = 0;
-    uint32_t *t3 = 0;
-    uint32_t *t4 = 0;
-    uint32_t *t5 = 0;
-    uint32_t t6 = 0;
-    uint32_t *t7 = 0;
-    uint32_t *t8 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+	volatile uint8_t *attr;
+	const void *bin;
+	unsigned int channel;
+	unsigned int group;
+	unsigned int i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	attr = private_vmalloc(2772);
+	tisp_tattr = (uint32_t)(uintptr_t)attr;
+	if (!attr) {
+		isp_printf(2, "failed to allocate T41 tuning attributes\n");
+		return -1;
+	}
+	memset((void *)attr, 0, 2772);
 
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_vmalloc)(2772); /* jalr target resolved by relocation */
+	/* Five three-channel signed controls begin at neutral (-128). */
+	for (channel = 0; channel < 3; channel++) {
+		attr[channel + 0] = 0x80;
+		attr[channel + 3] = 0x80;
+		attr[channel + 6] = 0x80;
+		attr[channel + 9] = 0x80;
+		attr[channel + 12] = 0x80;
+	}
 
-    /* fragment 2: Arithmetic */
-    s0 = (unsigned int *)&tisp_tattr;
+	/* Three banks of sixteen 8-byte controls. */
+	for (group = 0; group < 3; group++) {
+		for (i = 0; i < 16; i++) {
+			*(volatile uint32_t *)(attr + group * 128 + i * 8 + 184) = 0;
+			attr[group * 128 + i * 8 + 188] = 0x80;
+		}
+	}
 
-    /* fragment 3: Branch */
-    int _bc_v0_3 = v0 != 0;
-    *(uint32_t *)((char *)s0 + 0) = v0;
-    if (_bc_v0_3) { goto tisp_enable_tuning0x8c; }
+	*(volatile uint32_t *)(attr + 16) = 0;
+	*(volatile uint32_t *)(attr + 20) = 0;
+	*(volatile uint32_t *)(attr + 24) = 0;
 
-    /* fragment 4: CallSetup */
-    local_14 = 154;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC1, &__pow2_lut, 154); /* jalr target resolved by relocation */
+	/* Two identical 72-byte default color-control records. */
+	for (i = 0; i < 2; i++) {
+		volatile uint8_t *record = attr + 568 + i * 72;
 
-    /* fragment 5: Arithmetic */
-    v0 = -1;
+		*(volatile uint32_t *)(record + 0) = 0;
+		*(volatile uint32_t *)(record + 4) = 1;
+		*(volatile uint32_t *)(record + 8) = 1;
+		record[12] = 15;
+		record[13] = 15;
+		*(volatile uint32_t *)(record + 16) = 0;
+		record[20] = 13;
+		record[21] = 64;
+		record[22] = 0x90;
+		record[23] = 0xc0;
+		*(volatile uint32_t *)(record + 24) = 0;
+		*(volatile uint32_t *)(record + 28) = 1;
+		*(volatile uint32_t *)(record + 32) = 1;
+		record[36] = 15;
+		record[37] = 15;
+		*(volatile uint32_t *)(record + 40) = 0;
+		*(volatile uint32_t *)(record + 44) = 0;
+		*(volatile uint32_t *)(record + 48) = 1;
+		*(volatile uint32_t *)(record + 52) = 3;
+		record[56] = 15;
+		record[57] = 15;
+		record[60] = 0;
+		*(volatile uint16_t *)(record + 62) = 42;
+		*(volatile uint16_t *)(record + 64) = 22;
+		*(volatile uint16_t *)(record + 66) = 200;
+		*(volatile uint16_t *)(record + 68) = 19;
+		*(volatile uint16_t *)(record + 70) = 58;
+	}
 
-tisp_enable_tuning0x6c:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
+	*(volatile uint32_t *)(attr + 940) = 0;
+	*(volatile uint32_t *)(attr + 944) = 0;
+	*(volatile uint32_t *)(attr + 724) = 0;
+	*(volatile uint32_t *)(attr + 776) = 0;
+	*(volatile uint32_t *)(attr + 1400) = 0;
+	*(volatile uint32_t *)(attr + 1404) = 0;
+	*(volatile uint32_t *)(attr + 800) = 0;
+	*(volatile uint32_t *)(attr + 852) = 0;
+	*(volatile uint32_t *)(attr + 1860) = 0;
+	*(volatile uint32_t *)(attr + 1864) = 0;
+	*(volatile uint32_t *)(attr + 876) = 0;
+	*(volatile uint32_t *)(attr + 928) = 0;
 
-tisp_enable_tuning0x8c:
-    /* fragment 7: CallSetup */
-    v0 = (unsigned int *)memset((void *)(uintptr_t)v0, 0, 2772); /* jalr target resolved by relocation */
+	for (channel = 0; channel < 3; channel++) {
+		volatile uint8_t *record = attr + 2320 + channel * 44;
 
-    /* fragment 8: Arithmetic */
-    v0 = 0;
-    a0 = -128;
-    a2 = 3;
+		for (i = 0; i < 7; i++)
+			*(volatile uint32_t *)(record + i * 4) = 0;
+		memset((void *)(record + 28), 0, 16);
+	}
 
-tisp_enable_tuning0xb0:
-    /* fragment 9: MemoryAccess */
-    v1 = *(uint32_t *)((char *)((char *)&tisp_tattr));
-    v1 = (uintptr_t)v1 + (uintptr_t)v0;
-    *(uint8_t *)((char *)v1 + 0) = a0;
-    v1 = *(uint32_t *)((char *)((char *)&tisp_tattr));
-    v1 = (uintptr_t)v1 + (uintptr_t)v0;
-    *(uint8_t *)((char *)v1 + 3) = a0;
-    v1 = *(uint32_t *)((char *)((char *)&tisp_tattr));
-    a1 = (uintptr_t)v1 + (uintptr_t)v0;
-    v0 = v0 + 1;
-    *(uint8_t *)((char *)a1 + 6) = a0;
-    *(uint8_t *)((char *)a1 + 9) = a0;
+	bin = (const void *)(uintptr_t)
+		((uint32_t *)(void *)tsbin_storage)[0];
+	if (bin)
+		memcpy((void *)(attr + 2476), bin, 148);
+	bin = (const void *)(uintptr_t)
+		((uint32_t *)(void *)tsbin_storage)[1];
+	if (bin)
+		memcpy((void *)(attr + 2624), bin, 148);
 
-    /* fragment 10: Branch */
-    *(uint8_t *)((char *)a1 + 12) = a0;
-    if (v0 != a2) { goto tisp_enable_tuning0xb0; }
-
-    /* fragment 11: Arithmetic */
-    a0 = v1;
-    a3 = -128;
-    t0 = 16;
-    a2 = v1 + 384;
-    v0 = a0;
-
-tisp_enable_tuning0xf8:
-    /* fragment 12: Arithmetic */
-    a1 = 0;
-
-tisp_enable_tuning0xfc:
-    /* fragment 13: Arithmetic */
-    a1 = a1 + 1;
-
-    /* fragment 14: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 184) = 0;
-    *(uint8_t *)((char *)v0 + 188) = a3;
-
-    /* fragment 15: Branch */
-    v0 = v0 + 8;
-    if (a1 != t0) { goto tisp_enable_tuning0xfc; }
-
-    /* fragment 16: Arithmetic */
-    a0 = a0 + 128;
-
-    /* fragment 17: Branch */
-    v0 = a0;
-    if (a0 != a2) { goto tisp_enable_tuning0xf8; }
-
-    /* fragment 18: MemoryAccess */
-    *(uint32_t *)((char *)v1 + 16) = 0;
-    *(uint32_t *)((char *)v1 + 20) = 0;
-    *(uint32_t *)((char *)v1 + 24) = 0;
-    a1 = 1;
-    a0 = 15;
-    t8 = 13;
-    t7 = 64;
-    t6 = -112;
-    t5 = -64;
-    t4 = 3;
-    t3 = 42;
-    t2 = 22;
-    t1 = 200;
-    t0 = 19;
-    a3 = 58;
-    v0 = v1 + 568;
-    a2 = v1 + 712;
-
-tisp_enable_tuning0x160:
-    /* fragment 19: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = 0;
-    *(uint32_t *)((char *)v0 + 4) = a1;
-    *(uint32_t *)((char *)v0 + 8) = a1;
-    *(uint8_t *)((char *)v0 + 12) = a0;
-    *(uint8_t *)((char *)v0 + 13) = a0;
-    *(uint32_t *)((char *)v0 + 16) = 0;
-    *(uint8_t *)((char *)v0 + 20) = t8;
-    *(uint8_t *)((char *)v0 + 21) = t7;
-    *(uint8_t *)((char *)v0 + 22) = t6;
-    *(uint8_t *)((char *)v0 + 23) = t5;
-    *(uint32_t *)((char *)v0 + 24) = 0;
-    *(uint32_t *)((char *)v0 + 28) = a1;
-    *(uint32_t *)((char *)v0 + 32) = a1;
-    *(uint8_t *)((char *)v0 + 36) = a0;
-    *(uint8_t *)((char *)v0 + 37) = a0;
-    *(uint32_t *)((char *)v0 + 40) = 0;
-    *(uint32_t *)((char *)v0 + 44) = 0;
-    *(uint32_t *)((char *)v0 + 48) = a1;
-    *(uint32_t *)((char *)v0 + 52) = t4;
-    *(uint8_t *)((char *)v0 + 56) = a0;
-    *(uint8_t *)((char *)v0 + 57) = a0;
-    *(uint8_t *)((char *)v0 + 60) = 0;
-    *(uint16_t *)((char *)v0 + 62) = t3;
-    *(uint16_t *)((char *)v0 + 64) = t2;
-    *(uint16_t *)((char *)v0 + 66) = t1;
-    *(uint16_t *)((char *)v0 + 68) = t0;
-    *(uint16_t *)((char *)v0 + 70) = a3;
-    v0 = v0 + 72;
-
-    /* fragment 20: Branch */
-    s2 = 0;
-    if (v0 != a2) { goto tisp_enable_tuning0x160; }
-
-    /* fragment 21: MemoryAccess */
-    *(uint32_t *)((char *)v1 + 940) = 0;
-    *(uint32_t *)((char *)v1 + 944) = 0;
-    *(uint32_t *)((char *)v1 + 724) = 0;
-    *(uint32_t *)((char *)v1 + 776) = 0;
-    *(uint32_t *)((char *)v1 + 1400) = 0;
-    *(uint32_t *)((char *)v1 + 1404) = 0;
-    *(uint32_t *)((char *)v1 + 800) = 0;
-    *(uint32_t *)((char *)v1 + 852) = 0;
-    *(uint32_t *)((char *)v1 + 1860) = 0;
-    *(uint32_t *)((char *)v1 + 1864) = 0;
-    *(uint32_t *)((char *)v1 + 876) = 0;
-    *(uint32_t *)((char *)v1 + 928) = 0;
-    s4 = 44;
-    s3 = 3;
-    v1 = (uintptr_t)s2 * (uintptr_t)s4;
-
-tisp_enable_tuning0x214:
-    /* fragment 22: CallSetup */
-    s2 = s2 + 1;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2320) = 0;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2324) = 0;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2328) = 0;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2332) = 0;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2336) = 0;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2340) = 0;
-    *(uint32_t *)((char *)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (uintptr_t)v1) + 2344) = 0;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + (v1 + 2348)), 0, 16); /* jalr target resolved by relocation */
-
-    /* fragment 23: Branch */
-    v1 = (uintptr_t)s2 * (uintptr_t)s4;
-    if (s2 != s3) { goto tisp_enable_tuning0x214; }
-
-    /* fragment 24: Arithmetic */
-    v0 = (unsigned int *)&tsbin;
-
-    /* fragment 25: MemoryAccess */
-    a1 = *(uint32_t *)((char *)((char *)&tsbin));
-
-    /* fragment 26: Branch */
-    s1 = v0;
-    if (a1 == 0) { goto tisp_enable_tuning0x280; }
-
-    /* fragment 27: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + 2476), (void *)(uintptr_t)a1, 148); /* jalr target resolved by relocation */
-
-tisp_enable_tuning0x280:
-    /* fragment 28: Arithmetic */
-    v0 = s1;
-
-    /* fragment 29: MemoryAccess */
-    a1 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 30: Branch */
-    a2 = 148;
-    if (a1 == 0) { goto tisp_enable_tuning0x2a4; }
-
-    /* fragment 31: CallSetup */
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)((*(uint32_t *)((char *)((char *)&tisp_tattr))) + 2624), (void *)(uintptr_t)a1, a2); /* jalr target resolved by relocation */
-
-tisp_enable_tuning0x2a4:
-    /* fragment 32: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_day_or_night_event)(0, 18, &tisp_day_or_night_event); /* jalr target resolved by relocation */
-
-    /* fragment 33: Branch */
-    v0 = 0;
-    goto tisp_enable_tuning0x6c;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	tisp_event_set_cb(0, 18,
+			  (int32_t)(uintptr_t)tisp_day_or_night_event);
+	return 0;
 }
-
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c130 origin=fragment_seed original=tisp_disable_tuning */
 void tisp_disable_tuning(void)
 {
