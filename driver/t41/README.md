@@ -171,6 +171,15 @@ uses `core_subdev_ops` and byte offsets 276 and 280. The level-0 regression at
 kernel fatal signature. The still-guarded level-3 channel and tuning path
 requires separate reconstruction before it is enabled on hardware.
 
+The tuning object on that guarded path also initialized its lock and mutex at
+word-scaled offsets, installed two unrelated recovered constants instead of
+the tuning file operations and event callback, omitted the ISP debug-node open
+callback, and freed no object during deinitialization. Those fields now match
+the OEM byte layout and ownership flow. `isp_core_tuning_init` is classified
+similar at 53 instructions against OEM 60, while `isp_core_tuning_deinit` has
+exact 18-instruction count parity. This repair is compile- and audit-verified;
+hardware coverage remains coupled to the pending core-channel restoration.
+
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.

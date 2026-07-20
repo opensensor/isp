@@ -4709,6 +4709,7 @@ static struct file_operations isp_info_proc_fops = {
     .owner = THIS_MODULE,
     .llseek = (loff_t (*)(struct file *, loff_t, int))seq_lseek,
     .read = (ssize_t (*)(struct file *, char __user *, size_t, loff_t *))seq_read,
+    .open = (int (*)(struct inode *, struct file *))dump_isp_info_open,
     .release = (int (*)(struct inode *, struct file *))single_release,
 };
 static struct file_operations ivdc_misc_fops = {
@@ -21185,72 +21186,27 @@ isp_core_delete_aisp0x3c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000cc34 origin=fragment_seed original=isp_core_tuning_init */
 int32_t* isp_core_tuning_init(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *v0 = 0;
+    void *tuning = private_kmalloc(204, 0x24000c0);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!tuning) {
+        isp_printf(2, "Failed to allocate ISP tuning device\n");
+        return NULL;
+    }
 
-    /* fragment 1: CallSetup */
-    s1 = a0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(204, 37748736 + 192); /* jalr target resolved by relocation */
+    memset(tuning, 0, 204);
+    *(uint32_t *)((char *)tuning + 0) = a0;
+    private_spin_lock_init((int32_t *)((char *)tuning + 128));
+    private_raw_mutex_init((char *)tuning + 132,
+                           "isp_core_tuning.mlock", NULL);
 
-    /* fragment 2: Branch */
-    s0 = v0;
-    if (v0 != 0) { goto isp_core_tuning_init0x70; }
+    /* The OEM deliberately keeps the tuning object even if AISP registration
+     * reports an error; preserve that ownership and initialization order. */
+    isp_core_create_aisp((uintptr_t)tuning);
+    *(uint32_t *)((char *)tuning + 148) = 1;
+    *(void **)((char *)tuning + 152) = &isp_core_tunning_fops;
+    *(void **)((char *)tuning + 156) = (void *)isp_core_tuning_event;
 
-    /* fragment 3: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC31, &__pow2_lut, 2501); /* jalr target resolved by relocation */
-
-isp_core_tuning_init0x58:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    v0 = s0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t*)v0;
-
-isp_core_tuning_init0x70:
-    /* fragment 7: CallSetup */
-    v0 = (unsigned int *)memset((void *)(uintptr_t)v0, 0, 204); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    *(uint32_t *)((char *)s0 + 0) = s1;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_spin_lock_init)(s0 + 128); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)(s0 + 132, &LC36, 0); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)isp_core_create_aisp)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 11: Arithmetic */
-    v0 = 1;
-
-    /* fragment 12: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 148) = v0;
-    v0 = (unsigned int *)&sclk_name;
-    v0 = v0 + 5032;
-    *(uint32_t *)((char *)s0 + 152) = v0;
-    v0 = 65536;
-    v0 = v0 - 13936;
-
-    /* fragment 13: Branch */
-    *(uint32_t *)((char *)s0 + 156) = v0;
-    goto isp_core_tuning_init0x58;
-
-    return (int32_t*)v0;
+    return tuning;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000cd24 origin=model_output original=isp_core_tuning_deinit */
@@ -21260,7 +21216,7 @@ void isp_core_tuning_deinit(void *arg1)
         return;
 
     isp_core_delete_aisp(arg1);
-    private_kfree();
+    private_kfree(arg1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000cd6c origin=fragment_seed original=isp_core_tuning_clear */
