@@ -322,15 +322,15 @@
   },
   "recovered": {
     "path": "driver/t41/tx_isp_t41_recovered.ko",
-    "file_bytes": 590996,
+    "file_bytes": 591084,
     "elf_class": "elf32",
     "endianness": "little",
     "machine": "0x8",
     "function_symbols": 1516,
     "functions_with_disassembly": 1516,
-    "executable_section_bytes": 338272,
+    "executable_section_bytes": 338288,
     "initialized_writable_bytes": 15808,
-    "uninitialized_writable_bytes": 367136,
+    "uninitialized_writable_bytes": 367152,
     "sections": [
       {
         "name": ".MIPS.abiflags",
@@ -344,7 +344,7 @@
       {
         "name": ".bss",
         "address": "0x0",
-        "bytes": 367136,
+        "bytes": 367152,
         "alloc": true,
         "executable": false,
         "writable": true,
@@ -479,7 +479,7 @@
       {
         "name": ".rel.text",
         "address": "0x0",
-        "bytes": 84160,
+        "bytes": 84200,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -542,7 +542,7 @@
       {
         "name": ".strtab",
         "address": "0x0",
-        "bytes": 40219,
+        "bytes": 40235,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -551,7 +551,7 @@
       {
         "name": ".symtab",
         "address": "0x0",
-        "bytes": 38320,
+        "bytes": 38336,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -560,7 +560,7 @@
       {
         "name": ".text",
         "address": "0x0",
-        "bytes": 338272,
+        "bytes": 338288,
         "alloc": true,
         "executable": true,
         "writable": false,
@@ -611,8 +611,8 @@
     "larger": 24,
     "expanded": 17,
     "matched_oem_instructions": 116036,
-    "matched_recovered_instructions": 82156,
-    "matched_instruction_ratio": 0.7080216484539281
+    "matched_recovered_instructions": 82160,
+    "matched_instruction_ratio": 0.7080561205143231
   },
   "functions": [
     {
@@ -11580,7 +11580,7 @@
         {
           "name": "mbus_to_bayer_write",
           "section": ".text",
-          "address": "0x51824",
+          "address": "0x5181c",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -14020,7 +14020,7 @@
         {
           "name": "ispcore_s_wdr_en",
           "section": ".text",
-          "address": "0x51678",
+          "address": "0x51670",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -21580,25 +21580,25 @@
         {
           "name": "init_module",
           "section": ".text",
-          "address": "0x51f68",
+          "address": "0x51f60",
           "binding": "global",
-          "symbol_bytes": 2388,
-          "instructions": 597,
+          "symbol_bytes": 2412,
+          "instructions": 603,
           "branches": 1,
           "calls": 0,
           "returns": 0,
-          "relocations": 384
+          "relocations": 387
         }
       ],
-      "instruction_ratio": 149.25,
-      "instruction_delta": 593,
+      "instruction_ratio": 150.75,
+      "instruction_delta": 599,
       "recovered_totals": {
-        "symbol_bytes": 2388,
-        "instructions": 597,
+        "symbol_bytes": 2412,
+        "instructions": 603,
         "branches": 1,
         "calls": 0,
         "returns": 0,
-        "relocations": 384
+        "relocations": 387
       }
     },
     {
@@ -22420,7 +22420,7 @@
         {
           "name": "tx_isp_core_remove",
           "section": ".text",
-          "address": "0x51584",
+          "address": "0x5157c",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -23518,7 +23518,7 @@
         {
           "name": "regtrace_recovered_platform_remove",
           "section": ".text",
-          "address": "0x52944",
+          "address": "0x52954",
           "binding": "local",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -25338,7 +25338,7 @@
         {
           "name": "sub_73fa8",
           "section": ".text",
-          "address": "0x516c4",
+          "address": "0x516bc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25364,7 +25364,7 @@
         {
           "name": "sub_7408c",
           "section": ".text",
-          "address": "0x516cc",
+          "address": "0x516c4",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25390,7 +25390,7 @@
         {
           "name": "sub_740c0",
           "section": ".text",
-          "address": "0x516d4",
+          "address": "0x516cc",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -25416,7 +25416,7 @@
         {
           "name": "sub_7410c",
           "section": ".text",
-          "address": "0x5171c",
+          "address": "0x51714",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25442,7 +25442,7 @@
         {
           "name": "sub_74114",
           "section": ".text",
-          "address": "0x51724",
+          "address": "0x5171c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25468,7 +25468,7 @@
         {
           "name": "sub_74178",
           "section": ".text",
-          "address": "0x5172c",
+          "address": "0x51724",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25494,7 +25494,7 @@
         {
           "name": "sub_741d0",
           "section": ".text",
-          "address": "0x51734",
+          "address": "0x5172c",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -25520,7 +25520,7 @@
         {
           "name": "sub_74260",
           "section": ".text",
-          "address": "0x517d0",
+          "address": "0x517c8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25546,7 +25546,7 @@
         {
           "name": "sub_74274",
           "section": ".text",
-          "address": "0x517d8",
+          "address": "0x517d0",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25572,7 +25572,7 @@
         {
           "name": "sub_7427c",
           "section": ".text",
-          "address": "0x517e0",
+          "address": "0x517d8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25598,7 +25598,7 @@
         {
           "name": "sub_74280",
           "section": ".text",
-          "address": "0x517e8",
+          "address": "0x517e0",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -25624,7 +25624,7 @@
         {
           "name": "sub_742a0",
           "section": ".text",
-          "address": "0x51814",
+          "address": "0x5180c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25650,7 +25650,7 @@
         {
           "name": "sub_742bc",
           "section": ".text",
-          "address": "0x5181c",
+          "address": "0x51814",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -29898,7 +29898,7 @@
         {
           "name": "ispcore_interrupt_service_routine",
           "section": ".text",
-          "address": "0x518a8",
+          "address": "0x518a0",
           "binding": "global",
           "symbol_bytes": 1728,
           "instructions": 432,
@@ -30580,23 +30580,23 @@
           "section": ".text",
           "address": "0x51148",
           "binding": "global",
-          "symbol_bytes": 1084,
-          "instructions": 271,
+          "symbol_bytes": 1076,
+          "instructions": 269,
           "branches": 19,
           "calls": 16,
           "returns": 1,
-          "relocations": 60
+          "relocations": 62
         }
       ],
-      "instruction_ratio": 0.8442367601246106,
-      "instruction_delta": -50,
+      "instruction_ratio": 0.838006230529595,
+      "instruction_delta": -52,
       "recovered_totals": {
-        "symbol_bytes": 1084,
-        "instructions": 271,
+        "symbol_bytes": 1076,
+        "instructions": 269,
         "branches": 19,
         "calls": 16,
         "returns": 1,
-        "relocations": 60
+        "relocations": 62
       }
     },
     {
@@ -41618,7 +41618,7 @@
         {
           "name": "tx_isp_remove",
           "section": ".text",
-          "address": "0x528cc",
+          "address": "0x528dc",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -54178,7 +54178,7 @@
         {
           "name": "cleanup_module",
           "section": ".text",
-          "address": "0x528bc",
+          "address": "0x528cc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,

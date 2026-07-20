@@ -163,6 +163,14 @@ against OEM 70. The level-2 run at
 kernel fatal signature, clearing private-memory setup for level-3 static
 review.
 
+Level-3 static review then found that core probe passed the clock-name table as
+its subdevice operations and initialized the core spinlock and mutex at
+word-scaled offsets beyond the 880-byte allocation. The corrected shallow path
+uses `core_subdev_ops` and byte offsets 276 and 280. The level-0 regression at
+`logs/20260720-core-offset-fix-level0-117` inserts and unloads cleanly with no
+kernel fatal signature. The still-guarded level-3 channel and tuning path
+requires separate reconstruction before it is enabled on hardware.
+
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.

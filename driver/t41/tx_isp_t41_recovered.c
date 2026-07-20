@@ -160599,7 +160599,7 @@ tx_isp_core_probe0xb8:
 
     /* fragment 9: CallSetup */
     s6 = *(uint32_t *)((char *)(s5) + 92);
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_subdev_init)(s5, s0, &sclk_name); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_subdev_init)(s5, s0, &core_subdev_ops); /* jalr target resolved by relocation */
 
     /* fragment 10: Branch */
     s3 = v0;
@@ -160624,10 +160624,10 @@ tx_isp_core_probe0x13c:
 
 tx_isp_core_probe0x154:
     /* fragment 15: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_spin_lock_init)(s0 + 276); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_spin_lock_init)((uintptr_t)s0 + 276); /* jalr target resolved by relocation */
 
     /* fragment 16: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)(s0 + 280, &LC189, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)((uintptr_t)s0 + 280, &LC189, 0); /* jalr target resolved by relocation */
 
     /*
      * Bring-up guard: keep the core subdev registered, but defer the recovered
