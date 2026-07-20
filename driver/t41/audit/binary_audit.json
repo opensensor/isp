@@ -322,13 +322,13 @@
   },
   "recovered": {
     "path": "driver/t41/tx_isp_t41_recovered.ko",
-    "file_bytes": 588248,
+    "file_bytes": 588408,
     "elf_class": "elf32",
     "endianness": "little",
     "machine": "0x8",
     "function_symbols": 1516,
     "functions_with_disassembly": 1516,
-    "executable_section_bytes": 336384,
+    "executable_section_bytes": 336496,
     "initialized_writable_bytes": 15808,
     "uninitialized_writable_bytes": 383088,
     "sections": [
@@ -479,7 +479,7 @@
       {
         "name": ".rel.text",
         "address": "0x0",
-        "bytes": 83632,
+        "bytes": 83648,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -542,7 +542,7 @@
       {
         "name": ".strtab",
         "address": "0x0",
-        "bytes": 40101,
+        "bytes": 40118,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -551,7 +551,7 @@
       {
         "name": ".symtab",
         "address": "0x0",
-        "bytes": 38176,
+        "bytes": 38192,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -560,7 +560,7 @@
       {
         "name": ".text",
         "address": "0x0",
-        "bytes": 336384,
+        "bytes": 336496,
         "alloc": true,
         "executable": true,
         "writable": false,
@@ -605,14 +605,14 @@
     "recovered_only": 243,
     "same_instruction_count": 263,
     "similar": 472,
-    "shorter": 388,
-    "stub": 20,
+    "shorter": 389,
+    "stub": 19,
     "collapsed": 93,
     "larger": 22,
     "expanded": 15,
     "matched_oem_instructions": 116036,
-    "matched_recovered_instructions": 81686,
-    "matched_instruction_ratio": 0.7039711813575097
+    "matched_recovered_instructions": 81713,
+    "matched_instruction_ratio": 0.7042038677651763
   },
   "functions": [
     {
@@ -779,46 +779,6 @@
       "match_kind": "exact_name",
       "classification": "stub",
       "oem": {
-        "name": "ispcore_pad_event_handle",
-        "section": ".text",
-        "address": "0x6f2c0",
-        "binding": "local",
-        "symbol_bytes": 192,
-        "instructions": 48,
-        "branches": 9,
-        "calls": 0,
-        "returns": 2,
-        "relocations": 2
-      },
-      "recovered": [
-        {
-          "name": "ispcore_pad_event_handle",
-          "section": ".text",
-          "address": "0x468c4",
-          "binding": "global",
-          "symbol_bytes": 8,
-          "instructions": 2,
-          "branches": 0,
-          "calls": 0,
-          "returns": 1,
-          "relocations": 0
-        }
-      ],
-      "instruction_ratio": 0.041666666666666664,
-      "instruction_delta": -46,
-      "recovered_totals": {
-        "symbol_bytes": 8,
-        "instructions": 2,
-        "branches": 0,
-        "calls": 0,
-        "returns": 1,
-        "relocations": 0
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "stub",
-      "oem": {
         "name": "mbus_to_bayer_write",
         "section": ".text",
         "address": "0x743dc",
@@ -834,7 +794,7 @@
         {
           "name": "mbus_to_bayer_write",
           "section": ".text",
-          "address": "0x51804",
+          "address": "0x51870",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -1514,7 +1474,7 @@
         {
           "name": "tx_isp_core_ops_g_ctrl",
           "section": ".text",
-          "address": "0x4c39c",
+          "address": "0x4c408",
           "binding": "global",
           "symbol_bytes": 2480,
           "instructions": 620,
@@ -2794,7 +2754,7 @@
         {
           "name": "tisp_set_scaler_level_control_set",
           "section": ".text",
-          "address": "0x4d830",
+          "address": "0x4d89c",
           "binding": "global",
           "symbol_bytes": 228,
           "instructions": 57,
@@ -3194,7 +3154,7 @@
         {
           "name": "tisp_tmo_interrupt_static",
           "section": ".text",
-          "address": "0x4de50",
+          "address": "0x4debc",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -3274,7 +3234,7 @@
         {
           "name": "tisp_lce_interrupt_static",
           "section": ".text",
-          "address": "0x4b19c",
+          "address": "0x4b208",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -3314,7 +3274,7 @@
         {
           "name": "tisp_msca_chx_cfg_load",
           "section": ".text",
-          "address": "0x4d5b8",
+          "address": "0x4d624",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -3434,7 +3394,7 @@
         {
           "name": "tisp_msca_scaling_algorithm",
           "section": ".text",
-          "address": "0x4d05c",
+          "address": "0x4d0c8",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -3514,7 +3474,7 @@
         {
           "name": "isp_core_debug_show",
           "section": ".text",
-          "address": "0x47e04",
+          "address": "0x47e70",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -3714,7 +3674,7 @@
         {
           "name": "tisp_awb_process",
           "section": ".text",
-          "address": "0x4a22c",
+          "address": "0x4a298",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -3834,7 +3794,7 @@
         {
           "name": "tisp_dpc_pm_suspend",
           "section": ".text",
-          "address": "0x4823c",
+          "address": "0x482a8",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -4354,7 +4314,7 @@
         {
           "name": "tisp_defog_pm_suspend",
           "section": ".text",
-          "address": "0x48418",
+          "address": "0x48484",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -4394,7 +4354,7 @@
         {
           "name": "tisp_dmsc_pm_suspend",
           "section": ".text",
-          "address": "0x48280",
+          "address": "0x482ec",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -6260,7 +6220,7 @@
         {
           "name": "tx_isp_unlocked_ioctl",
           "section": ".text",
-          "address": "0x4ee48",
+          "address": "0x4eeb4",
           "binding": "global",
           "symbol_bytes": 4400,
           "instructions": 1100,
@@ -6460,7 +6420,7 @@
         {
           "name": "isp_vic_cmd_set",
           "section": ".text",
-          "address": "0x4e468",
+          "address": "0x4e4d4",
           "binding": "global",
           "symbol_bytes": 1784,
           "instructions": 446,
@@ -6660,7 +6620,7 @@
         {
           "name": "ispcore_core_ops_init",
           "section": ".text",
-          "address": "0x50a8c",
+          "address": "0x50af8",
           "binding": "global",
           "symbol_bytes": 1172,
           "instructions": 293,
@@ -6780,7 +6740,7 @@
         {
           "name": "isp_save_cmd_set",
           "section": ".text",
-          "address": "0x46bf0",
+          "address": "0x46c5c",
           "binding": "global",
           "symbol_bytes": 1008,
           "instructions": 252,
@@ -6820,7 +6780,7 @@
         {
           "name": "tisp_lce_init",
           "section": ".text",
-          "address": "0x4b204",
+          "address": "0x4b270",
           "binding": "global",
           "symbol_bytes": 984,
           "instructions": 246,
@@ -7060,7 +7020,7 @@
         {
           "name": "tisp_s_wdr_en",
           "section": ".text",
-          "address": "0x4d914",
+          "address": "0x4d980",
           "binding": "global",
           "symbol_bytes": 708,
           "instructions": 177,
@@ -7100,7 +7060,7 @@
         {
           "name": "tisp_awb_spec_calculate",
           "section": ".text",
-          "address": "0x49e40",
+          "address": "0x49eac",
           "binding": "global",
           "symbol_bytes": 1004,
           "instructions": 251,
@@ -7300,7 +7260,7 @@
         {
           "name": "tisp_vic_ctrl_ioctl",
           "section": ".text",
-          "address": "0x4eb60",
+          "address": "0x4ebcc",
           "binding": "global",
           "symbol_bytes": 660,
           "instructions": 165,
@@ -8180,7 +8140,7 @@
         {
           "name": "ispcore_frame_channel_set_fmt",
           "section": ".text",
-          "address": "0x4ceec",
+          "address": "0x4cf58",
           "binding": "global",
           "symbol_bytes": 368,
           "instructions": 92,
@@ -8380,7 +8340,7 @@
         {
           "name": "tisp_lsc_init",
           "section": ".text",
-          "address": "0x50164",
+          "address": "0x501d0",
           "binding": "global",
           "symbol_bytes": 492,
           "instructions": 123,
@@ -8620,7 +8580,7 @@
         {
           "name": "tisp_suspend_all",
           "section": ".text",
-          "address": "0x4933c",
+          "address": "0x493a8",
           "binding": "global",
           "symbol_bytes": 336,
           "instructions": 84,
@@ -8740,7 +8700,7 @@
         {
           "name": "func_adr_reg_write_every",
           "section": ".text",
-          "address": "0x4b75c",
+          "address": "0x4b7c8",
           "binding": "global",
           "symbol_bytes": 392,
           "instructions": 98,
@@ -9100,7 +9060,7 @@
         {
           "name": "tisp_mdns_addr_alloc",
           "section": ".text",
-          "address": "0x4df24",
+          "address": "0x4df90",
           "binding": "global",
           "symbol_bytes": 308,
           "instructions": 77,
@@ -9260,7 +9220,7 @@
         {
           "name": "tisp_lce_get_data",
           "section": ".text",
-          "address": "0x48308",
+          "address": "0x48374",
           "binding": "global",
           "symbol_bytes": 272,
           "instructions": 68,
@@ -10100,7 +10060,7 @@
         {
           "name": "ispcore_frame_channel_ir_qbuf",
           "section": ".text",
-          "address": "0x46fe0",
+          "address": "0x4704c",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -10460,7 +10420,7 @@
         {
           "name": "tisp_gsm_init",
           "section": ".text",
-          "address": "0x4dd74",
+          "address": "0x4dde0",
           "binding": "global",
           "symbol_bytes": 220,
           "instructions": 55,
@@ -10620,7 +10580,7 @@
         {
           "name": "ispcore_frame_channel_streamon",
           "section": ".text",
-          "address": "0x4d69c",
+          "address": "0x4d708",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -10700,7 +10660,7 @@
         {
           "name": "tisp_awb_pm_suspend",
           "section": ".text",
-          "address": "0x48028",
+          "address": "0x48094",
           "binding": "global",
           "symbol_bytes": 180,
           "instructions": 45,
@@ -10980,7 +10940,7 @@
         {
           "name": "tisp_ae_interrupt_hist",
           "section": ".text",
-          "address": "0x49860",
+          "address": "0x498cc",
           "binding": "global",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -11220,7 +11180,7 @@
         {
           "name": "tisp_sdns_pm_suspend",
           "section": ".text",
-          "address": "0x485c4",
+          "address": "0x48630",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -11260,7 +11220,7 @@
         {
           "name": "tisp_ysp_pm_suspend",
           "section": ".text",
-          "address": "0x48658",
+          "address": "0x486c4",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -11300,7 +11260,7 @@
         {
           "name": "ae_process_kthread",
           "section": ".text",
-          "address": "0x46b78",
+          "address": "0x46be4",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -11380,7 +11340,7 @@
         {
           "name": "tisp_s_hv_flip",
           "section": ".text",
-          "address": "0x4ce70",
+          "address": "0x4cedc",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -11525,6 +11485,46 @@
       "match_kind": "exact_name",
       "classification": "shorter",
       "oem": {
+        "name": "ispcore_pad_event_handle",
+        "section": ".text",
+        "address": "0x6f2c0",
+        "binding": "local",
+        "symbol_bytes": 192,
+        "instructions": 48,
+        "branches": 9,
+        "calls": 0,
+        "returns": 2,
+        "relocations": 2
+      },
+      "recovered": [
+        {
+          "name": "ispcore_pad_event_handle",
+          "section": ".text",
+          "address": "0x468c4",
+          "binding": "global",
+          "symbol_bytes": 116,
+          "instructions": 29,
+          "branches": 5,
+          "calls": 0,
+          "returns": 2,
+          "relocations": 2
+        }
+      ],
+      "instruction_ratio": 0.6041666666666666,
+      "instruction_delta": -19,
+      "recovered_totals": {
+        "symbol_bytes": 116,
+        "instructions": 29,
+        "branches": 5,
+        "calls": 0,
+        "returns": 2,
+        "relocations": 2
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "shorter",
+      "oem": {
         "name": "tisp_adr_faceae_curve_adjust",
         "section": ".text",
         "address": "0x4e05c",
@@ -11580,7 +11580,7 @@
         {
           "name": "tx_isp_core_remove",
           "section": ".text",
-          "address": "0x515cc",
+          "address": "0x51638",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -11620,7 +11620,7 @@
         {
           "name": "tisp_mdns_api_ai_par_push",
           "section": ".text",
-          "address": "0x4c2e4",
+          "address": "0x4c350",
           "binding": "global",
           "symbol_bytes": 144,
           "instructions": 36,
@@ -11660,7 +11660,7 @@
         {
           "name": "tisp_tmo_pm_suspend",
           "section": ".text",
-          "address": "0x4907c",
+          "address": "0x490e8",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -11820,7 +11820,7 @@
         {
           "name": "tisp_cdns_pm_suspend",
           "section": ".text",
-          "address": "0x4853c",
+          "address": "0x485a8",
           "binding": "global",
           "symbol_bytes": 136,
           "instructions": 34,
@@ -11940,7 +11940,7 @@
         {
           "name": "ispcore_frame_channel_streamoff",
           "section": ".text",
-          "address": "0x4d77c",
+          "address": "0x4d7e8",
           "binding": "global",
           "symbol_bytes": 128,
           "instructions": 32,
@@ -12060,7 +12060,7 @@
         {
           "name": "tisp_wdr_interrupt_static",
           "section": ".text",
-          "address": "0x4abec",
+          "address": "0x4ac58",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -12180,7 +12180,7 @@
         {
           "name": "tisp_wdr_pm_suspend",
           "section": ".text",
-          "address": "0x481d0",
+          "address": "0x4823c",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -12860,7 +12860,7 @@
         {
           "name": "tx_isp_remove",
           "section": ".text",
-          "address": "0x52178",
+          "address": "0x521e4",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -13060,7 +13060,7 @@
         {
           "name": "tisp_msca_addr_fifo_read",
           "section": ".text",
-          "address": "0x487a4",
+          "address": "0x48810",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -13100,7 +13100,7 @@
         {
           "name": "tisp_ae_pm_suspend",
           "section": ".text",
-          "address": "0x47f70",
+          "address": "0x47fdc",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -13140,7 +13140,7 @@
         {
           "name": "tisp_af_pm_suspend",
           "section": ".text",
-          "address": "0x47fcc",
+          "address": "0x48038",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -13180,7 +13180,7 @@
         {
           "name": "tisp_bcsh_pm_suspend",
           "section": ".text",
-          "address": "0x486ec",
+          "address": "0x48758",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -13220,7 +13220,7 @@
         {
           "name": "tisp_clm_pm_suspend",
           "section": ".text",
-          "address": "0x48f08",
+          "address": "0x48f74",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -13260,7 +13260,7 @@
         {
           "name": "tisp_gsm_pm_suspend",
           "section": ".text",
-          "address": "0x48fdc",
+          "address": "0x49048",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -13300,7 +13300,7 @@
         {
           "name": "tisp_hldc_pm_suspend",
           "section": ".text",
-          "address": "0x48748",
+          "address": "0x487b4",
           "binding": "global",
           "symbol_bytes": 92,
           "instructions": 23,
@@ -13420,7 +13420,7 @@
         {
           "name": "tisp_adr_pm_suspend",
           "section": ".text",
-          "address": "0x4845c",
+          "address": "0x484c8",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -13460,7 +13460,7 @@
         {
           "name": "tisp_blc_pm_suspend",
           "section": ".text",
-          "address": "0x4818c",
+          "address": "0x481f8",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -13500,7 +13500,7 @@
         {
           "name": "tisp_csc_pm_suspend",
           "section": ".text",
-          "address": "0x49038",
+          "address": "0x490a4",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -13540,7 +13540,7 @@
         {
           "name": "tisp_lce_pm_suspend",
           "section": ".text",
-          "address": "0x482c4",
+          "address": "0x48330",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -13580,7 +13580,7 @@
         {
           "name": "tisp_mdns_pm_suspend",
           "section": ".text",
-          "address": "0x484a0",
+          "address": "0x4850c",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -13700,7 +13700,7 @@
         {
           "name": "tisp_gib_pm_suspend",
           "section": ".text",
-          "address": "0x480dc",
+          "address": "0x48148",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -13740,7 +13740,7 @@
         {
           "name": "tisp_lsc_pm_suspend",
           "section": ".text",
-          "address": "0x48134",
+          "address": "0x481a0",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -13780,7 +13780,7 @@
         {
           "name": "tisp_tstp_pm_suspend",
           "section": ".text",
-          "address": "0x48eb0",
+          "address": "0x48f1c",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -13820,7 +13820,7 @@
         {
           "name": "tisp_ydns_pm_suspend",
           "section": ".text",
-          "address": "0x484e4",
+          "address": "0x48550",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -14180,7 +14180,7 @@
         {
           "name": "ispcore_s_wdr_en",
           "section": ".text",
-          "address": "0x51658",
+          "address": "0x516c4",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -14260,7 +14260,7 @@
         {
           "name": "tisp_get_frame_drop",
           "section": ".text",
-          "address": "0x4edf4",
+          "address": "0x4ee60",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -14860,7 +14860,7 @@
         {
           "name": "tisp_msca_param_array_set",
           "section": ".text",
-          "address": "0x4d378",
+          "address": "0x4d3e4",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -16180,7 +16180,7 @@
         {
           "name": "tisp_wdr_pm_resume",
           "section": ".text",
-          "address": "0x4a8a4",
+          "address": "0x4a910",
           "binding": "global",
           "symbol_bytes": 60,
           "instructions": 15,
@@ -16460,7 +16460,7 @@
         {
           "name": "dump_isp_info_open",
           "section": ".text",
-          "address": "0x46b50",
+          "address": "0x46bbc",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -21780,7 +21780,7 @@
         {
           "name": "init_module",
           "section": ".text",
-          "address": "0x51814",
+          "address": "0x51880",
           "binding": "global",
           "symbol_bytes": 2388,
           "instructions": 597,
@@ -23338,7 +23338,7 @@
         {
           "name": "isp_info_show_isra_6",
           "section": ".text",
-          "address": "0x47b3c",
+          "address": "0x47ba8",
           "binding": "global",
           "symbol_bytes": 712,
           "instructions": 178,
@@ -23364,7 +23364,7 @@
         {
           "name": "isp_mbus_to_bayer_isra_1",
           "section": ".text",
-          "address": "0x47160",
+          "address": "0x471cc",
           "binding": "global",
           "symbol_bytes": 1048,
           "instructions": 262,
@@ -23390,7 +23390,7 @@
         {
           "name": "ispcore_frame_channel_s_fmt_isra_2",
           "section": ".text",
-          "address": "0x47578",
+          "address": "0x475e4",
           "binding": "global",
           "symbol_bytes": 208,
           "instructions": 52,
@@ -23416,7 +23416,7 @@
         {
           "name": "ispcore_set_clk_parent_isra_4",
           "section": ".text",
-          "address": "0x47648",
+          "address": "0x476b4",
           "binding": "global",
           "symbol_bytes": 388,
           "instructions": 97,
@@ -23598,7 +23598,7 @@
         {
           "name": "regtrace_recovered_platform_remove",
           "section": ".text",
-          "address": "0x521ec",
+          "address": "0x52258",
           "binding": "local",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -25392,7 +25392,7 @@
         {
           "name": "sub_6f378",
           "section": ".text",
-          "address": "0x468cc",
+          "address": "0x46938",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25418,7 +25418,7 @@
         {
           "name": "sub_73fa8",
           "section": ".text",
-          "address": "0x516a4",
+          "address": "0x51710",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25444,7 +25444,7 @@
         {
           "name": "sub_7408c",
           "section": ".text",
-          "address": "0x516ac",
+          "address": "0x51718",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25470,7 +25470,7 @@
         {
           "name": "sub_740c0",
           "section": ".text",
-          "address": "0x516b4",
+          "address": "0x51720",
           "binding": "global",
           "symbol_bytes": 72,
           "instructions": 18,
@@ -25496,7 +25496,7 @@
         {
           "name": "sub_7410c",
           "section": ".text",
-          "address": "0x516fc",
+          "address": "0x51768",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25522,7 +25522,7 @@
         {
           "name": "sub_74114",
           "section": ".text",
-          "address": "0x51704",
+          "address": "0x51770",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25548,7 +25548,7 @@
         {
           "name": "sub_74178",
           "section": ".text",
-          "address": "0x5170c",
+          "address": "0x51778",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25574,7 +25574,7 @@
         {
           "name": "sub_741d0",
           "section": ".text",
-          "address": "0x51714",
+          "address": "0x51780",
           "binding": "global",
           "symbol_bytes": 156,
           "instructions": 39,
@@ -25600,7 +25600,7 @@
         {
           "name": "sub_74260",
           "section": ".text",
-          "address": "0x517b0",
+          "address": "0x5181c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25626,7 +25626,7 @@
         {
           "name": "sub_74274",
           "section": ".text",
-          "address": "0x517b8",
+          "address": "0x51824",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25652,7 +25652,7 @@
         {
           "name": "sub_7427c",
           "section": ".text",
-          "address": "0x517c0",
+          "address": "0x5182c",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25678,7 +25678,7 @@
         {
           "name": "sub_74280",
           "section": ".text",
-          "address": "0x517c8",
+          "address": "0x51834",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -25704,7 +25704,7 @@
         {
           "name": "sub_742a0",
           "section": ".text",
-          "address": "0x517f4",
+          "address": "0x51860",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -25730,7 +25730,7 @@
         {
           "name": "sub_742bc",
           "section": ".text",
-          "address": "0x517fc",
+          "address": "0x51868",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -29978,7 +29978,7 @@
         {
           "name": "ispcore_interrupt_service_routine",
           "section": ".text",
-          "address": "0x487fc",
+          "address": "0x48868",
           "binding": "global",
           "symbol_bytes": 1716,
           "instructions": 429,
@@ -30138,7 +30138,7 @@
         {
           "name": "tisp_wdr_softout_reg_refresh",
           "section": ".text",
-          "address": "0x4a254",
+          "address": "0x4a2c0",
           "binding": "global",
           "symbol_bytes": 1616,
           "instructions": 404,
@@ -30338,7 +30338,7 @@
         {
           "name": "tisp_adr_init",
           "section": ".text",
-          "address": "0x4be00",
+          "address": "0x4be6c",
           "binding": "global",
           "symbol_bytes": 1252,
           "instructions": 313,
@@ -30658,7 +30658,7 @@
         {
           "name": "tx_isp_core_probe",
           "section": ".text",
-          "address": "0x51190",
+          "address": "0x511fc",
           "binding": "global",
           "symbol_bytes": 1084,
           "instructions": 271,
@@ -30778,7 +30778,7 @@
         {
           "name": "tisp_wdr_init",
           "section": ".text",
-          "address": "0x4ac58",
+          "address": "0x4acc4",
           "binding": "global",
           "symbol_bytes": 976,
           "instructions": 244,
@@ -30818,7 +30818,7 @@
         {
           "name": "tisp_af_get_statistics",
           "section": ".text",
-          "address": "0x4990c",
+          "address": "0x49978",
           "binding": "global",
           "symbol_bytes": 968,
           "instructions": 242,
@@ -31898,7 +31898,7 @@
         {
           "name": "tisp_wdr_process",
           "section": ".text",
-          "address": "0x4a930",
+          "address": "0x4a99c",
           "binding": "global",
           "symbol_bytes": 700,
           "instructions": 175,
@@ -32018,7 +32018,7 @@
         {
           "name": "ispcore_slake_module",
           "section": ".text",
-          "address": "0x50f20",
+          "address": "0x50f8c",
           "binding": "global",
           "symbol_bytes": 624,
           "instructions": 156,
@@ -32138,7 +32138,7 @@
         {
           "name": "tisp_msca_params_update",
           "section": ".text",
-          "address": "0x4d0dc",
+          "address": "0x4d148",
           "binding": "global",
           "symbol_bytes": 668,
           "instructions": 167,
@@ -32338,7 +32338,7 @@
         {
           "name": "tisp_vic_mmap",
           "section": ".text",
-          "address": "0x4e248",
+          "address": "0x4e2b4",
           "binding": "global",
           "symbol_bytes": 544,
           "instructions": 136,
@@ -32378,7 +32378,7 @@
         {
           "name": "ispcore_video_s_stream",
           "section": ".text",
-          "address": "0x50850",
+          "address": "0x508bc",
           "binding": "global",
           "symbol_bytes": 572,
           "instructions": 143,
@@ -32618,7 +32618,7 @@
         {
           "name": "tisp_msca_pm_suspend",
           "section": ".text",
-          "address": "0x49110",
+          "address": "0x4917c",
           "binding": "global",
           "symbol_bytes": 556,
           "instructions": 139,
@@ -32778,7 +32778,7 @@
         {
           "name": "tisp_af_init",
           "section": ".text",
-          "address": "0x4ffa0",
+          "address": "0x5000c",
           "binding": "global",
           "symbol_bytes": 452,
           "instructions": 113,
@@ -33138,7 +33138,7 @@
         {
           "name": "ispcore_activate_module",
           "section": ".text",
-          "address": "0x47950",
+          "address": "0x479bc",
           "binding": "global",
           "symbol_bytes": 492,
           "instructions": 123,
@@ -33298,7 +33298,7 @@
         {
           "name": "tisp_adr_dn_params_refresh",
           "section": ".text",
-          "address": "0x4bacc",
+          "address": "0x4bb38",
           "binding": "global",
           "symbol_bytes": 504,
           "instructions": 126,
@@ -33338,7 +33338,7 @@
         {
           "name": "ispcore_frame_channel1_debug_qbuf",
           "section": ".text",
-          "address": "0x46958",
+          "address": "0x469c4",
           "binding": "global",
           "symbol_bytes": 420,
           "instructions": 105,
@@ -33538,7 +33538,7 @@
         {
           "name": "tisp_msca_cfg_shd_ram",
           "section": ".text",
-          "address": "0x4d3b4",
+          "address": "0x4d420",
           "binding": "global",
           "symbol_bytes": 516,
           "instructions": 129,
@@ -33578,7 +33578,7 @@
         {
           "name": "ispcore_clks_ops",
           "section": ".text",
-          "address": "0x477cc",
+          "address": "0x47838",
           "binding": "global",
           "symbol_bytes": 388,
           "instructions": 97,
@@ -33898,7 +33898,7 @@
         {
           "name": "tisp_adr_linear_switch",
           "section": ".text",
-          "address": "0x4b90c",
+          "address": "0x4b978",
           "binding": "global",
           "symbol_bytes": 448,
           "instructions": 112,
@@ -33978,7 +33978,7 @@
         {
           "name": "ispcore_resume_module",
           "section": ".text",
-          "address": "0x5043c",
+          "address": "0x504a8",
           "binding": "global",
           "symbol_bytes": 472,
           "instructions": 118,
@@ -34058,7 +34058,7 @@
         {
           "name": "tisp_defog_interrupt_static",
           "section": ".text",
-          "address": "0x4b5dc",
+          "address": "0x4b648",
           "binding": "global",
           "symbol_bytes": 384,
           "instructions": 96,
@@ -34258,7 +34258,7 @@
         {
           "name": "ispcore_suspend_module",
           "section": ".text",
-          "address": "0x50690",
+          "address": "0x506fc",
           "binding": "global",
           "symbol_bytes": 448,
           "instructions": 112,
@@ -34818,7 +34818,7 @@
         {
           "name": "tiziano_adr_interrupt_static",
           "section": ".text",
-          "address": "0x4bcc4",
+          "address": "0x4bd30",
           "binding": "global",
           "symbol_bytes": 316,
           "instructions": 79,
@@ -35138,7 +35138,7 @@
         {
           "name": "tisp_dmsc_param_array_set",
           "section": ".text",
-          "address": "0x4b028",
+          "address": "0x4b094",
           "binding": "global",
           "symbol_bytes": 372,
           "instructions": 93,
@@ -35378,7 +35378,7 @@
         {
           "name": "tisp_mdns_addr_free",
           "section": ".text",
-          "address": "0x4e058",
+          "address": "0x4e0c4",
           "binding": "global",
           "symbol_bytes": 312,
           "instructions": 78,
@@ -36098,7 +36098,7 @@
         {
           "name": "tisp_gsm_read_ram",
           "section": ".text",
-          "address": "0x4dbd8",
+          "address": "0x4dc44",
           "binding": "global",
           "symbol_bytes": 260,
           "instructions": 65,
@@ -36138,7 +36138,7 @@
         {
           "name": "tisp_msca_set_mirr_flip",
           "section": ".text",
-          "address": "0x4cd4c",
+          "address": "0x4cdb8",
           "binding": "global",
           "symbol_bytes": 292,
           "instructions": 73,
@@ -36298,7 +36298,7 @@
         {
           "name": "tisp_ae_get_hist",
           "section": ".text",
-          "address": "0x49764",
+          "address": "0x497d0",
           "binding": "global",
           "symbol_bytes": 252,
           "instructions": 63,
@@ -37178,7 +37178,7 @@
         {
           "name": "tisp_awb_main_interrupt_static",
           "section": ".text",
-          "address": "0x49d68",
+          "address": "0x49dd4",
           "binding": "global",
           "symbol_bytes": 216,
           "instructions": 54,
@@ -37258,7 +37258,7 @@
         {
           "name": "tisp_raw_rdma_fd_interrupt",
           "section": ".text",
-          "address": "0x4948c",
+          "address": "0x494f8",
           "binding": "global",
           "symbol_bytes": 244,
           "instructions": 61,
@@ -38898,7 +38898,7 @@
         {
           "name": "tisp_vic_ctrl_release",
           "section": ".text",
-          "address": "0x4e190",
+          "address": "0x4e1fc",
           "binding": "global",
           "symbol_bytes": 184,
           "instructions": 46,
@@ -39138,7 +39138,7 @@
         {
           "name": "tisp_ae_ai_interrupt_static",
           "section": ".text",
-          "address": "0x47ec4",
+          "address": "0x47f30",
           "binding": "global",
           "symbol_bytes": 172,
           "instructions": 43,
@@ -39858,7 +39858,7 @@
         {
           "name": "tisp_gsm_interrupt_hist",
           "section": ".text",
-          "address": "0x4dcdc",
+          "address": "0x4dd48",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -40938,7 +40938,7 @@
         {
           "name": "tisp_af_interrupt_static",
           "section": ".text",
-          "address": "0x49cd4",
+          "address": "0x49d40",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -42698,7 +42698,7 @@
         {
           "name": "tisp_ccm_pm_suspend",
           "section": ".text",
-          "address": "0x48f64",
+          "address": "0x48fd0",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -42738,7 +42738,7 @@
         {
           "name": "isp_interrupts_disable",
           "section": ".text",
-          "address": "0x50614",
+          "address": "0x50680",
           "binding": "global",
           "symbol_bytes": 124,
           "instructions": 31,
@@ -43178,7 +43178,7 @@
         {
           "name": "ispcore_frame_channel_reqbufs",
           "section": ".text",
-          "address": "0x468d4",
+          "address": "0x46940",
           "binding": "global",
           "symbol_bytes": 132,
           "instructions": 33,
@@ -43698,7 +43698,7 @@
         {
           "name": "tisp_raw_get_rw_handler",
           "section": ".text",
-          "address": "0x4dec0",
+          "address": "0x4df2c",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -44178,7 +44178,7 @@
         {
           "name": "isp_interrupts_enable",
           "section": ".text",
-          "address": "0x503e4",
+          "address": "0x50450",
           "binding": "global",
           "symbol_bytes": 88,
           "instructions": 22,
@@ -44458,7 +44458,7 @@
         {
           "name": "tisp_channel_main_start",
           "section": ".text",
-          "address": "0x4d64c",
+          "address": "0x4d6b8",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -44818,7 +44818,7 @@
         {
           "name": "tisp_channel_main_stop",
           "section": ".text",
-          "address": "0x4d730",
+          "address": "0x4d79c",
           "binding": "global",
           "symbol_bytes": 76,
           "instructions": 19,
@@ -47498,7 +47498,7 @@
         {
           "name": "tisp_msca_addr_ir_fifo_read",
           "section": ".text",
-          "address": "0x4d7fc",
+          "address": "0x4d868",
           "binding": "global",
           "symbol_bytes": 52,
           "instructions": 13,
@@ -48058,7 +48058,7 @@
         {
           "name": "system_reg_read",
           "section": ".text",
-          "address": "0x47eac",
+          "address": "0x47f18",
           "binding": "global",
           "symbol_bytes": 24,
           "instructions": 6,
@@ -48698,7 +48698,7 @@
         {
           "name": "tisp_raw_init",
           "section": ".text",
-          "address": "0x49580",
+          "address": "0x495ec",
           "binding": "global",
           "symbol_bytes": 256,
           "instructions": 64,
@@ -48778,7 +48778,7 @@
         {
           "name": "tisp_reg_map_get",
           "section": ".text",
-          "address": "0x49680",
+          "address": "0x496ec",
           "binding": "global",
           "symbol_bytes": 228,
           "instructions": 57,
@@ -49218,7 +49218,7 @@
         {
           "name": "fs_work_kthread",
           "section": ".text",
-          "address": "0x50350",
+          "address": "0x503bc",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -49378,7 +49378,7 @@
         {
           "name": "ispcore_frame_channel_freebufs",
           "section": ".text",
-          "address": "0x470d4",
+          "address": "0x47140",
           "binding": "global",
           "symbol_bytes": 140,
           "instructions": 35,
@@ -50418,7 +50418,7 @@
         {
           "name": "isp_fw_process",
           "section": ".text",
-          "address": "0x46afc",
+          "address": "0x46b68",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -50538,7 +50538,7 @@
         {
           "name": "tisp_wdr_hardware_reg_refresh",
           "section": ".text",
-          "address": "0x4a8e0",
+          "address": "0x4a94c",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -51698,7 +51698,7 @@
         {
           "name": "system_irq_func_set",
           "section": ".text",
-          "address": "0x4ff78",
+          "address": "0x4ffe4",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -51738,7 +51738,7 @@
         {
           "name": "tisp_adr_pm_resume",
           "section": ".text",
-          "address": "0x4b8e4",
+          "address": "0x4b950",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -52258,7 +52258,7 @@
         {
           "name": "tisp_g_mdns_ai_par",
           "section": ".text",
-          "address": "0x4c374",
+          "address": "0x4c3e0",
           "binding": "global",
           "symbol_bytes": 40,
           "instructions": 10,
@@ -54138,7 +54138,7 @@
         {
           "name": "cleanup_module",
           "section": ".text",
-          "address": "0x52168",
+          "address": "0x521d4",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -56618,7 +56618,7 @@
         {
           "name": "dump_msca_regs",
           "section": ".text",
-          "address": "0x47ea4",
+          "address": "0x47f10",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56698,7 +56698,7 @@
         {
           "name": "ispcore_frame_channel_ir_freebufs",
           "section": ".text",
-          "address": "0x47e8c",
+          "address": "0x47ef8",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56778,7 +56778,7 @@
         {
           "name": "ispcore_frame_channel_ir_set_fmt",
           "section": ".text",
-          "address": "0x47e94",
+          "address": "0x47f00",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,
@@ -56818,7 +56818,7 @@
         {
           "name": "ispcore_frame_channel_ir_streamoff",
           "section": ".text",
-          "address": "0x47e9c",
+          "address": "0x47f08",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,

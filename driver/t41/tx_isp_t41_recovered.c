@@ -4298,7 +4298,7 @@ int32_t ispcore_frame_channel_get_fmt(uintptr_t a0, uintptr_t a1);
 int32_t ispcore_frame_channel_ir_reqbufs(void);
 int32_t ispcore_frame_channel_ir_streamon(void);
 int32_t ispcore_frame_channel_ir_get_fmt(uintptr_t a0, uintptr_t a1);
-int32_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1);
+int32_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t sub_6f378(void);
 char* ispcore_irq_main_fd_work(void);
 int32_t ispcore_frame_channel_reqbufs(void* arg1, int32_t* arg2);
@@ -154242,52 +154242,30 @@ ispcore_frame_channel_ir_get_fmt0xb0:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006f2c0 origin=fragment_seed original=ispcore_pad_event_handle */
-int32_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1)
+int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
+				 uintptr_t data)
 {
-    uint32_t a2 = 0;
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+	typedef int32_t (*event_fn)(uintptr_t, uintptr_t);
+	static const int8_t callback_index[8] = { 0, 1, 2, 3, 4, -1, 5, 6 };
+	void *owner;
+	event_fn *ops;
+	event_fn callback;
+	uint32_t index;
 
-    /* fragment 0: MemoryAccess */
-    v0 = *(uint8_t *)((char *)a0 + 5);
-    v1 = a1;
+	if (!*(uint8_t *)(pad + 5))
+		return 0;
 
-    /* fragment 1: Branch */
-    a1 = a2;
-    if (v0 == 0) { goto ispcore_pad_event_handle0xb0; }
+	index = event - 0x03000001U;
+	if (index >= ARRAY_SIZE(callback_index) || callback_index[index] < 0)
+		return 0;
 
-    /* fragment 2: ConstantLoad */
-    a2 = 0xfcffffff;
+	owner = *(void **)(pad + 0x20);
+	ops = *(event_fn **)((char *)owner + 0xd4);
+	callback = ops[callback_index[index]];
+	if (!callback)
+		return -1;
 
-    /* fragment 3: Branch */
-    v0 = *(uint32_t *)((char *)(a0) + 32);
-    if (a2 == 0) { goto ispcore_pad_event_handle0xb0; }
-
-    /* fragment 4: Arithmetic */
-    a2 = (uintptr_t)&__pow2_lut;
-    v1 = (uintptr_t)v1 << 2;
-    a2 = a2 + 14944;
-    v1 = a2 + (uintptr_t)v1;
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v1 + 0);
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 6f2fc:	00600408 	jr.hb	v1 */
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 6f300:	00000000 	nop */
-
-    /* fragment 8: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 212);
-    t9 = *(uint32_t *)((char *)v0 + 0);
-
-ispcore_pad_event_handle0xb0:
-    ;
-    return 0;
+	return callback(pad, data);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006f378 origin=fragment_seed original=sub_6f378 */

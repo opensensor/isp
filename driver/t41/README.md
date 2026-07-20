@@ -28,8 +28,8 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 20 stub functions, 93 collapsed
-functions, 388 shorter functions, and 41 OEM-only symbols. Critical deficits
+The current linked-binary audit finds 19 stub functions, 93 collapsed
+functions, 389 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -76,6 +76,11 @@ helpers now preserve their full return values. The multiplier and min/max
 helpers have exact OEM instruction-count parity. A decompiler-only pair of
 `muls_dp_*` calls in AWB distance calculation was also replaced with explicit
 64-bit squares, eliminating two symbols that the target kernel cannot resolve.
+
+The ISP-core pad event handler again accepts its data argument and dispatches
+events `0x03000001` through `0x03000008` to the seven OEM callback slots (with
+the OEM no-op sixth event). Missing callbacks return `-1`; disabled pads and
+unknown events remain no-ops.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
