@@ -12,22 +12,22 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 339264 |
+| Executable section bytes | 479556 | 339456 |
 | Initialized writable bytes | 25120 | 16032 |
-| Uninitialized writable bytes | 20592 | 334528 |
+| Uninitialized writable bytes | 20592 | 301776 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=82405 ratio=0.710
-- classes: stub=18 collapsed=90 shorter=386 same_count=269 similar=471 larger=22 expanded=17
+- matched instructions: OEM=116036 recovered=82455 ratio=0.711
+- classes: stub=18 collapsed=90 shorter=388 same_count=268 similar=470 larger=22 expanded=17
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 20592 | 334528 | +313936 |
+| `.bss` | 20592 | 301776 | +281184 |
 | `.data` | 24768 | 15680 | -9088 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
@@ -35,16 +35,16 @@
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 3568 | -12192 |
-| `.rodata.str1.4` | 25860 | 5044 | -20816 |
-| `.text` | 478400 | 339264 | -139136 |
+| `.rodata` | 15760 | 3584 | -12176 |
+| `.rodata.str1.4` | 25860 | 5060 | -20800 |
+| `.text` | 478400 | 339456 | -138944 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 817 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -288,7 +288,7 @@ Showing 250 of 817 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_lsc_param_array_set` | `tisp_lsc_param_array_set` | 103 | 53 | 0.515 | -50 | 8->5 | 5->2 |
 | shorter | exact_name | `isp_vic_frd_show` | `isp_vic_frd_show` | 103 | 61 | 0.592 | -42 | 4->4 | 6->6 |
 | shorter | exact_name | `frame_channel_vidioc_get_fmt` | `frame_channel_vidioc_get_fmt` | 97 | 59 | 0.608 | -38 | 7->5 | 9->7 |
-| shorter | exact_name | `tisp_gib_interp_by_again` | `tisp_gib_interp_by_again` | 93 | 69 | 0.742 | -24 | 6->5 | 4->4 |
+| shorter | exact_name | `tisp_gib_interp_by_again` | `tisp_gib_interp_by_again` | 93 | 59 | 0.634 | -34 | 6->1 | 4->9 |
 | shorter | exact_name | `tisp_s_module_ratio_attr` | `tisp_s_module_ratio_attr` | 84 | 44 | 0.524 | -40 | 3->2 | 15->8 |
 | shorter | exact_name | `tisp_s_raw_rw_control` | `tisp_s_raw_rw_control` | 84 | 53 | 0.631 | -31 | 5->5 | 8->1 |
 | shorter | exact_name | `tisp_bypass_update` | `tisp_bypass_update` | 83 | 56 | 0.675 | -27 | 5->5 | 0->0 |
