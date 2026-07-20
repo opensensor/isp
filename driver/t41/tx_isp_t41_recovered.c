@@ -4373,7 +4373,7 @@ int32_t sub_7427c(uintptr_t a0);
 int32_t sub_74280(uintptr_t a0);
 int32_t sub_742a0(void);
 int32_t sub_742bc(uintptr_t a0);
-int64_t mbus_to_bayer_write(void);
+int32_t mbus_to_bayer_write(uint32_t mbus_code);
 int64_t ispcore_interrupt_service_routine(uintptr_t a0);
 int32_t init_module(void);
 void cleanup_module(void);
@@ -161837,77 +161837,22 @@ int32_t sub_742bc(uintptr_t a0)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000743dc origin=fragment_seed original=mbus_to_bayer_write */
-int64_t mbus_to_bayer_write(void)
+int32_t mbus_to_bayer_write(uint32_t mbus_code)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+	static const uint8_t bayer_order[4] = { 1, 3, 2, 0 };
+	uint32_t value = system_reg_read(0x88) & ~0x1fU;
+	uint32_t index = mbus_code - 0x5200U;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (index >= 20) {
+		isp_printf(2,
+			   "mbus_to_bayer_write: unsupported format 0x%08x\n",
+			   mbus_code);
+		return 0;
+	}
 
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_read)(136); /* jalr target resolved by relocation */
-
-    /* fragment 2: Arithmetic */
-    a1 = -32;
-    a1 = (uintptr_t)v0 & a1;
-    v0 = v1 - 20992;
-    a0 = v0 < 20;
-
-    /* fragment 3: Branch */
-    a2 = (uintptr_t)&__pow2_lut;
-    if (a0 == 0) { goto mbus_to_bayer_write0x80; }
-
-    /* fragment 4: CallSetup */
-    v1 = (uintptr_t)v0 << 2;
-    v0 = (unsigned int *)&__pow2_lut;
-    v0 = v0 + 15152;
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-    v0 = *(uint32_t *)((char *)v0 + 0);
-    v1 = (unsigned int *)&system_reg_write;
-    v1 = v1;
-    a1 = a1 | 1;
-
-mbus_to_bayer_write0x58:
-    /* fragment 5: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)(136); /* jalr target resolved by relocation */
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = 0;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 9: Branch */
-    a1 = a1 | 3;
-    goto mbus_to_bayer_write0x58;
-
-    /* fragment 10: Branch */
-    a1 = a1 | 2;
-    goto mbus_to_bayer_write0x58;
-
-mbus_to_bayer_write0x80:
-    /* fragment 11: Arithmetic */
-    v0 = 1461;
-
-    /* fragment 12: StackAccess */
-    local_14 = v0;
-    a2 = a2 + 15716;
-    a1 = (uintptr_t)&LC193;
-    v0 = (unsigned int *)&isp_printf;
-    local_18 = v1;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	value |= bayer_order[index & 3];
+	system_reg_write(0x88, value);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074494 origin=fragment_seed original=ispcore_interrupt_service_routine */

@@ -28,8 +28,8 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The current linked-binary audit finds 19 stub functions, 93 collapsed
-functions, 389 shorter functions, and 41 OEM-only symbols. Critical deficits
+The current linked-binary audit finds 18 stub functions, 93 collapsed
+functions, 390 shorter functions, and 41 OEM-only symbols. Critical deficits
 include subdevice initialization, core control/ioctl dispatch, and tuning
 paths.
 
@@ -81,6 +81,11 @@ The ISP-core pad event handler again accepts its data argument and dispatches
 events `0x03000001` through `0x03000008` to the seven OEM callback slots (with
 the OEM no-op sixth event). Missing callbacks return `-1`; disabled pads and
 unknown events remain no-ops.
+
+The media-bus Bayer writer now preserves the upper bits of ISP register
+`0x88`, clears its low five bits, and applies the OEM `{1,3,2,0}` Bayer-order
+mapping across codes `0x5200` through `0x5213`. Unsupported formats retain the
+OEM diagnostic/no-op behavior.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after

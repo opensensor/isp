@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 336496 |
+| Executable section bytes | 479556 | 336624 |
 | Initialized writable bytes | 25120 | 15808 |
 | Uninitialized writable bytes | 20592 | 383088 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=81713 ratio=0.704
-- classes: stub=19 collapsed=93 shorter=389 same_count=263 similar=472 larger=22 expanded=15
+- matched instructions: OEM=116036 recovered=81745 ratio=0.704
+- classes: stub=18 collapsed=93 shorter=390 same_count=263 similar=472 larger=22 expanded=15
 
 ## Allocated Section Delta
 
@@ -35,9 +35,9 @@
 | `.modinfo` | 1012 | 1136 | +124 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 15760 | 3488 | -12272 |
-| `.rodata.str1.4` | 25860 | 4736 | -21124 |
-| `.text` | 478400 | 336496 | -141904 |
+| `.rodata` | 15760 | 3504 | -12256 |
+| `.rodata.str1.4` | 25860 | 4784 | -21076 |
+| `.text` | 478400 | 336624 | -141776 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
@@ -52,7 +52,6 @@ Showing 250 of 822 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `ispcore_core_ops_ioctl` | `ispcore_core_ops_ioctl` | 309 | 2 | 0.006 | -307 | 8->0 | 55->0 |
 | stub | exact_name | `ispint_adr_64` | `ispint_adr_64` | 101 | 3 | 0.030 | -98 | 2->0 | 14->0 |
 | stub | exact_name | `func_interp1_short` | `func_interp1_short` | 67 | 2 | 0.030 | -65 | 0->0 | 10->0 |
-| stub | exact_name | `mbus_to_bayer_write` | `mbus_to_bayer_write` | 46 | 4 | 0.087 | -42 | 3->0 | 4->0 |
 | stub | exact_name | `func_zone_ct_weight` | `func_zone_ct_weight` | 42 | 2 | 0.048 | -40 | 0->0 | 6->1 |
 | stub | exact_name | `ISPAWBInterpolation2` | `ISPAWBInterpolation2` | 42 | 4 | 0.095 | -38 | 4->0 | 2->1 |
 | stub | exact_name | `tisp_irsca_para_calc` | `tisp_irsca_para_calc` | 41 | 8 | 0.195 | -33 | 0->0 | 4->1 |
@@ -298,3 +297,4 @@ Showing 250 of 822 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_bypass_update` | `tisp_bypass_update` | 83 | 56 | 0.675 | -27 | 5->5 | 0->0 |
 | shorter | exact_name | `tisp_clm_init` | `tisp_clm_init` | 83 | 59 | 0.711 | -24 | 7->6 | 0->0 |
 | shorter | exact_name | `tisp_mdns_func_en` | `tisp_mdns_func_en` | 82 | 46 | 0.561 | -36 | 2->1 | 3->3 |
+| shorter | exact_name | `ispcore_frame_channel_ir_qbuf` | `ispcore_frame_channel_ir_qbuf` | 79 | 61 | 0.772 | -18 | 4->3 | 12->11 |
