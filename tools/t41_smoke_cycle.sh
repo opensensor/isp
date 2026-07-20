@@ -79,14 +79,18 @@ reboot_device() {
 }
 trap reboot_device EXIT
 
+remote_sensor_module="${SENSOR_MODULE:-__none__}"
 set +e
 timeout 90 "${SSH[@]}" sh -s -- "$LEVEL" "$START_RAPTOR" \
-	"$SENSOR_MODULE" "$SMOKE_SECS" <<'EOS'
+	"$remote_sensor_module" "$SMOKE_SECS" <<'EOS'
 set -u
 level="$1"
 start_raptor="$2"
 sensor_module="$3"
 smoke_secs="$4"
+if [ "$sensor_module" = "__none__" ]; then
+	sensor_module=
+fi
 
 capture_state() {
 	label="$1"
