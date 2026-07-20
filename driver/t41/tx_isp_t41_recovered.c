@@ -728,6 +728,13 @@ static int tx_isp_bringup_level;
 module_param(tx_isp_bringup_level, int, 0);
 MODULE_PARM_DESC(tx_isp_bringup_level, "bring-up gate: -1 exports only, 0 shallow, 1 graph, 2 mem, 3 core tuning");
 
+#define T41_MAX_IRQS_PER_DEVICE 4
+#define T41_IRQ_SLOT_IRQ_OFF 12
+#define T41_IRQ_SLOT_STATE_OFF 24
+#define T41_IRQ_COUNT_OFF 36
+#define T41_IRQ_ENABLE_OFF 40
+#define T41_IRQ_DISABLE_OFF 44
+
 static int ivdc_threshold_line;
 module_param(ivdc_threshold_line, int, 0);
 MODULE_PARM_DESC(ivdc_threshold_line, "ivdc threshold line");
@@ -2777,9 +2784,11 @@ void *private_request_mem_region();
 int32_t private_release_mem_region();
 void __iomem *private_ioremap();
 void private_iounmap();
-int private_request_threaded_irq(void);
+int private_request_threaded_irq(unsigned int irq, irq_handler_t handler,
+                                 irq_handler_t thread_fn, unsigned long flags,
+                                 const char *name, void *dev);
 void private_enable_irq(unsigned int irq);
-void private_disable_irq(void);
+void private_disable_irq(unsigned int irq);
 void private_free_irq(unsigned int irq, void *dev_id);
 int32_t __private_spin_lock_irqsave(uint32_t a0, uintptr_t a1);
 int32_t private_spin_unlock_irqrestore(void);
@@ -5681,11 +5690,11 @@ void private_iounmap(addr)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000868 origin=model_output original=private_request_threaded_irq */
-int private_request_threaded_irq(void)
+int private_request_threaded_irq(unsigned int irq, irq_handler_t handler,
+                                 irq_handler_t thread_fn, unsigned long flags,
+                                 const char *name, void *dev)
 {
-    return ((int (*)(unsigned int, irq_handler_t, irq_handler_t,
-                       unsigned long, const char *, void *))
-            (void *)request_threaded_irq)(0, NULL, NULL, 0, NULL, NULL);
+    return request_threaded_irq(irq, handler, thread_fn, flags, name, dev);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000878 origin=model_output original=private_enable_irq */
@@ -5695,9 +5704,9 @@ void private_enable_irq(unsigned int irq)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000888 origin=model_output original=private_disable_irq */
-void private_disable_irq(void)
+void private_disable_irq(unsigned int irq)
 {
-    disable_irq(0);
+    disable_irq(irq);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000898 origin=reference_derived original=private_free_irq */
@@ -23941,256 +23950,113 @@ int32_t isp_irq_thread_handle(int32_t arg1, void *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d734 origin=fragment_seed original=tx_isp_enable_irq */
 int32_t tx_isp_enable_irq(uintptr_t a0, uint32_t a1)
 {
-    uint32_t *t9 = 0;
+    unsigned int irq;
 
-    /* fragment 0: Arithmetic */
-    a1 = a1 + 2;
-    a1 = a1 << 2;
-    a1 = a0 + a1;
-    t9 = (uint32_t *)&private_enable_irq;
-    t9 = t9;
+    if (!a0 || a1 >= T41_MAX_IRQS_PER_DEVICE)
+        return -EINVAL;
 
-    /* fragment 1: Unknown */
-    /* unmatched fragment 1 (Unknown): no deterministic matcher for Unknown */
-    /* asm: d748:	03200408 	jr.hb	t9 */
+    irq = *(uint32_t *)(a0 + T41_IRQ_SLOT_IRQ_OFF +
+                        (a1 * sizeof(uint32_t)));
+    if (!irq)
+        return -EINVAL;
 
-    /* fragment 2: MemoryAccess */
-    a0 = *(uint32_t *)((char *)a1 + 4);
-
+    private_enable_irq(irq);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d750 origin=fragment_seed original=tx_isp_disable_irq */
 int32_t tx_isp_disable_irq(uintptr_t a0, uint32_t a1)
 {
-    uint32_t *t9 = 0;
+    unsigned int irq;
 
-    /* fragment 0: Arithmetic */
-    a1 = a1 + 2;
-    a1 = a1 << 2;
-    a1 = a0 + a1;
-    t9 = (uint32_t *)&private_disable_irq;
-    t9 = t9;
+    if (!a0 || a1 >= T41_MAX_IRQS_PER_DEVICE)
+        return -EINVAL;
 
-    /* fragment 1: Unknown */
-    /* unmatched fragment 1 (Unknown): no deterministic matcher for Unknown */
-    /* asm: d764:	03200408 	jr.hb	t9 */
+    irq = *(uint32_t *)(a0 + T41_IRQ_SLOT_IRQ_OFF +
+                        (a1 * sizeof(uint32_t)));
+    if (!irq)
+        return -EINVAL;
 
-    /* fragment 2: MemoryAccess */
-    a0 = *(uint32_t *)((char *)a1 + 4);
-
+    private_disable_irq(irq);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d76c origin=fragment_seed original=tx_isp_request_irq */
 int32_t tx_isp_request_irq(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t local_30 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_44 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t s3 = 0;
-    uint32_t *s4 = 0;
-    uintptr_t s5 = 0;
-    uint32_t *s6 = 0;
-    uint32_t s7 = 0;
-    uintptr_t *v0 = 0;
+    struct platform_device *pdev = (struct platform_device *)a0;
+    unsigned int idx;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!pdev || !a1) {
+        isp_printf(2, "%s[%d] the parameters are invalid!\n",
+                   "tx_isp_request_irq", 78);
+        return -EINVAL;
+    }
 
-    /* fragment 1: Branch */
-    if (a0 == 0) { goto tx_isp_request_irq0x88; }
+    for (idx = 0; idx < T41_MAX_IRQS_PER_DEVICE; idx++) {
+        uintptr_t slot = a1 + (idx * sizeof(uint32_t));
+        int irq = private_platform_get_irq(pdev, idx);
+        int ret;
 
-    /* fragment 2: Branch */
-    s3 = a1;
-    if (a1 == 0) { goto tx_isp_request_irq0x88; }
+        if (irq < 0)
+            break;
 
-    /* fragment 3: CallSetup */
-    s6 = (uintptr_t *)&private_platform_get_irq;
-    s7 = (uintptr_t)&private_request_threaded_irq;
-    s4 = (unsigned int *)&private_spin_lock_init;
-    s5 = a0;
-    s1 = a1;
-    s0 = 0;
-    s6 = s6;
-    s7 = s7;
-    s4 = s4;
+        ret = private_request_threaded_irq(
+            irq, (irq_handler_t)isp_irq_handle,
+            (irq_handler_t)isp_irq_thread_handle, IRQF_ONESHOT,
+            pdev->name, (void *)slot);
+        if (ret) {
+            isp_printf(2, "%s[%d] request irq%d failed: %d\n",
+                       "tx_isp_request_irq", 95, irq, ret);
+            *(uint32_t *)(a1 + T41_IRQ_SLOT_IRQ_OFF +
+                          (idx * sizeof(uint32_t))) = 0;
+            *(uint32_t *)(a1 + T41_IRQ_COUNT_OFF) = idx;
+            return -EINTR;
+        }
 
-tx_isp_request_irq0x58:
-    /* fragment 4: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_platform_get_irq)(s5, s0); /* jalr target resolved by relocation */
+        private_spin_lock_init((int32_t *)slot);
+        *(uint32_t *)(a1 + T41_IRQ_SLOT_IRQ_OFF +
+                      (idx * sizeof(uint32_t))) = irq;
+        *(uint32_t *)(a1 + T41_IRQ_SLOT_STATE_OFF +
+                      (idx * sizeof(uint32_t))) = 0;
+        private_disable_irq(irq);
+    }
 
-    /* fragment 5: Branch */
-    s2 = v0;
-    if (v0 >= 0) { goto tx_isp_request_irq0xe8; }
-
-    /* fragment 6: Arithmetic */
-    v0 = s0 + 2;
-    v0 = (uintptr_t)v0 << 2;
-    v0 = s3 + (uintptr_t)v0;
-
-    /* fragment 7: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 4) = 0;
-    *(uint32_t *)((char *)s3 + 36) = s0;
-
-    /* fragment 8: Branch */
-    v0 = 0;
-    goto tx_isp_request_irq0xbc;
-
-tx_isp_request_irq0x88:
-    /* fragment 9: CallSetup */
-    local_14 = 78;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC0, &__pow2_lut, 78); /* jalr target resolved by relocation */
-
-    /* fragment 10: Arithmetic */
-    v0 = -22;
-
-tx_isp_request_irq0xbc:
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_request_irq0xe8:
-    /* fragment 12: CallSetup */
-    local_10 = *(uint32_t *)((char *)(s5) + 0);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_request_threaded_irq)(s2, 65536 - 10816, 65536 - 10596, 8192); /* jalr target resolved by relocation */
-
-    /* fragment 13: Branch */
-    int _bc_v0_13 = v0 == 0;
-    v0 = 95;
-    if (_bc_v0_13) { goto tx_isp_request_irq0x160; }
-
-    /* fragment 14: CallSetup */
-    s0 = s0 + 2;
-    local_14 = v0;
-    s0 = (uintptr_t)s0 << 2;
-    local_10 = (uint32_t *)&__pow2_lut;
-    s0 = s3 + (uintptr_t)s0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC1, &__pow2_lut, 95); /* jalr target resolved by relocation */
-
-    /* fragment 15: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 4) = 0;
-
-    /* fragment 16: Branch */
-    v0 = -4;
-    goto tx_isp_request_irq0xbc;
-
-tx_isp_request_irq0x160:
-    /* fragment 17: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_spin_lock_init)(s1); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    *(uint32_t *)((char *)s1 + 12) = s2;
-    *(uint32_t *)((char *)s3 + 40) = (65536 - 10444);
-    *(uint32_t *)((char *)s3 + 44) = (65536 - 10416);
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_disable_irq)(s2); /* jalr target resolved by relocation */
-
-    /* fragment 19: Arithmetic */
-    s0 = s0 + 1;
-
-    /* fragment 20: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 24) = 0;
-
-    /* fragment 21: Branch */
-    s1 = s1 + 4;
-    goto tx_isp_request_irq0x58;
-
+    *(uint32_t *)(a1 + T41_IRQ_COUNT_OFF) = idx;
+    *(uint32_t *)(a1 + T41_IRQ_ENABLE_OFF) = (uint32_t)tx_isp_enable_irq;
+    *(uint32_t *)(a1 + T41_IRQ_DISABLE_OFF) = (uint32_t)tx_isp_disable_irq;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d910 origin=fragment_seed original=tx_isp_free_irq */
 void tx_isp_free_irq(uintptr_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
+    unsigned int count;
+    unsigned int idx;
 
-    /* fragment 0: Branch */
-    if (a0 == 0) { goto tx_isp_free_irq0x80; }
+    if (!a0)
+        return;
 
-    /* fragment 1: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    count = *(uint32_t *)(a0 + T41_IRQ_COUNT_OFF);
+    if (count > T41_MAX_IRQS_PER_DEVICE)
+        count = T41_MAX_IRQS_PER_DEVICE;
 
-    /* fragment 2: Arithmetic */
-    s3 = (uintptr_t)&private_free_irq;
+    for (idx = 0; idx < count; idx++) {
+        uintptr_t slot = a0 + (idx * sizeof(uint32_t));
+        unsigned int irq = *(uint32_t *)(a0 + T41_IRQ_SLOT_IRQ_OFF +
+                                         (idx * sizeof(uint32_t)));
 
-    /* fragment 3: StackAccess */
-    local_1c = s2;
-    local_18 = s1;
-    local_14 = s0;
-    local_24 = ra;
-    s0 = a0;
-    s1 = a0 + 12;
-    s2 = 0;
-    s3 = s3;
+        if (irq)
+            private_free_irq(irq, (void *)slot);
+        *(uint32_t *)(a0 + T41_IRQ_SLOT_IRQ_OFF +
+                      (idx * sizeof(uint32_t))) = 0;
+        *(uint32_t *)(a0 + T41_IRQ_SLOT_STATE_OFF +
+                      (idx * sizeof(uint32_t))) = 0;
+    }
 
-tx_isp_free_irq0x34:
-    /* fragment 4: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 36);
-    v0 = s2 < v0;
-
-    /* fragment 5: Branch */
-    if (v0 != 0) { goto tx_isp_free_irq0x5c; }
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return;
-
-tx_isp_free_irq0x5c:
-    /* fragment 7: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s1 + 0);
-
-    /* fragment 8: Branch */
-    if (a0 == 0) { goto tx_isp_free_irq0x74; }
-
-    /* fragment 9: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_free_irq)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 10: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 0) = 0;
-
-tx_isp_free_irq0x74:
-    /* fragment 11: Arithmetic */
-    s2 = s2 + 1;
-
-    /* fragment 12: Branch */
-    s1 = s1 + 4;
-    goto tx_isp_free_irq0x34;
-
-tx_isp_free_irq0x80:
-    /* fragment 13: Epilogue */
-    /* function epilogue: restore registers and return */
-    return;
-
-    /* fragment 14: Unknown */
-    /* unmatched fragment 14 (Unknown): no deterministic matcher for Unknown */
-    /* asm: d994:	00000000 	nop */
-
+    *(uint32_t *)(a0 + T41_IRQ_COUNT_OFF) = 0;
+    *(uint32_t *)(a0 + T41_IRQ_ENABLE_OFF) = 0;
+    *(uint32_t *)(a0 + T41_IRQ_DISABLE_OFF) = 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d9a0 origin=fragment_seed original=ivdc_video_s_stream */

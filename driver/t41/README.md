@@ -28,10 +28,16 @@ Expected artifact:
 ## Baseline risk
 
 The recovered module is a bring-up artifact, not a production-ready driver.
-The initial linked-binary audit found 31 stub functions, 91 collapsed
-functions, 400 shorter functions, and 41 OEM-only symbols. Critical deficits
-include subdevice initialization, core control/ioctl dispatch, interrupt
-helpers, and tuning paths.
+The current linked-binary audit finds 29 stub functions, 91 collapsed
+functions, 399 shorter functions, and 41 OEM-only symbols. Critical deficits
+include subdevice initialization, core control/ioctl dispatch, and tuning
+paths.
+
+Completed static repairs restore all 31 OEM exports and replace the recovered
+IRQ wrappers that previously requested IRQ 0 with null handlers and disabled
+IRQ 0 regardless of their arguments. The linked audit now classifies the IRQ
+enable/disable helpers as shorter rather than stubs, and the request/free paths
+as similar in instruction count. Hardware validation is still required.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
