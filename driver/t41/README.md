@@ -90,10 +90,17 @@ OEM diagnostic/no-op behavior.
 The exports-only (`-1`) hardware smoke level inserts and removes cleanly on the
 Wyze Cam v4 target. The first shallow-platform (`0`) run inserted successfully,
 created `/dev/tx-isp`, and reached the recovered probe, but exposed word-scaled
-decompiler offsets in `tx_isp_remove` during unload. The teardown now uses the
-OEM byte offsets `0x0c` and `0x88`, preserves the proc pointer at `0x138`, and
-guards an absent parent device before deregistration. This repair requires a
-fresh level-0 hardware retest before advancing to the device graph.
+decompiler offsets in `tx_isp_remove` during unload. The parent teardown now
+uses the OEM byte offsets `0x0c` and `0x88`, preserves the proc pointer at
+`0x138`, and guards an absent parent device before deregistration.
+
+A second level-0 run passed that parent teardown but exposed heap corruption
+when the kernel later freed module metadata. The recovered child-platform loop
+had advanced 32 bytes instead of the OEM 8 bytes and called a math helper in
+place of each child driver's remove callback. The repaired loop visits all 16
+entries and invokes the callback at driver offset `0x04` before unregistering
+each platform device. This repair requires a fresh level-0 hardware retest
+before advancing to the device graph.
 
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after

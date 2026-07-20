@@ -3259,7 +3259,7 @@ int32_t tx_isp_resume(uintptr_t a0);
 int32_t tx_isp_suspend(uintptr_t a0);
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
 int32_t isp_subdev_release_clks(void *arg1);
-void* tx_isp_unregister_platforms(uintptr_t a0);
+void tx_isp_unregister_platforms(uintptr_t a0);
 int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1);
 int32_t tx_isp_sensor_release_sensor(uintptr_t a0, uint32_t a1);
 int32_t tx_isp_video_s_stream(uintptr_t a0, uint32_t a1);
@@ -31665,64 +31665,27 @@ int32_t isp_subdev_release_clks(void *arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013570 origin=fragment_seed original=tx_isp_unregister_platforms */
-void* tx_isp_unregister_platforms(uintptr_t a0)
+void tx_isp_unregister_platforms(uintptr_t a0)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
+	uint32_t *entry = (uint32_t *)a0;
+	uint32_t *end = (uint32_t *)((char *)entry + 0x80);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	for (; entry != end; entry += 2) {
+		struct platform_device *pdev =
+			(struct platform_device *)(uintptr_t)entry[0];
+		void *driver = (void *)(uintptr_t)entry[1];
 
-    /* fragment 1: Arithmetic */
-    s1 = (uint32_t *)&private_platform_device_unregister;
+		if (driver) {
+			int (*remove)(struct platform_device *);
 
-    /* fragment 2: StackAccess */
-    local_18 = s2;
-    local_10 = s0;
-    local_1c = ra;
-    s0 = a0;
-    s2 = a0 + 128;
-    s1 = s1;
+			remove = *(int (**)(struct platform_device *))
+				((char *)driver + 4);
+			remove(pdev);
+		}
 
-tx_isp_unregister_platforms0x24:
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 4);
-
-    /* fragment 4: Branch */
-    a0 = *(uint32_t *)((char *)(s0) + 0);
-    if (v0 == 0) { goto tx_isp_unregister_platforms0x3c; }
-
-    /* fragment 5: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(a0); /* jalr target resolved by relocation */
-
-tx_isp_unregister_platforms0x3c:
-    /* fragment 6: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s0 + 0);
-
-    /* fragment 7: Branch */
-    if (a0 == 0) { goto tx_isp_unregister_platforms0x50; }
-
-    /* fragment 8: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_platform_device_unregister)(a0); /* jalr target resolved by relocation */
-
-tx_isp_unregister_platforms0x50:
-    /* fragment 9: Arithmetic */
-    s0 = s0 + 8;
-
-    /* fragment 10: Branch */
-    if (s0 != s2) { goto tx_isp_unregister_platforms0x24; }
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (void*)v0;
+		if (pdev)
+			private_platform_device_unregister(pdev);
+	}
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000135e0 origin=fragment_seed original=tx_isp_sensor_register_sensor */

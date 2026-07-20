@@ -12,14 +12,14 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1516 |
 | Functions with disassembly | 1314 | 1516 |
-| Executable section bytes | 479556 | 336624 |
+| Executable section bytes | 479556 | 336608 |
 | Initialized writable bytes | 25120 | 15808 |
 | Uninitialized writable bytes | 20592 | 383088 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=243
-- matched instructions: OEM=116036 recovered=81746 ratio=0.704
+- matched instructions: OEM=116036 recovered=81743 ratio=0.704
 - classes: stub=18 collapsed=93 shorter=389 same_count=263 similar=473 larger=22 expanded=15
 
 ## Allocated Section Delta
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 3504 | -12256 |
 | `.rodata.str1.4` | 25860 | 4784 | -21076 |
-| `.text` | 478400 | 336624 | -141776 |
+| `.text` | 478400 | 336608 | -141792 |
 | `__ksymtab` | 248 | 248 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 260 | 280 | +20 |
