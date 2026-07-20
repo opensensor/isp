@@ -1275,10 +1275,13 @@ static unsigned char mscaler_storage[2656] __attribute__((aligned(4)));
 static unsigned char data_1ee40[16384];
 static unsigned char data_74b0[16384];
 static unsigned char data_80000[16384];
-static uint32_t day_night;
-static uint32_t deir_en;
+static unsigned char day_night_storage[8] __attribute__((aligned(4)));
+#define day_night (*(uint32_t *)(void *)day_night_storage)
+static unsigned char deir_en_storage[8] __attribute__((aligned(4)));
+#define deir_en (*(uint32_t *)(void *)deir_en_storage)
 static uint32_t dnw;
-static uint32_t global_wdr_en;
+static unsigned char global_wdr_en_storage[8] __attribute__((aligned(4)));
+#define global_wdr_en (*(uint32_t *)(void *)global_wdr_en_storage)
 static unsigned char sensor_ctrl_main_storage[424] __attribute__((aligned(4)));
 #define sensor_ctrl_main (*(uint32_t *)(void *)sensor_ctrl_main_storage)
 static unsigned char tevent_info_storage[7744] __attribute__((aligned(4)));
@@ -3487,7 +3490,7 @@ int64_t tisp_channel_main_attr_set(uint32_t a0, uintptr_t a1);
 int32_t tisp_sync_ivdc_state(uint32_t a0, uint32_t a1);
 void* tiziano_reserve_reg_write(uint32_t a0, uintptr_t a1, uint32_t a2);
 int tiziano_load_parameters(uint32_t channel, uintptr_t load_request);
-int64_t tisp_init(uint32_t a0, uintptr_t a1, uint32_t a2);
+int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path);
 int64_t tisp_core_switch_bin(uint32_t a0, uint32_t a1);
 int32_t tiziano_sync_sensor_attr(uintptr_t a0);
 int32_t tisp_get_bin_version(void);
@@ -50984,6 +50987,7 @@ free_binary:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020570 origin=fragment_seed original=tisp_init */
+#if 0
 int64_t tisp_init(uint32_t a0, uintptr_t a1, uint32_t a2)
 {
     uint32_t *local_10 = 0;
@@ -51767,6 +51771,254 @@ tisp_init0xa94:
     goto tisp_init0x8a4;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
+{
+    unsigned int slot = channel * sizeof(uint32_t);
+    unsigned char *cfg = (unsigned char *)config;
+    unsigned char *par;
+    unsigned char *params;
+    unsigned char *selected_params;
+    unsigned char **sensor_info_slot;
+    unsigned char **params_slot;
+    uint32_t *deir_slot;
+    uint32_t *wdr_slot;
+    uint32_t *day_slot;
+    uint32_t width;
+    uint32_t height;
+    uint32_t input_code;
+    uint32_t reg88;
+    uint32_t reg_flags;
+    uint32_t top_bypass = 0x01ffffff;
+    uint32_t secondary_bypass = 0;
+    uint32_t processing_en = 0;
+    uint32_t i;
+    unsigned char load_request[132];
+    char *path = (char *)load_request + sizeof(uint32_t);
+    int ret;
+
+    if (channel >= 2 || !cfg)
+        return -EINVAL;
+
+    par = (unsigned char *)&tisp_par_info + channel * 160;
+    sensor_info_slot = (unsigned char **)((char *)&tsbin + slot);
+    params_slot = (unsigned char **)((char *)&tparamsP + slot);
+    deir_slot = (uint32_t *)((char *)&deir_en + slot);
+    wdr_slot = (uint32_t *)((char *)&global_wdr_en + slot);
+    day_slot = (uint32_t *)((char *)&day_night + slot);
+
+    memset((void *)&mscaler, 0, sizeof(mscaler_storage));
+    memset(par, 0, 160);
+    memcpy(par, cfg, 160);
+
+    if (*sensor_info_slot || *params_slot)
+        return -EBUSY;
+
+    *sensor_info_slot = private_vmalloc(148);
+    if (!*sensor_info_slot)
+        return -ENOMEM;
+    memset(*sensor_info_slot, 0, 148);
+
+    *params_slot = private_vmalloc(98696);
+    if (!*params_slot) {
+        private_vfree(*sensor_info_slot);
+        *sensor_info_slot = NULL;
+        return -ENOMEM;
+    }
+    memset(*params_slot, 0, 98696);
+
+    memset(load_request, 0, sizeof(load_request));
+    if (param_path && *(char *)param_path) {
+        if (strnlen((char *)param_path, 128) >= 128) {
+            ret = -ENAMETOOLONG;
+            goto free_channel_allocations;
+        }
+        snprintf(path, 128, "%s", (char *)param_path);
+    } else {
+        snprintf(path, 128, "/etc/sensor/%s-t41.bin", par + 13);
+    }
+
+    ret = tiziano_load_parameters(channel, (uintptr_t)load_request);
+    if (param_path)
+        snprintf((char *)param_path, 132, "%s", path);
+    if (ret) {
+        isp_printf(2, "tisp_init: failed to load %s (%d)\n", path, ret);
+        goto free_channel_allocations;
+    }
+
+    params = *params_slot;
+    ret = tisp_params_copy(channel,
+                           *(uint32_t *)((char *)&tparams_day + slot),
+                           *(uint32_t *)(cfg + 120), 0,
+                           ((unsigned char *)&dnw)[1]);
+    if (ret)
+        isp_printf(2, "tisp_init: initial parameter copy failed (%d)\n", ret);
+
+    if (*(uint16_t *)(cfg + 10) == 3)
+        params[16] = 1;
+
+    width = *(uint32_t *)(cfg + 0);
+    height = *(uint32_t *)(cfg + 4);
+    system_reg_write(0x80, (width << 16) | (height & 0xffff));
+
+    input_code = *(uint32_t *)(cfg + 8) & 0x1f;
+    *deir_slot = 0;
+    if (input_code <= 3) {
+        system_reg_write(0x88, input_code);
+    } else if (input_code < 20) {
+        system_reg_write(0x88, input_code + 4);
+        *deir_slot = 1;
+    } else {
+        isp_printf(2, "tisp_init: unsupported input code %u\n", input_code);
+    }
+    par[12] = (unsigned char)*deir_slot;
+
+    reg_flags = (*(uint32_t *)(cfg + 8) >> 8) & 0x300;
+    reg88 = system_reg_read(0x88);
+    if (*(uint32_t *)(cfg + 120) & 1)
+        reg88 |= 0x10000 | reg_flags;
+    else if (*deir_slot == 1)
+        reg88 |= 0x100000 | reg_flags;
+    else
+        reg88 |= reg_flags;
+    system_reg_write(0x88, reg88);
+
+    sensor_init((uintptr_t)&sensor_ctrl_main, 0);
+
+    if (!params[35]) {
+        if (params[34])
+            tisp_csccr_range_stretch_mode();
+        else
+            tisp_csccr_range_compress_mode();
+    } else if (!params[34]) {
+        tisp_csccr_default_mode();
+    } else {
+        system_reg_write(0xf08ec, 0);
+        system_reg_write(0xf0010, 1);
+    }
+
+    if (*(uint16_t *)(cfg + 10) == 3)
+        tisp_csc_yuv_dmo();
+    else
+        tisp_set_csc_version(2);
+
+    for (i = 0; i < 32; i++) {
+        top_bypass &= ~(1U << i);
+        top_bypass |= (uint32_t)(params[4 + i] & 1) << i;
+        secondary_bypass &= ~(1U << i);
+        secondary_bypass |= (uint32_t)(params[36 + i] & 1) << i;
+    }
+    if (*(uint32_t *)(cfg + 120) & 1)
+        top_bypass &= ~BIT(3);
+    top_bypass |= 0xfc000000;
+    *(uint32_t *)((char *)&top_bypass_global + slot) = top_bypass;
+    system_reg_write((channel + 16) << 2, top_bypass);
+    system_reg_write(0x6c, secondary_bypass);
+    system_reg_write(0x48, 0xffffffff);
+
+    for (i = 0; i < 10; i++)
+        processing_en |= (uint32_t)(params[68 + i] & 1) << i;
+    if (*deir_slot == 1)
+        processing_en |= BIT(2);
+    system_reg_write(0x60, processing_en);
+
+#define T41_INIT2(fn) \
+    ((int (*)(uint32_t, uintptr_t))(uintptr_t)(fn))(channel, (uintptr_t)par)
+    T41_INIT2(tisp_top_init);
+    T41_INIT2(tisp_ae_init);
+    T41_INIT2(tisp_awb_init);
+    T41_INIT2(tisp_blc_init);
+    T41_INIT2(tisp_gib_init);
+    T41_INIT2(tisp_lsc_init);
+    T41_INIT2(tisp_tmo_init);
+    T41_INIT2(tisp_dpc_init);
+    T41_INIT2(tisp_adr_init);
+    T41_INIT2(tisp_dmsc_init);
+    T41_INIT2(tisp_gamma_init);
+    T41_INIT2(tisp_defog_init);
+    T41_INIT2(tisp_lce_init);
+    T41_INIT2(tisp_mdns_init);
+    T41_INIT2(tisp_af_init);
+    T41_INIT2(tisp_ydns_init);
+    T41_INIT2(tisp_cdns_init);
+    T41_INIT2(tisp_sdns_init);
+    T41_INIT2(tisp_ysp_init);
+    T41_INIT2(tisp_bcsh_init);
+    T41_INIT2(tisp_clm_init);
+    T41_INIT2(tisp_ccm_init);
+    T41_INIT2(tisp_gsm_init);
+    T41_INIT2(tisp_hldc_init);
+    T41_INIT2(tisp_tstp_init);
+    T41_INIT2(tisp_raw_init);
+
+    if (*(uint32_t *)(cfg + 120))
+        T41_INIT2(tisp_wdr_init);
+#undef T41_INIT2
+
+    if (*(uint32_t *)(cfg + 120) & 1) {
+        *wdr_slot = 1;
+        if (*day_slot) {
+            selected_params = (unsigned char *)(uintptr_t)
+                *(uint32_t *)((char *)&tparams_night + slot);
+            i = ((unsigned char *)&dnw)[3];
+        } else {
+            selected_params = (unsigned char *)(uintptr_t)
+                *(uint32_t *)((char *)&tparams_day + slot);
+            i = ((unsigned char *)&dnw)[1];
+        }
+        tisp_params_copy(channel, (uintptr_t)selected_params, 1, 1, i);
+
+#define T41_WDR2(fn) \
+        ((int (*)(uint32_t, uint32_t))(uintptr_t)(fn))(channel, 1)
+        T41_WDR2(tisp_tmo_wdr_en);
+        T41_WDR2(tisp_lsc_wdr_en);
+        T41_WDR2(tisp_ccm_wdr_en);
+        T41_WDR2(tisp_bcsh_wdr_en);
+        T41_WDR2(tisp_gamma_wdr_en);
+        T41_WDR2(tisp_mdns_wdr_en);
+        T41_WDR2(tisp_lce_wdr_en);
+        T41_WDR2(tisp_defog_wdr_en);
+        system_reg_write(0x20, 0xc7ff1000);
+        tisp_adr_linear_switch(0, 1);
+        T41_WDR2(tisp_dpc_wdr_en);
+#undef T41_WDR2
+        system_reg_write(0x20, system_reg_read(0x20) & ~BIT(13));
+        system_reg_write(0x20, system_reg_read(0x20) & ~BIT(14));
+        system_reg_write(0x20, system_reg_read(0x20) & ~BIT(28));
+        system_reg_write(0x20, system_reg_read(0x20) & ~BIT(29));
+    } else {
+        *wdr_slot = 0;
+    }
+
+    tisp_msca_init(channel, width & 0xffff, height & 0xffff);
+    tisp_msca_ir_init(162, 0, (width + 7) & 0xfff8);
+    ret = tisp_event_init(0);
+    if (ret)
+        isp_printf(2, "tisp_init: event initialization failed (%d)\n", ret);
+
+    *(uint32_t *)(par + 156) = *(uint32_t *)(cfg + 156);
+    if (*(uint32_t *)(par + 124) == 1) {
+        tisp_day_or_night_event(channel, 0, 1, 0);
+        system_reg_write(0xd030, 0xff008080);
+        system_reg_write(0xd000, 0xffffffff);
+    }
+
+    system_irq_func_set(channel, channel * 42 + 57,
+                        (int)(uintptr_t)tisp_top_update_pos);
+    return 0;
+
+free_channel_allocations:
+    if (*params_slot) {
+        private_vfree(*params_slot);
+        *params_slot = NULL;
+    }
+    if (*sensor_info_slot) {
+        private_vfree(*sensor_info_slot);
+        *sensor_info_slot = NULL;
+    }
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021010 origin=fragment_seed original=tisp_core_switch_bin */
