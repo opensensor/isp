@@ -100,7 +100,7 @@ capture_state() {
 		cat /proc/modules
 		cat /proc/interrupts
 		ps
-		ls -l /dev/tx* /dev/isp* /dev/framechan* /dev/misc-* 2>/dev/null || true
+		ls -l /dev/tx* /dev/isp* /dev/aisp* /dev/framechan* /dev/misc-* 2>/dev/null || true
 		find /proc/isp -maxdepth 2 -print 2>/dev/null || true
 		find /proc -maxdepth 3 -type f -path '*tx*isp*' -print 2>/dev/null || true
 	} >"/tmp/t41-${label}-state.txt" 2>&1

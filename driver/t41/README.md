@@ -180,6 +180,16 @@ similar at 53 instructions against OEM 60, while `isp_core_tuning_deinit` has
 exact 18-instruction count parity. This repair is compile- and audit-verified;
 hardware coverage remains coupled to the pending core-channel restoration.
 
+Core probe now builds its 232-byte channel records and embedded normal/IR
+callback tables with OEM byte offsets and named function relocations. It also
+restores channel dimensions and capability flags, pad event ownership, the
+tuning/debug node hooks, and failure cleanup. The linked probe is classified
+similar at 289 instructions against OEM 321. The insertion-only level-3 run at
+`logs/20260720-level3-core-channels-117` registers AISP, creates `/dev/isp-m0`,
+keeps core/VIC/IVDC IRQs 39/38/21 active, and reports no kernel warning or fatal
+signature. Live unload and a sensor/Raptor consumer remain gated on repair of
+the shorter recovered TISP deinitializer and review of the stream-init path.
+
 Hardware smoke tests must stage the module under `/tmp`, unload conflicting
 stock ISP modules first, capture kernel and userspace logs, and reboot after
 each experiment. Do not install this baseline into the persistent module tree.

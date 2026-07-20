@@ -160596,288 +160596,115 @@ tx_isp_core_probe0x154:
         return 0;
     }
 
-    /* fragment 17: CallSetup */
-    s8 = 232;
-    *(uint32_t *)((char *)s0 + 432) = (*(uint16_t *)((char *)(s0) + 256));
-    *(uint32_t *)((char *)s0 + 404) = (*(uint32_t *)((char *)(s5) + 92));
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)((*(uint16_t *)((char *)((uintptr_t)s0) + 256)) * 232, (uintptr_t)s4 | 192); /* jalr target resolved by relocation */
+    {
+        char *core = (char *)s0;
+        char *outpads = *(char **)(core + 260);
+        char *channels;
+        unsigned int channel_count = *(uint16_t *)(core + 256);
+        unsigned int index;
+        unsigned int table;
 
-    /* fragment 18: Branch */
-    s6 = v0;
-    if (v0 != 0) { goto tx_isp_core_probe0x21c; }
+        *(void **)(core + 404) = pdev->dev.platform_data;
+        *(uint32_t *)(core + 432) = channel_count;
 
-    /* fragment 19: CallSetup */
-    local_10 = (uint32_t *)&__pow2_lut;
-    local_14 = 2878;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC187, &__pow2_lut, 2878); /* jalr target resolved by relocation */
+        if (!channel_count || channel_count > 16 || !outpads) {
+            isp_printf(2, "Invalid ISP output channel table\n");
+            tx_isp_subdev_deinit((struct tx_isp_subdev *)core);
+            private_kfree(core);
+            return -EINVAL;
+        }
 
-    /* fragment 20: CallSetup */
-    local_14 = 3536;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC190, &__pow2_lut, 3536); /* jalr target resolved by relocation */
+        channels = private_kmalloc(channel_count * 232, 0x24000c0);
+        if (!channels) {
+            isp_printf(2, "Failed to allocate ISP output channels\n");
+            tx_isp_subdev_deinit((struct tx_isp_subdev *)core);
+            private_kfree(core);
+            return -EINVAL;
+        }
+        memset(channels, 0, channel_count * 232);
+        *(void **)(core + 428) = channels;
 
-tx_isp_core_probe0x204:
-    /* fragment 21: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tx_isp_subdev_deinit)(s0); /* jalr target resolved by relocation */
+        for (index = 0; index < channel_count; index++) {
+            char *channel = channels + index * 232;
+            char *pad = outpads + index * 36;
 
-    /* fragment 22: Branch */
-    s3 = -22;
-    goto tx_isp_core_probe0x13c;
+            *(uint32_t *)(channel + 116) = index;
+            *(uint32_t *)(channel + 120) = index % 3;
+            *(void **)(channel + 132) = pad;
 
-tx_isp_core_probe0x21c:
-    /* fragment 23: CallSetup */
-    s2 = 0;
-    s4 = 1;
-    v0 = (uintptr_t)memset((void *)(uintptr_t)s6, 0, (*(uint16_t *)((char *)((uintptr_t)s0) + 256)) * s8); /* jalr target resolved by relocation */
+            if (*(uint8_t *)(pad + 5) == 0) {
+                *(uint32_t *)(channel + 128) = 0;
+                continue;
+            }
 
-    /* fragment 24: Arithmetic */
-    a1 = 458752;
-    s1 = s6;
-    v1 = 3;
-    a2 = 36;
-    a1 = a1 - 3392;
+            if (index == 0 || index == 3) {
+                *(uint32_t *)(channel + 140) = 2624;
+                *(uint32_t *)(channel + 144) = 2048;
+                *(uint8_t *)(channel + 156) = 1;
+                *(uint8_t *)(channel + 157) = 0;
+            } else if (index == 1 || index == 4) {
+                *(uint32_t *)(channel + 140) = 1920;
+                *(uint32_t *)(channel + 144) = 1080;
+                *(uint8_t *)(channel + 156) = 1;
+                *(uint8_t *)(channel + 157) = 1;
+            }
 
-tx_isp_core_probe0x24c:
-    /* fragment 25: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 432);
-    v0 = s2 < v0;
+            *(uint32_t *)(channel + 148) = 128;
+            *(uint32_t *)(channel + 152) = 128;
+            *(uint32_t *)(channel + 128) = 1;
+            private_spin_lock_init((int32_t *)(channel + 168));
+            *(void **)(channel + 136) = core;
+            *(void **)(pad + 28) = (void *)ispcore_pad_event_handle;
+            *(void **)(pad + 32) = channel;
+        }
 
-    /* fragment 26: Branch */
-    t1 = 458752;
-    if (v0 != 0) { goto tx_isp_core_probe0x388; }
+        for (table = 0; table < 3; table++) {
+            void **input = (void **)(core + 564 + table * 28);
 
-    /* fragment 27: Arithmetic */
-    t0 = 458752;
-    a3 = 458752;
-    a2 = 458752;
-    a1 = (uintptr_t)&ispcore_frame_channel_qbuf;
-    a0 = 458752;
-    v1 = 458752;
+            input[0] = (void *)ispcore_frame_channel_get_fmt;
+            input[1] = (void *)ispcore_frame_channel_set_fmt;
+            input[2] = (void *)ispcore_frame_channel_streamon;
+            input[3] = (void *)ispcore_frame_channel_streamoff;
+            input[4] = (void *)ispcore_frame_channel_qbuf;
+            input[5] = (void *)ispcore_frame_channel_reqbufs;
+            input[6] = (void *)ispcore_frame_channel_freebufs;
+        }
 
-    /* fragment 28: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 428) = s6;
-    v0 = s0 + 564;
-    t2 = s0 + 648;
-    t1 = t1 - 3736;
-    t0 = t0 + 3016;
-    a3 = a3 + 1476;
-    a2 = a2 - 2016;
-    a1 = a1;
-    a0 = a0 - 2728;
-    v1 = v1 + 1336;
+        {
+            void **input = (void **)(core + 648);
 
-tx_isp_core_probe0x29c:
-    /* fragment 29: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = t1;
-    *(uint32_t *)((char *)v0 + 4) = t0;
-    *(uint32_t *)((char *)v0 + 8) = a3;
-    *(uint32_t *)((char *)v0 + 12) = a2;
-    *(uint32_t *)((char *)v0 + 16) = a1;
-    *(uint32_t *)((char *)v0 + 20) = a0;
-    *(uint32_t *)((char *)v0 + 24) = v1;
-    v0 = v0 + 28;
+            input[0] = (void *)ispcore_frame_channel_ir_get_fmt;
+            input[1] = (void *)ispcore_frame_channel_ir_set_fmt;
+            input[2] = (void *)ispcore_frame_channel_ir_streamon;
+            input[3] = (void *)ispcore_frame_channel_ir_streamoff;
+            input[4] = (void *)ispcore_frame_channel_ir_qbuf;
+            input[5] = (void *)ispcore_frame_channel_ir_reqbufs;
+            input[6] = (void *)ispcore_frame_channel_ir_freebufs;
+        }
 
-    /* fragment 30: Branch */
-    if (t2 != v0) { goto tx_isp_core_probe0x29c; }
+        *(void **)(core + 560) = isp_core_tuning_init((uint32_t)(uintptr_t)core);
+        if (!*(void **)(core + 560)) {
+            isp_printf(2, "Failed to initialize ISP tuning\n");
+            private_kfree(channels);
+            *(uint32_t *)(core + 436) = 1;
+            *(void **)(core + 428) = NULL;
+            tx_isp_subdev_deinit((struct tx_isp_subdev *)core);
+            private_kfree(core);
+            return -EINVAL;
+        }
 
-    /* fragment 31: ConstantLoad */
-    v0 = 0x6f208;
+        *(uint32_t *)(core + 296) = 1;
+        private_platform_set_drvdata((uintptr_t)pdev,
+                                     (uint32_t)(uintptr_t)core);
+        *(void **)(core + 268) = core;
+        *(void **)(core + 52) =
+            *(void **)((char *)*(void **)(core + 560) + 152);
+        *(void **)(core + 56) = &isp_info_proc_fops;
+        ispcore_sd = (uint32_t)(uintptr_t)core;
+        sensor_early_init((uint32_t)(uintptr_t)core);
+        return 0;
+    }
 
-    /* fragment 32: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 648) = v0;
-    v0 = 458752;
-    v0 = v0 + 9420;
-    *(uint32_t *)((char *)s0 + 652) = v0;
-    v0 = 458752;
-    v0 = v0 - 3584;
-    *(uint32_t *)((char *)s0 + 656) = v0;
-    v0 = 458752;
-    v0 = v0 + 9428;
-    *(uint32_t *)((char *)s0 + 660) = v0;
-    v0 = 458752;
-    v0 = v0 + 1020;
-    *(uint32_t *)((char *)s0 + 664) = v0;
-    v0 = 458752;
-    v0 = v0 - 3592;
-    *(uint32_t *)((char *)s0 + 668) = v0;
-    v0 = 458752;
-    v0 = v0 + 9412;
-    *(uint32_t *)((char *)s0 + 672) = v0;
-    v0 = (unsigned int *)&isp_core_tuning_init;
-    v0 = v0;
-
-    /* fragment 33: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)isp_core_tuning_init)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 34: Branch */
-    int _bc_v0_34 = v0 == 0;
-    *(uint32_t *)((char *)s0 + 560) = v0;
-    if (_bc_v0_34) { goto tx_isp_core_probe0x498; }
-
-    /* fragment 35: CallSetup */
-    *(uint32_t *)((char *)s0 + 296) = 1;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_platform_set_drvdata)(s5, s0); /* jalr target resolved by relocation */
-
-    /* fragment 36: CallSetup */
-    *(uint32_t *)((char *)s0 + 268) = s0;
-    *(uint32_t *)((char *)s0 + 52) = (*(uint32_t *)((char *)(*(uint32_t *)((char *)(s0) + 560)) + 152));
-    *(uint32_t *)((char *)s0 + 56) = ((uintptr_t)&sclk_name);
-    *(uint32_t *)((char *)((char *)&ispcore_sd)) = s0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)sensor_early_init)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 37: Branch */
-    goto tx_isp_core_probe0x88;
-
-tx_isp_core_probe0x388:
-    /* fragment 38: Unknown */
-    /* unmatched fragment 38 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 73d18:	0243001a 	div	zero,s2,v1 */
-
-    /* fragment 39: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 116) = s2;
-    *(uint32_t *)((char *)s1 + 120) = v0;
-    v0 = *(uint32_t *)((char *)s0 + 260);
-    s8 = (uintptr_t)s2 * a2;
-    v0 = v0 + s8;
-    *(uint32_t *)((char *)s1 + 132) = v0;
-    v0 = *(uint32_t *)((char *)s0 + 260);
-    v0 = v0 + s8;
-    v0 = *(uint8_t *)((char *)v0 + 5);
-
-    /* fragment 40: Branch */
-    if (v0 != 0) { goto tx_isp_core_probe0x3cc; }
-
-    /* fragment 41: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 128) = 0;
-
-tx_isp_core_probe0x3c0:
-    /* fragment 42: Arithmetic */
-    s2 = s2 + 1;
-
-    /* fragment 43: Branch */
-    s1 = s1 + 232;
-    goto tx_isp_core_probe0x24c;
-
-tx_isp_core_probe0x3cc:
-    /* fragment 44: Branch */
-    v0 = s2 < 2;
-    if (s2 == s4) { goto tx_isp_core_probe0x460; }
-
-    /* fragment 45: Branch */
-    if (v0 == 0) { goto tx_isp_core_probe0x434; }
-
-    /* fragment 46: Branch */
-    v0 = 2624;
-    if (s2 == 0) { goto tx_isp_core_probe0x480; }
-
-tx_isp_core_probe0x3e4:
-    /* fragment 47: CallSetup */
-    *(uint32_t *)((char *)s1 + 148) = 128;
-    *(uint32_t *)((char *)s1 + 152) = 128;
-    *(uint32_t *)((char *)s1 + 128) = s4;
-    local_28 = a1;
-    local_24 = a2;
-    local_20 = v1;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_spin_lock_init)(s1 + 168, a1, a2); /* jalr target resolved by relocation */
-
-    /* fragment 48: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 136) = s0;
-    v0 = *(uint32_t *)((char *)s0 + 260);
-    a1 = local_28;
-    a2 = local_24;
-    v0 = v0 + s8;
-    *(uint32_t *)((char *)v0 + 28) = a1;
-    v0 = *(uint32_t *)((char *)s0 + 260);
-    v1 = local_20;
-    s8 = v0 + s8;
-
-    /* fragment 49: Branch */
-    *(uint32_t *)((char *)s8 + 32) = s1;
-    goto tx_isp_core_probe0x3c0;
-
-tx_isp_core_probe0x434:
-    /* fragment 50: Branch */
-    v0 = 4;
-    if (s2 == v1) { goto tx_isp_core_probe0x47c; }
-
-    /* fragment 51: Branch */
-    int _bc_s2_51 = s2 != v0;
-    v0 = 1920;
-    if (_bc_s2_51) { goto tx_isp_core_probe0x3e4; }
-
-    /* fragment 52: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 140) = v0;
-    v0 = 1080;
-    *(uint32_t *)((char *)s1 + 144) = v0;
-    v0 = 1;
-    *(uint8_t *)((char *)s1 + 156) = s4;
-
-    /* fragment 53: Branch */
-    *(uint8_t *)((char *)s1 + 157) = v0;
-    goto tx_isp_core_probe0x3e4;
-
-tx_isp_core_probe0x460:
-    /* fragment 54: Arithmetic */
-    v0 = 1920;
-
-    /* fragment 55: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 140) = v0;
-    v0 = 1080;
-    *(uint32_t *)((char *)s1 + 144) = v0;
-    *(uint8_t *)((char *)s1 + 156) = s2;
-
-    /* fragment 56: Branch */
-    *(uint8_t *)((char *)s1 + 157) = s2;
-    goto tx_isp_core_probe0x3e4;
-
-tx_isp_core_probe0x47c:
-    /* fragment 57: Arithmetic */
-    v0 = 2624;
-
-tx_isp_core_probe0x480:
-    /* fragment 58: MemoryAccess */
-    *(uint32_t *)((char *)s1 + 140) = v0;
-    v0 = 2048;
-    *(uint32_t *)((char *)s1 + 144) = v0;
-    *(uint8_t *)((char *)s1 + 156) = s4;
-
-    /* fragment 59: Branch */
-    *(uint8_t *)((char *)s1 + 157) = 0;
-    goto tx_isp_core_probe0x3e4;
-
-tx_isp_core_probe0x498:
-    /* fragment 60: CallSetup */
-    local_14 = 3550;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC191, &__pow2_lut, 3550); /* jalr target resolved by relocation */
-
-    /* fragment 61: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 296);
-    v0 = v0 < 2;
-
-    /* fragment 62: Branch */
-    int _bc_v0_62 = v0 != 0;
-    v0 = 458752;
-    if (_bc_v0_62) { goto tx_isp_core_probe0x4e4; }
-
-    /* fragment 63: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)ispcore_slake_module)(s0); /* jalr target resolved by relocation */
-
-tx_isp_core_probe0x4e4:
-    /* fragment 64: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(*(uint32_t *)((char *)(s0) + 428)); /* jalr target resolved by relocation */
-
-    /* fragment 65: Arithmetic */
-    v0 = 1;
-
-    /* fragment 66: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 436) = v0;
-
-    /* fragment 67: Branch */
-    *(uint32_t *)((char *)s0 + 428) = 0;
-    goto tx_isp_core_probe0x204;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000073e94 origin=fragment_seed original=ispcore_s_wdr_en */
