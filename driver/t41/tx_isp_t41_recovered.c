@@ -1293,6 +1293,8 @@ static unsigned char top_bypass_global[8];
 static unsigned char top_info_storage[8] __attribute__((aligned(4)));
 /* Channel 1 is unavailable on this target; keep SDNS state without moving BSS. */
 #define sdns_info (((uint32_t *)(void *)top_info_storage)[1])
+/* The unavailable WDR channel-1 slot likewise backs the missing YSP scalar. */
+#define ysp_info (wdr_info[1])
 static struct file_operations tisp_fops;
 static unsigned char data_1388[16384];
 static uint32_t ev_last;
@@ -1815,9 +1817,10 @@ static int32_t *ptr_t3;
 static unsigned char data_56438[16384];
 static unsigned char data_86540[16384];
 static uint32_t ysp_paramsP;
-static uintptr_t (*data_8657c)(void);
-static uintptr_t (*data_86580)(void);
-static uintptr_t (*data_86584)(void);
+/* Retain the recovered callback aliases even when safe YSP teardown omits them. */
+static uintptr_t (*data_8657c)(void) __attribute__((used));
+static uintptr_t (*data_86580)(void) __attribute__((used));
+static uintptr_t (*data_86584)(void) __attribute__((used));
 static unsigned char _bss_globals[16384];
 static unsigned char msca_slock_storage[8] __attribute__((aligned(4)));
 #define msca_slock (*(uint32_t *)(void *)msca_slock_storage)
@@ -127288,6 +127291,12 @@ tisp_ysp_par_refresh0x9c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005bc00 origin=fragment_seed original=tisp_ysp_refresh */
 int32_t tisp_ysp_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* YSP is held in top bypass until its register writer is complete. */
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
     uint32_t ra = 0;
@@ -127309,11 +127318,64 @@ int32_t tisp_ysp_refresh(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005bc28 origin=fragment_seed original=tisp_ysp_init */
 int32_t tisp_ysp_init(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *runtime;
+    uint8_t *params;
+    uint8_t *params_copy;
+    uint32_t *bypass;
+
+    /* Preserve the recovered scalar BSS slot; this target uses channel 0. */
+    if (a0 != 0)
+        return -EINVAL;
+    if (ysp_info || ysp_paramsP)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    info = private_kmalloc(16, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 16);
+    ysp_info = (uint32_t)(uintptr_t)info;
+
+    runtime = private_vmalloc(274);
+    if (!runtime)
+        goto fail;
+    memset(runtime, 0, 274);
+
+    params_copy = private_vmalloc(2680);
+    if (!params_copy)
+        goto fail;
+    memset(params_copy, 0, 2680);
+    memcpy(params_copy, params + 65536 + 28108, 2680);
+    ysp_paramsP = (uint32_t)(uintptr_t)params_copy;
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 28108);
+    *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)runtime;
+    *(uint32_t *)(void *)(info + 8) = 0xffffffffU;
+
+    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
+    *bypass |= BIT(17);
+    system_reg_write((a0 + 16) << 2, *bypass);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: ysp-init safe bypass channel=%u\n", a0);
+    return 0;
+
+fail:
+    tisp_ysp_deinit(a0);
+    return -ENOMEM;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t local_1c = 0;
@@ -127418,10 +127480,36 @@ tisp_ysp_init0x84:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005bde0 origin=model_output original=tisp_ysp_deinit */
 int tisp_ysp_deinit(int arg1) {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+    if (arg1 != 0)
+        return -EINVAL;
+
+    info = (uint8_t *)(uintptr_t)ysp_info;
+    if (info) {
+        uint32_t runtime = *(uint32_t *)(void *)(info + 4);
+
+        if (runtime)
+            private_vfree((void *)(uintptr_t)runtime);
+        private_kfree(info);
+        ysp_info = 0;
+    }
+    if (ysp_paramsP) {
+        private_vfree((void *)(uintptr_t)ysp_paramsP);
+        ysp_paramsP = 0;
+    }
+    callbacks[204 / 4] = 0;
+    callbacks[208 / 4] = 0;
+    callbacks[212 / 4] = 0;
+    return 0;
+#else
     void *base = (void *)((char *)&tpm_cb + 0x50) + (arg1 << 2);
     void *ptr = *(void **)((char *)base + 0x0);
 
@@ -127453,11 +127541,16 @@ int tisp_ysp_deinit(int arg1) {
     }
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005bebc origin=fragment_seed original=tisp_ysp_dn_params_refresh */
 int32_t tisp_ysp_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -127514,6 +127607,7 @@ tisp_ysp_dn_params_refresh0x38:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005bf80 origin=fragment_seed original=tisp_ysp_param_array_get */
