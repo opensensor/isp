@@ -120642,10 +120642,17 @@ int32_t tisp_mdns_intp(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056394 origin=model_output original=tisp_mdns_wdr_en */
 int32_t tisp_mdns_wdr_en(int32_t arg1, int32_t arg2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* MDNS remains bypassed until its recovered register path is complete. */
+    (void)arg1;
+    (void)arg2;
+    return 0;
+#else
     int32_t *base = tisp_mdns_wdr_en_table;
     int32_t *entry = &base[arg1 << 2];
     ((void **)entry)[4] = arg2;
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000563b4 origin=fragment_seed original=tisp_mdns_func_en */
@@ -120910,6 +120917,12 @@ tisp_mdns_par_refresh0xb8:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000565fc origin=fragment_seed original=tisp_mdns_refresh */
 int32_t tisp_mdns_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Safe-bypass mode deliberately suppresses MDNS interpolation/writes. */
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
@@ -120938,11 +120951,74 @@ int32_t tisp_mdns_refresh(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056658 origin=fragment_seed original=tisp_mdns_init */
 int32_t tisp_mdns_init(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *runtime;
+    uint8_t *params;
+    uint32_t *bypass;
+    uint32_t width;
+    uint32_t height;
+
+    /* Preserve the recovered BSS layout; this T41 ISP exposes channel 0. */
+    if (a0 != 0 || !a1)
+        return -EINVAL;
+    if (mdns_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+    width = *(uint32_t *)(uintptr_t)a1;
+    height = *(uint32_t *)(uintptr_t)(a1 + 4);
+    if (!width || !height)
+        return -EINVAL;
+
+    /*
+     * Recreate the OEM T41 ownership layout, but hold MDNS in top bypass.
+     * Its recovered all-register refresh loses the final register-programming
+     * call, so publishing the object without enabling that path is safest.
+     */
+    info = private_kmalloc(48, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 48);
+    mdns_info = (uint32_t)(uintptr_t)info;
+
+    runtime = private_vmalloc(140);
+    if (!runtime)
+        goto fail;
+    memset(runtime, 0, 140);
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 16128);
+    *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)runtime;
+    *(uint32_t *)(void *)(info + 8) = 0xffffffffU;
+    *(uint32_t *)(void *)(info + 16) =
+        *(uint32_t *)(uintptr_t)(a1 + 120);
+    *(uint32_t *)(void *)(info + 20) = width;
+    *(uint32_t *)(void *)(info + 24) = height;
+    private_raw_mutex_init((struct mutex *)(void *)(info + 32),
+                           "mdns_mlock", NULL);
+
+    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
+    *bypass |= BIT(13);
+    system_reg_write((a0 + 16) << 2, *bypass);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: mdns-init safe bypass channel=%u %ux%u\n",
+           a0, width, height);
+    return 0;
+
+fail:
+    tisp_mdns_deinit(a0);
+    return -ENOMEM;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -121045,11 +121121,33 @@ tisp_mdns_init0x94:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005681c origin=model_output original=tisp_mdns_deinit */
 int32_t tisp_mdns_deinit(int32_t arg1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+    if (arg1 != 0)
+        return -EINVAL;
+
+    info = (uint8_t *)(uintptr_t)mdns_info;
+    if (info) {
+        uint32_t runtime = *(uint32_t *)(void *)(info + 4);
+
+        if (runtime)
+            private_vfree((void *)(uintptr_t)runtime);
+        private_kfree(info);
+        mdns_info = 0;
+    }
+    callbacks[144 / 4] = 0;
+    callbacks[148 / 4] = 0;
+    callbacks[152 / 4] = 0;
+    return 0;
+#else
 	void *s0 = data_56438;
 	void *s2;
 	int32_t *s1 = arg1 << 2;
@@ -121088,11 +121186,17 @@ int32_t tisp_mdns_deinit(int32_t arg1)
 		*(uint32_t *)((uintptr_t)data_86540 + 152) = 0;
 
 	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000568d8 origin=fragment_seed original=tisp_mdns_dn_params_refresh */
 int32_t tisp_mdns_dn_params_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -121135,6 +121239,7 @@ int32_t tisp_mdns_dn_params_refresh(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005696c origin=fragment_seed original=tisp_mdns_param_array_get */
