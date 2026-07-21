@@ -131525,6 +131525,55 @@ int32_t tisp_hldc_write_reg(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005eb1c origin=fragment_seed original=tisp_hldc_init */
 int32_t tisp_hldc_init(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *tpm;
+    uint8_t *params;
+    uint32_t width;
+    uint32_t height;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    width = *(uint32_t *)(void *)(a1);
+    height = *(uint32_t *)(void *)(a1 + 4);
+
+    info = private_kmalloc(16, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 16);
+    ((uint32_t *)(void *)&ivdc_threshold_line)[a0] =
+        (uint32_t)(uintptr_t)info;
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 31688);
+    *(uint16_t *)(void *)(info + 4) = 128;
+    *(uint16_t *)(void *)(info + 6) = (uint16_t)width;
+    *(uint16_t *)(void *)(info + 8) = (uint16_t)height;
+    *(uint16_t *)(void *)(info + 10) = (uint16_t)(width >> 1);
+    *(uint16_t *)(void *)(info + 12) = (uint16_t)(height >> 1);
+    *(uint8_t *)(void *)(info + 14) = 0;
+
+    tisp_hldc_write_reg(a0);
+    system_reg_write(864, 0x20220721);
+
+    tpm = (uint32_t *)(void *)tpm_cb_storage;
+    tpm[264 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_hldc_pm_get_regsize;
+    tpm[268 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_hldc_pm_suspend;
+    tpm[272 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_hldc_pm_resume;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: hldc-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -131610,6 +131659,7 @@ int32_t tisp_hldc_init(uint32_t a0, uintptr_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005ec4c origin=fragment_seed original=tisp_hldc_deinit */
@@ -136734,6 +136784,73 @@ tisp_irsca_para_calc0x98:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006336c origin=fragment_seed original=tisp_msca_init */
 int32_t tisp_msca_init(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *hard;
+    uint8_t *mem;
+    uint8_t *dmode;
+    uint32_t *tpm;
+    uint8_t *params;
+    uint32_t *slot;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    *(uint16_t *)(void *)&s_irsca_height = (uint16_t)a2;
+    *(uint16_t *)(void *)&s_irsca_width = (uint16_t)a1;
+
+    info = private_kmalloc(1300, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 1300);
+
+    hard = private_kmalloc(26, 0x024000c0);
+    mem = private_kmalloc(26, 0x024000c0);
+    dmode = private_kmalloc(26, 0x024000c0);
+    if (!hard || !mem || !dmode) {
+        if (info) private_kfree(info);
+        if (hard) private_kfree(hard);
+        if (mem) private_kfree(mem);
+        if (dmode) private_kfree(dmode);
+        return -ENOMEM;
+    }
+    memset(hard, 0, 26);
+    memset(mem, 0, 26);
+    memset(dmode, 0, 26);
+
+    slot = (uint32_t *)(void *)&ivdc_threshold_line;
+    slot[a0 + 4403] = (uint32_t)(uintptr_t)info;
+
+    mscaHardParTmp = (uint32_t)(uintptr_t)hard;
+    ivdc_mem_line = (uint32_t)(uintptr_t)mem;
+    direct_mode = (uint32_t)(uintptr_t)dmode;
+    mscaHardPar = (uint32_t)(uintptr_t)hard;
+
+    *(uint32_t *)(void *)((char *)&ivdc_threshold_line + 17604) =
+        (uint32_t)(uintptr_t)mem;
+    *(uint32_t *)(void *)((char *)&ivdc_threshold_line + 17608) =
+        (uint32_t)(uintptr_t)dmode;
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 32476);
+
+    tpm = (uint32_t *)(void *)tpm_cb_storage;
+    tpm[312 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_msca_pm_get_regsize;
+    tpm[316 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_msca_pm_suspend;
+    tpm[320 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_msca_pm_resume;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: msca-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -136891,6 +137008,7 @@ int32_t tisp_msca_init(uint32_t a0, uint32_t a1, uint32_t a2)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006359c origin=fragment_seed original=tisp_msca_params_update */
@@ -137983,6 +138101,30 @@ tisp_tstp_mark2_func0xbc:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006444c origin=fragment_seed original=tisp_tstp_init */
 int32_t tisp_tstp_init(void)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *tpm;
+
+    info = private_vmalloc(154);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 154);
+    main_tstp = (uint32_t)(uintptr_t)info;
+
+    tisp_tstp_reg_cfg();
+
+    tpm = (uint32_t *)(void *)tpm_cb_storage;
+    tpm[276 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_tstp_pm_get_regsize;
+    tpm[280 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_tstp_pm_suspend;
+    tpm[284 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_tstp_pm_resume;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tstp-init safe neutral\n");
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *a0 = 0;
     uint32_t a1 = 0;
@@ -138025,6 +138167,7 @@ int32_t tisp_tstp_init(void)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000644d0 origin=fragment_seed original=tisp_tstp_deinit */
@@ -141577,6 +141720,42 @@ tisp_gsm_interrupt_hist0x94:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066b60 origin=fragment_seed original=tisp_gsm_init */
 int32_t tisp_gsm_init(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint32_t width;
+    uint32_t height;
+    uint32_t area;
+    uint32_t *tpm;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    width = *(uint32_t *)(void *)(a1);
+    height = *(uint32_t *)(void *)(a1 + 4);
+
+    system_irq_func_set(a0, a0 * 42 + 7,
+                        (int)(uintptr_t)tisp_gsm_interrupt_hist);
+    tisp_event_set_cb(a0, 16, (int)(uintptr_t)tisp_gsm_process);
+
+    area = width * height;
+    *(uint32_t *)(void *)((char *)&s_gsm_image_area_div + 4) = 0;
+    *(uint32_t *)(void *)&s_gsm_image_area = area;
+    *(uint32_t *)(void *)&s_gsm_image_area_div = 2147483648U;
+
+    system_reg_write(0x1b020,
+                     *(uint16_t *)(void *)((char *)&gsm_hist_para + 0xc00));
+
+    tpm = (uint32_t *)(void *)tpm_cb_storage;
+    tpm[252 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_gsm_pm_get_regsize;
+    tpm[256 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_gsm_pm_suspend;
+    tpm[260 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_gsm_pm_resume;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: gsm-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -141643,6 +141822,7 @@ int32_t tisp_gsm_init(uint32_t a0, uintptr_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066c7c origin=fragment_seed original=tisp_gsm_api_set */
@@ -146051,6 +146231,45 @@ int32_t tisp_raw_pm_resume(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006b180 origin=fragment_seed original=tisp_raw_init */
 int32_t tisp_raw_init(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *tpm;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    if (rpars)
+        return -EBUSY;
+
+    info = private_vmalloc(48);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 48);
+    rpars = (uint32_t)(uintptr_t)info;
+
+    private_init_completion((uintptr_t)(info + 16));
+    private_init_completion((uintptr_t)(info + 32));
+
+    system_irq_func_set(a0, a0 * 42 + 68,
+                        (int)(uintptr_t)tisp_raw_wdma_fd_interrupt);
+    system_irq_func_set(a0, a0 * 42 + 69,
+                        (int)(uintptr_t)tisp_raw_rdma_fd_interrupt);
+
+    memset((void *)(uintptr_t)&tisp_raw_info, 0, 16);
+    ((uint32_t *)(void *)&tisp_raw_info)[7] = 0;
+
+    tpm = (uint32_t *)(void *)tpm_cb_storage;
+    tpm[288 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_raw_pm_get_regsize;
+    tpm[292 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_raw_pm_suspend;
+    tpm[296 / sizeof(uint32_t)] =
+        (uint32_t)(uintptr_t)tisp_raw_pm_resume;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: raw-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -146119,6 +146338,7 @@ int32_t tisp_raw_init(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006b280 origin=fragment_seed original=tisp_raw_deinit */
