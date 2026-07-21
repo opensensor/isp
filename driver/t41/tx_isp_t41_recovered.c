@@ -1231,7 +1231,9 @@ struct v4l2_format;
 static uint16_t FrameSize[5];
 static uint32_t WDRMODE, __bss_start, _awb_base, _awb_bss_base, _bss_anchor, _cb_base;
 static uint32_t _tisp_tmo_detailen_base, adr_ctc1_y_change, adr_ev, adr_ev_changed, adr_ev_top;
-static uint32_t adr_info, adr_tg_f_top, adr_tgain_changed, adr_tgain_top, ae_info;
+static uint32_t adr_info, adr_tg_f_top, adr_tgain_changed, adr_tgain_top, ae_info[2];
+static uint32_t ae_buf_info[2];
+static unsigned char slock_hist_storage[8] __attribute__((aligned(4)));
 static uint32_t af_buf_info[2], af_info[2];
 static uint32_t pst_awb_ct_detect[2], awb_info[2];
 static uint32_t bcsh_info, blc_info, ccm_info, cdns_info, chx_shd_flags, clk_cnt_39069;
@@ -35662,75 +35664,30 @@ int32_t sub_17498(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000174a0 origin=fragment_seed original=fix_point_div_32 */
 int32_t fix_point_div_32(uint32_t a0, uint32_t a1, uint32_t a2)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    uint32_t quotient;
+    uint32_t remainder;
+    uint32_t fractional = 0;
+    uint32_t bit = 0;
 
-    /* fragment 0: Unknown */
-    /* unmatched fragment 0 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 174a0:	00a6001b 	divu	zero,a1,a2 */
+    if (!a2 || a0 > 31U)
+        return 0;
 
-    /* fragment 1: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 2: Arithmetic */
-    a3 = a0;
-    v1 = 0;
-
-    /* fragment 3: StackAccess */
-    local_10 = s0;
-    local_14 = ra;
-    s0 = 0;
-
-fix_point_div_320x24:
-    /* fragment 4: Branch */
-    v0 = (uintptr_t)v0 << 1;
-    if (v1 == a3) { goto fix_point_div_320x60; }
-
-    /* fragment 5: Arithmetic */
-    a1 = a2 < v0;
-
-    /* fragment 6: Branch */
-    s0 = (uintptr_t)s0 << 1;
-    if (a1 == 0) { goto fix_point_div_320x48; }
-
-    /* fragment 7: Arithmetic */
-    s0 = (uintptr_t)s0 | 1;
-    v0 = v0 - a2;
-
-fix_point_div_320x40:
-    /* fragment 8: Branch */
-    v1 = v1 + 1;
-    goto fix_point_div_320x24;
-
-fix_point_div_320x48:
-    /* fragment 9: Branch */
-    if (a2 != v0) { goto fix_point_div_320x40; }
-
-    /* fragment 10: CallSetup */
-    v0 = a3 - 1;
-    s0 = (uintptr_t)s0 | 1;
-    v1 = (uintptr_t)v0 - (uintptr_t)v1;
-    s0 = (uintptr_t)s0 << (uintptr_t)v1;
-
-fix_point_div_320x60:
-    /* fragment 11: CallSetup */
-   v0 = __ashldi3(a0, 0, a3);
-
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 13: Arithmetic */
-    v0 = (uintptr_t)s0 | (uintptr_t)v0;
-
-    /* fragment 14: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    quotient = a1 / a2;
+    remainder = a1 % a2;
+    while (bit != a0) {
+        remainder <<= 1;
+        fractional <<= 1;
+        if (a2 < remainder) {
+            fractional |= 1U;
+            remainder -= a2;
+        } else if (a2 == remainder) {
+            fractional |= 1U;
+            fractional <<= a0 - 1U - bit;
+            break;
+        }
+        bit++;
+    }
+    return (int32_t)(fractional | (quotient << a0));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017528 origin=fragment_seed original=tisp_math_exp2 */
@@ -36665,24 +36622,10 @@ uint32_t fix_point_sub_32(uint32_t pointpos, uint32_t left, uint32_t right)
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017d44 origin=model_output original=fix_point_mult2_32 */
 int32_t fix_point_mult2_32(int32_t arg1, int32_t arg2, int32_t arg3) {
-    uint32_t shift = (uint32_t)(-arg1) & 0x1f;
-    uint32_t a3 = (uint32_t)arg2 >> (arg1 & 0x1f);
-    uint32_t t0 = (uint32_t)arg3 >> (arg1 & 0x1f);
-    int32_t a1 = (int32_t)(0xffffffffU & arg2);
-    int32_t a2 = (int32_t)(0xffffffffU & arg3);
-    
-    int32_t v0 = (int32_t)((uint32_t)a3 * t0);
-    
-    int64_t hi_lo = (int64_t)a1 * t0 + (int64_t)a3 * a2;
-    int32_t lo = (int32_t)hi_lo;
-    
-    v0 = v0 << (arg1 & 0x1f);
-    v0 = lo + v0;
-    
-    int32_t a1a2 = a1 * a2;
-    a1a2 = a1a2 >> (arg1 & 0x1f);
-    
-    return v0 + a1a2;
+    if (arg1 < 0 || arg1 > 31)
+        return 0;
+    return (int32_t)(((uint64_t)(uint32_t)arg2 *
+                      (uint32_t)arg3) >> (uint32_t)arg1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017d88 origin=fragment_seed original=fix_point_mult3_32 */
@@ -51695,6 +51638,7 @@ tisp_ae_lib_bilinear_intp0xe8:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021f40 origin=fragment_seed original=tisp_ae_malloc_cfg */
+#if 0
 int32_t* tisp_ae_malloc_cfg(uint32_t a0)
 {
     uint32_t local_14 = 0;
@@ -51810,6 +51754,50 @@ tisp_ae_malloc_cfg0xbc:
 
     return (int32_t*)v0;
 }
+#endif
+
+int32_t *tisp_ae_malloc_cfg(uint32_t channel)
+{
+    uint32_t *info;
+    unsigned char *buffer;
+    uint32_t physical;
+
+    if (channel >= ARRAY_SIZE(ae_buf_info))
+        return NULL;
+    if (ae_buf_info[channel])
+        return (int32_t *)(uintptr_t)ae_buf_info[channel];
+
+    info = private_kmalloc(24, GFP_KERNEL);
+    if (!info)
+        return NULL;
+    memset(info, 0, 24);
+    ae_buf_info[channel] = (uint32_t)(uintptr_t)info;
+
+    buffer = private_kmalloc(24576, GFP_KERNEL);
+    if (!buffer) {
+        private_kfree(info);
+        ae_buf_info[channel] = 0;
+        return NULL;
+    }
+    physical = (uint32_t)(uintptr_t)buffer + 0x80000000U;
+    system_reg_write(0x1902c, physical);
+    system_reg_write(0x19030, physical + 0x1000);
+    system_reg_write(0x19034, physical + 0x2000);
+    system_reg_write(0x19038, physical + 0x3000);
+    system_reg_write(0x1903c, physical + 0x4000);
+    system_reg_write(0x19040, physical + 0x4800);
+    system_reg_write(0x19044, physical + 0x5000);
+    system_reg_write(0x19048, physical + 0x5800);
+    system_reg_write(0x1904c, 0x10010033);
+
+    info[0] = 4;
+    info[1] = (uint32_t)(uintptr_t)buffer;
+    info[2] = physical;
+    info[3] = 4;
+    info[4] = (uint32_t)(uintptr_t)(buffer + 0x4000);
+    info[5] = physical + 0x4000;
+    return (int32_t *)info;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000220f4 origin=fragment_seed original=system_reg_set_ae_trig */
 int32_t system_reg_set_ae_trig(void)
@@ -51835,6 +51823,7 @@ int32_t system_reg_set_ae_trig(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002210c origin=fragment_seed original=tisp_ae_set_hardware_param */
+#if 0
 int64_t tisp_ae_set_hardware_param(uint32_t a0)
 {
     uint32_t *local_10 = 0;
@@ -52118,6 +52107,86 @@ tisp_ae_set_hardware_param0x30c:
     goto tisp_ae_set_hardware_param0xb0;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+static uint32_t t41_ae_pack_grid4(const unsigned char *state,
+                                  unsigned int offset)
+{
+    return *(const uint16_t *)(state + offset) |
+           (*(const uint16_t *)(state + offset + 2) << 8) |
+           (*(const uint16_t *)(state + offset + 4) << 16) |
+           (*(const uint16_t *)(state + offset + 6) << 24);
+}
+
+int64_t tisp_ae_set_hardware_param(uint32_t channel)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    uint32_t horizontal_count;
+    uint32_t vertical_count;
+    uint32_t horizontal_offset;
+    uint32_t vertical_offset;
+    uint32_t horizontal_step;
+    uint32_t vertical_step;
+    uint32_t packed;
+    uint32_t value;
+    unsigned int i;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+
+    vertical_offset = *(uint16_t *)(params + 1800);
+    vertical_count = *(uint16_t *)(params + 1802);
+    horizontal_offset = *(uint16_t *)(params + 1804);
+    horizontal_count = *(uint16_t *)(params + 1806);
+    packed = (horizontal_count << 28) |
+             (horizontal_offset << 16) |
+             (vertical_count << 12) | vertical_offset;
+
+    horizontal_step = ((*(uint16_t *)(state + 8548) + 1) >> 1) -
+                      horizontal_offset;
+    if (horizontal_count)
+        horizontal_step /= horizontal_count;
+    for (i = 0; i < horizontal_count && i < 15; ++i)
+        *(uint16_t *)(state + 8700 + i * 2) = horizontal_step;
+
+    vertical_step = ((*(uint16_t *)(state + 8550) + 1) >> 1) -
+                    vertical_offset;
+    if (vertical_count)
+        vertical_step /= vertical_count;
+    for (i = 0; i < vertical_count && i < 15; ++i)
+        *(uint16_t *)(state + 8730 + i * 2) = vertical_step;
+
+    system_reg_write(0x19004, packed);
+    system_reg_write(0x19008, t41_ae_pack_grid4(state, 8700));
+    system_reg_write(0x1900c, t41_ae_pack_grid4(state, 8708));
+    system_reg_write(0x19010, t41_ae_pack_grid4(state, 8716));
+    system_reg_write(0x19014,
+                     *(uint16_t *)(state + 8724) |
+                     (*(uint16_t *)(state + 8726) << 8) |
+                     (*(uint16_t *)(state + 8728) << 16));
+    system_reg_write(0x19018, t41_ae_pack_grid4(state, 8730));
+    system_reg_write(0x1901c, t41_ae_pack_grid4(state, 8738));
+    system_reg_write(0x19020, t41_ae_pack_grid4(state, 8746));
+    system_reg_write(0x19024,
+                     *(uint16_t *)(state + 8754) |
+                     (*(uint16_t *)(state + 8756) << 8) |
+                     (*(uint16_t *)(state + 8758) << 16));
+
+    value = *(uint16_t *)(params + 1810);
+    if (value < 255)
+        value = 255;
+    packed = (*(uint16_t *)(params + 1814) << 20) |
+             (*(uint16_t *)(params + 1812) << 16) |
+             *(uint16_t *)(params + 1808) |
+             (((value * 2) / 3) << 8);
+    system_reg_write(0x19028, packed);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002242c origin=model_output original=tisp_ae_get_hist */
@@ -52509,6 +52578,7 @@ tisp_set_ae_sensor_fps0xb4:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000228f4 origin=fragment_seed original=tisp_ae_sensor_par_ctrls_update */
+#if 0
 int64_t tisp_ae_sensor_par_ctrls_update(uint32_t a0)
 {
     uint32_t *local_10 = 0;
@@ -52956,8 +53026,113 @@ tisp_ae_sensor_par_ctrls_update0x500:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#endif
+
+int64_t tisp_ae_sensor_par_ctrls_update(uint32_t channel)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    unsigned char *cache;
+    unsigned char *par;
+    uint32_t lower;
+    uint32_t upper;
+    uint32_t precision;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    cache = *(unsigned char **)(void *)(ae_cache +
+                                        channel * sizeof(uint32_t));
+    if (!cache)
+        cache = ae_cache_init + channel * 0x688;
+    par = (unsigned char *)&tisp_par_info + channel * 160;
+
+    *(uint32_t *)(state + 7536) =
+        *(uint32_t *)(sensor_ctrl_main_storage + 48);
+    *(uint32_t *)(state + 7540) = 1024;
+    *(uint32_t *)(state + 7544) = 1024;
+    *(uint32_t *)(state + 7548) = 1024;
+    *(uint32_t *)(state + 7552) =
+        *(uint32_t *)(sensor_ctrl_main_storage + 52);
+    *(uint32_t *)(state + 7556) = tisp_math_exp2(
+        *(uint32_t *)(sensor_ctrl_main_storage + 40), 16, 10);
+    *(uint32_t *)(state + 7560) = tisp_math_exp2(
+        *(uint32_t *)(sensor_ctrl_main_storage + 44), 16, 10);
+    *(uint32_t *)(state + 7564) = 32767;
+
+    lower = *(uint32_t *)(state + 7536);
+    if (params[1242] == 1 && lower < *(uint32_t *)(params + 440))
+        lower = *(uint32_t *)(params + 440);
+    upper = *(uint32_t *)(state + 7552);
+    if (params[1246] == 1 && upper > *(uint32_t *)(params + 456))
+        upper = *(uint32_t *)(params + 456);
+    if (lower > upper)
+        lower = upper;
+    *(uint32_t *)(cache + 608) = lower;
+    *(uint32_t *)(cache + 624) = upper;
+    *(uint32_t *)(params + 440) = lower;
+    *(uint32_t *)(params + 456) = upper;
+
+    lower = *(uint32_t *)(state + 7540);
+    if (params[1243] == 1 && lower < *(uint32_t *)(params + 444))
+        lower = *(uint32_t *)(params + 444);
+    upper = *(uint32_t *)(state + 7556);
+    if (params[1247] == 1 && upper > *(uint32_t *)(params + 460))
+        upper = *(uint32_t *)(params + 460);
+    if (lower > upper)
+        lower = upper;
+    *(uint32_t *)(cache + 612) = lower;
+    *(uint32_t *)(cache + 628) = upper;
+    *(uint32_t *)(params + 444) = lower;
+    *(uint32_t *)(params + 460) = upper;
+
+    lower = *(uint32_t *)(state + 7548);
+    if (params[1245] == 1 && lower < *(uint32_t *)(params + 452))
+        lower = *(uint32_t *)(params + 452);
+    upper = *(uint32_t *)(state + 7564);
+    if (params[1249] == 1 && upper > *(uint32_t *)(params + 468))
+        upper = *(uint32_t *)(params + 468);
+    if (lower > upper)
+        lower = upper;
+    *(uint32_t *)(cache + 620) = lower;
+    *(uint32_t *)(cache + 636) = upper;
+    *(uint32_t *)(params + 452) = lower;
+    *(uint32_t *)(params + 468) = upper;
+    *(uint32_t *)(cache + 616) = *(uint32_t *)(state + 7544);
+    *(uint32_t *)(cache + 632) = *(uint32_t *)(state + 7560);
+
+    *(uint16_t *)(state + 8554) = *(uint16_t *)(par + 74);
+    *(uint16_t *)(state + 8556) = *(uint16_t *)(par + 72);
+    if (!*(uint16_t *)(par + 58))
+        *(uint32_t *)(params + 1660) = 0x190001;
+    if (!*(uint16_t *)(par + 54))
+        *(uint32_t *)(params + 1664) = 0x50001;
+
+    precision = *(uint16_t *)(params + 1728);
+    *(uint32_t *)(cache + 1260) = fix_point_div_32(
+        precision,
+        (*(uint32_t *)(par + 48) >> 16) << precision,
+        (*(uint32_t *)(par + 48) & 0xffff) << precision);
+    *(uint32_t *)(cache + 1264) = fix_point_div_32(
+        precision,
+        (*(uint32_t *)(par + 52) >> 16) << precision,
+        (*(uint32_t *)(par + 52) & 0xffff) << precision);
+    *(uint32_t *)(cache + 1268) = fix_point_div_32(
+        precision,
+        (*(uint32_t *)(par + 56) >> 16) << precision,
+        (*(uint32_t *)(par + 56) & 0xffff) << precision);
+    *(uint32_t *)(params + 1660) =
+        ((*(uint32_t *)(par + 56) << 1) & 0xffff0000) + 2;
+    *(uint32_t *)(params + 1664) =
+        ((*(uint32_t *)(par + 52) << 1) & 0xffff0000) + 2;
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022e08 origin=fragment_seed original=tisp_ae_short_sensor_par_ctrls_update */
+#if 0
 int64_t tisp_ae_short_sensor_par_ctrls_update(uint32_t a0)
 {
     uint32_t *local_10 = 0;
@@ -53297,6 +53472,89 @@ tisp_ae_short_sensor_par_ctrls_update0x36c:
     goto tisp_ae_short_sensor_par_ctrls_update0x29c;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+int64_t tisp_ae_short_sensor_par_ctrls_update(uint32_t channel)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    unsigned char *cache;
+    uint32_t lower;
+    uint32_t upper;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    cache = *(unsigned char **)(void *)(ae_cache +
+                                        channel * sizeof(uint32_t));
+    if (!cache)
+        cache = ae_cache_init + channel * 0x688;
+
+    *(uint32_t *)(state + 7568) =
+        *(uint32_t *)(sensor_ctrl_main_storage + 88);
+    *(uint32_t *)(state + 7572) = 1024;
+    *(uint32_t *)(state + 7576) = 1024;
+    *(uint32_t *)(state + 7580) = 1024;
+    *(uint32_t *)(state + 7584) =
+        *(uint32_t *)(sensor_ctrl_main_storage + 92);
+    *(uint32_t *)(state + 7588) = tisp_math_exp2(
+        *(uint32_t *)(sensor_ctrl_main_storage + 96), 16, 10);
+    *(uint32_t *)(state + 7592) = tisp_math_exp2(
+        *(uint32_t *)(sensor_ctrl_main_storage + 100), 16, 10);
+    *(uint32_t *)(state + 7596) = 32767;
+
+    lower = *(uint32_t *)(state + 7568);
+    if (params[1250] == 1 && lower < *(uint32_t *)(params + 472))
+        lower = *(uint32_t *)(params + 472);
+    upper = *(uint32_t *)(state + 7584);
+    if (params[1254] == 1 && upper > *(uint32_t *)(params + 488))
+        upper = *(uint32_t *)(params + 488);
+    if (lower > upper)
+        lower = upper;
+    *(uint32_t *)(cache + 640) = lower;
+    *(uint32_t *)(cache + 656) = upper;
+    *(uint32_t *)(params + 472) = lower;
+    *(uint32_t *)(params + 488) = upper;
+
+    if (*(uint16_t *)(params + 1224) == 1) {
+        lower = *(uint32_t *)(cache + 612);
+        upper = *(uint32_t *)(cache + 628);
+    } else {
+        lower = *(uint32_t *)(state + 7572);
+        if (params[1251] == 1 &&
+            lower < *(uint32_t *)(params + 476))
+            lower = *(uint32_t *)(params + 476);
+        upper = *(uint32_t *)(state + 7588);
+        if (params[1255] == 1 &&
+            upper > *(uint32_t *)(params + 492))
+            upper = *(uint32_t *)(params + 492);
+    }
+    if (lower > upper)
+        lower = upper;
+    *(uint32_t *)(cache + 644) = lower;
+    *(uint32_t *)(cache + 660) = upper;
+    *(uint32_t *)(params + 476) = lower;
+    *(uint32_t *)(params + 492) = upper;
+
+    lower = *(uint32_t *)(state + 7580);
+    if (params[1253] == 1 && lower < *(uint32_t *)(params + 484))
+        lower = *(uint32_t *)(params + 484);
+    upper = *(uint32_t *)(state + 7596);
+    if (params[1257] == 1 && upper > *(uint32_t *)(params + 500))
+        upper = *(uint32_t *)(params + 500);
+    if (lower > upper)
+        lower = upper;
+    *(uint32_t *)(cache + 652) = lower;
+    *(uint32_t *)(cache + 668) = upper;
+    *(uint32_t *)(params + 484) = lower;
+    *(uint32_t *)(params + 500) = upper;
+    *(uint32_t *)(cache + 648) = *(uint32_t *)(state + 7576);
+    *(uint32_t *)(cache + 664) = *(uint32_t *)(state + 7592);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000023188 origin=fragment_seed original=tisp_ae_get_bv */
@@ -55329,6 +55587,7 @@ int32_t tisp_ae_max_exp_calc_fps(uint32_t a0, uint32_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024684 origin=fragment_seed original=tisp_ae_fps_calc_max_exp */
+#if 0
 int32_t tisp_ae_fps_calc_max_exp(uint32_t a0, uint32_t a1)
 {
     uint32_t *local_10 = 0;
@@ -55399,6 +55658,44 @@ tisp_ae_fps_calc_max_exp0xac:
     /* fragment 7: Epilogue */
     /* function epilogue: restore registers and return */
 
+    return 0;
+}
+#endif
+
+int32_t tisp_ae_fps_calc_max_exp(uint32_t channel, uint32_t period)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    unsigned char *cache;
+    uint32_t precision;
+    uint32_t frame_lines;
+    uint32_t sensor_margin;
+    uint32_t result;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return 0;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    cache = *(unsigned char **)(void *)(ae_cache +
+                                        channel * sizeof(uint32_t));
+    if (!cache)
+        cache = ae_cache_init + channel * 0x688;
+
+    precision = *(uint16_t *)(params + 1728);
+    if (precision > 31U)
+        return 0;
+    frame_lines = *(uint16_t *)(state + 8554);
+    sensor_margin = *(uint32_t *)(sensor_ctrl_main_storage +
+                                  channel * 108 + 52);
+    result = fix_point_mult2_32(precision,
+                                frame_lines << precision,
+                                *(uint32_t *)(cache + 1260));
+    result = (uint32_t)fix_point_div_32(precision, result, period) >>
+             precision;
+    if (result >= frame_lines - sensor_margin)
+        return result - (frame_lines - sensor_margin);
     return 0;
 }
 
@@ -61525,6 +61822,7 @@ tisp_ae_short_ev_alloc0x2c4:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000282fc origin=fragment_seed original=tisp_ae_clac_deflicker_cfg */
+#if 0
 int64_t tisp_ae_clac_deflicker_cfg(uint32_t a0)
 {
     uint32_t *local_10 = 0;
@@ -61722,6 +62020,63 @@ tisp_ae_clac_deflicker_cfg0x1a4:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#endif
+
+int64_t tisp_ae_clac_deflicker_cfg(uint32_t channel)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    unsigned char *cache;
+    uint16_t *table;
+    uint32_t precision;
+    uint32_t denominator;
+    uint32_t count;
+    uint32_t factor;
+    uint32_t half;
+    unsigned int i;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    cache = *(unsigned char **)(void *)(ae_cache +
+                                        channel * sizeof(uint32_t));
+    if (!cache)
+        cache = ae_cache_init + channel * 0x688;
+
+    precision = *(uint16_t *)(params + 1728);
+    if (precision > 31U)
+        return -EINVAL;
+    denominator = (*(uint32_t *)(params + 1652) << 1) << precision;
+    count = (uint32_t)fix_point_div_32(
+        precision, denominator, *(uint32_t *)(cache + 1264));
+    count = (count >> precision) & 0xff;
+    if (!count)
+        count = 1;
+    if (count > 120)
+        count = 120;
+    state[9746] = count;
+
+    table = (uint16_t *)(void *)(state + 9272);
+    half = (1U << precision) / 2U;
+    factor = fix_point_div_32(
+        precision,
+        *(uint16_t *)(state + 8554) << precision,
+        denominator);
+    for (i = 1; i <= count; ++i) {
+        uint32_t value = fix_point_mult3_32(
+            precision, i << precision,
+            *(uint32_t *)(cache + 1260), factor);
+
+        table[i - 1] = (value + half) >> precision;
+    }
+    for (i = count; i < 120; ++i)
+        table[i] = table[count - 1];
+    state[9746] = count - 1;
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000284c4 origin=fragment_seed original=tisp_ae_par_sensor_trig */
 int64_t tisp_ae_par_sensor_trig(uint32_t a0)
@@ -61738,6 +62093,7 @@ int64_t tisp_ae_par_sensor_trig(uint32_t a0)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000284e4 origin=fragment_seed original=tisp_ae_par_calc */
+#if 0
 int64_t tisp_ae_par_calc(uint32_t a0, uint32_t a1)
 {
     uint32_t *local_10 = 0;
@@ -62106,6 +62462,143 @@ tisp_ae_par_calc0x3a4:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#endif
+
+static uint64_t t41_ae_mul_u64_u32_shr(uint64_t value, uint32_t factor,
+                                       uint32_t shift)
+{
+    uint64_t low_product = (uint64_t)(uint32_t)value * factor;
+    uint64_t high_product = (uint64_t)(uint32_t)(value >> 32) * factor;
+
+    if (!shift)
+        return low_product + (high_product << 32);
+    if (shift < 32U)
+        return (low_product >> shift) +
+               (high_product << (32U - shift));
+    if (shift < 64U)
+        return (low_product >> shift) +
+               (high_product >> (shift - 32U));
+    return 0;
+}
+
+int64_t tisp_ae_par_calc(uint32_t channel, uint32_t unused)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    unsigned char *cache;
+    uint32_t precision;
+    uint32_t million_fixed;
+    uint32_t product;
+    uint32_t packed_period;
+    uint32_t base_max;
+    unsigned int i;
+    unsigned int equal_index = 15;
+
+    (void)unused;
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    cache = *(unsigned char **)(void *)(ae_cache +
+                                        channel * sizeof(uint32_t));
+    if (!cache)
+        cache = ae_cache_init + channel * 0x688;
+
+    precision = *(uint16_t *)(params + 1728);
+    if (precision > 31U)
+        return -EINVAL;
+    million_fixed = 1000000U << precision;
+    product = (uint32_t)(((uint64_t)*(uint32_t *)(cache + 1260) *
+                          ((uint64_t)*(uint16_t *)(state + 8554) <<
+                           precision)) >> precision);
+    *(uint32_t *)(state + 8680) =
+        fix_point_div_32(precision, million_fixed, product);
+
+    *(uint32_t *)(cache + 676) = *(uint32_t *)(cache + 608);
+    *(uint32_t *)(cache + 680) = *(uint32_t *)(cache + 612);
+    *(uint32_t *)(cache + 684) = *(uint32_t *)(cache + 620);
+    packed_period = *(uint32_t *)(params + 1664);
+    base_max = tisp_ae_fps_calc_max_exp(
+        channel,
+        fix_point_div_32(precision,
+                         (packed_period >> 16) << precision,
+                         (packed_period & 0xffff) << precision));
+
+    for (i = 0; i < 15; ++i) {
+        unsigned char *slot = cache + 692 + i * 16;
+        uint32_t period_value =
+            *(uint32_t *)(params + 600 + i * 16);
+        uint32_t candidate = tisp_ae_fps_calc_max_exp(
+            channel,
+            fix_point_div_32(precision, million_fixed,
+                             period_value << precision));
+
+        if (candidate < *(uint32_t *)(cache + 608))
+            candidate = *(uint32_t *)(cache + 608);
+        else if (candidate > base_max)
+            candidate = base_max;
+        *(uint32_t *)(slot + 0) = candidate;
+        *(uint32_t *)(slot + 4) =
+            *(uint32_t *)(params + 604 + i * 16);
+        *(uint32_t *)(slot + 8) =
+            *(uint32_t *)(params + 608 + i * 16);
+    }
+
+    for (i = 0; i < 16; ++i) {
+        unsigned char *input = cache + 676 + i * 16;
+        uint64_t scaled = (uint64_t)*(uint32_t *)(input + 0) <<
+                          precision;
+
+        scaled = t41_ae_mul_u64_u32_shr(
+            scaled, *(uint32_t *)(input + 4), precision);
+        scaled = t41_ae_mul_u64_u32_shr(
+            scaled, *(uint32_t *)(input + 8), precision);
+        *(uint32_t *)(cache + 80 + i * 8) = (uint32_t)scaled;
+        *(uint32_t *)(cache + 84 + i * 8) = (uint32_t)(scaled >> 32);
+    }
+    for (i = 0; i < 15; ++i) {
+        if (*(uint32_t *)(cache + 80 + i * 8) ==
+                *(uint32_t *)(cache + 88 + i * 8) &&
+            *(uint32_t *)(cache + 84 + i * 8) ==
+                *(uint32_t *)(cache + 92 + i * 8)) {
+            equal_index = i;
+            break;
+        }
+    }
+    *(uint16_t *)(state + 8576) = equal_index;
+
+    if (*(uint32_t *)(params + 1736) == 0) {
+        for (i = 0; i < 16; ++i) {
+            unsigned char *slot = cache + 676 + i * 16;
+            uint32_t value;
+
+            if (*(uint32_t *)(params + 1732) == 0) {
+                value = *(uint32_t *)(slot + 0);
+                if (value < *(uint32_t *)(cache + 608))
+                    value = *(uint32_t *)(cache + 608);
+                else if (value > *(uint32_t *)(cache + 624))
+                    value = *(uint32_t *)(cache + 624);
+                *(uint32_t *)(slot + 0) = value;
+            }
+            value = *(uint32_t *)(slot + 4);
+            if (value < *(uint32_t *)(cache + 612))
+                value = *(uint32_t *)(cache + 612);
+            else if (value > *(uint32_t *)(cache + 628))
+                value = *(uint32_t *)(cache + 628);
+            *(uint32_t *)(slot + 4) = value;
+
+            value = *(uint32_t *)(slot + 8);
+            if (value < *(uint32_t *)(cache + 620))
+                value = *(uint32_t *)(cache + 620);
+            else if (value > *(uint32_t *)(cache + 636))
+                value = *(uint32_t *)(cache + 636);
+            *(uint32_t *)(slot + 8) = value;
+        }
+    }
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000288a0 origin=fragment_seed original=tisp_ae_par_update_trig */
 int64_t tisp_ae_par_update_trig(uint32_t a0)
@@ -62389,6 +62882,7 @@ tisp_ae_roi_point0x14c:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000028ba0 origin=fragment_seed original=tisp_ae_init_par_calc */
+#if 0
 int32_t tisp_ae_init_par_calc(uint32_t a0)
 {
     uint32_t local_14 = 0;
@@ -62465,8 +62959,46 @@ int32_t tisp_ae_init_par_calc(uint32_t a0)
 
     return 0;
 }
+#endif
+
+int32_t tisp_ae_init_par_calc(uint32_t channel)
+{
+    uint32_t *info;
+    unsigned char *params;
+    unsigned char *state;
+    unsigned char *cache;
+    uint32_t precision;
+    uint32_t packed_period;
+    uint32_t period;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    cache = *(unsigned char **)(void *)(ae_cache +
+                                        channel * sizeof(uint32_t));
+    if (!cache)
+        cache = ae_cache_init + channel * 0x688;
+
+    precision = *(uint16_t *)(params + 1728);
+    if (precision > 31U)
+        return -EINVAL;
+    packed_period = *(uint32_t *)(params + 1664);
+    period = fix_point_div_32(
+        precision,
+        (packed_period >> 16) << precision,
+        (packed_period & 0xffff) << precision);
+    *(uint32_t *)(state + 8684) =
+        tisp_ae_fps_calc_max_exp(channel, period);
+    *(uint32_t *)(state + 8692) = *(uint32_t *)(cache + 1260);
+    *(uint32_t *)(state + 8696) =
+        *(uint16_t *)(state + 8554) - *(uint32_t *)(state + 8688);
+    return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000028c68 origin=fragment_seed original=tisp_ae_init */
+#if 0
 int64_t tisp_ae_init(uint32_t a0, uintptr_t a1)
 {
     uint32_t *local_10 = 0;
@@ -62790,6 +63322,138 @@ tisp_ae_init0x4f4:
     goto tisp_ae_init0x354;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
+{
+    uint32_t *info;
+    unsigned char *state;
+    uintptr_t params;
+    uintptr_t cache;
+    uint32_t width;
+    uint32_t height;
+    uint32_t half_width;
+    uint32_t half_height;
+    uint32_t margin_width;
+    uint32_t margin_height;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+    int ret;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !par)
+        return -EINVAL;
+    if (ae_info[channel])
+        return -EBUSY;
+
+    if (!fliker_info) {
+        fliker_info = (uint32_t)(uintptr_t)private_kmalloc(10864,
+                                                       GFP_KERNEL);
+        if (!fliker_info)
+            return -ENOMEM;
+        memset((void *)(uintptr_t)fliker_info, 0, 10864);
+    }
+    if (!fliker_para) {
+        uint32_t *flicker;
+
+        flicker = private_kmalloc(16, GFP_KERNEL);
+        if (!flicker)
+            return -ENOMEM;
+        flicker[0] = 20;
+        flicker[1] = 30;
+        flicker[2] = 14;
+        flicker[3] = 5;
+        fliker_para = (uint32_t)(uintptr_t)flicker;
+    }
+    if (!tisp_ae_malloc_cfg(channel))
+        return -ENOMEM;
+
+    info = private_kmalloc(16, GFP_KERNEL);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 16);
+    state = private_kmalloc(9752, GFP_KERNEL);
+    if (!state) {
+        private_kfree(info);
+        return -ENOMEM;
+    }
+    memset(state, 0, 9752);
+    ae_info[channel] = (uint32_t)(uintptr_t)info;
+
+    params = *(uint32_t *)(void *)(tparamsP_storage +
+                                   channel * sizeof(uint32_t));
+    if (!params) {
+        ret = -ENODEV;
+        goto free_ae_info;
+    }
+    info[0] = (uint32_t)(params + 104);
+    info[1] = (uint32_t)(uintptr_t)state;
+    info[2] = (uint32_t)(params + 0x17fc4);
+    info[3] = *(uint32_t *)(par + 120);
+    *(uint16_t *)(state + 8548) = *(uint32_t *)(par + 0);
+    *(uint16_t *)(state + 8550) = *(uint32_t *)(par + 4);
+    *(uint16_t *)(state + 8552) = *(uint8_t *)(par + 12);
+    *(uint32_t *)(state + 8688) = *(uint16_t *)(par + 76);
+
+    tisp_ae_sensor_par_ctrls_update(channel);
+
+    cache = *(uint32_t *)(void *)(ae_cache +
+                                  channel * sizeof(uint32_t));
+    if (!cache)
+        cache = (uintptr_t)ae_cache_init + channel * 0x688;
+    if (info[3] == 1)
+        memcpy((void *)(cache + 928), (void *)(info[0] + 900), 256);
+    tisp_ae_short_sensor_par_ctrls_update(channel);
+    memcpy((void *)(cache + 1540), (void *)(info[0] + 1488), 60);
+    memcpy((void *)(cache + 1600), (void *)(info[0] + 1902), 60);
+
+    tisp_ae_init_par_calc(channel);
+    tisp_ae_par_calc(channel, 0);
+    tisp_ae_set_hardware_param(channel);
+
+    width = *(uint32_t *)(par + 0);
+    height = *(uint32_t *)(par + 4);
+    half_width = width >> 1;
+    half_height = height >> 1;
+    if ((uint64_t)width * height / 4 < 0x100000U) {
+        margin_width = width >> 2;
+        margin_height = height >> 2;
+    } else {
+        margin_width = width >> 3;
+        margin_height = height >> 3;
+    }
+    tisp_ae_roi_point(channel,
+                      (half_width - margin_width) & 0xffff,
+                      (half_height - margin_height) & 0xffff,
+                      (half_width + margin_width) & 0xffff,
+                      (half_height + margin_height) & 0xffff);
+    system_reg_set_ae_trig();
+
+    state[1664] = *(uint32_t *)(info[0] + 1648) + 1;
+    state[1665] = *(uint32_t *)(info[0] + 1648) + 1;
+    tisp_ae_clac_deflicker_cfg(channel);
+    *(uint16_t *)(state + 8566) = 0;
+    *(uint16_t *)(state + 8568) = 0;
+
+    system_irq_func_set(channel, channel * 42 + 5,
+                        (int)(uintptr_t)tisp_ae_interrupt_hist);
+    system_irq_func_set(channel, channel * 42 + 4,
+                        (int)(uintptr_t)tisp_ae_interrupt_static);
+    system_irq_func_set(channel, channel * 42 + 61,
+                        (int)(uintptr_t)tisp_ae_ai_interrupt_static);
+    tisp_event_set_cb(channel, 1, (int)(uintptr_t)tisp_ae_calc_process);
+    private_spin_lock_init(slock_hist_storage +
+                           channel * sizeof(uint32_t));
+    system_reg_write(0x300, 0x20220924);
+    callbacks[0] = (uint32_t)(uintptr_t)tisp_ae_pm_get_regsize;
+    callbacks[1] = (uint32_t)(uintptr_t)tisp_ae_pm_suspend;
+    callbacks[2] = (uint32_t)(uintptr_t)tisp_ae_pm_resume;
+    return 0;
+
+free_ae_info:
+    ae_info[channel] = 0;
+    private_kfree(state);
+    private_kfree(info);
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002917c origin=fragment_seed original=tisp_ae_deinit */
