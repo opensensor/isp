@@ -72,12 +72,33 @@ EOS
 
 "${SCP[@]}" "$LOCAL_MODULE" "$USER@$IP:$REMOTE_MODULE"
 experiment_started=1
+live_log_pid=
+stop_live_log() {
+	if [[ -n "${live_log_pid:-}" ]]; then
+		kill "$live_log_pid" >/dev/null 2>&1 || true
+		wait "$live_log_pid" >/dev/null 2>&1 || true
+		live_log_pid=
+	fi
+}
 reboot_device() {
 	if [[ "${experiment_started:-0}" == "1" ]]; then
 		timeout 12 "${SSH[@]}" 'sync; reboot -f' >/dev/null 2>&1 || true
 	fi
 }
-trap reboot_device EXIT
+cleanup() {
+	stop_live_log
+	reboot_device
+}
+trap cleanup EXIT
+
+# BusyBox dmesg on the target has no follow mode. Polling the tail preserves a
+# host-side breadcrumb if the kernel locks before the normal /tmp logs can be
+# retrieved. This is read-only and intentionally does not use dmesg -c.
+timeout 120 "${SSH[@]}" \
+	'while :; do date; dmesg | tail -n 160; echo ===t41-live-sample===; sleep 1; done' \
+	>"$LOG/t41-live-dmesg.txt" 2>&1 &
+live_log_pid=$!
+sleep 1
 
 remote_sensor_module="${SENSOR_MODULE:-__none__}"
 set +e
@@ -169,8 +190,16 @@ exit 0
 EOS
 remote_status=$?
 set -e
+stop_live_log
 
-"${SCP[@]}" "$USER@$IP:/tmp/t41-*.txt" "$LOG/" 2>/dev/null || true
+set +e
+timeout 30 "${SSH[@]}" 'cd /tmp && tar -cf - t41-*.txt' \
+	>"$LOG/t41-logs.tar" 2>"$LOG/t41-log-copy.txt"
+log_copy_status=$?
+set -e
+if [[ "$log_copy_status" == "0" ]]; then
+	tar -xf "$LOG/t41-logs.tar" -C "$LOG"
+fi
 
 rg -n -i 'kernel panic|kernel bug detected|oops|BUG:|unable to handle|unhandled kernel unaligned access|segfault|watchdog|fatal exception' \
 	"$LOG"/*dmesg.txt >"$LOG/kernel-fatal-signatures.txt" || true
@@ -182,7 +211,9 @@ printf 'log=%s\n' "$LOG"
 printf 'level=%s insmod_status=%s rmmod_status=%s kernel_fatal_signatures=%s\n' \
 	"$LEVEL" "$insmod_status" "$rmmod_status" "$fatal_count"
 printf 'remote_status=%s\n' "$remote_status"
+printf 'log_copy_status=%s\n' "$log_copy_status"
 
-if [[ "$remote_status" != "0" || "$insmod_status" != "0" || "$fatal_count" != "0" ]]; then
+if [[ "$remote_status" != "0" || "$log_copy_status" != "0" || \
+	"$insmod_status" != "0" || "$fatal_count" != "0" ]]; then
 	exit 1
 fi
