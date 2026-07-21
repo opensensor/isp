@@ -1231,7 +1231,8 @@ struct v4l2_format;
 static uint16_t FrameSize[5];
 static uint32_t WDRMODE, __bss_start, _awb_base, _awb_bss_base, _bss_anchor, _cb_base;
 static uint32_t _tisp_tmo_detailen_base, adr_ctc1_y_change, adr_ev, adr_ev_changed, adr_ev_top;
-static uint32_t adr_info, adr_tg_f_top, adr_tgain_changed, adr_tgain_top, ae_info[2];
+static uint32_t adr_info[2], adr_tg_f_top, adr_tgain_changed, adr_tgain_top, ae_info[2];
+static unsigned char adr_mlock_storage[32] __attribute__((aligned(4)));
 static uint32_t ae_buf_info[2];
 static unsigned char slock_hist_storage[8] __attribute__((aligned(4)));
 static uint32_t af_buf_info[2], af_info[2];
@@ -1240,13 +1241,13 @@ static uint32_t bcsh_info;
 static uint32_t blc_info[2];
 static uint32_t ccm_info, cdns_info, chx_shd_flags, clk_cnt_39069;
 static uint32_t cls, csc_switch, csc_version_now, ctl_table, defog_info, deghost_en, diffLast2Later;
-static uint32_t diff_thr_maxvalue, dmsc_debug_flags, dpc_info, dump_csd, ev_last_switch, ev_wdr_l, ev_wdr_s;
+static uint32_t diff_thr_maxvalue, dmsc_debug_flags, dpc_info[2], dmsc_info[2], dump_csd, ev_last_switch, ev_wdr_l, ev_wdr_s;
 static uint32_t find_new_buffer_fn, fix_y_tmp, fliker_info, fliker_para, force_triger, frameSum, frame_vb_measure;
-static uint32_t gamma_info, gib_info[2], globe_ispdev, height_adr, hist_short, i2c_driver, isp_breakfrm;
+static uint32_t gamma_info[2], gib_info[2], globe_ispdev, height_adr, hist_short, i2c_driver, isp_breakfrm;
 static uint32_t isp_ch0_frm_done, isp_core_debug_type, isp_err, isp_frm_done, isp_frm_err, isp_frm_start;
 static uint32_t isp_ir_frm_done, isp_overflow, isp_rst, ivdc_ddr_c_overflow, ivdc_ddr_y_overflow, ivdc_dma_done;
 static uint32_t ivdc_fifo_c_overflow, ivdc_fifo_y_overflow, ivdc_fmt_cnt, ivdc_stream_state, jump_table_76b60;
-static uint32_t lce_info, lsc_info, main_face_en_cnt, main_tstp, major, mask_en, maxvalue_short, maxvalue_short_last;
+static uint32_t lce_info, lsc_info[2], main_face_en_cnt, main_tstp, major, mask_en, maxvalue_short, maxvalue_short_last;
 static uint32_t mdns_equation_dif_cutval, mdns_equation_dif_segopt, mdns_equation_dif_yval0, mdns_equation_dif_yval1;
 static uint32_t mdns_equation_dif_yval2, mdns_equation_dif_yval3, mdns_equation_dif_yval4, mdns_equation_dif_yval5;
 static uint32_t mdns_equation_dif_yval6, mdns_equation_dif_yval7, mdns_equation_smp_yval0, mdns_equation_smp_yval1;
@@ -6764,6 +6765,157 @@ int vic_frame_channel_freebufs(void *arg1) {
     return -22;
 }
 
+/*
+ * The fragment reconstruction below loses several values across branches in
+ * the normal MIPI path (most importantly the saved return value).  Keep the
+ * OEM T41 register layout here, using the same direct-programming pattern as
+ * the working T40/T23 recoveries.
+ */
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+static int regtrace_t41_vic_start_mipi(uintptr_t vic_dev, uint32_t channel)
+{
+    uintptr_t ch;
+    uintptr_t attr;
+    uintptr_t regs_addr;
+    void __iomem *regs;
+    uint32_t dbus;
+    uint32_t width;
+    uint32_t height;
+    uint32_t image_twidth;
+    uint32_t csi_fmt;
+    uint32_t bits_per_pixel;
+    uint32_t frame_mode;
+    uint32_t sensor_mode;
+    uint32_t sensor_fid;
+    uint32_t vic_ctrl;
+    uint32_t reg_10c;
+    uint32_t frame_reg_1ac;
+    uint32_t frame_reg_1a8;
+
+    if (!vic_dev || vic_dev >= (uintptr_t)-4095 || channel >= 3)
+        return -EINVAL;
+
+    ch = vic_dev + channel * 96U;
+    attr = *(uint32_t *)(ch + 328);
+    regs_addr = *(uint32_t *)(vic_dev + 232);
+    if (!attr || attr >= (uintptr_t)-4095 ||
+        !regs_addr || regs_addr >= (uintptr_t)-4095)
+        return -EINVAL;
+
+    dbus = *(uint32_t *)(attr + 20);
+    width = *(uint32_t *)(ch + 276);
+    height = *(uint32_t *)(ch + 280);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: VIC start ch=%u vic=%p attr=%p dbus=%u %ux%u mode=%u frame=%u sensor=%u expo_fs=%u\n",
+           channel, (void *)vic_dev, (void *)attr, dbus, width, height,
+           *(uint32_t *)(attr + 24), *(uint32_t *)(attr + 120),
+           *(uint32_t *)(attr + 124), *(uint32_t *)(attr + 148));
+
+    if (dbus != 1U)
+        return -EOPNOTSUPP;
+
+    regs = (void __iomem *)regs_addr;
+    image_twidth = *(uint32_t *)(attr + 48);
+    if (!width)
+        width = image_twidth;
+    if (!height)
+        height = *(uint32_t *)(attr + 52);
+    if (!width || !height)
+        return -EINVAL;
+    if (!image_twidth)
+        image_twidth = width;
+
+    csi_fmt = *(uint32_t *)(attr + 128);
+    switch (csi_fmt) {
+    case 0:
+        bits_per_pixel = 8;
+        break;
+    case 1:
+        bits_per_pixel = 10;
+        break;
+    case 2:
+        bits_per_pixel = 12;
+        break;
+    case 7:
+        bits_per_pixel = 16;
+        break;
+    default:
+        return -EINVAL;
+    }
+
+    frame_mode = *(uint32_t *)(attr + 120);
+    sensor_fid = *(uint32_t *)(attr + 116);
+    sensor_mode = *(uint32_t *)(attr + 124);
+    if (*(uint32_t *)(attr + 24) == 1U)
+        writel(0x00020000, regs + 0x10);
+    writel(0x000a000a, regs + 0x1a4);
+    writel(((bits_per_pixel * image_twidth) + 31U) >> 5,
+           regs + 0x100);
+
+    vic_ctrl = *(uint32_t *)(vic_dev + 392) | 1U;
+    writel(vic_ctrl, regs + 0x1c0);
+    writel(vic_ctrl, regs + 0x101c0);
+    writel(2, regs + 0x0c);
+    writel(csi_fmt, regs + 0x14);
+    writel((width << 16) | height, regs + 0x04);
+
+    reg_10c = (*(uint32_t *)(attr + 68) << 25) |
+              (*(uint32_t *)(attr + 72) << 24) |
+              (*(uint32_t *)(attr + 76) << 23) |
+              (*(uint32_t *)(attr + 96) << 22) |
+              (*(uint32_t *)(attr + 100) << 20) |
+              (*(uint32_t *)(attr + 104) << 18) |
+              (*(uint32_t *)(attr + 108) << 12) |
+              (*(uint32_t *)(attr + 112) << 8) |
+              (frame_mode << 4) |
+              (sensor_fid << 2) |
+              sensor_mode;
+    writel(reg_10c, regs + 0x10c);
+    writel((image_twidth << 16) | *(uint16_t *)(attr + 80),
+           regs + 0x110);
+    writel(*(uint16_t *)(attr + 84), regs + 0x114);
+    writel(*(uint16_t *)(attr + 88), regs + 0x118);
+    writel(*(uint16_t *)(attr + 92), regs + 0x11c);
+
+    switch (frame_mode) {
+    case 1:
+        frame_reg_1ac = 0x4410;
+        frame_reg_1a8 = 0x4410;
+        break;
+    case 2:
+        frame_reg_1ac = 0x4420;
+        frame_reg_1a8 = 0x4420;
+        break;
+    default:
+        frame_reg_1ac = 0x4440;
+        frame_reg_1a8 = 0x4404;
+        break;
+    }
+    writel(frame_reg_1ac, regs + 0x1ac);
+    writel(frame_reg_1a8, regs + 0x1a8);
+    writel(0x10, regs + 0x1b0);
+    wmb();
+
+    writel(2, regs + 0x00);
+    writel(4, regs + 0x00);
+    writel((frame_mode << 4) | sensor_mode, regs + 0x1a0);
+    writel((*(uint16_t *)(attr + 86) << 16) |
+           *(uint16_t *)(attr + 82), regs + 0x104);
+    writel((*(uint16_t *)(attr + 94) << 16) |
+           *(uint16_t *)(attr + 90), regs + 0x108);
+    writel(1, regs + 0x00);
+    wmb();
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: VIC MIPI programmed ch=%u reg0=0x%x size=0x%x fmt=0x%x reg100=0x%x reg10c=0x%x reg1a0=0x%x ctrl=0x%x\n",
+           channel, readl(regs + 0x00), readl(regs + 0x04),
+           readl(regs + 0x14), readl(regs + 0x100),
+           readl(regs + 0x10c), readl(regs + 0x1a0),
+           readl(regs + 0x1c0));
+    return 0;
+}
+#endif
+
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000014dc origin=fragment_seed original=tx_isp_vic_start */
 int64_t tx_isp_vic_start(uintptr_t a0, uint32_t a1)
 {
@@ -6792,6 +6944,14 @@ int64_t tx_isp_vic_start(uintptr_t a0, uint32_t a1)
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        int regtrace_ret = regtrace_t41_vic_start_mipi(a0, a1);
+
+        if (regtrace_ret != -EOPNOTSUPP)
+            return regtrace_ret;
+    }
+#endif
 
     /* fragment 1: Arithmetic */
     s2 = 96;
@@ -10909,7 +11069,7 @@ tisp_vic_ctrl_ioctl0x29c:
     if (v1 != 0) { goto tisp_vic_ctrl_ioctl0x2d8; }
 
     /* fragment 56: Arithmetic */
-    s0 = (unsigned int *)&ivdc_threshold_line;
+    s0 = (uintptr_t *)&adr_info;
 
     /* fragment 57: MemoryAccess */
     a0 = *(uint32_t *)((char *)((char *)&vaddr));
@@ -12547,6 +12707,9 @@ int32_t subdev_sensor_ops_set_input(void* arg1, int32_t* arg2, int32_t arg3)
 
     enable = (unsigned int)arg2[0];
     vinum = (unsigned int)arg2[1];
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: set-input enter vin=%p enable=%u vinum=%u\n",
+	       (void *)vin, enable, vinum);
     if (vinum >= 3)
         return -EINVAL;
 
@@ -12606,18 +12769,30 @@ int32_t subdev_sensor_ops_set_input(void* arg1, int32_t* arg2, int32_t arg3)
     event = *(uintptr_t *)(sensor + 128);
     if (!event)
         return -515;
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: set-input sync-attr enter sensor=%p interface=%u event=%p video=%p\n",
+	       (void *)sensor, interface, (void *)event, (void *)(sensor + 724));
     ret = ((int (*)(uintptr_t, unsigned int, uintptr_t))event)
         (sensor, 0x01000001U, sensor + 724);
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: set-input sync-attr exit ret=%d\n", ret);
     if (ret)
         return ret;
 
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: set-input init enter sensor=%p enable=%u vinum=%u\n",
+	       (void *)sensor, enable, vinum);
     ret = ((int (*)(uintptr_t, unsigned int, uintptr_t))event)
         (sensor, 0x01000000U, (uintptr_t)arg2);
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: set-input init exit ret=%d\n", ret);
     if (ret)
         return ret;
 
     arg2[1] = ((*(uint32_t *)(sensor + 784) << 16) & 0x7fff0000U) |
               *(uint16_t *)(sensor + 788);
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: set-input exit packed=0x%x\n", arg2[1]);
     return 0;
 }
 
@@ -14088,8 +14263,14 @@ static int t41_register_sensor(uintptr_t vin, uintptr_t arg)
 		isp_printf(2, "VIN has no event callback for sensor %u\n", sensor_id);
 		return -1;
 	}
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: sensor-register create-frame enter sensor=%u interface=%u vin=%p notify=%p\n",
+	       sensor_id, interface, (void *)vin, (void *)notify);
 	ret = ((int (*)(uintptr_t, unsigned int, uintptr_t))notify)
 		(vin, T41_EVENT_CREATE_FRAME_CHAN, (uintptr_t)&interface);
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: sensor-register create-frame exit ret=%d\n",
+	       ret);
 	return ret ? -1 : 0;
 }
 
@@ -19616,6 +19797,10 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: isp-m0 ioctl enter cmd=0x%x arg=0x%x pid=%d comm=%s\n",
+           a1, a2, current->pid, current->comm);
+
     /* fragment 0: MemoryAccess */
     v0 = *(uint32_t *)((char *)a0 + 136);
     v0 = *(uint32_t *)((char *)v0 + 256);
@@ -22233,6 +22418,10 @@ int64_t ivdc_misc_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uint32_t *s0 = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: misc-ivdc ioctl enter cmd=0x%x arg=0x%x pid=%d comm=%s\n",
+           a1, a2, current->pid, current->comm);
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -26379,6 +26568,10 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: framechan ioctl enter cmd=0x%x arg=0x%x file=%p pid=%d comm=%s\n",
+           a1, a2, (void *)a0, current->pid, current->comm);
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -29205,6 +29398,8 @@ int32_t tx_isp_notify(uint32_t a0, uint32_t a1, uint32_t a2)
         char *ops;
         char *event_ops;
         int (*event)(uintptr_t, uint32_t, uint32_t);
+        unsigned int slot_index = (unsigned int)
+            ((slot - (ispdev + 60)) / sizeof(void *));
 
         if (!subdev || IS_ERR(subdev))
             continue;
@@ -29228,7 +29423,13 @@ int32_t tx_isp_notify(uint32_t a0, uint32_t a1, uint32_t a2)
             continue;
         }
 
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: notify enter event=0x%x slot=%u subdev=%p ops=%p cb=%p\n",
+               a1, slot_index, subdev, ops, event);
         ret = event ? event((uintptr_t)subdev, a1, a2) : -ENOIOCTLCMD;
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: notify exit event=0x%x slot=%u ret=%d\n",
+               a1, slot_index, ret);
         if (ret && ret != -ENOIOCTLCMD)
             return ret;
     }
@@ -29835,6 +30036,9 @@ int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
 
     if (!a0 || !a1)
         return -EINVAL;
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: sensor-register ioctl enter isp=%p user=0x%x\n",
+	       (void *)a0, a1);
     if (private_copy_from_user(sensor_info,
             (const void __user *)(uintptr_t)a1, sizeof(sensor_info)))
         return -EFAULT;
@@ -29844,6 +30048,9 @@ int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
     if (vin) {
         ret = subdev_sensor_ops_ioctl(vin, T41_EVENT_SENSOR_REGISTER,
                                       (uintptr_t)sensor_info);
+		printk(KERN_WARNING
+		       "tx_isp_t41_recovered: sensor-register VIN returned %d vin=%p\n",
+		       ret, (void *)vin);
         if (ret != -ENOIOCTLCMD)
             return ret;
     }
@@ -31223,20 +31430,45 @@ int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uint32_t *t3 = 0;
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
+    int regtrace_ret;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tx-isp ioctl enter cmd=0x%x arg=0x%x file=%p pid=%d comm=%s\n",
+           a1, a2, (void *)a0, current->pid, current->comm);
 
     /* libimp probes this command first.  Keep it independent of the damaged
      * generated dispatch below so userspace can identify the recovered ISP. */
-    if (a1 == 0x80045401U)
-        return tx_isp_driver_version_isra_12(a2);
+    if (a1 == 0x80045401U) {
+        regtrace_ret = tx_isp_driver_version_isra_12(a2);
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
+               a1, regtrace_ret);
+        return regtrace_ret;
+    }
     if (a1 == 0x80645405U) {
         uintptr_t isp = t41_load_ptr(a0, 136);
 
-        return isp ? tx_isp_sensor_register_sensor(isp - 12, a2) : -ENODEV;
+        regtrace_ret = isp ? tx_isp_sensor_register_sensor(isp - 12, a2) :
+                     -ENODEV;
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
+               a1, regtrace_ret);
+        return regtrace_ret;
     }
-    if (a1 == 0xc0045402U)
-        return t41_ioctl_enum_sensor_input(a0, a2);
-    if (a1 == 0xc0085404U)
-        return t41_ioctl_set_sensor_input(a0, a2);
+    if (a1 == 0xc0045402U) {
+        regtrace_ret = t41_ioctl_enum_sensor_input(a0, a2);
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
+               a1, regtrace_ret);
+        return regtrace_ret;
+    }
+    if (a1 == 0xc0085404U) {
+        regtrace_ret = t41_ioctl_set_sensor_input(a0, a2);
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
+               a1, regtrace_ret);
+        return regtrace_ret;
+    }
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -36895,53 +37127,25 @@ tisp_simple_intp0x5c:
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018070 origin=model_output original=tisp_simple_intp_int8 */
 uint32_t tisp_simple_intp_int8(int32_t arg1, int32_t arg2, void *arg3) {
-    /* Early exit: if arg1 >= 0xa, return byte at arg3 + 0xa */
-    if ((uint32_t)arg1 >= 0xa) {
-        return zx_d(((uint8_t *)arg3)[0xa]);
-    }
+	const uint8_t *table = arg3;
+	uint32_t left;
+	uint32_t right;
+	uint32_t delta;
+	uint32_t scaled;
 
-    uint8_t *p = (void *)((uintptr_t)arg3 + arg1);
-    uint32_t v1 = zx_d(p[0]);
-    uint32_t v0 = zx_d(p[1]);
+	if (!table)
+		return 0;
+	if ((uint32_t)arg1 >= 10)
+		return table[10];
 
-    /* If bytes are equal, return v0 */
-    if (v1 == v0) {
-        return v0;
-    }
-
-    /* Compute |v1 - v0| and direction flag */
-    uint32_t diff;
-    uint32_t dir; /* 1 if v1 >= v0, 0 if v1 < v0 */
-
-    if (v1 >= v0) {
-        diff = v1 - v0;
-        dir = 1;
-    } else {
-        diff = v0 - v1;
-        dir = 0;
-    }
-
-    /* Multiply diff by arg2 */
-    int32_t a1 = (int32_t)(diff * arg2);
-
-    /* Bit manipulation: extract and combine bits */
-    int32_t v0_shifted = a1 >> 16; /* arithmetic right shift */
-    int32_t a1_ext = (a1 >> 1) & 0x7fff; /* extract 15 bits from bit 1 */
-    int32_t *v0_3 = v0_shifted + a1_ext;
-
-    /* Apply direction */
-    uint32_t *v0_5;
-    if (dir == 0) {
-        /* v1 < v0 case: v0_5 = v1 - v0_3 */
-        v0_5 = v1 - (uintptr_t)v0_3;
-    } else {
-        /* v1 >= v0 case: v0_5 = v1 - v0_3 (same operation) */
-        v0_5 = v1 - (uintptr_t)v0_3;
-    }
-
-    v0_5 = (void *)(uintptr_t)((uintptr_t)v0_5 & (0xff));
-
-    return v0_5;
+	left = table[arg1];
+	right = table[arg1 + 1];
+	if (left == right)
+		return right;
+	delta = left < right ? right - left : left - right;
+	scaled = delta * (uint32_t)arg2;
+	scaled = (scaled >> 16) + ((scaled >> 15) & 1);
+	return left < right ? left + scaled : left - scaled;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000180e0 origin=fragment_seed original=tisp_simple_intp_int16 */
@@ -50087,8 +50291,18 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
         processing_en |= BIT(2);
     system_reg_write(0x60, processing_en);
 
-#define T41_INIT2(fn) \
-    ((int (*)(uint32_t, uintptr_t))(uintptr_t)(fn))(channel, (uintptr_t)par)
+#define T41_INIT2(fn) do { \
+    int regtrace_init_ret; \
+    printk(KERN_WARNING \
+           "tx_isp_t41_recovered: tisp-init enter %s channel=%u\n", \
+           #fn, channel); \
+    regtrace_init_ret = \
+        ((int (*)(uint32_t, uintptr_t))(uintptr_t)(fn)) \
+            (channel, (uintptr_t)par); \
+    printk(KERN_WARNING \
+           "tx_isp_t41_recovered: tisp-init exit %s ret=%d\n", \
+           #fn, regtrace_init_ret); \
+} while (0)
     T41_INIT2(tisp_top_init);
     T41_INIT2(tisp_ae_init);
     T41_INIT2(tisp_awb_init);
@@ -78719,6 +78933,7 @@ second_loop:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034084 origin=model_output original=tisp_lsc_prepare_write_lut */
+#if 0
 int32_t tisp_lsc_prepare_write_lut(int32_t arg1)
 {
     void *ptr = (void *)((uintptr_t)bss_base + (arg1 << 2));
@@ -78779,6 +78994,74 @@ int tisp_lsc_real_write_lut(int arg1) {
     system_reg_write(0x50020, ((s0_1 - 1) << 0x10) | 0x102);
     return 0;
 }
+#endif
+
+static uint8_t *t41_lsc_info(uint32_t channel)
+{
+	if (channel >= ARRAY_SIZE(lsc_info) || !lsc_info[channel])
+		return NULL;
+	return (uint8_t *)(uintptr_t)lsc_info[channel];
+}
+
+static uint32_t t41_lsc_lut_count(const uint8_t *info)
+{
+	const uint8_t *params =
+		(const uint8_t *)(uintptr_t)*(const uint32_t *)(const void *)info;
+	uint32_t count;
+
+	if (!params)
+		return 0;
+	if (params[26])
+		count = info[27688] ? 0x480 : 0x240;
+	else
+		count = *(const uint16_t *)(const void *)(params + 24);
+	if (count > 0x480)
+		count = 0x480;
+	return count;
+}
+
+int32_t tisp_lsc_prepare_write_lut(int32_t channel)
+{
+	uint8_t *info = t41_lsc_info(channel);
+
+	if (!info)
+		return -EINVAL;
+	info[27691]++;
+	return tisp_lsc_real_write_lut(channel);
+}
+
+int tisp_lsc_real_write_lut(int channel)
+{
+	uint8_t *info = t41_lsc_info(channel);
+	uint8_t *data;
+	uint32_t count;
+	uint32_t i;
+	unsigned long flags = 0;
+	void *lock;
+
+	if (!info)
+		return -EINVAL;
+	count = t41_lsc_lut_count(info);
+	if (!count)
+		return -EINVAL;
+	data = info + 32;
+	lock = lsc_slock_storage + channel * sizeof(uint32_t);
+
+	system_reg_write(0x50020, 0x101);
+	__private_spin_lock_irqsave((uint32_t)(uintptr_t)lock,
+				    (uintptr_t)&flags);
+	for (i = 0; i < count; ++i, data += 12) {
+		system_reg_write(0x50024,
+				 *(uint32_t *)(void *)(data + 0));
+		system_reg_write(0x50024,
+				 *(uint32_t *)(void *)(data + 4));
+		system_reg_write(0x50024, data[8]);
+	}
+	private_spin_unlock_irqrestore(lock, flags);
+	system_reg_write(0x50020, ((count - 1) << 16) | 0x102);
+	info[27691] = 0;
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000341f8 origin=fragment_seed original=tisp_lsc_pm_resume */
 int32_t tisp_lsc_pm_resume(uint32_t a0)
@@ -78810,6 +79093,7 @@ int32_t tisp_lsc_pm_resume(uint32_t a0)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034234 origin=fragment_seed original=tisp_lsc_write_reg */
+#if 0
 int32_t tisp_lsc_write_reg(uint32_t a0, uint32_t a1)
 {
     uint32_t local_14 = 0;
@@ -78945,6 +79229,66 @@ tisp_lsc_write_reg0x214:
     /* function epilogue: restore registers and return */
 
     return 0;
+}
+#endif
+
+int32_t tisp_lsc_write_reg(uint32_t channel, uint32_t mode)
+{
+	uint8_t *info = t41_lsc_info(channel);
+	uint8_t *params;
+	uint32_t value;
+
+	if (!info)
+		return -EINVAL;
+	params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+	if (!params)
+		return -EINVAL;
+
+	if (mode == 0) {
+		system_reg_write(0x3000,
+				 ((uint32_t)params[78] << 16 & 0x007f0000) |
+				 ((uint32_t)params[79] & 0x7f));
+		system_reg_write(0x3008,
+				 ((uint32_t)params[76] << 8) |
+				 ((uint32_t)params[72] << 31) |
+				 params[74] |
+				 ((uint32_t)*(uint16_t *)(void *)(params + 12)
+				  << 16 & 0x03ff0000));
+		system_reg_write(0x300c,
+				 ((uint32_t)params[77] << 8) |
+				 ((uint32_t)params[73] << 31) |
+				 params[75] |
+				 ((uint32_t)*(uint16_t *)(void *)(params + 14)
+				  << 16 & 0x03ff0000));
+		system_reg_write(0x3014,
+				 *(uint16_t *)(void *)(params + 8) |
+				 (*(uint32_t *)(void *)(params + 4) << 16));
+		system_reg_write(0x3018,
+				 *(uint32_t *)(void *)(params + 0));
+		system_reg_write(0x3020,
+				 ((uint32_t)params[71] << 16 & 0x00010000) |
+				 (params[26] & 1));
+	}
+
+	system_reg_write(0x3010,
+			 ((uint32_t)info[27690] << 16) | info[27689]);
+	if (mode == 0 || mode == 2) {
+		value = ((uint32_t)info[27697] << 4 & 0x30) |
+			((uint32_t)info[27698] << 8 & 0x300) |
+			(info[27696] & 3) |
+			((uint32_t)params[80] << 16) |
+			((uint32_t)params[81] << 12 & 0x3000);
+		system_reg_write(0x3004, value);
+
+		value = ((uint32_t)info[27693] << 4 & 0x30) |
+			((uint32_t)info[27694] << 8 & 0x300) |
+			(info[27692] & 3) |
+			((uint32_t)info[27695] << 12 & 0x3000) |
+			((uint32_t)params[82] << 16 & 0x00070000);
+		system_reg_write(0x301c, value);
+	}
+	system_reg_write(0x3100, 1);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003447c origin=fragment_seed original=tisp_lsc_fra_down_interrupt */
@@ -79221,6 +79565,7 @@ int32_t tisp_lsc_ring_itp(void *arg1, int32_t arg2, void *arg3, int32_t arg4, vo
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000348a4 origin=fragment_seed original=tisp_lsc_ct_interp */
+#if 0
 int64_t tisp_lsc_ct_interp(uint32_t a0, uint32_t a1, uint32_t a2)
 {
     uint32_t *local_10 = 0;
@@ -80116,8 +80461,79 @@ tisp_lsc_ct_interp0xa54:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#endif
+
+int64_t tisp_lsc_ct_interp(uint32_t channel, uint32_t ct, uint32_t force)
+{
+	uint8_t *info = t41_lsc_info(channel);
+	uint8_t *params;
+	const uint16_t *plane0;
+	const uint16_t *plane1;
+	const uint16_t *plane2;
+	uint32_t table_offset;
+	uint32_t flag_offset;
+	uint32_t flag2_offset;
+	uint32_t count;
+	uint32_t i;
+
+	if (!info)
+		return -EINVAL;
+	params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+	if (!params)
+		return -EINVAL;
+	if (!force && *(uint32_t *)(void *)(info + 12) == ct)
+		return 1;
+
+	*(uint32_t *)(void *)(info + 12) = ct;
+	if (ct < *(uint16_t *)(void *)(params + 18)) {
+		table_offset = 13952;
+		flag_offset = 83;
+		flag2_offset = 95;
+		*(uint32_t *)(void *)(info + 16) = 0;
+	} else if (ct <= *(uint16_t *)(void *)(params + 20)) {
+		table_offset = 27776;
+		flag_offset = 87;
+		flag2_offset = 98;
+		*(uint32_t *)(void *)(info + 16) = 2;
+	} else {
+		table_offset = 41600;
+		flag_offset = 91;
+		flag2_offset = 101;
+		*(uint32_t *)(void *)(info + 16) = 4;
+	}
+
+	info[27692] = params[flag_offset + 0];
+	info[27693] = params[flag_offset + 1];
+	info[27694] = params[flag_offset + 2];
+	info[27695] = params[flag_offset + 3];
+	info[27696] = params[flag2_offset + 0];
+	info[27697] = params[flag2_offset + 1];
+	info[27698] = params[flag2_offset + 2];
+
+	count = t41_lsc_lut_count(info);
+	plane0 = (const uint16_t *)(const void *)(params + table_offset);
+	plane1 = (const uint16_t *)(const void *)(params + table_offset + 4608);
+	plane2 = (const uint16_t *)(const void *)(params + table_offset + 9216);
+	for (i = 0; i < count; ++i) {
+		uint32_t a = plane0[i * 2 + 0] & 0xfff;
+		uint32_t b = plane0[i * 2 + 1] & 0xfff;
+		uint32_t c = plane1[i * 2 + 0] & 0xfff;
+		uint32_t d = plane1[i * 2 + 1] & 0xfff;
+		uint32_t e = plane2[i * 2 + 0] & 0xfff;
+		uint32_t f = plane2[i * 2 + 1] & 0xfff;
+		uint32_t *dest =
+			(uint32_t *)(void *)(info + 32 + i * 12);
+
+		dest[0] = a | (b << 12) | ((c & 0xff) << 24);
+		dest[1] = (c >> 8) | (d << 4) | (e << 16) |
+			  ((f & 0x0f) << 28);
+		dest[2] = f >> 4;
+	}
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003530c origin=fragment_seed original=tisp_lsc_ct_update */
+#if 0
 int32_t tisp_lsc_ct_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
     uint32_t *local_10 = 0;
@@ -80155,8 +80571,21 @@ tisp_lsc_ct_update0x40:
 
     return 0;
 }
+#endif
+
+int32_t tisp_lsc_ct_update(uint32_t channel, uint32_t ct, uint32_t force)
+{
+	int ret = (int)tisp_lsc_ct_interp(channel, ct, force);
+
+	if (ret < 0)
+		return ret;
+	if (ret == 0)
+		return tisp_lsc_prepare_write_lut(channel);
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003535c origin=fragment_seed original=tisp_lsc_gain_interp */
+#if 0
 int32_t tisp_lsc_gain_interp(uint32_t a0, uint32_t a1, uint32_t a2)
 {
     uint32_t local_14 = 0;
@@ -80238,8 +80667,41 @@ tisp_lsc_gain_interp0xa8:
 
     return 0;
 }
+#endif
+
+int32_t tisp_lsc_gain_interp(uint32_t channel, uint32_t gain,
+			     uint32_t force)
+{
+	uint8_t *info = t41_lsc_info(channel);
+	uint32_t previous;
+	uint32_t threshold;
+
+	if (!info)
+		return -EINVAL;
+	previous = *(uint32_t *)(void *)(info + 24);
+	threshold = *(uint32_t *)(void *)(info + 28);
+	if (!force) {
+		uint32_t delta = gain < previous ? previous - gain : gain - previous;
+
+		if (delta < threshold)
+			return 1;
+	}
+	*(uint32_t *)(void *)(info + 24) = gain;
+	info[27689] = (uint8_t)tisp_simple_intp_int8(gain >> 16,
+						      gain & 0xffff,
+						      (void *)(uintptr_t)
+						      *(uint32_t *)(void *)
+						      (info + 13856));
+	info[27690] = (uint8_t)tisp_simple_intp_int8(gain >> 16,
+						      gain & 0xffff,
+						      (void *)(uintptr_t)
+						      *(uint32_t *)(void *)
+						      (info + 13860));
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035428 origin=fragment_seed original=tisp_lsc_gain_update */
+#if 0
 int32_t tisp_lsc_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
     uint32_t local_14 = 0;
@@ -80276,8 +80738,22 @@ tisp_lsc_gain_update0x44:
 
     return 0;
 }
+#endif
+
+int32_t tisp_lsc_gain_update(uint32_t channel, uint32_t gain,
+			     uint32_t force)
+{
+	int ret = tisp_lsc_gain_interp(channel, gain, force);
+
+	if (ret < 0)
+		return ret;
+	if (ret == 0)
+		return tisp_lsc_write_reg(channel, 1);
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035484 origin=fragment_seed original=tisp_lsc_wdr_en */
+#if 0
 int64_t tisp_lsc_wdr_en(uint32_t a0, uint32_t a1)
 {
     uint32_t *local_10 = 0;
@@ -80356,8 +80832,39 @@ tisp_lsc_wdr_en0xc0:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#endif
+
+int64_t tisp_lsc_wdr_en(uint32_t channel, uint32_t enabled)
+{
+	uint8_t *info = t41_lsc_info(channel);
+	uint8_t *params;
+	int ret;
+
+	if (!info)
+		return -EINVAL;
+	params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+	if (!params)
+		return -EINVAL;
+	*(uint32_t *)(void *)(info + 13856) =
+		(uint32_t)(uintptr_t)(params + (enabled == 1 ? 49 : 27));
+	*(uint32_t *)(void *)(info + 13860) =
+		(uint32_t)(uintptr_t)(params + (enabled == 1 ? 60 : 38));
+	ret = tisp_lsc_gain_interp(channel,
+				   *(uint32_t *)(void *)(info + 24), 1);
+	if (ret)
+		return ret;
+	ret = (int)tisp_lsc_ct_interp(channel,
+				      *(uint32_t *)(void *)(info + 12), 1);
+	if (ret)
+		return ret;
+	ret = tisp_lsc_write_reg(channel, 0);
+	if (ret)
+		return ret;
+	return tisp_lsc_real_write_lut(channel);
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035554 origin=fragment_seed original=tisp_lsc_init */
+#if 0
 int tisp_lsc_init(uint32_t arg1, uint32_t *arg2)
 {
     uint32_t *s2 = arg1 << 2;
@@ -80425,8 +80932,79 @@ int tisp_lsc_init(uint32_t arg1, uint32_t *arg2)
     data_864e8 = (uint32_t)tisp_lsc_pm_resume;
     return 0;
 }
+#endif
+
+int tisp_lsc_init(uint32_t channel, uint32_t *par)
+{
+	uint8_t *info;
+	uint8_t *params;
+	uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+	int ret;
+
+	if (channel >= ARRAY_SIZE(lsc_info) || !par)
+		return -EINVAL;
+	if (lsc_info[channel])
+		return -EBUSY;
+	params = (uint8_t *)(uintptr_t)
+		((uint32_t *)(void *)tparamsP_storage)[channel];
+	if (!params)
+		return -ENODEV;
+
+	info = private_kmalloc(0x6c38, GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+	memset(info, 0, 0x6c38);
+	lsc_info[channel] = (uint32_t)(uintptr_t)info;
+	params += 0x4178;
+	*(uint32_t *)(void *)(info + 0) = (uint32_t)(uintptr_t)params;
+	*(uint32_t *)(void *)(info + 4) = par[1];
+	*(uint32_t *)(void *)(info + 8) = par[0];
+	*(uint32_t *)(void *)(info + 12) = 5000;
+	*(uint32_t *)(void *)(info + 16) = 5;
+	*(uint32_t *)(void *)(info + 20) = 16;
+	*(uint32_t *)(void *)(info + 24) = 0;
+	*(uint32_t *)(void *)(info + 28) = 256;
+	info[27688] = ((par[2] & 0x1f) < 4) ? 0 : 1;
+	info[27689] = 0xff;
+	info[27690] = 0xff;
+	info[27691] = 0;
+	info[27699] = 0;
+	info[27700] = 0;
+	info[27701] = 0;
+	*(uint32_t *)(void *)(info + 13856) =
+		(uint32_t)(uintptr_t)(params + (par[30] == 1 ? 49 : 27));
+	*(uint32_t *)(void *)(info + 13860) =
+		(uint32_t)(uintptr_t)(params + (par[30] == 1 ? 60 : 38));
+	private_spin_lock_init((int32_t *)(void *)
+				(lsc_slock_storage + channel * sizeof(uint32_t)));
+
+	ret = tisp_lsc_gain_interp(channel, 0, 1);
+	if (ret)
+		goto free_info;
+	ret = (int)tisp_lsc_ct_interp(channel, 5000, 1);
+	if (ret)
+		goto free_info;
+	ret = tisp_lsc_write_reg(channel, 0);
+	if (ret)
+		goto free_info;
+	ret = tisp_lsc_real_write_lut(channel);
+	if (ret)
+		goto free_info;
+
+	system_reg_write(0x0314, 0x20230531);
+	callbacks[12] = (uint32_t)(uintptr_t)tisp_lsc_pm_get_regsize;
+	callbacks[13] = (uint32_t)(uintptr_t)tisp_lsc_pm_suspend;
+	callbacks[14] = (uint32_t)(uintptr_t)tisp_lsc_pm_resume;
+	return 0;
+
+free_info:
+	private_kfree(info);
+	lsc_info[channel] = 0;
+	return ret;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000357d8 origin=fragment_seed original=tisp_lsc_deinit */
+#if 0
 int32_t tisp_lsc_deinit(uint32_t a0)
 {
     uint32_t *ptr;
@@ -80456,6 +81034,23 @@ int32_t tisp_lsc_deinit(uint32_t a0)
     }
 
     return 0;
+}
+#endif
+
+int32_t tisp_lsc_deinit(uint32_t channel)
+{
+	uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+	if (channel >= ARRAY_SIZE(lsc_info))
+		return -EINVAL;
+	if (lsc_info[channel]) {
+		private_kfree((void *)(uintptr_t)lsc_info[channel]);
+		lsc_info[channel] = 0;
+	}
+	callbacks[12] = 0;
+	callbacks[13] = 0;
+	callbacks[14] = 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003585c origin=fragment_seed original=tisp_lsc_param_array_get */
@@ -90321,10 +90916,9 @@ int64_t tisp_dpc_write_reg_long(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16256;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+    a0 = (uintptr_t)&dpc_info[a0];
 
     /* fragment 1: StackAccess */
     local_1c = ra;
@@ -90455,7 +91049,6 @@ tisp_dpc_write_reg_long0xb4:
     v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(28756, ((*(uint16_t *)((char *)((uintptr_t)s0) + 30)) << 16) | (*(uint8_t *)((char *)((uintptr_t)s2) + 1227))); /* jalr target resolved by relocation */
 
     /* fragment 28: CallSetup */
-    s2 = 268369920;
     v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(28760, ((*(uint8_t *)((char *)((uintptr_t)s2) + 1229)) << 8) | ((*(uint16_t *)((char *)((uintptr_t)s0) + 32)) << 16) | (*(uint8_t *)((char *)((uintptr_t)s2) + 1228))); /* jalr target resolved by relocation */
 
     /* fragment 29: CallSetup */
@@ -90477,10 +91070,10 @@ tisp_dpc_write_reg_long0xb4:
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(29244, a1); /* jalr target resolved by relocation */
 
     /* fragment 35: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(29108, (((*(uint16_t *)((char *)((uintptr_t)s0) + 84)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 82) & 4095)); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(29108, (((*(uint16_t *)((char *)((uintptr_t)s0) + 84)) << 16) & 0x0fff0000U) | (*(uint16_t *)((char *)((uintptr_t)s0) + 82) & 4095)); /* jalr target resolved by relocation */
 
     /* fragment 36: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(29112, (((*(uint16_t *)((char *)((uintptr_t)s0) + 88)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 86) & 4095)); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(29112, (((*(uint16_t *)((char *)((uintptr_t)s0) + 88)) << 16) & 0x0fff0000U) | (*(uint16_t *)((char *)((uintptr_t)s0) + 86) & 4095)); /* jalr target resolved by relocation */
 
     /* fragment 37: CallSetup */
     s2 = 67043328;
@@ -90542,10 +91135,9 @@ int64_t tisp_dpc_write_reg_short(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16256;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+    a0 = (uintptr_t)&dpc_info[a0];
 
     /* fragment 1: StackAccess */
     local_24 = ra;
@@ -90742,18 +91334,22 @@ int32_t tisp_dpc_write_reg_other(uint32_t a0)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: Arithmetic */
-    s3 = (uintptr_t)&ivdc_threshold_line;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
 
     /* fragment 2: StackAccess */
     local_24 = s4;
-    s3 = s3 + 16256;
-    s4 = a0 << 2;
+    /* Keep the OEM per-channel entry address in byte-addressed storage.
+     * The recovered s4 + s3 expression performed scaled pointer arithmetic
+     * because s4 was typed as uint32_t *, multiplying the BSS base by four. */
+    s3 = (uintptr_t)&dpc_info[a0];
+    s4 = 0;
     local_28 = s5;
     local_2c = ra;
     local_1c = s2;
     local_18 = s1;
     local_14 = s0;
-    s5 = s4 + s3;
+    s5 = s3;
     v0 = *(uint32_t *)((char *)s5 + 0);
     v1 = *(uint32_t *)((char *)v0 + 4);
     s0 = *(uint32_t *)((char *)v0 + 0);
@@ -90951,7 +91547,7 @@ int32_t tisp_dpc_write_reg_other(uint32_t a0)
     if (v0 == 0) { goto tisp_dpc_write_reg_other0x848; }
 
     /* fragment 65: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)(a0); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(a0, a1); /* jalr target resolved by relocation */
 
     /* fragment 66: CallSetup */
     v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(29212, (((*(uint16_t *)((char *)((uintptr_t)s0) + 678)) << 16) & (uintptr_t)s2) | (*(uint16_t *)((char *)((uintptr_t)s0) + 676) & 2047)); /* jalr target resolved by relocation */
@@ -91000,7 +91596,7 @@ tisp_dpc_write_reg_other0x848:
 
 tisp_dpc_write_reg_other0x8a0:
     /* fragment 79: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)(a0); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(a0, a1); /* jalr target resolved by relocation */
 
     /* fragment 80: Arithmetic */
     v0 = 0;
@@ -91040,6 +91636,12 @@ int32_t tisp_dpc_write_reg_part_0(uint32_t a0)
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
+
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    tisp_dpc_write_reg_long(a0);
+    tisp_dpc_write_reg_short(a0);
+    return tisp_dpc_write_reg_other(a0);
+#endif
 
     /* fragment 1: CallSetup */
     s0 = a0;
@@ -91081,10 +91683,9 @@ int32_t tisp_dpc_write_reg(uint32_t a0, uint32_t a1)
     uint32_t local_10 = 0, local_14 = 0, local_18 = 0, local_1c = 0;
 
     /* Common prologue for all paths */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16256;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+    a0 = (uintptr_t)&dpc_info[a0];
 
     /* Save callee-saved registers */
     local_1c = ra;
@@ -91219,10 +91820,9 @@ int32_t tisp_dpc_gain_interp(uint32_t a0, uint32_t a1)
     uintptr_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16256;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+    a0 = (uintptr_t)&dpc_info[a0];
 
     /* fragment 1: StackAccess */
     local_34 = ra;
@@ -91550,9 +92150,11 @@ int32_t tisp_dpc_l_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
     uint32_t *v1 = 0;
 
     /* fragment 0: CallSetup */
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 12) = a2;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+    *(uint32_t *)((char *)(uintptr_t)dpc_info[a0] + 12) = a2;
     s0 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dpc_gain_interp)(a0); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_dpc_gain_interp)(a0, 0); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dpc_write_reg_long)(s0); /* jalr target resolved by relocation */
@@ -91580,9 +92182,11 @@ int32_t tisp_dpc_s_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
     uint32_t *v1 = 0;
 
     /* fragment 0: CallSetup */
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 16) = a2;
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+    *(uint32_t *)((char *)(uintptr_t)dpc_info[a0] + 16) = a2;
     s0 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dpc_gain_interp)(a0); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_dpc_gain_interp)(a0, 1); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dpc_write_reg_short)(s0); /* jalr target resolved by relocation */
@@ -91614,8 +92218,10 @@ int32_t tisp_dpc_wdr_en(uint32_t a0, uint32_t a1)
     uint32_t *v1 = 0;
 
     /* fragment 0: CallSetup */
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
     s2 = a1;
-    *(uint8_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 8) = a1;
+    *(uint8_t *)((char *)(uintptr_t)dpc_info[a0] + 8) = a1;
     s0 = a0;
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dpc_gain_interp)(a0); /* jalr target resolved by relocation */
 
@@ -91678,6 +92284,55 @@ int32_t tisp_dpc_init(uint32_t a0)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        uint8_t *info;
+        uint8_t *params;
+        uint8_t *runtime;
+        uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+        if (a0 >= ARRAY_SIZE(dpc_info))
+            return -EINVAL;
+        if (dpc_info[a0])
+            return -EBUSY;
+        params = (uint8_t *)(uintptr_t)
+            ((uint32_t *)(void *)tparamsP_storage)[a0];
+        if (!params)
+            return -ENODEV;
+
+        info = private_kmalloc(24, 0x024000c0);
+        if (!info)
+            return -ENOMEM;
+        memset(info, 0, 24);
+        dpc_info[a0] = (uint32_t)(uintptr_t)info;
+        *(uint32_t *)(void *)info =
+            (uint32_t)(uintptr_t)(params + 15316);
+        info[8] = 0;
+        info[9] = ((system_reg_read(0x88) & 0x1fU) >= 5U);
+
+        runtime = private_kmalloc(110, 0x024000c0);
+        if (!runtime) {
+            private_kfree(info);
+            dpc_info[a0] = 0;
+            return -ENOMEM;
+        }
+        memset(runtime, 0, 110);
+        *(uint32_t *)(void *)(info + 4) =
+            (uint32_t)(uintptr_t)runtime;
+
+        tisp_dpc_gain_interp(a0, 0);
+        tisp_dpc_gain_interp(a0, 1);
+        tisp_dpc_write_reg_part_0(a0);
+        system_reg_write(0x340, 0x20220702);
+        callbacks[72 / 4] =
+            (uint32_t)(uintptr_t)tisp_dpc_pm_get_regsize;
+        callbacks[76 / 4] =
+            (uint32_t)(uintptr_t)tisp_dpc_pm_suspend;
+        callbacks[80 / 4] =
+            (uint32_t)(uintptr_t)tisp_dpc_pm_resume;
+        return 0;
+    }
+#else
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -91760,37 +92415,30 @@ tisp_dpc_init0x80:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003eb14 origin=model_output original=tisp_dpc_deinit */
-int tisp_dpc_deinit(int arg1) {
-    void **base = (void **)(((char *)&tpm_cb + 0x48) + (arg1 << 2));
-    void *ptr = *base;
+int tisp_dpc_deinit(int arg1)
+{
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+    uint8_t *info;
+    void *runtime;
 
-    if (ptr != 0) {
-        void *field4 = *(void **)((char *)ptr + 4);
-
-        if (field4 != 0) {
-            private_kfree();
-        }
-
-        private_kfree();
-        *base = 0;
+    if (arg1 < 0 || arg1 >= ARRAY_SIZE(dpc_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)dpc_info[arg1];
+    if (info) {
+        runtime = (void *)(uintptr_t)
+            *(uint32_t *)(void *)(info + 4);
+        if (runtime)
+            private_kfree(runtime);
+        private_kfree(info);
+        dpc_info[arg1] = 0;
     }
-
-    void *tpm = (void *)((char *)&tpm_cb + 0x48);
-    if (*(int *)((char *)tpm + 72) != 0) {
-        *(int *)((char *)tpm + 72) = 0;
-    }
-
-    if (*(int *)((char *)tpm + 76) != 0) {
-        *(int *)((char *)tpm + 76) = 0;
-    }
-
-    if (*(int *)((char *)tpm + 80) != 0) {
-        *(int *)((char *)tpm + 80) = 0;
-    }
-
+    callbacks[72 / 4] = 0;
+    callbacks[76 / 4] = 0;
+    callbacks[80 / 4] = 0;
     return 0;
 }
 
@@ -91807,6 +92455,9 @@ int32_t tisp_dpc_dn_params_refresh(uint32_t a0, uint32_t a1)
     uint32_t *s2 = 0;
     uintptr_t *v0 = 0;
 
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -91822,10 +92473,9 @@ int32_t tisp_dpc_dn_params_refresh(uint32_t a0, uint32_t a1)
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dpc_write_reg_part_0)(s0); /* jalr target resolved by relocation */
 
     /* fragment 4: ConstantLoad */
-    v0 = ((char *)&dpc_info);
+    v0 = (uintptr_t *)(uintptr_t)dpc_info[(uintptr_t)s0];
 
     /* fragment 5: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 0);
     *(uint32_t *)((char *)v0 + 20) = s2;
     ra = local_1c;
     s2 = local_18;
@@ -91849,9 +92499,13 @@ int32_t tisp_dpc_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0] || !a1 || !a2)
+        return -EINVAL;
+
     /* fragment 0: CallSetup */
     s0 = a2;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)a1, (void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0)), 1442); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)memcpy((void *)(uintptr_t)a1,
+        (void *)(uintptr_t)(*(uint32_t *)(uintptr_t)dpc_info[a0]), 1442); /* jalr target resolved by relocation */
 
     /* fragment 1: Arithmetic */
     v0 = 1442;
@@ -91881,10 +92535,15 @@ int32_t tisp_dpc_param_array_set(uint32_t a0, uint32_t a1)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0] || !a1)
+        return -EINVAL;
+
     /* fragment 0: CallSetup */
     s0 = a0;
     s1 = (uint32_t *)&tisp_dpc_gain_interp;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0)), (void *)(uintptr_t)a1, 1442); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)memcpy(
+        (void *)(uintptr_t)(*(uint32_t *)(uintptr_t)dpc_info[a0]),
+        (void *)(uintptr_t)a1, 1442); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_dpc_gain_interp)(s0, 0); /* jalr target resolved by relocation */
@@ -91938,23 +92597,25 @@ int64_t tisp_s_dpc_ratio(uint32_t a0)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(dpc_info) || !dpc_info[a0])
+        return -EINVAL;
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: ConstantLoad */
-    v0 = 0x0;
+    v0 = (uintptr_t *)tparamsP_storage;
 
     /* fragment 2: StackAccess */
     local_18 = s2;
     local_14 = s1;
     s2 = a0 << 2;
-    s1 = (uint32_t *)&ivdc_threshold_line;
+    s1 = (uintptr_t *)&dpc_info;
     local_10 = s0;
     local_24 = ra;
     local_20 = s4;
     local_1c = s3;
     v0 = (uintptr_t)s2 + (uintptr_t)v0;
-    s1 = s1 + 16256;
     s4 = *(uint32_t *)((char *)v0 + 0);
     v0 = (uintptr_t)s2 + (uintptr_t)s1;
     v0 = *(uint32_t *)((char *)v0 + 0);
@@ -92394,8 +93055,7 @@ int32_t tisp_dmsc_noref_reg_cfg(uint32_t a0)
     uintptr_t *v0 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16276;
+    v0 = (uintptr_t *)&dmsc_info;
     a0 = a0 << 2;
     a0 = a0 + (uintptr_t)v0;
 
@@ -92603,8 +93263,7 @@ int32_t tisp_dmsc_ref_reg_cfg(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16276;
+    v0 = (uintptr_t *)&dmsc_info;
     a0 = a0 << 2;
     a0 = a0 + (uintptr_t)v0;
 
@@ -93233,8 +93892,7 @@ int32_t tisp_dmsc_intp(uint32_t a0, uint32_t a1)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    v1 = v1 + 16276;
+    v1 = (uintptr_t *)&dmsc_info;
     v0 = a0 << 2;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
@@ -94604,11 +95262,10 @@ int64_t tisp_dmsc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: Arithmetic */
-    s1 = (uint32_t *)&ivdc_threshold_line;
+    s1 = (uintptr_t *)&dmsc_info;
 
     /* fragment 2: StackAccess */
     local_18 = s2;
-    s1 = s1 + 16276;
     s2 = a0 << 2;
     local_10 = s0;
     local_1c = ra;
@@ -94688,7 +95345,7 @@ int32_t tisp_dmsc_refresh(uint32_t a0, uint32_t a1)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dmsc_par_refresh)(a0); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_dmsc_par_refresh)(a0, a1, 256); /* jalr target resolved by relocation */
 
     /* fragment 2: Epilogue */
     /* function epilogue: restore registers and return */
@@ -94725,6 +95382,53 @@ int32_t tisp_dmsc_init(uint32_t a0)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        uint8_t *info;
+        uint32_t params;
+        void *runtime;
+        uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+        int ret;
+
+        if (a0 >= ARRAY_SIZE(dmsc_info))
+            return -EINVAL;
+        if (dmsc_info[a0])
+            return -EBUSY;
+        params = ((uint32_t *)(void *)tparamsP_storage)[a0];
+        if (!params)
+            return -ENODEV;
+
+        info = private_kmalloc(20, 0x024000c0);
+        if (!info)
+            return -ENOMEM;
+        memset(info, 0, 20);
+        dmsc_info[a0] = (uint32_t)(uintptr_t)info;
+
+        runtime = private_vmalloc(378);
+        if (!runtime) {
+            private_kfree(info);
+            dmsc_info[a0] = 0;
+            return -ENOMEM;
+        }
+        memset(runtime, 0, 378);
+        *(uint32_t *)(void *)info = params + 0x10000U + 10120U;
+        *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)runtime;
+        *(uint32_t *)(void *)(info + 8) = 0xffffffffU;
+        *(uint32_t *)(void *)(info + 16) = 128;
+
+        ret = tisp_dmsc_refresh(a0, 0x10000U);
+        if (ret)
+            return ret;
+        system_reg_write(0x344, 0x20220702);
+        callbacks[96 / 4] =
+            (uint32_t)(uintptr_t)tisp_dmsc_pm_get_regsize;
+        callbacks[100 / 4] =
+            (uint32_t)(uintptr_t)tisp_dmsc_pm_suspend;
+        callbacks[104 / 4] =
+            (uint32_t)(uintptr_t)tisp_dmsc_pm_resume;
+        return 0;
+    }
+#else
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -94794,42 +95498,30 @@ tisp_dmsc_init0x80:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042438 origin=model_output original=tisp_dmsc_deinit */
 int32_t tisp_dmsc_deinit(int32_t arg1)
 {
-    int32_t idx = arg1 << 2;
-    void **entry = (void **)((uintptr_t)bss_base + idx);
-    void *v0 = *entry;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+    uint8_t *info;
+    void *runtime;
 
-    if (v0 != NULL) {
-        int32_t a0 = *(int32_t *)((uintptr_t)v0 + 4);
-
-        if (a0 != 0) {
-            private_vfree((void *)(uintptr_t)a0);
-            *(int32_t *)((uintptr_t)v0 + 4) = 0;
-        }
-
-        private_kfree();
-        *entry = NULL;
+    if (arg1 < 0 || arg1 >= ARRAY_SIZE(dmsc_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)dmsc_info[arg1];
+    if (info) {
+        runtime = (void *)(uintptr_t)
+            *(uint32_t *)(void *)(info + 4);
+        if (runtime)
+            private_vfree(runtime);
+        private_kfree(info);
+        dmsc_info[arg1] = 0;
     }
-
-    /* tpm_cb + 96 */
-    if (*(void **)((uintptr_t)tpm_cb + 96) != NULL) {
-        *(void **)((uintptr_t)tpm_cb + 96) = NULL;
-    }
-
-    /* tpm_cb + 100 */
-    if (*(void **)((uintptr_t)tpm_cb + 100) != NULL) {
-        *(void **)((uintptr_t)tpm_cb + 100) = NULL;
-    }
-
-    /* tpm_cb + 104 */
-    if (*(void **)((uintptr_t)tpm_cb + 104) != NULL) {
-        *(void **)((uintptr_t)tpm_cb + 104) = NULL;
-    }
-
+    callbacks[96 / 4] = 0;
+    callbacks[100 / 4] = 0;
+    callbacks[104 / 4] = 0;
     return 0;
 }
 
@@ -94867,9 +95559,13 @@ int32_t tisp_dmsc_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(dmsc_info) || !dmsc_info[a0] || !a1 || !a2)
+        return -EINVAL;
+
     /* fragment 0: CallSetup */
     s0 = a2;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)a1, (void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0)), 4214); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)memcpy((void *)(uintptr_t)a1,
+        (void *)(uintptr_t)(*(uint32_t *)(uintptr_t)dmsc_info[a0]), 4214); /* jalr target resolved by relocation */
 
     /* fragment 1: Arithmetic */
     v0 = 4214;
@@ -94903,12 +95599,15 @@ int64_t tisp_dmsc_param_array_set(uint32_t a0, uint32_t a1)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(dmsc_info) || !dmsc_info[a0] || !a1)
+        return -EINVAL;
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: CallSetup */
     s0 = a0 << 2;
-    s0 = s0 + (uintptr_t)&ivdc_threshold_line;
+    s0 = s0 + (uintptr_t)&dmsc_info;
     s3 = a0;
     s1 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 0);
     v0 = (unsigned int *)memcpy((void *)(uintptr_t)s1, (void *)(uintptr_t)a1, 4214); /* jalr target resolved by relocation */
@@ -95016,9 +95715,8 @@ int32_t tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
+    v1 = (uintptr_t *)&dmsc_info;
     v0 = a0 << 2;
-    v1 = v1 + 16276;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
     /* fragment 1: MemoryAccess */
@@ -95091,7 +95789,9 @@ int32_t tisp_gamma_write_lut_rgb(uint32_t a0)
 
     /* fragment 0: CallSetup */
     s2 = 327680;
-    s5 = *(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0);
+    if (a0 >= ARRAY_SIZE(gamma_info) || !gamma_info[a0])
+        return -EINVAL;
+    s5 = gamma_info[a0];
     v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(327680 + 64, 257); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
@@ -95163,8 +95863,7 @@ int32_t tisp_gamma_write_lut_ir(uint32_t a0)
     uintptr_t *v0 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16288;
+    v0 = (uintptr_t *)&gamma_info;
     a0 = a0 << 2;
     a0 = a0 + (uintptr_t)v0;
 
@@ -95260,8 +95959,7 @@ int32_t tisp_gamma_strength_transform(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 16288;
+    v0 = (uintptr_t *)&gamma_info;
     a0 = a0 << 2;
     a0 = a0 + (uintptr_t)v0;
 
@@ -95329,17 +96027,23 @@ int64_t tisp_gamma_interp_by_ev(uint32_t arg1, uint32_t arg2, uint32_t arg3, uin
 {
     uint32_t *t3 = arg5;
     uint32_t t0 = 0;
-    uint32_t *t1 = (uint32_t *)((char *)arg1 + 0x3fa0);
+    uint32_t *t1;
     uint32_t *t2;
     uint32_t *t4 = 10;
     uint32_t *t5 = 9;
     uint32_t *v0;
     uint32_t *v1 = 0;
-    uint32_t a1 = *t1;
+    uint32_t a1;
     uint32_t *a0;
     uint32_t a2;
     uint32_t *a3;
     uint32_t t6;
+
+    (void)arg2;
+    if (arg1 >= ARRAY_SIZE(gamma_info) || !gamma_info[arg1])
+        return -EINVAL;
+    t1 = (uint32_t *)(uintptr_t)gamma_info[arg1];
+    a1 = *t1;
 
     *(uint32_t *)((char *)t1 + 532) = arg3;
     t2 = (uint32_t *)(a1 + 260);
@@ -95417,9 +96121,8 @@ int32_t tisp_gamma_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
     a2 = (uintptr_t)v0 | a2;
     a3 = a3 >> 10;
     v0 = -1;
-    v1 = (unsigned int *)&ivdc_threshold_line;
+    v1 = (uintptr_t *)&gamma_info;
     if (a3 != 0) { a2 = v0; }
-    v1 = v1 + 16288;
     v0 = a0 << 2;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
@@ -95437,7 +96140,7 @@ int32_t tisp_gamma_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
     /* fragment 4: CallSetup */
     local_10 = 0;
     s0 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_gamma_interp_by_ev)(a0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)tisp_gamma_interp_by_ev(a0, 0, a2, 0, 0);
 
     /* fragment 5: Arithmetic */
     v0 = (uintptr_t)v0 & 255;
@@ -95490,9 +96193,12 @@ int32_t tisp_gamma_wdr_en(uint32_t a0, uint32_t a1)
     uint32_t *v1 = 0;
 
     /* fragment 0: CallSetup */
-    local_10 = 1;
     s0 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_gamma_interp_by_ev)(a0); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(gamma_info) || !gamma_info[a0])
+        return -EINVAL;
+    local_10 = 1;
+    v0 = (uintptr_t *)tisp_gamma_interp_by_ev(
+        a0, 0, *(uint32_t *)(uintptr_t)(gamma_info[a0] + 532), 0, 1);
 
     /* fragment 1: CallSetup */
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_gamma_strength_transform)(s0); /* jalr target resolved by relocation */
@@ -95529,9 +96235,12 @@ int32_t tisp_gamma_dn_params_refresh(uint32_t a0, uint32_t a1)
     uint32_t *v1 = 0;
 
     /* fragment 0: CallSetup */
-    local_10 = 1;
     s0 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_gamma_interp_by_ev)(a0); /* jalr target resolved by relocation */
+    if (a0 >= ARRAY_SIZE(gamma_info) || !gamma_info[a0])
+        return -EINVAL;
+    local_10 = 1;
+    v0 = (uintptr_t *)tisp_gamma_interp_by_ev(
+        a0, 0, *(uint32_t *)(uintptr_t)(gamma_info[a0] + 532), 0, 1);
 
     /* fragment 1: CallSetup */
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_gamma_strength_transform)(s0); /* jalr target resolved by relocation */
@@ -95572,6 +96281,47 @@ int32_t tisp_gamma_init(uint32_t a0)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        uint8_t *info;
+        uint8_t *params;
+        uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+        if (a0 >= ARRAY_SIZE(gamma_info))
+            return -EINVAL;
+        if (gamma_info[a0])
+            return -EBUSY;
+        params = (uint8_t *)(uintptr_t)
+            ((uint32_t *)(void *)tparamsP_storage)[a0];
+        if (!params)
+            return -ENODEV;
+        params += 0x10000U + 14484U;
+
+        info = private_kmalloc(1060, 0x024000c0);
+        if (!info)
+            return -ENOMEM;
+        memset(info, 0, 1060);
+        gamma_info[a0] = (uint32_t)(uintptr_t)info;
+        *(uint32_t *)(void *)info = (uint32_t)(uintptr_t)params;
+        memcpy(info + 8, params + 300, 258);
+        memcpy(info + 272, params, 258);
+        *(uint32_t *)(void *)(info + 536) = 255;
+
+        tisp_gamma_interp_by_ev(a0, 0, 0, 0, 1);
+        tisp_gamma_strength_transform(a0);
+        memcpy(info + 798, params, 258);
+        tisp_gamma_write_lut_rgb(a0);
+        tisp_gamma_write_lut_ir(a0);
+        system_reg_write(0x328, 0x20220803);
+        callbacks[108 / 4] =
+            (uint32_t)(uintptr_t)tisp_gamma_pm_get_regsize;
+        callbacks[112 / 4] =
+            (uint32_t)(uintptr_t)tisp_gamma_pm_suspend;
+        callbacks[116 / 4] =
+            (uint32_t)(uintptr_t)tisp_gamma_pm_resume;
+        return 0;
+    }
+#else
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -95640,33 +96390,24 @@ int32_t tisp_gamma_init(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042e80 origin=fragment_seed original=tisp_gamma_deinit */
 int32_t tisp_gamma_deinit(uint32_t arg1)
 {
-	uint32_t *ptr;
-	uint32_t val;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
 
-	ptr = (uint32_t *)((uintptr_t)(uintptr_t)&gamma_info + (arg1 << 2));
-	val = *ptr;
-	if (val != 0) {
-		private_kfree();
-		*ptr = 0;
-	}
-	val = *(uint32_t *)((unsigned int)((char *)&tpm_cb + 0x6c));
-	if (val != 0) {
-		*(uint32_t *)((unsigned int)((char *)&tpm_cb + 0x6c)) = 0;
-	}
-	val = *(uint32_t *)((unsigned int)((char *)&tpm_cb + 0x70));
-	if (val != 0) {
-		*(uint32_t *)((unsigned int)((char *)&tpm_cb + 0x70)) = 0;
-	}
-	val = *(uint32_t *)((unsigned int)((char *)&tpm_cb + 0x74));
-	if (val != 0) {
-		*(uint32_t *)((unsigned int)((char *)&tpm_cb + 0x74)) = 0;
-	}
-	return 0;
+    if (arg1 >= ARRAY_SIZE(gamma_info))
+        return -EINVAL;
+    if (gamma_info[arg1]) {
+        private_kfree((void *)(uintptr_t)gamma_info[arg1]);
+        gamma_info[arg1] = 0;
+    }
+    callbacks[108 / 4] = 0;
+    callbacks[112 / 4] = 0;
+    callbacks[116 / 4] = 0;
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042f04 origin=fragment_seed original=tisp_gamma_param_array_get */
@@ -95679,9 +96420,13 @@ int32_t tisp_gamma_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(gamma_info) || !gamma_info[a0] || !a1 || !a2)
+        return -EINVAL;
+
     /* fragment 0: CallSetup */
     s0 = a2;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)a1, (void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0)), 568); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)memcpy((void *)(uintptr_t)a1,
+        (void *)(uintptr_t)(*(uint32_t *)(uintptr_t)gamma_info[a0]), 568); /* jalr target resolved by relocation */
 
     /* fragment 1: Arithmetic */
     v0 = 568;
@@ -95714,12 +96459,15 @@ int32_t tisp_gamma_param_array_set(uint32_t a0, uint32_t a1)
     uint32_t *s2 = 0;
     uintptr_t *v0 = 0;
 
+    if (a0 >= ARRAY_SIZE(gamma_info) || !gamma_info[a0] || !a1)
+        return -EINVAL;
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: CallSetup */
     s1 = a0 << 2;
-    s1 = s1 + (uintptr_t)&ivdc_threshold_line;
+    s1 = s1 + (uintptr_t)&gamma_info;
     s0 = a0;
     v0 = (uintptr_t)memcpy((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(s1) + 0)) + 0)), (void *)(uintptr_t)a1, 568); /* jalr target resolved by relocation */
 
@@ -95778,11 +96526,10 @@ int64_t tisp_gamma_set_attr(uint32_t a0, uintptr_t a1, uint32_t a2)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: Arithmetic */
-    s1 = (uint32_t *)&ivdc_threshold_line;
+    s1 = (uintptr_t *)&gamma_info;
 
     /* fragment 2: StackAccess */
     local_30 = s5;
-    s1 = s1 + 16288;
     s5 = a0 << 2;
     local_2c = s4;
     local_28 = s3;
@@ -96058,9 +96805,8 @@ int32_t tisp_gamma_get_attr(uint32_t a0, uint32_t a1, uint32_t a2)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: Arithmetic */
-    s1 = (uint32_t *)&ivdc_threshold_line;
+    s1 = (uintptr_t *)&gamma_info;
     a0 = a0 << 2;
-    s1 = s1 + 16288;
 
     /* fragment 2: StackAccess */
     local_18 = s2;
@@ -107905,7 +108651,6 @@ int32_t tisp_adr_deinit(uint32_t a0)
 
     /* fragment 2: StackAccess */
     local_1c = s3;
-    s0 = s0 + 17352;
     s3 = a0 << 2;
     local_20 = s4;
     local_24 = ra;
@@ -108066,8 +108811,7 @@ int32_t func_adr_reg_write_one(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    v1 = v1 + 17352;
+    v1 = (uintptr_t *)&adr_info;
     v0 = a0 << 2;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
@@ -108141,9 +108885,8 @@ int32_t func_adr_reg_write_5x5(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
+    v1 = (uintptr_t *)&adr_info;
     v0 = a0 << 2;
-    v1 = v1 + 17352;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
     /* fragment 1: StackAccess */
@@ -108301,8 +109044,7 @@ int32_t func_adr_reg_write_sometimes(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    v1 = v1 + 17352;
+    v1 = (uintptr_t *)&adr_info;
     v0 = a0 << 2;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
@@ -108550,8 +109292,7 @@ int64_t func_adr_reg_write_every(uint32_t a0)
     uintptr_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 17352;
+    v0 = (uintptr_t *)&adr_info;
     a0 = a0 << 2;
     a0 = a0 + (uintptr_t)v0;
 
@@ -108740,8 +109481,7 @@ int32_t tiziano_adr_read_data(uintptr_t a0, uint32_t a1)
     uintptr_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 17352;
+    v0 = (uintptr_t *)&adr_info;
     a1 = a1 << 2;
     a1 = a1 + (uintptr_t)v0;
 
@@ -109081,9 +109821,8 @@ int32_t tiziano_adr_stat_calc(uint32_t a0)
     uintptr_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
+    v0 = (uintptr_t *)&adr_info;
     a0 = a0 << 2;
-    v0 = v0 + 17352;
     v0 = a0 + (uintptr_t)v0;
 
     /* fragment 1: MemoryAccess */
@@ -109722,8 +110461,7 @@ int64_t tiziano_adr_5x5_init(uint32_t a0, uint32_t a1, uintptr_t a2, uint32_t a3
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 17352;
+    v0 = (uintptr_t *)&adr_info;
     a3 = a3 << 2;
     a3 = a3 + (uintptr_t)v0;
 
@@ -110248,9 +110986,8 @@ void* tiziano_adr_base_pars(uint32_t a0, uint32_t a1, uint32_t a2)
     v0 = 0; v1 = 0; t0 = 0; t1 = 0; t2 = 0; t3 = 0; t4 = 0; t5 = 0;
     a3 = 0;
 
-    /* v1 = &ivdc_threshold_line + 17352 */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    v1 = v1 + 17352;
+    /* v1 = &adr_info */
+    v1 = (uintptr_t *)&adr_info;
 
     /* v0 = a2 << 2 */
     v0 = a2 << 2;
@@ -111125,7 +111862,7 @@ func_local_info0x15c:
 int32_t func_gauss_local(int32_t *arg1, int32_t arg2)
 {
     int32_t *i_1 = arg1;
-    uintptr_t table = (uintptr_t)&ivdc_threshold_line + 17352 + ((uint32_t)arg2 << 2);
+    uintptr_t table = (uintptr_t)&adr_info + ((uint32_t)arg2 << 2);
     int32_t *s1 = *(int32_t **)(uintptr_t)*(uint32_t *)table;
     int32_t var_98[24];
     int32_t var_f8[24];
@@ -111506,6 +112243,12 @@ int32_t tisp_adr_init(uint32_t a0, uintptr_t a1)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(adr_info) || !a1)
+        return -EINVAL;
+    if (adr_info[a0])
+        return -EBUSY;
+    s3 = (uintptr_t)&adr_info;
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -111590,7 +112333,7 @@ tisp_adr_init0x1ac:
     /* fragment 18: CallSetup */
     s2 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(s7) + 0)) + 8);
     local_20 = *(uint32_t *)((char *)(s7) + 0);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(10056, 37748736 + 192, *(uint32_t *)((char *)(s7) + 0)); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_kmalloc)(10056, 37748736 + 192); /* jalr target resolved by relocation */
 
     /* fragment 19: StackAccess */
     a2 = local_20;
@@ -111645,7 +112388,7 @@ tisp_adr_init0x228:
     *(uint32_t *)((char *)(*(uint32_t *)((char *)(s7) + 0)) + 20) = 4;
     *(uint32_t *)((char *)(*(uint32_t *)((char *)(s7) + 0)) + 24) = s8;
     *(uint32_t *)((char *)(*(uint32_t *)((char *)(s7) + 0)) + 28) = local_20;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)(&ivdc_threshold_line + ((uintptr_t)s1 << 4), &LC28, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)(adr_mlock_storage + ((uintptr_t)s1 << 4), &LC28, 0); /* jalr target resolved by relocation */
 
     /* fragment 33: StackAccess */
     v1 = local_18;
@@ -111731,9 +112474,9 @@ tisp_adr_init0x3ec:
     /* fragment 47: CallSetup */
     *(uint16_t *)((char *)(s0 + 65536) + 7580) = a0;
     *(uint16_t *)((char *)(s0 + 65536) + 7582) = v1;
-    s8 = (uintptr_t)&ivdc_threshold_line + s5;
-    s5 = (uintptr_t)&ivdc_threshold_line + s5;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tiziano_adr_base_pars)(*(uint32_t *)((char *)(s5) + 0), 0, s1); /* jalr target resolved by relocation */
+    s8 = (uintptr_t)&height_adr + s5;
+    s5 = (uintptr_t)&width_adr + s5;
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tiziano_adr_base_pars)(*(uint32_t *)((char *)(s5) + 0), *(uint32_t *)((char *)(s8) + 0), s1); /* jalr target resolved by relocation */
 
     /* fragment 48: CallSetup */
     v0 = 65536;
@@ -111780,10 +112523,13 @@ tisp_adr_init0x42c:
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)func_adr_reg_write_every)(s1); /* jalr target resolved by relocation */
 
     /* fragment 62: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tiziano_adr_interrupt_static)((uintptr_t)s1, ((uintptr_t)s1 * 42) + 9, &tiziano_adr_interrupt_static); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)system_irq_func_set((uintptr_t)s1,
+        ((uintptr_t)s1 * 42) + 9,
+        (uintptr_t)tiziano_adr_interrupt_static);
 
     /* fragment 63: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_adr_process_func)(s1, 2, &tisp_adr_process_func); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)(uintptr_t)tisp_event_set_cb((uintptr_t)s1, 2,
+        (uintptr_t)tisp_adr_process_func);
 
     /* fragment 64: CallSetup */
     v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(800, 539099136 + 1831); /* jalr target resolved by relocation */
@@ -112524,8 +113270,7 @@ int16_t* tiziano_adr_ev_func(uint32_t a0)
     /* fragment 0: Arithmetic */
     v0 = a0;
     v1 = a0 << 2;
-    a0 = (unsigned int *)&ivdc_threshold_line;
-    a0 = a0 + 17352;
+    a0 = (uintptr_t)&adr_info;
     v1 = v1 + a0;
 
     /* fragment 1: StackAccess */
@@ -114144,8 +114889,7 @@ int64_t Tiziano_adr_fpga(uint32_t a0)
     uint32_t *v1 = 0;
 
     /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&ivdc_threshold_line;
-    v1 = v1 + 17352;
+    v1 = (uintptr_t *)&adr_info;
     v0 = a0 << 2;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
 
@@ -116124,7 +116868,9 @@ int32_t tiziano_adr_algorithm(uint32_t a0)
     uintptr_t *v1 = 0;
 
     /* fragment 0: CallSetup */
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0);
+    if (a0 >= ARRAY_SIZE(adr_info) || !adr_info[a0])
+        return -EINVAL;
+    s0 = *(uint32_t *)(uintptr_t)adr_info[a0];
     s1 = a0;
     v0 = (unsigned int *)memcpy((void *)(uintptr_t)&local_18, (void *)(uintptr_t)&__pow2_lut, 14); /* jalr target resolved by relocation */
 
@@ -116184,7 +116930,9 @@ int32_t tisp_adr_process_func(uint32_t a0)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: CallSetup */
-    s0 = (uintptr_t)&ivdc_threshold_line + (a0 << 4);
+    if (a0 >= ARRAY_SIZE(adr_info) || !adr_info[a0])
+        return -EINVAL;
+    s0 = (uintptr_t)(adr_mlock_storage + (a0 << 4));
     s1 = a0;
     v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_lock)(s0); /* jalr target resolved by relocation */
 
@@ -116233,11 +116981,15 @@ int32_t tisp_adr_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     uint32_t s3 = 0;
     uintptr_t *v0 = 0;
 
+    if (a0 >= ARRAY_SIZE(adr_info) || !adr_info[a0] || !a1 || !a2)
+        return -EINVAL;
+
     /* fragment 0: CallSetup */
     s1 = a1;
-    s3 = *(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&tmo_info) + 0)) + 4);
+    s3 = *(uint32_t *)((char *)(uintptr_t)adr_info[a0] + 4);
     s2 = a2;
-    v0 = (uintptr_t)memcpy((uintptr_t)s1, (void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0)), 2656); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)memcpy((uintptr_t)s1,
+        (void *)(uintptr_t)(*(uint32_t *)(uintptr_t)adr_info[a0]), 2656); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
     v0 = (uintptr_t)memcpy((void *)(uintptr_t)(s1 + 2656), (void *)(uintptr_t)s3, 800); /* jalr target resolved by relocation */
@@ -116271,9 +117023,14 @@ int32_t tisp_adr_param_array_set(uint32_t a0, uint32_t a1)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
+    if (a0 >= ARRAY_SIZE(adr_info) || !adr_info[a0] || !a1)
+        return -EINVAL;
+
     /* fragment 0: CallSetup */
     s0 = a0;
-    v0 = (uintptr_t)memcpy((void *)(uintptr_t)(*(uint32_t *)((char *)(*(uint32_t *)((char *)((a0 << 2) + (uintptr_t)&ivdc_threshold_line) + 0)) + 0)), (void *)(uintptr_t)a1, 2656); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)memcpy(
+        (void *)(uintptr_t)(*(uint32_t *)(uintptr_t)adr_info[a0]),
+        (void *)(uintptr_t)a1, 2656); /* jalr target resolved by relocation */
 
     /* fragment 1: CallSetup */
     *(uint16_t *)((char *)(((uintptr_t)s0 << 1) + (uintptr_t)&ivdc_threshold_line) + 0) = 1;
@@ -116391,7 +117148,7 @@ int32_t tisp_s_drc_ratio(uint32_t a0)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: ConstantLoad */
-    v0 = 0x0;
+    v0 = (uintptr_t *)tparamsP_storage;
 
     /* fragment 2: StackAccess */
     local_18 = s0;
@@ -116401,8 +117158,7 @@ int32_t tisp_s_drc_ratio(uint32_t a0)
     local_1c = s1;
     v0 = (uintptr_t)s0 + (uintptr_t)v0;
     s1 = *(uint32_t *)((char *)v0 + 0);
-    v0 = (unsigned int *)&ivdc_threshold_line;
-    v0 = v0 + 17352;
+    v0 = (uintptr_t *)&adr_info;
     v0 = (uintptr_t)s0 + (uintptr_t)v0;
     v0 = *(uint32_t *)((char *)v0 + 0);
     v0 = *(uint32_t *)((char *)v0 + 32);
@@ -141060,458 +141816,108 @@ tisp_tmo_pm_suspend0x6c:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000677d4 origin=fragment_seed original=tisp_tmo_size_update */
 int64_t tisp_tmo_size_update(uint32_t a0, uintptr_t a1)
 {
-    uintptr_t a2 = 0;
-    uintptr_t *a3 = 0;
-    uint32_t t0 = 0;
-    uintptr_t *t1 = 0;
-    uint32_t *t2 = 0;
-    uint32_t *t3 = 0;
-    uint32_t *v0 = 0;
-    uint32_t *v1 = 0;
+    uint8_t *info;
+    uint8_t *params;
+    uint8_t *size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t blocks_x;
+    uint32_t blocks_y;
+    uint32_t cells;
+    uint32_t doubled_cells;
+    uint32_t scale;
+    uint32_t ratio;
+    uint32_t exponent;
+    uint32_t flag;
+    uint32_t x_span;
+    uint32_t y_span;
 
-    /* fragment 0: ConstantLoad */
-    v0 = ((char *)&tmo_info);
-
-    /* fragment 1: MemoryAccess */
-    if (a0 >= 2 || !tmo_info[a0])
+    if (a0 >= 2 || !a1 || !tmo_info[a0])
         return -EINVAL;
-    a3 = (uintptr_t *)(uintptr_t)tmo_info[a0];
-    a2 = *(uint32_t *)((char *)a1 + 4);
-    v1 = 6415;
-    a0 = *(uint32_t *)((char *)a3 + 12);
-    v0 = *(uint32_t *)((char *)a1 + 0);
-    a2 = a2 + 7;
-    *(uint16_t *)((char *)a0 + 12) = v1;
-    v1 = 1034;
-    *(uint16_t *)((char *)a0 + 14) = v1;
-    v1 = 15;
 
-    /* fragment 2: Arithmetic */
-    /* asm: 6780c: div zero,a2,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(a2), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(a2));
-    a2 = a2 & 255;
-
-    /* fragment 3: Arithmetic */
-    a1 = v0 + 12;
-    v0 = 25;
-    t0 = 2;
-
-    /* fragment 4: Arithmetic */
-    /* asm: 67824: div zero,a1,v0 */
-    asm volatile("div $0, %0, %1" : : "r"(a1), "r"(v0) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(a1));
-    a1 = a1 & 255;
-    v1 = a1 * a2;
-    v0 = v1 < 8;
-
-    /* fragment 5: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x158; }
-
-    /* fragment 6: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    v0 = v0 + 8192;
-
-    /* fragment 7: Arithmetic */
-    /* asm: 67848: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 8: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = 0;
-    t0 = 13;
-
-tisp_tmo_size_update0x84:
-    /* fragment 9: MemoryAccess */
-    t1 = *(uint8_t *)((char *)a0 + 22);
-    v1 = (uintptr_t)v1 << 1;
-    *(uint8_t *)((char *)a0 + 23) = t1;
-    t1 = *(uint32_t *)((char *)a3 + 0);
-    *(uint16_t *)((char *)t1 + 4680) = a2;
-    a2 = *(uint32_t *)((char *)a3 + 0);
-    *(uint16_t *)((char *)a2 + 4682) = a1;
-    a1 = *(uint32_t *)((char *)a3 + 0);
-    *(uint16_t *)((char *)a1 + 4684) = v0;
-    v0 = *(uint32_t *)((char *)a3 + 0);
-    *(uint8_t *)((char *)v0 + 5825) = t0;
-    t2 = *(uint8_t *)((char *)a0 + 15);
-    t1 = *(uint8_t *)((char *)a0 + 13);
-    t0 = *(uint8_t *)((char *)a0 + 12);
-    v0 = (uintptr_t)t2 << 1;
-    v0 = (uintptr_t)v0 & 255;
-    a2 = t0 + (uintptr_t)v0;
-    t0 = t0 * (uintptr_t)t1;
-    v0 = (uintptr_t)v0 + (uintptr_t)t1;
-    v0 = (uintptr_t)v0 & 255;
-    a2 = a2 & 255;
-    a1 = *(uint8_t *)((char *)a0 + 16);
-    t3 = *(uint8_t *)((char *)a0 + 14);
-    *(uint8_t *)((char *)a0 + 17) = a2;
-    a1 = a1 << 1;
-    a1 = a1 + (uintptr_t)t3;
-    a1 = a1 & 255;
-    *(uint8_t *)((char *)a0 + 19) = a1;
-    a1 = a1 & 65535;
-    *(uint8_t *)((char *)a0 + 18) = v0;
-
-    /* fragment 10: MemoryAccess */
-    *(uint16_t *)((char *)a0 + 0) = t0;
-    t0 = (uintptr_t)v0 & 65535;
-    t1 = t0 * a2;
-    v0 = (uintptr_t)v0 - (uintptr_t)t2;
-    a2 = a2 - (uintptr_t)t2;
-    *(uint8_t *)((char *)a0 + 20) = a2;
-    *(uint8_t *)((char *)a0 + 21) = v0;
-    *(uint16_t *)((char *)a0 + 2) = t1;
-    t1 = (uintptr_t)t1 * a1;
-    a1 = t0 * a1;
-    *(uint16_t *)((char *)a0 + 4) = t1;
-    *(uint16_t *)((char *)a0 + 6) = a1;
-    v0 = *(uint32_t *)((char *)a3 + 0);
-    v0 = *(uint8_t *)((char *)v0 + 5949);
-    v0 = (uintptr_t)v0 * (uintptr_t)v1;
-    v0 = (uintptr_t)v0 >> 7;
-    *(uint16_t *)((char *)a0 + 8) = v0;
-    v0 = *(uint32_t *)((char *)a3 + 0);
-    v0 = *(uint8_t *)((char *)v0 + 5950);
-    v1 = (uintptr_t)v0 * (uintptr_t)v1;
-    v1 = (uintptr_t)v1 >> 7;
-
-    /* fragment 11: MemoryAccess */
-    *(uint16_t *)((char *)a0 + 10) = v1;
-
-tisp_tmo_size_update0x158:
-    /* fragment 12: Arithmetic */
-    v0 = v1 < 16;
-
-    /* fragment 13: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x17c; }
-
-    /* fragment 14: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    v0 = v0 + 16384;
-
-    /* fragment 15: Arithmetic */
-    /* asm: 6793c: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 16: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = 0;
-    t0 = 14;
-
-    /* fragment 17: Branch */
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x17c:
-    /* fragment 18: Arithmetic */
-    v0 = v1 < 32;
-
-    /* fragment 19: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x1a8; }
-
-    /* fragment 20: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 32768;
-    v0 = v0 + t0;
-
-    /* fragment 21: Arithmetic */
-    /* asm: 67964: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 22: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = 0;
-    t0 = 15;
-
-    /* fragment 23: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x1a8:
-    /* fragment 24: Arithmetic */
-    v0 = v1 < 64;
-
-    /* fragment 25: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x1d4; }
-
-    /* fragment 26: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 65536;
-    v0 = v0 + t0;
-
-    /* fragment 27: Arithmetic */
-    /* asm: 67990: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 28: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = 0;
-    t0 = 16;
-
-    /* fragment 29: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x1d4:
-    /* fragment 30: Arithmetic */
-    v0 = v1 < 128;
-
-    /* fragment 31: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x204; }
-
-    /* fragment 32: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 131072;
-    v0 = v0 + t0;
-
-    /* fragment 33: Arithmetic */
-    /* asm: 679bc: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 34: Arithmetic */
-    t0 = 1;
-
-    /* fragment 35: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 17;
-
-    /* fragment 36: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x204:
-    /* fragment 37: Arithmetic */
-    v0 = v1 < 256;
-
-    /* fragment 38: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x230; }
-
-    /* fragment 39: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t1 = 262144;
-    v0 = (uintptr_t)v0 + (uintptr_t)t1;
-
-    /* fragment 40: Arithmetic */
-    /* asm: 679ec: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 41: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 18;
-
-    /* fragment 42: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x230:
-    /* fragment 43: Arithmetic */
-    v0 = v1 < 512;
-
-    /* fragment 44: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x260; }
-
-    /* fragment 45: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 524288;
-    v0 = v0 + t0;
-
-    /* fragment 46: Arithmetic */
-    /* asm: 67a18: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 47: Arithmetic */
-    t0 = 3;
-
-    /* fragment 48: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 19;
-
-    /* fragment 49: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x260:
-    /* fragment 50: Arithmetic */
-    v0 = v1 < 1024;
-
-    /* fragment 51: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x290; }
-
-    /* fragment 52: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 1048576;
-    v0 = v0 + t0;
-
-    /* fragment 53: Arithmetic */
-    /* asm: 67a48: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 54: Arithmetic */
-    t0 = 4;
-
-    /* fragment 55: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 20;
-
-    /* fragment 56: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x290:
-    /* fragment 57: Arithmetic */
-    v0 = v1 < 2048;
-
-    /* fragment 58: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x2c0; }
-
-    /* fragment 59: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 2097152;
-    v0 = v0 + t0;
-
-    /* fragment 60: Arithmetic */
-    /* asm: 67a78: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 61: Arithmetic */
-    t0 = 5;
-
-    /* fragment 62: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 21;
-
-    /* fragment 63: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x2c0:
-    /* fragment 64: Arithmetic */
-    v0 = v1 < 4096;
-
-    /* fragment 65: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x2f0; }
-
-    /* fragment 66: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 4194304;
-    v0 = v0 + t0;
-
-    /* fragment 67: Arithmetic */
-    /* asm: 67aa8: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 68: Arithmetic */
-    t0 = 6;
-
-    /* fragment 69: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 22;
-
-    /* fragment 70: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x2f0:
-    /* fragment 71: Arithmetic */
-    v0 = v1 < 8192;
-
-    /* fragment 72: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x320; }
-
-    /* fragment 73: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 8388608;
-    v0 = v0 + t0;
-
-    /* fragment 74: Arithmetic */
-    /* asm: 67ad8: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 75: Arithmetic */
-    t0 = 7;
-
-    /* fragment 76: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 23;
-
-    /* fragment 77: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x320:
-    /* fragment 78: Arithmetic */
-    v0 = v1 < 16384;
-
-    /* fragment 79: Branch */
-    if (v0 == 0) { goto tisp_tmo_size_update0x350; }
-
-    /* fragment 80: Arithmetic */
-    v0 = (uintptr_t)v1 >> 1;
-    t0 = 16777216;
-    v0 = v0 + t0;
-
-    /* fragment 81: Arithmetic */
-    /* asm: 67b08: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 82: Arithmetic */
-    t0 = 8;
-
-    /* fragment 83: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 24;
-
-    /* fragment 84: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x350:
-    /* fragment 85: Arithmetic */
-    /* asm: 67b24: seh v0,v1 */
-    v0 = (unsigned int *)v1;
-
-    /* fragment 86: Branch */
-    if (v0 < 0) { goto tisp_tmo_size_update0x384; }
-
-    /* fragment 87: Arithmetic */
-    t0 = 33554432;
-    v0 = (uintptr_t)v1 >> 1;
-    v0 = v0 + t0;
-
-    /* fragment 88: Arithmetic */
-    /* asm: 67b3c: div zero,v0,v1 */
-    asm volatile("div $0, %0, %1" : : "r"(v0), "r"(v1) : "hi", "lo");
-    __asm__ volatile("mflo %0" : "=r"(v0));
-
-    /* fragment 89: Arithmetic */
-    t0 = 9;
-
-    /* fragment 90: MemoryAccess */
-    *(uint8_t *)((char *)a0 + 22) = t0;
-    t0 = 25;
-
-    /* fragment 91: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    goto tisp_tmo_size_update0x84;
-
-tisp_tmo_size_update0x384:
-    /* fragment 92: Arithmetic */
-    t0 = 0;
-
-    /* fragment 93: Branch */
-    v0 = 0;
-    goto tisp_tmo_size_update0x84;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+    info = (uint8_t *)(uintptr_t)tmo_info[a0];
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    size = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    if (!params || !size)
+        return -EINVAL;
+
+    width = *(uint32_t *)(void *)(a1 + 0);
+    height = *(uint32_t *)(void *)(a1 + 4);
+    blocks_y = ((height + 7U) / 15U) & 0xffU;
+    blocks_x = ((width + 12U) / 25U) & 0xffU;
+    cells = blocks_x * blocks_y;
+    if (!cells)
+        return -EINVAL;
+
+    *(uint16_t *)(void *)(size + 12) = 6415;
+    *(uint16_t *)(void *)(size + 14) = 1034;
+    size[16] = 2;
+
+    if (cells < 8U)
+        exponent = 13;
+    else if (cells < 16U)
+        exponent = 14;
+    else if (cells < 32U)
+        exponent = 15;
+    else if (cells < 64U)
+        exponent = 16;
+    else if (cells < 128U)
+        exponent = 17;
+    else if (cells < 256U)
+        exponent = 18;
+    else if (cells < 512U)
+        exponent = 19;
+    else if (cells < 1024U)
+        exponent = 20;
+    else if (cells < 2048U)
+        exponent = 21;
+    else if (cells < 4096U)
+        exponent = 22;
+    else if (cells < 8192U)
+        exponent = 23;
+    else if (cells < 16384U)
+        exponent = 24;
+    else if ((int16_t)cells >= 0)
+        exponent = 25;
+    else
+        exponent = 0;
+
+    if (exponent) {
+        scale = 1U << exponent;
+        ratio = ((cells >> 1) + scale) / cells;
+        flag = exponent > 16U ? exponent - 16U : 0;
+    } else {
+        ratio = 0;
+        flag = 0;
+    }
+
+    size[22] = (uint8_t)flag;
+    size[23] = (uint8_t)flag;
+    *(uint16_t *)(void *)(params + 4680) = (uint16_t)blocks_y;
+    *(uint16_t *)(void *)(params + 4682) = (uint16_t)blocks_x;
+    *(uint16_t *)(void *)(params + 4684) = (uint16_t)ratio;
+    params[5825] = (uint8_t)exponent;
+
+    doubled_cells = cells << 1;
+    y_span = size[12] + ((uint32_t)size[15] << 1);
+    x_span = size[13] + ((uint32_t)size[15] << 1);
+    size[17] = (uint8_t)y_span;
+    size[18] = (uint8_t)x_span;
+    size[19] = (uint8_t)(((uint32_t)size[16] << 1) + size[14]);
+    size[20] = (uint8_t)(y_span - size[15]);
+    size[21] = (uint8_t)(x_span - size[15]);
+    *(uint16_t *)(void *)(size + 0) =
+        (uint16_t)((uint32_t)size[12] * size[13]);
+    *(uint16_t *)(void *)(size + 2) = (uint16_t)(x_span * y_span);
+    *(uint16_t *)(void *)(size + 4) =
+        (uint16_t)(x_span * y_span * size[19]);
+    *(uint16_t *)(void *)(size + 6) = (uint16_t)(x_span * size[19]);
+    *(uint16_t *)(void *)(size + 8) =
+        (uint16_t)(((uint32_t)params[5949] * doubled_cells) >> 7);
+    *(uint16_t *)(void *)(size + 10) =
+        (uint16_t)(((uint32_t)params[5950] * doubled_cells) >> 7);
+
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000067b64 origin=fragment_seed original=tisp_tmo_params_fristframe_reg_refresh */
@@ -142968,6 +143374,77 @@ int32_t tisp_tmo_ram_reg_refresh(uint32_t a0)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        uint8_t *info;
+        uint8_t *runtime;
+        uint8_t *stats;
+        uint8_t *cursor;
+        uint32_t offset;
+        uint32_t plane;
+        uint32_t first;
+        uint32_t second;
+        uint32_t value;
+
+        if (a0 >= 2 || !tmo_info[a0] || !statYOut)
+            return -EINVAL;
+        info = (uint8_t *)(uintptr_t)tmo_info[a0];
+        runtime = (uint8_t *)(uintptr_t)
+            *(uint32_t *)(void *)(info + 8);
+        stats = (uint8_t *)(uintptr_t)statYOut;
+        if (!runtime || !stats)
+            return -EINVAL;
+
+        system_reg_write(0x50220, 0x101);
+        for (cursor = runtime + 120; cursor != runtime + 316;
+             cursor += 4) {
+            value = ((uint32_t)*(uint16_t *)(void *)(cursor + 2)
+                     << 16) & 0x0fff0000U;
+            value |= *(uint16_t *)(void *)cursor & 0x0fffU;
+            system_reg_write(0x50224, value);
+        }
+        value = *(uint16_t *)(void *)(runtime + 316) & 0x0fffU;
+        system_reg_write(0x50224, value | (value << 16));
+        system_reg_write(0x50220, 0x10102);
+
+        system_reg_write(0x50240, 0x101);
+        for (cursor = runtime + 318; cursor != runtime + 718;
+             cursor += 4) {
+            value = ((uint32_t)*(uint16_t *)(void *)(cursor + 2)
+                     << 16) & 0x1fff0000U;
+            value |= *(uint16_t *)(void *)cursor & 0x1fffU;
+            system_reg_write(0x50244, value);
+        }
+        value = *(uint16_t *)(void *)(runtime + 718) & 0x1fffU;
+        system_reg_write(0x50244, value | (value << 16));
+        system_reg_write(0x50240, 0x10102);
+
+        system_reg_write(0x50260, 0x101);
+        for (offset = 0; offset != 1500; offset += 4) {
+            for (plane = 0; plane != 15000; plane += 7500) {
+                cursor = stats + offset + plane;
+                first = *(uint32_t *)(void *)(cursor + 0) & 0x0fffU;
+                first |= (*(uint32_t *)(void *)(cursor + 1500)
+                          << 12) & 0x00fff000U;
+                first |= *(uint32_t *)(void *)(cursor + 3000) << 24;
+                system_reg_write(0x50264, first);
+
+                second = (*(uint32_t *)(void *)(cursor + 3000) >> 8)
+                         & 0x0fU;
+                second |= (*(uint32_t *)(void *)(cursor + 4500) << 4)
+                          & 0x0000ffffU;
+                second |= (*(uint32_t *)(void *)(cursor + 6000) << 16)
+                          & 0x0fff0000U;
+                system_reg_write(0x50264, second);
+            }
+        }
+        system_reg_write(0x50260, 0x10102);
+        system_reg_write(0x1e030, ~system_reg_read(0x1e030));
+        system_reg_write(0x1e034, 1);
+        system_reg_write(0x1e008, 1);
+        return 0;
+    }
+#else
     /* fragment 0: Arithmetic */
     v0 = (unsigned int *)&tmo_info;
     a0 = a0 << 2;
@@ -143116,6 +143593,7 @@ tisp_tmo_ram_reg_refresh0x168:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000697e4 origin=fragment_seed original=tisp_tmo_process */
@@ -143752,6 +144230,9 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
 
     if (a0 >= 2 || !a1)
         return -EINVAL;
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init begin channel=%u par=%p\n",
+           a0, (void *)a1);
     params = (uint8_t *)(uintptr_t)((uint32_t *)(void *)tparamsP_storage)[a0];
     if (!params)
         return -EINVAL;
@@ -143763,6 +144244,9 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     }
     memset(info, 0, 48);
     tmo_info[a0] = (uint32_t)(uintptr_t)info;
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init info=%p params=%p\n",
+           info, params);
 
     dma_buffer = private_kmalloc(32768, 0x024000c0);
     if (!dma_buffer) {
@@ -143776,6 +144260,9 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     *(uint32_t *)(void *)(info + 16) = 2;
     *(uint32_t *)(void *)(info + 20) = (uint32_t)(uintptr_t)dma_buffer;
     *(uint32_t *)(void *)(info + 24) = dma_addr;
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init dma=%p bus=0x%x\n",
+           dma_buffer, dma_addr);
 
     runtime = private_kmalloc(790, 0x024000c0);
     if (!runtime) {
@@ -143784,6 +144271,8 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     }
     memset(runtime, 0, 790);
     *(uint32_t *)(void *)(info + 8) = (uint32_t)(uintptr_t)runtime;
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init runtime=%p\n", runtime);
 
     *(uint32_t *)(void *)(info + 4) =
         (uint32_t)(uintptr_t)private_kmalloc(402, 0x024000c0);
@@ -143792,6 +144281,9 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
         return -ENOMEM;
     }
     memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 4), 0, 402);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init shadow=%p\n",
+           (void *)(uintptr_t)*(uint32_t *)(void *)(info + 4));
 
     *(uint32_t *)(void *)info = (uint32_t)(uintptr_t)(params + 9272);
     *(uint32_t *)(void *)(info + 12) =
@@ -143801,7 +144293,11 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
         return -ENOMEM;
     }
     memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 12), 0, 24);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init size-update enter\n");
     tisp_tmo_size_update(a0, a1);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init size-update exit\n");
 
     statYOut = (uint32_t)(uintptr_t)private_kmalloc(15000, 0x024000c0);
     statYNum = (uint32_t)(uintptr_t)private_kmalloc(15000, 0x024000c0);
@@ -143817,19 +144313,37 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     memset((void *)(uintptr_t)statYSum, 0, 15000);
     memset((void *)(uintptr_t)statYNumLast, 0, 15000);
     memset((void *)(uintptr_t)diffLast2Later, 0, 1500);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init stats ready\n");
 
     memcpy(runtime + 766, params + 5824, 2);
     memcpy(runtime + 48, params + 4680, 6);
     if (*(uint16_t *)(void *)(params + 480) >= 2)
         *(uint16_t *)(void *)(params + 480) = 0;
 
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init hard-refresh enter\n");
     tisp_tmo_params_hard_refresh(a0);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init hard-refresh exit\n");
     tisp_tmo_gain_interp(a0);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init gain-interp exit\n");
     tisp_tmo_ev_interp(a0);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init ev-interp exit\n");
     memcpy(runtime + 318, (void *)(uintptr_t)*(uint32_t *)(void *)(info + 4), 402);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init ram-refresh enter\n");
     tisp_tmo_ram_reg_refresh(a0);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init ram-refresh exit\n");
     tisp_tmo_default_reg_refresh(a0);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init default-refresh exit\n");
     tisp_tmo_params_fristframe_reg_refresh();
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tmo-init first-frame exit\n");
 
     system_irq_func_set(a0, a0 * 42 + 17, tisp_tmo_interrupt_static);
     tisp_event_set_cb(a0, 17, tisp_tmo_process);

@@ -3,14 +3,24 @@
 
 #include "tx_isp.h"
 #include "tx_isp_device.h"
+#include "../../include/tx_isp/tx_isp_subdev_abi.h"
 
-/* OEM subdev layout for name/pad metadata used by the stock binary. */
-#define TX_ISP_OEM_SUBDEV_NAME_OFFSET         0x08
-#define TX_ISP_OEM_SUBDEV_NUM_INPADS_OFFSET   0xc8
-#define TX_ISP_OEM_SUBDEV_NUM_OUTPADS_OFFSET  0xca
-#define TX_ISP_OEM_SUBDEV_INPADS_OFFSET       0xcc
-#define TX_ISP_OEM_SUBDEV_OUTPADS_OFFSET      0xd0
-#define TX_ISP_OEM_SUBDEV_PAD_STRIDE          0x24
+/*
+ * Preserve T31's established raw slot mapping.  It is the reverse of the
+ * directions assigned to these physical slots by the declared struct and by
+ * the recovered T23/T40 drivers; see docs/DRIVER_REUSE_PLAN.md.
+ */
+#define TX_ISP_OEM_SUBDEV_NAME_OFFSET         TX_ISP_ABI_SUBDEV_NAME_OFFSET
+#define TX_ISP_OEM_SUBDEV_NUM_INPADS_OFFSET   TX_ISP_ABI_LEGACY_SUBDEV_PAD_COUNT0
+#define TX_ISP_OEM_SUBDEV_NUM_OUTPADS_OFFSET  TX_ISP_ABI_LEGACY_SUBDEV_PAD_COUNT1
+#define TX_ISP_OEM_SUBDEV_INPADS_OFFSET       TX_ISP_ABI_LEGACY_SUBDEV_PAD_PTR0
+#define TX_ISP_OEM_SUBDEV_OUTPADS_OFFSET      TX_ISP_ABI_LEGACY_SUBDEV_PAD_PTR1
+#define TX_ISP_OEM_SUBDEV_PAD_STRIDE          TX_ISP_ABI_PAD_STRIDE
+
+static inline const char *tx_isp_subdev_raw_name_get(struct tx_isp_subdev *sd)
+{
+    return sd ? *(const char **)((char *)sd + TX_ISP_OEM_SUBDEV_NAME_OFFSET) : NULL;
+}
 
 static inline u8 tx_isp_subdev_raw_num_inpads_get(struct tx_isp_subdev *sd)
 {

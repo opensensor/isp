@@ -2139,45 +2139,6 @@ static const struct file_operations frame_channel_fops = {
     .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
-/* OEM subdev layout used by find_subdev_link_pad() in the stock binary. */
-#define OEM_SUBDEV_NAME_OFFSET         0x08
-#define OEM_SUBDEV_NUM_INPADS_OFFSET   0xc8
-#define OEM_SUBDEV_NUM_OUTPADS_OFFSET  0xca
-#define OEM_SUBDEV_INPADS_OFFSET       0xcc
-#define OEM_SUBDEV_OUTPADS_OFFSET      0xd0
-#define OEM_SUBDEV_PAD_STRIDE          0x24
-
-static inline const char *subdev_raw_name_get(struct tx_isp_subdev *sd)
-{
-    return *(const char **)((char *)sd + OEM_SUBDEV_NAME_OFFSET);
-}
-
-static inline u8 subdev_raw_num_inpads_get(struct tx_isp_subdev *sd)
-{
-    return *(u8 *)((char *)sd + OEM_SUBDEV_NUM_INPADS_OFFSET);
-}
-
-static inline u8 subdev_raw_num_outpads_get(struct tx_isp_subdev *sd)
-{
-    return *(u8 *)((char *)sd + OEM_SUBDEV_NUM_OUTPADS_OFFSET);
-}
-
-static inline struct tx_isp_subdev_pad *subdev_raw_inpads_get(struct tx_isp_subdev *sd)
-{
-    return *(struct tx_isp_subdev_pad **)((char *)sd + OEM_SUBDEV_INPADS_OFFSET);
-}
-
-static inline struct tx_isp_subdev_pad *subdev_raw_outpads_get(struct tx_isp_subdev *sd)
-{
-    return *(struct tx_isp_subdev_pad **)((char *)sd + OEM_SUBDEV_OUTPADS_OFFSET);
-}
-
-static inline struct tx_isp_subdev_pad *subdev_raw_pad_at(struct tx_isp_subdev_pad *pads,
-                                                          unsigned int index)
-{
-    return (struct tx_isp_subdev_pad *)((char *)pads + (index * OEM_SUBDEV_PAD_STRIDE));
-}
-
 /* OEM-matching: find a pad by entity name, pad type and index.
  * Note: OEM mapping uses type==1 for OUTPUT, type==2 for INPUT.
  */
@@ -2200,7 +2161,7 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
         /* OEM compares against the raw name pointer at +0x8. Fall back to the
          * drifted named members only if that slot is NULL.
          */
-        sname = subdev_raw_name_get(sd);
+        sname = tx_isp_subdev_raw_name_get(sd);
         if (!sname)
             sname = sd->module.name ? sd->module.name :
                 (sd->module.miscdev.name ? sd->module.miscdev.name :
@@ -2211,18 +2172,18 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
         if (strcmp(sname, desc->name) == 0) {
             /* Type 1 = OUTPUT pads (OEM), Type 2 = INPUT pads */
             if (desc->type == 1) {
-                pads = subdev_raw_outpads_get(sd);
-                pad_count = subdev_raw_num_outpads_get(sd);
+                pads = tx_isp_subdev_raw_outpads_get(sd);
+                pad_count = tx_isp_subdev_raw_num_outpads_get(sd);
                 if (pads && desc->index < pad_count)
-                    return subdev_raw_pad_at(pads, desc->index);
+                    return tx_isp_subdev_raw_pad_at(pads, desc->index);
                 pr_warn("find_subdev_link_pad: outpad index %u out of range for %s (raw_outpads=%p raw_num_outpads=%u)\n",
                         desc->index, sname, pads, pad_count);
                 return NULL;
             } else if (desc->type == 2) {
-                pads = subdev_raw_inpads_get(sd);
-                pad_count = subdev_raw_num_inpads_get(sd);
+                pads = tx_isp_subdev_raw_inpads_get(sd);
+                pad_count = tx_isp_subdev_raw_num_inpads_get(sd);
                 if (pads && desc->index < pad_count)
-                    return subdev_raw_pad_at(pads, desc->index);
+                    return tx_isp_subdev_raw_pad_at(pads, desc->index);
                 pr_warn("find_subdev_link_pad: inpad index %u out of range for %s (raw_inpads=%p raw_num_inpads=%u)\n",
                         desc->index, sname, pads, pad_count);
                 return NULL;

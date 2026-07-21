@@ -11,6 +11,71 @@
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_sysfs.h"
 
+/* Keep the named T31 subdevice model pinned to the recovered legacy ABI. */
+TX_ISP_ABI_ASSERT(t31_subdev_name,
+    __builtin_offsetof(struct tx_isp_subdev, module.name) ==
+    TX_ISP_ABI_SUBDEV_NAME_OFFSET);
+TX_ISP_ABI_ASSERT(t31_subdev_irqdev,
+    __builtin_offsetof(struct tx_isp_subdev, irqdev) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_IRQDEV_OFFSET);
+TX_ISP_ABI_ASSERT(t31_subdev_clocks,
+    __builtin_offsetof(struct tx_isp_subdev, clks) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_CLOCKS_OFFSET);
+TX_ISP_ABI_ASSERT(t31_subdev_clk_num,
+    __builtin_offsetof(struct tx_isp_subdev, clk_num) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_CLK_NUM_OFFSET);
+TX_ISP_ABI_ASSERT(t31_subdev_ops,
+    __builtin_offsetof(struct tx_isp_subdev, ops) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_OPS_OFFSET);
+TX_ISP_ABI_ASSERT(t31_subdev_num_outpads,
+    __builtin_offsetof(struct tx_isp_subdev, num_outpads) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_PAD_COUNT0);
+TX_ISP_ABI_ASSERT(t31_subdev_num_inpads,
+    __builtin_offsetof(struct tx_isp_subdev, num_inpads) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_PAD_COUNT1);
+TX_ISP_ABI_ASSERT(t31_subdev_outpads,
+    __builtin_offsetof(struct tx_isp_subdev, outpads) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_PAD_PTR0);
+TX_ISP_ABI_ASSERT(t31_subdev_inpads,
+    __builtin_offsetof(struct tx_isp_subdev, inpads) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_PAD_PTR1);
+TX_ISP_ABI_ASSERT(t31_subdev_dev_priv,
+    __builtin_offsetof(struct tx_isp_subdev, dev_priv) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_PRIVATE0);
+TX_ISP_ABI_ASSERT(t31_subdev_host_priv,
+    __builtin_offsetof(struct tx_isp_subdev, host_priv) ==
+    TX_ISP_ABI_LEGACY_SUBDEV_PRIVATE1);
+TX_ISP_ABI_ASSERT(t31_subdev_size,
+    sizeof(struct tx_isp_subdev) == TX_ISP_ABI_LEGACY_SUBDEV_SIZE);
+
+/*
+ * The pad prefix through event is checked.  T31 currently carries an extra
+ * event_callback member after it, making priv/sizeof differ from the recovered
+ * 0x20/0x24 layout.  Do not assert those two values until that live ABI issue
+ * is resolved separately from this structural extraction.
+ */
+TX_ISP_ABI_ASSERT(t31_pad_owner,
+    __builtin_offsetof(struct tx_isp_subdev_pad, sd) ==
+    TX_ISP_ABI_PAD_OWNER_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_index,
+    __builtin_offsetof(struct tx_isp_subdev_pad, index) ==
+    TX_ISP_ABI_PAD_INDEX_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_type,
+    __builtin_offsetof(struct tx_isp_subdev_pad, type) ==
+    TX_ISP_ABI_PAD_TYPE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_links_type,
+    __builtin_offsetof(struct tx_isp_subdev_pad, links_type) ==
+    TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_state,
+    __builtin_offsetof(struct tx_isp_subdev_pad, state) ==
+    TX_ISP_ABI_PAD_STATE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_link,
+    __builtin_offsetof(struct tx_isp_subdev_pad, link) ==
+    TX_ISP_ABI_PAD_LINK_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_event,
+    __builtin_offsetof(struct tx_isp_subdev_pad, event) ==
+    TX_ISP_ABI_PAD_EVENT_OFFSET);
+
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
 

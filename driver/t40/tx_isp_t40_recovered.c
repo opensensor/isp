@@ -5,6 +5,9 @@
 /* Target kernel arch/ABI: mips32r2 32bit */
 /* Module vermagic: 4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT  */
 
+#include "../include/tx_isp/tx_isp_math.h"
+#include "../include/tx_isp/tx_isp_subdev_abi.h"
+
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -54,104 +57,7 @@
 #endif
 #include <asm/uaccess.h>
 
-#ifndef __regtrace_stringify
-#define __regtrace_stringify_1(x) #x
-#define __regtrace_stringify(x) __regtrace_stringify_1(x)
-#endif
-#ifndef str
-#define str(x) __regtrace_stringify(x)
-#endif
-#ifndef REGTRACE_IOREMAP_UNCACHED
-#ifdef _CACHE_UNCACHED
-#define REGTRACE_IOREMAP_UNCACHED _CACHE_UNCACHED
-#else
-#define REGTRACE_IOREMAP_UNCACHED 0
-#endif
-#endif
-#ifndef REGTRACE_IOREMAP_CACHED
-#ifdef _CACHE_CACHABLE_NONCOHERENT
-#define REGTRACE_IOREMAP_CACHED _CACHE_CACHABLE_NONCOHERENT
-#else
-#define REGTRACE_IOREMAP_CACHED 0
-#endif
-#endif
-#ifndef IOREMAP_NORMAL
-#define IOREMAP_NORMAL REGTRACE_IOREMAP_UNCACHED
-#endif
-#ifndef IOREMAP_NOCACHE
-#define IOREMAP_NOCACHE REGTRACE_IOREMAP_UNCACHED
-#endif
-#ifndef IOREMAP_CACHE
-#define IOREMAP_CACHE REGTRACE_IOREMAP_CACHED
-#endif
-#ifndef IOREMAP_WC
-#define IOREMAP_WC REGTRACE_IOREMAP_UNCACHED
-#endif
-#ifndef IOREMAP_WT
-#define IOREMAP_WT REGTRACE_IOREMAP_UNCACHED
-#endif
-extern int jzgpio_set_func(int port, int func, unsigned long pins, ...);
-
-#if defined(__mips__) || defined(CONFIG_MIPS)
-#ifndef c0_hwrena
-#define c0_hwrena 7
-#endif
-#ifndef c0_status
-#define c0_status 12
-#endif
-#ifndef mtc0
-#define mtc0(val, reg) __asm__ volatile ("mtc0 %0, $" str(reg) :: "r"(val) : "memory")
-#endif
-#ifndef mfc0
-#define mfc0(reg) ({ int __regtrace_mfc0_value; __asm__ volatile ("mfc0 %0, $" str(reg) : "=r"(__regtrace_mfc0_value)); __regtrace_mfc0_value; })
-#endif
-static inline u32 regtrace_mips_rdhwr(unsigned int reg) { u32 value = 0; if (reg == 4) { __asm__ volatile ("rdhwr %0, $4" : "=r"(value)); } return value; }
-#ifndef __builtin_mips_rdhwr
-#define __builtin_mips_rdhwr(reg) regtrace_mips_rdhwr(reg)
-#endif
-static inline void regtrace_write_c0_hwrena(u32 value) { mtc0(value, c0_hwrena); }
-static inline void regtrace_write_c0_status(u32 value) { mtc0(value, c0_status); }
-static inline u32 regtrace_read_c0_status(void) { return (u32)mfc0(c0_status); }
-static inline u32 __wsbh(u32 value) { return ((value & 0x00ff00ffU) << 8) | ((value & 0xff00ff00U) >> 8); }
-#ifndef __ror
-static inline u32 __ror(u32 value, unsigned int shift) { shift &= 31U; return (value >> shift) | (value << ((32U - shift) & 31U)); }
-#endif
-#ifndef ror_d
-#define ror_d(value, shift) __ror((u32)(value), (shift))
-#endif
-#ifndef read_c0_status
-#define read_c0_status() regtrace_read_c0_status()
-#endif
-#ifndef write_c0_status
-#define write_c0_status(value) regtrace_write_c0_status(value)
-#endif
-#ifndef read_c0_hwrena
-#define read_c0_hwrena() ((u32)mfc0(c0_hwrena))
-#endif
-#ifndef write_c0_hwrena
-#define write_c0_hwrena(value) regtrace_write_c0_hwrena(value)
-#endif
-#endif
-
-#ifndef REGTRACE_SYNC_IOB
-#if defined(__mips__) || defined(CONFIG_MIPS)
-#define REGTRACE_SYNC_IOB() __asm__ volatile ("lui $3,0xa000\n\tsync\n\tlw $0,0($3)" ::: "memory", "$3")
-#else
-#define REGTRACE_SYNC_IOB() barrier()
-#endif
-#endif
-static inline void _sync(void) { REGTRACE_SYNC_IOB(); }
-
-static inline void trap(int code) { (void)code; }
-#define _hardwareRegister(reg) ((void)(reg), 0)
-#define _setLLBit(value) ((void)(value))
-#define _checkLLBit() (1)
-#define get_gp() ((void *)current_thread_info())
-
-typedef void *void_ptr;
-typedef const char *const_char_ptr;
-typedef char *char_ptr;
-typedef void *void_iomem_ptr;
+#include "../include/tx_isp/tx_isp_recovered_kernel.h"
 #else
 #define REGTRACE_WHOLE_DRIVER_SEED_SOURCE 1
 #ifndef REGTRACE_CANDIDATE_PRELUDE_H
@@ -914,20 +820,20 @@ struct tx_isp_irq_info {
 #define REGTRACE_IRQ_COUNT_OFF 36
 #define REGTRACE_IRQ_ENABLE_OFF 40
 #define REGTRACE_IRQ_DISABLE_OFF 44
-#define REGTRACE_IRQ_TABLE_SUBDEV_OFF 132
-#define REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET 132
-#define REGTRACE_TX_ISP_MODULE_RES_OFFSET 220
-#define REGTRACE_TX_ISP_MODULE_BASE_OFFSET 232
-#define REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET 244
-#define REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET 248
-#define REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET 256
-#define REGTRACE_TX_ISP_MODULE_INPAD_COUNT_OFFSET 258
-#define REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET 260
-#define REGTRACE_TX_ISP_MODULE_INPADS_OFFSET 264
+#define REGTRACE_IRQ_TABLE_SUBDEV_OFF TX_ISP_ABI_T40_SUBDEV_IRQDEV_OFFSET
+#define REGTRACE_TX_ISP_MODULE_IRQDEV_OFFSET TX_ISP_ABI_T40_SUBDEV_IRQDEV_OFFSET
+#define REGTRACE_TX_ISP_MODULE_RES_OFFSET TX_ISP_ABI_T40_SUBDEV_RES_OFFSET
+#define REGTRACE_TX_ISP_MODULE_BASE_OFFSET TX_ISP_ABI_T40_SUBDEV_BASE_OFFSET
+#define REGTRACE_TX_ISP_MODULE_CLK_PTR_OFFSET TX_ISP_ABI_T40_SUBDEV_CLOCKS_OFFSET
+#define REGTRACE_TX_ISP_MODULE_CLK_NUM_OFFSET TX_ISP_ABI_T40_SUBDEV_CLK_NUM_OFFSET
+#define REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET TX_ISP_ABI_T40_SUBDEV_PAD_COUNT0
+#define REGTRACE_TX_ISP_MODULE_INPAD_COUNT_OFFSET TX_ISP_ABI_T40_SUBDEV_PAD_COUNT1
+#define REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET TX_ISP_ABI_T40_SUBDEV_PAD_PTR0
+#define REGTRACE_TX_ISP_MODULE_INPADS_OFFSET TX_ISP_ABI_T40_SUBDEV_PAD_PTR1
 #define REGTRACE_TX_ISP_MAX_MEM_RESOURCES 3
-#define REGTRACE_TX_ISP_PAD_STRIDE 36
-#define REGTRACE_TX_ISP_PADTYPE_INPUT 1
-#define REGTRACE_TX_ISP_PADTYPE_OUTPUT 2
+#define REGTRACE_TX_ISP_PAD_STRIDE TX_ISP_ABI_PAD_STRIDE
+#define REGTRACE_TX_ISP_PADTYPE_INPUT TX_ISP_ABI_PADTYPE_INPUT
+#define REGTRACE_TX_ISP_PADTYPE_OUTPUT TX_ISP_ABI_PADTYPE_OUTPUT
 #define REGTRACE_TX_ISP_TYPE_SUBDEV 1
 #define REGTRACE_TX_ISP_TYPE_WIDGET 2
 
@@ -14761,7 +14667,7 @@ static void regtrace_isp_block_init_retry(const char *where)
 #define REGTRACE_ISP_M0_TUNING_STATE_OFFSET 0x78
 #define REGTRACE_ISP_M0_TUNING_STATE_ENABLED 3
 #define REGTRACE_TX_ISP_SUBDEV_SLOT0 0x3c
-#define REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET 0xfc
+#define REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET TX_ISP_ABI_T40_SUBDEV_OPS_OFFSET
 #define REGTRACE_TX_ISP_SENSOR_INFO_OFFSET 0x128
 #define REGTRACE_TX_ISP_VIDEO_WIDTH_OFFSET 0x00
 #define REGTRACE_TX_ISP_VIDEO_HEIGHT_OFFSET 0x04
@@ -61202,74 +61108,8 @@ table_intp0x84:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017028 origin=fragment_seed original=tisp_simple_intp */
 int64_t tisp_simple_intp(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = a0 < 10;
-
-    /* fragment 1: Branch */
-    a0 = a0 << 2;
-    if (v0 != 0) { goto tisp_simple_intp0x14; }
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 40);
-
-tisp_simple_intp0x14:
-    /* fragment 4: Arithmetic */
-    a2 = a2 + a0;
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a2 + 0);
-    v0 = *(uint32_t *)((char *)a2 + 4);
-
-    /* fragment 6: Branch */
-    a0 = v1 < v0;
-    if (v1 == v0) { goto tisp_simple_intp0x54; }
-
-    /* fragment 7: Branch */
-    if (a0 == 0) { goto tisp_simple_intp0x5c; }
-
-    /* fragment 8: Arithmetic */
-    v0 = (uintptr_t)v0 - (uintptr_t)v1;
-    a0 = 0;
-
-tisp_simple_intp0x38:
-    /* fragment 9: Arithmetic */
-    a1 = (uintptr_t)v0 * a1;
-    v0 = (uintptr_t *)((uintptr_t)a1 >> 16);
-    a1 = (a1 >> 15) & 0x1;
-    a1 = v0 + a1;
-
-    /* fragment 10: Branch */
-    v0 = v1 + a1;
-    if (a0 == 0) { goto tisp_simple_intp0x54; }
-
-    /* fragment 11: Arithmetic */
-    v0 = v1 - a1;
-
-tisp_simple_intp0x54:
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-    /* fragment 13: Unknown */
-    /* unmatched fragment 13 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 17080:	00000000 	nop */
-
-tisp_simple_intp0x5c:
-    /* fragment 14: Arithmetic */
-    v0 = (uintptr_t)v1 - (uintptr_t)v0;
-
-    /* fragment 15: Branch */
-    a0 = 1;
-    goto tisp_simple_intp0x38;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	return (int64_t)tx_isp_lerp_u32(a0, a1,
+				(const unsigned int *)a2, 10);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017090 origin=model_output original=tisp_simple_intp_int8 */

@@ -1,5 +1,6 @@
 obj-m += tx_isp_t40_recovered.o
 
+ccflags-y += -I$(src)/../include
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
 ccflags-y += -O0 -fno-tree-dce -fno-ipa-pure-const -fno-ipa-reference
 ccflags-y += -std=gnu99 -w

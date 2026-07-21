@@ -42,9 +42,15 @@
 #define TX_ISP_PADTYPE_UNDEFINE  0x00
 #define TX_ISP_PADTYPE_INPUT     0x01
 #define TX_ISP_PADTYPE_OUTPUT    0x02
+#ifndef TX_ISP_PADSTATE_FREE
 #define TX_ISP_PADSTATE_FREE     0x02
+#endif
+#ifndef TX_ISP_PADSTATE_LINKED
 #define TX_ISP_PADSTATE_LINKED   0x03
+#endif
+#ifndef TX_ISP_PADSTATE_STREAM
 #define TX_ISP_PADSTATE_STREAM   0x04
+#endif
 
 struct tx_isp_pad_descriptor {
     unsigned char type;

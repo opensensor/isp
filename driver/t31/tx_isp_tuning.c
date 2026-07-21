@@ -48,6 +48,7 @@
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_fixpt.h"
+#include "../include/tx_isp/tx_isp_math.h"
 
 #include "include/tx_isp_device.h"
 #include "include/tx_libimp.h"
@@ -28980,33 +28981,11 @@ static void tisp_ydns_param_cfg(void)
  * then adds or subtracts from array[hi]. Pure 32-bit arithmetic, no s64. */
 static uint32_t tisp_simple_intp(int gain_hi, int gain_lo, const uint32_t *array)
 {
-    uint32_t curr, next_val, diff, scaled;
-    int subtract;
+	if (gain_hi < 0)
+		gain_hi = 0;
 
-    if (gain_hi < 0) gain_hi = 0;
-    if (gain_hi >= 8) return array[8];
-
-    curr = array[gain_hi];
-    next_val = array[gain_hi + 1];
-
-    if (curr == next_val || gain_lo == 0)
-        return curr;
-
-    if (curr >= next_val) {
-        diff = curr - next_val;
-        subtract = 1;
-    } else {
-        diff = next_val - curr;
-        subtract = 0;
-    }
-
-    /* OEM: scaled = (diff * gain_lo) >> 16, with rounding from bit 15 */
-    {
-        uint32_t product = diff * gain_lo;
-        scaled = (product >> 16) + ((product >> 15) & 1);
-    }
-
-    return subtract ? (curr - scaled) : (curr + scaled);
+	return tx_isp_lerp_u32((uint32_t)gain_hi, (uint32_t)gain_lo,
+				array, 8);
 }
 
 /* OEM EXACT: absFun (0x1f5cc) — absolute difference of two values */
