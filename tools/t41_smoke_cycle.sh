@@ -94,6 +94,7 @@ fi
 
 capture_state() {
 	label="$1"
+	proc_diag="/tmp/t41-${label}-process.txt"
 	{
 		date
 		uptime
@@ -104,6 +105,19 @@ capture_state() {
 		find /proc/isp -maxdepth 2 -print 2>/dev/null || true
 		find /proc -maxdepth 3 -type f -path '*tx*isp*' -print 2>/dev/null || true
 	} >"/tmp/t41-${label}-state.txt" 2>&1
+	: >"$proc_diag"
+	for pid in $(pidof rvd 2>/dev/null); do
+		{
+			echo "pid=$pid"
+			cat "/proc/$pid/status" 2>/dev/null || true
+			cat "/proc/$pid/stack" 2>/dev/null || true
+			i=0
+			while [ "$i" -lt 256 ] && kill -0 "$pid" 2>/dev/null; do
+				cat "/proc/$pid/syscall" 2>/dev/null || true
+				i=$((i + 1))
+			done
+		} >>"$proc_diag" 2>&1
+	done
 	dmesg >"/tmp/t41-${label}-dmesg.txt" 2>/dev/null || true
 	logread >"/tmp/t41-${label}-logread.txt" 2>/dev/null || true
 	if command -v logcat >/dev/null 2>&1; then
