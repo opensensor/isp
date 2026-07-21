@@ -1247,7 +1247,7 @@ static uint32_t af_buf_info[2], af_info[2];
 static uint32_t pst_awb_ct_detect[2], awb_info[2];
 static uint32_t bcsh_info;
 static uint32_t blc_info[2];
-static uint32_t ccm_info, cdns_info, chx_shd_flags, clk_cnt_39069;
+static uint32_t cdns_info, chx_shd_flags, clk_cnt_39069;
 static uint32_t cls, csc_switch, csc_version_now, ctl_table, defog_info, deghost_en, diffLast2Later;
 static uint32_t diff_thr_maxvalue, dmsc_debug_flags, dpc_info[2], dmsc_info[2], dump_csd, ev_last_switch, ev_wdr_l, ev_wdr_s;
 static uint32_t find_new_buffer_fn, fix_y_tmp, fliker_info, fliker_para, force_triger, frameSum, frame_vb_measure;
@@ -1297,6 +1297,8 @@ static unsigned char top_info_storage[8] __attribute__((aligned(4)));
 #define ysp_info (wdr_info[1])
 /* Preserve BSS layout by backing the missing CLM scalar with BLC channel 1. */
 #define clm_info (blc_info[1])
+/* CCM's recovered scalar was absent; channel-1 gamma storage is unavailable. */
+#define ccm_info (gamma_info[1])
 static struct file_operations tisp_fops;
 static unsigned char data_1388[16384];
 static uint32_t ev_last;
@@ -140512,6 +140514,14 @@ tisp_ccm_write_reg0x74:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065da0 origin=fragment_seed original=tisp_ccm_ev_update */
 int32_t tisp_ccm_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* CCM stays neutral until its interpolation and register writer are safe. */
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -140579,11 +140589,18 @@ tisp_ccm_ev_update0x98:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065e50 origin=fragment_seed original=tisp_ccm_ct_update */
 int32_t tisp_ccm_ct_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -140635,11 +140652,16 @@ tisp_ccm_ct_update0x70:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065ed8 origin=fragment_seed original=tisp_ccm_wdr_en */
 int32_t tisp_ccm_wdr_en(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -140681,11 +140703,16 @@ int32_t tisp_ccm_wdr_en(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000065f70 origin=fragment_seed original=tisp_ccm_dn_params_refresh */
 int32_t tisp_ccm_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -140727,11 +140754,47 @@ int32_t tisp_ccm_dn_params_refresh(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066008 origin=fragment_seed original=tisp_ccm_init */
 int32_t tisp_ccm_init(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *params;
+
+    if (a0 != 0)
+        return -EINVAL;
+    if (ccm_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    info = private_kmalloc(196, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 196);
+    ccm_info = (uint32_t)(uintptr_t)info;
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 14336);
+    *(uint32_t *)(void *)(info + 100) = 65536;
+    *(uint32_t *)(void *)(info + 116) = 65536;
+    *(uint32_t *)(void *)(info + 132) = 65536;
+    *(uint32_t *)(void *)(info + 140) = 256;
+    *(uint32_t *)(void *)(info + 144) = 5000;
+    *(uint32_t *)(void *)(info + 148) = 64;
+    *(uint32_t *)(void *)(info + 152) = 16;
+    *(uint16_t *)(void *)(info + 192) = 0xff00U;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: ccm-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -140822,11 +140885,28 @@ int32_t tisp_ccm_init(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000661b4 origin=fragment_seed original=tisp_ccm_deinit */
 int32_t tisp_ccm_deinit(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    info = (uint8_t *)(uintptr_t)ccm_info;
+    if (info) {
+        private_kfree(info);
+        ccm_info = 0;
+    }
+    ((uint32_t *)(void *)tpm_cb_storage)[240 / sizeof(uint32_t)] = 0;
+    ((uint32_t *)(void *)tpm_cb_storage)[244 / sizeof(uint32_t)] = 0;
+    ((uint32_t *)(void *)tpm_cb_storage)[248 / sizeof(uint32_t)] = 0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -140902,6 +140982,7 @@ tisp_ccm_deinit0x74:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066238 origin=fragment_seed original=tisp_ccm_param_array_get */
@@ -141061,6 +141142,10 @@ int32_t tisp_ccm_api_get(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066460 origin=fragment_seed original=tisp_ccm_refresh_by_csc */
 int32_t tisp_ccm_refresh_by_csc(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
@@ -141089,6 +141174,7 @@ int32_t tisp_ccm_refresh_by_csc(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000664d0 origin=fragment_seed original=tisp_gsm_pm_get_regsize */
