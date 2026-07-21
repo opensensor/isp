@@ -1295,6 +1295,8 @@ static unsigned char top_info_storage[8] __attribute__((aligned(4)));
 #define sdns_info (((uint32_t *)(void *)top_info_storage)[1])
 /* The unavailable WDR channel-1 slot likewise backs the missing YSP scalar. */
 #define ysp_info (wdr_info[1])
+/* Preserve BSS layout by backing the missing CLM scalar with BLC channel 1. */
+#define clm_info (blc_info[1])
 static struct file_operations tisp_fops;
 static unsigned char data_1388[16384];
 static uint32_t ev_last;
@@ -139009,6 +139011,13 @@ tisp_clm_ct_interp0x23c:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064f0c origin=fragment_seed original=tisp_clm_ct_update */
 int32_t tisp_clm_ct_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* CLM remains neutral until its interpolation and LUT writers are proven. */
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -139042,11 +139051,17 @@ tisp_clm_ct_update0x40:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064f64 origin=fragment_seed original=tisp_clm_dn_params_refresh */
 int32_t tisp_clm_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Keep the neutral CLM state; the recovered writer is not yet safe. */
+    (void)a0;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -139085,11 +139100,42 @@ int32_t tisp_clm_dn_params_refresh(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000064ff0 origin=fragment_seed original=tisp_clm_init */
 int32_t tisp_clm_init(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *params;
+
+    if (a0 != 0)
+        return -EINVAL;
+    if (clm_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    info = private_kmalloc(3256, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 3256);
+    clm_info = (uint32_t)(uintptr_t)info;
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 18648);
+    *(uint32_t *)(void *)(info + 96) = 5000;
+    *(uint16_t *)(void *)(info + 2200) = 16;
+    *(uint8_t *)(void *)(info + 3252) = 5;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: clm-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -139160,11 +139206,28 @@ int32_t tisp_clm_init(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006513c origin=fragment_seed original=tisp_clm_deinit */
 int32_t tisp_clm_deinit(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    info = (uint8_t *)(uintptr_t)clm_info;
+    if (info) {
+        private_kfree(info);
+        clm_info = 0;
+    }
+    ((uint32_t *)(void *)tpm_cb_storage)[228 / sizeof(uint32_t)] = 0;
+    ((uint32_t *)(void *)tpm_cb_storage)[232 / sizeof(uint32_t)] = 0;
+    ((uint32_t *)(void *)tpm_cb_storage)[236 / sizeof(uint32_t)] = 0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -139240,6 +139303,7 @@ tisp_clm_deinit0x74:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000651c0 origin=fragment_seed original=tisp_clm_param_array_get */
