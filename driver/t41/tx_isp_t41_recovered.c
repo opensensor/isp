@@ -876,6 +876,13 @@ static int32_t *num_all_ptr = &num_all;
 
 /* WHOLE_DRIVER_SUPPORT_DECLARATIONS */
 static uint32_t __pow2_lut[256];
+static const struct {
+    char soc[32];
+    char release[64];
+} t41_driver_version = {
+    .soc = "T41",
+    .release = "20230620a",
+};
 static const char LC0[] = "[%s %d] [error] [ %s:%d ] not support this format\n";
 static unsigned char __attribute__((aligned(4))) sclk_name[12] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -30832,52 +30839,8 @@ int32_t tx_isp_driver_version_isra_12(uint32_t a0) __asm__("tx_isp_driver_versio
 #endif
 int32_t tx_isp_driver_version_isra_12(uint32_t a0)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_78 = 0;
-    uint32_t local_7c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a0;
-    v0 = (unsigned int *)memcpy((void *)(uintptr_t)&local_18, (void *)(uintptr_t)&__pow2_lut, 96); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_copy_to_user)(s0, &local_18, 96); /* jalr target resolved by relocation */
-
-    /* fragment 3: Branch */
-    v1 = 0;
-    if (v0 == 0) { goto tx_isp_driver_version_isra_120x80; }
-
-    /* fragment 4: CallSetup */
-    local_14 = 122;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC10, &__pow2_lut, 122); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v1 = -14;
-
-tx_isp_driver_version_isra_120x80:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = v1;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return private_copy_to_user(a0, (uint32_t)(uintptr_t)&t41_driver_version,
+                                sizeof(t41_driver_version)) ? -EFAULT : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013e58 origin=fragment_seed original=tx_isp_set_default_bin_path.isra.16 */
@@ -31476,6 +31439,11 @@ int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uint32_t *t3 = 0;
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
+
+    /* libimp probes this command first.  Keep it independent of the damaged
+     * generated dispatch below so userspace can identify the recovered ISP. */
+    if (a1 == 0x80045401U)
+        return tx_isp_driver_version_isra_12(a2);
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
