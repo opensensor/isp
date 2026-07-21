@@ -116,6 +116,15 @@ fi
 capture_state() {
 	label="$1"
 	proc_diag="/tmp/t41-${label}-process.txt"
+	# Preserve the first kernel fault before slower /proc diagnostics can block
+	# on a damaged task or the allocator's cascading failure path.
+	dmesg >"/tmp/t41-${label}-dmesg.txt" 2>/dev/null || true
+	logread >"/tmp/t41-${label}-logread.txt" 2>/dev/null || true
+	if command -v logcat >/dev/null 2>&1; then
+		logcat -d >"/tmp/t41-${label}-logcat.txt" 2>/dev/null || true
+	else
+		: >"/tmp/t41-${label}-logcat.txt"
+	fi
 	{
 		date
 		uptime
@@ -133,19 +142,12 @@ capture_state() {
 			cat "/proc/$pid/status" 2>/dev/null || true
 			cat "/proc/$pid/stack" 2>/dev/null || true
 			i=0
-			while [ "$i" -lt 256 ] && kill -0 "$pid" 2>/dev/null; do
+			while [ "$i" -lt 32 ] && kill -0 "$pid" 2>/dev/null; do
 				cat "/proc/$pid/syscall" 2>/dev/null || true
 				i=$((i + 1))
 			done
 		} >>"$proc_diag" 2>&1
 	done
-	dmesg >"/tmp/t41-${label}-dmesg.txt" 2>/dev/null || true
-	logread >"/tmp/t41-${label}-logread.txt" 2>/dev/null || true
-	if command -v logcat >/dev/null 2>&1; then
-		logcat -d >"/tmp/t41-${label}-logcat.txt" 2>/dev/null || true
-	else
-		: >"/tmp/t41-${label}-logcat.txt"
-	fi
 }
 
 capture_state before
