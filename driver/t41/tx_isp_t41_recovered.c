@@ -29343,6 +29343,52 @@ int32_t tx_isp_open(int32_t arg1, void *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012f00 origin=fragment_seed original=tx_isp_notify */
 int32_t tx_isp_notify(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    char *ispdev = (char *)(uintptr_t)globe_ispdev;
+    char *slot;
+    uint32_t event_class = a1 & 0xff000000;
+    int ret = 0;
+
+    (void)a0;
+    if (!ispdev || IS_ERR(ispdev))
+        return -ENODEV;
+
+    for (slot = ispdev + 60; slot != ispdev + 124;
+         slot += sizeof(void *)) {
+        char *subdev = *(char **)slot;
+        char *ops;
+        char *event_ops;
+        int (*event)(uintptr_t, uint32_t, uint32_t);
+
+        if (!subdev || IS_ERR(subdev))
+            continue;
+        ops = *(char **)(subdev + 0xfc);
+        if (!ops || IS_ERR(ops)) {
+            ret = -ENOIOCTLCMD;
+            continue;
+        }
+
+        if (event_class == 0x01000000) {
+            event_ops = *(char **)ops;
+            event = event_ops ?
+                *(int (**)(uintptr_t, uint32_t, uint32_t))
+                    (event_ops + 0x20) : NULL;
+        } else if (event_class == 0x02000000) {
+            event_ops = *(char **)(ops + 0x0c);
+            event = event_ops ?
+                *(int (**)(uintptr_t, uint32_t, uint32_t))
+                    (event_ops + 0x08) : NULL;
+        } else {
+            continue;
+        }
+
+        ret = event ? event((uintptr_t)subdev, a1, a2) : -ENOIOCTLCMD;
+        if (ret && ret != -ENOIOCTLCMD)
+            return ret;
+    }
+
+    return ret == -ENOIOCTLCMD ? 0 : ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -29470,6 +29516,7 @@ tx_isp_notify0xec:
     goto tx_isp_notify0x98;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013004 origin=fragment_seed original=find_subdev_link_pad */
