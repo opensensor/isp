@@ -12,14 +12,14 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1528 |
 | Functions with disassembly | 1314 | 1528 |
-| Executable section bytes | 479556 | 346752 |
+| Executable section bytes | 479556 | 346784 |
 | Initialized writable bytes | 25120 | 17200 |
-| Uninitialized writable bytes | 20592 | 302432 |
+| Uninitialized writable bytes | 20592 | 302464 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=255
-- matched instructions: OEM=116036 recovered=83758 ratio=0.722
+- matched instructions: OEM=116036 recovered=83767 ratio=0.722
 - classes: stub=17 collapsed=79 shorter=388 same_count=268 similar=480 larger=23 expanded=18
 
 ## Allocated Section Delta
@@ -27,7 +27,7 @@
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 20592 | 302432 | +281840 |
+| `.bss` | 20592 | 302464 | +281872 |
 | `.data` | 24768 | 16848 | -7920 |
 | `.exit.text` | 1140 | 0 | -1140 |
 | `.gnu.linkonce.this_module` | 352 | 352 | +0 |
@@ -37,7 +37,7 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 4656 | -11104 |
 | `.rodata.str1.4` | 25860 | 6136 | -19724 |
-| `.text` | 478400 | 346752 | -131648 |
+| `.text` | 478400 | 346784 | -131616 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
@@ -186,7 +186,7 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | oem_only | oem_only | `lsc_exchange_data.constprop.1` |  | 9 | 0 | 0.000 | -9 | 0->0 | 0->0 |
 | oem_only | oem_only | `tx_isp_module_exit` |  | 4 | 0 | 0.000 | -4 | 0->0 | 1->0 |
 | shorter | exact_name | `Tiziano_wdr_fusion_fpga` | `Tiziano_wdr_fusion_fpga` | 2197 | 1373 | 0.625 | -824 | 48->36 | 246->163 |
-| shorter | exact_name | `tx_isp_unlocked_ioctl` | `tx_isp_unlocked_ioctl` | 1845 | 1167 | 0.633 | -678 | 102->75 | 288->208 |
+| shorter | exact_name | `tx_isp_unlocked_ioctl` | `tx_isp_unlocked_ioctl` | 1845 | 1151 | 0.624 | -694 | 102->74 | 288->205 |
 | shorter | exact_name | `frame_channel_unlocked_ioctl` | `frame_channel_unlocked_ioctl` | 1076 | 637 | 0.592 | -439 | 61->45 | 169->102 |
 | shorter | exact_name | `Tiziano_defog_soft` | `Tiziano_defog_soft` | 755 | 449 | 0.595 | -306 | 9->3 | 55->35 |
 | shorter | exact_name | `tisp_init` | `tisp_init` | 680 | 360 | 0.529 | -320 | 87->36 | 39->38 |

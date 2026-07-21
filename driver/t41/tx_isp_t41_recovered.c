@@ -13086,7 +13086,7 @@ tx_isp_vin_probe0x80:
     *(uint32_t *)((char *)s0 + 308) = 0;
     *(uint32_t *)((char *)s0 + 284) = 0;
     s2 = *(uint32_t *)((char *)(s1) + 92);
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_subdev_init)(s1, s0, &sclk_name); /* jalr target resolved by relocation */
+    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_subdev_init)(s1, s0, &vin_subdev_ops); /* jalr target resolved by relocation */
 
     /* fragment 9: Branch */
     a2 = (uintptr_t)&__pow2_lut;
@@ -14427,7 +14427,8 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     memset(v0, 0, 424);
     s2 = *(void **)((char *)s3 + 92);
-    s1 = tx_isp_subdev_init((uint32_t *)s3, (uintptr_t)v0, 0);
+    s1 = tx_isp_subdev_init((uint32_t *)s3, (uintptr_t)v0,
+                            &csi_subdev_ops);
 
     if (s1 == 0) {
         void *req = private_request_mem_region(0x10022000, 4096, "mipi-phy");
@@ -29935,6 +29936,7 @@ int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
 {
     unsigned char sensor_info[T41_SENSOR_INFO_SIZE];
     unsigned int offset;
+    uintptr_t vin;
     uintptr_t subdev;
     int ret;
 
@@ -29943,6 +29945,15 @@ int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
     if (private_copy_from_user(sensor_info,
             (const void __user *)(uintptr_t)a1, sizeof(sensor_info)))
         return -EFAULT;
+
+    vin = (uint32_t)private_platform_get_drvdata(
+            (uintptr_t)&tx_isp_vin_platform_device);
+    if (vin) {
+        ret = subdev_sensor_ops_ioctl(vin, T41_EVENT_SENSOR_REGISTER,
+                                      (uintptr_t)sensor_info);
+        if (ret != -ENOIOCTLCMD)
+            return ret;
+    }
 
     for (offset = 60; offset < 124; offset += sizeof(uintptr_t)) {
         subdev = t41_load_ptr(a0, offset);
@@ -29953,7 +29964,7 @@ int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
         if (ret)
             return ret;
     }
-    return 0;
+    return vin ? 0 : -ENODEV;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000136c4 origin=fragment_seed original=tx_isp_sensor_release_sensor */
@@ -31220,29 +31231,23 @@ tx_isp_get_default_bin_path_isra_250xf8:
 static int t41_ioctl_enum_sensor_input(uintptr_t file, uint32_t user_arg)
 {
     uint32_t input[20];
-    uintptr_t isp;
-    uintptr_t subdev;
-    unsigned int offset;
+    uintptr_t vin;
     int ret;
 
     if (!file || !user_arg)
         return -EINVAL;
-    isp = t41_load_ptr(file, 136);
-    if (!isp)
-        return -ENODEV;
     if (private_copy_from_user(input,
             (const void __user *)(uintptr_t)user_arg, sizeof(input)))
         return -EFAULT;
 
-    for (offset = 48; offset < 112; offset += sizeof(uintptr_t)) {
-        subdev = t41_load_ptr(isp, offset);
-        if (!subdev)
-            continue;
-        ret = t41_call_sensor_ioctl(subdev, T41_EVENT_SENSOR_ENUM_INPUT,
-                                    (uintptr_t)input);
-        if (ret)
-            return ret;
-    }
+    vin = (uint32_t)private_platform_get_drvdata(
+            (uintptr_t)&tx_isp_vin_platform_device);
+    if (!vin)
+        return -ENODEV;
+    ret = subdev_sensor_ops_ioctl(vin, T41_EVENT_SENSOR_ENUM_INPUT,
+                                  (uintptr_t)input);
+    if (ret)
+        return ret;
 
     return private_copy_to_user(user_arg, (uint32_t)(uintptr_t)input,
                                 sizeof(input)) ? -EFAULT : 0;
