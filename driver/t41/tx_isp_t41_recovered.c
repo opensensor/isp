@@ -13928,144 +13928,49 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000006618 origin=fragment_seed original=subdev_sensor_ops_enum_input */
 int64_t subdev_sensor_ops_enum_input(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a2 = 0;
-    uint32_t at = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    uintptr_t head;
+    uintptr_t node;
+    uintptr_t sensor;
+    unsigned int requested;
+    unsigned int next_index = 0;
+    unsigned int input_index;
+    unsigned int i;
+    int found = 0;
 
-    /* fragment 0: Branch */
-    if (a0 != 0) { goto subdev_sensor_ops_enum_input0x30; }
+    if (!a0 || !a1)
+        return -EINVAL;
 
-subdev_sensor_ops_enum_input0x8:
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
+    requested = *(uint32_t *)a1;
+    head = a0 + 276;
+    private_mutex_lock((void *)(a0 + 288));
 
-    /* fragment 2: Arithmetic */
-    v0 = -22;
+    for (node = *(uintptr_t *)head; node != head;
+         node = *(uintptr_t *)node) {
+        sensor = node - 288;
+        if (*(uint32_t *)(a0 + 312) == 1)
+            input_index = *(uint16_t *)(sensor + 380);
+        else {
+            input_index = next_index++;
+            *(uint32_t *)(sensor + 280) = input_index;
+        }
 
-subdev_sensor_ops_enum_input0x10:
-    /* fragment 3: Arithmetic */
-    v0 = -22;
+        if (input_index != requested)
+            continue;
 
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
+        *(uint32_t *)(a1 + 36) = *(uint32_t *)(sensor + 284);
+        for (i = 0; i < 32; i++) {
+            uint8_t ch = *(uint8_t *)(sensor + 296 + i);
 
-subdev_sensor_ops_enum_input0x18:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
+            *(uint8_t *)(a1 + 4 + i) = ch;
+            if (!ch)
+                break;
+        }
+        found = 1;
+        break;
+    }
 
-subdev_sensor_ops_enum_input0x30:
-    /* fragment 6: Branch */
-    if (a1 == 0) { goto subdev_sensor_ops_enum_input0x8; }
-
-    /* fragment 7: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 8: CallSetup */
-    s3 = a0 + 288;
-    s2 = a0;
-    s1 = a1;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_lock)(a0 + 288); /* jalr target resolved by relocation */
-
-    /* fragment 9: MemoryAccess */
-    s0 = *(uint32_t *)((char *)s2 + 276);
-    v0 = 0;
-    v1 = s2 + 276;
-    s0 = s0 - 288;
-    a1 = 1;
-
-subdev_sensor_ops_enum_input0x80:
-    /* fragment 10: Arithmetic */
-    a0 = s0 + 288;
-
-    /* fragment 11: Branch */
-    if (a0 == v1) { goto subdev_sensor_ops_enum_input0xdc; }
-
-    /* fragment 12: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s2 + 312);
-
-    /* fragment 13: Branch */
-    if (a0 == a1) { goto subdev_sensor_ops_enum_input0x104; }
-
-    /* fragment 14: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 280) = v0;
-    v0 = v0 + 1;
-
-subdev_sensor_ops_enum_input0xa0:
-    /* fragment 15: MemoryAccess */
-    a2 = *(uint32_t *)((char *)s0 + 280);
-    a0 = *(uint32_t *)((char *)s1 + 0);
-
-    /* fragment 16: Branch */
-    int _bc_a2_16 = a2 != a0;
-    a0 = 32;
-    if (_bc_a2_16) { goto subdev_sensor_ops_enum_input0x110; }
-
-    /* fragment 17: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 284);
-    v1 = s0 + 296;
-    *(uint32_t *)((char *)s1 + 36) = v0;
-    v0 = s1 + 4;
-
-subdev_sensor_ops_enum_input0xc0:
-    /* fragment 18: MemoryAccess */
-    at = *(uint8_t *)((char *)v1 + 0);
-    a0 = a0 - 1;
-    *(uint8_t *)((char *)v0 + 0) = at;
-
-    /* fragment 19: Branch */
-    v0 = v0 + 1;
-    if (at == 0) { goto subdev_sensor_ops_enum_input0xdc; }
-
-    /* fragment 20: Branch */
-    v1 = v1 + 1;
-    if (a0 != 0) { goto subdev_sensor_ops_enum_input0xc0; }
-
-subdev_sensor_ops_enum_input0xdc:
-    /* fragment 21: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_mutex_unlock)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 22: MemoryAccess */
-    v1 = *(uint32_t *)((char *)s0 + 280);
-    v0 = *(uint32_t *)((char *)s1 + 0);
-
-    /* fragment 23: Branch */
-    int _bc_v1_23 = v1 != v0;
-    v0 = 0;
-    if (_bc_v1_23) { goto subdev_sensor_ops_enum_input0x10; }
-
-    /* fragment 24: Branch */
-    goto subdev_sensor_ops_enum_input0x18;
-
-subdev_sensor_ops_enum_input0x104:
-    /* fragment 25: MemoryAccess */
-    a0 = *(uint16_t *)((char *)s0 + 380);
-
-    /* fragment 26: Branch */
-    *(uint32_t *)((char *)s0 + 280) = a0;
-    goto subdev_sensor_ops_enum_input0xa0;
-
-subdev_sensor_ops_enum_input0x110:
-    /* fragment 27: MemoryAccess */
-    s0 = *(uint32_t *)((char *)s0 + 288);
-
-    /* fragment 28: Branch */
-    s0 = s0 - 288;
-    goto subdev_sensor_ops_enum_input0x80;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+    private_mutex_unlock((void *)(a0 + 288));
+    return found ? 0 : -EINVAL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000006734 origin=fragment_seed original=isp_i2c_new_subdev_board */
@@ -30028,101 +29933,26 @@ void tx_isp_unregister_platforms(uintptr_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000135e0 origin=fragment_seed original=tx_isp_sensor_register_sensor */
 int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t *local_80 = 0;
-    uint32_t local_84 = 0;
-    uint32_t local_88 = 0;
-    uint32_t local_8c = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
+    unsigned char sensor_info[T41_SENSOR_INFO_SIZE];
+    unsigned int offset;
+    uintptr_t subdev;
+    int ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!a0 || !a1)
+        return -EINVAL;
+    if (private_copy_from_user(sensor_info,
+            (const void __user *)(uintptr_t)a1, sizeof(sensor_info)))
+        return -EFAULT;
 
-    /* fragment 1: CallSetup */
-    s1 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_copy_from_user)(&local_18); /* jalr target resolved by relocation */
-
-    /* fragment 2: Branch */
-    s0 = s1 + 60;
-    if (v0 == 0) { goto tx_isp_sensor_register_sensor0x80; }
-
-    /* fragment 3: CallSetup */
-    local_14 = 270;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC7, &__pow2_lut, 270); /* jalr target resolved by relocation */
-
-    /* fragment 4: Arithmetic */
-    v0 = -14;
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_sensor_register_sensor0x6c:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_sensor_register_sensor0x80:
-    /* fragment 7: Arithmetic */
-    s2 = -515;
-    s1 = s1 + 124;
-
-tx_isp_sensor_register_sensor0x88:
-    /* fragment 8: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s0 + 0);
-
-    /* fragment 9: Branch */
-    if (a0 != 0) { goto tx_isp_sensor_register_sensor0xa8; }
-
-tx_isp_sensor_register_sensor0x94:
-    /* fragment 10: Arithmetic */
-    s0 = s0 + 4;
-
-tx_isp_sensor_register_sensor0x98:
-    /* fragment 11: Branch */
-    v0 = 0;
-    if (s1 != s0) { goto tx_isp_sensor_register_sensor0x88; }
-
-    /* fragment 12: Branch */
-    goto tx_isp_sensor_register_sensor0x6c;
-
-tx_isp_sensor_register_sensor0xa8:
-    /* fragment 13: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 14: Branch */
-    if (v0 == 0) { goto tx_isp_sensor_register_sensor0x94; }
-
-    /* fragment 15: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 8);
-
-    /* fragment 16: Branch */
-    a2 = (uintptr_t)&local_18;
-    if (v0 == 0) { goto tx_isp_sensor_register_sensor0x94; }
-
-    /* fragment 17: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 18: Branch */
-    if (v0 == 0) { goto tx_isp_sensor_register_sensor0x94; }
-
-    /* fragment 19: Branch */
-    if (v0 != s2) { goto tx_isp_sensor_register_sensor0x6c; }
-
-    /* fragment 20: Branch */
-    s0 = s0 + 4;
-    goto tx_isp_sensor_register_sensor0x98;
-
+    for (offset = 60; offset < 124; offset += sizeof(uintptr_t)) {
+        subdev = t41_load_ptr(a0, offset);
+        if (!subdev)
+            continue;
+        ret = t41_call_sensor_ioctl(subdev, T41_EVENT_SENSOR_REGISTER,
+                                    (uintptr_t)sensor_info);
+        if (ret)
+            return ret;
+    }
     return 0;
 }
 
@@ -31387,6 +31217,37 @@ tx_isp_get_default_bin_path_isra_250xf8:
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
 
+static int t41_ioctl_enum_sensor_input(uintptr_t file, uint32_t user_arg)
+{
+    uint32_t input[20];
+    uintptr_t isp;
+    uintptr_t subdev;
+    unsigned int offset;
+    int ret;
+
+    if (!file || !user_arg)
+        return -EINVAL;
+    isp = t41_load_ptr(file, 136);
+    if (!isp)
+        return -ENODEV;
+    if (private_copy_from_user(input,
+            (const void __user *)(uintptr_t)user_arg, sizeof(input)))
+        return -EFAULT;
+
+    for (offset = 48; offset < 112; offset += sizeof(uintptr_t)) {
+        subdev = t41_load_ptr(isp, offset);
+        if (!subdev)
+            continue;
+        ret = t41_call_sensor_ioctl(subdev, T41_EVENT_SENSOR_ENUM_INPUT,
+                                    (uintptr_t)input);
+        if (ret)
+            return ret;
+    }
+
+    return private_copy_to_user(user_arg, (uint32_t)(uintptr_t)input,
+                                sizeof(input)) ? -EFAULT : 0;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000014474 origin=fragment_seed original=tx_isp_unlocked_ioctl */
 int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
 {
@@ -31444,6 +31305,13 @@ int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
      * generated dispatch below so userspace can identify the recovered ISP. */
     if (a1 == 0x80045401U)
         return tx_isp_driver_version_isra_12(a2);
+    if (a1 == 0x80645405U) {
+        uintptr_t isp = t41_load_ptr(a0, 136);
+
+        return isp ? tx_isp_sensor_register_sensor(isp - 12, a2) : -ENODEV;
+    }
+    if (a1 == 0xc0045402U)
+        return t41_ioctl_enum_sensor_input(a0, a2);
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
