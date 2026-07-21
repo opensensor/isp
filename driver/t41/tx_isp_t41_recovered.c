@@ -106848,6 +106848,87 @@ tisp_defog_interrupt_static0x180:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004b5ac origin=fragment_seed original=tisp_defog_init */
 int64_t tisp_defog_init(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *params;
+    uint32_t *bypass;
+    uint32_t width;
+    uint32_t height;
+    int ret = -ENOMEM;
+
+    /* Preserve the recovered BSS layout; this T41 ISP exposes channel 0. */
+    if (a0 != 0 || !a1)
+        return -EINVAL;
+    if (defog_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    width = *(uint32_t *)(uintptr_t)a1;
+    height = *(uint32_t *)(uintptr_t)(a1 + 4);
+    if (!width || !height)
+        return -EINVAL;
+
+    /*
+     * Keep the OEM T41 ownership layout intact while Defog's generated
+     * interpolation helpers remain unsafe.  T40/T23 use the same lifecycle
+     * rule: state ownership is independent from enabling the enhancement.
+     */
+    info = private_kmalloc(60, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 60);
+    defog_info = (uint32_t)(uintptr_t)info;
+
+    *(uint32_t *)(void *)info = 4;
+    *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)
+        private_kmalloc(8192, 0x024000c0);
+    *(uint32_t *)(void *)(info + 16) = (uint32_t)(uintptr_t)
+        private_kmalloc(3948, 0x024000c0);
+    *(uint32_t *)(void *)(info + 20) = (uint32_t)(uintptr_t)
+        private_kmalloc(220, 0x024000c0);
+    *(uint32_t *)(void *)(info + 52) = (uint32_t)(uintptr_t)
+        private_vmalloc(360);
+    *(uint32_t *)(void *)(info + 56) = (uint32_t)(uintptr_t)
+        private_vmalloc(180);
+    if (!*(uint32_t *)(void *)(info + 4) ||
+        !*(uint32_t *)(void *)(info + 16) ||
+        !*(uint32_t *)(void *)(info + 20) ||
+        !*(uint32_t *)(void *)(info + 52) ||
+        !*(uint32_t *)(void *)(info + 56))
+        goto fail;
+
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 4), 0, 8192);
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 16), 0, 3948);
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 20), 0, 220);
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 52), 0, 360);
+    memset((void *)(uintptr_t)*(uint32_t *)(void *)(info + 56), 0, 180);
+
+    *(uint32_t *)(void *)(info + 8) =
+        *(uint32_t *)(void *)(info + 4) + 0x80000000U;
+    *(uint32_t *)(void *)(info + 12) =
+        (uint32_t)(uintptr_t)(params + 65536 + 15052);
+    *(uint32_t *)(void *)(info + 24) = 99;
+    *(uint32_t *)(void *)(info + 28) = height;
+    *(uint32_t *)(void *)(info + 32) = width;
+    *(uint8_t *)(void *)(info + 44) = params[65536 + 15052 + 461];
+
+    /* Do not expose Defog to EV/DN/IRQ paths until its helpers are repaired. */
+    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
+    *bypass |= BIT(11);
+    system_reg_write((a0 + 16) << 2, *bypass);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: defog-init safe bypass channel=%u %ux%u\n",
+           a0, width, height);
+    return 0;
+
+fail:
+    tisp_defog_deinit(a0);
+    return ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -107270,11 +107351,47 @@ tisp_defog_init0x5f4:
     goto tisp_defog_init0x2c8;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bbc8 origin=fragment_seed original=tisp_defog_deinit */
 int32_t tisp_defog_deinit(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+    static const unsigned int kfree_offsets[] = { 4, 16, 20 };
+    static const unsigned int vfree_offsets[] = { 52, 56 };
+    unsigned int i;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    info = (uint8_t *)(uintptr_t)defog_info;
+    if (info) {
+        for (i = 0; i < ARRAY_SIZE(kfree_offsets); ++i) {
+            uint32_t *slot = (uint32_t *)(void *)(info + kfree_offsets[i]);
+            if (*slot) {
+                private_kfree((void *)(uintptr_t)*slot);
+                *slot = 0;
+            }
+        }
+        for (i = 0; i < ARRAY_SIZE(vfree_offsets); ++i) {
+            uint32_t *slot = (uint32_t *)(void *)(info + vfree_offsets[i]);
+            if (*slot) {
+                private_vfree((void *)(uintptr_t)*slot);
+                *slot = 0;
+            }
+        }
+        private_kfree(info);
+        defog_info = 0;
+    }
+
+    callbacks[120 / 4] = 0;
+    callbacks[124 / 4] = 0;
+    callbacks[128 / 4] = 0;
+    return 0;
+#else
     unsigned long *s0;
     uint32_t *s2;
     unsigned long s3;
@@ -107374,11 +107491,20 @@ tisp_defog_deinit0x124:
 tisp_defog_deinit0x138:
     v0 = 0;
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bd1c origin=fragment_seed original=tisp_defog_ev_update */
 int32_t tisp_defog_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Defog is deliberately bypassed until its interpolation path is safe. */
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
@@ -107428,11 +107554,17 @@ tisp_defog_ev_update0x64:
     v0 = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bd88 origin=fragment_seed original=tisp_defog_wdr_en */
 int32_t tisp_defog_wdr_en(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
     uint32_t ra = 0;
@@ -107452,11 +107584,19 @@ int32_t tisp_defog_wdr_en(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004bdd4 origin=fragment_seed original=tisp_defog_dn_params_refresh */
 int32_t tisp_defog_dn_params_refresh(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -107700,6 +107840,7 @@ tisp_defog_dn_params_refresh0x2f4:
     goto tisp_defog_dn_params_refresh0x1f0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c160 origin=fragment_seed original=tisp_defog_param_array_get */

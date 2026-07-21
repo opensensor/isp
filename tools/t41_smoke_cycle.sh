@@ -95,7 +95,7 @@ trap cleanup EXIT
 # host-side breadcrumb if the kernel locks before the normal /tmp logs can be
 # retrieved. This is read-only and intentionally does not use dmesg -c.
 timeout 120 "${SSH[@]}" \
-	'while :; do date; dmesg | tail -n 160; echo ===t41-live-sample===; sleep 1; done' \
+	'while :; do date; dmesg | tail -n 1200; echo ===t41-live-sample===; sleep 1; done' \
 	>"$LOG/t41-live-dmesg.txt" 2>&1 &
 live_log_pid=$!
 sleep 1
