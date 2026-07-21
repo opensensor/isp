@@ -69606,6 +69606,11 @@ system_reg_write_af0x3c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d0a0 origin=fragment_seed original=tisp_af_set_hardware_param */
 int64_t tisp_af_set_hardware_param(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Fixed-focus T41 target: do not enter the collapsed AF register writer. */
+    (void)a0;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -69974,6 +69979,7 @@ tisp_af_set_hardware_param0x774:
     goto tisp_af_set_hardware_param0xbc;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d82c origin=fragment_seed original=tisp_af_get_statistics */
@@ -70889,7 +70895,9 @@ int32_t tisp_af_init(uint32_t a0, uintptr_t a1)
     uint8_t *info;
     uint8_t *workspace;
     uint32_t *params;
+#ifndef REGTRACE_KERNEL_TREE_BUILD
     uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+#endif
 
     if (a0 >= 2 || !a1)
         return -EINVAL;
@@ -70926,6 +70934,18 @@ int32_t tisp_af_init(uint32_t a0, uintptr_t a1)
     *(uint16_t *)(void *)(info + 12) = *(uint32_t *)(uintptr_t)a1;
     *(uint16_t *)(void *)(info + 14) = *(uint32_t *)(uintptr_t)(a1 + 4);
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /*
+     * The stock T41 AF writer has lost register values in reconstruction.
+     * Keep its exact state/DMA ownership, but do not arm AF IRQ processing on
+     * this fixed-focus camera until that 79.7%-sized function is restored.
+     */
+    system_reg_write(0x1a000, 0);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: af-init safe disabled channel=%u %ux%u\n",
+           a0, *(uint16_t *)(void *)(info + 12),
+           *(uint16_t *)(void *)(info + 14));
+#else
     tisp_af_set_hardware_param(a0 & 0xff);
     system_irq_func_set(a0, a0 * 42 + 6, tisp_af_interrupt_static);
     tisp_event_set_cb(a0, 15, tisp_af_calc_process);
@@ -70934,6 +70954,7 @@ int32_t tisp_af_init(uint32_t a0, uintptr_t a1)
     callbacks[0x9c / 4] = (uint32_t)(uintptr_t)tisp_af_pm_get_regsize;
     callbacks[0xa0 / 4] = (uint32_t)(uintptr_t)tisp_af_pm_suspend;
     callbacks[0xa4 / 4] = (uint32_t)(uintptr_t)tisp_af_pm_resume;
+#endif
 
     return 0;
 }
