@@ -1236,7 +1236,9 @@ static uint32_t ae_buf_info[2];
 static unsigned char slock_hist_storage[8] __attribute__((aligned(4)));
 static uint32_t af_buf_info[2], af_info[2];
 static uint32_t pst_awb_ct_detect[2], awb_info[2];
-static uint32_t bcsh_info, blc_info, ccm_info, cdns_info, chx_shd_flags, clk_cnt_39069;
+static uint32_t bcsh_info;
+static uint32_t blc_info[2];
+static uint32_t ccm_info, cdns_info, chx_shd_flags, clk_cnt_39069;
 static uint32_t cls, csc_switch, csc_version_now, ctl_table, defog_info, deghost_en, diffLast2Later;
 static uint32_t diff_thr_maxvalue, dmsc_debug_flags, dpc_info, dump_csd, ev_last_switch, ev_wdr_l, ev_wdr_s;
 static uint32_t find_new_buffer_fn, fix_y_tmp, fliker_info, fliker_para, force_triger, frameSum, frame_vb_measure;
@@ -36945,83 +36947,27 @@ uint32_t tisp_simple_intp_int8(int32_t arg1, int32_t arg2, void *arg3) {
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000180e0 origin=fragment_seed original=tisp_simple_intp_int16 */
 int64_t tisp_simple_intp_int16(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    const uint16_t *table = (const uint16_t *)a2;
+    uint32_t left;
+    uint32_t right;
+    uint32_t delta;
+    uint32_t scaled;
 
-    /* fragment 0: Arithmetic */
-    v0 = a0 < 10;
+    if (!table)
+        return 0;
+    if (a0 >= 10)
+        return table[10];
 
-    /* fragment 1: Branch */
-    a0 = a0 << 1;
-    if (v0 != 0) { goto tisp_simple_intp_int160x14; }
+    left = table[a0];
+    right = table[a0 + 1];
+    if (left == right)
+        return right;
 
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
+    delta = left < right ? right - left : left - right;
+    scaled = delta * a1;
+    scaled = (scaled >> 16) + ((scaled >> 15) & 1);
 
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint16_t *)((char *)a2 + 20);
-
-tisp_simple_intp_int160x14:
-    /* fragment 4: Arithmetic */
-    a2 = a2 + a0;
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint16_t *)((char *)a2 + 0);
-    v0 = *(uint16_t *)((char *)a2 + 2);
-
-    /* fragment 6: Branch */
-    a0 = v1 < v0;
-    if (v1 == v0) { goto tisp_simple_intp_int160x58; }
-
-    /* fragment 7: Branch */
-    if (a0 == 0) { goto tisp_simple_intp_int160x60; }
-
-    /* fragment 8: Arithmetic */
-    v0 = (uintptr_t)v0 - (uintptr_t)v1;
-    a0 = 0;
-
-tisp_simple_intp_int160x38:
-    /* fragment 9: Arithmetic */
-    a1 = (uintptr_t)v0 * a1;
-    v0 = a1 >> 16;
-    a1 = (a1 >> 15) & 0x1;
-    v0 = v0 + a1;
-
-    /* fragment 10: Branch */
-    v0 = (uintptr_t)v0 & 65535;
-    if (a0 == 0) { goto tisp_simple_intp_int160x6c; }
-
-    /* fragment 11: Arithmetic */
-    v0 = (uintptr_t)v1 - (uintptr_t)v0;
-
-tisp_simple_intp_int160x54:
-    /* fragment 12: Arithmetic */
-    v0 = (uintptr_t)v0 & 65535;
-
-tisp_simple_intp_int160x58:
-    /* fragment 13: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-    /* fragment 14: Unknown */
-    /* unmatched fragment 14 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 1813c:	00000000 	nop */
-
-tisp_simple_intp_int160x60:
-    /* fragment 15: Arithmetic */
-    v0 = (uintptr_t)v1 - (uintptr_t)v0;
-
-    /* fragment 16: Branch */
-    a0 = 1;
-    goto tisp_simple_intp_int160x38;
-
-tisp_simple_intp_int160x6c:
-    /* fragment 17: Branch */
-    v0 = (uintptr_t)v1 + (uintptr_t)v0;
-    goto tisp_simple_intp_int160x54;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+    return left < right ? left + scaled : left - scaled;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018154 origin=fragment_seed original=tisp_log2_int_to_fixed */
@@ -81408,6 +81354,7 @@ tisp_blc_pm_suspend0x30:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000036274 origin=fragment_seed original=tisp_blc_calc_self_gain */
+#if 0
 int32_t tisp_blc_calc_self_gain(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
     uint32_t ra = 0;
@@ -82043,6 +81990,241 @@ tisp_blc_deinit0x74:
     /* function epilogue: restore registers and return */
 
     return 0;
+}
+#endif
+
+int32_t tisp_blc_calc_self_gain(uint32_t a0, uint32_t a1, uint32_t a2,
+				uint32_t a3)
+{
+	uint32_t maximum = a0;
+	uint32_t quotient;
+
+	if (a1 > maximum)
+		maximum = a1;
+	if (a2 > maximum)
+		maximum = a2;
+	if (a3 > maximum)
+		maximum = a3;
+	if (maximum >> 11)
+		return 8192;
+
+	quotient = 0x02000000U / (4096U - maximum);
+	return (quotient >> 1) + (quotient & 1);
+}
+
+int32_t tisp_blc_rgb2channel(uint32_t channel, uint32_t frame)
+{
+	uint8_t *info;
+	uint16_t *source;
+	uint16_t *dest;
+
+	if (channel >= ARRAY_SIZE(blc_info) || frame >= 2 ||
+	    !blc_info[channel])
+		return -EINVAL;
+
+	info = (uint8_t *)(uintptr_t)blc_info[channel];
+	source = (uint16_t *)(void *)(info + frame * 32 + 20);
+	dest = (uint16_t *)(void *)(info + frame * 32 + 28);
+
+	switch (info[72]) {
+	case 0:
+		dest[0] = source[0];
+		dest[1] = source[1];
+		dest[2] = source[2];
+		dest[3] = source[3];
+		dest[4] = source[0];
+		break;
+	case 1:
+		dest[0] = source[3];
+		dest[1] = source[2];
+		dest[2] = source[1];
+		dest[3] = source[0];
+		dest[4] = source[3];
+		break;
+	case 2:
+		dest[0] = source[1];
+		dest[1] = source[0];
+		dest[2] = source[3];
+		dest[3] = source[2];
+		dest[4] = source[1];
+		break;
+	case 3:
+		dest[0] = source[2];
+		dest[1] = source[3];
+		dest[2] = source[0];
+		dest[3] = source[1];
+		dest[4] = source[2];
+		break;
+	default:
+		memset(dest, 0, 5 * sizeof(*dest));
+		break;
+	}
+
+	return 0;
+}
+
+int32_t tisp_blc_write_reg(uint32_t channel, uint32_t frame)
+{
+	uint8_t *info;
+	uint16_t *values;
+	uint32_t reg;
+
+	if (channel >= ARRAY_SIZE(blc_info) || frame >= 2 ||
+	    !blc_info[channel])
+		return -EINVAL;
+
+	info = (uint8_t *)(uintptr_t)blc_info[channel];
+	values = (uint16_t *)(void *)(info + frame * 32 + 28);
+	reg = frame ? 0x2014 : 0x2004;
+
+	system_reg_write(reg,
+			 ((uint32_t)values[1] << 16 & 0x0fff0000) |
+			 ((uint32_t)values[0] & 0x0fff));
+	system_reg_write(reg + 4,
+			 ((uint32_t)values[3] << 16 & 0x0fff0000) |
+			 ((uint32_t)values[2] & 0x0fff));
+	system_reg_write(reg + 8, (uint32_t)values[4] & 0x0fff);
+	system_reg_write(0x2000, 1);
+	return 0;
+}
+
+void *tisp_blc_ag_interp(uint32_t channel, uint32_t frame)
+{
+	uint8_t *info;
+	uint16_t *values;
+	uintptr_t table;
+	uint32_t gain;
+	uint32_t integer;
+	uint32_t fraction;
+	uint32_t i;
+
+	if (channel >= ARRAY_SIZE(blc_info) || frame >= 2 ||
+	    !blc_info[channel])
+		return NULL;
+
+	info = (uint8_t *)(uintptr_t)blc_info[channel];
+	if (info[73])
+		return NULL;
+
+	table = *(uint32_t *)(void *)(info + frame * sizeof(uint32_t));
+	if (!table)
+		return NULL;
+	gain = *(uint32_t *)(void *)(info + frame * 32 + 8);
+	integer = gain >> 16;
+	fraction = gain & 0xffff;
+	values = (uint16_t *)(void *)(info + frame * 32 + 20);
+
+	for (i = 0; i < 4; ++i)
+		values[i] = (uint16_t)tisp_simple_intp_int16(integer, fraction,
+							 table + i * 22);
+	*(uint32_t *)(void *)(info + frame * 32 + 12) =
+		tisp_blc_calc_self_gain(values[0], values[1], values[2],
+					values[3]);
+	return NULL;
+}
+
+int32_t tisp_blc_again_update(uint32_t channel, uint32_t frame,
+			      uint32_t gain)
+{
+	uint8_t *info;
+
+	if (channel >= ARRAY_SIZE(blc_info) || frame >= 2 ||
+	    !blc_info[channel])
+		return -EINVAL;
+	info = (uint8_t *)(uintptr_t)blc_info[channel];
+	if (info[73])
+		return 0;
+
+	*(uint32_t *)(void *)(info + frame * 32 + 8) = gain;
+	tisp_blc_ag_interp(channel, frame);
+	tisp_blc_rgb2channel(channel, frame);
+	return tisp_blc_write_reg(channel, frame);
+}
+
+int32_t tisp_blc_dn_params_refresh(uint32_t channel)
+{
+	int ret;
+
+	if (channel >= ARRAY_SIZE(blc_info) || !blc_info[channel])
+		return -EINVAL;
+	tisp_blc_ag_interp(channel, 0);
+	tisp_blc_ag_interp(channel, 1);
+	ret = tisp_blc_rgb2channel(channel, 0);
+	if (ret)
+		return ret;
+	ret = tisp_blc_rgb2channel(channel, 1);
+	if (ret)
+		return ret;
+	ret = tisp_blc_write_reg(channel, 0);
+	if (ret)
+		return ret;
+	return tisp_blc_write_reg(channel, 1);
+}
+
+int32_t tisp_blc_init(uint32_t channel, uintptr_t par)
+{
+	uint8_t *info;
+	uintptr_t params;
+	uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+	if (channel >= ARRAY_SIZE(blc_info) || !par)
+		return -EINVAL;
+	if (blc_info[channel])
+		return -EBUSY;
+
+	params = ((uint32_t *)(void *)tparamsP_storage)[channel];
+	if (!params)
+		return -ENODEV;
+	info = private_kmalloc(76, GFP_KERNEL);
+	if (!info)
+		return -ENOMEM;
+	memset(info, 0, 76);
+	blc_info[channel] = (uint32_t)(uintptr_t)info;
+
+	*(uint32_t *)(void *)(info + 0) = (uint32_t)(params + 7260);
+	*(uint32_t *)(void *)(info + 4) = (uint32_t)(params + 7348);
+	info[72] = *(uint32_t *)(par + 8) & 3;
+	*(uint32_t *)(void *)(info + 12) = 4096;
+	*(uint32_t *)(void *)(info + 44) = 4096;
+
+	tisp_blc_ag_interp(channel, 0);
+	tisp_blc_ag_interp(channel, 1);
+	tisp_blc_rgb2channel(channel, 0);
+	tisp_blc_rgb2channel(channel, 1);
+	tisp_blc_write_reg(channel, 0);
+	tisp_blc_write_reg(channel, 1);
+
+	system_reg_write(0x2010, 0);
+	system_reg_write(0x2020, 0);
+	system_reg_write(0x2024, 0x04000400);
+	system_reg_write(0x2028, 0x04000400);
+	system_reg_write(0x202c, 0);
+	system_reg_write(0x2030, 0x04000400);
+	system_reg_write(0x2034, 0x04000400);
+	system_reg_write(0x2038, 0);
+	system_reg_write(0x2000, 1);
+	system_reg_write(0x030c, 0x20220721);
+
+	callbacks[6] = (uint32_t)(uintptr_t)tisp_blc_pm_get_regsize;
+	callbacks[7] = (uint32_t)(uintptr_t)tisp_blc_pm_suspend;
+	callbacks[8] = (uint32_t)(uintptr_t)tisp_blc_pm_resume;
+	return 0;
+}
+
+int32_t tisp_blc_deinit(uint32_t channel)
+{
+	uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+	if (channel >= ARRAY_SIZE(blc_info))
+		return -EINVAL;
+	if (blc_info[channel]) {
+		private_kfree((void *)(uintptr_t)blc_info[channel]);
+		blc_info[channel] = 0;
+	}
+	callbacks[6] = 0;
+	callbacks[7] = 0;
+	callbacks[8] = 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000036948 origin=fragment_seed original=tisp_blc_param_array_get */

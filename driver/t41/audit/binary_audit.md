@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1530 |
 | Functions with disassembly | 1314 | 1530 |
-| Executable section bytes | 479556 | 350816 |
+| Executable section bytes | 479556 | 351200 |
 | Initialized writable bytes | 25120 | 17664 |
 | Uninitialized writable bytes | 20592 | 302496 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=257
-- matched instructions: OEM=116036 recovered=84611 ratio=0.729
-- classes: stub=17 collapsed=78 shorter=375 same_count=266 similar=491 larger=26 expanded=20
+- matched instructions: OEM=116036 recovered=84708 ratio=0.730
+- classes: stub=17 collapsed=78 shorter=372 same_count=266 similar=493 larger=27 expanded=20
 
 ## Allocated Section Delta
 
@@ -37,14 +37,14 @@
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 4672 | -11088 |
 | `.rodata.str1.4` | 25860 | 6184 | -19676 |
-| `.text` | 478400 | 350816 | -127584 |
+| `.text` | 478400 | 351200 | -127200 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 814 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 812 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -288,13 +288,13 @@ Showing 250 of 814 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_wdr_get_lum_s` | `tisp_wdr_get_lum_s` | 73 | 52 | 0.712 | -21 | 0->0 | 9->7 |
 | shorter | exact_name | `tisp_gsm_init` | `tisp_gsm_init` | 71 | 55 | 0.775 | -16 | 6->2 | 0->0 |
 | shorter | exact_name | `tisp_ydns_reg_cfg` | `tisp_ydns_reg_cfg` | 71 | 56 | 0.789 | -15 | 7->7 | 0->0 |
-| shorter | exact_name | `tisp_blc_ag_interp` | `tisp_blc_ag_interp` | 70 | 50 | 0.714 | -20 | 5->4 | 1->1 |
+| shorter | exact_name | `tisp_blc_ag_interp` | `tisp_blc_ag_interp` | 70 | 54 | 0.771 | -16 | 5->2 | 1->5 |
 | shorter | exact_name | `tisp_code_create_tuning_node` | `tisp_code_create_tuning_node` | 65 | 42 | 0.646 | -23 | 6->4 | 2->0 |
 | shorter | exact_name | `ispcore_frame_channel_streamon` | `ispcore_frame_channel_streamon` | 64 | 37 | 0.578 | -27 | 4->2 | 7->4 |
 | shorter | exact_name | `tisp_irsca_write_reg` | `tisp_irsca_write_reg` | 64 | 47 | 0.734 | -17 | 5->3 | 0->0 |
 | shorter | exact_name | `tisp_awb_pm_suspend` | `tisp_awb_pm_suspend` | 62 | 45 | 0.726 | -17 | 3->3 | 3->1 |
 | shorter | exact_name | `tiziano_adr_algorithm` | `tiziano_adr_algorithm` | 62 | 46 | 0.742 | -16 | 3->2 | 1->1 |
-| shorter | exact_name | `tisp_blc_write_reg` | `tisp_blc_write_reg` | 58 | 37 | 0.638 | -21 | 4->3 | 0->0 |
 | shorter | exact_name | `private_wait_event_interruptible` | `private_wait_event_interruptible` | 58 | 46 | 0.793 | -12 | 5->4 | 4->3 |
 | shorter | exact_name | `tisp_set_fps` | `tisp_set_fps` | 57 | 32 | 0.561 | -25 | 3->2 | 2->0 |
 | shorter | exact_name | `tisp_gamma_strength_transform` | `tisp_gamma_strength_transform` | 57 | 33 | 0.579 | -24 | 1->0 | 2->2 |
+| shorter | exact_name | `tisp_tmo_faceae_refresh` | `tisp_tmo_faceae_refresh` | 57 | 40 | 0.702 | -17 | 5->5 | 0->0 |
