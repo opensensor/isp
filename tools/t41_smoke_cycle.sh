@@ -172,7 +172,7 @@ set -e
 
 "${SCP[@]}" "$USER@$IP:/tmp/t41-*.txt" "$LOG/" 2>/dev/null || true
 
-rg -n -i 'kernel panic|kernel bug detected|oops|BUG:|unable to handle|segfault|watchdog|fatal exception' \
+rg -n -i 'kernel panic|kernel bug detected|oops|BUG:|unable to handle|unhandled kernel unaligned access|segfault|watchdog|fatal exception' \
 	"$LOG"/*dmesg.txt >"$LOG/kernel-fatal-signatures.txt" || true
 
 insmod_status="$(tr -d '\r\n' <"$LOG/t41-insmod-status.txt" 2>/dev/null || printf missing)"
