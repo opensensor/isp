@@ -123454,6 +123454,12 @@ tisp_cdns_par_refresh0x78:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000581e0 origin=fragment_seed original=tisp_cdns_refresh */
 int32_t tisp_cdns_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* CDNS is held in top bypass until its register writer is complete. */
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t a2 = 0;
     uint32_t *t9 = 0;
     uintptr_t *v0 = 0;
@@ -123471,11 +123477,56 @@ int32_t tisp_cdns_refresh(uint32_t a0, uint32_t a1)
     a2 = *(uint32_t *)((char *)((char *)&gain_thres));
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000581f4 origin=fragment_seed original=tisp_cdns_init */
 int32_t tisp_cdns_init(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *runtime;
+    uint8_t *params;
+    uint32_t *bypass;
+
+    /* Preserve the recovered scalar BSS slot; this target uses channel 0. */
+    if (a0 != 0)
+        return -EINVAL;
+    if (cdns_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    info = private_kmalloc(16, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 16);
+    cdns_info = (uint32_t)(uintptr_t)info;
+
+    runtime = private_kmalloc(32, 0x024000c0);
+    if (!runtime)
+        goto fail;
+    memset(runtime, 0, 32);
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 17935);
+    *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)runtime;
+    *(uint32_t *)(void *)(info + 8) = 0xffffffffU;
+
+    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
+    *bypass |= BIT(19);
+    system_reg_write((a0 + 16) << 2, *bypass);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: cdns-init safe bypass channel=%u\n", a0);
+    return 0;
+
+fail:
+    tisp_cdns_deinit(a0);
+    return -ENOMEM;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -123564,11 +123615,33 @@ tisp_cdns_init0x80:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000058368 origin=fragment_seed original=tisp_cdns_deinit */
 int32_t tisp_cdns_deinit(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    info = (uint8_t *)(uintptr_t)cdns_info;
+    if (info) {
+        uint32_t runtime = *(uint32_t *)(void *)(info + 4);
+
+        if (runtime)
+            private_kfree((void *)(uintptr_t)runtime);
+        private_kfree(info);
+        cdns_info = 0;
+    }
+    callbacks[180 / 4] = 0;
+    callbacks[184 / 4] = 0;
+    callbacks[188 / 4] = 0;
+    return 0;
+#else
     uintptr_t *s0;
     uintptr_t *s2;
     uintptr_t s3;
@@ -123608,11 +123681,16 @@ int32_t tisp_cdns_deinit(uint32_t a0)
     }
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000058420 origin=fragment_seed original=tisp_cdns_dn_params_refresh */
 int32_t tisp_cdns_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
     uint32_t ra = 0;
@@ -123632,6 +123710,7 @@ int32_t tisp_cdns_dn_params_refresh(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000058460 origin=fragment_seed original=tisp_cdns_param_array_get */
