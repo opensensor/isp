@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 1314 | 1528 |
 | Functions with disassembly | 1314 | 1528 |
-| Executable section bytes | 479556 | 346800 |
+| Executable section bytes | 479556 | 347664 |
 | Initialized writable bytes | 25120 | 17200 |
 | Uninitialized writable bytes | 20592 | 302464 |
 
 - direct matches: 1273
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=41 recovered-only=255
-- matched instructions: OEM=116036 recovered=83770 ratio=0.722
-- classes: stub=17 collapsed=79 shorter=388 same_count=268 similar=480 larger=23 expanded=18
+- matched instructions: OEM=116036 recovered=83863 ratio=0.723
+- classes: stub=17 collapsed=79 shorter=386 same_count=269 similar=481 larger=23 expanded=18
 
 ## Allocated Section Delta
 
@@ -36,15 +36,15 @@
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
 | `.rodata` | 15760 | 4656 | -11104 |
-| `.rodata.str1.4` | 25860 | 6136 | -19724 |
-| `.text` | 478400 | 346800 | -131600 |
+| `.rodata.str1.4` | 25860 | 6180 | -19680 |
+| `.text` | 478400 | 347664 | -130736 |
 | `__ksymtab` | 248 | 280 | +32 |
 | `__ksymtab_strings` | 637 | 737 | +100 |
 | `__param` | 260 | 280 | +20 |
 
 ## Function Outliers
 
-Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
+Showing 250 of 819 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -67,7 +67,7 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `tisp_g_hv_flip` | `tisp_g_hv_flip` | 27 | 2 | 0.074 | -25 | 0->0 | 0->0 |
 | collapsed | exact_name | `tisp_awb_ct_detect` | `tisp_awb_ct_detect` | 3100 | 1079 | 0.348 | -2021 | 41->32 | 362->144 |
 | collapsed | exact_name | `tx_isp_core_ops_s_ctrl` | `tx_isp_core_ops_s_ctrl` | 1768 | 257 | 0.145 | -1511 | 150->23 | 226->40 |
-| collapsed | exact_name | `tx_isp_core_ops_g_ctrl` | `tx_isp_core_ops_g_ctrl` | 1386 | 619 | 0.447 | -767 | 100->46 | 201->124 |
+| collapsed | exact_name | `tx_isp_core_ops_g_ctrl` | `tx_isp_core_ops_g_ctrl` | 1386 | 651 | 0.470 | -735 | 100->50 | 201->126 |
 | collapsed | exact_name | `tisp_ae_ev_list_alloc_calc` | `tisp_ae_ev_list_alloc_calc` | 1332 | 401 | 0.301 | -931 | 67->18 | 201->65 |
 | collapsed | exact_name | `tisp_mdns_reg_cfg` | `tisp_mdns_reg_cfg` | 1308 | 305 | 0.233 | -1003 | 102->43 | 4->0 |
 | collapsed | exact_name | `Tiziano_adr_fpga` | `Tiziano_adr_fpga` | 1152 | 366 | 0.318 | -786 | 18->9 | 115->47 |
@@ -88,7 +88,7 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `tisp_ae_par_calc` | `tisp_ae_par_calc` | 239 | 90 | 0.377 | -149 | 8->6 | 23->1 |
 | collapsed | exact_name | `tisp_tmo_ev_interp` | `tisp_tmo_ev_interp` | 211 | 99 | 0.469 | -112 | 2->1 | 42->14 |
 | collapsed | exact_name | `tisp_clm_write_csc_para` | `tisp_clm_write_csc_para` | 198 | 71 | 0.359 | -127 | 16->5 | 0->0 |
-| collapsed | exact_name | `tisp_g_module_attr` | `tisp_g_module_attr` | 189 | 44 | 0.233 | -145 | 4->2 | 29->3 |
+| collapsed | exact_name | `tisp_g_module_attr` | `tisp_g_module_attr` | 189 | 51 | 0.270 | -138 | 4->3 | 29->4 |
 | collapsed | exact_name | `tisp_s_module_attr` | `tisp_s_module_attr` | 189 | 51 | 0.270 | -138 | 4->3 | 29->4 |
 | collapsed | exact_name | `tisp_blc_ae_write_dgain` | `tisp_blc_ae_write_dgain` | 184 | 77 | 0.418 | -107 | 22->4 | 6->5 |
 | collapsed | exact_name | `tisp_bcsh_interp_by_ev` | `tisp_bcsh_interp_by_ev` | 182 | 82 | 0.451 | -100 | 11->0 | 12->11 |
@@ -186,8 +186,8 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | oem_only | oem_only | `lsc_exchange_data.constprop.1` |  | 9 | 0 | 0.000 | -9 | 0->0 | 0->0 |
 | oem_only | oem_only | `tx_isp_module_exit` |  | 4 | 0 | 0.000 | -4 | 0->0 | 1->0 |
 | shorter | exact_name | `Tiziano_wdr_fusion_fpga` | `Tiziano_wdr_fusion_fpga` | 2197 | 1373 | 0.625 | -824 | 48->36 | 246->163 |
-| shorter | exact_name | `tx_isp_unlocked_ioctl` | `tx_isp_unlocked_ioctl` | 1845 | 1151 | 0.624 | -694 | 102->74 | 288->205 |
-| shorter | exact_name | `frame_channel_unlocked_ioctl` | `frame_channel_unlocked_ioctl` | 1076 | 637 | 0.592 | -439 | 61->45 | 169->102 |
+| shorter | exact_name | `tx_isp_unlocked_ioctl` | `tx_isp_unlocked_ioctl` | 1845 | 1166 | 0.632 | -679 | 102->76 | 288->208 |
+| shorter | exact_name | `frame_channel_unlocked_ioctl` | `frame_channel_unlocked_ioctl` | 1076 | 653 | 0.607 | -423 | 61->46 | 169->107 |
 | shorter | exact_name | `Tiziano_defog_soft` | `Tiziano_defog_soft` | 755 | 449 | 0.595 | -306 | 9->3 | 55->35 |
 | shorter | exact_name | `tisp_init` | `tisp_init` | 680 | 360 | 0.529 | -320 | 87->36 | 39->38 |
 | shorter | exact_name | `Tiziano_wdr_deghost_fpga` | `Tiziano_wdr_deghost_fpga` | 679 | 419 | 0.617 | -260 | 40->34 | 49->26 |
@@ -259,7 +259,6 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_s_statis_config_attr` | `tisp_s_statis_config_attr` | 128 | 101 | 0.789 | -27 | 10->10 | 6->6 |
 | shorter | exact_name | `tisp_hldc_set_attr` | `tisp_hldc_set_attr` | 127 | 79 | 0.622 | -48 | 6->5 | 1->0 |
 | shorter | exact_name | `tisp_bcsh_init` | `tisp_bcsh_init` | 125 | 80 | 0.640 | -45 | 10->7 | 0->0 |
-| shorter | exact_name | `frame_channel_vidioc_set_fmt` | `frame_channel_vidioc_set_fmt` | 125 | 97 | 0.776 | -28 | 8->7 | 16->13 |
 | shorter | exact_name | `tisp_wdr_deinit` | `tisp_wdr_deinit` | 122 | 82 | 0.672 | -40 | 11->5 | 14->6 |
 | shorter | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 121 | 84 | 0.694 | -37 | 11->10 | 3->3 |
 | shorter | exact_name | `ispcore_irq_main_fd_work` | `ispcore_irq_main_fd_work` | 118 | 82 | 0.695 | -36 | 5->3 | 20->10 |
@@ -268,7 +267,7 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_ae_clac_deflicker_cfg` | `tisp_ae_clac_deflicker_cfg` | 114 | 85 | 0.746 | -29 | 3->3 | 7->4 |
 | shorter | exact_name | `tisp_top_write_bypass` | `tisp_top_write_bypass` | 113 | 78 | 0.690 | -35 | 7->5 | 11->10 |
 | shorter | exact_name | `tisp_lce_get_data` | `tisp_lce_get_data` | 112 | 68 | 0.607 | -44 | 8->6 | 5->6 |
-| shorter | exact_name | `ivdc_misc_unlocked_ioctl` | `ivdc_misc_unlocked_ioctl` | 112 | 81 | 0.723 | -31 | 6->4 | 17->14 |
+| shorter | exact_name | `ivdc_misc_unlocked_ioctl` | `ivdc_misc_unlocked_ioctl` | 112 | 82 | 0.732 | -30 | 6->4 | 17->15 |
 | shorter | exact_name | `vic_mdma_enable` | `vic_mdma_enable` | 111 | 82 | 0.739 | -29 | 0->0 | 7->3 |
 | shorter | exact_name | `ispcore_frame_channel_qbuf` | `ispcore_frame_channel_qbuf` | 110 | 82 | 0.745 | -28 | 5->3 | 9->9 |
 | shorter | exact_name | `tisp_msca_set_mask` | `tisp_msca_set_mask` | 109 | 77 | 0.706 | -32 | 8->8 | 4->2 |
@@ -280,7 +279,7 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_lsc_param_array_set` | `tisp_lsc_param_array_set` | 103 | 53 | 0.515 | -50 | 8->5 | 5->2 |
 | shorter | exact_name | `isp_vic_frd_show` | `isp_vic_frd_show` | 103 | 61 | 0.592 | -42 | 4->4 | 6->6 |
 | shorter | exact_name | `tisp_tmo_detailen_gain_interp` | `tisp_tmo_detailen_gain_interp` | 97 | 55 | 0.567 | -42 | 14->2 | 0->6 |
-| shorter | exact_name | `frame_channel_vidioc_get_fmt` | `frame_channel_vidioc_get_fmt` | 97 | 59 | 0.608 | -38 | 7->5 | 9->7 |
+| shorter | exact_name | `frame_channel_vidioc_get_fmt` | `frame_channel_vidioc_get_fmt` | 97 | 67 | 0.691 | -30 | 7->5 | 9->9 |
 | shorter | exact_name | `tisp_gib_interp_by_again` | `tisp_gib_interp_by_again` | 93 | 59 | 0.634 | -34 | 6->1 | 4->9 |
 | shorter | exact_name | `tisp_s_module_ratio_attr` | `tisp_s_module_ratio_attr` | 84 | 44 | 0.524 | -40 | 3->2 | 15->8 |
 | shorter | exact_name | `tisp_s_raw_rw_control` | `tisp_s_raw_rw_control` | 84 | 53 | 0.631 | -31 | 5->5 | 8->1 |
@@ -298,3 +297,4 @@ Showing 250 of 821 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_tmo_params_hard_refresh` | `tisp_tmo_params_hard_refresh` | 73 | 48 | 0.658 | -25 | 13->1 | 0->5 |
 | shorter | exact_name | `tisp_wdr_get_lum_s` | `tisp_wdr_get_lum_s` | 73 | 52 | 0.712 | -21 | 0->0 | 9->7 |
 | shorter | exact_name | `tisp_gsm_init` | `tisp_gsm_init` | 71 | 55 | 0.775 | -16 | 6->2 | 0->0 |
+| shorter | exact_name | `tisp_ydns_reg_cfg` | `tisp_ydns_reg_cfg` | 71 | 56 | 0.789 | -15 | 7->7 | 0->0 |

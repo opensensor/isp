@@ -2915,7 +2915,8 @@ void *private_kmalloc();
 void private_kfree();
 int32_t private_copy_from_user(void *to, const void __user *from,
                                unsigned long n);
-int32_t private_copy_to_user(uint32_t a0, uint32_t a1, uint32_t a2);
+int32_t private_copy_to_user(void __user *to, const void *from,
+                             unsigned long n);
 struct file *private_filp_open(const char *filename, int flags, umode_t mode);
 int private_filp_close(struct file *filp, fl_owner_t id);
 ssize_t private_vfs_read(struct file *file, char __user *buf, size_t count,
@@ -5824,46 +5825,10 @@ int32_t private_copy_from_user(void *to, const void __user *from,
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000cb0 origin=fragment_seed original=private_copy_to_user */
-int32_t private_copy_to_user(uint32_t a0, uint32_t a1, uint32_t a2)
+int32_t private_copy_to_user(void __user *to, const void *from,
+                             unsigned long n)
 {
-    uint32_t local_4 = 0;
-    uint32_t *a3 = 0;
-    uint32_t at = 0;
-    uintptr_t gp = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v1 = a0 + a2;
-    a3 = a0 | a2;
-
-    /* fragment 2: StackAccess */
-    local_4 = ra;
-    v1 = (uintptr_t)v1 | (uintptr_t)a3;
-    a3 = 0;
-    v1 = (uintptr_t)v1 & (uintptr_t)a3;
-
-    /* fragment 3: Branch */
-    if (v1 != 0) { goto private_copy_to_user0x34; }
-
-    /* fragment 4: CallSetup */
-    v0 = (unsigned int *)__copy_user((void *)(uintptr_t)a0, (void *)(uintptr_t)a1, a2); /* jalr target resolved by relocation */
-
-private_copy_to_user0x34:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = a2;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return copy_to_user(to, from, n);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000cf4 origin=fragment_seed original=private_filp_open */
