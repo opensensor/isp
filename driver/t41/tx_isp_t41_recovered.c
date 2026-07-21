@@ -13078,11 +13078,11 @@ tx_isp_vin_probe0x80:
     v0 = (unsigned int *)memset((void *)(uintptr_t)v0, 0, 336); /* jalr target resolved by relocation */
 
     /* fragment 7: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)(s0 + 288, &LC7, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_raw_mutex_init)((uintptr_t)s0 + 288, &LC7, 0); /* jalr target resolved by relocation */
 
     /* fragment 8: CallSetup */
-    *(uint32_t *)((char *)s0 + 276) = (s0 + 276);
-    *(uint32_t *)((char *)s0 + 280) = (s0 + 276);
+    *(uint32_t *)((char *)s0 + 276) = (uintptr_t)s0 + 276;
+    *(uint32_t *)((char *)s0 + 280) = (uintptr_t)s0 + 276;
     *(uint32_t *)((char *)s0 + 308) = 0;
     *(uint32_t *)((char *)s0 + 284) = 0;
     s2 = *(uint32_t *)((char *)(s1) + 92);
