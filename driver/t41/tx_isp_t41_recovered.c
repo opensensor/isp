@@ -130570,6 +130570,12 @@ int32_t tisp_bcsh_wdr_en(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e064 origin=fragment_seed original=tisp_bcsh_dn_params_refresh */
 int32_t tisp_bcsh_dn_params_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Keep the neutral BCSH state until interpolation and writes are complete. */
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -130615,11 +130621,55 @@ int32_t tisp_bcsh_dn_params_refresh(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e0fc origin=fragment_seed original=tisp_bcsh_init */
 int32_t tisp_bcsh_init(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint8_t *params;
+
+    if (a0 != 0)
+        return -EINVAL;
+    if (bcsh_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+
+    info = private_kmalloc(336, 0x024000c0);
+    if (!info)
+        return -ENOMEM;
+    memset(info, 0, 336);
+    bcsh_info = (uint32_t)(uintptr_t)info;
+
+    *(uint32_t *)(void *)info =
+        (uint32_t)(uintptr_t)(params + 65536 + 18288);
+    *(uint16_t *)(void *)(info + 172) = 256;
+    *(uint32_t *)(void *)(info + 176) = 65536;
+    *(uint32_t *)(void *)(info + 192) = 65536;
+    *(uint32_t *)(void *)(info + 208) = 65536;
+    *(uint16_t *)(void *)(info + 304) =
+        *(uint16_t *)(void *)(params + 65536 + 18288 + 280);
+    *(uint16_t *)(void *)(info + 306) =
+        *(uint16_t *)(void *)(params + 65536 + 18288 + 282);
+    *(uint16_t *)(void *)(info + 308) =
+        *(uint16_t *)(void *)(params + 65536 + 18288 + 284);
+    *(uint32_t *)(void *)(info + 312) = 5000;
+    *(uint32_t *)(void *)(info + 316) = 64;
+    *(uint32_t *)(void *)(info + 320) = 0;
+    *(uint32_t *)(void *)(info + 324) = 16;
+    *(uint32_t *)(void *)(info + 328) = 0x808080ff;
+    *(uint32_t *)(void *)(info + 332) = 128;
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: bcsh-init safe neutral channel=%u\n", a0);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -130738,11 +130788,27 @@ int32_t tisp_bcsh_init(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e2f0 origin=fragment_seed original=tisp_bcsh_deinit */
 int32_t tisp_bcsh_deinit(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+    if (a0 != 0)
+        return -EINVAL;
+
+    if (bcsh_info) {
+        private_kfree((void *)(uintptr_t)bcsh_info);
+        bcsh_info = 0;
+    }
+    callbacks[216 / 4] = 0;
+    callbacks[220 / 4] = 0;
+    callbacks[224 / 4] = 0;
+    return 0;
+#else
     uintptr_t *s0;
     uint32_t val;
     uint32_t *v1;
@@ -130772,6 +130838,7 @@ int32_t tisp_bcsh_deinit(uint32_t a0)
     }
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e374 origin=fragment_seed original=tisp_bcsh_param_array_get */
