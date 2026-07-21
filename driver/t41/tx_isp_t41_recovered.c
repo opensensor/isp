@@ -101257,6 +101257,11 @@ tisp_lce_awdr_to_used0x170:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045d54 origin=fragment_seed original=tisp_lce_wdr_en */
 int32_t tisp_lce_wdr_en(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    (void)a1;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
@@ -101277,11 +101282,16 @@ int32_t tisp_lce_wdr_en(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045d9c origin=fragment_seed original=tisp_lce_dn_params_refresh */
 int32_t tisp_lce_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -101307,6 +101317,7 @@ int32_t tisp_lce_dn_params_refresh(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045df8 origin=fragment_seed original=tisp_lce_clr_ram */
@@ -102367,6 +102378,13 @@ tisp_lce_get_show_data0x5d8:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000046a48 origin=fragment_seed original=tisp_lce_tgain_update */
 int32_t tisp_lce_tgain_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t t0 = 0;
@@ -102426,11 +102444,55 @@ tisp_lce_tgain_update0x60:
     v0 = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000046ab0 origin=fragment_seed original=tisp_lce_init */
 int64_t tisp_lce_init(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *state;
+    uint8_t *params;
+    uint32_t *bypass;
+    uint32_t width;
+    uint32_t height;
+
+    /* Preserve the recovered BSS layout; this T41 ISP exposes channel 0. */
+    if (a0 != 0 || !a1)
+        return -EINVAL;
+    if (lce_info)
+        return -EBUSY;
+
+    params = (uint8_t *)(uintptr_t)
+        ((uint32_t *)(void *)tparamsP_storage)[a0];
+    if (!params)
+        return -EINVAL;
+    width = *(uint32_t *)(uintptr_t)a1;
+    height = *(uint32_t *)(uintptr_t)(a1 + 4);
+    if (!width || !height)
+        return -EINVAL;
+
+    /*
+     * The working T40 kernel path bypasses LCE entirely.  Retain T41's OEM
+     * state ownership so parameter/debug interfaces have a valid anchor,
+     * but do not expose the divergent soft-processing helpers to events.
+     */
+    state = private_vmalloc(22836);
+    if (!state)
+        return -ENOMEM;
+    memset(state, 0, 22836);
+    lce_info = (uint32_t)(uintptr_t)state;
+    *(uint32_t *)(void *)state =
+        (uint32_t)(uintptr_t)(params + 65536 + 15780);
+
+    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
+    *bypass |= BIT(21);
+    system_reg_write((a0 + 16) << 2, *bypass);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: lce-init safe bypass channel=%u %ux%u\n",
+           a0, width, height);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -103072,11 +103134,26 @@ tisp_lce_init0x63c:
     goto tisp_lce_init0x264;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000047120 origin=fragment_seed original=tisp_lce_deinit */
 int32_t tisp_lce_deinit(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
+
+    if (a0 != 0)
+        return -EINVAL;
+    if (lce_info) {
+        private_vfree((void *)(uintptr_t)lce_info);
+        lce_info = 0;
+    }
+    callbacks[132 / 4] = 0;
+    callbacks[136 / 4] = 0;
+    callbacks[140 / 4] = 0;
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -103152,6 +103229,7 @@ tisp_lce_deinit0x74:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000471a4 origin=fragment_seed original=tisp_lce_param_array_get */
