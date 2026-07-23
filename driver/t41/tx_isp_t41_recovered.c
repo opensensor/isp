@@ -764,13 +764,13 @@ MODULE_PARM_DESC(t41_safe_tuning_events,
 /* The recovered vendor AE algorithm still contains unresolved legacy-BSS
  * arithmetic.  Keep event 1 live with a small controller whose inputs and
  * target come from the exact T41 histogram path.  The default Q8 target is
- * the converged stock OS04D10 histogram measured under the same image and
- * timing profile (14652 / 256 = 57.23). */
+ * the converged pristine-stock OS04D10 histogram measured under the same
+ * image and timing profile (13597 / 256 = 53.11). */
 static int t41_safe_ae_controller = 1;
 module_param(t41_safe_ae_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_ae_controller,
 		 "use the bounded histogram AE controller instead of recovered vendor AE");
-static unsigned int t41_ae_target_q8 = 14652;
+static unsigned int t41_ae_target_q8 = 13597;
 module_param(t41_ae_target_q8, uint, 0644);
 MODULE_PARM_DESC(t41_ae_target_q8,
 		 "safe AE target histogram mean in Q8 units");
@@ -783,20 +783,23 @@ MODULE_PARM_DESC(t41_ae_update_frames,
  * Stock does not stop after writing the sensor exposure.  Its event-4
  * callback fans the resulting 16.16 total gain out to every gain-dependent
  * ISP block.  Keep the first recovery deliberately narrow and independently
- * switchable: bit 0 is GIB, bit 1 is DMSC, and bit 2 is LSC.  A zero default
- * leaves existing captures unchanged until the reconstructed writers have
- * been compared against a matched stock frame.
+ * switchable: bit 0 is GIB, bit 1 is DMSC, bit 2 is LSC, bit 3 is TMO, and
+ * bit 4 is YDNS, and bit 5 is SDNS.  A zero default leaves existing captures unchanged until
+ * each reconstructed writer has been compared against a matched stock frame.
  */
 #define T41_GAIN_FANOUT_GIB  BIT(0)
 #define T41_GAIN_FANOUT_DMSC BIT(1)
 #define T41_GAIN_FANOUT_LSC  BIT(2)
+#define T41_GAIN_FANOUT_TMO  BIT(3)
+#define T41_GAIN_FANOUT_YDNS BIT(4)
+#define T41_GAIN_FANOUT_SDNS BIT(5)
 /* Keep module controls out of the recovered image's overlapping BSS.  Only
- * the low three bits are functional; the initialized high bit is a storage
+ * the low six bits are functional; the initialized high bit is a storage
  * sentinel and deliberately selects no block. */
 static unsigned int t41_safe_gain_fanout_mask = 0x80000000U;
 module_param(t41_safe_gain_fanout_mask, uint, 0644);
 MODULE_PARM_DESC(t41_safe_gain_fanout_mask,
-		 "safe total-gain fanout mask: GIB=1 DMSC=2 LSC=4");
+		 "safe total-gain fanout mask: GIB=1 DMSC=2 LSC=4 TMO=8 YDNS=16 SDNS=32");
 static unsigned int t41_safe_ae_integration = ~0U;
 module_param(t41_safe_ae_integration, uint, 0444);
 MODULE_PARM_DESC(t41_safe_ae_integration,
@@ -808,7 +811,7 @@ MODULE_PARM_DESC(t41_safe_ae_again,
 static unsigned int t41_safe_ae_gain_q16 = ~0U;
 module_param(t41_safe_ae_gain_q16, uint, 0444);
 MODULE_PARM_DESC(t41_safe_ae_gain_q16,
-		 "current safe-AE linear total gain in 16.16 format");
+		 "current safe-AE log2 total gain in Q16 format");
 static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 				      uint32_t mask);
 static unsigned int t41_gain_fanout_trigger = ~0U;
@@ -817,16 +820,38 @@ static int t41_gain_fanout_set(const char *value,
 {
 	int ret = param_set_uint(value, kp);
 
-	if (!ret && t41_gain_fanout_trigger &&
-	    (t41_safe_gain_fanout_mask & 0x7U))
-		ret = t41_apply_safe_gain_fanout(0, t41_gain_fanout_trigger,
-						 t41_safe_gain_fanout_mask & 0x7U);
+	if (!ret && t41_gain_fanout_trigger != ~0U &&
+	    (t41_safe_gain_fanout_mask & 0x3fU))
+		ret = t41_apply_safe_gain_fanout(
+			0, t41_gain_fanout_trigger,
+			t41_safe_gain_fanout_mask & 0x3fU);
 	return ret;
 }
 module_param_call(t41_gain_fanout_trigger, t41_gain_fanout_set,
 		  param_get_uint, &t41_gain_fanout_trigger, 0644);
 MODULE_PARM_DESC(t41_gain_fanout_trigger,
-		 "apply a 16.16 gain immediately through the selected safe fanout blocks");
+		 "apply a log2 Q16 gain immediately through the selected safe fanout blocks");
+static int t41_apply_safe_ev_fanout(uint32_t channel, uint32_t ev,
+				    uint32_t mask);
+static unsigned int t41_safe_ev_fanout_mask = 0x80000000U;
+module_param(t41_safe_ev_fanout_mask, uint, 0644);
+MODULE_PARM_DESC(t41_safe_ev_fanout_mask,
+		 "safe exposure-value fanout mask: Gamma=1 TMO=2");
+static unsigned int t41_ev_fanout_trigger = ~0U;
+static int t41_ev_fanout_set(const char *value, const struct kernel_param *kp)
+{
+	int ret = param_set_uint(value, kp);
+
+	if (!ret && t41_ev_fanout_trigger != ~0U &&
+	    (t41_safe_ev_fanout_mask & 0x3U))
+		ret = t41_apply_safe_ev_fanout(0, t41_ev_fanout_trigger,
+					       t41_safe_ev_fanout_mask & 0x3U);
+	return ret;
+}
+module_param_call(t41_ev_fanout_trigger, t41_ev_fanout_set,
+		  param_get_uint, &t41_ev_fanout_trigger, 0644);
+MODULE_PARM_DESC(t41_ev_fanout_trigger,
+		 "apply an EV immediately through the selected safe tone blocks");
 
 /* Drain the exact T41 TMO statistics DMA bank from status0 bit 17.  The
  * unsafe recovered tisp_tmo_fpga() process remains suppressed; this switch
@@ -1008,19 +1033,36 @@ MODULE_PARM_DESC(t41_stock_msca_unity_curve,
 		 "Commit exact-stock unity MSCA curves through shadow RAM (negative=enabled)");
 
 static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
+static void t41_apply_stock_awb_gains(void);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
- * process callback.  Preserve the OS04D10 profile's last stock day-mode gains
- * as a deterministic starting point instead of leaving seven of the eight
- * Bayer gain registers at unity. */
-static unsigned int t41_stock_awb_gain_a = 0x65cU;
+ * process callback.  These open-pipeline gains were calibrated against the
+ * same settled stock frame as the LCE/TMO oracle.  They compensate for the
+ * still-static YSP and gain-matched DMSC stages and match the stock frame's
+ * output chroma more closely than copying the OEM pipeline's internal
+ * 0x48c/0x1324 pair. */
+static unsigned int t41_stock_awb_gain_a = 0x49eU;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 0xd10U;
+static unsigned int t41_stock_awb_gain_b = 0x13a0U;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
+static unsigned int t41_awb_gain_trigger = 0x80000000U;
+static int t41_awb_gain_trigger_set(const char *value,
+				    const struct kernel_param *kp)
+{
+	int ret = param_set_uint(value, kp);
+
+	if (!ret)
+		t41_apply_stock_awb_gains();
+	return ret;
+}
+module_param_call(t41_awb_gain_trigger, t41_awb_gain_trigger_set,
+		  param_get_uint, &t41_awb_gain_trigger, 0644);
+MODULE_PARM_DESC(t41_awb_gain_trigger,
+		 "Apply the diagnostic AWB gain A/B parameters through both shadow banks");
 
 /* T40 and T23 both recover color first by closing a bounded gray-world loop
  * over the vendor-configured AWB statistics DMA.  T41 uses the same packed
@@ -1065,7 +1107,7 @@ static int t41_stock_awb_stats_profile = -1;
 module_param(t41_stock_awb_stats_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_awb_stats_profile,
 		 "negative replays the exact OS04D10 AWB statistics setup");
-static int t41_stock_dmsc_profile = 1;
+static int t41_stock_dmsc_profile = -1;
 module_param(t41_stock_dmsc_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_dmsc_profile,
 		 "Apply stock OS04D10 day DMSC delta (negative=enabled, positive=disabled)");
@@ -1085,27 +1127,50 @@ static int t41_stock_spatial_profile = -1;
 module_param(t41_stock_spatial_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_spatial_profile,
 		 "Apply exact-stock YDNS/YSP/SDNS/LCE banks and enable them (negative=enabled, diagnostic)");
+static int t41_stock_lce_ram_profile = -1;
+module_param(t41_stock_lce_ram_profile, int, 0644);
+MODULE_PARM_DESC(t41_stock_lce_ram_profile,
+		 "Replay exact stock T41 LCE geometry and RAM image (negative=enabled, diagnostic)");
+static int t41_stock_cdns_profile = -1;
+module_param(t41_stock_cdns_profile, int, 0644);
+MODULE_PARM_DESC(t41_stock_cdns_profile,
+		 "Apply the exact stock OS04D10 chroma-denoise register image (negative=enabled)");
 static int t41_stock_mdns_profile = -1;
 module_param(t41_stock_mdns_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_mdns_profile,
 		 "Advertise/program the stock T41 MDNS rmem layout and tuning bank (negative=enabled, diagnostic)");
-static int t41_stock_adr_profile = 1;
+static int t41_stock_adr_profile = -1;
 module_param(t41_stock_adr_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_adr_profile,
-		 "Program the stock 2560x1440 ADR geometry/tables and statistics DMA (negative=enabled, diagnostic)");
+		 "Program stock ADR geometry/statistics (negative=enabled; -2 skips shadow-RAM upload)");
 static int t41_stock_tmo_profile = -1;
 module_param(t41_stock_tmo_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_tmo_profile,
 		 "Replay a matched stock T41 TMO runtime curve (negative=enabled, diagnostic)");
 static void t41_apply_stock_tmo_profile(void);
-static int t41_tmo_replay_trigger;
+/* The TMO RAM port is owned by the per-frame ISP lifecycle.  A transaction
+ * issued directly from stream-on/sysfs can race the active shadow bank even
+ * though every individual MMIO write is correct.  Defer one-shot replays to
+ * main_fd_work, the same frame-complete process context used by T40/T23 for
+ * their sensor/tuning fanout. */
+/* Non-zero sentinels deliberately keep both objects out of the recovered
+ * driver's aliased legacy BSS.  Zero-initialized diagnostic state has been
+ * observed taking unrelated workspace values after tisp_init. */
+static atomic_t t41_tmo_frame_replay_pending = ATOMIC_INIT(-1);
+static int t41_tmo_replay_trigger = -1;
 static int t41_tmo_replay_set(const char *value,
                               const struct kernel_param *kp)
 {
     int ret = param_set_int(value, kp);
 
     if (!ret && t41_tmo_replay_trigger > 0)
-        t41_apply_stock_tmo_profile();
+        /* Level one is reserved for the automatic post-STREAMON curve
+         * replay.  A user-triggered diagnostic replay is level two: after
+         * userspace has populated statYOut from a captured oracle, the
+         * frame worker must also stream that complete 15 kB bank through
+         * 0x50260.  Keeping the distinction here prevents the cold-boot
+         * path from uploading its initially-zero statYOut image. */
+        atomic_set(&t41_tmo_frame_replay_pending, 2);
     return ret;
 }
 module_param_call(t41_tmo_replay_trigger, t41_tmo_replay_set,
@@ -1119,14 +1184,14 @@ MODULE_PARM_DESC(t41_stock_bcsh_profile,
 /* Exact stock state from the current pristine H20240401a Ingenic OS04D10
  * module.  The safe event gate does not run the unrecovered AWB fanout yet,
  * so seed LSC from that matched oracle instead of its init placeholders. */
-static unsigned int t41_stock_lsc_ct = 3652U;
+static unsigned int t41_stock_lsc_ct = 2798U;
 module_param(t41_stock_lsc_ct, uint, 0644);
 MODULE_PARM_DESC(t41_stock_lsc_ct,
 		 "Initial OS04D10 LSC color temperature measured from stock");
-static unsigned int t41_stock_lsc_gain = 0x0001b79cU;
+static unsigned int t41_stock_lsc_gain = 0x0002cc9cU;
 module_param(t41_stock_lsc_gain, uint, 0644);
 MODULE_PARM_DESC(t41_stock_lsc_gain,
-		 "Initial OS04D10 LSC linear total gain in 16.16 measured from stock");
+		 "Initial OS04D10 LSC log2 total gain in Q16 measured from stock");
 /* Keep the unallocated sentinel in initialized data.  Several recovered T41
  * objects still have overlapping BSS aliases, so a zero-initialized pointer
  * is not a reliable ownership marker during early tuning setup. */
@@ -12971,15 +13036,21 @@ int32_t tx_isp_vin_activate_subdev(uintptr_t a0)
 {
 	char *vin = (char *)a0;
 	void *lock;
+	uint32_t before;
 
 	if (!vin || IS_ERR(vin))
 		return -EINVAL;
 	lock = vin + 0x120;
 	private_mutex_lock(lock);
+	before = *(uint32_t *)(vin + 0x130);
 	if (*(uint32_t *)(vin + 0x130) == 1)
 		*(uint32_t *)(vin + 0x130) = 2;
 	private_mutex_unlock(lock);
 	++*(uint32_t *)(vin + 0x134);
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: VIN activate vin=%p state=%u->%u refs=%u\n",
+	       vin, before, *(uint32_t *)(vin + 0x130),
+	       *(uint32_t *)(vin + 0x134));
 	return 0;
 }
 
@@ -30473,13 +30544,18 @@ int32_t tx_isp_open(int32_t arg1, void *arg2)
 	char *miscdev;
 	char *slot;
 	char *end;
+	uintptr_t vin;
 	int result = 0;
+	int vin_seen = 0;
 
 	(void)arg1;
 	/* misc_open leaves the embedded miscdevice in file->private_data. */
 	miscdev = *(char **)((char *)arg2 + 0x88);
 	if (!miscdev)
 		return -ENODEV;
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: tx-isp open misc=%p refs=%u\n",
+	       miscdev, *(uint32_t *)(miscdev + 0x114));
 
 	if (*(int32_t *)(miscdev + 0x114) != 0) {
 		++*(int32_t *)(miscdev + 0x114);
@@ -30487,6 +30563,8 @@ int32_t tx_isp_open(int32_t arg1, void *arg2)
 	}
 
 	memset(miscdev + 0x118, 0, 5 * sizeof(uint32_t));
+	vin = (uintptr_t)private_platform_get_drvdata(
+		(uintptr_t)&tx_isp_vin_platform_device);
 	end = miscdev + 0x70;
 	for (slot = miscdev + 0x30; slot != end; slot += sizeof(void *)) {
 		char *subdev = *(char **)slot;
@@ -30496,11 +30574,30 @@ int32_t tx_isp_open(int32_t arg1, void *arg2)
 
 		if (!subdev)
 			continue;
+		if ((uintptr_t)subdev == vin)
+			vin_seen = 1;
 		ops = *(char **)(subdev + 0xfc);
 		internal_ops = ops ? *(char **)(ops + 0x10) : NULL;
 		open = internal_ops ? *(int (**)(void *))(internal_ops + 0) : NULL;
 		result = open ? open(subdev) : -ENOIOCTLCMD;
+		printk(KERN_WARNING
+		       "tx_isp_t41_recovered: tx-isp open slot=%u subdev=%p ops=%p internal=%p callback=%p ret=%d\n",
+		       (unsigned int)((slot - (miscdev + 0x30)) / sizeof(void *)),
+		       subdev, ops, internal_ops, open, result);
 		if (result && result != -ENOIOCTLCMD)
+			return result;
+	}
+	/* The stock open path reaches VIN through the aggregate subdevice slots.
+	 * During direct module reloads those links can be populated after the
+	 * miscdevice becomes visible.  Preserve the stock state transition by
+	 * activating the platform-owned VIN exactly once when its aggregate slot
+	 * is absent; sensor registration still enforces the normal opened state. */
+	if (vin && !vin_seen) {
+		result = tx_isp_vin_activate_subdev(vin);
+		printk(KERN_WARNING
+		       "tx_isp_t41_recovered: tx-isp open VIN fallback vin=%p ret=%d\n",
+		       (void *)vin, result);
+		if (result)
 			return result;
 	}
 
@@ -31192,13 +31289,16 @@ static void t41_apply_stock_awb_gains(void)
     uint32_t gain_a = 0x04000000U | (t41_stock_awb_gain_a & 0x3fffU);
     uint32_t gain_b = 0x04000000U | (t41_stock_awb_gain_b & 0x3fffU);
 
-    /* Exact active register image from the stock OS04D10 day profile.  Both
-     * banks are written together so the ISP cannot switch to a half-updated
-     * Bayer gain set at its per-frame trigger. */
+    /* Exact active register image from the stock OS04D10 day profile.  T23
+     * and T40 use the same two-bank ownership sequence: populate bank two,
+     * commit it, then populate and commit bank three.  Committing only bank
+     * three works during cold init but leaves bank two stale when gains are
+     * calibrated at runtime. */
     system_reg_write(0x04004, gain_a);
     system_reg_write(0x04008, gain_b);
     system_reg_write(0x0400c, gain_a);
     system_reg_write(0x04010, gain_b);
+    system_reg_set_awb_trig(2, 0);
     system_reg_write(0x05004, gain_a);
     system_reg_write(0x05008, gain_b);
     system_reg_write(0x0500c, gain_a);
@@ -31440,28 +31540,29 @@ static void t41_apply_stock_bcsh_profile(void)
 static void t41_apply_stock_dmsc_profile(void)
 {
     /* Exact differing words from the converged stock-T41 + working-timing
-     * OS04D10 oracle at integration=369, again=0x12.  The rest of the
+     * OS04D10 oracle at integration=1474, again=0x6c (ISP gain=0x2cc9c).
+     * The rest of the
      * recovered DMSC bank already matched stock, so keeping this as a delta
      * avoids replacing correct tuning state.  This follows the proven T40
      * stock-DMSC replay pattern, but uses T41 evidence only. */
     static const uint32_t stock_delta[][2] = {
         { 0x0a008, 0x00000064 }, { 0x0a038, 0x007800f0 },
-        { 0x0a048, 0x00140019 }, { 0x0a05c, 0x00080088 },
-        { 0x0a060, 0x00000000 }, { 0x0a080, 0x062f0000 },
+        { 0x0a048, 0x000e0015 }, { 0x0a05c, 0x00080088 },
+        { 0x0a060, 0x00000000 }, { 0x0a080, 0x01500000 },
         { 0x0a0b0, 0x080e0100 }, { 0x0a0b4, 0x08030211 },
-        { 0x0a18c, 0x012c8000 }, { 0x0a190, 0x002c4000 },
-        { 0x0a194, 0x00080000 }, { 0x0a198, 0x00010008 },
+        { 0x0a18c, 0x01000000 }, { 0x0a190, 0x00000000 },
+        { 0x0a194, 0x00080000 }, { 0x0a198, 0x00010001 },
         { 0x0a1c4, 0x0fff00c8 }, { 0x0a1d0, 0x0fff00c8 },
         { 0x0a1dc, 0x0fff00c8 }, { 0x0a1ec, 0x000001ff },
         { 0x0a1fc, 0x000000a0 }, { 0x0a204, 0x00000000 },
-        { 0x0a208, 0x01180320 }, { 0x0a224, 0x0fff0064 },
+        { 0x0a208, 0x011803c0 }, { 0x0a224, 0x0fff0064 },
         { 0x0a248, 0x00000000 }, { 0x0a24c, 0x20202020 },
         { 0x0a250, 0x20202020 }, { 0x0a254, 0x20202020 },
         { 0x0a258, 0x20202020 }, { 0x0a25c, 0x20202020 },
         { 0x0a260, 0x20202020 }, { 0x0a264, 0x20202020 },
-        { 0x0a268, 0x20202020 }, { 0x0a278, 0x00001230 },
+        { 0x0a268, 0x20202020 }, { 0x0a278, 0x00000730 },
         { 0x0a2b0, 0x00004030 }, { 0x0a2d4, 0x00201004 },
-        { 0x0a2d8, 0x01405014 }, { 0x0a2dc, 0x01c07019 },
+        { 0x0a2d8, 0x00e0380e }, { 0x0a2dc, 0x01505415 },
         { 0x0a2e0, 0x00000000 }, { 0x0a2e4, 0x00000000 },
         { 0x0a2e8, 0x00000000 },
     };
@@ -31545,6 +31646,107 @@ static void t41_apply_stock_ysp_profile(void)
            system_reg_read(0x40));
 }
 
+static void t41_clear_lce_hist_ram(unsigned int bank)
+{
+    uint32_t control = bank ? 0x501d0U : 0x501c0U;
+    uint32_t data = control + 4U;
+    unsigned int i;
+
+    system_reg_write(control, 0x00000101U);
+    for (i = 0; i < 1440U; ++i)
+        system_reg_write(data, 0);
+    if (bank)
+        system_reg_write(control, 0x059f0102U);
+    else
+        system_reg_write(0x50000U, 0x059f0102U);
+}
+
+static void t41_apply_stock_lce_ram_profile(void)
+{
+    /* Exact settled H20250310a LCE curve captured from state+21772 with the
+     * pristine Ingenic OS04D10 module at 2560x1440.  tisp_lce_write_all_reg
+     * streams these 32 tiles x 16 bytes through the write-only 0x501e0 RAM
+     * port.  The old spatial replay targeted 0x1d000 (the LCE/defog block),
+     * but native LCE geometry and control are at 0x0e000. */
+    static const uint32_t stock_curve[128] = {
+        0x25190d00, 0x715a4534, 0xc0b19f8a, 0xf2e7dbce,
+        0x25190d00, 0x71594534, 0xc0b19f89, 0xf2e7dbcd,
+        0x24180d00, 0x725a4533, 0xc1b3a08a, 0xf3e7dbce,
+        0x22170d00, 0x6c564231, 0xc2b19b84, 0xf3e8dcd0,
+        0x23170d00, 0x69544131, 0xc0ae9780, 0xf3e7dccf,
+        0x23180d00, 0x6a544232, 0xc1af9981, 0xf3e8dccf,
+        0x23180d00, 0x6b554231, 0xc2b19b83, 0xf3e8dccf,
+        0x23180d00, 0x6f584332, 0xc2b39e87, 0xf3e8dccf,
+        0x25190d00, 0x735b4534, 0xc1b2a08b, 0xf3e7dbce,
+        0x25190d00, 0x725b4534, 0xc0b1a08a, 0xf2e7dbce,
+        0x25180d00, 0x745c4634, 0xc1b3a18c, 0xf3e7dbce,
+        0x23180d00, 0x725b4533, 0xc3b4a08a, 0xf3e8dcd0,
+        0x23180d00, 0x6f584332, 0xc2b39e87, 0xf3e8dccf,
+        0x23180d00, 0x70584332, 0xc2b39f88, 0xf3e7dccf,
+        0x24180d00, 0x71594433, 0xc1b3a089, 0xf3e7dbcf,
+        0x25180d00, 0x765f4936, 0xc4b5a38d, 0xf3e8ddd0,
+        0x24180d00, 0x745c4533, 0xc0b1a08b, 0xf3e7dbce,
+        0x25190d00, 0x745c4634, 0xc1b2a08b, 0xf3e7dbce,
+        0x25180d00, 0x775f4835, 0xc2b3a28e, 0xf3e7dccf,
+        0x24180d00, 0x775f4834, 0xc3b5a38e, 0xf3e8dcd0,
+        0x24180d00, 0x755d4633, 0xc2b4a28d, 0xf3e7dccf,
+        0x25190d00, 0x765e4734, 0xc1b2a18d, 0xf3e7dbce,
+        0x25190d00, 0x765e4734, 0xc1b3a28d, 0xf3e7dbce,
+        0x26180d00, 0x7b644d38, 0xc6b7a692, 0xf3e9ded2,
+        0x21160c00, 0x6c56402f, 0xb7a79682, 0xf3e6d7c7,
+        0x22170d00, 0x6f584230, 0xb9aa9985, 0xf3e6d7c7,
+        0x27190d00, 0x7c644d38, 0xc4b6a692, 0xf3e8ddd1,
+        0x26180d00, 0x78624c37, 0xc3b5a38e, 0xf4e9ddcf,
+        0x27190d00, 0x7a644e39, 0xc4b6a590, 0xf4eaddd0,
+        0x2b1b0e00, 0x8069533e, 0xc7baa996, 0xf4e9dfd3,
+        0x291b0e00, 0x7e67503b, 0xc5b8a794, 0xf3e9ded2,
+        0x25180d00, 0x7d664e38, 0xc4b6a592, 0xf3e8ddd1,
+    };
+    static const uint32_t visible[][2] = {
+        { 0x0e000, 0x0120011c }, { 0x0e004, 0x00110002 },
+        { 0x0e008, 0x198d195f }, { 0x0e00c, 0x19a41976 },
+        { 0x0e010, 0x00000000 }, { 0x0e014, 0x00010000 },
+        { 0x0e018, 0x005e0000 }, { 0x0e01c, 0x0019a439 },
+        { 0x0e020, 0xddd10068 }, { 0x0e024, 0x7d666b49 },
+        { 0x0e028, 0x7d666459 }, { 0x0e02c, 0x7d666459 },
+        { 0x0e030, 0xc2b09c06 }, { 0x0e034, 0x064f6909 },
+        { 0x0e038, 0x04995519 }, { 0x0e03c, 0x05e06d18 },
+        { 0x0e040, 0x09ac8729 }, { 0x0e044, 0x0008307b },
+        { 0x0e048, 0x00080000 }, { 0x0e04c, 0x00000010 },
+    };
+    uint8_t *state = (uint8_t *)(uintptr_t)lce_info;
+    uint32_t *bypass;
+    unsigned int i;
+
+    if (t41_stock_lce_ram_profile > 0 || !t41_kernel_data_ptr(state))
+        return;
+
+    memcpy(state + 21772, stock_curve, sizeof(stock_curve));
+    for (i = 0; i < ARRAY_SIZE(visible); ++i)
+        system_reg_write(visible[i][0], visible[i][1]);
+
+    /* Exact tisp_lce_clr_ram.part.0 and tisp_lce_clr_ram(1) sequences.
+     * Both 45x32 histogram banks must be initialized before the curve bank
+     * is made visible; skipping them was the source of diagonal corruption. */
+    t41_clear_lce_hist_ram(0);
+    t41_clear_lce_hist_ram(1);
+
+    system_reg_write(0x0e080, 1);
+    system_reg_write(0x501e0, 0x00000101);
+    for (i = 0; i < ARRAY_SIZE(stock_curve); ++i)
+        system_reg_write(0x501e4, stock_curve[i]);
+    system_reg_write(0x501e0, 0x007f0102);
+    system_reg_write(0x0e084, 1);
+
+    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+    *bypass &= ~BIT(21);
+    system_reg_write(0x40, *bypass);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: exact stock LCE RAM profile applied visible=%u curve=%u top=%#x\n",
+           (unsigned int)ARRAY_SIZE(visible),
+           (unsigned int)ARRAY_SIZE(stock_curve), system_reg_read(0x40));
+}
+
 static void t41_apply_stock_spatial_profile(void)
 {
     /*
@@ -31558,9 +31760,10 @@ static void t41_apply_stock_spatial_profile(void)
      * here because its reference buffers are rebuilt separately.
      */
     static const uint32_t ydns_delta[][2] = {
-        { 0x10010, 0x00000011 }, { 0x10020, 0x00003101 },
-        { 0x10024, 0x0f131827 }, { 0x10028, 0x0000050a },
-        { 0x10040, 0x0000dc0c },
+        { 0x10010, 0x00000011 }, { 0x10020, 0x00003107 },
+        { 0x10024, 0x8084a4c1 }, { 0x10028, 0x7074787c },
+        { 0x10040, 0x0000dc17 }, { 0x10044, 0x0c0c1c68 },
+        { 0x10048, 0x000c0c0c },
     };
     static const uint32_t ysp_delta[][2] = {
         { 0x13004, 0x00040000 }, { 0x13018, 0x00206800 },
@@ -31646,8 +31849,15 @@ static void t41_apply_stock_spatial_profile(void)
     system_reg_write(0x1d09c, 1);
 
     bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    *bypass &= ~(BIT(14) | BIT(17) | BIT(18) | BIT(21));
+    /* tisp_lce_init() currently retains only the object's ownership state;
+     * it deliberately does not recreate the stock geometry and 1440-word
+     * statistics-RAM initialization.  Enabling that partial object produces
+     * diagonal frame corruption on a true cold boot.  T40 uses the same safe
+     * boundary, so leave LCE bypassed until its complete init is recovered. */
+    *bypass &= ~(BIT(14) | BIT(17) | BIT(18));
+    *bypass |= BIT(21);
     system_reg_write(0x40, *bypass);
+    t41_apply_stock_lce_ram_profile();
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock spatial profile applied "
            "ydns=%u ysp=%u sdns=%u lce=%u top-want=%#x top-read=%#x\n",
@@ -31657,20 +31867,23 @@ static void t41_apply_stock_spatial_profile(void)
 
 static int t41_program_stock_adr_shadow(void)
 {
-    const uint8_t *params_base;
-    const uint8_t *adr_params;
-    const uint16_t *knee;
+    /* Exact channel-0 ADR workspace captured from H20250310a after its
+     * native event worker settled.  Keeping both source curves literal
+     * avoids depending on the recovered tparamsP pointer layout while the
+     * rest of ADR ownership is still being reconstructed. */
+    static const uint16_t stock_param_curve[21] = {
+        0x0008, 0x0010, 0x0020, 0x0040, 0x0060, 0x0080, 0x0100,
+        0x0180, 0x0200, 0x0280, 0x0300, 0x0380, 0x0400, 0x0500,
+        0x0600, 0x0700, 0x0800, 0x0900, 0x0a00, 0x0c00, 0x0e00,
+    };
+    static const uint16_t stock_knee_curve[14] = {
+        0x0008, 0x0010, 0x0020, 0x0040, 0x0080, 0x00c0, 0x0100,
+        0x0180, 0x0200, 0x0300, 0x0400, 0x0600, 0x0800, 0x0c00,
+    };
     uint32_t value;
     unsigned int row;
     unsigned int pair;
     unsigned int writes = 0;
-
-    params_base = (const uint8_t *)(uintptr_t)
-        ((uint32_t *)(void *)tparamsP_storage)[0];
-    if (!t41_kernel_data_ptr(params_base))
-        return -ENODEV;
-    adr_params = params_base + 0x11d28;
-    knee = (const uint16_t *)(const void *)(adr_kneepoint_x + 2);
 
     /* Exact func_adr_reg_write_every() handshake from T41 HLIL/objdump.
      * 0x50304 is a write-only shadow-RAM port, so it cannot be recovered
@@ -31688,33 +31901,29 @@ static int t41_program_stock_adr_shadow(void)
         ++writes;
     }
 
-    /* Eleven words come directly from tparamsP+0x11d28+0x174. */
+    /* Eleven words are the exact stock params+0x174..0x19c image. */
     for (pair = 0; pair < 10; ++pair) {
-        const uint16_t *src = (const uint16_t *)(const void *)
-            (adr_params + 0x174 + pair * 4U);
-
-        value = ((uint32_t)(src[1] & 0x0fffU) << 16) |
-                (src[0] & 0x0fffU);
+        value = ((uint32_t)(stock_param_curve[pair * 2U + 1U] & 0x0fffU) << 16) |
+                (stock_param_curve[pair * 2U] & 0x0fffU);
         system_reg_write(0x50304, value);
         ++writes;
     }
-    value = *(const uint16_t *)(const void *)(adr_params + 0x19c) &
-            0x0fffU;
+    value = stock_param_curve[20] & 0x0fffU;
     system_reg_write(0x50304, value);
     ++writes;
 
     /* tisp_adr_init copies adr_kneepoint_x+2 into workspace+0x64 and into
      * each of the following 24 rows; replay that same initialized image. */
     for (pair = 0; pair < 7; ++pair) {
-        value = ((uint32_t)(knee[pair * 2U + 1U] & 0x0fffU) << 16) |
-                (knee[pair * 2U] & 0x0fffU);
+        value = ((uint32_t)(stock_knee_curve[pair * 2U + 1U] & 0x0fffU) << 16) |
+                (stock_knee_curve[pair * 2U] & 0x0fffU);
         system_reg_write(0x50304, value);
         ++writes;
     }
     for (row = 0; row < 24; ++row) {
         for (pair = 0; pair < 7; ++pair) {
-            value = ((uint32_t)(knee[pair * 2U + 1U] & 0x0fffU) << 16) |
-                    (knee[pair * 2U] & 0x0fffU);
+            value = ((uint32_t)(stock_knee_curve[pair * 2U + 1U] & 0x0fffU) << 16) |
+                    (stock_knee_curve[pair * 2U] & 0x0fffU);
             system_reg_write(0x50304, value);
             ++writes;
         }
@@ -31724,8 +31933,8 @@ static int t41_program_stock_adr_shadow(void)
     system_reg_write(0x50408, 1);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock ADR shadow programmed "
-           "words=%u params=%p last=%#x busy=%#x\n",
-           writes, params_base, value, system_reg_read(0x5040c));
+           "words=%u source=stock-oracle last=%#x busy=%#x\n",
+           writes, value, system_reg_read(0x5040c));
     return 0;
 }
 
@@ -31733,7 +31942,7 @@ static void t41_apply_stock_adr_profile(void)
 {
     /*
      * Exact writable-word delta from the stock/open T41 ISPCORE snapshots
-     * with the same hybrid OS04D10 driver.  The open image is visibly soft
+     * with the pristine, unmodified Ingenic OS04D10 sensor driver.  The open image is visibly soft
      * and its ADR geometry is the 1920x1080 default (0x9048=0x780,
      * 0x9038=0x438), while stock programs the sensor's native 2560x1440.
      *
@@ -31793,21 +32002,28 @@ static void t41_apply_stock_adr_profile(void)
 
     for (i = 0; i < ARRAY_SIZE(stock_delta); ++i)
         system_reg_write(stock_delta[i][0], stock_delta[i][1]);
-    (void)t41_program_stock_adr_shadow();
+    /* Diagnostic -2 isolates the native geometry/statistics programming
+     * from the write-only ADR curve RAM.  Stock refreshes that RAM from its
+     * per-frame ADR event worker; the recovered safe build does not yet own
+     * that lifecycle, so a static upload must be tested independently. */
+    if (t41_stock_adr_profile != -2)
+        (void)t41_program_stock_adr_shadow();
 
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock ADR profile applied words=%u "
-           "stats=%#x geometry=%#x/%#x/%#x dma=%#x/%#x/%#x/%#x\n",
+           "stats=%#x geometry=%#x/%#x/%#x dma=%#x/%#x/%#x/%#x shadow=%s\n",
            i, system_reg_read(0x09510), system_reg_read(0x09038),
            system_reg_read(0x09048), system_reg_read(0x09034),
            system_reg_read(0x09514), system_reg_read(0x09518),
-           system_reg_read(0x0951c), system_reg_read(0x09520));
+           system_reg_read(0x0951c), system_reg_read(0x09520),
+           t41_stock_adr_profile == -2 ? "skipped" : "uploaded");
 }
 
 static void t41_apply_stock_tmo_profile(void)
 {
-    /* Captured from the exact stock tx-isp-t41.ko with the same hybrid
-     * OS04D10 driver, initial integration 369 and gain 12.  Unlike the MMIO
+    /* Captured from the exact stock tx-isp-t41.ko with the pristine,
+     * unmodified Ingenic OS04D10 sensor driver, initial integration 369 and
+     * gain 12.  Unlike the MMIO
      * snapshot, this is the stock module's 201-entry software shadow after
      * its TMO event processing.  T41 uploads it through the write-only
      * 0x50240/0x50244 RAM port, exactly as tisp_tmo_ram_reg_refresh() does. */
@@ -31834,9 +32050,38 @@ static void t41_apply_stock_tmo_profile(void)
         0x1fcb, 0x1fcf, 0x1fd4, 0x1fda, 0x1fdf, 0x1fe5, 0x1fe9, 0x1fee, 0x1ff4, 0x1ff9,
         0x1fff,
     };
+    /* Settled exact-stock H20250310a shadow from the same capture as the LCE
+     * curve above and the statYOut diagnostic image.  Keeping EV, gain and
+     * both coupled local-tone stages from one instant avoids replaying a
+     * valid curve against an unrelated exposure state. */
+    static const uint16_t stock_curve_settled[201] = {
+        0x0a92, 0x0be6, 0x0d3b, 0x0e85, 0x0fba, 0x10e4, 0x120d, 0x1337, 0x1460, 0x1589,
+        0x161a, 0x16a9, 0x1739, 0x1782, 0x17ce, 0x181d, 0x186e, 0x1899, 0x18c4, 0x18f1,
+        0x1920, 0x194f, 0x197f, 0x19af, 0x19de, 0x19f5, 0x1a0d, 0x1a25, 0x1a3c, 0x1a53,
+        0x1a69, 0x1a80, 0x1a96, 0x1aac, 0x1ac0, 0x1ad6, 0x1aea, 0x1afe, 0x1b12, 0x1b26,
+        0x1b3a, 0x1b45, 0x1b4f, 0x1b59, 0x1b63, 0x1b6d, 0x1b79, 0x1b83, 0x1b8e, 0x1b98,
+        0x1ba4, 0x1bae, 0x1bb9, 0x1bc3, 0x1bce, 0x1bd8, 0x1be4, 0x1bef, 0x1bfa, 0x1c04,
+        0x1c0f, 0x1c1a, 0x1c25, 0x1c31, 0x1c3c, 0x1c48, 0x1c53, 0x1c5f, 0x1c6b, 0x1c78,
+        0x1c84, 0x1c90, 0x1c9d, 0x1ca3, 0x1caa, 0x1cb0, 0x1cb7, 0x1cbe, 0x1cc4, 0x1cca,
+        0x1cd1, 0x1cd8, 0x1cdf, 0x1ce5, 0x1cec, 0x1cf3, 0x1cfa, 0x1d00, 0x1d08, 0x1d0f,
+        0x1d16, 0x1d1c, 0x1d24, 0x1d2b, 0x1d32, 0x1d39, 0x1d41, 0x1d48, 0x1d50, 0x1d57,
+        0x1d5e, 0x1d66, 0x1d6d, 0x1d75, 0x1d7d, 0x1d84, 0x1d8b, 0x1d93, 0x1d9b, 0x1da3,
+        0x1dab, 0x1db3, 0x1dbb, 0x1dc3, 0x1dcb, 0x1dd3, 0x1ddb, 0x1de3, 0x1dec, 0x1df4,
+        0x1dfb, 0x1e04, 0x1e0d, 0x1e15, 0x1e1e, 0x1e27, 0x1e2f, 0x1e38, 0x1e41, 0x1e4b,
+        0x1e54, 0x1e5d, 0x1e67, 0x1e71, 0x1e7a, 0x1e84, 0x1e8f, 0x1e93, 0x1e99, 0x1e9e,
+        0x1ea3, 0x1ea8, 0x1ead, 0x1eb2, 0x1eb8, 0x1ebd, 0x1ec2, 0x1ec8, 0x1ecd, 0x1ed3,
+        0x1ed8, 0x1ede, 0x1ee4, 0x1ee9, 0x1eef, 0x1ef5, 0x1efa, 0x1f00, 0x1f06, 0x1f0c,
+        0x1f11, 0x1f17, 0x1f1d, 0x1f23, 0x1f29, 0x1f2f, 0x1f34, 0x1f3a, 0x1f40, 0x1f46,
+        0x1f4c, 0x1f52, 0x1f58, 0x1f5e, 0x1f64, 0x1f6a, 0x1f70, 0x1f76, 0x1f7c, 0x1f82,
+        0x1f88, 0x1f8e, 0x1f94, 0x1f9a, 0x1fa0, 0x1fa6, 0x1fac, 0x1fb2, 0x1fb8, 0x1fbe,
+        0x1fc4, 0x1fca, 0x1fd0, 0x1fd6, 0x1fdc, 0x1fe1, 0x1fe7, 0x1fed, 0x1ff3, 0x1ff9,
+        0x1fff,
+    };
     uint8_t *info;
     uint8_t *runtime;
     uint16_t *shadow;
+    uint32_t *bypass;
+    unsigned int i;
 
     if (t41_stock_tmo_profile > 0 || !tmo_info[0])
         return;
@@ -31847,18 +32092,35 @@ static void t41_apply_stock_tmo_profile(void)
         !t41_kernel_data_ptr(runtime))
         return;
 
-    memcpy(shadow, stock_curve, sizeof(stock_curve));
-    memcpy(runtime + 318, stock_curve, sizeof(stock_curve));
+    memcpy(shadow, stock_curve_settled, sizeof(stock_curve_settled));
+    memcpy(runtime + 318, stock_curve_settled,
+           sizeof(stock_curve_settled));
     *(uint16_t *)(void *)(runtime + 48) = 0x0060;
     *(uint16_t *)(void *)(runtime + 50) = 0x0066;
     *(uint16_t *)(void *)(runtime + 52) = 0x06b1;
     *(uint16_t *)(void *)(runtime + 766) = 0x1800;
-    *(uint32_t *)(void *)(info + 32) = 0x00000407;
+    *(uint32_t *)(void *)(info + 32) = 0x000028b2;
     *(uint32_t *)(void *)(info + 36) = 0;
-    *(uint32_t *)(void *)(info + 40) = 0x00007bdb;
+    *(uint32_t *)(void *)(info + 40) = 0x0002d244;
 
-    tisp_tmo_ram_reg_refresh(0);
-    tisp_tmo_default_reg_refresh(0);
+    /* Upload only the settled tone curve.  The recovered full RAM refresh
+     * subsequently streams its still-zero 15 kB statYOut image through
+     * 0x50260, which cancels the visible curve update.  This minimal
+     * transaction is the exact live sequence proven against stock on T41. */
+    system_reg_write(0x50240, 0x00000101);
+    for (i = 0; i < ARRAY_SIZE(stock_curve_settled) - 1; i += 2) {
+        uint32_t value = stock_curve_settled[i] & 0x1fffU;
+
+        value |= (uint32_t)(stock_curve_settled[i + 1] & 0x1fffU) << 16;
+        system_reg_write(0x50244, value);
+    }
+    system_reg_write(0x50244,
+                     (stock_curve_settled[ARRAY_SIZE(stock_curve_settled) - 1] &
+                      0x1fffU) * 0x00010001U);
+    system_reg_write(0x50240, 0x00010102);
+    system_reg_write(0x1e030, ~system_reg_read(0x1e030));
+    system_reg_write(0x1e034, 1);
+    system_reg_write(0x1e008, 1);
     /* These five readable controls are the only non-DMA TMO differences in
      * the matched stock/open snapshot.  The runtime writer above supplies
      * their associated write-only LUT state before they are committed. */
@@ -31867,15 +32129,42 @@ static void t41_apply_stock_tmo_profile(void)
     system_reg_write(0x1e084, 0x00000018);
     system_reg_write(0x1e0e0, 0x00000000);
     system_reg_write(0x1e0e4, 0x00000000);
+
+    /* Exact cold-boot A/B testing shows that the recovered TMO object still
+     * lacks process state beyond this visible curve transaction: enabling it
+     * washes the frame, while bypassing only TMO restores normal luminance.
+     * Preserve the stock shadow above for continued reconstruction, but keep
+     * the incomplete hardware block out of the live pipeline for now. */
+    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+    *bypass |= BIT(22);
+    system_reg_write(0x40, *bypass);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock TMO runtime profile applied "
            "curve=%u ev=%#x gain=%#x statYOut=%#x controls=%#x/%#x/%#x\n",
-           (unsigned int)ARRAY_SIZE(stock_curve),
+           (unsigned int)ARRAY_SIZE(stock_curve_settled),
            *(uint32_t *)(void *)(info + 32),
            *(uint32_t *)(void *)(info + 40),
            statYOut,
            system_reg_read(0x1e040), system_reg_read(0x1e080),
            system_reg_read(0x1e084));
+}
+
+static void t41_apply_stock_cdns_profile(void)
+{
+    if (t41_stock_cdns_profile > 0)
+        return;
+
+    /* These are the complete non-zero CDNS words in two independent exact
+     * stock H20250310a captures.  T41 and T40 derive the block base as
+     * (channel + 896) << 7; tisp_cdns_reg_trig() commits offset +4 last. */
+    system_reg_write(0x1c010U, 0x00000004U);
+    system_reg_write(0x1c040U, 0x3300be23U);
+    system_reg_write(0x1c050U, 0x0000ffffU);
+    system_reg_write(0x1c004U, 0x00000001U);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: stock CDNS profile applied check=%#x/%#x/%#x/%#x\n",
+           system_reg_read(0x1c004U), system_reg_read(0x1c010U),
+           system_reg_read(0x1c040U), system_reg_read(0x1c050U));
 }
 
 struct t41_mdns_layout {
@@ -52778,6 +53067,8 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
     if (channel == 0)
         t41_apply_stock_spatial_profile();
     if (channel == 0)
+        t41_apply_stock_cdns_profile();
+    if (channel == 0)
         t41_apply_stock_adr_profile();
     if (channel == 0)
         t41_apply_stock_tmo_profile();
@@ -55096,11 +55387,17 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 	int gib_ret = 0;
 	int dmsc_ret = 0;
 	int lsc_ret = 0;
+	int tmo_ret = 0;
+	int ydns_ret = 0;
+	int sdns_ret = 0;
 	int ret = 0;
 
-	if (channel >= 2 || gain_q16 < 0x10000U)
+	if (channel >= 2)
 		return -EINVAL;
 	if (mask & T41_GAIN_FANOUT_GIB) {
+		/* The recovered public wrappers retain their locally safe
+		 * (gain, force) ABI because damaged init callers pass fewer than the
+		 * stock three arguments.  Supply stock event a2 here explicitly. */
 		gib_ret = (int)tisp_gib_a_gain_update(channel, gain_q16, 0);
 		if (gib_ret < 0)
 			ret = gib_ret;
@@ -55115,14 +55412,115 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 		if (lsc_ret < 0 && !ret)
 			ret = lsc_ret;
 	}
+	if (mask & T41_GAIN_FANOUT_TMO) {
+		tmo_ret = tisp_tmo_gain_update(channel, 0, gain_q16);
+		if (tmo_ret < 0 && !ret)
+			ret = tmo_ret;
+	}
+	if (mask & T41_GAIN_FANOUT_YDNS) {
+		ydns_ret = tisp_ydns_refresh(channel, gain_q16);
+		if (ydns_ret < 0 && !ret)
+			ret = ydns_ret;
+	}
+	if (mask & T41_GAIN_FANOUT_SDNS) {
+		sdns_ret = tisp_sdns_refresh(channel, gain_q16);
+		if (sdns_ret < 0 && !ret)
+			ret = sdns_ret;
+	}
 	if (!ret)
 		t41_safe_gain_last_q16 = gain_q16;
 	printk(KERN_WARNING
-	       "tx_isp_t41_recovered: safe gain fanout gain=%#x mask=%#x ret=%d/%d/%d regs=%#x/%#x dmsc-last=%#x\n",
-	       gain_q16, mask, gib_ret, dmsc_ret, lsc_ret,
+	       "tx_isp_t41_recovered: safe gain fanout gain=%#x mask=%#x ret=%d/%d/%d/%d/%d/%d regs=%#x/%#x dmsc-last=%#x\n",
+	       gain_q16, mask, gib_ret, dmsc_ret, lsc_ret, tmo_ret,
+	       ydns_ret, sdns_ret,
 	       system_reg_read(0x08010U), system_reg_read(0x08014U),
 	       dmsc_info[channel] ?
 	       *(uint32_t *)(uintptr_t)(dmsc_info[channel] + 8U) : 0U);
+	return ret;
+}
+
+static int t41_apply_safe_ev_fanout(uint32_t channel, uint32_t ev,
+				    uint32_t mask)
+{
+	uint8_t *gamma;
+	uint8_t *tmo;
+	uint8_t *runtime;
+	uint16_t *curve;
+	uint32_t *bypass;
+	int gamma_ret = 0;
+	int tmo_ret = 0;
+	int ret = 0;
+
+	if (channel >= 2)
+		return -EINVAL;
+	if (mask & BIT(0)) {
+		gamma = gamma_info[channel] ?
+			(uint8_t *)(uintptr_t)gamma_info[channel] : NULL;
+		if (!t41_kernel_data_ptr(gamma)) {
+			gamma_ret = -ENODEV;
+		} else {
+			/* The fifth interpolation argument is the stock force flag.
+			 * It makes an explicit oracle write refresh the LUT even when
+			 * the interpolated strength matches the previous frame. */
+			gamma_ret = (int)tisp_gamma_interp_by_ev(channel, 0, ev,
+							     0, 1);
+			if (!gamma_ret)
+				gamma_ret = tisp_gamma_strength_transform(channel);
+			if (!gamma_ret)
+				gamma_ret = tisp_gamma_write_lut_rgb(channel);
+		}
+		if (gamma_ret < 0)
+			ret = gamma_ret;
+	}
+	if (mask & BIT(1)) {
+		tmo = tmo_info[channel] ?
+			(uint8_t *)(uintptr_t)tmo_info[channel] : NULL;
+		runtime = t41_kernel_data_ptr(tmo) ?
+			(uint8_t *)(uintptr_t)*(uint32_t *)(void *)(tmo + 8) : NULL;
+		curve = t41_kernel_data_ptr(tmo) ?
+			(uint16_t *)(uintptr_t)*(uint32_t *)(void *)(tmo + 4) : NULL;
+		if (!t41_kernel_data_ptr(tmo) ||
+		    !t41_kernel_data_ptr(runtime) ||
+		    !t41_kernel_data_ptr(curve)) {
+			tmo_ret = -ENODEV;
+		} else {
+			*(uint32_t *)(void *)(tmo + 32) = ev;
+			*(uint32_t *)(void *)(tmo + 36) = 0;
+			tmo_ret = (int)tisp_tmo_ev_interp(channel);
+			if (!tmo_ret) {
+				/* tisp_tmo_process performs this shadow-to-runtime copy
+				 * after its unsafe recovered FPGA stage.  Preserve that
+				 * exact boundary while bypassing only the unsafe stage. */
+				memcpy(runtime + 318, curve, 201 * sizeof(*curve));
+				tmo_ret = tisp_tmo_ram_reg_refresh(channel);
+			}
+			if (!tmo_ret)
+				tmo_ret = tisp_tmo_default_reg_refresh(channel);
+			if (!tmo_ret && t41_stock_tmo_profile <= 0) {
+				/* A diagnostic full-bank replay is the first point at
+				 * which the curve, runtime words and 15 kB spatial map
+				 * are all valid together.  Update the software shadow as
+				 * well as TOP so the next frame event cannot immediately
+				 * restore the safety bypass. */
+				bypass = &((uint32_t *)(void *)top_bypass_global)[channel];
+				*bypass &= ~BIT(22);
+				system_reg_write((channel + 16) << 2, *bypass);
+			}
+		}
+		if (tmo_ret < 0 && !ret)
+			ret = tmo_ret;
+	}
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: safe EV fanout ev=%#x mask=%#x ret=%d/%d gamma=%#x/%#x tmo=%#x/%#x\n",
+	       ev, mask, gamma_ret, tmo_ret,
+	       gamma_info[channel] ?
+	       *(uint32_t *)(uintptr_t)(gamma_info[channel] + 532U) : 0U,
+	       gamma_info[channel] ?
+	       *(uint32_t *)(uintptr_t)(gamma_info[channel] + 536U) : 0U,
+	       tmo_info[channel] ?
+	       *(uint32_t *)(uintptr_t)(tmo_info[channel] + 32U) : 0U,
+	       tmo_info[channel] ?
+	       *(uint32_t *)(uintptr_t)(tmo_info[channel] + 40U) : 0U);
 	return ret;
 }
 
@@ -55163,12 +55561,16 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		return -EAGAIN;
 	t41_safe_ae_integration = control->integration;
 	t41_safe_ae_again = control->again;
-	gain_q16 = control->again << 12;
+	/* Ingenic event 4 carries log2 gain in Q16.  The OS04D10 sensor code
+	 * is a linear gain with four fractional bits (0x10 is unity); shifting
+	 * it by 12 produced a linear Q16 value and drove every gain-interpolated
+	 * tuning block several stops past the stock state. */
+	gain_q16 = tisp_log2_fixed_to_fixed(control->again, 4, 16);
 	t41_safe_ae_gain_q16 = gain_q16;
-	if ((t41_safe_gain_fanout_mask & 0x7U) &&
+	if ((t41_safe_gain_fanout_mask & 0x3fU) &&
 	    gain_q16 != t41_safe_gain_last_q16)
 		t41_apply_safe_gain_fanout(channel, gain_q16,
-					    t41_safe_gain_fanout_mask & 0x7U);
+					    t41_safe_gain_fanout_mask & 0x3fU);
 
 	lock = (spinlock_t *)(void *)(slock_hist_storage +
 					  channel * sizeof(uint32_t));
@@ -55190,8 +55592,8 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		return 0;
 
 	/* Keep a stock-sized dead band around the measured target. */
-	if (mean_q8 >= t41_ae_target_q8 - t41_ae_target_q8 / 12 &&
-	    mean_q8 <= t41_ae_target_q8 + t41_ae_target_q8 / 12)
+	if (mean_q8 >= t41_ae_target_q8 - t41_ae_target_q8 / 24 &&
+	    mean_q8 <= t41_ae_target_q8 + t41_ae_target_q8 / 24)
 		return 0;
 
 	old_integration = control->integration;
@@ -55238,10 +55640,12 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		control->updates++;
 		t41_safe_ae_integration = integration;
 		t41_safe_ae_again = again;
-		t41_safe_ae_gain_q16 = again << 12;
-		if (t41_safe_gain_fanout_mask & 0x7U)
-			t41_apply_safe_gain_fanout(channel, again << 12,
-						    t41_safe_gain_fanout_mask & 0x7U);
+		gain_q16 = tisp_log2_fixed_to_fixed(again, 4, 16);
+		t41_safe_ae_gain_q16 = gain_q16;
+		if (t41_safe_gain_fanout_mask & 0x3fU)
+			t41_apply_safe_gain_fanout(
+				channel, gain_q16,
+				t41_safe_gain_fanout_mask & 0x3fU);
 	}
 	if (control->updates < 24 || ret)
 		printk(KERN_WARNING
@@ -99149,83 +99553,56 @@ tisp_gamma_strength_transform0xb8:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042a60 origin=fragment_seed original=tisp_gamma_interp_by_ev */
 int64_t tisp_gamma_interp_by_ev(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5)
 {
-    uint32_t *t3 = arg5;
-    uint32_t t0 = 0;
-    uint32_t *t1;
-    uint32_t *t2;
-    uint32_t *t4 = 10;
-    uint32_t *t5 = 9;
-    uint32_t *v0;
-    uint32_t *v1 = 0;
-    uint32_t a1;
-    uint32_t *a0;
-    uint32_t a2;
-    uint32_t *a3;
-    uint32_t t6;
+	uint8_t *info;
+	uint8_t *params;
+	uint32_t *thresholds;
+	uint8_t *strengths;
+	uint32_t strength;
+	unsigned int index;
 
-    (void)arg2;
-    if (arg1 >= ARRAY_SIZE(gamma_info) || !gamma_info[arg1])
-        return -EINVAL;
-    t1 = (uint32_t *)(uintptr_t)gamma_info[arg1];
-    a1 = *t1;
+	(void)arg2;
+	if (arg1 >= ARRAY_SIZE(gamma_info) || !gamma_info[arg1])
+		return -EINVAL;
+	info = (uint8_t *)(uintptr_t)gamma_info[arg1];
+	params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+	if (!t41_kernel_data_ptr(info) || !t41_kernel_data_ptr(params))
+		return -EINVAL;
 
-    *(uint32_t *)((char *)t1 + 532) = arg3;
-    t2 = (uint32_t *)(a1 + 260);
+	/* T41 HLIL 0x43490: ten EV knots at +0x104 and ten byte-sized
+	 * strengths at +0x22e.  The generated recovery failed to increment
+	 * the knot index after index nine and looped forever for high EVs. */
+	*(uint32_t *)(void *)(info + 532) = arg3;
+	thresholds = (uint32_t *)(void *)(params + 0x104);
+	strengths = params + 0x22e;
+	for (index = 0; index < 10; ++index) {
+		uint32_t low;
+		uint32_t high;
+		uint32_t offset;
 
-loop_start:
-    a0 = *t2;
-    if (arg4 != 0) goto do_increment;
-    t6 = arg3 < a0;
-    if (t6 == 0) goto do_increment;
-    v1 = t0 << 2;
-    if (t0 != 0) goto do_interp;
-    v1 = *(uint8_t *)((char *)a1 + 558);
+		if (arg4 || arg3 >= thresholds[index])
+			continue;
+		if (!index) {
+			strength = strengths[0];
+			goto selected;
+		}
+		low = thresholds[index - 1];
+		high = thresholds[index];
+		if (high == low)
+			return 2;
+		offset = arg3 - low;
+		strength = ((uint32_t)strengths[index - 1] *
+			    (high - low - offset) +
+			    (uint32_t)strengths[index] * offset +
+			    ((high - low) >> 1)) / (high - low);
+		goto selected;
+	}
+	strength = strengths[9];
 
-check_val:
-    v0 = *(uint32_t *)((char *)t1 + 536);
-    if (v0 != v1) goto store_val;
-    v0 = 1;
-    if (t3 == 0) goto done;
-
-store_val:
-    *(uint32_t *)((char *)t1 + 536) = v1;
-    v0 = 0;
-    goto done;
-
-do_interp:
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
-    v1 = *(uint32_t *)((char *)v0 + -4);
-    a0 = (uintptr_t)a0 - (uintptr_t)v1;
-    v0 = 2;
-    if (a0 == 0) goto done;
-    a1 = a1 + 558 + t0;
-    v0 = *(uint8_t *)((char *)a1 + -1);
-    a1 = *(uint8_t *)((char *)a1 + 0);
-    a2 = arg3 - (uintptr_t)v1;
-    v1 = a0 - a2;
-    t0 = a1 * a2;
-    a3 = (uintptr_t)a0 >> 1;
-    a1 = (uintptr_t)v0 * (uintptr_t)v1;
-    a2 = t0 + (uintptr_t)a3;
-    v1 = a1 + a2;
-    v1 = (void *)(uintptr_t)((uintptr_t)v1 / ((uintptr_t)a0));
-    goto check_val;
-
-do_increment:
-    if (t0 != t5) {
-        t0++;
-        if (t0 != t5) goto loop_start;
-        t0--;
-        v1 = *(uint8_t *)((char *)a1 + 567);
-        t0++;
-    }
-    t2 = (uint32_t *)((char *)t2 + 4);
-    if (t0 != t4) goto loop_start;
-    v0 = *(uint32_t *)((char *)t1 + 536);
-    goto check_val;
-
-done:
-    return (int64_t)v0;
+selected:
+	if (*(uint32_t *)(void *)(info + 536) == strength && !arg5)
+		return 1;
+	*(uint32_t *)(void *)(info + 536) = strength;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042b4c origin=fragment_seed original=tisp_gamma_ev_update */
@@ -104482,6 +104859,49 @@ tisp_lce_clr_ram0x54:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045e8c origin=fragment_seed original=tisp_lce_get_data */
 int32_t tisp_lce_get_data(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *state;
+    uint32_t control;
+    uint32_t data;
+    uint32_t aux_control;
+    uint32_t aux_data;
+    uint32_t *hist;
+    uint32_t *tail;
+    unsigned int i;
+
+    if (a0 != 0 || !lce_info)
+        return -EINVAL;
+    state = (uint8_t *)(uintptr_t)lce_info;
+    if (!t41_kernel_data_ptr(state))
+        return -EINVAL;
+
+    if (a1) {
+        control = 0x501d0U;
+        data = 0x501d8U;
+        aux_control = 0x50210U;
+        aux_data = 0x50218U;
+    } else {
+        control = 0x501c0U;
+        data = 0x501c8U;
+        aux_control = 0x50200U;
+        aux_data = 0x50208U;
+    }
+
+    /* Exact stock 45 x 32 histogram drain.  The OEM stores this bank at
+     * state+356, followed by 45 row-tail words at state+6116. */
+    system_reg_write(control, 0x00000201U);
+    hist = (uint32_t *)(void *)(state + 356);
+    for (i = 0; i < 1440U; ++i)
+        hist[i] = system_reg_read(data);
+    system_reg_write(control, 0x059f0202U);
+
+    system_reg_write(aux_control, 0x00000201U);
+    tail = (uint32_t *)(void *)(state + 6116);
+    for (i = 0; i < 45U; ++i)
+        tail[i] = system_reg_read(aux_data);
+    system_reg_write(aux_control, 0x002c0202U);
+    return 0;
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -104645,11 +105065,55 @@ tisp_lce_get_data0x1ac:
     goto tisp_lce_get_data0x4c;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004604c origin=fragment_seed original=tisp_lce_interrupt_static */
 int64_t tisp_lce_interrupt_static(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    static unsigned int trace_count;
+    uint8_t *state;
+    uint32_t status;
+    int ret = 0;
+
+    if (a0 != 0 || !lce_info)
+        return -EINVAL;
+    state = (uint8_t *)(uintptr_t)lce_info;
+    if (!t41_kernel_data_ptr(state))
+        return -EINVAL;
+
+    status = system_reg_read(0x0e014U);
+    ++*(uint32_t *)(void *)(state + 22792);
+    if (status & BIT(0)) {
+        if (status & BIT(8)) {
+            if (status & BIT(16)) {
+                t41_clear_lce_hist_ram(0);
+                system_reg_write(0x0e010U, 1);
+                ret = tisp_lce_get_data(a0, 1);
+                system_reg_write(0x0e010U, 0x00010000U);
+            } else {
+                t41_clear_lce_hist_ram(1);
+                system_reg_write(0x0e010U, 0x00010000U);
+                ret = tisp_lce_get_data(a0, 0);
+                system_reg_write(0x0e010U, 1);
+            }
+        } else {
+            ret = tisp_lce_get_data(a0, 0);
+            system_reg_write(0x0e010U, 1);
+        }
+    } else if (status & BIT(8)) {
+        ret = tisp_lce_get_data(a0, 1);
+        system_reg_write(0x0e010U, 0x00010000U);
+    }
+
+    if (trace_count < 12U)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: LCE IRQ drain status=%#x ret=%d count=%u\n",
+               status, ret, trace_count + 1U);
+    trace_count++;
+    return ret ? ret : 1;
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_40 = 0;
@@ -104787,6 +105251,7 @@ tisp_lce_interrupt_static0x14c:
     goto tisp_lce_interrupt_static0xb4;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000461b8 origin=fragment_seed original=lce_compress_data */
@@ -105572,6 +106037,9 @@ int64_t tisp_lce_init(uint32_t a0, uintptr_t a1)
     lce_info = (uint32_t)(uintptr_t)state;
     *(uint32_t *)(void *)state =
         (uint32_t)(uintptr_t)(params + 65536 + 15780);
+
+    if (t41_stock_lce_ram_profile <= 0)
+        system_irq_func_set(a0, a0 * 42 + 8, tisp_lce_interrupt_static);
 
     bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
     *bypass |= BIT(21);
@@ -125591,14 +126059,93 @@ tisp_ydns_par_refresh0x68:
     return 0;
 }
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+static int t41_ydns_runtime_refresh(uint32_t channel, uint32_t gain_q16)
+{
+    uint8_t *info;
+    const uint8_t *params;
+    uint8_t *runtime;
+    uint32_t cached;
+    uint32_t delta;
+    uint32_t effective_gain;
+    uint32_t base;
+    int32_t segment;
+    int32_t fraction;
+    unsigned int i;
+
+    if (channel != 0 || !ydns_info)
+        return -ENODEV;
+    info = (uint8_t *)(uintptr_t)ydns_info;
+    params = (const uint8_t *)(uintptr_t)
+        *(uint32_t *)(void *)info;
+    runtime = (uint8_t *)(uintptr_t)
+        *(uint32_t *)(void *)(info + 4);
+    if (!t41_kernel_data_ptr(info) || !t41_kernel_data_ptr(params) ||
+        !t41_kernel_data_ptr(runtime))
+        return -EFAULT;
+
+    /* Exact T41 tisp_ydns_par_refresh() cache semantics: retain the prior
+     * interpolation point for gain movements below the 0x100-Q16 threshold,
+     * but still re-emit that coherent working image on every refresh call. */
+    cached = *(uint32_t *)(void *)(info + 8);
+    effective_gain = gain_q16;
+    if (cached != 0xffffffffU) {
+        delta = gain_q16 >= cached ? gain_q16 - cached : cached - gain_q16;
+        if (delta < *(uint32_t *)(void *)(info + 12))
+            effective_gain = cached;
+        else
+            *(uint32_t *)(void *)(info + 8) = gain_q16;
+    } else {
+        *(uint32_t *)(void *)(info + 8) = gain_q16;
+    }
+
+    segment = (int32_t)(effective_gain >> 16);
+    fraction = (int32_t)(effective_gain & 0xffffU);
+    runtime[12] = (uint8_t)tisp_simple_intp_int8(
+        segment, fraction, (void *)(params + 3));
+    runtime[13] = (uint8_t)tisp_simple_intp_int8(
+        segment, fraction, (void *)(params + 14));
+    for (i = 0; i < 12; ++i)
+        runtime[i] = (uint8_t)tisp_simple_intp_int8(
+            segment, fraction, (void *)(params + 25 + 11 * i));
+    for (i = 0; i < 8; ++i)
+        runtime[14 + i] = (uint8_t)tisp_simple_intp_int8(
+            segment, fraction, (void *)(params + 157 + 11 * i));
+
+    /* Exact T41 tisp_ydns_reg_cfg()/tisp_ydns_reg_trig() packing, also
+     * shared by the repaired T40 driver. */
+    base = (channel + 0x100U) << 8;
+    system_reg_write(base + 0x08, params[0]);
+    system_reg_write(base + 0x10,
+        ((uint32_t)params[2] << 4 & 0x10U) | (params[1] & 1U));
+    system_reg_write(base + 0x20,
+        ((uint32_t)runtime[2] << 12 & 0x3000U) |
+        ((uint32_t)runtime[1] << 8 & 0x0300U) | runtime[0]);
+    system_reg_write(base + 0x24,
+        runtime[3] | ((uint32_t)runtime[4] << 8) |
+        ((uint32_t)runtime[5] << 16) | ((uint32_t)runtime[6] << 24));
+    system_reg_write(base + 0x28,
+        runtime[7] | ((uint32_t)runtime[8] << 8) |
+        ((uint32_t)runtime[9] << 16) | ((uint32_t)runtime[10] << 24));
+    system_reg_write(base + 0x40,
+        runtime[11] | ((uint32_t)runtime[12] << 8) |
+        ((uint32_t)runtime[13] << 16));
+    system_reg_write(base + 0x44,
+        runtime[14] | ((uint32_t)runtime[15] << 8) |
+        ((uint32_t)runtime[16] << 16) | ((uint32_t)runtime[17] << 24));
+    system_reg_write(base + 0x48,
+        runtime[18] | ((uint32_t)runtime[19] << 8) |
+        ((uint32_t)runtime[20] << 16) | ((uint32_t)runtime[21] << 24));
+    system_reg_write(base + 0x04, 1);
+    return 0;
+}
+#endif
+
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000576d0 origin=fragment_seed original=tisp_ydns_refresh */
 int32_t tisp_ydns_refresh(uint32_t a0, uint32_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    /* YDNS is held in top bypass until its register writer is complete. */
-    (void)a0;
-    (void)a1;
-    return 0;
+	return t41_ydns_runtime_refresh(a0, a1);
 #else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -125670,6 +126217,10 @@ int32_t tisp_ydns_init(uint32_t a0)
     *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)runtime;
     *(uint32_t *)(void *)(info + 8) = 0xffffffffU;
     *(uint32_t *)(void *)(info + 12) = 256;
+
+    if (tisp_ydns_refresh(a0, 0x10000U))
+        goto fail;
+    system_reg_write(0x350, 0x20220702U);
 
     bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
     *bypass |= BIT(14);
@@ -127909,14 +128460,131 @@ tisp_sdns_par_refresh0x9c:
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+static uint32_t t41_sdns_runtime_word(const uint8_t *runtime,
+                                      unsigned int offset)
+{
+    return runtime[offset] | ((uint32_t)runtime[offset + 1] << 8) |
+           ((uint32_t)runtime[offset + 2] << 16) |
+           ((uint32_t)runtime[offset + 3] << 24);
+}
+
+static int t41_sdns_runtime_refresh(uint32_t channel, uint32_t gain_q16)
+{
+    uint8_t *info;
+    const uint8_t *params;
+    uint8_t *runtime;
+    uint32_t cached;
+    uint32_t delta;
+    uint32_t effective_gain;
+    uint32_t base;
+    uint16_t word;
+    int32_t segment;
+    int32_t fraction;
+    unsigned int i;
+
+    if (channel != 0 || !sdns_info)
+        return -ENODEV;
+    info = (uint8_t *)(uintptr_t)sdns_info;
+    params = (const uint8_t *)(uintptr_t)
+        *(uint32_t *)(void *)info;
+    runtime = (uint8_t *)(uintptr_t)
+        *(uint32_t *)(void *)(info + 4);
+    if (!t41_kernel_data_ptr(info) || !t41_kernel_data_ptr(params) ||
+        !t41_kernel_data_ptr(runtime))
+        return -EFAULT;
+
+    /* T41 tisp_sdns_par_refresh() uses the same 0x100-Q16 hysteresis as
+     * YDNS.  A gain step re-interpolates only the reference bank; the static
+     * non-reference bank installed during bring-up remains coherent. */
+    cached = *(uint32_t *)(void *)(info + 8);
+    effective_gain = gain_q16;
+    if (cached != 0xffffffffU) {
+        delta = gain_q16 >= cached ? gain_q16 - cached : cached - gain_q16;
+        if (delta < 0x100U)
+            effective_gain = cached;
+        else
+            *(uint32_t *)(void *)(info + 8) = gain_q16;
+    } else {
+        *(uint32_t *)(void *)(info + 8) = gain_q16;
+    }
+
+    segment = (int32_t)(effective_gain >> 16);
+    fraction = (int32_t)(effective_gain & 0xffffU);
+    runtime[0] = (uint8_t)tisp_simple_intp_int8(
+        segment, fraction, (void *)(params + 0x6e));
+    runtime[1] = (uint8_t)tisp_simple_intp_int8(
+        segment, fraction, (void *)(params + 0x79));
+    runtime[2] = (uint8_t)tisp_simple_intp_int8(
+        segment, fraction, (void *)(params + 0x0b));
+    runtime[3] = (uint8_t)tisp_simple_intp_int8(
+        segment, fraction, (void *)(params + 0x16));
+    word = (uint16_t)tisp_simple_intp_int16(
+        segment, fraction, (uintptr_t)(params + 0x58));
+    runtime[4] = word & 0xffU;
+    runtime[5] = word >> 8;
+    for (i = 6; i <= 65; ++i)
+        runtime[i] = (uint8_t)tisp_simple_intp_int8(
+            segment, fraction,
+            (void *)(params + 0x84 + 11 * (i - 6)));
+    for (i = 66; i <= 74; ++i)
+        runtime[i] = (uint8_t)tisp_simple_intp_int8(
+            segment, fraction,
+            (void *)(params + 0x320 + 11 * (i - 66)));
+    for (i = 16; i <= 31; ++i)
+        runtime[i] = (uint8_t)tisp_ratio(info[16], runtime[i], 0x10);
+    runtime[74] = (uint8_t)tisp_ratio(info[16], runtime[74], 0xc8);
+
+    /* Exact T41 tisp_sdns_ref_reg_cfg() packing from H20250310a HLIL. */
+    base = (channel + 0x50U) << 10;
+    system_reg_write(base + 0x004,
+        ((uint32_t)runtime[1] << 20) | ((uint32_t)runtime[0] << 2));
+    system_reg_write(base + 0x00c,
+        ((uint32_t)runtime[3] << 18) | ((uint32_t)runtime[2] << 1));
+    system_reg_write(base + 0x010, t41_sdns_runtime_word(runtime, 4));
+    system_reg_write(base + 0x184, t41_sdns_runtime_word(runtime, 8));
+    system_reg_write(base + 0x188, t41_sdns_runtime_word(runtime, 12));
+    for (i = 0; i < 8; ++i)
+        system_reg_write(base + 0x140 + 4 * i,
+                         t41_sdns_runtime_word(runtime, 16 + 4 * i));
+    system_reg_write(base + 0x01c,
+        ((uint32_t)runtime[50] << 8) | runtime[48]);
+    system_reg_write(base + 0x018,
+        ((uint32_t)runtime[49] << 8) |
+        ((uint32_t)params[0x41] << 16) | runtime[65]);
+    system_reg_write(base + 0x160,
+        ((uint32_t)runtime[52] << 18) | ((uint32_t)runtime[51] << 2));
+    system_reg_write(base + 0x164,
+        ((uint32_t)runtime[54] << 18) | ((uint32_t)runtime[53] << 2));
+    system_reg_write(base + 0x168,
+        ((uint32_t)runtime[56] << 18) | ((uint32_t)runtime[55] << 2));
+    system_reg_write(base + 0x18c, t41_sdns_runtime_word(runtime, 57));
+    system_reg_write(base + 0x190, t41_sdns_runtime_word(runtime, 61));
+    system_reg_write(base + 0x094, runtime[66]);
+    system_reg_write(base + 0x030,
+        ((uint32_t)runtime[67] << 18) | ((uint32_t)params[0x47] << 4));
+    system_reg_write(base + 0x038,
+        ((uint32_t)runtime[69] << 18) | ((uint32_t)runtime[68] << 2));
+    system_reg_write(base + 0x024,
+        ((uint32_t)runtime[70] << 18) | params[0x45]);
+    system_reg_write(base + 0x028,
+        ((uint32_t)runtime[72] << 18) | ((uint32_t)runtime[71] << 2));
+    system_reg_write(base + 0x02c,
+        ((uint32_t)runtime[73] << 8) | params[0x46] |
+        ((uint32_t)runtime[74] << 12));
+    system_reg_write(base + 0x088,
+        ((uint32_t)params[0x0a] << 16) |
+        ((uint32_t)params[0x40] << 24));
+    system_reg_write(base + 0x054, 1);
+    return 0;
+}
+#endif
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000059548 origin=fragment_seed original=tisp_sdns_refresh */
 int32_t tisp_sdns_refresh(uint32_t a0, uint32_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    /* SDNS is held in top bypass until its register writer is complete. */
-    (void)a0;
-    (void)a1;
-    return 0;
+    return t41_sdns_runtime_refresh(a0, a1);
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -127985,6 +128653,10 @@ int32_t tisp_sdns_init(uint32_t a0)
     *(uint32_t *)(void *)(info + 4) = (uint32_t)(uintptr_t)runtime;
     *(uint32_t *)(void *)(info + 8) = 0xffffffffU;
     *(uint32_t *)(void *)(info + 16) = 128;
+
+    if (tisp_sdns_refresh(a0, 0x10000U))
+        goto fail;
+    system_reg_write(0x358, 0x20220702U);
 
     bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
     *bypass |= BIT(18);
@@ -156301,6 +156973,25 @@ void ispcore_irq_main_fd_work(void *work)
 		return;
 	core = *(uintptr_t *)(core_sd + 268);
 
+	/* Run the write-only TMO RAM transaction from the frame-complete worker,
+	 * matching the stock process-context ownership boundary. */
+	{
+		int tmo_replay =
+			atomic_xchg(&t41_tmo_frame_replay_pending, -1);
+
+		if (tmo_replay > 0)
+			t41_apply_stock_tmo_profile();
+		if (tmo_replay > 1) {
+			int ram_ret = tisp_tmo_ram_reg_refresh(0);
+			int regs_ret = ram_ret ? ram_ret :
+				tisp_tmo_default_reg_refresh(0);
+
+			printk(KERN_WARNING
+			       "tx_isp_t41_recovered: full diagnostic TMO RAM replay ret=%d/%d statYOut=%#x\n",
+			       ram_ret, regs_ret, statYOut);
+		}
+	}
+
 	/* Match the exact T41 per-frame empty shadow transaction without invoking
 	 * the unsafe recovered packed-workspace writer. */
 	if (!tisp_msca_state()) {
@@ -157758,7 +158449,14 @@ int32_t ispcore_frame_channel_streamon(void *arg1)
         if (!ret)
             t41_apply_stock_spatial_profile();
         if (!ret)
+            t41_apply_stock_cdns_profile();
+        if (!ret)
             t41_apply_stock_adr_profile();
+		/* The ISP stream transition resets the write-only TMO curve RAM.
+		 * Reapply it at the frame-complete boundary; the pre-stream writer
+		 * above only seeds software and transient hardware. */
+        if (!ret)
+            atomic_set(&t41_tmo_frame_replay_pending, 1);
         if (!ret && (t41_late_start_mask & 0x20))
             ret = t41_start_isp_fw_thread_late();
         if (!ret && (t41_late_start_mask & 0x10))
@@ -161141,6 +161839,11 @@ int32_t system_reg_write(uint32_t a0, uint32_t a1)
     /* Exact H20250310a address calculation, paired with system_reg_read():
      * write to *(ispcore_sd + 0xe8) + the byte offset. */
     writel(a1, regs + a0);
+    /* T40 and T23 both order each ISP MMIO write before issuing the next
+     * command.  This is required for RAM-port transactions such as TMO,
+     * where repeated writes to the same data register must not coalesce or
+     * overtake the address/latch writes. */
+    wmb();
     return 0;
 #else
     uint32_t ra = 0;
@@ -164425,6 +165128,20 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
                 printk(KERN_WARNING
                        "tx_isp_t41_recovered: ISP TMO stats irq callback=%#x ret=%d\n",
                        (uint32_t)callback, callback_ret);
+        }
+
+        if ((status0 & BIT(8)) && t41_stock_lce_ram_profile <= 0) {
+            int32_t callback = READ_ONCE(irq_func_cb[8]);
+            int64_t callback_ret = -ENODEV;
+
+            if (t41_kernel_data_ptr((void *)(uintptr_t)(uint32_t)callback))
+                callback_ret =
+                    ((int64_t (*)(uint32_t))(uintptr_t)
+                     (uint32_t)callback)(0);
+            if (trace_count < 32)
+                printk(KERN_WARNING
+                       "tx_isp_t41_recovered: ISP LCE stats irq callback=%#x ret=%lld\n",
+                       (uint32_t)callback, (long long)callback_ret);
         }
 
         if (trace_count < 32 || (status0 & 0x1))

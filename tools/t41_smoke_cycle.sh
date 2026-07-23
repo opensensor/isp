@@ -405,7 +405,7 @@ if [ -n "$kernel_trace" ] && [ "$insmod_status" -eq 0 ]; then
 	rm -f /tmp/isp-trace.txt /tmp/t41-kernel-trace.txt
 	system_read_addr="$(awk '$3 == "system_reg_read" { print "0x" $1; exit }' /proc/kallsyms)"
 	trace_memory_args=
-	for trace_symbol in tmo_info gamma_info gib_info dmsc_info lsc_info ae_info awb_info statYOut msca_info; do
+	for trace_symbol in tmo_info gamma_info gib_info dmsc_info lsc_info ae_info awb_info adr_info lce_info statYOut msca_info; do
 		trace_addr="$(awk -v symbol="$trace_symbol" \
 			'$3 == symbol && $1 != "00000000" { print "0x" $1; exit }' \
 			/proc/kallsyms)"

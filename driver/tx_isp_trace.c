@@ -11,7 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/math64.h>
 
-#define ISP_MONITOR_VERSION "3.15"
+#define ISP_MONITOR_VERSION "3.16"
 #define TRACE_FILE_PATH "/tmp/isp-trace.txt"
 
 /* Two MMIO windows:
@@ -44,6 +44,8 @@ static unsigned long dmsc_info_addr;
 static unsigned long lsc_info_addr;
 static unsigned long ae_info_addr;
 static unsigned long awb_info_addr;
+static unsigned long adr_info_addr;
+static unsigned long lce_info_addr;
 static unsigned long stat_y_out_addr;
 static unsigned long msca_info_addr;
 static unsigned long mscaler_addr;
@@ -145,6 +147,8 @@ module_param_named(dmsc_info_addr, dmsc_info_addr, ulong, 0400);
 module_param_named(lsc_info_addr, lsc_info_addr, ulong, 0400);
 module_param_named(ae_info_addr, ae_info_addr, ulong, 0400);
 module_param_named(awb_info_addr, awb_info_addr, ulong, 0400);
+module_param_named(adr_info_addr, adr_info_addr, ulong, 0400);
+module_param_named(lce_info_addr, lce_info_addr, ulong, 0400);
 module_param_named(stat_y_out_addr, stat_y_out_addr, ulong, 0400);
 module_param_named(msca_info_addr, msca_info_addr, ulong, 0400);
 module_param_named(mscaler_addr, mscaler_addr, ulong, 0400);
@@ -206,6 +210,93 @@ static void dump_tmo_memory(void)
 			trace_write("  R+0x%03x = 0x%04x\n", off,
 				    READ_ONCE(*(u16 *)(uintptr_t)(runtime + off)));
 	}
+}
+
+static void dump_adr_memory(void)
+{
+	u32 info;
+	u32 params;
+	u32 curve;
+	u32 runtime;
+	u32 algo;
+	u32 stats;
+	u32 off;
+
+	/* T41 tisp_adr_init stores a pointer in adr_info[channel].  Channel 0's
+	 * 36-byte descriptor owns the tuning parameters and the 800/1140/10056
+	 * byte workspaces used by func_adr_reg_write_every().  Capturing these
+	 * objects is the only reliable oracle for the write-only 0x50304 port. */
+	if (!trace_kernel_ptr(adr_info_addr))
+		return;
+	info = READ_ONCE(*(u32 *)(uintptr_t)adr_info_addr);
+	trace_write("[ADR_MEMORY] adr_info_symbol=0x%08lx info=0x%08x\n",
+		    adr_info_addr, info);
+	if (!trace_kernel_ptr(info))
+		return;
+	params = READ_ONCE(*(u32 *)(uintptr_t)(info + 0));
+	curve = READ_ONCE(*(u32 *)(uintptr_t)(info + 4));
+	runtime = READ_ONCE(*(u32 *)(uintptr_t)(info + 8));
+	algo = READ_ONCE(*(u32 *)(uintptr_t)(info + 12));
+	stats = READ_ONCE(*(u32 *)(uintptr_t)(info + 24));
+	trace_write("[ADR_MEMORY] params=0x%08x curve=0x%08x runtime=0x%08x algo=0x%08x stats=0x%08x\n",
+		    params, curve, runtime, algo, stats);
+	trace_write("[ADR_INFO] 0x000-0x023:\n");
+	for (off = 0; off < 36; off += 4)
+		trace_write("  I+0x%03x = 0x%08x\n", off,
+			    READ_ONCE(*(u32 *)(uintptr_t)(info + off)));
+	if (trace_kernel_ptr(params)) {
+		trace_write("[ADR_PARAMS] 0x000-0x1a3:\n");
+		for (off = 0; off < 420; off += 2)
+			trace_write("  P+0x%03x = 0x%04x\n", off,
+				    READ_ONCE(*(u16 *)(uintptr_t)(params + off)));
+	}
+	if (trace_kernel_ptr(curve)) {
+		trace_write("[ADR_CURVE] 0x000-0x31f:\n");
+		for (off = 0; off < 800; off += 2)
+			trace_write("  C+0x%03x = 0x%04x\n", off,
+				    READ_ONCE(*(u16 *)(uintptr_t)(curve + off)));
+	}
+	if (trace_kernel_ptr(runtime)) {
+		trace_write("[ADR_RUNTIME] 0x000-0x473:\n");
+		for (off = 0; off < 1140; off += 2)
+			trace_write("  R+0x%03x = 0x%04x\n", off,
+				    READ_ONCE(*(u16 *)(uintptr_t)(runtime + off)));
+	}
+	if (trace_kernel_ptr(algo)) {
+		trace_write("[ADR_ALGO] 0x000-0x2747:\n");
+		for (off = 0; off < 10056; off += 4)
+			trace_write("  A+0x%04x = 0x%08x\n", off,
+				    READ_ONCE(*(u32 *)(uintptr_t)(algo + off)));
+	}
+	if (trace_kernel_ptr(stats)) {
+		trace_write("[ADR_STATS] 0x0000-0x3fff:\n");
+		for (off = 0; off < 16384; off += 4)
+			trace_write("  S+0x%04x = 0x%08x\n", off,
+				    READ_ONCE(*(u32 *)(uintptr_t)(stats + off)));
+	}
+}
+
+static void dump_lce_memory(void)
+{
+	u32 state;
+	u32 off;
+
+	/* T41 owns one 22,836-byte LCE object.  Its visible 0x0e000 register
+	 * image is insufficient: the interrupt path fills the histogram region,
+	 * the event worker derives two 5,760-byte curve banks, and only then does
+	 * tisp_lce_write_all_reg() feed the write-only 0x501e0 port.  Preserve the
+	 * complete stock object so those regions and their geometry can be
+	 * reconstructed from evidence rather than inferred from MMIO. */
+	if (!trace_kernel_ptr(lce_info_addr))
+		return;
+	state = READ_ONCE(*(u32 *)(uintptr_t)lce_info_addr);
+	trace_write("[LCE_MEMORY] lce_info_symbol=0x%08lx state=0x%08x bytes=22836\n",
+		    lce_info_addr, state);
+	if (!trace_kernel_ptr(state))
+		return;
+	for (off = 0; off < 22836; off += 4)
+		trace_write("  L+0x%04x = 0x%08x\n", off,
+			    READ_ONCE(*(u32 *)(uintptr_t)(state + off)));
 }
 
 static void dump_tmo_stat_memory(void)
@@ -708,6 +799,8 @@ static void dump_full_snapshot(const char *tag)
 		}
 	}
 	dump_tmo_memory();
+	dump_adr_memory();
+	dump_lce_memory();
 	dump_tmo_stat_memory();
 	dump_gamma_memory();
 	dump_ysp_memory();
