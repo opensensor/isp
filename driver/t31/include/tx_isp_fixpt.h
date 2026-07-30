@@ -32,7 +32,18 @@ static inline u32 fix_point_div_32(u32 q, u32 num, u32 den)
 
 static inline u64 fix_point_mult2_64_native(u32 q, u64 a, u64 b)
 {
-	return tx_isp_fixmul_u64(q, a, b);
+	u64 mask, ai, bi, af, bf;
+
+	if (q >= 64)
+		return 0;
+
+	mask = (1ULL << q) - 1;
+	ai = a >> q;
+	bi = b >> q;
+	af = a & mask;
+	bf = b & mask;
+
+	return (ai * bi << q) + ai * bf + af * bi + ((af * bf) >> q);
 }
 
 static inline u64 fix_point_mult3_64_native(u32 q, u64 a, u64 b, u64 c)

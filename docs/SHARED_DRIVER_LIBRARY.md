@@ -253,6 +253,9 @@ captures. Color fidelity is tracked separately from these DMA-layout results.
   corrections.
 - Continue moving the generation-specific 64-bit divide and remaining
   fixed-point interpolation entry points behind host tests.
+- Reconnect T31's host-tested common 64-bit multiplier only through a
+  size-neutral boundary; the first additional inline layer changed recovered
+  AE code generation and visibly increased wall grain.
 - Extend tuning descriptors only when the matching userspace payload size and
   direction are proven; keep SoC dispatch and collectors local.
 - Extract typed buffer ownership and queue-lifecycle bookkeeping only after

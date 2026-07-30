@@ -409,8 +409,10 @@ static inline unsigned long long
 tx_isp_fixmul3_u64(unsigned int point_pos, unsigned long long first,
 		   unsigned long long second, unsigned long long third)
 {
-	return tx_isp_fixmul_u64(point_pos,
-		tx_isp_fixmul_u64(point_pos, first, second), third);
+	unsigned long long pair =
+		tx_isp_fixmul_u64(point_pos, first, second);
+
+	return tx_isp_fixmul_u64(point_pos, pair, third);
 }
 
 /*
