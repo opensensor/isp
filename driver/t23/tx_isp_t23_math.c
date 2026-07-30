@@ -12,6 +12,12 @@
 
 #define TX_ISP_T23_INTERPOLATION_LAST_INDEX	8U
 
+int fix_point_div_32(int point_pos, int numerator, int denominator)
+{
+	return (int)tx_isp_fixdiv_oem_u32((u32)point_pos, (u32)numerator,
+					  (u32)denominator);
+}
+
 u32 tisp_math_exp2(u32 value, u32 input_precision, u32 output_precision)
 {
 	return tx_isp_exp2_u32(value, (u8)input_precision,

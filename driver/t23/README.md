@@ -37,6 +37,14 @@ Current smoke-test status:
   640x360 streams at 25 fps with no fatal kernel, Raptor, or Android log
   entries. The tested open module remains active with SHA-256
   `d1b53dbe46435b1bc5bbb90d29a4b24185c368a79323b97b2432e839c8893848`.
+- The math adapter now also owns `fix_point_div_32`, replacing the recovered
+  pointer-arithmetic body with the common OEM-compatible wrapped divider.
+  Hardware validation decoded 148 main frames in six seconds, 74 substream
+  frames in three, and 124 main frames in the five-second post-transition
+  check. Night/auto/day transitions passed, ISP/VIC interrupts advanced, and
+  `dmesg`, `logread`, and `logcat` contained no new driver fault. The tested
+  open module remains active with SHA-256
+  `522d1324c640ab16ee1f5653407d275e06914cf4c1d255fa2b3cf4edd750a7f1`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

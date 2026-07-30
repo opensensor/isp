@@ -37910,37 +37910,6 @@ int32_t fix_point_mult3_32(int32_t arg1, int32_t arg2, int32_t arg3) {
     return fix_point_mult2_32(a1, a2, arg3);
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013ad4 origin=model_output original=fix_point_div_32 */
-int fix_point_div_32(int arg1, int arg2, int arg3) {
-    int *s0 = 0;
-    int *a1 = arg2 % arg3;
-    int *v0_1 = 0;
-    int v1 = arg1;
-    int *a0 = arg2 / arg3;
-    int *v0;
-
-    while (v0_1 != v1) {
-        a1 = (void *)(uintptr_t)((uintptr_t)a1 << (1));
-        s0 = (void *)(uintptr_t)((uintptr_t)s0 << (1));
-
-        if (arg3 >= a1) {
-            if (arg3 == a1) {
-                s0 = ((uintptr_t)s0 | 1) << ((arg1 - 1 - (uintptr_t)v0_1) & 0x1f);
-                break;
-            }
-
-            v0_1 = (void *)(uintptr_t)((uintptr_t)v0_1 + (1));
-        } else {
-            s0 = (void *)(uintptr_t)((uintptr_t)s0 | (1));
-            a1 = (void *)(uintptr_t)((uintptr_t)a1 - (arg3));
-            v0_1 = (void *)(uintptr_t)((uintptr_t)v0_1 + (1));
-        }
-    }
-
-    v0 = __ashldi3(a0, 0, arg1);
-    return (uintptr_t)s0 | (uintptr_t)v0;
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013b6c origin=model_output original=fix_point_intp */
 int32_t fix_point_intp(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5)
 {
