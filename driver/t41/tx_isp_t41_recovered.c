@@ -9,6 +9,9 @@
 #include "../include/tx_isp/tx_isp_daynight.h"
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
+#include "../include/tx_isp/tx_isp_exposure.h"
+#include "tx_isp_t41_exposure.h"
+#include "tx_isp_t41_scaler.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
@@ -767,13 +770,14 @@ MODULE_PARM_DESC(t41_safe_tuning_events,
  * target come from the exact T41 histogram path.  The default Q8 target is
  * the converged pristine-stock OS04D10 histogram measured under the same
  * image and timing profile.  A fresh daylight stock/open comparison on the
- * same OS04D10 converged at 369 lines and again=0x1f/0x1e with the open
- * histogram target at 12400 / 256 = 48.44. */
+ * same OS04D10 converged at 369 lines and again=0x1f/0x1e.  The base target
+ * is scaled by the active GIB profile below; 22000 with the 0x200/0x400
+ * attenuation pair yields an effective target of 11000 Q8. */
 static int t41_safe_ae_controller = 1;
 module_param(t41_safe_ae_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_ae_controller,
 		 "use the bounded histogram AE controller instead of recovered vendor AE");
-static unsigned int t41_ae_target_q8 = 12400;
+static unsigned int t41_ae_target_q8 = 22000;
 module_param(t41_ae_target_q8, uint, 0644);
 MODULE_PARM_DESC(t41_ae_target_q8,
 		 "safe AE target histogram mean in Q8 units");
@@ -781,6 +785,43 @@ static unsigned int t41_ae_update_frames = 3;
 module_param(t41_ae_update_frames, uint, 0644);
 MODULE_PARM_DESC(t41_ae_update_frames,
 		 "histogram frames between safe AE sensor updates");
+/*
+ * A short exposure cannot reject mains-powered LED PWM.  The OS04D10 runs
+ * exactly 44,225 lines/second, making 369 lines its nearest 1/120 second
+ * shutter.  Pair that default with the image-side attenuation profile below
+ * so bright scenes retain highlight headroom.
+ */
+static unsigned int t41_ae_flicker_floor_lines = 369U;
+module_param(t41_ae_flicker_floor_lines, uint, 0644);
+MODULE_PARM_DESC(t41_ae_flicker_floor_lines,
+		 "minimum anti-flicker integration lines (0 disables the floor)");
+static unsigned int t41_ae_flicker_ceiling_lines = 369U;
+module_param(t41_ae_flicker_ceiling_lines, uint, 0644);
+MODULE_PARM_DESC(t41_ae_flicker_ceiling_lines,
+		 "maximum anti-flicker integration lines (0 uses the sensor maximum)");
+static unsigned int t41_ae_flicker_frequency_hz = 60U;
+module_param(t41_ae_flicker_frequency_hz, uint, 0644);
+MODULE_PARM_DESC(t41_ae_flicker_frequency_hz,
+		 "anti-flicker mains frequency in Hz (0 disables snapping)");
+static unsigned int t41_ae_flicker_gib_gain_q10 = 0x200U;
+module_param(t41_ae_flicker_gib_gain_q10, uint, 0644);
+MODULE_PARM_DESC(t41_ae_flicker_gib_gain_q10,
+		 "pre-tone-map GIB gain used by the anti-flicker image profile");
+static unsigned int t41_color_green_correction_q10 = 0x200U;
+module_param(t41_color_green_correction_q10, uint, 0644);
+MODULE_PARM_DESC(t41_color_green_correction_q10,
+		 "neutral-preserving red/green correction used with anti-flicker");
+static unsigned int t41_color_blue_correction_q10 = 0x500U;
+module_param(t41_color_blue_correction_q10, uint, 0644);
+MODULE_PARM_DESC(t41_color_blue_correction_q10,
+		 "neutral-preserving red/blue correction used with anti-flicker");
+static int t41_flicker_profile_set(const char *value,
+				   const struct kernel_param *kp);
+static int t41_ae_flicker_profile = -1;
+module_param_call(t41_ae_flicker_profile, t41_flicker_profile_set,
+		  param_get_int, &t41_ae_flicker_profile, 0644);
+MODULE_PARM_DESC(t41_ae_flicker_profile,
+		 "negative enables matched GIB/CCM anti-flicker image profile");
 
 /*
  * Stock does not stop after writing the sensor exposure.  Its event-4
@@ -799,7 +840,7 @@ MODULE_PARM_DESC(t41_ae_update_frames,
 /* Keep module controls out of the recovered image's overlapping BSS.  Only
  * the low six bits are functional; the initialized high bit is a storage
  * sentinel and deliberately selects no block. */
-static unsigned int t41_safe_gain_fanout_mask = 0x80000032U;
+static unsigned int t41_safe_gain_fanout_mask = 0x80000002U;
 module_param(t41_safe_gain_fanout_mask, uint, 0644);
 MODULE_PARM_DESC(t41_safe_gain_fanout_mask,
 		 "safe total-gain fanout mask: GIB=1 DMSC=2 LSC=4 TMO=8 YDNS=16 SDNS=32");
@@ -815,6 +856,14 @@ static unsigned int t41_safe_ae_gain_q16 = ~0U;
 module_param(t41_safe_ae_gain_q16, uint, 0444);
 MODULE_PARM_DESC(t41_safe_ae_gain_q16,
 		 "current safe-AE log2 total gain in Q16 format");
+static unsigned int t41_safe_ae_last_mean_q8 = ~0U;
+module_param(t41_safe_ae_last_mean_q8, uint, 0444);
+MODULE_PARM_DESC(t41_safe_ae_last_mean_q8,
+		 "latest safe-AE histogram mean in Q8 units");
+static unsigned int t41_safe_ae_effective_target_q8 = ~0U;
+module_param(t41_safe_ae_effective_target_q8, uint, 0444);
+MODULE_PARM_DESC(t41_safe_ae_effective_target_q8,
+		 "current attenuation-adjusted safe-AE target in Q8 units");
 static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 				      uint32_t mask);
 static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16);
@@ -1022,19 +1071,20 @@ MODULE_PARM_DESC(t41_msca_frame_shadow_commit,
 static unsigned int t41_msca_frame_shadow_trace = 0x80000000U;
 
 /*
- * Stock tisp_msca_chx_cfg_load() calculates two 33-tap unity curves and
+ * Stock tisp_msca_chx_cfg_load() calculates two 33-tap polyphase curves and
  * commits them through the MSCA shadow-DMA port before it writes the visible
  * channel geometry.  The crash-safe recovery originally skipped that hidden
  * transaction.  Direct reads of 0xf0740..0xf07d0 do not expose the shadow
- * contents, so matching the readable MSCA register bank was insufficient.
- * A negative value enables the exact OS04D10 2560x1440 unity curve captured
- * from the stock H20250310a workspace; a positive value leaves the hardware
- * power-on coefficients untouched for an A/B control.
+ * contents, so matching the readable MSCA register bank was insufficient and
+ * 2560x1440-to-1920x1080 was running without its ratio-specific filter.  A
+ * negative value enables the exact H20250310a fixed-point generator and
+ * shadow transaction; a positive value retains the old power-on-coefficient
+ * A/B control.
  */
 static int t41_stock_msca_unity_curve = -1;
 module_param(t41_stock_msca_unity_curve, int, 0644);
 MODULE_PARM_DESC(t41_stock_msca_unity_curve,
-		 "Commit exact-stock unity MSCA curves through shadow RAM (negative=enabled)");
+		 "Commit exact-stock ratio-specific MSCA curves through shadow RAM (negative=enabled)");
 
 static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
 static void t41_apply_stock_awb_gains(void);
@@ -1044,11 +1094,11 @@ static void t41_apply_stock_awb_gains(void);
  * until the statistics controller below is ready to own the gains.  The old
  * 0x754/0xa6c defaults amplified both red and blue and produced a severe
  * magenta cast after Raptor selected day mode. */
-static unsigned int t41_stock_awb_gain_a = 0x380U;
+static unsigned int t41_stock_awb_gain_a = 0x3d0U;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 0x0880U;
+static unsigned int t41_stock_awb_gain_b = 0x0980U;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
@@ -1776,6 +1826,49 @@ static unsigned char tparamsP_storage[8] __attribute__((aligned(4)));
 static uint32_t pos_en;
 static uint32_t pos_value;
 static unsigned char top_bypass_global[8];
+
+static int t41_apply_flicker_profile(bool enable)
+{
+	uint32_t *bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+	int ret;
+
+	ret = tx_isp_t41_flicker_profile_apply(
+		0, enable, t41_ae_flicker_gib_gain_q10,
+		t41_color_green_correction_q10,
+		t41_color_blue_correction_q10, bypass);
+	printk(KERN_WARNING
+	       "tx_isp_t41_recovered: flicker image profile %s "
+	       "gib=%#x correction=%#x/%#x bypass=%#x ret=%d\n",
+	       enable ? "enabled" : "disabled",
+	       t41_ae_flicker_gib_gain_q10,
+	       t41_color_green_correction_q10,
+	       t41_color_blue_correction_q10, *bypass, ret);
+	return ret;
+}
+
+static int t41_flicker_profile_set(const char *value,
+				   const struct kernel_param *kp)
+{
+	int ret = param_set_int(value, kp);
+	uint32_t bypass;
+
+	if (ret)
+		return ret;
+
+	/*
+	 * Parameter parsing also runs before TISP owns the register bank.  Its
+	 * initialized TOP word always carries the upper reserved bits, so only
+	 * perform a live transition after that ownership point.
+	 */
+	bypass = ((uint32_t *)(void *)top_bypass_global)[0];
+	if (bypass & 0xfc000000U)
+		ret = t41_apply_flicker_profile(
+			t41_ae_flicker_profile < 0 &&
+			t41_ae_flicker_frequency_hz &&
+			t41_ae_flicker_floor_lines);
+	return ret;
+}
+
 static unsigned char top_info_storage[8] __attribute__((aligned(4)));
 /* Channel 1 is unavailable on this target; keep SDNS state without moving BSS. */
 #define sdns_info (((uint32_t *)(void *)top_info_storage)[1])
@@ -31764,9 +31857,25 @@ MODULE_PARM_DESC(t41_dmsc_high_gain_q16,
 static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16)
 {
     static const uint32_t low_gain[][2] = {
+        { 0x0a038U, 0x007800f0U },
         { 0x0a048U, 0x00140019U },
+        { 0x0a080U, 0x040f0000U },
+        { 0x0a18cU, 0x0155b000U },
+        { 0x0a190U, 0x00557000U },
+        { 0x0a194U, 0x00080000U },
         { 0x0a198U, 0x00010008U },
         { 0x0a208U, 0x01180320U },
+        { 0x0a224U, 0x0fff0064U },
+        { 0x0a248U, 0x00000000U },
+        { 0x0a24cU, 0x20202020U },
+        { 0x0a250U, 0x20202020U },
+        { 0x0a254U, 0x20202020U },
+        { 0x0a258U, 0x20202020U },
+        { 0x0a25cU, 0x20202020U },
+        { 0x0a260U, 0x20202020U },
+        { 0x0a264U, 0x20202020U },
+        { 0x0a268U, 0x20202020U },
+        { 0x0a278U, 0x00001030U },
         { 0x0a2d8U, 0x01405014U },
         { 0x0a2dcU, 0x01906419U },
     };
@@ -31975,33 +32084,33 @@ static void t41_apply_stock_spatial_profile(void)
      * here because its reference buffers are rebuilt separately.
      */
     static const uint32_t ydns_delta[][2] = {
-        { 0x10010, 0x00000011 }, { 0x10020, 0x00003107 },
-        { 0x10024, 0x8084a4c1 }, { 0x10028, 0x7074787c },
-        { 0x10040, 0x0000dc17 }, { 0x10044, 0x0c0c1c68 },
-        { 0x10048, 0x000c0c0c },
+        { 0x10010, 0x00000011 }, { 0x10020, 0x00003103 },
+        { 0x10024, 0x1e27314f }, { 0x10028, 0x00000a14 },
+        { 0x10040, 0x0000dc0f }, { 0x10044, 0x00000000 },
+        { 0x10048, 0x00000000 },
     };
     static const uint32_t ysp_delta[][2] = {
         { 0x13004, 0x00040000 }, { 0x13018, 0x00206800 },
-        { 0x1301c, 0x0003c050 }, { 0x13020, 0x0020c430 },
+        { 0x1301c, 0x0003c050 }, { 0x13020, 0x0020801f },
         { 0x1302c, 0x0281e078 }, { 0x13038, 0x0303fc00 },
-        { 0x13040, 0x027ff846 }, { 0x1304c, 0x00304000 },
+        { 0x13040, 0x027ff850 }, { 0x1304c, 0x00304000 },
         { 0x13050, 0x40000000 }, { 0x13054, 0x0000ffff },
         { 0x13058, 0x0000ffff },
         { 0x13084, 0x05050505 }, { 0x13088, 0x05050505 },
         { 0x13094, 0x0f0f0f0f }, { 0x13098, 0x0f0f0f0f },
         { 0x130a4, 0x0a0a0a0a }, { 0x130a8, 0x0a0a0a0a },
-        { 0x130ac, 0x01da00b1 }, { 0x130b0, 0x034002cb },
-        { 0x130b4, 0x03c2038a }, { 0x130b8, 0x03f203e4 },
-        { 0x130ec, 0x03ea03a7 }, { 0x130f0, 0x03ff03ff },
-        { 0x13124, 0x03e003ff }, { 0x13128, 0x0314037f },
+        { 0x130ac, 0x01580005 }, { 0x130b0, 0x02fc026f },
+        { 0x130b4, 0x03ad0361 }, { 0x130b8, 0x03f203dc },
+        { 0x130ec, 0x03d5034d }, { 0x130f0, 0x03ff03ff },
+        { 0x13124, 0x03bf03ff }, { 0x13128, 0x022102fb },
         { 0x1312c, 0x00780078 }, { 0x13130, 0x00780078 },
         { 0x13134, 0x00780078 }, { 0x13138, 0x00780078 },
         { 0x1313c, 0x00580058 }, { 0x13140, 0x00580058 },
         { 0x13144, 0x00580058 }, { 0x13148, 0x00580058 },
-        { 0x1314c, 0x00740074 }, { 0x13150, 0x00740074 },
-        { 0x13154, 0x00780078 }, { 0x13158, 0x00780078 },
-        { 0x1315c, 0x00480048 }, { 0x13160, 0x00480048 },
-        { 0x13164, 0x005c0048 }, { 0x13168, 0x005c005c },
+        { 0x1314c, 0x00580058 }, { 0x13150, 0x005c005c },
+        { 0x13154, 0x00600060 }, { 0x13158, 0x00640064 },
+        { 0x1315c, 0x003c003c }, { 0x13160, 0x003c003c },
+        { 0x13164, 0x003c003c }, { 0x13168, 0x003c003c },
     };
     static const uint32_t sdns_delta[][2] = {
         { 0x14004, 0x06400078 }, { 0x14010, 0x0aff00c8 },
@@ -32009,8 +32118,8 @@ static void t41_apply_stock_spatial_profile(void)
         { 0x14020, 0x00000001 }, { 0x14024, 0x00280000 },
         { 0x14028, 0x00000014 }, { 0x1402c, 0x00000a00 },
         { 0x14030, 0x002806e0 }, { 0x14034, 0x00000000 },
-        { 0x14038, 0x00280028 }, { 0x14048, 0x00000010 },
-        { 0x1404c, 0x058a058c }, { 0x14050, 0x01066400 },
+        { 0x14038, 0x00280028 }, { 0x14048, 0x00010001 },
+        { 0x1404c, 0x00000000 }, { 0x14050, 0x01092000 },
         { 0x14088, 0x00010000 }, { 0x1408c, 0x00080000 },
         { 0x14090, 0x00000003 }, { 0x14094, 0x00000010 },
         { 0x14100, 0x00140000 }, { 0x14104, 0x00280020 },
@@ -32021,8 +32130,8 @@ static void t41_apply_stock_spatial_profile(void)
         { 0x14128, 0x0050003c }, { 0x1412c, 0x00a00078 },
         { 0x14130, 0x00f000c8 }, { 0x14134, 0x01400118 },
         { 0x14138, 0x01900168 }, { 0x1413c, 0x00000320 },
-        { 0x14140, 0x03030303 }, { 0x14144, 0x02020203 },
-        { 0x14148, 0x01010101 }, { 0x1414c, 0x00000101 },
+        { 0x14140, 0x04040404 }, { 0x14144, 0x03030304 },
+        { 0x14148, 0x01020202 }, { 0x1414c, 0x01010101 },
         { 0x14150, 0x0607080a }, { 0x14154, 0x03030405 },
         { 0x14158, 0x01010202 }, { 0x1415c, 0x01010101 },
         { 0x14160, 0x00280004 }, { 0x14164, 0x00f00078 },
@@ -53199,6 +53308,15 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
         t41_apply_stock_tmo_profile();
     if (channel == 0)
         t41_apply_stock_bcsh_profile();
+    if (channel == 0 && t41_ae_flicker_profile < 0 &&
+        t41_ae_flicker_frequency_hz && t41_ae_flicker_floor_lines) {
+        int profile_ret = t41_apply_flicker_profile(true);
+
+        if (profile_ret)
+            printk(KERN_ERR
+                   "tx_isp_t41_recovered: initial flicker image profile failed ret=%d\n",
+                   profile_ret);
+    }
 
     if (*(uint32_t *)(cfg + 120) & 1) {
         *wdr_slot = 1;
@@ -55528,8 +55646,15 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 			ret = gib_ret;
 	}
 	if (mask & T41_GAIN_FANOUT_DMSC) {
-		t41_apply_stock_dmsc_gain_profile(gain_q16);
 		dmsc_ret = tisp_dmsc_refresh(channel, gain_q16);
+		/*
+		 * The recovered interpolator owns the gain-varying words but its
+		 * workspace still has holes in the daylight detail tables.  Apply
+		 * the measured stock completion after interpolation; doing this in
+		 * the opposite order lets every AE gain notification erase the
+		 * profile we just installed.
+		 */
+		t41_apply_stock_dmsc_gain_profile(gain_q16);
 		if (dmsc_ret < 0 && !ret)
 			ret = dmsc_ret;
 	}
@@ -55652,8 +55777,8 @@ static int t41_apply_safe_ev_fanout(uint32_t channel, uint32_t ev,
 
 int32_t t41_safe_ae_calc_process(uint32_t channel)
 {
-	static const uint16_t flicker_lines[] = { 369, 737, 1106, 1474 };
 	struct t41_safe_ae_state *control;
+	uint16_t flicker_lines[8];
 	uint32_t *info;
 	uint32_t *hist;
 	spinlock_t *lock;
@@ -55668,9 +55793,15 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	uint32_t again;
 	uint32_t old_integration;
 	uint32_t old_again;
-	uint32_t ideal_lines;
+	uint32_t flicker_floor;
+	uint32_t flicker_ceiling;
+	uint32_t flicker_frequency;
+	uint32_t flicker_line_count;
+	uint32_t max_integration;
+	uint32_t target_q8;
 	uint32_t gain_q16;
 	uint32_t sensor_value[2];
+	struct tx_isp_exposure_plan exposure;
 	unsigned int i;
 	int ret;
 
@@ -55712,20 +55843,69 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		return -EAGAIN;
 	mean_q8 = (uint32_t)div64_u64(weighted << 8, samples);
 	control->last_mean_q8 = mean_q8;
+	t41_safe_ae_last_mean_q8 = mean_q8;
 	control->frames++;
 	if (t41_ae_update_frames > 1 &&
 	    control->frames % t41_ae_update_frames)
 		return 0;
+	flicker_floor = t41_ae_flicker_floor_lines & BIT(31) ?
+		0 : t41_ae_flicker_floor_lines;
+	flicker_ceiling = t41_ae_flicker_ceiling_lines & BIT(31) ?
+		0 : t41_ae_flicker_ceiling_lines;
+	flicker_frequency = t41_ae_flicker_frequency_hz & BIT(31) ?
+		0 : t41_ae_flicker_frequency_hz;
+	max_integration = control->max_integration;
+	if (flicker_frequency && t41_ae_flicker_profile < 0 &&
+	    flicker_ceiling)
+		max_integration = min(max_integration, flicker_ceiling);
+	if (max_integration < control->min_integration ||
+	    (flicker_floor && flicker_floor > max_integration))
+		return -ERANGE;
+	target_q8 = t41_ae_target_q8;
+	if (flicker_frequency && flicker_floor &&
+	    t41_ae_flicker_profile < 0) {
+		ret = tx_isp_exposure_target_scale(
+			t41_ae_target_q8, t41_ae_flicker_gib_gain_q10,
+			0x400U, &target_q8);
+		if (ret)
+			return ret;
+	}
+	t41_safe_ae_effective_target_q8 = target_q8;
+	flicker_line_count = 0;
+	if (flicker_frequency) {
+		if (flicker_frequency != 50U &&
+		    flicker_frequency != 60U)
+			return -EINVAL;
+		/*
+		 * The OS04D10 profile clocks exactly 44,225 lines/second:
+		 * total_height 1769 * 25 fps.  Generate each rounded multiple
+		 * independently so fractional line periods do not accumulate.
+		 */
+		ret = tx_isp_flicker_nodes_build(
+			44225U, 2U * flicker_frequency,
+			max_integration,
+			flicker_lines, ARRAY_SIZE(flicker_lines),
+			&flicker_line_count);
+		if (ret)
+			return ret;
+	}
 
-	/* Keep a stock-sized dead band around the measured target. */
-	if (mean_q8 >= t41_ae_target_q8 - t41_ae_target_q8 / 24 &&
-	    mean_q8 <= t41_ae_target_q8 + t41_ae_target_q8 / 24)
+	/*
+	 * Keep a stock-sized dead band around the measured target.  A newly
+	 * requested flicker floor must still take effect while luma is already
+	 * inside that band.
+	 */
+	if ((!flicker_floor ||
+	     control->integration >= flicker_floor) &&
+	    control->integration <= max_integration &&
+	    mean_q8 >= target_q8 - target_q8 / 24 &&
+	    mean_q8 <= target_q8 + target_q8 / 24)
 		return 0;
 
 	old_integration = control->integration;
 	old_again = control->again;
 	current_total = old_integration * old_again;
-	scaled = (u64)current_total * t41_ae_target_q8;
+	scaled = (u64)current_total * target_q8;
 	desired_total = (uint32_t)div64_u64(scaled + mean_q8 / 2,
 						  mean_q8);
 	/* Bound each update to 25 percent.  Stock changes every frame, whereas
@@ -55736,23 +55916,17 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		desired_total = current_total - current_total / 5;
 	desired_total = clamp(desired_total,
 			      control->min_integration * 0x10U,
-			      control->max_integration * 0xf8U);
+			      max_integration * 0xf8U);
 
-	ideal_lines = DIV_ROUND_CLOSEST(desired_total, 0x10U);
-	if (ideal_lines < flicker_lines[0]) {
-		integration = clamp(ideal_lines, control->min_integration,
-				    control->max_integration);
-	} else {
-		integration = flicker_lines[0];
-		for (i = 1; i < ARRAY_SIZE(flicker_lines); ++i) {
-			if (flicker_lines[i] > ideal_lines ||
-			    flicker_lines[i] > control->max_integration)
-				break;
-			integration = flicker_lines[i];
-		}
-	}
-	again = DIV_ROUND_CLOSEST(desired_total, integration);
-	again = clamp(again, 0x10U, 0xf8U);
+	ret = tx_isp_exposure_plan_build(
+		desired_total, control->min_integration,
+		max_integration, 0x10U, 0xf8U,
+		flicker_lines, flicker_line_count,
+		flicker_floor, &exposure);
+	if (ret)
+		return ret;
+	integration = exposure.integration;
+	again = exposure.again;
 	if (integration == control->integration && again == control->again)
 		return 0;
 
@@ -55777,8 +55951,8 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: safe AE hist=%u.%02u target=%u.%02u samples=%llu exposure=%u/0x%x -> %u/0x%x ret=%d\n",
 		       mean_q8 >> 8, ((mean_q8 & 0xff) * 100) >> 8,
-		       t41_ae_target_q8 >> 8,
-		       ((t41_ae_target_q8 & 0xff) * 100) >> 8,
+		       target_q8 >> 8,
+		       ((target_q8 & 0xff) * 100) >> 8,
 		       (unsigned long long)samples,
 		       old_integration, old_again,
 		       integration, again, ret);
@@ -99277,29 +99451,32 @@ tisp_dmsc_param_array_set0x104:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042700 origin=fragment_seed original=tisp_dmsc_sharpness_set */
 int32_t tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1)
 {
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
+    uint8_t *info;
+    uint32_t gain_q16;
+    int ret;
 
-    /* fragment 0: Arithmetic */
-    v1 = (uintptr_t *)&dmsc_info;
-    v0 = a0 << 2;
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
+    if (a0 >= ARRAY_SIZE(dmsc_info) || !dmsc_info[a0])
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)dmsc_info[a0];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
 
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 0);
-    t9 = (uint32_t *)&tisp_dmsc_all_reg_refresh;
-    t9 = t9;
-    *(uint32_t *)((char *)v0 + 16) = a1;
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 42720:	03200408 	jr.hb	t9 */
-
-    /* fragment 3: MemoryAccess */
-    a1 = *(uint32_t *)((char *)v0 + 8);
-
-    return 0;
+    /*
+     * The stock function is a tail call: store the requested strength at
+     * dmsc_info+0x10, then rebuild the DMSC bank at its last interpolation
+     * position.  The recovered fragment retained the store but lost the
+     * jr.hb target, leaving the public sharpness control disconnected.
+     */
+    *(uint32_t *)(void *)(info + 16) = a1 & 0xffU;
+    gain_q16 = *(uint32_t *)(void *)(info + 8);
+    ret = tisp_dmsc_all_reg_refresh(a0, gain_q16);
+    /*
+     * The recovered refresh still has holes in its day workspace.  Reapply
+     * the measured low-gain oracle so a Raptor sharpness write cannot zero
+     * the eight detail-table words or replace the daylight thresholds.
+     */
+    t41_apply_stock_dmsc_gain_profile(gain_q16);
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042730 origin=fragment_seed original=tisp_gamma_pm_get_regsize */
@@ -140151,24 +140328,12 @@ label_62e98:
     return 0;
 }
 
-/*
- * Exact stock channel-0 unity filter observed in msca_info+0x008 and +0x04a.
- * It is the result of tisp_sin()/tisp_msca_normalized(8, 0x20, ...), and is
- * independently consistent with the working T40 driver's explicit scaler
- * coefficient/shadow commit path.  Keep this narrowly gated to a 1:1 main
- * channel until the general fixed-point curve generator is recovered.
- */
-static const uint16_t t41_stock_msca_unity_coeff[33] = {
-	0x0800, 0x07c0, 0x0709, 0x05ee, 0x049a, 0x0333, 0x01e3, 0x00cb,
-	0x0000, 0xff85, 0xff52, 0xff57, 0xff7d, 0xffb0, 0xffdc, 0xfff7,
-	0x0000, 0xfff9, 0xffe9, 0xffdb, 0xffd1, 0xffd1, 0xffdc, 0xffed,
-	0x0000, 0x0010, 0x0019, 0x001c, 0x0018, 0x0010, 0x0008, 0x0003,
-	0x0000,
-};
-
-static int t41_msca_commit_stock_unity_curve(void *workspace)
+static int t41_msca_commit_stock_curve(void *workspace,
+				       u32 target_width, u32 source_width,
+				       u32 target_height, u32 source_height)
 {
 	static const uint32_t curve_base[2] = { 0x0f0740U, 0x0f0790U };
+	s16 curves[2][TX_ISP_T41_SCALER_COEFFICIENTS];
 	unsigned int curve;
 	unsigned int i;
 	int ret;
@@ -140179,26 +140344,36 @@ static int t41_msca_commit_stock_unity_curve(void *workspace)
 		return -EINVAL;
 	if (system_reg_read(0x0f8100U) & 2U) {
 		printk(KERN_WARNING
-		       "tx_isp_t41_recovered: MSCA unity shadow DMA busy\n");
+		       "tx_isp_t41_recovered: MSCA curve shadow DMA busy\n");
 		return -EBUSY;
 	}
 
+	ret = tx_isp_t41_scaler_curve_generate(
+		target_height, source_height, curves[0],
+		TX_ISP_T41_SCALER_COEFFICIENTS);
+	if (ret)
+		return ret;
+	ret = tx_isp_t41_scaler_curve_generate(
+		target_width, source_width, curves[1],
+		TX_ISP_T41_SCALER_COEFFICIENTS);
+	if (ret)
+		return ret;
+
 	/* Preserve the same software-state image exposed by the stock module. */
-	memcpy((uint8_t *)workspace + 0x008,
-	       t41_stock_msca_unity_coeff,
-	       sizeof(t41_stock_msca_unity_coeff));
-	memcpy((uint8_t *)workspace + 0x04a,
-	       t41_stock_msca_unity_coeff,
-	       sizeof(t41_stock_msca_unity_coeff));
+	memcpy((uint8_t *)workspace + 0x008, curves[0], sizeof(curves[0]));
+	memcpy((uint8_t *)workspace + 0x04a, curves[1], sizeof(curves[1]));
 
 	ret = system_reg_write(0x0f8000U, 0x00000101U);
 	for (curve = 0; !ret && curve < 2; ++curve) {
-		for (i = 0; !ret && i < 33; i += 2) {
-			uint32_t packed = t41_stock_msca_unity_coeff[i] & 0x1fffU;
+		for (i = 0;
+		     !ret && i < TX_ISP_T41_SCALER_COEFFICIENTS;
+		     i += 2) {
+			uint32_t packed = (u16)curves[curve][i] & 0x1fffU;
 
-			if (i + 1 < 33)
-				packed |= (uint32_t)(t41_stock_msca_unity_coeff[i + 1] &
-						     0x1fffU) << 16;
+			if (i + 1 < TX_ISP_T41_SCALER_COEFFICIENTS)
+				packed |=
+					((u32)(u16)curves[curve][i + 1] &
+					 0x1fffU) << 16;
 			ret = system_reg_write(0x0f8004U, packed);
 			if (!ret)
 				ret = system_reg_write(0x0f8004U,
@@ -140216,8 +140391,8 @@ static int t41_msca_commit_stock_unity_curve(void *workspace)
 		ret = system_reg_write(0x0f8100U, 0x00000211U);
 
 	printk(KERN_WARNING
-	       "tx_isp_t41_recovered: MSCA exact-stock unity shadow curve ret=%d\n",
-	       ret);
+	       "tx_isp_t41_recovered: MSCA exact-stock curves %ux%u->%ux%u ret=%d\n",
+	       source_width, source_height, target_width, target_height, ret);
 	return ret;
 }
 
@@ -140295,9 +140470,10 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
     *(uint32_t *)(channel_params + 0x18) = horizontal_ratio;
     *(uint32_t *)(channel_params + 0x1c) = vertical_ratio;
 
-	if (a1 == 0 && horizontal_ratio == 0x4000U &&
-	    vertical_ratio == 0x4000U) {
-		int curve_ret = t41_msca_commit_stock_unity_curve(workspace);
+	if (a1 == 0) {
+		int curve_ret = t41_msca_commit_stock_curve(
+			workspace, channel_width, source_width,
+			channel_height, source_height);
 
 		if (curve_ret)
 			return curve_ret;
@@ -152125,26 +152301,22 @@ int32_t tisp_set_brightness(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c528 origin=fragment_seed original=tisp_set_sharpness */
 int32_t tisp_set_sharpness(uint32_t a0, uint32_t a1)
 {
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *attrs;
 
-    /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&tisp_tattr;
+    if (a0 >= ARRAY_SIZE(dmsc_info))
+        return -EINVAL;
+    attrs = (uint8_t *)(uintptr_t)
+        *(uint32_t *)(void *)&tisp_tattr;
+    if (t41_kernel_data_ptr(attrs))
+        attrs[a0 + 6U] = a1 & 0xffU;
 
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&tisp_tattr));
-    t9 = (uint32_t *)&tisp_ysp_sharpness_set;
-    t9 = t9;
-    v0 = v0 + a0;
-
-    /* fragment 2: Unknown */
-    /* unmatched fragment 2 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 6c53c:	03200408 	jr.hb	t9 */
-
-    /* fragment 3: MemoryAccess */
-    *(uint8_t *)((char *)v0 + 6) = a1;
-
-    return 0;
+    /*
+     * T23 and T31 both implement the user-visible sharpness control in the
+     * demosaic detail curves.  T41's recovered YSP tail call writes a damaged
+     * workspace and can assert the YSP bypass without updating its bank.
+     * The exact DMSC setter above owns a complete, live writer instead.
+     */
+    return tisp_dmsc_sharpness_set(a0, a1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c544 origin=fragment_seed original=tisp_set_saturation */
@@ -152889,50 +153061,52 @@ int32_t tisp_g_wdr_en(uintptr_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006cd30 origin=fragment_seed original=tisp_g_antiflick */
 int32_t tisp_g_antiflick(uint32_t a0, uintptr_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    if (!a1)
+        return -EINVAL;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_api_get_antiflick)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    tisp_ae_api_get_antiflick(a0, a1);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006cd58 origin=fragment_seed original=tisp_s_antiflick */
 int32_t tisp_s_antiflick(uint32_t a0, uintptr_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+    uint32_t mode;
+    uint8_t frequency;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!a1)
+        return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_ae_api_set_antiflick)(a0); /* jalr target resolved by relocation */
+    mode = *(uint32_t *)(uintptr_t)a1;
+    frequency = *(uint8_t *)(uintptr_t)(a1 + 4);
+    if (mode >= 3U ||
+        (mode != 0U && frequency != 50U && frequency != 60U))
+        return -EINVAL;
 
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
+    /*
+     * Gen3 NORMAL mode promises that exposure will not fall below the
+     * first mains-synchronous integration.  The recovered wrapper had lost
+     * its second argument, so Raptor's 60 Hz request never reached AE.
+     * AUTO mode deliberately retains short integration, matching the SDK
+     * ABI's documented distinction.
+     */
+    if (t41_safe_ae_controller > 0) {
+        if (mode == 0U) {
+            t41_ae_flicker_frequency_hz = 0;
+            t41_ae_flicker_floor_lines = 0;
+        } else {
+            t41_ae_flicker_frequency_hz = frequency;
+            t41_ae_flicker_floor_lines =
+                mode == 1U ?
+                DIV_ROUND_CLOSEST(44225U, 2U * frequency) : 0;
+        }
+    }
+    if (mode == 1U && t41_ae_flicker_profile < 0)
+        t41_apply_flicker_profile(true);
+    else
+        t41_apply_flicker_profile(false);
 
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    tisp_ae_api_set_antiflick(a0, a1);
     return 0;
 }
 

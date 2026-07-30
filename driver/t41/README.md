@@ -30,7 +30,7 @@ The source remains named `tx_isp_t41_recovered.c`, but Kbuild emits the
 canonical module name expected by current T41 sensor modules
 (`depends: tx-isp-t41`).
 
-The module is linked from six logical objects:
+The module is linked from eight logical objects:
 
 - `tx_isp_t41_recovered.c` — recovered core, pipeline, hardware, and tuning
 - `tx_isp_t41_daynight.c` — T41 adapter for the shared day/night state machine
@@ -40,6 +40,10 @@ The module is linked from six logical objects:
   implementation
 - `tx_isp_t41_frame_layout.c` — shared checked NV12 geometry and vendor
   aggregate-line semantics used by set-format and QBUF
+- `tx_isp_t41_exposure.c` — T41 sensor/color adapter around the shared checked
+  anti-flicker exposure planner
+- `tx_isp_t41_scaler.c` — exact T41 coefficient-table adapter around the
+  shared checked polyphase scaler generator
 
 ## Baseline risk
 
@@ -55,14 +59,15 @@ enable/disable helpers as shorter rather than stubs, and the request/free paths
 as similar in instruction count.
 
 The T41 module now reuses the common day/night state machine,
-interpolation/fixed-point helpers, and the T23/T31/T41 typed sensor-registry
-implementation. Full sensor/Raptor smoke tests pass, both MSCA streams run,
-and ISP interrupts advance. The temporary static day AWB baseline is
-`R=0x380, B=0x880`; both shadow banks retain those values across forced
-day/night transitions. This replaces the earlier red/blue-heavy defaults that
-produced a magenta day image. The shared registry now reports one active
-OS04D10 with chip `0x530444`, address `0x3c`, native 2560x1440 geometry, and
-25 fps; both driver-add and sensor-bind report one successful lifecycle call.
+interpolation/fixed-point helpers, checked exposure and scaler arithmetic, and
+the T23/T31/T41 typed sensor-registry implementation. Full sensor/Raptor smoke
+tests pass, both MSCA streams run, and ISP interrupts advance. The validated
+day AWB baseline is `R=0x3d0, B=0x980`; both shadow banks retain those values
+across forced day/night transitions. The accompanying neutral-preserving CCM
+corrects the OS04D10 magenta error without collapsing blue chroma. The shared
+registry reports one active OS04D10 with chip `0x530444`, address `0x3c`,
+native 2560x1440 geometry, and 25 fps; both driver-add and sensor-bind report
+one successful lifecycle call.
 
 The July 30 shared-format validation preserved the 3,133,440-byte 1080p pool,
 full-rate output, and coherent geometry across two clean boots. It decoded
@@ -74,11 +79,16 @@ module SHA-256 is
 The same cycle validates the shared NV12 DMA binding plan in the recovered
 late-link queue path. It decoded 150 main frames in six seconds, 75 substream
 frames in three, and 103 main frames in the four-second final check without
-rejecting a live buffer or changing stream geometry. Subsequent human-subject
-testing found that the static day gains still render red as pink and that
-short exposure under 120 Hz recessed LEDs creates a five-frame moving shadow
-cycle at 25 fps. Those are active AWB/CCM and AE/anti-flicker tuning issues,
-not regressions in the shared frame-layout helper.
+rejecting a live buffer or changing stream geometry. Later live tuning fixed
+the pink-red error and 120 Hz recessed-light shadow cycle with the shared
+exposure planner plus the T41 GIB/CCM adapter. The scaler investigation then
+found that the recovered path programmed 2560x1440-to-1920x1080 ratios while
+leaving ratio-specific hidden filter RAM uninitialized. The shared fixed-point
+generator now reproduces the stock unity curve exactly and emits the missing
+0.75x Lanczos coefficients. A clean boot logged two successful exact-stock
+curve commits, held 1920x1080 at 25 fps, and restored visibly sharper detail
+without changing the accepted color profile. The validated module SHA-256 is
+`687a90404e6d204e2030c381df4ae1890dfefd1333244115f55ce0f448c35376`.
 
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
