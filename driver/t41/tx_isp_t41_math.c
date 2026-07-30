@@ -122,6 +122,31 @@ u64 fix_point_div_64(u32 point_pos, u64 numerator, u64 denominator)
 	return tx_isp_fixdiv_u64(point_pos, numerator, denominator);
 }
 
+s32 tisp_log2_int_to_fixed(u32 value, s32 precision, s32 output_shift)
+{
+	return (s32)tx_isp_log2_int_u32(value, (u32)precision,
+					 (u32)output_shift);
+}
+
+s32 tisp_log2_fixed_to_fixed(u32 value, u32 input_precision,
+			      u32 output_precision)
+{
+	return (s32)tx_isp_log2_fixed_u32(value, input_precision,
+					   output_precision);
+}
+
+s32 tisp_log2_int_to_fixed_64(u64 value, u32 precision, u32 output_shift)
+{
+	return (s32)tx_isp_log2_int_u64(value, precision, output_shift);
+}
+
+s32 tisp_log2_fixed_to_fixed_64(u64 value, u32 input_precision,
+				 u32 output_precision)
+{
+	return (s32)tx_isp_log2_fixed_u64(value, input_precision,
+					   output_precision);
+}
+
 s64 tisp_simple_intp(u32 index, u32 fraction, unsigned long table_address)
 {
 	const u32 *table = (const u32 *)table_address;

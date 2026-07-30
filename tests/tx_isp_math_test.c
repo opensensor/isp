@@ -452,6 +452,14 @@ static void test_fixed_point_log2(void)
 					   output_shift) ==
 		       reference_log2_int_u64(value64, precision,
 					      output_shift));
+		assert(tx_isp_log2_fixed_u32(value, precision,
+					     output_shift) ==
+		       reference_log2_int_u32(value, output_shift, 0) -
+			       (int)(precision << (output_shift & 31U)));
+		assert(tx_isp_log2_fixed_u64(value64, precision,
+					     output_shift) ==
+		       reference_log2_int_u64(value64, output_shift, 0) -
+			       (int)(precision << (output_shift & 31U)));
 	}
 }
 

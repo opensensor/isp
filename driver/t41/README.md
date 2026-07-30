@@ -156,6 +156,16 @@ substream frames in three, and 125 post-day frames in five; night/auto/day,
 module SHA-256 is
 `bc1a798d0dac2909657b87f11f65938aa1af849d0a12291bf58fcc3e1e010100`.
 
+The integer/fixed 32-bit and 64-bit log2 family now lives in the math adapter
+and delegates to the same normalized-square primitives already used by T23
+and T31. Randomized host coverage verifies both integer and fixed wrappers.
+Because these entry points are live in gain, color, and filter calculations,
+the device gate included image inspection: the accepted red/color and edge
+profile remained intact. The cycle decoded 150 main frames in six seconds, 75
+substream frames in three, and 125 post-day frames in five, with successful
+night/auto/day and zero ISP errors. The validated module SHA-256 is
+`c8c94049aaf125798f1496e3b00dcac70f08c63461c5533349b747220b00a6ba`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

@@ -45,8 +45,8 @@ The per-SoC wrappers preserve their existing ABI and endpoint policy:
   until an extra wrapper no longer changes its machine-code register allocation.
 - T41 uses the unsigned 8/16/32-bit interpolation variants with its ten-step
   endpoint and delegates its generic/32/64-bit fixed-point add/subtract,
-  signed rounding, full-width multiply/divide, and wrapped 32-bit divider
-  wrappers.
+  signed rounding, full-width multiply/divide, 32-/64-bit log2, and wrapped
+  32-bit divider wrappers.
 - T23 retains its recovered unsuffixed/64-bit multiply bodies. Moving those
   symbols into the adapter reproducibly made `rvd` exit during startup on two
   clean boots, while rebuilding the committed local boundary restored Raptor

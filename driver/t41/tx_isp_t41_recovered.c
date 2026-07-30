@@ -39905,6 +39905,7 @@ table_intp0x84:
     return 0;
 }
 
+#ifndef REGTRACE_KERNEL_TREE_BUILD
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018154 origin=fragment_seed original=tisp_log2_int_to_fixed */
 int32_t tisp_log2_int_to_fixed(uint32_t value, int32_t precision,
 			       int32_t shift)
@@ -40046,6 +40047,7 @@ int32_t tisp_log2_fixed_to_fixed_64(uint32_t value_low,
 					out_precision, 0) -
 		(in_precision << (out_precision & 0x1f));
 }
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018558 origin=fragment_seed original=tisp_max */
 int64_t tisp_max(uint32_t first_low, uint32_t first_high,
