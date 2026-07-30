@@ -45,6 +45,16 @@ Current smoke-test status:
   `dmesg`, `logread`, and `logcat` contained no new driver fault. The tested
   open module remains active with SHA-256
   `522d1324c640ab16ee1f5653407d275e06914cf4c1d255fa2b3cf4edd750a7f1`.
+- T23's active `fix_point_mult2_32` entry point now lives in the math adapter
+  and uses the common generation-compatible split multiplier. Unlike the
+  T31/T41 full-range helper, this primitive deliberately preserves T23's
+  32-bit fractional-product wrap before shifting. The device cycle decoded
+  149 frames in six seconds, recorded 148 in six, and decoded 123 in the
+  five-second post-transition check. Night/auto/day, image appearance, and
+  ISP/VIC interrupts remained healthy; no ISP, Raptor, or kernel fault
+  appeared in `dmesg`, `logread`, or `logcat`. The tested open module remains
+  active with SHA-256
+  `31418bfe7de79751d18e64ff46309fc0674cb7e6e9f39c7cca2055ea8b2b9f7e`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

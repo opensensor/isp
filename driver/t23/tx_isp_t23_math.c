@@ -12,6 +12,13 @@
 
 #define TX_ISP_T23_INTERPOLATION_LAST_INDEX	8U
 
+int fix_point_mult2_32(int point_pos, int first, int second)
+{
+	return (int)tx_isp_fixmul_wrapped_u32_unchecked((u32)point_pos,
+							(u32)first,
+							(u32)second);
+}
+
 int fix_point_div_32(int point_pos, int numerator, int denominator)
 {
 	return (int)tx_isp_fixdiv_oem_u32((u32)point_pos, (u32)numerator,

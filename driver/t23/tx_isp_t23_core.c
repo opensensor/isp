@@ -37873,34 +37873,6 @@ int32_t fix_point_sub_32(int32_t arg1, int32_t arg2, int32_t arg3)
 	return arg2 - arg3;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013a64 origin=model_output original=fix_point_mult2_32 */
-int32_t fix_point_mult2_32(int32_t arg1, int32_t arg2, int32_t arg3) {
-    uint32_t shift = (uint32_t)arg1 & 0x1Fu;
-    uint32_t v0 = (uint32_t)(-(int)arg1);
-    uint32_t v1 = 0xFFFFFFFFu >> (v0 & 0x1Fu);
-    uint32_t a3 = (uint32_t)arg2 >> shift;
-    uint32_t t0 = (uint32_t)arg3 >> shift;
-    int32_t a1 = (int32_t)(v1 & (uint32_t)arg2);
-    int32_t a2 = (int32_t)(v1 & (uint32_t)arg3);
-    
-    /* Compute a1*t0 + a3*a2 as signed 64-bit */
-    long long cross = (long long)a1 * (long long)t0 + (long long)a3 * (long long)a2;
-    int32_t lo = (int32_t)cross;
-    
-    /* a3 * t0 as unsigned 32-bit, then shift left */
-    uint32_t high_prod = (uint32_t)a3 * (uint32_t)t0;
-    high_prod = high_prod << shift;
-    
-    /* lo + (high_prod) */
-    int32_t result = lo + (int32_t)high_prod;
-    
-    /* a1 * a2 as signed, then unsigned shift right */
-    int32_t low_prod = a1 * a2;
-    low_prod = (int32_t)((uint32_t)low_prod >> shift);
-    
-    return result + low_prod;
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013aa8 origin=model_output original=fix_point_mult3_32 */
 int32_t fix_point_mult3_32(int32_t arg1, int32_t arg2, int32_t arg3) {
     int32_t ret = fix_point_mult2_32(arg1, arg2, arg3);

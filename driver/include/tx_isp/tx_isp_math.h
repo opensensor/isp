@@ -376,6 +376,48 @@ tx_isp_fixmul3_u32(unsigned int point_pos, unsigned int first,
 }
 
 /*
+ * T23's generation-local split multiply keeps every partial product in 32
+ * bits, including the fractional product before its right shift. Preserve
+ * that wraparound separately from the full-range T31/T41 primitive above.
+ * The vendor routine is only defined for the tuning engine's Q1 through Q31.
+ */
+static inline unsigned int
+tx_isp_fixmul_wrapped_u32_unchecked(unsigned int point_pos,
+				    unsigned int first,
+				    unsigned int second)
+{
+	unsigned int mask;
+	unsigned int first_integer;
+	unsigned int first_fraction;
+	unsigned int second_integer;
+	unsigned int second_fraction;
+	unsigned int result;
+
+	mask = 0xffffffffU >> ((0U - point_pos) & 31U);
+	first_integer = first >> point_pos;
+	first_fraction = first & mask;
+	second_integer = second >> point_pos;
+	second_fraction = second & mask;
+
+	result = first_fraction * second_integer;
+	result += first_integer * second_fraction;
+	result += first_integer * second_integer << point_pos;
+	result += (first_fraction * second_fraction) >> point_pos;
+
+	return result;
+}
+
+static inline unsigned int
+tx_isp_fixmul_wrapped_u32(unsigned int point_pos, unsigned int first,
+			  unsigned int second)
+{
+	if (!point_pos || point_pos > 31U)
+		return 0;
+
+	return tx_isp_fixmul_wrapped_u32_unchecked(point_pos, first, second);
+}
+
+/*
  * Native-width counterpart used by the AE tuning paths. Keep the split form
  * used by the vendor code so MIPS32 builds do not require 128-bit arithmetic.
  * Intermediate products intentionally retain unsigned 64-bit wraparound.

@@ -208,6 +208,49 @@ static void test_fixed_point_multiply(void)
 	}
 }
 
+static unsigned int
+reference_t23_fixmul_u32(unsigned int point_pos, unsigned int first,
+			 unsigned int second)
+{
+	unsigned int mask = 0xffffffffU >> ((0U - point_pos) & 31U);
+	unsigned int first_integer = first >> point_pos;
+	unsigned int second_integer = second >> point_pos;
+	unsigned int first_fraction = first & mask;
+	unsigned int second_fraction = second & mask;
+	unsigned int result =
+		first_fraction * second_integer +
+		first_integer * second_fraction +
+		(first_integer * second_integer << point_pos);
+
+	return result + (first_fraction * second_fraction >> point_pos);
+}
+
+static void test_t23_fixed_point_multiply_equivalence(void)
+{
+	unsigned int seed = 0x23f17a2bU;
+	unsigned int iteration;
+	unsigned int point_pos;
+
+	for (iteration = 0; iteration < 10000; iteration++) {
+		unsigned int first;
+		unsigned int second;
+
+		seed = seed * 1664525U + 1013904223U;
+		first = seed;
+		seed = seed * 1664525U + 1013904223U;
+		second = seed;
+
+		for (point_pos = 1; point_pos < 32; point_pos++)
+			assert(tx_isp_fixmul_wrapped_u32(point_pos, first,
+							 second) ==
+			       reference_t23_fixmul_u32(point_pos, first,
+							second));
+	}
+
+	assert(tx_isp_fixmul_wrapped_u32(0, 1, 1) == 0);
+	assert(tx_isp_fixmul_wrapped_u32(32, 1, 1) == 0);
+}
+
 static void test_fixed_point_multiply_64(void)
 {
 	unsigned int seed = 0x64f17a2bU;
@@ -394,6 +437,7 @@ int main(void)
 	test_signed_interpolation();
 	test_typed_interpolation();
 	test_fixed_point_multiply();
+	test_t23_fixed_point_multiply_equivalence();
 	test_fixed_point_multiply_64();
 	test_fixed_point_divide();
 	test_fixed_point_log2();
