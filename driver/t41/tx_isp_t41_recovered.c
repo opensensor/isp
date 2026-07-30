@@ -10,9 +10,9 @@
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_exposure.h"
+#include "../include/tx_isp/tx_isp_math.h"
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
-
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -40071,18 +40071,18 @@ int64_t tisp_min(uint32_t first_low, uint32_t first_high,
 	return first < second ? first : second;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000185b8 origin=model_output original=tisp_ratio */
-uint32_t tisp_ratio(int32_t arg1, int32_t arg2, int32_t arg3) {
-    if (arg1 == 0x80)
-        return arg2;
-
-    int32_t v0 = (int8_t)(arg1 & 0xFF);
-
-    if (v0 < 0)
-        return (((arg1 - 128) * (arg3 - arg2)) >> 7) + arg2;
-
-    return ((arg1 * arg2) >> 7);
+/* Layout-sensitive T41 ABI entry for the shared Q7 ratio primitive. */
+uint32_t tisp_ratio(int32_t ratio, int32_t strength, int32_t maximum)
+{
+	TX_ISP_RATIO_Q7_RETURN(ratio, strength, maximum);
 }
+/*
+ * Keep this source span equal to the recovered body.
+ * __LINE__ is embedded by downstream diagnostics.
+ * Its numeric value is part of the current text image.
+ * Do not collapse this comment until those call sites
+ * stop carrying recovery-time line identifiers.
+ */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018600 origin=fragment_seed original=tisp_code_tuning_release */
 int32_t tisp_code_tuning_release(void)

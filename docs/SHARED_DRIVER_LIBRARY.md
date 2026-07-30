@@ -105,7 +105,12 @@ symbols and both native divide symbols through full-range primitives. The
 64-bit divider uses bounded shift/subtract arithmetic so kernel builds do not
 acquire compiler-runtime division dependencies. T41's integer/fixed 32-/64-bit
 log2 entry points use the shared normalized-square implementation, and its
-exp2 entry point uses the shared bounded 33-node Q30 interpolation. T31 retains
+exp2 entry point uses the shared bounded 33-node Q30 interpolation. Its live
+DMSC/SDNS strength fanout also uses the shared three-segment Q7 ratio blend,
+with the recovered low-byte branch ABI made explicit in the common primitive.
+The T41 entry remains in its original text slot because moving it shifted
+still-recovered indirect call targets; its macro form produces the exact
+accepted load image while sharing one tested algorithm. T31 retains
 size-neutral local copies in its recovered AE object, and T23 retains its
 recovered multiply bodies after an adapter extraction reproducibly terminated
 `rvd` during startup.
@@ -206,6 +211,8 @@ selects ratio 160 only in the sensor's `0x8xx` high-gain stage and returns to
 128 below the hysteresis band. With that profile, mean flat-wall decoded luma
 change was `0.01512`, compared with stock `0.01478`. The policy remains
 T31/SC2336-local and can be disabled with `sc2336_mdns_auto=0`.
+Later wall observations were made while storm light was falling and are not
+treated as same-scene regression evidence.
 
 The latest T31 cycle also corrected three proprietary tuning-ABI hazards:
 

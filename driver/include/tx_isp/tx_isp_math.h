@@ -639,4 +639,30 @@ tx_isp_fixdiv_oem_u32(unsigned int point_pos, unsigned int numerator,
 	return (quotient << point_pos) | fractional;
 }
 
+/*
+ * Three-segment Q7 strength blend used by the newer tuning engines.
+ *
+ * ratio 0..128 fades from zero to `strength`; ratio 128..255 fades from
+ * `strength` toward `maximum`.  The recovered ABI passes the ratio in a full
+ * word, but the OEM branch decision is made from its low byte.  Keep that
+ * narrowing explicit here so adapters cannot accidentally depend on host
+ * `char` signedness.
+ */
+#define TX_ISP_RATIO_Q7_RETURN(ratio, strength, maximum)		\
+	do {								\
+		if ((ratio) == 0x80)					\
+			return (strength);				\
+		if ((signed char)((ratio) & 0xff) < 0)			\
+			return ((((ratio) - 0x80) *			\
+				 ((maximum) - (strength))) >> 7) +	\
+				(strength);				\
+		return ((ratio) * (strength)) >> 7;			\
+	} while (0)
+
+static inline int
+tx_isp_ratio_q7_s32(int ratio, int strength, int maximum)
+{
+	TX_ISP_RATIO_Q7_RETURN(ratio, strength, maximum);
+}
+
 #endif /* TX_ISP_MATH_H */

@@ -509,6 +509,43 @@ static void test_fixed_point_exp2(void)
 	}
 }
 
+static void test_ratio_q7(void)
+{
+	unsigned int ratio;
+	unsigned int strength;
+	unsigned int maximum;
+
+	assert(tx_isp_ratio_q7_s32(0, 80, 200) == 0);
+	assert(tx_isp_ratio_q7_s32(64, 80, 200) == 40);
+	assert(tx_isp_ratio_q7_s32(128, 80, 200) == 80);
+	assert(tx_isp_ratio_q7_s32(192, 80, 200) == 140);
+	assert(tx_isp_ratio_q7_s32(255, 80, 200) == 199);
+	assert(tx_isp_ratio_q7_s32(0x180, 80, 200) == 320);
+	assert(tx_isp_ratio_q7_s32(192, 200, 16) == 108);
+
+	for (strength = 0; strength <= 255; strength += 5) {
+		for (maximum = 0; maximum <= 255; maximum += 7) {
+			for (ratio = 0; ratio <= 255; ratio++) {
+				int expected;
+
+				if (ratio == 128)
+					expected = (int)strength;
+				else if (ratio < 128)
+					expected =
+						(int)(ratio * strength) >> 7;
+				else
+					expected = (int)strength +
+						(((int)(ratio - 128) *
+						  ((int)maximum -
+						   (int)strength)) >> 7);
+				assert(tx_isp_ratio_q7_s32(
+					       (int)ratio, (int)strength,
+					       (int)maximum) == expected);
+			}
+		}
+	}
+}
+
 static void test_reference_equivalence(void)
 {
 	unsigned int unsigned_values[11];
@@ -549,6 +586,7 @@ int main(void)
 	test_fixed_point_divide();
 	test_fixed_point_log2();
 	test_fixed_point_exp2();
+	test_ratio_q7();
 	test_reference_equivalence();
 	puts("tx_isp_math_test: ok");
 	return 0;

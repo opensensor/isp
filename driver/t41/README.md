@@ -175,6 +175,19 @@ night/auto/day, `rvd`, image color/detail, and zero-error ISP interrupts all
 held. The validated module SHA-256 is
 `b55cc521890fe4f37d4b19f67d59113784ed176e40fd7ab11a4e2e95a6044741`.
 
+The live DMSC/SDNS `tisp_ratio` strength blend now comes from the common
+three-segment Q7 primitive. All 256 ratio values are host-tested across both
+increasing and decreasing output ranges. T41 must keep this entry in its
+original recovered text slot: moving the body shifted unresolved indirect
+targets and made Raptor stop during `IMP_ISP_AddSensor`. The shared return-body
+form preserves the complete accepted `.ko` byte-for-byte. With
+`tx_isp_bringup_level=3` retained in the one-shot argument file, the device
+again passed night/auto/day, decoded 151 main frames in six seconds and 75
+substream frames in three, kept both ISP IRQs advancing with `error=0`, and
+showed no driver fault in `dmesg`, `logread`, or `logcat`. The validated hash
+therefore remains
+`b55cc521890fe4f37d4b19f67d59113784ed176e40fd7ab11a4e2e95a6044741`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the
