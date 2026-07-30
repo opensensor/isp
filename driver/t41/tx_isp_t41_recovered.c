@@ -7,6 +7,8 @@
 
 #include "../include/tx_isp/tx_isp_sinfo.h"
 #include "../include/tx_isp/tx_isp_daynight.h"
+#include "../include/tx_isp/tx_isp_tuning_abi.h"
+#include "../include/tx_isp/tx_isp_frame_layout.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
@@ -20154,15 +20156,22 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
      * safe while we restore individual inner controls from the stock image.
      */
     if (a1 == 0xc0105435U) {
+        static const struct tx_isp_tuning_cmd_desc startup_routes[] = {
+            { TX_ISP_TUNING_CMD_T41_RUNNING_MODE, 4,
+              TX_ISP_TUNING_DIR_SET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_SENSOR_FPS, 4,
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_INLINE },
+        };
         static unsigned int trace_count;
-        uint32_t request[4];
+        struct tx_isp_tuning_t41_control request;
+        const struct tx_isp_tuning_cmd_desc *route;
         uint32_t mode;
         uint32_t previous_mode;
         char *core;
         char *tuning;
         int ret;
 
-        if (private_copy_from_user(request,
+        if (private_copy_from_user(&request,
                                    (void __user *)(uintptr_t)a2,
                                    sizeof(request)))
             return -EFAULT;
@@ -20170,7 +20179,13 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: isp-m0 control value=0x%x "
                    "get=%u id=0x%x aux=0x%x\n",
-                   request[0], request[1], request[2], request[3]);
+                   request.channel, request.is_get, request.id,
+                   request.value_or_ptr);
+
+        route = tx_isp_tuning_cmd_find(
+            startup_routes, ARRAY_SIZE(startup_routes), request.id,
+            request.is_get ? TX_ISP_TUNING_DIR_GET :
+                             TX_ISP_TUNING_DIR_SET);
 
         /*
          * Restore the first stateful control required by Raptor.  This T41
@@ -20181,11 +20196,12 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
          * The generic recovered control dispatcher above lost this case and
          * acknowledged the ioctl without changing either field.
          */
-        if (!request[1] && request[2] == 0x08000071U) {
-            if (request[0] != 0)
+        if (route && route->id == TX_ISP_TUNING_CMD_T41_RUNNING_MODE) {
+            if (request.channel != 0)
                 return -EINVAL;
             if (private_copy_from_user(&mode,
-                    (void __user *)(uintptr_t)request[3], sizeof(mode)))
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    sizeof(mode)))
                 return -EFAULT;
             if (mode > 1)
                 return -EINVAL;
@@ -20200,7 +20216,7 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             ret = tx_isp_daynight_stage(
                 (uint32_t *)(void *)(tuning + 24),
                 (uint32_t *)(void *)(core + 468 +
-                    request[0] * sizeof(uint32_t)),
+                    request.channel * sizeof(uint32_t)),
                 mode, &previous_mode);
             if (ret <= 0)
                 return ret;
@@ -20208,12 +20224,12 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: stage running-mode %u->%u "
                    "channel=%u\n",
-                   previous_mode, mode, request[0]);
-            if (request[0] < 2) {
+                   previous_mode, mode, request.channel);
+            if (request.channel < 2) {
                 *(uint32_t *)(void *)(tisp_par_info_storage +
-                    request[0] * 160 + 124) = mode;
+                    request.channel * 160 + 124) = mode;
                 *(uint32_t *)(void *)(day_night_storage +
-                    request[0] * sizeof(uint32_t)) = mode;
+                    request.channel * sizeof(uint32_t)) = mode;
             }
             return 0;
         }
@@ -20225,13 +20241,13 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
          * caller's placeholder (observed as 6) here makes its direct-mode
          * setup wait forever even though the ioctl itself succeeds.
          */
-        if (request[1] && request[2] == 0x08000070U) {
-            ret = tisp_ae_get_fps(request[0],
-                                  (uintptr_t)&request[3]);
+        if (route && route->id == TX_ISP_TUNING_CMD_T41_SENSOR_FPS) {
+            ret = tisp_ae_get_fps(request.channel,
+                                  (uintptr_t)&request.value_or_ptr);
             if (ret)
                 return ret;
             if (private_copy_to_user((void __user *)(uintptr_t)a2,
-                                     request, sizeof(request)))
+                                     &request, sizeof(request)))
                 return -EFAULT;
         }
         return 0;
@@ -26158,27 +26174,23 @@ int frame_channel_vidioc_set_fmt(void *arg1, struct v4l2_format *arg2)
      * Populate the cached queue format here so the initial QBUF length is
      * still checked against the exact hardware layout. */
     if (!format.words[5] || !format.words[6]) {
+        struct tx_isp_nv12_layout layout;
         uint32_t width_align = *(uint32_t *)(void *)isp_nv12_wbit;
         uint32_t height_align = *(uint32_t *)(void *)isp_nv12_hbit;
-        uint32_t aligned_width;
-        uint32_t aligned_height;
-        uint64_t sizeimage;
 
         if (!width_align || (width_align & (width_align - 1)))
             width_align = 32;
         if (!height_align || (height_align & (height_align - 1)))
             height_align = 16;
-        aligned_width = (format.words[1] + width_align - 1) &
-                        ~(width_align - 1);
-        aligned_height = (format.words[2] + height_align - 1) &
-                         ~(height_align - 1);
-        sizeimage = (uint64_t)aligned_width * aligned_height * 3U / 2U;
-        if (!aligned_width || !aligned_height || sizeimage > 0xffffffffULL) {
+        result = tx_isp_nv12_layout_build(format.words[1], format.words[2],
+                                          width_align, height_align,
+                                          &layout);
+        if (result) {
             result = -EINVAL;
             goto epilogue;
         }
-        format.words[5] = aligned_width;
-        format.words[6] = (uint32_t)sizeimage;
+        format.words[5] = layout.stride;
+        format.words[6] = layout.sizeimage;
         printk(KERN_WARNING
                "tx_isp_t41_recovered: set-fmt NV12 fallback stride=%u size=%u align=%u/%u\n",
                format.words[5], format.words[6], width_align, height_align);
@@ -157472,17 +157484,17 @@ int32_t ispcore_frame_channel_streamoff(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006f8d0 origin=fragment_seed original=ispcore_frame_channel_qbuf */
 int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
 {
+    struct tx_isp_nv12_layout layout;
     char *pad = (char *)a0;
     char *payload = (char *)a1;
     char *channel;
     unsigned long flags = 0;
     uint32_t width_align;
     uint32_t height_align;
-    uint32_t width;
-    uint32_t height;
     uint32_t y_dma;
     uint32_t uv_dma;
     uint32_t channel_index;
+    int ret;
 
     if (!t41_kernel_data_ptr(pad))
         return -EINVAL;
@@ -157509,15 +157521,22 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
         width_align = 16;
     if (!height_align || (height_align & (height_align - 1)))
         height_align = 16;
-    width = (*(uint32_t *)(channel + 4) + width_align - 1) &
-            ~(width_align - 1);
-    height = (*(uint32_t *)(channel + 8) + height_align - 1) &
-             ~(height_align - 1);
+    ret = tx_isp_nv12_layout_build(*(uint32_t *)(channel + 4),
+                                   *(uint32_t *)(channel + 8),
+                                   width_align, height_align, &layout);
+    if (ret) {
+        private_spin_unlock_irqrestore(channel + 0xa8, flags);
+        return ret;
+    }
 
     payload[-0x1c] = 5;
     ++*(uint32_t *)(payload - 0x18);
     y_dma = *(uint32_t *)(payload + 8);
-    uv_dma = y_dma + width * height;
+    if (y_dma > 0xffffffffU - layout.y_size) {
+        private_spin_unlock_irqrestore(channel + 0xa8, flags);
+        return -EOVERFLOW;
+    }
+    uv_dma = y_dma + layout.y_size;
     *(uint32_t *)(payload + 0x0c) = uv_dma;
     channel_index = *(uint32_t *)(channel + 0x78);
 
@@ -157533,7 +157552,8 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
     private_spin_unlock_irqrestore(channel + 0xa8, flags);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: core qbuf clean channel=%u dma=%#x/%#x aligned=%ux%u\n",
-           channel_index, y_dma, uv_dma, width, height);
+           channel_index, y_dma, uv_dma, layout.stride,
+           layout.aligned_height);
     return 0;
 }
 
@@ -159217,11 +159237,14 @@ int32_t ispcore_frame_channel_s_fmt_isra_2(uintptr_t a0, uintptr_t a1)
 {
     char *format = (char *)a1;
     const struct t41_isp_output_fmt *entry = NULL;
+    struct tx_isp_nv12_layout layout;
     uint32_t pixel_format;
     uint32_t width;
     uint32_t height;
     uint32_t bytesperline;
+    uint32_t sizeimage;
     unsigned int index;
+    int ret;
 
     if (!t41_kernel_data_ptr((void *)a0) ||
         !t41_kernel_data_ptr(format))
@@ -159242,11 +159265,18 @@ int32_t ispcore_frame_channel_s_fmt_isra_2(uintptr_t a0, uintptr_t a1)
 
     width = *(uint32_t *)(format + 0x04);
     height = *(uint32_t *)(format + 0x08);
-    bytesperline = (((width + 31) & ~31U) * entry->depth) >> 3;
+    if (pixel_format < 2) {
+        ret = tx_isp_nv12_layout_build(width, height, 32, 16, &layout);
+        if (ret)
+            return ret;
+        bytesperline = layout.aggregate_line_size;
+        sizeimage = layout.sizeimage;
+    } else {
+        bytesperline = (((width + 31) & ~31U) * entry->depth) >> 3;
+        sizeimage = bytesperline * height;
+    }
     *(uint32_t *)(format + 0x14) = bytesperline;
-    if (pixel_format < 2)
-        height = (height + 15) & ~15U;
-    *(uint32_t *)(format + 0x18) = bytesperline * height;
+    *(uint32_t *)(format + 0x18) = sizeimage;
     *(uint32_t *)a0 = (entry->depth >> 3) * width;
     *(const struct t41_isp_output_fmt **)(format + 0x20) = entry;
     return 0;

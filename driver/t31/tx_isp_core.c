@@ -23,6 +23,7 @@
 #include "include/tx_isp_subdev_helpers.h"
 #include "../include/tx_isp/tx_isp_math.h"
 #include "../include/tx_isp/tx_isp_daynight.h"
+#include "../include/tx_isp/tx_isp_frame_layout.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -103,8 +104,9 @@ static u32 ispcore_frame_format_depth(u32 pixelformat)
 
 static int ispcore_normalize_channel_format(struct frame_image_format *fmt)
 {
+    struct tx_isp_nv12_layout layout;
     u32 depth;
-    u32 aligned_height;
+    int ret;
 
     if (!fmt)
         return -EINVAL;
@@ -121,13 +123,15 @@ static int ispcore_normalize_channel_format(struct frame_image_format *fmt)
     if (!fmt->pix.width || !fmt->pix.height)
         return 0;
 
-    aligned_height = ALIGN(fmt->pix.height, 16);
-
     switch (fmt->pix.pixelformat) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV21:
-        fmt->pix.bytesperline = fmt->pix.width;
-        fmt->pix.sizeimage = fmt->pix.bytesperline * aligned_height * 3 / 2;
+        ret = tx_isp_nv12_layout_build(fmt->pix.width, fmt->pix.height,
+                                       1, 16, &layout);
+        if (ret)
+            return ret;
+        fmt->pix.bytesperline = layout.stride;
+        fmt->pix.sizeimage = layout.sizeimage;
         break;
     default:
         fmt->pix.bytesperline = (fmt->pix.width * depth) / 8;

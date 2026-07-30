@@ -1,0 +1,128 @@
+#include <assert.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "tx_isp/tx_isp_frame_layout.h"
+
+static void test_device_geometries(void)
+{
+	struct tx_isp_nv12_layout layout;
+
+	assert(tx_isp_nv12_layout_build(1920, 1080, 1, 16, &layout) == 0);
+	assert(layout.stride == 1920);
+	assert(layout.aggregate_line_size == 2880);
+	assert(layout.aligned_height == 1088);
+	assert(layout.y_size == 2088960);
+	assert(layout.sizeimage == 3133440);
+
+	assert(tx_isp_nv12_layout_build(640, 360, 1, 16, &layout) == 0);
+	assert(layout.stride == 640);
+	assert(layout.aggregate_line_size == 960);
+	assert(layout.aligned_height == 368);
+	assert(layout.y_size == 235520);
+	assert(layout.sizeimage == 353280);
+
+	assert(tx_isp_nv12_layout_build(1919, 1079, 32, 16, &layout) == 0);
+	assert(layout.stride == 1920);
+	assert(layout.aggregate_line_size == 2880);
+	assert(layout.aligned_height == 1088);
+	assert(layout.y_size == 2088960);
+	assert(layout.sizeimage == 3133440);
+
+	assert(tx_isp_nv12_layout_build(1920, 1080, 8, 1, &layout) == 0);
+	assert(layout.stride == 1920);
+	assert(layout.aggregate_line_size == 2880);
+	assert(layout.aligned_height == 1080);
+	assert(layout.y_size == 2073600);
+	assert(layout.sizeimage == 3110400);
+}
+
+static void test_mdns_device_geometries(void)
+{
+	struct tx_isp_mdns_layout layout;
+
+	assert(tx_isp_mdns_layout_build(1920, 1080, 1, &layout) == 0);
+	assert(layout.y_stride == 1920);
+	assert(layout.y_size == 2073600);
+	assert(layout.nv12_size == 3110400);
+	assert(layout.reference_stride == 64);
+	assert(layout.reference_height == 69);
+	assert(layout.reference_size == 4416);
+	assert(layout.reference_offset[0] == 3110400);
+	assert(layout.reference_offset[1] == 3110400);
+	assert(layout.reference_offset[2] == 3110400);
+	assert(layout.reference_offset[3] == 3110400);
+	assert(layout.uv_stride == 0);
+	assert(layout.tiny_stride == 0);
+	assert(layout.used_size == 3114816);
+
+	assert(tx_isp_mdns_layout_build(1920, 1080, 0, &layout) == 0);
+	assert(layout.reference_offset[0] == 3110400);
+	assert(layout.reference_offset[1] == 3114816);
+	assert(layout.reference_offset[2] == 3119232);
+	assert(layout.reference_offset[3] == 3123648);
+	assert(layout.uv_stride == 960);
+	assert(layout.uv_size == 1036800);
+	assert(layout.uv_offset[0] == 3128064);
+	assert(layout.uv_offset[1] == 4164864);
+	assert(layout.tiny_stride == 64);
+	assert(layout.tiny_size == 2160);
+	assert(layout.tiny_offset == 4683264);
+	assert(layout.used_size == 4685424);
+
+	assert(tx_isp_mdns_layout_build(640, 360, 1, &layout) == 0);
+	assert(layout.y_stride == 640);
+	assert(layout.nv12_size == 345600);
+	assert(layout.reference_stride == 24);
+	assert(layout.reference_height == 24);
+	assert(layout.reference_size == 576);
+	assert(layout.used_size == 346176);
+}
+
+static void test_validation_and_overflow(void)
+{
+	struct tx_isp_nv12_layout layout = { 1, 2, 3, 4, 5 };
+	struct tx_isp_mdns_layout mdns = {
+		.y_stride = 11,
+		.used_size = 22,
+	};
+
+	assert(tx_isp_nv12_layout_build(0, 1080, 1, 16, &layout) ==
+	       -EINVAL);
+	assert(tx_isp_nv12_layout_build(1920, 0, 1, 16, &layout) ==
+	       -EINVAL);
+	assert(tx_isp_nv12_layout_build(1920, 1080, 0, 16, &layout) ==
+	       -EINVAL);
+	assert(tx_isp_nv12_layout_build(1920, 1080, 3, 16, &layout) ==
+	       -EINVAL);
+	assert(tx_isp_nv12_layout_build(0xffffffffU, 1, 32, 1, &layout) ==
+	       -EOVERFLOW);
+	assert(tx_isp_nv12_layout_build(0x80000000U, 3, 1, 1, &layout) ==
+	       -EOVERFLOW);
+	assert(tx_isp_nv12_layout_build(1, 1, 1, 1, NULL) == -EINVAL);
+
+	/* Failed builds do not publish a partial layout. */
+	assert(layout.stride == 1);
+	assert(layout.aggregate_line_size == 2);
+	assert(layout.aligned_height == 3);
+	assert(layout.y_size == 4);
+	assert(layout.sizeimage == 5);
+
+	assert(tx_isp_mdns_layout_build(0, 1080, 0, &mdns) == -EINVAL);
+	assert(tx_isp_mdns_layout_build(1920, 0, 0, &mdns) == -EINVAL);
+	assert(tx_isp_mdns_layout_build(0xffffffffU, 0xffffffffU, 0,
+					&mdns) == -EOVERFLOW);
+	assert(tx_isp_mdns_layout_build(1920, 1080, 0, NULL) == -EINVAL);
+	assert(mdns.y_stride == 11);
+	assert(mdns.used_size == 22);
+}
+
+int main(void)
+{
+	test_device_geometries();
+	test_mdns_device_geometries();
+	test_validation_and_overflow();
+	puts("tx_isp_frame_layout tests passed");
+	return 0;
+}

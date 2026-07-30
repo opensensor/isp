@@ -18,6 +18,8 @@ T40 is intentionally outside this refactor.
 | Day/night transition shell | `tx_isp_daynight.h` | `common/tx_isp_daynight.c` | T31, T41 |
 | Ordered register profiles | `tx_isp_reg_profile.h` | `common/tx_isp_reg_profile.c` | T23, T31 |
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
+| Proprietary tuning wire ABI | `tx_isp_tuning_abi.h` | `common/tx_isp_tuning_abi.c` | T23, T31, T41 |
+| Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
@@ -96,6 +98,56 @@ Math primitives are kernel-independent and do not know the active SoC. Thin
 per-SoC wrappers preserve legacy entry-point names and generation-specific
 table endpoints.
 
+### Proprietary tuning ABI
+
+The common tuning ABI unit owns only byte-stable contracts:
+
+- the 8-byte T23/T31 scalar control, 12-byte T31 extended control, and
+  generation-specific 16-byte T23/T41 envelopes
+- exact 12-byte expression, 24-byte EV, and 8-byte WB replies
+- the sparse 0x80-byte EV offsets used to construct an expression reply
+- validated command descriptors with direction, inline-versus-userspace-
+  pointer payload kind, and fixed size where known
+
+Dispatch, hardware collection, and object offsets remain local. T23 uses the
+common descriptors and response packers in its safe userspace bridge. T31
+uses them for explicit get-control routing and no longer copies the first
+eight bytes of a larger internal structure as an implicit wire contract. T41
+uses a typed startup envelope and a two-entry generation-specific descriptor
+table for frame-rate and running-mode controls.
+
+The descriptor lookup intentionally accepts per-SoC tables. Identical numeric
+ranges are not assumed to have identical payloads, and T41's moved control IDs
+are named separately.
+
+### Frame layout
+
+`tx_isp_nv12_layout_build()` computes aligned Y-plane stride, the vendor
+private ABI's aggregate 12-bpp line size, aligned height, Y-plane size, UV
+offset, and complete single-plane NV12 size with checked 64-bit intermediates.
+It rejects zero dimensions, non-power-of-two alignment, and every result that
+cannot be represented by the vendor ABI's 32-bit fields. The two line sizes
+are intentionally distinct: the aggregate value describes the complete NV12
+line to libimp, while the Y stride locates the UV plane in DMA memory.
+
+Alignment remains policy supplied by the adapter:
+
+- T23 supplies width alignment 1 and height alignment 16 for its MSCA format
+  and UV offset.
+- T31 supplies width alignment 1 and height alignment 16 for both core and
+  outer frame-channel formats. Its outer private ABI now reports the OEM
+  aggregate line size and applies the NV12 plane multiplier exactly once.
+- T41 supplies width alignment 32 and height alignment 16 for both set-format
+  and QBUF, so those paths cannot disagree about the UV base or total size.
+
+`tx_isp_mdns_layout_build()` models the independently aligned T23/T31 MDNS
+allocation: one NV12 working image, four 64-byte-aligned reference banks, two
+UV banks, and the final tiny image. It also models the `isp_memopt=1` aliasing
+policy in which the auxiliary banks share the start of the working image.
+T23 and T31 still own allocation, register programming, logging, and ABI
+policy. T23 page-aligns the size returned by its 12-byte `GET_BUF` contract;
+T31 returns the exact used size through its eight-byte contract.
+
 ## Rules for New Shared Code
 
 1. Share a contract, not merely a matching recovered symbol name.
@@ -140,6 +192,36 @@ The resulting T31 module survived 100 consecutive ISP/exposure query pairs,
 day/night cycling, and RTSP decoding with no `dmesg`, `logread`, or `logcat`
 ioctl/fault signature.
 
+The subsequent common tuning-ABI extraction was rebuilt and reboot-tested on
+all three active devices. T23 decoded 124 main-stream frames in six seconds,
+T31 decoded 126 in ten seconds, and T41 decoded 201 in eight seconds. T31
+again completed 100 ISP/exposure query pairs, while T41 completed 100 typed
+frame-rate queries at 25/1. All three passed day/night/auto/day transitions
+and ended in day mode with loader status zero, the one-shot marker consumed,
+Raptor running, and their staged open module active.
+
+The checked frame-layout extraction then passed a second clean reboot on all
+three targets. T23 decoded 123 frames in five seconds, T31 decoded 88 in seven
+seconds at its inherited half cadence, and T41 decoded 151 in six seconds.
+T41's frame remained visually unchanged after sharing its set-format and QBUF
+UV-offset calculation. No kernel or ioctl fault signature appeared in the
+final `dmesg`, `logread`, or bounded `logcat` captures.
+
+The subsequent MDNS and private-format extraction corrected a concrete T31
+pool mismatch. Before the change, the outer frame channel reported 4,700,160
+bytes while the consumer allocated 3,133,440 bytes; both now report 3,133,440
+bytes, matching the OEM's `2880 * align16(1080)` contract. The active
+`isp_memopt=1` MDNS allocation remains exactly `0x2f8740`. T23 preserves its
+full-layout `0x477e70` used size and `0x478000` page-aligned allocation.
+
+Two clean boots per device covered the new module and a final re-armed
+inspection state. T23 decoded 127 frames in six seconds and then 112 in five;
+T31 decoded 125 in ten seconds and then 89 in seven at its inherited cadence;
+T41 decoded 150 in six seconds and then 125 in five. All three passed
+night/auto/day transitions, retained coherent geometry and color, reported
+zero ISP interrupt errors, and had clean `dmesg`, `logread`, and bounded
+`logcat` captures.
+
 ## Next Extraction Targets
 
 - Extend callback plans to repeated, device-proven initialization and teardown
@@ -150,5 +232,7 @@ ioctl/fault signature.
   corrections.
 - Continue moving pure fixed-point divide/log helpers behind host tests.
 - Recover the remaining T41 sensor-registry bind/lifecycle parity.
-- Define and host-test a shared scalar-versus-pointer tuning-command descriptor
-  before sharing ioctl dispatch across SoCs.
+- Extend tuning descriptors only when the matching userspace payload size and
+  direction are proven; keep SoC dispatch and collectors local.
+- Extract typed buffer ownership and queue-lifecycle bookkeeping only after
+  matching the one-buffer T31 consumer semantics and the T23/T41 paths.

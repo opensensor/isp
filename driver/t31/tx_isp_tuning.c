@@ -52,6 +52,7 @@
 #include "../include/tx_isp/tx_isp_callback_plan.h"
 #include "../include/tx_isp/tx_isp_math.h"
 #include "../include/tx_isp/tx_isp_daynight.h"
+#include "../include/tx_isp/tx_isp_tuning_abi.h"
 
 #include "include/tx_isp_device.h"
 #include "include/tx_libimp.h"
@@ -7234,8 +7235,8 @@ static int32_t fix_point_div_64(int32_t shift_bits, int32_t scale,
 
 /* fix_point_* functions are now defined in tx_isp_fixpt.h */
 
-#define TISP_EV_ATTR_WORDS	0x20
-#define TISP_EV_ATTR_BYTES	(TISP_EV_ATTR_WORDS * sizeof(uint32_t))
+#define TISP_EV_ATTR_WORDS	TX_ISP_TUNING_EV_SPARSE_WORDS
+#define TISP_EV_ATTR_BYTES	TX_ISP_TUNING_EV_SPARSE_BYTES
 
 static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
 {
@@ -7448,13 +7449,7 @@ EXPORT_SYMBOL(tx_isp_tuning_notify);
 static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     uint32_t ev_buffer[TISP_EV_ATTR_WORDS];
-    struct {
-        int32_t mode;
-        uint16_t integration_time;
-        uint16_t integration_time_min;
-        uint16_t integration_time_max;
-        uint16_t one_line_expr_in_us;
-    } expr_data;
+    struct tx_isp_tuning_expr expr_data;
 
     int ret = tisp_g_ev_attr(ev_buffer, ourISPdev->tuning_data);
     if (ret)
@@ -7465,14 +7460,10 @@ static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *
      * IMPISPExpr.g_attr layout.  The min/max halfwords live together at
      * sparse EV offsets 0x6c/0x6e and the line duration at offset 0x7c.
      */
-    expr_data.mode = ev_buffer[12] > 0;
-    expr_data.integration_time = ev_buffer[0] & 0xffff;
-    expr_data.integration_time_min =
-        *(uint16_t *)((uint8_t *)ev_buffer + 0x6c);
-    expr_data.integration_time_max =
-        *(uint16_t *)((uint8_t *)ev_buffer + 0x6e);
-    expr_data.one_line_expr_in_us =
-        *(uint16_t *)((uint8_t *)ev_buffer + 0x7c);
+    ret = tx_isp_tuning_expr_from_sparse(&expr_data, ev_buffer,
+                                         sizeof(ev_buffer));
+    if (ret)
+        return ret;
 
     if (copy_to_user((void __user *)ctrl->value, &expr_data, sizeof(expr_data)))
         return -EFAULT;
@@ -7971,39 +7962,62 @@ int tisp_g_wb_attr(void *out_buf);
 int tisp_get_bcsh_hue(uint32_t *value);
 
 /*
- * These controls return their value directly in the eight-byte ISP control
- * payload.  Keep this routing list explicit: a former "cmd >= 0x8000023"
- * shortcut swallowed unrelated pointer-valued controls such as highlight,
- * backlight and WB attributes before their OEM-shaped handlers could run.
+ * These controls need an explicitly reconstructed route.  The descriptor
+ * records whether the eight-byte envelope carries an inline result or a
+ * userspace pointer.  A former "cmd >= 0x8000023" shortcut swallowed
+ * unrelated pointer-valued controls before their OEM-shaped handlers ran.
  */
-static bool tisp_g_ctrl_uses_direct_route(uint32_t cmd)
+static const struct tx_isp_tuning_cmd_desc t31_g_ctrl_routes[] = {
+	{ TX_ISP_TUNING_CMD_WB, 8, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+	{ TX_ISP_TUNING_CMD_AE_COMP, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_AE_ROI, 0xe1, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+	{ TX_ISP_TUNING_CMD_EXPR, 12, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+	{ TX_ISP_TUNING_CMD_EV_ATTR, 24, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+	{ TX_ISP_TUNING_CMD_TOTAL_GAIN, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_MAX_AGAIN, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_MAX_DGAIN, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_MOVE_STATE, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_AE_STATS, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_AE_ZONE, 0x384, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+	{ TX_ISP_TUNING_CMD_AF_ZONE, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_AE_LUMA, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_AE_MANUAL, 0x98, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+	{ TX_ISP_TUNING_CMD_DEFOG, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_DPC, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_TEMPER, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_SINTER, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_DRC, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_T31_SENSOR_FPS, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+	{ TX_ISP_TUNING_CMD_BCSH_HUE, 4, TX_ISP_TUNING_DIR_GET,
+	  TX_ISP_TUNING_PAYLOAD_INLINE },
+};
+
+static const struct tx_isp_tuning_cmd_desc *
+tisp_g_ctrl_route(uint32_t cmd)
 {
-	switch (cmd) {
-	case 0x8000004: /* White balance */
-	case 0x8000023: /* AE compensation */
-	case 0x8000024: /* AE ROI */
-	case 0x8000025: /* Expression */
-	case 0x8000026: /* EV */
-	case 0x8000027: /* Total gain */
-	case 0x8000028: /* Maximum analog gain */
-	case 0x8000029: /* Maximum digital gain */
-	case 0x800002c: /* Move state */
-	case 0x800002d: /* AE statistics */
-	case 0x8000030: /* AE zone */
-	case 0x8000031: /* AF zone */
-	case 0x8000033: /* AE luma */
-	case 0x8000035: /* Manual AE attributes */
-	case 0x8000039: /* Defog strength */
-	case 0x8000062: /* DPC strength */
-	case 0x8000085: /* Temper strength */
-	case 0x8000086: /* Sinter strength */
-	case 0x80000a2: /* DRC strength */
-	case 0x80000e0: /* Sensor FPS */
-	case 0x8000101: /* BCSH hue */
-		return true;
-	default:
-		return false;
-	}
+	return tx_isp_tuning_cmd_find(t31_g_ctrl_routes,
+				      ARRAY_SIZE(t31_g_ctrl_routes), cmd,
+				      TX_ISP_TUNING_DIR_GET);
 }
 
 static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
@@ -8025,7 +8039,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     /* Handle the most common control commands based on Binary Ninja reference */
-    if (tisp_g_ctrl_uses_direct_route(ctrl->cmd)) {
+    if (tisp_g_ctrl_route(ctrl->cmd)) {
         switch(ctrl->cmd) {
             case 0x8000023:  // AE Compensation - Binary Ninja: tisp_get_ae_comp(&var_98)
                 tisp_get_ae_comp(&var_98);
@@ -8120,24 +8134,15 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 break;
             // Special case handlers
             case 0x8000004: {  // White Balance
-                struct {
-                    uint32_t mode;
-                    uint16_t r_gain;
-                    uint16_t b_gain;
-                } wb_data;
+                struct tx_isp_tuning_wb wb_data;
                 uint32_t wb_attr[7] = {0};
 
                 ret = tisp_g_wb_attr(wb_attr);
                 if (ret)
                     break;
-                if (wb_attr[0] >= 10) {
-                    ret = -EINVAL;
+                ret = tx_isp_tuning_wb_pack(&wb_data, wb_attr, 10);
+                if (ret)
                     break;
-                }
-
-                wb_data.mode = wb_attr[0];
-                wb_data.r_gain = wb_attr[1] & 0xffff;
-                wb_data.b_gain = wb_attr[2] & 0xffff;
                 if (copy_to_user((void __user *)(unsigned long)ctrl->value,
                                  &wb_data, sizeof(wb_data)))
                     ret = -EFAULT;
@@ -9415,22 +9420,34 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     /* Handle ISP core control commands (magic 0x56) */
     if (magic == 0x56) {
         struct isp_core_ctrl ctrl;
+        struct tx_isp_tuning_control wire_ctrl;
 
         pr_debug("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
 
         switch (cmd) {
             case 0xc008561c: /* OEM: S_CTRL - 8 bytes {ctrl_id, value} */
-                if (copy_from_user(&ctrl, (void __user *)arg, 8))
+                if (copy_from_user(&wire_ctrl, (void __user *)arg,
+                                   sizeof(wire_ctrl)))
                     return -EFAULT;
+                ctrl.cmd = wire_ctrl.id;
+                ctrl.value = (int32_t)wire_ctrl.value_or_ptr;
+                ctrl.flag = 0;
                 ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
                 break;
 
             case 0xc008561b: /* OEM: G_CTRL - 8 bytes {ctrl_id, value} */
-                if (copy_from_user(&ctrl, (void __user *)arg, 8))
+                if (copy_from_user(&wire_ctrl, (void __user *)arg,
+                                   sizeof(wire_ctrl)))
                     return -EFAULT;
+                ctrl.cmd = wire_ctrl.id;
+                ctrl.value = (int32_t)wire_ctrl.value_or_ptr;
+                ctrl.flag = 0;
                 ret = apical_isp_core_ops_g_ctrl(dev, &ctrl);
                 if (ret == 0) {
-                    if (copy_to_user((void __user *)arg, &ctrl, 8))
+                    wire_ctrl.id = ctrl.cmd;
+                    wire_ctrl.value_or_ptr = (uint32_t)ctrl.value;
+                    if (copy_to_user((void __user *)arg, &wire_ctrl,
+                                     sizeof(wire_ctrl)))
                         return -EFAULT;
                 }
                 break;
@@ -9440,33 +9457,35 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 /* OEM architecture: 12-byte struct {direction(4), ctrl_id(4), value(4)}
                  * direction == 0 -> apical_isp_core_ops_s_ctrl
                  * direction != 0 -> apical_isp_core_ops_g_ctrl */
-                uint32_t ext_buf[3];
+                struct tx_isp_tuning_ext_control ext;
                 struct isp_core_ctrl ext_ctrl;
 
-                if (copy_from_user(ext_buf, (void __user *)arg, 12))
+                if (copy_from_user(&ext, (void __user *)arg, sizeof(ext)))
                     return -EFAULT;
 
-                ext_ctrl.cmd = ext_buf[1];
-                ext_ctrl.value = (int32_t)ext_buf[2];
+                ext_ctrl.cmd = ext.id;
+                ext_ctrl.value = (int32_t)ext.value_or_ptr;
                 ext_ctrl.flag = 0;
 
                 {
                     static int log_count = 0;
                     if (log_count < 10) {
                         pr_info("0xc00c56c6[%d]: dir=%u cmd=0x%x val=0x%x\n",
-                                log_count, ext_buf[0], ext_buf[1], ext_buf[2]);
+                                log_count, ext.direction, ext.id,
+                                ext.value_or_ptr);
                         log_count++;
                     }
                 }
 
-                if (ext_buf[0] == 0) {
+                if (ext.direction == 0) {
                     ret = apical_isp_core_ops_s_ctrl(dev, &ext_ctrl);
                 } else {
                     ret = apical_isp_core_ops_g_ctrl(dev, &ext_ctrl);
                     if (ret == 0) {
-                        ext_buf[1] = ext_ctrl.cmd;
-                        ext_buf[2] = (uint32_t)ext_ctrl.value;
-                        if (copy_to_user((void __user *)arg, ext_buf, 12))
+                        ext.id = ext_ctrl.cmd;
+                        ext.value_or_ptr = (uint32_t)ext_ctrl.value;
+                        if (copy_to_user((void __user *)arg, &ext,
+                                         sizeof(ext)))
                             return -EFAULT;
                     }
                 }

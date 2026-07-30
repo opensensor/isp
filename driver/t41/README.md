@@ -30,12 +30,16 @@ The source remains named `tx_isp_t41_recovered.c`, but Kbuild emits the
 canonical module name expected by current T41 sensor modules
 (`depends: tx-isp-t41`).
 
-The module is linked from four logical objects:
+The module is linked from six logical objects:
 
 - `tx_isp_t41_recovered.c` — recovered core, pipeline, hardware, and tuning
 - `tx_isp_t41_daynight.c` — T41 adapter for the shared day/night state machine
 - `tx_isp_t41_math.c` — T41 ABI wrappers around shared math primitives
 - `tx_isp_t41_sinfo.c` — T41 layout adapter around the shared sensor registry
+- `tx_isp_t41_tuning_abi.c` — shared tuning-envelope and command-descriptor
+  implementation
+- `tx_isp_t41_frame_layout.c` — shared checked NV12 geometry and vendor
+  aggregate-line semantics used by set-format and QBUF
 
 ## Baseline risk
 
@@ -60,6 +64,13 @@ produced a magenta day image. One registry limitation remains: the
 recovered T41 runtime currently leaves the staged shared registry at
 `/proc/jz/sensor/count=0`, while the persistent installed driver reports one
 sensor, so metadata parity is not yet claimed.
+
+The July 30 shared-format validation preserved the 3,133,440-byte 1080p pool,
+full-rate output, coherent geometry, and balanced day color across two clean
+boots. It decoded 150 frames in six seconds and 125 in five, passed
+night/auto/day transitions, and left the open module active with zero ISP
+interrupt errors. The validated module SHA-256 is
+`55bed73a13b6b0b76557446ddfea06e53d1fe825e77270ee77a13b20ed2c4d7c`.
 
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked

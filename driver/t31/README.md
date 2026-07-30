@@ -16,6 +16,10 @@ just cosmetic:
   proprietary `libimp.so` control ABI.
 - `tx_isp_daynight.c`, `tx_isp_callback_plan.c`, and
   `tx_isp_reg_profile.c` adapt T31 behavior to shared library units.
+- `tx_isp_tuning_abi.c` links checked shared libimp envelopes, command
+  descriptors, and response packers.
+- `tx_isp_frame_layout.c` links checked NV12 and MDNS auxiliary geometry while
+  T31 retains its alignment, register, allocation, and memory-option policy.
 - `tx_isp_dmsc_profile.c` owns the sensor-qualified SC2336 DMSC correction.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.
 - `tx_isp_fixpt.c`, `tx_isp_ae_zone.c`, and `tx_isp_frame_done.c` isolate
@@ -36,11 +40,16 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - day output has coherent color, geometry, lens shading, and tonal continuity
 - 100 consecutive `get-isp` plus `get-exposure` query pairs complete without
   an ioctl failure, kernel fault, or producer restart
+- the main pool now reports the OEM-private `bytesperline=2880` and
+  `sizeimage=3133440` consistently, eliminating the former 4,700,160 versus
+  3,133,440 producer/consumer mismatch
+- the active `isp_memopt=1` MDNS allocation remains exactly `0x2f8740`
 - the tested reserved-memory command line is
   `rmem=22M@0x2a00000`; no bootloader environment change is required
 
-The validated module SHA-256 for that cycle is
-`6e3fd1c63e4289d2b9d297f8bbdb9cab0362e17c8998d4259090fdf9ba4f399b`.
+The validated module SHA-256 after the shared private-format and MDNS-layout
+extraction is
+`67f3ed067875f994919881128e0ffa71c812ab592a34e71e60f1a3123dbe6a61`.
 
 ## Tuning ABI Corrections
 
@@ -48,6 +57,10 @@ The T31 tuning ioctl carries either a scalar or a userspace pointer in the
 same eight-byte control payload.  Keep command routing explicit.  A former
 `cmd >= 0x8000023` shortcut interpreted pointer-valued WB, highlight, and
 backlight queries as scalars.
+
+The wire envelopes, fixed response layouts, sparse-EV extraction, and command
+payload descriptors now live in `tx_isp_tuning_abi.h`; T31 retains only the
+command table, hardware collectors, and dispatch policy.
 
 `tisp_g_ev_attr` is an OEM-shaped sparse 0x80-byte structure.  In particular:
 

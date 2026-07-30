@@ -78,6 +78,43 @@ dispatch. Pre-validation is important for hardware plans: a malformed entry
 cannot leave the ISP half-programmed. `tests/tx_isp_callback_plan_test.c`
 covers ordering, empty plans, malformed plans, and validation atomicity.
 
+### Proprietary tuning wire ABI
+
+`driver/common/tx_isp_tuning_abi.c` and
+`driver/include/tx_isp/tx_isp_tuning_abi.h` define the byte-stable libimp
+control envelopes, expression/EV/WB reply layouts, sparse EV offsets, pure
+response packers, and validated per-SoC command descriptors.
+
+This is deliberately not one cross-SoC ioctl switch. T23, T31, and T41 retain
+their own dispatch and hardware collectors, while sharing layout checks and
+scalar-versus-userspace-pointer metadata. T41's moved frame-rate/running-mode
+IDs remain generation-qualified. `tests/tx_isp_tuning_abi_test.c` covers every
+wire size/offset, descriptor direction and duplicate validation, sparse-input
+bounds, narrowing semantics, and the three reply packers.
+
+### Checked NV12 and MDNS layouts
+
+`driver/common/tx_isp_frame_layout.c` owns checked single-plane NV12 geometry:
+aligned Y stride/height, the private ABI's aggregate 12-bpp line size, Y-plane
+size, UV offset, and complete sizeimage. Each adapter passes its proven
+alignment policy, so the helper shares arithmetic without pretending
+T23/T31/T41 alignment registers are identical.
+
+T23 uses it for MSCA format reporting and QBUF UV placement, T31 core uses it
+for frame-channel normalization, T31 outer format handling uses it to preserve
+the OEM aggregate-line ABI without multiplying the total size twice, and T41
+uses one result shape for both set-format and QBUF.
+
+The same unit owns the checked T23/T31 MDNS auxiliary layout: NV12 working
+image, four compressed-reference banks, two UV banks, and the final tiny
+image. Its explicit memory-option policy reproduces the recovered bank
+aliasing without moving MMIO writes or allocation ownership into common code.
+T23 retains page padding in its 12-byte allocation ABI; T31 retains its exact
+used-size eight-byte ABI. `tests/tx_isp_frame_layout_test.c` covers the active
+1080p/360p geometries, both MDNS memory policies, exact offsets and sizes,
+differing alignment policies, invalid alignment, and every 32-bit overflow
+boundary.
+
 ### Sensor registry
 
 `driver/common/tx_isp_sinfo.c` owns the sensor-registry lifecycle, exported
@@ -126,7 +163,7 @@ T41 Kbuild now emits `driver/t41/tx-isp-t41.ko`, the canonical dependency name
 used by current T41 sensor modules, while retaining
 `tx_isp_t41_recovered.c` as the source filename.
 
-T41 is now a multi-object module with four explicit boundaries:
+T41 is now a multi-object module with six explicit boundaries:
 
 - `tx_isp_t41_recovered.c` owns the recovered pipeline, hardware, and tuning
   implementation.
@@ -136,11 +173,14 @@ T41 is now a multi-object module with four explicit boundaries:
   delegates its algorithms to `tx_isp_math.h`.
 - `tx_isp_t41_sinfo.c` supplies the T41 object-layout adapter for the common
   sensor registry.
+- `tx_isp_t41_tuning_abi.c` links the shared proprietary control ABI.
+- `tx_isp_t41_frame_layout.c` links checked frame-channel NV12 geometry and
+  vendor aggregate-line reporting.
 
 ### Multi-object T23 artifact
 
 T23 preserves the deployed `tx_isp_t23_recovered` module identity while linking
-six logical objects:
+eight logical objects:
 
 - `tx_isp_t23_core.c` owns the recovered pipeline, hardware, tuning, and the
   T23-specific sensor lifecycle callbacks.
@@ -153,6 +193,9 @@ six logical objects:
 - `tx_isp_t23_callback_plan.c` links the common validated callback runner.
 - `tx_isp_t23_reg_profile.c` links the shared ordered-profile and register-mask
   implementation.
+- `tx_isp_t23_tuning_abi.c` links the shared proprietary control ABI.
+- `tx_isp_t23_frame_layout.c` links checked frame-channel NV12 and MDNS
+  geometry.
 
 ## Device Validation
 
@@ -163,9 +206,9 @@ tested open build so the current work remains active for inspection.
 
 | SoC | Staged coverage | Result |
 |---|---|---|
-| T23 | six-object module, shared math/registry/register-mask/callback-plan plus mode adapter, SC2336, 1080p/360p | pass; day/night/auto and both streams clean |
-| T31 | shared math/registry/day-night/profiles/callback-plan, SC2336, 1080p/360p | pass; day/night clean and unclean producer restart reattaches |
-| T41 | four-object module, shared math/registry/day-night, OS04D10, 1080p/360p | pass; balanced day color and dual-stream fanout |
+| T23 | eight-object module, shared math/registry/register-mask/callback-plan/tuning-ABI/frame/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
+| T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, and expected half-rate RTSP clean |
+| T41 | six-object module, shared math/registry/day-night/tuning-ABI/frame-layout, OS04D10 | pass; balanced day color, correct 3,133,440-byte main pool, and full-rate RTSP |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs
 its marker before `insmod`. A crash therefore cannot repeatedly load the staged
@@ -173,11 +216,12 @@ module: the next watchdog or power-cycle returns to the persistent driver.
 Live unloading is not a safe test strategy for these camera pipelines. The
 latest detailed matrix is in `docs/SHARED_DRIVER_LIBRARY.md`.
 
-The latest T31 validation also covers the proprietary tuning ioctl ABI:
+The latest validation also covers the proprietary tuning ioctl ABI:
 WB/highlight/backlight readback, hue, AE compensation, total gain, expression
-line timing, exposure microseconds, and AE luma. The ioctl command set mixes
-scalar and pointer payloads, so a future shared dispatcher must describe that
-payload kind explicitly instead of using numeric command ranges.
+line timing, exposure microseconds, and AE luma on T31, plus T41's typed
+frame-rate and running-mode startup controls. The ioctl command set mixes
+scalar and pointer payloads; that distinction is now explicit in common
+descriptors instead of inferred from numeric command ranges.
 
 ## Target Layout
 
@@ -240,6 +284,5 @@ to shape the eventual common interface.
    completion, behind a reviewed interface.
 7. Move event/state-machine shells only after IRQ decode and acknowledge
    ordering remain explicit per-SoC behavior.
-8. Extract a host-testable tuning-response packer (EV, expression, WB) after
-   matching the byte layouts on T23 and T41; keep live statistics collection
-   and userspace copying in each SoC adapter.
+8. Model buffer ownership and queue-lifecycle state behind typed adapters,
+   starting with read-only comparisons of the T23/T31/T41 consumer contracts.

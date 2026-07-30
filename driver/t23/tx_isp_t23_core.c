@@ -6,6 +6,8 @@
 /* Module vermagic: 3.10.14__isvp_pike_1.0__ preempt mod_unload MIPS32_R1 32BIT  */
 
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
+#include "../include/tx_isp/tx_isp_tuning_abi.h"
+#include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "include/tx_isp_t23_mode.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -9486,14 +9488,14 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TISP_CTRL_CONTRAST 0x00980901U
 #define REGTRACE_TISP_CTRL_SATURATION 0x00980902U
 #define REGTRACE_TISP_CTRL_SHARPNESS 0x0098091bU
-#define REGTRACE_TISP_CTRL_BCSH_HUE 0x08000101U
-#define REGTRACE_TISP_CTRL_HIGHLIGHT_DEPRESS 0x0800002aU
-#define REGTRACE_TISP_CTRL_BACKLIGHT_COMP 0x08000037U
-#define REGTRACE_TISP_CTRL_WB_STATIS 0x08000005U
-#define REGTRACE_TISP_CTRL_GET_EXPR 0x08000025U
-#define REGTRACE_TISP_CTRL_GET_EV_ATTR 0x08000026U
-#define REGTRACE_TISP_CTRL_TOTAL_GAIN 0x08000027U
-#define REGTRACE_TISP_CTRL_AE_LUMA 0x08000033U
+#define REGTRACE_TISP_CTRL_BCSH_HUE TX_ISP_TUNING_CMD_BCSH_HUE
+#define REGTRACE_TISP_CTRL_HIGHLIGHT_DEPRESS TX_ISP_TUNING_CMD_HIGHLIGHT
+#define REGTRACE_TISP_CTRL_BACKLIGHT_COMP TX_ISP_TUNING_CMD_BACKLIGHT
+#define REGTRACE_TISP_CTRL_WB_STATIS TX_ISP_TUNING_CMD_WB_STATS
+#define REGTRACE_TISP_CTRL_GET_EXPR TX_ISP_TUNING_CMD_EXPR
+#define REGTRACE_TISP_CTRL_GET_EV_ATTR TX_ISP_TUNING_CMD_EV_ATTR
+#define REGTRACE_TISP_CTRL_TOTAL_GAIN TX_ISP_TUNING_CMD_TOTAL_GAIN
+#define REGTRACE_TISP_CTRL_AE_LUMA TX_ISP_TUNING_CMD_AE_LUMA
 #define REGTRACE_TISP_TOTAL_GAIN_1X (1U << 8)
 #define REGTRACE_TISP_AE_LUMA_DAY 80U
 #define REGTRACE_TISP_WB_GAIN_NEUTRAL 256U
@@ -13065,66 +13067,19 @@ struct regtrace_isp_buf_info {
     u32 size;
 };
 
-struct regtrace_tisp_ext_control {
-    u32 count;
-    u32 id;
-    u32 value_or_ptr;
-    u32 sensor;
-};
-
-struct regtrace_tisp_control {
-    u32 id;
-    u32 value;
-};
-
-struct regtrace_impisp_expr {
-    u32 mode;
-    u16 integration_time;
-    u16 integration_time_min;
-    u16 integration_time_max;
-    u16 one_line_expr_in_us;
-};
-
-struct regtrace_impisp_ev_attr {
-    u32 ev;
-    u32 expr_us;
-    u32 ev_log2;
-    u32 again;
-    u32 dgain;
-    u32 gain_log2;
-};
-
 static u32 regtrace_mdns_malloc_size(u32 mode, u32 width, u32 height)
 {
-    u32 h8;
-    u32 y_full;
-    u32 nv12_size;
-    u32 r_factor;
-    u32 r_lines;
-    u32 r_block;
-    u32 total;
+    struct tx_isp_mdns_layout layout;
     u32 pad;
 
     (void)mode;
-    h8 = height << 3;
-    y_full = ((width + 7U) >> 3) * h8;
-    nv12_size = y_full + (y_full >> 1);
-    r_factor = ((((width + 31U) >> 5) + 7U) >> 3);
-    r_lines = (((height + 15U) >> 4) + 1U) << 3;
-    r_block = r_factor * r_lines;
-    total = nv12_size + r_block;
+    if (tx_isp_mdns_layout_build(width, height, isp_memopt != 0,
+                                 &layout))
+        return 0;
 
-    if (isp_memopt == 0) {
-        u32 uv_block;
-        u32 tiny_size;
-
-        uv_block = (((width >> 1) + 7U) >> 3) * h8;
-        tiny_size = (((((width >> 5) + 7U) >> 3) * h8) >> 5);
-        total = nv12_size + (r_block << 2) + uv_block + (uv_block >> 1) + tiny_size;
-    }
-
-    pad = (4096U - (total & 4095U)) & 65535U;
-    return total + pad;
+    /* T23's 12-byte GET_BUF ABI page-pads the OEM used size. */
+    pad = (4096U - (layout.used_size & 4095U)) & 65535U;
+    return layout.used_size + pad;
 }
 
 static long regtrace_tx_isp_enuminput(unsigned long arg)
@@ -13251,7 +13206,7 @@ static bool regtrace_isp_m0_is_image_control(u32 id)
 
 static long regtrace_isp_m0_control(unsigned int cmd, unsigned long arg)
 {
-    struct regtrace_tisp_control ctrl;
+    struct tx_isp_tuning_control ctrl;
     long ret;
 
     if (!arg)
@@ -13273,7 +13228,20 @@ static long regtrace_isp_m0_control(unsigned int cmd, unsigned long arg)
 
 static long regtrace_isp_m0_ext_control(unsigned long arg)
 {
-    struct regtrace_tisp_ext_control ctrl;
+    static const struct tx_isp_tuning_cmd_desc routes[] = {
+        { REGTRACE_TISP_CTRL_TOTAL_GAIN, 4, TX_ISP_TUNING_DIR_GET,
+          TX_ISP_TUNING_PAYLOAD_INLINE },
+        { REGTRACE_TISP_CTRL_AE_LUMA, 4, TX_ISP_TUNING_DIR_GET,
+          TX_ISP_TUNING_PAYLOAD_INLINE },
+        { REGTRACE_TISP_CTRL_WB_STATIS, 4, TX_ISP_TUNING_DIR_GET,
+          TX_ISP_TUNING_PAYLOAD_INLINE },
+        { REGTRACE_TISP_CTRL_GET_EXPR, 12, TX_ISP_TUNING_DIR_GET,
+          TX_ISP_TUNING_PAYLOAD_USER_PTR },
+        { REGTRACE_TISP_CTRL_GET_EV_ATTR, 24, TX_ISP_TUNING_DIR_GET,
+          TX_ISP_TUNING_PAYLOAD_USER_PTR },
+    };
+    struct tx_isp_tuning_t23_ext_control ctrl;
+    const struct tx_isp_tuning_cmd_desc *route;
     long ret = 0;
 
     if (!arg)
@@ -13295,6 +13263,11 @@ static long regtrace_isp_m0_ext_control(unsigned long arg)
         goto copy_out;
     }
 
+    route = tx_isp_tuning_cmd_find(routes, ARRAY_SIZE(routes), ctrl.id,
+                                   TX_ISP_TUNING_DIR_GET);
+    if (!route)
+        goto copy_out;
+
     switch (ctrl.id) {
     case REGTRACE_TISP_CTRL_TOTAL_GAIN:
         ctrl.value_or_ptr = REGTRACE_TISP_TOTAL_GAIN_1X;
@@ -13308,13 +13281,9 @@ static long regtrace_isp_m0_ext_control(unsigned long arg)
         break;
     case REGTRACE_TISP_CTRL_GET_EXPR:
         if (ctrl.value_or_ptr) {
-            struct regtrace_impisp_expr expr;
+            struct tx_isp_tuning_expr expr;
 
-            memset(&expr, 0, sizeof(expr));
-            expr.integration_time = 1000;
-            expr.integration_time_min = 1;
-            expr.integration_time_max = 1125;
-            expr.one_line_expr_in_us = 30;
+            tx_isp_tuning_expr_pack(&expr, 0, 1000, 1, 1125, 30);
             if (copy_to_user((void __user *)(uintptr_t)ctrl.value_or_ptr,
                              &expr, sizeof(expr)))
                 return -EFAULT;
@@ -13322,14 +13291,11 @@ static long regtrace_isp_m0_ext_control(unsigned long arg)
         break;
     case REGTRACE_TISP_CTRL_GET_EV_ATTR:
         if (ctrl.value_or_ptr) {
-            struct regtrace_impisp_ev_attr ev;
+            struct tx_isp_tuning_ev_attr ev;
 
-            memset(&ev, 0, sizeof(ev));
-            ev.ev = REGTRACE_TISP_AE_LUMA_DAY;
-            ev.expr_us = 30000;
-            ev.again = REGTRACE_TISP_TOTAL_GAIN_1X;
-            ev.dgain = REGTRACE_TISP_TOTAL_GAIN_1X;
-            ev.gain_log2 = 0;
+            tx_isp_tuning_ev_pack(&ev, REGTRACE_TISP_AE_LUMA_DAY, 30000,
+                                  0, REGTRACE_TISP_TOTAL_GAIN_1X,
+                                  REGTRACE_TISP_TOTAL_GAIN_1X, 0);
             if (copy_to_user((void __user *)(uintptr_t)ctrl.value_or_ptr,
                              &ev, sizeof(ev)))
                 return -EFAULT;
@@ -13746,9 +13712,13 @@ static uint32_t regtrace_t23_frame_height(int channel)
 
 static uint32_t regtrace_t23_frame_uv_offset(int channel)
 {
+    struct tx_isp_nv12_layout layout;
+    uint32_t width = regtrace_t23_frame_width(channel);
     uint32_t height = regtrace_t23_frame_height(channel);
 
-    return regtrace_t23_frame_width(channel) * ((height + 15U) & ~15U);
+    if (tx_isp_nv12_layout_build(width, height, 1, 16, &layout))
+        return 0;
+    return layout.y_size;
 }
 
 static int regtrace_t23_program_msca_format(
@@ -13759,7 +13729,7 @@ static int regtrace_t23_program_msca_format(
     uint32_t full_height = REGTRACE_SC2336_HEIGHT;
     uint32_t target_width;
     uint32_t target_height;
-    uint32_t aligned_height;
+    struct tx_isp_nv12_layout layout;
     bool implicit_scaler;
     int ret;
 
@@ -13783,10 +13753,13 @@ static int regtrace_t23_program_msca_format(
     format->pix.field = REGTRACE_TISP_FIELD_NONE;
     if (!format->pix.colorspace)
         format->pix.colorspace = REGTRACE_TISP_COLORSPACE_REC709;
-    aligned_height = (target_height + 15U) & ~15U;
     if (format->pix.pixelformat == REGTRACE_TISP_PIX_FMT_NV12) {
-        format->pix.bytesperline = target_width;
-        format->pix.sizeimage = target_width * aligned_height * 3U / 2U;
+        ret = tx_isp_nv12_layout_build(target_width, target_height,
+                                       1, 16, &layout);
+        if (ret)
+            return ret;
+        format->pix.bytesperline = layout.stride;
+        format->pix.sizeimage = layout.sizeimage;
     }
 
     implicit_scaler = target_width != full_width || target_height != full_height;
@@ -84691,49 +84664,34 @@ tisp_mdns_get_malloc_cfg0x88:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005b110 origin=fragment_seed original=tisp_mdns_set_malloc_cfg */
 int32_t tisp_mdns_set_malloc_cfg(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-    uint32_t y_stride;
-    uint32_t y_size;
-    uint32_t r_stride;
-    uint32_t r_height;
-    uint32_t r_size;
-    uint32_t r_base;
-    uint32_t used;
-    uint32_t uv_stride;
-    uint32_t uv_size;
-    uint32_t tiny_stride;
+    struct tx_isp_mdns_layout layout;
 
     (void)a0;
-    y_stride = (a1 + 7U) & ~7U;
-    y_size = y_stride * a2;
+    if (tx_isp_mdns_layout_build(a1, a2, isp_memopt != 0, &layout))
+        return 0;
 
     system_reg_write(0x7820U, a3);
-    system_reg_write(0x7824U, y_stride);
-    system_reg_write(0x7828U, a3 + y_size);
-    system_reg_write(0x782cU, y_stride);
+    system_reg_write(0x7824U, layout.y_stride);
+    system_reg_write(0x7828U, a3 + layout.y_size);
+    system_reg_write(0x782cU, layout.y_stride);
 
-    r_base = a3 + y_size + (y_size >> 1);
-    r_stride = (((a1 + 31U) >> 5) + 7U) & ~7U;
-    r_height = ((a2 + 15U) >> 4) + 1U;
-    r_size = r_stride * r_height;
-    system_reg_write(0x7830U, r_base);
-    system_reg_write(0x7834U, r_stride);
+    system_reg_write(0x7830U, a3 + layout.reference_offset[0]);
+    system_reg_write(0x7834U, layout.reference_stride);
 
     if (isp_memopt) {
-        system_reg_write(0x7840U, r_base);
+        system_reg_write(0x7840U, a3 + layout.reference_offset[1]);
         system_reg_write(0x7844U, 0);
-        system_reg_write(0x7848U, r_base);
+        system_reg_write(0x7848U, a3 + layout.reference_offset[2]);
         system_reg_write(0x784cU, 0);
-        system_reg_write(0x7850U, r_base);
+        system_reg_write(0x7850U, a3 + layout.reference_offset[3]);
         system_reg_write(0x7854U, 0);
-        used = y_size + (y_size >> 1) + r_size;
     } else {
-        system_reg_write(0x7840U, r_base + r_size);
-        system_reg_write(0x7844U, r_stride);
-        system_reg_write(0x7848U, r_base + (r_size << 1));
-        system_reg_write(0x784cU, r_stride);
-        system_reg_write(0x7850U, r_base + r_size * 3U);
-        system_reg_write(0x7854U, r_stride);
-        used = y_size + (y_size >> 1) + (r_size << 2);
+        system_reg_write(0x7840U, a3 + layout.reference_offset[1]);
+        system_reg_write(0x7844U, layout.reference_stride);
+        system_reg_write(0x7848U, a3 + layout.reference_offset[2]);
+        system_reg_write(0x784cU, layout.reference_stride);
+        system_reg_write(0x7850U, a3 + layout.reference_offset[3]);
+        system_reg_write(0x7854U, layout.reference_stride);
     }
 
     system_reg_write(0x7838U, 0);
@@ -84746,21 +84704,16 @@ int32_t tisp_mdns_set_malloc_cfg(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t
         system_reg_write(0x7864U, 0);
         system_reg_write(0x7868U, a3);
         system_reg_write(0x786cU, 0);
-        return used;
+        return layout.used_size;
     }
 
-    uv_stride = ((a1 >> 1) + 7U) & ~7U;
-    uv_size = uv_stride * a2;
-    system_reg_write(0x7858U, a3 + used);
-    system_reg_write(0x785cU, uv_stride);
-    used += uv_size;
-    system_reg_write(0x7860U, a3 + used);
-    system_reg_write(0x7864U, uv_stride);
-    used += uv_size >> 1;
-    tiny_stride = ((a1 >> 5) + 7U) & ~7U;
-    system_reg_write(0x7868U, a3 + used);
-    system_reg_write(0x786cU, tiny_stride);
-    return used + ((a2 * tiny_stride) >> 5);
+    system_reg_write(0x7858U, a3 + layout.uv_offset[0]);
+    system_reg_write(0x785cU, layout.uv_stride);
+    system_reg_write(0x7860U, a3 + layout.uv_offset[1]);
+    system_reg_write(0x7864U, layout.uv_stride);
+    system_reg_write(0x7868U, a3 + layout.tiny_offset);
+    system_reg_write(0x786cU, layout.tiny_stride);
+    return layout.used_size;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005b430 origin=model_output original=tisp_mdns_malloc_reflash */

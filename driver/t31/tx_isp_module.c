@@ -46,6 +46,7 @@
 #include "include/tx_libimp.h"
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
+#include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
 
 /* CSI State constants - needed for proper state management */
@@ -1303,7 +1304,12 @@ static inline u32 frame_channel_format_depth(u32 pixfmt)
 
 static inline u32 frame_channel_format_bytesperline(u32 pixfmt, u32 width)
 {
+    struct tx_isp_nv12_layout layout;
     u32 depth = frame_channel_format_depth(pixfmt);
+
+    if ((pixfmt == V4L2_PIX_FMT_NV12 || pixfmt == V4L2_PIX_FMT_NV21) &&
+        tx_isp_nv12_layout_build(width, 1, 1, 1, &layout) == 0)
+        return layout.aggregate_line_size;
 
     if (depth == 0)
         return nv12_stride(width);
@@ -1313,14 +1319,20 @@ static inline u32 frame_channel_format_bytesperline(u32 pixfmt, u32 width)
 
 static inline u32 frame_channel_format_sizeimage(u32 pixfmt, u32 width, u32 height)
 {
+    struct tx_isp_nv12_layout layout;
     u32 bytesperline = frame_channel_format_bytesperline(pixfmt, width);
 
     switch (pixfmt) {
     case V4L2_PIX_FMT_NV12:
     case V4L2_PIX_FMT_NV21:
-        /* NV12: Y = stride * align16(height), UV = stride * align16(height)/2.
-         * MSCA hardware requires 16-line aligned UV offset. */
-        return (bytesperline * ALIGN(height, 16) * 3) / 2;
+        /*
+         * The private OEM ABI calls the aggregate 12-bpp line payload
+         * bytesperline.  It multiplies that value by aligned height once;
+         * applying another 3/2 plane factor over-reports the buffer by 50%.
+         */
+        if (tx_isp_nv12_layout_build(width, height, 1, 16, &layout) == 0)
+            return layout.sizeimage;
+        return 0;
     default:
         return bytesperline * height;
     }
@@ -4831,10 +4843,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // Physical address (always 0)
             uint32_t size;   // Calculated buffer size
         } buf_result;
+        struct tx_isp_mdns_layout layout;
         uint32_t width, height;
-        uint32_t stride8, h8, y_full, nv12_size;
-        uint32_t r_factor, r_lines, r_block;
-        uint32_t total_size;
+        int layout_ret;
 
         /* Get dimensions from ISP device */
         width = isp_dev->sensor_width;
@@ -4842,39 +4853,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (!width) width = 1920;
         if (!height) height = 1080;
 
-        /* OEM EXACT formula:
-         * stride8 = (width+7)/8, h8 = height*8
-         * y_full = stride8 * h8 = stride * height
-         * nv12 = y_full * 1.5
-         * r_block = small reference plane
-         * Then add UV/tiny planes depending on isp_memopt */
-        stride8 = (width + 7) >> 3;
-        h8 = height << 3;
-        y_full = stride8 * h8;               /* = stride * height */
-        nv12_size = y_full + (y_full >> 1);   /* NV12 = Y + UV/2 */
-
-        r_factor = (((width + 0x1f) >> 5) + 7) >> 3;
-        r_lines = (((height + 0xf) >> 4) + 1) << 3;
-        r_block = r_factor * r_lines;
-
-        if (isp_memopt == 0) {
-            /* Full buffer mode: 4 R-plane banks + UV + UV/2 + tiny */
-            uint32_t uv_factor = ((width >> 1) + 7) >> 3;
-            uint32_t uv_block = uv_factor * h8;
-            uint32_t tiny_factor = ((width >> 5) + 7) >> 3;
-            uint32_t tiny_size = (tiny_factor * h8) >> 5;
-            total_size = nv12_size + (r_block << 2) + uv_block
-                       + (uv_block >> 1) + tiny_size;
-        } else {
-            /* Memory optimized: single R-plane bank, no extra UV */
-            total_size = nv12_size + r_block;
-        }
+        layout_ret = tx_isp_mdns_layout_build(width, height,
+                                              isp_memopt != 0, &layout);
+        if (layout_ret)
+            return layout_ret;
 
         pr_info("ISP buffer calculation: %ux%u memopt=%d -> %u bytes (0x%x)\n",
-                width, height, isp_memopt, total_size, total_size);
+                width, height, isp_memopt, layout.used_size,
+                layout.used_size);
 
         buf_result.addr = 0;
-        buf_result.size = total_size;
+        buf_result.size = layout.used_size;
 
         if (copy_to_user(argp, &buf_result, sizeof(buf_result)))
             return -EFAULT;
@@ -4889,14 +4878,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // Physical buffer address
             uint32_t size;   // Buffer size
         } buf_setup;
+        struct tx_isp_mdns_layout layout;
         uint32_t width, height;
-        uint32_t y_stride, y_size;
-        uint32_t y_stride2, y_size2;
-        uint32_t r_offset, r_stride, r_size, r_total;
-        uint32_t uv_base, uv_stride, uv_size;
-        uint32_t uv_base2, uv_stride2, uv_size2;
-        uint32_t uv_base3, tiny_stride, tiny_size;
-        uint32_t final_offset;
+        int layout_ret;
 
         if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
             return -EFAULT;
@@ -4912,37 +4896,33 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("ISP set buffer: addr=0x%x size=%d width=%u height=%u isp_memopt=%d\n",
                 buf_setup.addr, buf_setup.size, width, height, isp_memopt);
 
+        layout_ret = tx_isp_mdns_layout_build(width, height,
+                                              isp_memopt != 0, &layout);
+        if (layout_ret)
+            return layout_ret;
+        if (buf_setup.size < layout.used_size) {
+            pr_err("Buffer too small for MDNS layout: need %u, got %u\n",
+                   layout.used_size, buf_setup.size);
+            return -EINVAL;
+        }
+
         /* OEM does NOT zero the frame buffer — it just programs DMA registers.
          * Previous PINK_DIAG zeroing (memset_io to 0) caused MDNS R=G=B:
          * zeroed UV in temporal reference = desaturated blend = self-reinforcing
          * grayscale output. Removed to match OEM behavior exactly. */
 
         // === Y-plane (main output) ===
-        y_stride = ((width + 7) >> 3) << 3;   // 8-byte aligned
-        y_size = y_stride * height;
-        if (buf_setup.size < y_size) {
-            pr_err("Buffer too small for Y plane: need %u, got %u\n", y_size, buf_setup.size);
-            return -EINVAL;
-        }
         system_reg_write(0x7820, buf_setup.addr);          // Y base address
-        system_reg_write(0x7824, y_stride);                 // Y stride
+        system_reg_write(0x7824, layout.y_stride);          // Y stride
 
         // === Y second bank ===
-        y_stride2 = ((width + 7) >> 3) << 3;  // same alignment
-        y_size2 = y_stride2 * height;
-        system_reg_write(0x7828, buf_setup.addr + y_size);  // Y bank 2
-        system_reg_write(0x782c, y_stride2);                // Y bank 2 stride
+        system_reg_write(0x7828, buf_setup.addr + layout.y_size);
+        system_reg_write(0x782c, layout.y_stride);
 
         // === R-plane (reference frame for MDNS temporal) ===
-        r_offset = y_size + (y_size2 >> 1);    // after Y + half UV
-        if (buf_setup.size < r_offset) {
-            pr_err("Buffer too small for R plane offset: need %u, got %u\n", r_offset, buf_setup.size);
-            return -EINVAL;
-        }
-        r_stride = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
-        r_size = r_stride * (((height + 0xf) >> 4) + 1);  /* OEM: compressed height */
-        system_reg_write(0x7830, buf_setup.addr + r_offset);  // R base
-        system_reg_write(0x7834, r_stride);                    // R stride
+        system_reg_write(0x7830,
+                         buf_setup.addr + layout.reference_offset[0]);
+        system_reg_write(0x7834, layout.reference_stride);
 
         // === Common registers ===
         system_reg_write(0x7838, 0);
@@ -4951,64 +4931,48 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // === Middle banks (0x7840-0x7854) — depends on isp_memopt ===
         if (isp_memopt == 0) {
             // Full buffer mode: 4 reference banks
-            system_reg_write(0x7840, buf_setup.addr + r_offset + r_size);
-            system_reg_write(0x7844, r_stride);
-            system_reg_write(0x7848, buf_setup.addr + r_offset + 2 * r_size);
-            system_reg_write(0x784c, r_stride);
-            system_reg_write(0x7850, buf_setup.addr + r_offset + 3 * r_size);
-            system_reg_write(0x7854, r_stride);
-            r_total = 4 * r_size;
+            system_reg_write(0x7840,
+                             buf_setup.addr + layout.reference_offset[1]);
+            system_reg_write(0x7844, layout.reference_stride);
+            system_reg_write(0x7848,
+                             buf_setup.addr + layout.reference_offset[2]);
+            system_reg_write(0x784c, layout.reference_stride);
+            system_reg_write(0x7850,
+                             buf_setup.addr + layout.reference_offset[3]);
+            system_reg_write(0x7854, layout.reference_stride);
             pr_info("Full buffer mode: r_stride=%u r_size=%u r_total=%u\n",
-                    r_stride, r_size, r_total);
+                    layout.reference_stride, layout.reference_size,
+                    layout.reference_size * TX_ISP_MDNS_REFERENCE_BANKS);
         } else {
             // Memory optimized: all banks point at same location
-            system_reg_write(0x7840, buf_setup.addr + r_offset);
+            system_reg_write(0x7840,
+                             buf_setup.addr + layout.reference_offset[1]);
             system_reg_write(0x7844, 0);
-            system_reg_write(0x7848, buf_setup.addr + r_offset);
+            system_reg_write(0x7848,
+                             buf_setup.addr + layout.reference_offset[2]);
             system_reg_write(0x784c, 0);
-            system_reg_write(0x7850, buf_setup.addr + r_offset);
+            system_reg_write(0x7850,
+                             buf_setup.addr + layout.reference_offset[3]);
             system_reg_write(0x7854, 0);
-            r_total = r_size;
-            pr_info("Memory optimized mode: r_stride=%u r_size=%u\n", r_stride, r_size);
-        }
-
-        // === UV-plane ===
-        uv_base = r_offset + r_total;
-        if (buf_setup.size < uv_base) {
-            pr_err("Buffer too small for UV base: need %u, got %u\n", uv_base, buf_setup.size);
-            return -EINVAL;
+            pr_info("Memory optimized mode: r_stride=%u r_size=%u\n",
+                    layout.reference_stride, layout.reference_size);
         }
 
         if (isp_memopt == 0) {
             // Full UV buffer mode
-            uv_stride = ((width / 2 + 7) >> 3) << 3;
-            uv_size = uv_stride * height;
-            system_reg_write(0x7858, buf_setup.addr + uv_base);
-            system_reg_write(0x785c, uv_stride);
-
-            uv_base2 = uv_base + uv_size;
-            if (buf_setup.size < uv_base2) {
-                pr_err("Buffer too small for UV bank2: need %u, got %u\n", uv_base2, buf_setup.size);
-                return -EINVAL;
-            }
-            uv_stride2 = ((width / 2 + 7) >> 3) << 3;
-            uv_size2 = uv_stride2 * height;
-            system_reg_write(0x7860, buf_setup.addr + uv_base2);
-            system_reg_write(0x7864, uv_stride2);
-
-            uv_base3 = uv_base2 + uv_size2 / 2;
-            if (buf_setup.size < uv_base3) {
-                pr_err("Buffer too small for UV bank3: need %u, got %u\n", uv_base3, buf_setup.size);
-                return -EINVAL;
-            }
-            tiny_stride = ((width / 32 + 7) >> 3) << 3;
-            tiny_size = tiny_stride * height;
-            system_reg_write(0x7868, buf_setup.addr + uv_base3);
-            system_reg_write(0x786c, tiny_stride);
-            final_offset = uv_base3 + tiny_size / 32;
+            system_reg_write(0x7858,
+                             buf_setup.addr + layout.uv_offset[0]);
+            system_reg_write(0x785c, layout.uv_stride);
+            system_reg_write(0x7860,
+                             buf_setup.addr + layout.uv_offset[1]);
+            system_reg_write(0x7864, layout.uv_stride);
+            system_reg_write(0x7868,
+                             buf_setup.addr + layout.tiny_offset);
+            system_reg_write(0x786c, layout.tiny_stride);
 
             pr_info("UV full mode: uv_stride=%u uv_stride2=%u tiny_stride=%u final=%u\n",
-                    uv_stride, uv_stride2, tiny_stride, final_offset);
+                    layout.uv_stride, layout.uv_stride,
+                    layout.tiny_stride, layout.used_size);
         } else {
             // Memory optimized: all UV banks point at base addr
             system_reg_write(0x7858, buf_setup.addr);
@@ -5017,17 +4981,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             system_reg_write(0x7864, 0);
             system_reg_write(0x7868, buf_setup.addr);
             system_reg_write(0x786c, 0);
-            final_offset = uv_base;
 
             pr_info("UV memopt mode: all UV banks -> addr=0x%x final=%u\n",
-                    buf_setup.addr, final_offset);
-        }
-
-        // Final size check
-        if (buf_setup.size < final_offset) {
-            pr_err("Buffer too small for final layout: need %u, got %u\n",
-                   final_offset, buf_setup.size);
-            return -EINVAL;
+                    buf_setup.addr, layout.used_size);
         }
 
         pr_info("ISP DMA registers 0x7820-0x786c programmed successfully\n");

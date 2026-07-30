@@ -37,6 +37,13 @@ The project has moved well beyond initial bring-up.
 - T31 and T41 share a configurable frame-boundary day/night state machine
 - T23 and T31 share ordered register-profile and bypass-mask primitives
 - T23 and T31 share validated ordered callback plans for tuning sequences
+- T23, T31, and T41 share checked proprietary tuning wire layouts, response
+  packers, and scalar-versus-pointer command descriptors
+- T23, T31, and T41 share overflow-checked NV12 stride, private aggregate-line,
+  UV-offset, and sizeimage calculation while retaining per-SoC alignment
+  policy
+- T23 and T31 share checked MDNS working/reference/UV/tiny-plane layout while
+  retaining their distinct allocation ABIs and register ownership
 - T31 applies evidence-backed SC2336 day/night DMSC correction profiles
 - T23 and T41 link recovered cores with logical shared-library adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree
@@ -83,8 +90,12 @@ Important driver files:
 - `driver/common/tx_isp_daynight.c` — configurable day/night transition shell
 - `driver/common/tx_isp_callback_plan.c` — validated ordered callback execution
 - `driver/common/tx_isp_reg_profile.c` — ordered register profiles and bypass-mask merge
+- `driver/common/tx_isp_tuning_abi.c` — checked libimp envelopes, reply packers, and command descriptors
+- `driver/common/tx_isp_frame_layout.c` — checked NV12 and T23/T31 MDNS geometry
 - `driver/include/tx_isp/tx_isp_math.h` — shared fixed-point/interpolation primitives
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
+- `driver/include/tx_isp/tx_isp_tuning_abi.h` — generation-aware proprietary control wire ABI
+- `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
 - `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
 - `driver/t31/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
