@@ -90,6 +90,13 @@ curve commits, held 1920x1080 at 25 fps, and restored visibly sharper detail
 without changing the accepted color profile. The validated module SHA-256 is
 `687a90404e6d204e2030c381df4ae1890dfefd1333244115f55ce0f448c35376`.
 
+The shared T41 math adapter now also owns `fix_point_div_32`, backed by the
+common OEM-compatible divider while preserving its wrapped 32-bit quotient and
+remainder behavior. The hardware cycle held 1920x1080 at 25 fps through a
+forced day transition, logged zero ISP interrupt errors, and preserved the
+accepted color, clarity, and lighting profile. The validated module SHA-256 is
+`27cb2801e4a0b9609b2db175acdfc39be2ab5e2b1ab63e6d956e4574793833d4`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

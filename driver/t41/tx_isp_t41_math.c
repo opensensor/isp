@@ -31,6 +31,12 @@ u32 fix_point_mult3_32(u32 point_pos, u32 first, u32 second, u32 third)
 	return tx_isp_fixmul3_u32(point_pos, first, second, third);
 }
 
+s32 fix_point_div_32(u32 point_pos, u32 numerator, u32 denominator)
+{
+	return (s32)tx_isp_fixdiv_oem_u32(point_pos, numerator,
+					  denominator);
+}
+
 s64 tisp_simple_intp(u32 index, u32 fraction, unsigned long table_address)
 {
 	const u32 *table = (const u32 *)table_address;

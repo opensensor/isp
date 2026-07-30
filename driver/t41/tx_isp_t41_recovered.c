@@ -38855,35 +38855,6 @@ int32_t sub_17498(void)
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000174a0 origin=fragment_seed original=fix_point_div_32 */
-int32_t fix_point_div_32(uint32_t a0, uint32_t a1, uint32_t a2)
-{
-    uint32_t quotient;
-    uint32_t remainder;
-    uint32_t fractional = 0;
-    uint32_t bit = 0;
-
-    if (!a2 || a0 > 31U)
-        return 0;
-
-    quotient = a1 / a2;
-    remainder = a1 % a2;
-    while (bit != a0) {
-        remainder <<= 1;
-        fractional <<= 1;
-        if (a2 < remainder) {
-            fractional |= 1U;
-            remainder -= a2;
-        } else if (a2 == remainder) {
-            fractional |= 1U;
-            fractional <<= a0 - 1U - bit;
-            break;
-        }
-        bit++;
-    }
-    return (int32_t)(fractional | (quotient << a0));
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017528 origin=fragment_seed original=tisp_math_exp2 */
 int32_t tisp_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3)
 {
