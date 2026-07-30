@@ -98,7 +98,9 @@ Math primitives are kernel-independent and do not know the active SoC. Thin
 per-SoC wrappers preserve legacy entry-point names and generation-specific
 table endpoints. The library keeps T23's wrapped 32-bit split multiplier
 separate from the full-range T31/T41 primitive because its fractional partial
-product wraps before the Q-format shift.
+product wraps before the Q-format shift. T23 and T41 share wraparound
+add/subtract arithmetic but retain their different underflow diagnostics in
+their adapters.
 
 ### Proprietary tuning ABI
 

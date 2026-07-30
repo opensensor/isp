@@ -17,6 +17,23 @@
 
 #define TX_ISP_T41_INTERPOLATION_LAST_INDEX	10U
 
+extern s32 isp_printf(u32 level, const char *fmt, ...);
+
+u32 fix_point_add_32(u32 point_pos, u32 left, u32 right)
+{
+	(void)point_pos;
+	return tx_isp_fixadd_u32(left, right);
+}
+
+u32 fix_point_sub_32(u32 point_pos, u32 left, u32 right)
+{
+	(void)point_pos;
+	if (left < right)
+		isp_printf(2, "fix_point_sub_32: unsigned underflow\n");
+
+	return tx_isp_fixsub_u32(left, right);
+}
+
 s32 fix_point_mult2_32(s32 point_pos, s32 first, s32 second)
 {
 	if (point_pos < 0 || point_pos > 31)

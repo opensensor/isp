@@ -12,6 +12,24 @@
 
 #define TX_ISP_T23_INTERPOLATION_LAST_INDEX	8U
 
+extern s32 isp_printf(u32 level, const char *fmt, ...);
+
+int fix_point_add_32(u32 point_pos, u32 left, u32 right)
+{
+	(void)point_pos;
+	return (int)tx_isp_fixadd_u32(left, right);
+}
+
+int fix_point_sub_32(int point_pos, int left, int right)
+{
+	(void)point_pos;
+	if ((u32)left < (u32)right)
+		isp_printf(2, "error: do not support negative number\n",
+			   right);
+
+	return (int)tx_isp_fixsub_u32((u32)left, (u32)right);
+}
+
 int fix_point_mult2_32(int point_pos, int first, int second)
 {
 	return (int)tx_isp_fixmul_wrapped_u32_unchecked((u32)point_pos,

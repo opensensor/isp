@@ -37849,30 +37849,6 @@ int32_t fix_point_div(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013a0c origin=fragment_seed original=fix_point_add_32 */
-int32_t fix_point_add_32(uint32_t a0, uint32_t a1, uint32_t a2)
-{
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 1: Arithmetic */
-    v0 = a1 + a2;
-
-    return 0;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013a14 origin=model_output original=fix_point_sub_32 */
-int32_t fix_point_sub_32(int32_t arg1, int32_t arg2, int32_t arg3)
-{
-	if ((unsigned int)arg2 < (unsigned int)arg3)
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("error: do not support negative number\n"), (uintptr_t)(arg3));
-
-	return arg2 - arg3;
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013aa8 origin=model_output original=fix_point_mult3_32 */
 int32_t fix_point_mult3_32(int32_t arg1, int32_t arg2, int32_t arg3) {
     int32_t ret = fix_point_mult2_32(arg1, arg2, arg3);

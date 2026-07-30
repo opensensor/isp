@@ -208,6 +208,14 @@ static void test_fixed_point_multiply(void)
 	}
 }
 
+static void test_fixed_point_add_subtract(void)
+{
+	assert(tx_isp_fixadd_u32(0x400, 0x800) == 0xc00);
+	assert(tx_isp_fixadd_u32(0xffffffffU, 1) == 0);
+	assert(tx_isp_fixsub_u32(0xc00, 0x800) == 0x400);
+	assert(tx_isp_fixsub_u32(0, 1) == 0xffffffffU);
+}
+
 static unsigned int
 reference_t23_fixmul_u32(unsigned int point_pos, unsigned int first,
 			 unsigned int second)
@@ -437,6 +445,7 @@ int main(void)
 	test_signed_interpolation();
 	test_typed_interpolation();
 	test_fixed_point_multiply();
+	test_fixed_point_add_subtract();
 	test_t23_fixed_point_multiply_equivalence();
 	test_fixed_point_multiply_64();
 	test_fixed_point_divide();

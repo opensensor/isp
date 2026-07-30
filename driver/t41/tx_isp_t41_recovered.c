@@ -39769,22 +39769,6 @@ int32_t fix_point_div_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uin
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017ce0 origin=fragment_seed original=fix_point_add_32 */
-uint32_t fix_point_add_32(uint32_t pointpos, uint32_t left, uint32_t right)
-{
-	(void)pointpos;
-	return left + right;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017ce8 origin=fragment_seed original=fix_point_sub_32 */
-uint32_t fix_point_sub_32(uint32_t pointpos, uint32_t left, uint32_t right)
-{
-	(void)pointpos;
-	if (left < right)
-		isp_printf(2, "fix_point_sub_32: unsigned underflow\n");
-	return left - right;
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017db4 origin=fragment_seed original=fix_point_intp */
 int32_t fix_point_intp(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
 {

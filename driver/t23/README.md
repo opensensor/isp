@@ -55,6 +55,14 @@ Current smoke-test status:
   appeared in `dmesg`, `logread`, or `logcat`. The tested open module remains
   active with SHA-256
   `31418bfe7de79751d18e64ff46309fc0674cb7e6e9f39c7cca2055ea8b2b9f7e`.
+- The common library and T23 math adapter now own the 32-bit fixed-point
+  add/subtract entry points as well. This restores the recovered add function,
+  which computed a value but returned zero, while preserving T23's unsigned
+  underflow diagnostic in the adapter. The entry points currently have no live
+  callers. Hardware validation decoded 149 frames in six seconds, recorded
+  123 in five, and decoded 124 in the five-second final check; mode transitions
+  and ISP/VIC logs remained clean. The active module SHA-256 is
+  `7ec01426f8701170cd13feddba543c52e90cdb424122f47dc8e9949a8c07187c`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

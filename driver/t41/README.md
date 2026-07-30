@@ -97,6 +97,14 @@ forced day transition, logged zero ISP interrupt errors, and preserved the
 accepted color, clarity, and lighting profile. The validated module SHA-256 is
 `27cb2801e4a0b9609b2db175acdfc39be2ab5e2b1ab63e6d956e4574793833d4`.
 
+The common library and T41 math adapter now also own the 32-bit fixed-point
+add/subtract entry points, retaining T41's underflow diagnostic locally.
+These entry points currently have no live callers. A clean boot decoded 150
+frames in six seconds and recorded 125 in five, preserved the accepted
+red/color and sharpness profile, passed night/auto/day, and logged zero ISP
+interrupt errors. The active module SHA-256 is
+`8ff2f59a2c2e555d88b2a9bd7d5f08911b2e84be33a0e9e75c4af1fdafc61a2c`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the
