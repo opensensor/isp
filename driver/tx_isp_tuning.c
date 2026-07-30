@@ -4443,12 +4443,31 @@ static uint32_t gib_ir_value[2] = {0, 0};      /* BSS zero; runtime set by DEIR 
 static uint32_t trig_set_deir = 0;        /* DEIR trigger flag */
 static uint32_t gib_deir_gate_en = 0;     /* GIB reg 0x106c bit16 shadow */
 
+/* GIB tuning global variables — OEM static defaults from tx-isp-t31.ko binary.
+ * Addresses verified: 0x9a2e4..0x9a30c. These are NOT populated from tuning blob;
+ * they're static defaults that produce the correct register values when combined
+ * with tiziano_gib_config_line. Note: data_9a2ec is already defined at line 3967
+ * for AE use (value 1), but OEM binary shows it initialized to 0x0 and used for
+ * 0x106c DEIR gate control. We keep the existing AE definition and override for GIB. */
+static uint32_t data_9a2e4 = 0x1;  /* OEM default, shift 0xa for 0x103c */
+static uint32_t data_9a2e8 = 0x0;  /* OEM default */
+/* data_9a2ec is defined at line 3967 for AE histogram-scaling (value 1) */
+static uint32_t data_9a2f0 = 0x1;  /* OEM default, shift 0xe for 0x103c */
+static uint32_t data_9a2f4 = 0x0;  /* OEM default, shift 0x3 for 0x106c */
+static uint32_t data_9a2f8 = 0x0;  /* OEM default, shift 8 for 0x103c */
+static uint32_t data_9a2fc = 0x0;  /* OEM default, shift 0x10 for 0x103c */
+static uint32_t data_9a300 = 0x0;  /* OEM default, shift 2 for 0x103c */
+static uint32_t data_9a304 = 0x3;  /* OEM default, shift 4 for 0x103c */
+static uint32_t data_9a308 = 0xfff;/* OEM default, 0x1038 low word */
+static uint32_t data_9a30c = 0xfff;/* OEM default, 0x1038 high word */
+
 /* GIB config line accessor — VERIFIED from MIPS disassembly of OEM tiziano_gib_lut_parameter.
- * config_line[0] is used directly at bit 12 of reg 0x103c (unnamed first-byte field).
+ * config_line[0] is used directly at bit 12 of reg 0x103c.
  * All other fields verified by tracing lw offsets from $r16 (config_line base):
- *   reg 0x1038 = config_line[11] << 16 | config_line[10]
- *   reg 0x103c = [7]<<16 | [4]<<14 | [0]<<12 | [1]<<10 | [6]<<8 | [9]<<4 | [8]<<2
- *   reg 0x106c = [3]<<16 | [2]<<3 | [5]
+ *   reg 0x1038 = data_9a30c << 16 | data_9a308 (OEM uses globals, both set to 0xfff)
+ *   reg 0x103c = data_9a2fc<<0x10 | data_9a2f0<<0xe | config_line[0]<<0xc | data_9a2e4<<0xa
+ *                | data_9a2f8<<8 | data_9a304<<4 | data_9a300<<2
+ *   reg 0x106c = data_9a2ec<<0x10 | data_9a2e8<<3 | data_9a2f4 (OEM formula via gate)
  */
 #define GIB_CFG_EN_BLC       tiziano_gib_config_line[1]   /* bit 10 of 0x103c */
 #define GIB_CFG_DEIR_MODE    tiziano_gib_config_line[2]   /* bit 3 of 0x106c */
