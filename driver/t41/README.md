@@ -137,6 +137,15 @@ The post-boot frame retained the accepted sharpness and color profile, while
 SHA-256 is
 `1aed03add34f3e213e39a654c0389603c23eecf2e39f6d1c9455df87248fbda6`.
 
+The two-/three-operand unsuffixed and `_64` fixed-point multiply entry points
+now live in the math adapter as official `(pointpos, u64, ...)` MIPS O32
+interfaces. Their common limb implementation retains the full low word of the
+128-bit product after the requested Q-format shift without compiler 128-bit
+support. The active candidate decoded 152 main frames in six seconds and 75
+substream frames in three, passed night/auto/day, kept `rvd` responsive, and
+reported zero ISP interrupt errors. Its module SHA-256 is
+`03e9f68a3740c03f51caae9269fa339d8d971d2c8566b1a8463daf7ffe1f904e`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

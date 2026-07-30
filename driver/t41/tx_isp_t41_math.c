@@ -69,6 +69,29 @@ s64 tisp_round_int64(s64 value, s32 precision)
 	return tx_isp_round_s64(value, (u32)precision);
 }
 
+u64 __attribute__((__noinline__))
+fix_point_mult2(u32 point_pos, u64 first, u64 second)
+{
+	return tx_isp_fixmul_u64(point_pos, first, second);
+}
+
+u64 fix_point_mult3(u32 point_pos, u64 first, u64 second, u64 third)
+{
+	u64 pair = fix_point_mult2(point_pos, first, second);
+
+	return fix_point_mult2(point_pos, pair, third);
+}
+
+u64 fix_point_mult2_64(u32 point_pos, u64 first, u64 second)
+{
+	return fix_point_mult2(point_pos, first, second);
+}
+
+u64 fix_point_mult3_64(u32 point_pos, u64 first, u64 second, u64 third)
+{
+	return fix_point_mult3(point_pos, first, second, third);
+}
+
 s32 fix_point_mult2_32(s32 point_pos, s32 first, s32 second)
 {
 	if (point_pos < 0 || point_pos > 31)

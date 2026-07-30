@@ -319,18 +319,32 @@ static void test_fixed_point_multiply_64(void)
 		unsigned int point_pos = iteration % 64U;
 
 		seed = seed * 1664525U + 1013904223U;
-		first = seed & 0xfffffU;
+		first = (unsigned long long)seed << 32;
 		seed = seed * 1664525U + 1013904223U;
-		second = seed & 0xfffffU;
+		first |= seed;
 		seed = seed * 1664525U + 1013904223U;
-		third = seed & 0xfffffU;
+		second = (unsigned long long)seed << 32;
+		seed = seed * 1664525U + 1013904223U;
+		second |= seed;
+		seed = seed * 1664525U + 1013904223U;
+		third = (unsigned long long)seed << 32;
+		seed = seed * 1664525U + 1013904223U;
+		third |= seed;
 
-		pair = (first * second) >> point_pos;
-		triple = (pair * third) >> point_pos;
+		pair = (unsigned long long)
+			(((__uint128_t)first * second) >> point_pos);
+		triple = (unsigned long long)
+			(((__uint128_t)pair * third) >> point_pos);
 		assert(tx_isp_fixmul_u64(point_pos, first, second) == pair);
 		assert(tx_isp_fixmul3_u64(point_pos, first, second, third) ==
 		       triple);
 	}
+
+	assert(tx_isp_fixmul_u64(
+		       63, 0xffffffffffffffffULL, 0xffffffffffffffffULL) ==
+	       (unsigned long long)
+		       (((__uint128_t)0xffffffffffffffffULL *
+			 0xffffffffffffffffULL) >> 63));
 }
 
 static void test_fixed_point_divide(void)

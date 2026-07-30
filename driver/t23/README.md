@@ -87,6 +87,14 @@ Current smoke-test status:
   seconds, passed night/auto/day, advanced both ISP interrupt lines, and logged
   no driver fault. The active module SHA-256 is
   `3b95aabf4e5014f53ac4fa003553a3cdf86873bd727542723fb064564f5b5669`.
+- The unsuffixed and `_64` two-/three-operand multiply bodies remain in the
+  recovered core. An attempted adapter extraction built and inserted cleanly
+  but made `rvd` exit during startup on two consecutive fail-safe boots.
+  Rebuilding the committed local boundary reproduced the accepted
+  `3b95aabf...` module byte-for-byte, restored Raptor control calls, passed a
+  forced day transition, and decoded 124 main frames in five seconds. Treat
+  this boundary as behavior/code-generation sensitive until its recovered
+  call sites have typed signatures.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

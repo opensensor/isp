@@ -100,7 +100,10 @@ table endpoints. The library keeps T23's wrapped 32-bit split multiplier
 separate from the full-range T31/T41 primitive because its fractional partial
 product wraps before the Q-format shift. T23 and T41 share wraparound
 add/subtract arithmetic but retain their different underflow diagnostics in
-their adapters.
+their adapters. T41 now routes all four native two-/three-operand multiply
+symbols through the full-range primitive. T31 retains a size-neutral local
+copy in its recovered AE object, and T23 retains its recovered bodies after
+an adapter extraction reproducibly terminated `rvd` during startup.
 
 ### Proprietary tuning ABI
 

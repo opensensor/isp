@@ -459,33 +459,61 @@ tx_isp_fixmul_wrapped_u32(unsigned int point_pos, unsigned int first,
 }
 
 /*
- * Native-width counterpart used by the AE tuning paths. Keep the split form
- * used by the vendor code so MIPS32 builds do not require 128-bit arithmetic.
- * Intermediate products intentionally retain unsigned 64-bit wraparound.
+ * Native-width counterpart used by the tuning paths. Build the full 128-bit
+ * product from 32-bit limbs so MIPS32 does not require compiler 128-bit
+ * support. The returned low word of (first * second) >> point_pos matches the
+ * OEM implementation for the complete unsigned 64-bit input domain.
  */
 static inline unsigned long long
 tx_isp_fixmul_u64(unsigned int point_pos, unsigned long long first,
 		  unsigned long long second)
 {
-	unsigned long long mask;
-	unsigned long long first_integer;
-	unsigned long long first_fraction;
-	unsigned long long second_integer;
-	unsigned long long second_fraction;
+	unsigned long long first_low;
+	unsigned long long first_high;
+	unsigned long long second_low;
+	unsigned long long second_high;
+	unsigned long long product_low_low;
+	unsigned long long product_low_high;
+	unsigned long long product_high_low;
+	unsigned long long product_high_high;
+	unsigned long long low;
+	unsigned long long high;
+	unsigned long long addend;
+	unsigned long long previous;
+	unsigned int carry;
 
 	if (point_pos >= 64U)
 		return 0;
 
-	mask = (1ULL << point_pos) - 1ULL;
-	first_integer = first >> point_pos;
-	first_fraction = first & mask;
-	second_integer = second >> point_pos;
-	second_fraction = second & mask;
+	first_low = (unsigned int)first;
+	first_high = first >> 32;
+	second_low = (unsigned int)second;
+	second_high = second >> 32;
 
-	return (first_integer * second_integer << point_pos) +
-		first_integer * second_fraction +
-		first_fraction * second_integer +
-		((first_fraction * second_fraction) >> point_pos);
+	product_low_low = first_low * second_low;
+	product_low_high = first_low * second_high;
+	product_high_low = first_high * second_low;
+	product_high_high = first_high * second_high;
+
+	low = product_low_low;
+	high = product_high_high +
+		(product_low_high >> 32) +
+		(product_high_low >> 32);
+
+	addend = product_low_high << 32;
+	previous = low;
+	low += addend;
+	carry = low < previous;
+
+	addend = product_high_low << 32;
+	previous = low;
+	low += addend;
+	high += carry + (low < previous);
+
+	if (!point_pos)
+		return low;
+
+	return (low >> point_pos) | (high << (64U - point_pos));
 }
 
 static inline unsigned long long
