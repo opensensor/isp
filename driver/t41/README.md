@@ -39,7 +39,8 @@ The module is linked from eight logical objects:
 - `tx_isp_t41_tuning_abi.c` — shared tuning-envelope and command-descriptor
   implementation
 - `tx_isp_t41_frame_layout.c` — shared checked NV12 geometry and vendor
-  aggregate-line semantics used by set-format and QBUF
+  aggregate-line semantics used by set-format and QBUF; it also imports the
+  shared 68-byte frame-buffer wire ABI and generation-specific flag policy
 - `tx_isp_t41_exposure.c` — T41 sensor/color adapter around the shared checked
   anti-flicker exposure planner
 - `tx_isp_t41_scaler.c` — exact T41 coefficient-table adapter around the

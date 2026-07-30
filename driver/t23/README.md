@@ -19,7 +19,9 @@ interpolation and normalization to the common T23/T41 generator.
 The tuning-ABI adapter supplies checked shared libimp envelopes, command
 descriptors, and expression/EV response packers. The frame-layout adapter
 supplies overflow-checked NV12 geometry and the shared T23/T31 MDNS auxiliary
-layout. T23 still owns dispatch, alignment policy, register writes,
+layout. Its private frame-channel arrays use the shared 68-byte frame-buffer
+wire ABI and named word/flag constants. T23 still owns dispatch, queue state,
+alignment policy, register writes,
 sensor-derived values, and its 12-byte allocation ABI's page padding.
 
 Current smoke-test status:

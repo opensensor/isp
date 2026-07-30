@@ -7908,18 +7908,18 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd)
  * HLIL reference (0xab3c):
  *   memcpy(arg2, arg1, 0x34)
  *   arg2->reserved = arg1->reserved   (+0x3c, +0x40)
- *   arg2->flags = (arg2->flags & 0xffff1bb8) | queue_flags
- *   if state==3: flags |= 2 (V4L2_BUF_FLAG_DONE)
- *   if state==4: flags |= 4 (V4L2_BUF_FLAG_ERROR)
+ *   arg2->flags = (arg2->flags & retain_mask) | queue_flags
+ *   if state==3: flags |= 4 (V4L2_BUF_FLAG_DONE)
+ *   if state==4: flags |= 0x40 (V4L2_BUF_FLAG_ERROR)
  *
  * In our struct frame_buffer the first 0x34 bytes map to
  * index..sequence (matching v4l2_buffer layout).
  */
 static int __fill_v4l2_buffer(struct frame_buffer *buf, struct v4l2_buffer *b)
 {
+    BUILD_BUG_ON(sizeof(*b) != TX_ISP_FRAME_BUFFER_BYTES);
     if (!buf || !b)
         return -EINVAL;
-
     /* OEM: memcpy(arg2, arg1, 0x34) — copy the v4l2-compatible header.
      * Both frame_buffer and v4l2_buffer start with the same layout:
      * index, type, bytesused, flags, field, timestamp, sequence, memory,
@@ -7936,7 +7936,7 @@ static int __fill_v4l2_buffer(struct frame_buffer *buf, struct v4l2_buffer *b)
     b->length    = buf->length;
 
     /* OEM: mask flags, keep only V4L2 standard bits, clear transient bits */
-    b->flags &= 0xffff1bb8;
+    b->flags &= TX_ISP_FRAME_FLAG_RETAIN_MASK;
 
     /* OEM: merge state into flags */
     switch (buf->state) {

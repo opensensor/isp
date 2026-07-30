@@ -19,6 +19,7 @@ T40 is intentionally outside this refactor.
 | Ordered register profiles | `tx_isp_reg_profile.h` | `common/tx_isp_reg_profile.c` | T23, T31 |
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
 | Proprietary tuning wire ABI | `tx_isp_tuning_abi.h` | `common/tx_isp_tuning_abi.c` | T23, T31, T41 |
+| Frame-buffer wire ABI and state flags | `tx_isp_frame_abi.h` | header-only pure functions | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
@@ -78,6 +79,25 @@ without executing a partial hardware sequence.
 The runner is deliberately small: error handling inside a tuning step remains
 an SoC policy, while the plan guarantees shape and ordering. T23 and T31 use
 it for their distinct 17- and 18-block refresh sequences.
+
+### Frame-buffer ABI
+
+`tx_isp_frame_abi.h` names the exact 17-word, 68-byte MIPS32 frame-buffer
+contract used by the private T23, T31, and T41 frame-channel ioctls. It owns
+the stable word offsets, the 52-byte copied prefix, persistent flag mask, and
+V4L2 queued/done/error values without depending on the build host's pointer or
+`timeval` sizes.
+
+Buffer-state values are not assumed to be universal. The common pure flag
+builder takes explicit state masks, with small T31 and T41 policy wrappers for
+their recovered meanings. Queue lists, locks, DMA handoff, late-link replay,
+and completion ordering remain generation-local. The active adapters now use
+the shared word and flag names in place of numeric offsets while preserving
+all three validated module images byte for byte.
+
+`tests/tx_isp_frame_abi_test.c` checks every important wire offset, total size,
+prefix size, persistent/queue flag merging, each recovered state transition,
+overlapping-policy priority, and out-of-range states.
 
 ### Sensor registry
 

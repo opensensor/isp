@@ -27467,7 +27467,7 @@ static int t41_frame_channel_reqbufs_clean(void *channel,
 
 static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
 {
-    uint32_t vbuf[17];
+    uint32_t vbuf[TX_ISP_FRAME_WORD_COUNT];
     uint32_t index;
     char *buffer;
     void **tail;
@@ -27478,15 +27478,16 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
         return -EINVAL;
     if (private_copy_from_user(vbuf, user_buf, sizeof(vbuf)))
         return -EFAULT;
-    index = vbuf[0];
+    index = vbuf[TX_ISP_FRAME_WORD_INDEX];
     printk(KERN_WARNING
            "tx_isp_t41_recovered: qbuf inspect channel=%u index=%u/%u "
            "type=%u/%u flags=%#x memory=%u/%u dma=0x%x "
            "length=0x%x/0x%x state=%u\n",
            *(uint32_t *)((char *)channel + 0x2dc), index,
-           *(uint32_t *)((char *)channel + 0x218), vbuf[1],
-           *(uint32_t *)((char *)channel + 0x2c), vbuf[3], vbuf[12],
-           *(uint32_t *)((char *)channel + 0x48), vbuf[13], vbuf[14],
+           *(uint32_t *)((char *)channel + 0x218), vbuf[TX_ISP_FRAME_WORD_TYPE],
+           *(uint32_t *)((char *)channel + 0x2c), vbuf[TX_ISP_FRAME_WORD_FLAGS],
+           vbuf[TX_ISP_FRAME_WORD_MEMORY], *(uint32_t *)((char *)channel + 0x48),
+           vbuf[TX_ISP_FRAME_WORD_DMA], vbuf[TX_ISP_FRAME_WORD_LENGTH],
            *(uint32_t *)((char *)channel + 0x64),
            index < *(uint32_t *)((char *)channel + 0x218) &&
            t41_kernel_data_ptr(*(void **)((char *)channel + 0x118 +
@@ -27494,7 +27495,7 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
            *(uint32_t *)((char *)*(void **)((char *)channel + 0x118 +
                                             index * sizeof(void *)) +
                          0x48) : ~0U);
-    if (vbuf[1] != *(uint32_t *)((char *)channel + 0x2c) ||
+    if (vbuf[TX_ISP_FRAME_WORD_TYPE] != *(uint32_t *)((char *)channel + 0x2c) ||
         index >= *(uint32_t *)((char *)channel + 0x218))
         return -EINVAL;
     buffer = *(char **)((char *)channel + 0x118 + index * sizeof(void *));
@@ -27502,9 +27503,9 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
         return -EINVAL;
     if (*(uint32_t *)(buffer + 0x48) == 3 &&
         (*(uint8_t *)((char *)channel + 0x250) & 1) &&
-        vbuf[12] == *(uint32_t *)((char *)channel + 0x48) &&
-        vbuf[13] == *(uint32_t *)(buffer + 0x34) &&
-        vbuf[14] == *(uint32_t *)(buffer + 0x38)) {
+        vbuf[TX_ISP_FRAME_WORD_MEMORY] == *(uint32_t *)((char *)channel + 0x48) &&
+        vbuf[TX_ISP_FRAME_WORD_DMA] == *(uint32_t *)(buffer + 0x34) &&
+        vbuf[TX_ISP_FRAME_WORD_LENGTH] == *(uint32_t *)(buffer + 0x38)) {
         uint32_t channel_index = *(uint32_t *)((char *)channel + 0x2dc);
         unsigned int channel_bit = channel_index < 31 ?
             1U << channel_index : 0;
@@ -27569,25 +27570,25 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
             return 0;
         return ret;
     }
-    if (vbuf[12] != *(uint32_t *)((char *)channel + 0x48) ||
-        vbuf[14] != *(uint32_t *)((char *)channel + 0x64) ||
+    if (vbuf[TX_ISP_FRAME_WORD_MEMORY] != *(uint32_t *)((char *)channel + 0x48) ||
+        vbuf[TX_ISP_FRAME_WORD_LENGTH] != *(uint32_t *)((char *)channel + 0x64) ||
         *(uint32_t *)(buffer + 0x48) != 0)
         return -EINVAL;
 
-    *(uint32_t *)(buffer + 0x0c) = vbuf[3] & 0xffff1bb8U;
-    *(uint32_t *)(buffer + 0x10) = vbuf[4];
-    *(uint32_t *)(buffer + 0x14) = vbuf[5];
-    *(uint32_t *)(buffer + 0x18) = vbuf[6];
-    *(uint32_t *)(buffer + 0x34) = vbuf[13];
-    *(uint32_t *)(buffer + 0x38) = vbuf[14];
+    *(uint32_t *)(buffer + 0x0c) = vbuf[TX_ISP_FRAME_WORD_FLAGS] & TX_ISP_FRAME_FLAG_RETAIN_MASK;
+    *(uint32_t *)(buffer + 0x10) = vbuf[TX_ISP_FRAME_WORD_FIELD];
+    *(uint32_t *)(buffer + 0x14) = vbuf[TX_ISP_FRAME_WORD_TIMESTAMP_SEC];
+    *(uint32_t *)(buffer + 0x18) = vbuf[TX_ISP_FRAME_WORD_TIMESTAMP_USEC];
+    *(uint32_t *)(buffer + 0x34) = vbuf[TX_ISP_FRAME_WORD_DMA];
+    *(uint32_t *)(buffer + 0x38) = vbuf[TX_ISP_FRAME_WORD_LENGTH];
     *(void **)(buffer + 0x68) = buffer + 0x68;
     *(void **)(buffer + 0x6c) = buffer + 0x68;
-    *(uint32_t *)(buffer + 0x70) = vbuf[13];
+    *(uint32_t *)(buffer + 0x70) = vbuf[TX_ISP_FRAME_WORD_DMA];
     *(uint32_t *)(buffer + 0x48) = 2;
     *(uint32_t *)(buffer + 0x4c) = 2;
 
-    private_dma_sync_single_for_device(NULL, vbuf[13], vbuf[14],
-                                       DMA_FROM_DEVICE);
+    private_dma_sync_single_for_device(NULL, vbuf[TX_ISP_FRAME_WORD_DMA],
+                                       vbuf[TX_ISP_FRAME_WORD_LENGTH], DMA_FROM_DEVICE);
     private_mutex_lock((char *)channel + 0x30);
     __private_spin_lock_irqsave((uintptr_t)((char *)channel + 0x2e0),
                                 (uintptr_t)&flags);
@@ -27608,34 +27609,33 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
         uint32_t state;
 
         /* H20250310a __fill_tisp_buffer: preserve the userspace reserved2
-         * pointer already in vbuf[15], copy the fixed 0x34-byte prefix and
+         * pointer already in reserved2, copy the fixed 0x34-byte prefix and
          * return the queue/state flags produced by __enqueue_in_driver. */
-        memcpy(vbuf, buffer, 0x34);
-        vbuf[16] = *(uint32_t *)(buffer + 0x40);
-        if (vbuf[15]) {
+        memcpy(vbuf, buffer, TX_ISP_FRAME_BUFFER_PREFIX_BYTES);
+        vbuf[TX_ISP_FRAME_WORD_RESERVED] = *(uint32_t *)(buffer + 0x40);
+        if (vbuf[TX_ISP_FRAME_WORD_RESERVED2]) {
             uint32_t *reserved = *(uint32_t **)(buffer + 0x3c);
 
             if (!t41_kernel_data_ptr(reserved)) {
                 ret = -EIO;
             } else {
                 reserved[2] = 0;
-                if (private_copy_to_user(
-                        (void __user *)(uintptr_t)vbuf[15], reserved, 12))
+                if (private_copy_to_user((void __user *)(uintptr_t)vbuf[TX_ISP_FRAME_WORD_RESERVED2], reserved, 12))
                     ret = -EFAULT;
             }
         }
         if (!ret && !t41_kernel_data_ptr(queue)) {
             ret = -EIO;
         } else if (!ret) {
-            vbuf[3] &= 0xffff1bb8U;
-            vbuf[3] |= *(uint32_t *)((char *)queue + 0x18);
+            vbuf[TX_ISP_FRAME_WORD_FLAGS] &= TX_ISP_FRAME_FLAG_RETAIN_MASK;
+            vbuf[TX_ISP_FRAME_WORD_FLAGS] |= *(uint32_t *)((char *)queue + 0x18);
             state = *(uint32_t *)(buffer + 0x48);
             if (state == 1 || state == 3)
-                vbuf[3] |= 2;
+                vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_QUEUED;
             else if (state == 4)
-                vbuf[3] |= 4;
+                vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_DONE;
             else if (state == 5)
-                vbuf[3] |= 0x40;
+                vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_ERROR;
         }
     }
     private_mutex_unlock((char *)channel + 0x30);
@@ -27648,14 +27648,14 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
            "tx_isp_t41_recovered: qbuf clean channel=%u index=%u "
            "dma=0x%x length=%u flags=%#x pending=%u\n",
            *(uint32_t *)((char *)channel + 0x2dc), index,
-           vbuf[13], vbuf[14], vbuf[3],
+           vbuf[TX_ISP_FRAME_WORD_DMA], vbuf[TX_ISP_FRAME_WORD_LENGTH], vbuf[TX_ISP_FRAME_WORD_FLAGS],
            *(uint32_t *)((char *)channel + 0x224));
     return 0;
 }
 
 static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
 {
-    uint32_t vbuf[17];
+    uint32_t vbuf[TX_ISP_FRAME_WORD_COUNT];
     uint32_t user_reserved2;
     char *done_head;
     char *node;
@@ -27670,7 +27670,7 @@ static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
         return -EINVAL;
     if (private_copy_from_user(vbuf, user_buf, sizeof(vbuf)))
         return -EFAULT;
-    if (vbuf[1] != *(uint32_t *)((char *)channel + 0x2c))
+    if (vbuf[TX_ISP_FRAME_WORD_TYPE] != *(uint32_t *)((char *)channel + 0x2c))
         return -EINVAL;
     if (!(*(uint8_t *)((char *)channel + 0x250) & 1))
         return -EINVAL;
@@ -27712,10 +27712,10 @@ static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
 
     if (!t41_kernel_data_ptr(buffer))
         return -EIO;
-    user_reserved2 = vbuf[15];
-    memcpy(vbuf, buffer, 0x34);
-    vbuf[15] = user_reserved2;
-    vbuf[16] = *(uint32_t *)(buffer + 0x40);
+    user_reserved2 = vbuf[TX_ISP_FRAME_WORD_RESERVED2];
+    memcpy(vbuf, buffer, TX_ISP_FRAME_BUFFER_PREFIX_BYTES);
+    vbuf[TX_ISP_FRAME_WORD_RESERVED2] = user_reserved2;
+    vbuf[TX_ISP_FRAME_WORD_RESERVED] = *(uint32_t *)(buffer + 0x40);
     if (user_reserved2) {
         uint32_t *reserved = *(uint32_t **)(buffer + 0x3c);
 
@@ -27726,15 +27726,15 @@ static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
                                  reserved, 12))
             return -EFAULT;
     }
-    vbuf[3] &= 0xffff1bb8U;
-    vbuf[3] |= *(uint32_t *)((char *)channel + 0x44);
+    vbuf[TX_ISP_FRAME_WORD_FLAGS] &= TX_ISP_FRAME_FLAG_RETAIN_MASK;
+    vbuf[TX_ISP_FRAME_WORD_FLAGS] |= *(uint32_t *)((char *)channel + 0x44);
     state = *(uint32_t *)(buffer + 0x48);
     if (state == 1 || state == 3)
-        vbuf[3] |= 2;
+        vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_QUEUED;
     else if (state == 4)
-        vbuf[3] |= 4;
+        vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_DONE;
     else if (state == 5)
-        vbuf[3] |= 0x40;
+        vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_ERROR;
 
     *(uint32_t *)(buffer + 0x48) = 0;
     if (*(uint32_t *)((char *)channel + 0x2dc) == 0 && direct_mode) {

@@ -20,6 +20,9 @@ just cosmetic:
   descriptors, and response packers.
 - `tx_isp_frame_layout.c` links checked NV12 and MDNS auxiliary geometry while
   T31 retains its alignment, register, allocation, and memory-option policy.
+- The shared frame-buffer ABI asserts T31's 68-byte MIPS32 `v4l2_buffer`
+  contract and names its persistent flag mask; T31 retains queue ownership and
+  its generation-specific state meanings.
 - `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
   deflicker LUT's fixed 120-word, repeated-tail ABI.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.

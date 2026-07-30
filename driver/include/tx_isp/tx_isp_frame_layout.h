@@ -1,12 +1,7 @@
 #ifndef TX_ISP_FRAME_LAYOUT_H
 #define TX_ISP_FRAME_LAYOUT_H
 
-#ifdef __KERNEL__
-#include <linux/types.h>
-#else
-#include <stdint.h>
-typedef uint32_t u32;
-#endif
+#include "tx_isp_frame_abi.h"
 
 struct tx_isp_nv12_layout {
 	u32 stride;

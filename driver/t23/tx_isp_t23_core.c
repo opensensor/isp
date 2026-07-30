@@ -13607,7 +13607,7 @@ static void regtrace_unregister_misc_ivdc(void)
 #define REGTRACE_FRAMECHAN_WAIT 0x400456bfU
 #define REGTRACE_FRAMECHAN_DQBUF 0xc0445611U
 #define REGTRACE_FRAMECHAN_QUERYBUF 0xc0445609U
-#define REGTRACE_FRAMECHAN_QBUF_WORDS 17
+#define REGTRACE_FRAMECHAN_QBUF_WORDS TX_ISP_FRAME_WORD_COUNT
 #define REGTRACE_FRAMECHAN_QBUF_SLOTS 8
 #define REGTRACE_FRAMECHAN_DONE_SLOTS 16
 #define REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE 1U
@@ -13867,15 +13867,20 @@ static int regtrace_framechan_record_qbuf(int channel, const uint32_t *words)
     if (channel < 0 || channel >= REGTRACE_FRAMECHAN_COUNT || !words)
         return -EINVAL;
 
-    ret = regtrace_t23_program_msca_qbuf(channel, words[13], words[14]);
+    ret = regtrace_t23_program_msca_qbuf(
+        channel, words[TX_ISP_FRAME_WORD_DMA],
+        words[TX_ISP_FRAME_WORD_LENGTH]);
     if (ret)
         return ret;
 
     spin_lock_irqsave(&regtrace_framechan_done_lock, flags);
     slot = regtrace_framechan_qbuf_count[channel] % REGTRACE_FRAMECHAN_QBUF_SLOTS;
-    regtrace_framechan_qbuf_index[channel][slot] = words[0];
-    regtrace_framechan_qbuf_userptr[channel][slot] = words[13];
-    regtrace_framechan_qbuf_len[channel][slot] = words[14];
+    regtrace_framechan_qbuf_index[channel][slot] =
+        words[TX_ISP_FRAME_WORD_INDEX];
+    regtrace_framechan_qbuf_userptr[channel][slot] =
+        words[TX_ISP_FRAME_WORD_DMA];
+    regtrace_framechan_qbuf_len[channel][slot] =
+        words[TX_ISP_FRAME_WORD_LENGTH];
     regtrace_framechan_qbuf_count[channel]++;
     spin_unlock_irqrestore(&regtrace_framechan_done_lock, flags);
     return 0;
@@ -14026,20 +14031,24 @@ static long regtrace_framechan_repair_dqbuf(int channel, unsigned long arg)
         regtrace_framechan_done_count[channel]--;
         spin_unlock_irqrestore(&regtrace_framechan_done_lock, flags);
 
-        words[0] = done.index;
-        words[13] = done.userptr;
-        words[14] = done.length;
+        words[TX_ISP_FRAME_WORD_INDEX] = done.index;
+        words[TX_ISP_FRAME_WORD_DMA] = done.userptr;
+        words[TX_ISP_FRAME_WORD_LENGTH] = done.length;
     } else {
         slot = regtrace_framechan_latest_slot(channel);
         if (slot >= 0) {
-            words[0] = regtrace_framechan_qbuf_index[channel][slot];
-            words[13] = regtrace_framechan_qbuf_userptr[channel][slot];
-            words[14] = regtrace_framechan_qbuf_len[channel][slot];
+            words[TX_ISP_FRAME_WORD_INDEX] =
+                regtrace_framechan_qbuf_index[channel][slot];
+            words[TX_ISP_FRAME_WORD_DMA] =
+                regtrace_framechan_qbuf_userptr[channel][slot];
+            words[TX_ISP_FRAME_WORD_LENGTH] =
+                regtrace_framechan_qbuf_len[channel][slot];
         }
     }
-    words[1] = REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE;
-    words[3] = 0x00000004U;
-    words[11] = regtrace_framechan_dq_sequence[channel]++;
+    words[TX_ISP_FRAME_WORD_TYPE] = REGTRACE_TISP_BUF_TYPE_VIDEO_CAPTURE;
+    words[TX_ISP_FRAME_WORD_FLAGS] = TX_ISP_FRAME_FLAG_DONE;
+    words[TX_ISP_FRAME_WORD_SEQUENCE] =
+        regtrace_framechan_dq_sequence[channel]++;
 
     if (copy_to_user((void __user *)(uintptr_t)arg, words, sizeof(words)))
         return -EFAULT;
@@ -14047,7 +14056,10 @@ static long regtrace_framechan_repair_dqbuf(int channel, unsigned long arg)
     if (regtrace_t23_log_framechan_payloads &&
         regtrace_framechan_log_count[channel] < 16) {
         printk(KERN_INFO "tx_isp_t23_recovered: framechan%d dqbuf idx=%u seq=%u userptr=0x%x len=0x%x slot=%d\n",
-               channel, words[0], words[11], words[13], words[14], slot);
+               channel, words[TX_ISP_FRAME_WORD_INDEX],
+               words[TX_ISP_FRAME_WORD_SEQUENCE],
+               words[TX_ISP_FRAME_WORD_DMA],
+               words[TX_ISP_FRAME_WORD_LENGTH], slot);
     }
     return 0;
 }
@@ -14163,8 +14175,13 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
             channel >= 0 && channel < REGTRACE_FRAMECHAN_COUNT &&
             regtrace_framechan_log_count[channel] < 16) {
             printk(KERN_INFO "tx_isp_t23_recovered: framechan%d qbuf idx=%u type=%u memory=%u userptr=0x%x len=0x%x flags=0x%x count=%u\n",
-                   channel, words[0], words[1], words[10], words[13],
-                   words[14], words[3], regtrace_framechan_qbuf_count[channel]);
+                   channel, words[TX_ISP_FRAME_WORD_INDEX],
+                   words[TX_ISP_FRAME_WORD_TYPE],
+                   words[TX_ISP_FRAME_WORD_TIMECODE_USERBITS],
+                   words[TX_ISP_FRAME_WORD_DMA],
+                   words[TX_ISP_FRAME_WORD_LENGTH],
+                   words[TX_ISP_FRAME_WORD_FLAGS],
+                   regtrace_framechan_qbuf_count[channel]);
         }
         break;
     }

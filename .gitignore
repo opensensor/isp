@@ -15,8 +15,7 @@
 built-in.o
 .tmp_versions/
 modules.builtin
-/tests/tx_isp_math_test
-/tests/tx_isp_subdev_abi_test
+/tests/*_test
 
 # Log/temp files
 build.log

@@ -98,6 +98,7 @@ Important driver files:
 - `driver/include/tx_isp/tx_isp_math.h` — shared fixed-point/interpolation primitives
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
 - `driver/include/tx_isp/tx_isp_tuning_abi.h` — generation-aware proprietary control wire ABI
+- `driver/include/tx_isp/tx_isp_frame_abi.h` — exact 32-bit frame-buffer wire layout and generation-aware state flags
 - `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
 - `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers

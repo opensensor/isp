@@ -140,6 +140,23 @@ publishing Y/UV addresses. All three adapters use this plan before their local
 QBUF hardware handoff. Their queue objects, locks, late-link replay, rotation,
 and completion semantics remain intentionally separate.
 
+### Frame-buffer wire ABI and state flags
+
+`driver/include/tx_isp/tx_isp_frame_abi.h` defines the shared 17-word
+MIPS32 `v4l2_buffer` wire shape used by all three active generations. Named
+offsets replace raw indices in the T23 and T41 private frame-channel paths,
+and the common 68-byte size is asserted against T31's kernel
+`struct v4l2_buffer`.
+
+The common layer also owns the persistent flag mask and a pure,
+policy-parameterized queue/state flag builder. T31 and T41 deliberately have
+different state masks; preserving those adapters avoids the unsafe assumption
+that a numeric internal buffer state has one meaning across SoCs. The initial
+integration is binary-neutral on T23, T31, and T41, providing a stable
+contract for later extraction of queue-copy helpers without changing live
+behavior. `tests/tx_isp_frame_abi_test.c` validates sizes, offsets, flag
+merging, policy priority, and every known state.
+
 ### Sensor registry
 
 `driver/common/tx_isp_sinfo.c` owns the sensor-registry lifecycle, exported
