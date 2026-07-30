@@ -66,10 +66,49 @@ struct tx_isp_sinfo_slot {
 	struct tx_isp_sinfo_file files[TX_ISP_SINFO_NKEYS];
 };
 
-static struct tx_isp_sinfo_slot
-	tx_isp_sinfo_slots[TX_ISP_SINFO_MAX_SENSORS];
+struct tx_isp_sinfo_stats {
+	unsigned int magic;
+	unsigned int driver_add_calls;
+	unsigned int driver_add_successes;
+	unsigned int driver_del_calls;
+	unsigned int driver_del_slots;
+	unsigned int sensor_bind_calls;
+	unsigned int sensor_bind_successes;
+	unsigned int sensor_unbind_calls;
+	unsigned int sensor_unbind_slots;
+	struct tx_isp_sinfo_slot *slots;
+};
+
+static struct tx_isp_sinfo_stats tx_isp_sinfo_stats = {
+	.magic = 0x53494e46U,
+};
+#define tx_isp_sinfo_heap_slots tx_isp_sinfo_stats.slots
 static DEFINE_MUTEX(tx_isp_sinfo_lock);
+#ifdef TX_ISP_SINFO_BSS_COMPAT_SLOTS
+/*
+ * Some recovered monoliths address anonymous core state beyond their last
+ * named BSS object. A per-SoC adapter may preserve the old registry object's
+ * BSS footprint and its initial contents while the authoritative slots move
+ * to protected heap storage.
+ */
+static struct {
+	struct proc_dir_entry *root;
+	struct tx_isp_sinfo_slot slots[TX_ISP_SINFO_MAX_SENSORS];
+} tx_isp_sinfo_bss_layout;
+#define tx_isp_sinfo_root tx_isp_sinfo_bss_layout.root
+#define tx_isp_sinfo_slots tx_isp_sinfo_bss_layout.slots
+#else
 static struct proc_dir_entry *tx_isp_sinfo_root;
+#define tx_isp_sinfo_slots tx_isp_sinfo_heap_slots
+#endif
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+#define tx_isp_sinfo_proc_slots tx_isp_sinfo_heap_slots
+#else
+#define tx_isp_sinfo_proc_slots tx_isp_sinfo_slots
+#endif
+#ifndef TX_ISP_SINFO_CONFIG_FLAGS
+#define TX_ISP_SINFO_CONFIG_FLAGS tx_isp_sinfo_config.flags
+#endif
 
 /*
  * The prebuilt sensor modules pass their private object as an opaque subdev.
@@ -97,11 +136,13 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 {
 	struct tx_isp_sinfo_file *file = m->private;
 	struct tx_isp_sinfo_slot *slot = file->slot;
+	enum tx_isp_sinfo_key selected_key = file->key;
 	struct i2c_client *client;
 	const void *attr;
 	const char *name;
 	unsigned int fps;
 	unsigned int denominator;
+	unsigned int config_flags = TX_ISP_SINFO_CONFIG_FLAGS;
 
 	(void)unused;
 	mutex_lock(&tx_isp_sinfo_lock);
@@ -112,17 +153,17 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 
 	client = NULL;
 	attr = NULL;
-	if (!(tx_isp_sinfo_config.flags & TX_ISP_SINFO_STATIC_METADATA)) {
+	if (!(config_flags & TX_ISP_SINFO_STATIC_METADATA)) {
 		client = tx_isp_sinfo_pointer_at(
 			slot->subdev, tx_isp_sinfo_config.client_offset);
 		attr = tx_isp_sinfo_pointer_at(
 			slot->subdev, tx_isp_sinfo_config.attr_offset);
 	}
 
-	switch (file->key) {
+	switch (selected_key) {
 	case TX_ISP_SINFO_NAME:
 		name = NULL;
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_STATIC_METADATA))
 			name = tx_isp_sinfo_pointer_at(
 				attr, tx_isp_sinfo_config.attr_name_offset);
@@ -132,7 +173,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "%s\n", name);
 		break;
 	case TX_ISP_SINFO_CHIP_ID:
-		if (tx_isp_sinfo_config.flags &
+		if (config_flags &
 		    TX_ISP_SINFO_STATIC_METADATA)
 			seq_printf(m, "0x%x\n",
 				   tx_isp_sinfo_config.static_chip_id);
@@ -144,7 +185,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 					   attr_chip_id_offset));
 		break;
 	case TX_ISP_SINFO_I2C_ADDR:
-		if (tx_isp_sinfo_config.flags &
+		if (config_flags &
 		    TX_ISP_SINFO_STATIC_METADATA)
 			seq_printf(m, "0x%x\n", slot->default_i2c_addr);
 		else
@@ -153,7 +194,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 				   slot->default_i2c_addr);
 		break;
 	case TX_ISP_SINFO_I2C_ADAPTER:
-		if (tx_isp_sinfo_config.flags &
+		if (config_flags &
 		    TX_ISP_SINFO_STATIC_METADATA)
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_config.static_i2c_adapter);
@@ -166,7 +207,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 					   adapter_nr_offset) : 0);
 		break;
 	case TX_ISP_SINFO_WIDTH:
-		if (tx_isp_sinfo_config.flags &
+		if (config_flags &
 		    TX_ISP_SINFO_STATIC_METADATA)
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_config.static_width);
@@ -177,7 +218,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 					   tx_isp_sinfo_config.width_offset));
 		break;
 	case TX_ISP_SINFO_HEIGHT:
-		if (tx_isp_sinfo_config.flags &
+		if (config_flags &
 		    TX_ISP_SINFO_STATIC_METADATA)
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_config.static_height);
@@ -188,7 +229,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 					   tx_isp_sinfo_config.height_offset));
 		break;
 	case TX_ISP_SINFO_FPS:
-		if (tx_isp_sinfo_config.flags &
+		if (config_flags &
 		    TX_ISP_SINFO_STATIC_METADATA) {
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_config.static_fps);
@@ -206,7 +247,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 		seq_printf(m, "%s\n", slot->subdev ? "active" : "loaded");
 		break;
 	case TX_ISP_SINFO_MCLK:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (attr)
@@ -219,7 +260,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "1\n");
 		break;
 	case TX_ISP_SINFO_VIDEO_INTERFACE:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (attr)
@@ -232,7 +273,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "0\n");
 		break;
 	case TX_ISP_SINFO_BOOT:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (attr)
@@ -245,7 +286,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "0\n");
 		break;
 	case TX_ISP_SINFO_RST_GPIO:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (attr)
@@ -258,7 +299,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "-1\n");
 		break;
 	case TX_ISP_SINFO_PWDN_GPIO:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (attr)
@@ -271,7 +312,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "-1\n");
 		break;
 	case TX_ISP_SINFO_MIN_FPS:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (slot->subdev) {
@@ -285,7 +326,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 		}
 		break;
 	case TX_ISP_SINFO_MAX_FPS:
-		if (!(tx_isp_sinfo_config.flags &
+		if (!(config_flags &
 		      TX_ISP_SINFO_EXTENDED_ATTRS))
 			break;
 		if (slot->subdev) {
@@ -326,9 +367,16 @@ static int tx_isp_sinfo_count_show(struct seq_file *m, void *unused)
 
 	(void)unused;
 	mutex_lock(&tx_isp_sinfo_lock);
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
 	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i)
-		if (tx_isp_sinfo_slots[i].used)
+		if (tx_isp_sinfo_heap_slots[i].used)
 			++count;
+#else
+	if (tx_isp_sinfo_slots)
+		for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i)
+			if (tx_isp_sinfo_slots[i].used)
+				++count;
+#endif
 	mutex_unlock(&tx_isp_sinfo_lock);
 	seq_printf(m, "%d\n", count);
 	return 0;
@@ -348,23 +396,116 @@ static const struct file_operations tx_isp_sinfo_count_fops = {
 	.release = single_release,
 };
 
-static void tx_isp_sinfo_slot_publish(struct tx_isp_sinfo_slot *slot,
-				      int index)
+static int tx_isp_sinfo_events_show(struct seq_file *m, void *unused)
+{
+	int i;
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	const struct tx_isp_sinfo_slot *slot;
+#endif
+
+	(void)unused;
+	mutex_lock(&tx_isp_sinfo_lock);
+	seq_printf(m, "magic=0x%08x\n", tx_isp_sinfo_stats.magic);
+	seq_printf(m, "driver_add calls=%u successes=%u\n",
+		   tx_isp_sinfo_stats.driver_add_calls,
+		   tx_isp_sinfo_stats.driver_add_successes);
+	seq_printf(m, "driver_del calls=%u slots=%u\n",
+		   tx_isp_sinfo_stats.driver_del_calls,
+		   tx_isp_sinfo_stats.driver_del_slots);
+	seq_printf(m, "sensor_bind calls=%u successes=%u\n",
+		   tx_isp_sinfo_stats.sensor_bind_calls,
+		   tx_isp_sinfo_stats.sensor_bind_successes);
+	seq_printf(m, "sensor_unbind calls=%u slots=%u\n",
+		   tx_isp_sinfo_stats.sensor_unbind_calls,
+		   tx_isp_sinfo_stats.sensor_unbind_slots);
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	for (i = 0, slot = tx_isp_sinfo_heap_slots;
+	     i < TX_ISP_SINFO_MAX_SENSORS;
+	     ++i, ++slot) {
+#else
+	for (i = 0; tx_isp_sinfo_slots &&
+		    i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
+		const struct tx_isp_sinfo_slot *slot =
+			&tx_isp_sinfo_slots[i];
+#endif
+
+		seq_printf(m,
+			   "slot%d used=%u drv=%p owner=%p subdev=%p dir=%p addr=0x%x\n",
+			   i, slot->used ? 1U : 0U, slot->drv, slot->owner,
+			   slot->subdev,
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+			   NULL,
+#else
+			   slot->dir,
+#endif
+			   slot->default_i2c_addr);
+	}
+	mutex_unlock(&tx_isp_sinfo_lock);
+	return 0;
+}
+
+static int tx_isp_sinfo_events_open(struct inode *inode, struct file *file)
+{
+	(void)inode;
+	return single_open(file, tx_isp_sinfo_events_show, NULL);
+}
+
+static const struct file_operations tx_isp_sinfo_events_fops = {
+	.owner = THIS_MODULE,
+	.open = tx_isp_sinfo_events_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static void tx_isp_sinfo_slot_sync_compat(int index);
+
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+#define TX_ISP_SINFO_LAYOUT_OPT	__attribute__((optimize("Os")))
+#else
+#define TX_ISP_SINFO_LAYOUT_OPT
+#endif
+
+static TX_ISP_SINFO_LAYOUT_OPT void
+tx_isp_sinfo_slot_publish(struct tx_isp_sinfo_slot *slot, int index)
 {
 	int key;
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	struct tx_isp_sinfo_slot *proc_slot;
+#endif
 
 	snprintf(slot->dirname, sizeof(slot->dirname), "sensor%d", index);
 	slot->dir = proc_mkdir(slot->dirname, tx_isp_sinfo_root);
 	if (!slot->dir)
 		return;
 
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	/*
+	 * Preserve the recovered lifecycle writes in the compatibility BSS, but
+	 * give procfs private data an address in the stable heap snapshot. The
+	 * recovered core may reuse the BSS after registration without invalidating
+	 * an already-open proc file.
+	 */
+	tx_isp_sinfo_slot_sync_compat(index);
+	proc_slot = &tx_isp_sinfo_heap_slots[index];
+#endif
 	for (key = 0; key < TX_ISP_SINFO_NKEYS; ++key) {
 		slot->files[key].slot = slot;
 		slot->files[key].key = key;
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+		proc_slot->files[key].slot = proc_slot;
+		proc_slot->files[key].key = key;
+#endif
 		proc_create_data(tx_isp_sinfo_key_name[key], 0444, slot->dir,
-				 &tx_isp_sinfo_fops, &slot->files[key]);
+				 &tx_isp_sinfo_fops,
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+				 &proc_slot->files[key]);
+#else
+				 &slot->files[key]);
+#endif
 	}
 }
+#undef TX_ISP_SINFO_LAYOUT_OPT
 
 static void tx_isp_sinfo_slot_unpublish(struct tx_isp_sinfo_slot *slot)
 {
@@ -374,15 +515,50 @@ static void tx_isp_sinfo_slot_unpublish(struct tx_isp_sinfo_slot *slot)
 	}
 }
 
+static void
+tx_isp_sinfo_slot_sync_compat(int index)
+{
+#ifdef TX_ISP_SINFO_BSS_COMPAT_SLOTS
+	struct tx_isp_sinfo_slot *snapshot;
+#ifndef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	int key;
+#endif
+
+#ifndef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	if (!tx_isp_sinfo_heap_slots || index < 0 ||
+	    index >= TX_ISP_SINFO_MAX_SENSORS)
+		return;
+#endif
+
+	snapshot = &tx_isp_sinfo_heap_slots[index];
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	/*
+	 * File descriptors are initialized once in stable heap storage and are
+	 * already owned by procfs. Refresh only lifecycle metadata thereafter.
+	 */
+	memcpy(snapshot, &tx_isp_sinfo_slots[index],
+	       sizeof(*snapshot) - sizeof(snapshot->files));
+#else
+	*snapshot = tx_isp_sinfo_slots[index];
+	for (key = 0; key < TX_ISP_SINFO_NKEYS; ++key) {
+		snapshot->files[key].slot = snapshot;
+	}
+#endif
+#else
+	(void)index;
+#endif
+}
+
 int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 			    struct module *owner)
 {
 	int i;
 
-	if (!drv || !tx_isp_sinfo_root)
+	if (!drv || !tx_isp_sinfo_root || !tx_isp_sinfo_slots)
 		return -EINVAL;
 
 	mutex_lock(&tx_isp_sinfo_lock);
+	tx_isp_sinfo_stats.driver_add_calls++;
 	/*
 	 * A few sensor generations bind their subdevice before registering the
 	 * I2C driver. Complete that owner-matched slot instead of publishing a
@@ -415,9 +591,18 @@ int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 			break;
 		}
 	}
+	if (i != TX_ISP_SINFO_MAX_SENSORS) {
+		tx_isp_sinfo_slot_sync_compat(i);
+		tx_isp_sinfo_stats.driver_add_successes++;
+	}
 	mutex_unlock(&tx_isp_sinfo_lock);
-	if (i == TX_ISP_SINFO_MAX_SENSORS)
+	if (i == TX_ISP_SINFO_MAX_SENSORS) {
+		pr_warn("tx-isp-sinfo: driver_add full drv=%p owner=%p addr=0x%x\n",
+			drv, owner, default_i2c_addr);
 		return -ENOSPC;
+	}
+	pr_info("tx-isp-sinfo: driver_add slot=%d drv=%p owner=%p addr=0x%x\n",
+		i, drv, owner, default_i2c_addr);
 	if (tx_isp_sinfo_config.driver_added)
 		tx_isp_sinfo_config.driver_added(
 			drv, default_i2c_addr, owner);
@@ -428,19 +613,28 @@ EXPORT_SYMBOL(tx_isp_sinfo_driver_add);
 void tx_isp_sinfo_driver_del(struct i2c_driver *drv)
 {
 	int i;
+	int removed = 0;
 
 	if (tx_isp_sinfo_config.driver_removing)
 		tx_isp_sinfo_config.driver_removing(drv);
 	mutex_lock(&tx_isp_sinfo_lock);
+	tx_isp_sinfo_stats.driver_del_calls++;
 	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
 		struct tx_isp_sinfo_slot *slot = &tx_isp_sinfo_slots[i];
 
 		if (slot->used && slot->drv == drv) {
+			pr_info("tx-isp-sinfo: driver_del slot=%d drv=%p owner=%p subdev=%p\n",
+				i, drv, slot->owner, slot->subdev);
 			tx_isp_sinfo_slot_unpublish(slot);
 			memset(slot, 0, sizeof(*slot));
+			tx_isp_sinfo_slot_sync_compat(i);
+			removed++;
+			tx_isp_sinfo_stats.driver_del_slots++;
 		}
 	}
 	mutex_unlock(&tx_isp_sinfo_lock);
+	if (!removed)
+		pr_info("tx-isp-sinfo: driver_del unmatched drv=%p\n", drv);
 }
 EXPORT_SYMBOL(tx_isp_sinfo_driver_del);
 
@@ -450,11 +644,12 @@ int tx_isp_sinfo_sensor_bind(void *subdev, struct module *owner)
 	int target = -1;
 	int source = -1;
 
-	if (!subdev)
+	if (!subdev || !tx_isp_sinfo_slots)
 		return -EINVAL;
 	if (tx_isp_sinfo_config.sensor_bound)
 		tx_isp_sinfo_config.sensor_bound(subdev, owner);
 	mutex_lock(&tx_isp_sinfo_lock);
+	tx_isp_sinfo_stats.sensor_bind_calls++;
 	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
 		struct tx_isp_sinfo_slot *slot = &tx_isp_sinfo_slots[i];
 
@@ -496,23 +691,45 @@ int tx_isp_sinfo_sensor_bind(void *subdev, struct module *owner)
 			i = target;
 		}
 	}
+	if (i != TX_ISP_SINFO_MAX_SENSORS) {
+		tx_isp_sinfo_slot_sync_compat(i);
+		tx_isp_sinfo_stats.sensor_bind_successes++;
+	}
 	mutex_unlock(&tx_isp_sinfo_lock);
-	return i == TX_ISP_SINFO_MAX_SENSORS ? -ENOSPC : 0;
+	if (i == TX_ISP_SINFO_MAX_SENSORS) {
+		pr_warn("tx-isp-sinfo: sensor_bind full subdev=%p owner=%p\n",
+			subdev, owner);
+		return -ENOSPC;
+	}
+	pr_info("tx-isp-sinfo: sensor_bind slot=%d subdev=%p owner=%p\n",
+		i, subdev, owner);
+	return 0;
 }
 EXPORT_SYMBOL(tx_isp_sinfo_sensor_bind);
 
 void tx_isp_sinfo_sensor_unbind(void *subdev, struct module *owner)
 {
 	int i;
+	int unbound = 0;
 
 	if (!subdev)
 		return;
 	mutex_lock(&tx_isp_sinfo_lock);
+	tx_isp_sinfo_stats.sensor_unbind_calls++;
 	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i)
 		if (tx_isp_sinfo_slots[i].used &&
-		    tx_isp_sinfo_slots[i].subdev == subdev)
+		    tx_isp_sinfo_slots[i].subdev == subdev) {
+			pr_info("tx-isp-sinfo: sensor_unbind slot=%d subdev=%p owner=%p\n",
+				i, subdev, owner);
 			tx_isp_sinfo_slots[i].subdev = NULL;
+			tx_isp_sinfo_slot_sync_compat(i);
+			unbound++;
+			tx_isp_sinfo_stats.sensor_unbind_slots++;
+		}
 	mutex_unlock(&tx_isp_sinfo_lock);
+	if (!unbound)
+		pr_info("tx-isp-sinfo: sensor_unbind unmatched subdev=%p owner=%p\n",
+			subdev, owner);
 	if (tx_isp_sinfo_config.sensor_unbound)
 		tx_isp_sinfo_config.sensor_unbound(subdev, owner);
 }
@@ -520,23 +737,37 @@ EXPORT_SYMBOL(tx_isp_sinfo_sensor_unbind);
 
 int tx_isp_sinfo_init(void)
 {
+	tx_isp_sinfo_heap_slots = kzalloc(
+		sizeof(*tx_isp_sinfo_heap_slots) * TX_ISP_SINFO_MAX_SENSORS,
+		GFP_KERNEL);
+	if (!tx_isp_sinfo_heap_slots)
+		return -ENOMEM;
+
 	tx_isp_sinfo_root = proc_mkdir("jz/sensor", NULL);
 	if (!tx_isp_sinfo_root) {
 		pr_warn("tx-isp-sinfo: cannot create /proc/jz/sensor\n");
+		kfree(tx_isp_sinfo_heap_slots);
+		tx_isp_sinfo_heap_slots = NULL;
 		return 0;
 	}
 	proc_create("count", 0444, tx_isp_sinfo_root,
 		    &tx_isp_sinfo_count_fops);
+	proc_create("events", 0444, tx_isp_sinfo_root,
+		    &tx_isp_sinfo_events_fops);
+	pr_info("tx-isp-sinfo: initialized max_sensors=%u\n",
+		TX_ISP_SINFO_MAX_SENSORS);
 	return 0;
 }
 
 void tx_isp_sinfo_exit(void)
 {
 	mutex_lock(&tx_isp_sinfo_lock);
-	memset(tx_isp_sinfo_slots, 0, sizeof(tx_isp_sinfo_slots));
+	kfree(tx_isp_sinfo_heap_slots);
+	tx_isp_sinfo_heap_slots = NULL;
 	mutex_unlock(&tx_isp_sinfo_lock);
 	if (tx_isp_sinfo_root) {
 		remove_proc_subtree("jz/sensor", NULL);
 		tx_isp_sinfo_root = NULL;
 	}
+	pr_info("tx-isp-sinfo: exited\n");
 }

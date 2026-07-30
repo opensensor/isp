@@ -4,6 +4,11 @@
  * Keep the recovered function names and MIPS32 ABI here while the algorithms
  * live in the kernel-independent common header. Table depth remains an
  * explicit T41 policy rather than hidden global state in the shared code.
+ *
+ * Only layout-neutral entry points belong here. The recovered T41 core is
+ * sensitive to both its text and BSS tail layout, so additional helpers must
+ * first move behind a separately loaded common module or a size-neutral
+ * trampoline before their generation-local bodies can be removed.
  */
 
 #include <linux/types.h>

@@ -1348,6 +1348,12 @@ static int32_t *num_all_ptr = &num_all;
 #endif
 
 /* WHOLE_DRIVER_SUPPORT_DECLARATIONS */
+/*
+ * This 256-word object is also the anchor for a recovered, layout-sensitive
+ * tail overlay. Do not append split-adapter state to T41 BSS: adapter state
+ * must live in initialized data or separately allocated storage so the
+ * original core tail layout remains intact.
+ */
 static uint32_t __pow2_lut[256];
 static const struct {
     char soc[32];
@@ -140032,10 +140038,10 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
     uint8_t *channel_params;
     void *workspace;
     uint32_t base;
-    uint32_t width;
-    uint32_t height;
-    uint32_t output_width;
-    uint32_t output_height;
+    uint32_t channel_width;
+    uint32_t channel_height;
+    uint32_t source_width;
+    uint32_t source_height;
     uint32_t crop_x;
     uint32_t crop_y;
     uint32_t crop_width;
@@ -140056,24 +140062,24 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
         return -EINVAL;
 
     ((void **)(void *)mscaHardPar_storage)[a1] = desc;
-    width = *(uint16_t *)(desc + 4);
-    height = *(uint16_t *)(desc + 6);
-    output_width = *(uint16_t *)(desc + 0x0e);
-    output_height = *(uint16_t *)(desc + 0x10);
+    channel_width = *(uint16_t *)(desc + 4);
+    channel_height = *(uint16_t *)(desc + 6);
+    source_width = *(uint16_t *)(desc + 0x0e);
+    source_height = *(uint16_t *)(desc + 0x10);
     crop_x = *(uint16_t *)(desc + 0x12);
     crop_y = *(uint16_t *)(desc + 0x14);
     crop_width = *(uint16_t *)(desc + 0x16);
     crop_height = *(uint16_t *)(desc + 0x18);
-    if (!width || !height)
+    if (!channel_width || !channel_height)
         return -EINVAL;
-    if (!output_width)
-        output_width = width;
-    if (!output_height)
-        output_height = height;
-    if (!crop_width || crop_x + crop_width > width)
-        crop_width = width - min(crop_x, width);
-    if (!crop_height || crop_y + crop_height > height)
-        crop_height = height - min(crop_y, height);
+    if (!source_width)
+        source_width = channel_width;
+    if (!source_height)
+        source_height = channel_height;
+    if (!crop_width || crop_x + crop_width > channel_width)
+        crop_width = channel_width - min(crop_x, channel_width);
+    if (!crop_height || crop_y + crop_height > channel_height)
+        crop_height = channel_height - min(crop_y, channel_height);
 
     workspace = *(void **)(void *)&msca_info;
     if (!t41_kernel_data_ptr(workspace))
@@ -140090,8 +140096,10 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
      * points at the stock tuning block, so retain its curve endpoints and
      * scaler-mode bytes while deriving only the two size-dependent ratios.
      */
-    horizontal_ratio = ((output_width << 14) + (width >> 1)) / width;
-    vertical_ratio = ((output_height << 14) + (height >> 1)) / height;
+    horizontal_ratio =
+        ((source_width << 14) + (channel_width >> 1)) / channel_width;
+    vertical_ratio =
+        ((source_height << 14) + (channel_height >> 1)) / channel_height;
     *(uint32_t *)(channel_params + 0x18) = horizontal_ratio;
     *(uint32_t *)(channel_params + 0x1c) = vertical_ratio;
 
@@ -140136,13 +140144,17 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
      * The T41 routine computes the two tuning fields while selecting the
      * channel-specific curve, then finishes with an unconditional zero write
      * to channel+0x68.  The OEM active-state oracle also reads zero here.  The
-     * earlier reconstruction retained the intermediate 0x41 value, which
-     * selects a non-stock output mode and leaves the NV12 chroma FIFO idle.
+    * earlier reconstruction retained the intermediate 0x41 value, which
+    * selects a non-stock output mode and leaves the NV12 chroma FIFO idle.
+     *
+     * The global input geometry at 0xf0084 belongs to tisp_msca_init() and
+     * remains the sensor's native size.  Stock tisp_msca_init_chx_cfg()
+     * writes only the per-channel output geometry here.  Overwriting the
+     * global register with channel 0's 1920x1080 output made MSCA consume a
+     * 2560x1440 source as if it were already scaled.
      */
     base = 0x0f0100U + a1 * 0x100U;
-    packed_size = (width << 16) | height;
-    if (a1 == 0)
-        system_reg_write(0x0f0084U, packed_size);
+    packed_size = (channel_width << 16) | channel_height;
     system_reg_write(0x0f00a0U + a1 * 8U,
                      ((uint32_t)*(uint16_t *)(desc + 0x0a) << 16) |
                      *(uint16_t *)(desc + 0x0c));
@@ -140180,10 +140192,11 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
            system_reg_read(base + 0x80), system_reg_read(base + 0x98));
 
     printk(KERN_WARNING
-           "tx_isp_t41_recovered: MSCA stock cfg channel=%u active=%#x input=%ux%u crop=%u,%u %ux%u output=%ux%u ratio=%#x/%#x curve=%#x/%#x mode=%#x algorithm=%#x stride=%u\n",
-           a1, active_mask, width, height, crop_x, crop_y,
+           "tx_isp_t41_recovered: MSCA stock cfg channel=%u active=%#x source=%ux%u output=%ux%u crop=%u,%u %ux%u ratio=%#x/%#x curve=%#x/%#x mode=%#x algorithm=%#x stride=%u\n",
+           a1, active_mask, source_width, source_height,
+           channel_width, channel_height, crop_x, crop_y,
            crop_width, crop_height,
-           output_width, output_height, horizontal_ratio, vertical_ratio,
+           horizontal_ratio, vertical_ratio,
            curve_bounds, curve_control, scale_mode, algorithm, stride);
     return 0;
 #else
@@ -165013,6 +165026,56 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
                        "tx_isp_t41_recovered: ISP frame-done work queued=%d\n",
                        work_queued);
             completion_trace_count++;
+        }
+
+        /*
+         * Stock maps MSCA channels 1 and 2 to ISP status bits 1 and 2.
+         * Each frame channel occupies 0xe8 bytes in core->channels and its
+         * remote pad is at +0x84.  The original recovery acknowledged these
+         * bits without draining their completion FIFOs, so each secondary
+         * channel stopped after consuming its two queued buffers.
+         *
+         * Channel 0 owns the once-per-input-frame tuning event and workqueue
+         * handoff above.  Secondary completions only return their buffer to
+         * the matching frame channel, as in H20250310a.
+         */
+        if (status0 & (BIT(1) | BIT(2))) {
+            unsigned int channel_index;
+
+            core = *(char **)(subdev + 0x10c);
+            channels = t41_kernel_data_ptr(core) ?
+                *(char **)(core + 0x1ac) : NULL;
+            for (channel_index = 1; channel_index < 3;
+                 ++channel_index) {
+                uint32_t event_data[8] = { 0 };
+                uint32_t y_dma = 0;
+                uint32_t uv_dma = 0;
+                void *remote = NULL;
+                int event_ret = -ENODEV;
+
+                if (!(status0 & BIT(channel_index)))
+                    continue;
+                if (t41_kernel_data_ptr(channels))
+                    remote = *(void **)(channels +
+                                        channel_index * 0xe8U + 0x84U);
+
+                tisp_msca_addr_fifo_read(channel_index,
+                                         (uintptr_t)&y_dma,
+                                         (uintptr_t)&uv_dma);
+                event_data[2] = y_dma;
+                event_data[3] = uv_dma;
+                tisp_ae_get_fps(0, (uintptr_t)&event_data[6]);
+                event_data[7] = READ_ONCE(isp_ch0_frm_done);
+
+                if (t41_kernel_data_ptr(remote))
+                    event_ret = tx_isp_send_event_to_remote(
+                        remote, 0x03000006, event_data);
+                if (trace_count < 32)
+                    printk(KERN_WARNING
+                           "tx_isp_t41_recovered: ISP secondary frame complete channel=%u y=%#x uv=%#x remote=%p seq=%u event-ret=%d\n",
+                           channel_index, y_dma, uv_dma, remote,
+                           event_data[7], event_ret);
+            }
         }
 
         /*

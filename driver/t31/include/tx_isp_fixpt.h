@@ -22,13 +22,7 @@ static inline u32 fix_point_mult3_32(u32 q, u32 a, u32 b, u32 c)
 
 static inline u32 fix_point_div_32(u32 q, u32 num, u32 den)
 {
-    if (den == 0)
-        return 0; /* caller should guard; safe default */
-
-    /* ((num << q) / den) using do_div to avoid libgcc 64-bit division */
-    u64 scaled = ((u64)num) << (q & 31);
-    do_div(scaled, den); /* scaled = scaled / den; remainder discarded */
-    return (u32)scaled;
+    return tx_isp_fixdiv_u32(q, num, den);
 }
 
 /* 64-bit Q-format fixed-point helpers.

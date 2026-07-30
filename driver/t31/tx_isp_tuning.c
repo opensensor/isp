@@ -7103,81 +7103,14 @@ int tisp_init(void *sensor_info_arg, char *param_name)
 
 static int32_t tisp_log2_int_to_fixed(uint32_t value, char precision_bits, char shift_amt)
 {
-    uint32_t precision = precision_bits;
-    uint32_t shift = shift_amt;
-
-    if (value == 0)
-        return 0;
-
-    // Find highest set bit position using binary search
-    uint32_t curr_val, bit_pos = 0;
-    if (value < 0x10000) {
-        curr_val = value;
-    } else {
-        curr_val = value >> 16;
-        bit_pos = 16;
-    }
-
-    if (curr_val >= 0x100) {
-        curr_val >>= 8;
-        bit_pos = bit_pos + 8;
-    }
-
-    if (curr_val >= 0x10) {
-        curr_val >>= 4;
-        bit_pos = bit_pos + 4;
-    }
-
-    if (curr_val >= 4) {
-        curr_val >>= 2;
-        bit_pos = bit_pos + 2;
-    }
-
-    if (curr_val != 1) {
-        bit_pos = bit_pos + 1;
-    }
-
-    // Normalize value for fixed-point calculation
-    uint32_t normalized;
-    if (bit_pos >= 16) {
-        normalized = value >> ((bit_pos - 15) & 0x1f);
-    } else {
-        normalized = value << ((15 - bit_pos) & 0x1f);
-    }
-
-    // Iterative fixed-point calculation.
-    // OEM branches on the top bit of the 32-bit square and then performs
-    // logical shifts. Using signed overflow here collapses many mid-range
-    // gains onto powers of two (for example 0x61e/0x68e -> 0x8000 log2),
-    // which matches the dark-image gain compression seen in the logs.
-    int32_t result = 0;
-    for (int32_t i = 0; i < precision; i++) {
-        uint32_t square = normalized * normalized;
-        result <<= 1;
-
-        if ((square & 0x80000000U) == 0) {
-            normalized = square >> 15;
-        } else {
-            result += 1;
-            normalized = square >> 16;
-        }
-    }
-
-    // Combine results with scaling
-    return ((bit_pos << (precision & 0x1f)) + result) << (shift & 0x1f) |
-           (normalized & 0x7fff) >> ((15 - shift) & 0x1f);
+    return tx_isp_log2_int_u32(value, (uint8_t)precision_bits,
+                               (uint8_t)shift_amt);
 }
 
 static int32_t tisp_log2_fixed_to_fixed(uint32_t input_val, int32_t in_precision, char out_precision)
 {
-    /* OEM EXACT (0x11470): log2_int_to_fixed(value, out_q, 0) - (in_q << out_q)
-     *
-     * For a fixed-point value in Q(in_q) format, log2(value) in integer sense
-     * gives log2(mantissa * 2^in_q) = log2(mantissa) + in_q.
-     * Subtracting in_q gives the true log2 of the represented value.
-     * E.g., gain=0x400 in Q10 means 1.0x; log2(0x400) - 10 = 0, correct. */
-    return tisp_log2_int_to_fixed(input_val, out_precision, 0)
-           - (in_precision << (out_precision & 0x1f));
+    return tx_isp_log2_fixed_u32(input_val, (uint32_t)in_precision,
+                                 (uint8_t)out_precision);
 }
 
 /* OEM EXACT: tisp_log2_int_to_fixed_64 (0x114a8) — 64-bit input log2.
@@ -7186,62 +7119,10 @@ static int32_t tisp_log2_fixed_to_fixed(uint32_t input_val, int32_t in_precision
 static int32_t tisp_log2_int_to_fixed_64(uint32_t val_lo, uint32_t val_hi,
                                           char precision, char shift)
 {
-    uint32_t v;
-    int32_t bit_pos;
-    uint32_t normalized;
-    int32_t result = 0;
-    int32_t i;
+    uint64_t value = ((uint64_t)val_hi << 32) | val_lo;
 
-    if ((val_lo | val_hi) == 0)
-        return 0;
-
-    /* Find MSB position across 64-bit value */
-    if (val_hi != 0) {
-        v = val_hi;
-        bit_pos = 32;
-    } else {
-        v = val_lo;
-        bit_pos = 0;
-    }
-
-    if (v >= 0x10000) { v >>= 16; bit_pos += 16; }
-    if (v >= 0x100)   { v >>= 8;  bit_pos += 8;  }
-    if (v >= 0x10)    { v >>= 4;  bit_pos += 4;  }
-    if (v >= 4)       { v >>= 2;  bit_pos += 2;  }
-    if (v != 1)       { bit_pos += 1; }
-
-    /* Normalize the 64-bit value to a 32-bit fixed-point mantissa.
-     * OEM uses (val << (16 - bit_pos)) or (val >> (bit_pos - 16)). */
-    {
-        uint64_t val64 = ((uint64_t)val_hi << 32) | val_lo;
-        if (bit_pos >= 16)
-            val64 >>= (bit_pos - 15);
-        else
-            val64 <<= (15 - bit_pos);
-        normalized = (uint32_t)val64;
-    }
-
-    /* Iterative fractional log2 computation (same as 32-bit version) */
-    for (i = 0; i < (int32_t)(uint8_t)precision; i++) {
-        uint64_t sq = (uint64_t)normalized * (uint64_t)normalized;
-        uint32_t sq_hi = (uint32_t)(sq >> 32);
-        uint32_t sq_lo = (uint32_t)sq;
-
-        result <<= 1;
-
-        if (((sq_lo & 0x80000000) | sq_hi) == 0) {
-            /* MSB of 64-bit square is 0 → shift left */
-            normalized = (sq_hi << 17) | (sq_lo >> 15);
-        } else {
-            /* MSB of 64-bit square is 1 → set bit and shift right */
-            result += 1;
-            normalized = (sq_hi << 16) | (sq_lo >> 16);
-        }
-    }
-
-    return ((bit_pos << ((uint8_t)precision & 0x1f)) + result)
-               << ((uint8_t)shift & 0x1f)
-           | (normalized & 0x7fff) >> ((15 - (uint8_t)shift) & 0x1f);
+    return tx_isp_log2_int_u64(value, (uint8_t)precision,
+                               (uint8_t)shift);
 }
 
 /* OEM EXACT: tisp_log2_fixed_to_fixed_64 (0x116ac) — 64-bit fixed-point log2.
@@ -7249,8 +7130,10 @@ static int32_t tisp_log2_int_to_fixed_64(uint32_t val_lo, uint32_t val_hi,
 static int32_t tisp_log2_fixed_to_fixed_64(uint32_t val_lo, uint32_t val_hi,
                                             int32_t in_precision, char out_precision)
 {
-    return tisp_log2_int_to_fixed_64(val_lo, val_hi, out_precision, 0)
-           - (in_precision << ((uint8_t)out_precision & 0x1f));
+    uint64_t value = ((uint64_t)val_hi << 32) | val_lo;
+
+    return tx_isp_log2_fixed_u64(value, (uint32_t)in_precision,
+                                 (uint8_t)out_precision);
 }
 
 // Reimplemented to avoid 64-bit division on MIPS32

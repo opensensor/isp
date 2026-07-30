@@ -19,6 +19,37 @@ MODULE=$STATE_DIR/module.ko
 ARGS=$STATE_DIR/args
 STATUS=$STATE_DIR/last-status
 LOG=$STATE_DIR/last-insmod.log
+WATCH_MARKER=$STATE_DIR/watch-registry
+WATCH_LOG=$STATE_DIR/registry-watch.log
+BOOT_DMESG_PREFIX=/tmp/open-tx-isp-boot-dmesg
+BOOT_KMSG_LOG=/tmp/open-tx-isp-boot-kmsg.log
+
+watch_registry()
+{
+	iteration=0
+	while [ "$iteration" -lt 45 ]; do
+		# Preserve the earliest driver/consumer messages before a verbose
+		# recovery build wraps the small kernel log ring.  Keep the snapshots
+		# in tmpfs and bound them to the startup window.
+		if [ "$iteration" -lt 12 ]; then
+			dmesg >"$BOOT_DMESG_PREFIX-$iteration.log"
+		fi
+		echo "sample=$iteration uptime=$(cut -d' ' -f1 /proc/uptime)"
+		if [ -r /proc/jz/sensor/count ]; then
+			echo -n "count="
+			cat /proc/jz/sensor/count
+			[ ! -r /proc/jz/sensor/events ] ||
+				cat /proc/jz/sensor/events
+			echo -n "entries="
+			ls -1 /proc/jz/sensor 2>/dev/null
+		else
+			echo "count=missing"
+		fi
+		dmesg | grep 'tx-isp-sinfo:' | tail -n 16
+		iteration=$((iteration + 1))
+		sleep 1
+	done
+}
 
 start()
 {
@@ -39,6 +70,14 @@ start()
 	insmod "$MODULE" $module_args >"$LOG" 2>&1
 	echo $? >"$STATUS"
 	sync
+
+	if [ "$(cat "$STATUS")" = 0 ] && [ -e "$WATCH_MARKER" ]; then
+		# The T41 recovery build can wrap the kernel ring in less than one
+		# second during ISP startup.  Stream a bounded copy from /dev/kmsg so
+		# the messages between snapshots are not lost.
+		timeout 20 cat /dev/kmsg >"$BOOT_KMSG_LOG" 2>&1 &
+		watch_registry >"$WATCH_LOG" 2>&1 &
+	fi
 }
 
 case "$1" in
