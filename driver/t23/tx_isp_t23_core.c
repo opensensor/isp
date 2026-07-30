@@ -6,6 +6,7 @@
 /* Module vermagic: 3.10.14__isvp_pike_1.0__ preempt mod_unload MIPS32_R1 32BIT  */
 
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
+#include "include/tx_isp_t23_mode.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
@@ -90190,8 +90191,6 @@ int64_t tisp_day_or_night_s_ctrl(uintptr_t a0, uint32_t a1)
 {
     uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
     const void *selected;
-    uint32_t bypass;
-    uint32_t i;
 
     if (a0 >= sizeof(day_night) / sizeof(uint32_t))
         return -EINVAL;
@@ -90208,28 +90207,7 @@ int64_t tisp_day_or_night_s_ctrl(uintptr_t a0, uint32_t a1)
     *(uint32_t *)(void *)(tisp_par_info + a0 * 156U + 124U) = a1;
     *(uint32_t *)(void *)(day_night + a0 * sizeof(uint32_t)) = 0;
 
-    bypass = system_reg_read(12);
-    for (i = 0; i < 32; i++)
-        bypass = (bypass & ~(1U << i)) | (active[i] << i);
-    system_reg_write(12, (bypass & 0xb577fffdU) | 0x34000009U);
-
-    tiziano_defog_dn_params_refresh();
-    tiziano_ae_dn_params_refresh();
-    tiziano_awb_dn_params_refresh();
-    tiziano_dmsc_dn_params_refresh();
-    tiziano_sharpen_dn_params_refresh();
-    tiziano_mdns_dn_params_refresh();
-    tiziano_sdns_dn_params_refresh();
-    tiziano_gib_dn_params_refresh();
-    tiziano_lsc_dn_params_refresh();
-    tiziano_ccm_dn_params_refresh();
-    tiziano_clm_dn_params_refresh();
-    tiziano_gamma_dn_params_refresh();
-    tiziano_adr_dn_params_refresh();
-    tiziano_dpc_dn_params_refresh();
-    tiziano_af_dn_params_refresh();
-    tiziano_bcsh_dn_params_refresh();
-    tiziano_ydns_dn_params_refresh();
+    tx_isp_t23_mode_profile_apply(active);
 
     cust_mode = 0;
     *(uint8_t *)(void *)&tispPollValue = 1;
@@ -90245,9 +90223,7 @@ int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2)
 {
     uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
     const void *selected = NULL;
-    uint32_t bypass;
     uint32_t dn;
-    uint32_t i;
 
     if (!tparams_cust)
         return -1;
@@ -90271,28 +90247,7 @@ int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2)
     if (selected)
         memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
 
-    bypass = system_reg_read(12);
-    for (i = 0; i < 32; i++)
-        bypass = (bypass & ~(1U << i)) | (active[i] << i);
-    system_reg_write(12, (bypass & 0xb577fffdU) | 0x34000009U);
-
-    tiziano_defog_dn_params_refresh();
-    tiziano_ae_dn_params_refresh();
-    tiziano_awb_dn_params_refresh();
-    tiziano_dmsc_dn_params_refresh();
-    tiziano_sharpen_dn_params_refresh();
-    tiziano_mdns_dn_params_refresh();
-    tiziano_sdns_dn_params_refresh();
-    tiziano_gib_dn_params_refresh();
-    tiziano_lsc_dn_params_refresh();
-    tiziano_ccm_dn_params_refresh();
-    tiziano_clm_dn_params_refresh();
-    tiziano_gamma_dn_params_refresh();
-    tiziano_adr_dn_params_refresh();
-    tiziano_dpc_dn_params_refresh();
-    tiziano_af_dn_params_refresh();
-    tiziano_bcsh_dn_params_refresh();
-    tiziano_ydns_dn_params_refresh();
+    tx_isp_t23_mode_profile_apply(active);
     return 0;
 }
 
@@ -90316,8 +90271,6 @@ uint32_t tisp_switch_bin(uint32_t a0)
     uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
     uint32_t mode = *(uint32_t *)(void *)(tisp_par_info + 124U);
     const void *selected = NULL;
-    uint32_t bypass;
-    uint32_t i;
     int32_t result;
 
     (void)system_reg_read(12);
@@ -90331,28 +90284,7 @@ uint32_t tisp_switch_bin(uint32_t a0)
         *(uint32_t *)(void *)(tisp_par_info + 124U) = mode;
     }
 
-    bypass = system_reg_read(12);
-    for (i = 0; i < 32; i++)
-        bypass = (bypass & ~(1U << i)) | (active[i] << i);
-    system_reg_write(12, (bypass & 0xb577fffdU) | 0x34000009U);
-
-    tiziano_defog_dn_params_refresh();
-    tiziano_ae_dn_params_refresh();
-    tiziano_awb_dn_params_refresh();
-    tiziano_dmsc_dn_params_refresh();
-    tiziano_sharpen_dn_params_refresh();
-    tiziano_mdns_dn_params_refresh();
-    tiziano_sdns_dn_params_refresh();
-    tiziano_gib_dn_params_refresh();
-    tiziano_lsc_dn_params_refresh();
-    tiziano_ccm_dn_params_refresh();
-    tiziano_clm_dn_params_refresh();
-    tiziano_gamma_dn_params_refresh();
-    tiziano_adr_dn_params_refresh();
-    tiziano_dpc_dn_params_refresh();
-    tiziano_af_dn_params_refresh();
-    tiziano_bcsh_dn_params_refresh();
-    tiziano_ydns_dn_params_refresh();
+    tx_isp_t23_mode_profile_apply(active);
 
     *(uint8_t *)(void *)&tispPollValue = 1;
     *((uint8_t *)(void *)&tispPollValue + 3) = 1;

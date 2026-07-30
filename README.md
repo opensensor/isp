@@ -9,8 +9,8 @@ kernel drivers for T23, T31, T40, and T41 cameras. The active cross-SoC
 refactoring work targets the device-tested T23, T31, and T41 drivers; T40 is
 kept as a working recovered baseline but is deferred from the current cleanup.
 T31 is organized as a modular driver. T23 and T41 retain large recovered core
-sources, but their modules now have separate math and sensor-registry adapters
-behind reviewed shared interfaces.
+sources, but their modules now have separate adapters for shared math,
+sensor-registry, day/night, and register-profile facilities where applicable.
 
 The project goal is **behavioral equivalence with the OEM driver**, so Ingenic's proprietary user-space library `libimp.so` can run unmodified against the open-source driver.
 
@@ -34,15 +34,19 @@ The project has moved well beyond initial bring-up.
 - tuning infrastructure and many ISP blocks are implemented
 - common interpolation/fixed-point primitives are used by T23, T31, and T41
 - T23, T31, and T41 share one typed sensor-registry implementation
-- T23 and T41 link recovered core, math adapter, and registry adapter objects
+- T31 and T41 share a configurable frame-boundary day/night state machine
+- T23 and T31 share ordered register-profile and bypass-mask primitives
+- T23 and T31 share validated ordered callback plans for tuning sequences
+- T31 applies evidence-backed SC2336 day/night DMSC correction profiles
+- T23 and T41 link recovered cores with logical shared-library adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree
 
 ### Still incomplete
 
 - image quality is **not yet OEM-equivalent**
-- the current main visible issue is false-color / green-magenta blob artifacts
 - some tuning tables are still synthetic or only partially reconstructed
 - several ISP blocks need additional parity work or better OEM-derived data
+- broader sensor, WDR, flip, and exposure-range coverage remains incomplete
 
 If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_PRD.md`.
 
@@ -50,6 +54,8 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 
 - [`docs/T31_ISP_ARCHITECTURE.md`](docs/T31_ISP_ARCHITECTURE.md) — current hardware / driver architecture notes
 - [`docs/DRIVER_REUSE_PLAN.md`](docs/DRIVER_REUSE_PLAN.md) — cross-SoC commonality map and staged reuse plan
+- [`docs/SHARED_DRIVER_LIBRARY.md`](docs/SHARED_DRIVER_LIBRARY.md) — landed shared interfaces, adapters, invariants, and device matrix
+- [`driver/t31/README.md`](driver/t31/README.md) — T31 file ownership, validated SC2336 state, tuning ABI, and known gaps
 - [`docs/IMAGE_TUNING_PRD.md`](docs/IMAGE_TUNING_PRD.md) — plan for finishing image tuning and remaining work
 - [`driver/t31/REGMAP_ADR_YDNS.md`](driver/t31/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
 - [`driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
@@ -74,14 +80,17 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 Important driver files:
 
 - `driver/common/tx_isp_sinfo.c` — shared sensor registry and procfs lifecycle
+- `driver/common/tx_isp_daynight.c` — configurable day/night transition shell
+- `driver/common/tx_isp_callback_plan.c` — validated ordered callback execution
+- `driver/common/tx_isp_reg_profile.c` — ordered register profiles and bypass-mask merge
 - `driver/include/tx_isp/tx_isp_math.h` — shared fixed-point/interpolation primitives
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
-- `driver/t23/tx_isp_t23_core.c` / `tx_isp_t23_math.c` / `tx_isp_t23_sinfo.c` — T23 recovered core and adapters
+- `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
 - `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
 - `driver/t31/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
 - `driver/t31/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
 - `driver/t31/tx_isp_csi.c` / `driver/t31/tx_isp_vic.c` / `driver/t31/tx_isp_vin.c` / `driver/t31/tx_isp_fs.c` — CSI/VIC/VIN/frame-source subdevices
-- `driver/t41/tx_isp_t41_recovered.c` / `tx_isp_t41_math.c` / `tx_isp_t41_sinfo.c` — T41 recovered core and adapters
+- `driver/t41/tx_isp_t41_recovered.c` and adapter objects — T41 recovered core with shared day/night, math, and registry facilities
 
 ## Project Goals
 

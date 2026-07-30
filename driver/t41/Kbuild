@@ -1,4 +1,5 @@
 tx-isp-t41-objs := tx_isp_t41_recovered.o \
+		   tx_isp_t41_daynight.o \
 		   tx_isp_t41_math.o \
 		   tx_isp_t41_sinfo.o
 obj-m += tx-isp-t41.o

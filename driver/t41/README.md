@@ -30,9 +30,10 @@ The source remains named `tx_isp_t41_recovered.c`, but Kbuild emits the
 canonical module name expected by current T41 sensor modules
 (`depends: tx-isp-t41`).
 
-The module is linked from three logical objects:
+The module is linked from four logical objects:
 
 - `tx_isp_t41_recovered.c` — recovered core, pipeline, hardware, and tuning
+- `tx_isp_t41_daynight.c` — T41 adapter for the shared day/night state machine
 - `tx_isp_t41_math.c` — T41 ABI wrappers around shared math primitives
 - `tx_isp_t41_sinfo.c` — T41 layout adapter around the shared sensor registry
 
@@ -49,9 +50,13 @@ IRQ 0 regardless of their arguments. The linked audit now classifies the IRQ
 enable/disable helpers as shorter rather than stubs, and the request/free paths
 as similar in instruction count.
 
-The T41 module now reuses the common interpolation/fixed-point helpers and the
-T23/T31/T41 typed sensor-registry implementation. Full sensor/Raptor smoke
-tests pass and ISP interrupts advance. One registry limitation remains: the
+The T41 module now reuses the common day/night state machine,
+interpolation/fixed-point helpers, and the T23/T31/T41 typed sensor-registry
+implementation. Full sensor/Raptor smoke tests pass, both MSCA streams run,
+and ISP interrupts advance. The temporary static day AWB baseline is
+`R=0x380, B=0x880`; both shadow banks retain those values across forced
+day/night transitions. This replaces the earlier red/blue-heavy defaults that
+produced a magenta day image. One registry limitation remains: the
 recovered T41 runtime currently leaves the staged shared registry at
 `/proc/jz/sensor/count=0`, while the persistent installed driver reports one
 sensor, so metadata parity is not yet claimed.

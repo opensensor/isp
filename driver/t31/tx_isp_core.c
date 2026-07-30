@@ -22,6 +22,7 @@
 #include "include/tx_libimp.h"
 #include "include/tx_isp_subdev_helpers.h"
 #include "../include/tx_isp/tx_isp_math.h"
+#include "../include/tx_isp/tx_isp_daynight.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -1503,6 +1504,45 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+struct t31_daynight_context {
+    struct tx_isp_dev *isp;
+};
+
+static const struct tx_isp_daynight_registers t31_daynight_registers = {
+    .fill = 0x6030,
+    .day_fill = 0xff00ff00,
+    .night_fill = 0xff008080,
+    .has_commit = false,
+};
+
+static void t31_daynight_write(void *opaque, u32 reg, u32 value)
+{
+    (void)opaque;
+    system_reg_write(reg, value);
+}
+
+static void t31_daynight_prepare(void *opaque, u32 mode)
+{
+    u8 drop_n = (u8)isp_day_night_switch_drop_frame_num;
+
+    (void)opaque;
+    (void)mode;
+    isp_day_night_switch_drop_frame_cnt[0] = drop_n;
+    isp_day_night_switch_drop_frame_cnt[1] = drop_n;
+    isp_day_night_switch_drop_frame_cnt[2] = drop_n;
+    isp_day_night_switch_drop_frame_cnt_pdq_interrupt = drop_n;
+}
+
+static int t31_daynight_notify(void *opaque, u32 mode)
+{
+    struct t31_daynight_context *context = opaque;
+
+    (void)mode;
+    if (!context->isp->tuning_data)
+        return -ENODEV;
+    return tx_isp_tuning_notify(context->isp, ISP_TUNING_EVENT_DN);
+}
+
 /* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
@@ -1637,51 +1677,33 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
      * dn_pending=1; the ISR then applies that deferred mode through the tuning
      * callback. dn_pending=2/3 remain fill-only transitions used by custom mode. */
     {
-        extern uint8_t isp_day_night_switch_drop_frame_cnt[3];
-        extern uint8_t isp_day_night_switch_drop_frame_cnt_pdq_interrupt;
-        extern int isp_day_night_switch_drop_frame_num;
-        u32 dn_mode;
+        struct t31_daynight_context context = {
+            .isp = isp_dev,
+        };
+        struct tx_isp_daynight_runtime runtime;
         u32 staged_mode = 0;
+        int notify_ret = 0;
+        int dn_ret;
 
         if (isp_dev && isp_dev->tuning_data)
             staged_mode = isp_tuning_oem_read_u32(isp_dev->tuning_data,
                               ISP_TUNING_OEM_RUNNING_MODE_OFFSET);
 
-        /* OEM: data_ba560 check — if DN transition is active, wait for sensor ack */
-        if (dn_transition_active == 1) {
-            if (staged_mode != 0)
-                dn_transition_active = 0;
-            else {
-                system_reg_write(0x6030, 0xff00ff00);
-                dn_transition_active = 0;
-            }
-        }
+        memset(&runtime, 0, sizeof(runtime));
+        runtime.running_mode = &staged_mode;
+        runtime.pending = &isp_dev->dn_pending;
+        runtime.commit_pending = &dn_transition_active;
+        runtime.registers = &t31_daynight_registers;
+        runtime.write = t31_daynight_write;
+        runtime.prepare = t31_daynight_prepare;
+        runtime.notify = t31_daynight_notify;
+        runtime.opaque = &context;
+        runtime.notify_result = &notify_ret;
 
-        dn_mode = isp_dev->dn_pending;
-        if (dn_mode == 1) {
-            u8 drop_n = (u8)isp_day_night_switch_drop_frame_num;
-            isp_day_night_switch_drop_frame_cnt[0] = drop_n;
-            isp_day_night_switch_drop_frame_cnt[1] = drop_n;
-            isp_day_night_switch_drop_frame_cnt[2] = drop_n;
-            isp_day_night_switch_drop_frame_cnt_pdq_interrupt = drop_n;
-
-            if (staged_mode == 1)
-                system_reg_write(0x6030, 0xff008080);
-
-            if (isp_dev->tuning_data)
-                tx_isp_tuning_notify(isp_dev, ISP_TUNING_EVENT_DN);
-
-            isp_dev->dn_pending = 0;
-            dn_transition_active = 1;
-        } else if (dn_mode == 2) {
-            /* Day mode transition */
-            system_reg_write(0x6030, 0xff00ff00);  /* Green fill during transition */
-            isp_dev->dn_pending = 0;
-        } else if (dn_mode == 3) {
-            /* Custom mode transition */
-            system_reg_write(0x6030, 0xff008080);
-            isp_dev->dn_pending = 0;
-        }
+        dn_ret = tx_isp_daynight_apply(&runtime);
+        if (dn_ret < 0)
+            pr_warn_ratelimited("T31 day/night apply failed: %d\n",
+                                dn_ret);
     }
 
     /*

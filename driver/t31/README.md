@@ -1,0 +1,105 @@
+# T31 TX-ISP Driver
+
+## Organization
+
+The T31 implementation is the most decomposed active driver and is the
+reference layout for future T23/T41 extractions.  The split is behavioral, not
+just cosmetic:
+
+- `tx_isp_module.c` owns module lifecycle, platform resources, frame-channel
+  ioctls, and buffer bookkeeping.
+- `tx_isp_core.c` owns ISP-core probe, MMIO, core IRQ handling, and MSCA frame
+  completion.
+- `tx_isp_csi.c`, `tx_isp_vic.c`, `tx_isp_vin.c`, and `tx_isp_fs.c` own their
+  corresponding subdevices.
+- `tx_isp_tuning.c` owns the recovered Tiziano tuning implementation and the
+  proprietary `libimp.so` control ABI.
+- `tx_isp_daynight.c`, `tx_isp_callback_plan.c`, and
+  `tx_isp_reg_profile.c` adapt T31 behavior to shared library units.
+- `tx_isp_dmsc_profile.c` owns the sensor-qualified SC2336 DMSC correction.
+- `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.
+- `tx_isp_fixpt.c`, `tx_isp_ae_zone.c`, and `tx_isp_frame_done.c` isolate
+  arithmetic, AE-zone, and frame-sync behavior from the large tuning unit.
+
+Register addresses, recovered object layouts, IRQ acknowledgement, tuning
+tables, and sensor-specific profiles remain T31-local.
+
+## Current SC2336 Runtime
+
+The July 30, 2026 device cycle validated the open module on the real T31
+SC2336 camera through the stock Ingenic userspace and Raptor:
+
+- main/sub RTSP streams initialize and remain responsive
+- forced night and day transitions produce top masks `0xB574224D` and
+  `0xB5742209`
+- lens shading is enabled by default (`force_bypass_lsc=0`)
+- day output has coherent color, geometry, lens shading, and tonal continuity
+- 100 consecutive `get-isp` plus `get-exposure` query pairs complete without
+  an ioctl failure, kernel fault, or producer restart
+- the tested reserved-memory command line is
+  `rmem=22M@0x2a00000`; no bootloader environment change is required
+
+The validated module SHA-256 for that cycle is
+`6e3fd1c63e4289d2b9d297f8bbdb9cab0362e17c8998d4259090fdf9ba4f399b`.
+
+## Tuning ABI Corrections
+
+The T31 tuning ioctl carries either a scalar or a userspace pointer in the
+same eight-byte control payload.  Keep command routing explicit.  A former
+`cmd >= 0x8000023` shortcut interpreted pointer-valued WB, highlight, and
+backlight queries as scalars.
+
+`tisp_g_ev_attr` is an OEM-shaped sparse 0x80-byte structure.  In particular:
+
+- current exposure lines are word 0
+- exposure microseconds are word 2
+- minimum/maximum integration lines are halfwords at byte offsets
+  `0x6c`/`0x6e`
+- one-line duration in microseconds is the halfword at byte offset `0x7c`
+
+Do not turn these byte offsets into `uint32_t` indices.  The old
+`ev_buffer[0x37]` write landed at byte `0xdc`, beyond both the OEM object and
+the caller's former eight-word stack buffer.
+
+`apical_isp_expr_g_ctrl` must return the exact 12-byte
+`IMPISPExpr.g_attr` layout:
+
+```text
+u32 mode
+u16 integration_time
+u16 integration_time_min
+u16 integration_time_max
+u16 one_line_expr_in_us
+```
+
+The recovered histogram path currently reports all samples in bin zero on
+this device.  `tisp_ae_g_luma` therefore uses the already-valid per-zone AE
+weighted mean only when the histogram-derived value is zero.  The live ioctl
+then reports scene-responsive exposure and luma instead of zeros.
+
+## Known Gaps
+
+- Raptor configures 25 fps, but this one-buffer frame-source pipeline delivers
+  about 12.5 fps.  The stock T31 evidence advances about 408 frames per 30
+  seconds (roughly 13.6 fps) with the same one-buffer behavior, so this is not
+  currently classified as an open-driver regression.  Changing kernel
+  completion cadence without a multi-buffer consumer test would risk active
+  buffer overwrite.
+- The raw histogram DMA layout still needs recovery; the per-zone luma
+  fallback is intentionally narrow.
+- Raptor's exposure summary still reports zero WB statistic gains even though
+  the main WB ioctl returns live nonzero red/blue gains.
+- More tuning internals should move into logical files, but extractions must
+  retain OEM callback order and be tested on-device.
+
+## Build and Check
+
+```bash
+SOC=t31 ./build_local.sh
+driver/t31/verify_no_divdi3.sh driver/t31/tx-isp-t31.ko
+make -C tests check
+git diff --check
+```
+
+Load experiments through the one-shot boot hook.  Do not live-unload the ISP
+stack while the sensor and Ingenic userspace hold its objects.

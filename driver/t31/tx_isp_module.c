@@ -639,6 +639,30 @@ static struct tx_isp_subdev *isp_i2c_new_subdev_board(struct i2c_adapter *adapte
     if (!adapter || !info)
         return NULL;
 
+    /*
+     * Make AddSensor idempotent.  If the userspace producer exits without
+     * completing its normal IMP teardown, the sensor client and live ISP
+     * pipeline can legitimately outlive its file descriptor.  A replacement
+     * producer must attach to that client instead of calling i2c_new_device()
+     * for the same bus/address and failing with -EBUSY forever.
+     *
+     * The subdev pointer is owned by the sensor driver's I2C client and stays
+     * valid until cleanup_i2c_infrastructure() unregisters that client.
+     */
+    mutex_lock(&i2c_client_mutex);
+    client = global_sensor_i2c_client;
+    if (client && client->adapter == adapter && client->addr == info->addr) {
+        result = i2c_get_clientdata(client);
+        mutex_unlock(&i2c_client_mutex);
+        if (result) {
+            pr_info("isp_i2c_new_subdev_board: reusing sensor subdev %p from %s at i2c-%d/0x%02x\n",
+                    result, info->type, adapter->nr, info->addr);
+            return (struct tx_isp_subdev *)result;
+        }
+    } else {
+        mutex_unlock(&i2c_client_mutex);
+    }
+
     /* Stock: private_request_module(1, arg2, arg3) */
     request_module("sensor_%s", info->type);
 

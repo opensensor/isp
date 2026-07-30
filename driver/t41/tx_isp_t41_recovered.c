@@ -6,6 +6,7 @@
 /* Module vermagic: 4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT  */
 
 #include "../include/tx_isp/tx_isp_sinfo.h"
+#include "../include/tx_isp/tx_isp_daynight.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
@@ -757,7 +758,7 @@ module_param(t41_checkpoint_start, uint, 0);
 static int t41_safe_tuning_events = 1;
 module_param(t41_safe_tuning_events, int, 0);
 MODULE_PARM_DESC(t41_safe_tuning_events,
-		 "suppress recovered AE/AWB/AF/WDR/GSM/TMO periodic callbacks");
+		 "suppress recovered AE/AWB/AF/WDR/GSM/TMO/day-night callbacks");
 
 /* The recovered vendor AE algorithm still contains unresolved legacy-BSS
  * arithmetic.  Keep event 1 live with a small controller whose inputs and
@@ -1037,16 +1038,15 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
 static void t41_apply_stock_awb_gains(void);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
- * process callback.  These open-pipeline gains were calibrated against the
- * same settled stock frame as the LCE/TMO oracle.  They compensate for the
- * still-static YSP and gain-matched DMSC stages and match the stock frame's
- * output chroma more closely than copying the OEM pipeline's internal
- * 0x48c/0x1324 pair. */
-static unsigned int t41_stock_awb_gain_a = 0x754U;
+ * process callback.  Keep a neutral, hardware-tested OS04D10 day baseline
+ * until the statistics controller below is ready to own the gains.  The old
+ * 0x754/0xa6c defaults amplified both red and blue and produced a severe
+ * magenta cast after Raptor selected day mode. */
+static unsigned int t41_stock_awb_gain_a = 0x380U;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 0x0a6cU;
+static unsigned int t41_stock_awb_gain_b = 0x0880U;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
@@ -1101,8 +1101,8 @@ static unsigned int t41_awb_min_pixels = 15000U;
 module_param(t41_awb_min_pixels, uint, 0644);
 MODULE_PARM_DESC(t41_awb_min_pixels,
 		 "minimum AWB statistic pixels accepted by the safe controller");
-static uint32_t t41_awb_last_rgain = 0x754U;
-static uint32_t t41_awb_last_bgain = 0x0a6cU;
+static uint32_t t41_awb_last_rgain = 0x380U;
+static uint32_t t41_awb_last_bgain = 0x0880U;
 /* Keep diagnostic state in .data.  Unrepaired functions still address a few
  * legacy BSS objects by relative layout, so adding ordinary zero-filled BSS
  * here can perturb unrelated capture state. */
@@ -20156,6 +20156,10 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     if (a1 == 0xc0105435U) {
         static unsigned int trace_count;
         uint32_t request[4];
+        uint32_t mode;
+        uint32_t previous_mode;
+        char *core;
+        char *tuning;
         int ret;
 
         if (private_copy_from_user(request,
@@ -20167,6 +20171,52 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                    "tx_isp_t41_recovered: isp-m0 control value=0x%x "
                    "get=%u id=0x%x aux=0x%x\n",
                    request[0], request[1], request[2], request[3]);
+
+        /*
+         * Restore the first stateful control required by Raptor.  This T41
+         * libimp generation uses 0x08000071 (T31 uses 0x080000e1) and passes
+         * the u32 mode through the envelope's userspace pointer.  Stock stores
+         * the requested mode at tuning+24 and marks core+468 for application
+         * by the next ISP frame IRQ.
+         * The generic recovered control dispatcher above lost this case and
+         * acknowledged the ioctl without changing either field.
+         */
+        if (!request[1] && request[2] == 0x08000071U) {
+            if (request[0] != 0)
+                return -EINVAL;
+            if (private_copy_from_user(&mode,
+                    (void __user *)(uintptr_t)request[3], sizeof(mode)))
+                return -EFAULT;
+            if (mode > 1)
+                return -EINVAL;
+
+            core = (char *)(uintptr_t)ispcore_sd;
+            if (!t41_kernel_data_ptr(core))
+                return -ENODEV;
+            tuning = *(char **)(core + 560);
+            if (!t41_kernel_data_ptr(tuning))
+                return -ENODEV;
+
+            ret = tx_isp_daynight_stage(
+                (uint32_t *)(void *)(tuning + 24),
+                (uint32_t *)(void *)(core + 468 +
+                    request[0] * sizeof(uint32_t)),
+                mode, &previous_mode);
+            if (ret <= 0)
+                return ret;
+
+            printk(KERN_WARNING
+                   "tx_isp_t41_recovered: stage running-mode %u->%u "
+                   "channel=%u\n",
+                   previous_mode, mode, request[0]);
+            if (request[0] < 2) {
+                *(uint32_t *)(void *)(tisp_par_info_storage +
+                    request[0] * 160 + 124) = mode;
+                *(uint32_t *)(void *)(day_night_storage +
+                    request[0] * sizeof(uint32_t)) = mode;
+            }
+            return 0;
+        }
 
         /*
          * Raptor queries the active frame rate before applying its image
@@ -20306,6 +20356,88 @@ isp_core_tunning_unlocked_ioctl0xec:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+struct t41_daynight_context {
+    char *tuning;
+};
+
+static const struct tx_isp_daynight_registers t41_daynight_registers = {
+    .fill = 0xd030,
+    .commit = 0xd000,
+    .day_fill = 0xff00ff00,
+    .night_fill = 0xff008080,
+    .commit_value = 0xffffffff,
+    .has_commit = true,
+};
+
+static void t41_daynight_write(void *opaque, u32 reg, u32 value)
+{
+    (void)opaque;
+    system_reg_write(reg, value);
+}
+
+static int t41_daynight_notify(void *opaque, u32 mode)
+{
+    struct t41_daynight_context *context = opaque;
+    uint32_t event_arg[2] = { 0, 0 };
+    int64_t (*tuning_event)(uintptr_t, uint32_t, uintptr_t);
+
+    (void)mode;
+    tuning_event = *(void **)(context->tuning + 156);
+    if (!t41_kernel_data_ptr((void *)(uintptr_t)tuning_event))
+        return -ENODEV;
+    return (int)tuning_event((uintptr_t)context->tuning, 0x04000003U,
+                             (uintptr_t)event_arg);
+}
+
+/*
+ * Exact T41 H20250310a day/night transition state machine from ISR +0x2fc.
+ * The first frame applies the requested CSC clamp and notifies the tuning
+ * event queue; the following frame closes the CSC shadow transaction.
+ */
+static void t41_apply_pending_day_night(char *core)
+{
+    struct t41_daynight_context context;
+    struct tx_isp_daynight_runtime runtime;
+    char *tuning;
+    uint32_t mode;
+    int notify_ret = 0;
+    int ret;
+
+    if (!t41_kernel_data_ptr(core))
+        return;
+    tuning = *(char **)(core + 560);
+    if (!t41_kernel_data_ptr(tuning))
+        return;
+
+    mode = *(uint32_t *)(tuning + 24);
+    context.tuning = tuning;
+    memset(&runtime, 0, sizeof(runtime));
+    runtime.running_mode = (uint32_t *)(void *)(tuning + 24);
+    runtime.pending = (uint32_t *)(void *)(core + 468);
+    runtime.commit_pending = &csc_switch;
+    runtime.registers = &t41_daynight_registers;
+    runtime.write = t41_daynight_write;
+    runtime.notify = t41_daynight_notify;
+    runtime.opaque = &context;
+    runtime.notify_result = &notify_ret;
+
+    ret = tx_isp_daynight_apply(&runtime);
+    if (ret == TX_ISP_DAYNIGHT_SWITCH)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: applied running-mode=%u csc=%#x "
+               "notify-ret=%d\n",
+               mode, mode ? t41_daynight_registers.night_fill :
+                            t41_daynight_registers.day_fill,
+               notify_ret);
+    else if (ret < 0)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: day-night apply failed ret=%d "
+               "mode=%u pending=%u\n",
+               ret, mode, *(uint32_t *)(core + 468));
+}
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000c878 origin=fragment_seed original=isp_frame_done_wakeup */
 int32_t isp_frame_done_wakeup(uint32_t a0)
@@ -40090,6 +40222,53 @@ int32_t tisp_comn_param_array_get(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000187d8 origin=fragment_seed original=tisp_comn_param_array_set */
 int32_t tisp_comn_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    unsigned char *par;
+    uint32_t *day_slot;
+    uint32_t previous_mode;
+    uint32_t mode;
+    int ret;
+
+    if (a0 >= 2 || !a1)
+        return -EINVAL;
+
+    memcpy(st_tisp_com_par_storage, (const void *)(uintptr_t)a1,
+           sizeof(st_tisp_com_par_storage));
+
+    /*
+     * Stock reads lbu 162(st_tisp_com_par).  The recovered expression used
+     * st_vic_save_par+0x22 instead, which is unrelated BSS and kept every
+     * set-running-mode request in day mode.
+     */
+    mode = st_tisp_com_par_storage[162];
+    par = tisp_par_info_storage + a0 * 160;
+    previous_mode = *(uint32_t *)(void *)(par + 124);
+    if (mode == previous_mode)
+        return 0;
+
+    *(uint32_t *)(void *)(par + 124) = mode;
+    day_slot = (uint32_t *)(void *)
+        (day_night_storage + a0 * sizeof(uint32_t));
+    *day_slot = mode;
+
+    ret = tisp_day_or_night_s_ctrl(a0, mode);
+
+    /*
+     * Preserve the stock immediate CSC switch.  The broader event-18
+     * parameter refresh remains quarantined until its packed workspaces are
+     * reconstructed, but this register pair is sufficient to disable chroma
+     * for the night/IR image without disturbing scaler geometry.
+     */
+    system_reg_write(0xd030, mode ? 0xff008080 : 0xff00ff00);
+    system_reg_write(0xd000, 0xffffffff);
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: day-night mode %u->%u channel=%u "
+           "csc=%#x event-ret=%d\n",
+           previous_mode, mode, a0,
+           mode ? 0xff008080 : 0xff00ff00, ret);
+    return ret;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -40161,6 +40340,7 @@ tisp_comn_param_array_set0xa8:
     goto tisp_comn_param_array_set0x7c;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018888 origin=fragment_seed original=tisp_ldc_param_array_set */
@@ -53491,7 +53671,7 @@ int32_t tisp_event_set_cb(int32_t arg1, int32_t arg2, int32_t arg3)
         arg3 = (int)(uintptr_t)t41_safe_ae_calc_process;
     if (t41_safe_tuning_events && arg3 &&
         (arg2 == 12 || arg2 == 13 || arg2 == 15 ||
-         arg2 == 16 || arg2 == 17)) {
+         arg2 == 16 || arg2 == 17 || arg2 == 18)) {
         printk(KERN_WARNING
                "tx_isp_t41_recovered: tuning-event callback suppressed "
                "channel=%d event=%d callback=%p\n",
@@ -151639,13 +151819,14 @@ uint32_t tisp_get_tuning(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c178 origin=fragment_seed original=tisp_day_or_night_s_ctrl */
 int32_t tisp_day_or_night_s_ctrl(uint32_t a0, uint32_t a1)
 {
-    uint32_t event[12];
+    uint32_t event[12] = { 0 };
+    int64_t ret;
 
     event[2] = 18;
     event[4] = a1;
     event[5] = 0;
-    tisp_event_push(a0, (uintptr_t)event);
-    return 0;
+    ret = tisp_event_push(a0, (uintptr_t)event);
+    return (int32_t)ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c1b0 origin=fragment_seed original=tisp_day_or_night_g_ctrl */
@@ -164970,6 +165151,7 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
             int work_queued;
 
             core = *(char **)(subdev + 0x10c);
+            t41_apply_pending_day_night(core);
             channels = t41_kernel_data_ptr(core) ?
                 *(char **)(core + 0x1ac) : NULL;
             if (t41_kernel_data_ptr(channels))

@@ -5,9 +5,9 @@
 The active refactor covers the working T23, T31, and T41 TX-ISP drivers. T31
 already has core, CSI, VIC, VIN, frame-source, tuning, and support translation
 units. T23 and T41 still have large recovered core translation units, but both
-modules now link separate math and sensor-registry adapter objects. This gives
-later extractions stable module boundaries without rewriting the recovered
-pipeline all at once.
+modules now link separate shared-library adapter objects. This gives later
+extractions stable module boundaries without rewriting the recovered pipeline
+all at once.
 
 T40 remains a working recovered baseline, but it is intentionally outside this
 round of cleanup.
@@ -37,6 +37,46 @@ The per-SoC wrappers preserve their existing ABI and endpoint policy:
 
 `tests/tx_isp_math_test.c` covers boundary behavior, OEM rounding, wrapped
 32-bit products, typed tables, and randomized equivalence checks.
+
+### Day/night transition shell
+
+`driver/common/tx_isp_daynight.c` owns mode validation, pending-state
+publication, normal versus fill-only transitions, CSC writes, and optional
+shadow commit. `driver/include/tx_isp/tx_isp_daynight.h` defines a callback-
+and-register configuration rather than selecting a SoC at runtime.
+
+T31 and T41 provide thin adapters with their own mode identifiers, register
+maps, frame-drop handling, tuning notifications, and commit behavior. T23
+retains its larger recovered refresh sequence until that ordering can be
+represented safely.
+
+### Ordered register profiles and masks
+
+`driver/common/tx_isp_reg_profile.c` applies ordered register/value lists with
+an optional final commit. T31 uses it for the device-derived SC2336 DMSC
+correction profiles that repair the previously solarized/false-color output
+after day/night refresh.
+
+The same unit provides the exact recovered flag-to-register merge used by
+T23's day/night, custom-mode, and tuning-bin top-bypass updates. The common
+operation replaces three local copies without changing transition order or
+tuning values.
+
+`tests/tx_isp_reg_profile_test.c` covers write order, commit placement,
+validation failures, mask replacement, non-boolean recovered semantics, and
+the 32-bit count limit.
+
+### Ordered callback plans
+
+`driver/common/tx_isp_callback_plan.c` validates an entire callback list before
+executing it in declaration order. T23 declares its 17-block mode refresh as a
+plan in `tx_isp_t23_mode.c`; T31 declares its 18-block day/night refresh plan
+next to the private tuning callbacks it adapts.
+
+This keeps the algorithms and exact order local while sharing validation and
+dispatch. Pre-validation is important for hardware plans: a malformed entry
+cannot leave the ISP half-programmed. `tests/tx_isp_callback_plan_test.c`
+covers ordering, empty plans, malformed plans, and validation atomicity.
 
 ### Sensor registry
 
@@ -86,10 +126,12 @@ T41 Kbuild now emits `driver/t41/tx-isp-t41.ko`, the canonical dependency name
 used by current T41 sensor modules, while retaining
 `tx_isp_t41_recovered.c` as the source filename.
 
-T41 is now a multi-object module with three explicit boundaries:
+T41 is now a multi-object module with four explicit boundaries:
 
 - `tx_isp_t41_recovered.c` owns the recovered pipeline, hardware, and tuning
   implementation.
+- `tx_isp_t41_daynight.c` adapts T41 registers and callbacks to the common
+  transition state machine.
 - `tx_isp_t41_math.c` preserves the recovered math entry-point ABI and
   delegates its algorithms to `tx_isp_math.h`.
 - `tx_isp_t41_sinfo.c` supplies the T41 object-layout adapter for the common
@@ -98,7 +140,7 @@ T41 is now a multi-object module with three explicit boundaries:
 ### Multi-object T23 artifact
 
 T23 preserves the deployed `tx_isp_t23_recovered` module identity while linking
-three logical objects:
+six logical objects:
 
 - `tx_isp_t23_core.c` owns the recovered pipeline, hardware, tuning, and the
   T23-specific sensor lifecycle callbacks.
@@ -106,23 +148,36 @@ three logical objects:
   and delegates its algorithm to `tx_isp_math.h`.
 - `tx_isp_t23_sinfo.c` supplies static metadata and lifecycle callbacks for the
   common sensor registry.
+- `tx_isp_t23_mode.c` owns the T23 bypass masks and one authoritative
+  declarative 17-block mode-refresh sequence.
+- `tx_isp_t23_callback_plan.c` links the common validated callback runner.
+- `tx_isp_t23_reg_profile.c` links the shared ordered-profile and register-mask
+  implementation.
 
 ## Device Validation
 
-Every staged module was loaded for one boot only, exercised through the real
-Raptor consumer, checked for advancing interrupts and kernel fatal signatures,
-then replaced by the untouched persistent module on reboot.
+Every staged module was loaded through the one-shot fail-safe hook, exercised
+through the real Raptor consumer, and checked with stream captures plus
+`dmesg`, `logread`, and `logcat`. Final device boots were re-armed with the
+tested open build so the current work remains active for inspection.
 
 | SoC | Staged coverage | Result |
 |---|---|---|
-| T23 | three-object module, shared interpolation and typed registry, SC2336, main/sub rings | pass; registry count 1 |
-| T31 | shared fixed-point math and typed registry, SC2336, main/sub rings | pass; registry count 1 |
-| T41 | three-object module, shared math and typed registry, OS04D10, main/sub rings | streaming pass; staged registry count remains zero |
+| T23 | six-object module, shared math/registry/register-mask/callback-plan plus mode adapter, SC2336, 1080p/360p | pass; day/night/auto and both streams clean |
+| T31 | shared math/registry/day-night/profiles/callback-plan, SC2336, 1080p/360p | pass; day/night clean and unclean producer restart reattaches |
+| T41 | four-object module, shared math/registry/day-night, OS04D10, 1080p/360p | pass; balanced day color and dual-stream fanout |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs
 its marker before `insmod`. A crash therefore cannot repeatedly load the staged
 module: the next watchdog or power-cycle returns to the persistent driver.
-Live unloading is not a safe test strategy for these camera pipelines.
+Live unloading is not a safe test strategy for these camera pipelines. The
+latest detailed matrix is in `docs/SHARED_DRIVER_LIBRARY.md`.
+
+The latest T31 validation also covers the proprietary tuning ioctl ABI:
+WB/highlight/backlight readback, hue, AE compensation, total gain, expression
+line timing, exposure microseconds, and AE luma. The ioctl command set mixes
+scalar and pointer payloads, so a future shared dispatcher must describe that
+payload kind explicitly instead of using numeric command ranges.
 
 ## Target Layout
 
@@ -174,12 +229,17 @@ to shape the eventual common interface.
 
 1. Recover the missing T41 sensor-registry bind/lifecycle path and require full
    `/proc/jz/sensor` parity before extending that interface.
-2. Review fixed-point divide and log/exp helpers shared by T31 and T41, starting
+2. Extend validated callback plans to other repeated initialization and
+   teardown sequences whose ordering is already device-proven.
+3. Review fixed-point divide and log/exp helpers shared by T31 and T41, starting
    with host-testable functions that cannot touch kernel or ISP state.
-3. Reconcile the known T31 pad-direction and 0x24/0x28 stride discrepancy in a
+4. Reconcile the known T31 pad-direction and 0x24/0x28 stride discrepancy in a
    standalone, device-tested change.
-4. Extend the checked ABI from pads to links, events, and sensor attributes.
-5. Split the next low-risk T23/T41 subsystem, such as proc diagnostics or frame
+5. Extend the checked ABI from pads to links, events, and sensor attributes.
+6. Split the next low-risk T23/T41 subsystem, such as proc diagnostics or frame
    completion, behind a reviewed interface.
-6. Move event/state-machine shells only after IRQ decode and acknowledge
+7. Move event/state-machine shells only after IRQ decode and acknowledge
    ordering remain explicit per-SoC behavior.
+8. Extract a host-testable tuning-response packer (EV, expression, WB) after
+   matching the byte layouts on T23 and T41; keep live statistics collection
+   and userspace copying in each SoC adapter.
