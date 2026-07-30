@@ -5,14 +5,16 @@ This directory is the T23 bring-up workspace for matching the OEM
 
 The recovered whole-driver seed from `tx-isp-t23-v1` now lives in
 `tx_isp_t23_core.c`, with separate math, sensor-registry, mode-profile,
-callback-plan, register-profile, and tuning-ABI adapter objects. Kbuild links
-all eight into the existing
+callback-plan, register-profile, frame-layout, scaler, and tuning-ABI adapter
+objects. Kbuild links all nine into the existing
 `tx_isp_t23_recovered.ko` module identity expected by this target. The math
 adapter delegates to the cross-SoC primitives, the registry adapter delegates
 slot/procfs ownership to the common typed implementation, and the profile
 adapter supplies the shared top-bypass flag merge. The T23 mode adapter owns
 the SoC masks and exact 17-block refresh order used by day/night, custom-mode,
-and tuning-bin transitions.
+and tuning-bin transitions. The scaler adapter owns the recovered T23 sinc
+table and four-tap correction order while delegating checked fixed-point
+interpolation and normalization to the common T23/T41 generator.
 
 The tuning-ABI adapter supplies checked shared libimp envelopes, command
 descriptors, and expression/EV response packers. The frame-layout adapter
@@ -27,8 +29,14 @@ Current smoke-test status:
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
 - Raptor starts and publishes stable H.264 streams on both MSCA channels.
-- The eight-object module passes a full one-shot device boot with advancing
+- The nine-object module passes a full one-shot device boot with advancing
   ISP/VIC interrupts and is followed by a verified persistent-driver reboot.
+- Both enabled MSCA channels now generate their polyphase curves through the
+  shared scaler library. Exact host regressions cover the T23 unity and
+  one-third curves, and a clean device boot published stable 1920x1080 and
+  640x360 streams at 25 fps with no fatal kernel, Raptor, or Android log
+  entries. The tested open module remains active with SHA-256
+  `d1b53dbe46435b1bc5bbb90d29a4b24185c368a79323b97b2432e839c8893848`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #else
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 typedef int32_t s32;

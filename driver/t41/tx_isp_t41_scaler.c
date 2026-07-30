@@ -16,7 +16,9 @@
 #include "tx_isp_t41_scaler.h"
 #include "../include/tx_isp/tx_isp_scaler.h"
 
+#ifdef __KERNEL__
 #include "../common/tx_isp_scaler.c"
+#endif
 
 static const s16 tx_isp_t41_scaler_sinc_lut[257] = {
 	1535, 1532, 1523, 1507, 1486, 1459, 1427, 1389,

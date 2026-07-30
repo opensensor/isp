@@ -45,12 +45,16 @@ tx_isp_exposure_test: tx_isp_exposure_test.c \
 		tx_isp_exposure_test.c ../driver/common/tx_isp_exposure.c
 
 tx_isp_scaler_test: tx_isp_scaler_test.c \
+		../driver/t23/tx_isp_t23_scaler.c \
+		../driver/t23/tx_isp_t23_scaler.h \
 		../driver/t41/tx_isp_t41_scaler.c \
 		../driver/t41/tx_isp_t41_scaler.h \
 		../driver/common/tx_isp_scaler.c \
 		../driver/include/tx_isp/tx_isp_scaler.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ \
-		tx_isp_scaler_test.c ../driver/t41/tx_isp_t41_scaler.c
+		tx_isp_scaler_test.c ../driver/common/tx_isp_scaler.c \
+		../driver/t23/tx_isp_t23_scaler.c \
+		../driver/t41/tx_isp_t41_scaler.c
 
 check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_reg_profile_test \
 		tx_isp_callback_plan_test tx_isp_tuning_abi_test \

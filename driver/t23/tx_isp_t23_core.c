@@ -9,6 +9,7 @@
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "include/tx_isp_t23_mode.h"
+#include "tx_isp_t23_scaler.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
@@ -40477,42 +40478,6 @@ int tisp_event_process(uint32_t channel)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000183f0 origin=fragment_seed original=tisp_msca_normalized */
-static const int16_t regtrace_t23_msca_sin_lut[257] = {
-    1535, 1534, 1532, 1528, 1523, 1516, 1507, 1497,
-    1486, 1473, 1459, 1444, 1427, 1409, 1389, 1369,
-    1347, 1324, 1300, 1274, 1248, 1221, 1194, 1165,
-    1135, 1105, 1074, 1043, 1011, 979, 946, 913,
-    880, 847, 813, 779, 745, 711, 678, 645,
-    612, 579, 546, 514, 483, 452, 421, 391,
-    361, 332, 304, 277, 251, 225, 200, 175,
-    152, 130, 109, 89, 69, 50, 32, 16,
-    0, -15, -29, -41, -53, -64, -75, -84,
-    -92, -99, -106, -112, -117, -121, -125, -128,
-    -130, -131, -132, -132, -132, -131, -130, -128,
-    -126, -124, -121, -118, -114, -110, -106, -102,
-    -98, -94, -89, -84, -79, -75, -70, -65,
-    -60, -55, -51, -47, -43, -39, -35, -31,
-    -27, -24, -21, -18, -15, -12, -10, -8,
-    -7, -5, -4, -3, -2, -1, 0, 0,
-    0, 0, 0, 0, -1, -2, -3, -4,
-    -5, -7, -8, -9, -10, -12, -14, -16,
-    -17, -19, -20, -22, -23, -25, -26, -27,
-    -28, -30, -31, -32, -33, -34, -34, -35,
-    -35, -36, -36, -36, -36, -36, -36, -36,
-    -35, -34, -33, -33, -32, -31, -29, -28,
-    -27, -26, -24, -23, -21, -20, -18, -16,
-    -14, -13, -11, -9, -7, -5, -3, -1,
-    0, 2, 3, 5, 6, 8, 9, 11,
-    12, 13, 14, 15, 16, 17, 18, 19,
-    19, 20, 20, 21, 21, 21, 21, 21,
-    21, 21, 21, 21, 20, 20, 19, 19,
-    18, 18, 17, 16, 15, 15, 14, 13,
-    12, 12, 11, 10, 9, 8, 7, 6,
-    6, 6, 5, 4, 3, 2, 2, 2,
-    2, 2, 1, 0, 0, 0, 0, 0,
-    0,
-};
-
 int32_t tisp_msca_normalized(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
     static const uint32_t add_order[4] = { 1, 2, 0, 3 };
@@ -40579,7 +40544,9 @@ int32_t tisp_msca_normalized(uintptr_t a0, uint32_t a1, uintptr_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018700 origin=fragment_seed original=tisp_sin */
 int32_t tisp_sin(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+    const s16 *sinc_lut;
     int16_t *output = (int16_t *)a2;
+    u32 sinc_lut_count;
     uint32_t step;
     uint32_t threshold = 1024;
     uint32_t segment_start = 0;
@@ -40587,6 +40554,9 @@ int32_t tisp_sin(uint32_t a0, uint32_t a1, uintptr_t a2)
     uint32_t phase = 0;
 
     if (!output || !a1)
+        return -EINVAL;
+    sinc_lut = tx_isp_t23_scaler_sinc_lut_get(&sinc_lut_count);
+    if (!sinc_lut || sinc_lut_count < 2)
         return -EINVAL;
 
     step = (a0 << 3) / a1;
@@ -40599,14 +40569,14 @@ int32_t tisp_sin(uint32_t a0, uint32_t a1, uintptr_t a2)
             segment_start = threshold;
             lut_index++;
             threshold += 1024;
-            if (lut_index + 1U >= ARRAY_SIZE(regtrace_t23_msca_sin_lut))
+            if (lut_index + 1U >= sinc_lut_count)
                 return -ERANGE;
             continue;
         }
 
         fraction = position - segment_start;
-        value = regtrace_t23_msca_sin_lut[lut_index + 1U] * fraction;
-        value += regtrace_t23_msca_sin_lut[lut_index] *
+        value = sinc_lut[lut_index + 1U] * fraction;
+        value += sinc_lut[lut_index] *
                  (1024U - fraction);
         output[phase] = (int16_t)((value >> 10) + ((value >> 9) & 1));
         phase++;
@@ -41946,16 +41916,12 @@ int32_t tisp_msca_curve_calc(uint32_t path, uint32_t channel)
         curve_w = (int16_t *)msca_ch2_lanczos_w;
     }
 
-    ret = tisp_sin(ratio_w, 16, (uintptr_t)curve_w);
+    ret = tx_isp_t23_scaler_curve_generate(
+        ratio_w, curve_w, TX_ISP_T23_SCALER_COEFFICIENTS);
     if (ret)
         return ret;
-    ret = tisp_msca_normalized(8, 16, (uintptr_t)curve_w);
-    if (ret)
-        return ret;
-    ret = tisp_sin(ratio_h, 16, (uintptr_t)curve_h);
-    if (ret)
-        return ret;
-    ret = tisp_msca_normalized(8, 16, (uintptr_t)curve_h);
+    ret = tx_isp_t23_scaler_curve_generate(
+        ratio_h, curve_h, TX_ISP_T23_SCALER_COEFFICIENTS);
     if (ret)
         return ret;
 
