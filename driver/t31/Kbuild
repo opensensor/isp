@@ -21,8 +21,8 @@ tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \
                $(DIR)/tx_isp_callback_plan.o \
                $(DIR)/tx_isp_reg_profile.o \
                $(DIR)/tx_isp_frame_layout.o \
+               $(DIR)/tx_isp_t31_exposure.o \
                $(DIR)/tx_isp_tuning_abi.o \
-               $(DIR)/tx_isp_dmsc_profile.o \
                $(DIR)/tx_isp_vin.o
 
 # Build both modules - changed tx-isp.o to tx-isp-t31.o

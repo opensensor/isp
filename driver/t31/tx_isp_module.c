@@ -73,6 +73,7 @@ static struct sensor_ops_storage stored_sensor_ops;
 static void sensor_expo_work_func(struct work_struct *work);
 DECLARE_WORK(sensor_expo_work, sensor_expo_work_func);
 EXPORT_SYMBOL(sensor_expo_work);
+static u32 sensor_expo_last_packed = ~0U;
 
 static void sensor_expo_work_func(struct work_struct *work)
 {
@@ -100,11 +101,27 @@ static void sensor_expo_work_func(struct work_struct *work)
 
         {
             int packed = ((int)again << 16) | ((int)it & 0xffff);
+
+            /*
+             * AE evaluates every ISP frame, but the sensor tuple commonly
+             * remains unchanged for hundreds of frames. Replaying the same
+             * SC2336 I2C transaction at 25 Hz needlessly touches its timing
+             * registers and can turn stable shadow noise into a visible
+             * cadence. The work item is serialized, so this local transport
+             * cache needs no additional locking.
+             */
+            if ((u32)packed == sensor_expo_last_packed) {
+                ourISPdev->sensor_update_pending = 0;
+                return;
+            }
             pr_info_ratelimited("sensor_expo_work: again=%u it=%u packed=0x%08x\n", again, it, packed);
             ret = stored_sensor_ops.original_ops->sensor->ioctl(
                 stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_EXPO, &packed);
-            if (ret)
+            if (ret) {
                 pr_err("sensor_expo_work: ioctl returned %d\n", ret);
+            } else {
+                sensor_expo_last_packed = (u32)packed;
+            }
         }
     }
     ourISPdev->sensor_update_pending = 0;
@@ -7118,6 +7135,8 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         pr_info("*** CALLING REAL SENSOR DRIVER S_STREAM - THIS WRITES 0x3e=0x91! ***\n");
 
+        if (enable)
+            sensor_expo_last_packed = ~0U;
         ret = stored_sensor_ops.original_ops->video->s_stream(stored_sensor_ops.sensor_sd, enable);
 
         pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);

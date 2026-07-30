@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "tx_isp/tx_isp_exposure.h"
+#include "../driver/t31/tx_isp_t31_exposure.h"
 
 static const u16 nodes_60hz[] = { 369, 737, 1106, 1474 };
 
@@ -53,6 +54,47 @@ static void test_flicker_node_generation(void)
 	assert(count == 99);
 	assert(tx_isp_flicker_nodes_build(0, 1, 10, nodes, 4,
 					  &count) == -EINVAL);
+}
+
+static void test_t31_flicker_lut_adapter(void)
+{
+	u32 lut[TX_ISP_T31_FLICKER_LUT_ENTRIES];
+	u32 last_index = 99;
+	u32 index;
+
+	for (index = 0; index < TX_ISP_T31_FLICKER_LUT_ENTRIES; ++index)
+		lut[index] = 0xdeadbeefU;
+	assert(tx_isp_t31_flicker_lut_build(
+		       300, 1440, lut, TX_ISP_T31_FLICKER_LUT_ENTRIES,
+		       &last_index) == 0);
+	assert(last_index == 3);
+	assert(lut[0] == 300);
+	assert(lut[1] == 600);
+	assert(lut[2] == 900);
+	assert(lut[3] == 1200);
+	assert(lut[4] == 1200);
+	assert(lut[TX_ISP_T31_FLICKER_LUT_ENTRIES - 1] == 1200);
+
+	assert(tx_isp_t31_flicker_lut_build(
+		       360, 1440, lut, TX_ISP_T31_FLICKER_LUT_ENTRIES,
+		       &last_index) == 0);
+	assert(last_index == 3);
+	assert(lut[0] == 360);
+	assert(lut[3] == 1440);
+	assert(lut[4] == 1440);
+
+	assert(tx_isp_t31_flicker_lut_build(300, 200, lut, 4,
+					    &last_index) == 0);
+	assert(last_index == 0);
+	assert(lut[0] == 300);
+	assert(lut[3] == 300);
+
+	lut[0] = 0x12345678U;
+	last_index = 99;
+	assert(tx_isp_t31_flicker_lut_build(0, 1440, lut, 4,
+					    &last_index) == -EINVAL);
+	assert(lut[0] == 0x12345678U);
+	assert(last_index == 99);
 }
 
 static void test_short_and_flicker_floor(void)
@@ -141,6 +183,7 @@ int main(void)
 {
 	test_target_scaling();
 	test_flicker_node_generation();
+	test_t31_flicker_lut_adapter();
 	test_short_and_flicker_floor();
 	test_node_and_gain_selection();
 	test_bounds_and_validation();

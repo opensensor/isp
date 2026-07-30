@@ -39,10 +39,13 @@ tx_isp_frame_layout_test: tx_isp_frame_layout_test.c \
 		tx_isp_frame_layout_test.c ../driver/common/tx_isp_frame_layout.c
 
 tx_isp_exposure_test: tx_isp_exposure_test.c \
+		../driver/t31/tx_isp_t31_exposure.c \
+		../driver/t31/tx_isp_t31_exposure.h \
 		../driver/common/tx_isp_exposure.c \
 		../driver/include/tx_isp/tx_isp_exposure.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ \
-		tx_isp_exposure_test.c ../driver/common/tx_isp_exposure.c
+		tx_isp_exposure_test.c ../driver/common/tx_isp_exposure.c \
+		../driver/t31/tx_isp_t31_exposure.c
 
 tx_isp_scaler_test: tx_isp_scaler_test.c \
 		../driver/t23/tx_isp_t23_scaler.c \

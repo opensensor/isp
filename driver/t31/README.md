@@ -20,7 +20,8 @@ just cosmetic:
   descriptors, and response packers.
 - `tx_isp_frame_layout.c` links checked NV12 and MDNS auxiliary geometry while
   T31 retains its alignment, register, allocation, and memory-option policy.
-- `tx_isp_dmsc_profile.c` owns the sensor-qualified SC2336 DMSC correction.
+- `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
+  deflicker LUT's fixed 120-word, repeated-tail ABI.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.
 - `tx_isp_fixpt.c`, `tx_isp_ae_zone.c`, and `tx_isp_frame_done.c` isolate
   arithmetic, AE-zone, and frame-sync behavior from the large tuning unit.
@@ -38,6 +39,15 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   `0xB5742209`
 - lens shading is enabled by default (`force_bypass_lsc=0`)
 - day output has coherent color, geometry, lens shading, and tonal continuity
+- DMSC register `0x4800` is sourced only from the tuning blob's output/debug
+  selector; Bayer routing is not synthesized into this register
+- the SC2336 linear-mode MDNS top word matches the same-camera stock oracle
+  (`0x7814=0x00f01100`)
+- duplicate sensor exposure tuples are suppressed after the first successful
+  write, avoiding redundant 25 Hz SC2336 timing-register transactions
+- a synchronized stock/open capture at approximately 1200 integration lines
+  and sensor gain `0xc4` matched the functional DMSC, sharpen, MDNS/YDNS,
+  RDNS, SDNS, and BCSH register programming
 - 100 consecutive `get-isp` plus `get-exposure` query pairs complete without
   an ioctl failure, kernel fault, or producer restart
 - the main pool now reports the OEM-private `bytesperline=2880` and
@@ -52,7 +62,14 @@ address range, and Y/UV placement before the local tracking and MSCA handoff.
 The validation retained exact 3,133,440/353,280-byte pools and the inherited
 half-rate cadence without rejecting a live buffer. The validated module
 SHA-256 is
-`e311d2f2fb98deb3449c2b4278f197e2bb61b2203af33fe735f85b9676827aba`.
+`2b7a97c16d709fb2c9e0671f347093e7ea8be1054065741ee5b848f0306ce556`.
+
+The DMSC output selector deserves particular care.  Its low bits select
+normal or diagnostic DMSC outputs; they are not a CFA index.  Rewriting them
+from the sensor media-bus Bayer order produced a monochrome edge/noise image.
+The preserved compatibility entry point is therefore a no-op, while
+`tisp_dmsc_out_opt_cfg()` writes the tuning-selected word exactly like the
+shipping implementation.
 
 ## Tuning ABI Corrections
 
@@ -105,6 +122,10 @@ then reports scene-responsive exposure and luma instead of zeros.
   fallback is intentionally narrow.
 - Raptor's exposure summary still reports zero WB statistic gains even though
   the main WB ioctl returns live nonzero red/blue gains.
+- In the matched-exposure July 30 wall capture, accepted open output retained
+  roughly 1.5-1.7 times the stock frame-to-frame luma change in flat regions.
+  The image was visually accepted, but this remains a useful MDNS/LSC tuning
+  parity target.
 - More tuning internals should move into logical files, but extractions must
   retain OEM callback order and be tested on-device.
 

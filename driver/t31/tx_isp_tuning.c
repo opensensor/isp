@@ -48,11 +48,11 @@
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_fixpt.h"
-#include "include/tx_isp_dmsc_profile.h"
 #include "../include/tx_isp/tx_isp_callback_plan.h"
 #include "../include/tx_isp/tx_isp_math.h"
 #include "../include/tx_isp/tx_isp_daynight.h"
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
+#include "tx_isp_t31_exposure.h"
 
 #include "include/tx_isp_device.h"
 #include "include/tx_libimp.h"
@@ -21661,94 +21661,14 @@ static u32 dmsc_sp_ud_ns_thres_val;
 
 static int tisp_dmsc_all_reg_refresh(u32 gain);
 
-static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
-{
-	switch (mbus_code) {
-#ifdef V4L2_MBUS_FMT_SRGGB8_1X8
-	case V4L2_MBUS_FMT_SRGGB8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SRGGB10_1X10
-	case V4L2_MBUS_FMT_SRGGB10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SRGGB12_1X12
-	case V4L2_MBUS_FMT_SRGGB12_1X12:
-#endif
-		return 0;
-#ifdef V4L2_MBUS_FMT_SGRBG8_1X8
-	case V4L2_MBUS_FMT_SGRBG8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SGRBG10_1X10
-	case V4L2_MBUS_FMT_SGRBG10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SGRBG12_1X12
-	case V4L2_MBUS_FMT_SGRBG12_1X12:
-#endif
-		return 2;
-#ifdef V4L2_MBUS_FMT_SGBRG8_1X8
-	case V4L2_MBUS_FMT_SGBRG8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SGBRG10_1X10
-	case V4L2_MBUS_FMT_SGBRG10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SGBRG12_1X12
-	case V4L2_MBUS_FMT_SGBRG12_1X12:
-#endif
-		return 3;
-#ifdef V4L2_MBUS_FMT_SBGGR8_1X8
-	case V4L2_MBUS_FMT_SBGGR8_1X8:
-#endif
-#ifdef V4L2_MBUS_FMT_SBGGR10_1X10
-	case V4L2_MBUS_FMT_SBGGR10_1X10:
-#endif
-#ifdef V4L2_MBUS_FMT_SBGGR12_1X12
-	case V4L2_MBUS_FMT_SBGGR12_1X12:
-#endif
-		return 1;
-	default:
-		return 0;
-	}
-}
-
-static u32 tisp_dmsc_apply_flip_to_cfa(u32 idx, unsigned int shvflip)
-{
-	/* T31 hardware order: RGGB, BGGR, GRBG, GBRG. */
-	static const u8 hmap[4] = {2, 3, 0, 1};
-	static const u8 vmap[4] = {3, 2, 1, 0};
-
-	idx &= 0x3;
-	if (shvflip & 0x1)
-		idx = hmap[idx];
-	if (shvflip & 0x2)
-		idx = vmap[idx];
-
-	return idx;
-}
-
-static u32 tisp_dmsc_live_out_opt_word(void)
-{
-	struct tx_isp_sensor *sensor = NULL;
-	u32 out_opt = dmsc_out_opt_word;
-	u32 mbus_code = 0;
-	unsigned int shvflip = 0;
-	u32 idx;
-
-	if (ourISPdev)
-		sensor = ourISPdev->sensor;
-	if (sensor) {
-		mbus_code = sensor->video.mbus.code;
-		shvflip = sensor->video.shvflip;
-	}
-
-	idx = tisp_dmsc_apply_flip_to_cfa(tisp_dmsc_cfa_base_from_mbus(mbus_code), shvflip);
-	return (out_opt & ~0x3u) | idx;
-}
-
+/*
+ * Compatibility symbol retained for older in-tree consumers.  Register
+ * 0x4800 is DMSC's tuning-selected output/debug mode, not a Bayer/CFA field;
+ * CFA routing belongs to the ISP input path.  Rewriting its low bits from the
+ * media-bus format selects diagnostic edge/noise outputs (SC2336 stock=0).
+ */
 int tisp_dmsc_reprogram_sensor_cfa(void)
 {
-	u32 out_opt = tisp_dmsc_live_out_opt_word();
-
-	system_reg_write(0x4800, out_opt);
-	system_reg_write(0x499c, 1);
 	return 0;
 }
 EXPORT_SYMBOL(tisp_dmsc_reprogram_sensor_cfa);
@@ -21912,7 +21832,7 @@ static void tisp_dmsc_write_default_regs(void)
 
 static int tisp_dmsc_out_opt_cfg(void)
 {
-	system_reg_write(0x4800, tisp_dmsc_live_out_opt_word());
+	system_reg_write(0x4800, dmsc_out_opt_word);
 	return 0;
 }
 
@@ -22292,9 +22212,6 @@ static int tisp_dmsc_intp_reg_refresh(u32 gain)
 	tisp_dmsc_fc_par_cfg();
 	tisp_dmsc_deir_par_cfg();
 	tisp_dmsc_d_ud_ns_par_cfg();
-	if (tisp_sc2336_oem_profile_active())
-		tx_isp_t31_sc2336_dmsc_profile_apply(
-			ourISPdev && ourISPdev->day_night);
 	return 0;
 }
 
@@ -22321,11 +22238,7 @@ static int tisp_dmsc_all_reg_refresh(u32 gain)
 	tisp_dmsc_awb_gain_par_cfg(dmsc_param_word(0xa8, 0));
 	tisp_dmsc_deir_rgb_par_cfg();
 	tisp_dmsc_d_ud_ns_par_cfg();
-	if (tisp_sc2336_oem_profile_active())
-		tx_isp_t31_sc2336_dmsc_profile_apply(
-			ourISPdev && ourISPdev->day_night);
-	else
-		system_reg_write(0x499c, 1);
+	system_reg_write(0x499c, 1);
 	return 0;
 }
 
@@ -22515,8 +22428,8 @@ int tiziano_dmsc_init(void)
 	if (tiziano_dmsc_params_refresh())
 		return -ENODATA;
 	dmsc_params_ready = true;
-	pr_info("tiziano_dmsc_init: DMSC out_opt blob=0x%08x live=0x%08x\n",
-		dmsc_out_opt_word, tisp_dmsc_live_out_opt_word());
+	pr_info("tiziano_dmsc_init: DMSC out_opt=0x%08x\n",
+		dmsc_out_opt_word);
 	tisp_dmsc_par_refresh(0x10000, 0x10000, 1);
 	return 0;
 }
@@ -33912,6 +33825,17 @@ static int tisp_mdns_top_func_cfg(int enable)
            (mdns_sta_group_num_array << 12) |
            (mdns_psn_enable_array << 16) |
            (mdns_psn_max_num_array << 20);
+
+    /*
+     * The shipping SC2336 pipeline leaves the low confidence-threshold bit
+     * and pixel-sample-noise path disabled in linear mode.  Enabling them
+     * turns stable, low-contrast walls into a frame-varying texture even
+     * though exposure and gain are constant.  This mask is taken from a
+     * same-camera, same-scene OEM register oracle (0x7814 = 0x00f01100).
+     */
+    if (tisp_sc2336_oem_profile_active() && !mdns_wdr_en)
+        top1 &= ~0x00010001U;
+
     system_reg_write(0x7814, top1);
     system_reg_write(0x7808, (mdns_uv_debug_array << 5) | mdns_y_debug_array);
 
@@ -34687,8 +34611,9 @@ int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3,
 {
     uint32_t fps_num, fps_den;
     uint32_t total_height = param3;
-    uint32_t step, node_count, i;
+    uint32_t step, last_index;
     uint64_t line_rate;
+    int ret;
 
     if (!lut_array || !nodes_count) {
         pr_err("tiziano_deflicker_expt: NULL pointer parameters\n");
@@ -34723,19 +34648,16 @@ int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3,
         return -EINVAL;
     }
 
-    node_count = total_height / step;
-    if (!node_count)
-        node_count = 1;
-    if (node_count > 120)
-        node_count = 120;
-
-    for (i = 0; i < node_count; i++)
-        lut_array[i] = (i + 1) * step;
-    for (; i < 120; i++)
-        lut_array[i] = lut_array[node_count - 1];
+    ret = tx_isp_t31_flicker_lut_build(
+        step, total_height, lut_array, TX_ISP_T31_FLICKER_LUT_ENTRIES,
+        &last_index);
+    if (ret) {
+        *nodes_count = 0;
+        return ret;
+    }
 
     /* OEM publishes the last valid index rather than an element count. */
-    *nodes_count = node_count - 1;
+    *nodes_count = last_index;
     pr_info("T31_DEFLICK: hz=%u line_token=0x%x total=%ux%u step=%u "
             "last_idx=%u last=%u\n",
             flicker_t, param2, param4, param3, step,
