@@ -222,7 +222,7 @@ tested open build so the current work remains active for inspection.
 | SoC | Staged coverage | Result |
 |---|---|---|
 | T23 | eight-object module, shared math/registry/register-mask/callback-plan/tuning-ABI/frame/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
-| T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, and expected half-rate RTSP clean |
+| T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
 | T41 | six-object module, shared math/registry/day-night/tuning-ABI/frame-layout, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light color and anti-flicker tuning remain open |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs

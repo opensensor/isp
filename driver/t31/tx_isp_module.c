@@ -75,6 +75,53 @@ DECLARE_WORK(sensor_expo_work, sensor_expo_work_func);
 EXPORT_SYMBOL(sensor_expo_work);
 static u32 sensor_expo_last_packed = ~0U;
 
+/*
+ * SC2336 high-gain temporal-noise profile.
+ *
+ * The sensor LUT uses the 0x8xx register range for its high-gain stage.  In
+ * that stage the OEM-like MDNS ratio of 0x80 leaves fixed walls visibly
+ * active; 0xa0 matches the stock flat-region temporal metric without reducing
+ * the accepted bright-scene detail.  Keep hysteresis between 0x400 and 0x800
+ * so normal AE movement cannot toggle the profile every frame.
+ */
+static int sc2336_mdns_auto = 1;
+module_param(sc2336_mdns_auto, int, S_IRUGO);
+MODULE_PARM_DESC(sc2336_mdns_auto,
+                 "Automatically strengthen MDNS in the SC2336 high-gain stage");
+
+static int sc2336_mdns_auto_state = -1;
+extern int tisp_s_mdns_ratio(int ratio);
+
+static void sensor_expo_update_mdns_profile(unsigned int again)
+{
+    int next_state;
+    int ratio;
+
+    if (!sc2336_mdns_auto || !ourISPdev || !ourISPdev->sensor)
+        return;
+    if (strncmp(ourISPdev->sensor->info.name, "sc2336", 6) != 0)
+        return;
+
+    if (again >= 0x800)
+        next_state = 1;
+    else if (again <= 0x400)
+        next_state = 0;
+    else if (sc2336_mdns_auto_state < 0)
+        next_state = 0;
+    else
+        return;
+
+    if (next_state == sc2336_mdns_auto_state)
+        return;
+
+    ratio = next_state ? 0xa0 : 0x80;
+    if (tisp_s_mdns_ratio(ratio) == 0) {
+        sc2336_mdns_auto_state = next_state;
+        pr_info("SC2336 MDNS profile: again=0x%x ratio=%d (%s gain)\n",
+                again, ratio, next_state ? "high" : "normal");
+    }
+}
+
 static void sensor_expo_work_func(struct work_struct *work)
 {
     int ret;
@@ -88,6 +135,7 @@ static void sensor_expo_work_func(struct work_struct *work)
         stored_sensor_ops.sensor_sd) {
         again = ourISPdev->sensor->attr.again;
         it = ourISPdev->sensor->attr.integration_time;
+        sensor_expo_update_mdns_profile(again);
 
         /* The sensor driver's set_again iterates its own LUT with
          * bounds checking against sensor_attr.max_again — no need
@@ -1075,6 +1123,12 @@ static struct fs_platform_data fs_pdata = {
 
 /* Shared frame channel state used across the driver. */
 struct frame_channel_device frame_channels[4];
+/*
+ * Physical address delivered by the OEM one-buffer pre-dequeue path but not
+ * yet observed in the MSCA DMA-done FIFO.  The later DMA-done event consumes
+ * this marker instead of delivering the same frame twice.
+ */
+static u32 frame_pre_dequeue_pending_phys[3];
 int num_channels = 4;
 static u32 frame_channel_colorspace[4] = {
     V4L2_COLORSPACE_REC709,
@@ -1419,6 +1473,28 @@ int frame_chan_event(void *priv, int event, void *data)
         bool drop = false;
         int ch = fcd->channel_num;
 
+        /*
+         * A normal MSCA completion follows an OEM pre-dequeue notification
+         * for the same buffer.  Userspace may already have dequeued and
+         * re-queued that one buffer for the next frame, so do not mutate its
+         * state or signal a duplicate frame here.
+         */
+        if (data && ch >= 0 && ch < ARRAY_SIZE(frame_pre_dequeue_pending_phys)) {
+            u32 y_addr = ((u32 *)data)[2];
+            unsigned long pre_flags;
+            bool pre_dequeued = false;
+
+            spin_lock_irqsave(&fcd->oem_buf_lock, pre_flags);
+            if (y_addr && frame_pre_dequeue_pending_phys[ch] == y_addr) {
+                frame_pre_dequeue_pending_phys[ch] = 0;
+                pre_dequeued = true;
+            }
+            spin_unlock_irqrestore(&fcd->oem_buf_lock, pre_flags);
+
+            if (pre_dequeued)
+                return 0;
+        }
+
         /* OEM EXACT: Day/night switch drop-frame logic.
          * During DN transitions, the ISR sets per-channel counters.
          * While counter > 0, recycle the frame (don't deliver to userspace)
@@ -1495,6 +1571,57 @@ int frame_chan_event(void *priv, int event, void *data)
     }
 }
 EXPORT_SYMBOL_GPL(frame_chan_event);
+
+/*
+ * Deliver channel 0's active one-buffer frame at the configured OEM
+ * pre-dequeue point.  The caller is the frame-start worker in tx_isp_core.c,
+ * after its isp_ch0_pre_dequeue_time delay.
+ */
+int frame_channel_pre_dequeue(int channel)
+{
+    struct frame_channel_device *fcd;
+    struct tx_isp_channel_state *state;
+    unsigned long flags;
+    u32 phys_addr = 0;
+    int i;
+
+    if (channel < 0 || channel >= ARRAY_SIZE(frame_pre_dequeue_pending_phys))
+        return -EINVAL;
+
+    fcd = &frame_channels[channel];
+    state = &fcd->state;
+    if (!state->streaming || !state->capture_active)
+        return -EAGAIN;
+    if (fcd->oem_buf_count != 1)
+        return -EOPNOTSUPP;
+
+    spin_lock_irqsave(&fcd->oem_buf_lock, flags);
+    if (frame_pre_dequeue_pending_phys[channel]) {
+        spin_unlock_irqrestore(&fcd->oem_buf_lock, flags);
+        return -EALREADY;
+    }
+
+    for (i = 0; i < fcd->oem_buf_count && i < 64; i++) {
+        if (fcd->oem_bufs[i].state == 3 &&
+            fcd->oem_bufs[i].phys_addr) {
+            phys_addr = fcd->oem_bufs[i].phys_addr;
+            frame_pre_dequeue_pending_phys[channel] = phys_addr;
+            break;
+        }
+    }
+    spin_unlock_irqrestore(&fcd->oem_buf_lock, flags);
+
+    if (!phys_addr)
+        return -ENOENT;
+
+    state->last_done_phys = phys_addr;
+    atomic_inc(&state->frame_ready_count);
+    state->sequence++;
+    complete(&state->frame_done);
+    wake_up_interruptible(&state->frame_wait);
+    return 0;
+}
+EXPORT_SYMBOL_GPL(frame_channel_pre_dequeue);
 
 /* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
 void system_reg_write_ae(u32 arg1, u32 arg2, u32 arg3)
@@ -2107,6 +2234,9 @@ int frame_channel_open(struct inode *inode, struct file *file)
     spin_lock_init(&fcd->oem_buf_lock);
     memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
     fcd->oem_buf_count = 0;
+    if (fcd->channel_num >= 0 &&
+        fcd->channel_num < ARRAY_SIZE(frame_pre_dequeue_pending_phys))
+        frame_pre_dequeue_pending_phys[fcd->channel_num] = 0;
 
     /* Set default format based on channel if not already set */
     if (fcd->state.width == 0) {
@@ -3733,6 +3863,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Reset OEM buffer rotation state for new allocation */
             memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
             fcd->oem_buf_count = reqbuf.count;
+            if (channel >= 0 &&
+                channel < ARRAY_SIZE(frame_pre_dequeue_pending_phys))
+                frame_pre_dequeue_pending_phys[channel] = 0;
             state->current_buffer.type = reqbuf.type;
             state->current_buffer.memory = reqbuf.memory;
             state->current_buffer.length = buffer_size;
@@ -4275,6 +4408,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Stop channel streaming
         state->streaming = false;
         state->capture_active = false;
+        if (channel >= 0 &&
+            channel < ARRAY_SIZE(frame_pre_dequeue_pending_phys))
+            frame_pre_dequeue_pending_phys[channel] = 0;
         state->state = 3;
         state->flags &= ~1U;
         fcd->streaming_flags &= ~1;
@@ -7137,6 +7273,8 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         if (enable)
             sensor_expo_last_packed = ~0U;
+        if (enable)
+            sc2336_mdns_auto_state = -1;
         ret = stored_sensor_ops.original_ops->video->s_stream(stored_sensor_ops.sensor_sd, enable);
 
         pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);

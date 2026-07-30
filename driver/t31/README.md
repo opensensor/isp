@@ -45,6 +45,13 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   (`0x7814=0x00f01100`)
 - duplicate sensor exposure tuples are suppressed after the first successful
   write, avoiding redundant 25 Hz SC2336 timing-register transactions
+- the OEM one-buffer pre-dequeue path now schedules the configured 24 ms
+  frame-start lead event, so both RTSP streams deliver the configured 25 fps
+  instead of waiting through a userspace round trip and losing every other
+  frame
+- SC2336 gain-stage hysteresis keeps the accepted MDNS ratio `0x80` at normal
+  gain and selects the device-validated `0xa0` profile in the `0x8xx`
+  high-gain stage; `sc2336_mdns_auto=0` disables this local policy
 - a synchronized stock/open capture at approximately 1200 integration lines
   and sensor gain `0xc4` matched the functional DMSC, sharpen, MDNS/YDNS,
   RDNS, SDNS, and BCSH register programming
@@ -59,10 +66,11 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.
-The validation retained exact 3,133,440/353,280-byte pools and the inherited
-half-rate cadence without rejecting a live buffer. The validated module
-SHA-256 is
-`2b7a97c16d709fb2c9e0671f347093e7ea8be1054065741ee5b848f0306ce556`.
+The validation retained exact 3,133,440/353,280-byte pools without rejecting a
+live buffer. The repaired pre-dequeue path decoded 501 main frames in 20
+seconds and 250 substream frames in 10 seconds. The validated module SHA-256
+is
+`8a1e71f3f0479bbc450d5a98f7af910b572b1a5b0b331b03518a4ba466d5d731`.
 
 The common math library now exposes and host-tests the split 64-bit two- and
 three-operand Q-format multipliers used by AE tuning. T31 intentionally retains
@@ -70,8 +78,9 @@ its local inline compatibility body: routing that body through one additional
 header wrapper changed register allocation inside the large recovered AE
 function and produced visibly grainier walls despite mathematical equivalence.
 Restoring the size-neutral boundary reproduces the accepted module and its
-entire loadable text byte-for-byte. The active module SHA-256 remains
-`2b7a97c16d709fb2c9e0671f347093e7ea8be1054065741ee5b848f0306ce556`.
+entire loadable text byte-for-byte. The pre-dequeue/MDNS work leaves that
+fragile tuning object untouched and changes only the frame-source/core and
+outer sensor-work objects.
 
 The DMSC output selector deserves particular care.  Its low bits select
 normal or diagnostic DMSC outputs; they are not a CFA index.  Rewriting them
@@ -121,20 +130,16 @@ then reports scene-responsive exposure and luma instead of zeros.
 
 ## Known Gaps
 
-- Raptor configures 25 fps, but this one-buffer frame-source pipeline delivers
-  about 12.5 fps.  The stock T31 evidence advances about 408 frames per 30
-  seconds (roughly 13.6 fps) with the same one-buffer behavior, so this is not
-  currently classified as an open-driver regression.  Changing kernel
-  completion cadence without a multi-buffer consumer test would risk active
-  buffer overwrite.
+- The pre-dequeue implementation is intentionally limited to the one-buffer
+  channel contract exercised by this consumer. Multi-buffer ownership still
+  needs a separate device-backed queue test before it can share this path.
 - The raw histogram DMA layout still needs recovery; the per-zone luma
   fallback is intentionally narrow.
 - Raptor's exposure summary still reports zero WB statistic gains even though
   the main WB ioctl returns live nonzero red/blue gains.
-- In the matched-exposure July 30 wall capture, accepted open output retained
-  roughly 1.5-1.7 times the stock frame-to-frame luma change in flat regions.
-  The image was visually accepted, but this remains a useful MDNS/LSC tuning
-  parity target.
+- The same-light July 30 wall capture measured mean flat-region frame change
+  `0.01512` with the high-gain profile versus stock `0.01478`; continue
+  checking motion/detail tradeoffs as more sensors acquire automatic profiles.
 - More tuning internals should move into logical files, but extractions must
   retain OEM callback order and be tested on-device.
 - T31's native 64-bit multiply shim can move to the common header only after

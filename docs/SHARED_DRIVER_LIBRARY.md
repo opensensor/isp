@@ -179,18 +179,25 @@ streams, forced day/night transitions, automatic mode, and post-run
 | SoC / sensor | Main stream | Sub stream | Mode coverage | Result |
 |---|---:|---:|---|---|
 | T23 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | clean geometry and color; no fatal or memory faults |
-| T31 / SC2336 | 1920×1080, 25 fps configured | 640×360, 25 fps configured | day, night, auto | LSC/DMSC color and shading corrected; tuning readbacks and exposure telemetry stable |
+| T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | one-buffer pre-dequeue restored; high-gain MDNS profile matches stock flat-wall stability |
 | T41 / OS04D10 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | balanced `0x380/0x880` day AWB and dual-stream fanout |
 
 The tested stock reserved-memory settings are sufficient: 22 MiB on T23/T31
 and 30 MiB on T41. No bootloader environment change is currently required.
 
-The T31 consumer currently delivers about 12.5 frames per second despite its
-25-fps configuration. Historical stock evidence on the same T31/SC2336
-pipeline advances about 408 frames per 30 seconds (roughly 13.6 fps) and also
-uses a one-buffer frame-source pool. This is tracked as inherited consumer
-cadence rather than a new open-driver regression; changing frame-completion
-cadence requires a multi-buffer ownership test first.
+The T31 consumer uses one frame-source buffer and configures
+`isp_ch0_pre_dequeue_time=24`. Stock schedules an early DQBUF event from the
+frame-start interrupt so userspace can return that buffer before the following
+frame. The open worker previously ignored that event and therefore delivered
+only about 12.5 fps. Restoring the one-buffer pre-dequeue contract produced
+501 main frames in 20 seconds and 250 substream frames in 10 seconds. A
+same-light stock oracle produced 191 frames in eight seconds.
+
+At the storm-light gain point, the SC2336-specific automatic MDNS profile
+selects ratio 160 only in the sensor's `0x8xx` high-gain stage and returns to
+128 below the hysteresis band. With that profile, mean flat-wall decoded luma
+change was `0.01512`, compared with stock `0.01478`. The policy remains
+T31/SC2336-local and can be disabled with `sc2336_mdns_auto=0`.
 
 The latest T31 cycle also corrected three proprietary tuning-ABI hazards:
 
@@ -263,4 +270,5 @@ captures. Color fidelity is tracked separately from these DMA-layout results.
 - Extend tuning descriptors only when the matching userspace payload size and
   direction are proven; keep SoC dispatch and collectors local.
 - Extract typed buffer ownership and queue-lifecycle bookkeeping only after
-  matching the one-buffer T31 consumer semantics and the T23/T41 paths.
+  matching the now-device-validated one-buffer T31 pre-dequeue semantics and
+  the T23/T41 paths.

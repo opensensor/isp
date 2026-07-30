@@ -1119,6 +1119,7 @@ static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 static struct workqueue_struct *fs_workqueue = NULL;
 static struct work_struct fs_work;
 static void ispcore_irq_fs_work(struct work_struct *work);
+extern int frame_channel_pre_dequeue(int channel);
 
 
 
@@ -1474,6 +1475,21 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     }
 
     sensor_call_counter++;
+
+    /*
+     * OEM ispcore ISR 0x69904 schedules pre_frame_dequeue on the frame-start
+     * interrupt when isp_ch0_pre_dequeue_time is non-zero.  The worker waits
+     * for the configured line lead time and then sends an early DQBUF event.
+     *
+     * Thingino configures the T31 main channel with one VBM buffer and
+     * isp_ch0_pre_dequeue_time=24.  Without this event userspace cannot
+     * return the sole MSCA buffer until DMA-done, so the following sensor
+     * frame has no output address and the stream falls to half rate.
+     */
+    if (vic_is_streaming && isp_ch0_pre_dequeue_time > 0) {
+        msleep(isp_ch0_pre_dequeue_time);
+        frame_channel_pre_dequeue(0);
+    }
 }
 
 
