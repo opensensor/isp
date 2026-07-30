@@ -12,7 +12,7 @@
 #include <linux/gpio.h>
 #include <linux/clk.h>
 #include <linux/proc_fs.h>
-#include <tx-isp-common.h>
+#include <tx_isp_common.h>
 #include <sensor-common.h>
 #include <sensor-info.h>
 

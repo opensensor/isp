@@ -1,0 +1,12 @@
+obj-m += tx_isp_t41_recovered.o
+
+ccflags-y += -I$(src)/../include
+ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
+ccflags-y += -std=gnu99
+ccflags-y += -fpermissive
+ccflags-y += -w
+ccflags-y += -Wno-error=strict-prototypes
+ccflags-y += -Wno-error=implicit-function-declaration
+ccflags-y += -Wno-error=implicit-int
+ccflags-y += -Wno-error=int-conversion
+ccflags-y += -Wno-error=incompatible-pointer-types

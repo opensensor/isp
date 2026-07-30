@@ -74,7 +74,7 @@ The T31 camera stack processes image data through a multi-stage hardware pipelin
 
 ```
 driver/
-  tx-isp-module.c          Module init/exit, platform driver, shared register helpers
+  tx_isp_module.c          Module init/exit, platform driver, shared register helpers
   tx_isp_core.c            ISP core subdev, MMIO mappings, core ISR, bring-up logic
   tx_isp_vic.c             VIC subdev, MDMA, buffer management, frame capture
   tx_isp_csi.c             CSI subdev, MIPI PHY, lane configuration
@@ -90,8 +90,7 @@ driver/
   tx_isp_ae_zone.c         AE zone statistics management
   tx_isp_fixpt.c           Fixed-point math (Q16/Q24 for gain/exposure)
   tx_isp_reset.c           Hardware reset sequences
-  tx-isp-trace.c           Register change tracing to /opt/trace.txt
-  tx-isp-debug.c           Debug infrastructure, logging levels, compat wrappers
+  tx_isp_trace.c           Register change tracing to /opt/trace.txt
   tx_isp_vic_debug.c       VIC-specific debugging and MIPI PHY monitoring
   include/                 All shared headers
 ```
@@ -1351,7 +1350,7 @@ For channel N: add `(N << 8)` to base offset.
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ```
 
-### 14.2 Register Tracing (`tx-isp-trace.c`)
+### 14.2 Register Tracing (`tx_isp_trace.c`)
 
 Writes to `/opt/trace.txt` with register change tracking:
 
@@ -1543,9 +1542,9 @@ Next frame uses updated parameters
 | Header | Purpose |
 |--------|---------|
 | `tx_isp.h` | Main device structure, CSI device, global declarations |
-| `tx-isp-device.h` | Subdev, pad, link, channel, module structures |
-| `tx-isp-common.h` | Sensor attributes, MIPI config, event definitions, macros |
-| `tx-libimp.h` | Frame node, tuning state, ioctl commands, V4L2 controls |
+| `tx_isp_device.h` | Subdev, pad, link, channel, module structures |
+| `tx_isp_common.h` | Sensor attributes, MIPI config, event definitions, macros |
+| `tx_libimp.h` | Frame node, tuning state, ioctl commands, V4L2 controls |
 | `tx_isp_vic.h` | VIC device structure and buffer management |
 | `tx_isp_vin.h` | VIN device structure |
 | `tx_isp_core_device.h` | Core device, FS device, platform data structures |
@@ -1575,6 +1574,6 @@ Common formats:
 |----------|---------|
 | `CLAUDE.md` | Development workflow and MCP tool usage |
 | `docs/T31_ISP_ARCHITECTURE.md` | High-level architecture notes |
-| `driver/REGMAP_ADR_YDNS.md` | ADR/YDNS register windows and OEM constraints |
-| `driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md` | Stream start verification notes |
+| `driver/t31/REGMAP_ADR_YDNS.md` | ADR/YDNS register windows and OEM constraints |
+| `driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md` | Stream start verification notes |
 | `external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md` | OEM tuning blob status |

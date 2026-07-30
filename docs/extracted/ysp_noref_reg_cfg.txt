@@ -1,0 +1,35 @@
+// warnings: 2
+// 64954: BRANCH beqz a0,64d04 <tisp_ysp_noref_reg_cfg+0x3c4>
+// 64d10: BRANCH b 6496c <tisp_ysp_noref_reg_cfg+0x2c>
+system_reg_write((((ch+152)<<9)+4), (((B(sec_ysp+111)<<16)|(B(sec_ysp+112)<<20))|B(sec_ysp+1624)));
+system_reg_write((((ch+152)<<9)+48), (((B(W(sec_ysp_comb+296)+6)<<8)|(B(W(sec_ysp_comb+296)+7)<<12))|B(W(sec_ysp_comb+296)+5)));
+system_reg_write((((ch+152)<<9)+52), (((((B(W(sec_ysp_comb+296)+1)<<4)|(B(W(sec_ysp_comb+296)+2)<<8))|B(W(sec_ysp_comb+296)+0))|(B(W(sec_ysp_comb+296)+3)<<12))|(B(W(sec_ysp_comb+296)+4)<<16)));
+system_reg_write((((ch+152)<<9)+56), (((((B(sec_ysp+158)<<12)|B(W(sec_ysp_comb+108)+0))|(B(sec_ysp+159)<<16))|(B(W(sec_ysp_comb+108)+1)<<4))|(B(W(sec_ysp_comb+108)+2)<<8)));
+system_reg_write((((ch+152)<<9)+64), ((((B(sec_ysp+694)<<4)|(B(sec_ysp+695)<<8))|B(sec_ysp+693))|(B(sec_ysp+696)<<16)));
+system_reg_write((((ch+152)<<9)+76), ((((((B(sec_ysp+1156)<<4)|(B(sec_ysp+1157)<<8))|B(sec_ysp+161))|(B(sec_ysp+1158)<<12))|(B(sec_ysp+1159)<<16))|(B(sec_ysp+1160)<<24)));
+system_reg_write((((ch+152)<<9)+128), W4(sec_ysp+472));
+system_reg_write((((ch+152)<<9)+132), W4(sec_ysp+476));
+system_reg_write((((ch+152)<<9)+144), W4(sec_ysp+480));
+system_reg_write((((ch+152)<<9)+148), W4(sec_ysp+484));
+system_reg_write((((ch+152)<<9)+168), W4(sec_ysp+354));
+system_reg_write((((ch+152)<<9)+172), W4(sec_ysp+358));
+system_reg_write((((ch+152)<<9)+176), W4(sec_ysp+362));
+system_reg_write((((ch+152)<<9)+180), W4(sec_ysp+366));
+system_reg_write((((ch+152)<<9)+200), W4(W(sec_ysp_comb+292)+0));
+system_reg_write((((ch+152)<<9)+204), W4(W(sec_ysp_comb+292)+4));
+system_reg_write((((ch+152)<<9)+208), W4(W(sec_ysp_comb+292)+8));
+system_reg_write((((ch+152)<<9)+212), W4(W(sec_ysp_comb+292)+12));
+system_reg_write((((ch+152)<<9)+216), W4(W(sec_ysp_comb+292)+16));
+system_reg_write((((ch+152)<<9)+220), W4(W(sec_ysp_comb+292)+20));
+system_reg_write((((ch+152)<<9)+224), W4(W(sec_ysp_comb+292)+24));
+system_reg_write((((ch+152)<<9)+228), W4(W(sec_ysp_comb+292)+28));
+system_reg_write((((ch+152)<<9)+296), W4(W(sec_ysp_comb+376)+0));
+system_reg_write((((ch+152)<<9)+300), W4(W(sec_ysp_comb+376)+4));
+system_reg_write((((ch+152)<<9)+304), W4(W(sec_ysp_comb+376)+8));
+system_reg_write((((ch+152)<<9)+308), W4(W(sec_ysp_comb+376)+12));
+system_reg_write((((ch+152)<<9)+312), W4(W(sec_ysp_comb+376)+16));
+system_reg_write((((ch+152)<<9)+316), W4(W(sec_ysp_comb+376)+20));
+system_reg_write((((ch+152)<<9)+320), W4(W(sec_ysp_comb+376)+24));
+system_reg_write((((ch+152)<<9)+324), W4(W(sec_ysp_comb+376)+28));
+system_reg_write((((ch+152)<<9)+480), ((((B(W(sec_ysp_comb+380)+3)<<6)|(B(W(sec_ysp_comb+380)+4)<<16))|B(W(sec_ysp_comb+380)+2))|(B(W(sec_ysp_comb+380)+5)<<24)));
+system_reg_write((((ch+152)<<9)+484), ((((B(W(sec_ysp_comb+380)+7)<<6)|(B(W(sec_ysp_comb+380)+8)<<16))|B(W(sec_ysp_comb+380)+6))|(B(W(sec_ysp_comb+380)+9)<<24)));

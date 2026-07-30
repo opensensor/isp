@@ -1,10 +1,13 @@
-# Open-Source ISP Driver for Ingenic T31
+# Open-Source TX-ISP Drivers for Ingenic T23, T31, and T40
 
 ![Ingenic ISP Logo](./ingenic_isp.webp)
 
 ## Overview
 
-This repository contains an open-source reimplementation of the Ingenic T31 ISP kernel driver (`tx-isp-t31.ko`) used on devices such as the Wyze Cam 3 and other T31-based cameras.
+This repository contains open-source reimplementations of the Ingenic TX-ISP
+kernel drivers for T23, T31, and T40 cameras. T31 is organized as a modular
+driver; T23 and T40 are working recovered drivers that are being progressively
+split into reviewed, reusable subsystems.
 
 The project goal is **behavioral equivalence with the OEM driver**, so Ingenic's proprietary user-space library `libimp.so` can run unmodified against the open-source driver.
 
@@ -40,31 +43,36 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 ## Key Documentation
 
 - [`docs/T31_ISP_ARCHITECTURE.md`](docs/T31_ISP_ARCHITECTURE.md) — current hardware / driver architecture notes
+- [`docs/DRIVER_REUSE_PLAN.md`](docs/DRIVER_REUSE_PLAN.md) — cross-SoC commonality map and staged reuse plan
 - [`docs/IMAGE_TUNING_PRD.md`](docs/IMAGE_TUNING_PRD.md) — plan for finishing image tuning and remaining work
-- [`driver/REGMAP_ADR_YDNS.md`](driver/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
-- [`driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
+- [`driver/t31/REGMAP_ADR_YDNS.md`](driver/t31/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
+- [`driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
 - [`external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md`](external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md) — current map of recovered vs synthetic tuning data
 
 ## Repository Layout
 
 | Path | Purpose |
 |---|---|
-| `driver/` | Open-source T31 ISP kernel-driver implementation |
-| `driver/include/` | Shared headers and data structures |
+| `driver/` | Per-SoC open-source ISP kernel-driver implementations |
+| `driver/include/tx_isp/` | Reviewed cross-SoC interfaces and primitives |
+| `driver/t23/` | T23 recovered driver and tuning data |
+| `driver/t31/` | T31 ISP kernel-driver implementation |
+| `driver/t31/include/` | T31-local headers and data structures |
+| `driver/t40/` | T40 recovered driver and tuning data |
 | `external/ingenic-sdk/` | Sensor and SDK reference material |
 | `docs/` | High-level project documentation and planning |
 | `OEM-tx-isp-t31.ko` | OEM reference kernel module |
 
 Important driver files:
 
-- `driver/tx-isp-module.c` — module init/exit, platform resources, shared register helpers
-- `driver/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
-- `driver/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
-- `driver/tx_isp_csi.c` / `driver/tx_isp_vic.c` / `driver/tx_isp_vin.c` / `driver/tx_isp_fs.c` — CSI/VIC/VIN/frame-source subdevices
+- `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
+- `driver/t31/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
+- `driver/t31/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
+- `driver/t31/tx_isp_csi.c` / `driver/t31/tx_isp_vic.c` / `driver/t31/tx_isp_vin.c` / `driver/t31/tx_isp_fs.c` — CSI/VIC/VIN/frame-source subdevices
 
 ## Project Goals
 
-1. Replace the proprietary ISP kernel driver on T31 devices
+1. Replace the proprietary TX-ISP kernel drivers on supported T23/T31/T40 devices
 2. Preserve compatibility with Ingenic's `libimp.so`
 3. Match OEM register sequencing and control behavior closely
 4. Recover or reconstruct enough OEM tuning content for acceptable image quality
@@ -72,22 +80,29 @@ Important driver files:
 
 ## Requirements
 
-- **Target SoC:** Ingenic T31
-- **Kernel focus:** Linux 3.10.14-based vendor trees
+- **Target SoCs:** Ingenic T23, T31, and T40
+- **Kernel focus:** Linux 3.10.14 vendor trees (T23/T31) and Linux 4.4.94 vendor trees (T40)
 - **Userspace ABI target:** Ingenic `libimp.so`
 - **Sensor support model:** OEM-style sensor drivers and compatible sensor integrations from the Ingenic SDK ecosystem
 
 ## Build
 
-Typical cross-compile command for the vendor 3.10.14 kernel environment:
+The local build helper selects a per-SoC driver with `SOC`:
 
 ```bash
-make -C <kernel-src> M=$(pwd)/driver modules ARCH=mips CROSS_COMPILE=mipsel-linux-gnu-
+SOC=t23 ./build_local.sh
+SOC=t31 ./build_local.sh
+SOC=t40 ./build_local.sh
 ```
 
-Expected artifact:
+`ROOT`, `KDIR`, and `CROSS` can be supplied for the matching vendor kernel and
+toolchain. See the comments in `build_local.sh` for details.
 
-- `driver/tx-isp-t31.ko`
+Host-side tests for shared, kernel-independent primitives run with:
+
+```bash
+make -C tests check
+```
 
 ## Reverse-Engineering Workflow
 
