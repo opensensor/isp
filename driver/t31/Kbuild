@@ -16,6 +16,7 @@ tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \
                $(DIR)/tx_isp_fixpt.o \
                $(DIR)/tx_isp_ae_zone.o \
                $(DIR)/tx_isp_subdev_mgmt.o \
+               $(DIR)/tx_isp_sinfo.o \
                $(DIR)/tx_isp_vin.o
 
 # Build both modules - changed tx-isp.o to tx-isp-t31.o

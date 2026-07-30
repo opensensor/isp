@@ -5,7 +5,6 @@
 /* Target kernel arch/ABI: mips32 32bit */
 /* Module vermagic: 3.10.14__isvp_pike_1.0__ preempt mod_unload MIPS32_R1 32BIT  */
 
-#include "../include/tx_isp/tx_isp_math.h"
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -9039,6 +9038,8 @@ int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int def_i2c_addr, struct mod
 void tx_isp_sinfo_driver_del(struct i2c_driver *drv);
 int tx_isp_sinfo_sensor_bind(struct tx_isp_subdev *sd, struct module *owner);
 void tx_isp_sinfo_sensor_unbind(struct tx_isp_subdev *sd, struct module *owner);
+int tx_isp_sinfo_init(void);
+void tx_isp_sinfo_exit(void);
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 char __bss_start[4096];
@@ -9353,326 +9354,49 @@ int32_t tx_isp_subdev_deinit(uintptr_t arg1)
     return 0;
 }
 
-#define REGTRACE_SINFO_MAX_SENSORS 4
-
-enum regtrace_sinfo_key {
-    REGTRACE_SINFO_NAME,
-    REGTRACE_SINFO_CHIP_ID,
-    REGTRACE_SINFO_I2C_ADDR,
-    REGTRACE_SINFO_I2C_ADAPTER,
-    REGTRACE_SINFO_WIDTH,
-    REGTRACE_SINFO_HEIGHT,
-    REGTRACE_SINFO_FPS,
-    REGTRACE_SINFO_STATUS,
-    REGTRACE_SINFO_NKEYS,
-};
-
-static const char *const regtrace_sinfo_key_name[REGTRACE_SINFO_NKEYS] = {
-    [REGTRACE_SINFO_NAME] = "name",
-    [REGTRACE_SINFO_CHIP_ID] = "chip_id",
-    [REGTRACE_SINFO_I2C_ADDR] = "i2c_addr",
-    [REGTRACE_SINFO_I2C_ADAPTER] = "i2c_adapter",
-    [REGTRACE_SINFO_WIDTH] = "width",
-    [REGTRACE_SINFO_HEIGHT] = "height",
-    [REGTRACE_SINFO_FPS] = "fps",
-    [REGTRACE_SINFO_STATUS] = "status",
-};
-
-struct regtrace_sinfo_slot;
-
-struct regtrace_sinfo_file {
-    struct regtrace_sinfo_slot *slot;
-    enum regtrace_sinfo_key key;
-};
-
-struct regtrace_sinfo_slot {
-    bool used;
-    struct i2c_driver *drv;
-    struct module *owner;
-    unsigned short def_i2c_addr;
-    struct tx_isp_subdev *sd;
-    struct proc_dir_entry *dir;
-    char dirname[16];
-    struct regtrace_sinfo_file files[REGTRACE_SINFO_NKEYS];
-};
-
-static DEFINE_MUTEX(regtrace_sinfo_lock);
-static struct proc_dir_entry *regtrace_sinfo_root;
-static struct regtrace_sinfo_slot regtrace_sinfo_slots[REGTRACE_SINFO_MAX_SENSORS];
-
-static const char *regtrace_sinfo_name(struct regtrace_sinfo_slot *slot)
+void tx_isp_t23_sinfo_driver_added(struct i2c_driver *drv,
+                                   int default_i2c_addr,
+                                   struct module *owner)
 {
-    if (slot && slot->drv && slot->drv->driver.name)
-        return slot->drv->driver.name;
-    return "unknown";
-}
-
-static int regtrace_sinfo_show(struct seq_file *m, void *v)
-{
-    struct regtrace_sinfo_file *file = m->private;
-    struct regtrace_sinfo_slot *slot;
-
-    (void)v;
-    if (!file || !file->slot)
-        return 0;
-
-    slot = file->slot;
-    mutex_lock(&regtrace_sinfo_lock);
-    if (!slot->used) {
-        mutex_unlock(&regtrace_sinfo_lock);
-        return 0;
-    }
-
-    switch (file->key) {
-    case REGTRACE_SINFO_NAME:
-        seq_printf(m, "%s\n", regtrace_sinfo_name(slot));
-        break;
-    case REGTRACE_SINFO_I2C_ADDR:
-        seq_printf(m, "0x%x\n", slot->def_i2c_addr);
-        break;
-    case REGTRACE_SINFO_I2C_ADAPTER:
-        seq_printf(m, "0\n");
-        break;
-    case REGTRACE_SINFO_CHIP_ID:
-        seq_printf(m, "0x2336\n");
-        break;
-    case REGTRACE_SINFO_WIDTH:
-        seq_printf(m, "1920\n");
-        break;
-    case REGTRACE_SINFO_HEIGHT:
-        seq_printf(m, "1080\n");
-        break;
-    case REGTRACE_SINFO_FPS:
-        seq_printf(m, "25\n");
-        break;
-    case REGTRACE_SINFO_STATUS:
-        seq_printf(m, "%s\n", slot->sd ? "active" : "loaded");
-        break;
-    default:
-        break;
-    }
-
-    mutex_unlock(&regtrace_sinfo_lock);
-    return 0;
-}
-
-static int regtrace_sinfo_open(struct inode *inode, struct file *file)
-{
-    return single_open(file, regtrace_sinfo_show, PDE_DATA(inode));
-}
-
-static const struct file_operations regtrace_sinfo_fops = {
-    .owner = THIS_MODULE,
-    .open = regtrace_sinfo_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-
-static int regtrace_sinfo_count_show(struct seq_file *m, void *v)
-{
-    int i;
-    int count = 0;
-
-    (void)v;
-    mutex_lock(&regtrace_sinfo_lock);
-    for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-        if (regtrace_sinfo_slots[i].used)
-            count++;
-    }
-    mutex_unlock(&regtrace_sinfo_lock);
-
-    seq_printf(m, "%d\n", count);
-    return 0;
-}
-
-static int regtrace_sinfo_count_open(struct inode *inode, struct file *file)
-{
-    (void)inode;
-    return single_open(file, regtrace_sinfo_count_show, NULL);
-}
-
-static const struct file_operations regtrace_sinfo_count_fops = {
-    .owner = THIS_MODULE,
-    .open = regtrace_sinfo_count_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-
-static void regtrace_sinfo_slot_publish(struct regtrace_sinfo_slot *slot, int index)
-{
-    int key;
-
-    snprintf(slot->dirname, sizeof(slot->dirname), "sensor%d", index);
-    slot->dir = proc_mkdir(slot->dirname, regtrace_sinfo_root);
-    if (!slot->dir)
-        return;
-
-    for (key = 0; key < REGTRACE_SINFO_NKEYS; key++) {
-        slot->files[key].slot = slot;
-        slot->files[key].key = key;
-        proc_create_data(regtrace_sinfo_key_name[key], 0444, slot->dir,
-                         &regtrace_sinfo_fops, &slot->files[key]);
-    }
-}
-
-static void regtrace_sinfo_slot_unpublish(struct regtrace_sinfo_slot *slot)
-{
-    if (slot->dir) {
-        remove_proc_subtree(slot->dirname, regtrace_sinfo_root);
-        slot->dir = NULL;
-    }
-}
-
-int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int def_i2c_addr, struct module *owner)
-{
-    int i;
-
-    if (!drv || !regtrace_sinfo_root)
-        return -EINVAL;
-
-    mutex_lock(&regtrace_sinfo_lock);
-    for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-        struct regtrace_sinfo_slot *slot = &regtrace_sinfo_slots[i];
-
-        if (slot->used && !slot->drv && slot->owner == owner) {
-            slot->drv = drv;
-            slot->def_i2c_addr = (unsigned short)def_i2c_addr;
-            break;
-        }
-    }
-    if (i != REGTRACE_SINFO_MAX_SENSORS) {
-        mutex_unlock(&regtrace_sinfo_lock);
-        printk(KERN_INFO "tx_isp_t23_recovered: sensor-info driver fill %s addr=0x%x slot=%d\n",
-               drv->driver.name ? drv->driver.name : "unknown",
-               def_i2c_addr, i);
-        regtrace_t23_sensor_driver = drv;
-        regtrace_t23_sensor_owner = owner;
-        regtrace_t23_ensure_sensor_client(drv, (unsigned short)def_i2c_addr,
-                                          "sinfo-driver-fill");
-        return 0;
-    }
-
-    for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-        if (!regtrace_sinfo_slots[i].used) {
-            struct regtrace_sinfo_slot *slot = &regtrace_sinfo_slots[i];
-
-            memset(slot, 0, sizeof(*slot));
-            slot->used = true;
-            slot->drv = drv;
-            slot->owner = owner;
-            slot->def_i2c_addr = (unsigned short)def_i2c_addr;
-            regtrace_sinfo_slot_publish(slot, i);
-            break;
-        }
-    }
-    mutex_unlock(&regtrace_sinfo_lock);
-
-    if (i == REGTRACE_SINFO_MAX_SENSORS) {
-        printk(KERN_WARNING "tx_isp_t23_recovered: no free sensor-info slot for %s\n",
-               drv->driver.name ? drv->driver.name : "unknown");
-        return -ENOSPC;
-    }
-
     printk(KERN_INFO "tx_isp_t23_recovered: sensor-info driver add %s addr=0x%x\n",
-           drv->driver.name ? drv->driver.name : "unknown", def_i2c_addr);
+           drv && drv->driver.name ? drv->driver.name : "unknown",
+           default_i2c_addr);
     regtrace_t23_sensor_driver = drv;
     regtrace_t23_sensor_owner = owner;
-    regtrace_t23_ensure_sensor_client(drv, (unsigned short)def_i2c_addr,
+    regtrace_t23_ensure_sensor_client(drv,
+                                      (unsigned short)default_i2c_addr,
                                       "sinfo-driver-add");
-    return 0;
 }
 
-void tx_isp_sinfo_driver_del(struct i2c_driver *drv)
+void tx_isp_t23_sinfo_driver_removing(struct i2c_driver *drv)
 {
-    int i;
-
     regtrace_t23_release_sensor_client(drv, "sinfo-driver-del");
-    mutex_lock(&regtrace_sinfo_lock);
-    for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-        struct regtrace_sinfo_slot *slot = &regtrace_sinfo_slots[i];
-
-        if (slot->used && slot->drv == drv) {
-            regtrace_sinfo_slot_unpublish(slot);
-            memset(slot, 0, sizeof(*slot));
-        }
-    }
-    mutex_unlock(&regtrace_sinfo_lock);
 }
 
-int tx_isp_sinfo_sensor_bind(struct tx_isp_subdev *sd, struct module *owner)
+void tx_isp_t23_sinfo_sensor_bound(void *subdev, struct module *owner)
 {
-    int i;
-
-    if (!sd)
-        return -EINVAL;
+    struct tx_isp_subdev *sd = subdev;
 
     regtrace_t23_sensor_sd = sd;
     regtrace_t23_sensor_identified = false;
     regtrace_t23_sensor_initialized = false;
     regtrace_t23_sensor_streaming = false;
     regtrace_t23_seed_sensor_caches("sensor-bind");
-    mutex_lock(&regtrace_sinfo_lock);
-    for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-        struct regtrace_sinfo_slot *slot = &regtrace_sinfo_slots[i];
-
-        if (slot->used && slot->owner == owner && !slot->sd) {
-            slot->sd = sd;
-            break;
-        }
-    }
-    if (i == REGTRACE_SINFO_MAX_SENSORS) {
-        for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-            if (!regtrace_sinfo_slots[i].used) {
-                struct regtrace_sinfo_slot *slot = &regtrace_sinfo_slots[i];
-
-                memset(slot, 0, sizeof(*slot));
-                slot->used = true;
-                slot->owner = owner;
-                slot->sd = sd;
-                regtrace_sinfo_slot_publish(slot, i);
-                break;
-            }
-        }
-    }
-    mutex_unlock(&regtrace_sinfo_lock);
     printk(KERN_INFO "tx_isp_t23_recovered: sensor bind sd=%p owner=%p\n",
            sd, owner);
-    return 0;
 }
 
-void tx_isp_sinfo_sensor_unbind(struct tx_isp_subdev *sd, struct module *owner)
+void tx_isp_t23_sinfo_sensor_unbound(void *subdev, struct module *owner)
 {
-    int i;
+    struct tx_isp_subdev *sd = subdev;
 
     (void)owner;
-    if (!sd)
-        return;
-
-    mutex_lock(&regtrace_sinfo_lock);
-    for (i = 0; i < REGTRACE_SINFO_MAX_SENSORS; i++) {
-        if (regtrace_sinfo_slots[i].used && regtrace_sinfo_slots[i].sd == sd)
-            regtrace_sinfo_slots[i].sd = NULL;
-    }
-    mutex_unlock(&regtrace_sinfo_lock);
     if (regtrace_t23_sensor_sd == sd) {
         regtrace_t23_sensor_sd = NULL;
         regtrace_t23_sensor_identified = false;
         regtrace_t23_sensor_initialized = false;
         regtrace_t23_sensor_streaming = false;
     }
-}
-
-static int tx_isp_sinfo_init(void)
-{
-    regtrace_sinfo_root = proc_mkdir("jz/sensor", NULL);
-    if (!regtrace_sinfo_root) {
-        printk(KERN_WARNING "tx_isp_t23_recovered: cannot create /proc/jz/sensor\n");
-        return 0;
-    }
-    proc_create("count", 0444, regtrace_sinfo_root, &regtrace_sinfo_count_fops);
-    return 0;
 }
 
 static int regtrace_t23_vin_proc_init(void)
@@ -9696,18 +9420,6 @@ static void regtrace_t23_vin_proc_exit(void)
     if (regtrace_t23_isp_proc_root) {
         remove_proc_subtree("jz/isp", NULL);
         regtrace_t23_isp_proc_root = NULL;
-    }
-}
-
-static void tx_isp_sinfo_exit(void)
-{
-    mutex_lock(&regtrace_sinfo_lock);
-    memset(regtrace_sinfo_slots, 0, sizeof(regtrace_sinfo_slots));
-    mutex_unlock(&regtrace_sinfo_lock);
-
-    if (regtrace_sinfo_root) {
-        remove_proc_subtree("jz/sensor", NULL);
-        regtrace_sinfo_root = NULL;
     }
 }
 
@@ -14648,10 +14360,6 @@ EXPORT_SYMBOL(private_capable);
 EXPORT_SYMBOL(private_driver_get_interface);
 EXPORT_SYMBOL(tx_isp_subdev_init);
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
-EXPORT_SYMBOL(tx_isp_sinfo_driver_add);
-EXPORT_SYMBOL(tx_isp_sinfo_driver_del);
-EXPORT_SYMBOL(tx_isp_sinfo_sensor_bind);
-EXPORT_SYMBOL(tx_isp_sinfo_sensor_unbind);
 
 int32_t tx_isp_create_graph_and_nodes(uintptr_t a0);
 int tx_isp_probe(struct platform_device *pdev);
@@ -38463,13 +38171,6 @@ return_path:
 	(void)arg3;
 	(void)arg4;
 	return (int32_t)(uint8_t)arg2[0];
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013da0 origin=model_output original=tisp_simple_intp */
-int32_t tisp_simple_intp(int32_t arg1, int32_t arg2, void *arg3)
-{
-	return tx_isp_lerp_s32((uint32_t)arg1, (uint32_t)arg2,
-				arg3, 8);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013e0c origin=hlil_exact original=tisp_log2_int_to_fixed */

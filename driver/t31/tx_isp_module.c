@@ -46,6 +46,7 @@
 #include "include/tx_libimp.h"
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
+#include "../include/tx_isp/tx_isp_sinfo.h"
 
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
@@ -5790,6 +5791,12 @@ static int tx_isp_init(void)
 
     pr_info("*** V4L2 VIDEO DEVICES DISABLED - skipping /dev/videoX registration ***\n");
 
+    ret = tx_isp_sinfo_init();
+    if (ret) {
+        pr_err("Failed to initialize sensor registry: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+
     /* Netlink channel is initialized later in tisp_param_operate_init()
      * (inside tisp_init) to match OEM timing — libimp connects only after
      * the ISP pipeline is running. */
@@ -5824,6 +5831,7 @@ static void tx_isp_exit(void)
     int i;
 
     pr_info("TX ISP driver exiting...\n");
+    tx_isp_sinfo_exit();
 
     if (ourISPdev) {
         /* Clean up subdevice graph */

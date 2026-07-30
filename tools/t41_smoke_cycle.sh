@@ -4,7 +4,7 @@ set -euo pipefail
 # Safe, staged T41 module smoke cycle. Every experiment is followed by a
 # reboot; the recovered module is only uploaded to /tmp.
 
-IP="${THINGINO_IP:-192.168.50.244}"
+IP="${THINGINO_IP:-192.168.50.127}"
 USER="${THINGINO_USER:-root}"
 PASS="${THINGINO_PASS:-}"
 LEVEL="${T41_BRINGUP_LEVEL:--1}"
@@ -18,8 +18,8 @@ CONSUMER_SECS="${T41_CONSUMER_SECS:-$SMOKE_SECS}"
 CHECKPOINT_MS="${T41_CHECKPOINT_MS:-0}"
 CHECKPOINT_START="${T41_CHECKPOINT_START:-0}"
 RECOVERED_PARAMS="${T41_RECOVERED_PARAMS:-1}"
-REMOTE_MODULE=/tmp/tx_isp_t41_recovered.ko
-LOCAL_MODULE="${T41_MODULE:-driver/t41/tx_isp_t41_recovered.ko}"
+REMOTE_MODULE=/tmp/tx-isp-t41.ko
+LOCAL_MODULE="${T41_MODULE:-driver/t41/tx-isp-t41.ko}"
 FRAME_PROBE="${T41_FRAME_PROBE:-}"
 REMOTE_FRAME_PROBE=/tmp/t41_frame_probe
 IMP_TRACE="${T41_IMP_TRACE:-}"
@@ -34,7 +34,7 @@ REMOTE_KERNEL_TRACE=/tmp/t41_kernel_trace.ko
 LOG="${1:-logs/$(date +%Y%m%d-%H%M%S)-t41-level${LEVEL}-${IP##*.}}"
 
 case "$IP" in
-	192.168.50.117 | 192.168.50.244) ;;
+	192.168.50.117 | 192.168.50.127 | 192.168.50.244) ;;
 	*)
 		echo "refusing non-target IP: $IP" >&2
 		exit 2
@@ -362,12 +362,12 @@ capture_state before
 dmesg -c >/tmp/t41-dmesg-before-clear.txt 2>/dev/null || true
 set +e
 if [ "$recovered_params" = "1" ]; then
-	insmod /tmp/tx_isp_t41_recovered.ko tx_isp_bringup_level="$level" \
+	insmod /tmp/tx-isp-t41.ko tx_isp_bringup_level="$level" \
 		t41_checkpoint_ms="$checkpoint_ms" \
 		t41_checkpoint_start="$checkpoint_start" \
 		>/tmp/t41-insmod.txt 2>&1
 else
-	insmod /tmp/tx_isp_t41_recovered.ko >/tmp/t41-insmod.txt 2>&1
+	insmod /tmp/tx-isp-t41.ko >/tmp/t41-insmod.txt 2>&1
 fi
 insmod_status=$?
 set -e

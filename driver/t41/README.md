@@ -8,8 +8,9 @@ Cam v4 T41NQ/OS04D10 Linux 4.4.94 target. It was generated from the OEM
 The source was salvaged from the June 2026 `tx-isp-t41-v1` reconstruction
 workspace. All 1,510 function candidates were emitted and 1,508 compiled in
 isolation, but only 157 were normalized exact matches. A later manual cleanup
-made the whole driver build; it was never promoted into the open driver tree or
-validated on hardware.
+made the whole driver build. It now has staged hardware coverage through the
+OS04D10 sensor and Raptor consumer, but it remains recovery-grade code rather
+than a production-equivalent replacement.
 
 ## Build
 
@@ -23,7 +24,17 @@ SOC=t41 ./build_local.sh
 
 Expected artifact:
 
-- `driver/t41/tx_isp_t41_recovered.ko`
+- `driver/t41/tx-isp-t41.ko`
+
+The source remains named `tx_isp_t41_recovered.c`, but Kbuild emits the
+canonical module name expected by current T41 sensor modules
+(`depends: tx-isp-t41`).
+
+The module is linked from three logical objects:
+
+- `tx_isp_t41_recovered.c` — recovered core, pipeline, hardware, and tuning
+- `tx_isp_t41_math.c` — T41 ABI wrappers around shared math primitives
+- `tx_isp_t41_sinfo.c` — T41 layout adapter around the shared sensor registry
 
 ## Baseline risk
 
@@ -36,7 +47,14 @@ Completed static repairs restore all 31 OEM exports and replace the recovered
 IRQ wrappers that previously requested IRQ 0 with null handlers and disabled
 IRQ 0 regardless of their arguments. The linked audit now classifies the IRQ
 enable/disable helpers as shorter rather than stubs, and the request/free paths
-as similar in instruction count. Hardware validation is still required.
+as similar in instruction count.
+
+The T41 module now reuses the common interpolation/fixed-point helpers and the
+T23/T31/T41 typed sensor-registry implementation. Full sensor/Raptor smoke
+tests pass and ISP interrupts advance. One registry limitation remains: the
+recovered T41 runtime currently leaves the staged shared registry at
+`/proc/jz/sensor/count=0`, while the persistent installed driver reports one
+sensor, so metadata parity is not yet claimed.
 
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
@@ -201,9 +219,14 @@ globals before the stream path is enabled. The level-3 regression at
 `logs/20260720-level3-tisp-storage-117` again registers cleanly with no warning
 or fatal signature.
 
-Hardware smoke tests must stage the module under `/tmp`, unload conflicting
-stock ISP modules first, capture kernel and userspace logs, and reboot after
-each experiment. Do not install this baseline into the persistent module tree.
+Hardware smoke tests must use a one-shot boot stage, capture kernel and
+userspace logs, and reboot after each experiment. Do not install this baseline
+into the persistent module tree or hot-unload an active camera pipeline.
+
+`tools/open_tx_isp_boot_once_init.sh` is the fail-safe init hook used for full
+consumer tests. It removes and syncs its armed marker before inserting the
+staged module, so a watchdog or power-cycle loads the untouched persistent
+module on the next boot.
 
 Use the staged smoke harness after boot-time stock loading has been disabled:
 
@@ -213,6 +236,7 @@ T41_BRINGUP_LEVEL=-1 tools/t41_smoke_cycle.sh
 
 The levels are intentionally incremental: `-1` exports only, `0` performs a
 shallow platform probe, `1` adds the device graph, `2` adds ISP memory setup,
-and `3` enables the recovered core/tuning path. The harness refuses to run if
-any `tx_isp*` module is already loaded and reboots the camera after every
-experiment.
+and `3` enables the recovered core/tuning path. The legacy harness refuses to
+run if any `tx_isp*` module is already loaded and reboots the camera after
+every experiment; use the one-shot init hook when the stock boot sequence
+cannot safely unload its active module.

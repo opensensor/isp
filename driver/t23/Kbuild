@@ -1,3 +1,6 @@
+tx_isp_t23_recovered-objs := tx_isp_t23_core.o \
+			     tx_isp_t23_math.o \
+			     tx_isp_t23_sinfo.o
 obj-m += tx_isp_t23_recovered.o
 
 ccflags-y += -I$(src)/../include

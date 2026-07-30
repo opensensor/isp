@@ -3,9 +3,13 @@
 This directory is the T23 bring-up workspace for matching the OEM
 `tx-isp-t23.ko` behavior on Linux 3.10.14 targets.
 
-The initial `tx_isp_t23_recovered.c` file is the kbuild-compatible recovered
-whole-driver seed from `tx-isp-t23-v1`, plus the local compatibility shims
-needed to load the SC2336 T23 sensor module and start the Raptor pipeline.
+The recovered whole-driver seed from `tx-isp-t23-v1` now lives in
+`tx_isp_t23_core.c`, with separate `tx_isp_t23_math.c` and
+`tx_isp_t23_sinfo.c` adapters. Kbuild links all three into the existing
+`tx_isp_t23_recovered.ko` module identity expected by this target. The math
+adapter delegates to the cross-SoC primitives, while the registry adapter
+delegates slot/procfs ownership to the common typed implementation and keeps
+T23 sensor-client side effects in explicit lifecycle callbacks.
 
 Current smoke-test status:
 
@@ -14,6 +18,8 @@ Current smoke-test status:
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
 - Raptor starts and publishes stable H.264 streams on both MSCA channels.
+- The three-object module passes a full one-shot device boot with advancing
+  ISP/VIC interrupts and is followed by a verified persistent-driver reboot.
 - The recovered child-platform path has symmetric remove handlers for its
   allocated subdevices, IRQs, MMIO mappings, clocks, pads, and channel state;
   the module can be unloaded after the sensor and consumers are stopped.

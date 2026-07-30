@@ -1,0 +1,61 @@
+/*
+ * T41 compatibility entry points for the shared TX-ISP math library.
+ *
+ * Keep the recovered function names and MIPS32 ABI here while the algorithms
+ * live in the kernel-independent common header. Table depth remains an
+ * explicit T41 policy rather than hidden global state in the shared code.
+ */
+
+#include <linux/types.h>
+
+#include "../include/tx_isp/tx_isp_math.h"
+
+#define TX_ISP_T41_INTERPOLATION_LAST_INDEX	10U
+
+s32 fix_point_mult2_32(s32 point_pos, s32 first, s32 second)
+{
+	if (point_pos < 0 || point_pos > 31)
+		return 0;
+
+	return (s32)tx_isp_fixmul_u32((u32)point_pos, (u32)first,
+				      (u32)second);
+}
+
+u32 fix_point_mult3_32(u32 point_pos, u32 first, u32 second, u32 third)
+{
+	return tx_isp_fixmul3_u32(point_pos, first, second, third);
+}
+
+s64 tisp_simple_intp(u32 index, u32 fraction, unsigned long table_address)
+{
+	const u32 *table = (const u32 *)table_address;
+
+	if (!table)
+		return 0;
+
+	return tx_isp_lerp_u32(index, fraction, table,
+			       TX_ISP_T41_INTERPOLATION_LAST_INDEX);
+}
+
+u32 tisp_simple_intp_int8(s32 index, s32 fraction, void *table_address)
+{
+	const u8 *table = table_address;
+
+	if (!table)
+		return 0;
+
+	return tx_isp_lerp_u8((u32)index, (u32)fraction, table,
+			      TX_ISP_T41_INTERPOLATION_LAST_INDEX);
+}
+
+s64 tisp_simple_intp_int16(u32 index, u32 fraction,
+			   unsigned long table_address)
+{
+	const u16 *table = (const u16 *)table_address;
+
+	if (!table)
+		return 0;
+
+	return tx_isp_lerp_u16(index, fraction, table,
+			       TX_ISP_T41_INTERPOLATION_LAST_INDEX);
+}

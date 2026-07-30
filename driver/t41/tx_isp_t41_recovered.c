@@ -5,6 +5,8 @@
 /* Target kernel arch/ABI: mips32r2 32bit */
 /* Module vermagic: 4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT  */
 
+#include "../include/tx_isp/tx_isp_sinfo.h"
+
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -710,10 +712,6 @@ extern struct module __this_module;
 #ifndef module_exit
 #define module_exit(fn)
 #endif
-#endif
-
-#ifdef REGTRACE_KERNEL_TREE_BUILD
-#include "tx_isp_t41_sinfo.c"
 #endif
 
 #ifndef _IOC
@@ -39557,22 +39555,6 @@ uint32_t fix_point_sub_32(uint32_t pointpos, uint32_t left, uint32_t right)
 	return left - right;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017d44 origin=model_output original=fix_point_mult2_32 */
-int32_t fix_point_mult2_32(int32_t arg1, int32_t arg2, int32_t arg3) {
-    if (arg1 < 0 || arg1 > 31)
-        return 0;
-    return (int32_t)(((uint64_t)(uint32_t)arg2 *
-                      (uint32_t)arg3) >> (uint32_t)arg1);
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017d88 origin=fragment_seed original=fix_point_mult3_32 */
-uint32_t fix_point_mult3_32(uint32_t pointpos, uint32_t first,
-			    uint32_t second, uint32_t third)
-{
-	return fix_point_mult2_32(pointpos,
-		fix_point_mult2_32(pointpos, first, second), third);
-}
-
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017db4 origin=fragment_seed original=fix_point_intp */
 int32_t fix_point_intp(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
 {
@@ -39753,128 +39735,6 @@ table_intp0x84:
     v0 = *(uint32_t *)((char *)a1 + -8);
 
     return 0;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000018008 origin=fragment_seed original=tisp_simple_intp */
-int64_t tisp_simple_intp(uint32_t a0, uint32_t a1, uintptr_t a2)
-{
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = a0 < 10;
-
-    /* fragment 1: Branch */
-    a0 = a0 << 2;
-    if (v0 != 0) { goto tisp_simple_intp0x14; }
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a2 + 40);
-
-tisp_simple_intp0x14:
-    /* fragment 4: Arithmetic */
-    a2 = a2 + a0;
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a2 + 0);
-    v0 = *(uint32_t *)((char *)a2 + 4);
-
-    /* fragment 6: Branch */
-    a0 = v1 < v0;
-    if (v1 == v0) { goto tisp_simple_intp0x54; }
-
-    /* fragment 7: Branch */
-    if (a0 == 0) { goto tisp_simple_intp0x5c; }
-
-    /* fragment 8: Arithmetic */
-    v0 = (uintptr_t)v0 - (uintptr_t)v1;
-    a0 = 0;
-
-tisp_simple_intp0x38:
-    /* fragment 9: Arithmetic */
-    a1 = (uintptr_t)v0 * a1;
-    v0 = (uintptr_t)a1 >> 16;
-    a1 = (a1 >> 15) & 0x1;
-    a1 = v0 + a1;
-
-    /* fragment 10: Branch */
-    v0 = v1 + a1;
-    if (a0 == 0) { goto tisp_simple_intp0x54; }
-
-    /* fragment 11: Arithmetic */
-    v0 = v1 - a1;
-
-tisp_simple_intp0x54:
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-    /* fragment 13: Unknown */
-    /* unmatched fragment 13 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 18060:	00000000 	nop */
-
-tisp_simple_intp0x5c:
-    /* fragment 14: Arithmetic */
-    v0 = (uintptr_t)v1 - (uintptr_t)v0;
-
-    /* fragment 15: Branch */
-    a0 = 1;
-    goto tisp_simple_intp0x38;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000018070 origin=model_output original=tisp_simple_intp_int8 */
-uint32_t tisp_simple_intp_int8(int32_t arg1, int32_t arg2, void *arg3) {
-	const uint8_t *table = arg3;
-	uint32_t left;
-	uint32_t right;
-	uint32_t delta;
-	uint32_t scaled;
-
-	if (!table)
-		return 0;
-	if ((uint32_t)arg1 >= 10)
-		return table[10];
-
-	left = table[arg1];
-	right = table[arg1 + 1];
-	if (left == right)
-		return right;
-	delta = left < right ? right - left : left - right;
-	scaled = delta * (uint32_t)arg2;
-	scaled = (scaled >> 16) + ((scaled >> 15) & 1);
-	return left < right ? left + scaled : left - scaled;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000180e0 origin=fragment_seed original=tisp_simple_intp_int16 */
-int64_t tisp_simple_intp_int16(uint32_t a0, uint32_t a1, uintptr_t a2)
-{
-    const uint16_t *table = (const uint16_t *)a2;
-    uint32_t left;
-    uint32_t right;
-    uint32_t delta;
-    uint32_t scaled;
-
-    if (!table)
-        return 0;
-    if (a0 >= 10)
-        return table[10];
-
-    left = table[a0];
-    right = table[a0 + 1];
-    if (left == right)
-        return right;
-
-    delta = left < right ? right - left : left - right;
-    scaled = delta * a1;
-    scaled = (scaled >> 16) + ((scaled >> 15) & 1);
-
-    return left < right ? left + scaled : left - scaled;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018154 origin=fragment_seed original=tisp_log2_int_to_fixed */
@@ -165987,12 +165847,12 @@ int32_t init_module(void)
 	int ret;
 
     regtrace_patch_relocated_data();
-	ret = tx_isp_t41_sinfo_init();
-	if (ret)
-		return ret;
 	ret = tx_isp_init();
 	if (ret)
-		tx_isp_t41_sinfo_exit();
+		return ret;
+	ret = tx_isp_sinfo_init();
+	if (ret)
+		((void (*)(void))(uintptr_t)&tx_isp_exit)();
 	return ret;
 }
 
@@ -166000,8 +165860,9 @@ int32_t init_module(void)
 void cleanup_module(void)
 {
     uintptr_t t9 = (uintptr_t)&tx_isp_exit;
+
+	tx_isp_sinfo_exit();
     ((void (*)(void))(uintptr_t)t9)();
-	tx_isp_t41_sinfo_exit();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074ce0 origin=fragment_seed original=tx_isp_vic_remove */
