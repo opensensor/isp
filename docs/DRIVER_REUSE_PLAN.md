@@ -115,6 +115,12 @@ used-size eight-byte ABI. `tests/tx_isp_frame_layout_test.c` covers the active
 differing alignment policies, invalid alignment, and every 32-bit overflow
 boundary.
 
+The same interface now binds NV12 geometry to a supplied DMA buffer. It
+validates allocation length and the complete 32-bit address range before
+publishing Y/UV addresses. All three adapters use this plan before their local
+QBUF hardware handoff. Their queue objects, locks, late-link replay, rotation,
+and completion semantics remain intentionally separate.
+
 ### Sensor registry
 
 `driver/common/tx_isp_sinfo.c` owns the sensor-registry lifecycle, exported
@@ -138,13 +144,10 @@ T23 and T31 have full live coverage with their SC2336 sensors, including name,
 chip ID, I2C address, 1920x1080 dimensions, 25 fps, active state, and advancing
 ISP interrupts.
 
-T41 has live streaming coverage with the OS04D10 sensor, but the recovered
-runtime currently leaves the staged shared registry at count zero. Its
-persistent installed driver reports one sensor, so this is a concrete parity
-gap rather than an unsupported sensor. The sensor and Raptor pipeline load and
-stream normally, but shared-registry metadata parity is not yet claimed. Do
-not hide this with synthetic sensor entries; recover the missing T41
-bind/lifecycle behavior first.
+T41 now has full live shared-registry coverage with the OS04D10 sensor.
+`/proc/jz/sensor/count` reports one; the driver-add and sensor-bind counters
+each report one success; and `sensor0` reports `os04d10`, chip `0x530444`,
+address `0x3c`, native 2560x1440 geometry, 25 fps, and active state.
 
 ### Checked ABI and recovery support
 
@@ -208,7 +211,7 @@ tested open build so the current work remains active for inspection.
 |---|---|---|
 | T23 | eight-object module, shared math/registry/register-mask/callback-plan/tuning-ABI/frame/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
 | T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, and expected half-rate RTSP clean |
-| T41 | six-object module, shared math/registry/day-night/tuning-ABI/frame-layout, OS04D10 | pass; balanced day color, correct 3,133,440-byte main pool, and full-rate RTSP |
+| T41 | six-object module, shared math/registry/day-night/tuning-ABI/frame-layout, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light color and anti-flicker tuning remain open |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs
 its marker before `insmod`. A crash therefore cannot repeatedly load the staged
@@ -271,18 +274,17 @@ to shape the eventual common interface.
 
 ## Next Candidates
 
-1. Recover the missing T41 sensor-registry bind/lifecycle path and require full
-   `/proc/jz/sensor` parity before extending that interface.
-2. Extend validated callback plans to other repeated initialization and
+1. Extend validated callback plans to other repeated initialization and
    teardown sequences whose ordering is already device-proven.
-3. Review fixed-point divide and log/exp helpers shared by T31 and T41, starting
+2. Review fixed-point divide and log/exp helpers shared by T31 and T41, starting
    with host-testable functions that cannot touch kernel or ISP state.
-4. Reconcile the known T31 pad-direction and 0x24/0x28 stride discrepancy in a
+3. Reconcile the known T31 pad-direction and 0x24/0x28 stride discrepancy in a
    standalone, device-tested change.
-5. Extend the checked ABI from pads to links, events, and sensor attributes.
-6. Split the next low-risk T23/T41 subsystem, such as proc diagnostics or frame
+4. Extend the checked ABI from pads to links, events, and sensor attributes.
+5. Split the next low-risk T23/T41 subsystem, such as proc diagnostics or frame
    completion, behind a reviewed interface.
-7. Move event/state-machine shells only after IRQ decode and acknowledge
+6. Move event/state-machine shells only after IRQ decode and acknowledge
    ordering remain explicit per-SoC behavior.
-8. Model buffer ownership and queue-lifecycle state behind typed adapters,
+7. Model the next layer of buffer ownership and queue-lifecycle state behind
+   typed adapters,
    starting with read-only comparisons of the T23/T31/T41 consumer contracts.

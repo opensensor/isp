@@ -13710,17 +13710,6 @@ static uint32_t regtrace_t23_frame_height(int channel)
     return channel == 1 ? 360U : 1080U;
 }
 
-static uint32_t regtrace_t23_frame_uv_offset(int channel)
-{
-    struct tx_isp_nv12_layout layout;
-    uint32_t width = regtrace_t23_frame_width(channel);
-    uint32_t height = regtrace_t23_frame_height(channel);
-
-    if (tx_isp_nv12_layout_build(width, height, 1, 16, &layout))
-        return 0;
-    return layout.y_size;
-}
-
 static int regtrace_t23_program_msca_format(
     int channel, struct regtrace_t23_frame_image_format *format)
 {
@@ -13798,23 +13787,33 @@ static int regtrace_t23_program_msca_format(
     return 0;
 }
 
-static void regtrace_t23_program_msca_qbuf(int channel,
-                                           uint32_t phys,
-                                           uint32_t length)
+static int regtrace_t23_program_msca_qbuf(int channel,
+                                          uint32_t phys,
+                                          uint32_t length)
 {
-    uint32_t uv_phys;
+    struct tx_isp_nv12_buffer buffer;
     int ret;
 
     if (!regtrace_t23_direct_msca_qbuf)
-        return;
+        return 0;
     if (channel < 0 || channel >= 3 || !phys)
-        return;
+        return -EINVAL;
 
-    uv_phys = phys + regtrace_t23_frame_uv_offset(channel);
-    ret = tisp_msca_addr_fifo_write((char)channel, phys, uv_phys);
+    ret = tx_isp_nv12_buffer_build(regtrace_t23_frame_width(channel),
+                                   regtrace_t23_frame_height(channel),
+                                   1, 16, phys, length, &buffer);
+    if (ret) {
+        printk(KERN_ERR "tx_isp_t23_recovered: reject MSCA qbuf ch=%d y=0x%x len=0x%x ret=%d\n",
+               channel, phys, length, ret);
+        return ret;
+    }
+
+    ret = tisp_msca_addr_fifo_write((char)channel, buffer.y_dma,
+                                    buffer.uv_dma);
     if (regtrace_t23_log_framechan_payloads)
         printk(KERN_WARNING "tx_isp_t23_recovered: direct MSCA qbuf ch=%d y=0x%x uv=0x%x len=0x%x ret=%d\n",
-               channel, phys, uv_phys, length, ret);
+               channel, buffer.y_dma, buffer.uv_dma, length, ret);
+    return ret;
 }
 
 static void regtrace_t23_set_msca_stream(int channel,
@@ -13858,13 +13857,18 @@ static void regtrace_t23_set_msca_stream(int channel,
            reason ? reason : "?");
 }
 
-static void regtrace_framechan_record_qbuf(int channel, const uint32_t *words)
+static int regtrace_framechan_record_qbuf(int channel, const uint32_t *words)
 {
     unsigned long flags;
     uint32_t slot;
+    int ret;
 
     if (channel < 0 || channel >= REGTRACE_FRAMECHAN_COUNT || !words)
-        return;
+        return -EINVAL;
+
+    ret = regtrace_t23_program_msca_qbuf(channel, words[13], words[14]);
+    if (ret)
+        return ret;
 
     spin_lock_irqsave(&regtrace_framechan_done_lock, flags);
     slot = regtrace_framechan_qbuf_count[channel] % REGTRACE_FRAMECHAN_QBUF_SLOTS;
@@ -13873,7 +13877,7 @@ static void regtrace_framechan_record_qbuf(int channel, const uint32_t *words)
     regtrace_framechan_qbuf_len[channel][slot] = words[14];
     regtrace_framechan_qbuf_count[channel]++;
     spin_unlock_irqrestore(&regtrace_framechan_done_lock, flags);
-    regtrace_t23_program_msca_qbuf(channel, words[13], words[14]);
+    return 0;
 }
 
 static void regtrace_framechan_done_init(void)
@@ -14151,7 +14155,9 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
         ret = regtrace_framechan_copy_words_from_user(words, arg);
         if (ret)
             break;
-        regtrace_framechan_record_qbuf(channel, words);
+        ret = regtrace_framechan_record_qbuf(channel, words);
+        if (ret)
+            break;
         if (regtrace_t23_log_framechan_payloads &&
             channel >= 0 && channel < REGTRACE_FRAMECHAN_COUNT &&
             regtrace_framechan_log_count[channel] < 16) {

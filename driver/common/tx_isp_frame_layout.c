@@ -53,6 +53,34 @@ int tx_isp_nv12_layout_build(u32 width, u32 height, u32 width_align,
 	return 0;
 }
 
+int tx_isp_nv12_buffer_build(u32 width, u32 height, u32 width_align,
+			     u32 height_align, u32 y_dma, u32 buffer_size,
+			     struct tx_isp_nv12_buffer *buffer)
+{
+	struct tx_isp_nv12_buffer result;
+	u64 last_dma;
+	int ret;
+
+	if (!buffer)
+		return -EINVAL;
+
+	ret = tx_isp_nv12_layout_build(width, height, width_align,
+				       height_align, &result.layout);
+	if (ret)
+		return ret;
+	if (buffer_size < result.layout.sizeimage)
+		return -ENOSPC;
+
+	last_dma = (u64)y_dma + result.layout.sizeimage - 1;
+	if (last_dma > 0xffffffffULL)
+		return -EOVERFLOW;
+
+	result.y_dma = y_dma;
+	result.uv_dma = y_dma + result.layout.y_size;
+	*buffer = result;
+	return 0;
+}
+
 int tx_isp_mdns_layout_build(u32 width, u32 height, u32 memopt,
 			     struct tx_isp_mdns_layout *layout)
 {

@@ -47,9 +47,12 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - the tested reserved-memory command line is
   `rmem=22M@0x2a00000`; no bootloader environment change is required
 
-The validated module SHA-256 after the shared private-format and MDNS-layout
-extraction is
-`67f3ed067875f994919881128e0ffa71c812ab592a34e71e60f1a3123dbe6a61`.
+The shared NV12 DMA plan now validates QBUF allocation length, complete
+address range, and Y/UV placement before the local tracking and MSCA handoff.
+The validation retained exact 3,133,440/353,280-byte pools and the inherited
+half-rate cadence without rejecting a live buffer. The validated module
+SHA-256 is
+`e311d2f2fb98deb3449c2b4278f197e2bb61b2203af33fe735f85b9676827aba`.
 
 ## Tuning ABI Corrections
 

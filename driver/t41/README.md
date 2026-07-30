@@ -60,17 +60,25 @@ implementation. Full sensor/Raptor smoke tests pass, both MSCA streams run,
 and ISP interrupts advance. The temporary static day AWB baseline is
 `R=0x380, B=0x880`; both shadow banks retain those values across forced
 day/night transitions. This replaces the earlier red/blue-heavy defaults that
-produced a magenta day image. One registry limitation remains: the
-recovered T41 runtime currently leaves the staged shared registry at
-`/proc/jz/sensor/count=0`, while the persistent installed driver reports one
-sensor, so metadata parity is not yet claimed.
+produced a magenta day image. The shared registry now reports one active
+OS04D10 with chip `0x530444`, address `0x3c`, native 2560x1440 geometry, and
+25 fps; both driver-add and sensor-bind report one successful lifecycle call.
 
 The July 30 shared-format validation preserved the 3,133,440-byte 1080p pool,
-full-rate output, coherent geometry, and balanced day color across two clean
-boots. It decoded 150 frames in six seconds and 125 in five, passed
-night/auto/day transitions, and left the open module active with zero ISP
-interrupt errors. The validated module SHA-256 is
-`55bed73a13b6b0b76557446ddfea06e53d1fe825e77270ee77a13b20ed2c4d7c`.
+full-rate output, and coherent geometry across two clean boots. It decoded
+150 frames in six seconds and 125 in five, passed night/auto/day transitions,
+and left the open module active with zero ISP interrupt errors. The validated
+module SHA-256 is
+`64e7103e81765b5c72a42088bb7b46a12cea1538aae21a9d3cfe4f802ffbc5da`.
+
+The same cycle validates the shared NV12 DMA binding plan in the recovered
+late-link queue path. It decoded 150 main frames in six seconds, 75 substream
+frames in three, and 103 main frames in the four-second final check without
+rejecting a live buffer or changing stream geometry. Subsequent human-subject
+testing found that the static day gains still render red as pink and that
+short exposure under 120 Hz recessed LEDs creates a five-frame moving shadow
+cycle at 25 fps. Those are active AWB/CCM and AE/anti-flicker tuning issues,
+not regressions in the shared frame-layout helper.
 
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked

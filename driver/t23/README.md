@@ -33,6 +33,12 @@ Current smoke-test status:
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,
   and left the open module active with zero ISP interrupt errors.
+- The shared NV12 DMA plan now validates QBUF length, complete address range,
+  and Y/UV placement before programming MSCA. Its two validation boots decoded
+  125 main frames in six seconds, 73 substream frames in three, and 99 main
+  frames in the four-second final check without rejecting a live buffer.
+  The validated module SHA-256 is
+  `0cd4c917624be506cfd35d233ea0aba11f9491486bbd981514de5c3993a4acf4`.
 - The recovered child-platform path has symmetric remove handlers for its
   allocated subdevices, IRQs, MMIO mappings, clocks, pads, and channel state;
   the module can be unloaded after the sensor and consumers are stopped.

@@ -44,6 +44,9 @@ The project has moved well beyond initial bring-up.
   policy
 - T23 and T31 share checked MDNS working/reference/UV/tiny-plane layout while
   retaining their distinct allocation ABIs and register ownership
+- T23, T31, and T41 share checked NV12 DMA binding, including allocation
+  length, complete 32-bit address-range, and Y/UV plane validation before QBUF
+  reaches hardware
 - T31 applies evidence-backed SC2336 day/night DMSC correction profiles
 - T23 and T41 link recovered cores with logical shared-library adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree

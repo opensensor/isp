@@ -16,6 +16,12 @@ struct tx_isp_nv12_layout {
 	u32 sizeimage;
 };
 
+struct tx_isp_nv12_buffer {
+	struct tx_isp_nv12_layout layout;
+	u32 y_dma;
+	u32 uv_dma;
+};
+
 /*
  * The temporal denoise unit keeps an NV12 reference followed by up to four
  * compressed reference banks and, in full-memory mode, two chroma auxiliary
@@ -57,6 +63,16 @@ struct tx_isp_mdns_layout {
 int tx_isp_nv12_layout_build(u32 width, u32 height, u32 width_align,
 			     u32 height_align,
 			     struct tx_isp_nv12_layout *layout);
+
+/*
+ * Bind checked NV12 geometry to one physical buffer.  The complete image must
+ * fit both the supplied allocation and the vendor ABI's 32-bit DMA space.
+ * Results are published only after every geometry, length, and address check
+ * succeeds.
+ */
+int tx_isp_nv12_buffer_build(u32 width, u32 height, u32 width_align,
+			     u32 height_align, u32 y_dma, u32 buffer_size,
+			     struct tx_isp_nv12_buffer *buffer);
 
 /*
  * Build the T23/T31 MDNS auxiliary allocation.  memopt == 0 returns the full

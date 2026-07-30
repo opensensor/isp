@@ -130,6 +130,13 @@ cannot be represented by the vendor ABI's 32-bit fields. The two line sizes
 are intentionally distinct: the aggregate value describes the complete NV12
 line to libimp, while the Y stride locates the UV plane in DMA memory.
 
+`tx_isp_nv12_buffer_build()` binds that geometry to one physical buffer. It
+rejects an undersized userspace allocation and any image whose final byte
+would exceed the 32-bit DMA address space, then publishes typed Y and UV
+addresses atomically. T23, T31, and T41 call it before their local QBUF paths
+write MSCA state. Queue ownership, locking, replay, and completion remain
+per-SoC behavior.
+
 Alignment remains policy supplied by the adapter:
 
 - T23 supplies width alignment 1 and height alignment 16 for its MSCA format
@@ -218,9 +225,23 @@ Two clean boots per device covered the new module and a final re-armed
 inspection state. T23 decoded 127 frames in six seconds and then 112 in five;
 T31 decoded 125 in ten seconds and then 89 in seven at its inherited cadence;
 T41 decoded 150 in six seconds and then 125 in five. All three passed
-night/auto/day transitions, retained coherent geometry and color, reported
-zero ISP interrupt errors, and had clean `dmesg`, `logread`, and bounded
-`logcat` captures.
+night/auto/day transitions, retained coherent geometry and stream continuity,
+reported zero ISP interrupt errors, and had clean `dmesg`, `logread`, and
+bounded `logcat` captures. A later human-subject T41 check exposed two tuning
+defects that those transport smokes could not establish: red rendered pink
+and a short exposure under 120 Hz recessed LEDs produced a five-frame moving
+shadow cycle.
+
+The checked DMA-binding extraction then passed the same two-boot cycle on all
+three devices. T23 decoded 125 main frames in six seconds, 73 substream frames
+in three, and 99 main frames in the four-second final check. T31 decoded
+120/10 seconds, 65/5 seconds on the substream, and 88/7 seconds after the clean
+reboot at its inherited cadence. T41 decoded 150/6 seconds, 75/3 seconds on
+the substream, and 103/4 seconds after the clean reboot. No active buffer was
+rejected; geometry, stream continuity, and the T31
+3,133,440/353,280-byte pool contracts were unchanged. Every device passed
+night/auto/day and had clean `dmesg`, `logread`, and bounded `logcat`
+captures. Color fidelity is tracked separately from these DMA-layout results.
 
 ## Next Extraction Targets
 
@@ -231,7 +252,6 @@ zero ISP interrupt errors, and had clean `dmesg`, `logread`, and bounded
 - Expand ordered profiles to other evidence-backed, sensor-specific tuning
   corrections.
 - Continue moving pure fixed-point divide/log helpers behind host tests.
-- Recover the remaining T41 sensor-registry bind/lifecycle parity.
 - Extend tuning descriptors only when the matching userspace payload size and
   direction are proven; keep SoC dispatch and collectors local.
 - Extract typed buffer ownership and queue-lifecycle bookkeeping only after

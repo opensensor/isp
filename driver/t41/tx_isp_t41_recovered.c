@@ -157484,7 +157484,7 @@ int32_t ispcore_frame_channel_streamoff(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006f8d0 origin=fragment_seed original=ispcore_frame_channel_qbuf */
 int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
 {
-    struct tx_isp_nv12_layout layout;
+    struct tx_isp_nv12_buffer buffer;
     char *pad = (char *)a0;
     char *payload = (char *)a1;
     char *channel;
@@ -157492,7 +157492,7 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
     uint32_t width_align;
     uint32_t height_align;
     uint32_t y_dma;
-    uint32_t uv_dma;
+    uint32_t dma_length;
     uint32_t channel_index;
     int ret;
 
@@ -157521,23 +157521,20 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
         width_align = 16;
     if (!height_align || (height_align & (height_align - 1)))
         height_align = 16;
-    ret = tx_isp_nv12_layout_build(*(uint32_t *)(channel + 4),
-                                   *(uint32_t *)(channel + 8),
-                                   width_align, height_align, &layout);
-    if (ret) {
-        private_spin_unlock_irqrestore(channel + 0xa8, flags);
-        return ret;
-    }
 
     payload[-0x1c] = 5;
     ++*(uint32_t *)(payload - 0x18);
     y_dma = *(uint32_t *)(payload + 8);
-    if (y_dma > 0xffffffffU - layout.y_size) {
+    dma_length = *(uint32_t *)(payload - 0x30);
+    ret = tx_isp_nv12_buffer_build(*(uint32_t *)(channel + 4),
+                                   *(uint32_t *)(channel + 8),
+                                   width_align, height_align, y_dma,
+                                   dma_length, &buffer);
+    if (ret) {
         private_spin_unlock_irqrestore(channel + 0xa8, flags);
-        return -EOVERFLOW;
+        return ret;
     }
-    uv_dma = y_dma + layout.y_size;
-    *(uint32_t *)(payload + 0x0c) = uv_dma;
+    *(uint32_t *)(payload + 0x0c) = buffer.uv_dma;
     channel_index = *(uint32_t *)(channel + 0x78);
 
     if (direct_mode && *(uint32_t *)(channel + 0x74) == 0) {
@@ -157545,15 +157542,16 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
         *(uint32_t *)(payload + 0x0c) = y_dma | 0x01000000U;
     } else {
         payload[-0x1c] = 7;
-        tisp_msca_addr_fifo_write(channel_index, y_dma, uv_dma);
+        tisp_msca_addr_fifo_write(channel_index, buffer.y_dma,
+                                  buffer.uv_dma);
         payload[-0x1c] = 8;
     }
 
     private_spin_unlock_irqrestore(channel + 0xa8, flags);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: core qbuf clean channel=%u dma=%#x/%#x aligned=%ux%u\n",
-           channel_index, y_dma, uv_dma, layout.stride,
-           layout.aligned_height);
+           channel_index, buffer.y_dma, buffer.uv_dma,
+           buffer.layout.stride, buffer.layout.aligned_height);
     return 0;
 }
 

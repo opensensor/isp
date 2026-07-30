@@ -3772,7 +3772,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
         struct v4l2_buffer buffer;
+        struct tx_isp_nv12_buffer dma_buffer;
         unsigned long flags;
+        u32 buffer_w;
+        u32 buffer_h;
+        u32 buffer_size;
+        uint32_t buffer_phys_addr;
+        int dma_ret;
 
         pr_debug("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
 
@@ -3815,23 +3821,34 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * V4L2_MEMORY_USERPTR: buffer.m.userptr contains the physical address.
          * Fallback: compute from rmem base + index * size.
          */
-	        u32 buffer_w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
-	        u32 buffer_h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
-	        u32 buffer_size = state->sizeimage ?
-	                          state->sizeimage :
-	                          frame_channel_format_sizeimage(
-	                              frame_channel_export_pixfmt(channel, state->format),
-	                              buffer_w, buffer_h);
-        uint32_t buffer_phys_addr;
-	        if (!buffer.length)
-	            buffer.length = buffer_size;
+        buffer_w = state->width ? (u32)state->width :
+                   (channel == 0 ? 1920U : 640U);
+        buffer_h = state->height ? (u32)state->height :
+                   (channel == 0 ? 1080U : 360U);
+        buffer_size = state->sizeimage ?
+                      state->sizeimage :
+                      frame_channel_format_sizeimage(
+                          frame_channel_export_pixfmt(channel, state->format),
+                          buffer_w, buffer_h);
+        if (!buffer.length)
+            buffer.length = buffer_size;
         if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
             buffer_phys_addr = (uint32_t)buffer.m.userptr;
         } else {
             buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
         }
 
-	        pr_debug("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, sizeimage=%u, memory=%d, userptr=0x%lx ***\n",
+        dma_ret = tx_isp_nv12_buffer_build(
+            buffer_w, buffer_h, 1, 16, buffer_phys_addr,
+            buffer.length, &dma_buffer);
+        if (dma_ret) {
+            pr_err("*** QBUF: invalid NV12 buffer idx=%u dma=0x%x length=%u required=%u ret=%d ***\n",
+                   buffer.index, buffer_phys_addr, buffer.length,
+                   buffer_size, dma_ret);
+            return dma_ret;
+        }
+
+        pr_debug("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, sizeimage=%u, memory=%d, userptr=0x%lx ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size, buffer.memory, buffer.m.userptr);
 
         if (frame_channel_track_buffer(fcd, &buffer) == 0) {
@@ -3882,11 +3899,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
              * Channel 0 is typically full-res (1920x1080), but channel 1 may be
              * scaled (e.g., 640x360).  Using vic->width for all channels puts
              * the UV plane at the wrong offset → green/magenta corruption. */
-            u32 w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
-            u32 h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
-            u32 aligned_h = (h + 0xf) & ~0xf;
-            u32 uv_addr = buffer_phys_addr + w * aligned_h;
-
             /* Auto-configure MSCA scaler for channels > 0 on first QBUF.
              * libimp configures channels through the IMP system API which
              * calls IMP_FrameSource_SetChnAttr / EnableChn.  These go through
@@ -3901,17 +3913,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                  * our target dimensions instead of overwriting them with
                  * the full ISP resolution (the *arg2==0 path). */
                 attr_words[0] = 1;       /* enable custom dimensions */
-                attr_words[1] = w;       /* target width (e.g., 640) */
-                attr_words[2] = h;       /* target height (e.g., 360) */
+                attr_words[1] = buffer_w; /* target width (e.g., 640) */
+                attr_words[2] = buffer_h; /* target height (e.g., 360) */
                 attr_words[3] = 0;       /* no crop */
                 attr_words[4] = 0;       /* crop x */
                 attr_words[5] = 0;       /* crop y */
-                attr_words[6] = w;       /* crop width = output */
-                attr_words[7] = h;       /* crop height = output */
+                attr_words[6] = buffer_w; /* crop width = output */
+                attr_words[7] = buffer_h; /* crop height = output */
                 attr_words[8] = 0;       /* scaler mode */
 
                 pr_debug("QBUF ch%d: auto-configuring MSCA scaler for %ux%u\n",
-                        channel, w, h);
+                        channel, buffer_w, buffer_h);
                 tisp_channel_attr_set(channel, attr_words);
                 tisp_channel_start(channel, NULL);
                 state->msca_configured = true;
@@ -3921,13 +3933,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
              *      *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x9984) = UV addr
              * channel_id << 8 selects the MSCA channel register bank.
              */
-            writel(buffer_phys_addr,
+            writel(dma_buffer.y_dma,
                    ourISPdev->core_regs + (channel << 8) + 0x996c);
-            writel(uv_addr,
+            writel(dma_buffer.uv_dma,
                    ourISPdev->core_regs + (channel << 8) + 0x9984);
 
             pr_debug("QBUF ch%d: MSCA Y=0x%x UV=0x%x (w=%u h=%u aligned_h=%u)\n",
-                     channel, buffer_phys_addr, uv_addr, w, h, aligned_h);
+                     channel, dma_buffer.y_dma, dma_buffer.uv_dma,
+                     buffer_w, buffer_h,
+                     dma_buffer.layout.aligned_height);
         }
 
         /* OEM buffer rotation: track state for frame-done requeue.
