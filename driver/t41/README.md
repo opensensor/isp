@@ -146,6 +146,16 @@ substream frames in three, passed night/auto/day, kept `rvd` responsive, and
 reported zero ISP interrupt errors. Its module SHA-256 is
 `03e9f68a3740c03f51caae9269fa339d8d971d2c8566b1a8463daf7ffe1f904e`.
 
+The matching unsuffixed and `_64` divide entry points now use a common
+full-domain shift/subtract divider. This replaces one recovery-grade body and
+one literal jump-to-null stub without introducing `__udivdi3` or 128-bit
+compiler helpers. Ten thousand randomized host cases match a `__uint128_t`
+oracle. The fail-safe device boot decoded 150 main frames in six seconds, 77
+substream frames in three, and 125 post-day frames in five; night/auto/day,
+`rvd`, and both ISP cores remained healthy with `error=0`. The validated
+module SHA-256 is
+`bc1a798d0dac2909657b87f11f65938aa1af849d0a12291bf58fcc3e1e010100`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

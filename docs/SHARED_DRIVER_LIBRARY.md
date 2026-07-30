@@ -101,9 +101,12 @@ separate from the full-range T31/T41 primitive because its fractional partial
 product wraps before the Q-format shift. T23 and T41 share wraparound
 add/subtract arithmetic but retain their different underflow diagnostics in
 their adapters. T41 now routes all four native two-/three-operand multiply
-symbols through the full-range primitive. T31 retains a size-neutral local
-copy in its recovered AE object, and T23 retains its recovered bodies after
-an adapter extraction reproducibly terminated `rvd` during startup.
+symbols and both native divide symbols through full-range primitives. The
+64-bit divider uses bounded shift/subtract arithmetic so kernel builds do not
+acquire compiler-runtime division dependencies. T31 retains size-neutral local
+copies in its recovered AE object, and T23 retains its recovered multiply
+bodies after an adapter extraction reproducibly terminated `rvd` during
+startup.
 
 ### Proprietary tuning ABI
 

@@ -31,6 +31,8 @@ for:
 - two- and three-operand unsigned 32-bit and 64-bit fixed-point multiplication
 - T23-compatible split multiplication with wrapped 32-bit partial products
 - OEM-compatible wrapped and full-range unsigned 32-bit fixed-point division
+- full-range unsigned 64-bit fixed-point division without compiler 128-bit
+  arithmetic or libgcc division helpers
 
 The per-SoC wrappers preserve their existing ABI and endpoint policy:
 
@@ -43,7 +45,8 @@ The per-SoC wrappers preserve their existing ABI and endpoint policy:
   until an extra wrapper no longer changes its machine-code register allocation.
 - T41 uses the unsigned 8/16/32-bit interpolation variants with its ten-step
   endpoint and delegates its generic/32/64-bit fixed-point add/subtract,
-  signed rounding, full-width multiply, and wrapped-divider wrappers.
+  signed rounding, full-width multiply/divide, and wrapped 32-bit divider
+  wrappers.
 - T23 retains its recovered unsuffixed/64-bit multiply bodies. Moving those
   symbols into the adapter reproducibly made `rvd` exit during startup on two
   clean boots, while rebuilding the committed local boundary restored Raptor
@@ -52,7 +55,7 @@ The per-SoC wrappers preserve their existing ABI and endpoint policy:
 `tests/tx_isp_math_test.c` covers boundary behavior, OEM interpolation
 rounding, signed 64-bit fixed-point rounding, wrapped 32/64-bit add/subtract
 and products, T23's split-product equivalence over Q1-Q31, Q0-Q63 64-bit
-products, typed tables, and randomized equivalence checks.
+products and quotients, typed tables, and randomized equivalence checks.
 
 ### Day/night transition shell
 

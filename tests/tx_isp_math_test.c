@@ -381,6 +381,40 @@ static void test_fixed_point_divide(void)
 		assert(tx_isp_fixdiv_u32(point_pos, numerator,
 					 denominator) == expected);
 	}
+
+	assert(tx_isp_fixdiv_u64(10, 0x400, 0x400) == 0x400);
+	assert(tx_isp_fixdiv_u64(10, 0x600, 0x400) == 0x600);
+	assert(tx_isp_fixdiv_u64(0, 0xffffffffffffffffULL,
+				 0xffffffffffffffffULL) == 1);
+	assert(tx_isp_fixdiv_u64(63, 0xffffffffffffffffULL,
+				 0xffffffffffffffffULL) ==
+	       0x8000000000000000ULL);
+	assert(tx_isp_fixdiv_u64(10, 1, 0) == 0);
+	assert(tx_isp_fixdiv_u64(64, 1, 1) == 0);
+
+	for (iteration = 0; iteration < 10000; iteration++) {
+		unsigned long long numerator;
+		unsigned long long denominator;
+		unsigned long long expected;
+		unsigned int point_pos = iteration % 64U;
+
+		seed = seed * 1664525U + 1013904223U;
+		numerator = (unsigned long long)seed << 32;
+		seed = seed * 1664525U + 1013904223U;
+		numerator |= seed;
+		seed = seed * 1664525U + 1013904223U;
+		denominator = (unsigned long long)seed << 32;
+		seed = seed * 1664525U + 1013904223U;
+		denominator |= seed;
+		if (!denominator)
+			denominator = 1;
+
+		expected = (unsigned long long)
+			(((__uint128_t)numerator << point_pos) /
+			 denominator);
+		assert(tx_isp_fixdiv_u64(point_pos, numerator,
+					 denominator) == expected);
+	}
 }
 
 static void test_fixed_point_log2(void)

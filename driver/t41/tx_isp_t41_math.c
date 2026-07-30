@@ -112,6 +112,16 @@ s32 fix_point_div_32(u32 point_pos, u32 numerator, u32 denominator)
 					  denominator);
 }
 
+u64 fix_point_div(u32 point_pos, u64 numerator, u64 denominator)
+{
+	return tx_isp_fixdiv_u64(point_pos, numerator, denominator);
+}
+
+u64 fix_point_div_64(u32 point_pos, u64 numerator, u64 denominator)
+{
+	return tx_isp_fixdiv_u64(point_pos, numerator, denominator);
+}
+
 s64 tisp_simple_intp(u32 index, u32 fraction, unsigned long table_address)
 {
 	const u32 *table = (const u32 *)table_address;

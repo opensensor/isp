@@ -558,6 +558,52 @@ tx_isp_fixdiv_u32(unsigned int point_pos, unsigned int numerator,
 }
 
 /*
+ * Full-width counterpart for the native tuning ABI. Compute both the integer
+ * quotient and the requested fractional bits with shift/subtract division so
+ * MIPS32 builds require neither compiler 128-bit support nor a libgcc 64-bit
+ * divide helper. The result is the low word of (numerator << point_pos) /
+ * denominator across the complete unsigned 64-bit input domain.
+ */
+static inline unsigned long long
+tx_isp_fixdiv_u64(unsigned int point_pos, unsigned long long numerator,
+		  unsigned long long denominator)
+{
+	unsigned long long quotient = 0;
+	unsigned long long remainder = 0;
+	unsigned long long fractional = 0;
+	unsigned long long shifted;
+	unsigned int overflow;
+	unsigned int bit;
+
+	if (!denominator || point_pos >= 64U)
+		return 0;
+
+	for (bit = 64U; bit > 0; bit--) {
+		overflow = (unsigned int)(remainder >> 63);
+		shifted = (remainder << 1) |
+			((numerator >> (bit - 1U)) & 1ULL);
+		if (overflow || shifted >= denominator) {
+			shifted -= denominator;
+			quotient |= 1ULL << (bit - 1U);
+		}
+		remainder = shifted;
+	}
+
+	for (bit = 0; bit < point_pos; bit++) {
+		overflow = (unsigned int)(remainder >> 63);
+		shifted = remainder << 1;
+		fractional <<= 1;
+		if (overflow || shifted >= denominator) {
+			shifted -= denominator;
+			fractional |= 1ULL;
+		}
+		remainder = shifted;
+	}
+
+	return (quotient << point_pos) | fractional;
+}
+
+/*
  * Ingenic's generation-local implementation performs the fractional
  * remainder shift in 32 bits. Keep that wrapped behavior as an explicit
  * compatibility primitive alongside the full-range implementation above.
