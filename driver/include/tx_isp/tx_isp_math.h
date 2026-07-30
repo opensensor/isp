@@ -376,6 +376,44 @@ tx_isp_fixmul3_u32(unsigned int point_pos, unsigned int first,
 }
 
 /*
+ * Native-width counterpart used by the AE tuning paths. Keep the split form
+ * used by the vendor code so MIPS32 builds do not require 128-bit arithmetic.
+ * Intermediate products intentionally retain unsigned 64-bit wraparound.
+ */
+static inline unsigned long long
+tx_isp_fixmul_u64(unsigned int point_pos, unsigned long long first,
+		  unsigned long long second)
+{
+	unsigned long long mask;
+	unsigned long long first_integer;
+	unsigned long long first_fraction;
+	unsigned long long second_integer;
+	unsigned long long second_fraction;
+
+	if (point_pos >= 64U)
+		return 0;
+
+	mask = (1ULL << point_pos) - 1ULL;
+	first_integer = first >> point_pos;
+	first_fraction = first & mask;
+	second_integer = second >> point_pos;
+	second_fraction = second & mask;
+
+	return (first_integer * second_integer << point_pos) +
+		first_integer * second_fraction +
+		first_fraction * second_integer +
+		((first_fraction * second_fraction) >> point_pos);
+}
+
+static inline unsigned long long
+tx_isp_fixmul3_u64(unsigned int point_pos, unsigned long long first,
+		   unsigned long long second, unsigned long long third)
+{
+	return tx_isp_fixmul_u64(point_pos,
+		tx_isp_fixmul_u64(point_pos, first, second), third);
+}
+
+/*
  * Unsigned Q-format division without a 64-bit divide helper. The remainder is
  * widened before each fractional-bit shift so large denominators retain exact
  * behavior across the full 32-bit input domain.

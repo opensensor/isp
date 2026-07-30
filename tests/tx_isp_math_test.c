@@ -208,6 +208,39 @@ static void test_fixed_point_multiply(void)
 	}
 }
 
+static void test_fixed_point_multiply_64(void)
+{
+	unsigned int seed = 0x64f17a2bU;
+	unsigned int iteration;
+
+	assert(tx_isp_fixmul_u64(10, 0x400, 0x400) == 0x400);
+	assert(tx_isp_fixmul_u64(20, 0x180000, 0x200000) == 0x300000);
+	assert(tx_isp_fixmul_u64(64, 1, 1) == 0);
+	assert(tx_isp_fixmul3_u64(10, 0x400, 0x800, 0xc00) == 0x1800);
+
+	for (iteration = 0; iteration < 10000; iteration++) {
+		unsigned long long first;
+		unsigned long long second;
+		unsigned long long third;
+		unsigned long long pair;
+		unsigned long long triple;
+		unsigned int point_pos = iteration % 64U;
+
+		seed = seed * 1664525U + 1013904223U;
+		first = seed & 0xfffffU;
+		seed = seed * 1664525U + 1013904223U;
+		second = seed & 0xfffffU;
+		seed = seed * 1664525U + 1013904223U;
+		third = seed & 0xfffffU;
+
+		pair = (first * second) >> point_pos;
+		triple = (pair * third) >> point_pos;
+		assert(tx_isp_fixmul_u64(point_pos, first, second) == pair);
+		assert(tx_isp_fixmul3_u64(point_pos, first, second, third) ==
+		       triple);
+	}
+}
+
 static void test_fixed_point_divide(void)
 {
 	unsigned int seed = 0xd17331a4U;
@@ -361,6 +394,7 @@ int main(void)
 	test_signed_interpolation();
 	test_typed_interpolation();
 	test_fixed_point_multiply();
+	test_fixed_point_multiply_64();
 	test_fixed_point_divide();
 	test_fixed_point_log2();
 	test_fixed_point_exp2();

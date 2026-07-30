@@ -251,7 +251,8 @@ captures. Color fidelity is tracked separately from these DMA-layout results.
   offsets have typed checks.
 - Expand ordered profiles to other evidence-backed, sensor-specific tuning
   corrections.
-- Continue moving pure fixed-point divide/log helpers behind host tests.
+- Continue moving the generation-specific 64-bit divide and remaining
+  fixed-point interpolation entry points behind host tests.
 - Extend tuning descriptors only when the matching userspace payload size and
   direction are proven; keep SoC dispatch and collectors local.
 - Extract typed buffer ownership and queue-lifecycle bookkeeping only after

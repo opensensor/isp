@@ -64,6 +64,16 @@ half-rate cadence without rejecting a live buffer. The validated module
 SHA-256 is
 `2b7a97c16d709fb2c9e0671f347093e7ea8be1054065741ee5b848f0306ce556`.
 
+The common math library now also owns the split 64-bit two- and three-operand
+Q-format multipliers used by T31 AE tuning; the local header retains only the
+recovered ABI names and the kernel-specific 64-bit divide adapter. The device
+cycle decoded 126 frames in ten seconds, 101 in an eight-second recording, and
+88 in the seven-second post-transition check. Night/auto/day transitions,
+image geometry and tone, and ISP/VIC interrupts remained coherent, with no new
+driver fault in `dmesg`, `logread`, or `logcat`. The tested open module remains
+active with SHA-256
+`55b6151615e41c57dc79fde93fa79928ffa2e3b4626bd271eae851af6c1edd25`.
+
 The DMSC output selector deserves particular care.  Its low bits select
 normal or diagnostic DMSC outputs; they are not a CFA index.  Rewriting them
 from the sensor media-bus Bayer order produced a monochrome edge/noise image.

@@ -32,29 +32,13 @@ static inline u32 fix_point_div_32(u32 q, u32 num, u32 den)
 
 static inline u64 fix_point_mult2_64_native(u32 q, u64 a, u64 b)
 {
-	/* Same split-multiply algorithm as mult2_32 but for 64-bit operands.
-	 * OEM at 0x10bd0. For the values used in ae0_tune2 (EV ratios near
-	 * 1.0 in Q20), the partial products fit in 64 bits. */
-	u64 mask, ai, bi, af, bf;
-
-	if (q >= 64)
-		return 0;
-
-	mask = (1ULL << q) - 1;
-	ai = a >> q;
-	bi = b >> q;
-	af = a & mask;
-	bf = b & mask;
-
-	/* (ai*bi << q) + ai*bf + af*bi + (af*bf >> q)
-	 * For AE values (bounded to ~30 bits), no 128-bit overflow. */
-	return (ai * bi << q) + ai * bf + af * bi + ((af * bf) >> q);
+	return tx_isp_fixmul_u64(q, a, b);
 }
 
 static inline u64 fix_point_mult3_64_native(u32 q, u64 a, u64 b, u64 c)
 {
-	/* OEM at 0x10d70: mult3 = mult2(mult2(a,b), c) */
 	u64 ab = fix_point_mult2_64_native(q, a, b);
+
 	return fix_point_mult2_64_native(q, ab, c);
 }
 
