@@ -765,12 +765,14 @@ MODULE_PARM_DESC(t41_safe_tuning_events,
  * arithmetic.  Keep event 1 live with a small controller whose inputs and
  * target come from the exact T41 histogram path.  The default Q8 target is
  * the converged pristine-stock OS04D10 histogram measured under the same
- * image and timing profile (13597 / 256 = 53.11). */
+ * image and timing profile.  A fresh daylight stock/open comparison on the
+ * same OS04D10 converged at 369 lines and again=0x1f/0x1e with the open
+ * histogram target at 12400 / 256 = 48.44. */
 static int t41_safe_ae_controller = 1;
 module_param(t41_safe_ae_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_ae_controller,
 		 "use the bounded histogram AE controller instead of recovered vendor AE");
-static unsigned int t41_ae_target_q8 = 13597;
+static unsigned int t41_ae_target_q8 = 12400;
 module_param(t41_ae_target_q8, uint, 0644);
 MODULE_PARM_DESC(t41_ae_target_q8,
 		 "safe AE target histogram mean in Q8 units");
@@ -796,7 +798,7 @@ MODULE_PARM_DESC(t41_ae_update_frames,
 /* Keep module controls out of the recovered image's overlapping BSS.  Only
  * the low six bits are functional; the initialized high bit is a storage
  * sentinel and deliberately selects no block. */
-static unsigned int t41_safe_gain_fanout_mask = 0x80000000U;
+static unsigned int t41_safe_gain_fanout_mask = 0x80000032U;
 module_param(t41_safe_gain_fanout_mask, uint, 0644);
 MODULE_PARM_DESC(t41_safe_gain_fanout_mask,
 		 "safe total-gain fanout mask: GIB=1 DMSC=2 LSC=4 TMO=8 YDNS=16 SDNS=32");
@@ -814,6 +816,7 @@ MODULE_PARM_DESC(t41_safe_ae_gain_q16,
 		 "current safe-AE log2 total gain in Q16 format");
 static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 				      uint32_t mask);
+static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16);
 static unsigned int t41_gain_fanout_trigger = ~0U;
 static int t41_gain_fanout_set(const char *value,
 			       const struct kernel_param *kp)
@@ -1041,11 +1044,11 @@ static void t41_apply_stock_awb_gains(void);
  * still-static YSP and gain-matched DMSC stages and match the stock frame's
  * output chroma more closely than copying the OEM pipeline's internal
  * 0x48c/0x1324 pair. */
-static unsigned int t41_stock_awb_gain_a = 0x49eU;
+static unsigned int t41_stock_awb_gain_a = 0x754U;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 0x13a0U;
+static unsigned int t41_stock_awb_gain_b = 0x0a6cU;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
@@ -1067,17 +1070,20 @@ MODULE_PARM_DESC(t41_awb_gain_trigger,
 /* T40 and T23 both recover color first by closing a bounded gray-world loop
  * over the vendor-configured AWB statistics DMA.  T41 uses the same packed
  * 16-byte records at 128-byte strides, but keeps its own sensor-specific
- * calibration.  The default biases are derived from a matched stock T41 run:
- * raw q10 ratios 0x3bd/0x499 produced active gains 0x65c/0xd10. */
+ * calibration.  T41's AWB statistic is upstream of the applied WB gains, so
+ * use the working T40 absolute mapping rather than treating the ratio as
+ * feedback.  The defaults come from a settled open-driver capture under the
+ * same light as stock: selected-bank q10 ratios 0x1d8..0x1dd map to the
+ * stock gains 0x754/0xa6c. */
 static int t41_safe_awb_controller = 1;
 module_param(t41_safe_awb_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_awb_controller,
 		 "negative enables workqueue-backed T41 AWB DMA gray-world controller");
-static unsigned int t41_awb_rbias_q10 = 1742U;
+static unsigned int t41_awb_rbias_q10 = 4053U;
 module_param(t41_awb_rbias_q10, uint, 0644);
 MODULE_PARM_DESC(t41_awb_rbias_q10,
 		 "safe AWB red calibration bias in Q10");
-static unsigned int t41_awb_bbias_q10 = 2909U;
+static unsigned int t41_awb_bbias_q10 = 5759U;
 module_param(t41_awb_bbias_q10, uint, 0644);
 MODULE_PARM_DESC(t41_awb_bbias_q10,
 		 "safe AWB blue calibration bias in Q10");
@@ -1085,16 +1091,20 @@ static unsigned int t41_awb_update_irqs = 2U;
 module_param(t41_awb_update_irqs, uint, 0644);
 MODULE_PARM_DESC(t41_awb_update_irqs,
 		 "AWB statistics interrupts between safe gain updates");
-static unsigned int t41_awb_min_zones = 48U;
+static unsigned int t41_awb_warmup_irqs = 128U;
+module_param(t41_awb_warmup_irqs, uint, 0644);
+MODULE_PARM_DESC(t41_awb_warmup_irqs,
+		 "valid AWB interrupts ignored before closed-loop gain updates");
+static unsigned int t41_awb_min_zones = 32U;
 module_param(t41_awb_min_zones, uint, 0644);
 MODULE_PARM_DESC(t41_awb_min_zones,
 		 "minimum populated AWB zones accepted by the safe controller");
-static unsigned int t41_awb_min_pixels = 50000U;
+static unsigned int t41_awb_min_pixels = 15000U;
 module_param(t41_awb_min_pixels, uint, 0644);
 MODULE_PARM_DESC(t41_awb_min_pixels,
 		 "minimum AWB statistic pixels accepted by the safe controller");
-static uint32_t t41_awb_last_rgain = 0x65cU;
-static uint32_t t41_awb_last_bgain = 0xd10U;
+static uint32_t t41_awb_last_rgain = 0x754U;
+static uint32_t t41_awb_last_bgain = 0x0a6cU;
 /* Keep diagnostic state in .data.  Unrepaired functions still address a few
  * legacy BSS objects by relative layout, so adding ordinary zero-filled BSS
  * here can perturb unrelated capture state. */
@@ -31304,6 +31314,8 @@ static void t41_apply_stock_awb_gains(void)
     system_reg_write(0x0500c, gain_a);
     system_reg_write(0x05010, gain_b);
     system_reg_set_awb_trig(3, 0);
+    t41_awb_last_rgain = t41_stock_awb_gain_a;
+    t41_awb_last_bgain = t41_stock_awb_gain_b;
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock AWB gains applied a=%#x b=%#x read=%#x/%#x/%#x/%#x\n",
            t41_stock_awb_gain_a, t41_stock_awb_gain_b,
@@ -31419,10 +31431,18 @@ static int32_t t41_safe_awb_interrupt(uint32_t channel)
     if (!zones || !red || !green || !blue ||
         zones < t41_awb_min_zones || pixels < t41_awb_min_pixels)
         goto trace;
+    if (t41_awb_irq_count <= t41_awb_warmup_irqs)
+        goto trace;
     if (t41_awb_update_irqs > 1U &&
         t41_awb_irq_count % t41_awb_update_irqs)
         goto trace;
 
+    /*
+     * The packed AWB statistic is taken before WB multiplication.  Its
+     * G/R and G/B ratios therefore map directly to target gains through the
+     * OS04D10 calibration constants; multiplying by the current gain turns
+     * the loop into positive feedback and drives both channels to 0x1800.
+     */
     target_r = (uint32_t)div64_u64(green << 10, red);
     target_b = (uint32_t)div64_u64(green << 10, blue);
     target_r = (uint32_t)(((uint64_t)target_r *
@@ -31578,6 +31598,53 @@ static void t41_apply_stock_dmsc_profile(void)
            "tx_isp_t41_recovered: stock DMSC delta applied words=%u check=%#x/%#x/%#x/%#x\n",
            i, system_reg_read(0x0a008), system_reg_read(0x0a080),
            system_reg_read(0x0a1c4), system_reg_read(0x0a24c));
+}
+
+/*
+ * tisp_dmsc_refresh() correctly interpolates the gain-varying DMSC words,
+ * but five writer-owned static words sit outside that refresh.  The old
+ * driver left their 0x2cc9c high-gain oracle active even after AE reached
+ * daylight gain.  Select the matching static side before every recovered
+ * DMSC interpolation.  The threshold is halfway between the measured
+ * daylight (about 0xe829 Q16) and high-gain (0x2cc9c Q16) oracles.
+ */
+static unsigned int t41_dmsc_high_gain_q16 = 0x18000U;
+module_param(t41_dmsc_high_gain_q16, uint, 0644);
+MODULE_PARM_DESC(t41_dmsc_high_gain_q16,
+		 "Q16 log2 gain threshold selecting the stock high-gain DMSC static profile");
+
+static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16)
+{
+    static const uint32_t low_gain[][2] = {
+        { 0x0a048U, 0x00140019U },
+        { 0x0a198U, 0x00010008U },
+        { 0x0a208U, 0x01180320U },
+        { 0x0a2d8U, 0x01405014U },
+        { 0x0a2dcU, 0x01906419U },
+    };
+    static const uint32_t high_gain[][2] = {
+        { 0x0a048U, 0x000e0015U },
+        { 0x0a198U, 0x00010001U },
+        { 0x0a208U, 0x011803c0U },
+        { 0x0a2d8U, 0x00e0380eU },
+        { 0x0a2dcU, 0x01505415U },
+    };
+    const uint32_t (*profile)[2];
+    unsigned int count;
+    unsigned int i;
+
+    if (t41_stock_dmsc_profile > 0)
+        return;
+    if (gain_q16 >= t41_dmsc_high_gain_q16) {
+        profile = high_gain;
+        count = ARRAY_SIZE(high_gain);
+    } else {
+        profile = low_gain;
+        count = ARRAY_SIZE(low_gain);
+    }
+    for (i = 0; i < count; ++i)
+        system_reg_write(profile[i][0], profile[i][1]);
+    system_reg_write(0x0a19cU, 1U);
 }
 
 static void t41_apply_stock_ysp_profile(void)
@@ -55403,6 +55470,7 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 			ret = gib_ret;
 	}
 	if (mask & T41_GAIN_FANOUT_DMSC) {
+		t41_apply_stock_dmsc_gain_profile(gain_q16);
 		dmsc_ret = tisp_dmsc_refresh(channel, gain_q16);
 		if (dmsc_ret < 0 && !ret)
 			ret = dmsc_ret;
