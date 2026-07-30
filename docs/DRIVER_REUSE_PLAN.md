@@ -26,7 +26,7 @@ for:
 
 - signed and unsigned Q16 interpolation
 - typed 8-bit and 16-bit table interpolation
-- unsigned 32-bit fixed-point add/subtract with natural wraparound
+- unsigned 32-bit and 64-bit fixed-point add/subtract with natural wraparound
 - two- and three-operand unsigned 32-bit and 64-bit fixed-point multiplication
 - T23-compatible split multiplication with wrapped 32-bit partial products
 - OEM-compatible wrapped and full-range unsigned 32-bit fixed-point division
@@ -34,19 +34,20 @@ for:
 The per-SoC wrappers preserve their existing ABI and endpoint policy:
 
 - T23 uses signed interpolation with its eight-step table endpoint and
-  delegates its add/subtract and generation-specific wrapped multiply/divide
-  entry points.
+  delegates its 32/64-bit add/subtract and generation-specific wrapped
+  multiply/divide entry points.
 - T31 delegates its 32-bit fixed-point multiply wrappers to the common helpers.
   Its native 64-bit algorithm is available and tested in the common header,
   but the recovered AE translation unit retains an identical local inline body
   until an extra wrapper no longer changes its machine-code register allocation.
 - T41 uses the unsigned 8/16/32-bit interpolation variants with its ten-step
-  endpoint and delegates its fixed-point add/subtract, multiply, and
+  endpoint and delegates its 32/64-bit fixed-point add/subtract, multiply, and
   wrapped-divider wrappers.
 
 `tests/tx_isp_math_test.c` covers boundary behavior, OEM rounding, wrapped
-32-bit add/subtract and products, T23's split-product equivalence over Q1-Q31,
-Q0-Q63 64-bit products, typed tables, and randomized equivalence checks.
+32/64-bit add/subtract and products, T23's split-product equivalence over
+Q1-Q31, Q0-Q63 64-bit products, typed tables, and randomized equivalence
+checks.
 
 ### Day/night transition shell
 

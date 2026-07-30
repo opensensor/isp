@@ -214,6 +214,12 @@ static void test_fixed_point_add_subtract(void)
 	assert(tx_isp_fixadd_u32(0xffffffffU, 1) == 0);
 	assert(tx_isp_fixsub_u32(0xc00, 0x800) == 0x400);
 	assert(tx_isp_fixsub_u32(0, 1) == 0xffffffffU);
+	assert(tx_isp_fixadd_u64(0x100000000ULL, 0x200000000ULL) ==
+	       0x300000000ULL);
+	assert(tx_isp_fixadd_u64(0xffffffffffffffffULL, 1) == 0);
+	assert(tx_isp_fixsub_u64(0x300000000ULL, 0x200000000ULL) ==
+	       0x100000000ULL);
+	assert(tx_isp_fixsub_u64(0, 1) == 0xffffffffffffffffULL);
 }
 
 static unsigned int

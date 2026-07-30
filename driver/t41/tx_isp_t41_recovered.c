@@ -4134,8 +4134,6 @@ uint64_t fix_point_sub(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint3
 uint32_t fix_point_mult2(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 int32_t fix_point_mult3(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7);
 int32_t fix_point_div(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
-uint64_t fix_point_add_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
-uint64_t fix_point_sub_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
 int32_t fix_point_mult2_64(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 int32_t fix_point_mult3_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7);
 int32_t fix_point_div_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
@@ -39486,30 +39484,6 @@ int32_t fix_point_div(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4
     v1_4 = (uint32_t)(final_result >> 32);
 
     return (int32_t)(v0_6 | (uintptr_t)s0);
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017a1c origin=fragment_seed original=fix_point_add_64 */
-uint64_t fix_point_add_64(uint32_t pointpos, uint32_t padding,
-			  uint32_t left_low, uint32_t left_high,
-			  uint32_t right_low, uint32_t right_high)
-{
-	return fix_point_add(pointpos, padding, left_low, left_high,
-			     right_low, right_high);
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017a38 origin=fragment_seed original=fix_point_sub_64 */
-uint64_t fix_point_sub_64(uint32_t pointpos, uint32_t padding,
-			  uint32_t left_low, uint32_t left_high,
-			  uint32_t right_low, uint32_t right_high)
-{
-	uint64_t left = ((uint64_t)left_high << 32) | left_low;
-	uint64_t right = ((uint64_t)right_high << 32) | right_low;
-
-	(void)pointpos;
-	(void)padding;
-	if (left < right)
-		isp_printf(2, "fix_point_sub_64: unsigned underflow\n");
-	return left - right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017acc origin=fragment_seed original=fix_point_mult2_64 */

@@ -105,6 +105,17 @@ red/color and sharpness profile, passed night/auto/day, and logged zero ISP
 interrupt errors. The active module SHA-256 is
 `8ff2f59a2c2e555d88b2a9bd7d5f08911b2e84be33a0e9e75c4af1fdafc61a2c`.
 
+The SDK-declared 64-bit add/subtract entry points now live in the same adapter
+and delegate to common unsigned wraparound primitives. The recovered six-word
+forms represented the MIPS O32 expansion of `(pointpos, u64, u64)`; keeping the
+official C signature in the adapter makes that ABI explicit while retaining
+T41's underflow diagnostic. These entry points currently have no live callers.
+A one-shot boot decoded 151 frames in six seconds, passed night/auto/day,
+advanced both ISP cores with `error=0`, and preserved the accepted red/color
+and sharpness profile. No driver fault appeared in `dmesg`, `logread`, or
+`logcat`. The active module SHA-256 is
+`11c850f8dc83fecaeda9fba627e5c1bbeb5db4f77bf851b34adbd4a8432a161f`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

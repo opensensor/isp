@@ -34,6 +34,21 @@ u32 fix_point_sub_32(u32 point_pos, u32 left, u32 right)
 	return tx_isp_fixsub_u32(left, right);
 }
 
+u64 fix_point_add_64(u32 point_pos, u64 left, u64 right)
+{
+	(void)point_pos;
+	return tx_isp_fixadd_u64(left, right);
+}
+
+u64 fix_point_sub_64(u32 point_pos, u64 left, u64 right)
+{
+	(void)point_pos;
+	if (left < right)
+		isp_printf(2, "fix_point_sub_64: unsigned underflow\n");
+
+	return tx_isp_fixsub_u64(left, right);
+}
+
 s32 fix_point_mult2_32(s32 point_pos, s32 first, s32 second)
 {
 	if (point_pos < 0 || point_pos > 31)

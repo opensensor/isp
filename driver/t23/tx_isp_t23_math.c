@@ -30,6 +30,22 @@ int fix_point_sub_32(int point_pos, int left, int right)
 	return (int)tx_isp_fixsub_u32((u32)left, (u32)right);
 }
 
+u64 fix_point_add_64(u32 point_pos, u64 left, u64 right)
+{
+	(void)point_pos;
+	return tx_isp_fixadd_u64(left, right);
+}
+
+u64 fix_point_sub_64(u32 point_pos, u64 left, u64 right)
+{
+	(void)point_pos;
+	if (left < right)
+		isp_printf(2, "error: do not support negative number\n",
+			   (u32)left);
+
+	return tx_isp_fixsub_u64(left, right);
+}
+
 int fix_point_mult2_32(int point_pos, int first, int second)
 {
 	return (int)tx_isp_fixmul_wrapped_u32_unchecked((u32)point_pos,

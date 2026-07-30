@@ -387,6 +387,18 @@ tx_isp_fixsub_u32(unsigned int left, unsigned int right)
 	return left - right;
 }
 
+static inline unsigned long long
+tx_isp_fixadd_u64(unsigned long long left, unsigned long long right)
+{
+	return left + right;
+}
+
+static inline unsigned long long
+tx_isp_fixsub_u64(unsigned long long left, unsigned long long right)
+{
+	return left - right;
+}
+
 /*
  * T23's generation-local split multiply keeps every partial product in 32
  * bits, including the fractional product before its right shift. Preserve

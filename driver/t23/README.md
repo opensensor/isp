@@ -63,6 +63,15 @@ Current smoke-test status:
   123 in five, and decoded 124 in the five-second final check; mode transitions
   and ISP/VIC logs remained clean. The active module SHA-256 is
   `7ec01426f8701170cd13feddba543c52e90cdb424122f47dc8e9949a8c07187c`.
+- The same adapter now owns the SDK-declared 64-bit add/subtract entry points.
+  Their recovered six-word declarations were the MIPS O32 expansion of
+  `(pointpos, u64, u64)`; the adapter uses that authoritative C ABI, retains
+  T23's local underflow diagnostic, and delegates wraparound arithmetic to the
+  common library. These entry points currently have no live callers. A
+  one-shot boot decoded 149 frames in six seconds, passed night/auto/day,
+  advanced both ISP interrupt lines, and produced no driver fault in `dmesg`,
+  `logread`, or `logcat`. The active module SHA-256 is
+  `7ca7b50296bc689ec011ee77fa05efeb09d262eaeeacb555661b44e2456524ac`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

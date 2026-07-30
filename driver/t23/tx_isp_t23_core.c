@@ -14394,8 +14394,6 @@ int32_t fix_point_add(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, in
 int32_t fix_point_sub(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t fix_point_mult2(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t fix_point_mult3(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6, int32_t arg7, int32_t arg8);
-int64_t fix_point_add_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
-int32_t fix_point_sub_64(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t fix_point_mult2_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
 int32_t fix_point_mult3_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7);
 int32_t fix_point_div_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
@@ -37540,39 +37538,6 @@ int32_t fix_point_mult3(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
     a1 = v0;
     /* tailcall fix_point_mult2(arg1, a1, v0, v1, arg7, arg8) */
     return fix_point_mult2(arg1, a1, v0, v1, arg7, arg8);
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000135cc origin=fragment_seed original=fix_point_add_64 */
-int64_t fix_point_add_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
-{
-	uint32_t *v0 = arg5;
-	uint32_t v1 = arg4;
-	uint32_t a2_new;
-	v0 = a2 + (uintptr_t)v0;
-	a2_new = v0 < a2;
-	a3 = a3 + v1;
-	v1 = a2_new + a3;
-	(void)v1;
-	return (int64_t)v0;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000135e8 origin=model_output original=fix_point_sub_64 */
-int32_t fix_point_sub_64(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6)
-{
-    if ((uint32_t)arg4 >= (uint32_t)arg6) {
-        int32_t *result = arg3 - arg5;
-        
-        if (arg6 == arg4) {
-            result = arg3 - arg5;
-        }
-        
-        if (arg6 != arg4 || (uint32_t)arg3 >= (uint32_t)arg5) {
-            return result;
-        }
-    }
-    
-    ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("error: do not support negative number\n"), (uintptr_t)(arg3));
-    return arg3 - arg5;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013670 origin=fragment_seed original=fix_point_mult2_64 */
