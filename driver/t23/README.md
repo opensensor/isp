@@ -72,6 +72,13 @@ Current smoke-test status:
   advanced both ISP interrupt lines, and produced no driver fault in `dmesg`,
   `logread`, or `logcat`. The active module SHA-256 is
   `7ca7b50296bc689ec011ee77fa05efeb09d262eaeeacb555661b44e2456524ac`.
+- The SDK's unsuffixed add/subtract pair has the same `(pointpos, u64, u64)`
+  contract and now lives beside the `_64` pair in the adapter. There are no
+  live callers; retaining both names is required by the vendor ABI. The
+  one-shot boot passed night/auto/day, decoded 123 frames in the five-second
+  final check, advanced both ISP interrupt lines, and logged no driver fault.
+  The active module SHA-256 is
+  `086c5467f5024c47ec04c945cd124bf6882b78be96e825c3c65c2215566291b8`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

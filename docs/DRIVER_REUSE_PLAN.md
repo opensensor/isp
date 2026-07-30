@@ -34,15 +34,15 @@ for:
 The per-SoC wrappers preserve their existing ABI and endpoint policy:
 
 - T23 uses signed interpolation with its eight-step table endpoint and
-  delegates its 32/64-bit add/subtract and generation-specific wrapped
+  delegates its generic/32/64-bit add/subtract and generation-specific wrapped
   multiply/divide entry points.
 - T31 delegates its 32-bit fixed-point multiply wrappers to the common helpers.
   Its native 64-bit algorithm is available and tested in the common header,
   but the recovered AE translation unit retains an identical local inline body
   until an extra wrapper no longer changes its machine-code register allocation.
 - T41 uses the unsigned 8/16/32-bit interpolation variants with its ten-step
-  endpoint and delegates its 32/64-bit fixed-point add/subtract, multiply, and
-  wrapped-divider wrappers.
+  endpoint and delegates its generic/32/64-bit fixed-point add/subtract,
+  multiply, and wrapped-divider wrappers.
 
 `tests/tx_isp_math_test.c` covers boundary behavior, OEM rounding, wrapped
 32/64-bit add/subtract and products, T23's split-product equivalence over

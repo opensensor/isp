@@ -116,6 +116,14 @@ and sharpness profile. No driver fault appeared in `dmesg`, `logread`, or
 `logcat`. The active module SHA-256 is
 `11c850f8dc83fecaeda9fba627e5c1bbeb5db4f77bf851b34adbd4a8432a161f`.
 
+The unsuffixed SDK add/subtract pair exposes the same `(pointpos, u64, u64)`
+contract and now lives beside the `_64` pair in the adapter. Both symbol names
+are retained for vendor ABI compatibility; neither pair currently has a live
+caller. The one-shot boot passed night/auto/day, decoded 126 frames in the
+five-second final check, advanced both ISP cores with `error=0`, and logged no
+driver fault. The active module SHA-256 is
+`c60fddd5000f96a7bfea49e67f059d5417e79e7643395cfbfc093f269186414b`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

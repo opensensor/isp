@@ -14390,8 +14390,6 @@ int32_t sub_13208(void);
 int32_t sub_13210(void);
 int32_t sub_13218(void);
 uint32_t tisp_math_exp2(uint32_t a0, uint32_t a1, uint32_t a2);
-int32_t fix_point_add(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
-int32_t fix_point_sub(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t fix_point_mult2(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t fix_point_mult3(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6, int32_t arg7, int32_t arg8);
 int32_t fix_point_mult2_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
@@ -37416,49 +37414,6 @@ int32_t sub_13218(void)
     v0 = 0;
 
     return 0;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013304 origin=model_output original=fix_point_add */
-int32_t fix_point_add(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6) {
-    return arg3 + arg5;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000013320 origin=model_output original=fix_point_sub */
-int32_t fix_point_sub(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6) {
-    int32_t *s0;
-    int32_t *s1;
-    int32_t *s2;
-    int32_t *s3;
-    int32_t *result;
-
-    s2 = arg3;
-    s0 = arg4;
-    s3 = arg6;
-
-    /* if (arg4 < arg6) goto error */
-    if ((uint32_t)arg4 < (uint32_t)arg6)
-        goto error;
-
-    s1 = arg5;
-
-    /* if (arg6 != arg4) goto epilogue */
-    if (arg6 != arg4)
-        goto epilogue;
-
-    /* arg6 == arg4, check if arg3 < arg5 */
-    result = (uintptr_t)s2 - (uintptr_t)s1;
-    if ((uint32_t)arg3 < (uint32_t)arg5)
-        goto error;
-
-    goto epilogue;
-
-error:
-    ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("error: do not support negative number\n"), (uintptr_t)(arg3));
-    return arg3 - arg5;
-
-epilogue:
-    result = (uintptr_t)s2 - (uintptr_t)s1;
-    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000133a8 origin=model_output original=fix_point_mult2 */

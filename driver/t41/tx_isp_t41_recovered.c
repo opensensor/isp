@@ -4129,8 +4129,6 @@ int32_t sub_17490(void);
 int32_t sub_17498(void);
 int32_t fix_point_div_32(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t tisp_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3);
-uint64_t fix_point_add(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
-uint64_t fix_point_sub(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5);
 uint32_t fix_point_mult2(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
 int32_t fix_point_mult3(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6, uint32_t arg7);
 int32_t fix_point_div(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, uint32_t arg6);
@@ -38907,34 +38905,6 @@ int32_t tisp_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3)
     }
 
     return (uintptr_t)v0 >> ((uintptr_t)s0 & 0x1f);
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000175ec origin=fragment_seed original=fix_point_add */
-uint64_t fix_point_add(uint32_t pointpos, uint32_t padding,
-		       uint32_t left_low, uint32_t left_high,
-		       uint32_t right_low, uint32_t right_high)
-{
-	uint64_t left = ((uint64_t)left_high << 32) | left_low;
-	uint64_t right = ((uint64_t)right_high << 32) | right_low;
-
-	(void)pointpos;
-	(void)padding;
-	return left + right;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000017608 origin=fragment_seed original=fix_point_sub */
-uint64_t fix_point_sub(uint32_t pointpos, uint32_t padding,
-		       uint32_t left_low, uint32_t left_high,
-		       uint32_t right_low, uint32_t right_high)
-{
-	uint64_t left = ((uint64_t)left_high << 32) | left_low;
-	uint64_t right = ((uint64_t)right_high << 32) | right_low;
-
-	(void)pointpos;
-	(void)padding;
-	if (left < right)
-		isp_printf(2, "fix_point_sub: unsigned underflow\n");
-	return left - right;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001769c origin=fragment_seed original=fix_point_mult2 */
