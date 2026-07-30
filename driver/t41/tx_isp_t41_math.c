@@ -147,6 +147,11 @@ s32 tisp_log2_fixed_to_fixed_64(u64 value, u32 input_precision,
 					   output_precision);
 }
 
+u32 tisp_math_exp2(u32 value, u32 input_precision, u32 output_precision)
+{
+	return tx_isp_exp2_u32(value, input_precision, output_precision);
+}
+
 s64 tisp_simple_intp(u32 index, u32 fraction, unsigned long table_address)
 {
 	const u32 *table = (const u32 *)table_address;

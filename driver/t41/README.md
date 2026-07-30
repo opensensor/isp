@@ -166,6 +166,15 @@ substream frames in three, and 125 post-day frames in five, with successful
 night/auto/day and zero ISP errors. The validated module SHA-256 is
 `c8c94049aaf125798f1496e3b00dcac70f08c63461c5533349b747220b00a6ba`.
 
+The complementary `tisp_math_exp2` entry point now delegates to the common
+33-node Q30 lookup/interpolation helper, which rejects invalid precision or
+table ranges instead of inheriting masked MIPS shifts. The active tuning paths
+use valid Q5/Q16 inputs. The device cycle decoded 150 main frames in six
+seconds, 75 substream frames in three, and 125 post-day frames in five;
+night/auto/day, `rvd`, image color/detail, and zero-error ISP interrupts all
+held. The validated module SHA-256 is
+`b55cc521890fe4f37d4b19f67d59113784ed176e40fd7ab11a4e2e95a6044741`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

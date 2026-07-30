@@ -104,10 +104,11 @@ their adapters. T41 now routes all four native two-/three-operand multiply
 symbols and both native divide symbols through full-range primitives. The
 64-bit divider uses bounded shift/subtract arithmetic so kernel builds do not
 acquire compiler-runtime division dependencies. T41's integer/fixed 32-/64-bit
-log2 entry points also use the shared normalized-square implementation. T31
-retains size-neutral local copies in its recovered AE object, and T23 retains
-its recovered multiply bodies after an adapter extraction reproducibly
-terminated `rvd` during startup.
+log2 entry points use the shared normalized-square implementation, and its
+exp2 entry point uses the shared bounded 33-node Q30 interpolation. T31 retains
+size-neutral local copies in its recovered AE object, and T23 retains its
+recovered multiply bodies after an adapter extraction reproducibly terminated
+`rvd` during startup.
 
 ### Proprietary tuning ABI
 
