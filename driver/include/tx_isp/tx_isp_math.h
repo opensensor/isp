@@ -400,6 +400,23 @@ tx_isp_fixsub_u64(unsigned long long left, unsigned long long right)
 }
 
 /*
+ * Round a signed fixed-point value while removing `precision` fractional
+ * bits. Ingenic returns the input unchanged for Q0 and Q63+, and for Q1..Q62
+ * adds the highest discarded bit to the arithmetic-shifted result.
+ */
+static inline long long
+tx_isp_round_s64(long long value, unsigned int precision)
+{
+	unsigned int rounding_shift = precision - 1U;
+
+	if (rounding_shift >= 62U)
+		return value;
+
+	return (value >> precision) +
+		((value >> rounding_shift) & 1LL);
+}
+
+/*
  * T23's generation-local split multiply keeps every partial product in 32
  * bits, including the fractional product before its right shift. Preserve
  * that wraparound separately from the full-range T31/T41 primitive above.

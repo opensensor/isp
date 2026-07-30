@@ -4148,7 +4148,9 @@ int32_t tisp_log2_int_to_fixed(uint32_t arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_log2_fixed_to_fixed(uint32_t a0, uint32_t a1, uint32_t a2);
 int32_t tisp_log2_int_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 int32_t tisp_log2_fixed_to_fixed_64(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
-int64_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3);
+/* MIPS O32 word view of the SDK tisp_round_int64(s64, s32) ABI. */
+int64_t tisp_round_int64(int32_t value_low, int32_t value_high,
+			 int32_t precision);
 int64_t tisp_max(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 int64_t tisp_min(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 uint32_t tisp_ratio(int32_t arg1, int32_t arg2, int32_t arg3);
@@ -40035,21 +40037,6 @@ int32_t tisp_log2_fixed_to_fixed_64(uint32_t value_low,
 	return tisp_log2_int_to_fixed_64(value_low, value_high,
 					out_precision, 0) -
 		(in_precision << (out_precision & 0x1f));
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000184cc origin=model_output original=tisp_round_int64 */
-int64_t tisp_round_int64(int32_t value_low, int32_t value_high,
-			 int32_t precision)
-{
-	int64_t value = (int64_t)(((uint64_t)(uint32_t)value_high << 32) |
-				  (uint32_t)value_low);
-	int64_t shifted;
-
-	if ((uint32_t)(precision - 1) >= 62)
-		return value;
-
-	shifted = value >> precision;
-	return shifted + (shifted & 1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018558 origin=fragment_seed original=tisp_max */

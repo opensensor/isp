@@ -222,6 +222,41 @@ static void test_fixed_point_add_subtract(void)
 	assert(tx_isp_fixsub_u64(0, 1) == 0xffffffffffffffffULL);
 }
 
+static long long reference_round_s64(long long value,
+				      unsigned int precision)
+{
+	if ((precision - 1U) >= 62U)
+		return value;
+
+	return (value >> precision) +
+		((value >> (precision - 1U)) & 1LL);
+}
+
+static void test_fixed_point_round_s64(void)
+{
+	unsigned int seed = 0x6400d123U;
+	unsigned int iteration;
+
+	assert(tx_isp_round_s64(0x180, 8) == 2);
+	assert(tx_isp_round_s64(0x17f, 8) == 1);
+	assert(tx_isp_round_s64(-0x180, 8) == -1);
+	assert(tx_isp_round_s64(-0x181, 8) == -2);
+	assert(tx_isp_round_s64(123, 0) == 123);
+	assert(tx_isp_round_s64(123, 63) == 123);
+
+	for (iteration = 0; iteration < 100000; iteration++) {
+		unsigned long long bits;
+		unsigned int precision = iteration % 64U;
+
+		seed = seed * 1664525U + 1013904223U;
+		bits = (unsigned long long)seed << 32;
+		seed = seed * 1664525U + 1013904223U;
+		bits |= seed;
+		assert(tx_isp_round_s64((long long)bits, precision) ==
+		       reference_round_s64((long long)bits, precision));
+	}
+}
+
 static unsigned int
 reference_t23_fixmul_u32(unsigned int point_pos, unsigned int first,
 			 unsigned int second)
@@ -452,6 +487,7 @@ int main(void)
 	test_typed_interpolation();
 	test_fixed_point_multiply();
 	test_fixed_point_add_subtract();
+	test_fixed_point_round_s64();
 	test_t23_fixed_point_multiply_equivalence();
 	test_fixed_point_multiply_64();
 	test_fixed_point_divide();

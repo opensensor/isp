@@ -62,6 +62,11 @@ u64 fix_point_sub_64(u32 point_pos, u64 left, u64 right)
 	return tx_isp_fixsub_u64(left, right);
 }
 
+s64 tisp_round_int64(s64 value, s32 precision)
+{
+	return tx_isp_round_s64(value, (u32)precision);
+}
+
 int fix_point_mult2_32(int point_pos, int first, int second)
 {
 	return (int)tx_isp_fixmul_wrapped_u32_unchecked((u32)point_pos,

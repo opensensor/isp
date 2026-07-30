@@ -124,6 +124,19 @@ five-second final check, advanced both ISP cores with `error=0`, and logged no
 driver fault. The active module SHA-256 is
 `c60fddd5000f96a7bfea49e67f059d5417e79e7643395cfbfc093f269186414b`.
 
+The signed 64-bit rounding entry point now lives in the math adapter and uses
+the exact behavior recovered directly from both stock modules: arithmetic
+shift by `p`, then add bit `p-1`. This replaces a recovered T41 body that added
+the parity bit of the already-shifted result. The helper is live throughout
+gamma, CSC, color, and filter coefficient generation, so this boundary
+requires same-scene image validation in addition to the normal smoke cycle.
+The candidate has the stock 140-byte routine size, decoded 152 frames in six
+seconds, passed night/auto/day, and advanced both ISP cores with `error=0`.
+The post-boot frame retained the accepted sharpness and color profile, while
+`dmesg`, `logread`, and `logcat` showed no driver fault. The active module
+SHA-256 is
+`1aed03add34f3e213e39a654c0389603c23eecf2e39f6d1c9455df87248fbda6`.
+
 The OEM-derived leading-bit helpers now return their computed positions rather
 than zero, and `private_copy_from_user` once again uses the kernel's checked
 copy path. This restores a prerequisite for fixed-point tuning math and for the

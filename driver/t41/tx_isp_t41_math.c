@@ -64,6 +64,11 @@ u64 fix_point_sub_64(u32 point_pos, u64 left, u64 right)
 	return tx_isp_fixsub_u64(left, right);
 }
 
+s64 tisp_round_int64(s64 value, s32 precision)
+{
+	return tx_isp_round_s64(value, (u32)precision);
+}
+
 s32 fix_point_mult2_32(s32 point_pos, s32 first, s32 second)
 {
 	if (point_pos < 0 || point_pos > 31)

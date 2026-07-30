@@ -79,6 +79,14 @@ Current smoke-test status:
   final check, advanced both ISP interrupt lines, and logged no driver fault.
   The active module SHA-256 is
   `086c5467f5024c47ec04c945cd124bf6882b78be96e825c3c65c2215566291b8`.
+- The stock T23 and T41 modules implement identical signed 64-bit fixed-point
+  rounding semantics. T23's adapter now exports the official `(s64, s32)` ABI
+  and delegates to the common helper, replacing a recovered body that invoked
+  the arithmetic-shift helper four times and lost the high return word. T23
+  currently has no live caller. The one-shot boot decoded 149 frames in six
+  seconds, passed night/auto/day, advanced both ISP interrupt lines, and logged
+  no driver fault. The active module SHA-256 is
+  `3b95aabf4e5014f53ac4fa003553a3cdf86873bd727542723fb064564f5b5669`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

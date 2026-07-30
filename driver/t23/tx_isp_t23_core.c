@@ -14720,7 +14720,9 @@ int32_t tisp_defog_param_array_set(int32_t arg1, int32_t arg2);
 int32_t defog_itp(int32_t arg1, int32_t arg2, int32_t arg3);
 uint8_t tisp_g_defog_str_internal(uint32_t a0, uintptr_t a1);
 int32_t tisp_s_defog_str_internal(uint32_t a0, uintptr_t a1);
-int32_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3);
+/* MIPS O32 word view of the SDK tisp_round_int64(s64, s32) ABI. */
+int64_t tisp_round_int64(int32_t value_low, int32_t value_high,
+			 int32_t precision);
 int32_t tisp_clm_sort_ct_list(int32_t *arg1);
 int32_t system_reg_write_clm(int32_t arg1, int32_t arg2, int32_t arg3);
 int32_t clm_lut2reg(int16_t *arg1, uint8_t *arg2, void *arg3, int32_t arg4);
@@ -63846,34 +63848,6 @@ store_results:
     s1 = local_18;
     s0 = local_14;
     return 0;
-}
-
-/* WHOLE_DRIVER_CANDIDATE fn_000000000003ada0 origin=model_output original=tisp_round_int64 */
-int32_t tisp_round_int64(int32_t arg1, int32_t arg2, int32_t arg3) {
-    int32_t *result = arg1;
-    int32_t shift = arg3 - 1;
-
-    if ((uint32_t)shift < 62) {
-        int32_t *v0;
-        int32_t v1;
-        /* First call: __ashrdi3(arg1, arg2, arg3) */
-        v0 = __ashrdi3(arg1, arg2, arg3);
-        v1 = __ashrdi3(arg1, arg2, arg3);
-        /* Second call: __ashrdi3(arg1, arg2, arg3-1) */
-        int32_t v0_2 = __ashrdi3(result, arg2, shift);
-        int32_t v1_2 = __ashrdi3(result, arg2, shift);
-        int32_t *s1 = v0;
-        int32_t *s5 = v1_2;
-        result = (v0_2 & 1) + (uintptr_t)s1;
-        int32_t s1_ovf = (result < s1) ? 1 : 0;
-        int32_t *s3 = (void *)(s1_ovf + (uintptr_t)s5);
-        /* return v0=result, v1=s3 */
-        (void)v1;
-        (void)v0_2;
-        return result;
-    }
-
-    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003ae38 origin=model_output original=tisp_clm_sort_ct_list */
