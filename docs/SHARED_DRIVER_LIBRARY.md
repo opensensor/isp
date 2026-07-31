@@ -131,6 +131,15 @@ size, and direction for host validation without depending on a kernel's
 `_IOC` definitions. `tests/tx_isp_frame_channel_test.c` checks the contiguous
 event contract plus every legacy and T41 envelope.
 
+The header also owns the fixed five-word, 20-byte request-buffer envelope,
+named count/type/memory/capabilities/reserved positions, and the legacy
+stream-on/off commands. T31 consumes the shared structure directly. T23 and
+T41 use the named positions in their existing arrays to retain recovered
+instruction layout. Allocation limits, queue release, stream transitions, and
+generation-divergent remote events remain in the adapters. Sequential builds
+produce the same validated module hashes, so this extraction is binary-neutral
+on all three active SoCs.
+
 ### Frame-image format ABI
 
 `tx_isp_frame_format.h` models the private frame-channel image format without

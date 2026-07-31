@@ -14,6 +14,30 @@
 #define TX_ISP_FRAME_EVENT_BUFFER_DONE		0x03000006U
 
 /*
+ * REQBUFS is the same five-word wire object in every recovered generation.
+ * Allocation ownership and the returned count remain generation-specific.
+ */
+enum tx_isp_frame_request_word {
+	TX_ISP_FRAME_REQUEST_WORD_COUNT = 0,
+	TX_ISP_FRAME_REQUEST_WORD_TYPE,
+	TX_ISP_FRAME_REQUEST_WORD_MEMORY,
+	TX_ISP_FRAME_REQUEST_WORD_CAPABILITIES,
+	TX_ISP_FRAME_REQUEST_WORD_RESERVED,
+	TX_ISP_FRAME_REQUEST_WORD_COUNT_TOTAL,
+};
+
+struct tx_isp_frame_request_wire {
+	u32 count;
+	u32 type;
+	u32 memory;
+	u32 capabilities;
+	u32 reserved;
+};
+
+#define TX_ISP_FRAME_REQUEST_BYTES		0x14U
+#define TX_ISP_FRAME_STREAM_TYPE_BYTES		0x04U
+
+/*
  * T23/T31 retain the V4L2 ('V') ioctl family.  T41 uses its private 'T'
  * family and the 116-byte extended format.
  */
@@ -23,6 +47,8 @@
 #define TX_ISP_FRAME_IOCTL_LEGACY_QUERYBUF	0xc0445609U
 #define TX_ISP_FRAME_IOCTL_LEGACY_QBUF		0xc044560fU
 #define TX_ISP_FRAME_IOCTL_LEGACY_DQBUF		0xc0445611U
+#define TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON	0x80045612U
+#define TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF	0x80045613U
 #define TX_ISP_FRAME_IOCTL_LEGACY_WAIT		0x400456bfU
 
 #define TX_ISP_FRAME_IOCTL_T41_SET_FORMAT	0xc0745451U

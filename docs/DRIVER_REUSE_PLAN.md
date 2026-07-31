@@ -189,6 +189,12 @@ families. T23/T31 use the legacy `V` family with a 112-byte format; T41 uses
 its private `T` family with the 116-byte flip extension. Small pure decoders
 make type, number, payload size, and direction testable on the host.
 
+The same header defines the compiler-independent 20-byte REQBUFS object and
+its five named word positions. T31 uses the structure directly; T23 and T41
+retain code-generation-stable arrays while replacing raw positions with those
+names. The legacy stream-on/off command IDs and their four-byte scalar payload
+are common, but each generation still owns stream state and hardware order.
+
 The common event range intentionally ends at `0x03000006`. Event meanings
 above buffer completion diverge between recovered generations and stay local
 until device evidence proves otherwise. T23's aliases, T31's frame/core/VIC

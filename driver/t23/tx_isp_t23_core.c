@@ -9500,8 +9500,8 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TISP_TOTAL_GAIN_1X (1U << 8)
 #define REGTRACE_TISP_AE_LUMA_DAY 80U
 #define REGTRACE_TISP_WB_GAIN_NEUTRAL 256U
-#define REGTRACE_T23_VIDIOC_STREAMON 0x80045612U
-#define REGTRACE_T23_VIDIOC_STREAMOFF 0x80045613U
+#define REGTRACE_T23_VIDIOC_STREAMON TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON
+#define REGTRACE_T23_VIDIOC_STREAMOFF TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF
 
 int32_t system_reg_write(uint32_t a0, uint32_t a1);
 int32_t system_reg_read(uint32_t a0);
@@ -14149,7 +14149,7 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
         break;
     }
     case REGTRACE_FRAMECHAN_REQBUFS: {
-        uint32_t words[5];
+        uint32_t words[TX_ISP_FRAME_REQUEST_WORD_COUNT_TOTAL];
 
         memset(words, 0, sizeof(words));
         if (arg && copy_from_user(words, (const void __user *)(uintptr_t)arg,
@@ -14159,7 +14159,9 @@ static long regtrace_framechan_ioctl(struct file *file, unsigned int cmd, unsign
         }
         if (regtrace_t23_log_framechan_payloads)
             printk(KERN_INFO "tx_isp_t23_recovered: framechan%d reqbufs count=%u type=%u memory=%u ret=0\n",
-                   channel, words[0], words[1], words[2]);
+                   channel, words[TX_ISP_FRAME_REQUEST_WORD_COUNT],
+                   words[TX_ISP_FRAME_REQUEST_WORD_TYPE],
+                   words[TX_ISP_FRAME_REQUEST_WORD_MEMORY]);
         break;
     }
     case REGTRACE_FRAMECHAN_QBUF: {

@@ -3773,13 +3773,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return 0;
     }
     case TX_ISP_FRAME_IOCTL_LEGACY_REQBUFS: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
-        struct v4l2_requestbuffers {
-            uint32_t count;
-            uint32_t type;
-            uint32_t memory;
-            uint32_t capabilities;
-            uint32_t reserved[1];
-        } reqbuf;
+        struct tx_isp_frame_request_wire reqbuf;
+        /* Shared fixed-width userspace envelope; allocation stays local. */
+        /* Keep this declaration block line-stable for recovered diagnostics. */
+        /* count may be reduced by the T31 memory policy before copy-out. */
+        /* type and memory retain the caller's V4L2-compatible values. */
+        /* capabilities and reserved are passed through unchanged. */
+        /* End of the line-stable shared request declaration block. */
 
         if (copy_from_user(&reqbuf, argp, sizeof(reqbuf)))
             return -EFAULT;
@@ -4301,7 +4301,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0x80045612: { // VIDIOC_STREAMON - Start streaming
+    case TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON: { // VIDIOC_STREAMON - Start streaming
         uint32_t type;
         struct tx_isp_subdev *vic_sd = NULL;
         int ret = 0;
@@ -4386,7 +4386,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
     }
-    case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
+    case TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF: { // VIDIOC_STREAMOFF - Stop streaming
         uint32_t type;
         frame_channel_drain_deliverability_queues(state);
 
@@ -5267,10 +5267,10 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     case 0x800456d3: { // TX_ISP_VIDEO_LINK_STREAM_OFF - Disable video link streaming
         return tx_isp_video_link_stream(isp_dev, 0);
     }
-    case 0x80045612: { // VIDIOC_STREAMON - Start video streaming
+    case TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON: { // VIDIOC_STREAMON - Start video streaming
         return tx_isp_video_s_stream(isp_dev, 1);
     }
-    case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
+    case TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF: { // VIDIOC_STREAMOFF - Stop video streaming
         return tx_isp_video_s_stream(isp_dev, 0);
     }
     case 0x40045626: {  // VIDIOC_GET_SENSOR_INFO - Simple success response (USERSPACE EXPECTS THIS!)

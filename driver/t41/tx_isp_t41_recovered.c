@@ -27368,7 +27368,7 @@ frame_channel_release0x64:
 static int t41_frame_channel_reqbufs_clean(void *channel,
                                            void __user *user_req)
 {
-    uint32_t req[5];
+    uint32_t req[TX_ISP_FRAME_REQUEST_WORD_COUNT_TOTAL];
     uint32_t requested;
     uint32_t old_count;
     uint32_t allocated = 0;
@@ -27384,19 +27384,19 @@ static int t41_frame_channel_reqbufs_clean(void *channel,
         return -EBUSY;
 
     old_count = *(uint32_t *)((char *)channel + 0x218);
-    if (!req[0] || old_count ||
-        req[2] != *(uint32_t *)((char *)channel + 0x48)) {
+    if (!req[TX_ISP_FRAME_REQUEST_WORD_COUNT] || old_count ||
+        req[TX_ISP_FRAME_REQUEST_WORD_MEMORY] != *(uint32_t *)((char *)channel + 0x48)) {
         __vb2_queue_free((char *)channel + 0x2c, old_count);
-        if (!req[0]) {
-            req[0] = 0;
+        if (!req[TX_ISP_FRAME_REQUEST_WORD_COUNT]) {
+            req[TX_ISP_FRAME_REQUEST_WORD_COUNT] = 0;
             return private_copy_to_user(user_req, req, sizeof(req)) ?
                 -EFAULT : 0;
         }
     }
-    if (req[2] != *(uint32_t *)((char *)channel + 0x48))
+    if (req[TX_ISP_FRAME_REQUEST_WORD_MEMORY] != *(uint32_t *)((char *)channel + 0x48))
         return -EINVAL;
 
-    requested = req[0] > 64 ? 64 : req[0];
+    requested = req[TX_ISP_FRAME_REQUEST_WORD_COUNT] > 64 ? 64 : req[TX_ISP_FRAME_REQUEST_WORD_COUNT];
     buffer_size = *(uint32_t *)((char *)channel + 0x40);
     for (index = 0; index < requested; index++) {
         char *buffer = private_kmalloc(buffer_size, 0x24000c0);
@@ -27439,7 +27439,7 @@ static int t41_frame_channel_reqbufs_clean(void *channel,
     }
 
     *(uint32_t *)((char *)channel + 0x218) = old_count + allocated;
-    req[0] = allocated;
+    req[TX_ISP_FRAME_REQUEST_WORD_COUNT] = allocated;
     if (*(uint32_t *)((char *)channel + 0x2dc) == 0 && direct_mode)
         g_banks_sum = allocated;
 
@@ -27461,7 +27461,7 @@ static int t41_frame_channel_reqbufs_clean(void *channel,
            "tx_isp_t41_recovered: reqbufs clean channel=%u count=%u "
            "type=%u memory=%u buffer_size=%u\n",
            *(uint32_t *)((char *)channel + 0x2dc), allocated,
-           req[1], req[2], buffer_size);
+           req[TX_ISP_FRAME_REQUEST_WORD_TYPE], req[TX_ISP_FRAME_REQUEST_WORD_MEMORY], buffer_size);
     return 0;
 }
 

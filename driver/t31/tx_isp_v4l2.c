@@ -19,6 +19,7 @@
 #include <media/videobuf2-dma-contig.h>
 #include "include/tx_isp.h"
 #include "include/tx_isp_device.h"
+#include "../include/tx_isp/tx_isp_frame_channel.h"
 
 /* V4L2 frame channel device structure */
 struct tx_isp_v4l2_device {
@@ -374,8 +375,8 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
     memset(&fake_file, 0, sizeof(fake_file));
     fake_file.private_data = (void *)(unsigned long)dev->channel_num;
 
-    /* Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
-    ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045612, (unsigned long)&type);
+    /* Route to the legacy frame-channel STREAMON contract. */
+    ret = frame_channel_unlocked_ioctl(&fake_file, TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON, (unsigned long)&type);
 
     pr_info("*** V4L2 Channel %d: STREAMON result=%d ***\n",
             dev->channel_num, ret);
@@ -410,8 +411,8 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
     memset(&fake_file, 0, sizeof(fake_file));
     fake_file.private_data = (void *)(unsigned long)dev->channel_num;
 
-    /* Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
-    ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045613, (unsigned long)&type);
+    /* Route to the legacy frame-channel STREAMOFF contract. */
+    ret = frame_channel_unlocked_ioctl(&fake_file, TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF, (unsigned long)&type);
 
     pr_info("*** V4L2 Channel %d: STREAMOFF result=%d ***\n",
             dev->channel_num, ret);

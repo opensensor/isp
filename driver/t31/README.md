@@ -82,6 +82,9 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   ioctl envelopes; Raptor reports both streams at 25 fps and saved a fresh
   302,532-byte 1920x1080 JPEG while external monitoring occupied the RTSP
   server's four client slots
+- the frame-channel dispatcher now uses the compiler-independent common
+  20-byte request-buffer structure and common legacy stream command names;
+  its memory-pressure limits and allocation state remain local
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.

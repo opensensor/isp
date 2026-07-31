@@ -49,7 +49,9 @@ The project has moved well beyond initial bring-up.
   reaches hardware
 - T23, T31, and T41 share the proven frame-channel event namespace and exact
   legacy-`V`/T41-`T` private ioctl envelopes without conflating the
-  generation-specific events above buffer completion
+  generation-specific events above buffer completion; the common contract
+  also owns the fixed 20-byte request-buffer wire object and legacy stream
+  command IDs
 - T31 applies evidence-backed SC2336 day/night DMSC correction profiles
 - T23 and T41 link recovered cores with logical shared-library adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree

@@ -81,7 +81,9 @@ module SHA-256 is
 `64e7103e81765b5c72a42088bb7b46a12cea1538aae21a9d3cfe4f802ffbc5da`.
 
 The shared frame-channel contract now names the set/get-format, stream,
-queue, and completion events plus every T41 private ioctl envelope. The
+queue, and completion events plus every T41 private ioctl envelope. Its
+REQBUFS path also consumes the common five-word count/type/memory positions
+while retaining T41's local allocation, queue-free, and remote-event policy. The
 deterministic sequential build's fail-safe boot reports both 1920x1080 and
 640x360 streams at 25 fps and saved a fresh 379,001-byte main-stream JPEG.
 ISP IRQs advanced, forced day mode applied, and kernel, Raptor, and Android
