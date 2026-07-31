@@ -7935,20 +7935,20 @@ static int __fill_v4l2_buffer(struct frame_buffer *buf, struct v4l2_buffer *b)
     b->m.userptr = buf->m.userptr;
     b->length    = buf->length;
 
-    /* OEM: mask flags, keep only V4L2 standard bits, clear transient bits */
-    b->flags &= TX_ISP_FRAME_FLAG_RETAIN_MASK;
-
-    /* OEM: merge state into flags */
-    switch (buf->state) {
-    case 3: /* ACTIVE/DONE */
-        b->flags |= V4L2_BUF_FLAG_DONE;
-        break;
-    case 4: /* ERROR */
-        b->flags |= V4L2_BUF_FLAG_ERROR;
-        break;
-    default:
-        break;
-    }
+    /* Apply the recovered T31 queue-state policy to persistent V4L2 flags. */
+    b->flags = tx_isp_frame_flags_t31(b->flags, 0, buf->state);
+    /*
+     * This function sits inside a recovered translation unit whose later
+     * dynamic-debug descriptors retain source line numbers.  Keep this
+     * explanatory block at twelve physical lines so extracting the policy
+     * does not perturb those descriptors or the validated module image.
+     * The common helper owns only the persistent-mask and state-to-flag map.
+     * Buffer ownership, queue locking, copy direction, timestamps, and DMA
+     * lifecycle remain in the T31 frame-channel implementation.
+     * This constraint is temporary: once the remaining recovered monolith
+     * is separated into logical objects, ordinary formatting can replace
+     * this layout-preserving comment without shifting unrelated metadata.
+     */
 
     return 0;
 }

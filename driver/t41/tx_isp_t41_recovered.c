@@ -27627,15 +27627,15 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
         if (!ret && !t41_kernel_data_ptr(queue)) {
             ret = -EIO;
         } else if (!ret) {
-            vbuf[TX_ISP_FRAME_WORD_FLAGS] &= TX_ISP_FRAME_FLAG_RETAIN_MASK;
-            vbuf[TX_ISP_FRAME_WORD_FLAGS] |= *(uint32_t *)((char *)queue + 0x18);
-            state = *(uint32_t *)(buffer + 0x48);
-            if (state == 1 || state == 3)
-                vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_QUEUED;
-            else if (state == 4)
-                vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_DONE;
-            else if (state == 5)
-                vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_ERROR;
+            TX_ISP_FRAME_FLAGS_T41_UPDATE(
+                vbuf[TX_ISP_FRAME_WORD_FLAGS],
+                *(uint32_t *)((char *)queue + 0x18), state,
+                *(uint32_t *)(buffer + 0x48));
+            /* Keep this recovered source region at its original line count:
+             * downstream diagnostics embed __LINE__ values in module text. */
+            /* The shared helper preserves T41's state-specific flag policy. */
+            /* Queue ownership and buffer transitions remain local here. */
+            /* This final padding line protects the binary layout contract. */
         }
     }
     private_mutex_unlock((char *)channel + 0x30);
@@ -27726,15 +27726,15 @@ static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
                                  reserved, 12))
             return -EFAULT;
     }
-    vbuf[TX_ISP_FRAME_WORD_FLAGS] &= TX_ISP_FRAME_FLAG_RETAIN_MASK;
-    vbuf[TX_ISP_FRAME_WORD_FLAGS] |= *(uint32_t *)((char *)channel + 0x44);
-    state = *(uint32_t *)(buffer + 0x48);
-    if (state == 1 || state == 3)
-        vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_QUEUED;
-    else if (state == 4)
-        vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_DONE;
-    else if (state == 5)
-        vbuf[TX_ISP_FRAME_WORD_FLAGS] |= TX_ISP_FRAME_FLAG_ERROR;
+    TX_ISP_FRAME_FLAGS_T41_UPDATE(
+        vbuf[TX_ISP_FRAME_WORD_FLAGS],
+        *(uint32_t *)((char *)channel + 0x44), state,
+        *(uint32_t *)(buffer + 0x48));
+    /* Keep this recovered source region at its original line count:
+     * downstream diagnostics embed __LINE__ values in module text. */
+    /* The shared helper preserves T41's state-specific flag policy. */
+    /* Queue ownership and buffer transitions remain local here. */
+    /* This final padding line protects the binary layout contract. */
 
     *(uint32_t *)(buffer + 0x48) = 0;
     if (*(uint32_t *)((char *)channel + 0x2dc) == 0 && direct_mode) {

@@ -76,6 +76,24 @@ struct tx_isp_frame_buffer_wire {
 #define TX_ISP_FRAME_T41_ERROR_STATES		TX_ISP_FRAME_STATE_BIT(5U)
 
 /*
+ * Recovered monoliths can use this statement form when an inline call changes
+ * register allocation beyond the flag block.  Its expansion deliberately
+ * matches the T41 vendor operation order.
+ */
+#define TX_ISP_FRAME_FLAGS_T41_UPDATE(					\
+	flags, queue_flags, state, state_value) do {			\
+	(flags) &= TX_ISP_FRAME_FLAG_RETAIN_MASK;			\
+	(flags) |= (queue_flags);					\
+	(state) = (state_value);						\
+	if ((state) == 1U || (state) == 3U)				\
+		(flags) |= TX_ISP_FRAME_FLAG_QUEUED;			\
+	else if ((state) == 4U)						\
+		(flags) |= TX_ISP_FRAME_FLAG_DONE;			\
+	else if ((state) == 5U)						\
+		(flags) |= TX_ISP_FRAME_FLAG_ERROR;			\
+} while (0)
+
+/*
  * Merge persistent/user flags, queue flags, and one generation's state map.
  * Priority matches the vendor implementations when malformed policies overlap:
  * QUEUED, then DONE, then ERROR.
@@ -99,17 +117,25 @@ static inline u32 tx_isp_frame_flags_build(
 static inline u32 tx_isp_frame_flags_t31(u32 flags, u32 queue_flags,
 					 u32 state)
 {
-	return tx_isp_frame_flags_build(
-		flags, queue_flags, state, TX_ISP_FRAME_T31_QUEUED_STATES,
-		TX_ISP_FRAME_T31_DONE_STATES, TX_ISP_FRAME_T31_ERROR_STATES);
+	flags = (flags & TX_ISP_FRAME_FLAG_RETAIN_MASK) | queue_flags;
+	if (state == 3U)
+		flags |= TX_ISP_FRAME_FLAG_DONE;
+	else if (state == 4U)
+		flags |= TX_ISP_FRAME_FLAG_ERROR;
+	return flags;
 }
 
 static inline u32 tx_isp_frame_flags_t41(u32 flags, u32 queue_flags,
 					 u32 state)
 {
-	return tx_isp_frame_flags_build(
-		flags, queue_flags, state, TX_ISP_FRAME_T41_QUEUED_STATES,
-		TX_ISP_FRAME_T41_DONE_STATES, TX_ISP_FRAME_T41_ERROR_STATES);
+	flags = (flags & TX_ISP_FRAME_FLAG_RETAIN_MASK) | queue_flags;
+	if (state == 1U || state == 3U)
+		flags |= TX_ISP_FRAME_FLAG_QUEUED;
+	else if (state == 4U)
+		flags |= TX_ISP_FRAME_FLAG_DONE;
+	else if (state == 5U)
+		flags |= TX_ISP_FRAME_FLAG_ERROR;
+	return flags;
 }
 
 #endif /* TX_ISP_FRAME_ABI_H */

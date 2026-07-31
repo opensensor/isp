@@ -95,9 +95,17 @@ and completion ordering remain generation-local. The active adapters now use
 the shared word and flag names in place of numeric offsets while preserving
 all three validated module images byte for byte.
 
+T31 calls its shared inline policy directly. T41 uses the equivalent common
+statement adapter because an ordinary inline call lets GCC reschedule the
+state load across the recovered flag block, perturbing register allocation
+throughout the large queue functions. The adapter retains the vendor operation
+order and keeps the validated T41 image byte-exact without duplicating policy
+in the recovered monolith.
+
 `tests/tx_isp_frame_abi_test.c` checks every important wire offset, total size,
 prefix size, persistent/queue flag merging, each recovered state transition,
-overlapping-policy priority, and out-of-range states.
+overlapping-policy priority, out-of-range states, and single evaluation by the
+layout-preserving T41 adapter.
 
 ### Sensor registry
 

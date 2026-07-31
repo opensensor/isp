@@ -65,6 +65,25 @@ static void test_t41_states(void)
 	assert(tx_isp_frame_flags_t41(source, queue, 32) == base);
 }
 
+static void test_t41_statement_adapter(void)
+{
+	const uint32_t queue_values[] = { 0x00000401U };
+	const uint32_t state_values[] = { 4U };
+	uint32_t flags = 0xffffffffU;
+	unsigned int queue_index = 0;
+	unsigned int state_index = 0;
+	uint32_t state = 99U;
+
+	TX_ISP_FRAME_FLAGS_T41_UPDATE(
+		flags, queue_values[queue_index++], state,
+		state_values[state_index++]);
+	assert(queue_index == 1);
+	assert(state_index == 1);
+	assert(state == 4);
+	assert(flags == ((0xffffffffU & TX_ISP_FRAME_FLAG_RETAIN_MASK) |
+			 0x00000401U | TX_ISP_FRAME_FLAG_DONE));
+}
+
 static void test_policy_priority(void)
 {
 	const uint32_t overlap = TX_ISP_FRAME_STATE_BIT(7U);
@@ -81,6 +100,7 @@ int main(void)
 {
 	test_t31_states();
 	test_t41_states();
+	test_t41_statement_adapter();
 	test_policy_priority();
 	puts("tx_isp_frame_abi tests passed");
 	return 0;
