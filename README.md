@@ -47,6 +47,9 @@ The project has moved well beyond initial bring-up.
 - T23, T31, and T41 share checked NV12 DMA binding, including allocation
   length, complete 32-bit address-range, and Y/UV plane validation before QBUF
   reaches hardware
+- T23, T31, and T41 share the proven frame-channel event namespace and exact
+  legacy-`V`/T41-`T` private ioctl envelopes without conflating the
+  generation-specific events above buffer completion
 - T31 applies evidence-backed SC2336 day/night DMSC correction profiles
 - T23 and T41 link recovered cores with logical shared-library adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree
@@ -99,6 +102,7 @@ Important driver files:
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
 - `driver/include/tx_isp/tx_isp_tuning_abi.h` — generation-aware proprietary control wire ABI
 - `driver/include/tx_isp/tx_isp_frame_abi.h` — exact 32-bit frame-buffer wire layout and generation-aware state flags
+- `driver/include/tx_isp/tx_isp_frame_channel.h` — shared frame-channel event IDs, generation-qualified ioctl envelopes, and ioctl decoders
 - `driver/include/tx_isp/tx_isp_frame_format.h` — compiler-independent 112/116-byte frame-image format ABI
 - `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities

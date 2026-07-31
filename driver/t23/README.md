@@ -21,8 +21,9 @@ descriptors, and expression/EV response packers. The frame-layout adapter
 supplies overflow-checked NV12 geometry and the shared T23/T31 MDNS auxiliary
 layout. Its private frame-channel arrays use the shared 68-byte frame-buffer
 wire ABI and named word/flag constants. Its recovered 112-byte frame-image
-format is compile-time checked against the shared format ABI. T23 still owns
-dispatch, queue state,
+format is compile-time checked against the shared format ABI. The
+frame-channel compatibility aliases now use the common legacy-`V` ioctl
+envelopes. T23 still owns dispatch, queue state,
 alignment policy, register writes,
 sensor-derived values, and its 12-byte allocation ABI's page padding.
 

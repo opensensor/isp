@@ -26,6 +26,9 @@ just cosmetic:
 - `frame_image_format` embeds the shared fixed 48-byte pixel descriptor instead
   of Ingenic's GCC-5.4-only `v4l2_pix_format` extension. This restores the
   private format from 96 to the OEM/libimp 112 bytes on modern compilers.
+- The outer frame dispatcher and ISP/VIC handoffs use the shared proven event
+  IDs and legacy-`V` ioctl envelopes; generation-specific events above
+  buffer-done remain local.
 - `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
   deflicker LUT's fixed 120-word, repeated-tail ABI.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.
@@ -73,15 +76,19 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   76 frames in six seconds to 147 in six seconds while the main stream remains
   full-rate; a second boot decoded 124/122 main/sub frames in five seconds
 - the validated open module is active with SHA-256
-  `7fe1d1b488baef4afbac3087148555bf087fb77f3bc55be12c3ce1bbe58ff59b`;
+  `ab91a6d1c2e7341d09eb888c1c5d2be07b3e9200d021da811adf89263f0e7355`;
   forced day mode, ISP interrupts, `dmesg`, `logread`, and `logcat` all passed
+- the shared frame-channel names leave the complete loadable image unchanged;
+  the current build differs from the preceding module only in two bytes of
+  its non-loaded ELF string table and decoded 177/174 main/sub frames in the
+  seven-second inspection run
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.
 The validation retained exact 3,133,440/353,280-byte pools without rejecting a
 live buffer. The repaired pre-dequeue path decoded 501 main frames in 20
 seconds and 250 substream frames in 10 seconds. The validated module SHA-256
-is
+for that earlier DMA-binding cycle was
 `8a1e71f3f0479bbc450d5a98f7af910b572b1a5b0b331b03518a4ba466d5d731`.
 
 The common math library now exposes and host-tests the split 64-bit two- and

@@ -20,6 +20,7 @@ T40 is intentionally outside this refactor.
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
 | Proprietary tuning wire ABI | `tx_isp_tuning_abi.h` | `common/tx_isp_tuning_abi.c` | T23, T31, T41 |
 | Frame-buffer wire ABI and state flags | `tx_isp_frame_abi.h` | header-only pure functions | T23, T31, T41 |
+| Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T31, T41 |
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 
@@ -107,6 +108,28 @@ in the recovered monolith.
 prefix size, persistent/queue flag merging, each recovered state transition,
 overlapping-policy priority, out-of-range states, and single evaluation by the
 layout-preserving T41 adapter.
+
+### Frame-channel event and ioctl contracts
+
+`tx_isp_frame_channel.h` owns the device-proven remote event sequence from
+get/set format through stream on/off, queue buffer, and buffer completion
+(`0x03000001` through `0x03000006`). T23/T31 retain their V4L2 `V` private
+ioctl family and 112-byte format, while T41 retains its private `T` family and
+116-byte extended format. Set/get format, buffer requests, query/queue/dequeue,
+stream control, completion wait, bank/count, and alignment commands are named
+without manufacturing a false common command number across generations.
+
+Events `0x03000007` through `0x03000009` remain local. Recovered T31 and T41
+code assigns different queue-free, request, and VIC meanings in that range,
+so the shared namespace deliberately stops at the last contract supported by
+all three devices.
+
+T23's frame-channel compatibility aliases, T31's outer dispatcher and
+ISP/VIC event handoff, and T41's recovered dispatcher/IRQ handoff now consume
+the common names. Pure ioctl decoders expose command number, type, payload
+size, and direction for host validation without depending on a kernel's
+`_IOC` definitions. `tests/tx_isp_frame_channel_test.c` checks the contiguous
+event contract plus every legacy and T41 envelope.
 
 ### Frame-image format ABI
 
@@ -279,6 +302,19 @@ The resulting T31 module survived 100 consecutive ISP/exposure query pairs,
 day/night cycling, and RTSP decoding with no `dmesg`, `logread`, or `logcat`
 ioctl/fault signature.
 
+The frame-channel contract extraction kept T23 byte-identical and T31's
+complete loadable image byte-identical; T31 differed only in two bytes of the
+non-loaded ELF string table. T41's recovery compiler re-laid out the dormant
+tail of its decompiler-generated ioctl dispatcher even though the constants
+are equivalent, so it received a full fail-safe device cycle. Both 1920x1080
+and 640x360 streams sustained 25 fps, ISP interrupts advanced, day mode
+applied, and `dmesg`, `logread`, and `logcat` contained no fault signature.
+The final inspection boot decoded 177/174 T31 main/sub frames and 178/178 T41
+main/sub frames in seven seconds. Both staged loaders reported status zero
+with their one-shot markers consumed, leaving the tested open builds active.
+Ambient brightness and noise were not compared because a rainstorm changed
+the scene during validation.
+
 The subsequent common tuning-ABI extraction was rebuilt and reboot-tested on
 all three active devices. T23 decoded 124 main-stream frames in six seconds,
 T31 decoded 126 in ten seconds, and T41 decoded 201 in eight seconds. T31
@@ -327,8 +363,9 @@ captures. Color fidelity is tracked separately from these DMA-layout results.
 
 - Extend callback plans to repeated, device-proven initialization and teardown
   sequences while preserving exact per-SoC order.
-- Extract common frame/channel bookkeeping after the T23/T41 recovered object
-  offsets have typed checks.
+- Extract common frame/channel bookkeeping now that command/event contracts
+  and wire layouts are explicit, while keeping the T23/T41 recovered object
+  layouts local until their offsets have typed checks.
 - Expand ordered profiles to other evidence-backed, sensor-specific tuning
   corrections.
 - Continue moving the generation-specific 64-bit divide and remaining

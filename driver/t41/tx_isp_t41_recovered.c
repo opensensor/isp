@@ -25202,14 +25202,14 @@ int32_t ivdc_disable_irq(void *arg1) {
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f21c origin=model_output original=ivdc_pad_event_handle */
 int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
-    if (arg2 == 0x3000001 || arg2 == 0x3000002 ||
-        arg2 == 0x3000003 || arg2 == 0x3000005)
+    if (arg2 == TX_ISP_FRAME_EVENT_GET_FORMAT || arg2 == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+        arg2 == TX_ISP_FRAME_EVENT_STREAM_ON || arg2 == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
         printk(KERN_WARNING
                "tx_isp_t41_recovered: ivdc pad event=%08x pad=%p "
                "enabled=%d owner=%p data=%p\n",
                arg2, arg1, arg1 ? *(int32_t *)(arg1 + 5) : -1,
                arg1 ? (void *)(uintptr_t)*arg1 : NULL, arg3);
-    if (*(int32_t *)(arg1 + 5) == 0 || (unsigned int)(arg2 - 0x3000001) >= 8)
+    if (*(int32_t *)(arg1 + 5) == 0 || (unsigned int)(arg2 - TX_ISP_FRAME_EVENT_GET_FORMAT) >= 8)
         return 0;
 
     int32_t *result;
@@ -25218,10 +25218,10 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
     uint32_t (* s0_2)(int32_t arg1, int32_t arg2, int32_t arg3);
 
     switch (arg2) {
-    case 0x3000001:
+    case TX_ISP_FRAME_EVENT_GET_FORMAT:
         result = 0xffffffff;
         if (arg1 != 0 && (unsigned int)arg1 < 0xfffff001) {
-            a1_3 = 0x3000001;
+            a1_3 = TX_ISP_FRAME_EVENT_GET_FORMAT;
             a0 = *(void **)((char *)*arg1 + 0x108);
         }
         goto label_f2b0;
@@ -25230,7 +25230,7 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
         if (result == 0 || result == 0xfffffdfd)
             return 0;
         break;
-    case 0x3000002:
+    case TX_ISP_FRAME_EVENT_SET_FORMAT:
         result = 0xffffffff;
         if (arg1 != 0 && (unsigned int)arg1 < 0xfffff001) {
             void * s3_1 = *arg1;
@@ -25259,7 +25259,7 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
             *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0x64) = 7;
             *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0x84) = 1;
             *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0x68) = (int32_t)&data_10000;
-            *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0x6c) = 0x3000001;
+            *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0x6c) = TX_ISP_FRAME_EVENT_GET_FORMAT;
             if (ivdc_threshold_line == 0)
                 ivdc_threshold_line = a3_1;
             uint32_t ivdc_threshold_line_1 = ivdc_threshold_line;
@@ -25271,8 +25271,8 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
             *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0x50) = 0x20;
             *(int32_t *)((char *)*(void **)((uintptr_t)s0_1 + 0x110) + 0x1c0) = s1_1 | (uintptr_t)a0_2;
             *(int32_t *)((char *)*(void **)((char *)s0_1 + 0x110) + 0xd0) = 0x400;
-            return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)s3_1 + 0x108)), (uintptr_t)(0x3000002), (uintptr_t)(arg3));
-    case 0x3000003:
+            return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)s3_1 + 0x108)), (uintptr_t)(TX_ISP_FRAME_EVENT_SET_FORMAT), (uintptr_t)(arg3));
+    case TX_ISP_FRAME_EVENT_STREAM_ON:
         uint32_t (* s1_3)(int32_t arg1, int32_t arg2, int32_t arg3);
         if (arg1 == 0) {
             s0_2 = NULL;
@@ -25292,28 +25292,28 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
         *(int32_t *)((char *)s1_3 + 0x114) = 2;
         arg3 = NULL;
         *(int32_t *)((char *)s1_3 + 0x118) = 0xc;
-        a1_3 = 0x3000003;
+        a1_3 = TX_ISP_FRAME_EVENT_STREAM_ON;
         goto label_f528;
-    case 0x3000004:
+    case TX_ISP_FRAME_EVENT_STREAM_OFF:
         s0_2 = NULL;
         if (arg1 != 0 && (unsigned int)arg1 < 0xfffff001)
             s0_2 = *arg1;
         ivdc_disable_irq(s0_2);
         arg3 = NULL;
-        a1_3 = 0x3000004;
+        a1_3 = TX_ISP_FRAME_EVENT_STREAM_OFF;
     label_f528:
         a0 = *(void **)((char *)s0_2 + 0x108);
         goto label_f2b0;
-    case 0x3000005:
+    case TX_ISP_FRAME_EVENT_QUEUE_BUFFER:
         uint32_t (* v0_27)(int32_t arg1, int32_t arg2, int32_t arg3) = NULL;
         if (arg1 != 0 && (unsigned int)arg1 < 0xfffff001)
             v0_27 = *arg1;
-        return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)v0_27 + 0x108)), (uintptr_t)(0x3000005), (uintptr_t)(arg3));
-    case 0x3000006:
+        return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)v0_27 + 0x108)), (uintptr_t)(TX_ISP_FRAME_EVENT_QUEUE_BUFFER), (uintptr_t)(arg3));
+    case TX_ISP_FRAME_EVENT_BUFFER_DONE:
         uint32_t (* v0_26)(int32_t arg1, int32_t arg2, int32_t arg3) = NULL;
         if (arg1 != 0 && (unsigned int)arg1 < 0xfffff001)
             v0_26 = *arg1;
-        return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)v0_26 + 0x104)), (uintptr_t)(0x3000006), (uintptr_t)(arg3));
+        return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)v0_26 + 0x104)), (uintptr_t)(TX_ISP_FRAME_EVENT_BUFFER_DONE), (uintptr_t)(arg3));
     case 0x3000007:
         void * s3_2 = NULL;
         if (arg1 != 0 && (unsigned int)arg1 < 0xfffff001)
@@ -25427,7 +25427,7 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
         *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x60) = 0x100702;
         *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x64) = 7;
         *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x68) = (int32_t)&data_10000;
-        *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x6c) = 0x3000001;
+        *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x6c) = TX_ISP_FRAME_EVENT_GET_FORMAT;
         *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x70) = 0;
         *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x74) = 0;
         *(int32_t *)((char *)*(void **)((char *)s0_3 + 0x110) + 0x78) = 0;
@@ -25558,7 +25558,7 @@ int ivdc_pad_event_handle(int32_t * arg1, int arg2, void * arg3) {
         *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x60) = 0x100702;
         *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x64) = 7;
         *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x68) = (int32_t)&data_10000;
-        *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x6c) = 0x3000001;
+        *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x6c) = TX_ISP_FRAME_EVENT_GET_FORMAT;
         *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x70) = 0;
         *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x74) = 0;
         *(int32_t *)((char *)*(void **)((char *)s0_4 + 0x110) + 0x78) = 0;
@@ -25654,7 +25654,7 @@ int32_t __enqueue_in_driver(uintptr_t a0)
            buffer + 0x68, *(uint32_t *)(buffer + 0x70),
            *(uint32_t *)(buffer + 0x34));
     ret = tx_isp_send_event_to_remote(
-        remote_pad, 0x03000005U, buffer + 0x68);
+        remote_pad, TX_ISP_FRAME_EVENT_QUEUE_BUFFER, buffer + 0x68);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: enqueue event returned buffer=%p ret=%d\n",
            buffer, ret);
@@ -25821,7 +25821,7 @@ void __vb2_queue_cancel(void *arg1)
 	if (*(uint8_t *)((char *)arg1 + 0x224) & 1)
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))
 		 tx_isp_send_event_to_remote)(
-			*(uintptr_t *)((char *)arg1 + 0x2ac), 0x3000004, 0);
+			*(uintptr_t *)((char *)arg1 + 0x2ac), TX_ISP_FRAME_EVENT_STREAM_OFF, 0);
 	*(uint8_t *)((char *)arg1 + 0x224) &= 0xfe;
 
 	*(void **)((char *)arg1 + 0x1f0) = (char *)arg1 + 0x1f0;
@@ -26294,7 +26294,7 @@ int frame_channel_vidioc_set_fmt(void *arg1, struct v4l2_format *arg2)
            format.words[TX_ISP_FRAME_FORMAT_WORD_WIDTH], format.words[TX_ISP_FRAME_FORMAT_WORD_HEIGHT], format.words[TX_ISP_FRAME_FORMAT_WORD_PIXELFORMAT],
            format.words[TX_ISP_FRAME_FORMAT_WORD_FIELD], format.words[TX_ISP_FRAME_FORMAT_WORD_COLORSPACE], &format);
     result = tx_isp_send_event_to_remote(
-        *(void **)((char *)arg1 + 0x2d8), 0x3000002, &format);
+        *(void **)((char *)arg1 + 0x2d8), TX_ISP_FRAME_EVENT_SET_FORMAT, &format);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: set-fmt dispatch returned %d\n",
            result);
@@ -26337,7 +26337,7 @@ int frame_channel_vidioc_get_fmt(void *arg1, struct v4l2_format *arg2)
     }
 
     result = tx_isp_send_event_to_remote(
-        *(void **)((char *)arg1 + 0x2d8), 0x3000001, &format);
+        *(void **)((char *)arg1 + 0x2d8), TX_ISP_FRAME_EVENT_GET_FORMAT, &format);
     if (result == 0 || result == -ENOIOCTLCMD) {
         /* The OEM handler normalizes these fields after the remote event. */
         format.words[TX_ISP_FRAME_FORMAT_WORD_TYPE] = 1;
@@ -26532,7 +26532,7 @@ int32_t frame_chan_event(uintptr_t a0, uint32_t a1, uintptr_t a2)
 
     if (!t41_kernel_data_ptr(pad))
         return -EINVAL;
-    if (a1 != 0x03000006U)
+    if (a1 != TX_ISP_FRAME_EVENT_BUFFER_DONE)
         return 0;
     if (!t41_kernel_data_ptr(descriptor))
         return -EINVAL;
@@ -26686,7 +26686,7 @@ static __maybe_unused int32_t frame_chan_event_legacy(uintptr_t a0,
     if (v1 == 0) { goto frame_chan_event0x420; }
 
     /* fragment 3: ConstantLoad */
-    v0 = 0x3000006;
+    v0 = TX_ISP_FRAME_EVENT_BUFFER_DONE;
 
     /* fragment 4: Branch */
     int _bc_a1_4 = a1 != v0;
@@ -27523,7 +27523,7 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
         if (channel_bit && (t41_late_link_replay_mask & channel_bit))
             return 0;
         ret = tx_isp_send_event_to_remote(
-            *(void **)((char *)channel + 0x2d8), 0x03000002U,
+            *(void **)((char *)channel + 0x2d8), TX_ISP_FRAME_EVENT_SET_FORMAT,
             (char *)channel + 0x254);
         if (!ret || ret == -ENOIOCTLCMD) {
             node = *(char **)pending_head;
@@ -27537,7 +27537,7 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
                 }
                 node = *(char **)(queued + 0x58);
                 ret = tx_isp_send_event_to_remote(
-                    *(void **)((char *)channel + 0x2d8), 0x03000005U,
+                    *(void **)((char *)channel + 0x2d8), TX_ISP_FRAME_EVENT_QUEUE_BUFFER,
                     queued + 0x68);
                 if (ret && ret != -ENOIOCTLCMD)
                     break;
@@ -27546,7 +27546,7 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
         }
         if (!ret || ret == -ENOIOCTLCMD)
             ret = tx_isp_send_event_to_remote(
-                *(void **)((char *)channel + 0x2d8), 0x03000003U,
+                *(void **)((char *)channel + 0x2d8), TX_ISP_FRAME_EVENT_STREAM_ON,
                 NULL);
 
         /* STREAMON is synchronous through the deferred producer start.  The
@@ -27810,7 +27810,7 @@ static int t41_frame_channel_streamon_clean(void *channel,
            "tx_isp_t41_recovered: streamon remote event begin remote=%p\n",
            *(void **)((char *)channel + 0x2d8));
     ret = tx_isp_send_event_to_remote(
-        *(void **)((char *)channel + 0x2d8), 0x03000003U, NULL);
+        *(void **)((char *)channel + 0x2d8), TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: streamon remote event returned ret=%d\n",
            ret);
@@ -27896,7 +27896,7 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
-    if (a1 != 0xc0445456U && a1 != 0xc004545aU)
+    if (a1 != TX_ISP_FRAME_IOCTL_T41_DQBUF && a1 != TX_ISP_FRAME_IOCTL_T41_GET_COUNT)
         printk(KERN_WARNING
                "tx_isp_t41_recovered: framechan ioctl enter cmd=0x%x "
                "arg=0x%x file=%p pid=%d comm=%s\n",
@@ -27907,7 +27907,7 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
 
     /* fragment 1: MemoryAccess */
     s0 = *(uint32_t *)((char *)a0 + 136);
-    if (a1 == 0xc0745451U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_SET_FORMAT) {
         int ret = frame_channel_vidioc_set_fmt(
             s0, (struct v4l2_format __user *)(uintptr_t)a2);
 
@@ -27916,7 +27916,7 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                s0, ret);
         return ret;
     }
-    if (a1 == 0xc0745452U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_GET_FORMAT) {
         int ret = frame_channel_vidioc_get_fmt(
             s0, (struct v4l2_format __user *)(uintptr_t)a2);
 
@@ -27932,14 +27932,14 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
      * These conservative shims let all Raptor channels finish negotiating;
      * the real queue operations are restored one command at a time below.
      */
-    if (a1 == 0xc0145453U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_REQBUFS) {
         return t41_frame_channel_reqbufs_clean(
             s0, (void __user *)(uintptr_t)a2);
     }
-    if (a1 == 0xc0445454U || a1 == 0xc0445455U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_QUERYBUF || a1 == TX_ISP_FRAME_IOCTL_T41_QBUF) {
         uint32_t buf[TX_ISP_FRAME_WORD_COUNT];
 
-        if (a1 == 0xc0445455U) {
+        if (a1 == TX_ISP_FRAME_IOCTL_T41_QBUF) {
             int ret = t41_frame_channel_qbuf_clean(
                 s0, (void __user *)(uintptr_t)a2);
 
@@ -27957,16 +27957,16 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                "tx_isp_t41_recovered: %s diagnostic channel=%u index=%u "
                "type=%u memory=%u userptr=0x%x length=%u\n",
                "querybuf",
-               *(uint32_t *)((char *)s0 + 0x2dc), buf[0], buf[1],
-               buf[12], buf[13], buf[14]);
+               *(uint32_t *)((char *)s0 + 0x2dc), buf[TX_ISP_FRAME_WORD_INDEX], buf[TX_ISP_FRAME_WORD_TYPE],
+               buf[TX_ISP_FRAME_WORD_MEMORY], buf[TX_ISP_FRAME_WORD_DMA], buf[TX_ISP_FRAME_WORD_LENGTH]);
         return private_copy_to_user((void __user *)(uintptr_t)a2, buf,
                                     sizeof(buf)) ? -EFAULT : 0;
     }
-    if (a1 == 0xc0445456U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_DQBUF) {
         return t41_frame_channel_dqbuf_clean(
             s0, (void __user *)(uintptr_t)a2);
     }
-    if (a1 == 0xc0045457U || a1 == 0xc0045458U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_STREAM_ON || a1 == TX_ISP_FRAME_IOCTL_T41_STREAM_OFF) {
         uint32_t type;
         int ret = 0;
 
@@ -27976,13 +27976,13 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             return -EFAULT;
         if (type != *(uint32_t *)((char *)s0 + 0x2c))
             return -EINVAL;
-        if (a1 == 0xc0045457U)
+        if (a1 == TX_ISP_FRAME_IOCTL_T41_STREAM_ON)
             return t41_frame_channel_streamon_clean(
                 s0, (void __user *)(uintptr_t)a2);
         else {
 			ret = tx_isp_send_event_to_remote(
 				*(void **)((char *)s0 + 0x2d8),
-				0x03000004U, NULL);
+				TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
 			if (ret == -ENOIOCTLCMD)
 				ret = 0;
             *(uint8_t *)((char *)s0 + 0x250) &= ~1U;
@@ -27992,10 +27992,10 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                "tx_isp_t41_recovered: stream diagnostic channel=%u "
 		       "enable=%u ret=%d\n",
                *(uint32_t *)((char *)s0 + 0x2dc),
-		       a1 == 0xc0045457U, ret);
+		       a1 == TX_ISP_FRAME_IOCTL_T41_STREAM_ON, ret);
         return ret;
     }
-    if (a1 == 0xc0045459U) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_SET_BANKS) {
         uint32_t banks;
 
         if (private_copy_from_user(&banks, (void __user *)(uintptr_t)a2,
@@ -28007,13 +28007,13 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                *(uint32_t *)((char *)s0 + 0x2dc) : ~0U, banks);
         return 0;
     }
-    if (a1 == 0xc004545aU) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_GET_COUNT) {
         uint32_t count = 0;
 
         return private_copy_to_user((void __user *)(uintptr_t)a2, &count,
                                     sizeof(count)) ? -EFAULT : 0;
     }
-    if (a1 == 0xc004545bU) {
+    if (a1 == TX_ISP_FRAME_IOCTL_T41_SET_ALIGN) {
         uint32_t align[2];
 
         if (private_copy_from_user(align, (void __user *)(uintptr_t)a2,
@@ -28169,7 +28169,7 @@ frame_channel_unlocked_ioctl0x108:
 
 frame_channel_unlocked_ioctl0x16c:
     /* fragment 37: ConstantLoad */
-    v0 = 0xc0745451;
+    v0 = TX_ISP_FRAME_IOCTL_T41_SET_FORMAT;
 
     /* fragment 38: Branch */
     v0 = v0 + 21586;
@@ -29652,7 +29652,7 @@ frame_channel_unlocked_ioctl0x1048:
 
 frame_channel_unlocked_ioctl0x10a4:
     /* fragment 376: ConstantLoad */
-    v0 = 0xc0745451;
+    v0 = TX_ISP_FRAME_IOCTL_T41_SET_FORMAT;
 
     /* fragment 377: Branch */
     v0 = v0 + 21586;
@@ -37437,9 +37437,9 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 		((char *)remote + 0x1c);
 	if (!t41_kernel_data_ptr((void *)(uintptr_t)handle))
 		return -ENOIOCTLCMD;
-	if (event == 0x03000001U || event == 0x03000002U ||
-	    event == 0x03000003U ||
-	    event == 0x03000005U)
+	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: remote event=%08x arg=%p remote=%p "
 		       "handle=%p data=%p\n",
@@ -37447,9 +37447,9 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 	{
 		int32_t result = handle(remote, event, data);
 
-		if (event == 0x03000001U || event == 0x03000002U ||
-		    event == 0x03000003U ||
-		    event == 0x03000005U)
+		if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+		    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+		    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
 			printk(KERN_WARNING
 			       "tx_isp_t41_recovered: remote event=%08x returned %d\n",
 			       event, result);
@@ -157058,7 +157058,7 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	if (!*(uint8_t *)(pad + 5))
 		return 0;
 
-	index = event - 0x03000001U;
+	index = event - TX_ISP_FRAME_EVENT_GET_FORMAT;
 	if (index >= ARRAY_SIZE(callback_index) || callback_index[index] < 0)
 		return 0;
 
@@ -157083,9 +157083,9 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	owner = channels + pad_index * 232U;
 	*(void **)(pad + 0x20) = owner;
 	ops = *(event_fn **)((char *)owner + 0xd4);
-	if (event == 0x03000001U || event == 0x03000002U ||
-	    event == 0x03000003U ||
-	    event == 0x03000005U)
+	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: core pad event=%08x pad=%p owner=%p "
 		       "ops=%p index=%u data=%p\n",
@@ -157094,9 +157094,9 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	if (!t41_kernel_data_ptr(owner) || !t41_kernel_data_ptr(ops))
 		return -EINVAL;
 	callback = ops[callback_index[index]];
-	if (event == 0x03000001U || event == 0x03000002U ||
-	    event == 0x03000003U ||
-	    event == 0x03000005U)
+	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: core pad event=%08x callback=%p\n",
 		       event, callback);
@@ -157106,9 +157106,9 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	{
 		int32_t result = callback(pad, data);
 
-		if (event == 0x03000001U || event == 0x03000002U ||
-		    event == 0x03000003U ||
-		    event == 0x03000005U)
+		if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+		    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+		    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
 			printk(KERN_WARNING
 			       "tx_isp_t41_recovered: core pad event=%08x "
 			       "callback returned %d\n",
@@ -164584,7 +164584,7 @@ int32_t ispcore_core_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2)
 			get_fps(0, (uintptr_t)&event_data[6]);
 			ret = tx_isp_send_event_to_remote(
 				*(void **)(channels + 0x16c),
-				0x03000006, event_data);
+				TX_ISP_FRAME_EVENT_BUFFER_DONE, event_data);
 		}
 		break;
 	default:
@@ -165266,7 +165266,7 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
 
             if (t41_kernel_data_ptr(remote))
                 event_ret = tx_isp_send_event_to_remote(
-                    remote, 0x03000006, event_data);
+                    remote, TX_ISP_FRAME_EVENT_BUFFER_DONE, event_data);
 
             /* Exact H20250310a signals CORE_FRAME_DONE after returning the
              * MSCA buffer and before queueing main_fd_work.  This advances
@@ -165351,7 +165351,7 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
 
                 if (t41_kernel_data_ptr(remote))
                     event_ret = tx_isp_send_event_to_remote(
-                        remote, 0x03000006, event_data);
+                        remote, TX_ISP_FRAME_EVENT_BUFFER_DONE, event_data);
                 if (trace_count < 32)
                     printk(KERN_WARNING
                            "tx_isp_t41_recovered: ISP secondary frame complete channel=%u y=%#x uv=%#x remote=%p seq=%u event-ret=%d\n",

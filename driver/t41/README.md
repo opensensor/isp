@@ -42,6 +42,8 @@ The module is linked from eight logical objects:
   aggregate-line semantics used by set-format and QBUF; it also imports the
   shared 68-byte frame-buffer ABI, 116-byte extended frame-format ABI, and
   generation-specific flag policy
+- `tx_isp_frame_channel.h` supplies the proven common event IDs and T41's
+  exact private-`T` ioctl envelopes to the recovered dispatcher and IRQ paths
 - `tx_isp_t41_exposure.c` — T41 sensor/color adapter around the shared checked
   anti-flicker exposure planner
 - `tx_isp_t41_scaler.c` — exact T41 coefficient-table adapter around the
@@ -77,6 +79,16 @@ full-rate output, and coherent geometry across two clean boots. It decoded
 and left the open module active with zero ISP interrupt errors. The validated
 module SHA-256 is
 `64e7103e81765b5c72a42088bb7b46a12cea1538aae21a9d3cfe4f802ffbc5da`.
+
+The shared frame-channel contract now names the set/get-format, stream,
+queue, and completion events plus every T41 private ioctl envelope. Two
+fail-safe boots sustained 25 fps on both 1920x1080 and 640x360 RTSP streams;
+the final seven-second inspection decoded 178 frames from each. ISP IRQs
+advanced, forced day mode applied, and kernel, Raptor, and Android fault scans
+were clean. The active module SHA-256 is
+`0502dde70bff9d386eff8231389756e0be53a62923c9f70f99eba574d80abe28`.
+The scene was darkening during a storm, so this cycle validates transport and
+ABI behavior rather than brightness or noise parity.
 
 The same cycle validates the shared NV12 DMA binding plan in the recovered
 late-link queue path. It decoded 150 main frames in six seconds, 75 substream

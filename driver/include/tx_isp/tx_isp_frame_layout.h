@@ -2,6 +2,7 @@
 #define TX_ISP_FRAME_LAYOUT_H
 
 #include "tx_isp_frame_abi.h"
+#include "tx_isp_frame_channel.h"
 #include "tx_isp_frame_format.h"
 
 struct tx_isp_nv12_layout {

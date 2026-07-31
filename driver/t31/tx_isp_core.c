@@ -1787,7 +1787,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         while (drain_count < 8 && (fifo_stat_ch0 & 1) == 0) {
             evt[0] = 0; evt[1] = 0; evt[3] = 0;
             evt[2] = readl(isp_regs + 0x9974); /* pop FIFO = Y addr */
-            frame_chan_event(&frame_channels[0], 0x3000006, evt);
+            frame_chan_event(&frame_channels[0], TX_ISP_FRAME_EVENT_BUFFER_DONE, evt);
             drain_count++;
             fifo_stat_ch0 = readl(isp_regs + 0x997c);
         }
@@ -1799,7 +1799,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         while (drain_count < 8 && (readl(isp_regs + 0x9a7c) & 1) == 0) {
             evt[0] = 0; evt[1] = 0; evt[3] = 0;
             evt[2] = readl(isp_regs + 0x9a74);
-            frame_chan_event(&frame_channels[1], 0x3000006, evt);
+            frame_chan_event(&frame_channels[1], TX_ISP_FRAME_EVENT_BUFFER_DONE, evt);
             drain_count++;
         }
         /* CH2 drain */
@@ -1807,7 +1807,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         while (drain_count < 8 && (readl(isp_regs + 0x9b7c) & 1) == 0) {
             evt[0] = 0; evt[1] = 0; evt[3] = 0;
             evt[2] = readl(isp_regs + 0x9b74);
-            frame_chan_event(&frame_channels[2], 0x3000006, evt);
+            frame_chan_event(&frame_channels[2], TX_ISP_FRAME_EVENT_BUFFER_DONE, evt);
             drain_count++;
         }
     }
@@ -3317,7 +3317,7 @@ static int frame_channel_vidioc_set_fmt(void *channel_dev, void __user *arg)
     /* Binary Ninja: tx_isp_send_event_to_remote(*(arg1 + 0x2bc), 0x3000002, &var_80) */
     ISP_INFO("frame_channel_vidioc_set_fmt: Forwarding set format to core channel %d\n",
              fcd->channel_num);
-    event_ret = tx_isp_send_event_to_remote(remote_sd, 0x3000002, &format);
+    event_ret = tx_isp_send_event_to_remote(remote_sd, TX_ISP_FRAME_EVENT_SET_FORMAT, &format);
 
     if (event_ret != 0 && event_ret != 0xfffffdfd) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to set format: %d\n", event_ret);
@@ -3424,7 +3424,7 @@ int ispcore_frame_channel_dqbuf(void* arg1, void* arg2)
         return 0;
 
     /* Use already-declared symbol; no need for local extern */
-    tx_isp_send_event_to_remote((struct tx_isp_subdev*)arg1, 0x3000006, arg2);
+    tx_isp_send_event_to_remote((struct tx_isp_subdev*)arg1, TX_ISP_FRAME_EVENT_BUFFER_DONE, arg2);
     return 0;
 }
 
@@ -3767,9 +3767,9 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
     /* Add MCP logging for method entry */
     ISP_INFO("ispcore_pad_event_handle: entry with arg2=0x%x", arg2);
 
-    if (dispatch && dispatch->enabled != 0 && ((uint32_t)(arg2 - 0x3000001) < 7)) {
+    if (dispatch && dispatch->enabled != 0 && ((uint32_t)(arg2 - TX_ISP_FRAME_EVENT_GET_FORMAT) < 7)) {
         switch (arg2) {
-        case 0x3000001: {
+        case TX_ISP_FRAME_EVENT_GET_FORMAT: {
             /* Get format */
             result = 0;
 
@@ -3783,7 +3783,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             return 0;
         }
 
-        case 0x3000002: {
+        case TX_ISP_FRAME_EVENT_SET_FORMAT: {
             struct frame_image_format *format = arg3;
             struct isp_channel *channel = dispatch->event_priv;
             u32 attr_words[0x34 / sizeof(u32)];
@@ -3834,7 +3834,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             break;
         }
 
-        case 0x3000003: {
+        case TX_ISP_FRAME_EVENT_STREAM_ON: {
             /* Stream start — use dispatch->state instead of raw OEM pointer
              * offsets.  The OEM event_priv layout does NOT match our
              * isp_channel struct; raw *(priv+0x9c) spinlock and *(priv+0x74)
@@ -3858,14 +3858,14 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             break;
         }
 
-        case 0x3000004: {
+        case TX_ISP_FRAME_EVENT_STREAM_OFF: {
             /* Stream stop */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000004 (stream stop)");
             ispcore_frame_channel_streamoff(arg1);
             return 0;
         }
 
-        case 0x3000005: {
+        case TX_ISP_FRAME_EVENT_QUEUE_BUFFER: {
             /* Queue buffer — rewritten to use proper struct field access.
              * The OEM reads width/height/pixelformat from event_priv at
              * offsets +0x04/+0x08/+0x0c and channel_id at +0x70, then
@@ -3923,7 +3923,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             break;
         }
 
-        case 0x3000006: {
+        case TX_ISP_FRAME_EVENT_BUFFER_DONE: {
             /* Buffer done — simple return (handled by ISR frame_chan_event) */
             return 0;
         }

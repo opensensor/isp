@@ -181,6 +181,21 @@ the common word names in its live set/get-format path while retaining its
 different field and colorspace values. `tests/tx_isp_frame_format_test.c`
 provides host-side size and offset regression coverage.
 
+### Frame-channel events and private ioctl envelopes
+
+`driver/include/tx_isp/tx_isp_frame_channel.h` names the common remote events
+from get-format through buffer-done and both generation-qualified ioctl
+families. T23/T31 use the legacy `V` family with a 112-byte format; T41 uses
+its private `T` family with the 116-byte flip extension. Small pure decoders
+make type, number, payload size, and direction testable on the host.
+
+The common event range intentionally ends at `0x03000006`. Event meanings
+above buffer completion diverge between recovered generations and stay local
+until device evidence proves otherwise. T23's aliases, T31's frame/core/VIC
+handoffs, and T41's dispatch/IRQ paths now reference the common contract.
+`tests/tx_isp_frame_channel_test.c` covers every named envelope and the proven
+event sequence.
+
 ### Sensor registry
 
 `driver/common/tx_isp_sinfo.c` owns the sensor-registry lifecycle, exported
@@ -269,9 +284,9 @@ tested open build so the current work remains active for inspection.
 
 | SoC | Staged coverage | Result |
 |---|---|---|
-| T23 | eight-object module, shared math/registry/register-mask/callback-plan/tuning-ABI/frame/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
-| T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
-| T41 | six-object module, shared math/registry/day-night/tuning-ABI/frame-layout, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light color and anti-flicker tuning remain open |
+| T23 | nine-object module, shared math/registry/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
+| T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
+| T41 | eight-object module, shared math/registry/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs
 its marker before `insmod`. A crash therefore cannot repeatedly load the staged

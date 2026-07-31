@@ -802,8 +802,8 @@ static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 
 /* Event system constants from reference driver */
 #define TX_ISP_EVENT_FRAME_QBUF         0x3000008
-#define TX_ISP_EVENT_FRAME_DQBUF        0x3000006
-#define TX_ISP_EVENT_FRAME_STREAMON     0x3000003
+#define TX_ISP_EVENT_FRAME_DQBUF        TX_ISP_FRAME_EVENT_BUFFER_DONE
+#define TX_ISP_EVENT_FRAME_STREAMON     TX_ISP_FRAME_EVENT_STREAM_ON
 
 /* Hardware integration constants */
 #define TX_ISP_HW_IRQ_FRAME_DONE        0x1
@@ -3772,7 +3772,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
+    case TX_ISP_FRAME_IOCTL_LEGACY_REQBUFS: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
         struct v4l2_requestbuffers {
             uint32_t count;
             uint32_t type;
@@ -3920,7 +3920,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
+    case TX_ISP_FRAME_IOCTL_LEGACY_QBUF: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
         struct v4l2_buffer buffer;
         struct tx_isp_nv12_buffer dma_buffer;
         unsigned long flags;
@@ -4114,7 +4114,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_debug("*** Channel %d: QBUF completed successfully (MIPS-safe) ***\n", channel);
         return 0;
     }
-    case 0xc0445609: { // VIDIOC_DQBUF - Dequeue buffer
+    case TX_ISP_FRAME_IOCTL_LEGACY_QUERYBUF: { // VIDIOC_DQBUF - Dequeue buffer
         struct v4l2_buffer {
             uint32_t index;
             uint32_t type;
@@ -4154,7 +4154,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0xc0445611: { // VIDIOC_DQBUF - Dequeue buffer - Binary Ninja implementation
+    case TX_ISP_FRAME_IOCTL_LEGACY_DQBUF: { // VIDIOC_DQBUF - Dequeue buffer - Binary Ninja implementation
         struct v4l2_buffer {
             uint32_t index;
             uint32_t type;
@@ -4359,10 +4359,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * We must dispatch to ISP core BEFORE VIC to match this ordering.
          */
         if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
-            tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, 0x3000003, NULL);
+            tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
 
         /* OEM: VIC dispatch (ispvic_frame_channel_s_stream → MDMA enable) */
-        ret = tx_isp_send_event_to_remote(vic_sd, 0x3000003, NULL);
+        ret = tx_isp_send_event_to_remote(vic_sd, TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
         if (ret != 0 && ret != 0xfffffdfd) {
             pr_err("streamon: driver refused to start streaming\n");
             state->streaming = false;
@@ -4428,19 +4428,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * The OEM does NOT call tx_isp_video_s_stream here.
          */
         if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
-            tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, 0x3000004, NULL);
+            tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
 
         /* OEM: VIC dispatch (ispvic_frame_channel_s_stream → MDMA disable) */
         {
             struct tx_isp_subdev *vic_sd_off = (struct tx_isp_subdev *)fcd->vic_subdev;
             if (vic_sd_off)
-                tx_isp_send_event_to_remote(vic_sd_off, 0x3000004, NULL);
+                tx_isp_send_event_to_remote(vic_sd_off, TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
         }
 
         pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
     }
-    case 0x407056c4: { // VIDIOC_GET_FRAME_FORMAT
+    case TX_ISP_FRAME_IOCTL_LEGACY_GET_FORMAT: { // VIDIOC_GET_FRAME_FORMAT
         struct frame_image_format format;
         struct tx_isp_subdev *remote_sd = NULL;
         int ret;
@@ -4450,7 +4450,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             remote_sd = &ourISPdev->channels[channel].subdev;
 
         if (remote_sd)
-            ret = tx_isp_send_event_to_remote(remote_sd, 0x3000001, &format);
+            ret = tx_isp_send_event_to_remote(remote_sd, TX_ISP_FRAME_EVENT_GET_FORMAT, &format);
         else
             ret = 0xfffffdfd;
 
@@ -4485,7 +4485,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0xc07056c3: { // VIDIOC_SET_FRAME_FORMAT
+    case TX_ISP_FRAME_IOCTL_LEGACY_SET_FORMAT: { // VIDIOC_SET_FRAME_FORMAT
         struct frame_image_format format;
         struct tx_isp_subdev *remote_sd = NULL;
         int ret;
@@ -4508,7 +4508,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             remote_sd = &ourISPdev->channels[channel].subdev;
 
         if (remote_sd)
-            ret = tx_isp_send_event_to_remote(remote_sd, 0x3000002, &format);
+            ret = tx_isp_send_event_to_remote(remote_sd, TX_ISP_FRAME_EVENT_SET_FORMAT, &format);
         else
             ret = 0xfffffdfd;
 
@@ -4538,7 +4538,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         return 0;
     }
-    case 0x400456bf: { /* OEM frame completion wait — EXACT Binary Ninja match:
+    case TX_ISP_FRAME_IOCTL_LEGACY_WAIT: { /* OEM frame completion wait — EXACT Binary Ninja match:
                        * wait_for_completion_interruptible($s0 + 0x2d4)
                        * result = *($s0 + 0x2d4) + 1   (on success)
                        * result = error                 (on signal)
@@ -6733,11 +6733,11 @@ static int tx_isp_send_event_to_remote_local(void *subdev, int event_type, void 
         }
         return 0;
 
-    case 0x3000006: /* TX_ISP_EVENT_FRAME_DQBUF */
+    case TX_ISP_FRAME_EVENT_BUFFER_DONE: /* TX_ISP_EVENT_FRAME_DQBUF */
         pr_debug("*** DQBUF EVENT: MIPS-safe fallback processing ***\n");
         return 0;
 
-    case 0x3000003: /* TX_ISP_EVENT_FRAME_STREAMON */
+    case TX_ISP_FRAME_EVENT_STREAM_ON: /* TX_ISP_EVENT_FRAME_STREAMON */
         pr_debug("*** STREAMON EVENT: MIPS-safe fallback processing ***\n");
         return 0;
 
@@ -6787,7 +6787,7 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         pr_debug("*** VIC EVENT: QBUF (0x3000008) - forwarding to vic_core_ops_ioctl ***\n");
         return vic_core_ops_ioctl(&vic_dev->sd, 0x3000008, data);
     }
-    case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
+    case TX_ISP_FRAME_EVENT_STREAM_ON: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
         pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE (chn0 only) ***\n");
 
         /* Only Channel 0 controls VIC RUN; other channels do not start hardware */
@@ -6801,11 +6801,11 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
         return ispvic_frame_channel_s_stream(vic_dev, 1);
     }
-    case 0x3000004: { /* TX_ISP_EVENT_STREAM_CANCEL - Stop VIC streaming */
+    case TX_ISP_FRAME_EVENT_STREAM_OFF: { /* TX_ISP_EVENT_STREAM_CANCEL - Stop VIC streaming */
         pr_info("*** VIC EVENT: STREAM_STOP/CANCEL (0x3000004) - DEACTIVATING VIC HARDWARE ***\n");
         return ispvic_frame_channel_s_stream(vic_dev, 0);
     }
-    case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
+    case TX_ISP_FRAME_EVENT_QUEUE_BUFFER: { /* Buffer enqueue event from __enqueue_in_driver */
         pr_debug("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");
         /* Only Channel 0 programs VIC slots. Gate others to avoid wrong UV/stride. */
         if (data) {
@@ -6817,7 +6817,7 @@ int vic_event_handler(void *subdev, int event_type, void *data)
             }
         }
         /* Forward to VIC core so it can program slots via ispvic_frame_channel_qbuf */
-        return vic_core_ops_ioctl(&vic_dev->sd, 0x3000005, data);
+        return vic_core_ops_ioctl(&vic_dev->sd, TX_ISP_FRAME_EVENT_QUEUE_BUFFER, data);
     }
     default:
         pr_info("*** vic_event_handler: UNHANDLED EVENT 0x%x - returning 0xfffffdfd ***\n", event_type);
@@ -6995,7 +6995,7 @@ static int __submit_buffer_to_msca(int channel, u32 phys_addr)
     entry.buffer_addr = phys_addr;
     entry.channel = channel;
 
-    return tx_isp_send_event_to_remote(remote_sd, 0x3000005, &entry);
+    return tx_isp_send_event_to_remote(remote_sd, TX_ISP_FRAME_EVENT_QUEUE_BUFFER, &entry);
 }
 
 static int __enqueue_in_driver(void *arg1)
@@ -7020,7 +7020,7 @@ static int __enqueue_in_driver(void *arg1)
     if (!sd)
         return -EINVAL;
 
-    result = tx_isp_send_event_to_remote(sd, 0x3000005,
+    result = tx_isp_send_event_to_remote(sd, TX_ISP_FRAME_EVENT_QUEUE_BUFFER,
                                           (void *)((u8 *)arg1 + 0x68));
 
     if (result != 0 && result != -ENOIOCTLCMD) {
