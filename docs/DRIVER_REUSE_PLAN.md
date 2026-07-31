@@ -390,7 +390,7 @@ running so the current work is available for inspection.
 | SoC | Staged coverage | Result |
 |---|---|---|
 | T23 | ten-object module, shared math/registry/subdevice resolver/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
-| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
+| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, two-buffer DMA-done rotation, and full-rate RTSP |
 | T40 | three-object module, shared registry/subdevice resolver/link/event/state policy, GC4653 | pass; day mode, active IRQ 38/39, and valid 1920x1080 RTSP decode; legacy full proc dump excluded |
 | T41 | nine-object module, shared math/registry/subdevice resolver/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
 
