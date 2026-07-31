@@ -22,6 +22,8 @@ just cosmetic:
   T31 retains its alignment, register, allocation, and memory-option policy.
 - `tx_isp_t31_subdev_resolver.c` supplies T31's typed graph and established
   raw pad-direction mapping to the common name/type/index resolver.
+- Pad allocation delegates the common five-word active-link initializer while
+  retaining T31's extra callback/private tail and raw pad-slot mapping.
 - The shared frame-buffer ABI asserts T31's 68-byte MIPS32 `v4l2_buffer`
   contract and names its persistent flag mask; T31 retains queue ownership and
   its generation-specific state meanings.
@@ -98,6 +100,11 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   decoded 149 1920x1080 frames in six seconds with clean `dmesg`, `logread`,
   and `logcat`; the active module SHA-256 is
   `bb95aba4587061b4d364fd3b3893bbf8d8ec0471252deed97dc996e569d48673`
+- the common pad-link state candidate consumed its one-shot marker, bound the
+  SC2336 once, accepted forced day mode, advanced ISP/VIC interrupts, and
+  decoded 148 1920x1080 frames in six seconds; all three fault scans are clean
+  and the responsive candidate remains active with SHA-256
+  `322ace762900c81d22e55f527572708f6ae92d6ca144725d52fb58413dd37b4a`
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.

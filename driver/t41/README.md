@@ -37,7 +37,7 @@ The module is linked from nine logical objects:
 - `tx_isp_t41_math.c` — T41 ABI wrappers around shared math primitives
 - `tx_isp_t41_sinfo.c` — T41 layout adapter around the shared sensor registry
 - `tx_isp_t41_subdev.c` — extended T41 graph-layout adapter around the shared
-  name/type/index pad resolver
+  name/type/index pad resolver and link-state core
 - `tx_isp_t41_tuning_abi.c` — shared tuning-envelope and command-descriptor
   implementation
 - `tx_isp_t41_frame_layout.c` — shared checked NV12 geometry and vendor
@@ -106,6 +106,17 @@ day mode, advanced both ISP cores with `error=0`, and decoded 150 1920x1080
 frames in six seconds. `dmesg`, `logread`, and `logcat` fault scans were clean.
 The tested module remains active with SHA-256
 `34aaccbd070010bc704e9588182bfb9f3302a416bcd871111c53f82ae235cd1e`.
+
+Link setup now delegates link-type/stream-state validation and the symmetric
+source/sink record write to the common subdevice library. T41 retains
+generation-local conflict teardown calls and their recovered ordering. The
+one-shot candidate bound the OS04D10 once, accepted forced day mode, advanced
+both ISP cores with `error=0`, and decoded 150 1920x1080 frames in six
+seconds. `dmesg`, `logread`, and `logcat` fault scans are clean. The candidate
+remains active with SHA-256
+`7f385cf872d21568dc105b85ca852a4f33a5ade30c72f52451acd880dfeee9d4`.
+The scene was darkening during a rainstorm, so this gate covers graph, stream,
+and ABI behavior rather than comparative brightness or shadow-noise quality.
 
 The same cycle validates the shared NV12 DMA binding plan in the recovered
 late-link queue path. It decoded 150 main frames in six seconds, 75 substream

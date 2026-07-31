@@ -11,6 +11,7 @@
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_sysfs.h"
 #include "../include/tx_isp/tx_isp_frame_channel.h"
+#include "../include/tx_isp/tx_isp_subdev.h"
 /* Keep the named T31 subdevice model pinned to the recovered legacy ABI. */
 TX_ISP_ABI_ASSERT(t31_subdev_name,
     __builtin_offsetof(struct tx_isp_subdev, module.name) ==
@@ -495,11 +496,7 @@ static int tx_isp_subdev_init_pads(struct tx_isp_subdev *sd,
         pad->type = desc->type;
         pad->links_type = desc->links_type;
         pad->state = TX_ISP_PADSTATE_FREE;
-        pad->link.source = NULL;
-        pad->link.sink = NULL;
-        pad->link.reverse = NULL;
-        pad->link.flag = 0;
-        pad->link.state = 0;
+        tx_isp_subdev_init_link_record(pad);
         pad->event = NULL;
         pad->event_callback = NULL;
         pad->priv = NULL;

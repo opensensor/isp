@@ -26,6 +26,8 @@
 #define TX_ISP_SUBDEV_LINK_SET_COUNT_OFFSET   0x04U
 #define TX_ISP_SUBDEV_LINK_SET_SIZE           0x08U
 
+#define TX_ISP_SUBDEV_LINK_ENABLED             0x01U
+
 struct tx_isp_subdev_pad_descriptor32 {
 	unsigned int name;
 	unsigned char type;
@@ -59,6 +61,13 @@ enum tx_isp_subdev_resolve_status {
 	TX_ISP_SUBDEV_RESOLVE_INDEX_RANGE,
 };
 
+enum tx_isp_subdev_link_status {
+	TX_ISP_SUBDEV_LINK_OK = 0,
+	TX_ISP_SUBDEV_LINK_INVALID,
+	TX_ISP_SUBDEV_LINK_TYPE_MISMATCH,
+	TX_ISP_SUBDEV_LINK_BUSY,
+};
+
 /*
  * The search algorithm is common; object layout and pointer validation are
  * generation-specific. Accessors must return NULL for unusable objects.
@@ -77,5 +86,24 @@ void *tx_isp_subdev_resolve_pad(
 	const struct tx_isp_subdev_pad_descriptor *descriptor,
 	const struct tx_isp_subdev_resolver_ops *ops,
 	enum tx_isp_subdev_resolve_status *status);
+
+/*
+ * Validate the generation-neutral portion of a link transition. Teardown
+ * callbacks and their ordering remain local to each SoC.
+ */
+enum tx_isp_subdev_link_status tx_isp_subdev_validate_link(
+	unsigned int source_links_type,
+	unsigned int sink_links_type,
+	unsigned int source_state,
+	unsigned int sink_state,
+	unsigned int flags,
+	unsigned int *enabled_flags);
+
+/* Initialize or connect the common 32-bit pad/link prefix in recovered order. */
+void tx_isp_subdev_init_link_record(void *pad);
+void tx_isp_subdev_connect_link_pair(
+	void *source_pad,
+	void *sink_pad,
+	unsigned int flags);
 
 #endif /* TX_ISP_SUBDEV_H */

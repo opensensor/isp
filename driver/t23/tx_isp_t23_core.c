@@ -9305,7 +9305,7 @@ static int regtrace_t23_subdev_init_pads(unsigned char *sd, const unsigned char 
         *(uint8_t *)(pad + TX_ISP_ABI_PAD_TYPE_OFFSET) = type;
         *(uint8_t *)(pad + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET) = links;
         *(uint8_t *)(pad + TX_ISP_ABI_PAD_STATE_OFFSET) = TX_ISP_ABI_PADSTATE_FREE;
-        *(uint32_t *)(pad + TX_ISP_ABI_PAD_LINK_OFFSET + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
+        tx_isp_subdev_init_link_record((void *)pad);
     }
 
     *(uint16_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET) = out_count;

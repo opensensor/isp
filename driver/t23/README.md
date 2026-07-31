@@ -31,6 +31,10 @@ Pad creation and recovered link teardown now consume the common pad/link ABI
 offsets. The shared detach operation captures the three endpoints and clears
 the first four link words while preserving link state, without changing the
 linked module image.
+Pad construction now also delegates the complete five-word active-link
+initialization to the shared subdevice library. This is behavior-equivalent
+to T23's zeroed allocation plus local flag write, but makes the initialized
+record contract explicit and shared with T31.
 The subdevice adapter supplies T23's graph table and legacy pad-slot offsets
 to the shared name/type/index resolver. Its recovered graph descriptor reads
 also use the common 8-byte endpoint wire positions.
@@ -120,6 +124,12 @@ Current smoke-test status:
   interrupts, and decoded 148 1920x1080 frames in six seconds. All three fault
   logs were clean. The tested module remains active with SHA-256
   `865278fb52172ff948b4a4e2bc92c27680344c12b7b57dfcc9f1c94743fc4047`.
+- The common pad-link state cycle booted once with marker consumption and a
+  single SC2336 bind, accepted forced day mode, advanced ISP/VIC interrupts,
+  and decoded 149 1920x1080 frames in six seconds. `dmesg`, `logread`, and
+  `logcat` contain no driver faults. The candidate remains active with
+  SHA-256
+  `403bb2bbe4c81da5bd0bdc5ce81c7f4bdaa50ff9e268ac67e555a5f029fbb855`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

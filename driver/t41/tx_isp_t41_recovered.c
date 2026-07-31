@@ -34195,6 +34195,7 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link)
         uintptr_t source;
         uintptr_t sink;
         uint32_t flags = *(uint32_t *)(record + TX_ISP_SUBDEV_LINK_FLAG_OFFSET);
+        unsigned int enabled_flags; enum tx_isp_subdev_link_status link_status;
         int ret;
 
         printk(KERN_WARNING
@@ -34228,41 +34229,40 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link)
                *(uint32_t *)(sink + 20));
         if (t41_video_link_dry_run > 0)
             continue;
-        if (!(*(uint8_t *)(source + 6) & *(uint8_t *)(sink + 6) & flags)) {
+        link_status = tx_isp_subdev_validate_link(
+            *(uint8_t *)(source + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET), *(uint8_t *)(sink + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET),
+            *(uint8_t *)(source + TX_ISP_ABI_PAD_STATE_OFFSET), *(uint8_t *)(sink + TX_ISP_ABI_PAD_STATE_OFFSET),
+            flags, &enabled_flags);
+        if (link_status == TX_ISP_SUBDEV_LINK_TYPE_MISMATCH) {
             printk(KERN_ERR
                    "tx_isp_t41_recovered: video-link type mismatch link=%u item=%u source=%#x sink=%#x flags=%#x\n",
-                   link, i, *(uint8_t *)(source + 6),
-                   *(uint8_t *)(sink + 6), flags);
+                   link, i, *(uint8_t *)(source + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET), *(uint8_t *)(sink + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET), flags);
             return -EINVAL;
         }
-        if (*(uint8_t *)(source + 7) == 4 ||
-            *(uint8_t *)(sink + 7) == 4)
+        if (link_status == TX_ISP_SUBDEV_LINK_BUSY)
             return -EBUSY;
+        if (link_status != TX_ISP_SUBDEV_LINK_OK)
+            return -EINVAL;
 
-        if (*(uint8_t *)(source + 7) == 3 &&
-            *(uint32_t *)(source + 12) != sink) {
-            ret = subdev_video_destroy_link(source + 8);
+        if (*(uint8_t *)(source + TX_ISP_ABI_PAD_STATE_OFFSET) == TX_ISP_ABI_PADSTATE_LINKED &&
+            *(uint32_t *)(source + TX_ISP_ABI_PAD_LINK_OFFSET +
+                         TX_ISP_ABI_LINK_SINK_OFFSET) != sink) {
+            ret = subdev_video_destroy_link(
+                source + TX_ISP_ABI_PAD_LINK_OFFSET);
             if (ret && ret != -ENOIOCTLCMD)
                 return ret;
         }
-        if (*(uint8_t *)(sink + 7) == 3 &&
-            *(uint32_t *)(sink + 12) != source) {
-            ret = subdev_video_destroy_link(sink + 8);
+        if (*(uint8_t *)(sink + TX_ISP_ABI_PAD_STATE_OFFSET) == TX_ISP_ABI_PADSTATE_LINKED &&
+            *(uint32_t *)(sink + TX_ISP_ABI_PAD_LINK_OFFSET +
+                         TX_ISP_ABI_LINK_SINK_OFFSET) != source) {
+            ret = subdev_video_destroy_link(
+                sink + TX_ISP_ABI_PAD_LINK_OFFSET);
             if (ret && ret != -ENOIOCTLCMD)
                 return ret;
         }
 
-        flags |= 1U;
-        *(uint32_t *)(source + 8) = source;
-        *(uint32_t *)(source + 12) = sink;
-        *(uint32_t *)(source + 16) = sink + 8;
-        *(uint32_t *)(source + 20) = flags;
-        *(uint8_t *)(source + 7) = 3;
-        *(uint32_t *)(sink + 8) = sink;
-        *(uint32_t *)(sink + 12) = source;
-        *(uint32_t *)(sink + 16) = source + 8;
-        *(uint32_t *)(sink + 20) = flags;
-        *(uint8_t *)(sink + 7) = 3;
+        flags = enabled_flags;
+        tx_isp_subdev_connect_link_pair((void *)source, (void *)sink, flags);
         printk(KERN_WARNING
                "tx_isp_t41_recovered: video-link connected link=%u item=%u source=%p sink=%p flags=%#x source-remote=%p source-event=%p sink-remote=%p sink-event=%p\n",
                link, i, (void *)source, (void *)sink, flags,

@@ -264,6 +264,22 @@ the SDK declarations, and T41's recovered graph path now uses the common
 positions. Sequential rebuilds remained byte-identical to all three tested
 resolver modules.
 
+The same common subdevice unit now owns the generation-neutral part of link
+state transitions. It validates the source/sink capability intersection,
+rejects streaming pads, adds the enabled flag, initializes the five-word
+active-link record, and writes symmetric source/sink pairs in recovered order.
+T23 and T31 use the common initializer during pad allocation; T41 also uses
+the validator and pair connector during live graph setup. Conflict teardown
+callbacks and their ordering remain generation-local.
+
+A sequential three-target build and one-shot device cycle validated this
+extraction. Each device consumed its marker, registered exactly one sensor,
+accepted forced day mode, advanced ISP/VIC interrupts, and decoded 149, 148,
+and 150 1080p frames in six seconds on T23, T31, and T41 respectively.
+`dmesg`, `logread`, and `logcat` fault scans were clean. The scene darkened
+during a rainstorm, so image brightness and wall-noise comparisons were
+deliberately excluded from this structural gate.
+
 `driver/include/tx_isp/tx_isp_recovered_kernel.h` holds the already-reviewed
 kernel-tree compatibility prelude used by recovered sources. Keep larger
 freestanding recovery-tool declarations local until their signatures are

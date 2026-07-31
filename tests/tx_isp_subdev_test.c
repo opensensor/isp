@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "../driver/include/tx_isp/tx_isp_subdev.h"
+#include "../driver/include/tx_isp/tx_isp_subdev_abi.h"
 
 #define FAKE_SUBDEV_COUNT 4
 #define FAKE_PAD_STRIDE   36
@@ -92,6 +93,88 @@ static void test_wire_layout(void)
 	       TX_ISP_SUBDEV_LINK_SET_COUNT_OFFSET);
 }
 
+static void test_link_validation(void)
+{
+	unsigned int enabled_flags = 0xdeadbeefU;
+
+	expect(tx_isp_subdev_validate_link(
+		0x4, 0x5, 2, 3, 0x4, &enabled_flags) ==
+	       TX_ISP_SUBDEV_LINK_OK);
+	expect(enabled_flags == 0x5);
+
+	enabled_flags = 0xdeadbeefU;
+	expect(tx_isp_subdev_validate_link(
+		0x2, 0x4, 2, 2, 0x6, &enabled_flags) ==
+	       TX_ISP_SUBDEV_LINK_TYPE_MISMATCH);
+	expect(enabled_flags == 0);
+
+	expect(tx_isp_subdev_validate_link(
+		0x1, 0x1, 4, 2, 0x1, &enabled_flags) ==
+	       TX_ISP_SUBDEV_LINK_BUSY);
+	expect(tx_isp_subdev_validate_link(
+		0x1, 0x1, 2, 4, 0x1, &enabled_flags) ==
+	       TX_ISP_SUBDEV_LINK_BUSY);
+	expect(tx_isp_subdev_validate_link(
+		0x1, 0x1, 2, 2, 0x1, 0) ==
+	       TX_ISP_SUBDEV_LINK_INVALID);
+}
+
+static unsigned int load_word(const unsigned char *object, unsigned int offset)
+{
+	return *(const unsigned int *)(object + offset);
+}
+
+static void test_link_record_operations(void)
+{
+	unsigned char source[FAKE_PAD_STRIDE];
+	unsigned char sink[FAKE_PAD_STRIDE];
+	unsigned int source_address = (unsigned int)(uintptr_t)source;
+	unsigned int sink_address = (unsigned int)(uintptr_t)sink;
+	unsigned int i;
+
+	for (i = 0; i < FAKE_PAD_STRIDE; ++i) {
+		source[i] = 0xa5;
+		sink[i] = 0x5a;
+	}
+	tx_isp_subdev_init_link_record(source);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_SOURCE_OFFSET) == 0);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_SINK_OFFSET) == 0);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_REVERSE_OFFSET) == 0);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_FLAG_OFFSET) == 0);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_STATE_OFFSET) == 0);
+	expect(source[TX_ISP_ABI_PAD_STATE_OFFSET] == 0xa5);
+
+	tx_isp_subdev_connect_link_pair(source, sink, 0x9);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_SOURCE_OFFSET) == source_address);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_SINK_OFFSET) == sink_address);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_REVERSE_OFFSET) ==
+	       sink_address + TX_ISP_ABI_PAD_LINK_OFFSET);
+	expect(load_word(source, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_FLAG_OFFSET) == 0x9);
+	expect(source[TX_ISP_ABI_PAD_STATE_OFFSET] ==
+	       TX_ISP_ABI_PADSTATE_LINKED);
+
+	expect(load_word(sink, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_SOURCE_OFFSET) == sink_address);
+	expect(load_word(sink, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_SINK_OFFSET) == source_address);
+	expect(load_word(sink, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_REVERSE_OFFSET) ==
+	       source_address + TX_ISP_ABI_PAD_LINK_OFFSET);
+	expect(load_word(sink, TX_ISP_ABI_PAD_LINK_OFFSET +
+			TX_ISP_ABI_LINK_FLAG_OFFSET) == 0x9);
+	expect(sink[TX_ISP_ABI_PAD_STATE_OFFSET] ==
+	       TX_ISP_ABI_PADSTATE_LINKED);
+}
+
 int main(void)
 {
 	unsigned char source_pads[2][FAKE_PAD_STRIDE] = { { 0 } };
@@ -122,6 +205,8 @@ int main(void)
 	void *pad;
 
 	test_wire_layout();
+	test_link_validation();
+	test_link_record_operations();
 	pad = tx_isp_subdev_resolve_pad(
 		&graph, &descriptor, &fake_ops, &status);
 	expect(pad == &source_pads[1][0]);
