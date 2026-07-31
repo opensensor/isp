@@ -21,8 +21,9 @@ STATUS=$STATE_DIR/last-status
 LOG=$STATE_DIR/last-insmod.log
 WATCH_MARKER=$STATE_DIR/watch-registry
 WATCH_LOG=$STATE_DIR/registry-watch.log
-BOOT_DMESG_PREFIX=/tmp/open-tx-isp-boot-dmesg
-BOOT_KMSG_LOG=/tmp/open-tx-isp-boot-kmsg.log
+# These must survive a watchdog reboot if the staged module faults.
+BOOT_DMESG_PREFIX=$STATE_DIR/boot-dmesg
+BOOT_KMSG_LOG=$STATE_DIR/boot-kmsg.log
 
 watch_registry()
 {
@@ -65,6 +66,7 @@ start()
 		return 0
 	fi
 
+	rm -f "$BOOT_KMSG_LOG" "$BOOT_DMESG_PREFIX"-*.log
 	module_args=
 	[ ! -r "$ARGS" ] || module_args="$(cat "$ARGS")"
 	insmod "$MODULE" $module_args >"$LOG" 2>&1

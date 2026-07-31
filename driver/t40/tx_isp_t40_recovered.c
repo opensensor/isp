@@ -7,6 +7,7 @@
 
 #include "../include/tx_isp/tx_isp_math.h"
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
+#include "tx_isp_t40_subdev.h"
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
@@ -16155,7 +16156,7 @@ static int regtrace_subdev_init_pads(unsigned char *sd, const unsigned char *pda
         *(uint8_t *)(pad + 5) = type;
         *(uint8_t *)(pad + 6) = links;
         *(uint8_t *)(pad + 7) = 2;
-        *(uint32_t *)(pad + 20) = 0;
+        tx_isp_subdev_init_link_record(pad);
     }
 
     *(uint32_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPADS_OFFSET) = (uint32_t)(uintptr_t)outpads;
@@ -21055,7 +21056,8 @@ static void regtrace_patch_core_pad_callbacks(void)
 static int regtrace_link_pads_oem(unsigned char *src, unsigned char *dst,
                                   uint32_t flags)
 {
-    uint32_t link_flags = flags | 1U;
+    enum tx_isp_subdev_link_status status;
+    unsigned int enabled_flags;
 
     regtrace_link_diag.attempts++;
     regtrace_link_diag.last_src = src;
@@ -21067,23 +21069,18 @@ static int regtrace_link_pads_oem(unsigned char *src, unsigned char *dst,
         return -ENODEV;
     }
 
-    if (((src[6] & dst[6] & flags) == 0) ||
-        src[7] == 4 || dst[7] == 4) {
+    status = tx_isp_subdev_validate_link(
+        src[TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET],
+        dst[TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET],
+        src[TX_ISP_ABI_PAD_STATE_OFFSET],
+        dst[TX_ISP_ABI_PAD_STATE_OFFSET],
+        flags, &enabled_flags);
+    if (status != TX_ISP_SUBDEV_LINK_OK) {
         regtrace_link_diag.missing++;
         return -EINVAL;
     }
 
-    *(uint32_t *)(src + 8) = (uint32_t)(uintptr_t)src;
-    *(uint32_t *)(src + 12) = (uint32_t)(uintptr_t)dst;
-    *(uint32_t *)(src + 16) = (uint32_t)(uintptr_t)(dst + 8);
-    *(uint32_t *)(src + 20) = link_flags;
-    src[7] = 3;
-
-    *(uint32_t *)(dst + 8) = (uint32_t)(uintptr_t)dst;
-    *(uint32_t *)(dst + 12) = (uint32_t)(uintptr_t)src;
-    *(uint32_t *)(dst + 16) = (uint32_t)(uintptr_t)(src + 8);
-    *(uint32_t *)(dst + 20) = link_flags;
-    dst[7] = 3;
+    tx_isp_subdev_connect_link_pair(src, dst, enabled_flags);
 
     regtrace_link_diag.created++;
     regtrace_link_diag.last_src_remote = (void *)(uintptr_t)*(uint32_t *)(src + 12);
@@ -49344,37 +49341,7 @@ label_f2b8:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f4a4 origin=fragment_seed original=check_state */
 int32_t check_state(uintptr_t a0)
 {
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Branch */
-    v0 = 0;
-    if (a0 == 0) { goto check_state0x24; }
-
-    /* fragment 1: MemoryAccess */
-    a1 = *(uint32_t *)((char *)a0 + 508);
-    v1 = a0 + 508;
-
-    /* fragment 2: Branch */
-    v0 = 1;
-    if (a1 != v1) { goto check_state0x24; }
-
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint8_t *)((char *)a0 + 536);
-    v0 = ~(0 | (uintptr_t)v0);
-    v0 = (uintptr_t)v0 & 1;
-
-check_state0x24:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: f4cc:	00000000 	nop */
-
-    return 0;
+    return tx_isp_t40_subdev_state_ready((void *)a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f4d0 origin=fragment_seed original=__frame_channel_vb2_streamoff */
@@ -52440,168 +52407,7 @@ int32_t tx_isp_suspend(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001103c origin=fragment_seed original=find_subdev_link_pad */
 int64_t find_subdev_link_pad(uintptr_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t local_1c = 0;
-    uintptr_t *a2 = 0;
-    uintptr_t *a3 = 0;
-    uint32_t at = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    a3 = a0 + 60;
-    a0 = a0 + 124;
-
-find_subdev_link_pad0x8:
-    /* fragment 1: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a3 + 0);
-
-    /* fragment 2: Branch */
-    if (v1 != 0) { goto find_subdev_link_pad0x118; }
-
-    /* fragment 3: Arithmetic */
-    a3 = a3 + 4;
-
-    /* fragment 4: Branch */
-    v0 = 0;
-    if (a0 != a3) { goto find_subdev_link_pad0x8; }
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 11060:	00000000 	nop */
-
-find_subdev_link_pad0x28:
-    /* fragment 7: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a3 + 0);
-
-    /* fragment 8: Branch */
-    if (v1 == 0) { goto find_subdev_link_pad0x68; }
-
-find_subdev_link_pad0x34:
-    /* fragment 9: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 8);
-    a2 = *(uint32_t *)((char *)a1 + 0);
-    t0 = *(uint8_t *)((char *)v0 + 0);
-
-find_subdev_link_pad0x40:
-    /* fragment 10: MemoryAccess */
-    at = *(uint8_t *)((char *)a2 + 0);
-    v0 = v0 + 1;
-
-    /* fragment 11: Branch */
-    a2 = a2 + 1;
-    if (at != t0) { goto find_subdev_link_pad0x5c; }
-
-    /* fragment 12: Branch */
-    int _bc_t0_12 = t0 != 0;
-    t0 = *(uint8_t *)((char *)(v0) + 0);
-    if (_bc_t0_12) { goto find_subdev_link_pad0x40; }
-
-    /* fragment 13: Arithmetic */
-    t0 = at;
-
-find_subdev_link_pad0x5c:
-    /* fragment 14: Arithmetic */
-    t0 = t0 - at;
-
-    /* fragment 15: Branch */
-    if (t0 == 0) { goto find_subdev_link_pad0xd8; }
-
-find_subdev_link_pad0x68:
-    /* fragment 16: Arithmetic */
-    a3 = a3 + 4;
-
-    /* fragment 17: Branch */
-    v0 = 0;
-    if (a0 != a3) { goto find_subdev_link_pad0x28; }
-
-    /* fragment 18: Branch */
-    goto find_subdev_link_pad0x110;
-
-find_subdev_link_pad0x7c:
-    /* fragment 19: Branch */
-    int _bc_v0_19 = v0 != a0;
-    v0 = 183;
-    if (_bc_v0_19) { goto find_subdev_link_pad0xa4; }
-
-    /* fragment 20: MemoryAccess */
-    v0 = *(uint8_t *)((char *)a1 + 5);
-    a0 = *(uint16_t *)((char *)v1 + 256);
-    a0 = v0 < a0;
-
-    /* fragment 21: Branch */
-    if (a0 == 0) { goto find_subdev_link_pad0xa0; }
-
-    /* fragment 22: Branch */
-    v1 = *(uint32_t *)((char *)(v1) + 260);
-    goto find_subdev_link_pad0x100;
-
-find_subdev_link_pad0xa0:
-    /* fragment 23: CallSetup */
-    v0 = 183;
-
-find_subdev_link_pad0xa4:
-    /* fragment 24: CallSetup */
-    local_14 = v0;
-    local_10 = (uint32_t *)&__param_str_isp_dual_buf;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC1, &__param_str_isp_dual_buf, 183); /* jalr target resolved by relocation */
-
-    /* fragment 25: Branch */
-    v0 = 0;
-    goto find_subdev_link_pad0x10c;
-
-find_subdev_link_pad0xd8:
-    /* fragment 26: MemoryAccess */
-    v0 = *(uint8_t *)((char *)a1 + 4);
-    a0 = 1;
-
-    /* fragment 27: Branch */
-    int _bc_v0_27 = v0 != a0;
-    a0 = 2;
-    if (_bc_v0_27) { goto find_subdev_link_pad0x7c; }
-
-    /* fragment 28: MemoryAccess */
-    v0 = *(uint8_t *)((char *)a1 + 5);
-    a0 = *(uint16_t *)((char *)v1 + 258);
-    a0 = v0 < a0;
-
-    /* fragment 29: Branch */
-    if (a0 == 0) { goto find_subdev_link_pad0xa0; }
-
-    /* fragment 30: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v1 + 264);
-
-find_subdev_link_pad0x100:
-    /* fragment 31: Arithmetic */
-    a0 = 36;
-    a1 = (uintptr_t)v0 * a0;
-    v0 = a1 + (uintptr_t)v1;
-
-find_subdev_link_pad0x10c:
-    /* fragment 32: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-find_subdev_link_pad0x110:
-    /* fragment 33: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-find_subdev_link_pad0x118:
-    /* fragment 34: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 35: Branch */
-    goto find_subdev_link_pad0x34;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+    return tx_isp_t40_resolve_link_pad(a0, a1, 0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011160 origin=fragment_seed original=isp_subdev_init_clks */
@@ -57926,10 +57732,17 @@ tx_isp_reg_set0x4c:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000152e8 origin=model_output original=tx_isp_send_event_to_remote */
+static int regtrace_t40_remote_event_pointer_valid(unsigned long address)
+{
+    return regtrace_is_kernel_ptr((void *)address);
+}
+
 int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     unsigned char *pad = arg1;
+    struct tx_isp_remote_event_target target;
+    enum tx_isp_remote_event_status route_status;
     void *remote_pad = NULL;
     void *callback = NULL;
     static unsigned int log_count;
@@ -57969,33 +57782,47 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
         return -ENOIOCTLCMD;
     }
 
-    remote_pad = *(void **)(pad + 0x0c);
-    regtrace_send_event_diag.last_remote = remote_pad;
-    if (regtrace_is_kernel_ptr(remote_pad)) {
-        callback = *(void **)((char *)remote_pad + 0x1c);
+    route_status = tx_isp_t40_resolve_remote_event(
+        pad, regtrace_t40_remote_event_pointer_valid, &target);
+    if (route_status == TX_ISP_REMOTE_EVENT_OK) {
+        remote_pad = target.pad;
+        callback = (void *)(uintptr_t)target.handler;
+        regtrace_send_event_diag.last_remote = remote_pad;
         regtrace_send_event_diag.last_callback = callback;
-        if (regtrace_is_kernel_ptr(callback)) {
-            ret = ((int (*)(void *, uint32_t, void *))callback)(remote_pad, event, data);
-            regtrace_send_event_diag.remote_calls++;
-            regtrace_send_event_diag.last_ret = ret;
-            if (event == REGTRACE_TX_ISP_EVENT_FRAME_QBUF) {
-                if (qbuf_log_count < 4) {
-                    printk(KERN_INFO "tx_isp_t40_recovered: send_event remote pad=%p remote=%p cb=%p event=0x%x ret=%d\n",
-                           pad, remote_pad, callback, event, ret);
-                } else if (qbuf_log_count == 4) {
-                    printk(KERN_INFO "tx_isp_t40_recovered: send_event qbuf logging suppressed\n");
-                }
-                qbuf_log_count++;
-            } else if (log_count < 128) {
+        ret = ((tx_isp_remote_event_handler)(uintptr_t)target.handler)(
+            remote_pad, event, data);
+        regtrace_send_event_diag.remote_calls++;
+        regtrace_send_event_diag.last_ret = ret;
+        if (event == REGTRACE_TX_ISP_EVENT_FRAME_QBUF) {
+            if (qbuf_log_count < 4) {
                 printk(KERN_INFO "tx_isp_t40_recovered: send_event remote pad=%p remote=%p cb=%p event=0x%x ret=%d\n",
                        pad, remote_pad, callback, event, ret);
-            } else if (log_count == 128) {
-                printk(KERN_INFO "tx_isp_t40_recovered: send_event logging suppressed\n");
+            } else if (qbuf_log_count == 4) {
+                printk(KERN_INFO "tx_isp_t40_recovered: send_event qbuf logging suppressed\n");
             }
-            if (event != REGTRACE_TX_ISP_EVENT_FRAME_QBUF)
-                log_count++;
-            return ret;
+            qbuf_log_count++;
+        } else if (log_count < 128) {
+            printk(KERN_INFO "tx_isp_t40_recovered: send_event remote pad=%p remote=%p cb=%p event=0x%x ret=%d\n",
+                   pad, remote_pad, callback, event, ret);
+        } else if (log_count == 128) {
+            printk(KERN_INFO "tx_isp_t40_recovered: send_event logging suppressed\n");
         }
+        if (event != REGTRACE_TX_ISP_EVENT_FRAME_QBUF)
+            log_count++;
+        return ret;
+    }
+
+    /*
+     * Preserve the recovery driver's partial-route diagnostics. Invocation is
+     * deliberately owned by the shared resolver above.
+     */
+    remote_pad = *(void **)(pad + TX_ISP_ABI_PAD_LINK_OFFSET +
+                           TX_ISP_ABI_LINK_SINK_OFFSET);
+    regtrace_send_event_diag.last_remote = remote_pad;
+    if (regtrace_is_kernel_ptr(remote_pad)) {
+        callback = *(void **)((char *)remote_pad +
+                             TX_ISP_ABI_PAD_EVENT_OFFSET);
+        regtrace_send_event_diag.last_callback = callback;
     }
 
     if (event == REGTRACE_TX_ISP_EVENT_FRAME_DONE) {

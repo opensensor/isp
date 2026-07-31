@@ -2,7 +2,7 @@
 #define TX_ISP_SUBDEV_ABI_H
 
 /*
- * Recovered TX-ISP subdevice ABI facts shared by the three supported SoCs.
+ * Recovered TX-ISP subdevice ABI facts shared by the four supported SoCs.
  *
  * These are byte offsets in objects exchanged with OEM modules, not a
  * suggested C object model.  Keep the two pad slots physically named here:
@@ -12,7 +12,7 @@
  * it is resolved with a device smoke test.
  */
 
-/* Pad layout shared by the recovered T23 and T40 implementations. */
+/* Pad layout shared by the recovered implementations and T31 typed driver. */
 #define TX_ISP_ABI_PAD_OWNER_OFFSET             0x00
 #define TX_ISP_ABI_PAD_INDEX_OFFSET             0x04
 #define TX_ISP_ABI_PAD_TYPE_OFFSET              0x05

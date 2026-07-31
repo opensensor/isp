@@ -2,19 +2,17 @@
 
 ## Purpose
 
-The active T23, T31, and T41 drivers share behavior only where device evidence
-shows that the contract is genuinely common. Shared code owns algorithms and
-small state-machine shells; each SoC adapter continues to own addresses,
-object layouts, tuning data, callbacks, and ordering differences.
-
-T40 is intentionally outside this refactor.
+The active T23, T31, T40, and T41 drivers share behavior only where device
+evidence shows that the contract is genuinely common. Shared code owns
+algorithms and small state-machine shells; each SoC adapter continues to own
+addresses, object layouts, tuning data, callbacks, and ordering differences.
 
 ## Current Library
 
 | Unit | Interface | Implementation | Consumers |
 |---|---|---|---|
 | Fixed-point and interpolation math | `tx_isp_math.h` | header-only pure functions | T23, T31, T41 |
-| Sensor registry | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T31, T41 |
+| Sensor registry | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T31, T40, T41 |
 | Day/night transition shell | `tx_isp_daynight.h` | `common/tx_isp_daynight.c` | T31, T41 |
 | Ordered register profiles | `tx_isp_reg_profile.h` | `common/tx_isp_reg_profile.c` | T23, T31 |
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
@@ -23,10 +21,10 @@ T40 is intentionally outside this refactor.
 | Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T31, T41 |
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
-| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T41 |
-| Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T41 |
-| Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T41 |
-| Recovered subdevice readiness | `tx_isp_state.h` | `common/tx_isp_state.c` | T23, T41 |
+| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T40, T41 |
+| Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T40, T41 |
+| Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T40, T41 |
+| Recovered subdevice readiness | `tx_isp_state.h` | `common/tx_isp_state.c` | T23, T40, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
@@ -51,6 +49,10 @@ creation, and T41 uses them for frame-channel event callback installation and
 remote dispatch. Host tests assert every link and pad offset. The change is
 binary-neutral on all three active modules.
 
+T40 uses the shared initializer during recovered pad allocation and the
+shared validator/pair connector in its live graph-repair path. Its diagnostic
+counters, pointer policy, and teardown remain local.
+
 The shared prefix deliberately stops before the unresolved pad tail. T31 has
 an extra `event_callback` member after `event`, so its `priv` position and
 full pad size differ from the recovered 0x20/0x24 layout used elsewhere.
@@ -71,10 +73,11 @@ adapters and T41's recovered link setup use the named offsets.
 
 The adapters keep every physical difference visible. T23 reads 16 subdevice
 pointers at graph offset `0x38` and uses the legacy `0xc8` through `0xd0`
-pad slots. T41 reads its 16 pointers at `0x3c` and uses the extended `0x100`
-through `0x108` slots. T31 uses its typed graph and retains its established
-raw input/output mapping, including the known reversal relative to the
-declared structure. Pointer validation also remains adapter policy.
+pad slots. T40 and T41 read their 16 pointers at `0x3c` and use the extended
+`0x100` through `0x108` slots. T31 uses its typed graph and retains its
+established raw input/output mapping, including the known reversal relative
+to the declared structure. Pointer validation also remains adapter policy;
+T40 keeps its stricter aligned kernel-address check.
 
 Host tests exercise valid input/output resolution and every failure status.
 One-shot device boots then exercised real graph creation on all three SoCs.
@@ -92,6 +95,14 @@ Replacing the remaining raw graph-record positions with this wire contract
 rebuilt to the exact three live hashes above, so it required no additional
 device cycle.
 
+The T40 adapter was added in a later device cycle against the exact
+T40XP/GC4653 OEM module. The open three-object module registered one sensor,
+accepted forced day mode, kept IRQ 38/39 active, and delivered a valid
+1920x1080 H.264 stream. FFmpeg decoded eight frames without errors. The
+generation-local full recovery proc dump is not part of the health contract:
+an unbounded read triggered the known unsafe diagnostic path and the one-shot
+loader correctly returned the next boot to stock.
+
 ### Remote pad event routing
 
 `tx_isp_resolve_remote_event()` owns the common recovered route from a local
@@ -101,12 +112,13 @@ handler through generation policy, and distinguishes invalid input, an
 unlinked pad, and a missing handler. Callback invocation, event logging, and
 the kernel-address policy remain in each SoC adapter.
 
-T23 and T41 share the same recovered pad/link positions and use small ABI
-accessors around the common resolver. This restores T23's OEM three-argument
-remote-event behavior in place of its former unconditional-success stub.
-T41 preserves its existing event diagnostics and call ordering. T31 retains
-its structurally different typed dispatch/fallback path and does not link this
-unit.
+T23, T40, and T41 share the same recovered pad/link positions and use small
+ABI accessors around the common resolver. This restores T23's OEM
+three-argument remote-event behavior in place of its former
+unconditional-success stub. T40 preserves its event-class filter, diagnostics,
+and local frame-done fallback; T41 preserves its existing event diagnostics
+and call ordering. T31 retains its structurally different typed
+dispatch/fallback path and does not link this unit.
 
 Host tests cover invalid inputs, missing accessors, unlinked and invalid
 remote pads, absent and invalid handlers, and successful callback invocation.
@@ -125,11 +137,13 @@ brightness, noise, or image-detail comparison.
 
 ### Recovered subdevice readiness
 
-The OEM T23 and T41 `check_state` functions apply the same policy: reject a
-null object; accept an object whose queue head is not self-linked; otherwise
-invert bit zero of its state field. `tx_isp_subdev_state_ready()` owns that
-value-level policy. The adapters retain T23's `0x1f8` queue/`0x20c` word-state
-layout and T41's `0x1fc` queue/`0x224` byte-state layout.
+The OEM T23, T40, and T41 `check_state` functions apply the same policy:
+reject a null object; accept an object whose queue head is not self-linked;
+otherwise invert bit zero of its state field.
+`tx_isp_subdev_state_ready()` owns that value-level policy. The adapters
+retain T23's `0x1f8` queue/`0x20c` word-state layout, T40's `0x1fc`
+queue/`0x218` byte-state layout, and T41's `0x1fc` queue/`0x224` byte-state
+layout.
 
 This extraction also restores T41 behavior that the recovered source had
 collapsed to an unconditional-zero stub. Host tests cover null, linked,
@@ -388,18 +402,19 @@ T31 returns the exact used size through its eight-byte contract.
 
 ## Validation Matrix
 
-The July 30, 2026 device cycle exercised the real Raptor consumer, both RTSP
-streams, forced day/night transitions, automatic mode, and post-run
-`dmesg`, `logread`, and `logcat`.
+The July 30-31, 2026 device cycles exercised the real Raptor consumer, RTSP,
+mode control, and post-run `dmesg`, `logread`, and `logcat`.
 
 | SoC / sensor | Main stream | Sub stream | Mode coverage | Result |
 |---|---:|---:|---|---|
 | T23 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | clean geometry and color; no fatal or memory faults |
 | T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | one-buffer pre-dequeue restored; high-gain MDNS profile matches stock flat-wall stability |
+| T40XP / GC4653 | 1920×1080 @ 25 fps | configured, not part of this gate | day | shared subdevice/link/event/state pass; eight decoded main frames and no fatal signature |
 | T41 / OS04D10 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | balanced `0x380/0x880` day AWB and dual-stream fanout |
 
-The tested stock reserved-memory settings are sufficient: 22 MiB on T23/T31
-and 30 MiB on T41. No bootloader environment change is currently required.
+The tested stock reserved-memory settings are sufficient: 22 MiB on T23/T31,
+128 MiB on the T40XP target, and 30 MiB on T41. No bootloader environment
+change was required.
 
 The T31 consumer uses one frame-source buffer and configures
 `isp_ch0_pre_dequeue_time=24`. Stock schedules an early DQBUF event from the

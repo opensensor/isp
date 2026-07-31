@@ -1,5 +1,6 @@
 tx-isp-t40-objs := tx_isp_t40_recovered.o \
-		   tx_isp_t40_sinfo.o
+		   tx_isp_t40_sinfo.o \
+		   tx_isp_t40_subdev.o
 obj-m += tx-isp-t40.o
 
 ccflags-y += -I$(src)/../include

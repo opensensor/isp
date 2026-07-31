@@ -2,15 +2,12 @@
 
 ## Scope
 
-The active refactor covers the working T23, T31, and T41 TX-ISP drivers. T31
-already has core, CSI, VIC, VIN, frame-source, tuning, and support translation
-units. T23 and T41 still have large recovered core translation units, but both
-modules now link separate shared-library adapter objects. This gives later
-extractions stable module boundaries without rewriting the recovered pipeline
-all at once.
-
-T40 remains a working recovered baseline, but it is intentionally outside this
-round of cleanup.
+The active refactor covers the working T23, T31, T40, and T41 TX-ISP drivers.
+T31 already has core, CSI, VIC, VIN, frame-source, tuning, and support
+translation units. T23, T40, and T41 still have large recovered core
+translation units, but their modules now link separate shared-library adapter
+objects. This gives later extractions stable module boundaries without
+rewriting the recovered pipeline all at once.
 
 The goal is one implementation where behavior is genuinely common, with small
 per-SoC adapters for recovered object layouts, register maps, capabilities,
@@ -251,11 +248,11 @@ pad tail differ from the recovered 0x24-byte shape. That discrepancy remains
 visible and is not papered over by a false full-structure assertion.
 
 `driver/common/tx_isp_subdev.c` now owns the name/type/index graph search used
-by all three active generations. Small layout adapters retain T23's graph
-table at `0x38`, T41's at `0x3c`, their legacy/extended subdevice prefixes,
-and T31's established raw direction mapping. The common resolver validates
-type, pad storage, and bounds and reports a host-tested failure status without
-owning logging or link mutation.
+by all four active generations. Small layout adapters retain T23's graph table
+at `0x38`, the T40/T41 tables at `0x3c`, their legacy/extended subdevice
+prefixes, and T31's established raw direction mapping. The common resolver
+validates type, pad storage, and bounds and reports a host-tested failure
+status without owning logging or link mutation.
 
 The companion wire contract fixes an endpoint at 8 bytes, a complete
 source/sink/flag link record at 20 bytes, and a record-set pointer/count
@@ -272,6 +269,10 @@ T23 and T31 use the common initializer during pad allocation; T41 also uses
 the validator and pair connector during live graph setup. Conflict teardown
 callbacks and their ordering remain generation-local.
 
+T40 now uses the common initializer during recovered pad allocation and the
+validator/pair connector in its live graph-repair path. Its strict pointer
+policy, diagnostic counters, and teardown remain local.
+
 A sequential three-target build and one-shot device cycle validated this
 extraction. Each device consumed its marker, registered exactly one sensor,
 accepted forced day mode, advanced ISP/VIC interrupts, and decoded 149, 148,
@@ -281,12 +282,13 @@ during a rainstorm, so image brightness and wall-noise comparisons were
 deliberately excluded from this structural gate.
 
 `driver/common/tx_isp_remote_event.c` now owns the generation-neutral
-local-pad to active-sink to event-handler lookup shared by T23 and T41.
+local-pad to active-sink to event-handler lookup shared by T23, T40, and T41.
 Generation adapters retain their pointer policy, invocation, and diagnostics.
 This replaces T23's recovered unconditional-success stub with the OEM
 three-argument dispatch behavior while leaving T41's working call path and
-logging intact. T31's typed dispatcher has different fallback semantics and
-is intentionally not a consumer.
+logging intact. T40 keeps its event-class filter, detailed diagnostics, and
+local frame-done fallback. T31's typed dispatcher has different fallback
+semantics and is intentionally not a consumer.
 
 Host failure-path tests pass, sequential T23/T41 builds left the excluded T31
 artifact byte-identical, and fail-safe boots left the new T23/T41 modules
@@ -297,10 +299,10 @@ callbacks returning zero. Kernel, system, and Raptor logs contain no driver
 faults. The scene was darkening during a storm, so the cycle validates
 dispatch and transport rather than comparative image quality.
 
-The common state unit now owns the identical value-level T23/T41
+The common state unit now owns the identical value-level T23/T40/T41
 `check_state` decision while adapters retain their different queue offsets and
-state-field widths. Besides removing another duplicate recovered policy, this
-restores T41's OEM behavior in place of its unconditional-zero recovery stub.
+state-field widths. Besides removing duplicate recovered policy, this restores
+the T40 and T41 OEM behavior in place of unconditional-zero recovery stubs.
 Host edge cases pass. Fail-safe T23/T41 boots each bound one sensor, accepted
 forced day mode, advanced ISP interrupts, and decoded 149/151 1080p frames in
 six seconds without driver faults. T31 was not rebuilt or rebooted and its
@@ -310,6 +312,23 @@ artifact and live module remained byte-identical.
 kernel-tree compatibility prelude used by recovered sources. Keep larger
 freestanding recovery-tool declarations local until their signatures are
 verified.
+
+### Canonical T40 artifact
+
+T40 Kbuild emits `driver/t40/tx-isp-t40.ko`, matching the dependency name used
+by the GC4653 sensor module. It is now a three-object module:
+
+- `tx_isp_t40_recovered.c` owns the recovered hardware and tuning pipeline.
+- `tx_isp_t40_sinfo.c` supplies the T40 layout adapter for the common sensor
+  registry.
+- `tx_isp_t40_subdev.c` supplies the extended-layout graph, remote-event,
+  link-state, and readiness adapters.
+
+The 2026-07-31 T40XP/GC4653 cycle built against the exact 4.4.94 firmware tree,
+registered one sensor, accepted forced day mode, kept IRQ 38/39 active, and
+delivered a valid 1920x1080 H.264 stream. FFmpeg decoded eight frames without
+errors. The full recovery proc dump remains explicitly outside the health
+contract because its legacy diagnostic path is unsafe.
 
 ### Canonical T41 artifact
 
@@ -372,6 +391,7 @@ running so the current work is available for inspection.
 |---|---|---|
 | T23 | ten-object module, shared math/registry/subdevice resolver/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
 | T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
+| T40 | three-object module, shared registry/subdevice resolver/link/event/state policy, GC4653 | pass; day mode, active IRQ 38/39, and valid 1920x1080 RTSP decode; legacy full proc dump excluded |
 | T41 | nine-object module, shared math/registry/subdevice resolver/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs
@@ -395,7 +415,7 @@ driver/
 ├── common/               # Shared kernel implementation
 ├── t23/                  # T23 registers, resources, tables, quirks
 ├── t31/                  # Split T31 implementation and adapters
-├── t40/                  # Deferred recovered baseline
+├── t40/                  # T40 recovered pipeline and shared adapters
 └── t41/                  # T41 registers, resources, tables, quirks
 ```
 
@@ -415,8 +435,8 @@ callback surface. It should not discover the SoC at runtime or grow a web of
 - code still represented by unresolved recovery fragments
 
 T31's file boundaries are a useful decomposition guide, not automatically the
-canonical behavior. T23 and T41 may expose older or newer semantics that need
-to shape the eventual common interface.
+canonical behavior. T23, T40, and T41 may expose older or newer semantics that
+need to shape the eventual common interface.
 
 ## Safe Extraction Rules
 
@@ -425,7 +445,7 @@ to shape the eventual common interface.
 2. Preserve the existing exported or per-driver entry point as a thin wrapper
    during the first move.
 3. Express generation differences as explicit data, offsets, or callbacks.
-4. Add host tests for pure code and build all three active modules for every
+4. Add host tests for pure code and build all four active modules for every
    shared change.
 5. Run a full consumer smoke test on each affected SoC before declaring a
    kernel-facing extraction complete.
@@ -442,10 +462,12 @@ to shape the eventual common interface.
 3. Reconcile the known T31 pad-direction and 0x24/0x28 stride discrepancy in a
    standalone, device-tested change.
 4. Extend the checked ABI from pads to links, events, and sensor attributes.
-5. Split the next low-risk T23/T41 subsystem, such as proc diagnostics or frame
-   completion, behind a reviewed interface.
+5. Split the next low-risk recovered T23/T40/T41 subsystem behind a reviewed
+   interface. T40 proc diagnostics are specifically excluded until their
+   unsafe full-read path is repaired.
 6. Move event/state-machine shells only after IRQ decode and acknowledge
    ordering remain explicit per-SoC behavior.
 7. Model the next layer of buffer ownership and queue-lifecycle state behind
    typed adapters,
-   starting with read-only comparisons of the T23/T31/T41 consumer contracts.
+   starting with read-only comparisons of the T23/T31/T40/T41 consumer
+   contracts.

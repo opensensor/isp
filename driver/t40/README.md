@@ -4,10 +4,10 @@ This directory is the T40 bring-up workspace for matching the OEM
 `tx-isp-t40.ko` behavior on Linux 4.4.94 targets.
 
 The initial `tx_isp_t40_recovered.c` file is a recovered whole-driver seed plus
-the local parity fixes from the Wyze Cam 3 Pro T40XP/GC4653 smoke-test loop. It
-is intentionally isolated from the hand-written T31 driver while the T40 ABI,
-platform devices, pad/event routing, frame-channel buffers, and hardware
-activation sequence are checked against the OEM module.
+the local parity fixes from the Wyze Cam 3 Pro T40XP/GC4653 smoke-test loop.
+Hardware sequencing and tuning remain local, while reviewed object-layout
+adapters now let T40 consume the same small shared-library contracts as the
+other open drivers.
 
 Build from a compatible 4.4.94 kernel tree with:
 
@@ -17,7 +17,35 @@ make -C <kernel-src> M=$(pwd)/driver/t40 modules
 
 Expected artifact:
 
-- `driver/t40/tx_isp_t40_recovered.ko`
+- `driver/t40/tx-isp-t40.ko`
+
+## Current organization
+
+- `tx_isp_t40_recovered.c` owns the recovered pipeline, device lifecycle,
+  hardware programming, diagnostics, and T40 tuning policy.
+- `tx_isp_t40_sinfo.c` adapts the T40 sensor object layout to the common typed
+  registry.
+- `tx_isp_t40_subdev.c` adapts the extended T40 graph and subdevice layout to
+  the common graph resolver, remote-event resolver, readiness policy, and
+  pad-link operations.
+
+The T40 adapter retains generation-local pointer validation and the recovered
+queue/state offsets (`0x1fc` and `0x218`). Remote-event filtering, diagnostics,
+and the local frame-done fallback also remain in the recovered driver.
+
+The first shared-subdevice device cycle ran on the T40XP/GC4653 camera at
+`.144` on 2026-07-31. The open module registered one sensor, accepted forced
+day mode, kept IRQ 38/39 active, and supplied a valid 1920x1080 H.264 RTSP
+stream; FFmpeg decoded eight frames without an error and saved a fresh JPEG.
+The module stayed resident with all 326 recovery parameters exposed and no
+kernel-fatal signature during the sustained check.
+
+Do not use an unbounded full read of `/proc/tx_isp_t40_recovered` as a health
+probe. That legacy diagnostic path remains unsafe and caused the one-shot
+test boot to fall back to stock. Use the bounded T40 probe tooling and the
+specific `/proc/jz/sensor` nodes instead. The fail-safe boot loader now keeps
+its early dmesg and kmsg captures in its persistent state directory so this
+class of watchdog fallback retains evidence.
 
 ## Validated parity repairs
 
