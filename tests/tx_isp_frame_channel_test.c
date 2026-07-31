@@ -22,6 +22,14 @@ static void test_events(void)
 	       TX_ISP_FRAME_EVENT_QUEUE_BUFFER + 1);
 }
 
+static void test_slot_states(void)
+{
+	assert(TX_ISP_FRAME_SLOT_FREE == 0);
+	assert(TX_ISP_FRAME_SLOT_QUEUED == 1);
+	assert(TX_ISP_FRAME_SLOT_ACTIVE == 3);
+	assert(TX_ISP_FRAME_SLOT_DONE == 4);
+}
+
 static void assert_ioctl(uint32_t command, uint32_t type, uint32_t number,
 			 uint32_t bytes, uint32_t direction)
 {
@@ -90,6 +98,7 @@ static void test_t41_ioctls(void)
 int main(void)
 {
 	test_events();
+	test_slot_states();
 	test_request_wire();
 	test_legacy_ioctls();
 	test_t41_ioctls();

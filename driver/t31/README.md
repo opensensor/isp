@@ -25,8 +25,8 @@ just cosmetic:
 - Pad allocation delegates the common five-word active-link initializer while
   retaining T31's extra callback/private tail and raw pad-slot mapping.
 - The shared frame-buffer ABI asserts T31's 68-byte MIPS32 `v4l2_buffer`
-  contract and names its persistent flag mask; T31 retains queue ownership and
-  its generation-specific state meanings.
+  contract, names its persistent flag mask, and defines the recovered
+  FREE/QUEUED/ACTIVE/DONE slot states; T31 retains queue ownership.
 - `frame_image_format` embeds the shared fixed 48-byte pixel descriptor instead
   of Ingenic's GCC-5.4-only `v4l2_pix_format` extension. This restores the
   private format from 96 to the OEM/libimp 112 bytes on modern compilers.
@@ -49,7 +49,7 @@ tables, and sensor-specific profiles remain T31-local.
 
 ## Current SC2336 Runtime
 
-The July 30, 2026 device cycle validated the open module on the real T31
+The July 30-31, 2026 device cycles validated the open module on the real T31
 SC2336 camera through the stock Ingenic userspace and Raptor:
 
 - main/sub RTSP streams initialize and remain responsive
@@ -63,10 +63,12 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   (`0x7814=0x00f01100`)
 - duplicate sensor exposure tuples are suppressed after the first successful
   write, avoiding redundant 25 Hz SC2336 timing-register transactions
-- the OEM one-buffer pre-dequeue path now schedules the configured 24 ms
-  frame-start lead event, so both RTSP streams deliver the configured 25 fps
-  instead of waiting through a userspace round trip and losing every other
-  frame
+- the main frame source uses two VBM buffers and rotates QUEUED/ACTIVE/DONE
+  ownership before waking DQBUF; userspace receives only DMA-complete frames
+  while both RTSP streams retain the configured 25 fps
+- frame timestamps are captured at DMA completion instead of at userspace
+  dequeue, eliminating scheduler-dependent PTS/DTS jitter and multi-second
+  delivery gaps
 - SC2336 gain-stage hysteresis keeps the accepted MDNS ratio `0x80` at normal
   gain and selects the device-validated `0xa0` profile in the `0x8xx`
   high-gain stage; `sc2336_mdns_auto=0` disables this local policy
@@ -105,13 +107,19 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   decoded 148 1920x1080 frames in six seconds; all three fault scans are clean
   and the responsive candidate remains active with SHA-256
   `322ace762900c81d22e55f527572708f6ae92d6ca144725d52fb58413dd37b4a`
+- the final two-buffer module consumed its fail-safe marker, loaded with status
+  zero, accepted forced day mode, and returned 300 monotonic main-stream
+  packets in 12 seconds with 39.155-41.644 ms DTS spacing; the persistent open
+  module SHA-256 is
+  `14908c65dd40bb76f538a4a92a0a27803ea89fd8a9a0cdb8c0975516eaeb85a7`
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.
 The validation retained exact 3,133,440/353,280-byte pools without rejecting a
-live buffer. The repaired pre-dequeue path decoded 501 main frames in 20
-seconds and 250 substream frames in 10 seconds. The validated module SHA-256
-for that earlier DMA-binding cycle was
+live buffer. An earlier one-buffer pre-dequeue experiment decoded 501 main
+frames in 20 seconds and 250 substream frames in 10 seconds, but could expose
+an ACTIVE buffer before DMA completion; it has been replaced by the safe
+two-buffer rotation. The validated module SHA-256 for that earlier cycle was
 `8a1e71f3f0479bbc450d5a98f7af910b572b1a5b0b331b03518a4ba466d5d731`.
 
 The common math library now exposes and host-tests the split 64-bit two- and
@@ -119,10 +127,9 @@ three-operand Q-format multipliers used by AE tuning. T31 intentionally retains
 its local inline compatibility body: routing that body through one additional
 header wrapper changed register allocation inside the large recovered AE
 function and produced visibly grainier walls despite mathematical equivalence.
-Restoring the size-neutral boundary reproduces the accepted module and its
-entire loadable text byte-for-byte. The pre-dequeue/MDNS work leaves that
-fragile tuning object untouched and changes only the frame-source/core and
-outer sensor-work objects.
+Restoring the size-neutral boundary reproduces the accepted tuning object
+byte-for-byte. The frame-queue/MDNS work leaves that fragile object untouched
+and changes only frame-source/core and outer sensor-work objects.
 
 The DMSC output selector deserves particular care.  Its low bits select
 normal or diagnostic DMSC outputs; they are not a CFA index.  Rewriting them
@@ -172,9 +179,9 @@ then reports scene-responsive exposure and luma instead of zeros.
 
 ## Known Gaps
 
-- The pre-dequeue implementation is intentionally limited to the one-buffer
-  channel contract exercised by this consumer. Multi-buffer ownership still
-  needs a separate device-backed queue test before it can share this path.
+- T23/T41 still need their own device-backed ownership tests before the full
+  T31 queue lifecycle can move behind a common implementation rather than only
+  sharing slot-state names.
 - The raw histogram DMA layout still needs recovery; the per-zone luma
   fallback is intentionally narrow.
 - Raptor's exposure summary still reports zero WB statistic gains even though

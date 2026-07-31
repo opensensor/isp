@@ -47,6 +47,7 @@
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
 #include "tx_isp_t31_subdev_resolver.h"
+#include "../include/tx_isp/tx_isp_frame_channel.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
 
@@ -1124,12 +1125,6 @@ static struct fs_platform_data fs_pdata = {
 
 /* Shared frame channel state used across the driver. */
 struct frame_channel_device frame_channels[4];
-/*
- * Physical address delivered by the OEM one-buffer pre-dequeue path but not
- * yet observed in the MSCA DMA-done FIFO.  The later DMA-done event consumes
- * this marker instead of delivering the same frame twice.
- */
-static u32 frame_pre_dequeue_pending_phys[3];
 int num_channels = 4;
 static u32 frame_channel_colorspace[4] = {
     V4L2_COLORSPACE_REC709,
@@ -1474,28 +1469,6 @@ int frame_chan_event(void *priv, int event, void *data)
         bool drop = false;
         int ch = fcd->channel_num;
 
-        /*
-         * A normal MSCA completion follows an OEM pre-dequeue notification
-         * for the same buffer.  Userspace may already have dequeued and
-         * re-queued that one buffer for the next frame, so do not mutate its
-         * state or signal a duplicate frame here.
-         */
-        if (data && ch >= 0 && ch < ARRAY_SIZE(frame_pre_dequeue_pending_phys)) {
-            u32 y_addr = ((u32 *)data)[2];
-            unsigned long pre_flags;
-            bool pre_dequeued = false;
-
-            spin_lock_irqsave(&fcd->oem_buf_lock, pre_flags);
-            if (y_addr && frame_pre_dequeue_pending_phys[ch] == y_addr) {
-                frame_pre_dequeue_pending_phys[ch] = 0;
-                pre_dequeued = true;
-            }
-            spin_unlock_irqrestore(&fcd->oem_buf_lock, pre_flags);
-
-            if (pre_dequeued)
-                return 0;
-        }
-
         /* OEM EXACT: Day/night switch drop-frame logic.
          * During DN transitions, the ISR sets per-channel counters.
          * While counter > 0, recycle the frame (don't deliver to userspace)
@@ -1524,45 +1497,65 @@ int frame_chan_event(void *priv, int event, void *data)
                 state->last_done_phys = y_addr;
         }
 
-        atomic_inc(&state->frame_ready_count);
-        state->sequence++;
-        complete(&state->frame_done);
-        wake_up_interruptible(&state->frame_wait);
-
-        /* OEM frame-done requeue: mark completed buffer as DONE,
-         * then submit the next queued buffer to MSCA immediately.
-         * This is the third __enqueue_in_driver call site from OEM. */
+        /*
+         * Finish all ownership and metadata transitions before waking DQBUF.
+         * The former ordering woke userspace first, allowing DQBUF/QBUF to
+         * recycle the buffer while this handler still considered it ACTIVE.
+         */
         {
             unsigned long oem_flags;
             int bi, next_idx = -1;
             u32 next_phys = 0;
             u32 y_done = state->last_done_phys;
+            u32 completed_sequence = state->sequence + 1;
+            struct timeval completed_timestamp;
+
+            fill_timeval_mono(&completed_timestamp);
 
             spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
             /* Mark completed buffer as DONE */
             if (y_done) {
                 for (bi = 0; bi < fcd->oem_buf_count && bi < 64; bi++) {
-                    if (fcd->oem_bufs[bi].state == 3 &&
+                    if (fcd->oem_bufs[bi].state == TX_ISP_FRAME_SLOT_ACTIVE &&
                         fcd->oem_bufs[bi].phys_addr == y_done) {
-                        fcd->oem_bufs[bi].state = 4; /* DONE */
+                        fcd->oem_bufs[bi].state = TX_ISP_FRAME_SLOT_DONE;
+                        fcd->oem_bufs[bi].done_sequence = completed_sequence;
+                        fcd->oem_bufs[bi].done_timestamp = completed_timestamp;
                         break;
                     }
                 }
             }
             /* Find next queued buffer to submit */
             for (bi = 0; bi < fcd->oem_buf_count && bi < 64; bi++) {
-                if (fcd->oem_bufs[bi].state == 1) {
+                if (fcd->oem_bufs[bi].state == TX_ISP_FRAME_SLOT_QUEUED) {
                     next_phys = fcd->oem_bufs[bi].phys_addr;
-                    fcd->oem_bufs[bi].state = 3; /* ACTIVE */
+                    fcd->oem_bufs[bi].state = TX_ISP_FRAME_SLOT_ACTIVE;
                     next_idx = bi;
                     break;
                 }
             }
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
 
-            if (next_idx >= 0 && next_phys)
-                __submit_buffer_to_msca(fcd->channel_num, next_phys);
+            if (next_idx >= 0 && next_phys) {
+                int submit_ret = __submit_buffer_to_msca(fcd->channel_num,
+                                                         next_phys);
+                if (submit_ret) {
+                    spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
+                    if (fcd->oem_bufs[next_idx].state == TX_ISP_FRAME_SLOT_ACTIVE &&
+                        fcd->oem_bufs[next_idx].phys_addr == next_phys)
+                        fcd->oem_bufs[next_idx].state = TX_ISP_FRAME_SLOT_QUEUED;
+                    spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
+                    pr_err_ratelimited("frame ch%d: next buffer submit failed: %d\n",
+                                       ch, submit_ret);
+                }
+            }
+
+            state->sequence = completed_sequence;
         }
+
+        atomic_inc(&state->frame_ready_count);
+        complete(&state->frame_done);
+        wake_up_interruptible(&state->frame_wait);
         return 0;
     }
     case TX_ISP_EVENT_FRAME_QBUF: /* 0x3000008 */
@@ -1572,57 +1565,6 @@ int frame_chan_event(void *priv, int event, void *data)
     }
 }
 EXPORT_SYMBOL_GPL(frame_chan_event);
-
-/*
- * Deliver channel 0's active one-buffer frame at the configured OEM
- * pre-dequeue point.  The caller is the frame-start worker in tx_isp_core.c,
- * after its isp_ch0_pre_dequeue_time delay.
- */
-int frame_channel_pre_dequeue(int channel)
-{
-    struct frame_channel_device *fcd;
-    struct tx_isp_channel_state *state;
-    unsigned long flags;
-    u32 phys_addr = 0;
-    int i;
-
-    if (channel < 0 || channel >= ARRAY_SIZE(frame_pre_dequeue_pending_phys))
-        return -EINVAL;
-
-    fcd = &frame_channels[channel];
-    state = &fcd->state;
-    if (!state->streaming || !state->capture_active)
-        return -EAGAIN;
-    if (fcd->oem_buf_count != 1)
-        return -EOPNOTSUPP;
-
-    spin_lock_irqsave(&fcd->oem_buf_lock, flags);
-    if (frame_pre_dequeue_pending_phys[channel]) {
-        spin_unlock_irqrestore(&fcd->oem_buf_lock, flags);
-        return -EALREADY;
-    }
-
-    for (i = 0; i < fcd->oem_buf_count && i < 64; i++) {
-        if (fcd->oem_bufs[i].state == 3 &&
-            fcd->oem_bufs[i].phys_addr) {
-            phys_addr = fcd->oem_bufs[i].phys_addr;
-            frame_pre_dequeue_pending_phys[channel] = phys_addr;
-            break;
-        }
-    }
-    spin_unlock_irqrestore(&fcd->oem_buf_lock, flags);
-
-    if (!phys_addr)
-        return -ENOENT;
-
-    state->last_done_phys = phys_addr;
-    atomic_inc(&state->frame_ready_count);
-    state->sequence++;
-    complete(&state->frame_done);
-    wake_up_interruptible(&state->frame_wait);
-    return 0;
-}
-EXPORT_SYMBOL_GPL(frame_channel_pre_dequeue);
 
 /* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
 void system_reg_write_ae(u32 arg1, u32 arg2, u32 arg3)
@@ -2235,9 +2177,6 @@ int frame_channel_open(struct inode *inode, struct file *file)
     spin_lock_init(&fcd->oem_buf_lock);
     memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
     fcd->oem_buf_count = 0;
-    if (fcd->channel_num >= 0 &&
-        fcd->channel_num < ARRAY_SIZE(frame_pre_dequeue_pending_phys))
-        frame_pre_dequeue_pending_phys[fcd->channel_num] = 0;
 
     /* Set default format based on channel if not already set */
     if (fcd->state.width == 0) {
@@ -3822,9 +3761,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Reset OEM buffer rotation state for new allocation */
             memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
             fcd->oem_buf_count = reqbuf.count;
-            if (channel >= 0 &&
-                channel < ARRAY_SIZE(frame_pre_dequeue_pending_phys))
-                frame_pre_dequeue_pending_phys[channel] = 0;
             state->current_buffer.type = reqbuf.type;
             state->current_buffer.memory = reqbuf.memory;
             state->current_buffer.length = buffer_size;
@@ -3882,12 +3818,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     case TX_ISP_FRAME_IOCTL_LEGACY_QBUF: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
         struct v4l2_buffer buffer;
         struct tx_isp_nv12_buffer dma_buffer;
-        unsigned long flags;
         u32 buffer_w;
         u32 buffer_h;
         u32 buffer_size;
         uint32_t buffer_phys_addr;
         int dma_ret;
+        int submit_ret;
+        bool submit_now = false;
 
         pr_debug("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
 
@@ -3978,21 +3915,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_warn("*** QBUF: Failed to track buffer metadata for idx=%d ***\n", buffer.index);
         }
 
-        /* Track queued buffer for deliverability gating */
-        {
-            struct queued_node *qnode = kmalloc(sizeof(*qnode), GFP_KERNEL);
-            if (qnode) {
-                qnode->index = buffer.index;
-                spin_lock_irqsave(&state->queue_lock, flags);
-                list_add_tail(&qnode->list, &state->queued_buffers);
-                state->queued_count++;
-                spin_unlock_irqrestore(&state->queue_lock, flags);
-                pr_debug("[QBUF] ch%d queued idx=%u (queued_count=%d)\n", channel, qnode->index, state->queued_count);
-            } else {
-                pr_warn("*** QBUF: Failed to allocate queued_node; proceeding but deliverability may be delayed ***\n");
-            }
-        }
-
         /* OEM EXACT: ispcore_pad_event_handle case 0x3000005.
          * __enqueue_in_driver → tx_isp_send_event_to_remote(sd, 0x3000005, buf)
          * → ispcore_pad_event_handle writes ONLY MSCA output DMA addresses.
@@ -4038,30 +3960,52 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 state->msca_configured = true;
             }
 
-            /* OEM: *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x996c) = Y addr
-             *      *(*($s3_4 + 0xb8) + (*($s1_2 + 0x70) << 8) + 0x9984) = UV addr
-             * channel_id << 8 selects the MSCA channel register bank.
-             */
-            writel(dma_buffer.y_dma,
-                   ourISPdev->core_regs + (channel << 8) + 0x996c);
-            writel(dma_buffer.uv_dma,
-                   ourISPdev->core_regs + (channel << 8) + 0x9984);
-
-            pr_debug("QBUF ch%d: MSCA Y=0x%x UV=0x%x (w=%u h=%u aligned_h=%u)\n",
-                     channel, dma_buffer.y_dma, dma_buffer.uv_dma,
-                     buffer_w, buffer_h,
-                     dma_buffer.layout.aligned_height);
+            /* DMA addresses are submitted below only when this slot becomes
+             * ACTIVE. A second userspace QBUF must remain QUEUED instead of
+             * replacing the address of the frame currently in flight. */
         }
 
-        /* OEM buffer rotation: track state for frame-done requeue.
-         * When the next frame completes, the ISR can submit the next
-         * queued buffer without waiting for userspace QBUF. */
+        /* Exactly one slot owns the MSCA output registers. Additional slots
+         * wait in QUEUED state until the DMA-done handler rotates them. */
         if (buffer.index < 64 && fcd) {
             unsigned long oem_flags;
+            int bi;
+            bool active = false;
+
             spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
+            for (bi = 0; bi < fcd->oem_buf_count && bi < 64; bi++) {
+                if (bi != buffer.index &&
+                    fcd->oem_bufs[bi].state == TX_ISP_FRAME_SLOT_ACTIVE) {
+                    active = true;
+                    break;
+                }
+            }
             fcd->oem_bufs[buffer.index].phys_addr = buffer_phys_addr;
-            fcd->oem_bufs[buffer.index].state = 3; /* ACTIVE — already submitted to HW above */
+            fcd->oem_bufs[buffer.index].done_sequence = 0;
+            memset(&fcd->oem_bufs[buffer.index].done_timestamp, 0,
+                   sizeof(fcd->oem_bufs[buffer.index].done_timestamp));
+            if (active) {
+                fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_QUEUED;
+            } else {
+                fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_ACTIVE;
+                submit_now = true;
+            }
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
+        }
+
+        if (submit_now) {
+            submit_ret = __submit_buffer_to_msca(channel, buffer_phys_addr);
+            if (submit_ret) {
+                unsigned long oem_flags;
+
+                spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
+                if (fcd->oem_bufs[buffer.index].state == TX_ISP_FRAME_SLOT_ACTIVE)
+                    fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_FREE;
+                spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
+                pr_err("QBUF ch%d: failed to submit buffer %u: %d\n",
+                       channel, buffer.index, submit_ret);
+                return submit_ret;
+            }
         }
 
         /* Copy buffer back to user space */
@@ -4175,31 +4119,57 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         {
             struct frame_buffer *tracked = NULL;
-            u32 delivered_seq = state->sequence;
+            u32 delivered_seq = 0;
             struct timeval delivered_ts;
-            u32 delivered_idx;
+            u32 delivered_idx = 0;
             u32 done_phys = state->last_done_phys;
             int match_found = 0;
+            unsigned long oem_flags;
+            int bi;
+
+            memset(&delivered_ts, 0, sizeof(delivered_ts));
+
+            /* Consume the oldest DMA-complete slot. Completion metadata is
+             * captured in the IRQ path, so userspace scheduling jitter cannot
+             * become frame timestamp jitter. */
+            spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
+            for (bi = 0; bi < fcd->oem_buf_count && bi < 64; bi++) {
+                if (fcd->oem_bufs[bi].state != TX_ISP_FRAME_SLOT_DONE)
+                    continue;
+                if (!match_found ||
+                    fcd->oem_bufs[bi].done_sequence < delivered_seq) {
+                    delivered_idx = bi;
+                    delivered_seq = fcd->oem_bufs[bi].done_sequence;
+                    delivered_ts = fcd->oem_bufs[bi].done_timestamp;
+                    done_phys = fcd->oem_bufs[bi].phys_addr;
+                    match_found = 1;
+                }
+            }
+            spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
 
             /* Match completed buffer by Y physical address from FIFO pop.
              * The OEM matches buffers this way — the rotating index was
              * returning wrong buffers causing corrupted/stale frame data. */
-            if (done_phys) {
-                int bi;
+            if (!match_found && done_phys) {
                 int bc = state->buffer_count ? state->buffer_count : 3;
                 for (bi = 0; bi < bc; bi++) {
                     struct frame_buffer *tb = frame_channel_get_tracked_buffer(fcd, bi);
                     if (tb && (tb->m.userptr & ~0xfff) == (done_phys & ~0xfff)) {
                         delivered_idx = bi;
+                        delivered_seq = state->sequence;
+                        fill_timeval_mono(&delivered_ts);
                         match_found = 1;
                         break;
                     }
                 }
             }
-            if (!match_found)
-                delivered_idx = delivered_seq % (state->buffer_count ? state->buffer_count : 3);
+            if (!match_found) {
+                delivered_seq = state->sequence;
+                delivered_idx = delivered_seq %
+                    (state->buffer_count ? state->buffer_count : 3);
+                fill_timeval_mono(&delivered_ts);
+            }
 
-            fill_timeval_mono(&delivered_ts);
 
             /* Look up the tracked buffer from QBUF to get correct userptr */
             tracked = frame_channel_get_tracked_buffer(fcd, delivered_idx);
@@ -4251,7 +4221,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (buffer.index < 64 && fcd) {
             unsigned long oem_flags;
             spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
-            fcd->oem_bufs[buffer.index].state = 0; /* FREE */
+            fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_FREE;
+            fcd->oem_bufs[buffer.index].done_sequence = 0;
+            memset(&fcd->oem_bufs[buffer.index].done_timestamp, 0,
+                   sizeof(fcd->oem_bufs[buffer.index].done_timestamp));
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
         }
 
@@ -4367,9 +4340,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Stop channel streaming
         state->streaming = false;
         state->capture_active = false;
-        if (channel >= 0 &&
-            channel < ARRAY_SIZE(frame_pre_dequeue_pending_phys))
-            frame_pre_dequeue_pending_phys[channel] = 0;
         state->state = 3;
         state->flags &= ~1U;
         fcd->streaming_flags &= ~1;
@@ -6932,29 +6902,28 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
  * Implemented to match OEM for future buffer management integration.
  */
 
-/* __submit_buffer_to_msca - Send buffer to ISP core via event 0x3000005.
- * Constructs a vic_buffer_entry and dispatches through ispcore_pad_event_handle,
- * which writes per-channel MSCA Y/UV DMA addresses.
- * Equivalent to OEM __enqueue_in_driver but using our struct layout. */
+/* Program the next completed-frame destination. This is called both from
+ * process-context QBUF and from the DMA-done rotation path, so keep it as the
+ * same short MMIO operation performed by ispcore_pad_event_handle. */
 static int __submit_buffer_to_msca(int channel, u32 phys_addr)
 {
-    struct vic_buffer_entry entry;
-    struct tx_isp_subdev *remote_sd;
+    struct tx_isp_channel_state *state;
+    u32 width, height, aligned_height, uv_addr;
 
-    if (!ourISPdev || channel < 0 || channel >= 3)
+    if (!ourISPdev || !ourISPdev->core_regs || !phys_addr ||
+        channel < 0 || channel >= 3)
         return -EINVAL;
 
-    /* Find the remote subdev for this channel's pad link */
-    remote_sd = ourISPdev->subdevs[3]; /* ISP core subdev handles 0x3000005 */
-    if (!remote_sd)
-        return -ENODEV;
+    state = &frame_channels[channel].state;
+    width = state->width ? state->width : (channel == 0 ? 1920U : 640U);
+    height = state->height ? state->height : (channel == 0 ? 1080U : 360U);
+    aligned_height = (height + 0xf) & ~0xfU;
+    uv_addr = phys_addr + width * aligned_height;
 
-    memset(&entry, 0, sizeof(entry));
-    INIT_LIST_HEAD(&entry.list);
-    entry.buffer_addr = phys_addr;
-    entry.channel = channel;
+    writel(phys_addr, ourISPdev->core_regs + (channel << 8) + 0x996c);
+    writel(uv_addr, ourISPdev->core_regs + (channel << 8) + 0x9984);
 
-    return tx_isp_send_event_to_remote(remote_sd, TX_ISP_FRAME_EVENT_QUEUE_BUFFER, &entry);
+    return 0;
 }
 
 static int __enqueue_in_driver(void *arg1)

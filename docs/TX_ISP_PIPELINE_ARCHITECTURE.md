@@ -1033,12 +1033,13 @@ IRQ 37 (isp-m0)                    IRQ 38 (isp-w02)
 3. Error check: if (status & 0x3f8) -> log error bits
 4. Frame sync: if (status & 0x1000)
    -> queue_work_on(0, fs_workqueue, &fs_work)
-   -> for the configured one-buffer CH0 path, wait
-      isp_ch0_pre_dequeue_time and signal the active buffer early
+   -> update sensor/frame-sync work only; do not expose an ACTIVE output buffer
 5. Bayer pattern: if (bayer_write_pending)
    -> mbus_to_bayer_write()  (one-shot, clears flag)
 6. Channel FIFO drain:
    -> Read Y addresses from isp_regs + 0x9974
+   -> Mark the matching slot DONE and capture completion sequence/timestamp
+   -> Activate/program the next QUEUED slot
    -> Signal: frame_chan_event(&frame_channels[0], 0x3000006, evt)
 7. Increment ourISPdev->frame_count
 ```
@@ -1404,7 +1405,7 @@ Under `/sys/devices/.../<device>/`:
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
 | `print_level` | ISP_WARN_LEVEL | Logging verbosity |
-| `isp_ch0_pre_dequeue_time` | (varies) | Channel timing |
+| `isp_ch0_pre_dequeue_time` | (varies) | Legacy timing ABI; T31 Raptor uses 0 with two-buffer DMA-done delivery |
 | `isp_memopt` | (varies) | Memory optimization flags |
 | `isp_day_night_switch_drop_frame_num` | (varies) | Frame drop on mode switch |
 

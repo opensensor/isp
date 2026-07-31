@@ -408,7 +408,7 @@ mode control, and post-run `dmesg`, `logread`, and `logcat`.
 | SoC / sensor | Main stream | Sub stream | Mode coverage | Result |
 |---|---:|---:|---|---|
 | T23 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | clean geometry and color; no fatal or memory faults |
-| T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | one-buffer pre-dequeue restored; high-gain MDNS profile matches stock flat-wall stability |
+| T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | two-buffer DMA-done rotation; monotonic timestamps; high-gain MDNS profile |
 | T40XP / GC4653 | 1920×1080 @ 25 fps | configured, not part of this gate | day | shared subdevice/link/event/state pass; eight decoded main frames and no fatal signature |
 | T41 / OS04D10 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | balanced `0x380/0x880` day AWB and dual-stream fanout |
 
@@ -416,13 +416,21 @@ The tested stock reserved-memory settings are sufficient: 22 MiB on T23/T31,
 128 MiB on the T40XP target, and 30 MiB on T41. No bootloader environment
 change was required.
 
-The T31 consumer uses one frame-source buffer and configures
-`isp_ch0_pre_dequeue_time=24`. Stock schedules an early DQBUF event from the
-frame-start interrupt so userspace can return that buffer before the following
-frame. The open worker previously ignored that event and therefore delivered
-only about 12.5 fps. Restoring the one-buffer pre-dequeue contract produced
-501 main frames in 20 seconds and 250 substream frames in 10 seconds. A
-same-light stock oracle produced 191 frames in eight seconds.
+The T31 consumer now uses two main frame-source buffers and configures
+`isp_ch0_pre_dequeue_time=0`. The former one-buffer workaround signaled an
+ACTIVE buffer from frame-start work, before the MSCA DMA-done event. That kept
+the nominal frame rate but allowed the encoder and MSCA to touch the same NV12
+buffer and timestamped frames according to userspace scheduling. The shared
+slot-state values (`FREE`, `QUEUED`, `ACTIVE`, `DONE`) now describe a strict
+rotation: DMA completion stores sequence/timestamp and selects the next queued
+slot before waking DQBUF. On the real T31, 22 MiB rmem held both 3,133,440-byte
+main buffers without a bootloader change. A 12-second RTSP probe returned 300
+strictly monotonic packets at approximately 40 ms intervals.
+
+In the same fixed wall regions, the two-buffer path reduced non-IDR temporal
+luma change p95 from `0.3359` to `0.0641` (left wall), `0.0670` to `0.0192`
+(right wall), and `1.3114` to `0.0362` (upper wall). The remaining two-second
+IDR reset is an encoder rate-control boundary rather than ISP exposure motion.
 
 At the storm-light gain point, the SC2336-specific automatic MDNS profile
 selects ratio 160 only in the sensor's `0x8xx` high-gain stage and returns to
@@ -515,6 +523,6 @@ captures. Color fidelity is tracked separately from these DMA-layout results.
   AE code generation and visibly increased wall grain.
 - Extend tuning descriptors only when the matching userspace payload size and
   direction are proven; keep SoC dispatch and collectors local.
-- Extract typed buffer ownership and queue-lifecycle bookkeeping only after
-  matching the now-device-validated one-buffer T31 pre-dequeue semantics and
-  the T23/T41 paths.
+- Extend the now-device-validated T31 typed buffer ownership and queue lifecycle
+  to T23/T41 only after equivalent per-device DMA-completion tests establish
+  their generation-specific handoff rules.

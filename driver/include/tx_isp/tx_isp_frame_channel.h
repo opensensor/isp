@@ -13,6 +13,14 @@
 #define TX_ISP_FRAME_EVENT_QUEUE_BUFFER		0x03000005U
 #define TX_ISP_FRAME_EVENT_BUFFER_DONE		0x03000006U
 
+/* Buffer ownership values recovered from the legacy frame-channel ABI. */
+enum tx_isp_frame_slot_state {
+	TX_ISP_FRAME_SLOT_FREE = 0,
+	TX_ISP_FRAME_SLOT_QUEUED = 1,
+	TX_ISP_FRAME_SLOT_ACTIVE = 3,
+	TX_ISP_FRAME_SLOT_DONE = 4,
+};
+
 /*
  * REQBUFS is the same five-word wire object in every recovered generation.
  * Allocation ownership and the returned count remain generation-specific.

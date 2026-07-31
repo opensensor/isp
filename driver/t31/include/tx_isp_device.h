@@ -638,6 +638,8 @@ struct frame_channel_device {
     struct {
         u32 phys_addr;
         u32 state;
+        u32 done_sequence;
+        struct timeval done_timestamp;
     } oem_bufs[64];
     int oem_buf_count;
     spinlock_t oem_buf_lock;
