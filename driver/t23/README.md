@@ -7,9 +7,9 @@ The recovered whole-driver seed from `tx-isp-t23-v1` now lives in
 `tx_isp_t23_core.c`, with separate math, sensor-registry, mode-profile,
 callback-plan, register-profile, frame-layout, scaler, and tuning-ABI adapter
 objects. Kbuild links all nine into the existing
-`tx_isp_t23_recovered.ko` module identity expected by this target. The math
-adapter delegates to the cross-SoC primitives, the registry adapter delegates
-slot/procfs ownership to the common typed implementation, and the profile
+`tx-isp-t23.ko` canonical module identity expected by current sensor builds.
+The math adapter delegates to the cross-SoC primitives, the registry adapter
+delegates slot/procfs ownership to the common typed implementation, and the profile
 adapter supplies the shared top-bypass flag merge. The T23 mode adapter owns
 the SoC masks and exact 17-block refresh order used by day/night, custom-mode,
 and tuning-bin transitions. The scaler adapter owns the recovered T23 sinc
@@ -100,6 +100,12 @@ Current smoke-test status:
   forced day transition, and decoded 124 main frames in five seconds. Treat
   this boundary as behavior/code-generation sensitive until its recovered
   call sites have typed signatures.
+- The canonical `tx-isp-t23.ko` now consumes the shared legacy frame-channel
+  ioctl envelopes. Its deterministic sequential build is active with SHA-256
+  `214708e247d78178796bae93856c6210d4d045007ea98b73958e9c1f9fa02b0f`.
+  Raptor reports 1920x1080 and 640x360 at 25 fps, an external RTSP consumer
+  remains active, ISP/VIC interrupts advance, and the final `dmesg`,
+  `logread`, and `logcat` fault scans are clean.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,
@@ -495,4 +501,4 @@ make -C <kernel-src> M=$(pwd)/driver/t23 ARCH=mips CROSS_COMPILE=<mipsel-prefix>
 
 Expected artifact:
 
-- `driver/t23/tx_isp_t23_recovered.ko`
+- `driver/t23/tx-isp-t23.ko`

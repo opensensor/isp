@@ -302,18 +302,17 @@ The resulting T31 module survived 100 consecutive ISP/exposure query pairs,
 day/night cycling, and RTSP decoding with no `dmesg`, `logread`, or `logcat`
 ioctl/fault signature.
 
-The frame-channel contract extraction kept T23 byte-identical and T31's
-complete loadable image byte-identical; T31 differed only in two bytes of the
-non-loaded ELF string table. T41's recovery compiler re-laid out the dormant
-tail of its decompiler-generated ioctl dispatcher even though the constants
-are equivalent, so it received a full fail-safe device cycle. Both 1920x1080
-and 640x360 streams sustained 25 fps, ISP interrupts advanced, day mode
-applied, and `dmesg`, `logread`, and `logcat` contained no fault signature.
-The final inspection boot decoded 177/174 T31 main/sub frames and 178/178 T41
-main/sub frames in seven seconds. Both staged loaders reported status zero
-with their one-shot markers consumed, leaving the tested open builds active.
-Ambient brightness and noise were not compared because a rainstorm changed
-the scene during validation.
+The frame-channel contract extraction was rebuilt sequentially because
+`build_local.sh` changes shared top-level build selection and therefore cannot
+produce authoritative artifacts in parallel. The deterministic T23, T31, and
+T41 modules all passed fail-safe boots with loader status zero and consumed
+one-shot markers. Raptor reports both configured channels at 25 fps on every
+device; T31 and T41 additionally saved fresh 302,532- and 379,001-byte
+1920x1080 JPEGs while an external monitor occupied the RTSP servers' client
+slots. ISP interrupts advanced, day mode applied, and `dmesg`, `logread`, and
+`logcat` contained no driver fault signature. The tested open builds remain
+active. Ambient brightness and noise were not compared because a rainstorm
+changed the scene during validation.
 
 The subsequent common tuning-ABI extraction was rebuilt and reboot-tested on
 all three active devices. T23 decoded 124 main-stream frames in six seconds,

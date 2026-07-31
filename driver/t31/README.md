@@ -76,12 +76,12 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
   76 frames in six seconds to 147 in six seconds while the main stream remains
   full-rate; a second boot decoded 124/122 main/sub frames in five seconds
 - the validated open module is active with SHA-256
-  `ab91a6d1c2e7341d09eb888c1c5d2be07b3e9200d021da811adf89263f0e7355`;
+  `e07d82117a4e37f8d23a97fac6d09acddcce7d551e85ada478e89a6363e25ac1`;
   forced day mode, ISP interrupts, `dmesg`, `logread`, and `logcat` all passed
-- the shared frame-channel names leave the complete loadable image unchanged;
-  the current build differs from the preceding module only in two bytes of
-  its non-loaded ELF string table and decoded 177/174 main/sub frames in the
-  seven-second inspection run
+- the deterministic sequential build uses the shared frame-channel events and
+  ioctl envelopes; Raptor reports both streams at 25 fps and saved a fresh
+  302,532-byte 1920x1080 JPEG while external monitoring occupied the RTSP
+  server's four client slots
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.

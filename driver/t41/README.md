@@ -81,12 +81,12 @@ module SHA-256 is
 `64e7103e81765b5c72a42088bb7b46a12cea1538aae21a9d3cfe4f802ffbc5da`.
 
 The shared frame-channel contract now names the set/get-format, stream,
-queue, and completion events plus every T41 private ioctl envelope. Two
-fail-safe boots sustained 25 fps on both 1920x1080 and 640x360 RTSP streams;
-the final seven-second inspection decoded 178 frames from each. ISP IRQs
-advanced, forced day mode applied, and kernel, Raptor, and Android fault scans
-were clean. The active module SHA-256 is
-`0502dde70bff9d386eff8231389756e0be53a62923c9f70f99eba574d80abe28`.
+queue, and completion events plus every T41 private ioctl envelope. The
+deterministic sequential build's fail-safe boot reports both 1920x1080 and
+640x360 streams at 25 fps and saved a fresh 379,001-byte main-stream JPEG.
+ISP IRQs advanced, forced day mode applied, and kernel, Raptor, and Android
+fault scans were clean. The active module SHA-256 is
+`cf79410cf59b3140b4df3eb67b00d69f6fa99e6455b2181ad220cc1d5e73129a`.
 The scene was darkening during a storm, so this cycle validates transport and
 ABI behavior rather than brightness or noise parity.
 

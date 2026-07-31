@@ -257,8 +257,8 @@ T41 is now a multi-object module with six explicit boundaries:
 
 ### Multi-object T23 artifact
 
-T23 preserves the deployed `tx_isp_t23_recovered` module identity while linking
-eight logical objects:
+T23 uses the canonical deployed `tx_isp_t23` module identity while linking
+nine logical objects:
 
 - `tx_isp_t23_core.c` owns the recovered pipeline, hardware, tuning, and the
   T23-specific sensor lifecycle callbacks.
