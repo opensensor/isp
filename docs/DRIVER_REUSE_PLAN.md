@@ -257,6 +257,13 @@ and T31's established raw direction mapping. The common resolver validates
 type, pad storage, and bounds and reports a host-tested failure status without
 owning logging or link mutation.
 
+The companion wire contract fixes an endpoint at 8 bytes, a complete
+source/sink/flag link record at 20 bytes, and a record-set pointer/count
+envelope at 8 bytes. Host tests cover every field; T31 target assertions pin
+the SDK declarations, and T41's recovered graph path now uses the common
+positions. Sequential rebuilds remained byte-identical to all three tested
+resolver modules.
+
 `driver/include/tx_isp/tx_isp_recovered_kernel.h` holds the already-reviewed
 kernel-tree compatibility prelude used by recovered sources. Keep larger
 freestanding recovery-tool declarations local until their signatures are

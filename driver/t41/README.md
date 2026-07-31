@@ -99,7 +99,9 @@ ABI behavior rather than brightness or noise parity.
 
 The common graph resolver now owns the endpoint name/type/index search while
 the T41 adapter retains the graph table at `0x3c`, extended pad slots, and
-recovered pointer checks. Its one-shot boot bound the OS04D10 once, applied
+recovered pointer checks. Its setup path consumes the common 8-byte endpoint,
+20-byte graph-link, and 8-byte record-set wire positions. Its one-shot boot bound
+the OS04D10 once, applied
 day mode, advanced both ISP cores with `error=0`, and decoded 150 1920x1080
 frames in six seconds. `dmesg`, `logread`, and `logcat` fault scans were clean.
 The tested module remains active with SHA-256

@@ -60,6 +60,13 @@ output/input type, find the named subdevice, validate pad storage and index,
 then apply the configured stride. It returns a precise status for invalid
 records, unknown names or types, missing pad arrays, and range failures.
 
+The same interface defines the compiler-independent graph wire objects: an
+8-byte endpoint containing a 32-bit name pointer plus type/index bytes, a
+20-byte source/sink/flag link record, and an 8-byte record-pointer/count set.
+Host tests assert every offset and size; T31 additionally asserts its declared
+vendor structures against the contract at target compile time. T23/T41
+adapters and T41's recovered link setup use the named offsets.
+
 The adapters keep every physical difference visible. T23 reads 16 subdevice
 pointers at graph offset `0x38` and uses the legacy `0xc8` through `0xd0`
 pad slots. T41 reads its 16 pointers at `0x3c` and uses the extended `0x100`
@@ -78,6 +85,10 @@ scans were clean. The live module hashes are respectively
 and `34aaccbd070010bc704e9588182bfb9f3302a416bcd871111c53f82ae235cd1e`.
 Ambient brightness and noise were not compared because storm lighting was
 changing.
+
+Replacing the remaining raw graph-record positions with this wire contract
+rebuilt to the exact three live hashes above, so it required no additional
+device cycle.
 
 ## Adapter Boundaries
 

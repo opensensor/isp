@@ -1,6 +1,37 @@
 #include "tx_isp_t31_subdev_resolver.h"
 #include "include/tx_isp_subdev_helpers.h"
 
+TX_ISP_ABI_ASSERT(t31_link_desc_name,
+	__builtin_offsetof(struct link_pad_description, name) ==
+	TX_ISP_SUBDEV_DESC_NAME_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_desc_type,
+	__builtin_offsetof(struct link_pad_description, type) ==
+	TX_ISP_SUBDEV_DESC_TYPE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_desc_index,
+	__builtin_offsetof(struct link_pad_description, index) ==
+	TX_ISP_SUBDEV_DESC_INDEX_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_desc_size,
+	sizeof(struct link_pad_description) == TX_ISP_SUBDEV_DESC_SIZE);
+TX_ISP_ABI_ASSERT(t31_link_config_source,
+	__builtin_offsetof(struct tx_isp_link_config, src) ==
+	TX_ISP_SUBDEV_LINK_SOURCE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_config_sink,
+	__builtin_offsetof(struct tx_isp_link_config, dst) ==
+	TX_ISP_SUBDEV_LINK_SINK_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_config_flag,
+	__builtin_offsetof(struct tx_isp_link_config, flag) ==
+	TX_ISP_SUBDEV_LINK_FLAG_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_config_size,
+	sizeof(struct tx_isp_link_config) == TX_ISP_SUBDEV_LINK_CONFIG_SIZE);
+TX_ISP_ABI_ASSERT(t31_link_set_records,
+	__builtin_offsetof(struct tx_isp_link_configs, config) ==
+	TX_ISP_SUBDEV_LINK_SET_RECORDS_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_set_count,
+	__builtin_offsetof(struct tx_isp_link_configs, length) ==
+	TX_ISP_SUBDEV_LINK_SET_COUNT_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_set_size,
+	sizeof(struct tx_isp_link_configs) == TX_ISP_SUBDEV_LINK_SET_SIZE);
+
 static void *tx_isp_t31_subdev_at(void *graph, unsigned int index)
 {
 	struct tx_isp_dev *isp_dev = graph;

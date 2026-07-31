@@ -34181,8 +34181,8 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link)
     if (*configured)
         return 0;
 
-    records = *(uint32_t *)(configs + link * 8U);
-    count = *(uint32_t *)(configs + link * 8U + sizeof(uint32_t));
+    records = *(uint32_t *)(configs + link * TX_ISP_SUBDEV_LINK_SET_SIZE + TX_ISP_SUBDEV_LINK_SET_RECORDS_OFFSET);
+    count = *(uint32_t *)(configs + link * TX_ISP_SUBDEV_LINK_SET_SIZE + TX_ISP_SUBDEV_LINK_SET_COUNT_OFFSET);
     if (!records || records >= (uintptr_t)-4095)
         return -EINVAL;
 
@@ -34191,22 +34191,22 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link)
            link, count, (void *)graph, (void *)records,
            t41_video_link_dry_run);
     for (i = 0; i < count; i++) {
-        uintptr_t record = records + i * 20U;
+        uintptr_t record = records + i * TX_ISP_SUBDEV_LINK_CONFIG_SIZE;
         uintptr_t source;
         uintptr_t sink;
-        uint32_t flags = *(uint32_t *)(record + 16);
+        uint32_t flags = *(uint32_t *)(record + TX_ISP_SUBDEV_LINK_FLAG_OFFSET);
         int ret;
 
         printk(KERN_WARNING
                "tx_isp_t41_recovered: video-link resolve link=%u item=%u record=%p src=%s/%u/%u sink=%s/%u/%u flags=%#x\n",
                link, i, (void *)record,
-               (char *)(uintptr_t)*(uint32_t *)(record + 0),
-               *(uint8_t *)(record + 4), *(uint8_t *)(record + 5),
-               (char *)(uintptr_t)*(uint32_t *)(record + 8),
-               *(uint8_t *)(record + 12), *(uint8_t *)(record + 13),
+               (char *)(uintptr_t)*(uint32_t *)(record + TX_ISP_SUBDEV_LINK_SOURCE_OFFSET + TX_ISP_SUBDEV_DESC_NAME_OFFSET),
+               *(uint8_t *)(record + TX_ISP_SUBDEV_LINK_SOURCE_OFFSET + TX_ISP_SUBDEV_DESC_TYPE_OFFSET), *(uint8_t *)(record + TX_ISP_SUBDEV_LINK_SOURCE_OFFSET + TX_ISP_SUBDEV_DESC_INDEX_OFFSET),
+               (char *)(uintptr_t)*(uint32_t *)(record + TX_ISP_SUBDEV_LINK_SINK_OFFSET + TX_ISP_SUBDEV_DESC_NAME_OFFSET),
+               *(uint8_t *)(record + TX_ISP_SUBDEV_LINK_SINK_OFFSET + TX_ISP_SUBDEV_DESC_TYPE_OFFSET), *(uint8_t *)(record + TX_ISP_SUBDEV_LINK_SINK_OFFSET + TX_ISP_SUBDEV_DESC_INDEX_OFFSET),
                flags);
-        source = (uintptr_t)find_subdev_link_pad(graph, record);
-        sink = (uintptr_t)find_subdev_link_pad(graph, record + 8);
+        source = (uintptr_t)find_subdev_link_pad(graph, record + TX_ISP_SUBDEV_LINK_SOURCE_OFFSET);
+        sink = (uintptr_t)find_subdev_link_pad(graph, record + TX_ISP_SUBDEV_LINK_SINK_OFFSET);
 
         if (!source || !sink) {
             printk(KERN_WARNING

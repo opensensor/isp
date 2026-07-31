@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -63,6 +64,34 @@ static void expect(int condition)
 		__builtin_trap();
 }
 
+static void test_wire_layout(void)
+{
+	expect(sizeof(struct tx_isp_subdev_pad_descriptor32) ==
+	       TX_ISP_SUBDEV_DESC_SIZE);
+	expect(offsetof(struct tx_isp_subdev_pad_descriptor32, name) ==
+	       TX_ISP_SUBDEV_DESC_NAME_OFFSET);
+	expect(offsetof(struct tx_isp_subdev_pad_descriptor32, type) ==
+	       TX_ISP_SUBDEV_DESC_TYPE_OFFSET);
+	expect(offsetof(struct tx_isp_subdev_pad_descriptor32, index) ==
+	       TX_ISP_SUBDEV_DESC_INDEX_OFFSET);
+
+	expect(sizeof(struct tx_isp_subdev_link_config32) ==
+	       TX_ISP_SUBDEV_LINK_CONFIG_SIZE);
+	expect(offsetof(struct tx_isp_subdev_link_config32, source) ==
+	       TX_ISP_SUBDEV_LINK_SOURCE_OFFSET);
+	expect(offsetof(struct tx_isp_subdev_link_config32, sink) ==
+	       TX_ISP_SUBDEV_LINK_SINK_OFFSET);
+	expect(offsetof(struct tx_isp_subdev_link_config32, flag) ==
+	       TX_ISP_SUBDEV_LINK_FLAG_OFFSET);
+
+	expect(sizeof(struct tx_isp_subdev_link_set32) ==
+	       TX_ISP_SUBDEV_LINK_SET_SIZE);
+	expect(offsetof(struct tx_isp_subdev_link_set32, records) ==
+	       TX_ISP_SUBDEV_LINK_SET_RECORDS_OFFSET);
+	expect(offsetof(struct tx_isp_subdev_link_set32, count) ==
+	       TX_ISP_SUBDEV_LINK_SET_COUNT_OFFSET);
+}
+
 int main(void)
 {
 	unsigned char source_pads[2][FAKE_PAD_STRIDE] = { { 0 } };
@@ -92,6 +121,7 @@ int main(void)
 	enum tx_isp_subdev_resolve_status status;
 	void *pad;
 
+	test_wire_layout();
 	pad = tx_isp_subdev_resolve_pad(
 		&graph, &descriptor, &fake_ops, &status);
 	expect(pad == &source_pads[1][0]);

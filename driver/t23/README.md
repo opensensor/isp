@@ -32,7 +32,8 @@ offsets. The shared detach operation captures the three endpoints and clears
 the first four link words while preserving link state, without changing the
 linked module image.
 The subdevice adapter supplies T23's graph table and legacy pad-slot offsets
-to the shared name/type/index resolver.
+to the shared name/type/index resolver. Its recovered graph descriptor reads
+also use the common 8-byte endpoint wire positions.
 
 Current smoke-test status:
 

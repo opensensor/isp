@@ -8,6 +8,42 @@
 #define TX_ISP_SUBDEV_PAD_OUTPUT 1U
 #define TX_ISP_SUBDEV_PAD_INPUT  2U
 
+/*
+ * Compiler-independent MIPS32 graph record ABI. The two bytes after index are
+ * alignment padding in the vendor structure and are retained explicitly.
+ */
+#define TX_ISP_SUBDEV_DESC_NAME_OFFSET       0x00U
+#define TX_ISP_SUBDEV_DESC_TYPE_OFFSET       0x04U
+#define TX_ISP_SUBDEV_DESC_INDEX_OFFSET      0x05U
+#define TX_ISP_SUBDEV_DESC_SIZE              0x08U
+
+#define TX_ISP_SUBDEV_LINK_SOURCE_OFFSET     0x00U
+#define TX_ISP_SUBDEV_LINK_SINK_OFFSET       0x08U
+#define TX_ISP_SUBDEV_LINK_FLAG_OFFSET       0x10U
+#define TX_ISP_SUBDEV_LINK_CONFIG_SIZE       0x14U
+
+#define TX_ISP_SUBDEV_LINK_SET_RECORDS_OFFSET 0x00U
+#define TX_ISP_SUBDEV_LINK_SET_COUNT_OFFSET   0x04U
+#define TX_ISP_SUBDEV_LINK_SET_SIZE           0x08U
+
+struct tx_isp_subdev_pad_descriptor32 {
+	unsigned int name;
+	unsigned char type;
+	unsigned char index;
+	unsigned char reserved[2];
+};
+
+struct tx_isp_subdev_link_config32 {
+	struct tx_isp_subdev_pad_descriptor32 source;
+	struct tx_isp_subdev_pad_descriptor32 sink;
+	unsigned int flag;
+};
+
+struct tx_isp_subdev_link_set32 {
+	unsigned int records;
+	unsigned int count;
+};
+
 struct tx_isp_subdev_pad_descriptor {
 	const char *name;
 	unsigned char type;

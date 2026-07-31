@@ -34,6 +34,8 @@ just cosmetic:
 - Compile-time checks pin the typed five-word active-link record to the common
   20-byte MIPS32 layout; the known extra callback in T31's pad tail remains
   explicit and is not folded into the shared recovered prefix.
+- Target assertions also pin the declared 8-byte endpoint, 20-byte graph-link
+  configuration, and 8-byte configuration-set envelope to the common wire ABI.
 - `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
   deflicker LUT's fixed 120-word, repeated-tail ABI.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.

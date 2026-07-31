@@ -65,11 +65,14 @@ unsigned long tx_isp_t41_resolve_link_pad(
 	if (!descriptor)
 		return 0;
 	common_descriptor.name =
-		*(const char **)((char *)descriptor + 0);
+		*(const char **)((char *)descriptor +
+				TX_ISP_SUBDEV_DESC_NAME_OFFSET);
 	common_descriptor.type =
-		*(unsigned char *)((char *)descriptor + 4);
+		*(unsigned char *)((char *)descriptor +
+				  TX_ISP_SUBDEV_DESC_TYPE_OFFSET);
 	common_descriptor.index =
-		*(unsigned char *)((char *)descriptor + 5);
+		*(unsigned char *)((char *)descriptor +
+				  TX_ISP_SUBDEV_DESC_INDEX_OFFSET);
 	return (unsigned long)tx_isp_subdev_resolve_pad(
 		(void *)graph, &common_descriptor, &tx_isp_t41_subdev_ops,
 		status);
