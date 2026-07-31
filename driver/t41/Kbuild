@@ -2,6 +2,7 @@ tx-isp-t41-objs := tx_isp_t41_recovered.o \
 		   tx_isp_t41_daynight.o \
 		   tx_isp_t41_math.o \
 		   tx_isp_t41_sinfo.o \
+		   tx_isp_t41_subdev.o \
 		   tx_isp_t41_frame_layout.o \
 		   tx_isp_t41_exposure.o \
 		   tx_isp_t41_scaler.o \

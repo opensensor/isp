@@ -13,6 +13,7 @@
 #include "../include/tx_isp/tx_isp_math.h"
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
+#include "tx_isp_t41_subdev.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -62,7 +63,6 @@
 #endif
 #endif
 #include <asm/uaccess.h>
-
 #ifndef __regtrace_stringify
 #define __regtrace_stringify_1(x) #x
 #define __regtrace_stringify(x) __regtrace_stringify_1(x)
@@ -31043,8 +31043,8 @@ tx_isp_notify0xec:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013004 origin=fragment_seed original=find_subdev_link_pad */
 int64_t find_subdev_link_pad(uintptr_t a0, uintptr_t a1)
 {
-    const char *wanted_name;
-    uint8_t endpoint_type;
+    return tx_isp_t41_resolve_link_pad(a0, a1, 0);
+#if 0 /* Preserved recovered resolver oracle; common code is live. */
     uint8_t pad_index;
     unsigned int i;
 
@@ -31091,7 +31091,7 @@ int64_t find_subdev_link_pad(uintptr_t a0, uintptr_t a1)
     printk(KERN_WARNING
            "tx_isp_t41_recovered: link subdev not found name=%s type=%u index=%u\n",
            wanted_name, endpoint_type, pad_index);
-    return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013128 origin=fragment_seed original=tx_isp_resume */

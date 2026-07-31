@@ -24,6 +24,7 @@ T40 is intentionally outside this refactor.
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 | Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T41 |
+| Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
@@ -51,6 +52,32 @@ binary-neutral on all three active modules.
 The shared prefix deliberately stops before the unresolved pad tail. T31 has
 an extra `event_callback` member after `event`, so its `priv` position and
 full pad size differ from the recovered 0x20/0x24 layout used elsewhere.
+
+### Subdevice graph resolution
+
+`tx_isp_subdev_resolve_pad()` owns the common graph search: validate the OEM
+output/input type, find the named subdevice, validate pad storage and index,
+then apply the configured stride. It returns a precise status for invalid
+records, unknown names or types, missing pad arrays, and range failures.
+
+The adapters keep every physical difference visible. T23 reads 16 subdevice
+pointers at graph offset `0x38` and uses the legacy `0xc8` through `0xd0`
+pad slots. T41 reads its 16 pointers at `0x3c` and uses the extended `0x100`
+through `0x108` slots. T31 uses its typed graph and retains its established
+raw input/output mapping, including the known reversal relative to the
+declared structure. Pointer validation also remains adapter policy.
+
+Host tests exercise valid input/output resolution and every failure status.
+One-shot device boots then exercised real graph creation on all three SoCs.
+Forced day mode passed, sensor bind/add remained one-for-one, ISP/VIC
+interrupts advanced, and six-second 1920x1080 decodes produced 148 T23, 149
+T31, and 150 T41 frames. Post-stream `dmesg`, `logread`, and `logcat` fault
+scans were clean. The live module hashes are respectively
+`865278fb52172ff948b4a4e2bc92c27680344c12b7b57dfcc9f1c94743fc4047`,
+`bb95aba4587061b4d364fd3b3893bbf8d8ec0471252deed97dc996e569d48673`,
+and `34aaccbd070010bc704e9588182bfb9f3302a416bcd871111c53f82ae235cd1e`.
+Ambient brightness and noise were not compared because storm lighting was
+changing.
 
 ## Adapter Boundaries
 

@@ -1,6 +1,7 @@
 tx-isp-t23-objs := tx_isp_t23_core.o \
 			     tx_isp_t23_math.o \
 			     tx_isp_t23_sinfo.o \
+			     tx_isp_t23_subdev.o \
 			     tx_isp_t23_mode.o \
 			     tx_isp_t23_callback_plan.o \
 			     tx_isp_t23_reg_profile.o \

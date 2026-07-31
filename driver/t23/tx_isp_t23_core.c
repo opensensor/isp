@@ -10,7 +10,7 @@
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "include/tx_isp_t23_mode.h"
 #include "tx_isp_t23_scaler.h"
-
+#include "tx_isp_t23_subdev.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -36361,8 +36361,8 @@ int32_t tx_isp_notify(int32_t arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010798 origin=fragment_seed original=find_subdev_link_pad */
 int64_t find_subdev_link_pad(uintptr_t arg1, uintptr_t arg2)
 {
-    uintptr_t *a3 = arg1 + 0x38;
-    uintptr_t end = arg1 + 0x78;
+    return tx_isp_t23_resolve_link_pad(arg1, arg2, 0);
+#if 0 /* Preserved recovered resolver oracle; common code is live. */
     uintptr_t v0 = *(uintptr_t *)a3;
     uint32_t at = 0;
 
@@ -36421,7 +36421,7 @@ int64_t find_subdev_link_pad(uintptr_t arg1, uintptr_t arg2)
     }
 
 out:
-    return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010878 origin=fragment_seed original=isp_subdev_release_clks */

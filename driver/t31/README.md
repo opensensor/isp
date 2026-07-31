@@ -20,6 +20,8 @@ just cosmetic:
   descriptors, and response packers.
 - `tx_isp_frame_layout.c` links checked NV12 and MDNS auxiliary geometry while
   T31 retains its alignment, register, allocation, and memory-option policy.
+- `tx_isp_t31_subdev_resolver.c` supplies T31's typed graph and established
+  raw pad-direction mapping to the common name/type/index resolver.
 - The shared frame-buffer ABI asserts T31's 68-byte MIPS32 `v4l2_buffer`
   contract and names its persistent flag mask; T31 retains queue ownership and
   its generation-specific state meanings.
@@ -78,7 +80,7 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - the compiler-independent 112-byte frame format restores the substream from
   76 frames in six seconds to 147 in six seconds while the main stream remains
   full-rate; a second boot decoded 124/122 main/sub frames in five seconds
-- the validated open module is active with SHA-256
+- the validated frame-channel open module used SHA-256
   `e07d82117a4e37f8d23a97fac6d09acddcce7d551e85ada478e89a6363e25ac1`;
   forced day mode, ISP interrupts, `dmesg`, `logread`, and `logcat` all passed
 - the deterministic sequential build uses the shared frame-channel events and
@@ -88,6 +90,12 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - the frame-channel dispatcher now uses the compiler-independent common
   20-byte request-buffer structure and common legacy stream command names;
   its memory-pressure limits and allocation state remain local
+- the graph endpoint search now uses the common checked subdevice resolver
+  while retaining T31's known raw input/output slot mapping; its one-shot boot
+  bound the SC2336 once, applied day mode, advanced ISP/VIC interrupts, and
+  decoded 149 1920x1080 frames in six seconds with clean `dmesg`, `logread`,
+  and `logcat`; the active module SHA-256 is
+  `bb95aba4587061b4d364fd3b3893bbf8d8ec0471252deed97dc996e569d48673`
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.

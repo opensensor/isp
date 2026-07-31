@@ -16,6 +16,7 @@ tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \
                $(DIR)/tx_isp_fixpt.o \
                $(DIR)/tx_isp_ae_zone.o \
                $(DIR)/tx_isp_subdev_mgmt.o \
+               $(DIR)/tx_isp_t31_subdev_resolver.o \
                $(DIR)/tx_isp_sinfo.o \
                $(DIR)/tx_isp_daynight.o \
                $(DIR)/tx_isp_callback_plan.o \

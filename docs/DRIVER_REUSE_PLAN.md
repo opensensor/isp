@@ -250,6 +250,13 @@ T31's extra callback after the common pad event pointer still makes its full
 pad tail differ from the recovered 0x24-byte shape. That discrepancy remains
 visible and is not papered over by a false full-structure assertion.
 
+`driver/common/tx_isp_subdev.c` now owns the name/type/index graph search used
+by all three active generations. Small layout adapters retain T23's graph
+table at `0x38`, T41's at `0x3c`, their legacy/extended subdevice prefixes,
+and T31's established raw direction mapping. The common resolver validates
+type, pad storage, and bounds and reports a host-tested failure status without
+owning logging or link mutation.
+
 `driver/include/tx_isp/tx_isp_recovered_kernel.h` holds the already-reviewed
 kernel-tree compatibility prelude used by recovered sources. Keep larger
 freestanding recovery-tool declarations local until their signatures are
@@ -261,7 +268,7 @@ T41 Kbuild now emits `driver/t41/tx-isp-t41.ko`, the canonical dependency name
 used by current T41 sensor modules, while retaining
 `tx_isp_t41_recovered.c` as the source filename.
 
-T41 is now a multi-object module with six explicit boundaries:
+T41 is now a multi-object module with nine explicit boundaries:
 
 - `tx_isp_t41_recovered.c` owns the recovered pipeline, hardware, and tuning
   implementation.
@@ -271,14 +278,20 @@ T41 is now a multi-object module with six explicit boundaries:
   delegates its algorithms to `tx_isp_math.h`.
 - `tx_isp_t41_sinfo.c` supplies the T41 object-layout adapter for the common
   sensor registry.
+- `tx_isp_t41_subdev.c` adapts the extended T41 graph and subdevice layout to
+  the common pad resolver.
 - `tx_isp_t41_tuning_abi.c` links the shared proprietary control ABI.
 - `tx_isp_t41_frame_layout.c` links checked frame-channel NV12 geometry and
   vendor aggregate-line reporting.
+- `tx_isp_t41_exposure.c` adapts T41 sensor control to checked common exposure
+  planning.
+- `tx_isp_t41_scaler.c` supplies T41 coefficient tables to the common checked
+  scaler generator.
 
 ### Multi-object T23 artifact
 
 T23 uses the canonical deployed `tx_isp_t23` module identity while linking
-nine logical objects:
+ten logical objects:
 
 - `tx_isp_t23_core.c` owns the recovered pipeline, hardware, tuning, and the
   T23-specific sensor lifecycle callbacks.
@@ -286,6 +299,8 @@ nine logical objects:
   and delegates its algorithm to `tx_isp_math.h`.
 - `tx_isp_t23_sinfo.c` supplies static metadata and lifecycle callbacks for the
   common sensor registry.
+- `tx_isp_t23_subdev.c` adapts the legacy T23 graph and subdevice layout to
+  the common pad resolver.
 - `tx_isp_t23_mode.c` owns the T23 bypass masks and one authoritative
   declarative 17-block mode-refresh sequence.
 - `tx_isp_t23_callback_plan.c` links the common validated callback runner.
@@ -294,19 +309,21 @@ nine logical objects:
 - `tx_isp_t23_tuning_abi.c` links the shared proprietary control ABI.
 - `tx_isp_t23_frame_layout.c` links checked frame-channel NV12 and MDNS
   geometry.
+- `tx_isp_t23_scaler.c` supplies T23 coefficient tables to the common checked
+  scaler generator.
 
 ## Device Validation
 
 Every staged module was loaded through the one-shot fail-safe hook, exercised
 through the real Raptor consumer, and checked with stream captures plus
-`dmesg`, `logread`, and `logcat`. Final device boots were re-armed with the
-tested open build so the current work remains active for inspection.
+`dmesg`, `logread`, and `logcat`. The successful tested open builds remain
+running so the current work is available for inspection.
 
 | SoC | Staged coverage | Result |
 |---|---|---|
-| T23 | nine-object module, shared math/registry/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
-| T31 | shared math/registry/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
-| T41 | eight-object module, shared math/registry/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
+| T23 | ten-object module, shared math/registry/subdevice resolver/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
+| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, OEM one-buffer pre-dequeue, and full-rate RTSP |
+| T41 | nine-object module, shared math/registry/subdevice resolver/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
 
 The one-shot loader in `tools/open_tx_isp_boot_once_init.sh` consumes and syncs
 its marker before `insmod`. A crash therefore cannot repeatedly load the staged

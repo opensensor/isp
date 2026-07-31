@@ -30,12 +30,14 @@ The source remains named `tx_isp_t41_recovered.c`, but Kbuild emits the
 canonical module name expected by current T41 sensor modules
 (`depends: tx-isp-t41`).
 
-The module is linked from eight logical objects:
+The module is linked from nine logical objects:
 
 - `tx_isp_t41_recovered.c` — recovered core, pipeline, hardware, and tuning
 - `tx_isp_t41_daynight.c` — T41 adapter for the shared day/night state machine
 - `tx_isp_t41_math.c` — T41 ABI wrappers around shared math primitives
 - `tx_isp_t41_sinfo.c` — T41 layout adapter around the shared sensor registry
+- `tx_isp_t41_subdev.c` — extended T41 graph-layout adapter around the shared
+  name/type/index pad resolver
 - `tx_isp_t41_tuning_abi.c` — shared tuning-envelope and command-descriptor
   implementation
 - `tx_isp_t41_frame_layout.c` — shared checked NV12 geometry and vendor
@@ -94,6 +96,14 @@ fault scans were clean. The active module SHA-256 is
 `cf79410cf59b3140b4df3eb67b00d69f6fa99e6455b2181ad220cc1d5e73129a`.
 The scene was darkening during a storm, so this cycle validates transport and
 ABI behavior rather than brightness or noise parity.
+
+The common graph resolver now owns the endpoint name/type/index search while
+the T41 adapter retains the graph table at `0x3c`, extended pad slots, and
+recovered pointer checks. Its one-shot boot bound the OS04D10 once, applied
+day mode, advanced both ISP cores with `error=0`, and decoded 150 1920x1080
+frames in six seconds. `dmesg`, `logread`, and `logcat` fault scans were clean.
+The tested module remains active with SHA-256
+`34aaccbd070010bc704e9588182bfb9f3302a416bcd871111c53f82ae235cd1e`.
 
 The same cycle validates the shared NV12 DMA binding plan in the recovered
 late-link queue path. It decoded 150 main frames in six seconds, 75 substream

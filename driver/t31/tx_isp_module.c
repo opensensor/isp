@@ -46,6 +46,7 @@
 #include "include/tx_libimp.h"
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
+#include "tx_isp_t31_subdev_resolver.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
 
@@ -2329,57 +2330,15 @@ static const struct file_operations frame_channel_fops = {
 static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev,
                                                      const struct link_pad_description *desc)
 {
-    int i;
-    if (!isp_dev || !desc || !desc->name)
-        return NULL;
+    enum tx_isp_subdev_resolve_status status;
+    struct tx_isp_subdev_pad *pad;
 
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        const char *sname;
-        struct tx_isp_subdev_pad *pads;
-        u8 pad_count;
-
-        if (!sd)
-            continue;
-
-        /* OEM compares against the raw name pointer at +0x8. Fall back to the
-         * drifted named members only if that slot is NULL.
-         */
-        sname = tx_isp_subdev_raw_name_get(sd);
-        if (!sname)
-            sname = sd->module.name ? sd->module.name :
-                (sd->module.miscdev.name ? sd->module.miscdev.name :
-                 (sd->module.dev && sd->module.dev->kobj.name ? sd->module.dev->kobj.name : NULL));
-        if (!sname)
-            continue;
-
-        if (strcmp(sname, desc->name) == 0) {
-            /* Type 1 = OUTPUT pads (OEM), Type 2 = INPUT pads */
-            if (desc->type == 1) {
-                pads = tx_isp_subdev_raw_outpads_get(sd);
-                pad_count = tx_isp_subdev_raw_num_outpads_get(sd);
-                if (pads && desc->index < pad_count)
-                    return tx_isp_subdev_raw_pad_at(pads, desc->index);
-                pr_warn("find_subdev_link_pad: outpad index %u out of range for %s (raw_outpads=%p raw_num_outpads=%u)\n",
-                        desc->index, sname, pads, pad_count);
-                return NULL;
-            } else if (desc->type == 2) {
-                pads = tx_isp_subdev_raw_inpads_get(sd);
-                pad_count = tx_isp_subdev_raw_num_inpads_get(sd);
-                if (pads && desc->index < pad_count)
-                    return tx_isp_subdev_raw_pad_at(pads, desc->index);
-                pr_warn("find_subdev_link_pad: inpad index %u out of range for %s (raw_inpads=%p raw_num_inpads=%u)\n",
-                        desc->index, sname, pads, pad_count);
-                return NULL;
-            } else {
-                pr_warn("find_subdev_link_pad: unknown pad type %u for %s\n", desc->type, sname);
-                return NULL;
-            }
-        }
-    }
-
-    pr_debug("find_subdev_link_pad: entity '%s' not found\n", desc->name);
-    return NULL;
+    pad = tx_isp_t31_resolve_link_pad(isp_dev, desc, &status);
+    if (!pad && desc)
+        pr_debug("find_subdev_link_pad: entity='%s' type=%u index=%u status=%u\n",
+                 desc->name ? desc->name : "(null)", desc->type,
+                 desc->index, status);
+    return pad;
 }
 
 // Sensor synchronization matching reference ispcore_sync_sensor_attr - SDK compatible

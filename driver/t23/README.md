@@ -5,8 +5,8 @@ This directory is the T23 bring-up workspace for matching the OEM
 
 The recovered whole-driver seed from `tx-isp-t23-v1` now lives in
 `tx_isp_t23_core.c`, with separate math, sensor-registry, mode-profile,
-callback-plan, register-profile, frame-layout, scaler, and tuning-ABI adapter
-objects. Kbuild links all nine into the existing
+subdevice, callback-plan, register-profile, frame-layout, scaler, and
+tuning-ABI adapter objects. Kbuild links all ten into the existing
 `tx-isp-t23.ko` canonical module identity expected by current sensor builds.
 The math adapter delegates to the cross-SoC primitives, the registry adapter
 delegates slot/procfs ownership to the common typed implementation, and the profile
@@ -31,6 +31,8 @@ Pad creation and recovered link teardown now consume the common pad/link ABI
 offsets. The shared detach operation captures the three endpoints and clears
 the first four link words while preserving link state, without changing the
 linked module image.
+The subdevice adapter supplies T23's graph table and legacy pad-slot offsets
+to the shared name/type/index resolver.
 
 Current smoke-test status:
 
@@ -39,7 +41,7 @@ Current smoke-test status:
   are present.
 - `/proc/jz/sensor/sensor0` reports the SC2336 metadata expected by Raptor.
 - Raptor starts and publishes stable H.264 streams on both MSCA channels.
-- The nine-object module passes a full one-shot device boot with advancing
+- The ten-object module passes a full one-shot device boot with advancing
   ISP/VIC interrupts and is followed by a verified persistent-driver reboot.
 - Both enabled MSCA channels now generate their polyphase curves through the
   shared scaler library. Exact host regressions cover the T23 unity and
@@ -111,6 +113,12 @@ Current smoke-test status:
   Raptor reports 1920x1080 and 640x360 at 25 fps, an external RTSP consumer
   remains active, ISP/VIC interrupts advance, and the final `dmesg`,
   `logread`, and `logcat` fault scans are clean.
+- The graph endpoint search now runs through the host-tested common subdevice
+  resolver while its `0x38` graph table and legacy pad slots remain local.
+  A one-shot boot bound the SC2336 once, applied day mode, advanced ISP/VIC
+  interrupts, and decoded 148 1920x1080 frames in six seconds. All three fault
+  logs were clean. The tested module remains active with SHA-256
+  `865278fb52172ff948b4a4e2bc92c27680344c12b7b57dfcc9f1c94743fc4047`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,
