@@ -28,7 +28,9 @@ layout and named count/type/memory positions. T23 still owns dispatch, queue sta
 alignment policy, register writes,
 sensor-derived values, and its 12-byte allocation ABI's page padding.
 Pad creation and recovered link teardown now consume the common pad/link ABI
-offsets without changing the linked module image.
+offsets. The shared detach operation captures the three endpoints and clears
+the first four link words while preserving link state, without changing the
+linked module image.
 
 Current smoke-test status:
 

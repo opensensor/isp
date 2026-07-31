@@ -240,6 +240,12 @@ Host checks and T31 target assertions cover every field. T23/T41 recovered
 link teardown and T41 remote-event dispatch use the common offsets without
 changing any active module image.
 
+The shared header also owns the identical T23/T41 link-detach prefix: capture
+source, reverse, and sink, then clear source, sink, reverse, and flags while
+retaining the link state word. Pad state transitions and the rest of link
+destruction remain generation-local. A sequential T23/T31/T41 rebuild after
+this extraction reproduced all three active module hashes exactly.
+
 T31's extra callback after the common pad event pointer still makes its full
 pad tail differ from the recovered 0x24-byte shape. That discrepancy remains
 visible and is not papered over by a false full-structure assertion.

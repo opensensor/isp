@@ -155,8 +155,32 @@ TX_ISP_ABI_ASSERT(host_t40_pad_ptr1,
 	offsetof(struct tx_isp_abi_t40_subdev32, pad_ptr1) ==
 	TX_ISP_ABI_T40_SUBDEV_PAD_PTR1);
 
+static void test_link_detach(void)
+{
+	struct tx_isp_abi_link32 link = {
+		.source = 0x11111111U,
+		.sink = 0x22222222U,
+		.reverse = 0x33333333U,
+		.flag = 0x44444444U,
+		.state = 0x55555555U,
+	};
+	uint32_t source = 0;
+	uint32_t reverse = 0;
+	uint32_t sink = 0;
+
+	TX_ISP_ABI_LINK_DETACH(&link, source, reverse, sink);
+	if (source != 0x11111111U || reverse != 0x33333333U ||
+	    sink != 0x22222222U)
+		__builtin_trap();
+	if (link.source || link.sink || link.reverse || link.flag)
+		__builtin_trap();
+	if (link.state != 0x55555555U)
+		__builtin_trap();
+}
+
 int main(void)
 {
+	test_link_detach();
 	puts("tx_isp_subdev_abi_test: ok");
 	return 0;
 }

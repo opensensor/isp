@@ -23,7 +23,7 @@ T40 is intentionally outside this refactor.
 | Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T31, T41 |
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
-| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets and assertions | T23, T31, T41 |
+| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
@@ -35,6 +35,12 @@ dependency ABI expected by the matching sensor drivers and userspace.
 five-word active-link record. The link fields are source, sink, reverse,
 flags, and state at offsets `0x00` through `0x10`, with a total size of
 `0x14`; the pad event function remains at offset `0x1c`.
+
+The identical recovered T23/T41 detach prefix now uses a shared operation that
+returns the source, reverse link, and sink before clearing the first four link
+words. It deliberately preserves the state word and leaves pad state and
+generation-specific destruction policy to each driver. Host tests lock down
+the read order, cleared fields, and retained state.
 
 T31 asserts every typed link field at target compile time. T23 and T41 use the
 same names in recovered link teardown, T23 uses the pad names during pad

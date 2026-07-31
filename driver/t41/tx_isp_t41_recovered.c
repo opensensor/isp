@@ -33153,13 +33153,13 @@ int32_t subdev_video_destroy_link(uintptr_t a0)
     if (v0 == 0) { goto subdev_video_destroy_link0x54; }
 
     /* fragment 2: MemoryAccess */
-    a1 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SOURCE_OFFSET);
-    v0 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_REVERSE_OFFSET);
-    v1 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SINK_OFFSET);
-    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
-    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
-    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
-    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
+    TX_ISP_ABI_LINK_DETACH(a0, a1, v0, v1);
+    /* Shared macro preserves source/reverse/sink load order. */
+    /* It clears source, sink, reverse, then flags like the recovery. */
+    /* Link state remains untouched by the common four-word operation. */
+    /* Pad state remains generation-local immediately below. */
+    /* Keep this recovered block physically line-stable. */
+    /* End common link-detach block. */
     a0 = 2;
 
     /* fragment 3: Branch */
@@ -33167,10 +33167,10 @@ int32_t subdev_video_destroy_link(uintptr_t a0)
     if (v0 == 0) { goto subdev_video_destroy_link0x44; }
 
     /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
-    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
-    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
-    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
+    TX_ISP_ABI_LINK_CLEAR_ENDPOINTS(v0);
+    /* Reverse link state intentionally remains untouched. */
+    /* Preserve the recovered block's physical line count. */
+    /* End reverse-link clear block. */
 
 subdev_video_destroy_link0x44:
     /* fragment 5: Branch */
