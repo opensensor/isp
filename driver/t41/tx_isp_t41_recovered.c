@@ -4,7 +4,7 @@
 /* Target kernel version: 4.4.94 */
 /* Target kernel arch/ABI: mips32r2 32bit */
 /* Module vermagic: 4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT  */
-
+#include "../include/tx_isp/tx_isp_subdev_abi.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
 #include "../include/tx_isp/tx_isp_daynight.h"
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
@@ -27111,7 +27111,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 				private_spin_lock_init(q + 736);
 				private_raw_mutex_init(q + 740, "frame_chan_vb2_mlock", NULL);
 				private_init_completion(q + 760);
-				*(uint32_t *)((char *)chan + 28) = (uintptr_t)frame_chan_event;
+				*(uint32_t *)((char *)chan + TX_ISP_ABI_PAD_EVENT_OFFSET) = (uintptr_t)frame_chan_event;
 				*(uint32_t *)((char *)q + 756) = 1;
 			}
 		} else {
@@ -33147,30 +33147,30 @@ int32_t subdev_video_destroy_link(uintptr_t a0)
     uintptr_t *v1 = 0;
 
     /* fragment 0: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 12);
+    v0 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_FLAG_OFFSET);
 
     /* fragment 1: Branch */
     if (v0 == 0) { goto subdev_video_destroy_link0x54; }
 
     /* fragment 2: MemoryAccess */
-    a1 = *(uint32_t *)((char *)a0 + 0);
-    v0 = *(uint32_t *)((char *)a0 + 8);
-    v1 = *(uint32_t *)((char *)a0 + 4);
-    *(uint32_t *)((char *)a0 + 0) = 0;
-    *(uint32_t *)((char *)a0 + 4) = 0;
-    *(uint32_t *)((char *)a0 + 8) = 0;
-    *(uint32_t *)((char *)a0 + 12) = 0;
+    a1 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SOURCE_OFFSET);
+    v0 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_REVERSE_OFFSET);
+    v1 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SINK_OFFSET);
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
     a0 = 2;
 
     /* fragment 3: Branch */
-    *(uint8_t *)((char *)a1 + 7) = a0;
+    *(uint8_t *)((char *)a1 + TX_ISP_ABI_PAD_STATE_OFFSET) = a0;
     if (v0 == 0) { goto subdev_video_destroy_link0x44; }
 
     /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = 0;
-    *(uint32_t *)((char *)v0 + 4) = 0;
-    *(uint32_t *)((char *)v0 + 8) = 0;
-    *(uint32_t *)((char *)v0 + 12) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
 
 subdev_video_destroy_link0x44:
     /* fragment 5: Branch */
@@ -33180,7 +33180,7 @@ subdev_video_destroy_link0x44:
     v0 = 2;
 
     /* fragment 7: MemoryAccess */
-    *(uint8_t *)((char *)v1 + 7) = v0;
+    *(uint8_t *)((char *)v1 + TX_ISP_ABI_PAD_STATE_OFFSET) = v0;
 
 subdev_video_destroy_link0x54:
     /* fragment 8: Epilogue */
@@ -37430,11 +37430,11 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 
 	if (!t41_kernel_data_ptr(arg1))
 		return -ENOIOCTLCMD;
-	remote = *(void **)((char *)arg1 + 0x0c);
+	remote = *(void **)((char *)arg1 + TX_ISP_ABI_PAD_LINK_OFFSET + TX_ISP_ABI_LINK_SINK_OFFSET);
 	if (!t41_kernel_data_ptr(remote))
 		return -ENOIOCTLCMD;
 	handle = *(int32_t (**)(void *, uint32_t, void *))
-		((char *)remote + 0x1c);
+		((char *)remote + TX_ISP_ABI_PAD_EVENT_OFFSET);
 	if (!t41_kernel_data_ptr((void *)(uintptr_t)handle))
 		return -ENOIOCTLCMD;
 	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||

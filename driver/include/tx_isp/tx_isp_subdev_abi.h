@@ -31,6 +31,14 @@
 #define TX_ISP_ABI_PADSTATE_LINKED              0x03
 #define TX_ISP_ABI_PADSTATE_STREAM              0x04
 
+/* Active link record embedded in every 32-bit recovered pad. */
+#define TX_ISP_ABI_LINK_SOURCE_OFFSET            0x00
+#define TX_ISP_ABI_LINK_SINK_OFFSET              0x04
+#define TX_ISP_ABI_LINK_REVERSE_OFFSET           0x08
+#define TX_ISP_ABI_LINK_FLAG_OFFSET              0x0c
+#define TX_ISP_ABI_LINK_STATE_OFFSET             0x10
+#define TX_ISP_ABI_LINK_SIZE                     0x14
+
 /* T23 and T31 share this recovered subdevice prefix. */
 #define TX_ISP_ABI_SUBDEV_NAME_OFFSET           0x08
 #define TX_ISP_ABI_LEGACY_SUBDEV_IRQDEV_OFFSET  0x80

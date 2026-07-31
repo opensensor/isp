@@ -27,6 +27,8 @@ envelopes. Its request-buffer compatibility path uses the shared five-word
 layout and named count/type/memory positions. T23 still owns dispatch, queue state,
 alignment policy, register writes,
 sensor-derived values, and its 12-byte allocation ABI's page padding.
+Pad creation and recovered link teardown now consume the common pad/link ABI
+offsets without changing the linked module image.
 
 Current smoke-test status:
 

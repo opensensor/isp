@@ -23,10 +23,28 @@ T40 is intentionally outside this refactor.
 | Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T31, T41 |
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
+| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets and assertions | T23, T31, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
 dependency ABI expected by the matching sensor drivers and userspace.
+
+### Subdevice pad and link ABI
+
+`tx_isp_subdev_abi.h` names the common 32-bit pad prefix and its embedded
+five-word active-link record. The link fields are source, sink, reverse,
+flags, and state at offsets `0x00` through `0x10`, with a total size of
+`0x14`; the pad event function remains at offset `0x1c`.
+
+T31 asserts every typed link field at target compile time. T23 and T41 use the
+same names in recovered link teardown, T23 uses the pad names during pad
+creation, and T41 uses them for frame-channel event callback installation and
+remote dispatch. Host tests assert every link and pad offset. The change is
+binary-neutral on all three active modules.
+
+The shared prefix deliberately stops before the unresolved pad tail. T31 has
+an extra `event_callback` member after `event`, so its `priv` position and
+full pad size differ from the recovered 0x20/0x24 layout used elsewhere.
 
 ## Adapter Boundaries
 

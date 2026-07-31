@@ -44,6 +44,8 @@ The module is linked from eight logical objects:
   generation-specific flag policy
 - `tx_isp_frame_channel.h` supplies the proven common event IDs and T41's
   exact private-`T` ioctl envelopes to the recovered dispatcher and IRQ paths
+- `tx_isp_subdev_abi.h` names the pad/link fields used by remote event
+  dispatch, frame-channel callback installation, and recovered link teardown
 - `tx_isp_t41_exposure.c` — T41 sensor/color adapter around the shared checked
   anti-flicker exposure planner
 - `tx_isp_t41_scaler.c` — exact T41 coefficient-table adapter around the

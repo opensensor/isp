@@ -10,7 +10,7 @@
 #include "include/tx_isp_subdev_helpers.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_sysfs.h"
-
+#include "../include/tx_isp/tx_isp_frame_channel.h"
 /* Keep the named T31 subdevice model pinned to the recovered legacy ABI. */
 TX_ISP_ABI_ASSERT(t31_subdev_name,
     __builtin_offsetof(struct tx_isp_subdev, module.name) ==
@@ -283,9 +283,9 @@ int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, unsigned int event, vo
     }
 
     if (sd->ops && sd->ops->video && sd->ops->video->s_stream) {
-        if (event == 0x3000003) /* STREAM START */
+        if (event == TX_ISP_FRAME_EVENT_STREAM_ON)
             return sd->ops->video->s_stream(sd, 1);
-        else if (event == 0x3000004) /* STREAM STOP */
+        else if (event == TX_ISP_FRAME_EVENT_STREAM_OFF)
             return sd->ops->video->s_stream(sd, 0);
     }
 
@@ -1557,3 +1557,22 @@ void __exit tx_isp_subdev_platform_exit(void)
 /* Export symbols for main module to call these functions */
 EXPORT_SYMBOL(tx_isp_subdev_platform_init);
 EXPORT_SYMBOL(tx_isp_subdev_platform_exit);
+
+/* Pin the typed T31 link record to the common 32-bit recovered layout. */
+TX_ISP_ABI_ASSERT(t31_link_source,
+    __builtin_offsetof(struct tx_isp_subdev_link, source) ==
+    TX_ISP_ABI_LINK_SOURCE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_sink,
+    __builtin_offsetof(struct tx_isp_subdev_link, sink) ==
+    TX_ISP_ABI_LINK_SINK_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_reverse,
+    __builtin_offsetof(struct tx_isp_subdev_link, reverse) ==
+    TX_ISP_ABI_LINK_REVERSE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_flag,
+    __builtin_offsetof(struct tx_isp_subdev_link, flag) ==
+    TX_ISP_ABI_LINK_FLAG_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_state,
+    __builtin_offsetof(struct tx_isp_subdev_link, state) ==
+    TX_ISP_ABI_LINK_STATE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_link_size,
+    sizeof(struct tx_isp_subdev_link) == TX_ISP_ABI_LINK_SIZE);

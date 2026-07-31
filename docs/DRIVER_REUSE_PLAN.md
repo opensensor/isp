@@ -234,7 +234,15 @@ address `0x3c`, native 2560x1440 geometry, 25 fps, and active state.
 
 `driver/include/tx_isp/tx_isp_subdev_abi.h` records reviewed physical pad and
 generation-specific subdevice offsets. T31 compile-time assertions cover the
-confirmed named fields and common pad prefix.
+confirmed named fields and common pad prefix. It now also owns the exact
+five-word, 20-byte active-link record: source, sink, reverse, flags, and state.
+Host checks and T31 target assertions cover every field. T23/T41 recovered
+link teardown and T41 remote-event dispatch use the common offsets without
+changing any active module image.
+
+T31's extra callback after the common pad event pointer still makes its full
+pad tail differ from the recovered 0x24-byte shape. That discrepancy remains
+visible and is not papered over by a false full-structure assertion.
 
 `driver/include/tx_isp/tx_isp_recovered_kernel.h` holds the already-reviewed
 kernel-tree compatibility prelude used by recovered sources. Keep larger

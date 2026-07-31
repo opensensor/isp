@@ -53,6 +53,24 @@ struct tx_isp_abi_t40_subdev32 {
 	uint32_t pad_ptr1;
 };
 
+TX_ISP_ABI_ASSERT(host_link_source,
+	offsetof(struct tx_isp_abi_link32, source) ==
+	TX_ISP_ABI_LINK_SOURCE_OFFSET);
+TX_ISP_ABI_ASSERT(host_link_sink,
+	offsetof(struct tx_isp_abi_link32, sink) ==
+	TX_ISP_ABI_LINK_SINK_OFFSET);
+TX_ISP_ABI_ASSERT(host_link_reverse,
+	offsetof(struct tx_isp_abi_link32, reverse) ==
+	TX_ISP_ABI_LINK_REVERSE_OFFSET);
+TX_ISP_ABI_ASSERT(host_link_flag,
+	offsetof(struct tx_isp_abi_link32, flag) ==
+	TX_ISP_ABI_LINK_FLAG_OFFSET);
+TX_ISP_ABI_ASSERT(host_link_state,
+	offsetof(struct tx_isp_abi_link32, state) ==
+	TX_ISP_ABI_LINK_STATE_OFFSET);
+TX_ISP_ABI_ASSERT(host_link_size,
+	sizeof(struct tx_isp_abi_link32) == TX_ISP_ABI_LINK_SIZE);
+
 TX_ISP_ABI_ASSERT(host_pad_owner,
 	offsetof(struct tx_isp_abi_pad32, owner) == TX_ISP_ABI_PAD_OWNER_OFFSET);
 TX_ISP_ABI_ASSERT(host_pad_index,

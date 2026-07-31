@@ -9300,12 +9300,12 @@ static int regtrace_t23_subdev_init_pads(unsigned char *sd, const unsigned char 
             continue;
         }
 
-        *(uint32_t *)(pad + 0) = (uint32_t)(uintptr_t)sd;
-        *(uint8_t *)(pad + 4) = index;
-        *(uint8_t *)(pad + 5) = type;
-        *(uint8_t *)(pad + 6) = links;
-        *(uint8_t *)(pad + 7) = 2;
-        *(uint32_t *)(pad + 20) = 0;
+        *(uint32_t *)(pad + TX_ISP_ABI_PAD_OWNER_OFFSET) = (uint32_t)(uintptr_t)sd;
+        *(uint8_t *)(pad + TX_ISP_ABI_PAD_INDEX_OFFSET) = index;
+        *(uint8_t *)(pad + TX_ISP_ABI_PAD_TYPE_OFFSET) = type;
+        *(uint8_t *)(pad + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET) = links;
+        *(uint8_t *)(pad + TX_ISP_ABI_PAD_STATE_OFFSET) = TX_ISP_ABI_PADSTATE_FREE;
+        *(uint32_t *)(pad + TX_ISP_ABI_PAD_LINK_OFFSET + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
     }
 
     *(uint16_t *)(sd + REGTRACE_TX_ISP_MODULE_OUTPAD_COUNT_OFFSET) = out_count;
@@ -32998,12 +32998,12 @@ int32_t ivdc_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
 
     /* fragment 6: IndirectTailCall */
     switch (a1) {
-        case 0x3000001: return -ENOSYS; /* inline case at 0xcf3c */
-        case 0x3000002: return -ENOSYS; /* inline case at 0xcf60 */
-        case 0x3000003: return -ENOSYS; /* inline case at 0xcf7c */
-        case 0x3000004: return -ENOSYS; /* inline case at 0xcfcc */
-        case 0x3000005: return -ENOSYS; /* inline case at 0xd030 */
-        case 0x3000006: return -ENOSYS; /* inline case at 0xd004 */
+        case TX_ISP_FRAME_EVENT_GET_FORMAT: return -ENOSYS; /* inline case at 0xcf3c */
+        case TX_ISP_FRAME_EVENT_SET_FORMAT: return -ENOSYS; /* inline case at 0xcf60 */
+        case TX_ISP_FRAME_EVENT_STREAM_ON: return -ENOSYS; /* inline case at 0xcf7c */
+        case TX_ISP_FRAME_EVENT_STREAM_OFF: return -ENOSYS; /* inline case at 0xcfcc */
+        case TX_ISP_FRAME_EVENT_QUEUE_BUFFER: return -ENOSYS; /* inline case at 0xd030 */
+        case TX_ISP_FRAME_EVENT_BUFFER_DONE: return -ENOSYS; /* inline case at 0xd004 */
         case 0x3000007: return -ENOSYS; /* inline case at 0xd05c */
         case 0x3000008: return -ENOSYS; /* inline case at 0xd264 */
         default: return -1;
@@ -35249,7 +35249,7 @@ int32_t frame_channel_vidioc_get_fmt(uintptr_t a0, uint32_t a1)
     s2 = a1;
     s1 = (int32_t *)a0;
 
-    result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((int32_t *)(*(int32_t **)((char *)a0 + 0x2bc)), (uintptr_t)(0x3000001), (uintptr_t)((int32_t *)(s1 + 16)));
+    result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((int32_t *)(*(int32_t **)((char *)a0 + 0x2bc)), (uintptr_t)(TX_ISP_FRAME_EVENT_GET_FORMAT), (uintptr_t)((int32_t *)(s1 + 16)));
 
     if (result != 0 && result != -515) {
         ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("Failed to set fmt to frame chan%d!\n"), (uintptr_t)(*(int32_t **)((char *)s1 + 0x2c0)));
@@ -36610,30 +36610,30 @@ int32_t subdev_video_destroy_link(uintptr_t a0)
     uintptr_t v1 = 0;
 
     /* fragment 0: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 12);
+    v0 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_FLAG_OFFSET);
 
     /* fragment 1: Branch */
     if (v0 == 0) { goto subdev_video_destroy_link0x54; }
 
     /* fragment 2: MemoryAccess */
-    a1 = *(uint32_t *)((char *)a0 + 0);
-    v0 = *(uint32_t *)((char *)a0 + 8);
-    v1 = *(uint32_t *)((char *)a0 + 4);
-    *(uint32_t *)((char *)a0 + 0) = 0;
-    *(uint32_t *)((char *)a0 + 4) = 0;
-    *(uint32_t *)((char *)a0 + 8) = 0;
-    *(uint32_t *)((char *)a0 + 12) = 0;
+    a1 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SOURCE_OFFSET);
+    v0 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_REVERSE_OFFSET);
+    v1 = *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SINK_OFFSET);
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
+    *(uint32_t *)((char *)a0 + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
     a0 = 2;
 
     /* fragment 3: Branch */
-    *(uint8_t *)((char *)a1 + 7) = a0;
+    *(uint8_t *)((char *)a1 + TX_ISP_ABI_PAD_STATE_OFFSET) = a0;
     if (v0 == 0) { goto subdev_video_destroy_link0x44; }
 
     /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = 0;
-    *(uint32_t *)((char *)v0 + 4) = 0;
-    *(uint32_t *)((char *)v0 + 8) = 0;
-    *(uint32_t *)((char *)v0 + 12) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
+    *(uint32_t *)((char *)v0 + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
 
 subdev_video_destroy_link0x44:
     /* fragment 5: Branch */
@@ -36643,7 +36643,7 @@ subdev_video_destroy_link0x44:
     v0 = 2;
 
     /* fragment 7: MemoryAccess */
-    *(uint8_t *)((char *)v1 + 7) = v0;
+    *(uint8_t *)((char *)v1 + TX_ISP_ABI_PAD_STATE_OFFSET) = v0;
 
 subdev_video_destroy_link0x54:
     /* fragment 8: Epilogue */
@@ -93510,8 +93510,8 @@ int32_t isp_pre_frame_dequeue(void) {
     /* zero values at 24(sp), 28(sp), 32(sp) - these are the 3rd, 4th, 5th args */
     int32_t zero_arr[3] = {0, 0, 0};
 
-    /* tx_isp_send_event_to_remote(a0_val, 0x3000006, zero_arr) */
-    int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_val), (uintptr_t)(0x3000006), (uintptr_t)(zero_arr));
+    /* tx_isp_send_event_to_remote(a0_val, BUFFER_DONE, zero_arr) */
+    int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_val), (uintptr_t)(TX_ISP_FRAME_EVENT_BUFFER_DONE), (uintptr_t)(zero_arr));
 
     return result;
 }
@@ -93554,7 +93554,7 @@ int32_t ispcore_frame_channel_dqbuf(void *arg1, int32_t arg2)
 	if (arg1 == 0)
 		return 0;
 
-	((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(arg1), (uintptr_t)(0x3000006), (uintptr_t)(arg2));
+	((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(arg1), (uintptr_t)(TX_ISP_FRAME_EVENT_BUFFER_DONE), (uintptr_t)(arg2));
 	return 0;
 }
 
@@ -95800,12 +95800,12 @@ int32_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
 
     /* fragment 6: IndirectTailCall */
     switch (a1) {
-        case 0x3000001: return -ENOSYS; /* inline case at 0x69bd4 */
-        case 0x3000002: return -ENOSYS; /* inline case at 0x69c50 */
-        case 0x3000003: return -ENOSYS; /* inline case at 0x69cf8 */
-        case 0x3000004: return -ENOSYS; /* inline case at 0x69dd8 */
-        case 0x3000005: return -ENOSYS; /* inline case at 0x69df0 */
-        case 0x3000006: return -ENOSYS; /* inline case at 0x69cf0 */
+        case TX_ISP_FRAME_EVENT_GET_FORMAT: return -ENOSYS; /* inline case at 0x69bd4 */
+        case TX_ISP_FRAME_EVENT_SET_FORMAT: return -ENOSYS; /* inline case at 0x69c50 */
+        case TX_ISP_FRAME_EVENT_STREAM_ON: return -ENOSYS; /* inline case at 0x69cf8 */
+        case TX_ISP_FRAME_EVENT_STREAM_OFF: return -ENOSYS; /* inline case at 0x69dd8 */
+        case TX_ISP_FRAME_EVENT_QUEUE_BUFFER: return -ENOSYS; /* inline case at 0x69df0 */
+        case TX_ISP_FRAME_EVENT_BUFFER_DONE: return -ENOSYS; /* inline case at 0x69cf0 */
         case 0x3000007: return -ENOSYS; /* inline case at 0x69fbc */
         case 0x3000008: return -ENOSYS; /* inline case at 0x6a014 */
         default: return -1;

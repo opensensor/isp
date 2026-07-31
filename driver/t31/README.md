@@ -29,6 +29,9 @@ just cosmetic:
 - The outer frame dispatcher and ISP/VIC handoffs use the shared proven event
   IDs and legacy-`V` ioctl envelopes; generation-specific events above
   buffer-done remain local.
+- Compile-time checks pin the typed five-word active-link record to the common
+  20-byte MIPS32 layout; the known extra callback in T31's pad tail remains
+  explicit and is not folded into the shared recovered prefix.
 - `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
   deflicker LUT's fixed 120-word, repeated-tail ABI.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.
