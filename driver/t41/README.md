@@ -130,6 +130,14 @@ remains active with SHA-256
 `07166ce513a884029b90c3250976da957fd4d6439932cbc17ef67f4946a3f7ae`.
 Changing storm light excluded visual-quality comparisons from this gate.
 
+The OEM `check_state` queue/state policy is now shared with T23 while T41
+retains its `0x1fc` queue and `0x224` byte-state positions. This replaces the
+recovered unconditional-zero body with the OEM decision. The fail-safe boot
+bound the OS04D10 once, accepted day mode, advanced both ISP cores with
+`error=0`, and decoded 151 1080p frames in six seconds without driver faults.
+The candidate remains active with SHA-256
+`adb6e008067e4e44f909d6695a6a3f53ac87355e9d5c8766f6d1a5b3e3e84f96`.
+
 The same cycle validates the shared NV12 DMA binding plan in the recovered
 late-link queue path. It decoded 150 main frames in six seconds, 75 substream
 frames in three, and 103 main frames in the four-second final check without

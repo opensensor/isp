@@ -35301,15 +35301,7 @@ static long frame_channel_unlocked_ioctl(struct file *filp, unsigned int cmd, un
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f950 origin=model_output original=check_state */
 int32_t check_state(void *arg1)
 {
-	int32_t *result = 0;
-
-	if (arg1 != 0) {
-		result = 1;
-		if (*(int32_t *)(arg1 + 0x1f8) == (int32_t)(arg1 + 0x1f8))
-			return (*(int32_t *)(arg1 + 0x20c) & 1) ^ 1;
-	}
-
-	return result;
+	return tx_isp_t23_subdev_state_ready(arg1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f97c origin=fragment_seed original=tx_isp_frame_chan_deinit */

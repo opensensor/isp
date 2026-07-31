@@ -137,6 +137,12 @@ Current smoke-test status:
   ISP/VIC interrupts, and decoded 149 1920x1080 frames in six seconds. All
   three fault logs were clean. The candidate remains active with SHA-256
   `d8f71fd58f2fde522b1cc61f8f29386bbf3c7869923a66003c9034b406801c58`.
+- `check_state` now delegates its OEM queue/state decision to the common
+  value-level policy while the T23 `0x1f8`/`0x20c` layout stays local. Its
+  fail-safe boot bound the SC2336 once, accepted day mode, advanced both ISP
+  interrupt lines, and decoded 149 1080p frames in six seconds with clean
+  fault logs. The candidate remains active with SHA-256
+  `86970c12687c268c795a53c91db734716662eefe2eaca4b41e6a45edf28ce61b`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

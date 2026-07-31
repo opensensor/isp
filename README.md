@@ -106,12 +106,16 @@ Important driver files:
   generation-neutral pad-link validation, initialization, and connection
 - `driver/common/tx_isp_remote_event.c` — checked pad-to-remote-handler route
   resolution shared by the recovered T23 and T41 dispatchers
+- `driver/common/tx_isp_state.c` — value-level recovered subdevice readiness
+  policy with generation-local field adapters
 - `driver/include/tx_isp/tx_isp_math.h` — shared fixed-point/interpolation primitives
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
 - `driver/include/tx_isp/tx_isp_subdev.h` — graph wire records, resolver
   interface, and shared link-state operations
 - `driver/include/tx_isp/tx_isp_remote_event.h` — remote-event adapter,
   resolved-target, and failure-status contract
+- `driver/include/tx_isp/tx_isp_state.h` — layout-independent subdevice state
+  evaluation interface
 - `driver/include/tx_isp/tx_isp_tuning_abi.h` — generation-aware proprietary control wire ABI
 - `driver/include/tx_isp/tx_isp_frame_abi.h` — exact 32-bit frame-buffer wire layout and generation-aware state flags
 - `driver/include/tx_isp/tx_isp_frame_channel.h` — shared frame-channel event IDs, generation-qualified ioctl envelopes, and ioctl decoders

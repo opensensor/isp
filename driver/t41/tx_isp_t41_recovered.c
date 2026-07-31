@@ -27135,19 +27135,18 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011110 origin=fragment_seed original=check_state */
 int32_t check_state(uintptr_t a0)
 {
+    return tx_isp_t41_subdev_state_ready((void *)a0);
+#if 0 /* Preserved recovered state oracle; the checked adapter is live. */
     uint32_t a1 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
-
     /* fragment 0: Branch */
     v0 = 0;
     if (a0 == 0) { goto check_state0x24; }
-
     /* fragment 1: MemoryAccess */
     a1 = *(uint32_t *)((char *)a0 + 508);
     v1 = a0 + 508;
-
     /* fragment 2: Branch */
     v0 = 1;
     if (a1 != v1) { goto check_state0x24; }
@@ -27166,6 +27165,7 @@ check_state0x24:
     /* asm: 11138:	00000000 	nop */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001113c origin=fragment_seed original=fs_suspend_module */

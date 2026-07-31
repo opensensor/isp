@@ -26,6 +26,7 @@ T40 is intentionally outside this refactor.
 | Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T41 |
 | Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T41 |
 | Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T41 |
+| Recovered subdevice readiness | `tx_isp_state.h` | `common/tx_isp_state.c` | T23, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
@@ -121,6 +122,28 @@ The active T23, T31, and T41 module hashes are respectively
 and `07166ce513a884029b90c3250976da957fd4d6439932cbc17ef67f4946a3f7ae`.
 Outdoor light was changing rapidly during a rainstorm, so this gate makes no
 brightness, noise, or image-detail comparison.
+
+### Recovered subdevice readiness
+
+The OEM T23 and T41 `check_state` functions apply the same policy: reject a
+null object; accept an object whose queue head is not self-linked; otherwise
+invert bit zero of its state field. `tx_isp_subdev_state_ready()` owns that
+value-level policy. The adapters retain T23's `0x1f8` queue/`0x20c` word-state
+layout and T41's `0x1fc` queue/`0x224` byte-state layout.
+
+This extraction also restores T41 behavior that the recovered source had
+collapsed to an unconditional-zero stub. Host tests cover null, linked,
+self-linked, and unrelated state-bit combinations. Sequential T23/T41 builds
+left T31's artifact unchanged, and fail-safe device boots registered one
+sensor each, accepted forced day mode, advanced ISP interrupts, and decoded
+149 and 151 1080p frames in six seconds. Final kernel, system, and Raptor logs
+contained no driver faults. The active T23 and T41 module hashes are
+`86970c12687c268c795a53c91db734716662eefe2eaca4b41e6a45edf28ce61b`
+and
+`adb6e008067e4e44f909d6695a6a3f53ac87355e9d5c8766f6d1a5b3e3e84f96`.
+T31 remained active at
+`322ace762900c81d22e55f527572708f6ae92d6ca144725d52fb58413dd37b4a`.
+Changing storm light again excluded visual-quality comparisons.
 
 ## Adapter Boundaries
 

@@ -297,6 +297,15 @@ callbacks returning zero. Kernel, system, and Raptor logs contain no driver
 faults. The scene was darkening during a storm, so the cycle validates
 dispatch and transport rather than comparative image quality.
 
+The common state unit now owns the identical value-level T23/T41
+`check_state` decision while adapters retain their different queue offsets and
+state-field widths. Besides removing another duplicate recovered policy, this
+restores T41's OEM behavior in place of its unconditional-zero recovery stub.
+Host edge cases pass. Fail-safe T23/T41 boots each bound one sensor, accepted
+forced day mode, advanced ISP interrupts, and decoded 149/151 1080p frames in
+six seconds without driver faults. T31 was not rebuilt or rebooted and its
+artifact and live module remained byte-identical.
+
 `driver/include/tx_isp/tx_isp_recovered_kernel.h` holds the already-reviewed
 kernel-tree compatibility prelude used by recovered sources. Keep larger
 freestanding recovery-tool declarations local until their signatures are

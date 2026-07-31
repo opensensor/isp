@@ -3,6 +3,8 @@
 
 #define TX_ISP_T41_GRAPH_SUBDEVS_OFFSET 0x3cU
 #define TX_ISP_T41_GRAPH_SUBDEV_COUNT   16U
+#define TX_ISP_T41_STATE_QUEUE_OFFSET   0x1fcU
+#define TX_ISP_T41_STATE_FLAGS_OFFSET   0x224U
 
 static int tx_isp_t41_valid_pointer(const void *pointer)
 {
@@ -104,6 +106,24 @@ enum tx_isp_remote_event_status tx_isp_t41_resolve_remote_event(
 		local_pad, &tx_isp_t41_remote_event_ops, pointer_valid, target);
 }
 
+int tx_isp_t41_subdev_state_ready(void *object)
+{
+	unsigned long queue_next;
+	unsigned int state;
+
+	if (!object)
+		return 0;
+	queue_next = *(unsigned int *)((char *)object +
+				      TX_ISP_T41_STATE_QUEUE_OFFSET);
+	state = *(unsigned char *)((char *)object +
+				  TX_ISP_T41_STATE_FLAGS_OFFSET);
+	return tx_isp_subdev_state_ready(
+		(unsigned long)object, queue_next,
+		(unsigned long)((char *)object + TX_ISP_T41_STATE_QUEUE_OFFSET),
+		state);
+}
+
 /* Build the shared resolver into the T41 module. */
 #include "../common/tx_isp_subdev.c"
 #include "../common/tx_isp_remote_event.c"
+#include "../common/tx_isp_state.c"
