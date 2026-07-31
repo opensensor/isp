@@ -13725,8 +13725,8 @@ static int regtrace_t23_program_msca_format(
 
     if (channel < 0 || channel >= 3 || !format)
         return -EINVAL;
-    if (sizeof(*format) != 0x70)
-        return -EINVAL;
+    BUILD_BUG_ON(sizeof(*format) != TX_ISP_FRAME_FORMAT_BYTES);
+    /* The local recovered type is the shared 0x70-byte wire contract. */
 
     target_width = format->pix.width;
     target_height = format->pix.height;

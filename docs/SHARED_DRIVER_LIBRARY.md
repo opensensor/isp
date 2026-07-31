@@ -20,6 +20,7 @@ T40 is intentionally outside this refactor.
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
 | Proprietary tuning wire ABI | `tx_isp_tuning_abi.h` | `common/tx_isp_tuning_abi.c` | T23, T31, T41 |
 | Frame-buffer wire ABI and state flags | `tx_isp_frame_abi.h` | header-only pure functions | T23, T31, T41 |
+| Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
@@ -106,6 +107,31 @@ in the recovered monolith.
 prefix size, persistent/queue flag merging, each recovered state transition,
 overlapping-policy priority, out-of-range states, and single evaluation by the
 layout-preserving T41 adapter.
+
+### Frame-image format ABI
+
+`tx_isp_frame_format.h` models the private frame-channel image format without
+using the build kernel's conditional `struct v4l2_pix_format`. T23 and T31 use
+the 112-byte base: a fixed 48-byte pixel descriptor followed by crop, scaler,
+rate, and front-crop fields. T41 uses the same base plus its recovered
+four-byte flip-enable extension, for 116 bytes total.
+
+This boundary exposed a real T31 compiler dependency. Ingenic's 3.10
+`videodev2.h` includes the final flags/encoding/quantization/transfer words
+only when `GCC_VERSION == 50400`. A modern cross-compiler therefore made the
+open driver's private format 96 bytes while its ioctl still advertised the
+OEM 112-byte payload. T31 now embeds the shared fixed pixel descriptor, so
+copy size and every crop/scaler offset match libimp regardless of compiler.
+
+The T31 device passed two clean boots with the corrected layout. Main and
+substream decoded 148/147 frames in six seconds, then 124/122 in five seconds;
+the old module's repeated substream samples were 76 frames in six seconds.
+T23 and T41 rebuild byte-identically because their layouts were already
+explicit. T41's differing field/colorspace values and flip extension remain
+generation-qualified rather than normalized away.
+
+`tests/tx_isp_frame_format_test.c` asserts both complete sizes, all structural
+boundaries, enable-byte padding, named word offsets, and the T41 extension.
 
 ### Sensor registry
 

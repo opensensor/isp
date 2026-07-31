@@ -160,6 +160,27 @@ changing live behavior. `tests/tx_isp_frame_abi_test.c` validates sizes,
 offsets, flag merging, policy priority, every known state, and single
 evaluation by the T41 adapter.
 
+### Frame-image format wire ABI
+
+`driver/include/tx_isp/tx_isp_frame_format.h` owns the fixed private format
+layout separately from both queue state and image-size arithmetic. Its
+112-byte base contains the 48-byte pixel descriptor and crop/scaler/rate
+controls shared by T23/T31. T41 appends its recovered flip word for a
+116-byte generation-specific envelope.
+
+T31 no longer embeds the kernel's compiler-conditional `v4l2_pix_format`.
+Under the current compiler that type omitted four words and silently reduced
+the private payload to 96 bytes even though `_IOWR` and the OEM userspace
+contract require 112. Replacing only that nested descriptor with the shared
+wire type restores the original offsets while keeping T31's normalization,
+event dispatch, and hardware policy local. Two device boots delivered
+full-rate 1080p and 360p streams with clean kernel/Raptor/Android logs.
+
+T23 asserts its recovered local structure against the common size. T41 uses
+the common word names in its live set/get-format path while retaining its
+different field and colorspace values. `tests/tx_isp_frame_format_test.c`
+provides host-side size and offset regression coverage.
+
 ### Sensor registry
 
 `driver/common/tx_isp_sinfo.c` owns the sensor-registry lifecycle, exported

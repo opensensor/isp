@@ -26220,8 +26220,8 @@ int frame_channel_open(struct inode *inode, struct file *file)
 int frame_channel_vidioc_set_fmt(void *arg1, struct v4l2_format *arg2)
 {
     union {
-        unsigned char bytes[0x74];
-        uint32_t words[0x74 / sizeof(uint32_t)];
+        unsigned char bytes[TX_ISP_T41_FRAME_FORMAT_BYTES];
+        uint32_t words[TX_ISP_T41_FRAME_FORMAT_WORD_COUNT];
     } format;
     int result = -EINVAL;
 
@@ -26235,23 +26235,23 @@ int frame_channel_vidioc_set_fmt(void *arg1, struct v4l2_format *arg2)
         goto epilogue;
     }
 
-    if (format.words[0] != 1) {
+    if (format.words[TX_ISP_FRAME_FORMAT_WORD_TYPE] != 1) {
         isp_printf(2, "[%s %d] The frame type is invalid!\n",
                    "frame_channel_vidioc_set_fmt", __LINE__);
         result = -EINVAL;
         goto epilogue;
     }
 
-    if (format.words[4] == 0) {
-        format.words[4] = 4;
-    } else if (format.words[4] != 4) {
+    if (format.words[TX_ISP_FRAME_FORMAT_WORD_FIELD] == 0) {
+        format.words[TX_ISP_FRAME_FORMAT_WORD_FIELD] = 4;
+    } else if (format.words[TX_ISP_FRAME_FORMAT_WORD_FIELD] != 4) {
         isp_printf(2, "[%s %d] The field is invalid!\n",
                    "frame_channel_vidioc_set_fmt", __LINE__);
         result = -EINVAL;
         goto epilogue;
     }
 
-    if (format.words[7] != 8) {
+    if (format.words[TX_ISP_FRAME_FORMAT_WORD_COLORSPACE] != 8) {
         isp_printf(2, "[%s %d] The colorspace is invalid!\n",
                    "frame_channel_vidioc_set_fmt", __LINE__);
         result = -EINVAL;
@@ -26264,7 +26264,7 @@ int frame_channel_vidioc_set_fmt(void *arg1, struct v4l2_format *arg2)
      * same global width/height alignment when programming its address FIFO.
      * Populate the cached queue format here so the initial QBUF length is
      * still checked against the exact hardware layout. */
-    if (!format.words[5] || !format.words[6]) {
+    if (!format.words[TX_ISP_FRAME_FORMAT_WORD_BYTESPERLINE] || !format.words[TX_ISP_FRAME_FORMAT_WORD_SIZEIMAGE]) {
         struct tx_isp_nv12_layout layout;
         uint32_t width_align = *(uint32_t *)(void *)isp_nv12_wbit;
         uint32_t height_align = *(uint32_t *)(void *)isp_nv12_hbit;
@@ -26273,26 +26273,26 @@ int frame_channel_vidioc_set_fmt(void *arg1, struct v4l2_format *arg2)
             width_align = 32;
         if (!height_align || (height_align & (height_align - 1)))
             height_align = 16;
-        result = tx_isp_nv12_layout_build(format.words[1], format.words[2],
-                                          width_align, height_align,
-                                          &layout);
+        result = tx_isp_nv12_layout_build(
+            format.words[TX_ISP_FRAME_FORMAT_WORD_WIDTH], format.words[TX_ISP_FRAME_FORMAT_WORD_HEIGHT],
+            width_align, height_align, &layout);
         if (result) {
             result = -EINVAL;
             goto epilogue;
         }
-        format.words[5] = layout.stride;
-        format.words[6] = layout.sizeimage;
+        format.words[TX_ISP_FRAME_FORMAT_WORD_BYTESPERLINE] = layout.stride;
+        format.words[TX_ISP_FRAME_FORMAT_WORD_SIZEIMAGE] = layout.sizeimage;
         printk(KERN_WARNING
                "tx_isp_t41_recovered: set-fmt NV12 fallback stride=%u size=%u align=%u/%u\n",
-               format.words[5], format.words[6], width_align, height_align);
+               format.words[TX_ISP_FRAME_FORMAT_WORD_BYTESPERLINE], format.words[TX_ISP_FRAME_FORMAT_WORD_SIZEIMAGE], width_align, height_align);
     }
 
     printk(KERN_WARNING
            "tx_isp_t41_recovered: set-fmt dispatch channel=%p pad=%p "
            "type=%u %ux%u pix=%u field=%u colorspace=%u data=%p\n",
-           arg1, *(void **)((char *)arg1 + 0x2d8), format.words[0],
-           format.words[1], format.words[2], format.words[3],
-           format.words[4], format.words[7], &format);
+           arg1, *(void **)((char *)arg1 + 0x2d8), format.words[TX_ISP_FRAME_FORMAT_WORD_TYPE],
+           format.words[TX_ISP_FRAME_FORMAT_WORD_WIDTH], format.words[TX_ISP_FRAME_FORMAT_WORD_HEIGHT], format.words[TX_ISP_FRAME_FORMAT_WORD_PIXELFORMAT],
+           format.words[TX_ISP_FRAME_FORMAT_WORD_FIELD], format.words[TX_ISP_FRAME_FORMAT_WORD_COLORSPACE], &format);
     result = tx_isp_send_event_to_remote(
         *(void **)((char *)arg1 + 0x2d8), 0x3000002, &format);
     printk(KERN_WARNING
@@ -26321,8 +26321,8 @@ epilogue:
 int frame_channel_vidioc_get_fmt(void *arg1, struct v4l2_format *arg2)
 {
     union {
-        unsigned char bytes[0x74];
-        uint32_t words[0x74 / sizeof(uint32_t)];
+        unsigned char bytes[TX_ISP_T41_FRAME_FORMAT_BYTES];
+        uint32_t words[TX_ISP_T41_FRAME_FORMAT_WORD_COUNT];
     } format;
     int result = -EINVAL;
 
@@ -26340,9 +26340,9 @@ int frame_channel_vidioc_get_fmt(void *arg1, struct v4l2_format *arg2)
         *(void **)((char *)arg1 + 0x2d8), 0x3000001, &format);
     if (result == 0 || result == -ENOIOCTLCMD) {
         /* The OEM handler normalizes these fields after the remote event. */
-        format.words[0] = 1;
-        format.words[4] = 4;
-        format.words[7] = 8;
+        format.words[TX_ISP_FRAME_FORMAT_WORD_TYPE] = 1;
+        format.words[TX_ISP_FRAME_FORMAT_WORD_FIELD] = 4;
+        format.words[TX_ISP_FRAME_FORMAT_WORD_COLORSPACE] = 8;
 
         if (private_copy_to_user(arg2, &format, sizeof(format)) != 0) {
             isp_printf(2, "[%s %d] Failed to copy to user\n",
@@ -27937,7 +27937,7 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             s0, (void __user *)(uintptr_t)a2);
     }
     if (a1 == 0xc0445454U || a1 == 0xc0445455U) {
-        uint32_t buf[17];
+        uint32_t buf[TX_ISP_FRAME_WORD_COUNT];
 
         if (a1 == 0xc0445455U) {
             int ret = t41_frame_channel_qbuf_clean(

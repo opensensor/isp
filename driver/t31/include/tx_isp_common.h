@@ -18,6 +18,7 @@
 #include <linux/miscdevice.h>
 #include <linux/videodev2.h>
 
+#include <tx_isp/tx_isp_frame_format.h>
 #include "tx_isp_device.h"
 
 #define ISP_SUCCESS 0
@@ -517,7 +518,7 @@ struct isp_image_tuning_default_ctrl {
  */
 struct frame_image_format {
 	unsigned int type;
-	struct v4l2_pix_format pix;
+	struct tx_isp_pixel_format_wire pix;
 
 	/* crop */
 	bool crop_enable;

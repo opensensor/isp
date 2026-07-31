@@ -1,4 +1,4 @@
-ccflags-y += -I$(src)/include
+ccflags-y += -I$(src)/include -I$(src)/../include
 
 # Main ISP module objects - note changed name to tx-isp-t31 (ensure tx_isp_module.o is first)
 tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \

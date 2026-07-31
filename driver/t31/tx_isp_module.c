@@ -4489,7 +4489,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         struct frame_image_format format;
         struct tx_isp_subdev *remote_sd = NULL;
         int ret;
-
+        BUILD_BUG_ON(sizeof(format) != TX_ISP_FRAME_FORMAT_BYTES);
         if (copy_from_user(&format, argp, sizeof(format)))
             return -EFAULT;
 

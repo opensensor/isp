@@ -23,6 +23,9 @@ just cosmetic:
 - The shared frame-buffer ABI asserts T31's 68-byte MIPS32 `v4l2_buffer`
   contract and names its persistent flag mask; T31 retains queue ownership and
   its generation-specific state meanings.
+- `frame_image_format` embeds the shared fixed 48-byte pixel descriptor instead
+  of Ingenic's GCC-5.4-only `v4l2_pix_format` extension. This restores the
+  private format from 96 to the OEM/libimp 112 bytes on modern compilers.
 - `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
   deflicker LUT's fixed 120-word, repeated-tail ABI.
 - `tx_isp_sinfo.c` supplies the T31 adapter for the shared sensor registry.
@@ -66,6 +69,12 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - the active `isp_memopt=1` MDNS allocation remains exactly `0x2f8740`
 - the tested reserved-memory command line is
   `rmem=22M@0x2a00000`; no bootloader environment change is required
+- the compiler-independent 112-byte frame format restores the substream from
+  76 frames in six seconds to 147 in six seconds while the main stream remains
+  full-rate; a second boot decoded 124/122 main/sub frames in five seconds
+- the validated open module is active with SHA-256
+  `7fe1d1b488baef4afbac3087148555bf087fb77f3bc55be12c3ce1bbe58ff59b`;
+  forced day mode, ISP interrupts, `dmesg`, `logread`, and `logcat` all passed
 
 The shared NV12 DMA plan now validates QBUF allocation length, complete
 address range, and Y/UV placement before the local tracking and MSCA handoff.
