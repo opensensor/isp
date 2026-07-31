@@ -25,6 +25,7 @@ T40 is intentionally outside this refactor.
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 | Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T41 |
 | Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T41 |
+| Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
@@ -89,6 +90,37 @@ changing.
 Replacing the remaining raw graph-record positions with this wire contract
 rebuilt to the exact three live hashes above, so it required no additional
 device cycle.
+
+### Remote pad event routing
+
+`tx_isp_resolve_remote_event()` owns the common recovered route from a local
+pad through its active-link sink to the remote pad event handler. The pure
+resolver clears its output first, validates the local pad, remote pad, and
+handler through generation policy, and distinguishes invalid input, an
+unlinked pad, and a missing handler. Callback invocation, event logging, and
+the kernel-address policy remain in each SoC adapter.
+
+T23 and T41 share the same recovered pad/link positions and use small ABI
+accessors around the common resolver. This restores T23's OEM three-argument
+remote-event behavior in place of its former unconditional-success stub.
+T41 preserves its existing event diagnostics and call ordering. T31 retains
+its structurally different typed dispatch/fallback path and does not link this
+unit.
+
+Host tests cover invalid inputs, missing accessors, unlinked and invalid
+remote pads, absent and invalid handlers, and successful callback invocation.
+Sequential T23/T41 builds left the excluded T31 artifact byte-identical.
+Fail-safe T23/T41 boots then registered one sensor apiece, accepted forced day
+mode, advanced all active ISP interrupt lines, and decoded 149 and 151
+1920x1080 frames in six seconds. The untouched T31 control decoded 148 frames.
+T41's early kernel capture recorded repeated real remote routes returning
+zero; final `dmesg`, `logread`, and `logcat` scans contained no driver faults.
+The active T23, T31, and T41 module hashes are respectively
+`d8f71fd58f2fde522b1cc61f8f29386bbf3c7869923a66003c9034b406801c58`,
+`322ace762900c81d22e55f527572708f6ae92d6ca144725d52fb58413dd37b4a`,
+and `07166ce513a884029b90c3250976da957fd4d6439932cbc17ef67f4946a3f7ae`.
+Outdoor light was changing rapidly during a rainstorm, so this gate makes no
+brightness, noise, or image-detail comparison.
 
 ## Adapter Boundaries
 

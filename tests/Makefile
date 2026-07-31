@@ -5,6 +5,7 @@ CFLAGS += -std=c99 -Wall -Wextra -Werror
 .PHONY: all check clean
 
 all: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
+	tx_isp_remote_event_test \
 	tx_isp_reg_profile_test \
 	tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 	tx_isp_frame_abi_test tx_isp_frame_channel_test \
@@ -23,6 +24,12 @@ tx_isp_subdev_test: tx_isp_subdev_test.c \
 		../driver/include/tx_isp/tx_isp_subdev.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ \
 		tx_isp_subdev_test.c ../driver/common/tx_isp_subdev.c
+
+tx_isp_remote_event_test: tx_isp_remote_event_test.c \
+		../driver/common/tx_isp_remote_event.c \
+		../driver/include/tx_isp/tx_isp_remote_event.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ \
+		tx_isp_remote_event_test.c ../driver/common/tx_isp_remote_event.c
 
 tx_isp_reg_profile_test: tx_isp_reg_profile_test.c \
 		../driver/common/tx_isp_reg_profile.c \
@@ -86,6 +93,7 @@ tx_isp_scaler_test: tx_isp_scaler_test.c \
 		../driver/t41/tx_isp_t41_scaler.c
 
 check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
+		tx_isp_remote_event_test \
 		tx_isp_reg_profile_test \
 		tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 		tx_isp_frame_abi_test tx_isp_frame_channel_test \
@@ -95,6 +103,7 @@ check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 	./tx_isp_math_test
 	./tx_isp_subdev_abi_test
 	./tx_isp_subdev_test
+	./tx_isp_remote_event_test
 	./tx_isp_reg_profile_test
 	./tx_isp_callback_plan_test
 	./tx_isp_tuning_abi_test
@@ -107,6 +116,7 @@ check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 
 clean:
 	$(RM) tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
+		tx_isp_remote_event_test \
 		tx_isp_reg_profile_test \
 		tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 		tx_isp_frame_abi_test tx_isp_frame_channel_test \

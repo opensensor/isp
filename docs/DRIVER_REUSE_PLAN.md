@@ -280,6 +280,23 @@ and 150 1080p frames in six seconds on T23, T31, and T41 respectively.
 during a rainstorm, so image brightness and wall-noise comparisons were
 deliberately excluded from this structural gate.
 
+`driver/common/tx_isp_remote_event.c` now owns the generation-neutral
+local-pad to active-sink to event-handler lookup shared by T23 and T41.
+Generation adapters retain their pointer policy, invocation, and diagnostics.
+This replaces T23's recovered unconditional-success stub with the OEM
+three-argument dispatch behavior while leaving T41's working call path and
+logging intact. T31's typed dispatcher has different fallback semantics and
+is intentionally not a consumer.
+
+Host failure-path tests pass, sequential T23/T41 builds left the excluded T31
+artifact byte-identical, and fail-safe boots left the new T23/T41 modules
+active. Both registered one sensor, accepted forced day mode, and advanced ISP
+interrupts. Six-second 1080p decodes produced 149 T23, 148 untouched-control
+T31, and 151 T41 frames; T41 early logs show repeated resolved remote
+callbacks returning zero. Kernel, system, and Raptor logs contain no driver
+faults. The scene was darkening during a storm, so the cycle validates
+dispatch and transport rather than comparative image quality.
+
 `driver/include/tx_isp/tx_isp_recovered_kernel.h` holds the already-reviewed
 kernel-tree compatibility prelude used by recovered sources. Keep larger
 freestanding recovery-tool declarations local until their signatures are

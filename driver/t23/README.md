@@ -130,6 +130,13 @@ Current smoke-test status:
   `logcat` contain no driver faults. The candidate remains active with
   SHA-256
   `403bb2bbe4c81da5bd0bdc5ce81c7f4bdaa50ff9e268ac67e555a5f029fbb855`.
+- The recovered remote-event export now has its OEM three-argument ABI and
+  resolves the active-link sink and handler through the shared checked
+  library instead of returning unconditional success. Its fail-safe boot
+  registered and bound the SC2336 once, accepted forced day mode, advanced
+  ISP/VIC interrupts, and decoded 149 1920x1080 frames in six seconds. All
+  three fault logs were clean. The candidate remains active with SHA-256
+  `d8f71fd58f2fde522b1cc61f8f29386bbf3c7869923a66003c9034b406801c58`.
 - The shared MDNS layout preserves the full 1080p `0x477e70` used size and
   T23's `0x478000` page-aligned allocation. Two July 30 validation boots
   decoded 127 frames in six seconds and 112 in five, passed night/auto/day,

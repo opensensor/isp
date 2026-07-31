@@ -2749,6 +2749,7 @@ static bool t41_kernel_data_ptr(const void *ptr)
 	return address >= PAGE_OFFSET && address < (unsigned long)-4095;
 }
 
+static int t41_remote_event_pointer_valid(unsigned long address) { return t41_kernel_data_ptr((const void *)address); }
 static void t41_log_ispcore_children(const char *stage)
 {
 	char *subdev = (char *)(uintptr_t)ispcore_sd;
@@ -37425,18 +37426,17 @@ tx_isp_reg_set0x4c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001626c origin=model_output original=tx_isp_send_event_to_remote */
 int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 {
+	struct tx_isp_remote_event_target target;
+	enum tx_isp_remote_event_status status;
 	void *remote;
 	int32_t (*handle)(void *, uint32_t, void *);
 
-	if (!t41_kernel_data_ptr(arg1))
+	status = tx_isp_t41_resolve_remote_event(
+		arg1, t41_remote_event_pointer_valid, &target);
+	if (status != TX_ISP_REMOTE_EVENT_OK)
 		return -ENOIOCTLCMD;
-	remote = *(void **)((char *)arg1 + TX_ISP_ABI_PAD_LINK_OFFSET + TX_ISP_ABI_LINK_SINK_OFFSET);
-	if (!t41_kernel_data_ptr(remote))
-		return -ENOIOCTLCMD;
-	handle = *(int32_t (**)(void *, uint32_t, void *))
-		((char *)remote + TX_ISP_ABI_PAD_EVENT_OFFSET);
-	if (!t41_kernel_data_ptr((void *)(uintptr_t)handle))
-		return -ENOIOCTLCMD;
+	remote = target.pad;
+	handle = (tx_isp_remote_event_handler)(uintptr_t)target.handler;
 	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
 	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
 	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)

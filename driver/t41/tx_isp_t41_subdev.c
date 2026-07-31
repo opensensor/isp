@@ -78,5 +78,32 @@ unsigned long tx_isp_t41_resolve_link_pad(
 		status);
 }
 
+static void *tx_isp_t41_remote_pad(void *local_pad)
+{
+	return *(void **)((char *)local_pad + TX_ISP_ABI_PAD_LINK_OFFSET +
+			 TX_ISP_ABI_LINK_SINK_OFFSET);
+}
+
+static unsigned long tx_isp_t41_event_handler(void *remote_pad)
+{
+	return *(unsigned int *)((char *)remote_pad +
+				TX_ISP_ABI_PAD_EVENT_OFFSET);
+}
+
+static const struct tx_isp_remote_event_ops tx_isp_t41_remote_event_ops = {
+	.remote_pad = tx_isp_t41_remote_pad,
+	.event_handler = tx_isp_t41_event_handler,
+};
+
+enum tx_isp_remote_event_status tx_isp_t41_resolve_remote_event(
+	void *local_pad,
+	tx_isp_remote_event_pointer_valid pointer_valid,
+	struct tx_isp_remote_event_target *target)
+{
+	return tx_isp_resolve_remote_event(
+		local_pad, &tx_isp_t41_remote_event_ops, pointer_valid, target);
+}
+
 /* Build the shared resolver into the T41 module. */
 #include "../common/tx_isp_subdev.c"
+#include "../common/tx_isp_remote_event.c"

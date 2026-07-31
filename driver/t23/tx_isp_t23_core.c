@@ -9031,7 +9031,7 @@ int32_t tx_isp_init(void);
 static long tx_isp_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 int private_reset_tx_isp_module(int arg);
 int32_t tx_isp_reg_set(void *arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5);
-int32_t tx_isp_send_event_to_remote(void *arg1);
+int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data);
 int32_t tx_isp_module_init(uintptr_t a0, uintptr_t a1);
 int32_t tx_isp_module_deinit(uint32_t a0);
 int32_t tx_isp_subdev_init(uintptr_t a0, uintptr_t a1, uint32_t a2);
@@ -9161,7 +9161,23 @@ uintptr_t __divdi3(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3) { (vo
 uintptr_t __moddi3(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3) { (void)a0; (void)a1; (void)a2; (void)a3; return 0; }
 void call_text_func(void) {}
 void get_isp_priv_mem(unsigned int *phyaddr, unsigned int *size) { if (phyaddr) *phyaddr = 0; if (size) *size = 0; }
-int32_t tx_isp_send_event_to_remote(void *arg1) { (void)arg1; return 0; }
+static bool regtrace_t23_valid_ptr(uintptr_t ptr);
+static int regtrace_t23_remote_event_pointer_valid(unsigned long address)
+{
+    return regtrace_t23_valid_ptr((uintptr_t)address);
+}
+int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
+{
+    struct tx_isp_remote_event_target target;
+    tx_isp_remote_event_handler handler;
+
+    if (tx_isp_t23_resolve_remote_event(
+            arg1, regtrace_t23_remote_event_pointer_valid, &target) !=
+        TX_ISP_REMOTE_EVENT_OK)
+        return -ENOIOCTLCMD;
+    handler = (tx_isp_remote_event_handler)(uintptr_t)target.handler;
+    return handler(target.pad, event, data);
+}
 static struct tx_isp_subdev *regtrace_t23_sensor_sd;
 static struct i2c_client *regtrace_t23_sensor_client;
 static struct i2c_driver *regtrace_t23_sensor_driver;
@@ -9170,7 +9186,6 @@ static bool regtrace_t23_sensor_identified;
 static bool regtrace_t23_sensor_initialized;
 static bool regtrace_t23_sensor_streaming;
 static bool regtrace_t23_csi_initialized;
-static bool regtrace_t23_valid_ptr(uintptr_t ptr);
 static void regtrace_t23_seed_sensor_caches(const char *reason);
 static int regtrace_t23_call_sensor_chip_ident(const char *reason);
 uint32_t tisp_set_fps(uint32_t unused, uint32_t fps);

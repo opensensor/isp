@@ -37,7 +37,8 @@ The module is linked from nine logical objects:
 - `tx_isp_t41_math.c` — T41 ABI wrappers around shared math primitives
 - `tx_isp_t41_sinfo.c` — T41 layout adapter around the shared sensor registry
 - `tx_isp_t41_subdev.c` — extended T41 graph-layout adapter around the shared
-  name/type/index pad resolver and link-state core
+  name/type/index pad resolver, link-state core, and checked remote-event
+  route resolver
 - `tx_isp_t41_tuning_abi.c` — shared tuning-envelope and command-descriptor
   implementation
 - `tx_isp_t41_frame_layout.c` — shared checked NV12 geometry and vendor
@@ -117,6 +118,17 @@ remains active with SHA-256
 `7f385cf872d21568dc105b85ca852a4f33a5ade30c72f52451acd880dfeee9d4`.
 The scene was darkening during a rainstorm, so this gate covers graph, stream,
 and ABI behavior rather than comparative brightness or shadow-noise quality.
+
+Remote-event dispatch now delegates the local-pad, active-sink, and handler
+lookup to the shared checked resolver while retaining T41's pointer policy,
+event diagnostics, and callback invocation. The fail-safe cycle registered
+and bound the OS04D10 once, accepted forced day mode, advanced both ISP cores
+with `error=0`, and decoded 151 1920x1080 frames in six seconds. Early kernel
+capture shows repeated resolved remote callbacks returning zero, and the final
+`dmesg`, `logread`, and `logcat` scans contain no driver faults. The candidate
+remains active with SHA-256
+`07166ce513a884029b90c3250976da957fd4d6439932cbc17ef67f4946a3f7ae`.
+Changing storm light excluded visual-quality comparisons from this gate.
 
 The same cycle validates the shared NV12 DMA binding plan in the recovered
 late-link queue path. It decoded 150 main frames in six seconds, 75 substream

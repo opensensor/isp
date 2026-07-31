@@ -104,10 +104,14 @@ Important driver files:
 - `driver/common/tx_isp_frame_layout.c` — checked NV12 and T23/T31 MDNS geometry
 - `driver/common/tx_isp_subdev.c` — checked graph endpoint resolution and
   generation-neutral pad-link validation, initialization, and connection
+- `driver/common/tx_isp_remote_event.c` — checked pad-to-remote-handler route
+  resolution shared by the recovered T23 and T41 dispatchers
 - `driver/include/tx_isp/tx_isp_math.h` — shared fixed-point/interpolation primitives
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
 - `driver/include/tx_isp/tx_isp_subdev.h` — graph wire records, resolver
   interface, and shared link-state operations
+- `driver/include/tx_isp/tx_isp_remote_event.h` — remote-event adapter,
+  resolved-target, and failure-status contract
 - `driver/include/tx_isp/tx_isp_tuning_abi.h` — generation-aware proprietary control wire ABI
 - `driver/include/tx_isp/tx_isp_frame_abi.h` — exact 32-bit frame-buffer wire layout and generation-aware state flags
 - `driver/include/tx_isp/tx_isp_frame_channel.h` — shared frame-channel event IDs, generation-qualified ioctl envelopes, and ioctl decoders
