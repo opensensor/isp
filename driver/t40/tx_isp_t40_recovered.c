@@ -195407,7 +195407,7 @@ static void regtrace_apply_t40_bringup_profile(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000007c700 origin=fragment_seed original=init_module */
-int32_t init_module(void)
+int32_t tx_isp_t40_core_init(void)
 {
     regtrace_patch_relocated_data();
     regtrace_irq_frame_done_work_init();
@@ -195510,7 +195510,7 @@ tx_isp_module_init0x84:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000007c710 origin=fragment_seed original=cleanup_module */
-void cleanup_module(void)
+void tx_isp_t40_core_exit(void)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     cancel_work_sync(&regtrace_irq_frame_done_work[0].work);

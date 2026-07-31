@@ -1,4 +1,4 @@
-tx_isp_t23_recovered-objs := tx_isp_t23_core.o \
+tx-isp-t23-objs := tx_isp_t23_core.o \
 			     tx_isp_t23_math.o \
 			     tx_isp_t23_sinfo.o \
 			     tx_isp_t23_mode.o \
@@ -7,7 +7,7 @@ tx_isp_t23_recovered-objs := tx_isp_t23_core.o \
 			     tx_isp_t23_frame_layout.o \
 			     tx_isp_t23_scaler.o \
 			     tx_isp_t23_tuning_abi.o
-obj-m += tx_isp_t23_recovered.o
+obj-m += tx-isp-t23.o
 
 ccflags-y += -I$(src)/../include
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD

@@ -1,4 +1,6 @@
-obj-m += tx_isp_t40_recovered.o
+tx-isp-t40-objs := tx_isp_t40_recovered.o \
+		   tx_isp_t40_sinfo.o
+obj-m += tx-isp-t40.o
 
 ccflags-y += -I$(src)/../include
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD

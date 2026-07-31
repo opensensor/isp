@@ -110,6 +110,27 @@ static struct proc_dir_entry *tx_isp_sinfo_root;
 #define TX_ISP_SINFO_CONFIG_FLAGS tx_isp_sinfo_config.flags
 #endif
 
+static bool tx_isp_sinfo_key_supported(enum tx_isp_sinfo_key key)
+{
+	unsigned int config_flags = TX_ISP_SINFO_CONFIG_FLAGS;
+
+	switch (key) {
+	case TX_ISP_SINFO_MIN_FPS:
+	case TX_ISP_SINFO_MAX_FPS:
+		return config_flags & TX_ISP_SINFO_EXTENDED_ATTRS;
+	case TX_ISP_SINFO_MCLK:
+	case TX_ISP_SINFO_BOOT:
+	case TX_ISP_SINFO_VIDEO_INTERFACE:
+	case TX_ISP_SINFO_RST_GPIO:
+	case TX_ISP_SINFO_PWDN_GPIO:
+		return config_flags &
+		       (TX_ISP_SINFO_EXTENDED_ATTRS |
+			TX_ISP_SINFO_REGINFO_WIRING);
+	default:
+		return true;
+	}
+}
+
 /*
  * The prebuilt sensor modules pass their private object as an opaque subdev.
  * These offsets are stable parts of each SoC's binary ABI, recovered from the
@@ -132,6 +153,13 @@ tx_isp_sinfo_u32_at(const void *base, unsigned int offset)
 	return *(const unsigned int *)((const unsigned char *)base + offset);
 }
 
+static int tx_isp_sinfo_s32_at(const void *base, unsigned int offset)
+{
+	if (!base)
+		return 0;
+	return *(const int *)((const unsigned char *)base + offset);
+}
+
 static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 {
 	struct tx_isp_sinfo_file *file = m->private;
@@ -139,10 +167,17 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 	enum tx_isp_sinfo_key selected_key = file->key;
 	struct i2c_client *client;
 	const void *attr;
+	const void *info;
+	const void *wiring;
 	const char *name;
 	unsigned int fps;
 	unsigned int denominator;
 	unsigned int config_flags = TX_ISP_SINFO_CONFIG_FLAGS;
+	unsigned int wiring_mclk_offset;
+	unsigned int wiring_boot_offset;
+	unsigned int wiring_interface_offset;
+	unsigned int wiring_rst_gpio_offset;
+	unsigned int wiring_pwdn_gpio_offset;
 
 	(void)unused;
 	mutex_lock(&tx_isp_sinfo_lock);
@@ -153,11 +188,37 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 
 	client = NULL;
 	attr = NULL;
+	info = NULL;
 	if (!(config_flags & TX_ISP_SINFO_STATIC_METADATA)) {
 		client = tx_isp_sinfo_pointer_at(
 			slot->subdev, tx_isp_sinfo_config.client_offset);
 		attr = tx_isp_sinfo_pointer_at(
 			slot->subdev, tx_isp_sinfo_config.attr_offset);
+		if (slot->subdev &&
+		    (config_flags & TX_ISP_SINFO_REGINFO_WIRING))
+			info = (const unsigned char *)slot->subdev +
+			       tx_isp_sinfo_config.info_offset;
+	}
+	if (config_flags & TX_ISP_SINFO_REGINFO_WIRING) {
+		wiring = info;
+		wiring_mclk_offset = tx_isp_sinfo_config.info_mclk_offset;
+		wiring_boot_offset = tx_isp_sinfo_config.info_boot_offset;
+		wiring_interface_offset =
+			tx_isp_sinfo_config.info_interface_offset;
+		wiring_rst_gpio_offset =
+			tx_isp_sinfo_config.info_rst_gpio_offset;
+		wiring_pwdn_gpio_offset =
+			tx_isp_sinfo_config.info_pwdn_gpio_offset;
+	} else {
+		wiring = attr;
+		wiring_mclk_offset = tx_isp_sinfo_config.attr_mclk_offset;
+		wiring_boot_offset = tx_isp_sinfo_config.attr_boot_offset;
+		wiring_interface_offset =
+			tx_isp_sinfo_config.attr_interface_offset;
+		wiring_rst_gpio_offset =
+			tx_isp_sinfo_config.attr_rst_gpio_offset;
+		wiring_pwdn_gpio_offset =
+			tx_isp_sinfo_config.attr_pwdn_gpio_offset;
 	}
 
 	switch (selected_key) {
@@ -248,66 +309,61 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 		break;
 	case TX_ISP_SINFO_MCLK:
 		if (!(config_flags &
-		      TX_ISP_SINFO_EXTENDED_ATTRS))
+		      (TX_ISP_SINFO_EXTENDED_ATTRS |
+		       TX_ISP_SINFO_REGINFO_WIRING)))
 			break;
-		if (attr)
+		if (wiring)
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_u32_at(
-					   attr,
-					   tx_isp_sinfo_config.
-					   attr_mclk_offset));
+					   wiring, wiring_mclk_offset));
 		else
 			seq_printf(m, "1\n");
 		break;
 	case TX_ISP_SINFO_VIDEO_INTERFACE:
 		if (!(config_flags &
-		      TX_ISP_SINFO_EXTENDED_ATTRS))
+		      (TX_ISP_SINFO_EXTENDED_ATTRS |
+		       TX_ISP_SINFO_REGINFO_WIRING)))
 			break;
-		if (attr)
+		if (wiring)
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_u32_at(
-					   attr,
-					   tx_isp_sinfo_config.
-					   attr_interface_offset));
+					   wiring, wiring_interface_offset));
 		else
 			seq_printf(m, "0\n");
 		break;
 	case TX_ISP_SINFO_BOOT:
 		if (!(config_flags &
-		      TX_ISP_SINFO_EXTENDED_ATTRS))
+		      (TX_ISP_SINFO_EXTENDED_ATTRS |
+		       TX_ISP_SINFO_REGINFO_WIRING)))
 			break;
-		if (attr)
+		if (wiring)
 			seq_printf(m, "%u\n",
 				   tx_isp_sinfo_u32_at(
-					   attr,
-					   tx_isp_sinfo_config.
-					   attr_boot_offset));
+					   wiring, wiring_boot_offset));
 		else
 			seq_printf(m, "0\n");
 		break;
 	case TX_ISP_SINFO_RST_GPIO:
 		if (!(config_flags &
-		      TX_ISP_SINFO_EXTENDED_ATTRS))
+		      (TX_ISP_SINFO_EXTENDED_ATTRS |
+		       TX_ISP_SINFO_REGINFO_WIRING)))
 			break;
-		if (attr)
-			seq_printf(m, "%u\n",
-				   tx_isp_sinfo_u32_at(
-					   attr,
-					   tx_isp_sinfo_config.
-					   attr_rst_gpio_offset));
+		if (wiring)
+			seq_printf(m, "%d\n",
+				   tx_isp_sinfo_s32_at(
+					   wiring, wiring_rst_gpio_offset));
 		else
 			seq_printf(m, "-1\n");
 		break;
 	case TX_ISP_SINFO_PWDN_GPIO:
 		if (!(config_flags &
-		      TX_ISP_SINFO_EXTENDED_ATTRS))
+		      (TX_ISP_SINFO_EXTENDED_ATTRS |
+		       TX_ISP_SINFO_REGINFO_WIRING)))
 			break;
-		if (attr)
-			seq_printf(m, "%u\n",
-				   tx_isp_sinfo_u32_at(
-					   attr,
-					   tx_isp_sinfo_config.
-					   attr_pwdn_gpio_offset));
+		if (wiring)
+			seq_printf(m, "%d\n",
+				   tx_isp_sinfo_s32_at(
+					   wiring, wiring_pwdn_gpio_offset));
 		else
 			seq_printf(m, "-1\n");
 		break;
@@ -490,6 +546,8 @@ tx_isp_sinfo_slot_publish(struct tx_isp_sinfo_slot *slot, int index)
 	proc_slot = &tx_isp_sinfo_heap_slots[index];
 #endif
 	for (key = 0; key < TX_ISP_SINFO_NKEYS; ++key) {
+		if (!tx_isp_sinfo_key_supported(key))
+			continue;
 		slot->files[key].slot = slot;
 		slot->files[key].key = key;
 #ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT

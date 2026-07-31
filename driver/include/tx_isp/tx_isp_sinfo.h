@@ -6,6 +6,7 @@ struct module;
 
 #define TX_ISP_SINFO_STATIC_METADATA	(1U << 0)
 #define TX_ISP_SINFO_EXTENDED_ATTRS	(1U << 1)
+#define TX_ISP_SINFO_REGINFO_WIRING	(1U << 2)
 
 /*
  * Binary sensor modules pass private objects whose layouts differ by SoC.
@@ -32,6 +33,13 @@ struct tx_isp_sinfo_config {
 	unsigned int attr_interface_offset;
 	unsigned int attr_rst_gpio_offset;
 	unsigned int attr_pwdn_gpio_offset;
+
+	unsigned int info_offset;
+	unsigned int info_mclk_offset;
+	unsigned int info_boot_offset;
+	unsigned int info_interface_offset;
+	unsigned int info_rst_gpio_offset;
+	unsigned int info_pwdn_gpio_offset;
 
 	unsigned int static_chip_id;
 	unsigned int static_i2c_adapter;
