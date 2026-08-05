@@ -72,13 +72,26 @@ The T41 module now reuses the common day/night state machine,
 interpolation/fixed-point helpers, checked exposure and scaler arithmetic, and
 the T23/T31/T41 typed sensor-registry implementation. Full sensor/Raptor smoke
 tests pass, both MSCA streams run, and ISP interrupts advance. The validated
-mixed-light AWB baseline is `R=1605, B=3440`; both shadow banks retain those
+mixed-light AWB fallback is `R=1450, B=3780`; both shadow banks retain those
 values across forced day/night transitions. It runs with the exact active OEM
 OS04D10 day CCM and unity GIB. The older half-GIB/custom-CCM combination remains
 available only as an explicitly selected experiment. The shared
 registry reports one active OS04D10 with chip `0x530444`, address `0x3c`,
 native 2560x1440 geometry, and 25 fps; both driver-add and sensor-bind report
 one successful lifecycle call.
+
+The optional T41 safe-AWB path now consumes all eight packed 16-byte records
+in every 128-byte DMA zone group. The earlier record-zero sampler appeared
+valid in one spatial phase but changed its ratios by several times when the
+hardware advanced the ring, producing red/green flashes. Runtime writes of a
+negative value to `t41_safe_awb_controller` rearm the one-shot statistics
+engine; disabling it cancels the worker and immediately restores the calibrated
+fallback. Read-only parameters expose the selected bank, raw ratios, applied
+gains, IRQ/update counts, and rejected samples. A 12.5% consistency gate rejects
+partially replaced DMA groups while accepting a persistent illuminant change
+after 32 samples. On the mixed daylight/incandescent test scene the controller
+held `R=1438..1439, B=3819..3824` across bank transitions while rejecting the
+transient groups that previously pulled either channel down by hundreds.
 
 The August correctness cycle also restores the T41 1.2 tuning responses used
 by RIC: running-mode GET, AE expression, the 256-bin/225-zone AE statistics
@@ -87,10 +100,13 @@ the common tuning-ABI unit and covered by host tests rather than being open
 coded in the recovered ioctl dispatcher. With AE target `17600`, profile `1`,
 and the AWB baseline above, a matched scene measured
 `Y/U/V/SAT=117.125/119.855/132.521/29.133`, versus
-`118.832/119.857/132.143/25.161` on stock. The open driver and OpenIMP ran
-together with no visible block corruption in repeated decoded frames. All 15
-host suites pass; the active one-shot module SHA-256 is
-`471c26c9f464f615796e1e32e5d86e235773e8009a5846894c240e9716cc3b55`.
+`118.832/119.857/132.143/25.161` on stock. After the aggregate-AWB correction,
+the calibrated fallback measured `U/V=125.51/128.88` and the adaptive path
+settled at `126.45/128.13`; the controlled stock oracle was `127.66/125.97`.
+The open driver and OpenIMP ran together with no visible block corruption or
+H.264 decode errors in repeated frames. All 15 host suites pass; the active
+one-shot module SHA-256 is
+`ea13f99745fdc52b947ec52a8ebd3185bb39484c240dcab1148e005c20237c54`.
 
 The July 30 shared-format validation preserved the 3,133,440-byte 1080p pool,
 full-rate output, and coherent geometry across two clean boots. It decoded

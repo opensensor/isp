@@ -1093,11 +1093,11 @@ static void t41_apply_stock_awb_gains(void);
  * baseline until the statistics controller below is ready to own the gains.
  * These values pair with the exact OEM CCM and avoid the cyan cast of the
  * legacy half-GIB/custom-CCM profile. */
-static unsigned int t41_stock_awb_gain_a = 1605U;
+static unsigned int t41_stock_awb_gain_a = 1450U;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 3440U;
+static unsigned int t41_stock_awb_gain_b = 3780U;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
@@ -1118,21 +1118,22 @@ MODULE_PARM_DESC(t41_awb_gain_trigger,
 
 /* T40 and T23 both recover color first by closing a bounded gray-world loop
  * over the vendor-configured AWB statistics DMA.  T41 uses the same packed
- * 16-byte records at 128-byte strides, but keeps its own sensor-specific
- * calibration.  T41's AWB statistic is upstream of the applied WB gains, so
- * use the working T40 absolute mapping rather than treating the ratio as
- * feedback.  The defaults come from a settled open-driver capture under the
- * same light as stock: selected-bank q10 ratios 0x1d8..0x1dd map to the
- * stock gains 0x754/0xa6c. */
+ * 16-byte records, eight records per 128-byte zone group, but keeps its own
+ * sensor-specific calibration.  T41's AWB statistic is upstream of the
+ * applied WB gains, so use the working T40 absolute mapping rather than
+ * treating the ratio as feedback. */
+static int t41_safe_awb_controller_set(const char *value,
+				       const struct kernel_param *kp);
 static int t41_safe_awb_controller = 1;
-module_param(t41_safe_awb_controller, int, 0644);
+module_param_call(t41_safe_awb_controller, t41_safe_awb_controller_set,
+		  param_get_int, &t41_safe_awb_controller, 0644);
 MODULE_PARM_DESC(t41_safe_awb_controller,
-		 "negative enables workqueue-backed T41 AWB DMA gray-world controller");
-static unsigned int t41_awb_rbias_q10 = 4053U;
+		 "negative enables and rearms the workqueue-backed T41 AWB DMA controller");
+static unsigned int t41_awb_rbias_q10 = 1040U;
 module_param(t41_awb_rbias_q10, uint, 0644);
 MODULE_PARM_DESC(t41_awb_rbias_q10,
 		 "safe AWB red calibration bias in Q10");
-static unsigned int t41_awb_bbias_q10 = 5759U;
+static unsigned int t41_awb_bbias_q10 = 1086U;
 module_param(t41_awb_bbias_q10, uint, 0644);
 MODULE_PARM_DESC(t41_awb_bbias_q10,
 		 "safe AWB blue calibration bias in Q10");
@@ -1152,13 +1153,48 @@ static unsigned int t41_awb_min_pixels = 15000U;
 module_param(t41_awb_min_pixels, uint, 0644);
 MODULE_PARM_DESC(t41_awb_min_pixels,
 		 "minimum AWB statistic pixels accepted by the safe controller");
-static uint32_t t41_awb_last_rgain = 0x380U;
-static uint32_t t41_awb_last_bgain = 0x0880U;
+static uint32_t t41_awb_last_rgain = 1450U;
+static uint32_t t41_awb_last_bgain = 3780U;
+static uint32_t t41_awb_last_raw_r_q10 = 0x400U;
+static uint32_t t41_awb_last_raw_b_q10 = 0x400U;
 /* Keep diagnostic state in .data.  Unrepaired functions still address a few
  * legacy BSS objects by relative layout, so adding ordinary zero-filled BSS
  * here can perturb unrelated capture state. */
 static uint32_t t41_awb_irq_count = 0x80000000U;
 static uint32_t t41_awb_update_count = 0x80000000U;
+static uint32_t t41_awb_reject_count = 0x80000000U;
+static uint32_t t41_awb_last_bank = 0x80000000U;
+static uint32_t t41_awb_outlier_r_q10 = 0x400U;
+static uint32_t t41_awb_outlier_b_q10 = 0x400U;
+static uint32_t t41_awb_outlier_count = 0x80000000U;
+module_param_named(t41_safe_awb_rgain, t41_awb_last_rgain, uint, 0444);
+MODULE_PARM_DESC(t41_safe_awb_rgain,
+		 "last red gain applied by the T41 safe AWB path");
+module_param_named(t41_safe_awb_bgain, t41_awb_last_bgain, uint, 0444);
+MODULE_PARM_DESC(t41_safe_awb_bgain,
+		 "last blue gain applied by the T41 safe AWB path");
+module_param_named(t41_safe_awb_raw_r_q10, t41_awb_last_raw_r_q10, uint,
+		   0444);
+MODULE_PARM_DESC(t41_safe_awb_raw_r_q10,
+		 "last aggregate T41 AWB G/R ratio before calibration");
+module_param_named(t41_safe_awb_raw_b_q10, t41_awb_last_raw_b_q10, uint,
+		   0444);
+MODULE_PARM_DESC(t41_safe_awb_raw_b_q10,
+		 "last aggregate T41 AWB G/B ratio before calibration");
+module_param_named(t41_safe_awb_irq_count, t41_awb_irq_count, uint, 0444);
+MODULE_PARM_DESC(t41_safe_awb_irq_count,
+		 "valid T41 AWB DMA completions since the last rearm");
+module_param_named(t41_safe_awb_update_count, t41_awb_update_count, uint,
+		   0444);
+MODULE_PARM_DESC(t41_safe_awb_update_count,
+		 "T41 safe AWB gain updates since the last rearm");
+module_param_named(t41_safe_awb_reject_count, t41_awb_reject_count, uint,
+		   0444);
+MODULE_PARM_DESC(t41_safe_awb_reject_count,
+		 "transient T41 AWB ratio outliers rejected since rearm");
+module_param_named(t41_safe_awb_bank, t41_awb_last_bank, uint, 0444);
+MODULE_PARM_DESC(t41_safe_awb_bank,
+		 "last T41 AWB DMA bank sampled by the safe controller");
 static void t41_safe_awb_workfn(struct work_struct *work);
 static DECLARE_WORK(t41_safe_awb_work, t41_safe_awb_workfn);
 static uint32_t t41_safe_gain_last_q16 = ~0U;
@@ -31753,6 +31789,14 @@ static void t41_safe_awb_apply(uint32_t rgain, uint32_t bgain)
     system_reg_set_awb_trig(3, 0);
 }
 
+static bool t41_safe_awb_ratio_close(uint32_t value, uint32_t reference)
+{
+    uint32_t tolerance = max_t(uint32_t, reference >> 3, 1U);
+
+    return value >= reference - min(reference, tolerance) &&
+           value <= reference + tolerance;
+}
+
 static int32_t t41_safe_awb_interrupt(uint32_t channel)
 {
     uint8_t *info;
@@ -31762,11 +31806,14 @@ static int32_t t41_safe_awb_interrupt(uint32_t channel)
     uint32_t bank_size;
     uint32_t bank;
     uint32_t off;
+    uint32_t rec;
     uint32_t zones = 0;
     uint64_t red = 0;
     uint64_t green = 0;
     uint64_t blue = 0;
     uint64_t pixels = 0;
+    uint32_t raw_r;
+    uint32_t raw_b;
     uint32_t target_r;
     uint32_t target_b;
 
@@ -31784,6 +31831,7 @@ static int32_t t41_safe_awb_interrupt(uint32_t channel)
     /* Exact T41 tisp_awb_main_interrupt_static consumes the bank named by
      * 0x18050 directly.  T40's preceding-bank rule does not apply here. */
     bank = (uint32_t)system_reg_read(0x18050U) & 3U;
+    t41_awb_last_bank = bank;
     if (!bank_size || bank_size > 0x8000U)
         return -EINVAL;
     source = dma + bank * bank_size;
@@ -31792,20 +31840,27 @@ static int32_t t41_safe_awb_interrupt(uint32_t channel)
         return -EINVAL;
 
     dma_cache_sync(NULL, source, bank_size, DMA_FROM_DEVICE);
-    for (off = 0; off + 16U <= bank_size; off += 128U) {
-        uint32_t w0 = *(uint32_t *)(void *)(source + off + 0);
-        uint32_t w1 = *(uint32_t *)(void *)(source + off + 4);
-        uint32_t w2 = *(uint32_t *)(void *)(source + off + 8);
-        uint32_t w3 = *(uint32_t *)(void *)(source + off + 12);
-        uint32_t count = ((w3 & 0x3fU) << 8) | (w2 >> 24);
+    for (off = 0; off + 128U <= bank_size; off += 128U) {
+        /* The OEM parser consumes all eight packed records in each group.
+         * Sampling only record zero makes the result depend on the spatial
+         * phase: it looked plausible in bank zero but changed by several
+         * times when the hardware advanced to banks one and two. */
+        for (rec = 0; rec < 128U; rec += 16U) {
+            uint8_t *record = source + off + rec;
+            uint32_t w0 = *(uint32_t *)(void *)(record + 0);
+            uint32_t w1 = *(uint32_t *)(void *)(record + 4);
+            uint32_t w2 = *(uint32_t *)(void *)(record + 8);
+            uint32_t w3 = *(uint32_t *)(void *)(record + 12);
+            uint32_t count = ((w3 & 0x3fU) << 8) | (w2 >> 24);
 
-        if (!count)
-            continue;
-        red += w0 & 0x3fffffU;
-        green += ((w1 & 0xfffU) << 10) | (w0 >> 22);
-        blue += ((w2 & 3U) << 20) | (w1 >> 12);
-        pixels += count;
-        zones++;
+            if (!count)
+                continue;
+            red += w0 & 0x3fffffU;
+            green += ((w1 & 0xfffU) << 10) | (w0 >> 22);
+            blue += ((w2 & 3U) << 20) | (w1 >> 12);
+            pixels += count;
+            zones++;
+        }
     }
 
     t41_awb_irq_count = (t41_awb_irq_count & 0x7fffffffU) + 1U;
@@ -31824,8 +31879,40 @@ static int32_t t41_safe_awb_interrupt(uint32_t channel)
      * OS04D10 calibration constants; multiplying by the current gain turns
      * the loop into positive feedback and drives both channels to 0x1800.
      */
-    target_r = (uint32_t)div64_u64(green << 10, red);
-    target_b = (uint32_t)div64_u64(green << 10, blue);
+    raw_r = (uint32_t)div64_u64(green << 10, red);
+    raw_b = (uint32_t)div64_u64(green << 10, blue);
+
+    /* The T41 statistic engine occasionally exposes a partially replaced
+     * zone group while its DMA ring advances.  Those bursts last less than
+     * two seconds in controlled captures and shift both ratios by 20-60%,
+     * enough to create a visible green flash despite output damping.  Accept
+     * ratios near the settled estimate immediately.  A real illuminant step
+     * is still accepted after 32 mutually consistent samples (about five
+     * seconds at the default every-other-interrupt update rate). */
+    if (!t41_safe_awb_ratio_close(raw_r, t41_awb_last_raw_r_q10) ||
+        !t41_safe_awb_ratio_close(raw_b, t41_awb_last_raw_b_q10)) {
+        if (t41_safe_awb_ratio_close(raw_r, t41_awb_outlier_r_q10) &&
+            t41_safe_awb_ratio_close(raw_b, t41_awb_outlier_b_q10)) {
+            t41_awb_outlier_count =
+                (t41_awb_outlier_count & 0x7fffffffU) + 1U;
+        } else {
+            t41_awb_outlier_r_q10 = raw_r;
+            t41_awb_outlier_b_q10 = raw_b;
+            t41_awb_outlier_count = 1U;
+        }
+        if (t41_awb_outlier_count < 32U) {
+            t41_awb_reject_count =
+                (t41_awb_reject_count & 0x7fffffffU) + 1U;
+            goto trace;
+        }
+    }
+    t41_awb_last_raw_r_q10 = raw_r;
+    t41_awb_last_raw_b_q10 = raw_b;
+    t41_awb_outlier_r_q10 = raw_r;
+    t41_awb_outlier_b_q10 = raw_b;
+    t41_awb_outlier_count = 0U;
+    target_r = raw_r;
+    target_b = raw_b;
     target_r = (uint32_t)(((uint64_t)target_r *
                            t41_awb_rbias_q10) >> 10);
     target_b = (uint32_t)(((uint64_t)target_b *
@@ -31847,8 +31934,9 @@ trace:
     if (t41_awb_irq_count <= 12U ||
         !(t41_awb_irq_count & (t41_awb_irq_count - 1U)))
         printk(KERN_WARNING
-               "tx_isp_t41_recovered: safe AWB irq=%u update=%u bank=%u zones=%u pixels=%llu rgb=%llu/%llu/%llu gains=%#x/%#x\n",
-               t41_awb_irq_count, t41_awb_update_count, bank, zones,
+               "tx_isp_t41_recovered: safe AWB irq=%u update=%u reject=%u bank=%u zones=%u pixels=%llu rgb=%llu/%llu/%llu gains=%#x/%#x\n",
+               t41_awb_irq_count, t41_awb_update_count,
+               t41_awb_reject_count, bank, zones,
                (unsigned long long)pixels, (unsigned long long)red,
                (unsigned long long)green, (unsigned long long)blue,
                t41_awb_last_rgain, t41_awb_last_bgain);
@@ -31863,6 +31951,38 @@ static void t41_safe_awb_workfn(struct work_struct *work)
 {
     (void)work;
     t41_safe_awb_interrupt(0);
+}
+
+static int t41_safe_awb_controller_set(const char *value,
+				       const struct kernel_param *kp)
+{
+    int was_enabled = t41_safe_awb_controller < 0;
+    int ret = param_set_int(value, kp);
+
+    if (ret)
+        return ret;
+    if (t41_safe_awb_controller < 0) {
+        /* AWB statistics are one-shot.  A controller enabled after stream-on
+         * otherwise waits forever because the ignored startup completion was
+         * never rearmed.  Reapply only the writer-owned setup words and start
+         * a fresh warmup window before accepting DMA statistics. */
+        t41_awb_irq_count = 0x80000000U;
+        t41_awb_update_count = 0x80000000U;
+        t41_awb_reject_count = 0x80000000U;
+        t41_awb_last_bank = 0x80000000U;
+        t41_awb_last_raw_r_q10 = t41_awb_rbias_q10 ?
+            (t41_awb_last_rgain << 10) / t41_awb_rbias_q10 : 0x400U;
+        t41_awb_last_raw_b_q10 = t41_awb_bbias_q10 ?
+            (t41_awb_last_bgain << 10) / t41_awb_bbias_q10 : 0x400U;
+        t41_awb_outlier_r_q10 = t41_awb_last_raw_r_q10;
+        t41_awb_outlier_b_q10 = t41_awb_last_raw_b_q10;
+        t41_awb_outlier_count = 0x80000000U;
+        t41_apply_stock_awb_stats_profile();
+    } else if (was_enabled) {
+        cancel_work_sync(&t41_safe_awb_work);
+        t41_apply_stock_awb_gains();
+    }
+    return 0;
 }
 
 static void t41_apply_stock_dpc_profile(void)
