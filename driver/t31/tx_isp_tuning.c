@@ -258,6 +258,9 @@ extern uint32_t deir_en;
 #define CLM_S_LUT_SIZE      0x834   /* 2100 bytes = 1050 × int16_t */
 #define CLM_LUT_SHIFT_SIZE  4
 #define CLM_REG_SIZE         0x690   /* 0x1A4 words × 4 bytes */
+#define CLM_TPARAMS_H_LUT    0xFB84  /* OEM 0x94694 - tparams base 0x84B10 */
+#define CLM_TPARAMS_S_LUT    0xFF9E  /* OEM 0x94AAE - tparams base 0x84B10 */
+#define CLM_TPARAMS_SHIFT   0x107D4  /* OEM 0x952E4 - tparams base 0x84B10 */
 #define SDNS_TPARAMS_OFFSET  0xA878  /* OEM SDNS blob starts at 0x8F388 - 0x84B10 */
 #define MDNS_TPARAMS_OFFSET  0xBB30  /* OEM MDNS blob starts at 0x90640 - 0x84B10 */
 static uint8_t  tiziano_clm_h_lut[CLM_H_LUT_SIZE];
@@ -24276,10 +24279,10 @@ EXPORT_SYMBOL(tiziano_mdns_dn_params_refresh);
  * Register map:
  *   0x6800        CLM enable (write 1)
  *   0x6804        CLM LUT shift
- *   0x60000-0x6068c  S bank 0  (0x1A4 words)
- *   0x68000-0x6868c  H bank 0
- *   0x70000-0x7068c  S bank 1  (mirror)
- *   0x78000-0x7868c  H bank 1  (mirror)
+ *   0x60000-0x6068c  H bank 0  (0x1A4 words)
+ *   0x68000-0x6868c  H bank 1  (mirror)
+ *   0x70000-0x7068c  S bank 0
+ *   0x78000-0x7868c  S bank 1  (mirror)
  *
  * LUT layout in tparams:
  *   offset 0xFB84  H LUT   0x41A bytes (1050 × uint8_t,  7-bit values)
@@ -24349,17 +24352,16 @@ static int tiziano_set_parameter_clm(void)
 	/* Enable CLM block and write LUT shift */
 	system_reg_write_clm(1, 0x6804, tiziano_clm_lut_shift);
 
-	/* Bank 0: S regs at 0x60000, H regs at 0x68000 */
+	/* OEM layout: mirrored H banks followed by mirrored S banks. */
 	for (i = 0; i < nwords; i++) {
-		system_reg_write(0x60000 + i * 4, tiziano_clm_s_reg[i]);
+		system_reg_write(0x60000 + i * 4, tiziano_clm_h_reg[i]);
 	}
 	for (i = 0; i < nwords; i++) {
 		system_reg_write(0x68000 + i * 4, tiziano_clm_h_reg[i]);
 	}
 
-	/* Bank 1 (mirror): H regs at 0x70000, S regs at 0x78000 (OEM order) */
 	for (i = 0; i < nwords; i++) {
-		system_reg_write(0x70000 + i * 4, tiziano_clm_h_reg[i]);
+		system_reg_write(0x70000 + i * 4, tiziano_clm_s_reg[i]);
 	}
 	for (i = 0; i < nwords; i++) {
 		system_reg_write(0x78000 + i * 4, tiziano_clm_s_reg[i]);
@@ -24368,13 +24370,7 @@ static int tiziano_set_parameter_clm(void)
 	return 0;
 }
 
-/* tiziano_clm_params_refresh — OEM-exact CLM payload refresh.
- *
- * The stock module copies the CLM H/S LUTs and LUT-shift value directly from
- * the loaded tuning blob (`tparams + 0xd44`, `+0x115e`, `+0x1994`).  Our
- * previous zero-fill placeholder left CLM enabled while programming an empty
- * table set, which can crush the image in both day and night modes.
- */
+/* tiziano_clm_params_refresh — OEM-exact CLM payload refresh. */
 static int tiziano_clm_params_refresh(void)
 {
 	const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
@@ -24387,9 +24383,12 @@ static int tiziano_clm_params_refresh(void)
 		return 0;
 	}
 
-	memcpy(tiziano_clm_h_lut, params + 0x0d44, CLM_H_LUT_SIZE);
-	memcpy(tiziano_clm_s_lut, params + 0x115e, CLM_S_LUT_SIZE);
-	memcpy(&tiziano_clm_lut_shift, params + 0x1994, CLM_LUT_SHIFT_SIZE);
+	memcpy(tiziano_clm_h_lut, params + CLM_TPARAMS_H_LUT,
+	       CLM_H_LUT_SIZE);
+	memcpy(tiziano_clm_s_lut, params + CLM_TPARAMS_S_LUT,
+	       CLM_S_LUT_SIZE);
+	memcpy(&tiziano_clm_lut_shift, params + CLM_TPARAMS_SHIFT,
+	       CLM_LUT_SHIFT_SIZE);
 
 	pr_info("tiziano_clm_params_refresh: loaded CLM LUTs from tuning blob (shift=%u h0=0x%02x h1=0x%02x s0=%d s1=%d)\n",
 		tiziano_clm_lut_shift,

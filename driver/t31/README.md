@@ -23,7 +23,8 @@ just cosmetic:
 - `tx_isp_t31_subdev_resolver.c` supplies T31's typed graph and established
   raw pad-direction mapping to the common name/type/index resolver.
 - Pad allocation delegates the common five-word active-link initializer while
-  retaining T31's extra callback/private tail and raw pad-slot mapping.
+  retaining T31's raw pad-slot mapping. The complete pad type is asserted as
+  the OEM 0x24-byte wire object.
 - The shared frame-buffer ABI asserts T31's 68-byte MIPS32 `v4l2_buffer`
   contract, names its persistent flag mask, and defines the recovered
   FREE/QUEUED/ACTIVE/DONE slot states; T31 retains queue ownership.
@@ -34,8 +35,9 @@ just cosmetic:
   IDs and legacy-`V` ioctl envelopes; generation-specific events above
   buffer-done remain local.
 - Compile-time checks pin the typed five-word active-link record to the common
-  20-byte MIPS32 layout; the known extra callback in T31's pad tail remains
-  explicit and is not folded into the shared recovered prefix.
+  20-byte MIPS32 layout and the pad private pointer/stride to 0x20/0x24. The
+  former extra callback was removed because it made the C type wider than the
+  allocator's OEM stride.
 - Target assertions also pin the declared 8-byte endpoint, 20-byte graph-link
   configuration, and 8-byte configuration-set envelope to the common wire ABI.
 - `tx_isp_t31_exposure.c` adapts the shared exposure library to the T31
@@ -46,6 +48,29 @@ just cosmetic:
 
 Register addresses, recovered object layouts, IRQ acknowledgement, tuning
 tables, and sensor-specific profiles remain T31-local.
+
+## Current GC2053 Runtime
+
+The August 5, 2026 Wyze Cam v3 cycle added a second T31 sensor oracle:
+
+- the corrected 0x24-byte pad ABI consumed its one-shot marker, registered one
+  GC2053 at address `0x37`, kept Raptor and ISP/W02/AVPU interrupts advancing,
+  and decoded 358 1920x1080 frames in 12 seconds without a driver fault
+- the recovered CLM bank assignment is H/H at `0x60000/0x68000` and S/S at
+  `0x70000/0x78000`; this matches both the T31 OEM HLIL and the T23 recovered
+  implementation
+- loading H, S, and shift from tuning-block offsets `0xfb84`, `0xff9e`, and
+  `0x107d4` reproduces all four stock GC2053 CLM banks byte-for-byte
+- with exact CLM data, AE recovers to the stock operating range and both
+  1920x1080 and 640x360 streams remain decoder-clean at 30 fps
+- image parity is not complete: with GIB active, AWB DMA has zero RGB sums and
+  the frame is severely magenta; bypassing only GIB restores RGB sums in at
+  least 219 of 225 zones and recognizable color. The default remains
+  OEM-aligned with GIB active so this remaining defect is visible rather than
+  silently hidden
+- every candidate was loaded through the one-shot fail-safe path, and the
+  camera was power-cycled back to the persistent 831,776-byte stock module
+  after each experiment
 
 ## Current SC2336 Runtime
 

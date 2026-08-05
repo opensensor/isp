@@ -226,7 +226,6 @@ struct tx_isp_subdev_pad {
 	unsigned char state;				/* Pad state (TX_ISP_PADSTATE_*) */
 	struct tx_isp_subdev_link link;	/* The active link */
 	int (*event)(struct tx_isp_subdev_pad *, unsigned int event, void *data);
-    void (*event_callback)(struct tx_isp_subdev_pad *pad, void *priv);
 	void *priv;
 };
 
@@ -440,6 +439,9 @@ struct isp_channel {
     struct device *dev;                // Parent device
     struct tx_isp_subdev subdev;  // Add this
     struct tx_isp_subdev_pad pad; // And this
+    /* Preserve the established isp_channel tail offsets after correcting the
+     * separately allocated pad wire object from 0x28 to the OEM 0x24 bytes. */
+    uint32_t pad_layout_compat;
     uint32_t flags;                    // Channel flags
     uint32_t is_open;                  // Open count
     bool enabled;                    // Streaming state

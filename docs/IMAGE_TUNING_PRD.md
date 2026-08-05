@@ -264,6 +264,42 @@ This effort is complete when:
 
 ## Progress Log
 
+### 2026-08-05: GC2053 CLM Parity and GIB Isolation
+
+The Wyze Cam v3 GC2053 stock module supplied a same-device register and image
+oracle. The open driver had two independent CLM defects:
+
+1. It cross-wired the four table windows as S/H/H/S. OEM T31 HLIL and the T23
+   recovered implementation both program H/H/S/S at `0x60000`, `0x68000`,
+   `0x70000`, and `0x78000`.
+2. It copied CLM data from `0x0d44/0x115e/0x1994`, which are unrelated parts
+   of the tuning block. The OEM addresses resolve to
+   `0xfb84/0xff9e/0x107d4` relative to `tparams`.
+
+Repacking the deployed GC2053 tuning file from those corrected offsets
+reproduces the stock H and S register payloads exactly. On hardware, all four
+open CLM bank hashes then equal their stock counterparts. This changes the
+failure from a black or unstable exposure state to normal AE feedback: the
+forced-day sample recovered from luma 1 / gain 19,822 to luma 54 / gain 367 /
+8,165 microseconds. Main and sub RTSP remained decoder-clean at 30 fps, with
+359 main frames decoded in 12 seconds.
+
+Color is still not at parity. With GIB active, the decoded frame is severely
+magenta and all 225 AWB DMA records have zero RGB sums. A one-variable boot
+with `force_bypass_gib=1`, keeping the corrected CLM data, restores
+recognizable color and nonzero RGB sums in 219-221 zones per DMA bank. The
+stock module produces valid AWB sums with GIB active, so bypass is diagnostic,
+not the intended fix. The next task is therefore the T31 linear-GIB active
+path—initialization/commit semantics and any state not represented by the
+currently matching visible `0x1038-0x106c` values—not further CLM tuning.
+
+Evidence bundles:
+
+- `logs/20260805-074446-t31-clm-oem-parity-smoke-118`
+- `logs/20260805-074753-t31-clm-parity-gib-bypass-probe-118`
+- stock oracle and AWB/core dumps in
+  `logs/20260805-072838-t31-awb-pretransition-forensics-118`
+
 ### 2026-04-03: Phase 3 Data Extraction + Phase 2 Block Testing
 
 **Completed (Phase 3 data extraction):**

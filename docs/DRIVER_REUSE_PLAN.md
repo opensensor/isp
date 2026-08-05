@@ -230,8 +230,9 @@ address `0x3c`, native 2560x1440 geometry, 25 fps, and active state.
 ### Checked ABI and recovery support
 
 `driver/include/tx_isp/tx_isp_subdev_abi.h` records reviewed physical pad and
-generation-specific subdevice offsets. T31 compile-time assertions cover the
-confirmed named fields and common pad prefix. It now also owns the exact
+generation-specific subdevice offsets. T31 compile-time assertions now cover
+the complete OEM 0x24-byte pad, including the private pointer and stride. It
+also owns the exact
 five-word, 20-byte active-link record: source, sink, reverse, flags, and state.
 Host checks and T31 target assertions cover every field. T23/T41 recovered
 link teardown and T41 remote-event dispatch use the common offsets without
@@ -243,9 +244,14 @@ retaining the link state word. Pad state transitions and the rest of link
 destruction remain generation-local. A sequential T23/T31/T41 rebuild after
 this extraction reproduced all three active module hashes exactly.
 
-T31's extra callback after the common pad event pointer still makes its full
-pad tail differ from the recovered 0x24-byte shape. That discrepancy remains
-visible and is not papered over by a false full-structure assertion.
+The former T31-only callback after the pad event pointer was a recovery error:
+the allocator already used the OEM 0x24-byte stride, so the 0x28-byte C type
+made the final pad's private-pointer initialization overrun the allocation.
+The callback is removed, private/size assertions enforce the wire ABI, and an
+explicit compatibility word after the embedded channel pad preserves the
+already-established `isp_channel` tail offsets. A one-shot GC2053 boot bound
+one sensor, kept Raptor and the ISP interrupts live, and decoded 358 main
+frames in 12 seconds without a kernel fault.
 
 `driver/common/tx_isp_subdev.c` now owns the name/type/index graph search used
 by all four active generations. Small layout adapters retain T23's graph table
@@ -384,13 +390,13 @@ ten logical objects:
 
 Every staged module was loaded through the one-shot fail-safe hook, exercised
 through the real Raptor consumer, and checked with stream captures plus
-`dmesg`, `logread`, and `logcat`. The successful tested open builds remain
-running so the current work is available for inspection.
+kernel and service diagnostics. The persistent module is restored and
+verified after each controlled experiment.
 
 | SoC | Staged coverage | Result |
 |---|---|---|
 | T23 | ten-object module, shared math/registry/subdevice resolver/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
-| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout, SC2336 | pass; corrected 3,133,440-byte pool geometry, unchanged `0x2f8740` memory-optimized MDNS allocation, two-buffer DMA-done rotation, and full-rate RTSP |
+| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout; SC2336 and GC2053 | transport/ABI pass; corrected 0x24-byte pad allocation contract, one GC2053 registration, 1920x1080/640x360 at 30 fps, and decoder-clean RTSP. CLM banks now match the GC2053 OEM image byte-for-byte; active-GIB color parity remains open |
 | T40 | three-object module, shared registry/subdevice resolver/link/event/state policy, GC4653 | pass; day mode, active IRQ 38/39, and valid 1920x1080 RTSP decode; legacy full proc dump excluded |
 | T41 | nine-object module, shared math/registry/subdevice resolver/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
 
@@ -459,8 +465,9 @@ need to shape the eventual common interface.
    teardown sequences whose ordering is already device-proven.
 2. Review fixed-point divide and log/exp helpers shared by T31 and T41, starting
    with host-testable functions that cannot touch kernel or ISP state.
-3. Reconcile the known T31 pad-direction and 0x24/0x28 stride discrepancy in a
-   standalone, device-tested change.
+3. Diagnose the T31 linear-GIB active path using the GC2053 stock/open oracle;
+   with otherwise identical CLM tables, GIB bypass restores AWB RGB sums and
+   recognizable color while the OEM module operates correctly with GIB active.
 4. Extend the checked ABI from pads to links, events, and sensor attributes.
 5. Split the next low-risk recovered T23/T40/T41 subsystem behind a reviewed
    interface. T40 proc diagnostics are specifically excluded until their

@@ -49,12 +49,8 @@ TX_ISP_ABI_ASSERT(t31_subdev_host_priv,
 TX_ISP_ABI_ASSERT(t31_subdev_size,
     sizeof(struct tx_isp_subdev) == TX_ISP_ABI_LEGACY_SUBDEV_SIZE);
 
-/*
- * The pad prefix through event is checked.  T31 currently carries an extra
- * event_callback member after it, making priv/sizeof differ from the recovered
- * 0x20/0x24 layout.  Do not assert those two values until that live ABI issue
- * is resolved separately from this structural extraction.
- */
+/* T31 uses the same complete 0x24-byte pad wire layout as the recovered
+ * T23/T40/T41 implementations and the vendor SDK declarations. */
 TX_ISP_ABI_ASSERT(t31_pad_owner,
     __builtin_offsetof(struct tx_isp_subdev_pad, sd) ==
     TX_ISP_ABI_PAD_OWNER_OFFSET);
@@ -76,6 +72,11 @@ TX_ISP_ABI_ASSERT(t31_pad_link,
 TX_ISP_ABI_ASSERT(t31_pad_event,
     __builtin_offsetof(struct tx_isp_subdev_pad, event) ==
     TX_ISP_ABI_PAD_EVENT_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_private,
+    __builtin_offsetof(struct tx_isp_subdev_pad, priv) ==
+    TX_ISP_ABI_PAD_PRIVATE_OFFSET);
+TX_ISP_ABI_ASSERT(t31_pad_size,
+    sizeof(struct tx_isp_subdev_pad) == TX_ISP_ABI_PAD_STRIDE);
 
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
@@ -498,7 +499,6 @@ static int tx_isp_subdev_init_pads(struct tx_isp_subdev *sd,
         pad->state = TX_ISP_PADSTATE_FREE;
         tx_isp_subdev_init_link_record(pad);
         pad->event = NULL;
-        pad->event_callback = NULL;
         pad->priv = NULL;
     }
 
