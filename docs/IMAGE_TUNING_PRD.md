@@ -300,6 +300,43 @@ Evidence bundles:
 - stock oracle and AWB/core dumps in
   `logs/20260805-072838-t31-awb-pretransition-forensics-118`
 
+### 2026-08-05: Active-GIB Runtime Bisection
+
+A same-boot live toggle made the failure boundary repeatable without changing
+the tuning payload. With the open module, active GIB (`0x0c` bit 5 clear)
+produced zero RGB sums in all four 225-zone AWB banks. Setting only bit 5
+restored 222 nonzero zones per bank and recognizable color; clearing it again
+returned the banks to zero. The same active/bypass/active sequence under the
+stock module retained 222 nonzero zones per bank in every phase. Active-GIB
+reactivation is therefore supported by the hardware and OEM sequence; the open
+failure is not an artifact of toggling the block after stream start.
+
+The following hypotheses were tested and did not restore active-GIB output:
+
+- reapplying the recovered GIB payload after the top-level bypass selection
+- disabling only GIB's internal BLC, and then clearing the full `0x103c`
+  control word
+- replacing the open `0x80000-0x8017c` DEIR/GIB table with the same-device
+  stock contents
+
+The visible stock/open controls remain equal at `0x1038-0x106c`. Register
+`0x1070` is normally zero under stock as well, with only a short commit pulse,
+so a permanently open gate is not required. These results move the next
+investigation outside the coefficient payload: audit the GIB/raw-front-end
+clock, reset, input-format, and ownership sequence that precedes the visible
+register writes. Keep `force_bypass_gib` as a diagnostic control only; making
+it the default would conceal the defect and diverge from OEM behavior.
+
+One attempted whole-window transplant is intentionally excluded from the
+evidence: its RTSP consumer had already exited, which stopped the ISP and
+cleared the control window before the observation. No conclusion should be
+drawn from that sample.
+
+Evidence bundles:
+
+- `logs/20260805-081154-t31-gib-live-toggle-probe-118`
+- `logs/20260805-081725-t31-gib-post-top-recommit-118`
+
 ### 2026-04-03: Phase 3 Data Extraction + Phase 2 Block Testing
 
 **Completed (Phase 3 data extraction):**

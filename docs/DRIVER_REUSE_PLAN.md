@@ -468,6 +468,9 @@ need to shape the eventual common interface.
 3. Diagnose the T31 linear-GIB active path using the GC2053 stock/open oracle;
    with otherwise identical CLM tables, GIB bypass restores AWB RGB sums and
    recognizable color while the OEM module operates correctly with GIB active.
+   Visible GIB controls, the DEIR table, internal BLC, and post-top payload
+   replay have now been ruled out; compare the raw-front-end clock/reset,
+   input-format, and ownership sequence before changing more tuning data.
 4. Extend the checked ABI from pads to links, events, and sensor attributes.
 5. Split the next low-risk recovered T23/T40/T41 subsystem behind a reviewed
    interface. T40 proc diagnostics are specifically excluded until their
