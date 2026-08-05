@@ -106,4 +106,16 @@ void tx_isp_subdev_connect_link_pair(
 	void *sink_pad,
 	unsigned int flags);
 
+/*
+ * Recovered T23/T41 teardown clears the endpoint/reverse/flag prefix while
+ * deliberately leaving link state alone. Callers continue to own pad state
+ * and the generation-local callback order around this operation.
+ */
+void tx_isp_subdev_clear_link_endpoints(void *link);
+void tx_isp_subdev_detach_link(
+	void *link,
+	unsigned int *source,
+	unsigned int *reverse,
+	unsigned int *sink);
+
 #endif /* TX_ISP_SUBDEV_H */

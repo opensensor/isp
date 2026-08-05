@@ -17,8 +17,12 @@ all: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 tx_isp_math_test: tx_isp_math_test.c ../driver/include/tx_isp/tx_isp_math.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
 
-tx_isp_subdev_abi_test: tx_isp_subdev_abi_test.c ../driver/include/tx_isp/tx_isp_subdev_abi.h
-	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
+tx_isp_subdev_abi_test: tx_isp_subdev_abi_test.c \
+		../driver/common/tx_isp_subdev.c \
+		../driver/include/tx_isp/tx_isp_subdev_abi.h \
+		../driver/include/tx_isp/tx_isp_subdev.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ \
+		tx_isp_subdev_abi_test.c ../driver/common/tx_isp_subdev.c
 
 tx_isp_subdev_test: tx_isp_subdev_test.c \
 		../driver/common/tx_isp_subdev.c \

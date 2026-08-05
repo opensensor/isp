@@ -36623,8 +36623,8 @@ int32_t subdev_video_destroy_link(uintptr_t a0)
     if (v0 == 0) { goto subdev_video_destroy_link0x54; }
 
     /* fragment 2: MemoryAccess */
-    TX_ISP_ABI_LINK_DETACH(a0, a1, v0, v1);
-    /* Shared macro preserves source/reverse/sink load order. */
+    tx_isp_subdev_detach_link(a0, &a1, &v0, &v1);
+    /* Shared helper preserves source/reverse/sink load order. */
     /* It clears source, sink, reverse, then flags like the recovery. */
     /* Link state remains untouched by the common four-word operation. */
     /* Pad state remains generation-local immediately below. */
@@ -36637,7 +36637,7 @@ int32_t subdev_video_destroy_link(uintptr_t a0)
     if (v0 == 0) { goto subdev_video_destroy_link0x44; }
 
     /* fragment 4: MemoryAccess */
-    TX_ISP_ABI_LINK_CLEAR_ENDPOINTS(v0);
+    tx_isp_subdev_clear_link_endpoints(v0);
     /* Reverse link state intentionally remains untouched. */
     /* Preserve the recovered block's physical line count. */
     /* End reverse-link clear block. */

@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "tx_isp/tx_isp_subdev_abi.h"
+#include "tx_isp/tx_isp_subdev.h"
 
 struct tx_isp_abi_link32 {
 	uint32_t source;
@@ -168,7 +169,7 @@ static void test_link_detach(void)
 	uint32_t reverse = 0;
 	uint32_t sink = 0;
 
-	TX_ISP_ABI_LINK_DETACH(&link, source, reverse, sink);
+	tx_isp_subdev_detach_link(&link, &source, &reverse, &sink);
 	if (source != 0x11111111U || reverse != 0x33333333U ||
 	    sink != 0x22222222U)
 		__builtin_trap();

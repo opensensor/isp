@@ -39,32 +39,6 @@
 #define TX_ISP_ABI_LINK_STATE_OFFSET             0x10
 #define TX_ISP_ABI_LINK_SIZE                     0x14
 
-/*
- * Recovered T23/T41 link teardown clears the endpoint/reverse/flag prefix but
- * deliberately leaves the link-state word alone. Callers still own pad state.
- * `link` must be a side-effect-free pointer expression.
- */
-#define TX_ISP_ABI_LINK_CLEAR_ENDPOINTS(link) do {			\
-	*(unsigned int *)((char *)(link) +				\
-		TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;			\
-	*(unsigned int *)((char *)(link) +				\
-		TX_ISP_ABI_LINK_SINK_OFFSET) = 0;			\
-	*(unsigned int *)((char *)(link) +				\
-		TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;			\
-	*(unsigned int *)((char *)(link) +				\
-		TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;			\
-} while (0)
-
-#define TX_ISP_ABI_LINK_DETACH(link, source, reverse, sink) do {		\
-	(source) = *(unsigned int *)((char *)(link) +			\
-		TX_ISP_ABI_LINK_SOURCE_OFFSET);				\
-	(reverse) = *(unsigned int *)((char *)(link) +			\
-		TX_ISP_ABI_LINK_REVERSE_OFFSET);				\
-	(sink) = *(unsigned int *)((char *)(link) +			\
-		TX_ISP_ABI_LINK_SINK_OFFSET);				\
-	TX_ISP_ABI_LINK_CLEAR_ENDPOINTS(link);				\
-} while (0)
-
 /* T23 and T31 share this recovered subdevice prefix. */
 #define TX_ISP_ABI_SUBDEV_NAME_OFFSET           0x08
 #define TX_ISP_ABI_LEGACY_SUBDEV_IRQDEV_OFFSET  0x80

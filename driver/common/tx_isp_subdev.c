@@ -105,8 +105,31 @@ void tx_isp_subdev_init_link_record(void *pad)
 	if (!pad)
 		return;
 	link = (char *)pad + TX_ISP_ABI_PAD_LINK_OFFSET;
-	TX_ISP_ABI_LINK_CLEAR_ENDPOINTS(link);
+	tx_isp_subdev_clear_link_endpoints(link);
 	*(unsigned int *)((char *)link + TX_ISP_ABI_LINK_STATE_OFFSET) = 0;
+}
+
+void tx_isp_subdev_clear_link_endpoints(void *link)
+{
+	*(unsigned int *)((char *)link + TX_ISP_ABI_LINK_SOURCE_OFFSET) = 0;
+	*(unsigned int *)((char *)link + TX_ISP_ABI_LINK_SINK_OFFSET) = 0;
+	*(unsigned int *)((char *)link + TX_ISP_ABI_LINK_REVERSE_OFFSET) = 0;
+	*(unsigned int *)((char *)link + TX_ISP_ABI_LINK_FLAG_OFFSET) = 0;
+}
+
+void tx_isp_subdev_detach_link(
+	void *link,
+	unsigned int *source,
+	unsigned int *reverse,
+	unsigned int *sink)
+{
+	*source = *(unsigned int *)((char *)link +
+		TX_ISP_ABI_LINK_SOURCE_OFFSET);
+	*reverse = *(unsigned int *)((char *)link +
+		TX_ISP_ABI_LINK_REVERSE_OFFSET);
+	*sink = *(unsigned int *)((char *)link +
+		TX_ISP_ABI_LINK_SINK_OFFSET);
+	tx_isp_subdev_clear_link_endpoints(link);
 }
 
 void tx_isp_subdev_connect_link_pair(
