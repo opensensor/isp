@@ -795,6 +795,17 @@ EXPORT_SYMBOL(tx_isp_sinfo_sensor_unbind);
 
 int tx_isp_sinfo_init(void)
 {
+	enum tx_isp_sinfo_config_status config_status;
+
+	config_status = tx_isp_sinfo_config_check(
+		&tx_isp_sinfo_config, TX_ISP_SINFO_CONFIG_FLAGS);
+	if (config_status != TX_ISP_SINFO_CONFIG_OK) {
+		pr_err("tx-isp-sinfo: invalid ABI config status=%u flags=0x%x\n",
+		       (unsigned int)config_status,
+		       (unsigned int)TX_ISP_SINFO_CONFIG_FLAGS);
+		return -EINVAL;
+	}
+
 	tx_isp_sinfo_heap_slots = kzalloc(
 		sizeof(*tx_isp_sinfo_heap_slots) * TX_ISP_SINFO_MAX_SENSORS,
 		GFP_KERNEL);

@@ -12,7 +12,7 @@ addresses, object layouts, tuning data, callbacks, and ordering differences.
 | Unit | Interface | Implementation | Consumers |
 |---|---|---|---|
 | Fixed-point and interpolation math | `tx_isp_math.h` | header-only pure functions | T23, T31, T41 |
-| Sensor registry | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T31, T40, T41 |
+| Sensor registry and checked offset policy | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T31, T40, T41 |
 | Day/night transition shell | `tx_isp_daynight.h` | `common/tx_isp_daynight.c` | T31, T41 |
 | Ordered register profiles | `tx_isp_reg_profile.h` | `common/tx_isp_reg_profile.c` | T23, T31 |
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
@@ -29,6 +29,21 @@ addresses, object layouts, tuning data, callbacks, and ordering differences.
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
 dependency ABI expected by the matching sensor drivers and userspace.
+
+### Sensor registry ABI
+
+Each adapter declares recovered offsets in `struct tx_isp_sinfo_config`; the
+common initializer checks the effective flags and every offset it can
+dereference before allocating slots or creating procfs state. Unknown flags,
+missing static geometry, and non-word-aligned object, attribute, extended-fps,
+or register-info offsets fail initialization with `-EINVAL`. Zero offsets
+remain valid, as required by the real attribute name field.
+
+The access-policy distinction is explicit in the check. Static metadata skips
+dynamic object and wiring traversal, while extended min/max fps remains an
+independent capability. Register-info wiring takes precedence over attribute
+wiring if both flags are selected. Host coverage locks down the T23, T31, T40,
+and T41 declarations plus every rejected configuration class.
 
 ### Subdevice pad and link ABI
 

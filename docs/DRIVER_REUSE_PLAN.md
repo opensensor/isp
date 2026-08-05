@@ -215,6 +215,15 @@ one typed `struct tx_isp_sinfo_config`:
 - T41 supplies its larger recovered layout and enables the extended sensor
   attributes.
 
+The common initializer now validates that configuration before allocating
+registry state or publishing procfs entries. It rejects unknown policy bits,
+missing static geometry, and misaligned object, attribute, extended-fps, or
+register-info offsets. The check follows the actual access policy: zero is a
+valid base-field offset, static metadata suppresses dynamic object traversal,
+and register-info wiring supersedes attribute wiring when both capabilities
+are present. Host tests cover all four active configurations and each failure
+class.
+
 This is source sharing rather than a second runtime module: each TX-ISP module
 continues to own and export the ABI expected by its matching sensor module.
 
@@ -471,7 +480,8 @@ need to shape the eventual common interface.
    Visible GIB controls, the DEIR table, internal BLC, and post-top payload
    replay have now been ruled out; compare the raw-front-end clock/reset,
    input-format, and ownership sequence before changing more tuning data.
-4. Extend the checked ABI from pads to links, events, and sensor attributes.
+4. Extend the checked ABI from alignment and policy checks to bounded sensor
+   object and attribute spans once exact private structure sizes are proven.
 5. Split the next low-risk recovered T23/T40/T41 subsystem behind a reviewed
    interface. T40 proc diagnostics are specifically excluded until their
    unsafe full-read path is repaired.
