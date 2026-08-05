@@ -767,16 +767,16 @@ MODULE_PARM_DESC(t41_safe_tuning_events,
 
 /* The recovered vendor AE algorithm still contains unresolved legacy-BSS
  * arithmetic.  Keep event 1 live with a small controller whose inputs and
- * target come from the exact T41 histogram path.  A matched stock/open
- * daylight comparison selected 17600 Q8 with the OEM CCM and unity GIB.  It
- * converges at a flicker-safe 737-line shutter in this mixed-light scene and
- * preserves stock output luma without the color distortion of the legacy
- * half-gain experiment below. */
+ * target come from the exact T41 histogram path.  A controlled stock/open
+ * mixed-light sweep selected 14500 Q8 with the OEM CCM and unity GIB.  It
+ * converges at the same flicker-safe 737-line shutter as stock, matches stock
+ * output luma, and reduces flat-field variation relative to the earlier
+ * over-bright 17600 target. */
 static int t41_safe_ae_controller = 1;
 module_param(t41_safe_ae_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_ae_controller,
 		 "use the bounded histogram AE controller instead of recovered vendor AE");
-static unsigned int t41_ae_target_q8 = 17600;
+static unsigned int t41_ae_target_q8 = 14500;
 module_param(t41_ae_target_q8, uint, 0644);
 MODULE_PARM_DESC(t41_ae_target_q8,
 		 "safe AE target histogram mean in Q8 units");

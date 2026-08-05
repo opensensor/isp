@@ -97,16 +97,20 @@ The August correctness cycle also restores the T41 1.2 tuning responses used
 by RIC: running-mode GET, AE expression, the 256-bin/225-zone AE statistics
 envelope, and AWB global statistics. Their packed layouts are implemented in
 the common tuning-ABI unit and covered by host tests rather than being open
-coded in the recovered ioctl dispatcher. With AE target `17600`, profile `1`,
-and the AWB baseline above, a matched scene measured
+coded in the recovered ioctl dispatcher. The earlier AE target `17600`, profile
+`1`, and the old AWB baseline measured
 `Y/U/V/SAT=117.125/119.855/132.521/29.133`, versus
 `118.832/119.857/132.143/25.161` on stock. After the aggregate-AWB correction,
 the calibrated fallback measured `U/V=125.51/128.88` and the adaptive path
 settled at `126.45/128.13`; the controlled stock oracle was `127.66/125.97`.
+An in-place AE sweep selected the new `14500` default: it measured
+`Y/U/V/SAT=97.54/126.96/128.42/30.57` versus the same-scene stock luma
+`99.76`, retained the stock-like 737-line shutter, and reduced the flat-ceiling
+standard deviation from `0.0444` at target `16000` to `0.0344`.
 The open driver and OpenIMP ran together with no visible block corruption or
 H.264 decode errors in repeated frames. All 15 host suites pass; the active
 one-shot module SHA-256 is
-`ea13f99745fdc52b947ec52a8ebd3185bb39484c240dcab1148e005c20237c54`.
+`782c9db5b2de3ece08245e6ace8a4e8fd27d86bc52c490bca8375a1f8478ba02`.
 
 The July 30 shared-format validation preserved the 3,133,440-byte 1080p pool,
 full-rate output, and coherent geometry across two clean boots. It decoded
