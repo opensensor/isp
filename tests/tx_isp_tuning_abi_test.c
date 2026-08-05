@@ -100,10 +100,26 @@ static void store_u32(uint8_t *bytes, unsigned int offset, uint32_t value)
 static void test_response_packers(void)
 {
 	uint8_t sparse[TX_ISP_TUNING_EV_SPARSE_BYTES] = { 0 };
+	uint8_t t41_expr[TX_ISP_TUNING_T41_AE_EXPR_BYTES];
+	uint8_t t41_stats[TX_ISP_TUNING_T41_AE_STATS_BYTES];
+	uint32_t histogram[TX_ISP_TUNING_T41_AE_HIST_BINS] = { 0 };
 	const uint32_t wb_words[3] = { 2, 0x12345, 0x2abcd };
+	const struct tx_isp_tuning_t41_ae_expr_values t41_values = {
+		.integration_time = 369,
+		.analog_gain_x1024 = 1344,
+		.min_integration_time = 1,
+		.max_integration_time = 1760,
+		.max_analog_gain_x1024 = 15872,
+		.total_gain_db = 29906,
+		.exposure_value = 506,
+		.ev_log2 = 588809,
+	};
 	struct tx_isp_tuning_expr expr;
 	struct tx_isp_tuning_ev_attr ev;
 	struct tx_isp_tuning_wb wb;
+	uint64_t exposure;
+	uint32_t value;
+	uint32_t mean_q8;
 
 	assert(tx_isp_tuning_expr_pack(&expr, 1, 0x12345, 2, 0x34567,
 					 0x45678) == 0);
@@ -141,9 +157,40 @@ static void test_response_packers(void)
 	assert(wb.r_gain == 0x2345);
 	assert(wb.b_gain == 0xabcd);
 	assert(tx_isp_tuning_wb_pack(&wb, wb_words, 2) == -EINVAL);
+
+	assert(tx_isp_tuning_t41_ae_expr_pack(t41_expr, sizeof(t41_expr),
+					      &t41_values) == 0);
+	memcpy(&value, t41_expr + TX_ISP_TUNING_T41_AE_EXPR_INTEGRATION,
+	       sizeof(value));
+	assert(value == 369);
+	memcpy(&value, t41_expr + TX_ISP_TUNING_T41_AE_EXPR_TOTAL_GAIN,
+	       sizeof(value));
+	assert(value == 29906);
+	memcpy(&exposure, t41_expr + TX_ISP_TUNING_T41_AE_EXPR_EXPOSURE,
+	       sizeof(exposure));
+	assert(exposure == 506);
+
+	histogram[40] = 10;
+	histogram[80] = 10;
+	assert(tx_isp_tuning_t41_ae_stats_pack(t41_stats, sizeof(t41_stats),
+					       histogram,
+					       ARRAY_SIZE(histogram),
+					       &mean_q8) == 0);
+	assert(mean_q8 == 60U * 256U);
+	memcpy(&value, t41_stats + TX_ISP_TUNING_T41_AE_STATS_HIST256 +
+	       40 * sizeof(uint32_t), sizeof(value));
+	assert(value == 10);
+	memcpy(&value, t41_stats + TX_ISP_TUNING_T41_AE_STATS_ZONES,
+	       sizeof(value));
+	assert(value == 60);
 	assert(tx_isp_tuning_expr_pack(NULL, 0, 0, 0, 0, 0) == -EINVAL);
 	assert(tx_isp_tuning_ev_pack(NULL, 0, 0, 0, 0, 0, 0) == -EINVAL);
 	assert(tx_isp_tuning_wb_pack(NULL, wb_words, 10) == -EINVAL);
+	assert(tx_isp_tuning_t41_ae_expr_pack(NULL, 0, &t41_values) ==
+	       -EINVAL);
+	assert(tx_isp_tuning_t41_ae_stats_pack(NULL, 0, histogram,
+					       ARRAY_SIZE(histogram), NULL) ==
+	       -EINVAL);
 }
 
 int main(void)

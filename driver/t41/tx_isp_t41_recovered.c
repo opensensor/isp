@@ -767,17 +767,16 @@ MODULE_PARM_DESC(t41_safe_tuning_events,
 
 /* The recovered vendor AE algorithm still contains unresolved legacy-BSS
  * arithmetic.  Keep event 1 live with a small controller whose inputs and
- * target come from the exact T41 histogram path.  The default Q8 target is
- * the converged pristine-stock OS04D10 histogram measured under the same
- * image and timing profile.  A fresh daylight stock/open comparison on the
- * same OS04D10 converged at 369 lines and again=0x1f/0x1e.  The base target
- * is scaled by the active GIB profile below; 22000 with the 0x200/0x400
- * attenuation pair yields an effective target of 11000 Q8. */
+ * target come from the exact T41 histogram path.  A matched stock/open
+ * daylight comparison selected 17600 Q8 with the OEM CCM and unity GIB.  It
+ * converges at a flicker-safe 737-line shutter in this mixed-light scene and
+ * preserves stock output luma without the color distortion of the legacy
+ * half-gain experiment below. */
 static int t41_safe_ae_controller = 1;
 module_param(t41_safe_ae_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_ae_controller,
 		 "use the bounded histogram AE controller instead of recovered vendor AE");
-static unsigned int t41_ae_target_q8 = 22000;
+static unsigned int t41_ae_target_q8 = 17600;
 module_param(t41_ae_target_q8, uint, 0644);
 MODULE_PARM_DESC(t41_ae_target_q8,
 		 "safe AE target histogram mean in Q8 units");
@@ -817,11 +816,11 @@ MODULE_PARM_DESC(t41_color_blue_correction_q10,
 		 "neutral-preserving red/blue correction used with anti-flicker");
 static int t41_flicker_profile_set(const char *value,
 				   const struct kernel_param *kp);
-static int t41_ae_flicker_profile = -1;
+static int t41_ae_flicker_profile = 1;
 module_param_call(t41_ae_flicker_profile, t41_flicker_profile_set,
 		  param_get_int, &t41_ae_flicker_profile, 0644);
 MODULE_PARM_DESC(t41_ae_flicker_profile,
-		 "negative enables matched GIB/CCM anti-flicker image profile");
+		 "negative enables legacy half-GIB/custom-CCM experiment; positive retains OEM CCM");
 
 /*
  * Stock does not stop after writing the sensor exposure.  Its event-4
@@ -1090,15 +1089,15 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
 static void t41_apply_stock_awb_gains(void);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
- * process callback.  Keep a neutral, hardware-tested OS04D10 day baseline
- * until the statistics controller below is ready to own the gains.  The old
- * 0x754/0xa6c defaults amplified both red and blue and produced a severe
- * magenta cast after Raptor selected day mode. */
-static unsigned int t41_stock_awb_gain_a = 0x3d0U;
+ * process callback.  Keep the matched hardware-tested OS04D10 mixed-daylight
+ * baseline until the statistics controller below is ready to own the gains.
+ * These values pair with the exact OEM CCM and avoid the cyan cast of the
+ * legacy half-GIB/custom-CCM profile. */
+static unsigned int t41_stock_awb_gain_a = 1605U;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 0x0980U;
+static unsigned int t41_stock_awb_gain_b = 3440U;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
@@ -20224,6 +20223,116 @@ aisp_core_tunning_unlocked_ioctl0x48:
     return (uint32_t)v0;
 }
 
+static int t41_tuning_copy_ae_expr(unsigned int channel, uintptr_t user_ptr)
+{
+    struct tx_isp_tuning_t41_ae_expr_values values;
+    struct t41_safe_ae_state *control;
+    u8 response[TX_ISP_TUNING_T41_AE_EXPR_BYTES];
+    u64 exposure;
+    int ret;
+
+    if (channel >= ARRAY_SIZE(t41_safe_ae) || !user_ptr)
+        return -EINVAL;
+    control = &t41_safe_ae[channel];
+    if (!control->integration || !control->again)
+        return -EAGAIN;
+
+    exposure = (u64)control->integration * control->again / 0x10U;
+    memset(&values, 0, sizeof(values));
+    values.integration_time = control->integration;
+    values.analog_gain_x1024 = control->again << 6;
+    values.min_integration_time = control->min_integration;
+    values.max_integration_time = control->max_integration;
+    values.max_analog_gain_x1024 = 0xf8U << 6;
+    values.total_gain_db = tisp_log2_fixed_to_fixed(control->again, 4, 16);
+    values.exposure_value = exposure;
+    values.ev_log2 = exposure ?
+        tisp_log2_int_to_fixed((u32)exposure, 16, 0) : 0;
+
+    ret = tx_isp_tuning_t41_ae_expr_pack(response, sizeof(response),
+                                          &values);
+    if (ret)
+        return ret;
+    return private_copy_to_user((void __user *)user_ptr, response,
+                                sizeof(response)) ? -EFAULT : 0;
+}
+
+static int t41_tuning_copy_ae_stats(unsigned int channel, uintptr_t user_ptr)
+{
+    const unsigned int histogram_bytes =
+        TX_ISP_TUNING_T41_AE_HIST_BINS * sizeof(u32);
+    const unsigned int allocation_bytes =
+        TX_ISP_TUNING_T41_AE_STATS_BYTES + sizeof(u32) + histogram_bytes;
+    u8 *allocation;
+    u8 *response;
+    u32 *histogram;
+    u32 *info;
+    u32 *state;
+    spinlock_t *lock;
+    unsigned long flags;
+    u32 mean_q8;
+    int ret;
+
+    if (channel >= ARRAY_SIZE(ae_info) || !user_ptr)
+        return -EINVAL;
+    info = (u32 *)(uintptr_t)ae_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    state = (u32 *)(uintptr_t)info[1];
+    if (!t41_kernel_data_ptr(state))
+        return -ENODEV;
+
+    allocation = kzalloc(allocation_bytes, GFP_KERNEL);
+    if (!allocation)
+        return -ENOMEM;
+    response = allocation;
+    histogram = (u32 *)(void *)(allocation +
+        ALIGN(TX_ISP_TUNING_T41_AE_STATS_BYTES, sizeof(u32)));
+    lock = (spinlock_t *)(void *)(slock_hist_storage +
+                                  channel * sizeof(u32));
+    spin_lock_irqsave(lock, flags);
+    memcpy(histogram, state, histogram_bytes);
+    spin_unlock_irqrestore(lock, flags);
+
+    ret = tx_isp_tuning_t41_ae_stats_pack(
+        response, TX_ISP_TUNING_T41_AE_STATS_BYTES,
+        histogram, TX_ISP_TUNING_T41_AE_HIST_BINS, &mean_q8);
+    if (!ret && private_copy_to_user((void __user *)user_ptr, response,
+                                     TX_ISP_TUNING_T41_AE_STATS_BYTES))
+        ret = -EFAULT;
+    kfree(allocation);
+    return ret;
+}
+
+static int t41_tuning_copy_awb_global_stats(unsigned int channel,
+                                             uintptr_t user_ptr)
+{
+    u32 response[4] = { 0, 0, 0, 0 };
+    u32 *info;
+    u8 *state;
+    u16 value;
+
+    if (channel >= ARRAY_SIZE(awb_info) || !user_ptr)
+        return -EINVAL;
+    info = (u32 *)(uintptr_t)awb_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    state = (u8 *)(uintptr_t)info[1];
+    if (!t41_kernel_data_ptr(state))
+        return -ENODEV;
+
+    memcpy(&value, state + 60088, sizeof(value));
+    response[0] = value;
+    memcpy(&value, state + 60090, sizeof(value));
+    response[1] = value;
+    memcpy(&value, state + 60076, sizeof(value));
+    response[2] = value;
+    memcpy(&value, state + 60078, sizeof(value));
+    response[3] = value;
+    return private_copy_to_user((void __user *)user_ptr, response,
+                                sizeof(response)) ? -EFAULT : 0;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000c784 origin=fragment_seed original=isp_core_tunning_unlocked_ioctl */
 int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
 {
@@ -20250,9 +20359,18 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     if (a1 == 0xc0105435U) {
         static const struct tx_isp_tuning_cmd_desc startup_routes[] = {
             { TX_ISP_TUNING_CMD_T41_RUNNING_MODE, 4,
-              TX_ISP_TUNING_DIR_SET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_T41_SENSOR_FPS, 4,
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_INLINE },
+            { TX_ISP_TUNING_CMD_T41_AE_EXPR_INFO,
+              TX_ISP_TUNING_T41_AE_EXPR_BYTES,
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_AE_STATS,
+              TX_ISP_TUNING_T41_AE_STATS_BYTES,
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS, 16,
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
         static unsigned int trace_count;
         struct tx_isp_tuning_t41_control request;
@@ -20291,6 +20409,18 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
         if (route && route->id == TX_ISP_TUNING_CMD_T41_RUNNING_MODE) {
             if (request.channel != 0)
                 return -EINVAL;
+            if (request.is_get) {
+                core = (char *)(uintptr_t)ispcore_sd;
+                if (!t41_kernel_data_ptr(core))
+                    return -ENODEV;
+                tuning = *(char **)(core + 560);
+                if (!t41_kernel_data_ptr(tuning))
+                    return -ENODEV;
+                mode = *(u32 *)(void *)(tuning + 24);
+                return private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    &mode, sizeof(mode)) ? -EFAULT : 0;
+            }
             if (private_copy_from_user(&mode,
                     (void __user *)(uintptr_t)request.value_or_ptr,
                     sizeof(mode)))
@@ -20325,6 +20455,17 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             }
             return 0;
         }
+
+        if (route && route->id == TX_ISP_TUNING_CMD_T41_AE_EXPR_INFO)
+            return t41_tuning_copy_ae_expr(request.channel,
+                                           request.value_or_ptr);
+        if (route && route->id == TX_ISP_TUNING_CMD_T41_AE_STATS)
+            return t41_tuning_copy_ae_stats(request.channel,
+                                            request.value_or_ptr);
+        if (route &&
+            route->id == TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS)
+            return t41_tuning_copy_awb_global_stats(
+                request.channel, request.value_or_ptr);
 
         /*
          * Raptor queries the active frame rate before applying its image
@@ -53206,9 +53347,10 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
         t41_apply_stock_tmo_profile();
     if (channel == 0)
         t41_apply_stock_bcsh_profile();
-    if (channel == 0 && t41_ae_flicker_profile < 0 &&
-        t41_ae_flicker_frequency_hz && t41_ae_flicker_floor_lines) {
-        int profile_ret = t41_apply_flicker_profile(true);
+    if (channel == 0) {
+        bool legacy_profile = t41_ae_flicker_profile < 0 &&
+            t41_ae_flicker_frequency_hz && t41_ae_flicker_floor_lines;
+        int profile_ret = t41_apply_flicker_profile(legacy_profile);
 
         if (profile_ret)
             printk(KERN_ERR
@@ -145212,20 +145354,8 @@ int32_t tisp_ccm_init(uint32_t a0)
     *(uint32_t *)(void *)(info + 152) = 16;
     *(uint16_t *)(void *)(info + 192) = 0xff00U;
 
-    if (t41_stock_ccm_baseline > 0) {
-        /* Exact active-state oracle from the OEM H20250310a driver. */
-        system_reg_write(0xb004, 0x3e060650);
-        system_reg_write(0xb008, 0x3f723fab);
-        system_reg_write(0xb00c, 0x3f2f055e);
-        system_reg_write(0xb010, 0x3daf007c);
-        system_reg_write(0xb014, 0x000005d4);
-        system_reg_write(0xb018, 0x00041008);
-        system_reg_write(0xb01c, 0x00000008);
-        system_reg_write(0xb020, 0x0fff00ff);
-        system_reg_write(0xb024, 0x00080000);
-        system_reg_write(0xb028, 0x00010001);
-        system_reg_write(0xb000, 1);
-    }
+    if (t41_stock_ccm_baseline > 0)
+        tx_isp_t41_stock_ccm_apply();
 
     printk(KERN_WARNING
            "tx_isp_t41_recovered: ccm-init safe neutral channel=%u "

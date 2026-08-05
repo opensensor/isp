@@ -8,6 +8,7 @@
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
+typedef uint64_t u64;
 #endif
 
 /*
@@ -43,6 +44,14 @@ typedef uint32_t u32;
 
 #define TX_ISP_TUNING_CMD_T41_SENSOR_FPS	0x08000070U
 #define TX_ISP_TUNING_CMD_T41_RUNNING_MODE	0x08000071U
+#define TX_ISP_TUNING_CMD_T41_AWB_ATTR		0x08000010U
+#define TX_ISP_TUNING_CMD_T41_AWB_STATS		0x08000011U
+#define TX_ISP_TUNING_CMD_T41_AWB_WEIGHT	0x08000012U
+#define TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS	0x08000013U
+#define TX_ISP_TUNING_CMD_T41_AE_WEIGHT		0x08000021U
+#define TX_ISP_TUNING_CMD_T41_AE_STATS		0x08000022U
+#define TX_ISP_TUNING_CMD_T41_AE_EXPR_INFO	0x08000023U
+#define TX_ISP_TUNING_CMD_T41_AWB_RGB_COEFFT	0x08000098U
 
 #define TX_ISP_TUNING_DIR_GET			0x01U
 #define TX_ISP_TUNING_DIR_SET			0x02U
@@ -116,6 +125,32 @@ struct tx_isp_tuning_wb {
 	u16 b_gain;
 };
 
+/* T40/T41 1.2 libimp packed response layouts. */
+#define TX_ISP_TUNING_T41_AE_EXPR_BYTES		232U
+#define TX_ISP_TUNING_T41_AE_EXPR_INTEGRATION	24U
+#define TX_ISP_TUNING_T41_AE_EXPR_AGAIN		28U
+#define TX_ISP_TUNING_T41_AE_EXPR_TOTAL_GAIN	204U
+#define TX_ISP_TUNING_T41_AE_EXPR_EXPOSURE	216U
+#define TX_ISP_TUNING_T41_AE_EXPR_EV_LOG2	224U
+
+#define TX_ISP_TUNING_T41_AE_STATS_BYTES	1934U
+#define TX_ISP_TUNING_T41_AE_STATS_HIST5		0U
+#define TX_ISP_TUNING_T41_AE_STATS_HIST256	10U
+#define TX_ISP_TUNING_T41_AE_STATS_ZONES	1034U
+#define TX_ISP_TUNING_T41_AE_HIST_BINS		256U
+#define TX_ISP_TUNING_T41_AE_ZONE_COUNT		225U
+
+struct tx_isp_tuning_t41_ae_expr_values {
+	u32 integration_time;
+	u32 analog_gain_x1024;
+	u32 min_integration_time;
+	u32 max_integration_time;
+	u32 max_analog_gain_x1024;
+	u32 total_gain_db;
+	u64 exposure_value;
+	u32 ev_log2;
+};
+
 #define TX_ISP_TUNING_EV_SPARSE_BYTES		0x80U
 #define TX_ISP_TUNING_EV_SPARSE_WORDS		0x20U
 #define TX_ISP_TUNING_EV_EXPR_MIN_OFFSET	0x6cU
@@ -143,5 +178,14 @@ int tx_isp_tuning_ev_pack(struct tx_isp_tuning_ev_attr *out, u32 ev,
 
 int tx_isp_tuning_wb_pack(struct tx_isp_tuning_wb *out,
 			  const u32 *words, u32 mode_count);
+
+int tx_isp_tuning_t41_ae_expr_pack(
+	void *out, unsigned int out_bytes,
+	const struct tx_isp_tuning_t41_ae_expr_values *values);
+
+int tx_isp_tuning_t41_ae_stats_pack(void *out, unsigned int out_bytes,
+				    const u32 *histogram,
+				    unsigned int histogram_bins,
+				    u32 *mean_q8);
 
 #endif /* TX_ISP_TUNING_ABI_H */
