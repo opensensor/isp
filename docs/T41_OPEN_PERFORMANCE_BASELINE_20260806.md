@@ -1,0 +1,94 @@
+# T41 Open-Stack Performance Baseline — 2026-08-06
+
+This is the first versioned baseline produced by
+`tools/isp_benchmark_device.sh`. It describes correctness and resource use
+before performance optimization or V4L2 implementation work.
+
+## Workload identity
+
+- device: Wyze Cam v4, Ingenic T41, two logical CPUs, 84,940 KiB RAM
+- kernel: Linux 4.4.94 SMP PREEMPT
+- sensor: OS04D10 (`chip_id=0x530444`), active at 2560x1440 and configured 25 fps
+- stream: main H.264, 8,000,000 bit/s CBR, GOP 25, configured 25 fps
+- clients: no RTSP or WebRTC clients
+- transport: OpenIMP to Raptor shared-memory ring
+- warm-up: 30 seconds
+- measurement: 120 seconds scheduled, 122.280 seconds actual, 12 windows
+- collection interval: 10 seconds
+
+Exact file identities:
+
+| Component | File bytes | SHA-256 |
+|---|---:|---|
+| open `tx_isp_t41` module | 756,320 | `cf838ed8f4dfc612389fdee5aeb2377a16636818298b6087da278025a55e8814` |
+| mapped OpenIMP `libimp.so` | 315,676 | `768898c86f36cecaa3c7fb065a545b41f57be7d54ebd31f298bc313b4fd91804` |
+| RVD executable | 150,192 | `0ff407b97e890f88359889ce383483d39ecd073d8c9cc7d51b5a336431046acc` |
+
+The module occupied 829,941 bytes according to `/proc/modules`. This loaded
+image count is distinct from the ELF file size and does not include every
+runtime allocation made by the driver.
+
+## Baseline results
+
+| Metric | Result |
+|---|---:|
+| whole-system CPU, mean | 22.441% of two-core capacity |
+| whole-system CPU, min / max | 20.768% / 24.320% |
+| named pipeline-process CPU, mean | 21.554% of two-core capacity |
+| RVD CPU, mean / max | 19.324% / 20.245% |
+| RVD RSS, mean / max | 3,944 / 3,944 KiB |
+| all named daemons, individual RSS sum | 13,340 KiB |
+| MemAvailable, start / end / minimum | 58,224 / 58,120 / 58,088 KiB |
+| MemAvailable drift | -104 KiB |
+| allocated main / audio SHM files | 2,564,352 / 136,192 bytes |
+| delivered frames | 1,526 |
+| delivered rate, overall | 12.496 fps |
+| delivered window rate, mean / min / max | 12.500 / 12.365 / 12.575 fps |
+| delivered-rate window standard deviation | 0.074 fps |
+| new ISP overflows / kernel fatals / userspace faults | 0 / 0 / 0 |
+
+Individual daemon CPU means were RVD 19.324%, RAD 2.093%, RSD 0.120%, RIC
+0.013%, and RWD 0.004% of total machine capacity. The RSS sum is shown only as
+an inventory; it is not unique memory because shared mappings may be counted
+in more than one process.
+
+Raw interrupt rates were:
+
+| IRQ | Mean rate |
+|---|---:|
+| `isp-w02` | 50.009/s |
+| `isp-m0` | 160.871/s |
+| `isp-ivdc` | 0/s |
+| `avpu.0` | 12.500/s |
+
+These are activity counters, not frame rates. Their aggregate ISP rate was
+210.533 interrupts/s.
+
+## Correctness finding
+
+The sensor procfs state, Raptor stream status, and ring header all advertised
+25 fps, but the producer sequence delivered 12.496 fps. A direct `ringdump`
+check independently showed alternating frame timestamp gaps of approximately
+52 ms and 108 ms and an average near 12.9 fps over a short sample. The 2.5K
+pipeline is therefore not currently delivering its configured 25 fps.
+
+This mismatch is part of the baseline, not a benchmark substitution: future
+changes must report configured and delivered rate separately. A performance
+improvement that preserves 12.5 fps is not equivalent to one that delivers the
+full configured workload.
+
+## Observer bound and replicate
+
+Sampling plus scheduler delay added 2.280 seconds beyond 120 seconds of
+scheduled sleeps, or 1.865% of actual wall time. That is reported as an upper
+bound on observer wall time, not subtracted from CPU.
+
+An earlier version-1 replicate used 24 five-second windows. It produced
+12.496 delivered fps, approximately 21.50% named-process CPU, -64 KiB
+MemAvailable drift, and zero new faults. Whole-system CPU was 23.553%; the
+larger collector duty cycle is why version 2 defaults to ten-second windows.
+
+The complete version-2 evidence bundle is kept in the local artifact archive
+at `artifacts/device-baselines/isp-benchmark-v2-open-t41-os04d10-20260806/`.
+It includes raw interval samples, process/IRQ summaries, module parameters,
+file hashes, stream/client status, and before/after kernel and service logs.
