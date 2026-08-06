@@ -5,6 +5,7 @@
 #include <linux/interrupt.h>
 #include <linux/i2c.h>
 #include <linux/clk.h>
+#include <linux/version.h>
 #include <linux/vmalloc.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
@@ -24,8 +25,13 @@
 #include "../include/tx_isp/tx_isp_math.h"
 #include "../include/tx_isp/tx_isp_daynight.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
+#include "../include/tx_isp/tx_isp_sinfo.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+#include <dt-bindings/clock/ingenic,t31-cgu.h>
+#endif
 
 
 static int print_level = ISP_WARN_LEVEL;
@@ -4493,7 +4499,37 @@ EXPORT_SYMBOL(private_spin_lock_init);
 
 struct clk * private_clk_get(struct device *dev, const char *id)
 {
-    return clk_get(dev, id);
+    struct clk *clk;
+
+    clk = clk_get(dev, id);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+    /*
+     * Vendor T31 sensor drivers request the CIM clock through the global
+     * clkdev name "cgu_cim". Mainline exposes it only through the CGU OF
+     * provider. Keep this fallback for kernels built before the clkdev alias.
+     */
+    if (IS_ERR(clk) && id && !strcmp(id, "cgu_cim")) {
+        struct device_node *cgu_np;
+        struct of_phandle_args clkspec;
+
+        cgu_np = of_find_compatible_node(NULL, NULL, "ingenic,t31-cgu");
+        if (!cgu_np)
+            return clk;
+
+        memset(&clkspec, 0, sizeof(clkspec));
+        clkspec.np = cgu_np;
+        clkspec.args_count = 1;
+        clkspec.args[0] = T31_CLK_CIM;
+        clk = of_clk_get_from_provider(&clkspec);
+        of_node_put(cgu_np);
+
+        if (!IS_ERR(clk))
+            pr_info("tx-isp: resolved legacy cgu_cim through T31 CGU provider\n");
+    }
+#endif
+
+    return clk;
 }
 EXPORT_SYMBOL(private_clk_get);
 
@@ -4584,6 +4620,7 @@ void private_kfree(void *p)
 void private_i2c_del_driver(struct i2c_driver *driver)
 {
     i2c_del_driver(driver);
+    tx_isp_sinfo_driver_del(driver);
 }
 
 int private_gpio_request(unsigned int gpio, const char *label)
@@ -4604,7 +4641,7 @@ void private_msleep(unsigned int msecs)
 void private_clk_disable(struct clk *clk)
 {
     pr_info("[CLK] Disabling clock (rate=%lu Hz)\n", clk_get_rate(clk));
-    clk_disable(clk);
+    clk_disable_unprepare(clk);
 }
 
 void *private_i2c_get_clientdata(const struct i2c_client *client)
@@ -4627,9 +4664,28 @@ int private_i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num
     return i2c_transfer(adap, msgs, num);
 }
 
+int private_i2c_add_driver_addr(struct i2c_driver *driver,
+                                unsigned short default_i2c_addr)
+{
+    int ret;
+    int sinfo_ret;
+
+    ret = i2c_add_driver(driver);
+    if (ret)
+        return ret;
+
+    sinfo_ret = tx_isp_sinfo_driver_add(driver, default_i2c_addr,
+                                        driver->driver.owner);
+    if (sinfo_ret)
+        pr_warn("tx-isp: failed to publish sensor driver %s: %d\n",
+                driver->driver.name, sinfo_ret);
+
+    return 0;
+}
+
 int private_i2c_add_driver(struct i2c_driver *driver)
 {
-    return i2c_add_driver(driver);
+    return private_i2c_add_driver_addr(driver, 0);
 }
 
 int private_gpio_direction_output(unsigned int gpio, int value)
@@ -4641,7 +4697,7 @@ int private_clk_enable(struct clk *clk)
 {
     int ret;
     pr_info("[CLK] Enabling clock (rate=%lu Hz)\n", clk_get_rate(clk));
-    ret = clk_enable(clk);
+    ret = clk_prepare_enable(clk);
     if (ret)
         pr_err("[CLK] Failed to enable clock: %d\n", ret);
     return ret;
@@ -4680,7 +4736,37 @@ EXPORT_SYMBOL(isp_printf);
 
 int private_jzgpio_set_func(enum gpio_port port, enum gpio_function func,unsigned long pins)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
     return jzgpio_set_func(port, func, pins);
+#else
+    void __iomem *gpio_base;
+    u32 mask = (u32)pins;
+
+    /*
+     * T31 uses direct per-bank GPIO set/clear registers, not the X1000
+     * shadow-register window. Preserve the vendor sensor-module pinmux ABI
+     * so PA15/function-1 can carry the CIM master clock on mainline.
+     */
+    if (port < GPIO_PORT_A || port >= GPIO_NR_PORTS ||
+        func < GPIO_FUNC_0 || func > GPIO_FUNC_3)
+        return -EINVAL;
+
+    gpio_base = ioremap(0x10010000 + ((unsigned int)port * 0x1000),
+                        0x100);
+    if (!gpio_base)
+        return -ENOMEM;
+
+    writel(mask, gpio_base + 0x18); /* PXINTC */
+    writel(mask, gpio_base + 0x28); /* PXMSKC */
+    writel(mask, gpio_base + ((func & 0x2) ? 0x34 : 0x38)); /* PAT1 */
+    writel(mask, gpio_base + ((func & 0x1) ? 0x44 : 0x48)); /* PAT0 */
+    wmb();
+    iounmap(gpio_base);
+
+    pr_info("tx-isp: T31 pinmux P%c mask=0x%08x function=%u\n",
+            'A' + port, mask, func);
+    return 0;
+#endif
 }
 EXPORT_SYMBOL(private_jzgpio_set_func);
 
@@ -4715,12 +4801,17 @@ __must_check int private_get_driver_interface(struct jz_driver_common_interfaces
 {
 	if(pfaces == NULL)
 		return -1;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 	*pfaces = get_driver_common_interfaces();
 	if(*pfaces && ((*pfaces)->flags_0 != (unsigned int)printk || (*pfaces)->flags_0 !=(*pfaces)->flags_1)){
 		ISP_ERROR("flags = 0x%08x, jzflags = %p,0x%08x", (*pfaces)->flags_0, printk, (*pfaces)->flags_1);
 		return -1;
 	}else
 		return 0;
+#else
+	*pfaces = NULL;
+	return 0;
+#endif
 }
 EXPORT_SYMBOL(private_get_driver_interface);
 
@@ -4733,6 +4824,7 @@ EXPORT_SYMBOL(private_i2c_get_clientdata);
 EXPORT_SYMBOL(private_capable);
 EXPORT_SYMBOL(private_i2c_set_clientdata);
 EXPORT_SYMBOL(private_i2c_transfer);
+EXPORT_SYMBOL(private_i2c_add_driver_addr);
 EXPORT_SYMBOL(private_i2c_add_driver);
 EXPORT_SYMBOL(private_gpio_direction_output);
 EXPORT_SYMBOL(private_clk_enable);
@@ -4936,7 +5028,11 @@ void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum d
 
     /* Use the standard Linux DMA cache sync function that's available in kernel 3.10 */
     /* This matches the reference implementation in external/ingenic-sdk/3.10/avpu/t31/avpu_main.c */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
     dma_cache_sync(dev, vaddr, size, direction);
+#else
+    __flush_cache_all();
+#endif
 
     pr_debug("private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
 }

@@ -2,6 +2,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
 #include "include/tx_isp.h"
 #include "include/tx_isp_vic.h"
 #include "include/tx_isp_vin.h"
@@ -17,6 +18,9 @@
 #define TX_ISP_PROC_CLKS_FILE "clks"
 
 struct proc_context {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+    struct proc_dir_entry *jz_dir;
+#endif
     struct proc_dir_entry *isp_dir;
     struct proc_dir_entry *isp_w00_entry;
     struct proc_dir_entry *isp_w01_entry;
@@ -53,12 +57,12 @@ static int tx_isp_proc_w00_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_w00_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_w00_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_w00_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_w00_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_w00_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* ISP-W01 file operations - matches reference driver behavior */
@@ -116,13 +120,13 @@ static int tx_isp_proc_w01_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_w01_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_w01_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_w01_open,
-    .read = seq_read,
-    .write = tx_isp_proc_w01_write,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_w01_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_w01_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_WRITE = tx_isp_proc_w01_write,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* ISP-W02 file operations - CRITICAL: Match reference driver output format */
@@ -204,13 +208,13 @@ static int tx_isp_proc_w02_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_w02_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_w02_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_w02_open,
-    .read = seq_read,
-    .write = tx_isp_proc_w02_write,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_w02_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_w02_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_WRITE = tx_isp_proc_w02_write,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* VIC-MDMA proc file: dumps stride/control and first slot Y/UV bases */
@@ -282,12 +286,12 @@ static int tx_isp_proc_vic_mdma_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_vic_mdma_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_vic_mdma_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_vic_mdma_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_vic_mdma_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_vic_mdma_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 
@@ -357,13 +361,13 @@ static int tx_isp_proc_fs_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_fs_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_fs_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_fs_open,
-    .read = seq_read,
-    .write = tx_isp_proc_fs_write,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_fs_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_fs_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_WRITE = tx_isp_proc_fs_write,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* ISP-M0 file operations - CRITICAL MISSING PIECE */
@@ -418,13 +422,13 @@ static int tx_isp_proc_m0_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_m0_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_m0_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_m0_open,
-    .read = seq_read,
-    .write = tx_isp_proc_m0_write,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_m0_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_m0_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_WRITE = tx_isp_proc_m0_write,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* CSI file operations */
@@ -439,12 +443,12 @@ static int tx_isp_proc_csi_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_csi_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_csi_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_csi_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_csi_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_csi_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* Clock tracking file operations */
@@ -524,12 +528,12 @@ static int tx_isp_proc_clks_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_clks_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_clks_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_clks_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_clks_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_clks_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* VIC file operations */
@@ -544,16 +548,24 @@ static int tx_isp_proc_vic_open(struct inode *inode, struct file *file)
     return single_open(file, tx_isp_proc_vic_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_proc_vic_fops = {
-    .owner = THIS_MODULE,
-    .open = tx_isp_proc_vic_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_proc_vic_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_OPEN = tx_isp_proc_vic_open,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* Global proc context */
 static struct proc_context *tx_isp_proc_ctx = NULL;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+struct proc_dir_entry *tx_isp_get_jz_proc_root(void)
+{
+    return tx_isp_proc_ctx ? tx_isp_proc_ctx->jz_dir : NULL;
+}
+EXPORT_SYMBOL(tx_isp_get_jz_proc_root);
+#endif
 
 /* Helper function to safely get or create proc directory on Linux 3.10 with overlays */
 static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct proc_dir_entry *parent, bool *created)
@@ -615,11 +627,21 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     ctx->isp = isp;
     tx_isp_proc_ctx = ctx;
 
-    /* Create /proc/jz/isp directory - we always create this one */
+    /* Mainline procfs requires each path component to be created separately. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+    ctx->jz_dir = proc_mkdir("jz", NULL);
+    if (!ctx->jz_dir) {
+        pr_err("Failed to create /proc/jz\n");
+        goto error_free_ctx;
+    }
+
+    ctx->isp_dir = proc_mkdir("isp", ctx->jz_dir);
+#else
     ctx->isp_dir = proc_mkdir(TX_ISP_PROC_ISP_DIR, NULL);
+#endif
     if (!ctx->isp_dir) {
         pr_err("Failed to create /proc/%s\n", TX_ISP_PROC_ISP_DIR);
-        goto error_free_ctx;
+        goto error_remove_jz_dir;
     }
 
     /* Create /proc/jz/isp/isp-w00 */
@@ -645,7 +667,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
      * the VIC subdev dynamically from isp->vic_dev at access time, since
      * VIC is probed AFTER this proc entry is created. */
     {
-        extern const struct file_operations isp_vic_frd_fops_wrapper;
+        extern const TX_ISP_PROC_OPS isp_vic_frd_fops_wrapper;
         ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
                                              &isp_vic_frd_fops_wrapper, isp);
     }
@@ -745,6 +767,11 @@ error_remove_w00:
     proc_remove(ctx->isp_w00_entry);
 error_remove_isp_dir:
     proc_remove(ctx->isp_dir);
+error_remove_jz_dir:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+    if (ctx->jz_dir)
+        proc_remove(ctx->jz_dir);
+#endif
 error_free_ctx:
     kfree(ctx);
     tx_isp_proc_ctx = NULL;
@@ -795,6 +822,11 @@ void tx_isp_remove_proc_entries(void)
     if (ctx->isp_dir) {
         proc_remove(ctx->isp_dir);
     }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+    if (ctx->jz_dir) {
+        proc_remove(ctx->jz_dir);
+    }
+#endif
 
     kfree(ctx);
     tx_isp_proc_ctx = NULL;

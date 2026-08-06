@@ -13,6 +13,7 @@
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 #include "../include/tx_isp/tx_isp_subdev.h"
 /* Keep the named T31 subdevice model pinned to the recovered legacy ABI. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 TX_ISP_ABI_ASSERT(t31_subdev_name,
     __builtin_offsetof(struct tx_isp_subdev, module.name) ==
     TX_ISP_ABI_SUBDEV_NAME_OFFSET);
@@ -48,6 +49,7 @@ TX_ISP_ABI_ASSERT(t31_subdev_host_priv,
     TX_ISP_ABI_LEGACY_SUBDEV_PRIVATE1);
 TX_ISP_ABI_ASSERT(t31_subdev_size,
     sizeof(struct tx_isp_subdev) == TX_ISP_ABI_LEGACY_SUBDEV_SIZE);
+#endif
 
 /* T31 uses the same complete 0x24-byte pad wire layout as the recovered
  * T23/T40/T41 implementations and the vendor SDK declarations. */

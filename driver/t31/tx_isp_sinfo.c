@@ -8,16 +8,25 @@
 #include <linux/errno.h>
 
 #include "../include/tx_isp/tx_isp_sinfo.h"
+#include "include/tx_isp_common.h"
+
+#define T31_SENSOR_VIDEO_OFFSET(member) \
+	(offsetof(struct tx_isp_sensor, video) + \
+	 offsetof(struct tx_isp_video_in, member))
 
 static const struct tx_isp_sinfo_config tx_isp_sinfo_config = {
-	.client_offset = 0x0d4,
-	.attr_offset = 0x268,
-	.width_offset = 0x234,
-	.height_offset = 0x238,
-	.fps_offset = 0x274,
-	.adapter_nr_offset = 0x0e0,
-	.attr_name_offset = 0,
-	.attr_chip_id_offset = 4,
+	.client_offset = offsetof(struct tx_isp_sensor, sd) +
+			 offsetof(struct tx_isp_subdev, dev_priv),
+	.attr_offset = T31_SENSOR_VIDEO_OFFSET(attr),
+	.width_offset = T31_SENSOR_VIDEO_OFFSET(mbus) +
+			offsetof(struct v4l2_mbus_framefmt, width),
+	.height_offset = T31_SENSOR_VIDEO_OFFSET(mbus) +
+			 offsetof(struct v4l2_mbus_framefmt, height),
+	.fps_offset = T31_SENSOR_VIDEO_OFFSET(fps),
+	.adapter_nr_offset = offsetof(struct i2c_adapter, nr),
+	.attr_name_offset = offsetof(struct tx_isp_sensor_attribute, name),
+	.attr_chip_id_offset =
+		offsetof(struct tx_isp_sensor_attribute, chip_id),
 };
 
 #include "../common/tx_isp_sinfo.c"

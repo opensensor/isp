@@ -131,7 +131,11 @@ struct tx_isp_sensor_win_setting {
 	int width;
 	int height;
 	int fps;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 	enum v4l2_mbus_pixelcode mbus_code;
+#else
+	u32 mbus_code;
+#endif
 	enum v4l2_colorspace colorspace;
 	void *regs;	/* Regs to tweak; the default fps is fast */
 };

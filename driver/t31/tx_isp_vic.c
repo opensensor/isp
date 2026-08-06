@@ -2210,12 +2210,13 @@ int isp_vic_frd_show(struct seq_file *seq, void *v)
     seq_printf(seq, " %d, %d\n", frame_count, total_errors);
 
     /* Binary Ninja: Print all error counts */
-    return seq_printf(seq, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
-                     vic_dev->vic_errors[0], vic_dev->vic_errors[1], vic_dev->vic_errors[2],
-                     vic_dev->vic_errors[3], vic_dev->vic_errors[4], vic_dev->vic_errors[5],
-                     vic_dev->vic_errors[6], vic_dev->vic_errors[7], vic_dev->vic_errors[8],
-                     vic_dev->vic_errors[9], vic_dev->vic_errors[10], vic_dev->vic_errors[11],
-                     vic_dev->vic_errors[12]);
+    seq_printf(seq, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
+               vic_dev->vic_errors[0], vic_dev->vic_errors[1], vic_dev->vic_errors[2],
+               vic_dev->vic_errors[3], vic_dev->vic_errors[4], vic_dev->vic_errors[5],
+               vic_dev->vic_errors[6], vic_dev->vic_errors[7], vic_dev->vic_errors[8],
+               vic_dev->vic_errors[9], vic_dev->vic_errors[10], vic_dev->vic_errors[11],
+               vic_dev->vic_errors[12]);
+    return 0;
 }
 
 /* Dump ISP VIC FRD open - EXACT Binary Ninja implementation */
@@ -3047,13 +3048,13 @@ EXPORT_SYMBOL(vic_subdev_ops);
 
 
 /* VIC FRD file operations - EXACT Binary Ninja implementation */
-const struct file_operations isp_vic_frd_fops = {
-    .owner = THIS_MODULE,
-    .llseek = seq_lseek,                /* private_seq_lseek from hex dump */
-    .read = seq_read,                   /* private_seq_read from hex dump */
-    .write = isp_vic_cmd_set,           /* OEM: write handler for snapraw/saveraw */
-    .open = dump_isp_vic_frd_open,      /* dump_isp_vic_frd_open from hex dump */
-    .release = single_release,          /* private_single_release from hex dump */
+const TX_ISP_PROC_OPS isp_vic_frd_fops = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_LSEEK = seq_lseek,      /* private_seq_lseek from hex dump */
+    TX_ISP_PROC_READ = seq_read,         /* private_seq_read from hex dump */
+    TX_ISP_PROC_WRITE = isp_vic_cmd_set, /* OEM: write handler for snapraw/saveraw */
+    TX_ISP_PROC_OPEN = dump_isp_vic_frd_open,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* Wrapper fops for /proc/jz/isp/isp-w02 created from tx_isp_proc.c.
@@ -3085,13 +3086,13 @@ static ssize_t isp_vic_cmd_set_wrapper(struct file *file, const char __user *buf
     return isp_vic_cmd_set(file, buf, count, ppos);
 }
 
-const struct file_operations isp_vic_frd_fops_wrapper = {
-    .owner = THIS_MODULE,
-    .llseek = seq_lseek,
-    .read = seq_read,
-    .write = isp_vic_cmd_set_wrapper,
-    .open = dump_isp_vic_frd_open_wrapper,
-    .release = single_release,
+const TX_ISP_PROC_OPS isp_vic_frd_fops_wrapper = {
+    TX_ISP_PROC_OWNER
+    TX_ISP_PROC_LSEEK = seq_lseek,
+    TX_ISP_PROC_READ = seq_read,
+    TX_ISP_PROC_WRITE = isp_vic_cmd_set_wrapper,
+    TX_ISP_PROC_OPEN = dump_isp_vic_frd_open_wrapper,
+    TX_ISP_PROC_RELEASE = single_release,
 };
 
 /* VIC W02 proc file operations - FIXED for proper proc interface */

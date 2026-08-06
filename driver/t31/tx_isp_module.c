@@ -24,6 +24,9 @@
 
 #include <linux/ktime.h>
 #include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+#include <linux/irqdomain.h>
+#endif
 
 #include <linux/netlink.h>
 #include <linux/skbuff.h>
@@ -345,6 +348,10 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd,
                                   struct tx_isp_sensor *sensor);
 int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd);
 
+/* Global I2C client tracking to prevent duplicate creation. */
+static struct i2c_client *global_sensor_i2c_client;
+static DEFINE_MUTEX(i2c_client_mutex);
+
 long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_dev *isp_dev;
@@ -470,13 +477,13 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
                     struct i2c_client *fail_client =
                         (struct i2c_client *)tx_isp_get_subdevdata(sensor_sd);
                     if (fail_client) {
-                        struct i2c_adapter *fail_adapter = fail_client->adapter;
-                        if (fail_adapter)
-                            i2c_put_adapter(fail_adapter);
+                        mutex_lock(&i2c_client_mutex);
+                        if (global_sensor_i2c_client == fail_client)
+                            global_sensor_i2c_client = NULL;
+                        mutex_unlock(&i2c_client_mutex);
                         i2c_unregister_device(fail_client);
                     }
                 }
-                tx_isp_subdev_deinit(sensor_sd);
                 return -ENODEV;
             }
         }
@@ -574,6 +581,7 @@ EXPORT_SYMBOL(subdev_sensor_ops_ioctl);
 
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
+void tx_isp_remove_proc_entries(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
@@ -676,10 +684,6 @@ int netlink_send_msg(const void *data, size_t len)
 }
 
 
-/* Global I2C client tracking to prevent duplicate creation */
-static struct i2c_client *global_sensor_i2c_client = NULL;
-static DEFINE_MUTEX(i2c_client_mutex);
-
 /*
  * isp_i2c_new_subdev_board - EXACT OEM Binary Ninja reference implementation
  *
@@ -739,7 +743,11 @@ static struct tx_isp_subdev *isp_i2c_new_subdev_board(struct i2c_adapter *adapte
         return NULL;
 
     /* Stock: private_i2c_new_device(adapter, info) */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 5, 0)
     client = i2c_new_device(adapter, info);
+#else
+    client = i2c_new_client_device(adapter, info);
+#endif
     if (!client)
         return NULL;
 
@@ -790,13 +798,17 @@ static int prepare_i2c_infrastructure(struct tx_isp_dev *dev)
 /* Clean up I2C infrastructure */
 static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 {
+    struct i2c_client *client;
+
     /* Clean up global I2C client */
     mutex_lock(&i2c_client_mutex);
-    if (global_sensor_i2c_client) {
-        i2c_unregister_device(global_sensor_i2c_client);
-        global_sensor_i2c_client = NULL;
-    }
+    client = global_sensor_i2c_client;
+    global_sensor_i2c_client = NULL;
     mutex_unlock(&i2c_client_mutex);
+
+    /* The I2C core invokes sensor_remove(); do not hold our mutex then. */
+    if (client)
+        i2c_unregister_device(client);
 
     /* Clean up any remaining I2C clients and adapters */
     pr_info("I2C infrastructure cleanup complete\n");
@@ -906,7 +918,8 @@ static int frame_channel_track_buffer(struct frame_channel_device *fcd,
     tracked->bytesused = buffer->bytesused;
     tracked->flags = buffer->flags;
     tracked->field = buffer->field;
-    tracked->timestamp = buffer->timestamp;
+    tracked->timestamp.tv_sec = buffer->timestamp.tv_sec;
+    tracked->timestamp.tv_usec = buffer->timestamp.tv_usec;
     tracked->sequence = buffer->sequence;
     tracked->memory = buffer->memory;
     tracked->length = buffer->length;
@@ -1173,6 +1186,55 @@ struct platform_device tx_isp_core_platform_device = {
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
     .resource = tx_isp_core_resources,
 };
+
+/*
+ * The vendor 3.10 kernel used a fixed Linux IRQ base of 8, so its T31
+ * resources named ISP and VIC interrupts 37 and 38. Mainline allocates
+ * virtual IRQs dynamically; the corresponding T31 INTC hardware lines are
+ * 29 and 30. Resolve those lines through the mainline IRQ domain while
+ * retaining the legacy resource numbers on older kernels.
+ */
+static int tx_isp_map_mainline_irqs(void)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+    struct device_node *intc_np;
+    struct irq_domain *intc_domain;
+    unsigned int isp_irq;
+    unsigned int vic_irq;
+
+    intc_np = of_find_compatible_node(NULL, NULL, "ingenic,t31-intc");
+    if (!intc_np) {
+        pr_err("tx-isp: T31 interrupt controller node not found\n");
+        return -ENODEV;
+    }
+
+    intc_domain = irq_find_host(intc_np);
+    of_node_put(intc_np);
+    if (!intc_domain) {
+        pr_err("tx-isp: T31 interrupt controller domain not ready\n");
+        return -EPROBE_DEFER;
+    }
+
+    isp_irq = irq_create_mapping(intc_domain, 29);
+    vic_irq = irq_create_mapping(intc_domain, 30);
+    if (!isp_irq || !vic_irq) {
+        pr_err("tx-isp: failed to map T31 ISP/VIC hardware IRQs\n");
+        return -ENODEV;
+    }
+
+    tx_isp_resources[0].start = tx_isp_resources[0].end = isp_irq;
+    tx_isp_resources[1].start = tx_isp_resources[1].end = vic_irq;
+    tx_isp_vic_resources[1].start = tx_isp_vic_resources[1].end = vic_irq;
+    tx_isp_csi_resources[1].start = tx_isp_csi_resources[1].end = vic_irq;
+    tx_isp_vin_resources[0].start = tx_isp_vin_resources[0].end = isp_irq;
+    tx_isp_fs_resources[1].start = tx_isp_fs_resources[1].end = vic_irq;
+    tx_isp_core_resources[1].start = tx_isp_core_resources[1].end = isp_irq;
+
+    pr_info("tx-isp: mapped T31 hardware IRQs ISP=29->%u VIC=30->%u\n",
+            isp_irq, vic_irq);
+#endif
+    return 0;
+}
 
 /* Forward declaration for VIC event handler */
 
@@ -3903,7 +3965,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             state->current_buffer.bytesused = buffer.bytesused;
             state->current_buffer.flags = buffer.flags;
             state->current_buffer.field = buffer.field;
-            state->current_buffer.timestamp = buffer.timestamp;
+            state->current_buffer.timestamp.tv_sec = buffer.timestamp.tv_sec;
+            state->current_buffer.timestamp.tv_usec = buffer.timestamp.tv_usec;
             state->current_buffer.sequence = buffer.sequence;
             state->current_buffer.memory = buffer.memory;
             state->current_buffer.length = buffer.length;
@@ -5500,6 +5563,10 @@ static int tx_isp_init(void)
 
     pr_info("TX ISP driver initializing with new subdevice management system...\n");
 
+    ret = tx_isp_map_mainline_irqs();
+    if (ret)
+        return ret;
+
     /* Step 1: Check driver interface (matches reference) */
     gpio_mode_check = 0;  // Always return success for standard kernel
     if (gpio_mode_check != 0) {
@@ -5642,7 +5709,9 @@ static int tx_isp_init(void)
     }
 
     /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
-    pr_info("*** REGISTERING PLATFORM DEVICES FOR DUAL IRQ SETUP (37 + 38) ***\n");
+    pr_info("*** REGISTERING PLATFORM DEVICES FOR DUAL IRQ SETUP (%lu + %lu) ***\n",
+            (unsigned long)tx_isp_core_resources[1].start,
+            (unsigned long)tx_isp_vic_resources[1].start);
 
     ret = platform_device_register(&tx_isp_csi_platform_device);
     if (ret) {
@@ -5881,6 +5950,7 @@ static int tx_isp_init(void)
     return 0;
 
 err_cleanup_platforms:
+    tx_isp_remove_proc_entries();
     tx_isp_cleanup_subdev_graph(ourISPdev);
 
     /* Clean up in reverse order */
@@ -5908,6 +5978,7 @@ static void tx_isp_exit(void)
 
     pr_info("TX ISP driver exiting...\n");
     tx_isp_sinfo_exit();
+    tx_isp_remove_proc_entries();
 
     if (ourISPdev) {
         /* Clean up subdevice graph */
@@ -6218,22 +6289,20 @@ int private_reset_tx_isp_module(int arg)
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
 }
 
-#define VIC_RAW_IRQ_LOCK_OFFSET 0x130
-#define VIC_RAW_IRQ_FLAG_OFFSET 0x13c
-
-static inline spinlock_t *tx_vic_raw_irq_lock(struct tx_isp_vic_device *vic_dev)
+static inline spinlock_t *tx_vic_irq_lock(struct tx_isp_vic_device *vic_dev)
 {
-    return (spinlock_t *)((char *)vic_dev + VIC_RAW_IRQ_LOCK_OFFSET);
+    return &vic_dev->lock;
 }
 
-static inline u32 tx_vic_raw_irq_flag_get(struct tx_isp_vic_device *vic_dev)
+static inline u32 tx_vic_irq_flag_get(struct tx_isp_vic_device *vic_dev)
 {
-    return *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET);
+    return vic_dev->hw_irq_enabled;
 }
 
-static inline void tx_vic_raw_irq_flag_set(struct tx_isp_vic_device *vic_dev, u32 enabled)
+static inline void tx_vic_irq_flag_set(struct tx_isp_vic_device *vic_dev, u32 enabled)
 {
-    *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET) = enabled;
+    vic_dev->hw_irq_enabled = enabled;
+    vic_dev->irq_enabled = enabled;
 }
 
 static inline struct tx_isp_vic_device *tx_vic_irq_owner_resolve(struct tx_isp_vic_device *vic_dev)
@@ -6319,11 +6388,11 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    spin_lock_irqsave(tx_vic_raw_irq_lock(active_vic), flags);
+    spin_lock_irqsave(tx_vic_irq_lock(active_vic), flags);
 	tx_isp_vic_restore_interrupts();
 
-    if (tx_vic_raw_irq_flag_get(active_vic) == 0) {
-        tx_vic_raw_irq_flag_set(active_vic, 1);
+    if (tx_vic_irq_flag_get(active_vic) == 0) {
+        tx_vic_irq_flag_set(active_vic, 1);
         irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
         tx_vic_seed_irq_slots(active_vic, irq);
         pr_info("tx_vic_enable_irq: enabling VIC IRQ %d\n", irq);
@@ -6332,7 +6401,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 	    pr_info("tx_vic_enable_irq: flag already set, VIC regs restored\n");
     }
 
-    spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
+    spin_unlock_irqrestore(tx_vic_irq_lock(active_vic), flags);
 }
 
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
@@ -6345,16 +6414,16 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     if (!active_vic)
         return;
 
-    spin_lock_irqsave(tx_vic_raw_irq_lock(active_vic), flags);
+    spin_lock_irqsave(tx_vic_irq_lock(active_vic), flags);
 
-    if (tx_vic_raw_irq_flag_get(active_vic) != 0) {
-        tx_vic_raw_irq_flag_set(active_vic, 0);
+    if (tx_vic_irq_flag_get(active_vic) != 0) {
+        tx_vic_irq_flag_set(active_vic, 0);
         irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
         tx_vic_seed_irq_slots(active_vic, irq);
         tx_vic_irq_slot_disable(&active_vic->sd_irq_info);
     }
 
-    spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
+    spin_unlock_irqrestore(tx_vic_irq_lock(active_vic), flags);
 }
 
 
@@ -7266,9 +7335,12 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor)
 {
     struct registered_sensor *reg_sensor;
+	struct i2c_client *client;
+	struct module *owner = NULL;
     int subdev_slot;
     int i;
     int ret = 0;
+	int sinfo_ret;
 
     if (!sd || !sensor) {
         pr_err("Invalid sensor registration parameters\n");
@@ -7410,6 +7482,15 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
 
     mutex_unlock(&sensor_register_mutex);
 
+	client = (struct i2c_client *)tx_isp_get_subdevdata(sd);
+	if (client && client->dev.driver)
+		owner = client->dev.driver->owner;
+	sinfo_ret = tx_isp_sinfo_sensor_bind(sd, owner);
+	if (sinfo_ret)
+		pr_warn("tx-isp: failed to publish active sensor %s: %d\n",
+			sensor->info.name[0] ? sensor->info.name : "(unnamed)",
+			sinfo_ret);
+
     /* RACE CONDITION FIX: If the sensor module loads AFTER the ISP module,
      * the ISP probe already ran tx_isp_create_subdev_graph() which set
      * isp_dev->state = 1, but the activation attempt during probe failed
@@ -7443,7 +7524,14 @@ EXPORT_SYMBOL(tx_isp_register_sensor_subdev);
 int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 {
     struct registered_sensor *sensor, *tmp;
+	struct i2c_client *client;
+	struct module *owner = NULL;
     int i;
+
+	client = (struct i2c_client *)tx_isp_get_subdevdata(sd);
+	if (client && client->dev.driver)
+		owner = client->dev.driver->owner;
+	tx_isp_sinfo_sensor_unbind(sd, owner);
 
     mutex_lock(&sensor_register_mutex);
     registered_sensor_subdev = NULL;
@@ -7857,7 +7945,8 @@ static int __fill_v4l2_buffer(struct frame_buffer *buf, struct v4l2_buffer *b)
     b->bytesused = buf->bytesused;
     b->flags     = buf->flags;
     b->field     = buf->field;
-    b->timestamp = buf->timestamp;
+    b->timestamp.tv_sec = buf->timestamp.tv_sec;
+    b->timestamp.tv_usec = buf->timestamp.tv_usec;
     b->sequence  = buf->sequence;
     b->memory    = buf->memory;
     b->m.userptr = buf->m.userptr;
@@ -8140,11 +8229,10 @@ MODULE_INFO(supported, "T31 ISP Hardware");
 
 /* V4L2 symbol dependencies - declare what we need */
 MODULE_ALIAS("char-major-81-*");  /* V4L2 device major number */
-MODULE_DEVICE_TABLE(platform, tx_isp_platform_device_ids);
-
 /* Platform device ID table for proper device matching */
 static struct platform_device_id tx_isp_platform_device_ids[] = {
     { "tx-isp", 0 },
     { "tx-isp-t31", 0 },
     { }
 };
+MODULE_DEVICE_TABLE(platform, tx_isp_platform_device_ids);

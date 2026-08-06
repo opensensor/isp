@@ -16,20 +16,6 @@
 #include <sensor-common.h>
 #include <sensor-info.h>
 
-/* CRITICAL: Ensure interface constants are correct - fix from logs showing wrong values */
-#ifndef TX_SENSOR_DATA_INTERFACE_DVP
-#define TX_SENSOR_DATA_INTERFACE_DVP 1
-#endif
-#ifndef TX_SENSOR_DATA_INTERFACE_MIPI
-#define TX_SENSOR_DATA_INTERFACE_MIPI 2
-#endif
-
-/* CRITICAL: Force MIPI for GC2053 regardless of parameter */
-#undef TX_SENSOR_DATA_INTERFACE_DVP
-#undef TX_SENSOR_DATA_INTERFACE_MIPI
-#define TX_SENSOR_DATA_INTERFACE_DVP 1
-#define TX_SENSOR_DATA_INTERFACE_MIPI 2
-
 #define SENSOR_NAME "gc2053"
 #define SENSOR_BUS_TYPE TX_SENSOR_CONTROL_INTERFACE_I2C
 #define SENSOR_I2C_ADDRESS 0x37
@@ -64,6 +50,64 @@ MODULE_PARM_DESC(reset_gpio, "Reset GPIO NUM");
 static int pwdn_gpio = -1;
 module_param(pwdn_gpio, int, S_IRUGO);
 MODULE_PARM_DESC(pwdn_gpio, "Power down GPIO NUM");
+
+static bool reset_gpio_requested;
+static bool pwdn_gpio_requested;
+
+static void sensor_free_gpios(void)
+{
+	if (reset_gpio_requested) {
+		private_gpio_free(reset_gpio);
+		reset_gpio_requested = false;
+	}
+	if (pwdn_gpio_requested) {
+		private_gpio_free(pwdn_gpio);
+		pwdn_gpio_requested = false;
+	}
+}
+
+static void sensor_power_reset(void)
+{
+	/* The GC2053 requires MCLK while reset is released. */
+	ISP_WARNING("=== PERFORMING GPIO RESET SEQUENCE WITH MCLK RUNNING ===\n");
+
+	if (reset_gpio != -1) {
+		int ret;
+
+		ISP_WARNING("Requesting reset GPIO %d\n", reset_gpio);
+		ret = private_gpio_request(reset_gpio, "sensor_reset");
+		if (!ret) {
+			reset_gpio_requested = true;
+			ISP_WARNING("GPIO reset sequence: HIGH -> LOW -> HIGH\n");
+			private_gpio_direction_output(reset_gpio, 1);
+			private_msleep(20);
+			private_gpio_direction_output(reset_gpio, 0);
+			private_msleep(20);
+			private_gpio_direction_output(reset_gpio, 1);
+			private_msleep(20);
+			ISP_WARNING("GPIO reset sequence completed successfully\n");
+		} else {
+			ISP_ERROR("Failed to request reset GPIO %d: %d\n",
+				  reset_gpio, ret);
+		}
+	}
+
+	if (pwdn_gpio != -1) {
+		int ret;
+
+		ISP_WARNING("Configuring power-down GPIO %d\n", pwdn_gpio);
+		ret = private_gpio_request(pwdn_gpio, "sensor_pwdn");
+		if (!ret) {
+			pwdn_gpio_requested = true;
+			private_gpio_direction_output(pwdn_gpio, 0);
+			private_msleep(20);
+			ISP_WARNING("Power-down GPIO configured - sensor powered up\n");
+		} else {
+			ISP_ERROR("Failed to request power-down GPIO %d: %d\n",
+				  pwdn_gpio, ret);
+		}
+	}
+}
 
 static int sensor_gpio_func = DVP_PA_LOW_10BIT;
 module_param(sensor_gpio_func, int, S_IRUGO);
@@ -1251,26 +1295,22 @@ static struct regval_list sensor_stream_off_mipi[] = {
 
 int sensor_read(struct tx_isp_subdev *sd, unsigned char reg, unsigned char *value) {
 	struct i2c_client *client = tx_isp_get_subdevdata(sd);
-	struct i2c_msg msg[2] = {
-		[0] = {
-			.addr = client->addr,
-			.flags = 0,
-			.len = 1,
-			.buf = &reg,
-		},
-		[1] = {
-			.addr = client->addr,
-			.flags = I2C_M_RD,
-			.len = 1,
-			.buf = value,
-		}
-	};
-	int ret;
+	struct i2c_msg msg[2];
+	int ret = -EINVAL;
 	
 	if (!client) {
 		ISP_ERROR("sensor_read: I2C client is NULL!\n");
 		return -ENODEV;
 	}
+
+	msg[0].addr = client->addr;
+	msg[0].flags = 0;
+	msg[0].len = 1;
+	msg[0].buf = &reg;
+	msg[1].addr = client->addr;
+	msg[1].flags = I2C_M_RD;
+	msg[1].len = 1;
+	msg[1].buf = value;
 	
 	if (!client->adapter) {
 		ISP_ERROR("sensor_read: I2C adapter is NULL!\n");
@@ -1281,11 +1321,14 @@ int sensor_read(struct tx_isp_subdev *sd, unsigned char reg, unsigned char *valu
 	            reg, client, client->adapter->name, client->addr);
 	
 	ret = private_i2c_transfer(client->adapter, msg, 2);
-	if (ret > 0) {
+	if (ret == 2) {
 		ret = 0;
 		ISP_WARNING("sensor_read: reg=0x%02x value=0x%02x SUCCESS\n", reg, *value);
 	} else {
-		ISP_ERROR("sensor_read: reg=0x%02x FAILED ret=%d\n", reg, ret);
+		ISP_ERROR("sensor_read: reg=0x%02x incomplete transfer ret=%d expected=2\n",
+			  reg, ret);
+		if (ret >= 0)
+			ret = -EIO;
 	}
 
 	return ret;
@@ -1294,18 +1337,18 @@ int sensor_read(struct tx_isp_subdev *sd, unsigned char reg, unsigned char *valu
 int sensor_write(struct tx_isp_subdev *sd, unsigned char reg, unsigned char value) {
 	struct i2c_client *client = tx_isp_get_subdevdata(sd);
 	unsigned char buf[2] = {reg, value};
-	struct i2c_msg msg = {
-		.addr = client->addr,
-		.flags = 0,
-		.len = 2,
-		.buf = buf,
-	};
+	struct i2c_msg msg;
 	int ret;
 	
 	if (!client) {
 		ISP_ERROR("sensor_write: I2C client is NULL!\n");
 		return -ENODEV;
 	}
+
+	msg.addr = client->addr;
+	msg.flags = 0;
+	msg.len = 2;
+	msg.buf = buf;
 	
 	if (!client->adapter) {
 		ISP_ERROR("sensor_write: I2C adapter is NULL!\n");
@@ -1316,11 +1359,14 @@ int sensor_write(struct tx_isp_subdev *sd, unsigned char reg, unsigned char valu
 	            reg, value, client, client->adapter->name, client->addr);
 	
 	ret = private_i2c_transfer(client->adapter, &msg, 1);
-	if (ret > 0) {
+	if (ret == 1) {
 		ret = 0;
 		ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x SUCCESS\n", reg, value);
 	} else {
-		ISP_ERROR("sensor_write: reg=0x%02x val=0x%02x FAILED ret=%d\n", reg, value, ret);
+		ISP_ERROR("sensor_write: reg=0x%02x val=0x%02x incomplete transfer ret=%d expected=1\n",
+			  reg, value, ret);
+		if (ret >= 0)
+			ret = -EIO;
 	}
 
 	return ret;
@@ -1848,6 +1894,7 @@ static struct tx_isp_subdev_ops sensor_ops = {
 
 /* External ISP framework registration function */
 extern int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor);
+extern int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd);
 
 /* It's the sensor device */
 static u64 tx_isp_module_dma_mask = ~(u64) 0;
@@ -1866,53 +1913,13 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	struct tx_isp_subdev *sd;
 	struct tx_isp_video_in *video;
 	struct tx_isp_sensor *sensor;
-	int ret;
+	int ret = -EINVAL;
 	
 	ISP_WARNING("=== GC2053 SENSOR PROBE START ===\n");
 	ISP_WARNING("sensor_probe: client=%p, addr=0x%02x, adapter=%p (%s)\n",
 	            client, client ? client->addr : 0,
 	            client ? client->adapter : NULL,
 	            (client && client->adapter) ? client->adapter->name : "NULL");
-	
-	/* CRITICAL: GPIO RESET MUST HAPPEN BEFORE ANY I2C COMMUNICATION */
-	ISP_WARNING("=== PERFORMING GPIO RESET SEQUENCE BEFORE I2C ===\n");
-	
-	if (reset_gpio != -1) {
-		ISP_WARNING("Requesting reset GPIO %d\n", reset_gpio);
-		ret = private_gpio_request(reset_gpio, "sensor_reset");
-		if (!ret) {
-			ISP_WARNING("GPIO reset sequence: HIGH -> LOW -> HIGH\n");
-			/* Proper reset sequence for GC2053 */
-			private_gpio_direction_output(reset_gpio, 1);  /* Release reset (active low) */
-			private_msleep(50);  /* Wait for power stabilization */
-			private_gpio_direction_output(reset_gpio, 0);  /* Assert reset */
-			private_msleep(50);  /* Hold reset for sufficient time */
-			private_gpio_direction_output(reset_gpio, 1);  /* Release reset */
-			private_msleep(100); /* Wait for sensor boot sequence */
-			ISP_WARNING("GPIO reset sequence completed successfully\n");
-		} else {
-			ISP_ERROR("CRITICAL: Failed to request reset GPIO %d: %d\n", reset_gpio, ret);
-			ISP_ERROR("This will likely cause I2C communication failure!\n");
-		}
-	} else {
-		ISP_WARNING("WARNING: No reset GPIO configured (reset_gpio=-1)\n");
-		ISP_WARNING("If I2C fails, configure reset_gpio module parameter\n");
-	}
-
-	if (pwdn_gpio != -1) {
-		ISP_WARNING("Configuring power-down GPIO %d\n", pwdn_gpio);
-		ret = private_gpio_request(pwdn_gpio, "sensor_pwdn");
-		if (!ret) {
-			/* Ensure sensor is powered up (power-down is active low) */
-			private_gpio_direction_output(pwdn_gpio, 0);  /* Power up sensor */
-			private_msleep(20);
-			ISP_WARNING("Power-down GPIO configured - sensor powered up\n");
-		} else {
-			ISP_ERROR("Failed to request power-down GPIO %d: %d\n", pwdn_gpio, ret);
-		}
-	}
-	
-	ISP_WARNING("=== GPIO INITIALIZATION COMPLETE ===\n");
 	
 	sensor = (struct tx_isp_sensor *) kzalloc(sizeof(*sensor), GFP_KERNEL);
 	if (!sensor) {
@@ -1934,14 +1941,34 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ISP_WARNING("sensor_probe: Initialized sensor info - name=%s, i2c_addr=0x%02x\n",
 	            sensor->info.name, sensor->info.i2c.addr);
 	
-	sensor->mclk = clk_get(NULL, "cgu_cim");
+	sensor->mclk = private_clk_get(NULL, "cgu_cim");
 	if (IS_ERR(sensor->mclk)) {
-		ISP_ERROR("Cannot get sensor input clock cgu_cim\n");
+		ret = PTR_ERR(sensor->mclk);
+		ISP_ERROR("Cannot get sensor input clock cgu_cim: %d\n", ret);
 		goto err_get_mclk;
 	}
 
-	private_clk_set_rate(sensor->mclk, 24000000);
-	private_clk_enable(sensor->mclk);
+	ret = private_clk_set_rate(sensor->mclk, 24000000);
+	if (ret) {
+		ISP_ERROR("Cannot set sensor input clock to 24 MHz: %d\n", ret);
+		goto err_put_mclk;
+	}
+	ret = private_clk_enable(sensor->mclk);
+	if (ret) {
+		ISP_ERROR("Cannot enable sensor input clock: %d\n", ret);
+		goto err_put_mclk;
+	}
+
+	ret = private_jzgpio_set_func(GPIO_PORT_A, GPIO_FUNC_1, 0x8000);
+	if (ret) {
+		ISP_ERROR("Cannot mux PA15 as CIM MCLK: %d\n", ret);
+		goto err_set_sensor_gpio;
+	}
+	ISP_WARNING("sensor_probe: CIM MCLK enabled at 24000000 Hz on PA15\n");
+
+	sensor_power_reset();
+	ISP_WARNING("=== GPIO INITIALIZATION COMPLETE ===\n");
+
 	sensor_attr.dbus_type = data_interface;
     ISP_WARNING("sensor_probe: data_interface=%d, sensor_max_fps=%d\n", data_interface, sensor_max_fps);
 	if ((data_interface == TX_SENSOR_DATA_INTERFACE_DVP) && (sensor_max_fps == TX_SENSOR_MAX_FPS_30)) {
@@ -2040,6 +2067,7 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		vtsn1 = 0x65;
 	} else {
 		ISP_ERROR("Can not support this data interface and fps!!!\n");
+		ret = -EINVAL;
 		goto err_set_sensor_data_interface;
 	}
 
@@ -2114,29 +2142,44 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 err_set_sensor_data_interface:
 err_set_sensor_gpio:
 	private_clk_disable(sensor->mclk);
+err_put_mclk:
 	private_clk_put(sensor->mclk);
 err_get_mclk:
 	kfree(sensor);
 err_alloc_sensor:
-	/* Clean up GPIOs if we allocated them */
-	if (reset_gpio != -1)
-		private_gpio_free(reset_gpio);
-	if (pwdn_gpio != -1)
-		private_gpio_free(pwdn_gpio);
+	sensor_free_gpios();
 	return ret;
 }
 
 static int sensor_remove(struct i2c_client *client) {
-	struct tx_isp_subdev *sd = private_i2c_get_clientdata(client);
-	struct tx_isp_sensor *sensor = tx_isp_get_subdev_hostdata(sd);
+	struct tx_isp_subdev *sd;
+	struct tx_isp_sensor *sensor;
 
-	if (reset_gpio != -1)
-		private_gpio_free(reset_gpio);
-	if (pwdn_gpio != -1)
-		private_gpio_free(pwdn_gpio);
+	if (!client)
+		return 0;
 
-	private_clk_disable(sensor->mclk);
-	private_clk_put(sensor->mclk);
+	sd = private_i2c_get_clientdata(client);
+	if (!sd) {
+		ISP_WARNING("sensor_remove: probe did not attach client data; cleanup already complete\n");
+		sensor_free_gpios();
+		return 0;
+	}
+
+	sensor = tx_isp_get_subdev_hostdata(sd);
+	private_i2c_set_clientdata(client, NULL);
+	if (!sensor) {
+		ISP_WARNING("sensor_remove: subdev has no sensor host data\n");
+		sensor_free_gpios();
+		return 0;
+	}
+
+	tx_isp_unregister_sensor_subdev(sd);
+	sensor_free_gpios();
+
+	if (!IS_ERR_OR_NULL(sensor->mclk)) {
+		private_clk_disable(sensor->mclk);
+		private_clk_put(sensor->mclk);
+	}
 	tx_isp_subdev_deinit(sd);
 	kfree(sensor);
 	return 0;
@@ -2173,7 +2216,8 @@ static __init int init_sensor(void) {
 	
 	/* Only register the I2C driver - the ISP driver will create the I2C device
 	 * which will trigger our probe function */
-	ret = private_i2c_add_driver(&sensor_driver);
+	ret = private_i2c_add_driver_addr(&sensor_driver,
+					  SENSOR_I2C_ADDRESS);
 	if (ret) {
 		ISP_ERROR("Failed to add I2C driver for %s\n", SENSOR_NAME);
 		return ret;

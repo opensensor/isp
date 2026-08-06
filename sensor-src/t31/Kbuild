@@ -1,0 +1,9 @@
+ccflags-y += -I$(src)/include -I$(src)/../../driver/t31/include
+ccflags-y += -I$(src)/../../driver/include
+ccflags-y += -include $(src)/../../driver/t31/include/tx_isp_kernel_compat.h
+ccflags-y += -Wno-error=incompatible-pointer-types -Wno-error=strict-prototypes
+
+KBUILD_EXTRA_SYMBOLS := $(src)/../../driver/t31/Module.symvers
+
+sensor_gc2053_t31-objs := gc2053.o
+obj-m += sensor_gc2053_t31.o

@@ -530,6 +530,8 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
 {
     u32 ctrl;
     int ret;
+    int irq;
+    struct platform_device *pdev;
 
     if (!sd)
         return -EINVAL;
@@ -539,12 +541,21 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
     /* CRITICAL: Register CSI interrupt handler if not already registered */
     static int csi_irq_registered = 0;
     if (!csi_irq_registered) {
-        ret = request_irq(38, tx_isp_csi_irq_handler, IRQF_SHARED, "tx-isp-csi", sd);
+        pdev = to_platform_device(sd->module.dev);
+        irq = platform_get_irq(pdev, 0);
+        if (irq < 0) {
+            pr_err("*** CSI INTERRUPT: Failed to resolve platform IRQ: %d ***\n", irq);
+            mutex_unlock(&container_of(sd, struct tx_isp_csi_device, sd)->mutex);
+            return irq;
+        }
+
+        ret = request_irq(irq, tx_isp_csi_irq_handler, IRQF_SHARED, "tx-isp-csi", sd);
         if (ret == 0) {
-            pr_info("*** CSI INTERRUPT: Handler registered for IRQ 38 ***\n");
+            pr_info("*** CSI INTERRUPT: Handler registered for IRQ %d ***\n", irq);
             csi_irq_registered = 1;
         } else {
-            pr_err("*** CSI INTERRUPT: Failed to register handler for IRQ 38: %d ***\n", ret);
+            pr_err("*** CSI INTERRUPT: Failed to register handler for IRQ %d: %d ***\n",
+                   irq, ret);
         }
     }
 

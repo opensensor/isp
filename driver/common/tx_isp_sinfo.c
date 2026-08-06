@@ -7,6 +7,8 @@
  * ABI and any required lifecycle callbacks.
  */
 
+#include <linux/version.h>
+
 #include "../include/tx_isp/tx_isp_sinfo.h"
 
 #define TX_ISP_SINFO_MAX_SENSORS 4
@@ -122,6 +124,10 @@ struct tx_isp_sinfo_heap_state {
 static struct proc_dir_entry *tx_isp_sinfo_root;
 #define tx_isp_sinfo_slots tx_isp_sinfo_heap_slots
 #define tx_isp_sinfo_heap_allocation tx_isp_sinfo_heap_slots
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+static struct proc_dir_entry *tx_isp_sinfo_jz_root;
+extern struct proc_dir_entry *tx_isp_get_jz_proc_root(void);
 #endif
 #ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
 #define tx_isp_sinfo_proc_slots tx_isp_sinfo_heap_slots
@@ -430,12 +436,12 @@ static int tx_isp_sinfo_open(struct inode *inode, struct file *file)
 	return single_open(file, tx_isp_sinfo_show, PDE_DATA(inode));
 }
 
-static const struct file_operations tx_isp_sinfo_fops = {
-	.owner = THIS_MODULE,
-	.open = tx_isp_sinfo_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_sinfo_fops = {
+	TX_ISP_PROC_OWNER
+	TX_ISP_PROC_OPEN = tx_isp_sinfo_open,
+	TX_ISP_PROC_READ = seq_read,
+	TX_ISP_PROC_LSEEK = seq_lseek,
+	TX_ISP_PROC_RELEASE = single_release,
 };
 
 static int tx_isp_sinfo_count_show(struct seq_file *m, void *unused)
@@ -466,12 +472,12 @@ static int tx_isp_sinfo_count_open(struct inode *inode, struct file *file)
 	return single_open(file, tx_isp_sinfo_count_show, NULL);
 }
 
-static const struct file_operations tx_isp_sinfo_count_fops = {
-	.owner = THIS_MODULE,
-	.open = tx_isp_sinfo_count_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_sinfo_count_fops = {
+	TX_ISP_PROC_OWNER
+	TX_ISP_PROC_OPEN = tx_isp_sinfo_count_open,
+	TX_ISP_PROC_READ = seq_read,
+	TX_ISP_PROC_LSEEK = seq_lseek,
+	TX_ISP_PROC_RELEASE = single_release,
 };
 
 static int tx_isp_sinfo_events_show(struct seq_file *m, void *unused)
@@ -528,12 +534,12 @@ static int tx_isp_sinfo_events_open(struct inode *inode, struct file *file)
 	return single_open(file, tx_isp_sinfo_events_show, NULL);
 }
 
-static const struct file_operations tx_isp_sinfo_events_fops = {
-	.owner = THIS_MODULE,
-	.open = tx_isp_sinfo_events_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
+static const TX_ISP_PROC_OPS tx_isp_sinfo_events_fops = {
+	TX_ISP_PROC_OWNER
+	TX_ISP_PROC_OPEN = tx_isp_sinfo_events_open,
+	TX_ISP_PROC_READ = seq_read,
+	TX_ISP_PROC_LSEEK = seq_lseek,
+	TX_ISP_PROC_RELEASE = single_release,
 };
 
 static void tx_isp_sinfo_slot_sync_compat(int index);
@@ -683,6 +689,9 @@ void tx_isp_sinfo_driver_del(struct i2c_driver *drv)
 	int i;
 	int removed = 0;
 
+	if (!drv || !tx_isp_sinfo_slots)
+		return;
+
 	if (tx_isp_sinfo_config.driver_removing)
 		tx_isp_sinfo_config.driver_removing(drv);
 	mutex_lock(&tx_isp_sinfo_lock);
@@ -721,6 +730,8 @@ int tx_isp_sinfo_sensor_bind(void *subdev, struct module *owner)
 	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
 		struct tx_isp_sinfo_slot *slot = &tx_isp_sinfo_slots[i];
 
+		if (slot->used && slot->subdev == subdev)
+			break;
 		if (slot->used && slot->owner == owner && !slot->subdev) {
 			slot->subdev = subdev;
 			break;
@@ -780,7 +791,7 @@ void tx_isp_sinfo_sensor_unbind(void *subdev, struct module *owner)
 	int i;
 	int unbound = 0;
 
-	if (!subdev)
+	if (!subdev || !tx_isp_sinfo_slots)
 		return;
 	mutex_lock(&tx_isp_sinfo_lock);
 	tx_isp_sinfo_stats.sensor_unbind_calls++;
@@ -831,9 +842,19 @@ int tx_isp_sinfo_init(void)
 	if (!tx_isp_sinfo_heap_slots)
 		return -ENOMEM;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	/* Mainline procfs no longer accepts a slash in a single entry name. */
+	tx_isp_sinfo_jz_root = tx_isp_get_jz_proc_root();
+	if (tx_isp_sinfo_jz_root)
+		tx_isp_sinfo_root = proc_mkdir("sensor", tx_isp_sinfo_jz_root);
+#else
 	tx_isp_sinfo_root = proc_mkdir("jz/sensor", NULL);
+#endif
 	if (!tx_isp_sinfo_root) {
 		pr_warn("tx-isp-sinfo: cannot create /proc/jz/sensor\n");
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+		tx_isp_sinfo_jz_root = NULL;
+#endif
 		kfree(tx_isp_sinfo_heap_allocation);
 		tx_isp_sinfo_heap_slots = NULL;
 		return 0;
@@ -851,16 +872,28 @@ void tx_isp_sinfo_exit(void)
 {
 	struct proc_dir_entry *root = NULL;
 	void *heap_allocation = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	struct proc_dir_entry *jz_root = NULL;
+#endif
 
 	mutex_lock(&tx_isp_sinfo_lock);
 	if (tx_isp_sinfo_heap_slots) {
 		root = tx_isp_sinfo_root;
 		tx_isp_sinfo_root = NULL;
 		heap_allocation = tx_isp_sinfo_heap_allocation;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+		jz_root = tx_isp_sinfo_jz_root;
+		tx_isp_sinfo_jz_root = NULL;
+#endif
 	}
 	mutex_unlock(&tx_isp_sinfo_lock);
-	if (root)
+	if (root) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+		remove_proc_subtree("sensor", jz_root);
+#else
 		remove_proc_subtree("jz/sensor", NULL);
+#endif
+	}
 	mutex_lock(&tx_isp_sinfo_lock);
 	kfree(heap_allocation);
 	tx_isp_sinfo_heap_slots = NULL;

@@ -1,30 +1,32 @@
 ccflags-y += -I$(src)/include -I$(src)/../include
+ccflags-y += -include $(src)/include/tx_isp_kernel_compat.h
+ccflags-y += -Wno-error=incompatible-pointer-types -Wno-error=strict-prototypes
 
 # Main ISP module objects - note changed name to tx-isp-t31 (ensure tx_isp_module.o is first)
-tx-isp-t31-objs :=  $(DIR)/tx_isp_module.o \
-                $(DIR)/tx_isp_core.o \
-               $(DIR)/tx_isp_reset.o \
-               $(DIR)/tx_isp_subdev.o \
-               $(DIR)/tx_isp_proc.o \
-               $(DIR)/tx_isp_sysfs.o \
-               $(DIR)/tx_isp_vic.o \
-               $(DIR)/tx_isp_vic_debug.o \
-               $(DIR)/tx_isp_frame_done.o \
-               $(DIR)/tx_isp_csi.o \
-               $(DIR)/tx_isp_fs.o \
-               $(DIR)/tx_isp_tuning.o \
-               $(DIR)/tx_isp_fixpt.o \
-               $(DIR)/tx_isp_ae_zone.o \
-               $(DIR)/tx_isp_subdev_mgmt.o \
-               $(DIR)/tx_isp_t31_subdev_resolver.o \
-               $(DIR)/tx_isp_sinfo.o \
-               $(DIR)/tx_isp_daynight.o \
-               $(DIR)/tx_isp_callback_plan.o \
-               $(DIR)/tx_isp_reg_profile.o \
-               $(DIR)/tx_isp_frame_layout.o \
-               $(DIR)/tx_isp_t31_exposure.o \
-               $(DIR)/tx_isp_tuning_abi.o \
-               $(DIR)/tx_isp_vin.o
+tx-isp-t31-objs := tx_isp_module.o \
+               tx_isp_core.o \
+               tx_isp_reset.o \
+               tx_isp_subdev.o \
+               tx_isp_proc.o \
+               tx_isp_sysfs.o \
+               tx_isp_vic.o \
+               tx_isp_vic_debug.o \
+               tx_isp_frame_done.o \
+               tx_isp_csi.o \
+               tx_isp_fs.o \
+               tx_isp_tuning.o \
+               tx_isp_fixpt.o \
+               tx_isp_ae_zone.o \
+               tx_isp_subdev_mgmt.o \
+               tx_isp_t31_subdev_resolver.o \
+               tx_isp_sinfo.o \
+               tx_isp_daynight.o \
+               tx_isp_callback_plan.o \
+               tx_isp_reg_profile.o \
+               tx_isp_frame_layout.o \
+               tx_isp_t31_exposure.o \
+               tx_isp_tuning_abi.o \
+               tx_isp_vin.o
 
 # Build both modules - changed tx-isp.o to tx-isp-t31.o
 obj-m := tx-isp-t31.o

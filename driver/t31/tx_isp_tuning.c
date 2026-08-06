@@ -9361,7 +9361,8 @@ struct af_zone_data af_zone_data = {
 
 
 /* Event callback function array - Binary Ninja reference */
-static int (*cb[32])() = {NULL};
+typedef int (*tisp_event_cb_t)(int, int, int, int, int, int, int, int);
+static tisp_event_cb_t cb[32] = {NULL};
 
 /* ISP event callback function array - Binary Ninja reference */
 void (*isp_event_func_cb[32])(void) = {NULL};
@@ -19768,6 +19769,13 @@ int af_interrupt_static(void)
     return 1;
 }
 
+static irqreturn_t af_interrupt_static_wrapper(int irq, void *dev_id)
+{
+    (void)irq;
+    (void)dev_id;
+    return af_interrupt_static() ? IRQ_HANDLED : IRQ_NONE;
+}
+
 /* OEM EXACT: tiziano_wdr_interrupt_static — WDR stats handler.
  * Decompiled from OEM at 0x5d2a0. Only relevant in WDR mode. */
 int tiziano_wdr_interrupt_static(void)
@@ -28611,7 +28619,7 @@ int tiziano_af_init(uint32_t height, uint32_t width)
 {
     pr_info("tiziano_af_init: Initializing Auto Focus (%dx%d)\n", width, height);
     /* OEM registers AF interrupt handler at IRQ index 0x1f */
-    system_irq_func_set(0x1f, af_interrupt_static);
+    system_irq_func_set(0x1f, af_interrupt_static_wrapper);
     return 0;
 }
 
@@ -30377,7 +30385,7 @@ int tisp_event_set_cb(int event_id, void *callback)
     }
 
     /* Binary Ninja: *((arg1 << 2) + &cb) = arg2 */
-    cb[event_id] = (int (*)())callback;
+    cb[event_id] = (tisp_event_cb_t)callback;
 
     pr_info("tisp_event_set_cb: Event %d callback set to %p\n", event_id, callback);
     return 0;
@@ -32329,7 +32337,11 @@ int tisp_code_create_tuning_node(void)
     }
 
     /* Binary Ninja: tuning_class = __class_create(&__this_module, "isp-m0", 0) */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
     tuning_class = class_create(THIS_MODULE, "isp-m0");
+#else
+    tuning_class = class_create("isp-m0");
+#endif
     if (IS_ERR(tuning_class)) {
         ret = PTR_ERR(tuning_class);
         pr_err("tisp_code_create_tuning_node: Failed to create class: %d\n", ret);

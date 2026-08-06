@@ -25,16 +25,50 @@
 #include <linux/netlink.h>
 #include <net/netlink.h>
 #include <linux/spi/spi.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 #include <soc/irq.h>
 #include <soc/base.h>
+#endif
 #include <asm/io.h>
 #include <asm/irq.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 #include <asm/uaccess.h>
+#else
+#include <linux/uaccess.h>
+#endif
 #include <asm/cacheflush.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 #include <soc/gpio.h>
 #include <mach/platform.h>
 /*#include <linux/seq_file.h>*/
 #include <jz_proc.h>
+#else
+/*
+ * The vendor kernels exposed pinmux enums and address-limit types through
+ * architecture-private headers.  Keep the ABI declarations available for
+ * external sensor modules on mainline; their implementations below either use
+ * a supported generic API or return -EOPNOTSUPP.
+ */
+enum gpio_function {
+	GPIO_FUNC_0 = 0x00,
+	GPIO_FUNC_1 = 0x01,
+	GPIO_FUNC_2 = 0x02,
+	GPIO_FUNC_3 = 0x03,
+	GPIO_OUTPUT0 = 0x04,
+	GPIO_OUTPUT1 = 0x05,
+	GPIO_INPUT = 0x06,
+};
+
+enum gpio_port {
+	GPIO_PORT_A = 0,
+	GPIO_PORT_B,
+	GPIO_PORT_C,
+	GPIO_NR_PORTS,
+};
+
+typedef unsigned long mm_segment_t;
+#endif
 
 struct jz_driver_common_interfaces {
 	unsigned int flags_0;			// The flags must be checked.
@@ -248,6 +282,8 @@ struct i2c_client *private_i2c_new_device(struct i2c_adapter *adap, struct i2c_b
 void private_i2c_set_clientdata(struct i2c_client *dev, void *data);
 void *private_i2c_get_clientdata(const struct i2c_client *dev);
 int private_i2c_add_driver(struct i2c_driver *drv);
+int private_i2c_add_driver_addr(struct i2c_driver *drv,
+				unsigned short default_i2c_addr);
 void private_i2c_unregister_device(struct i2c_client *client);
 
 /* gpio interfaces */
