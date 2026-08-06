@@ -58,6 +58,14 @@ typedef uint64_t u64;
 #define TX_ISP_TUNING_CMD_T41_CONTRAST		0x08000095U
 #define TX_ISP_TUNING_CMD_T41_AWB_RGB_COEFFT	0x08000098U
 
+/* Open implementation extension.  Keep policy names in userspace: the
+ * driver only owns the atomic auto/manual AWB transition and gain replay. */
+#define TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL	0x08ff0001U
+#define TX_ISP_TUNING_CMD_OPEN_AE_TARGET	0x08ff0002U
+
+#define TX_ISP_TUNING_AWB_MANUAL		0U
+#define TX_ISP_TUNING_AWB_AUTO		1U
+
 #define TX_ISP_TUNING_DIR_GET			0x01U
 #define TX_ISP_TUNING_DIR_SET			0x02U
 
@@ -104,6 +112,15 @@ struct tx_isp_tuning_t41_control {
 	u32 is_get;
 	u32 id;
 	u32 value_or_ptr;
+};
+
+/* Eight-byte payload for TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL.  Manual gains
+ * use the ISP's Q10 convention (0x400 is unity).  For AUTO, they seed the
+ * bounded controller so a live profile change has no color discontinuity. */
+struct tx_isp_tuning_awb_control {
+	u32 mode;
+	u16 r_gain;
+	u16 b_gain;
 };
 
 /* Exact libimp response layouts. */

@@ -1088,6 +1088,8 @@ MODULE_PARM_DESC(t41_stock_msca_unity_curve,
 
 static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
 static void t41_apply_stock_awb_gains(void);
+static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
+                                  uint16_t bgain);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
  * process callback.  Keep a hardware-tested OS04D10 daylight fallback until
@@ -20447,6 +20449,13 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
               TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS, 16,
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL,
+              sizeof(struct tx_isp_tuning_awb_control),
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_OPEN_AE_TARGET, sizeof(uint32_t),
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
         static unsigned int trace_count;
         struct tx_isp_tuning_t41_control request;
@@ -20538,6 +20547,52 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
         if (route && route->id == TX_ISP_TUNING_CMD_T41_AE_STATS)
             return t41_tuning_copy_ae_stats(request.channel,
                                             request.value_or_ptr);
+        if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL) {
+            struct tx_isp_tuning_awb_control control;
+
+            if (request.channel != 0 || !request.value_or_ptr)
+                return -EINVAL;
+            if (request.is_get) {
+                control.mode = READ_ONCE(t41_safe_awb_controller) < 0 ?
+                    TX_ISP_TUNING_AWB_AUTO : TX_ISP_TUNING_AWB_MANUAL;
+                control.r_gain = (uint16_t)READ_ONCE(t41_awb_last_rgain);
+                control.b_gain = (uint16_t)READ_ONCE(t41_awb_last_bgain);
+                return private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    &control, sizeof(control)) ? -EFAULT : 0;
+            }
+            if (private_copy_from_user(
+                    &control,
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    sizeof(control)))
+                return -EFAULT;
+            return t41_safe_awb_configure(control.mode, control.r_gain,
+                                          control.b_gain);
+        }
+        if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AE_TARGET) {
+            uint32_t target;
+
+            if (request.channel != 0 || !request.value_or_ptr)
+                return -EINVAL;
+            if (request.is_get) {
+                target = READ_ONCE(t41_ae_target_q8);
+                return private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    &target, sizeof(target)) ? -EFAULT : 0;
+            }
+            if (private_copy_from_user(
+                    &target,
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    sizeof(target)))
+                return -EFAULT;
+            if (target < 0x400U || target > 0xffffU)
+                return -ERANGE;
+            WRITE_ONCE(t41_ae_target_q8, target);
+            printk(KERN_WARNING
+                   "tx_isp_t41_recovered: live AE target=%u Q8\n",
+                   target);
+            return 0;
+        }
         if (route && route->payload_size == 1U) {
             uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
             uint8_t value;
@@ -32055,6 +32110,57 @@ static int t41_safe_awb_controller_set(const char *value,
         cancel_work_sync(&t41_safe_awb_work);
         t41_apply_stock_awb_gains();
     }
+    return 0;
+}
+
+static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
+                                  uint16_t bgain)
+{
+    int was_enabled = READ_ONCE(t41_safe_awb_controller) < 0;
+
+    if (mode > TX_ISP_TUNING_AWB_AUTO || rgain < 0x200U ||
+        rgain > 0x1800U || bgain < 0x200U || bgain > 0x1800U)
+        return -EINVAL;
+
+    /* Stop future IRQ fan-out before waiting for an in-flight worker.  The
+     * subsequent two-bank write is then an indivisible profile handoff from
+     * userspace's point of view; capture and encoding remain untouched. */
+    if (mode == TX_ISP_TUNING_AWB_MANUAL) {
+        WRITE_ONCE(t41_safe_awb_controller, 1);
+        if (was_enabled)
+            cancel_work_sync(&t41_safe_awb_work);
+        t41_stock_awb_gain_a = rgain;
+        t41_stock_awb_gain_b = bgain;
+        t41_apply_stock_awb_gains();
+    } else {
+        if (was_enabled) {
+            WRITE_ONCE(t41_safe_awb_controller, 1);
+            cancel_work_sync(&t41_safe_awb_work);
+        }
+        t41_stock_awb_gain_a = rgain;
+        t41_stock_awb_gain_b = bgain;
+        t41_safe_awb_apply(rgain, bgain);
+        t41_awb_last_rgain = rgain;
+        t41_awb_last_bgain = bgain;
+        WRITE_ONCE(t41_safe_awb_controller, -1);
+        t41_awb_irq_count = 0x80000000U;
+        t41_awb_update_count = 0x80000000U;
+        t41_awb_reject_count = 0x80000000U;
+        t41_awb_last_bank = 0x80000000U;
+        t41_awb_last_raw_r_q10 = t41_awb_rbias_q10 ?
+            (t41_awb_last_rgain << 10) / t41_awb_rbias_q10 : 0x400U;
+        t41_awb_last_raw_b_q10 = t41_awb_bbias_q10 ?
+            (t41_awb_last_bgain << 10) / t41_awb_bbias_q10 : 0x400U;
+        t41_awb_outlier_r_q10 = t41_awb_last_raw_r_q10;
+        t41_awb_outlier_b_q10 = t41_awb_last_raw_b_q10;
+        t41_awb_outlier_count = 0x80000000U;
+        t41_apply_stock_awb_stats_profile();
+    }
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: live AWB profile mode=%s gains=%#x/%#x\n",
+           mode == TX_ISP_TUNING_AWB_AUTO ? "auto" : "manual",
+           rgain, bgain);
     return 0;
 }
 

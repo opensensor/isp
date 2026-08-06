@@ -23,6 +23,10 @@ ABI_ASSERT(t41_control_size,
 	sizeof(struct tx_isp_tuning_t41_control) == 16);
 ABI_ASSERT(t41_control_id,
 	offsetof(struct tx_isp_tuning_t41_control, id) == 8);
+ABI_ASSERT(awb_control_size,
+	sizeof(struct tx_isp_tuning_awb_control) == 8);
+ABI_ASSERT(awb_control_r_gain,
+	offsetof(struct tx_isp_tuning_awb_control, r_gain) == 4);
 ABI_ASSERT(expr_size, sizeof(struct tx_isp_tuning_expr) == 12);
 ABI_ASSERT(expr_min,
 	offsetof(struct tx_isp_tuning_expr, integration_time_min) == 6);
@@ -39,6 +43,13 @@ static void test_descriptors(void)
 		{ TX_ISP_TUNING_CMD_T41_RUNNING_MODE, 4,
 		  TX_ISP_TUNING_DIR_SET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
 		{ TX_ISP_TUNING_CMD_T41_SHARPNESS, 1,
+		  TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+		  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+		{ TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL,
+		  sizeof(struct tx_isp_tuning_awb_control),
+		  TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+		  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+		{ TX_ISP_TUNING_CMD_OPEN_AE_TARGET, sizeof(uint32_t),
 		  TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
 		  TX_ISP_TUNING_PAYLOAD_USER_PTR },
 		{ TX_ISP_TUNING_CMD_BCSH_HUE, 4,

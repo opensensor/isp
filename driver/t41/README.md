@@ -101,6 +101,17 @@ same ceiling region and reducing its average saturation from `75.31` to `2.02`.
 This closes the severe daylight color regression while the larger OEM AWB
 model-selection path is recovered; it does not claim dynamic-AWB parity.
 
+A later matched stock/open capture on August 6 bounded the live-profile state
+more precisely. OEM AWB moved from `1484/3516` to `1476/3524` over 20 seconds;
+the latter pair is now the deterministic security seed. Replaying the remaining
+different GIB/CCM/BCSH writer words did not close the observed luma gap. Raising
+the open safe-AE target from `14500` to `17600` did: whole-frame normalized Y
+moved from `0.381` to `0.453`, versus `0.450` on stock. Two open-extension
+tuning controls now switch the bounded AWB mode/gains and AE target in process
+context, without stopping V4L2 capture or the encoder. Policy names and presets
+remain in OpenIMP userspace; the experimental aggregate AWB controller remains
+explicitly opt-in.
+
 The August correctness cycle also restores the T41 1.2 tuning responses used
 by RIC: running-mode GET, AE expression, the 256-bin/225-zone AE statistics
 envelope, and AWB global statistics. Their packed layouts are implemented in
