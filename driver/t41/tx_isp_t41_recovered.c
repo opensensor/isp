@@ -1089,17 +1089,18 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
 static void t41_apply_stock_awb_gains(void);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
- * process callback.  Keep the matched hardware-tested OS04D10 mixed-daylight
- * baseline until the statistics controller below is ready to own the gains.
- * These values are the matched live stock OS04D10 register image from the
- * current mixed tungsten/daylight reference and pair with the exact OEM CCM.
- * Keep the controls writable because the OEM AWB controller is dynamic while
- * this fallback remains intentionally static. */
-static unsigned int t41_stock_awb_gain_a = 1240U;
+ * process callback.  Keep a hardware-tested OS04D10 daylight fallback until
+ * the statistics controller below reproduces the OEM model across illuminant
+ * changes.  The older mixed tungsten/daylight stock snapshot (1240/4624)
+ * produced U/V=186.05/79.28 on the neutral ceiling when full daylight reached
+ * the scene.  A live two-axis sweep selected 1800/3000, which measured
+ * U/V=126.97/129.33 on the same region with the exact OEM CCM.  Keep the
+ * controls writable because this fallback remains intentionally static. */
+static unsigned int t41_stock_awb_gain_a = 1800U;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
 		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 4624U;
+static unsigned int t41_stock_awb_gain_b = 3000U;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
 		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
@@ -1155,8 +1156,8 @@ static unsigned int t41_awb_min_pixels = 15000U;
 module_param(t41_awb_min_pixels, uint, 0644);
 MODULE_PARM_DESC(t41_awb_min_pixels,
 		 "minimum AWB statistic pixels accepted by the safe controller");
-static uint32_t t41_awb_last_rgain = 1240U;
-static uint32_t t41_awb_last_bgain = 4624U;
+static uint32_t t41_awb_last_rgain = 1800U;
+static uint32_t t41_awb_last_bgain = 3000U;
 static uint32_t t41_awb_last_raw_r_q10 = 0x400U;
 static uint32_t t41_awb_last_raw_b_q10 = 0x400U;
 /* Keep diagnostic state in .data.  Unrepaired functions still address a few

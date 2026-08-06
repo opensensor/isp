@@ -71,10 +71,10 @@ as similar in instruction count.
 The T41 module now reuses the common day/night state machine,
 interpolation/fixed-point helpers, checked exposure and scaler arithmetic, and
 the T23/T31/T41 typed sensor-registry implementation. Full sensor/Raptor smoke
-tests pass, both MSCA streams run, and ISP interrupts advance. The validated
-mixed-light AWB fallback is `R=1450, B=3780`; both shadow banks retain those
-values across forced day/night transitions. It runs with the exact active OEM
-OS04D10 day CCM and unity GIB. The older half-GIB/custom-CCM combination remains
+tests pass, both MSCA streams run, and ISP interrupts advance. The static AWB
+safety fallback is now `R=1800, B=3000`; both shadow banks retain those values
+across forced day/night transitions. It runs with the exact active OEM OS04D10
+day CCM and unity GIB. The older half-GIB/custom-CCM combination remains
 available only as an explicitly selected experiment. The shared
 registry reports one active OS04D10 with chip `0x530444`, address `0x3c`,
 native 2560x1440 geometry, and 25 fps; both driver-add and sensor-bind report
@@ -92,6 +92,14 @@ partially replaced DMA groups while accepting a persistent illuminant change
 after 32 samples. On the mixed daylight/incandescent test scene the controller
 held `R=1438..1439, B=3819..3824` across bank transitions while rejecting the
 transient groups that previously pulled either channel down by hundreds.
+The aggregate controller remains opt-in: in the August 6 full-daylight scene
+its current gray-world-to-gain mapping settled near `R=1127, B=1518` and made
+the frame green. The fixed mixed-light stock snapshot (`1240/4624`) was also
+not a safe daylight fallback: the neutral ceiling measured `U/V=186.05/79.28`.
+A two-axis live sweep selected `1800/3000`, measuring `126.97/129.33` on the
+same ceiling region and reducing its average saturation from `75.31` to `2.02`.
+This closes the severe daylight color regression while the larger OEM AWB
+model-selection path is recovered; it does not claim dynamic-AWB parity.
 
 The August correctness cycle also restores the T41 1.2 tuning responses used
 by RIC: running-mode GET, AE expression, the 256-bin/225-zone AE statistics
@@ -110,7 +118,7 @@ standard deviation from `0.0444` at target `16000` to `0.0344`.
 The open driver and OpenIMP ran together with no visible block corruption or
 H.264 decode errors in repeated frames. All 15 host suites pass; the active
 one-shot module SHA-256 is
-`782c9db5b2de3ece08245e6ace8a4e8fd27d86bc52c490bca8375a1f8478ba02`.
+`cf838ed8f4dfc612389fdee5aeb2377a16636818298b6087da278025a55e8814`.
 
 The July 30 shared-format validation preserved the 3,133,440-byte 1080p pool,
 full-rate output, and coherent geometry across two clean boots. It decoded
