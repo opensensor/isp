@@ -1356,6 +1356,18 @@ static int print_level = 1;
 module_param(print_level, int, 0);
 MODULE_PARM_DESC(print_level, "isp print level");
 
+/*
+ * Frame-channel recovery originally kept verbose tracing enabled while the
+ * private queue ABI was reconstructed.  Several of those call sites are on
+ * the QBUF and ISP interrupt paths and can emit multiple printk records per
+ * frame.  Keep the diagnostics available without charging every production
+ * frame for formatting, console locking, and log-buffer traffic.
+ */
+static int t41_runtime_trace;
+module_param(t41_runtime_trace, int, 0644);
+MODULE_PARM_DESC(t41_runtime_trace,
+		 "enable verbose T41 frame/remote-event/IRQ recovery tracing");
+
 /* WHOLE_DRIVER_PLATFORM_DERIVATION
  * platform: linux_kernel_module
  * frameworks: 2 lifecycle_hooks: 0 resources: 2 unresolved: 61
@@ -20392,9 +20404,10 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: isp-m0 ioctl enter cmd=0x%x arg=0x%x pid=%d comm=%s\n",
-           a1, a2, current->pid, current->comm);
+    if (t41_runtime_trace)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: isp-m0 ioctl enter cmd=0x%x arg=0x%x pid=%d comm=%s\n",
+               a1, a2, current->pid, current->comm);
 
     /*
      * The OEM default ioctl first copies one 16-byte control envelope.  The
@@ -20432,7 +20445,7 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                                    (void __user *)(uintptr_t)a2,
                                    sizeof(request)))
             return -EFAULT;
-        if (trace_count++ < 32)
+        if (t41_runtime_trace && trace_count++ < 32)
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: isp-m0 control value=0x%x "
                    "get=%u id=0x%x aux=0x%x\n",
@@ -25836,17 +25849,19 @@ int32_t __enqueue_in_driver(uintptr_t a0)
     *(uint32_t *)(buffer + 0x48) = 3;
     *(uint8_t *)(buffer + 0x4c) = 3;
     remote_pad = *(void **)(queue + 0x2ac);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: enqueue begin buffer=%p queue=%p "
-           "channel=%u remote=%p payload=%p dma=%08x len=%u\n",
-           buffer, queue, *(uint32_t *)(queue + 0x2b0), remote_pad,
-           buffer + 0x68, *(uint32_t *)(buffer + 0x70),
-           *(uint32_t *)(buffer + 0x34));
+    if (t41_runtime_trace)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: enqueue begin buffer=%p queue=%p "
+               "channel=%u remote=%p payload=%p dma=%08x len=%u\n",
+               buffer, queue, *(uint32_t *)(queue + 0x2b0), remote_pad,
+               buffer + 0x68, *(uint32_t *)(buffer + 0x70),
+               *(uint32_t *)(buffer + 0x34));
     ret = tx_isp_send_event_to_remote(
         remote_pad, TX_ISP_FRAME_EVENT_QUEUE_BUFFER, buffer + 0x68);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: enqueue event returned buffer=%p ret=%d\n",
-           buffer, ret);
+    if (t41_runtime_trace)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: enqueue event returned buffer=%p ret=%d\n",
+               buffer, ret);
     if (ret == -ENOIOCTLCMD)
         ret = 0;
     if (ret)
@@ -27668,22 +27683,23 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
     if (private_copy_from_user(vbuf, user_buf, sizeof(vbuf)))
         return -EFAULT;
     index = vbuf[TX_ISP_FRAME_WORD_INDEX];
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: qbuf inspect channel=%u index=%u/%u "
-           "type=%u/%u flags=%#x memory=%u/%u dma=0x%x "
-           "length=0x%x/0x%x state=%u\n",
-           *(uint32_t *)((char *)channel + 0x2dc), index,
-           *(uint32_t *)((char *)channel + 0x218), vbuf[TX_ISP_FRAME_WORD_TYPE],
-           *(uint32_t *)((char *)channel + 0x2c), vbuf[TX_ISP_FRAME_WORD_FLAGS],
-           vbuf[TX_ISP_FRAME_WORD_MEMORY], *(uint32_t *)((char *)channel + 0x48),
-           vbuf[TX_ISP_FRAME_WORD_DMA], vbuf[TX_ISP_FRAME_WORD_LENGTH],
-           *(uint32_t *)((char *)channel + 0x64),
-           index < *(uint32_t *)((char *)channel + 0x218) &&
-           t41_kernel_data_ptr(*(void **)((char *)channel + 0x118 +
-                                          index * sizeof(void *))) ?
-           *(uint32_t *)((char *)*(void **)((char *)channel + 0x118 +
-                                            index * sizeof(void *)) +
-                         0x48) : ~0U);
+    if (t41_runtime_trace)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: qbuf inspect channel=%u index=%u/%u "
+               "type=%u/%u flags=%#x memory=%u/%u dma=0x%x "
+               "length=0x%x/0x%x state=%u\n",
+               *(uint32_t *)((char *)channel + 0x2dc), index,
+               *(uint32_t *)((char *)channel + 0x218), vbuf[TX_ISP_FRAME_WORD_TYPE],
+               *(uint32_t *)((char *)channel + 0x2c), vbuf[TX_ISP_FRAME_WORD_FLAGS],
+               vbuf[TX_ISP_FRAME_WORD_MEMORY], *(uint32_t *)((char *)channel + 0x48),
+               vbuf[TX_ISP_FRAME_WORD_DMA], vbuf[TX_ISP_FRAME_WORD_LENGTH],
+               *(uint32_t *)((char *)channel + 0x64),
+               index < *(uint32_t *)((char *)channel + 0x218) &&
+               t41_kernel_data_ptr(*(void **)((char *)channel + 0x118 +
+                                              index * sizeof(void *))) ?
+               *(uint32_t *)((char *)*(void **)((char *)channel + 0x118 +
+                                                index * sizeof(void *)) +
+                             0x48) : ~0U);
     if (vbuf[TX_ISP_FRAME_WORD_TYPE] != *(uint32_t *)((char *)channel + 0x2c) ||
         index >= *(uint32_t *)((char *)channel + 0x218))
         return -EINVAL;
@@ -27833,12 +27849,14 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
     if (private_copy_to_user(user_buf, vbuf, sizeof(vbuf)))
         return -EFAULT;
 
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: qbuf clean channel=%u index=%u "
-           "dma=0x%x length=%u flags=%#x pending=%u\n",
-           *(uint32_t *)((char *)channel + 0x2dc), index,
-           vbuf[TX_ISP_FRAME_WORD_DMA], vbuf[TX_ISP_FRAME_WORD_LENGTH], vbuf[TX_ISP_FRAME_WORD_FLAGS],
-           *(uint32_t *)((char *)channel + 0x224));
+    if (t41_runtime_trace)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: qbuf clean channel=%u index=%u "
+               "dma=0x%x length=%u flags=%#x pending=%u\n",
+               *(uint32_t *)((char *)channel + 0x2dc), index,
+               vbuf[TX_ISP_FRAME_WORD_DMA], vbuf[TX_ISP_FRAME_WORD_LENGTH],
+               vbuf[TX_ISP_FRAME_WORD_FLAGS],
+               *(uint32_t *)((char *)channel + 0x224));
     return 0;
 }
 
@@ -28085,7 +28103,8 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
 
-    if (a1 != TX_ISP_FRAME_IOCTL_T41_DQBUF && a1 != TX_ISP_FRAME_IOCTL_T41_GET_COUNT)
+    if (t41_runtime_trace && a1 != TX_ISP_FRAME_IOCTL_T41_DQBUF &&
+        a1 != TX_ISP_FRAME_IOCTL_T41_GET_COUNT)
         printk(KERN_WARNING
                "tx_isp_t41_recovered: framechan ioctl enter cmd=0x%x "
                "arg=0x%x file=%p pid=%d comm=%s\n",
@@ -28132,9 +28151,10 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             int ret = t41_frame_channel_qbuf_clean(
                 s0, (void __user *)(uintptr_t)a2);
 
-            printk(KERN_WARNING
-                   "tx_isp_t41_recovered: framechan ioctl qbuf exit channel=%p ret=%d\n",
-                   s0, ret);
+            if (t41_runtime_trace)
+                printk(KERN_WARNING
+                       "tx_isp_t41_recovered: framechan ioctl qbuf exit channel=%p ret=%d\n",
+                       s0, ret);
             return ret;
         }
 
@@ -37701,9 +37721,10 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 		return -ENOIOCTLCMD;
 	remote = target.pad;
 	handle = (tx_isp_remote_event_handler)(uintptr_t)target.handler;
-	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
-	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
-	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
+	if (t41_runtime_trace &&
+	    (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+	     event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+	     event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER))
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: remote event=%08x arg=%p remote=%p "
 		       "handle=%p data=%p\n",
@@ -37711,9 +37732,10 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data)
 	{
 		int32_t result = handle(remote, event, data);
 
-		if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
-		    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
-		    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
+		if (t41_runtime_trace &&
+		    (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+		     event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+		     event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER))
 			printk(KERN_WARNING
 			       "tx_isp_t41_recovered: remote event=%08x returned %d\n",
 			       event, result);
@@ -157382,9 +157404,10 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	owner = channels + pad_index * 232U;
 	*(void **)(pad + 0x20) = owner;
 	ops = *(event_fn **)((char *)owner + 0xd4);
-	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
-	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
-	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
+	if (t41_runtime_trace &&
+	    (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+	     event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+	     event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER))
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: core pad event=%08x pad=%p owner=%p "
 		       "ops=%p index=%u data=%p\n",
@@ -157393,9 +157416,10 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	if (!t41_kernel_data_ptr(owner) || !t41_kernel_data_ptr(ops))
 		return -EINVAL;
 	callback = ops[callback_index[index]];
-	if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
-	    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
-	    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
+	if (t41_runtime_trace &&
+	    (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+	     event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+	     event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER))
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: core pad event=%08x callback=%p\n",
 		       event, callback);
@@ -157405,9 +157429,10 @@ int32_t ispcore_pad_event_handle(uintptr_t pad, uint32_t event,
 	{
 		int32_t result = callback(pad, data);
 
-		if (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
-		    event == TX_ISP_FRAME_EVENT_STREAM_ON ||
-		    event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER)
+		if (t41_runtime_trace &&
+		    (event == TX_ISP_FRAME_EVENT_GET_FORMAT || event == TX_ISP_FRAME_EVENT_SET_FORMAT ||
+		     event == TX_ISP_FRAME_EVENT_STREAM_ON ||
+		     event == TX_ISP_FRAME_EVENT_QUEUE_BUFFER))
 			printk(KERN_WARNING
 			       "tx_isp_t41_recovered: core pad event=%08x "
 			       "callback returned %d\n",
@@ -157900,10 +157925,11 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
     }
 
     private_spin_unlock_irqrestore(channel + 0xa8, flags);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: core qbuf clean channel=%u dma=%#x/%#x aligned=%ux%u\n",
-           channel_index, buffer.y_dma, buffer.uv_dma,
-           buffer.layout.stride, buffer.layout.aligned_height);
+    if (t41_runtime_trace)
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: core qbuf clean channel=%u dma=%#x/%#x aligned=%ux%u\n",
+               channel_index, buffer.y_dma, buffer.uv_dma,
+               buffer.layout.stride, buffer.layout.aligned_height);
     return 0;
 }
 
@@ -165701,7 +165727,7 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
                        (uint32_t)callback, (long long)callback_ret);
         }
 
-        if (trace_count < 32 || (status0 & 0x1))
+        if (t41_runtime_trace && (trace_count < 32 || (status0 & 0x1)))
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: ISP safe irq epoch=%#x status=%#x error=%#x aux=%#x/%#x\n",
                    trace_epoch, status0, error, status2, status3);
