@@ -306,6 +306,8 @@ command_capture loaded_modules.txt cat /proc/modules
 command_capture initial_processes.txt ps w
 command_capture raptor_status.txt raptorctl status
 command_capture rvd_status.txt raptorctl rvd status
+command_capture rwd_status.txt raptorctl rwd status
+command_capture rsd_status.txt raptorctl rsd status
 command_capture rvd_fps_config.txt raptorctl rvd get-fps 0
 command_capture rvd_bitrate_config.txt raptorctl rvd get-bitrate 0
 command_capture rvd_rc_mode.txt raptorctl rvd get-rc-mode 0
@@ -549,6 +551,10 @@ cp /proc/interrupts "$OUTPUT/interrupts_after.txt" 2>/dev/null || cat /proc/inte
 cp /proc/meminfo "$OUTPUT/meminfo_after.txt" 2>/dev/null || cat /proc/meminfo > "$OUTPUT/meminfo_after.txt"
 command_capture final_processes.txt ps w
 command_capture raptor_status_after.txt raptorctl status
+command_capture rwd_status_after.txt raptorctl rwd status
+command_capture rsd_status_after.txt raptorctl rsd status
+command_capture rwd_clients_after.txt raptorctl rwd clients
+command_capture rsd_clients_after.txt raptorctl rsd clients
 
 {
 	printf 'name\tsize_bytes\n'

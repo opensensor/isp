@@ -117,3 +117,41 @@ This checkpoint is not compared directly with the original 12.5 fps CPU
 figures above: it performs twice the delivered work and includes substantial
 correctness changes. The original bundle remains the honest pre-optimization
 baseline; the newer run is the full-rate production checkpoint.
+
+## Allocation-free IRQ wait and production trace gate
+
+The next measured build combines two lifecycle/performance changes without
+altering image tuning or the H.264 command path:
+
+- OpenIMP reuses one aligned thread-local result buffer for synchronous AVPU
+  `WAIT_IRQ`, eliminating one heap allocation/free pair per encoded frame.
+- T41's recovered QBUF, remote-event, pad-event, ISP-IRQ, and tuning-poll
+  diagnostics are behind the writable `t41_runtime_trace` parameter, which is
+  off by default. Before the gate, the module emitted multiple warning-level
+  records per frame; the final boot emitted zero records from these hot paths.
+
+The committed artifacts are open-tx-isp `bcf6d1df` and OpenIMP `b313479`:
+
+| Component | File bytes | Loaded bytes | SHA-256 |
+|---|---:|---:|---|
+| open `tx_isp_t41` module | 757,580 | 668,136 | `998427b79384826e50435a2fdd3d8f479d4431b5a4748206aeb9df6c8ecc53c3` |
+| mapped OpenIMP `libimp.so` | 317,004 | n/a | `b5eb3526d555051b6bb40b08913a2b74002c337369437e0d4fbe39374f7fb91f` |
+
+The 60-second QHD run delivered 24.996 fps with 0.041 fps window standard
+deviation, +112 KiB `MemAvailable` drift, and zero ISP-overflow, kernel-fatal,
+or userspace-fault deltas. Named pipeline CPU was 7.474% of total two-core
+capacity; RVD was 0.809%.
+
+The immediately preceding full-rate run measured 7.866% named pipeline CPU
+and 1.047% RVD CPU, so the directional changes are -5.0% and -22.7%,
+respectively. The whole-system figures are not compared: the earlier client
+snapshot showed one established WebRTC peer, while the final bundle's detailed
+client list was empty even though RWD retained the same live-worker CPU/RSS
+signature and reported a client immediately after the run. Benchmark version
+2 now records daemon-level RWD/RSD status and before/after client lists so
+future comparisons cannot hide that ambiguity behind a single snapshot.
+
+The loaded open module is 1,409 bytes (0.21%) larger than OEM and its ELF file
+is 77,896 bytes (9.3%) smaller. The 426-byte loaded increase from the preceding
+open checkpoint is the explicit runtime trace gate and parameter metadata; it
+keeps recovery diagnostics available without paying per-frame logging cost.

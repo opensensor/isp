@@ -62,6 +62,11 @@ Raptor status:
 5. exact ISP module and `libimp` identities, with `-m` supplied explicitly
 6. multiple runs in alternating order when the expected difference is small
 
+The bundle records RWD/RSD daemon status and client lists both before and
+after sampling. Use both: an empty detailed client list is not sufficient to
+label a run idle if the daemon-level status still reports an active client,
+and a client that connects mid-run invalidates a nominal no-client label.
+
 Do not compare a live-preview run with a no-client run. Client demand can
 change encoder, WebRTC/RTSP, copy, and network costs. Name that workload in the
 run label and preserve the status captures.
@@ -90,6 +95,8 @@ The primary files are:
 | `error_deltas.tsv` | new overflow/fatal/fault events during measurement |
 | `metadata.tsv` | workload identity and benchmark parameters |
 | `sensor_state.tsv` | active sensor identity, geometry, and configured FPS |
+| `rwd_status*.txt`, `rwd_clients*.txt` | WebRTC daemon/client workload before and after |
+| `rsd_status*.txt`, `rsd_clients*.txt` | RTSP daemon/client workload before and after |
 
 `cpu_capacity_pct` is a share of the whole machine. On a two-core SoC, 50%
 means one fully occupied core. `cpu_one_core_pct` uses conventional process
