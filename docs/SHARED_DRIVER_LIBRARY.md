@@ -21,6 +21,7 @@ addresses, object layouts, tuning data, callbacks, and ordering differences.
 | Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T31, T41 |
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
+| Capture queue ownership and metadata | `tx_isp_video_queue.h` | `common/tx_isp_video_queue.c` | private/V4L2 adapters (integration pending) |
 | Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T40, T41 |
 | Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T40, T41 |
 | Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T40, T41 |
@@ -310,6 +311,23 @@ generation-qualified rather than normalized away.
 
 `tests/tx_isp_frame_format_test.c` asserts both complete sizes, all structural
 boundaries, enable-byte padding, named word offsets, and the T41 extension.
+
+### Capture queue core
+
+`tx_isp_video_queue.h` defines an allocation-free queue state machine for the
+existing private capture endpoints and the additive public V4L2 adapters. The
+caller supplies fixed slot storage and serialization; the common unit owns
+QBUF ownership, hardware take, completion-order DQBUF, per-STREAMON sequence
+numbers, timestamp conversion, error flags and counters, and deterministic
+STREAMOFF cancellation.
+
+The unit deliberately does not depend on vb2 or a kernel-version-specific
+`struct v4l2_buffer`. It produces the already validated fixed wire object, so
+3.10/4.4/mainline glue can share queue semantics without sharing allocation,
+DMA, locking, or wakeup policy prematurely. Host tests cover invalid state
+transitions, duplicate QBUF, empty queues, out-of-order hardware completion,
+metadata/error propagation, and stream restart ownership. Live drivers do not
+link the object until their adapters are ready, avoiding dead module weight.
 
 ### Sensor registry
 

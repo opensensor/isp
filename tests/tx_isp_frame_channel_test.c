@@ -28,6 +28,7 @@ static void test_slot_states(void)
 	assert(TX_ISP_FRAME_SLOT_QUEUED == 1);
 	assert(TX_ISP_FRAME_SLOT_ACTIVE == 3);
 	assert(TX_ISP_FRAME_SLOT_DONE == 4);
+	assert(TX_ISP_FRAME_SLOT_ERROR == 5);
 }
 
 static void assert_ioctl(uint32_t command, uint32_t type, uint32_t number,

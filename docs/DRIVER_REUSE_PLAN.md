@@ -137,6 +137,14 @@ publishing Y/UV addresses. All three adapters use this plan before their local
 QBUF hardware handoff. Their queue objects, locks, late-link replay, rotation,
 and completion semantics remain intentionally separate.
 
+The next boundary is now represented by the allocation-free
+`tx_isp_video_queue` core. It owns generic buffer ownership, completion order,
+sequence/timestamp/error metadata, counters, and STREAMOFF recovery while
+leaving locks, DMA allocation, hardware handoff, and wakeups to typed private
+or V4L2 adapters. It remains unlinked from live modules until the first
+adapter is ready; `tests/tx_isp_video_queue_test.c` exercises the complete
+state machine without adding dead production footprint.
+
 ### Frame-buffer wire ABI and state flags
 
 `driver/include/tx_isp/tx_isp_frame_abi.h` defines the shared 17-word
@@ -487,7 +495,6 @@ need to shape the eventual common interface.
    unsafe full-read path is repaired.
 6. Move event/state-machine shells only after IRQ decode and acknowledge
    ordering remain explicit per-SoC behavior.
-7. Model the next layer of buffer ownership and queue-lifecycle state behind
-   typed adapters,
-   starting with read-only comparisons of the T23/T31/T40/T41 consumer
-   contracts.
+7. Connect one generation-local MMAP capture adapter to the landed common
+   queue core, beginning with T41 format/capability enumeration and keeping
+   private Raptor ownership mutually exclusive with `/dev/video*`.

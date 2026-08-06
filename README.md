@@ -46,6 +46,9 @@ The project has moved well beyond initial bring-up.
 - T23, T31, and T41 share checked NV12 DMA binding, including allocation
   length, complete 32-bit address-range, and Y/UV plane validation before QBUF
   reaches hardware
+- the private frame-channel and future public V4L2 adapters now share an
+  allocation-free queue core for buffer ownership, completion ordering,
+  sequence/timestamp metadata, errors, and deterministic STREAMOFF recovery
 - T23, T31, and T41 share the proven frame-channel event namespace and exact
   legacy-`V`/T41-`T` private ioctl envelopes without conflating the
   generation-specific events above buffer completion; the common contract
@@ -76,6 +79,7 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 - [`docs/IMAGE_TUNING_PRD.md`](docs/IMAGE_TUNING_PRD.md) — plan for finishing image tuning and remaining work
 - [`docs/ISP_PERFORMANCE_BENCHMARK.md`](docs/ISP_PERFORMANCE_BENCHMARK.md) — reproducible on-device CPU, memory, throughput, IRQ, and module-size baseline
 - [`docs/T41_OPEN_PERFORMANCE_BASELINE_20260806.md`](docs/T41_OPEN_PERFORMANCE_BASELINE_20260806.md) — first 2.5K open-stack T41 baseline and configured-versus-delivered FPS finding
+- [`docs/V4L2_CAPTURE_PATH.md`](docs/V4L2_CAPTURE_PATH.md) — additive V4L2 capture architecture, landed queue core, and adapter phases
 - [`driver/t31/REGMAP_ADR_YDNS.md`](driver/t31/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
 - [`driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
 - [`external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md`](external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md) — current map of recovered vs synthetic tuning data

@@ -19,6 +19,7 @@ enum tx_isp_frame_slot_state {
 	TX_ISP_FRAME_SLOT_QUEUED = 1,
 	TX_ISP_FRAME_SLOT_ACTIVE = 3,
 	TX_ISP_FRAME_SLOT_DONE = 4,
+	TX_ISP_FRAME_SLOT_ERROR = 5,
 };
 
 /*
