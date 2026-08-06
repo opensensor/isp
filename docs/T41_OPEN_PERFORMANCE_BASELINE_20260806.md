@@ -92,3 +92,28 @@ The complete version-2 evidence bundle is kept in the local artifact archive
 at `artifacts/device-baselines/isp-benchmark-v2-open-t41-os04d10-20260806/`.
 It includes raw interval samples, process/IRQ summaries, module parameters,
 file hashes, stream/client status, and before/after kernel and service logs.
+
+## Post-baseline optimized checkpoint
+
+Later correctness work restored the configured QHD cadence before any
+optimization was accepted. After removing OpenIMP's discarded source sampler
+and redundant T41 access-unit rescan, the August 6 compact-module checkpoint
+measured 24.992 delivered fps and 3.176% named pipeline-process CPU. The
+30-second run changed MemAvailable by -44 KiB and recorded zero ISP overflow,
+kernel-fatal, or userspace-fault events. A subsequent ten-second RTSP probe
+decoded High-profile 2560x1440 at 25/1 without warnings.
+
+The recovered module also contained ten zero-filled absolute-address anchors
+which had each been emitted as generic 16 KiB placeholders. Exhaustive source
+references and the retained OEM address spacing bound their reachable sizes
+to 18 through 514 bytes. Correcting those declarations reduced `.bss` from
+270,288 to 107,808 bytes and the live `/proc/modules` footprint from 829,941
+to 667,525 bytes. The OEM module occupies 666,727 bytes, leaving the open
+module only 798 bytes larger when loaded. Its 756,384-byte ELF file remains
+smaller than OEM's 835,476-byte file because NOBITS BSS does not contribute
+payload bytes.
+
+This checkpoint is not compared directly with the original 12.5 fps CPU
+figures above: it performs twice the delivered work and includes substantial
+correctness changes. The original bundle remains the honest pre-optimization
+baseline; the newer run is the full-rate production checkpoint.

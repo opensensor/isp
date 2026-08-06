@@ -41,13 +41,17 @@ check_equal()
 	fi
 }
 
-check_equal ".data size" "$(section_size .data)" "004520"
-check_equal ".bss size" "$(section_size .bss)" "03dfd0"
+check_equal ".data size" "$(section_size .data)" "004560"
+check_equal ".bss size" "$(section_size .bss)" "01a520"
+check_equal "g_abs_77740 address/size" \
+	"$(symbol_pair g_abs_77740)" "0000048c 00000108"
+check_equal "g_abs_77bf0 address/size" \
+	"$(symbol_pair g_abs_77bf0)" "0000003c 00000202"
 check_equal "tx_isp_sinfo_stats address/size" \
-	"$(symbol_pair tx_isp_sinfo_stats)" "000044f0 00000028"
+	"$(symbol_pair tx_isp_sinfo_stats)" "00004530 00000028"
 check_equal "__pow2_lut address/size" \
-	"$(symbol_pair __pow2_lut)" "0003d914 00000400"
+	"$(symbol_pair __pow2_lut)" "00019e6c 00000400"
 check_equal "tx_isp_sinfo_bss_layout address/size" \
-	"$(symbol_pair tx_isp_sinfo_bss_layout)" "0003dd40 00000284"
+	"$(symbol_pair tx_isp_sinfo_bss_layout)" "0001a290 00000284"
 
 echo "T41 BSS contract: ok ($module)"

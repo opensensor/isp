@@ -11,6 +11,36 @@
 
 #include "../include/tx_isp/tx_isp_sinfo.h"
 
+/*
+ * The shared registry is included by recovered T23/T40/T41 adapters as well
+ * as the native T31 driver.  T31 force-includes its broader mainline kernel
+ * compatibility header, but the recovered adapters must still get the
+ * procfs operation spelling appropriate to the kernel they target.
+ */
+#ifndef TX_ISP_PROC_OPS
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+#define TX_ISP_PROC_OPS struct proc_ops
+#define TX_ISP_PROC_OWNER
+#define TX_ISP_PROC_OPEN .proc_open
+#define TX_ISP_PROC_READ .proc_read
+#define TX_ISP_PROC_WRITE .proc_write
+#define TX_ISP_PROC_LSEEK .proc_lseek
+#define TX_ISP_PROC_RELEASE .proc_release
+#else
+#define TX_ISP_PROC_OPS struct file_operations
+#define TX_ISP_PROC_OWNER .owner = THIS_MODULE,
+#define TX_ISP_PROC_OPEN .open
+#define TX_ISP_PROC_READ .read
+#define TX_ISP_PROC_WRITE .write
+#define TX_ISP_PROC_LSEEK .llseek
+#define TX_ISP_PROC_RELEASE .release
+#endif
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0) && !defined(PDE_DATA)
+#define PDE_DATA(inode) pde_data(inode)
+#endif
+
 #define TX_ISP_SINFO_MAX_SENSORS 4
 
 enum tx_isp_sinfo_key {

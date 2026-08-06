@@ -3421,22 +3421,30 @@ static unsigned char __attribute__((aligned(4))) jump_table_76f90[812] = {
     0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x00, 0x00, 
 };
 static int32_t wdr_count;
-static unsigned char g_abs_77740[16384];
-static unsigned char g_abs_77848[16384];
-static unsigned char g_abs_778a8[16384];
-static unsigned char g_abs_77908[16384];
-static unsigned char g_abs_77968[16384];
-static unsigned char g_abs_779c8[16384];
-static unsigned char g_abs_77a28[16384];
+/*
+ * These zero-filled anchors were originally emitted as generic 16 KiB
+ * recovery placeholders.  Their names retain the OEM image addresses, so
+ * adjacent address deltas and the bounded copies below provide their actual
+ * extents.  Keeping every anchor at 16 KiB reserved 160 KiB of module BSS for
+ * roughly 1.3 KiB of reachable data and made the open module's loaded
+ * footprint substantially larger than OEM.
+ */
+static unsigned char g_abs_77740[0x108];
+static unsigned char g_abs_77848[0x60];
+static unsigned char g_abs_778a8[0x60];
+static unsigned char g_abs_77908[0x60];
+static unsigned char g_abs_77968[0x60];
+static unsigned char g_abs_779c8[0x60];
+static unsigned char g_abs_77a28[0x42];
 static unsigned char __attribute__((aligned(4))) gain_thres[16] = {
     0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 };
 static unsigned char __attribute__((aligned(4))) ysp_ratio[16] = {
     0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 };
-static unsigned char g_abs_77b80[16384];
-static unsigned char g_abs_77b94[16384];
-static unsigned char g_abs_77bf0[16384];
+static unsigned char g_abs_77b80[0x12];
+static unsigned char g_abs_77b94[0x12];
+static unsigned char g_abs_77bf0[0x202];
 static unsigned char __attribute__((aligned(4))) s_irsca_width[2] = {
     0x80, 0x07, 
 };
