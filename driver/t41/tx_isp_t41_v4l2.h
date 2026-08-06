@@ -2,6 +2,7 @@
 #define TX_ISP_T41_V4L2_H
 
 struct device;
+struct file;
 
 int tx_isp_t41_v4l2_init(struct device *parent);
 void tx_isp_t41_v4l2_exit(void);
@@ -15,5 +16,14 @@ int t41_frame_channel_reqbufs_clean(void *channel, void __user *user_req);
 int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf);
 int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf);
 int t41_frame_channel_streamon_clean(void *channel, void __user *user_type);
+
+/* Narrow bridge from the public V4L2 adapter to the recovered aggregate
+ * lifecycle.  The adapter owns policy, sensor metadata, and DMA allocation;
+ * the recovered unit only supplies access to its private aggregate object. */
+int tx_isp_t41_legacy_sensor_present(void);
+int tx_isp_t41_legacy_open(struct file *file);
+long tx_isp_t41_legacy_ioctl(struct file *file, unsigned int command,
+			     void *argument);
+int tx_isp_t41_legacy_release(struct file *file);
 
 #endif /* TX_ISP_T41_V4L2_H */

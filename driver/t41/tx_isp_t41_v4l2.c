@@ -2,7 +2,9 @@
 /* Linux-4.4 V4L2 MMAP adapter for one recovered T41 scaler channel. */
 
 #include <linux/kernel.h>
+#include <linux/dma-mapping.h>
 #include <linux/kthread.h>
+#include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/timekeeping.h>
@@ -30,6 +32,94 @@
 #define TX_ISP_T41_V4L2_MIN_BUFFERS	2U
 #define TX_ISP_T41_V4L2_MAX_BUFFERS	8U
 
+#define TISP_VIDIOC_REGISTER_SENSOR	0x80645405U
+#define TISP_VIDIOC_UNREGISTER_SENSOR	0x80645406U
+#define TISP_VIDIOC_S_INPUT		0xc0085404U
+#define TISP_VIDIOC_G_INPUT		0x80085403U
+#define TISP_VIDIOC_PREPARE_SENSOR	0x80085407U
+#define TISP_VIDIOC_FINISH_SENSOR	0x80085408U
+#define TISP_VIDIOC_START_SENSOR		0x80085409U
+#define TISP_VIDIOC_STOP_SENSOR		0x8008540aU
+#define TISP_VIDIOC_ENABLE_SENSOR	0xc008540bU
+#define TISP_VIDIOC_DISABLE_SENSOR	0xc008540cU
+#define TISP_VIDIOC_SET_MDNS_BUF_INFO	0x800c540fU
+#define TISP_VIDIOC_GET_MDNS_BUF_INFO	0x800c5410U
+
+struct tx_isp_t41_i2c_info {
+	char type[20];
+	s32 address;
+	s32 adapter;
+};
+
+struct tx_isp_t41_spi_info {
+	char modalias[32];
+	s32 bus;
+};
+
+/* Exact T41 userspace sensor-registration wire image (100 bytes). */
+struct tx_isp_t41_sensor_info {
+	char name[32];
+	s32 control_bus;
+	union {
+		struct tx_isp_t41_i2c_info i2c;
+		struct tx_isp_t41_spi_info spi;
+	};
+	s32 reset_gpio;
+	s32 power_down_gpio;
+	s32 power_gpio;
+	u16 sensor_id;
+	s32 video_interface;
+	s32 mclk;
+	s32 default_boot;
+};
+
+struct tx_isp_t41_initarg {
+	s32 enable;
+	s32 vinum;
+};
+
+struct tx_isp_t41_buf_info {
+	u32 vinum;
+	u32 paddr;
+	u32 size;
+};
+
+static bool v4l2_autostart = true;
+module_param(v4l2_autostart, bool, 0644);
+MODULE_PARM_DESC(v4l2_autostart,
+	"start the configured sensor when V4L2 is the first ISP consumer");
+static char *v4l2_sensor_name = "os04d10";
+module_param(v4l2_sensor_name, charp, 0644);
+MODULE_PARM_DESC(v4l2_sensor_name, "sensor driver name used by V4L2 autostart");
+static unsigned int v4l2_sensor_i2c_addr = 0x3c;
+module_param(v4l2_sensor_i2c_addr, uint, 0644);
+MODULE_PARM_DESC(v4l2_sensor_i2c_addr, "7-bit sensor I2C address");
+static int v4l2_sensor_i2c_adapter;
+module_param(v4l2_sensor_i2c_adapter, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_i2c_adapter, "sensor I2C adapter number");
+static int v4l2_sensor_reset_gpio = -1;
+module_param(v4l2_sensor_reset_gpio, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_reset_gpio, "sensor reset GPIO (-1 disables)");
+static int v4l2_sensor_power_down_gpio = -1;
+module_param(v4l2_sensor_power_down_gpio, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_power_down_gpio,
+	"sensor power-down GPIO (-1 disables)");
+static int v4l2_sensor_power_gpio = -1;
+module_param(v4l2_sensor_power_gpio, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_power_gpio, "sensor power GPIO (-1 disables)");
+static unsigned int v4l2_sensor_id;
+module_param(v4l2_sensor_id, uint, 0644);
+MODULE_PARM_DESC(v4l2_sensor_id, "optional sensor instance identifier");
+static int v4l2_sensor_video_interface;
+module_param(v4l2_sensor_video_interface, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_video_interface, "sensor video input interface");
+static int v4l2_sensor_mclk = 1;
+module_param(v4l2_sensor_mclk, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_mclk, "sensor master-clock selector");
+static int v4l2_sensor_default_boot;
+module_param(v4l2_sensor_default_boot, int, 0644);
+MODULE_PARM_DESC(v4l2_sensor_default_boot, "sensor default boot mode");
+
 extern int frame_channel_vidioc_set_fmt(void *channel,
 					struct v4l2_format *format);
 
@@ -46,14 +136,190 @@ struct tx_isp_t41_v4l2 {
 	struct v4l2_pix_format format;
 	struct task_struct *completion_task;
 	void *alloc_ctx;
+	struct device *parent;
 	void *channel;
 	void *owned_channel;
+	struct file legacy_file;
+	struct tx_isp_t41_sensor_info sensor;
+	void *mdns_cpu;
+	dma_addr_t mdns_dma;
+	u32 mdns_size;
 	u32 private_count;
+	bool lifecycle_acquired;
+	bool lifecycle_owned;
 	bool stopping;
 	bool registered;
 };
 
 static struct tx_isp_t41_v4l2 tx_isp_t41_video;
+
+static int tx_isp_t41_v4l2_legacy_ioctl(struct tx_isp_t41_v4l2 *video,
+					unsigned int command, void *argument)
+{
+	mm_segment_t old_fs = get_fs();
+	int ret;
+
+	set_fs(KERNEL_DS);
+	ret = tx_isp_t41_legacy_ioctl(&video->legacy_file, command, argument);
+	set_fs(old_fs);
+	return ret;
+}
+
+static void tx_isp_t41_v4l2_fill_sensor(
+	struct tx_isp_t41_sensor_info *sensor)
+{
+	memset(sensor, 0, sizeof(*sensor));
+	strlcpy(sensor->name, v4l2_sensor_name, sizeof(sensor->name));
+	sensor->control_bus = 1;
+	strlcpy(sensor->i2c.type, v4l2_sensor_name,
+		sizeof(sensor->i2c.type));
+	sensor->i2c.address = v4l2_sensor_i2c_addr;
+	sensor->i2c.adapter = v4l2_sensor_i2c_adapter;
+	sensor->reset_gpio = v4l2_sensor_reset_gpio;
+	sensor->power_down_gpio = v4l2_sensor_power_down_gpio;
+	sensor->power_gpio = v4l2_sensor_power_gpio;
+	sensor->sensor_id = v4l2_sensor_id;
+	sensor->video_interface = v4l2_sensor_video_interface;
+	sensor->mclk = v4l2_sensor_mclk;
+	sensor->default_boot = v4l2_sensor_default_boot;
+}
+
+static void tx_isp_t41_v4l2_pipeline_put(struct tx_isp_t41_v4l2 *video)
+{
+	struct tx_isp_t41_initarg input = { 0, 0 };
+
+	if (!video->lifecycle_acquired)
+		return;
+	if (video->lifecycle_owned) {
+		tx_isp_t41_v4l2_legacy_ioctl(video,
+			TISP_VIDIOC_DISABLE_SENSOR, &input);
+		tx_isp_t41_v4l2_legacy_ioctl(video,
+			TISP_VIDIOC_STOP_SENSOR, &input);
+		tx_isp_t41_v4l2_legacy_ioctl(video,
+			TISP_VIDIOC_FINISH_SENSOR, &input);
+		tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_S_INPUT,
+			&input);
+		tx_isp_t41_v4l2_legacy_ioctl(video,
+			TISP_VIDIOC_UNREGISTER_SENSOR, &video->sensor);
+		if (video->mdns_cpu)
+			dma_free_coherent(video->parent, video->mdns_size,
+				video->mdns_cpu, video->mdns_dma);
+		video->mdns_cpu = NULL;
+		video->mdns_dma = 0;
+		video->mdns_size = 0;
+		tx_isp_t41_legacy_release(&video->legacy_file);
+		pr_info("tx_isp_t41: V4L2 released standalone ISP lifecycle\n");
+	}
+	video->lifecycle_owned = false;
+	video->lifecycle_acquired = false;
+}
+
+static int tx_isp_t41_v4l2_pipeline_get(struct tx_isp_t41_v4l2 *video)
+{
+	struct tx_isp_t41_initarg input = { 1, 0 };
+	struct tx_isp_t41_buf_info mdns = { 0, 0, 0 };
+	int ret;
+
+	if (video->lifecycle_acquired)
+		return 0;
+	if (tx_isp_t41_legacy_sensor_present()) {
+		video->lifecycle_acquired = true;
+		video->lifecycle_owned = false;
+		return 0;
+	}
+	if (!v4l2_autostart || !v4l2_sensor_name || !*v4l2_sensor_name)
+		return -ENODEV;
+	if (strlen(v4l2_sensor_name) >= sizeof(video->sensor.i2c.type) ||
+	    !v4l2_sensor_i2c_addr || v4l2_sensor_i2c_addr > 0x7fU ||
+	    v4l2_sensor_i2c_adapter < 0 || v4l2_sensor_id > U16_MAX ||
+	    v4l2_sensor_video_interface < 0 ||
+	    v4l2_sensor_video_interface > 2 || v4l2_sensor_mclk < 0 ||
+	    v4l2_sensor_mclk > 2)
+		return -EINVAL;
+
+	memset(&video->legacy_file, 0, sizeof(video->legacy_file));
+	ret = tx_isp_t41_legacy_open(&video->legacy_file);
+	if (ret)
+		return ret;
+	tx_isp_t41_v4l2_fill_sensor(&video->sensor);
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video,
+		TISP_VIDIOC_REGISTER_SENSOR, &video->sensor);
+	if (ret)
+		goto fail_open;
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_S_INPUT,
+		&input);
+	if (ret)
+		goto fail_sensor;
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video,
+		TISP_VIDIOC_GET_MDNS_BUF_INFO, &mdns);
+	if (ret)
+		goto fail_input;
+	if (mdns.size) {
+		video->mdns_cpu = dma_alloc_coherent(video->parent, mdns.size,
+			&video->mdns_dma, GFP_KERNEL);
+		if (!video->mdns_cpu) {
+			ret = -ENOMEM;
+			goto fail_input;
+		}
+		video->mdns_size = mdns.size;
+		if ((u64)video->mdns_dma > U32_MAX) {
+			ret = -ERANGE;
+			goto fail_dma;
+		}
+		memset(video->mdns_cpu, 0, mdns.size);
+		mdns.paddr = (u32)video->mdns_dma;
+		ret = tx_isp_t41_v4l2_legacy_ioctl(video,
+			TISP_VIDIOC_SET_MDNS_BUF_INFO, &mdns);
+		if (ret)
+			goto fail_dma;
+	}
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_G_INPUT,
+		&input);
+	if (ret)
+		goto fail_dma;
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video,
+		TISP_VIDIOC_PREPARE_SENSOR, &input);
+	if (ret)
+		goto fail_dma;
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video,
+		TISP_VIDIOC_START_SENSOR, &input);
+	if (ret)
+		goto fail_finish;
+	ret = tx_isp_t41_v4l2_legacy_ioctl(video,
+		TISP_VIDIOC_ENABLE_SENSOR, &input);
+	if (ret)
+		goto fail_stop;
+	video->lifecycle_owned = true;
+	video->lifecycle_acquired = true;
+	pr_info("tx_isp_t41: V4L2 started standalone sensor %s at i2c-%d/%#x\n",
+		video->sensor.name, video->sensor.i2c.adapter,
+		video->sensor.i2c.address);
+	return 0;
+
+fail_stop:
+	tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_STOP_SENSOR,
+		&input);
+fail_finish:
+	input.enable = 0;
+	tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_FINISH_SENSOR,
+		&input);
+fail_dma:
+	if (video->mdns_cpu)
+		dma_free_coherent(video->parent, video->mdns_size,
+			video->mdns_cpu, video->mdns_dma);
+	video->mdns_cpu = NULL;
+	video->mdns_dma = 0;
+	video->mdns_size = 0;
+fail_input:
+	input.enable = 0;
+	tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_S_INPUT, &input);
+fail_sensor:
+	tx_isp_t41_v4l2_legacy_ioctl(video, TISP_VIDIOC_UNREGISTER_SENSOR,
+		&video->sensor);
+fail_open:
+	tx_isp_t41_legacy_release(&video->legacy_file);
+	return ret;
+}
 
 /* The private ABI is a userspace ABI. Linux 4.4 still permits a narrow,
  * synchronous KERNEL_DS bridge; newer-kernel glue will call the same queue
@@ -133,14 +399,26 @@ static int tx_isp_t41_v4l2_acquire_channel(struct tx_isp_t41_v4l2 *video,
 		mutex_unlock(&video->channel_lock);
 		return ret;
 	}
+	mutex_unlock(&video->channel_lock);
+
+	/* A cold module has no frame-channel devices yet.  Sensor selection and
+	 * graph activation create them, so lifecycle acquisition must precede the
+	 * channel lookup rather than depend on a legacy process doing it first. */
+	ret = tx_isp_t41_v4l2_pipeline_get(video);
+	if (ret)
+		return ret;
+
+	mutex_lock(&video->channel_lock);
 	channel = video->channel;
 	if (!channel) {
 		mutex_unlock(&video->channel_lock);
+		tx_isp_t41_v4l2_pipeline_put(video);
 		return -ENODEV;
 	}
 	ret = tx_isp_t41_frame_channel_claim(channel);
 	if (ret) {
 		mutex_unlock(&video->channel_lock);
+		tx_isp_t41_v4l2_pipeline_put(video);
 		return ret;
 	}
 	video->owned_channel = channel;
@@ -176,6 +454,7 @@ static int tx_isp_t41_v4l2_acquire_channel(struct tx_isp_t41_v4l2 *video,
 
 fail:
 	tx_isp_t41_frame_channel_release(channel);
+	tx_isp_t41_v4l2_pipeline_put(video);
 	mutex_lock(&video->channel_lock);
 	video->owned_channel = NULL;
 	video->private_count = 0;
@@ -194,6 +473,7 @@ static void tx_isp_t41_v4l2_release_channel(struct tx_isp_t41_v4l2 *video)
 	mutex_unlock(&video->channel_lock);
 	if (channel)
 		tx_isp_t41_frame_channel_release(channel);
+	tx_isp_t41_v4l2_pipeline_put(video);
 }
 
 static int tx_isp_t41_v4l2_queue_setup(
@@ -224,8 +504,10 @@ static int tx_isp_t41_v4l2_queue_setup(
 	ret = tx_isp_video_queue_configure(&video->capture_queue, count,
 		V4L2_BUF_TYPE_VIDEO_CAPTURE, V4L2_MEMORY_MMAP,
 		video->format.sizeimage);
-	if (ret)
+	if (ret) {
+		tx_isp_t41_v4l2_release_channel(video);
 		return ret;
+	}
 	*num_buffers = count;
 	*num_planes = 1;
 	sizes[0] = video->format.sizeimage;
@@ -603,6 +885,7 @@ static const struct v4l2_ioctl_ops tx_isp_t41_v4l2_ioctl_ops = {
 	.vidioc_g_input = tx_isp_t41_v4l2_get_input,
 	.vidioc_reqbufs = tx_isp_t41_v4l2_request_buffers,
 	.vidioc_querybuf = vb2_ioctl_querybuf,
+	.vidioc_expbuf = vb2_ioctl_expbuf,
 	.vidioc_qbuf = vb2_ioctl_qbuf,
 	.vidioc_dqbuf = vb2_ioctl_dqbuf,
 	.vidioc_streamon = vb2_ioctl_streamon,
@@ -636,6 +919,8 @@ int tx_isp_t41_v4l2_init(struct device *parent)
 	if (!parent)
 		return -EINVAL;
 	memset(video, 0, sizeof(*video));
+	BUILD_BUG_ON(sizeof(struct tx_isp_t41_sensor_info) != 100);
+	video->parent = parent;
 	mutex_init(&video->ioctl_lock);
 	mutex_init(&video->channel_lock);
 	spin_lock_init(&video->queue_lock);

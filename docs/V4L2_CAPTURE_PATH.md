@@ -41,9 +41,18 @@ wakeups.
    repeated open/close, and stream restart are wired through vb2. Channel
    claim/release is strict: a second owner receives `EBUSY`, while STREAMOFF
    wakes the completion thread and deterministically returns all buffers.
-4. Add DMABUF import only after MMAP correctness and cache ownership are
-   proven on T31 and T41. USERPTR is not part of the first public contract.
-5. Add a mainline media-controller adapter without changing the queue and
+4. T41 exports each contiguous MMAP capture buffer with `VIDIOC_EXPBUF`.
+   `tests/t41_v4l2_dmabuf_test.c` maps the returned DMA-BUF fds, observes ten
+   changing full-resolution frames through those mappings, and leaves buffer
+   ownership with the V4L2 capture queue. DMA-BUF import belongs to the
+   separate encoder queue; USERPTR is not part of the public contract.
+5. When no legacy IMP process has selected a sensor, the first T41
+   `REQBUFS` performs the complete sensor registration, graph activation,
+   MDNS coherent allocation, and sensor prepare/start/enable sequence. The
+   last V4L2 owner performs the inverse sequence and releases the sensor.
+   When Raptor already owns the graph, the adapter detects and borrows that
+   lifecycle without tearing it down on close.
+6. Add a mainline media-controller adapter without changing the queue and
    layout cores. Version-specific vb2 glue stays in a small compatibility
    layer.
 
@@ -52,6 +61,11 @@ frame-interval enumeration. `tests/t41_v4l2_mmap_test.c` allocates two full
 resolution buffers, captures ten frames, checks sequence/timestamp/payload
 metadata, and optionally writes the final NV12 frame for visual validation.
 Both tests run while Raptor continues to use scaler channel 0.
+
+The standalone lifecycle was additionally validated with Raptor fully
+stopped: three consecutive open/capture/close cycles each delivered ten
+2560x1440 frames at 40 ms intervals, then Raptor restarted and reclaimed the
+sensor normally. This removes Raptor as a prerequisite for `/dev/video0`.
 
 The T41 adapter's call into the recovered private ioctl handlers uses the
 narrow `KERNEL_DS` bridge available in Linux 4.4. This compatibility glue is

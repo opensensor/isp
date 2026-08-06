@@ -33668,6 +33668,52 @@ int32_t tx_isp_release(uint32_t a0, uintptr_t a1)
 	return 0;
 }
 
+/*
+ * The public V4L2 adapter must be able to own the ISP lifecycle when no
+ * legacy IMP process is present.  Keep the policy and all new state in the
+ * adapter translation unit: these four helpers only expose the recovered
+ * aggregate's already-proven open/ioctl/release entry points.  This avoids
+ * adding state to the recovered monolith's layout-sensitive BSS.
+ */
+int tx_isp_t41_legacy_sensor_present(void)
+{
+	char *vin = (char *)(uintptr_t)private_platform_get_drvdata(
+		(uintptr_t)&tx_isp_vin_platform_device);
+
+	return t41_kernel_data_ptr(vin) &&
+		t41_kernel_data_ptr(*(void **)(vin + 0x11c));
+}
+
+int tx_isp_t41_legacy_open(struct file *file)
+{
+	char *ispdev = (char *)(uintptr_t)globe_ispdev;
+
+	if (!file || !t41_kernel_data_ptr(ispdev))
+		return -ENODEV;
+	file->private_data = ispdev + 0x0c;
+	return tx_isp_open(0, file);
+}
+
+long tx_isp_t41_legacy_ioctl(struct file *file, unsigned int command,
+			     void *argument)
+{
+	if (!file || !file->private_data || !argument)
+		return -EINVAL;
+	return tx_isp_unlocked_ioctl((uintptr_t)file, command,
+		(uint32_t)(uintptr_t)argument);
+}
+
+int tx_isp_t41_legacy_release(struct file *file)
+{
+	int ret;
+
+	if (!file || !file->private_data)
+		return 0;
+	ret = tx_isp_release(0, (uintptr_t)file);
+	file->private_data = NULL;
+	return ret;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013d28 origin=fragment_seed original=tx_isp_init */
 int32_t tx_isp_init(void)
 {
