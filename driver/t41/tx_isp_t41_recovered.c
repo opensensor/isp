@@ -1246,11 +1246,11 @@ module_param(t41_stock_tmo_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_tmo_profile,
 		 "Replay a matched stock T41 TMO runtime curve (negative=enabled, diagnostic)");
 static void t41_apply_stock_tmo_profile(void);
-/* The TMO RAM port is owned by the per-frame ISP lifecycle.  A transaction
- * issued directly from stream-on/sysfs can race the active shadow bank even
- * though every individual MMIO write is correct.  Defer one-shot replays to
- * main_fd_work, the same frame-complete process context used by T40/T23 for
- * their sensor/tuning fanout. */
+static void t41_hold_tmo_bypass(void);
+/* Keep TMO bypassed across the stream reset.  Its recovered cold-boot state
+ * still clips the frame even after the known curve is installed, so the
+ * normal lifecycle must remain fail-safe while explicit diagnostics may
+ * synchronously replay the matched profile from process context. */
 /* Non-zero sentinels deliberately keep both objects out of the recovered
  * driver's aliased legacy BSS.  Zero-initialized diagnostic state has been
  * observed taking unrelated workspace values after tisp_init. */
@@ -1261,20 +1261,25 @@ static int t41_tmo_replay_set(const char *value,
 {
     int ret = param_set_int(value, kp);
 
-    if (!ret && t41_tmo_replay_trigger > 0)
-        /* Level one is reserved for the automatic post-STREAMON curve
-         * replay.  A user-triggered diagnostic replay is level two: after
-         * userspace has populated statYOut from a captured oracle, the
-         * frame worker must also stream that complete 15 kB bank through
-         * 0x50260.  Keeping the distinction here prevents the cold-boot
-         * path from uploading its initially-zero statYOut image. */
-        atomic_set(&t41_tmo_frame_replay_pending, 2);
+    if (!ret && t41_tmo_replay_trigger == 0) {
+        atomic_set(&t41_tmo_frame_replay_pending, -1);
+        t41_hold_tmo_bypass();
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: TMO held in fail-safe bypass\n");
+    } else if (!ret && t41_tmo_replay_trigger > 0) {
+        /* The sysfs callback is process context.  Use the same fail-safe
+         * ordering as stream start and never upload the cold, initially-zero
+         * 15 kB statYOut workspace. */
+        atomic_set(&t41_tmo_frame_replay_pending, -1);
+        t41_hold_tmo_bypass();
+        t41_apply_stock_tmo_profile();
+    }
     return ret;
 }
 module_param_call(t41_tmo_replay_trigger, t41_tmo_replay_set,
                   param_get_int, &t41_tmo_replay_trigger, 0644);
 MODULE_PARM_DESC(t41_tmo_replay_trigger,
-		 "Re-upload the diagnostic TMO tables after statYOut is populated");
+		 "TMO lifecycle control: zero bypasses; positive reinstalls the stock profile");
 static int t41_stock_bcsh_profile = -1;
 module_param(t41_stock_bcsh_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_bcsh_profile,
@@ -2900,9 +2905,8 @@ static const char LC192[] = "[%s %d] [ %s:%d ] Failed to ioctl!\n";
 static const char LC193[] = "[%s %d] %s[%d] the format(0x%08x) of input couldn't be handled!\n";
 static const char LC194[] = "[ %s:%d ] ispcore: irq-status unusual 0x%08x, 0x%x\n ";
 static const char LC195[] = "[ %s:%d ] ispcore: irq-status unusual 0x%08x\n isp overflow !!!";
-static unsigned char __attribute__((aligned(4))) main_fd_work[16] = {
-    0xe0, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
-};
+static void ispcore_irq_main_fd_work(struct work_struct *work);
+static DECLARE_WORK(main_fd_work, ispcore_irq_main_fd_work);
 static unsigned char __attribute__((aligned(4))) isp_drivers[24] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -5116,7 +5120,6 @@ int32_t ispcore_frame_channel_ir_streamon(void);
 int32_t ispcore_frame_channel_ir_get_fmt(uintptr_t a0, uintptr_t a1);
 int32_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t sub_6f378(void);
-void ispcore_irq_main_fd_work(void *work);
 int32_t ispcore_frame_channel_reqbufs(void* arg1, int32_t* arg2);
 int32_t ispcore_frame_channel1_debug_qbuf(uintptr_t a0, uintptr_t a1);
 int32_t isp_fw_process(void);
@@ -5466,9 +5469,6 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)ispcore_subdev_core_ops + 0x28) = (const void *)&ispcore_irq_thread_handle;
     *(const void **)((char *)ispcore_subdev_video_ops + 0x0) = (const void *)&ispcore_video_s_stream;
     *(const void **)((char *)ispcore_subdev_video_ops + 0x8) = (const void *)&ispcore_link_setup;
-    *(const void **)((char *)main_fd_work + 0x4) = (const void *)((char *)((char *)&main_fd_work + 0x4));
-    *(const void **)((char *)main_fd_work + 0x8) = (const void *)((char *)((char *)&main_fd_work + 0x4));
-    *(const void **)((char *)main_fd_work + 0xc) = (const void *)&ispcore_irq_main_fd_work;
 }
 
 /* WHOLE_DRIVER_RUNTIME_SUPPORT */
@@ -32597,27 +32597,36 @@ static void t41_apply_stock_tmo_profile(void)
     uint8_t *runtime;
     uint16_t *shadow;
     uint32_t *bypass;
+    bool shadow_valid;
     unsigned int i;
 
-    if (t41_stock_tmo_profile > 0 || !tmo_info[0])
+    if (t41_stock_tmo_profile > 0)
         return;
-    info = (uint8_t *)(uintptr_t)tmo_info[0];
-    shadow = (uint16_t *)(uintptr_t)*(uint32_t *)(void *)(info + 4);
-    runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 8);
-    if (!t41_kernel_data_ptr(info) || !t41_kernel_data_ptr(shadow) ||
-        !t41_kernel_data_ptr(runtime))
-        return;
+    info = t41_kernel_data_ptr((void *)(uintptr_t)tmo_info[0]) ?
+        (uint8_t *)(uintptr_t)tmo_info[0] : NULL;
+    shadow = info ?
+        (uint16_t *)(uintptr_t)*(uint32_t *)(void *)(info + 4) : NULL;
+    runtime = info ?
+        (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 8) : NULL;
+    shadow_valid = t41_kernel_data_ptr(shadow) &&
+        t41_kernel_data_ptr(runtime);
 
-    memcpy(shadow, stock_curve_settled, sizeof(stock_curve_settled));
-    memcpy(runtime + 318, stock_curve_settled,
-           sizeof(stock_curve_settled));
-    *(uint16_t *)(void *)(runtime + 48) = 0x0060;
-    *(uint16_t *)(void *)(runtime + 50) = 0x0066;
-    *(uint16_t *)(void *)(runtime + 52) = 0x06b1;
-    *(uint16_t *)(void *)(runtime + 766) = 0x1800;
-    *(uint32_t *)(void *)(info + 32) = 0x000028b2;
-    *(uint32_t *)(void *)(info + 36) = 0;
-    *(uint32_t *)(void *)(info + 40) = 0x0002d244;
+    /* The hardware profile is self-contained.  Update the recovered
+     * software object when it exists, but never suppress the literal
+     * hardware transaction merely because that optional shadow was not
+     * reconstructed on a cold boot. */
+    if (shadow_valid) {
+        memcpy(shadow, stock_curve_settled, sizeof(stock_curve_settled));
+        memcpy(runtime + 318, stock_curve_settled,
+               sizeof(stock_curve_settled));
+        *(uint16_t *)(void *)(runtime + 48) = 0x0060;
+        *(uint16_t *)(void *)(runtime + 50) = 0x0066;
+        *(uint16_t *)(void *)(runtime + 52) = 0x06b1;
+        *(uint16_t *)(void *)(runtime + 766) = 0x1800;
+        *(uint32_t *)(void *)(info + 32) = 0x000028b2;
+        *(uint32_t *)(void *)(info + 36) = 0;
+        *(uint32_t *)(void *)(info + 40) = 0x0002d244;
+    }
 
     /* Upload only the settled tone curve.  The recovered full RAM refresh
      * subsequently streams its still-zero 15 kB statYOut image through
@@ -32657,13 +32666,21 @@ static void t41_apply_stock_tmo_profile(void)
     system_reg_write(0x40, *bypass);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock TMO runtime profile applied "
-           "curve=%u ev=%#x gain=%#x statYOut=%#x controls=%#x/%#x/%#x\n",
+           "curve=%u ev=%#x gain=%#x statYOut=%#x controls=%#x/%#x/%#x shadow=%s\n",
            (unsigned int)ARRAY_SIZE(stock_curve_settled),
-           *(uint32_t *)(void *)(info + 32),
-           *(uint32_t *)(void *)(info + 40),
+           shadow_valid ? *(uint32_t *)(void *)(info + 32) : 0x000028b2,
+           shadow_valid ? *(uint32_t *)(void *)(info + 40) : 0x0002d244,
            statYOut,
            system_reg_read(0x1e040), system_reg_read(0x1e080),
-           system_reg_read(0x1e084));
+           system_reg_read(0x1e084), shadow_valid ? "valid" : "missing");
+}
+
+static void t41_hold_tmo_bypass(void)
+{
+    uint32_t *bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+
+    *bypass |= BIT(22);
+    system_reg_write(0x40, *bypass);
 }
 
 static void t41_apply_stock_cdns_profile(void)
@@ -149284,6 +149301,16 @@ int32_t tisp_tmo_process(uint32_t a0)
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
 
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* The recovered FPGA stage derives its controls from an incomplete
+     * cold-boot statistics history and immediately overwrites the matched
+     * profile with zeros.  Callback registration normally suppresses this
+     * event, but retain the guard at the writer itself so an alternate event
+     * route cannot silently undo the fail-safe stream-start transaction. */
+    if (t41_safe_tuning_events)
+        return 0;
+#endif
+
     v1 = (unsigned int *)&tmo_info;
     v0 = a0 << 2;
     v0 = (uintptr_t)v0 + (uintptr_t)v1;
@@ -157433,7 +157460,7 @@ static int t41_msca_commit_frame_shadow(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006f380 origin=fragment_seed original=ispcore_irq_main_fd_work */
-void ispcore_irq_main_fd_work(void *work)
+static void ispcore_irq_main_fd_work(struct work_struct *work)
 {
 	static const int32_t sensor_event[10] = {
 		0x02000007, 0x02000008, 0x02000009, 0x02000005,
@@ -157450,25 +157477,6 @@ void ispcore_irq_main_fd_work(void *work)
 	if (!core_sd)
 		return;
 	core = *(uintptr_t *)(core_sd + 268);
-
-	/* Run the write-only TMO RAM transaction from the frame-complete worker,
-	 * matching the stock process-context ownership boundary. */
-	{
-		int tmo_replay =
-			atomic_xchg(&t41_tmo_frame_replay_pending, -1);
-
-		if (tmo_replay > 0)
-			t41_apply_stock_tmo_profile();
-		if (tmo_replay > 1) {
-			int ram_ret = tisp_tmo_ram_reg_refresh(0);
-			int regs_ret = ram_ret ? ram_ret :
-				tisp_tmo_default_reg_refresh(0);
-
-			printk(KERN_WARNING
-			       "tx_isp_t41_recovered: full diagnostic TMO RAM replay ret=%d/%d statYOut=%#x\n",
-			       ram_ret, regs_ret, statYOut);
-		}
-	}
 
 	/* Match the exact T41 per-frame empty shadow transaction without invoking
 	 * the unsafe recovered packed-workspace writer. */
@@ -158936,11 +158944,15 @@ int32_t ispcore_frame_channel_streamon(void *arg1)
             t41_apply_stock_cdns_profile();
         if (!ret)
             t41_apply_stock_adr_profile();
-		/* The ISP stream transition resets the write-only TMO curve RAM.
-		 * Reapply it at the frame-complete boundary; the pre-stream writer
-		 * above only seeds software and transient hardware. */
-        if (!ret)
-            atomic_set(&t41_tmo_frame_replay_pending, 1);
+        /* The ISP stream transition resets TMO's write-only state.  Keep the
+         * incomplete recovered block bypassed after that transition; enabling
+         * it here turns an otherwise correct cold-boot frame almost entirely
+         * white.  Explicit diagnostics can still replay the matched profile
+         * through t41_tmo_replay_trigger. */
+        if (!ret) {
+            t41_hold_tmo_bypass();
+            atomic_set(&t41_tmo_frame_replay_pending, -1);
+        }
         if (!ret && (t41_late_start_mask & 0x20))
             ret = t41_start_isp_fw_thread_late();
         if (!ret && (t41_late_start_mask & 0x10))
@@ -165574,7 +165586,7 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
              * overflow (error bit 0x20). */
             work_queued = queue_work_on(
                 2, system_wq,
-                (struct work_struct *)(void *)main_fd_work);
+                &main_fd_work);
             if (completion_trace_count < 12)
                 printk(KERN_WARNING
                        "tx_isp_t41_recovered: ISP frame-done work queued=%d\n",
@@ -166028,7 +166040,7 @@ ispcore_interrupt_service_routine0x3a8:
 
 ispcore_interrupt_service_routine0x3ac:
     /* fragment 77: CallSetup */
-    v0 = (uintptr_t)queue_work_on(2, (void *)(uintptr_t)(*(uint32_t *)((char *)&system_wq + 0)), (void *)(uintptr_t)&main_fd_work); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)queue_work_on(2, (void *)(uintptr_t)(*(uint32_t *)((char *)&system_wq + 0)), &main_fd_work); /* jalr target resolved by relocation */
 
 ispcore_interrupt_service_routine0x3c8:
     /* fragment 78: MemoryAccess */
