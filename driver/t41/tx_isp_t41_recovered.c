@@ -827,8 +827,9 @@ MODULE_PARM_DESC(t41_ae_flicker_profile,
  * callback fans the resulting 16.16 total gain out to every gain-dependent
  * ISP block.  Keep the first recovery deliberately narrow and independently
  * switchable: bit 0 is GIB, bit 1 is DMSC, bit 2 is LSC, bit 3 is TMO, and
- * bit 4 is YDNS, and bit 5 is SDNS.  A zero default leaves existing captures unchanged until
- * each reconstructed writer has been compared against a matched stock frame.
+ * bit 4 is YDNS, and bit 5 is SDNS.  DMSC and SDNS have matched live-frame
+ * validation; keep the remaining reconstructed writers opt-in until each has
+ * been compared against a matched stock frame.
  */
 #define T41_GAIN_FANOUT_GIB  BIT(0)
 #define T41_GAIN_FANOUT_DMSC BIT(1)
@@ -839,7 +840,7 @@ MODULE_PARM_DESC(t41_ae_flicker_profile,
 /* Keep module controls out of the recovered image's overlapping BSS.  Only
  * the low six bits are functional; the initialized high bit is a storage
  * sentinel and deliberately selects no block. */
-static unsigned int t41_safe_gain_fanout_mask = 0x80000002U;
+static unsigned int t41_safe_gain_fanout_mask = 0x80000022U;
 module_param(t41_safe_gain_fanout_mask, uint, 0644);
 MODULE_PARM_DESC(t41_safe_gain_fanout_mask,
 		 "safe total-gain fanout mask: GIB=1 DMSC=2 LSC=4 TMO=8 YDNS=16 SDNS=32");
