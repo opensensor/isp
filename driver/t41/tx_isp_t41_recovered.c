@@ -32735,6 +32735,8 @@ static void t41_apply_stock_tmo_profile(void)
 
 static void t41_apply_stock_cdns_profile(void)
 {
+    uint32_t *bypass;
+
     if (t41_stock_cdns_profile > 0)
         return;
 
@@ -32745,10 +32747,23 @@ static void t41_apply_stock_cdns_profile(void)
     system_reg_write(0x1c040U, 0x3300be23U);
     system_reg_write(0x1c050U, 0x0000ffffU);
     system_reg_write(0x1c004U, 0x00000001U);
+
+    /*
+     * tisp_cdns_init() keeps TOP bit 19 asserted while the recovered runtime
+     * writer is incomplete.  The literal profile above is the complete
+     * writer-owned stock CDNS image and the block has no external DMA state,
+     * so it is coherent at this point.  Leaving the safety bit set discarded
+     * the restored profile and left visible chroma noise in low-light areas.
+     */
+    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+    *bypass &= ~BIT(19);
+    system_reg_write(0x40U, *bypass);
     printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock CDNS profile applied check=%#x/%#x/%#x/%#x\n",
+           "tx_isp_t41_recovered: stock CDNS profile applied "
+           "check=%#x/%#x/%#x/%#x top=%#x\n",
            system_reg_read(0x1c004U), system_reg_read(0x1c010U),
-           system_reg_read(0x1c040U), system_reg_read(0x1c050U));
+           system_reg_read(0x1c040U), system_reg_read(0x1c050U),
+           system_reg_read(0x40U));
 }
 
 struct t41_mdns_layout {
