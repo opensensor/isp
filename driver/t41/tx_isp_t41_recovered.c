@@ -20430,6 +20430,21 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             { TX_ISP_TUNING_CMD_T41_AE_STATS,
               TX_ISP_TUNING_T41_AE_STATS_BYTES,
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_BCSH_HUE, 1,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_BRIGHTNESS, 1,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_SHARPNESS, 1,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_SATURATION, 1,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_CONTRAST, 1,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS, 16,
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
@@ -20523,6 +20538,59 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
         if (route && route->id == TX_ISP_TUNING_CMD_T41_AE_STATS)
             return t41_tuning_copy_ae_stats(request.channel,
                                             request.value_or_ptr);
+        if (route && route->payload_size == 1U) {
+            uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
+            uint8_t value;
+            unsigned int offset;
+
+            if (request.channel != 0 ||
+                !t41_kernel_data_ptr(attrs) || !request.value_or_ptr)
+                return -ENODEV;
+            switch (route->id) {
+            case TX_ISP_TUNING_CMD_T41_BCSH_HUE:
+                offset = 12U;
+                break;
+            case TX_ISP_TUNING_CMD_T41_BRIGHTNESS:
+                offset = 9U;
+                break;
+            case TX_ISP_TUNING_CMD_T41_SHARPNESS:
+                offset = 6U;
+                break;
+            case TX_ISP_TUNING_CMD_T41_SATURATION:
+                offset = 0U;
+                break;
+            case TX_ISP_TUNING_CMD_T41_CONTRAST:
+                offset = 3U;
+                break;
+            default:
+                return -EINVAL;
+            }
+            if (request.is_get) {
+                value = attrs[offset];
+                return private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    &value, sizeof(value)) ? -EFAULT : 0;
+            }
+            if (private_copy_from_user(
+                    &value,
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    sizeof(value)))
+                return -EFAULT;
+            switch (route->id) {
+            case TX_ISP_TUNING_CMD_T41_BCSH_HUE:
+                return tisp_set_hue(request.channel, value);
+            case TX_ISP_TUNING_CMD_T41_BRIGHTNESS:
+                return tisp_set_brightness(request.channel, value);
+            case TX_ISP_TUNING_CMD_T41_SHARPNESS:
+                return tisp_set_sharpness(request.channel, value);
+            case TX_ISP_TUNING_CMD_T41_SATURATION:
+                return tisp_set_saturation(request.channel, value);
+            case TX_ISP_TUNING_CMD_T41_CONTRAST:
+                return tisp_set_contrast(request.channel, value);
+            default:
+                return -EINVAL;
+            }
+        }
         if (route &&
             route->id == TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS)
             return t41_tuning_copy_awb_global_stats(
@@ -152600,6 +152668,16 @@ tisp_set_fps0x78:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c4f0 origin=fragment_seed original=tisp_set_brightness */
 int32_t tisp_set_brightness(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
+
+    if (a0 != 0 || !t41_kernel_data_ptr(attrs))
+        return -EINVAL;
+    attrs[a0 + 9U] = a1 & 0xffU;
+
+    /* The recovered OEM setter dereferences a collapsed pointer table. */
+    return -EOPNOTSUPP;
+#else
     uint32_t local_14 = 0;
     uint32_t local_1c = 0;
     uint32_t ra = 0;
@@ -152614,6 +152692,7 @@ int32_t tisp_set_brightness(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c528 origin=fragment_seed original=tisp_set_sharpness */
@@ -152640,6 +152719,38 @@ int32_t tisp_set_sharpness(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c544 origin=fragment_seed original=tisp_set_saturation */
 int32_t tisp_set_saturation(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
+    uint32_t saturation = a1 & 0xffU;
+    uint32_t high;
+    uint32_t low;
+
+    if (a0 != 0 || !t41_kernel_data_ptr(attrs))
+        return -EINVAL;
+    attrs[a0] = saturation;
+
+    /*
+     * Scale the proven stock BCSH matrix directly, as in the crash-safe T40
+     * recovery.  128 is exact unity and preserves the accepted T41 bank.
+     */
+#define T41_WRITE_SCALED_BCSH(_register, _word) do { \
+        high = (((_word) >> 16) & 0xffffU) * saturation / 128U; \
+        low = ((_word) & 0xffffU) * saturation / 128U; \
+        if (high > 0x0fffU) \
+            high = 0x0fffU; \
+        if (low > 0x0fffU) \
+            low = 0x0fffU; \
+        system_reg_write((_register), (high << 16) | low); \
+    } while (0)
+    T41_WRITE_SCALED_BCSH(0x11018U, 0x03fd0400U);
+    T41_WRITE_SCALED_BCSH(0x1101cU, 0x04020400U);
+    T41_WRITE_SCALED_BCSH(0x11020U, 0x04020400U);
+#undef T41_WRITE_SCALED_BCSH
+    printk(KERN_INFO
+           "tx_isp_t41_recovered: safe BCSH saturation scaled to %u/128\n",
+           saturation);
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t local_1c = 0;
     uint32_t ra = 0;
@@ -152654,11 +152765,20 @@ int32_t tisp_set_saturation(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c57c origin=fragment_seed original=tisp_set_contrast */
 int32_t tisp_set_contrast(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
+
+    if (a0 != 0 || !t41_kernel_data_ptr(attrs))
+        return -EINVAL;
+    attrs[a0 + 3U] = a1 & 0xffU;
+    return -EOPNOTSUPP;
+#else
     uint32_t local_14 = 0;
     uint32_t local_1c = 0;
     uint32_t ra = 0;
@@ -152673,11 +152793,20 @@ int32_t tisp_set_contrast(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c5b4 origin=fragment_seed original=tisp_set_hue */
 int32_t tisp_set_hue(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
+
+    if (a0 != 0 || !t41_kernel_data_ptr(attrs))
+        return -EINVAL;
+    attrs[a0 + 12U] = a1 & 0xffU;
+    return -EOPNOTSUPP;
+#else
     uint32_t local_14 = 0;
     uint32_t local_1c = 0;
     uint32_t ra = 0;
@@ -152692,6 +152821,7 @@ int32_t tisp_set_hue(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006c5ec origin=fragment_seed original=tisp_set_csc_attr */

@@ -28,7 +28,6 @@
 #define TX_ISP_T41_V4L2_NATIVE_WIDTH	2560U
 #define TX_ISP_T41_V4L2_NATIVE_HEIGHT	1440U
 #define TX_ISP_T41_V4L2_FPS		25U
-#define TX_ISP_T41_V4L2_CHANNEL		1U
 #define TX_ISP_T41_V4L2_MIN_BUFFERS	2U
 #define TX_ISP_T41_V4L2_MAX_BUFFERS	8U
 
@@ -88,6 +87,13 @@ static bool v4l2_autostart = true;
 module_param(v4l2_autostart, bool, 0644);
 MODULE_PARM_DESC(v4l2_autostart,
 	"start the configured sensor when V4L2 is the first ISP consumer");
+/* Keep this zero-valued adapter parameter out of the recovered BSS prefix:
+ * later recovered objects retain absolute layout contracts.  The .data tail
+ * already has alignment space reserved by the other V4L2 parameters. */
+static unsigned int v4l2_channel __attribute__((section(".data")));
+module_param(v4l2_channel, uint, 0444);
+MODULE_PARM_DESC(v4l2_channel,
+	"frame-source channel exported through V4L2 (0 is the native main path)");
 static char *v4l2_sensor_name = "os04d10";
 module_param(v4l2_sensor_name, charp, 0644);
 MODULE_PARM_DESC(v4l2_sensor_name, "sensor driver name used by V4L2 autostart");
@@ -758,7 +764,7 @@ static int tx_isp_t41_v4l2_querycap(struct file *file, void *priv,
 	(void)priv;
 	strlcpy((char *)capability->driver, "tx-isp-t41",
 		sizeof(capability->driver));
-	strlcpy((char *)capability->card, "Ingenic T41 ISP scaler 1",
+	strlcpy((char *)capability->card, "Ingenic T41 ISP capture",
 		sizeof(capability->card));
 	strlcpy((char *)capability->bus_info, "platform:tx-isp-t41",
 		sizeof(capability->bus_info));
@@ -916,7 +922,7 @@ int tx_isp_t41_v4l2_init(struct device *parent)
 	struct tx_isp_nv12_layout layout;
 	int ret;
 
-	if (!parent)
+	if (!parent || v4l2_channel > 2U)
 		return -EINVAL;
 	memset(video, 0, sizeof(*video));
 	BUILD_BUG_ON(sizeof(struct tx_isp_t41_sensor_info) != 100);
@@ -973,8 +979,8 @@ int tx_isp_t41_v4l2_init(struct device *parent)
 	if (ret)
 		goto fail_v4l2;
 	video->registered = true;
-	pr_info("tx_isp_t41: V4L2 MMAP node registered as /dev/video%d (scaler %u)\n",
-		video->video_dev.num, TX_ISP_T41_V4L2_CHANNEL);
+	pr_info("tx_isp_t41: V4L2 MMAP node registered as /dev/video%d (channel %u)\n",
+		video->video_dev.num, v4l2_channel);
 	return 0;
 
 fail_v4l2:
@@ -1004,7 +1010,7 @@ void tx_isp_t41_v4l2_bind_channel(void *channel, unsigned int index)
 {
 	struct tx_isp_t41_v4l2 *video = &tx_isp_t41_video;
 
-	if (!video->registered || index != TX_ISP_T41_V4L2_CHANNEL)
+	if (!video->registered || index != v4l2_channel)
 		return;
 	mutex_lock(&video->channel_lock);
 	video->channel = channel;

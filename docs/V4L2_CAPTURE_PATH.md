@@ -30,9 +30,10 @@ wakeups.
 
 ## Adapter phases
 
-1. T41 registers `/dev/video0` on scaler channel 1. It exposes the native
-   2560x1440 NV12 format from the shared checked layout helper. Raptor retains
-   scaler channel 0, so both paths can run without sharing buffer ownership.
+1. T41 registers `/dev/video0` on frame-source channel 0 by default (selectable
+   with the read-only `v4l2_channel` module parameter). It exposes the native
+   2560x1440 NV12 format from the shared checked layout helper. The public and
+   private paths remain mutually exclusive owners of the selected channel.
 2. T41 connects `REQBUFS`/`QUERYBUF`/`QBUF`/`DQBUF`/`STREAMON`/`STREAMOFF` to
    the common queue core through Linux 4.4 vb2 MMAP and contiguous DMA. The
    private queue metadata receives those physical buffers and the existing
@@ -50,8 +51,9 @@ wakeups.
    `REQBUFS` performs the complete sensor registration, graph activation,
    MDNS coherent allocation, and sensor prepare/start/enable sequence. The
    last V4L2 owner performs the inverse sequence and releases the sensor.
-   When Raptor already owns the graph, the adapter detects and borrows that
-   lifecycle without tearing it down on close.
+   If a private client already owns the sensor lifecycle, the adapter may
+   attach only when the selected frame-source channel is unclaimed; otherwise
+   the strict ownership gate returns `EBUSY`.
 6. Add a mainline media-controller adapter without changing the queue and
    layout cores. Version-specific vb2 glue stays in a small compatibility
    layer.
@@ -60,7 +62,8 @@ wakeups.
 frame-interval enumeration. `tests/t41_v4l2_mmap_test.c` allocates two full
 resolution buffers, captures ten frames, checks sequence/timestamp/payload
 metadata, and optionally writes the final NV12 frame for visual validation.
-Both tests run while Raptor continues to use scaler channel 0.
+Both tests run with the selected channel exclusively owned by V4L2. The Raptor
+V4L2 backend uses the same node rather than opening a parallel IMP channel.
 
 The standalone lifecycle was additionally validated with Raptor fully
 stopped: three consecutive open/capture/close cycles each delivered ten
@@ -87,6 +90,16 @@ longer exists.
   counters; they are never silently converted to successful frames.
 - Adding `/dev/video*` must not change ISP tuning, exposure, image quality,
   encoder cadence, or the existing private ABI.
+
+## Tuning lifecycle
+
+V4L2 capture deliberately does not own image policy. The T41 private tuning
+node exposes AE expression/statistics reads plus crash-safe sharpness and
+saturation controls for a standalone userspace controller. Recovered
+brightness, contrast, and hue setters fail with `EOPNOTSUPP` until their BCSH
+workspace is complete; they never enter the known invalid pointer path.
+`openimp-tuningd` holds that descriptor and tracks gain independently of
+Raptor, so capture/encoder restarts do not reset the tuning policy.
 
 ## Performance gate
 
