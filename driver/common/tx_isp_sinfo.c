@@ -94,12 +94,34 @@ static DEFINE_MUTEX(tx_isp_sinfo_lock);
 static struct {
 	struct proc_dir_entry *root;
 	struct tx_isp_sinfo_slot slots[TX_ISP_SINFO_MAX_SENSORS];
-} tx_isp_sinfo_bss_layout;
+} tx_isp_sinfo_bss_layout __attribute__((used));
+#endif
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+/*
+ * Keep every live registry pointer away from a compatibility BSS tail which
+ * a recovered monolith may address as anonymous private state.  The public
+ * slots pointer still points directly at the slot array, so the stats ABI and
+ * the BSS footprint remain unchanged.
+ */
+struct tx_isp_sinfo_heap_state {
+	struct proc_dir_entry *root;
+	struct tx_isp_sinfo_slot slots[TX_ISP_SINFO_MAX_SENSORS];
+};
+#define tx_isp_sinfo_heap_state_ptr \
+	((struct tx_isp_sinfo_heap_state *)((unsigned char *) \
+	 tx_isp_sinfo_heap_slots - \
+	 offsetof(struct tx_isp_sinfo_heap_state, slots)))
+#define tx_isp_sinfo_root tx_isp_sinfo_heap_state_ptr->root
+#define tx_isp_sinfo_slots tx_isp_sinfo_heap_slots
+#define tx_isp_sinfo_heap_allocation tx_isp_sinfo_heap_state_ptr
+#elif defined(TX_ISP_SINFO_BSS_COMPAT_SLOTS)
 #define tx_isp_sinfo_root tx_isp_sinfo_bss_layout.root
 #define tx_isp_sinfo_slots tx_isp_sinfo_bss_layout.slots
+#define tx_isp_sinfo_heap_allocation tx_isp_sinfo_heap_slots
 #else
 static struct proc_dir_entry *tx_isp_sinfo_root;
 #define tx_isp_sinfo_slots tx_isp_sinfo_heap_slots
+#define tx_isp_sinfo_heap_allocation tx_isp_sinfo_heap_slots
 #endif
 #ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
 #define tx_isp_sinfo_proc_slots tx_isp_sinfo_heap_slots
@@ -576,32 +598,20 @@ static void tx_isp_sinfo_slot_unpublish(struct tx_isp_sinfo_slot *slot)
 static void
 tx_isp_sinfo_slot_sync_compat(int index)
 {
-#ifdef TX_ISP_SINFO_BSS_COMPAT_SLOTS
+#if defined(TX_ISP_SINFO_BSS_COMPAT_SLOTS) && \
+	!defined(TX_ISP_SINFO_STABLE_PROC_SNAPSHOT)
 	struct tx_isp_sinfo_slot *snapshot;
-#ifndef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
 	int key;
-#endif
 
-#ifndef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
 	if (!tx_isp_sinfo_heap_slots || index < 0 ||
 	    index >= TX_ISP_SINFO_MAX_SENSORS)
 		return;
-#endif
 
 	snapshot = &tx_isp_sinfo_heap_slots[index];
-#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
-	/*
-	 * File descriptors are initialized once in stable heap storage and are
-	 * already owned by procfs. Refresh only lifecycle metadata thereafter.
-	 */
-	memcpy(snapshot, &tx_isp_sinfo_slots[index],
-	       sizeof(*snapshot) - sizeof(snapshot->files));
-#else
 	*snapshot = tx_isp_sinfo_slots[index];
 	for (key = 0; key < TX_ISP_SINFO_NKEYS; ++key) {
 		snapshot->files[key].slot = snapshot;
 	}
-#endif
 #else
 	(void)index;
 #endif
@@ -612,7 +622,7 @@ int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 {
 	int i;
 
-	if (!drv || !tx_isp_sinfo_root || !tx_isp_sinfo_slots)
+	if (!drv || !tx_isp_sinfo_slots || !tx_isp_sinfo_root)
 		return -EINVAL;
 
 	mutex_lock(&tx_isp_sinfo_lock);
@@ -796,6 +806,9 @@ EXPORT_SYMBOL(tx_isp_sinfo_sensor_unbind);
 int tx_isp_sinfo_init(void)
 {
 	enum tx_isp_sinfo_config_status config_status;
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	struct tx_isp_sinfo_heap_state *heap_state;
+#endif
 
 	config_status = tx_isp_sinfo_config_check(
 		&tx_isp_sinfo_config, TX_ISP_SINFO_CONFIG_FLAGS);
@@ -806,16 +819,22 @@ int tx_isp_sinfo_init(void)
 		return -EINVAL;
 	}
 
+#ifdef TX_ISP_SINFO_STABLE_PROC_SNAPSHOT
+	heap_state = kzalloc(sizeof(*heap_state), GFP_KERNEL);
+	if (heap_state)
+		tx_isp_sinfo_heap_slots = heap_state->slots;
+#else
 	tx_isp_sinfo_heap_slots = kzalloc(
 		sizeof(*tx_isp_sinfo_heap_slots) * TX_ISP_SINFO_MAX_SENSORS,
 		GFP_KERNEL);
+#endif
 	if (!tx_isp_sinfo_heap_slots)
 		return -ENOMEM;
 
 	tx_isp_sinfo_root = proc_mkdir("jz/sensor", NULL);
 	if (!tx_isp_sinfo_root) {
 		pr_warn("tx-isp-sinfo: cannot create /proc/jz/sensor\n");
-		kfree(tx_isp_sinfo_heap_slots);
+		kfree(tx_isp_sinfo_heap_allocation);
 		tx_isp_sinfo_heap_slots = NULL;
 		return 0;
 	}
@@ -830,13 +849,21 @@ int tx_isp_sinfo_init(void)
 
 void tx_isp_sinfo_exit(void)
 {
+	struct proc_dir_entry *root = NULL;
+	void *heap_allocation = NULL;
+
 	mutex_lock(&tx_isp_sinfo_lock);
-	kfree(tx_isp_sinfo_heap_slots);
+	if (tx_isp_sinfo_heap_slots) {
+		root = tx_isp_sinfo_root;
+		tx_isp_sinfo_root = NULL;
+		heap_allocation = tx_isp_sinfo_heap_allocation;
+	}
+	mutex_unlock(&tx_isp_sinfo_lock);
+	if (root)
+		remove_proc_subtree("jz/sensor", NULL);
+	mutex_lock(&tx_isp_sinfo_lock);
+	kfree(heap_allocation);
 	tx_isp_sinfo_heap_slots = NULL;
 	mutex_unlock(&tx_isp_sinfo_lock);
-	if (tx_isp_sinfo_root) {
-		remove_proc_subtree("jz/sensor", NULL);
-		tx_isp_sinfo_root = NULL;
-	}
 	pr_info("tx-isp-sinfo: exited\n");
 }

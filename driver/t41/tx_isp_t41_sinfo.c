@@ -48,10 +48,10 @@ static const struct tx_isp_sinfo_config tx_isp_sinfo_config = {
 
 /*
  * The original four-slot array occupied 0x280 bytes at the recovered core's
- * BSS tail. Keep that anonymous tail overlay in place for recovered lifecycle
- * writes, but give procfs a stable heap snapshot because the core later
- * repurposes the overlay. The common implementation is kept size-neutral for
- * T41 so all allocatable linked-section boundaries remain unchanged.
+ * BSS tail. Keep that anonymous tail overlay in place solely to preserve the
+ * recovered layout, while the registry's authoritative state and proc root
+ * live together on the heap because the core later repurposes the overlay.
+ * The common implementation keeps the T41 BSS footprint unchanged.
  */
 #define TX_ISP_SINFO_BSS_COMPAT_SLOTS	1
 #define TX_ISP_SINFO_STABLE_PROC_SNAPSHOT	1

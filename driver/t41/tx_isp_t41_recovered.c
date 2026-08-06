@@ -927,16 +927,15 @@ MODULE_PARM_DESC(t41_stock_ccm_baseline,
 		 "seed CCM from the stock T41 OS04D10 boot profile");
 
 /*
- * The safe TISP bring-up path intentionally leaves several firmware blocks
- * unconstructed.  Running the stock all-block teardown against those neutral
- * objects can free or walk state that was never initialized.  Keep close(2)
- * symmetric with the safe initializer until every block has a real init/deinit
- * pair; module removal and the smoke harness reboot reclaim the allocations.
+ * The ownership-aware deinitializers now match the safe TISP constructors, so
+ * normal close and module removal can release their state without a reboot.
+ * Keep the old allocation-retaining behavior as an emergency diagnostic gate,
+ * but use the complete lifecycle by default.
  */
-static int t41_safe_tisp_teardown = 1;
+static int t41_safe_tisp_teardown = -1;
 module_param(t41_safe_tisp_teardown, int, 0);
 MODULE_PARM_DESC(t41_safe_tisp_teardown,
-		 "skip unreconstructed all-block TISP teardown after safe initialization");
+		 "positive values retain TISP allocations on close for emergency diagnostics");
 
 /*
  * tisp_msca_init() currently installs neutral storage instead of the packed
@@ -1933,8 +1932,8 @@ static unsigned char tsbin_storage[8] __attribute__((aligned(4)));
 static uint32_t init_load_bin;
 static unsigned char bin_version[8];
 static const uint32_t crc_table[8] = {
-    0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419,
-    0x706af48f, 0xe963a535, 0x9e6495a3, 0x00000000,
+    0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
+    0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 };
 static unsigned char msca_storage[78] __attribute__((aligned(4)));
 #define msca (*(uint32_t *)(void *)msca_storage)
@@ -31609,106 +31608,27 @@ int32_t tx_isp_sensor_register_sensor(uintptr_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000136c4 origin=fragment_seed original=tx_isp_sensor_release_sensor */
 int32_t tx_isp_sensor_release_sensor(uintptr_t a0, uint32_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_84 = 0;
-    uint32_t local_88 = 0;
-    uint32_t local_8c = 0;
-    uint32_t *local_90 = 0;
-    uint32_t *local_94 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
+    unsigned char sensor_info[T41_SENSOR_INFO_SIZE];
+    uintptr_t vin;
+    int ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    if (!a0 || !a1)
+        return -EINVAL;
+    if (private_copy_from_user(sensor_info,
+            (const void __user *)(uintptr_t)a1, sizeof(sensor_info)))
+        return -EFAULT;
 
-    /* fragment 1: CallSetup */
-    s1 = a0;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_copy_from_user)(&local_18); /* jalr target resolved by relocation */
+    vin = (uint32_t)private_platform_get_drvdata(
+            (uintptr_t)&tx_isp_vin_platform_device);
+    if (!vin)
+        return -ENODEV;
 
-    /* fragment 2: Branch */
-    s2 = 33554432;
-    if (v0 != 0) { goto tx_isp_sensor_release_sensor0x68; }
-
-    /* fragment 3: Arithmetic */
-    s0 = s1 + 60;
-    s2 = s2 + 1;
-    s1 = s1 + 124;
-    s3 = -515;
-
-tx_isp_sensor_release_sensor0x48:
-    /* fragment 4: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s0 + 0);
-
-    /* fragment 5: Branch */
-    if (a0 != 0) { goto tx_isp_sensor_release_sensor0xb8; }
-
-tx_isp_sensor_release_sensor0x54:
-    /* fragment 6: Arithmetic */
-    s0 = s0 + 4;
-
-tx_isp_sensor_release_sensor0x58:
-    /* fragment 7: Branch */
-    v0 = 0;
-    if (s1 != s0) { goto tx_isp_sensor_release_sensor0x48; }
-
-    /* fragment 8: Branch */
-    goto tx_isp_sensor_release_sensor0xa0;
-
-tx_isp_sensor_release_sensor0x68:
-    /* fragment 9: CallSetup */
-    local_14 = 298;
-    local_10 = (uint32_t *)&__pow2_lut;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC7, &__pow2_lut, 298); /* jalr target resolved by relocation */
-
-    /* fragment 10: Arithmetic */
-    v0 = -14;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_sensor_release_sensor0xa0:
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-tx_isp_sensor_release_sensor0xb8:
-    /* fragment 13: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 252);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 14: Branch */
-    if (v0 == 0) { goto tx_isp_sensor_release_sensor0x54; }
-
-    /* fragment 15: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 8);
-
-    /* fragment 16: Branch */
-    a2 = (uintptr_t)&local_18;
-    if (v0 == 0) { goto tx_isp_sensor_release_sensor0x54; }
-
-    /* fragment 17: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_math_exp2)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 18: Branch */
-    if (v0 == 0) { goto tx_isp_sensor_release_sensor0x54; }
-
-    /* fragment 19: Branch */
-    if (v0 != s3) { goto tx_isp_sensor_release_sensor0xa0; }
-
-    /* fragment 20: Branch */
-    s0 = s0 + 4;
-    goto tx_isp_sensor_release_sensor0x58;
-
-    return 0;
+    ret = subdev_sensor_ops_ioctl(vin, T41_EVENT_SENSOR_RELEASE,
+                                  (uintptr_t)sensor_info);
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: sensor-release VIN returned %d vin=%p\n",
+           ret, (void *)vin);
+    return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 static void t41_apply_stock_awb_gains(void)
@@ -34444,6 +34364,27 @@ static int t41_ioctl_video_link_setup(uintptr_t file, uint32_t user_arg)
     return t41_setup_video_link_graph(graph, link);
 }
 
+static int t41_ioctl_video_link_destroy(uintptr_t file, uint32_t user_arg)
+{
+    int32_t input[2];
+    uintptr_t miscdev;
+    unsigned int link;
+
+    if (!file || !user_arg)
+        return -EINVAL;
+    if (private_copy_from_user(input,
+            (const void __user *)(uintptr_t)user_arg, sizeof(input)))
+        return -EFAULT;
+
+    link = direct_mode ? 3U : (unsigned int)input[1];
+    if (link >= 5)
+        return -EINVAL;
+    miscdev = t41_load_ptr(file, 136);
+    if (!miscdev)
+        return -ENODEV;
+    return tx_isp_video_link_destroy_isra_3(miscdev - 12, link);
+}
+
 static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link)
 {
     uintptr_t records;
@@ -34631,6 +34572,16 @@ int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                a1, regtrace_ret);
         return regtrace_ret;
     }
+    if (a1 == 0x80645406U) {
+        uintptr_t isp = t41_load_ptr(a0, 136);
+
+        regtrace_ret = isp ? tx_isp_sensor_release_sensor(isp - 12, a2) :
+                     -ENODEV;
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
+               a1, regtrace_ret);
+        return regtrace_ret;
+    }
     if (a1 == 0xc0045402U) {
         regtrace_ret = t41_ioctl_enum_sensor_input(a0, a2);
         printk(KERN_WARNING
@@ -34657,6 +34608,13 @@ int64_t tx_isp_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
     }
     if (a1 == 0x80085409U) {
         regtrace_ret = t41_ioctl_video_link_setup(a0, a2);
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
+               a1, regtrace_ret);
+        return regtrace_ret;
+    }
+    if (a1 == 0x8008540aU) {
+        regtrace_ret = t41_ioctl_video_link_destroy(a0, a2);
         printk(KERN_WARNING
                "tx_isp_t41_recovered: tx-isp ioctl exit cmd=0x%x ret=%d\n",
                a1, regtrace_ret);
@@ -51697,10 +51655,19 @@ int32_t tisp_function_clear(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f8e8 origin=fragment_seed original=tisp_deinit */
 int tisp_deinit(int channel)
 {
-    unsigned int slot = (unsigned int)channel * sizeof(uint32_t);
+    unsigned int slot;
     void *bin;
     void **params;
     void **sensor_bin;
+
+    if (channel < 0 ||
+        channel >= ARRAY_SIZE(tparams_day_storage) / sizeof(uint32_t))
+        return -EINVAL;
+    slot = (unsigned int)channel * sizeof(uint32_t);
+
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tisp-deinit enter channel=%d\n",
+           channel);
 
     tisp_ae_deinit(channel);
     tisp_awb_deinit(channel);
@@ -51749,7 +51716,7 @@ int tisp_deinit(int channel)
         *params = NULL;
     }
 
-    sensor_bin = (void **)&tsbin;
+    sensor_bin = (void **)((char *)&tsbin + slot);
     if (*sensor_bin) {
         private_vfree(*sensor_bin);
         *sensor_bin = NULL;
@@ -51759,6 +51726,9 @@ int tisp_deinit(int channel)
         tisp_code_destroy_tuning_node();
 
     init_load_bin = 0;
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: tisp-deinit exit channel=%d\n",
+           channel);
     return 0;
 }
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001fb8c origin=fragment_seed original=tisp_fw_process */
@@ -52363,20 +52333,25 @@ int tiziano_load_parameters(uint32_t channel, uintptr_t load_request)
     declared_size = *(uint32_t *)(payload + 48);
     night_offset = *(uint32_t *)(payload + 52);
     expected_crc = *(uint32_t *)(payload + 60);
-    if (declared_size < 64 || declared_size > file_size ||
-        night_offset > declared_size - 64) {
+    if (declared_size > (uint32_t)file_size - 64 ||
+        night_offset > declared_size) {
         isp_printf(2, "tiziano_load_parameters: invalid parameter extents\n");
         goto free_binary;
     }
 
-    for (offset = 64; offset < (declared_size & ~3U); offset += 4) {
+    /* Stock T41 hashes declared_size bytes beginning immediately after the
+     * 64-byte file header.  Keep this exact range: declared_size is a payload
+     * length, not an absolute file offset. */
+    for (offset = 64; offset < 64 + (declared_size & ~3U); offset += 4) {
         uint32_t word = *(uint32_t *)(payload + offset);
 
         crc ^= word;
         crc ^= crc_table[crc & 7];
     }
     if (crc != expected_crc) {
-        isp_printf(2, "tiziano_load_parameters: CRC mismatch\n");
+        isp_printf(2,
+                   "tiziano_load_parameters: CRC mismatch computed=%08x expected=%08x\n",
+                   crc, expected_crc);
         goto free_binary;
     }
     printk(KERN_WARNING
@@ -139463,9 +139438,28 @@ int32_t tisp_msca_deinit(int32_t arg1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     uint32_t *tpm = (uint32_t *)(void *)tpm_cb_storage;
+    void **temporary = (void **)(void *)mscaHardParTmp_storage;
+    void **hard = (void **)(void *)mscaHardPar_storage;
+    void *workspace;
+    unsigned int i;
 
     if (arg1 != 0)
         return -EINVAL;
+
+    workspace = *(void **)(void *)&msca_info;
+    *(void **)(void *)&msca_info = NULL;
+    if (workspace)
+        private_kfree(workspace);
+
+    for (i = 0; i < 3; ++i) {
+        void *descriptor = temporary[i];
+
+        temporary[i] = NULL;
+        hard[i] = NULL;
+        if (descriptor)
+            private_kfree(descriptor);
+    }
+
     memset(msca_storage, 0, sizeof(msca_storage));
     memset(mscaler_storage, 0, sizeof(mscaler_storage));
     tpm[312 / sizeof(uint32_t)] = 0;
@@ -163896,7 +163890,7 @@ int64_t ispcore_core_ops_init(uintptr_t subdev_ptr, uintptr_t init_ptr)
             }
         }
 
-        if (t41_safe_tisp_teardown) {
+        if (t41_safe_tisp_teardown > 0) {
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: safe TISP teardown deferred vinum=%u\n",
                    vinum);
@@ -163911,7 +163905,7 @@ int64_t ispcore_core_ops_init(uintptr_t subdev_ptr, uintptr_t init_ptr)
             *(uint32_t *)(attr + 176) = 0;
         }
         *(uint32_t *)(core + 472) = 0;
-        if (!t41_safe_tisp_teardown)
+        if (t41_safe_tisp_teardown <= 0)
             tisp_deinit(vinum);
 
         core = *(unsigned char **)(subdev + 268);
@@ -166623,9 +166617,6 @@ int tx_isp_core_remove(struct platform_device *pdev)
 	}
 
 	tx_isp_subdev_deinit(module);
-	if (tx_isp_bringup_level >= 3 && !t41_safe_tisp_teardown)
-		tisp_deinit(0);
-
 	private_platform_set_drvdata(pdev, NULL);
 	private_kfree(core);
 	return 0;
