@@ -38,12 +38,12 @@ static void test_validation(void)
 	assert(tx_isp_video_queue_prepare(&queue, 3, 0, TEST_SIZE) == -EINVAL);
 	assert(tx_isp_video_queue_prepare(&queue, 0, 0, TEST_SIZE - 1) ==
 	       -EINVAL);
-	assert(tx_isp_video_queue_qbuf(&queue, 0) == -EINVAL);
+	assert(tx_isp_video_queue_qbuf(&queue, 0) == 0);
 	assert(tx_isp_video_queue_take(&queue, &index) == -EINVAL);
 	assert(tx_isp_video_queue_stream_on(&queue) == 0);
 	assert(tx_isp_video_queue_stream_on(&queue) == -EINVAL);
 	assert(tx_isp_video_queue_qbuf(&queue, 3) == -EINVAL);
-	assert(tx_isp_video_queue_take(&queue, &index) == -EAGAIN);
+	assert(tx_isp_video_queue_take(&queue, &index) == 0 && index == 0);
 }
 
 static void test_completion_order_and_wire_metadata(void)
@@ -54,10 +54,10 @@ static void test_completion_order_and_wire_metadata(void)
 	u32 index;
 
 	configure_queue(&queue, slots);
-	assert(tx_isp_video_queue_stream_on(&queue) == 0);
 	assert(tx_isp_video_queue_qbuf(&queue, 0) == 0);
 	assert(tx_isp_video_queue_qbuf(&queue, 1) == 0);
 	assert(tx_isp_video_queue_qbuf(&queue, 0) == -EBUSY);
+	assert(tx_isp_video_queue_stream_on(&queue) == 0);
 	assert(tx_isp_video_queue_take(&queue, &index) == 0 && index == 0);
 	assert(tx_isp_video_queue_take(&queue, &index) == 0 && index == 1);
 

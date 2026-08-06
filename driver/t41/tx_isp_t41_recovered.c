@@ -14,6 +14,7 @@
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
 #include "tx_isp_t41_subdev.h"
+#include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -26098,6 +26099,8 @@ void* tx_isp_frame_chan_deinit(uintptr_t a0)
     uint32_t *s1 = 0;
     uintptr_t *v0 = 0;
 
+    tx_isp_t41_v4l2_unbind_channel((void *)a0);
+
     /* fragment 0: Branch */
     v0 = a0 < -4095;
     if (a0 == 0) { goto tx_isp_frame_chan_deinit0x64; }
@@ -26372,48 +26375,64 @@ int32_t fs_core_ops_ioctl(uintptr_t a0, uint32_t a1, uintptr_t a2)
 		}
 		isp_printf(1, " Create %s OK! \n", name);
 		*(uint32_t *)(channel + 0x28) = 1;
+		tx_isp_t41_v4l2_bind_channel(channel, i);
 	}
 
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000103ec origin=fragment_seed original=frame_channel_open */
+int tx_isp_t41_frame_channel_claim(void *channel)
+{
+	struct mutex *lock;
+	u32 state;
+
+	if (!t41_kernel_data_ptr(channel))
+		return -EINVAL;
+	lock = (struct mutex *)((char *)channel + 0x2e4);
+	private_mutex_lock(lock);
+	state = *(u32 *)((char *)channel + 0x2f4);
+	if (state != 2) {
+		private_mutex_unlock(lock);
+		return state < 2 ? -ENODEV : -EBUSY;
+	}
+	*(u32 *)((char *)channel + 0x2f4) = 3;
+	private_mutex_unlock(lock);
+
+	memset((char *)channel + 0x254, 0, 0x74);
+	*(u32 *)((char *)channel + 0x308) = 0;
+	*(u32 *)((char *)channel + 0x30c) = 0;
+	private_init_completion((char *)channel + 0x2f8);
+	__vb2_queue_free((char *)channel + 0x2c,
+			 *(u32 **)((char *)channel + 0x218));
+	return 0;
+}
+
 int frame_channel_open(struct inode *inode, struct file *file)
 {
     uint32_t *ptr;
     int32_t val;
-	struct mutex *lock;
 
     ptr = *(uint32_t **)((char *)file + 0x88);
 
     if (ptr == 0 || (uint32_t)ptr >= 0xfffff001)
         return -22;
 
-	lock = (struct mutex *)((char *)ptr + 0x2e4);
 	printk(KERN_WARNING
 	       "tx_isp_t41_recovered: framechan open enter channel=%u state=%u ptr=%p inode=%p file=%p\n",
 	       *(uint32_t *)((char *)ptr + 0x2dc),
 	       *(uint32_t *)((char *)ptr + 0x2f4), ptr, inode, file);
-	private_mutex_lock(lock);
+	val = tx_isp_t41_frame_channel_claim(ptr);
+    if (val) {
+		int ret = val;
 
-    val = *(uint32_t *)((char *)ptr + 0x2f4);
-    if (val < 2) {
-		private_mutex_unlock(lock);
-        val = *(uint32_t *)((char *)ptr + 0x2dc);
-        isp_printf(2, "[%s %d] Frame channel%d is slake now, Please activate it firstly!\n", "frame_channel_open");
+		val = *(uint32_t *)((char *)ptr + 0x2dc);
+		isp_printf(2, "[%s %d] Frame channel%d is unavailable!\n", "frame_channel_open");
 		printk(KERN_WARNING
 		       "tx_isp_t41_recovered: framechan open rejected channel=%u state=%u\n",
 		       val, *(uint32_t *)((char *)ptr + 0x2f4));
-        return -1;
+		return ret;
     }
-
-	private_mutex_unlock(lock);
-    memset((char *)ptr + 0x254, 0, 0x74);
-    *(uint32_t *)((char *)ptr + 0x308) = 0;
-    *(uint32_t *)((char *)ptr + 0x30c) = 0;
-    private_init_completion((char *)ptr + 0x2f8);
-    __vb2_queue_free((char *)ptr + 0x2c, *(uint32_t **)((char *)ptr + 0x218));
-    *(uint32_t *)((char *)ptr + 0x2f4) = 3;
 	printk(KERN_WARNING
 	       "tx_isp_t41_recovered: framechan open exit channel=%u state=3\n",
 	       *(uint32_t *)((char *)ptr + 0x2dc));
@@ -27508,6 +27527,45 @@ __frame_channel_vb2_streamoff0xa0:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011264 origin=fragment_seed original=frame_channel_release */
+int tx_isp_t41_frame_channel_streamoff(void *channel)
+{
+	int ret;
+
+	if (!t41_kernel_data_ptr(channel))
+		return -EINVAL;
+	ret = tx_isp_send_event_to_remote(
+		*(void **)((char *)channel + 0x2d8),
+		TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
+	if (ret == -ENOIOCTLCMD)
+		ret = 0;
+	*(u8 *)((char *)channel + 0x250) &= ~1U;
+	__vb2_queue_cancel((char *)channel + 0x2c);
+	*(u32 *)((char *)channel + 0x2f4) = 3;
+	wake_up_interruptible((wait_queue_head_t *)((char *)channel + 0x238));
+	return ret;
+}
+
+int tx_isp_t41_frame_channel_release(void *channel)
+{
+	struct mutex *lock;
+	u32 state;
+
+	if (!t41_kernel_data_ptr(channel))
+		return -EINVAL;
+	lock = (struct mutex *)((char *)channel + 0x2e4);
+	private_mutex_lock(lock);
+	state = *(u32 *)((char *)channel + 0x2f4);
+	private_mutex_unlock(lock);
+	if (state == 4)
+		tx_isp_t41_frame_channel_streamoff(channel);
+	__vb2_queue_free((char *)channel + 0x2c,
+			 *(u32 **)((char *)channel + 0x218));
+	private_mutex_lock(lock);
+	*(u32 *)((char *)channel + 0x2f4) = 2;
+	private_mutex_unlock(lock);
+	return 0;
+}
+
 int32_t frame_channel_release(uint32_t a0, uintptr_t a1, uint32_t a2)
 {
     uint32_t local_14 = 0;
@@ -27521,6 +27579,10 @@ int32_t frame_channel_release(uint32_t a0, uintptr_t a1, uint32_t a2)
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
+
+    if (t41_kernel_data_ptr(*(void **)((char *)a1 + 136)))
+		return tx_isp_t41_frame_channel_release(
+			*(void **)((char *)a1 + 136));
 
     /* fragment 1: MemoryAccess */
     s0 = *(uint32_t *)((char *)a1 + 136);
@@ -27569,8 +27631,7 @@ frame_channel_release0x64:
     return 0;
 }
 
-static int t41_frame_channel_reqbufs_clean(void *channel,
-                                           void __user *user_req)
+int t41_frame_channel_reqbufs_clean(void *channel, void __user *user_req)
 {
     uint32_t req[TX_ISP_FRAME_REQUEST_WORD_COUNT_TOTAL];
     uint32_t requested;
@@ -27669,7 +27730,7 @@ static int t41_frame_channel_reqbufs_clean(void *channel,
     return 0;
 }
 
-static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
+int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
 {
     uint32_t vbuf[TX_ISP_FRAME_WORD_COUNT];
     uint32_t index;
@@ -27860,7 +27921,7 @@ static int t41_frame_channel_qbuf_clean(void *channel, void __user *user_buf)
     return 0;
 }
 
-static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
+int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
 {
     uint32_t vbuf[TX_ISP_FRAME_WORD_COUNT];
     uint32_t user_reserved2;
@@ -27964,8 +28025,7 @@ static int t41_frame_channel_dqbuf_clean(void *channel, void __user *user_buf)
         -EFAULT : 0;
 }
 
-static int t41_frame_channel_streamon_clean(void *channel,
-                                            void __user *user_type)
+int t41_frame_channel_streamon_clean(void *channel, void __user *user_type)
 {
     uint32_t type;
     char *node;
@@ -28188,15 +28248,8 @@ int64_t frame_channel_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
         if (a1 == TX_ISP_FRAME_IOCTL_T41_STREAM_ON)
             return t41_frame_channel_streamon_clean(
                 s0, (void __user *)(uintptr_t)a2);
-        else {
-			ret = tx_isp_send_event_to_remote(
-				*(void **)((char *)s0 + 0x2d8),
-				TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
-			if (ret == -ENOIOCTLCMD)
-				ret = 0;
-            *(uint8_t *)((char *)s0 + 0x250) &= ~1U;
-            *(uint32_t *)((char *)s0 + 0x2f4) = 3;
-        }
+        else
+			ret = tx_isp_t41_frame_channel_streamoff(s0);
         printk(KERN_WARNING
                "tx_isp_t41_recovered: stream diagnostic channel=%u "
 		       "enable=%u ret=%d\n",
@@ -166506,8 +166559,15 @@ int32_t init_module(void)
 	if (ret)
 		return ret;
 	ret = tx_isp_sinfo_init();
-	if (ret)
+	if (ret) {
 		((void (*)(void))(uintptr_t)&tx_isp_exit)();
+		return ret;
+	}
+	ret = tx_isp_t41_v4l2_init(&tx_isp_platform_device.dev);
+	if (ret) {
+		tx_isp_sinfo_exit();
+		((void (*)(void))(uintptr_t)&tx_isp_exit)();
+	}
 	return ret;
 }
 
@@ -166516,6 +166576,7 @@ void cleanup_module(void)
 {
     uintptr_t t9 = (uintptr_t)&tx_isp_exit;
 
+	tx_isp_t41_v4l2_exit();
 	tx_isp_sinfo_exit();
     ((void (*)(void))(uintptr_t)t9)();
 }

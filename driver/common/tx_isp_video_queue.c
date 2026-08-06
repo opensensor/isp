@@ -1,5 +1,6 @@
 #ifdef __KERNEL__
 #include <linux/errno.h>
+#include <linux/math64.h>
 #include <linux/string.h>
 #else
 #include <errno.h>
@@ -101,7 +102,7 @@ int tx_isp_video_queue_qbuf(struct tx_isp_video_queue *queue, u32 index)
 {
 	struct tx_isp_video_slot *slot;
 
-	if (!queue || !queue->slots || !queue->streaming ||
+	if (!queue || !queue->slots || !queue->count ||
 	    index >= queue->count || queue->queued_count >= queue->count)
 		return -EINVAL;
 	slot = &queue->slots[index];
@@ -176,6 +177,9 @@ int tx_isp_video_queue_dqbuf(struct tx_isp_video_queue *queue,
 	struct tx_isp_video_slot *slot;
 	u32 index;
 	u32 error;
+#ifdef __KERNEL__
+	u32 timestamp_remainder;
+#endif
 
 	if (!queue || !queue->slots || !buffer)
 		return -EINVAL;
@@ -198,9 +202,15 @@ int tx_isp_video_queue_dqbuf(struct tx_isp_video_queue *queue,
 	buffer->type = queue->type;
 	buffer->bytesused = slot->bytesused;
 	buffer->flags = error ? TX_ISP_FRAME_FLAG_ERROR : TX_ISP_FRAME_FLAG_DONE;
+#ifdef __KERNEL__
+	buffer->timestamp_sec = (u32)div_u64_rem(slot->timestamp_ns,
+		1000000000U, &timestamp_remainder);
+	buffer->timestamp_usec = timestamp_remainder / 1000U;
+#else
 	buffer->timestamp_sec = (u32)(slot->timestamp_ns / 1000000000ULL);
 	buffer->timestamp_usec =
 		(u32)((slot->timestamp_ns % 1000000000ULL) / 1000ULL);
+#endif
 	buffer->sequence = slot->sequence;
 	buffer->memory = queue->memory;
 	buffer->dma = slot->dma;

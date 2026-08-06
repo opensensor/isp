@@ -30,19 +30,34 @@ wakeups.
 
 ## Adapter phases
 
-1. Add a read-only capability/format adapter and register one capture node per
-   enabled scaler channel. Expose NV12 only, using the checked active format
-   and layout rather than independently calculating strides.
-2. Connect `REQBUFS`/`QUERYBUF`/`QBUF`/`DQBUF`/`STREAMON`/`STREAMOFF` to the
-   common queue core. The first implementation is MMAP with contiguous DMA;
-   it reuses the existing frame-source queue event and completion callback.
-3. Add `poll()` and blocking/nonblocking DQBUF wakeups, then validate queue
-   cancellation, process exit, repeated open/close, and stream restart.
+1. T41 registers `/dev/video0` on scaler channel 1. It exposes the native
+   2560x1440 NV12 format from the shared checked layout helper. Raptor retains
+   scaler channel 0, so both paths can run without sharing buffer ownership.
+2. T41 connects `REQBUFS`/`QUERYBUF`/`QBUF`/`DQBUF`/`STREAMON`/`STREAMOFF` to
+   the common queue core through Linux 4.4 vb2 MMAP and contiguous DMA. The
+   private queue metadata receives those physical buffers and the existing
+   ISP completion path returns them to vb2 in hardware completion order.
+3. `poll()`, blocking and nonblocking DQBUF, queue cancellation, process exit,
+   repeated open/close, and stream restart are wired through vb2. Channel
+   claim/release is strict: a second owner receives `EBUSY`, while STREAMOFF
+   wakes the completion thread and deterministically returns all buffers.
 4. Add DMABUF import only after MMAP correctness and cache ownership are
    proven on T31 and T41. USERPTR is not part of the first public contract.
 5. Add a mainline media-controller adapter without changing the queue and
    layout cores. Version-specific vb2 glue stays in a small compatibility
    layer.
+
+`tests/t41_v4l2_discovery_test.c` covers QUERYCAP, format, frame-size, and
+frame-interval enumeration. `tests/t41_v4l2_mmap_test.c` allocates two full
+resolution buffers, captures ten frames, checks sequence/timestamp/payload
+metadata, and optionally writes the final NV12 frame for visual validation.
+Both tests run while Raptor continues to use scaler channel 0.
+
+The T41 adapter's call into the recovered private ioctl handlers uses the
+narrow `KERNEL_DS` bridge available in Linux 4.4. This compatibility glue is
+kept out of the common queue/layout cores and must be replaced by native
+kernel-operation callbacks in the mainline adapter, where `set_fs()` no
+longer exists.
 
 ## Correctness contract
 
