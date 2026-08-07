@@ -868,6 +868,7 @@ MODULE_PARM_DESC(t41_safe_ae_effective_target_q8,
 static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 				      uint32_t mask);
 static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16);
+static void t41_apply_stock_bcsh_profile(uint32_t color_model);
 static unsigned int t41_gain_fanout_trigger = ~0U;
 static int t41_gain_fanout_set(const char *value,
 			       const struct kernel_param *kp)
@@ -1287,6 +1288,10 @@ static int t41_stock_bcsh_profile = -1;
 module_param(t41_stock_bcsh_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_bcsh_profile,
 		 "Program the exact stock OS04D10 BCSH writer bank (negative=enabled)");
+static unsigned int t41_bcsh_color_model = ~0U;
+module_param(t41_bcsh_color_model, uint, 0444);
+MODULE_PARM_DESC(t41_bcsh_color_model,
+		 "active stock-derived BCSH color model (0=day, 1=low-light)");
 /* Exact stock state from the current pristine H20240401a Ingenic OS04D10
  * module.  The safe event gate does not run the unrecovered AWB fanout yet,
  * so seed LSC from that matched oracle instead of its init placeholders. */
@@ -20456,6 +20461,9 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             { TX_ISP_TUNING_CMD_OPEN_AE_TARGET, sizeof(uint32_t),
               TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
               TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL, sizeof(uint32_t),
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
         static unsigned int trace_count;
         struct tx_isp_tuning_t41_control request;
@@ -20591,6 +20599,27 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: live AE target=%u Q8\n",
                    target);
+            return 0;
+        }
+        if (route && route->id == TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL) {
+            uint32_t color_model;
+
+            if (request.channel != 0 || !request.value_or_ptr)
+                return -EINVAL;
+            if (request.is_get) {
+                color_model = READ_ONCE(t41_bcsh_color_model);
+                return private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    &color_model, sizeof(color_model)) ? -EFAULT : 0;
+            }
+            if (private_copy_from_user(
+                    &color_model,
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    sizeof(color_model)))
+                return -EFAULT;
+            if (color_model > TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT)
+                return -EINVAL;
+            t41_apply_stock_bcsh_profile(color_model);
             return 0;
         }
         if (route && route->payload_size == 1U) {
@@ -32200,10 +32229,10 @@ static void t41_apply_stock_dpc_profile(void)
            system_reg_read(0x071a0), system_reg_read(0x0723c));
 }
 
-static void t41_apply_stock_bcsh_profile(void)
+static void t41_apply_stock_bcsh_profile(uint32_t color_model)
 {
     /*
-     * Exact converged day-mode output of stock T41 tisp_bcsh_write_reg().
+     * Exact converged outputs of stock T41 tisp_bcsh_write_reg().
      * The stock HLIL proves that BCSH owns exactly 29 words at
      * 0x11000..0x11070.  Do not copy 0x11074 and above: those registers are
      * outside the writer/PM range and include live or separately-owned state.
@@ -32213,7 +32242,7 @@ static void t41_apply_stock_bcsh_profile(void)
      * of the replay.  T41 needs its own values because its BCSH layout and
      * interpolation chain differ from T40.
      */
-    static const uint32_t stock_words[] = {
+    static const uint32_t day_words[] = {
         0x000003ff, 0x000003fc, 0x000003ff, 0x000003ff,
         0x000003fc, 0x000003ff, 0x03fd0400, 0x04020400,
         0x04020400, 0x3ef70400, 0x00000006, 0x06a53fff,
@@ -32223,16 +32252,32 @@ static void t41_apply_stock_bcsh_profile(void)
         0x03840000, 0x00010009, 0x0030000c, 0x054e0573,
         0x054e0573,
     };
+    static const uint32_t low_light_words[] = {
+        0x000003ff, 0x000003fc, 0x000003ff, 0x000003ff,
+        0x000003fc, 0x000003ff, 0x03fd0400, 0x04020400,
+        0x04020400, 0x00b90400, 0x00000007, 0x05a83fff,
+        0x0000007c, 0x3ff73ffc, 0x000008c0, 0x00080000,
+        0x00c80050, 0x00100000, 0x03600320, 0x00660001,
+        0x00120008, 0x04000001, 0x04000400, 0x03840001,
+        0x03840001, 0x00000001, 0x0030000c, 0x0518052d,
+        0x0518052d,
+    };
+    const uint32_t *stock_words;
     unsigned int i;
 
     if (t41_stock_bcsh_profile > 0)
         return;
-    for (i = 0; i < ARRAY_SIZE(stock_words); ++i)
+    stock_words = color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT ?
+        low_light_words : day_words;
+    for (i = 0; i < ARRAY_SIZE(day_words); ++i)
         system_reg_write(0x11000 + i * sizeof(uint32_t), stock_words[i]);
+    WRITE_ONCE(t41_bcsh_color_model, color_model);
 
     printk(KERN_WARNING
-           "tx_isp_t41_recovered: exact stock BCSH bank applied words=%u "
+           "tx_isp_t41_recovered: exact stock BCSH bank applied model=%s words=%u "
            "check=%#x/%#x/%#x/%#x\n",
+           color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT ?
+               "low-light" : "day",
            i, system_reg_read(0x11000), system_reg_read(0x11024),
            system_reg_read(0x11054), system_reg_read(0x11070));
 }
@@ -53781,7 +53826,7 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
     if (channel == 0)
         t41_apply_stock_tmo_profile();
     if (channel == 0)
-        t41_apply_stock_bcsh_profile();
+        t41_apply_stock_bcsh_profile(TX_ISP_TUNING_COLOR_MODEL_DAY);
     if (channel == 0) {
         bool legacy_profile = t41_ae_flicker_profile < 0 &&
             t41_ae_flicker_frequency_hz && t41_ae_flicker_floor_lines;

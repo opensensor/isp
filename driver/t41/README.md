@@ -112,6 +112,16 @@ context, without stopping V4L2 capture or the encoder. Policy names and presets
 remain in OpenIMP userspace; the experimental aggregate AWB controller remains
 explicitly opt-in.
 
+A matched nighttime oracle showed why that daylight seed cannot be the whole
+security policy. Stock converged around `1240/4692`, lowered scene luma, and
+selected a different 29-word `tisp_bcsh_write_reg()` bank. Replaying only the
+gains left open too warm and saturated; replaying the writer-owned low-light
+bank plus the matched `15800` AE target closed normalized YUV from stock
+`109.568/116.295/138.708` to open `109.546/116.765/137.548`. A third open
+tuning command now switches the complete day/low-light color-model bank live.
+OpenIMP owns gain-threshold hysteresis and the sensor-specific trims; the
+driver owns only the validated register transaction.
+
 The August correctness cycle also restores the T41 1.2 tuning responses used
 by RIC: running-mode GET, AE expression, the 256-bin/225-zone AE statistics
 envelope, and AWB global statistics. Their packed layouts are implemented in

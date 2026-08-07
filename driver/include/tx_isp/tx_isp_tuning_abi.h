@@ -62,9 +62,13 @@ typedef uint64_t u64;
  * driver only owns the atomic auto/manual AWB transition and gain replay. */
 #define TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL	0x08ff0001U
 #define TX_ISP_TUNING_CMD_OPEN_AE_TARGET	0x08ff0002U
+#define TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL	0x08ff0003U
 
 #define TX_ISP_TUNING_AWB_MANUAL		0U
 #define TX_ISP_TUNING_AWB_AUTO		1U
+
+#define TX_ISP_TUNING_COLOR_MODEL_DAY		0U
+#define TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT	1U
 
 #define TX_ISP_TUNING_DIR_GET			0x01U
 #define TX_ISP_TUNING_DIR_SET			0x02U
