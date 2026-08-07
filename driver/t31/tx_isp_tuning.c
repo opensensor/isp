@@ -2744,11 +2744,11 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 		return tisp_apply_debug_top_bypass_overrides(bypass_val, __func__);
 	}
 
-	/* OEM EXACT: read CURRENT register value as starting point.
-	 * The OEM does NOT use a hardcoded starting value — it reads
-	 * system_reg_read(0xc) and modifies only the bits controlled by
-	 * tuning params, preserving all other HW-set bits. */
-	bypass_val = system_reg_read(0xc);
+	/* OEM tisp_init seeds the per-block loop from 0x8077efff.  Starting
+	 * from the live register preserves reset-state bits 2 and 6, which
+	 * inverts DPC and the LSC LUT gate for the official T31 IQ files.
+	 * The GC2053 day bank, for example, must resolve to 0xb5742249. */
+	bypass_val = 0x8077efff;
 
 	if (params && tuning_bin_loaded) {
 		/* OEM EXACT per-bit loop: each u32 in tparams[0..31] is a BYPASS flag.

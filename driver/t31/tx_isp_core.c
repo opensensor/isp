@@ -1966,13 +1966,14 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
     }
     pr_info("Secondary VIC registers mapped at 0x10023000\n");
 
-    /* Map CSI BASIC registers - 0x10023000 is the W01/wrapper bank, not BASIC. */
-    isp->csi_regs = ioremap(0x10022000, 0x1000);
+    /* Mainline maps the DesignWare CSI host; vendor kernels retain their
+     * legacy wrapper-backed resource contract. */
+    isp->csi_regs = ioremap(TX_ISP_CSI_BASE, 0x1000);
     if (!isp->csi_regs) {
         pr_err("Failed to map CSI registers\n");
         goto err_unmap_vic2;
     }
-    pr_info("CSI registers mapped at 0x10022000\n");
+    pr_info("CSI host registers mapped at 0x%08x\n", TX_ISP_CSI_BASE);
 
     /* Map PHY registers */
     isp->phy_base = ioremap(0x10021000, 0x1000);
@@ -2036,9 +2037,19 @@ static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
 int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 {
     struct clk *cgu_isp;
-    struct clk *isp_clk;
+    struct clk *isp_core_clk;
     struct clk *csi_clk;
+    unsigned long target_rate = 100000000;
     int ret;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+    /* The mainline profile passes its required clock through the existing
+     * isp_clk module parameter.  Do not silently replace that value with the
+     * recovered 100 MHz fallback; 1080p MIPI profiles such as GC2053 request
+     * 200 MHz.  Vendor kernels retain the historical fixed-rate behavior. */
+    if (isp_clk > 0)
+        target_rate = isp_clk;
+#endif
 
     pr_info("[CLK] Configuring ISP system clocks\n");
 
@@ -2050,10 +2061,10 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     }
 
     /* Get the ISP core clock */
-    isp_clk = clk_get(isp->dev, "isp");
-    if (IS_ERR(isp_clk)) {
-        pr_err("[CLK] Failed to get ISP clock: %ld\n", PTR_ERR(isp_clk));
-        ret = PTR_ERR(isp_clk);
+    isp_core_clk = clk_get(isp->dev, "isp");
+    if (IS_ERR(isp_core_clk)) {
+        pr_err("[CLK] Failed to get ISP clock: %ld\n", PTR_ERR(isp_core_clk));
+        ret = PTR_ERR(isp_core_clk);
         goto err_put_cgu_isp;
     }
 
@@ -2065,15 +2076,23 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
         goto err_put_isp_clk;
     }
 
-    /* CRITICAL: Set cgu_isp to 100MHz - required for proper ISP operation */
-    pr_info("[CLK] Setting CGU ISP clock rate to 100MHz (current=%lu Hz)\n", clk_get_rate(cgu_isp));
-    ret = clk_set_rate(cgu_isp, 100000000);
+    pr_info("[CLK] Setting ISP clock rate to %lu Hz (current=%lu Hz)\n",
+            target_rate, clk_get_rate(cgu_isp));
+    ret = clk_set_rate(cgu_isp, target_rate);
     if (ret) {
-        pr_warn("[CLK] Failed to set CGU ISP clock rate to 100MHz: %d (continuing with current rate)\n", ret);
+        pr_warn("[CLK] Failed to set CGU ISP clock rate to %lu Hz: %d (continuing with current rate)\n",
+                target_rate, ret);
         /* Don't fail - continue with whatever rate is set */
     } else {
         pr_info("[CLK] CGU ISP clock rate set to %lu Hz\n", clk_get_rate(cgu_isp));
     }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+    ret = clk_set_rate(isp_core_clk, target_rate);
+    if (ret)
+        pr_warn("[CLK] Failed to set ISP core clock rate to %lu Hz: %d (continuing with current rate)\n",
+                target_rate, ret);
+#endif
 
     /* Enable clocks in correct order (parent first) */
     pr_info("[CLK] Enabling CGU ISP clock (rate=%lu Hz)\n", clk_get_rate(cgu_isp));
@@ -2083,8 +2102,8 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
         goto err_put_csi_clk;
     }
 
-    pr_info("[CLK] Enabling ISP clock (rate=%lu Hz)\n", clk_get_rate(isp_clk));
-    ret = clk_prepare_enable(isp_clk);
+    pr_info("[CLK] Enabling ISP clock (rate=%lu Hz)\n", clk_get_rate(isp_core_clk));
+    ret = clk_prepare_enable(isp_core_clk);
     if (ret) {
         pr_err("[CLK] Failed to enable ISP clock: %d\n", ret);
         goto err_disable_cgu_isp;
@@ -2099,7 +2118,7 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     /* Store clocks in ISP device structure */
     isp->cgu_isp = cgu_isp;
-    isp->isp_clk = isp_clk;
+    isp->isp_clk = isp_core_clk;
     isp->csi_clk = csi_clk;
 
     /* Allow clocks to stabilize before proceeding - critical for CSI PHY */
@@ -2107,21 +2126,21 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     pr_info("[CLK] All ISP clocks enabled successfully\n");
     pr_info("[CLK]   cgu_isp: %lu Hz\n", clk_get_rate(cgu_isp));
-    pr_info("[CLK]   isp:     %lu Hz\n", clk_get_rate(isp_clk));
+    pr_info("[CLK]   isp:     %lu Hz\n", clk_get_rate(isp_core_clk));
     pr_info("[CLK]   csi:     %lu Hz\n", clk_get_rate(csi_clk));
 
     return 0;
 
 err_disable_isp_clk:
     pr_info("[CLK] Disabling ISP clock (cleanup)\n");
-    clk_disable_unprepare(isp_clk);
+    clk_disable_unprepare(isp_core_clk);
 err_disable_cgu_isp:
     pr_info("[CLK] Disabling CGU ISP clock (cleanup)\n");
     clk_disable_unprepare(cgu_isp);
 err_put_csi_clk:
     clk_put(csi_clk);
 err_put_isp_clk:
-    clk_put(isp_clk);
+    clk_put(isp_core_clk);
 err_put_cgu_isp:
     clk_put(cgu_isp);
     return ret;

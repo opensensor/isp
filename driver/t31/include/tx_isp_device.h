@@ -7,6 +7,7 @@
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
 #include <linux/types.h>
+#include <linux/version.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <linux/miscdevice.h>
@@ -48,7 +49,18 @@ enum tx_isp_subdev_id {
 /* Register base addresses */
 #define TX_ISP_CORE_BASE   0x13300000
 #define TX_ISP_VIC_BASE    0x10023000
-#define TX_ISP_CSI_BASE    0x10022000
+#define TX_ISP_CSI_WRAPPER_BASE 0x10022000
+/*
+ * T31 has a vendor PHY/wrapper window at 0x10022000 and a DesignWare
+ * CSI-2 host controller at 0x10023000 (VERSION == 0x3130322a).  The 3.10
+ * vendor stack exposes the former as its legacy CSI resource and pre-seeds
+ * the host separately.  Mainline must own the real host controller.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+#define TX_ISP_CSI_BASE    0x10023000
+#else
+#define TX_ISP_CSI_BASE    TX_ISP_CSI_WRAPPER_BASE
+#endif
 
 /* Register offsets */
 /* Core registers */

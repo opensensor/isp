@@ -995,7 +995,11 @@ static struct resource tx_isp_vic_resources[] = {
 
 /* VIC clock configuration array - EXACT Binary Ninja MCP */
 static struct tx_isp_device_clk vic_clks[] = {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+    {"cgu_isp", 0xffff},     /* Mainline rate comes from isp_clk parameter */
+#else
     {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
+#endif
     {"isp", 0xffff},         /* Auto-rate ISP clock */
 };
 
@@ -1028,8 +1032,8 @@ struct platform_device tx_isp_vic_platform_device = {
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
         .name  = "isp-device",
-        .start = 0x10022000,           /* OEM CSI basic/DPHY window; wrapper is separately mapped */
-        .end   = 0x10022FFF,
+        .start = TX_ISP_CSI_BASE,
+        .end   = TX_ISP_CSI_BASE + 0xfff,
         .flags = IORESOURCE_MEM,
     },
     [1] = {
@@ -3878,6 +3882,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return 0;
     }
     case TX_ISP_FRAME_IOCTL_LEGACY_QBUF: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
+        struct tx_isp_frame_buffer_wire wire;
         struct v4l2_buffer buffer;
         struct tx_isp_nv12_buffer dma_buffer;
         u32 buffer_w;
@@ -3890,11 +3895,34 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_debug("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
 
-        /* Binary Ninja: private_copy_from_user(&var_78, $s2, 0x44) */
-        if (copy_from_user(&buffer, argp, sizeof(buffer))) {
+        /* The legacy ioctl number encodes a 0x44-byte, time32 MIPS buffer.
+         * Linux 5.6+ deliberately uses a time64 timestamp inside the kernel's
+         * struct v4l2_buffer, moving memory/userptr by eight bytes.  This
+         * private ioctl bypasses the V4L2 compat layer, so decode the stable
+         * vendor wire object explicitly instead of copying into the native
+         * mainline structure. */
+        BUILD_BUG_ON(sizeof(wire) != TX_ISP_FRAME_BUFFER_BYTES);
+        if (copy_from_user(&wire, argp, sizeof(wire))) {
             pr_err("*** QBUF: Copy from user failed ***\n");
             return -EFAULT;
         }
+
+        memset(&buffer, 0, sizeof(buffer));
+        buffer.index = wire.index;
+        buffer.type = wire.type;
+        buffer.bytesused = wire.bytesused;
+        buffer.flags = wire.flags;
+        buffer.field = wire.field;
+        buffer.timestamp.tv_sec = (s32)wire.timestamp_sec;
+        buffer.timestamp.tv_usec = (s32)wire.timestamp_usec;
+        memcpy(&buffer.timecode, &wire.timecode_type,
+               sizeof(buffer.timecode));
+        buffer.sequence = wire.sequence;
+        buffer.memory = wire.memory;
+        buffer.m.userptr = wire.dma;
+        buffer.length = wire.length;
+        buffer.reserved2 = wire.reserved2;
+        buffer.reserved = wire.reserved;
 
         /* Binary Ninja: if (var_74 != *($s0 + 0x24)) - validate buffer type */
         if (buffer.type != fcd->buffer_type) {
@@ -3925,10 +3953,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* Defer forwarding to VIC until after we compute phys and populate buffer.m */
 
-        /* Use the physical address from userspace (libimp allocates from rmem via KMEM).
-         * V4L2_MEMORY_USERPTR: buffer.m.userptr contains the physical address.
-         * Fallback: compute from rmem base + index * size.
-         */
+        /* Use the physical address supplied by the USERPTR client.  The frame
+         * channel does not own an allocator, so it must never invent a DMA
+         * address when the userspace envelope is incomplete.  In particular,
+         * 0x06300000 is also used by libimp for the ISP auxiliary allocation;
+         * treating it as a frame-pool base makes MSCA overwrite/read the wrong
+         * object and produces stable striped frames. */
         buffer_w = state->width ? (u32)state->width :
                    (channel == 0 ? 1920U : 640U);
         buffer_h = state->height ? (u32)state->height :
@@ -3940,10 +3970,21 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                           buffer_w, buffer_h);
         if (!buffer.length)
             buffer.length = buffer_size;
-        if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
-            buffer_phys_addr = (uint32_t)buffer.m.userptr;
-        } else {
-            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+        if (buffer.memory != V4L2_MEMORY_USERPTR || !buffer.m.userptr) {
+            pr_err_ratelimited("QBUF ch%d idx=%u rejected: memory=%u userptr=0x%lx length=%u\n",
+                               channel, buffer.index, buffer.memory,
+                               buffer.m.userptr, buffer.length);
+            return -EINVAL;
+        }
+        buffer_phys_addr = (uint32_t)buffer.m.userptr;
+
+        {
+            static atomic_t qbuf_trace_budget = ATOMIC_INIT(12);
+
+            if (atomic_dec_if_positive(&qbuf_trace_budget) >= 0)
+                pr_info("QBUF ch%d idx=%u userptr=0x%08x length=%u required=%u\n",
+                        channel, buffer.index, buffer_phys_addr,
+                        buffer.length, buffer_size);
         }
 
         dma_ret = tx_isp_nv12_buffer_build(
@@ -4071,8 +4112,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* Copy buffer back to user space */
-        if (copy_to_user(argp, &buffer, sizeof(buffer))) {
+        /* Return the same legacy wire layout accepted above. */
+        wire.index = buffer.index;
+        wire.type = buffer.type;
+        wire.bytesused = buffer.bytesused;
+        wire.flags = buffer.flags;
+        wire.field = buffer.field;
+        wire.timestamp_sec = (u32)buffer.timestamp.tv_sec;
+        wire.timestamp_usec = (u32)buffer.timestamp.tv_usec;
+        memcpy(&wire.timecode_type, &buffer.timecode,
+               sizeof(buffer.timecode));
+        wire.sequence = buffer.sequence;
+        wire.memory = buffer.memory;
+        wire.dma = (u32)buffer.m.userptr;
+        wire.length = buffer.length;
+        wire.reserved2 = buffer.reserved2;
+        wire.reserved = buffer.reserved;
+        if (copy_to_user(argp, &wire, sizeof(wire))) {
             pr_err("*** QBUF: Failed to copy buffer back to user ***\n");
             return -EFAULT;
         }

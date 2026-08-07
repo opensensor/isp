@@ -387,8 +387,7 @@ static void __iomem *tx_cpm_regs = NULL;
 u32 csi_read32(u32 reg)
 {
     if (!tx_isp_csi_regs) {
-        /* CSI basic/DPHY MMIO lives at 0x10022000; wrapper/W01 is separate at 0x10023000. */
-        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
+        tx_isp_csi_regs = ioremap(TX_ISP_CSI_BASE, 0x1000);
         if (!tx_isp_csi_regs) {
             pr_err("Failed to map CSI registers\n");
             return 0;
@@ -410,8 +409,7 @@ static inline u32 cpm_read32(u32 reg)
 void csi_write32(u32 reg, u32 val)
 {
     if (!tx_isp_csi_regs) {
-        /* CSI basic/DPHY MMIO lives at 0x10022000; wrapper/W01 is separate at 0x10023000. */
-        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
+        tx_isp_csi_regs = ioremap(TX_ISP_CSI_BASE, 0x1000);
         if (!tx_isp_csi_regs) {
             pr_err("Failed to map CSI registers\n");
             return;
@@ -792,11 +790,10 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
     if (isp_csi_regs)
         return isp_csi_regs;
 
-    /*
-     * The OEM csi_core_ops_init HLIL uses +0x13c for 0x00/0x128/0x160/0x1e0/0x260,
-     * and the hardware trace shows those accesses landing in the live CSI block at
-     * 0x10022000. Point this slot at the CSI MMIO window, not raw ISP core space.
-     */
+    /* The OEM +0x13c slot addresses the T31 PHY/timing wrapper.  On 3.10
+     * this is also the legacy CSI resource.  Mainline maps the DesignWare
+     * host separately, so never alias the wrapper slot to csi_regs there. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
     if (csi_dev->csi_regs) {
         isp_csi_regs = csi_dev->csi_regs;
         pr_info("csi_get_wrapper_regs: populated +0x13c from csi_dev->csi_regs %p\n",
@@ -805,10 +802,12 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
         isp_csi_regs = ourISPdev->csi_regs;
         pr_info("csi_get_wrapper_regs: populated +0x13c from isp_dev->csi_regs %p\n",
                 isp_csi_regs);
-    } else {
-        isp_csi_regs = ioremap(0x10022000, 0x1000);
+    } else
+#endif
+    {
+        isp_csi_regs = ioremap(TX_ISP_CSI_WRAPPER_BASE, 0x1000);
         if (isp_csi_regs)
-            pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated 0x10022000 CSI mapping %p\n",
+            pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated wrapper mapping %p\n",
                     isp_csi_regs);
     }
 
@@ -829,8 +828,13 @@ static int csi_calc_rate_sel(struct tx_isp_sensor_attribute *sensor_attr)
         return 0;
 
     rate = sensor_attr->mipi.settle_time_apative_en;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+    /* The vendor kernel pre-seeds the PHY timing registers and treats this
+     * field as an instruction to leave them alone.  Preserve that contract
+     * for the original kernel line. */
     if (rate != 0)
         return rate;
+#endif
 
     clk = sensor_attr->mipi.clk;
     if (clk - 0x50 < 0x1e)
@@ -953,47 +957,50 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(interface_type, csi_regs + 0x0c);
         private_msleep(1);
 
-        /*
-         * OEM logic: when settle_time_apative_en is set (boolean flag),
-         * skip rate register writes entirely — let the PHY use hardware
-         * defaults.  Only calculate and write rate_sel from mipi.clk
-         * when the flag is clear.
-         *
-         * NOTE: These writes go to isp_csi_regs which may read as zero
-         * until the VIC kick below enables the PHY bus bridge.  The
-         * writes still land in the hardware shadow registers.
-         */
+        /* Vendor kernels enter here with the VIC bridge and DPHY timing
+         * already initialized by the platform stack, so retain the OEM
+         * adaptive-settle branch for them.  Mainline has no such pre-seed:
+         * open the bridge before touching the wrapper timing registers and
+         * program an explicit selector even for adaptive sensors. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+        rate_sel = csi_calc_rate_sel(sensor_attr);
+        rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) |
+                   (rate_sel & 0xf);
+        writel(rate_reg, isp_csi_regs + 0x160);
+        writel(rate_reg, isp_csi_regs + 0x1e0);
+        writel(rate_reg, isp_csi_regs + 0x260);
+#else
         if (!sensor_attr->mipi.settle_time_apative_en) {
             rate_sel = csi_calc_rate_sel(sensor_attr);
-        } else {
-            rate_sel = -1; /* adaptive — HW defaults used */
-        }
-
-        /* Kick VIC 0x0c to enable CSI PHY register bus bridge.
-         * Must happen BEFORE wrapper writes so they land in live regs.
-         * Rate regs (0x160/0x1e0/0x260) are written AFTER the kick
-         * so they take effect on both adaptive and non-adaptive sensors.
-         * Value must be 1; tx_isp_vic_start overwrites to 2 (MIPI). */
-        vic_write32(0x0c, 1);
-        wmb();
-        if (!csi_wait_w01_phase(250)) {
-            pr_warn("csi_core_ops_init: W01 phase did not advance (0x14=0x%08x)\n",
-                    vic_read32(0x14));
-        }
-
-        /* Now write rate regs (bridge is active, writes will land) */
-        if (rate_sel >= 0) {
-            rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | (rate_sel & 0xf);
+            rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) |
+                       (rate_sel & 0xf);
             writel(rate_reg, isp_csi_regs + 0x160);
             writel(rate_reg, isp_csi_regs + 0x1e0);
             writel(rate_reg, isp_csi_regs + 0x260);
+        } else {
+            rate_sel = -1;
         }
+#endif
 
         /* OEM writes 0x7d and lane mask to wrapper regs, always 0x3f */
         writel(0x7d, isp_csi_regs + 0x00);
         writel(0x3f, isp_csi_regs + 0x128);
-        /* OEM only writes csi_regs+0x10, NOT vic 0x10 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+        /* The vendor kernel pre-seeds the DesignWare host.  Mainline does
+         * not, so release all three host/PHY resets after wrapper timing is
+         * programmed.  Leaving PHY_SHUTDOWNZ low produces frame-shaped but
+         * invalid striped output with no CSI error bits set. */
+        writel(1, csi_regs + 0x08);
+        writel(1, csi_regs + 0x0c);
         writel(1, csi_regs + 0x10);
+        wmb();
+        if (!csi_wait_w01_phase(250))
+            pr_warn("csi_core_ops_init: CSI PHY did not reach a stable phase (0x14=0x%08x)\n",
+                    readl(csi_regs + 0x14));
+#else
+        /* Preserve the recovered OEM write sequence on vendor kernels. */
+        writel(1, csi_regs + 0x10);
+#endif
 
         private_msleep(10);
         pr_info("csi_core_ops_init: MIPI init programmed lanes=%u rate_sel=%d (adaptive=%d) basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x slot13c[0x00]=0x%08x slot13c[0x0c]=0x%08x w01[0x14]=0x%08x w01[0x40]=0x%08x slot13c[0x128]=0x%08x\n",
@@ -1098,9 +1105,8 @@ struct tx_isp_subdev_ops csi_subdev_ops = {
 // Define resources outside probe
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
-        /* OEM CSI basic/DPHY block; wrapper/W01 is separately mapped at 0x10023000. */
-        .start  = 0x10022000,
-        .end    = 0x10022000 + 0x1000 - 1,
+        .start  = TX_ISP_CSI_BASE,
+        .end    = TX_ISP_CSI_BASE + 0x1000 - 1,
         .flags  = IORESOURCE_MEM,
         .name   = "csi-regs",
     }
@@ -1182,9 +1188,8 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     *csi_mem_res_slot(csi_dev) = sd->res;
 
-    /* Keep the wrapper/+0x13c bank distinct from the basic CSI regs. The
-     * OEM probe maps the basic block from the subdev resource, while wrapper
-     * accesses come from a dedicated 0x10023000 mapping.
+    /* Keep the wrapper/+0x13c bank distinct from the mainline CSI host. The
+     * OEM probe maps its CSI resource through the vendor wrapper contract.
      */
     if (old_wrapper_regs == old_basic_regs || old_wrapper_regs == csi_dev->csi_regs)
         *csi_wrapper_regs_slot(csi_dev) = NULL;
@@ -1263,7 +1268,7 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
     }
 
     pr_info("=== CSI Register Dump (Basic + Wrapper) ===\n");
-    /* Basic CSI registers (0x10022000 space) */
+    /* DesignWare CSI host registers (mainline) or legacy CSI resource. */
     pr_info("[BASIC] VERSION (0x00):      0x%08x\n", readl(csi_base + 0x00));
     pr_info("[BASIC] N_LANES (0x04):      0x%08x\n", readl(csi_base + 0x04));
     pr_info("[BASIC] PHY_SHUTDOWNZ (0x08): 0x%08x\n", readl(csi_base + 0x08));

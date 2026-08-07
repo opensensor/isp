@@ -4,6 +4,7 @@
 #include <linux/of.h>
 #include <linux/interrupt.h>
 #include <linux/ratelimit.h>
+#include <linux/version.h>
 
 #include <linux/i2c.h>
 #include <linux/clk.h>
@@ -1601,6 +1602,37 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             pr_info("sensor type is OTHER_MIPI!\n");
         }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
+        /* The vendor kernel leaves the CSI-2 data type preconfigured for
+         * sensors such as GC2053, whose attribute table advertises RAW10 but
+         * leaves data_type_value at zero.  Mainline starts from reset, so
+         * derive the missing value without overriding sensors that provide
+         * an explicit CSI-2 data type.
+         */
+        if (!data_type_value) {
+            switch (sensor_csi_fmt) {
+            case TX_SENSOR_RAW8:
+                data_type_value = RAW8;
+                break;
+            case TX_SENSOR_RAW10:
+                data_type_value = RAW10;
+                break;
+            case TX_SENSOR_RAW12:
+                data_type_value = RAW12;
+                break;
+            case TX_SENSOR_YUV422:
+                data_type_value = YUV422_8BIT;
+                break;
+            default:
+                break;
+            }
+
+            if (data_type_value)
+                pr_info("tx_isp_vic_start: inferred CSI-2 data type 0x%x from sensor format %u\n",
+                        data_type_value, sensor_csi_fmt);
+        }
+#endif
+
 			switch (sensor_csi_fmt) {
         case TX_SENSOR_RAW10:
             bits_per_pixel = 10;
@@ -2379,7 +2411,8 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		u32 width = vic_dev->width;
 		u32 height = vic_dev->height;
 		struct tx_isp_sensor_attribute *sattr = vic_raw_sensor_attr_get(vic_dev);
-		int is_nv12 = (sattr && sattr->data_type == 7);
+		int is_nv12 = sattr &&
+			sattr->mipi.mipi_sc.sensor_csi_fmt == TX_SENSOR_YUV422;
 		u32 stride_line, frame_size, savenum, total_size;
 		u32 saved_7810, saved_7814, saved_7804, saved_7820;
 		bool was_processing;
@@ -2483,8 +2516,12 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			int fmt_arg = 0;
 			was_processing = vic_dev->processing;
 
-			if (!is_nv12 && sattr && sattr->total_width != 0)
-				dual = 1; /* approximate dual-ch check */
+			/* OEM tests sensor_attribute::data_type at +0x90 here.
+			 * Linear GC2053 is single-channel; total_width is geometry and
+			 * must not be used as a proxy for WDR/dual-channel capture. */
+			if (!is_nv12 && sattr &&
+			    sattr->data_type != TX_SENSOR_DATA_TYPE_LINEAR)
+				dual = 1;
 			if (is_nv12)
 				fmt_arg = 7;
 
