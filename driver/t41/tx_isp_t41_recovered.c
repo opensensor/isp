@@ -1091,6 +1091,7 @@ static int t41_setup_video_link_graph(uintptr_t graph, unsigned int link);
 static void t41_apply_stock_awb_gains(void);
 static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
                                   uint16_t bgain);
+static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
  * process callback.  Keep a hardware-tested OS04D10 daylight fallback until
@@ -20464,6 +20465,9 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             { TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL, sizeof(uint32_t),
               TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
               TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_OPEN_AWB_SCENE,
+              sizeof(struct tx_isp_tuning_awb_scene),
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
         static unsigned int trace_count;
         struct tx_isp_tuning_t41_control request;
@@ -20617,10 +20621,22 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                     (void __user *)(uintptr_t)request.value_or_ptr,
                     sizeof(color_model)))
                 return -EFAULT;
-            if (color_model > TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT)
+            if (color_model > TX_ISP_TUNING_COLOR_MODEL_BRIGHT_DAY)
                 return -EINVAL;
             t41_apply_stock_bcsh_profile(color_model);
             return 0;
+        }
+        if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AWB_SCENE) {
+            struct tx_isp_tuning_awb_scene scene;
+
+            if (request.channel != 0 || !request.value_or_ptr)
+                return -EINVAL;
+            ret = t41_safe_awb_measure_scene(&scene);
+            if (ret)
+                return ret;
+            return private_copy_to_user(
+                (void __user *)(uintptr_t)request.value_or_ptr,
+                &scene, sizeof(scene)) ? -EFAULT : 0;
         }
         if (route && route->payload_size == 1U) {
             uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
@@ -31946,6 +31962,93 @@ static void t41_safe_awb_apply(uint32_t rgain, uint32_t bgain)
     system_reg_set_awb_trig(3, 0);
 }
 
+/* Return a stable scene-color signal without enabling the experimental AWB
+ * writer.  Each hardware bank covers a different spatial phase, so aggregate
+ * all four banks; treating any one bank as a complete frame caused the old
+ * auto controller's large blue/green excursions. */
+static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene)
+{
+    uint8_t *info;
+    uint8_t *params;
+    uint8_t *dma;
+    uint32_t bank_size;
+    uint32_t bank;
+    uint32_t grid_rows;
+    uint32_t grid_columns;
+    uint32_t grid_groups;
+    uint64_t red = 0;
+    uint64_t green = 0;
+    uint64_t blue = 0;
+    uint64_t pixels = 0;
+    uint32_t zones = 0;
+
+    if (!scene || !awb_info[0])
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)awb_info[0];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 0);
+    dma = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(dma))
+        return -ENODEV;
+
+    bank_size = ((8U - 6U * params[3274]) & 0xffU) << 12;
+    if (!bank_size || bank_size > 0x8000U)
+        return -EINVAL;
+    grid_rows = *(uint16_t *)(void *)(params + 3182);
+    grid_columns = *(uint16_t *)(void *)(params + 3186);
+    if (!grid_rows || !grid_columns || grid_rows > 15U ||
+        grid_columns > 15U || params[3274] != 0U)
+        return -EINVAL;
+    grid_groups = grid_rows * grid_columns;
+    if (grid_groups > bank_size / 128U)
+        return -EINVAL;
+    for (bank = 0; bank < 4U; ++bank) {
+        uint8_t *source = dma + bank * bank_size;
+        uint32_t group;
+
+        if (!t41_kernel_data_ptr(source) ||
+            !t41_kernel_data_ptr(source + bank_size - 1U))
+            return -ENODEV;
+        dma_cache_sync(NULL, source, bank_size, DMA_FROM_DEVICE);
+        /* The bank allocation is 32 KiB, but the configured 15x15 grid
+         * occupies only 225 packed 128-byte groups. The unused allocation
+         * tail is not cleared consistently across boots; treating it as
+         * active zones made the aggregate ratios jump with stale data. */
+        for (group = 0; group < grid_groups; ++group) {
+            uint32_t off = group * 128U;
+            uint32_t rec;
+
+            for (rec = 0; rec < 128U; rec += 16U) {
+                uint8_t *record = source + off + rec;
+                uint32_t w0 = *(uint32_t *)(void *)(record + 0);
+                uint32_t w1 = *(uint32_t *)(void *)(record + 4);
+                uint32_t w2 = *(uint32_t *)(void *)(record + 8);
+                uint32_t w3 = *(uint32_t *)(void *)(record + 12);
+                uint32_t count = ((w3 & 0x3fU) << 8) | (w2 >> 24);
+
+                if (!count)
+                    continue;
+                red += w0 & 0x3fffffU;
+                green += ((w1 & 0xfffU) << 10) | (w0 >> 22);
+                blue += ((w2 & 3U) << 20) | (w1 >> 12);
+                pixels += count;
+                zones++;
+            }
+        }
+    }
+
+    /* Keep the statistics engine live while manual gains remain installed. */
+    system_reg_set_awb_trig(1, 0);
+    if (zones < t41_awb_min_zones * 4U ||
+        pixels < (uint64_t)t41_awb_min_pixels * 4U ||
+        !red || !green || !blue)
+        return -ENODATA;
+    scene->raw_r_q10 = (uint32_t)div64_u64(green << 10, red);
+    scene->raw_b_q10 = (uint32_t)div64_u64(green << 10, blue);
+    return 0;
+}
+
 static bool t41_safe_awb_ratio_close(uint32_t value, uint32_t reference)
 {
     uint32_t tolerance = max_t(uint32_t, reference >> 3, 1U);
@@ -32262,13 +32365,30 @@ static void t41_apply_stock_bcsh_profile(uint32_t color_model)
         0x03840001, 0x00000001, 0x0030000c, 0x0518052d,
         0x0518052d,
     };
+    /* Converged OEM OS04D10 bank captured under strong indirect daylight on
+     * 2026-08-07.  The original day bank above was captured under mixed
+     * late-day daylight and warm interior lighting. */
+    static const uint32_t bright_day_words[] = {
+        0x000003ff, 0x000003fc, 0x000003ff, 0x000003ff,
+        0x000003fc, 0x000003ff, 0x03fd0400, 0x04020400,
+        0x04020400, 0x3f8d0401, 0x00003ff7, 0x09bc0000,
+        0x000001db, 0x00080000, 0x000006c7, 0x00080000,
+        0x00c80050, 0x00100000, 0x03600320, 0x00660001,
+        0x00100006, 0x00000001, 0x04000400, 0x03840000,
+        0x03840000, 0x00010009, 0x0030000c, 0x05660593,
+        0x05660593,
+    };
     const uint32_t *stock_words;
     unsigned int i;
 
     if (t41_stock_bcsh_profile > 0)
         return;
-    stock_words = color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT ?
-        low_light_words : day_words;
+    if (color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT)
+        stock_words = low_light_words;
+    else if (color_model == TX_ISP_TUNING_COLOR_MODEL_BRIGHT_DAY)
+        stock_words = bright_day_words;
+    else
+        stock_words = day_words;
     for (i = 0; i < ARRAY_SIZE(day_words); ++i)
         system_reg_write(0x11000 + i * sizeof(uint32_t), stock_words[i]);
     WRITE_ONCE(t41_bcsh_color_model, color_model);
@@ -32277,7 +32397,9 @@ static void t41_apply_stock_bcsh_profile(uint32_t color_model)
            "tx_isp_t41_recovered: exact stock BCSH bank applied model=%s words=%u "
            "check=%#x/%#x/%#x/%#x\n",
            color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT ?
-               "low-light" : "day",
+               "low-light" :
+               (color_model == TX_ISP_TUNING_COLOR_MODEL_BRIGHT_DAY ?
+                    "bright-day" : "day"),
            i, system_reg_read(0x11000), system_reg_read(0x11024),
            system_reg_read(0x11054), system_reg_read(0x11070));
 }
