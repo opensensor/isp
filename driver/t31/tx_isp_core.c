@@ -10,6 +10,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
+#include <linux/math64.h>
 #include "include/tx_isp.h"
 #include "include/tx_isp_core.h"
 #include "include/tx_isp_core_device.h"
@@ -41,9 +42,6 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 extern int private_reset_tx_isp_module(int arg);
 int tx_isp_core_ensure_powered(struct tx_isp_dev *isp, const char *origin);
 
-#define TX_ISP_RESET_REG      0xb00000c4
-#define TX_ISP_RESET_READY    0x100000
-
 /* Global ISP register base for tuning subsystem */
 void __iomem *isp_reg_base = NULL;
 EXPORT_SYMBOL(isp_reg_base);
@@ -71,6 +69,8 @@ extern uint32_t msca_ch_en;
 extern uint32_t msca_dmaout_arb;
 static const uint8_t *tisp_channel_attr_store(int channel_id);
 static u32 tisp_channel_attr_word(const uint8_t *attr_bytes, size_t word_index);
+static void tisp_channel_attr_word_set(uint8_t *attr_bytes, size_t word_index,
+                                       u32 value);
 static u32 tisp_channel_sensor_width(struct tx_isp_dev *isp_dev);
 static u32 tisp_channel_sensor_height(struct tx_isp_dev *isp_dev);
 static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3);
@@ -313,19 +313,10 @@ static void ispcore_sync_output_format(struct tx_isp_dev *isp_dev,
                                        int channel_id,
                                        const struct frame_image_format *fmt)
 {
-    struct tx_isp_vic_device *vic_dev;
     u32 out_fmt;
 
     if (!isp_dev || !fmt || !ispcore_valid_channel_id(channel_id))
         return;
-
-    if (channel_id == 0 && isp_dev->vic_dev) {
-        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        vic_dev->width = fmt->pix.width;
-        vic_dev->height = fmt->pix.height;
-        vic_dev->pixel_format = fmt->pix.pixelformat;
-        vic_dev->stride = fmt->pix.bytesperline ? fmt->pix.bytesperline : fmt->pix.width;
-    }
 
     if (ispcore_msca_out_fmt_from_pixelformat(fmt->pix.pixelformat, &out_fmt) != 0)
         return;
@@ -532,14 +523,15 @@ static void tisp_fill_sensor_info_blob(struct tx_isp_dev *isp_dev,
 {
     u32 active_width = 1920;
     u32 active_height = 1080;
+    u32 raw_fps;
 
     BUILD_BUG_ON(sizeof(*info) != TISP_SENSOR_INFO_SIZE);
     memset(info, 0, sizeof(*info));
 
     tisp_si_set_word(info, TISP_SI_WORD_WIDTH, active_width);
     tisp_si_set_word(info, TISP_SI_WORD_HEIGHT, active_height);
-    tisp_si_set_word(info, TISP_SI_WORD_FPS,
-                     tisp_raw_fps_from_sensor(isp_dev, sensor_attr));
+    raw_fps = tisp_raw_fps_from_sensor(isp_dev, sensor_attr);
+    tisp_si_set_word(info, TISP_SI_WORD_FPS, raw_fps);
     /* Keep sensor-info Bayer as the flipped base CFA index (0..3).
      * The extended programming values live only inside tisp_init(). */
     tisp_si_set_word(info, TISP_SI_WORD_BAYER, tisp_bayer_from_sensor(isp_dev));
@@ -567,73 +559,77 @@ static void tisp_fill_sensor_info_blob(struct tx_isp_dev *isp_dev,
         u32 total_width = sensor_attr->total_width ? sensor_attr->total_width : active_width;
         u32 total_height = sensor_attr->total_height ? sensor_attr->total_height : active_height;
         u32 line_time_us = sensor_attr->one_line_expr_in_us ? sensor_attr->one_line_expr_in_us : 1;
-        u32 max_again_limit = sensor_attr->max_again_short ? sensor_attr->max_again_short : sensor_attr->max_again;
+        u32 fps_num = raw_fps >> 16;
+        u32 fps_den = raw_fps & 0xffff;
+        u64 frame_period_us;
 
+        /* OEM ispcore_sync_sensor_attr derives this field from the active
+         * frame period rather than trusting the sensor driver's rounded
+         * one_line_expr_in_us value. */
+        if (fps_num && fps_den && total_height) {
+            frame_period_us = (u64)fps_den * 1000000ULL;
+            do_div(frame_period_us, fps_num);
+            do_div(frame_period_us, total_height);
+            line_time_us = (u32)frame_period_us;
+        }
+        if (!line_time_us)
+            line_time_us = 1;
+
+        if (sensor_attr->name)
+            strlcpy((char *)&info->words[TISP_SI_WORD_NAME0],
+                    sensor_attr->name, 3 * sizeof(u32));
         tisp_si_set_word(info, TISP_SI_WORD_INTEGRATION_TIME,
                          sensor_attr->integration_time);
-        tisp_si_set_word(info, TISP_SI_WORD_AGAIN, sensor_attr->again);
-        tisp_si_set_word(info, TISP_SI_WORD_DGAIN, sensor_attr->dgain);
         tisp_si_set_word(info, TISP_SI_WORD_MAX_AGAIN, sensor_attr->max_again);
         tisp_si_set_word(info, TISP_SI_WORD_MAX_DGAIN, sensor_attr->max_dgain);
-        tisp_si_set_word(info, TISP_SI_WORD_LINE_TIME,
-                         tisp_si_pack_u16(1, line_time_us));
+        tisp_si_set_word(info, TISP_SI_WORD_AGAIN, sensor_attr->again);
+        tisp_si_set_word(info, TISP_SI_WORD_DGAIN, sensor_attr->dgain);
         tisp_si_set_word(info, TISP_SI_WORD_MIN_IT,
-                         tisp_si_pack_u16(sensor_attr->min_integration_time, 0));
+                         tisp_si_pack_u16(sensor_attr->min_integration_time,
+                                          sensor_attr->min_integration_time_native));
         tisp_si_set_word(info, TISP_SI_WORD_IT_LIMITS,
-                         tisp_si_pack_u16(sensor_attr->integration_time_limit,
-                                          sensor_attr->max_integration_time_native));
+                         tisp_si_pack_u16(sensor_attr->max_integration_time_native,
+                                          sensor_attr->integration_time_limit));
         tisp_si_set_word(info, TISP_SI_WORD_TOTAL_SIZE,
                          tisp_si_pack_u16(total_width, total_height));
         tisp_si_set_word(info, TISP_SI_WORD_MAX_IT,
                          tisp_si_pack_u16(sensor_attr->max_integration_time,
-                                          sensor_attr->wdr_cache));
-        tisp_si_set_word(info, TISP_SI_WORD_SHORT_IT,
-                         tisp_si_pack_u16(sensor_attr->integration_time_short, 0));
-        tisp_si_set_word(info, TISP_SI_WORD_SHORT_MISC,
-                         tisp_si_pack_u16(sensor_attr->again_short,
+                                          sensor_attr->integration_time_apply_delay));
+        tisp_si_set_word(info, TISP_SI_WORD_GAIN_DELAYS,
+                         tisp_si_pack_u16(sensor_attr->again_apply_delay,
+                                          sensor_attr->dgain_apply_delay));
+        tisp_si_set_word(info, TISP_SI_WORD_LINE_SHORT_MIN,
+                         tisp_si_pack_u16(line_time_us,
                                           sensor_attr->min_integration_time_short));
         tisp_si_set_word(info, TISP_SI_WORD_MAX_IT_SHORT,
-                         tisp_si_pack_u16(sensor_attr->max_integration_time_short, 0));
-        tisp_si_set_word(info, TISP_SI_WORD_MAX_AGAIN_LIMIT, max_again_limit);
-        tisp_si_set_word(info, TISP_SI_WORD_MODE,
-                         (sensor_attr->data_type != TX_SENSOR_DATA_TYPE_LINEAR) ? 1 : 0);
-        tisp_si_set_word(info, TISP_SI_WORD_FLAGS, sensor_attr->data_type);
+                         sensor_attr->max_integration_time_short);
+        tisp_si_set_word(info, TISP_SI_WORD_SHORT_IT,
+                         sensor_attr->integration_time_short);
+        tisp_si_set_word(info, TISP_SI_WORD_MAX_AGAIN_LIMIT,
+                         sensor_attr->max_again_short);
+        tisp_si_set_word(info, TISP_SI_WORD_AGAIN_SHORT,
+                         sensor_attr->again_short);
+        tisp_si_set_word(info, TISP_SI_WORD_WDR_CACHE,
+                         sensor_attr->wdr_cache);
     }
-}
 
-static u32 isp_core_read_reset_ctl(void)
-{
-    void __iomem *reset_reg;
-    u32 reg_val = 0;
-
-    reset_reg = ioremap(TX_ISP_RESET_REG, 4);
-    if (!reset_reg)
-        return 0;
-
-    reg_val = readl(reset_reg);
-    iounmap(reset_reg);
-
-    return reg_val;
+    pr_info("TISP_SENSOR_INFO: %08x %08x %08x %08x %08x %08x\n",
+            info->words[0], info->words[1], info->words[2], info->words[3],
+            info->words[4], info->words[5]);
+    pr_info("TISP_SENSOR_INFO: %08x %08x %08x %08x %08x %08x\n",
+            info->words[6], info->words[7], info->words[8], info->words[9],
+            info->words[10], info->words[11]);
+    pr_info("TISP_SENSOR_INFO: %08x %08x %08x %08x %08x %08x\n",
+            info->words[12], info->words[13], info->words[14], info->words[15],
+            info->words[16], info->words[17]);
+    pr_info("TISP_SENSOR_INFO: %08x %08x %08x %08x %08x %08x\n",
+            info->words[18], info->words[19], info->words[20], info->words[21],
+            info->words[22], info->words[23]);
 }
 
 static void isp_core_early_cpm_bringup(void)
 {
     void __iomem *cpm;
-    int reset_ret;
-    u32 reset_ctl;
-    u32 clkgr0_before;
-    u32 clkgr1_before;
-    u32 reset_before;
-    u32 unlock_before;
-    u32 r30_before;
-    u32 r3c_before;
-    u32 clkgr0_after;
-    u32 clkgr1_after;
-    u32 reset_after;
-    u32 r30_after;
-    const u32 clkgr0_mask = (1u << 7) | (1u << 13) | (1u << 21) | (1u << 30);
-    const u32 clkgr1_mask = (1u << 2) | (1u << 30);
-    const u32 reset_mask = (1u << 0) | (1u << 8);
 
     cpm = ioremap(0x10000000, 0x1000);
     if (!cpm) {
@@ -641,78 +637,16 @@ static void isp_core_early_cpm_bringup(void)
         return;
     }
 
-    clkgr0_before = readl(cpm + 0x20);
-    clkgr1_before = readl(cpm + 0x28);
-    r30_before = readl(cpm + 0x30);
-    reset_before = readl(cpm + 0x34);
-    unlock_before = readl(cpm + 0x38);
-    r3c_before = readl(cpm + 0x3c);
-
-    pr_info("[CPM][CORE] early bring-up before tisp_init: g0=%08x g1=%08x r30=%08x r34=%08x unl=%08x r3c=%08x\n",
-            clkgr0_before, clkgr1_before, r30_before, reset_before, unlock_before, r3c_before);
-
-    writel(clkgr0_before & ~clkgr0_mask, cpm + 0x20);
-    writel(clkgr1_before & ~clkgr1_mask, cpm + 0x28);
-    wmb();
-    udelay(5);
-
-    writel(0x0000A5A5, cpm + 0x38);
-    wmb();
-    udelay(1);
-
-    /* Some Ingenic reset windows behave W1C, others require RMW clear. */
-    writel(reset_mask, cpm + 0x34);
-    wmb();
-    udelay(5);
-
-    reset_after = readl(cpm + 0x34);
-    if (reset_after & reset_mask) {
-        writel(reset_after & ~reset_mask, cpm + 0x34);
-        wmb();
-        udelay(5);
-        reset_after = readl(cpm + 0x34);
-    }
-
-    if (reset_after & reset_mask) {
-        /*
-         * Live logs showed the old 0x30 fallback clearing r30=0x40000001 to
-         * zero without changing r34 at all. Avoid touching that ambiguous
-         * window directly and fall back to the OEM whole-module reset pulse
-         * that is already used later during core init.
-         */
-        reset_ctl = isp_core_read_reset_ctl();
-        if (reset_ctl & TX_ISP_RESET_READY) {
-            pr_warn("[CPM][CORE] early bring-up: 0x34 clear did not release reset; c4=%08x ready, pulsing reset helper\n",
-                    reset_ctl);
-
-            reset_ret = private_reset_tx_isp_module(0);
-            if (reset_ret != 0)
-                pr_warn("[CPM][CORE] early bring-up: reset helper returned %d\n", reset_ret);
-
-            writel(0x0000A5A5, cpm + 0x38);
-            wmb();
-            udelay(1);
-        } else {
-            pr_warn("[CPM][CORE] early bring-up: 0x34 clear did not release reset; c4=%08x not ready, deferring reset helper\n",
-                    reset_ctl);
-        }
-
-        r30_after = readl(cpm + 0x30);
-        reset_after = readl(cpm + 0x34);
-        pr_info("[CPM][CORE] early bring-up reset-helper fallback: r30=%08x r34=%08x\n",
-                r30_after, reset_after);
-    } else {
-        r30_after = readl(cpm + 0x30);
-    }
-
-    clkgr0_after = readl(cpm + 0x20);
-    clkgr1_after = readl(cpm + 0x28);
-
-    pr_info("[CPM][CORE] early bring-up after preflight: g0=%08x g1=%08x r30=%08x r34=%08x\n",
-            clkgr0_after, clkgr1_after, r30_after, reset_after);
-    if (reset_after & reset_mask)
-        pr_warn("[CPM][CORE] early bring-up: reset bits still asserted (mask=%08x, r34=%08x)\n",
-                reset_mask, reset_after);
+    /*
+     * T31 CPM 0x34/0x38 are CPPSR/CPSPPR (clock-protection status and
+     * parameter), not reset/unlock registers.  Stock leaves them alone and
+     * performs the ISP reset through SRBC at 0xc4 after enabling the named
+     * clocks.  Keep this preflight read-only and let tx_isp_configure_clocks()
+     * plus private_reset_tx_isp_module() follow that OEM sequence.
+     */
+    pr_info("[CPM][CORE] pre-clock state: clkgr0=%08x clkgr1=%08x vpucdr=%08x cppsr=%08x cpsppr=%08x srbc=%08x\n",
+            readl(cpm + 0x20), readl(cpm + 0x28), readl(cpm + 0x30),
+            readl(cpm + 0x34), readl(cpm + 0x38), readl(cpm + 0xc4));
 
     iounmap(cpm);
 }
@@ -737,9 +671,8 @@ int tx_isp_core_ensure_powered(struct tx_isp_dev *isp, const char *origin)
 
     if (!isp->cgu_isp || !isp->isp_clk || !isp->csi_clk) {
         /*
-         * Only run the intrusive CPM preflight on the first power-up path.
-         * Live logs show re-running it later during VIC stream-on does not
-         * release reset and just re-touches the same stuck window.
+         * Snapshot CPM state on the first power-up path.  Clock and reset
+         * mutations are deliberately left to the stock-compatible helpers.
          */
         isp_core_early_cpm_bringup();
 
@@ -875,7 +808,7 @@ static uint32_t effect_frame = 0;
 static uint32_t effect_count = 0;
 
 
-int isp_clk = 100000000;
+int isp_clk = 200000000;
 module_param(isp_clk, int, S_IRUGO);
 MODULE_PARM_DESC(isp_clk, "isp clock freq");
 EXPORT_SYMBOL(isp_clk);
@@ -1726,19 +1659,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
      * Both are one-shot: they fire on the first interrupt and are then
      * inhibited by their respective guard variables.
      */
-    /* Guard: restore MSCA DMA output bits ONLY when a valid buffer
-     * address is programmed.  Writing 0xf0000 to 0x9804 when 0x996c=0
-     * causes MSCA to attempt DMA to address 0, which fails and makes
-     * the hardware auto-disable DMA (stripping 0xf0000 immediately). */
-    if (msca_ch_en & 0x1) {
-        u32 hw_9804 = readl(isp_regs + 0x9804);
-        u32 buf_addr = readl(isp_regs + 0x996c);
-        if ((hw_9804 & 0xf0000) != 0xf0000 && buf_addr != 0) {
-            msca_ch_en |= 0xf0000;
-            system_reg_write(0x9804, msca_ch_en);
-        }
-    }
-
     /* One-shot bayer write and top_sel — must fire on first interrupt,
      * not gated by bit 0x1 which may not fire reliably yet. */
 	    if (bayer_write_pending) {
@@ -2039,17 +1959,12 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     struct clk *cgu_isp;
     struct clk *isp_core_clk;
     struct clk *csi_clk;
-    unsigned long target_rate = 100000000;
+    unsigned long target_rate = isp_clk > 0 ? isp_clk : 200000000;
     int ret;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-    /* The mainline profile passes its required clock through the existing
-     * isp_clk module parameter.  Do not silently replace that value with the
-     * recovered 100 MHz fallback; 1080p MIPI profiles such as GC2053 request
-     * 200 MHz.  Vendor kernels retain the historical fixed-rate behavior. */
-    if (isp_clk > 0)
-        target_rate = isp_clk;
-#endif
+    /* Stock T31 uses the isp_clk parameter on the vendor kernel as well as
+     * mainline.  The VDB2 profile supplies 200 MHz; forcing the old 100 MHz
+     * fallback here leaves MSCA unable to complete an output frame. */
 
     pr_info("[CLK] Configuring ISP system clocks\n");
 
@@ -2664,6 +2579,15 @@ static u32 tisp_channel_attr_word(const uint8_t *attr_bytes, size_t word_index)
     return value;
 }
 
+static void tisp_channel_attr_word_set(uint8_t *attr_bytes, size_t word_index,
+                                       u32 value)
+{
+    if (!attr_bytes || word_index >= (0x34 / sizeof(u32)))
+        return;
+
+    memcpy(attr_bytes + (word_index * sizeof(u32)), &value, sizeof(value));
+}
+
 static u32 tisp_channel_sensor_width(struct tx_isp_dev *isp_dev)
 {
     u32 width = 0;
@@ -3002,8 +2926,13 @@ int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr)
     system_reg_write(0x9818, msca_dmaout_arb_next);
 
     if (tisp_channel_attr_word(stored_attr, 8) == 1) {
-        full_width = data_b2e10;
-        full_height = data_b2e14;
+        /* OEM tisp_channel_start reads the per-channel frame-crop extent
+         * from attr words 11/12 when frame crop is enabled.  data_b2e10/14
+         * describe the global MSCA crop and can already contain the requested
+         * output size; using them here made a 1920x1080 channel its own source
+         * instead of scaling the sensor's 2048x1536 frame. */
+        full_width = tisp_channel_attr_word(stored_attr, 11);
+        full_height = tisp_channel_attr_word(stored_attr, 12);
     } else {
         full_width = tisp_channel_sensor_width(isp_dev);
         full_height = tisp_channel_sensor_height(isp_dev);
@@ -3051,6 +2980,16 @@ int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr)
     pr_info("*** tisp_channel_start: ch=%d target=%ux%u base=%ux%u scaled=%d arb=0x%08x ch_en=0x%08x ***\n",
             channel_id, target_width, target_height, full_width, full_height,
             scaled, msca_dmaout_arb_next, msca_ch_en);
+    pr_info("T31 CH_START readback: ch=%d ctrl=0x%08x stat=0x%08x arb=0x%08x src=0x%08x out=0x%08x step=0x%08x coeff=%08x/%08x/%08x/%08x\n",
+            channel_id,
+            system_reg_read(0x9804), system_reg_read(0x9808),
+            system_reg_read(0x9818), system_reg_read(0x9864),
+            system_reg_read(channel_base + 0x100),
+            system_reg_read(channel_base + 0x104),
+            system_reg_read(channel_base + 0x1c0),
+            system_reg_read(channel_base + 0x1c4),
+            system_reg_read(channel_base + 0x1c8),
+            system_reg_read(channel_base + 0x1cc));
 
     ISP_INFO("*** tisp_channel_start: Channel %d started successfully ***\n", channel_id);
     return 0;
@@ -3466,33 +3405,45 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
     int32_t var_64 = arg2[8];
     int32_t var_68 = data_b2f34;
 
+    pr_info("T31 ATTR_SET entry: ch=%u isp=%dx%d fcrop=%u/%ux%u+%u+%u attr=%d/%dx%d crop=%d/%dx%d+%d+%d\n",
+            channel_id, tispinfo_1, data_b2f34,
+            tisp_channel_attr_word(ds0_attr, 8),
+            tisp_channel_attr_word(ds0_attr, 11),
+            tisp_channel_attr_word(ds0_attr, 12),
+            tisp_channel_attr_word(ds0_attr, 9),
+            tisp_channel_attr_word(ds0_attr, 10),
+            arg2[0], arg2[1], arg2[2], arg2[3],
+            arg2[6], arg2[7], arg2[4], arg2[5]);
+
     isp_printf(0, "not support the gpio mode!\n", channel_id);
 
     /* Store channel attributes in global arrays */
-    extern uint8_t ds0_attr[], ds1_attr[], ds2_attr[];
     if (channel_id == 0) {
-        memcpy(&ds0_attr, arg2, 0x34);
+        memcpy(ds0_attr, arg2, 0x34);
     } else if (channel_id == 1) {
-        memcpy(&ds1_attr, arg2, 0x34);
+        memcpy(ds1_attr, arg2, 0x34);
     } else if (channel_id == 2) {
-        memcpy(&ds2_attr, arg2, 0x34);
+        memcpy(ds2_attr, arg2, 0x34);
     }
 
     int32_t tispinfo_2 = tispinfo_1;
     int32_t s2 = data_b2f34;
     int32_t a1_2;
 
-    if (data_b2e04 == 0) {
-        data_b2e08 = 0;
-        data_b2e0c = 0;
-        data_b2e10 = tispinfo_2;
-        data_b2e14 = s2;
+    /* In the stock object, the globals originally reconstructed as
+     * data_b2e04..data_b2e14 are ds0_attr words 8..12.  All channels use
+     * that channel-0 cache for the global frame-crop/MSCA input geometry. */
+    if (tisp_channel_attr_word(ds0_attr, 8) == 0) {
+        tisp_channel_attr_word_set(ds0_attr, 9, 0);
+        tisp_channel_attr_word_set(ds0_attr, 10, 0);
+        tisp_channel_attr_word_set(ds0_attr, 11, tispinfo_2);
+        tisp_channel_attr_word_set(ds0_attr, 12, s2);
         a1_2 = 0;
     } else {
-        int32_t tispinfo_3 = data_b2e10;
-        int32_t v1_1 = data_b2e08;
-        int32_t a0_1 = data_b2e14;
-        int32_t a1_1 = data_b2e0c;
+        int32_t tispinfo_3 = tisp_channel_attr_word(ds0_attr, 11);
+        int32_t v1_1 = tisp_channel_attr_word(ds0_attr, 9);
+        int32_t a0_1 = tisp_channel_attr_word(ds0_attr, 12);
+        int32_t a1_1 = tisp_channel_attr_word(ds0_attr, 10);
 
         if ((uint32_t)tispinfo_2 < (uint32_t)(tispinfo_3 + v1_1) ||
             (uint32_t)s2 < (uint32_t)(a0_1 + a1_1)) {
@@ -3504,6 +3455,13 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
         s2 = a0_1;
         a1_2 = (v1_1 << 0x10) | a1_1;
     }
+
+    /* Keep the compatibility exports coherent with their stock storage. */
+    data_b2e04 = tisp_channel_attr_word(ds0_attr, 8);
+    data_b2e08 = tisp_channel_attr_word(ds0_attr, 9);
+    data_b2e0c = tisp_channel_attr_word(ds0_attr, 10);
+    data_b2e10 = tisp_channel_attr_word(ds0_attr, 11);
+    data_b2e14 = tisp_channel_attr_word(ds0_attr, 12);
 
     system_reg_write(0x9860, a1_2);
     system_reg_write(0x9864, (tispinfo_2 << 0x10) | s2);
@@ -3551,6 +3509,15 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
     system_reg_write(s1_2 + 0x28, (arg2[4] << 0x10) | arg2[5]);
     system_reg_write(s1_2 + 0x80, tispinfo_4);
     system_reg_write(s1_2 + 0x98, tispinfo_4);
+
+    pr_info("T31 ATTR_SET exit: ch=%u src=0x%08x out=0x%08x step=0x%08x crop=0x%08x/0x%08x stride=0x%08x/0x%08x\n",
+            channel_id,
+            system_reg_read(0x9864), system_reg_read(s1_2),
+            system_reg_read(s1_2 + 4),
+            system_reg_read(s1_2 + 0x28),
+            system_reg_read(s1_2 + 0x2c),
+            system_reg_read(s1_2 + 0x80),
+            system_reg_read(s1_2 + 0x98));
 
     return 0;
 }
@@ -3675,6 +3642,12 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
         data_b2e04 = 1;
         data_b2e14 = arg5;
 
+        tisp_channel_attr_word_set(ds0_attr, 8, 1);
+        tisp_channel_attr_word_set(ds0_attr, 9, arg3);
+        tisp_channel_attr_word_set(ds0_attr, 10, arg2);
+        tisp_channel_attr_word_set(ds0_attr, 11, arg4);
+        tisp_channel_attr_word_set(ds0_attr, 12, arg5);
+
         system_reg_write(0x9860, arg3 << 0x10 | arg2);
         system_reg_write(0x9864, arg4 << 0x10 | arg5);
 
@@ -3797,6 +3770,8 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             struct frame_image_format *format = arg3;
             struct isp_channel *channel = dispatch->event_priv;
             u32 attr_words[0x34 / sizeof(u32)];
+            u32 sensor_width;
+            u32 sensor_height;
 
             /* Set format */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000002 (set format)");
@@ -3813,6 +3788,37 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 
             ispcore_sanitize_channel_geometry(format);
 
+            /* Some stock-compatible libimp builds describe the requested
+             * channel size only in pix.width/pix.height and leave the
+             * explicit scaler fields clear.  The OEM T31 pipeline still
+             * treats a channel smaller than the active sensor as a scaled
+             * MSCA output.  Resolve that legacy form while format state is
+             * being established; QBUF must remain address-only. */
+            sensor_width = tisp_channel_sensor_width(isp_dev);
+            sensor_height = tisp_channel_sensor_height(isp_dev);
+            if (!format->scaler_enable &&
+                !format->crop_enable && !format->fcrop_enable &&
+                format->pix.width && format->pix.height &&
+                sensor_width && sensor_height &&
+                (format->pix.width != sensor_width ||
+                 format->pix.height != sensor_height)) {
+                format->scaler_enable = true;
+                format->scaler_out_width = format->pix.width;
+                format->scaler_out_height = format->pix.height;
+            }
+
+            pr_info("T31 SET_FORMAT: ch=%u sensor=%ux%u output=%ux%u scaler=%u/%ux%u crop=%u/%u,%u %ux%u fcrop=%u/%u,%u %ux%u\n",
+                    dispatch->channel_id, sensor_width, sensor_height,
+                    format->pix.width, format->pix.height,
+                    format->scaler_enable,
+                    format->scaler_out_width, format->scaler_out_height,
+                    format->crop_enable,
+                    format->crop_left, format->crop_top,
+                    format->crop_width, format->crop_height,
+                    format->fcrop_enable,
+                    format->fcrop_left, format->fcrop_top,
+                    format->fcrop_width, format->fcrop_height);
+
             ispcore_frame_format_to_attr_words(format, attr_words);
 
             if (format->fcrop_enable) {
@@ -3821,8 +3827,6 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                                      format->fcrop_left,
                                      format->fcrop_width,
                                      format->fcrop_height);
-            } else {
-                data_b2e04 = 0;
             }
 
             if (!ispcore_bypass_enabled(isp_dev) &&
@@ -4660,7 +4664,17 @@ void private_msleep(unsigned int msecs)
 void private_clk_disable(struct clk *clk)
 {
     pr_info("[CLK] Disabling clock (rate=%lu Hz)\n", clk_get_rate(clk));
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+    /*
+     * Vendor sensor modules pair this wrapper with clk_enable().  Their
+     * clocks are prepared by the 3.10 platform clock provider, so changing
+     * the legacy ABI to clk_disable_unprepare() unbalances the provider's
+     * prepare count and can gate the T31 camera pipeline unexpectedly.
+     */
+    clk_disable(clk);
+#else
     clk_disable_unprepare(clk);
+#endif
 }
 
 void *private_i2c_get_clientdata(const struct i2c_client *client)
@@ -4716,7 +4730,12 @@ int private_clk_enable(struct clk *clk)
 {
     int ret;
     pr_info("[CLK] Enabling clock (rate=%lu Hz)\n", clk_get_rate(clk));
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+    /* Preserve the original Ingenic 3.10 sensor-driver clock ABI. */
+    ret = clk_enable(clk);
+#else
     ret = clk_prepare_enable(clk);
+#endif
     if (ret)
         pr_err("[CLK] Failed to enable clock: %d\n", ret);
     return ret;

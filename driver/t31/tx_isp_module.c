@@ -244,6 +244,8 @@ static void tx_isp_refresh_sensor_attachment(struct tx_isp_dev *isp_dev,
 
     isp_dev->sensor = sensor;
     isp_dev->sensor_sd = sd;
+    if (isp_dev->vin_dev)
+        isp_dev->vin_dev->active = sensor;
     /* sensor subdev now references ISP dev via ourISPdev global */
 
     if (sensor->info.name[0]) {
@@ -995,11 +997,7 @@ static struct resource tx_isp_vic_resources[] = {
 
 /* VIC clock configuration array - EXACT Binary Ninja MCP */
 static struct tx_isp_device_clk vic_clks[] = {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-    {"cgu_isp", 0xffff},     /* Mainline rate comes from isp_clk parameter */
-#else
-    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
-#endif
+    {"cgu_isp", 0xffff},     /* Rate is owned by tx_isp_configure_clocks() */
     {"isp", 0xffff},         /* Auto-rate ISP clock */
 };
 
@@ -1570,8 +1568,7 @@ int frame_chan_event(void *priv, int event, void *data)
          */
         {
             unsigned long oem_flags;
-            int bi, next_idx = -1;
-            u32 next_phys = 0;
+            int bi;
             u32 y_done = state->last_done_phys;
             u32 completed_sequence = state->sequence + 1;
             struct timeval completed_timestamp;
@@ -1591,30 +1588,7 @@ int frame_chan_event(void *priv, int event, void *data)
                     }
                 }
             }
-            /* Find next queued buffer to submit */
-            for (bi = 0; bi < fcd->oem_buf_count && bi < 64; bi++) {
-                if (fcd->oem_bufs[bi].state == TX_ISP_FRAME_SLOT_QUEUED) {
-                    next_phys = fcd->oem_bufs[bi].phys_addr;
-                    fcd->oem_bufs[bi].state = TX_ISP_FRAME_SLOT_ACTIVE;
-                    next_idx = bi;
-                    break;
-                }
-            }
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
-
-            if (next_idx >= 0 && next_phys) {
-                int submit_ret = __submit_buffer_to_msca(fcd->channel_num,
-                                                         next_phys);
-                if (submit_ret) {
-                    spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
-                    if (fcd->oem_bufs[next_idx].state == TX_ISP_FRAME_SLOT_ACTIVE &&
-                        fcd->oem_bufs[next_idx].phys_addr == next_phys)
-                        fcd->oem_bufs[next_idx].state = TX_ISP_FRAME_SLOT_QUEUED;
-                    spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
-                    pr_err_ratelimited("frame ch%d: next buffer submit failed: %d\n",
-                                       ch, submit_ret);
-                }
-            }
 
             state->sequence = completed_sequence;
         }
@@ -3891,7 +3865,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         uint32_t buffer_phys_addr;
         int dma_ret;
         int submit_ret;
-        bool submit_now = false;
 
         pr_debug("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
 
@@ -4034,82 +4007,41 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
              * Channel 0 is typically full-res (1920x1080), but channel 1 may be
              * scaled (e.g., 640x360).  Using vic->width for all channels puts
              * the UV plane at the wrong offset → green/magenta corruption. */
-            /* Auto-configure MSCA scaler for channels > 0 on first QBUF.
-             * libimp configures channels through the IMP system API which
-             * calls IMP_FrameSource_SetChnAttr / EnableChn.  These go through
-             * an event path that our driver doesn't fully handle, so the
-             * MSCA scaler registers for channel 1+ never get configured.
-             * Without this, the scaler outputs full-resolution into a small
-             * buffer → diagonal green/magenta corruption. */
-            if (channel > 0 && !state->msca_configured) {
-                u32 attr_words[0x34 / sizeof(u32)];
-                memset(attr_words, 0, sizeof(attr_words));
-                /* attr[0] MUST be non-zero so tisp_channel_attr_set uses
-                 * our target dimensions instead of overwriting them with
-                 * the full ISP resolution (the *arg2==0 path). */
-                attr_words[0] = 1;       /* enable custom dimensions */
-                attr_words[1] = buffer_w; /* target width (e.g., 640) */
-                attr_words[2] = buffer_h; /* target height (e.g., 360) */
-                attr_words[3] = 0;       /* no crop */
-                attr_words[4] = 0;       /* crop x */
-                attr_words[5] = 0;       /* crop y */
-                attr_words[6] = buffer_w; /* crop width = output */
-                attr_words[7] = buffer_h; /* crop height = output */
-                attr_words[8] = 0;       /* scaler mode */
-
-                pr_debug("QBUF ch%d: auto-configuring MSCA scaler for %ux%u\n",
-                        channel, buffer_w, buffer_h);
-                tisp_channel_attr_set(channel, attr_words);
-                tisp_channel_start(channel, NULL);
-                state->msca_configured = true;
-            }
-
             /* DMA addresses are submitted below only when this slot becomes
              * ACTIVE. A second userspace QBUF must remain QUEUED instead of
              * replacing the address of the frame currently in flight. */
         }
 
-        /* Exactly one slot owns the MSCA output registers. Additional slots
-         * wait in QUEUED state until the DMA-done handler rotates them. */
+        /* Stock T31 pushes every QBUF directly into the MSCA address FIFOs.
+         * Registers 0x996c/0x9984 are FIFO write ports, not single live DMA
+         * slots.  Keeping extra buffers in a software queue starves MSCA at
+         * stream start (the hardware reports 0x11001 and never asserts the
+         * channel-active bits in 0x9808). */
         if (buffer.index < 64 && fcd) {
             unsigned long oem_flags;
-            int bi;
-            bool active = false;
 
             spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
-            for (bi = 0; bi < fcd->oem_buf_count && bi < 64; bi++) {
-                if (bi != buffer.index &&
-                    fcd->oem_bufs[bi].state == TX_ISP_FRAME_SLOT_ACTIVE) {
-                    active = true;
-                    break;
-                }
-            }
             fcd->oem_bufs[buffer.index].phys_addr = buffer_phys_addr;
             fcd->oem_bufs[buffer.index].done_sequence = 0;
             memset(&fcd->oem_bufs[buffer.index].done_timestamp, 0,
                    sizeof(fcd->oem_bufs[buffer.index].done_timestamp));
-            if (active) {
-                fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_QUEUED;
-            } else {
-                fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_ACTIVE;
-                submit_now = true;
-            }
+            fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_ACTIVE;
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
         }
 
-        if (submit_now) {
-            submit_ret = __submit_buffer_to_msca(channel, buffer_phys_addr);
-            if (submit_ret) {
-                unsigned long oem_flags;
+        submit_ret = __submit_buffer_to_msca(channel, buffer_phys_addr);
+        if (submit_ret) {
+            unsigned long oem_flags;
 
+            if (fcd && buffer.index < 64) {
                 spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
                 if (fcd->oem_bufs[buffer.index].state == TX_ISP_FRAME_SLOT_ACTIVE)
                     fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_FREE;
                 spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
-                pr_err("QBUF ch%d: failed to submit buffer %u: %d\n",
-                       channel, buffer.index, submit_ret);
-                return submit_ret;
             }
+            pr_err("QBUF ch%d: failed to submit buffer %u: %d\n",
+                   channel, buffer.index, submit_ret);
+            return submit_ret;
         }
 
         /* Return the same legacy wire layout accepted above. */
@@ -4354,8 +4286,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON: { // VIDIOC_STREAMON - Start streaming
         uint32_t type;
-        struct tx_isp_subdev *vic_sd = NULL;
-        int ret = 0;
 
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
@@ -4394,34 +4324,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         wmb();
         state->streaming = true;
 
-        vic_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
-        if (!vic_sd) {
-            state->streaming = false;
-            state->enabled = false;
-            state->flags &= ~1U;
-            fcd->streaming_flags &= ~1;
-            return -ENODEV;
-        }
-
-        /* OEM: ISP core channel dispatch FIRST (tisp_channel_start → 0x9804 = 0xf0001).
-         * In the OEM, event 0x3000003 goes through the pad chain:
-         *   ispcore_pad_event_handle → tisp_channel_start (MSCA channel enable)
-         *   vic_pad_event_handler → ispvic_frame_channel_s_stream (VIC MDMA enable)
-         * We must dispatch to ISP core BEFORE VIC to match this ordering.
-         */
+        /* The frame channel is an MSCA output.  The sensor-to-ISP VIC input
+         * engine was already started by tx_isp_vic_start(); its separate
+         * MDMA snapshot path must remain disabled here, as on stock T31.
+         * Enabling MDMA with empty 0x318+ bank addresses raises the 0x200
+         * ISP fault before MSCA can complete its first output frame. */
         if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
             tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
-
-        /* OEM: VIC dispatch (ispvic_frame_channel_s_stream → MDMA enable) */
-        ret = tx_isp_send_event_to_remote(vic_sd, TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
-        if (ret != 0 && ret != 0xfffffdfd) {
-            pr_err("streamon: driver refused to start streaming\n");
-            state->streaming = false;
-            state->enabled = false;
-            state->flags &= ~1U;
-            fcd->streaming_flags &= ~1;
-            return ret;
-        }
 
         state->state = 4;
 
@@ -4467,23 +4376,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         complete_all(&state->frame_done);
         wake_up_interruptible(&state->frame_wait);
 
-        /* OEM: ISP core channel dispatch (tisp_channel_stop + dispatch state reset).
-         * In the OEM, event 0x3000004 goes through the pad chain:
-         *   ispcore_pad_event_handle → ispcore_frame_channel_streamoff
-         *     → tisp_channel_stop, dispatch->state = 3, memset channel struct
-         *   vic_pad_event_handler → ispvic_frame_channel_s_stream(0)
-         *     → VIC MDMA disable
-         * The OEM does NOT call tx_isp_video_s_stream here.
-         */
+        /* Stop only the MSCA output channel.  VIC input lifetime is owned by
+         * the sensor pipeline rather than by an individual frame channel. */
         if (ourISPdev && channel >= 0 && channel < ISP_MAX_CHAN)
             tx_isp_send_event_to_remote(&ourISPdev->channels[channel].subdev, TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
-
-        /* OEM: VIC dispatch (ispvic_frame_channel_s_stream → MDMA disable) */
-        {
-            struct tx_isp_subdev *vic_sd_off = (struct tx_isp_subdev *)fcd->vic_subdev;
-            if (vic_sd_off)
-                tx_isp_send_event_to_remote(vic_sd_off, TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
-        }
 
         pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
@@ -4541,8 +4437,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&format, argp, sizeof(format)))
             return -EFAULT;
 
-        pr_info("Channel %d: Set format %dx%d pixfmt=0x%x\n",
-                channel, format.pix.width, format.pix.height, format.pix.pixelformat);
+        pr_info("Channel %d: Set format %dx%d pixfmt=0x%x scaler=%u/%ux%u crop=%u fcrop=%u\n",
+                channel, format.pix.width, format.pix.height,
+                format.pix.pixelformat, format.scaler_enable,
+                format.scaler_out_width, format.scaler_out_height,
+                format.crop_enable, format.fcrop_enable);
 
         format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         format.pix.pixelformat = frame_channel_export_pixfmt(channel, format.pix.pixelformat);
@@ -4574,7 +4473,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->format = format.pix.pixelformat;
         state->bytesperline = format.pix.bytesperline;
         state->sizeimage = format.pix.sizeimage;
-
         if (ret == 0xfffffdfd || ret == -ENOIOCTLCMD)
             pr_warn("*** Channel %d: SET_FMT remote handler missing (ret=%d); storing software format only, skipping non-OEM direct attr programming ***\n",
                     channel, ret);
@@ -7617,6 +7515,8 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 
     if (ourISPdev && ourISPdev->sensor &&
         &ourISPdev->sensor->sd == sd) {
+        if (ourISPdev->vin_dev && ourISPdev->vin_dev->active == ourISPdev->sensor)
+            ourISPdev->vin_dev->active = NULL;
         ourISPdev->sensor = NULL;
     }
 

@@ -429,86 +429,30 @@ int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin)
  */
 int tx_isp_vin_init(void* arg1, int32_t arg2)
 {
-    void* a0;
-    void* v0_1;
-    int32_t v0_2;
+    struct tx_isp_vin_device *vin = arg1;
+    struct tx_isp_sensor *sensor;
     int32_t result;
-    int32_t v1;
-    extern struct tx_isp_dev *ourISPdev;
-    
+
     mcp_log_info("tx_isp_vin_init: EXACT Binary Ninja implementation", arg2);
-    
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    if (!ourISPdev || !ourISPdev->sensor) {
-        a0 = 0;
-    } else {
-        a0 = ourISPdev->sensor;
-    }
-    
-    /* Binary Ninja: if ($a0 == 0) */
-    if (a0 == 0) {
-        /* Binary Ninja: isp_printf(1, &$LC0, 0x158) */
+
+    if (!vin)
+        return -EINVAL;
+
+    sensor = vin->active;
+    if (!sensor) {
         mcp_log_info("tx_isp_vin_init: no sensor available", 0x158);
-        /* Binary Ninja: result = 0xffffffff */
-        result = 0xffffffff;
+        result = -1;
+    } else if (!sensor->sd.ops || !sensor->sd.ops->core ||
+               !sensor->sd.ops->core->init) {
+        result = 0;
     } else {
-        /* Binary Ninja: void* $v0_1 = **($a0 + 0xc4) */
-        struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)a0;
-        if (!sensor->sd.ops || !sensor->sd.ops->core) {
-            v0_1 = 0;
-        } else {
-            v0_1 = sensor->sd.ops->core;
-        }
-        
-        /* Binary Ninja: if ($v0_1 == 0) */
-        if (v0_1 == 0) {
-            /* Binary Ninja: result = 0 */
+        result = sensor->sd.ops->core->init(&sensor->sd, arg2);
+        if (result == -ENOIOCTLCMD)
             result = 0;
-        } else {
-            /* Binary Ninja: int32_t $v0_2 = *($v0_1 + 4) */
-            struct tx_isp_subdev_core_ops *core_ops = (struct tx_isp_subdev_core_ops *)v0_1;
-            if (!core_ops->init) {
-                v0_2 = 0;
-            } else {
-                v0_2 = (int32_t)core_ops->init;
-            }
-            
-            /* Binary Ninja: if ($v0_2 == 0) */
-            if (v0_2 == 0) {
-                /* Binary Ninja: result = 0 */
-                result = 0;
-            } else {
-                /* Binary Ninja: result = $v0_2() */
-                int (*init_func)(struct tx_isp_subdev *, int) = (int (*)(struct tx_isp_subdev *, int))v0_2;
-                result = init_func(&sensor->sd, arg2);
-                
-                /* Binary Ninja: if (result == 0xfffffdfd) */
-                if (result == 0xfffffdfd) {
-                    /* Binary Ninja: result = 0 */
-                    result = 0;
-                }
-            }
-        }
     }
-    
-    /* CRITICAL FIX: Binary Ninja shows int32_t $v1 = 3 (not 4!) */
-    /* Binary Ninja: int32_t $v1 = 3 */
-    v1 = 3;
-    
-    /* Binary Ninja: if (arg2 == 0) */
-    if (arg2 == 0) {
-        /* Binary Ninja: $v1 = 2 */
-        v1 = 2;
-    }
-    
-    /* Binary Ninja: *(arg1 + 0xf4) = $v1 */
-    if (ourISPdev && ourISPdev->vin_dev) {
-        struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-        vin_dev->state = v1;
-        mcp_log_info("tx_isp_vin_init: *** VIN STATE SET ***", v1);
-    }
-    
-    /* Binary Ninja: return result */
+
+    vin->state = arg2 ? TX_ISP_MODULE_INIT : TX_ISP_MODULE_ACTIVATE;
+    mcp_log_info("tx_isp_vin_init: *** VIN STATE SET ***", vin->state);
     mcp_log_info("tx_isp_vin_init: EXACT Binary Ninja result", result);
     return result;
 }
@@ -546,120 +490,48 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
  * @sd: Subdev structure
  * @enable: Enable/disable streaming
  *
- * EXACT Binary Ninja reference implementation
+ * Match the OEM T31 VIN control node: delegate streaming to the selected
+ * sensor, then update the VIN module state.  VIN does not program a separate
+ * hardware engine; CSI and VIC own the T31 input-path registers.
  */
 int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_vin_device *vin = NULL;
-    struct tx_isp_sensor *sensor = NULL;
-    extern struct tx_isp_dev *ourISPdev;
-    int ret = 0;
-    u32 ctrl_val;
-    int32_t vin_state;
+    struct tx_isp_vin_device *vin;
+    struct tx_isp_sensor *sensor;
+    int ret;
 
     mcp_log_info("vin_s_stream: called", enable);
 
-    /* SAFE: Use global ISP device reference instead of subdev traversal */
-    if (!ourISPdev) {
-        mcp_log_error("vin_s_stream: no global ISP device available", 0);
-        return -ENODEV;
-    }
+    if (!sd)
+        return -EINVAL;
 
-    /* SAFE: Get VIN device from global ISP device */
-    vin = ourISPdev->vin_dev;
-    if (!vin || !is_valid_kernel_pointer(vin)) {
-        mcp_log_error("vin_s_stream: no VIN device in global ISP", (u32)vin);
-        return -ENODEV;
-    }
-
-    mcp_log_info("vin_s_stream: VIN device from global ISP", (u32)vin);
+    vin = sd_to_vin_device(sd);
     mcp_log_info("vin_s_stream: current VIN state", vin->state);
 
-    vin_state = vin->state;
+    if ((enable && vin->state == TX_ISP_MODULE_RUNNING) ||
+        (!enable && vin->state != TX_ISP_MODULE_RUNNING))
+        return 0;
 
-    if (enable != 0) {
-        if (vin_state < 3) {
-            mcp_log_info("vin_s_stream: deferring stream enable until VIN init path runs", vin_state);
-            mcp_log_info("vin_s_stream: returning -ENOIOCTLCMD for pre-init VIN state", vin_state);
+    sensor = vin->active;
+    if (sensor) {
+        if (!sensor->sd.ops || !sensor->sd.ops->video ||
+            !sensor->sd.ops->video->s_stream) {
+            mcp_log_error("vin_s_stream: sensor has no valid s_stream function", 0);
             return -ENOIOCTLCMD;
         }
 
-        mcp_log_info("vin_s_stream: VIN streaming enable from state", vin_state);
-    } else {
-        if (vin_state == 4) {
-            mcp_log_info("vin_s_stream: VIN streamoff from state 4", vin_state);
-        } else {
-            mcp_log_info("vin_s_stream: VIN not in streaming state", vin_state);
-            return 0;
-        }
-    }
-
-    sensor = ourISPdev->sensor;
-    if (!sensor || !is_valid_kernel_pointer(sensor)) {
-        mcp_log_error("vin_s_stream: no active sensor in global ISP", (u32)sensor);
-        goto label_132f4;
-    }
-
-    if (sensor->sd.ops && is_valid_kernel_pointer(sensor->sd.ops) &&
-        sensor->sd.ops->video && is_valid_kernel_pointer(sensor->sd.ops->video) &&
-        sensor->sd.ops->video->s_stream && is_valid_kernel_pointer(sensor->sd.ops->video->s_stream)) {
-        extern int tx_isp_configure_clocks(struct tx_isp_dev *isp);
-
-        mcp_log_info("vin_s_stream: Initializing ISP clocks before VIN streaming", 0);
-        ret = tx_isp_configure_clocks(ourISPdev);
-        if (ret != 0) {
-            mcp_log_error("vin_s_stream: Clock initialization failed", ret);
-            return ret;
-        }
-
-        mcp_log_info("vin_s_stream: ISP clocks initialized successfully", 0);
         mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
         ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
-
-        if (ret == 0)
-            goto label_132f4;
-
-        if (ret != -0x203) {
+        if (ret) {
             mcp_log_error("vin_s_stream: sensor streaming failed", ret);
             return ret;
         }
-
-        ret = 0;
     } else {
-        mcp_log_error("vin_s_stream: sensor has no valid s_stream function", 0);
-        return -0x203;
+        /* OEM treats an empty input as a successful state-only transition. */
+        mcp_log_info("vin_s_stream: no active sensor", 0);
     }
 
-label_132f4:
-    if (enable) {
-        vin->state = 4;
-        mcp_log_info("vin_s_stream: *** VIN STATE SET TO 4 (ACTIVE STREAMING) ***", vin->state);
-
-        if (vin->base && is_valid_kernel_pointer(vin->base)) {
-            ctrl_val = readl(vin->base + VIN_CTRL);
-            ctrl_val |= VIN_CTRL_START;
-            writel(ctrl_val, vin->base + VIN_CTRL);
-            mcp_log_info("vin_s_stream: VIN hardware started", ctrl_val);
-        }
-    } else {
-        int timeout = 1000;
-
-        vin->state = 3;
-        mcp_log_info("vin_s_stream: *** VIN STATE SET TO 3 (NON-STREAMING) ***", vin->state);
-
-        if (vin->base && is_valid_kernel_pointer(vin->base)) {
-            ctrl_val = readl(vin->base + VIN_CTRL);
-            ctrl_val &= ~VIN_CTRL_START;
-            ctrl_val |= VIN_CTRL_STOP;
-            writel(ctrl_val, vin->base + VIN_CTRL);
-
-            while ((readl(vin->base + VIN_STATUS) & STATUS_BUSY) && timeout-- > 0)
-                udelay(10);
-
-            mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
-        }
-    }
-
+    vin->state = enable ? TX_ISP_MODULE_RUNNING : TX_ISP_MODULE_INIT;
     mcp_log_info("vin_s_stream: final VIN state", vin->state);
     return 0;
 }
@@ -672,18 +544,14 @@ label_132f4:
  */
 int tx_isp_vin_activate_subdev(void* arg1)
 {
-    extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_vin_device *vin_dev;
+    struct tx_isp_vin_device *vin_dev = arg1;
     
     mcp_log_info("tx_isp_vin_activate_subdev: EXACT Binary Ninja implementation", 0);
     
-    /* Get VIN device from global ISP device */
-    if (!ourISPdev || !ourISPdev->vin_dev) {
+    if (!vin_dev) {
         mcp_log_error("tx_isp_vin_activate_subdev: no VIN device available", 0);
         return -ENODEV;
     }
-    
-    vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
     
     /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
     mutex_lock(&vin_dev->mlock);

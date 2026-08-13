@@ -13245,6 +13245,9 @@ static long regtrace_isp_m0_control(unsigned int cmd, unsigned long arg)
 static long regtrace_isp_m0_ext_control(unsigned long arg)
 {
     static const struct tx_isp_tuning_cmd_desc routes[] = {
+        { TX_ISP_TUNING_CMD_T31_SENSOR_FPS, 4,
+          TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+          TX_ISP_TUNING_PAYLOAD_INLINE },
         { REGTRACE_TISP_CTRL_TOTAL_GAIN, 4, TX_ISP_TUNING_DIR_GET,
           TX_ISP_TUNING_PAYLOAD_INLINE },
         { REGTRACE_TISP_CTRL_AE_LUMA, 4, TX_ISP_TUNING_DIR_GET,
@@ -13280,9 +13283,25 @@ static long regtrace_isp_m0_ext_control(unsigned long arg)
     }
 
     route = tx_isp_tuning_cmd_find(routes, ARRAY_SIZE(routes), ctrl.id,
-                                   TX_ISP_TUNING_DIR_GET);
+                                   ctrl.count == 0 ? TX_ISP_TUNING_DIR_SET :
+                                                     TX_ISP_TUNING_DIR_GET);
     if (!route)
         goto copy_out;
+
+    if (route->id == TX_ISP_TUNING_CMD_T31_SENSOR_FPS) {
+        if (ctrl.count == 0) {
+            ret = (long)(int32_t)tisp_set_fps(0, ctrl.value_or_ptr);
+            if (ret)
+                return ret;
+            regtrace_t23_source_sensor_fps = ctrl.value_or_ptr;
+        } else if (ctrl.count == 1) {
+            ctrl.value_or_ptr = regtrace_t23_source_sensor_fps ?
+                regtrace_t23_source_sensor_fps : 0x00190001U;
+        } else {
+            return -EINVAL;
+        }
+        goto copy_out;
+    }
 
     switch (ctrl.id) {
     case REGTRACE_TISP_CTRL_TOTAL_GAIN:
@@ -28765,8 +28784,13 @@ apical_isp_core_ops_g_ctrl0xf28:
 static long isp_core_tunning_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
     (void)filp;
-    (void)cmd;
-    (void)arg;
+
+    if (cmd == REGTRACE_ISP_M0_EXT_CONTROL)
+        return regtrace_isp_m0_ext_control(arg);
+    if (cmd == REGTRACE_ISP_M0_SET_CONTROL ||
+        cmd == REGTRACE_ISP_M0_GET_CONTROL)
+        return regtrace_isp_m0_control(cmd, arg);
+
     return 0;
 }
 

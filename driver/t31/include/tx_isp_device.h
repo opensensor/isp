@@ -52,15 +52,12 @@ enum tx_isp_subdev_id {
 #define TX_ISP_CSI_WRAPPER_BASE 0x10022000
 /*
  * T31 has a vendor PHY/wrapper window at 0x10022000 and a DesignWare
- * CSI-2 host controller at 0x10023000 (VERSION == 0x3130322a).  The 3.10
- * vendor stack exposes the former as its legacy CSI resource and pre-seeds
- * the host separately.  Mainline must own the real host controller.
+ * CSI-2 host controller at 0x10023000 (VERSION == 0x3130322a).  These are
+ * distinct hardware banks on both the vendor and mainline kernels.  The OEM
+ * T31 resource table maps isp-w01 at 0x10023000 and its probe separately maps
+ * the 0x10022000 "mipi-phy" window into the +0x13c wrapper slot.
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 #define TX_ISP_CSI_BASE    0x10023000
-#else
-#define TX_ISP_CSI_BASE    TX_ISP_CSI_WRAPPER_BASE
-#endif
 
 /* Register offsets */
 /* Core registers */
@@ -620,7 +617,6 @@ struct tx_isp_channel_state {
     struct completion frame_done;          /* ISR signals, frame_pooling_thread waits */
     atomic_t frame_ready_count;            /* Frames ready but not yet consumed */
     u32 last_done_phys;                    /* Y phys addr from last MSCA FIFO pop */
-    bool msca_configured;                  /* MSCA scaler auto-configured for this channel */
 
     /* Legacy fields for compatibility */
     struct frame_buffer current_buffer;     /* Current active buffer */

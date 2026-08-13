@@ -52,7 +52,6 @@ void dump_csi_reg(struct tx_isp_subdev *sd);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
 void __iomem *tx_isp_get_vic_primary_regs(void);
-static void __maybe_unused csi_jit_ungate_clocks(void);
 
 
 static void __iomem *tx_isp_core_regs = NULL;
@@ -150,147 +149,6 @@ void isp_write32(u32 reg, u32 val)
     }
     writel(val, tx_isp_core_regs + reg);
 }
-
-/* JIT ungate CSI/DPHY and wrapper clocks before BASIC/WRAP access */
-static void __maybe_unused csi_jit_ungate_clocks(void)
-{
-    void __iomem *cpm = ioremap(0x10000000, 0x1000);
-    if (!cpm) {
-        pr_warn("[CPM][CSI] ioremap failed; cannot JIT-ungate clocks\n");
-        return;
-    }
-    /* CLKGR0 bit7: CSI/DPHY gate: 1=gated, 0=ungated */
-    u32 g0_before = readl(cpm + 0x20);
-    if (g0_before & (1u << 7)) {
-        writel(g0_before & ~(1u << 7), cpm + 0x20);
-        wmb(); udelay(5);
-        pr_info("[CPM][CSI] JIT ungate CLKGR0 bit7: %08x -> %08x\n", g0_before, readl(cpm + 0x20));
-    } else {
-        pr_info("[CPM][CSI] CLKGR0 already ungated: %08x\n", g0_before);
-    }
-    /* CLKGR1 bit2: wrapper side gate sometimes needed for CSI interactions */
-    u32 g1_before = readl(cpm + 0x28);
-    if (g1_before & (1u << 2)) {
-        writel(g1_before & ~(1u << 2), cpm + 0x28);
-        wmb(); udelay(5);
-        pr_info("[CPM][CSI] JIT ungate CLKGR1 bit2: %08x -> %08x\n", g1_before, readl(cpm + 0x28));
-    } else {
-        pr_info("[CPM][CSI] CLKGR1 already ungated: %08x\n", g1_before);
-    }
-    iounmap(cpm);
-}
-
-/* Optional CPM reset deassert for CSI: enabled by default while bring-up is unstable. */
-static int csi_cpm_reset_fix = 1;
-module_param(csi_cpm_reset_fix, int, 0644);
-MODULE_PARM_DESC(csi_cpm_reset_fix, "If 1, deassert CSI-related reset bits in CPM[0x34] after unlocking CPM[0x38]=0xA5A5 (default: enabled)");
-
-static void __maybe_unused csi_cpm_deassert_reset_if_enabled(void)
-{
-    void __iomem *cpm = ioremap(0x10000000, 0x1000);
-    if (!cpm)
-        return;
-
-    u32 r_unlock = readl(cpm + 0x38);
-    u32 r_before = readl(cpm + 0x34);
-    u32 r30      = readl(cpm + 0x30);
-    u32 r3c      = readl(cpm + 0x3C);
-    pr_info("[CPM][CSI] Reset window: unlock=0x%08x, reset_before=0x%08x (r30=0x%08x r3c=0x%08x)\n", r_unlock, r_before, r30, r3c);
-
-    /* Also emit to /opt/csi.txt so it’s visible in field logs */
-    {
-        char fbuf[256];
-        int n = 0;
-        n += scnprintf(fbuf + n, sizeof(fbuf) - n, "=== CSI DUMP ===\n");
-        n += scnprintf(fbuf + n, sizeof(fbuf) - n, "[TAG  ] CPM_RESET_FIX BEFORE\n");
-        n += scnprintf(fbuf + n, sizeof(fbuf) - n, "[CPM  ] 0x30=%08x 0x34=%08x 0x38=%08x 0x3C=%08x\n", r30, r_before, r_unlock, r3c);
-        csi_write_file(fbuf, n);
-    }
-
-
-    /* Guard: allow manual disable for experiments, but default to active during bring-up. */
-    if (!csi_cpm_reset_fix) {
-        pr_info("[CPM][CSI] Reset deassert helper disabled by module param; skipping CPM reset writes\n");
-        iounmap(cpm);
-        return;
-    }
-
-    pr_info("[CPM][CSI] Reset deassert helper enabled; attempting CPM reset release\n");
-
-    /* Always attempt CPM reset deassert now (risk-elevated per user) */
-
-    /* Unlock (many Ingenic parts require writing 0xA5A5 before modifying reset regs) */
-    writel(0x0000A5A5, cpm + 0x38);
-    wmb();
-
-    /* Try W1C semantics first: write 1s to clear bits 0 and 8, don't touch others */
-    {
-        u32 mask = (1u << 0) | (1u << 8);
-        writel(mask, cpm + 0x34);
-        wmb();
-        udelay(5);
-    }
-
-    u32 r_after1 = readl(cpm + 0x34);
-
-    /* If unchanged, try RMW clear (RW semantics) */
-    if ((r_after1 & ((1u << 0) | (1u << 8))) == ((1u << 0) | (1u << 8))) {
-        u32 rmw = r_after1 & ~((1u << 0) | (1u << 8));
-        writel(rmw, cpm + 0x34);
-        wmb();
-        udelay(5);
-    }
-
-    /* If 0x34 still shows bits set, attempt clear via 0x30 (alternate semantics) */
-    if ((readl(cpm + 0x34) & ((1u << 0) | (1u << 8))) != 0) {
-        u32 mask = (1u << 0) | (1u << 8);
-        u32 r30b = readl(cpm + 0x30);
-        /* Try W1C on 0x30 */
-        writel(mask, cpm + 0x30);
-        wmb();
-        udelay(5);
-        u32 r30c = readl(cpm + 0x30);
-        u32 r34c = readl(cpm + 0x34);
-        if ((r34c & mask) != 0) {
-            /* Try RMW clear on 0x30 */
-            u32 rmw30 = r30c & ~mask;
-            writel(rmw30, cpm + 0x30);
-            wmb();
-            udelay(5);
-        }
-        /* Mirror this attempt to /opt as well */
-        {
-            char fbuf3[256];
-            int n3 = 0;
-            u32 r30d = readl(cpm + 0x30);
-            u32 r34d = readl(cpm + 0x34);
-            n3 += scnprintf(fbuf3 + n3, sizeof(fbuf3) - n3, "=== CSI DUMP ===\n");
-            n3 += scnprintf(fbuf3 + n3, sizeof(fbuf3) - n3, "[TAG  ] CPM_RESET_FIX TRY 0x30\n");
-            n3 += scnprintf(fbuf3 + n3, sizeof(fbuf3) - n3, "[CPM  ] 0x30=%08x->%08x 0x34=%08x->%08x\n", r30b, r30d, r_after1, r34d);
-            csi_write_file(fbuf3, n3);
-        }
-    }
-
-    {
-        u32 r_unlock2 = readl(cpm + 0x38);
-        u32 r_final   = readl(cpm + 0x34);
-        u32 r30a      = readl(cpm + 0x30);
-        u32 r3ca      = readl(cpm + 0x3C);
-        pr_info("[CPM][CSI] Reset window after deassert: unlock=0x%08x, reset_after=0x%08x (r30=0x%08x r3c=0x%08x)\n",
-                r_unlock2, r_final, r30a, r3ca);
-
-        /* Mirror to /opt/csi.txt for guaranteed capture */
-        char fbuf2[256];
-        int n2 = 0;
-        n2 += scnprintf(fbuf2 + n2, sizeof(fbuf2) - n2, "=== CSI DUMP ===\n");
-        n2 += scnprintf(fbuf2 + n2, sizeof(fbuf2) - n2, "[TAG  ] CPM_RESET_FIX AFTER\n");
-        n2 += scnprintf(fbuf2 + n2, sizeof(fbuf2) - n2, "[CPM  ] 0x30=%08x 0x34=%08x 0x38=%08x 0x3C=%08x\n", r30a, r_final, r_unlock2, r3ca);
-        csi_write_file(fbuf2, n2);
-    }
-
-    iounmap(cpm);
-}
-
 
 static void __iomem *tx_isp_vic_regs = NULL;
 
@@ -790,26 +648,13 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
     if (isp_csi_regs)
         return isp_csi_regs;
 
-    /* The OEM +0x13c slot addresses the T31 PHY/timing wrapper.  On 3.10
-     * this is also the legacy CSI resource.  Mainline maps the DesignWare
-     * host separately, so never alias the wrapper slot to csi_regs there. */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
-    if (csi_dev->csi_regs) {
-        isp_csi_regs = csi_dev->csi_regs;
-        pr_info("csi_get_wrapper_regs: populated +0x13c from csi_dev->csi_regs %p\n",
+    /* OEM tx_isp_csi_probe maps this bank separately from isp-w01's
+     * 0x10023000 resource.  Never alias it to csi_regs: doing so sends the
+     * PHY timing writes into DesignWare host registers on vendor kernels. */
+    isp_csi_regs = ioremap(TX_ISP_CSI_WRAPPER_BASE, 0x1000);
+    if (isp_csi_regs)
+        pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated wrapper mapping %p\n",
                 isp_csi_regs);
-    } else if (ourISPdev && ourISPdev->csi_regs) {
-        isp_csi_regs = ourISPdev->csi_regs;
-        pr_info("csi_get_wrapper_regs: populated +0x13c from isp_dev->csi_regs %p\n",
-                isp_csi_regs);
-    } else
-#endif
-    {
-        isp_csi_regs = ioremap(TX_ISP_CSI_WRAPPER_BASE, 0x1000);
-        if (isp_csi_regs)
-            pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated wrapper mapping %p\n",
-                    isp_csi_regs);
-    }
 
     if (!isp_csi_regs)
         return NULL;
@@ -957,11 +802,13 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(interface_type, csi_regs + 0x0c);
         private_msleep(1);
 
-        /* Vendor kernels enter here with the VIC bridge and DPHY timing
-         * already initialized by the platform stack, so retain the OEM
-         * adaptive-settle branch for them.  Mainline has no such pre-seed:
-         * open the bridge before touching the wrapper timing registers and
-         * program an explicit selector even for adaptive sensors. */
+        /* Mainline has no vendor PHY pre-seed, so program an explicit rate
+         * selector even for adaptive sensors.  The vendor-kernel branch must
+         * retain the recovered OEM sequence exactly: host DPHY_RSTZ is
+         * released above, wrapper timing is programmed next, and CSI2_RESETN
+         * is released below.  An extra host reset write here moves PHY_STATE
+         * from the stock 0x300 state to 0x630 and produces ERR1 bit 0x10
+         * (lane-0 start-of-transmission sync error) on SC301IoT. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
         rate_sel = csi_calc_rate_sel(sensor_attr);
         rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) |
@@ -970,26 +817,28 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(rate_reg, isp_csi_regs + 0x1e0);
         writel(rate_reg, isp_csi_regs + 0x260);
 #else
-        if (!sensor_attr->mipi.settle_time_apative_en) {
+        if (!sensor_attr->mipi.settle_time_apative_en)
             rate_sel = csi_calc_rate_sel(sensor_attr);
+        else
+            rate_sel = -1;
+
+        if (rate_sel >= 0) {
             rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) |
                        (rate_sel & 0xf);
             writel(rate_reg, isp_csi_regs + 0x160);
             writel(rate_reg, isp_csi_regs + 0x1e0);
             writel(rate_reg, isp_csi_regs + 0x260);
-        } else {
-            rate_sel = -1;
         }
 #endif
 
         /* OEM writes 0x7d and lane mask to wrapper regs, always 0x3f */
         writel(0x7d, isp_csi_regs + 0x00);
         writel(0x3f, isp_csi_regs + 0x128);
+        /* Mainline must release the complete DesignWare host/PHY reset set.
+         * Preserve the recovered OEM sequence on vendor kernels, where the
+         * boot chain owns PHY_SHUTDOWNZ/DPHY_RSTZ and the ISP driver releases
+         * CSI2_RESETN only. */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
-        /* The vendor kernel pre-seeds the DesignWare host.  Mainline does
-         * not, so release all three host/PHY resets after wrapper timing is
-         * programmed.  Leaving PHY_SHUTDOWNZ low produces frame-shaped but
-         * invalid striped output with no CSI error bits set. */
         writel(1, csi_regs + 0x08);
         writel(1, csi_regs + 0x0c);
         writel(1, csi_regs + 0x10);
@@ -998,7 +847,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             pr_warn("csi_core_ops_init: CSI PHY did not reach a stable phase (0x14=0x%08x)\n",
                     readl(csi_regs + 0x14));
 #else
-        /* Preserve the recovered OEM write sequence on vendor kernels. */
         writel(1, csi_regs + 0x10);
 #endif
 
@@ -1188,9 +1036,8 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     *csi_mem_res_slot(csi_dev) = sd->res;
 
-    /* Keep the wrapper/+0x13c bank distinct from the mainline CSI host. The
-     * OEM probe maps its CSI resource through the vendor wrapper contract.
-     */
+    /* Keep the wrapper/+0x13c bank distinct from the CSI host on every
+     * kernel.  The OEM probe uses the same two-window hardware contract. */
     if (old_wrapper_regs == old_basic_regs || old_wrapper_regs == csi_dev->csi_regs)
         *csi_wrapper_regs_slot(csi_dev) = NULL;
 

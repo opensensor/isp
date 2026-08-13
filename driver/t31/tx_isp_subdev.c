@@ -853,6 +853,11 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 		if (strcmp(pdev->name, "isp-w02") == 0) {
 			struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
 			ourISPdev->vic_dev = vic_dev;
+		} else if (strcmp(pdev->name, "isp-w00") == 0) {
+			/* Keep one VIN object, as in the OEM graph.  Publishing the probed
+			 * platform VIN here also prevents core probe from allocating a
+			 * disconnected compatibility VIN later. */
+			ourISPdev->vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
 		}
 
 		slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
@@ -1340,7 +1345,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         }
 
         if (!already_registered) {
-            /* Find next available slot starting from index 5 (after VIC=0, CSI=1, VIN=2, Core=3, FS=4) */
+            /* Find next available slot starting from index 5 (after CSI=0, VIN=1, VIC=2, Core=3, FS=4) */
             int sensor_index = -1;
             for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
                 if (ourISPdev->subdevs[i] == NULL) {

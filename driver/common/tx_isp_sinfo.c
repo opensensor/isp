@@ -657,6 +657,7 @@ int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 			    struct module *owner)
 {
 	int i;
+	bool merged = false;
 
 	if (!drv || !tx_isp_sinfo_slots || !tx_isp_sinfo_root)
 		return -EINVAL;
@@ -664,18 +665,43 @@ int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 	mutex_lock(&tx_isp_sinfo_lock);
 	tx_isp_sinfo_stats.driver_add_calls++;
 	/*
-	 * A few sensor generations bind their subdevice before registering the
-	 * I2C driver. Complete that owner-matched slot instead of publishing a
-	 * duplicate entry.
+	 * The compatibility wrapper in some SDK sensor modules publishes the
+	 * same driver after private_i2c_add_driver() returns.  The first call may
+	 * only know the legacy address (zero), while the sensor-side call carries
+	 * the real address and module owner.  Treat those calls as metadata
+	 * updates for one sensor instead of consuming a second registry slot.
 	 */
 	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
 		struct tx_isp_sinfo_slot *slot = &tx_isp_sinfo_slots[i];
 
-		if (slot->used && !slot->drv && slot->owner == owner) {
-			slot->drv = drv;
+		if (!slot->used || slot->drv != drv)
+			continue;
+		if (default_i2c_addr) {
 			slot->default_i2c_addr =
 				(unsigned short)default_i2c_addr;
-			break;
+			if (owner)
+				slot->owner = owner;
+		} else if (!slot->owner) {
+			slot->owner = owner;
+		}
+		merged = true;
+		break;
+	}
+	/*
+	 * A few sensor generations bind their subdevice before registering the
+	 * I2C driver. Complete that owner-matched slot instead of publishing a
+	 * duplicate entry.
+	 */
+	if (!merged) {
+		for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
+			struct tx_isp_sinfo_slot *slot = &tx_isp_sinfo_slots[i];
+
+			if (slot->used && !slot->drv && slot->owner == owner) {
+				slot->drv = drv;
+				slot->default_i2c_addr =
+					(unsigned short)default_i2c_addr;
+				break;
+			}
 		}
 	}
 	if (i == TX_ISP_SINFO_MAX_SENSORS) {

@@ -7,6 +7,8 @@
 #   armed       - marker enabling exactly one staged insertion
 #   module.ko   - module to insert before the normal S11 module loader
 #   args        - optional insmod arguments
+#   sensor.ko   - optional matched sensor module to insert after module.ko
+#   sensor.args - optional sensor insmod arguments
 #
 # The marker is removed and synced before insmod. If the staged module crashes
 # the kernel, a watchdog/power-cycle boots the persistent module on the next
@@ -17,6 +19,8 @@ STATE_DIR=/opt/open-tx-isp-smoke
 MARKER=$STATE_DIR/armed
 MODULE=$STATE_DIR/module.ko
 ARGS=$STATE_DIR/args
+SENSOR_MODULE=$STATE_DIR/sensor.ko
+SENSOR_ARGS=$STATE_DIR/sensor.args
 STATUS=$STATE_DIR/last-status
 LOG=$STATE_DIR/last-insmod.log
 WATCH_MARKER=$STATE_DIR/watch-registry
@@ -59,6 +63,12 @@ start()
 	rm -f "$MARKER"
 	sync
 
+	# A staged recovery driver may Oops without panicking on vendor kernels.
+	# Convert that Oops into the panic=2 recovery path for this boot only;
+	# the setting returns to its normal default after the automatic reboot.
+	[ ! -w /proc/sys/kernel/panic_on_oops ] ||
+		echo 1 >/proc/sys/kernel/panic_on_oops
+
 	if [ ! -r "$MODULE" ]; then
 		echo "module missing: $MODULE" >"$LOG"
 		echo 2 >"$STATUS"
@@ -70,7 +80,34 @@ start()
 	module_args=
 	[ ! -r "$ARGS" ] || module_args="$(cat "$ARGS")"
 	insmod "$MODULE" $module_args >"$LOG" 2>&1
-	echo $? >"$STATUS"
+	module_status=$?
+	if [ "$module_status" -ne 0 ]; then
+		echo "$module_status" >"$STATUS"
+		sync
+		return 0
+	fi
+
+	if [ -r "$SENSOR_MODULE" ]; then
+		sensor_args=
+		[ ! -r "$SENSOR_ARGS" ] || sensor_args="$(cat "$SENSOR_ARGS")"
+		insmod "$SENSOR_MODULE" $sensor_args >>"$LOG" 2>&1
+		sensor_status=$?
+		if [ "$sensor_status" -ne 0 ]; then
+			echo "$sensor_status" >"$STATUS"
+			# Do not let S11 pair the staged ISP with the persistent sensor
+			# after a matched-sensor insertion failure.
+			rmmod tx_isp_t31 >>"$LOG" 2>&1
+			if [ $? -ne 0 ]; then
+				echo "failed to unload staged ISP; rebooting to stock" >>"$LOG"
+				sync
+				reboot -f
+			fi
+			sync
+			return 0
+		fi
+	fi
+
+	echo 0 >"$STATUS"
 	sync
 
 	if [ "$(cat "$STATUS")" = 0 ] && [ -e "$WATCH_MARKER" ]; then

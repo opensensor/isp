@@ -97,7 +97,48 @@ MODULE_PARM_DESC(force_bypass_defog,
 static int tisp_force_identity_ccm = 0; /* Keep OEM CCM active by default; identity only for targeted isolation */
 module_param_named(force_identity_ccm, tisp_force_identity_ccm, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_identity_ccm,
-			 "Force CCM output matrix to identity (default: 0 — keep OEM CCM path active unless isolating it)");
+			 "Force CCM output to the diagnostic matrix (defaults to identity; default: 0 keeps the OEM CCM path)");
+
+/*
+ * Writable diagonal gains make the forced CCM path useful for live isolation
+ * without racing the ISP update thread with repeated devmem writes.  0x400 is
+ * unity in the T31 CCM register format, so the defaults remain true identity.
+ */
+static int tisp_force_ccm_r = 0x400;
+module_param_named(force_ccm_r, tisp_force_ccm_r, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_r, "Forced CCM red diagonal gain (0x400 = unity)");
+
+static int tisp_force_ccm_rg;
+module_param_named(force_ccm_rg, tisp_force_ccm_rg, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_rg, "Forced CCM red-from-green coefficient (signed, 0x400 = unity)");
+
+static int tisp_force_ccm_rb;
+module_param_named(force_ccm_rb, tisp_force_ccm_rb, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_rb, "Forced CCM red-from-blue coefficient (signed, 0x400 = unity)");
+
+static int tisp_force_ccm_g = 0x400;
+module_param_named(force_ccm_g, tisp_force_ccm_g, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_g, "Forced CCM green diagonal gain (0x400 = unity)");
+
+static int tisp_force_ccm_gr;
+module_param_named(force_ccm_gr, tisp_force_ccm_gr, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_gr, "Forced CCM green-from-red coefficient (signed, 0x400 = unity)");
+
+static int tisp_force_ccm_gb;
+module_param_named(force_ccm_gb, tisp_force_ccm_gb, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_gb, "Forced CCM green-from-blue coefficient (signed, 0x400 = unity)");
+
+static int tisp_force_ccm_b = 0x400;
+module_param_named(force_ccm_b, tisp_force_ccm_b, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_b, "Forced CCM blue diagonal gain (0x400 = unity)");
+
+static int tisp_force_ccm_br;
+module_param_named(force_ccm_br, tisp_force_ccm_br, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_br, "Forced CCM blue-from-red coefficient (signed, 0x400 = unity)");
+
+static int tisp_force_ccm_bg;
+module_param_named(force_ccm_bg, tisp_force_ccm_bg, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_ccm_bg, "Forced CCM blue-from-green coefficient (signed, 0x400 = unity)");
 
 static int tisp_force_bypass_dpc = 0;
 module_param_named(force_bypass_dpc, tisp_force_bypass_dpc, int, S_IRUGO | S_IWUSR);
@@ -116,6 +157,17 @@ MODULE_PARM_DESC(force_bypass_lsc,
 static int tisp_force_bypass_gib = 0; /* OEM T31 path keeps GIB active */
 module_param_named(force_bypass_gib, tisp_force_bypass_gib, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_gib, "Force GIB (bit 5) bypass (default: 0 — match the OEM T31 pipeline)");
+
+/* Diagnostic override for gain-dependent raw-domain correction.  Leave this
+ * disabled by default so the production path continues to follow AE exactly.
+ * A non-negative value constrains only GIB and DPC; exposure and every other
+ * gain-dependent block still receive the real AE gain. */
+static int tisp_force_raw_correction_gain = -1;
+module_param_named(force_raw_correction_gain,
+                   tisp_force_raw_correction_gain, int,
+                   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(force_raw_correction_gain,
+                 "Override GIB/DPC gain for raw-correction diagnosis (-1: disabled)");
 
 static int tisp_force_bypass_mdns = 0; /* MDNS: enabled (OEM default) */
 module_param_named(force_bypass_mdns, tisp_force_bypass_mdns, int, S_IRUGO | S_IWUSR);
@@ -2454,7 +2506,6 @@ T31_REFRESH_ADAPTER(tiziano_sharpen_dn_params_refresh)
 T31_REFRESH_ADAPTER(tiziano_mdns_dn_params_refresh)
 T31_REFRESH_ADAPTER(tiziano_sdns_dn_params_refresh)
 T31_REFRESH_ADAPTER(tiziano_gib_dn_params_refresh)
-T31_REFRESH_ADAPTER(tisp_gb_dn_params_refresh)
 T31_REFRESH_ADAPTER(tiziano_lsc_dn_params_refresh)
 T31_REFRESH_ADAPTER(tiziano_ccm_dn_params_refresh)
 T31_REFRESH_ADAPTER(tiziano_clm_dn_params_refresh)
@@ -2476,7 +2527,6 @@ static const struct tx_isp_callback_step t31_daynight_refresh_steps[] = {
 	T31_REFRESH_STEP(tiziano_mdns_dn_params_refresh),
 	T31_REFRESH_STEP(tiziano_sdns_dn_params_refresh),
 	T31_REFRESH_STEP(tiziano_gib_dn_params_refresh),
-	T31_REFRESH_STEP(tisp_gb_dn_params_refresh),
 	T31_REFRESH_STEP(tiziano_lsc_dn_params_refresh),
 	T31_REFRESH_STEP(tiziano_ccm_dn_params_refresh),
 	T31_REFRESH_STEP(tiziano_clm_dn_params_refresh),
@@ -2726,7 +2776,9 @@ EXPORT_SYMBOL(tisp_enforce_block_whitelist);
 
 static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 {
-	u32 *params = (u32 *)(tparams_active ? tparams_active : tparams_day);
+	u8 *param_block = (u8 *)(tparams_active ? tparams_active : tparams_day);
+	u32 *top_bypass_flags = param_block ?
+		(u32 *)param_block : NULL;
 	u32 bypass_val;
 	int i;
 
@@ -2750,19 +2802,25 @@ static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
 	 * The GC2053 day bank, for example, must resolve to 0xb5742249. */
 	bypass_val = 0x8077efff;
 
-	if (params && tuning_bin_loaded) {
-		/* OEM EXACT per-bit loop: each u32 in tparams[0..31] is a BYPASS flag.
-		 * Clear bit i, then set it if params[i] is non-zero. */
+	if (top_bypass_flags) {
+		/* OEM tisp_init adds 0x111c0 to its static tparams object before
+		 * this loop because the loaded active parameter bank begins at that
+		 * offset in the stock object.  tparams_active is already the extracted
+		 * bank (the loader removed the prefix), so its first 32 words are the
+		 * bypass flags.  Preserve the OEM raw arithmetic: clear bit i, then
+		 * add flags[i] << i.  Some official IQ files use values greater than
+		 * one; normalizing them to boolean changes the carry/clear behavior. */
 		for (i = 0; i < 32; i++) {
 			u32 bit = 1U << i;
-			u32 val = params[i] ? 1U : 0U;
-			bypass_val = (bypass_val & ~bit) | (val << i);
+			bypass_val = (bypass_val & ~bit) +
+				(top_bypass_flags[i] << i);
 		}
 	}
 
-	if (params && tuning_bin_loaded)
+	if (top_bypass_flags)
 		pr_info("tisp_compute_top_bypass: tparams[5](GIB)=%u [13](GB)=%u [16](MDNS)=%u\n",
-			params[5], params[13], params[16]);
+			top_bypass_flags[5], top_bypass_flags[13],
+			top_bypass_flags[16]);
 	pr_info("tisp_compute_top_bypass: oem_loop=0x%08x\n", bypass_val);
 
 	/* OEM non-WDR masks (from tisp_init @ 0x15f98):
@@ -4222,9 +4280,8 @@ static struct tisp_sensor_info_blob sensor_info = {
         [TISP_SI_WORD_HEIGHT] = 1080,
         [TISP_SI_WORD_BAYER] = 0,
         [TISP_SI_WORD_FPS] = (25 << 16) | 1,
-        [TISP_SI_WORD_LINE_TIME] = (28 << 16) | 1,
+        [TISP_SI_WORD_LINE_SHORT_MIN] = 28,
         [TISP_SI_WORD_TOTAL_SIZE] = (1080 << 16) | 1920,
-        [TISP_SI_WORD_MODE] = 0,
     },
 };
 static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
@@ -4477,19 +4534,19 @@ static const uint32_t tiziano_gib_b_ir_linear_oem[2] = {1024, 1024};
 /* BLC arrays: OEM STATIC defaults from the .ko binary.
  * libimp overrides these to ~256 at runtime via param_array_set. */
 static const uint32_t tiziano_gib_deirm_blc_r_linear_oem[9] = {
-    67, 68, 67, 67, 66, 66, 66, 66, 66,
+    253, 254, 256, 258, 258, 258, 258, 258, 258,
 };
 static const uint32_t tiziano_gib_deirm_blc_gr_linear_oem[9] = {
-    66, 68, 67, 67, 67, 67, 67, 67, 67,
+    253, 254, 256, 258, 259, 259, 259, 259, 259,
 };
 static const uint32_t tiziano_gib_deirm_blc_gb_linear_oem[9] = {
-    66, 68, 67, 66, 67, 67, 67, 67, 67,
+    253, 254, 254, 257, 257, 257, 257, 257, 257,
 };
 static const uint32_t tiziano_gib_deirm_blc_b_linear_oem[9] = {
-    66, 68, 68, 67, 67, 67, 67, 67, 67,
+    253, 254, 254, 257, 256, 256, 256, 256, 256,
 };
 static const uint32_t tiziano_gib_deirm_blc_ir_linear_oem[9] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    65, 63, 67, 66, 63, 63, 63, 63, 63,
 };
 static const uint32_t gib_ir_point_oem[4] = {5, 50, 51, 128};
 static const uint32_t gib_ir_reser_oem[15] = {0};
@@ -6849,9 +6906,8 @@ int tisp_init(void *sensor_info_arg, char *param_name)
             [TISP_SI_WORD_HEIGHT] = 1080,
             [TISP_SI_WORD_BAYER] = 0,
             [TISP_SI_WORD_FPS] = (25 << 16) | 1,
-            [TISP_SI_WORD_LINE_TIME] = (28 << 16) | 1,
+            [TISP_SI_WORD_LINE_SHORT_MIN] = 28,
             [TISP_SI_WORD_TOTAL_SIZE] = (1080 << 16) | 1920,
-            [TISP_SI_WORD_MODE] = 0,
         },
     };
 
@@ -7366,8 +7422,9 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 
     /* OEM EXACT call order (decompiled at 0x62300): all _dn_ variants.
      * RDNS disabled: kills AWB/AE stats mid-stream (root cause TBD).
-     * GB params MUST be refreshed regardless of GB bypass bit — GIB
-     * shares the 0x1000-0x1070 register space and reads GB BLC refs. */
+     * Do not refresh the WDR-only GB parameter bank here.  Although GB and
+     * GIB share 0x1000-0x1070, OEM leaves the linear GB BLC defaults intact;
+     * loading the WDR bank corrupts 0x1018-0x102c on linear sensors. */
 	tisp_refresh_daynight_pipeline();
 
 	if (ourISPdev)
@@ -8590,7 +8647,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
              * rebuilds the sensor-line exposure table, then retriggers AE. */
             _flicker_t.data[0] = hz;
             tiziano_deflicker_expt_tune(hz,
-                    tisp_si_line_time_token(&sensor_info),
+                    tisp_si_fps(&sensor_info),
                     tisp_si_total_height(&sensor_info),
                     tisp_si_total_width(&sensor_info));
             tisp_ae_trig();
@@ -8675,28 +8732,28 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
         // Special case handlers:
         case 0x8000004: {  // White Balance
-            struct {
-                uint32_t r_gain;
-                uint32_t g_gain;
-                uint32_t b_gain;
-                uint32_t color_temp;  // From the decompiled WB references
-            } wb_data;
+            struct tx_isp_tuning_wb wb_data;
 
-//            if (copy_from_user(&wb_data, (void __user *)ctrl->value, sizeof(wb_data))) {
-//                ret = -EFAULT;
-//                goto out;
-////            }
-//
-//            tuning->wb_gains.r = wb_data.r_gain;
-//            tuning->wb_gains.g = wb_data.g_gain;
-//            tuning->wb_gains.b = wb_data.b_gain;
-//            tuning->wb_temp = wb_data.color_temp;
+            if (copy_from_user(&wb_data,
+                               (void __user *)(unsigned long)ctrl->value,
+                               sizeof(wb_data))) {
+                ret = -EFAULT;
+                break;
+            }
+            if (wb_data.mode >= 10) {
+                ret = -EINVAL;
+                break;
+            }
 
-            // Update hardware if tuning is active
-//            writel(wb_data.r_gain, tuning->regs + ISP_WB_R_GAIN);
-//            writel(wb_data.g_gain, tuning->regs + ISP_WB_G_GAIN);
-//            writel(wb_data.b_gain, tuning->regs + ISP_WB_B_GAIN);
-//            wmb();
+            /* SetWB uses the same packed eight-byte payload as GetWB.  Let
+             * the OEM-shaped AWB state machine commit it on its normal frame
+             * boundary instead of writing the hardware bank behind it. */
+            ret = tisp_s_wb_mode(wb_data.mode, wb_data.r_gain,
+                                 wb_data.b_gain);
+            if (!ret) {
+                tuning->wb_gains.r = wb_data.r_gain;
+                tuning->wb_gains.b = wb_data.b_gain;
+            }
             break;
         }
 
@@ -11287,11 +11344,13 @@ static uint8_t param_defog_weightlut20_tmp[0x80] = {
 /* Non‑WDR FPGA para */
 static uint8_t param_defog_fpga_para_array[0x40];
 
-/* Defog runtime block buffers (air light R/G/B and transmit T), size 0x2d0 bytes each */
-static uint8_t defog_block_air_light_r[0x2d0]; /* OEM: zero-init OK */
-static uint8_t defog_block_air_light_g[0x2d0];
-static uint8_t defog_block_air_light_b[0x2d0];
-static uint8_t defog_block_transmit_t[0x2d0]; /* Must init to 0xFF (no fog) — 0 = max defogging */
+/* Defog runtime block buffers: 180 u32 slots (10 rows x 18 columns),
+ * 0x2d0 bytes each.  The hardware consumes the low byte of every slot. */
+#define TISP_DEFOG_BLOCK_COUNT (0x2d0 / sizeof(uint32_t))
+static uint32_t defog_block_air_light_r[TISP_DEFOG_BLOCK_COUNT];
+static uint32_t defog_block_air_light_g[TISP_DEFOG_BLOCK_COUNT];
+static uint32_t defog_block_air_light_b[TISP_DEFOG_BLOCK_COUNT];
+static uint32_t defog_block_transmit_t[TISP_DEFOG_BLOCK_COUNT];
 
 static inline uint32_t le32_at(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
@@ -11511,12 +11570,13 @@ static void tiziano_defog_params_refresh(void)
         for (i = 0; i < 16; i++) le32_put(param_defog_fpga_para_wdr_array, i, fpgaw[i]);
     }
 
-    /* Air light initial values: OEM inits to 0xC8 (200) — not zero */
-    memset(defog_block_air_light_r, 0xC8, sizeof(defog_block_air_light_r));
-    memset(defog_block_air_light_g, 0xC8, sizeof(defog_block_air_light_g));
-    memset(defog_block_air_light_b, 0xC8, sizeof(defog_block_air_light_b));
-    /* Transmit T: OEM inits to 0xE6 (230) — near-passthrough */
-    memset(defog_block_transmit_t, 0xE6, sizeof(defog_block_transmit_t));
+    /* OEM stores one byte-valued sample in each u32 slot. */
+    for (i = 0; i < TISP_DEFOG_BLOCK_COUNT; i++) {
+        defog_block_air_light_r[i] = 0xC8;
+        defog_block_air_light_g[i] = 0xC8;
+        defog_block_air_light_b[i] = 0xC8;
+        defog_block_transmit_t[i] = 0xE6;
+    }
 }
 
 /* Bulk writer: mirrors OEM tiziano_defog_set_reg_params() */
@@ -11525,11 +11585,11 @@ static int tiziano_defog_set_reg_params(void)
     for (uint32_t i = 0; i != 0x48; i += 4) {
         uint32_t addr = 0x58000 + i * 0xA;
         for (uint32_t j = 0; j != 0x2d0; j += 0x48) {
-            uint32_t idx = i + j;
-            uint32_t val = ((uint32_t)defog_block_air_light_r[idx] << 24)
-                         | ((uint32_t)defog_block_air_light_g[idx] << 16)
-                         | ((uint32_t)defog_block_air_light_b[idx] << 8)
-                         |  (uint32_t)defog_block_transmit_t[idx];
+            uint32_t idx = (i + j) / sizeof(uint32_t);
+            uint32_t val = ((defog_block_air_light_r[idx] & 0xff) << 24)
+                         | ((defog_block_air_light_g[idx] & 0xff) << 16)
+                         | ((defog_block_air_light_b[idx] & 0xff) << 8)
+                         |  (defog_block_transmit_t[idx] & 0xff);
             system_reg_write(addr, val);
             addr += 4;
         }
@@ -17346,7 +17406,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
      * total frame height, and total frame width. */
     uint32_t a2_13 = tisp_si_total_height(&sensor_info);
     uint32_t a3_1 = tisp_si_total_width(&sensor_info);
-    uint32_t a1_5 = tisp_si_line_time_token(&sensor_info);
+    uint32_t a1_5 = tisp_si_fps(&sensor_info);
 
     /* Binary Ninja EXACT: data_b0b28 = $a1_5 */
     data_b0b28 = a1_5;
@@ -19967,8 +20027,6 @@ static int tiziano_gib_params_refresh(void)
         memcpy(tiziano_gib_config_line,         p + GIB_TBIN_CONFIG_LINE, 0x30);
         memcpy(tiziano_gib_r_g_linear,          p + GIB_TBIN_RG_LINEAR,   0x08);
         memcpy(tiziano_gib_b_ir_linear,         p + GIB_TBIN_BIR_LINEAR,  0x08);
-        /* OEM loads BLC from tparams like everything else (verified by offset
-         * audit against OEM tiziano_gib_params_refresh @ 0x21a98). */
         memcpy(tiziano_gib_deirm_blc_r_linear,  p + GIB_TBIN_BLC_R,  0x24);
         memcpy(tiziano_gib_deirm_blc_gr_linear, p + GIB_TBIN_BLC_GR, 0x24);
         memcpy(tiziano_gib_deirm_blc_gb_linear, p + GIB_TBIN_BLC_GB, 0x24);
@@ -21203,15 +21261,29 @@ static void jz_isp_ccm_para2reg(int32_t *reg_data, const int32_t *param_data)
     }
 }
 
-static void tisp_ccm_fill_identity_reg_data(int32_t *reg_data)
+static int32_t tisp_ccm_encode_forced_coeff(int coeff)
 {
-    static const int32_t identity_reg_data[9] = {
-        0x0400, 0x0000, 0x0000,
-        0x0000, 0x0400, 0x0000,
-        0x0000, 0x0000, 0x0400,
-    };
+    if (coeff < -0x2000)
+        coeff = -0x2000;
+    else if (coeff > 0x1fff)
+        coeff = 0x1fff;
 
-    memcpy(reg_data, identity_reg_data, sizeof(identity_reg_data));
+    if (coeff < 0)
+        coeff &= 0x3fff;
+    return coeff;
+}
+
+static void tisp_ccm_fill_forced_reg_data(int32_t *reg_data)
+{
+    reg_data[0] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_r);
+    reg_data[1] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_rg);
+    reg_data[2] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_rb);
+    reg_data[3] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_gr);
+    reg_data[4] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_g);
+    reg_data[5] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_gb);
+    reg_data[6] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_br);
+    reg_data[7] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_bg);
+    reg_data[8] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_b);
 }
 
 /* tiziano_ccm_params_refresh - OEM static CCM payload from tx-isp-t31.ko.
@@ -21388,9 +21460,11 @@ int jz_isp_ccm(void)
     jz_isp_ccm_para2reg(reg_data, final_matrix);
 
     if (tisp_force_identity_ccm) {
-        tisp_ccm_fill_identity_reg_data(reg_data);
-        pr_info("jz_isp_ccm: forcing identity CCM for isolation (EV=%u CT=%d sat=%u)\n",
-            ev_value, ct_value, data_c52fc);
+        tisp_ccm_fill_forced_reg_data(reg_data);
+        pr_debug("jz_isp_ccm: forcing diagonal CCM r=0x%x g=0x%x b=0x%x "
+             "(EV=%u CT=%d sat=%u)\n",
+             tisp_force_ccm_r, tisp_force_ccm_g, tisp_force_ccm_b,
+             ev_value, ct_value, data_c52fc);
     }
 
     /* Step 6: write to hardware */
@@ -29426,19 +29500,19 @@ static int defog_wei_interpcot(int rows, int cols, const uint32_t *avg_map,
 static int defog_3x3_5x5_params_init(uint32_t width, uint32_t height)
 {
 	static const uint32_t cent3_base[24] = {
-		0x10, 0x21, 0x32, 0x44, 0x57, 0x6b, 0x81, 0x97,
-		0xaf, 0xc8, 0xe4, 0x101, 0x121, 0x144, 0x16a, 0x194,
-		0x1c4, 0x1fb, 0x23b, 0x287, 0x2e8, 0x368, 0x42b, 0x5cf,
+		0x0ff, 0x209, 0x31f, 0x442, 0x573, 0x6b5, 0x809, 0x971,
+		0xaef, 0xc87, 0xe3b, 0x1012, 0x1210, 0x143c, 0x16a0, 0x1947,
+		0x1c45, 0x1faf, 0x23ad, 0x2877, 0x2e78, 0x3681, 0x42b3, 0x5cf0,
 	};
 	static const uint32_t cent5_dense_base[63] = {
-		0x11, 0x22, 0x32, 0x44, 0x56, 0x68, 0x7b, 0x8e,
-		0xa1, 0xb4, 0xc8, 0xdc, 0xf1, 0x106, 0x11b, 0x131,
-		0x48, 0x15e, 0x175, 0x18e, 0x1a7, 0x1c0, 0x1db, 0x1f7,
-		0x213, 0x22a, 0x249, 0x268, 0x289, 0x2aa, 0x2cd, 0x2f1,
-		0x316, 0x33d, 0x366, 0x390, 0x3bc, 0x3eb, 0x41d, 0x452,
-		0x48a, 0x4c6, 0x506, 0x54b, 0x596, 0x5e8, 0x642, 0x6a5,
-		0x714, 0x791, 0x821, 0x8c8, 0x991, 0xa83, 0xbb2, 0xd2b,
-		0xf14, 0x11a4, 0x14c6, 0x18d2, 0x1e36, 0x2577, 0x31b8,
+		0x085, 0x10d, 0x197, 0x223, 0x2b1, 0x342, 0x3d6, 0x46c,
+		0x505, 0x5a0, 0x63f, 0x6e1, 0x786, 0x82e, 0x8da, 0x98a,
+		0xa3d, 0xaf4, 0xbaf, 0xc6f, 0xd33, 0xdfc, 0xec9, 0xf9c,
+		0x1075, 0x1153, 0x1237, 0x1322, 0x1414, 0x150d, 0x160d, 0x1716,
+		0x1827, 0x1941, 0x1a66, 0x1b95, 0x1ccf, 0x1e16, 0x1f6a, 0x20cd,
+		0x223f, 0x23c3, 0x255a, 0x2705, 0x28c8, 0x2aa4, 0x2c9d, 0x2eb7,
+		0x30f6, 0x3360, 0x35fb, 0x38d0, 0x3bea, 0x3f58, 0x432d, 0x46d2,
+		0x4c8b, 0x527a, 0x59be, 0x631b, 0x704e, 0x86de, 0x9db0,
 	};
 	uint32_t rows = (height + 5) / 10;
 	uint32_t cols = (width + 9) / 18;
@@ -29454,10 +29528,10 @@ static int defog_3x3_5x5_params_init(uint32_t width, uint32_t height)
 	if (!width || !height)
 		return -EINVAL;
 
-	/* OEM HLIL:
-	 * ((width * height + 0x3f4) / 0x7e9 * data_9cd44 + 0x32) / 0x64
-	 * The OEM scale constant resolves to 100, so this is a rounded block-area
-	 * factor based on the nominal 18x10 defog grid. */
+	/* OEM HLIL uses the generic distance bases at 0x6d0a4 and 0x6d104:
+	 * ((width * height + 0x3f4) / 0x7e9 * data_9cd44 + 0x32) / 0x64.
+	 * data_9cd44 is 100, so this is a rounded block-area factor based on the
+	 * nominal 18x10 defog grid. */
 	block_scale = ((((width * height) + 0x3f4) / 0x7e9) * 100 + 0x32) / 0x64;
 
 	for (i = 0; i < ARRAY_SIZE(cent3_base); i++)
@@ -31026,22 +31100,28 @@ static int mdns_diag_frame_count;
 int tisp_tgain_update(uint32_t gain)
 {
     static uint32_t tgain_call_count;
+    uint32_t raw_correction_gain = gain;
     extern struct tx_isp_dev *ourISPdev;
+
+    if (tisp_force_raw_correction_gain >= 0)
+        raw_correction_gain = (uint32_t)tisp_force_raw_correction_gain;
+
     if (ourISPdev && ourISPdev->tuning_data)
         ourISPdev->tuning_data->total_gain = gain;
 
     if (tgain_call_count < 5 || (tgain_call_count % 300) == 0)
-        pr_info("tisp_tgain_update[%u]: gain=0x%x\n", tgain_call_count, gain);
+        pr_info("tisp_tgain_update[%u]: gain=0x%x raw_correction_gain=0x%x\n",
+                tgain_call_count, gain, raw_correction_gain);
     tgain_call_count++;
 
     /* OEM EXACT: tisp_tgain_update calls _refresh wrappers unconditionally.
      * Order: GIB, GB_BLC, DMSC, Sharpen, SDNS, DPC, LSC, YDNS, RDNS, MDNS. */
-    tisp_gib_gain_interpolation(gain);
+    tisp_gib_gain_interpolation(raw_correction_gain);
     tisp_gb_blc_again_interp(gain, 0);
     tisp_dmsc_refresh(gain);
     tisp_sharpen_refresh(gain);
     tisp_sdns_refresh(gain);
-    tisp_dpc_refresh(gain);
+    tisp_dpc_refresh(raw_correction_gain);
     tisp_lsc_gain_update(gain);
     tisp_ydns_gain_update(gain);
     tisp_rdns_gain_update(gain);
@@ -35043,7 +35123,7 @@ int tiziano_ae_dn_params_refresh(void)
      */
     {
         uint32_t a3 = tisp_si_total_width(&sensor_info);
-        uint32_t a1 = tisp_si_line_time_token(&sensor_info);
+        uint32_t a1 = tisp_si_fps(&sensor_info);
         uint32_t a2 = tisp_si_total_height(&sensor_info);
 
         data_b0b28 = a1;

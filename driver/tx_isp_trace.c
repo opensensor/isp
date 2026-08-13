@@ -11,6 +11,10 @@
 #include <linux/mutex.h>
 #include <linux/math64.h>
 
+#ifndef READ_ONCE
+#define READ_ONCE(x) (*(volatile typeof(x) *)&(x))
+#endif
+
 #define ISP_MONITOR_VERSION "3.16"
 #define TRACE_FILE_PATH "/tmp/isp-trace.txt"
 
@@ -33,6 +37,7 @@ static bool tracing_active;
 static bool trace_sequence_mode;
 static bool trace_core_only;
 static bool trace_quality_only;
+static bool trace_t31_gib_only;
 static bool trace_snapshot_only;
 static uint trace_interval_ms = 1000;
 static unsigned long system_reg_read_addr;
@@ -130,12 +135,22 @@ static const struct trace_range quality_trace_ranges[] = {
 	{ BASE_ISP, 0x1e000, 0x1e118, "TMO" },
 };
 
+static const struct trace_range t31_gib_trace_ranges[] = {
+	/* T31 raw front-end state.  Keep this intentionally narrow so a 1 ms
+	 * sampling interval can observe the reset-to-first-frame GIB latch without
+	 * delaying ISP bring-up. */
+	{ BASE_ISP, 0x00000, 0x00030, "T31_TOP" },
+	{ BASE_ISP, 0x01000, 0x01070, "T31_GIB" },
+	{ BASE_ISP, 0x80000, 0x8017c, "T31_GIB_DEIR" },
+};
+
 static const struct trace_range *active_trace_ranges = trace_ranges;
 static int active_trace_range_count = ARRAY_SIZE(trace_ranges);
 
 module_param_named(sequence_mode, trace_sequence_mode, bool, 0644);
 module_param_named(core_only, trace_core_only, bool, 0644);
 module_param_named(quality_only, trace_quality_only, bool, 0644);
+module_param_named(t31_gib_only, trace_t31_gib_only, bool, 0644);
 module_param_named(snapshot_only, trace_snapshot_only, bool, 0644);
 module_param_named(interval_ms, trace_interval_ms, uint, 0644);
 module_param_named(system_reg_read_addr, system_reg_read_addr, ulong, 0400);
@@ -860,7 +875,12 @@ static int __init isp_trace_init(void)
 
 	pr_info("ISP Tuning Trace v%s initializing vendor_read=%#lx\n",
 		ISP_MONITOR_VERSION, system_reg_read_addr);
-	if (trace_quality_only) {
+	if (trace_t31_gib_only) {
+		active_trace_ranges = t31_gib_trace_ranges;
+		active_trace_range_count = ARRAY_SIZE(t31_gib_trace_ranges);
+		if (!trace_interval_ms)
+			trace_interval_ms = 1;
+	} else if (trace_quality_only) {
 		active_trace_ranges = quality_trace_ranges;
 		active_trace_range_count = ARRAY_SIZE(quality_trace_ranges);
 		if (!trace_interval_ms)
@@ -911,9 +931,10 @@ static int __init isp_trace_init(void)
 	trace_write("ISP Tuning Trace v%s — %d registers across %d ranges mode=%s interval_ms=%u\n",
 		    ISP_MONITOR_VERSION, snapshot_count,
 		    active_trace_range_count,
-		    trace_quality_only ? "quality" :
+		    trace_t31_gib_only ? "t31-gib" :
+		    (trace_quality_only ? "quality" :
 		    (trace_core_only ? "core" :
-		    (trace_sequence_mode ? "sequence" : "wide")),
+		    (trace_sequence_mode ? "sequence" : "wide"))),
 		    trace_interval_ms);
 
 	if (!trace_snapshot_only)
