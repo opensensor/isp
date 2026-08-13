@@ -4,10 +4,34 @@
 struct device;
 struct file;
 
+#ifdef CONFIG_TX_ISP_T41_V4L2
 int tx_isp_t41_v4l2_init(struct device *parent);
 void tx_isp_t41_v4l2_exit(void);
 void tx_isp_t41_v4l2_bind_channel(void *channel, unsigned int index);
 void tx_isp_t41_v4l2_unbind_channel(void *channel);
+#else
+static inline int tx_isp_t41_v4l2_init(struct device *parent)
+{
+	(void)parent;
+	return 0;
+}
+
+static inline void tx_isp_t41_v4l2_exit(void)
+{
+}
+
+static inline void tx_isp_t41_v4l2_bind_channel(void *channel,
+					 unsigned int index)
+{
+	(void)channel;
+	(void)index;
+}
+
+static inline void tx_isp_t41_v4l2_unbind_channel(void *channel)
+{
+	(void)channel;
+}
+#endif
 
 int tx_isp_t41_frame_channel_claim(void *channel);
 int tx_isp_t41_frame_channel_release(void *channel);
