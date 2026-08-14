@@ -1700,12 +1700,7 @@ void system_reg_write_gb(u32 arg1, u32 arg2, u32 arg3)
     system_reg_write(arg2, arg3);
 }
 
-/* system_reg_write_gib - Gate write for GIB double-buffered registers.
- * OEM decompilation shows this calls system_reg_write() as a FUNCTION
- * for both the gate open and the value write (with tail-call for the
- * second). This provides natural delay between the two writes via
- * function call overhead. Previous "back-to-back" direct stores may
- * have been too fast for the hardware gate timing. */
+/* system_reg_write_gib - Gate write for GIB double-buffered registers. */
 void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3)
 {
     if (arg1 == 1)
@@ -6187,7 +6182,7 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
 /* private_reset_tx_isp_module - Binary Ninja exact implementation */
 int private_reset_tx_isp_module(int arg)
 {
-    void __iomem *cpm_regs;
+    volatile u32 * const cpm_srbc = (volatile u32 *)0xb00000c4;
     u32 reset_reg;
     u32 reset_before;
     int timeout = 500; /* 0x1f4 iterations like Binary Ninja */
@@ -6196,50 +6191,39 @@ int private_reset_tx_isp_module(int arg)
         return 0;
     }
 
-    /* Map CPM registers */
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (!cpm_regs) {
-        return -ENOMEM;
-    }
-
-    reset_before = readl(cpm_regs + 0xc4);
-    pr_info("[CPM][OEM] private_reset_tx_isp_module: c4 before pulse=0x%08x\n", reset_before);
-
-    /* Binary Ninja: *0xb00000c4 |= 0x200000 */
+    /* The vendor SDK deliberately accesses CPM through its uncached KSEG1
+     * alias.  Keep the reset transaction on that exact path: generic
+     * ioremap() mappings are not equivalent on this Ingenic 3.10 kernel. */
+    reset_before = *cpm_srbc;
     reset_reg = reset_before;
     reset_reg |= 0x200000;
-    writel(reset_reg, cpm_regs + 0xc4);
-    wmb();
-    pr_info("[CPM][OEM] private_reset_tx_isp_module: trigger pulse wrote c4=0x%08x\n", reset_reg);
+    *cpm_srbc = reset_reg;
 
-    /* Binary Ninja: for (int32_t i = 0x1f4; i != 0; ) */
+    /* Vendor private_cpm_reset(addr, 22), instruction-for-instruction order. */
     while (timeout > 0) {
-        reset_reg = readl(cpm_regs + 0xc4);
-        /* Binary Ninja: if ((*0xb00000c4 & 0x100000) != 0) */
+        reset_reg = *cpm_srbc;
         if ((reset_reg & 0x100000) != 0) {
-            pr_info("[CPM][OEM] private_reset_tx_isp_module: ready observed c4=0x%08x\n", reset_reg);
-            /* Binary Ninja: *0xb00000c4 = (*0xb00000c4 & 0xffdfffff) | 0x400000 */
+            /* Stock re-reads SRBC after observing READY, rather than using
+             * the value returned by the poll.  Preserve that separate bus
+             * transaction before issuing the bit-22 acknowledge pulse. */
+            reset_reg = *cpm_srbc;
             reset_reg = (reset_reg & 0xffdfffff) | 0x400000;
-            writel(reset_reg, cpm_regs + 0xc4);
-            /* Binary Ninja: *0xb00000c4 &= 0xffbfffff */
+            *cpm_srbc = reset_reg;
+            reset_reg = *cpm_srbc;
             reset_reg &= 0xffbfffff;
-            writel(reset_reg, cpm_regs + 0xc4);
-            wmb();
-            pr_info("[CPM][OEM] private_reset_tx_isp_module: complete c4 after pulse=0x%08x\n",
-                    readl(cpm_regs + 0xc4));
+            *cpm_srbc = reset_reg;
 
-            iounmap(cpm_regs);
+            pr_info("[CPM][OEM] private_reset_tx_isp_module: direct KSEG1 reset c4=%08x->%08x\n",
+                    reset_before, *cpm_srbc);
             return 0;
         }
 
-        /* Binary Ninja: i -= 1; private_msleep(2) */
         timeout--;
         msleep(2);
     }
 
     pr_warn("[CPM][OEM] private_reset_tx_isp_module: timeout waiting for ready bit, final c4=0x%08x\n",
-            readl(cpm_regs + 0xc4));
-    iounmap(cpm_regs);
+            *cpm_srbc);
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
 }
 

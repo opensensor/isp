@@ -4478,7 +4478,7 @@ static void tisp_rdns_intp_reg_refresh(uint32_t gain);
 
 /* GIB tuning binary blob offsets — verified against OEM memcpy addresses.
  * OEM tparams_day base: 0x84B10; offset = OEM_addr - 0x84B10.
- * tiziano_gib_params_refresh reads ALL GIB data from the tuning blob.
+ * tiziano_gib_params_refresh reads all GIB data from the active tuning bank.
  *
  * NOTE: A previous "fix" shifted these by +0x18 based on an out-of-band blob
  * that carried a 32-byte LUT preamble the OEM driver does NOT consume. The
@@ -13381,14 +13381,6 @@ static uint32_t awb_array_b[AWB_STATS_ZONES];
 static uint32_t awb_array_ir[AWB_STATS_ZONES];
 static uint32_t awb_array_p[AWB_STATS_ZONES];
 
-/* Shadow AWB stats arrays — written by awb_interrupt_static (IRQ context),
- * then copied into the live arrays once from JZ_Isp_Awb(). */
-static uint32_t awb_shadow_r[AWB_STATS_ZONES];
-static uint32_t awb_shadow_g[AWB_STATS_ZONES];
-static uint32_t awb_shadow_b[AWB_STATS_ZONES];
-static uint32_t awb_shadow_ir[AWB_STATS_ZONES];
-static uint32_t awb_shadow_p[AWB_STATS_ZONES];
-static int      awb_shadow_ready;  /* set by IRQ snapshot, cleared by AWB consume */
 static uint32_t awb_irq_last_offset;
 static uint32_t awb_irq_last_raw[4];
 static uint32_t awb_transition_diag_frames;
@@ -13777,7 +13769,6 @@ int tiziano_awb_dn_params_refresh(void)
 	 * zone cache/history state here. */
 	awb_history_reset = 1;
 	awb_dn_refresh_flag = 1;
-	awb_shadow_ready = 0;
 	awb_irq_diag_armed = 1;
 	awb_transition_diag_frames = 4;
 	tiziano_awb_params_refresh();
@@ -13797,7 +13788,6 @@ int tiziano_awb_stream_start_refresh(void)
 		return 0;
 
 	pr_info("tiziano_awb_stream_start_refresh: re-applying AWB hardware params on stream enable\n");
-	awb_shadow_ready = 0;
 	awb_irq_diag_armed = 1;
 	awb_transition_diag_frames = 4;
 	tiziano_awb_dump_producer_state("stream-before-hw");
@@ -15191,6 +15181,24 @@ static int tisp_rdns_awb_gain_par_cfg(void)
     uint32_t *arr = (uint32_t *)rdns_awb_gain_par_cfg_array;
     system_reg_write(0x3000, (arr[1] << 16) | arr[0]);
     system_reg_write(0x3004, (arr[3] << 16) | arr[2]);
+    return 0;
+}
+
+/* VDB2 OEM 0x59a00: keep the RDNS colour-gain normalization in step with
+ * AWB.  Tiziano_awb_set_gain passes the upper halfwords of its packed AWB
+ * registers here; those halfwords are the constant 0x0400 marker, not the
+ * live red/blue gains in the low halfwords.  Consequently stock programs
+ * unity RDNS gains (0x40 after >> 4) and their Q6 reciprocals (1). */
+static int tisp_rdns_awb_gain_updata(uint32_t gain_gr, uint32_t gain_gb)
+{
+    uint32_t gr = gain_gr >> 4;
+    uint32_t gb = gain_gb >> 4;
+    uint32_t gr_inv = fix_point_div_32(6, 1, gr);
+    uint32_t gb_inv = fix_point_div_32(6, 1, gb);
+
+    system_reg_write(0x3000, (gb << 16) | gr);
+    system_reg_write(0x3004, (gb_inv << 16) | gr_inv);
+    system_reg_write(0x30ac, 1);
     return 0;
 }
 
@@ -17571,10 +17579,13 @@ static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos, const uint32_
 		system_reg_write_awb(2, 0x1808, reg_pair[1]);
 		system_reg_write_awb(2, 0x180c, reg_pair[0]);
 		system_reg_write_awb(2, 0x1810, reg_pair[1]);
-		/* Keep RDNS' color-gain tuple owned by its tuning parameters while
-		 * AWB changes the dedicated 0x1804..0x1810 gains.  Feeding the WB
-		 * register encoding into RDNS here produced ~0x80 gains with zero
-		 * reciprocals and a severe green-channel collapse in daylight. */
+		/* OEM reads the upper halfword of each packed register from the
+		 * little-endian stack slots (both are 0x0400).  Passing the low
+		 * halfword here instead would incorrectly feed the live WB gains to
+		 * RDNS and can collapse a colour channel when the Q6 reciprocal
+		 * truncates to zero. */
+		tisp_rdns_awb_gain_updata(reg_pair[0] >> 16,
+					reg_pair[1] >> 16);
 	}
 
 	/* One-time color register dump to compare with OEM */
@@ -17947,12 +17958,12 @@ static uint32_t func_zone_ct_weight(uint32_t inv_ct, const uint32_t *cw,
  * @n_lights:    Number of light sources (CT nodes).
  * @ct_wght_p:   CT weight boundary params [4]: lo_outer, lo_inner, hi_inner, hi.
  * @ct_mode:     CT mode [2]: [0]=enable, [1]=scale.
- * @ct_mesh:     Color temperature mesh (15x15 uint32_t).
+ * @rgbg_weight_mesh: Active indoor/outdoor rg/bg weight mesh (15x15 uint32_t).
  * @cols:        Number of columns (15).
  * @rows:        Number of rows (15).
  * @rg_pos:      rg grid positions [15].
  * @bg_pos:      bg grid positions [15].
- * @ct_wght_mesh: CT weight mesh (same layout as ct_mesh), used when ct_mode[0]==1.
+ * @ct_mesh:     Color temperature mesh (15x15 uint32_t).
  * @awb_wght:    Per-zone AWB weights (15x15 uint32_t).
  * @dis_tw:      Distance threshold/weight params [3]: [0]=enable, [1]=hi, [2]=lo.
  * @out_ct:      Output: detected color temperature.
@@ -17969,12 +17980,12 @@ static void Tiziano_Awb_Ct_Detect(
 	uint32_t n_lights,        /* arg4 */
 	const uint32_t *ct_wght_p, /* arg5 */
 	const uint32_t *ct_mode,  /* arg6 */
-	const uint32_t *ct_mesh,  /* arg7 */
+	const uint32_t *rgbg_weight_mesh, /* arg7 */
 	uint32_t cols,            /* arg8 */
 	uint32_t rows,            /* arg9 */
 	const uint32_t *rg_pos,  /* arg10 */
 	const uint32_t *bg_pos,  /* arg11 */
-	const uint32_t *ct_wght_mesh, /* arg12 */
+	const uint32_t *ct_mesh, /* arg12 */
 	const uint32_t *awb_wght, /* arg13 */
 	const uint32_t *dis_tw,  /* arg14 */
 	uint32_t *out_ct,        /* arg15 */
@@ -18166,12 +18177,28 @@ find_bg_idx:
 				continue;
 			}
 
-			/* Interpolate CT mesh value */
-			if (rg_idx == 15) {
+			/* Interpolate CT mesh value.  The upper-right mesh corner is a
+			 * distinct OEM case: there is no following row or column to
+			 * interpolate.  Handling it through the rg-boundary path reads
+			 * one element beyond the 15x15 meshes. */
+			if (rg_idx == 15 && bg_idx == 15) {
+				uint32_t inv_ct_val = ct_mesh[14 * 15 + 14];
+
+				mesh_val = rgbg_weight_mesh[14 * 15 + 14] << q_mask;
+				if (ct_enable == 1) {
+					if (inv_ct_val)
+						inv_ct_val = 1000000u / inv_ct_val;
+					*wght_p = func_zone_ct_weight(inv_ct_val,
+						ct_wght_p, ct_scale, fp,
+						mesh_val, var_a4, var_a0);
+				} else {
+					*wght_p = mesh_val;
+				}
+			} else if (rg_idx == 15) {
 				/* rg at max boundary — use last column */
 				uint32_t mesh_off = bg_idx * 15; /* row = bg_idx */
-				uint32_t row_last = ct_mesh[mesh_off - 1]; /* last element of prev row */
-				uint32_t row_last_next = ct_mesh[mesh_off - 1 + 15]; /* next row last */
+				uint32_t row_last = rgbg_weight_mesh[mesh_off - 1]; /* last element of prev row */
+				uint32_t row_last_next = rgbg_weight_mesh[mesh_off - 1 + 15]; /* next row last */
 
 				mesh_val = ISPAWBInterpolation1(fp,
 					zone_bg_val,
@@ -18179,8 +18206,8 @@ find_bg_idx:
 					row_last, row_last_next);
 
 				if (ct_enable == 1) {
-					uint32_t ct_w_last = ct_wght_mesh[mesh_off - 1];
-					uint32_t ct_w_last_next = ct_wght_mesh[mesh_off - 1 + 15];
+					uint32_t ct_w_last = ct_mesh[mesh_off - 1];
+					uint32_t ct_w_last_next = ct_mesh[mesh_off - 1 + 15];
 					uint32_t ct_interp = ISPAWBInterpolation1(fp,
 						zone_bg_val,
 						bg_pos[bg_idx - 1], bg_pos[bg_idx],
@@ -18197,8 +18224,8 @@ find_bg_idx:
 			} else if (bg_idx == 15) {
 				/* bg at max boundary — use last row */
 				uint32_t mesh_off = rg_idx; /* col = rg_idx */
-				uint32_t col_rg = ct_mesh[14 * 15 + mesh_off - 1];
-				uint32_t col_rg_next = ct_mesh[14 * 15 + mesh_off];
+				uint32_t col_rg = rgbg_weight_mesh[14 * 15 + mesh_off - 1];
+				uint32_t col_rg_next = rgbg_weight_mesh[14 * 15 + mesh_off];
 
 				mesh_val = ISPAWBInterpolation1(fp,
 					zone_rg_val,
@@ -18206,8 +18233,8 @@ find_bg_idx:
 					col_rg, col_rg_next);
 
 				if (ct_enable == 1) {
-					uint32_t ct_col = ct_wght_mesh[14 * 15 + mesh_off - 1];
-					uint32_t ct_col_next = ct_wght_mesh[14 * 15 + mesh_off];
+					uint32_t ct_col = ct_mesh[14 * 15 + mesh_off - 1];
+					uint32_t ct_col_next = ct_mesh[14 * 15 + mesh_off];
 					uint32_t ct_interp = ISPAWBInterpolation1(fp,
 						zone_rg_val,
 						rg_pos[rg_idx - 1], rg_pos[rg_idx],
@@ -18229,12 +18256,12 @@ find_bg_idx:
 				row0_val = ISPAWBInterpolation1(fp,
 					zone_rg_val,
 					rg_pos[rg_idx - 1], rg_pos[rg_idx],
-					ct_mesh[mesh_off], ct_mesh[mesh_off + 1]);
+					rgbg_weight_mesh[mesh_off], rgbg_weight_mesh[mesh_off + 1]);
 
 				row1_val = ISPAWBInterpolation1(fp,
 					zone_rg_val,
 					rg_pos[rg_idx - 1], rg_pos[rg_idx],
-					ct_mesh[mesh_off + 15], ct_mesh[mesh_off + 16]);
+					rgbg_weight_mesh[mesh_off + 15], rgbg_weight_mesh[mesh_off + 16]);
 
 				mesh_val = ISPAWBInterpolation2(fp,
 					zone_bg_val,
@@ -18247,13 +18274,13 @@ find_bg_idx:
 					uint32_t ct_r0 = ISPAWBInterpolation1(fp,
 						zone_rg_val,
 						rg_pos[rg_idx - 1], rg_pos[rg_idx],
-						ct_wght_mesh[mesh_off],
-						ct_wght_mesh[mesh_off + 1]);
+						ct_mesh[mesh_off],
+						ct_mesh[mesh_off + 1]);
 					uint32_t ct_r1 = ISPAWBInterpolation1(fp,
 						zone_rg_val,
 						rg_pos[rg_idx - 1], rg_pos[rg_idx],
-						ct_wght_mesh[mesh_off + 15],
-						ct_wght_mesh[mesh_off + 16]);
+						ct_mesh[mesh_off + 15],
+						ct_mesh[mesh_off + 16]);
 					uint32_t ct_interp = ISPAWBInterpolation2(fp,
 						zone_bg_val,
 						bg_pos[bg_idx - 1], bg_pos[bg_idx],
@@ -18758,13 +18785,14 @@ find_bg_idx:
 				for (c = 0; c < cols; c++) {
 					idx = r * cols + c;
 					{
-						/* OEM EXACT: w = fix_point_mult2_32(q, rgbg_wght, zone_pix_wgh)
-						 * Note: OEM fix_point_mult3_32 is just an alias for mult2_32
-						 * (tail-calls it with same args). awb_wght is applied
-						 * in Phase 9 (distance refinement), NOT here. */
-						uint32_t w = fix_point_mult2_32(fp,
+						/* VDB2 OEM 0x1baf0 calls the four-argument helper with
+						 * rgbg_wght, zone_pix_wgh, and arg13 (_awb_wght) in
+						 * a1/a2/a3.  Some older T31 binaries expose a three-
+						 * argument alias here, so follow the active VDB2 ABI. */
+						uint32_t w = fix_point_mult3_32(fp,
 							rgbg_wght[idx],
-							zone_pix_wgh[idx]);
+							zone_pix_wgh[idx],
+							awb_wght[idx] << q_mask);
 						sum_rg_w += (uint64_t)fix_point_mult2_32(fp,
 							zone_rg[idx], w);
 						sum_bg_w += (uint64_t)fix_point_mult2_32(fp,
@@ -18822,8 +18850,9 @@ find_bg_idx:
 
 						rgbg_dis[zone_idx] = dist;
 
-						/* OEM: dist_sum += mult2(q, mult2(q, dist, rgbg_wght),
-						 *                         awb_wght << q) */
+						/* VDB2 OEM 0x1bdb4: the four-argument helper combines
+						 * distance, mesh weight, and normalized pixel weight;
+						 * the following mult2 applies the per-zone AWB weight. */
 						if (rgbg_wght[zone_idx] == 0)
 							continue;
 						if (zone_pix_wgh[zone_idx] == 0)
@@ -18832,8 +18861,9 @@ find_bg_idx:
 							continue;
 
 						dist_sum_w += fix_point_mult2_32(fp,
-							fix_point_mult2_32(fp, dist,
-								rgbg_wght[zone_idx]),
+							fix_point_mult3_32(fp, dist,
+								rgbg_wght[zone_idx],
+								zone_pix_wgh[zone_idx]),
 							awb_wght[zone_idx] << q_mask);
 					}
 				}
@@ -18875,10 +18905,12 @@ find_bg_idx:
 										rgbg_d_wght[idx] = rgbg_wght[idx];
 									}
 
-									/* OEM: dw = mult2(q, rgbg_d_wght, zone_pix_wgh) */
-									dw = fix_point_mult2_32(fp,
+									/* VDB2 OEM 0x1bfd8: retain all three zone
+									 * confidence terms in the refined average. */
+									dw = fix_point_mult3_32(fp,
 										rgbg_d_wght[idx],
-										zone_pix_wgh[idx]);
+										zone_pix_wgh[idx],
+										awb_wght[idx] << q_mask);
 
 									w_combined = fix_point_mult2_32(fp,
 										zone_rg[idx], dw);
@@ -18971,20 +19003,20 @@ find_bg_idx:
 
 				if (rg_bi == 15 && bg_bi == 15) {
 					/* Both at max — use corner value */
-					interp_val = ct_wght_mesh[14 * 15 + 14] << q_mask;
+					interp_val = ct_mesh[14 * 15 + 14] << q_mask;
 				} else if (rg_bi == 15) {
 					/* rg at max — interpolate along bg axis in last column */
 					uint32_t off = bg_bi * 15;
-					uint32_t v0 = ct_wght_mesh[off - 1];
-					uint32_t v1 = ct_wght_mesh[off - 1 + 15];
+					uint32_t v0 = ct_mesh[off - 1];
+					uint32_t v1 = ct_mesh[off - 1 + 15];
 					interp_val = ISPAWBInterpolation1(fp,
 						final_bg, bg_pos[bg_bi - 1], bg_pos[bg_bi],
 						v0, v1);
 				} else if (bg_bi == 15) {
 					/* bg at max — interpolate along rg axis in last row */
 					uint32_t off = 14 * 15 + rg_bi;
-					uint32_t v0 = ct_wght_mesh[off - 1];
-					uint32_t v1 = ct_wght_mesh[off];
+					uint32_t v0 = ct_mesh[off - 1];
+					uint32_t v1 = ct_mesh[off];
 					interp_val = ISPAWBInterpolation1(fp,
 						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
 						v0, v1);
@@ -18993,10 +19025,10 @@ find_bg_idx:
 					uint32_t off = (bg_bi - 1) * 15 + (rg_bi - 1);
 					uint32_t r0 = ISPAWBInterpolation1(fp,
 						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
-						ct_wght_mesh[off], ct_wght_mesh[off + 1]);
+						ct_mesh[off], ct_mesh[off + 1]);
 					uint32_t r1 = ISPAWBInterpolation1(fp,
 						final_rg, rg_pos[rg_bi - 1], rg_pos[rg_bi],
-						ct_wght_mesh[off + 15], ct_wght_mesh[off + 16]);
+						ct_mesh[off + 15], ct_mesh[off + 16]);
 					interp_val = ISPAWBInterpolation2(fp,
 						final_bg, bg_pos[bg_bi - 1], bg_pos[bg_bi],
 						r0, r1);
@@ -19305,12 +19337,12 @@ static int Tiziano_awb_fpga(const uint32_t *stats_r,
 			active_light_src_num,                 /* arg4: number of light sources */
 			ct_th_active,                         /* arg5: CT weight boundary [4] */
 			ct_para_active,                       /* arg6: CT mode [enable, scale] */
-			(const uint32_t *)_color_temp_mesh,   /* arg7: CT mesh */
+			ct_wght_mesh_active,                  /* arg7: active rg/bg weight mesh */
 			AWB_STATS_COLS,                       /* arg8: cols */
 			AWB_STATS_ROWS,                       /* arg9: rows */
 			(const uint32_t *)_rg_pos,            /* arg10: rg positions */
 			(const uint32_t *)_bg_pos,            /* arg11: bg positions */
-			ct_wght_mesh_active,                  /* arg12: CT weight mesh */
+			(const uint32_t *)_color_temp_mesh,   /* arg12: CT mesh */
 			(const uint32_t *)_awb_wght,          /* arg13: zone weights */
 			_awb_dis_tw,                          /* arg14: distance thresh/weight */
 			&ct_detect_ct,                        /* arg15: output CT */
@@ -19500,27 +19532,19 @@ static int JZ_Isp_Get_Awb_Statistics(void *buffer, uint32_t flags)
 			u32 w2 = src[2];
 			u32 w3 = src[3];
 
-			awb_shadow_r[idx] = w0 & 0x1fffff;
-			awb_shadow_g[idx] = ((w1 & 0x3ff) << 11) | (w0 >> 21);
-			awb_shadow_b[idx] = (w1 & 0x7ffffc00) >> 10;
-			awb_shadow_ir[idx] = ((w2 & 0xfffff) << 1) | (w1 >> 31);
-			awb_shadow_p[idx] = ((w3 & 1) << 12) | (w2 >> 20);
+			/* OEM writes the DMA snapshot straight into the working arrays.
+			 * tisp_event_process() holds local IRQs disabled while AWB consumes
+			 * them, providing the same single-CPU exclusion as stock. */
+			awb_array_r[idx] = w0 & 0x1fffff;
+			awb_array_g[idx] = ((w1 & 0x3ff) << 11) | (w0 >> 21);
+			awb_array_b[idx] = (w1 & 0x7ffffc00) >> 10;
+			awb_array_ir[idx] = ((w2 & 0xfffff) << 1) | (w1 >> 31);
+			awb_array_p[idx] = ((w3 & 1) << 12) | (w2 >> 20);
 			src += 4;
 		}
 	}
 
-	awb_shadow_ready = 1;
 	return 0;
-}
-
-static void awb_copy_shadow_to_live(void)
-{
-	memcpy(awb_array_r, awb_shadow_r, sizeof(awb_array_r));
-	memcpy(awb_array_g, awb_shadow_g, sizeof(awb_array_g));
-	memcpy(awb_array_b, awb_shadow_b, sizeof(awb_array_b));
-	memcpy(awb_array_ir, awb_shadow_ir, sizeof(awb_array_ir));
-	memcpy(awb_array_p, awb_shadow_p, sizeof(awb_array_p));
-	awb_shadow_ready = 0;
 }
 
 static void tiziano_awb_fill_zone_geometry(uint32_t height, uint32_t width)
@@ -19609,9 +19633,6 @@ static int JZ_Isp_Awb(void)
 	if (awb_algo_count <= 3 || (awb_algo_count % 300) == 0)
 		pr_info("JZ_Isp_Awb[%u]: ct=%u ev_data=%u algo_mode=%u\n",
 			awb_algo_count, _awb_ct, awb_ev_data, awb_algo_mode);
-
-	if (awb_shadow_ready != 0)
-		awb_copy_shadow_to_live();
 
 	if (awb_transition_diag_frames != 0) {
 		pr_info("AWB_CONSUME[%u]: bank_off=0x%x raw0=[%08x %08x %08x %08x] "
@@ -19713,10 +19734,6 @@ int awb_interrupt_static(void)
 	if (data_a2f5c == 0)
 		return 0;
 
-	/* Keep one AWB snapshot outstanding until the event thread consumes it. */
-	if (awb_shadow_ready != 0)
-		return 1;
-
 	/* OEM EXACT: read bank status, shift left 12 for byte offset */
 	offset = system_reg_read(0xb050) << 12;
 	buffer_addr = (void *)(unsigned long)(data_a2f5c + offset);
@@ -19751,8 +19768,8 @@ int awb_interrupt_static(void)
 			pr_info("AWB_IRQ1: zone0 raw=[%08x %08x %08x %08x] "
 				"R=%u G=%u B=%u P=%u\n",
 				buf[0], buf[1], buf[2], buf[3],
-				awb_shadow_r[0], awb_shadow_g[0],
-				awb_shadow_b[0], awb_shadow_p[0]);
+				awb_array_r[0], awb_array_g[0],
+				awb_array_b[0], awb_array_p[0]);
 		}
 	} else {
 		u32 *buf = (u32 *)buffer_addr;
@@ -19764,8 +19781,7 @@ int awb_interrupt_static(void)
 
 	/* OEM EXACT: push event 10 → triggers JZ_Isp_Awb */
 	event_data.event_id = 0xa;
-	if (tisp_event_push(&event_data) != 0)
-		awb_shadow_ready = 0;
+	tisp_event_push(&event_data);
 	return 1;
 }
 
@@ -19860,7 +19876,6 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 	awb_history_count = 0;
 	awb_history_reset = 1;
 	awb_zero_zone_count = 0;
-	awb_shadow_ready = 0;
 	awb_irq_diag_armed = 1;
 	awb_transition_diag_frames = 4;
 	memset(tisp_wb_attr, 0, 0x1c);
@@ -20013,12 +20028,10 @@ int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
 
 /* ===== GIB (Green Imbalance) — OEM EXACT implementations ===== */
 
-/* OEM EXACT: tiziano_gib_params_refresh — reload GIB parameter state.
- * The OEM copies the active tuning block into a staging buffer, then reloads
- * most GIB arrays from that buffer. The five BLC interpolation tables are the
- * exception: the OEM sources those from static rodata, not the tuning blob.
- * We mirror that behavior here while still falling back to static defaults when
- * no tuning binary is loaded at all. */
+/* Reload GIB parameter state.  Stock initially copies the five BLC curves
+ * from generic driver rodata and its libimp later supplies the sensor-specific
+ * arrays.  OpenIMP does not issue that private param-array write, so load the
+ * equivalent curves directly from the active sensor tuning bank here. */
 static int tiziano_gib_params_refresh(void)
 {
     const u8 *p = (const u8 *)(tparams_active ? tparams_active : tparams_day);
@@ -20046,7 +20059,6 @@ static int tiziano_gib_params_refresh(void)
         memcpy(tiziano_gib_deir_matrix_h,        p + GIB_TBIN_DEIR_MAT_H, 0x3c);
         memcpy(tiziano_gib_deir_matrix_m,        p + GIB_TBIN_DEIR_MAT_M, 0x3c);
         memcpy(tiziano_gib_deir_matrix_l,        p + GIB_TBIN_DEIR_MAT_L, 0x3c);
-        pr_info("gib_params_refresh: loaded from tuning binary\n");
     } else {
         /* Fallback: use static defaults embedded in the driver */
         memcpy(tiziano_gib_config_line,         tiziano_gib_config_line_oem,
@@ -20091,34 +20103,7 @@ static int tiziano_gib_params_refresh(void)
                sizeof(tiziano_gib_deir_matrix_m));
         memcpy(tiziano_gib_deir_matrix_l, tiziano_gib_deir_matrix_l_oem,
                sizeof(tiziano_gib_deir_matrix_l));
-        pr_info("gib_params_refresh: using static defaults (no tuning binary)\n");
     }
-
-    pr_info("gib_params_refresh: cfg={%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%u}\n",
-            tiziano_gib_config_line[0], tiziano_gib_config_line[1],
-            tiziano_gib_config_line[2], tiziano_gib_config_line[3],
-            tiziano_gib_config_line[4], tiziano_gib_config_line[5],
-            tiziano_gib_config_line[6], tiziano_gib_config_line[7],
-            tiziano_gib_config_line[8], tiziano_gib_config_line[9],
-            tiziano_gib_config_line[10], tiziano_gib_config_line[11]);
-    pr_info("gib_params_refresh: rg={%u,%u} bir={%u,%u}\n",
-            tiziano_gib_r_g_linear[0], tiziano_gib_r_g_linear[1],
-            tiziano_gib_b_ir_linear[0], tiziano_gib_b_ir_linear[1]);
-    pr_info("gib_params_refresh: blc_r ={%u,%u,%u} blc_gr={%u,%u,%u}\n",
-            tiziano_gib_deirm_blc_r_linear[0], tiziano_gib_deirm_blc_r_linear[1],
-            tiziano_gib_deirm_blc_r_linear[2],
-            tiziano_gib_deirm_blc_gr_linear[0], tiziano_gib_deirm_blc_gr_linear[1],
-            tiziano_gib_deirm_blc_gr_linear[2]);
-    pr_info("gib_params_refresh: blc_gb={%u,%u,%u} blc_b ={%u,%u,%u} blc_ir={%u,%u,%u}\n",
-            tiziano_gib_deirm_blc_gb_linear[0], tiziano_gib_deirm_blc_gb_linear[1],
-            tiziano_gib_deirm_blc_gb_linear[2],
-            tiziano_gib_deirm_blc_b_linear[0], tiziano_gib_deirm_blc_b_linear[1],
-            tiziano_gib_deirm_blc_b_linear[2],
-            tiziano_gib_deirm_blc_ir_linear[0], tiziano_gib_deirm_blc_ir_linear[1],
-            tiziano_gib_deirm_blc_ir_linear[2]);
-    pr_info("gib_params_refresh: deir_r_m[0..3]={%u,%u,%u,%u}\n",
-            tiziano_gib_deir_r_m[0], tiziano_gib_deir_r_m[1],
-            tiziano_gib_deir_r_m[2], tiziano_gib_deir_r_m[3]);
     return 0;
 }
 
@@ -20183,46 +20168,10 @@ static int tisp_gib_gain_interpolation(uint32_t gain)
         break;
     }
 
-    /* Diagnostic: print interpolated values and channel mapping */
-    {
-        static int gib_interp_diag;
-        if (gib_interp_diag < 3) {
-            pr_info("GIB_INTERP: bayer=%u raw R=%u Gr=%u Gb=%u B=%u IR=%u\n",
-                bayer, blc_r, blc_gr, blc_gb, blc_b, blc_ir);
-            pr_info("GIB_INTERP: ch0=%u ch1=%u ch2=%u ch3=%u ch4=%u\n",
-                ch0, ch1, ch2, ch3, ch4);
-            pr_info("GIB_INTERP: 0x1060=%08x 0x1064=%08x 0x1068=%08x\n",
-                ch0, (ch2 << 16) | ch1, (ch4 << 16) | ch3);
-            gib_interp_diag++;
-        }
-    }
-
-    /* OEM EXACT: gate writes to BLC registers */
+    /* OEM EXACT: gate writes to BLC registers. */
     system_reg_write_gib(1, 0x1060, ch0);
     system_reg_write_gib(1, 0x1064, (ch2 << 16) | ch1);
     system_reg_write_gib(1, 0x1068, (ch4 << 16) | ch3);
-
-    /* Readback verification for first 3 calls — detect gate failures */
-    {
-        static int gib_gate_verify_count;
-        if (gib_gate_verify_count < 3) {
-            u32 rb_1060 = system_reg_read(0x1060);
-            u32 rb_1064 = system_reg_read(0x1064);
-            u32 rb_1068 = system_reg_read(0x1068);
-            u32 exp_1064 = (ch2 << 16) | ch1;
-            u32 exp_1068 = (ch4 << 16) | ch3;
-            pr_info("GIB_GATE_VERIFY[%d]: wrote 0x1060=%08x read=%08x %s\n",
-                    gib_gate_verify_count, ch0, rb_1060,
-                    (rb_1060 == ch0) ? "OK" : "MISMATCH");
-            pr_info("GIB_GATE_VERIFY[%d]: wrote 0x1064=%08x read=%08x %s\n",
-                    gib_gate_verify_count, exp_1064, rb_1064,
-                    (rb_1064 == exp_1064) ? "OK" : "MISMATCH");
-            pr_info("GIB_GATE_VERIFY[%d]: wrote 0x1068=%08x read=%08x %s\n",
-                    gib_gate_verify_count, exp_1068, rb_1068,
-                    (rb_1068 == exp_1068) ? "OK" : "MISMATCH");
-            gib_gate_verify_count++;
-        }
-    }
 
     tisp_gib_blc_ag = gain;
     return 0;
@@ -20475,34 +20424,6 @@ int tiziano_gib_init(void)
                           tiziano_gib_deir_g_m,
                           tiziano_gib_deir_b_m);
 
-    /* GIB register readback verification — check if gate writes took effect */
-    {
-        u32 r1038 = system_reg_read(0x1038);
-        u32 r103c = system_reg_read(0x103c);
-        u32 r1060 = system_reg_read(0x1060);
-        u32 r1064 = system_reg_read(0x1064);
-        u32 r1068 = system_reg_read(0x1068);
-        u32 r106c = system_reg_read(0x106c);
-        u32 exp_1038 = (GIB_CFG_WGT_HI << 16) | GIB_CFG_WGT_LO;
-        u32 exp_106c = (gib_deir_gate_en << 16) | (GIB_CFG_DEIR_MODE << 3) | GIB_CFG_DEIR_STR;
-
-        pr_info("GIB_INIT: 0x1038=%08x(exp=%08x) 0x103c=%08x\n", r1038, exp_1038, r103c);
-        pr_info("GIB_INIT: 0x1060=%08x 0x1064=%08x 0x1068=%08x\n", r1060, r1064, r1068);
-        pr_info("GIB_INIT: 0x106c=%08x(exp=%08x) deir_gate=%u deir_en=%u\n",
-                r106c, exp_106c, gib_deir_gate_en, deir_en);
-        pr_info("GIB_INIT: bypass=0x%08x reg8=0x%08x GIB_bit5=%s\n",
-                system_reg_read(0xc), system_reg_read(0x8),
-                (system_reg_read(0xc) & 0x20) ? "BYPASSED" : "ACTIVE");
-
-        /* Verify gate writes took effect */
-        if (r1038 != exp_1038)
-            pr_err("GIB_INIT: 0x1038 MISMATCH! wrote %08x read %08x — direct write may have failed\n",
-                    exp_1038, r1038);
-        if (r106c != exp_106c)
-            pr_err("GIB_INIT: 0x106c MISMATCH! wrote %08x read %08x — gate write may have failed\n",
-                    exp_106c, r106c);
-    }
-
     return 0;
 }
 
@@ -20527,7 +20448,11 @@ uint32_t lsc_mesh_size[2] = {0x11, 0x11};  /* 17x17 mesh [width, height] */
 uint32_t lsc_mesh_scale = 2;    /* Mesh scaling factor */
 uint32_t lsc_mean_en = 1;       /* Mean enable flag */
 static uint32_t lsc_mode = 0;          /* 0=A, 1=A/T, 2=T, 3=T/D, 4=D */
-static uint32_t lsc_ct_curr = 0x2700;  /* Live CT provided by AWB */
+/* OEM .data initializes lsc_ct_curr to 0x1388 (5000 K).  This matters at
+ * startup: the first live AWB result must be compared against the same
+ * neutral seed so that crossing an illuminant boundary re-arms the LSC LUT
+ * after the ISP pipeline has started. */
+static uint32_t lsc_ct_curr = 0x1388;  /* Live CT provided by AWB */
 static uint32_t data_9a400 = 0x1900;   /* A/T boundary CT */
 static uint32_t data_9a404 = 0x3500;   /* T upper boundary CT */
 static uint32_t data_9a408 = 0x6500;   /* D lower boundary CT */
@@ -20689,7 +20614,13 @@ int tisp_lsc_write_lut_datas(void)
             memcpy(&lsc_final_lut, &lsc_a_lut, sizeof(lsc_final_lut));
         } else if (mode == 1) {
             /* Interpolate between A and T illuminants */
-            uint32_t weight = ((lsc_ct_curr - data_9a400) << 12) / (data_9a404 - data_9a400);
+            /* Keep the interpolation weight signed.  The LUT lane delta can
+             * be negative, and the OEM uses an arithmetic right shift after
+             * multiplying it by this Q12 weight.  An unsigned weight promotes
+             * a negative lane delta to u32 and clamps the result to 0xfff,
+             * producing the regular green LSC cells seen on T31. */
+            int32_t weight = (int32_t)(((lsc_ct_curr - data_9a400) << 12) /
+                                       (data_9a404 - data_9a400));
 
             for (int i = 0; i < lsc_lut_count; i++) {
                 uint32_t a_val = lsc_a_lut[i];
@@ -20719,7 +20650,8 @@ int tisp_lsc_write_lut_datas(void)
             if (mode != 3) {
                 memcpy(&lsc_final_lut, &lsc_d_lut, sizeof(lsc_final_lut));
             } else {
-                uint32_t weight = ((lsc_ct_curr - data_9a408) << 12) / (data_9a40c - data_9a408);
+                int32_t weight = (int32_t)(((lsc_ct_curr - data_9a408) << 12) /
+                                           (data_9a40c - data_9a408));
 
                 for (int i = 0; i < lsc_lut_count; i++) {
                     uint32_t t_val = lsc_t_lut[i];
@@ -20870,7 +20802,7 @@ int tiziano_lsc_init(void)
     return 0;
 }
 
-/* CCM tables from OEM tx-isp-t31.ko static data (0x8e6e4..0x8e860). */
+/* CCM fallback tables from the OEM tx-isp-t31.ko embedded parameter block. */
 static const uint32_t oem_ccm_dp_blob[5] = {0x0, 0x8, 0x50, 0x100, 0x100};
 static const int32_t oem_ccm_a_linear[9] = {0x060f, 0x3ee6, 0x3f0b, 0x3d8f, 0x0738, 0x3f39, 0x3e9a, 0x3a2e, 0x0b37};
 static const int32_t oem_ccm_t_linear[9] = {0x05ee, 0x3f98, 0x3e7b, 0x3ce6, 0x08e6, 0x3e34, 0x3f5f, 0x3bf7, 0x08aa};
@@ -20882,6 +20814,23 @@ static const int32_t oem_ccm_t_wdr[9] = {0x05e9, 0x3dda, 0x003d, 0x3e6f, 0x06e8,
 static const int32_t oem_ccm_d_wdr[9] = {0x0, 0x0, 0x0, 0x3f45, 0x0637, 0x3e84, 0x0082, 0x3c81, 0x06fc};
 static const uint32_t oem_cm_sat_list_wdr[9] = {0x0, 0x0, 0x0, 0x100, 0xdc, 0xd2, 0xc8, 0xc8, 0x96};
 static const uint32_t oem_cm_awb_list[2] = {0x1324, 0x0c1c};
+
+/* Offsets in each 0x137f0-byte T31 sensor IQ parameter block.  The OEM
+ * tisp_init() copies the selected block into its embedded tparams object at
+ * +0x111c0.  tiziano_ccm_params_refresh() then copies from relocation addends
+ * +0x1ad94..+0x1af10, giving these block-relative offsets. */
+#define CCM_TPARAMS_DP_CFG_OFF       0x09bd4
+#define CCM_TPARAMS_A_LINEAR_OFF     0x09be8
+#define CCM_TPARAMS_T_LINEAR_OFF     0x09c0c
+#define CCM_TPARAMS_D_LINEAR_OFF     0x09c30
+#define CCM_TPARAMS_EV_LIST_OFF      0x09c54
+#define CCM_TPARAMS_SAT_LIST_OFF     0x09c78
+#define CCM_TPARAMS_A_WDR_OFF        0x09c9c
+#define CCM_TPARAMS_T_WDR_OFF        0x09cc0
+#define CCM_TPARAMS_D_WDR_OFF        0x09ce4
+#define CCM_TPARAMS_EV_LIST_WDR_OFF  0x09d08
+#define CCM_TPARAMS_SAT_LIST_WDR_OFF 0x09d2c
+#define CCM_TPARAMS_AWB_LIST_OFF     0x09d50
 
 int32_t tiziano_ccm_a_linear[9] = {0x060f, 0x3ee6, 0x3f0b, 0x3d8f, 0x0738, 0x3f39, 0x3e9a, 0x3a2e, 0x0b37};
 int32_t tiziano_ccm_t_linear[9] = {0x05ee, 0x3f98, 0x3e7b, 0x3ce6, 0x08e6, 0x3e34, 0x3f5f, 0x3bf7, 0x08aa};
@@ -21286,41 +21235,77 @@ static void tisp_ccm_fill_forced_reg_data(int32_t *reg_data)
     reg_data[8] = tisp_ccm_encode_forced_coeff(tisp_force_ccm_b);
 }
 
-/* tiziano_ccm_params_refresh - OEM static CCM payload from tx-isp-t31.ko.
- * BN decomp shows fixed memcpy() sources at 0x8e6e4..0x8e860, not tuning-bin
- * offsets. Matrix/saturation tables are only refreshed while ccm_ctrl[0] == 0;
- * DP config, EV lists, and AWB thresholds are always copied. */
+/* tiziano_ccm_params_refresh - refresh CCM from the active sensor IQ block.
+ * Matrix/saturation tables are only refreshed while ccm_ctrl[0] == 0; DP
+ * config, EV lists, and AWB thresholds are always copied, matching OEM. */
 void tiziano_ccm_params_refresh(void)
 {
+    const u8 *params = (const u8 *)(tparams_active ? tparams_active : tparams_day);
+    bool use_tuning = params && tuning_bin_loaded;
     const char *sensor_name = "unknown";
+    const char *source = use_tuning ? "sensor-iq" : "static-fallback";
+    uint32_t dp_blob[5];
 
     if (ourISPdev && ourISPdev->sensor_name[0])
         sensor_name = ourISPdev->sensor_name;
 
     if (ccm_ctrl.params[0] == 0) {
-        memcpy(tiziano_ccm_a_linear, oem_ccm_a_linear, sizeof(tiziano_ccm_a_linear));
-        memcpy(tiziano_ccm_t_linear, oem_ccm_t_linear, sizeof(tiziano_ccm_t_linear));
-        memcpy(tiziano_ccm_d_linear, oem_ccm_d_linear, sizeof(tiziano_ccm_d_linear));
-        memcpy(cm_sat_list, oem_cm_sat_list, sizeof(cm_sat_list));
-        memcpy(tiziano_ccm_a_wdr, oem_ccm_a_wdr, sizeof(tiziano_ccm_a_wdr));
-        memcpy(tiziano_ccm_t_wdr, oem_ccm_t_wdr, sizeof(tiziano_ccm_t_wdr));
-        memcpy(tiziano_ccm_d_wdr, oem_ccm_d_wdr, sizeof(tiziano_ccm_d_wdr));
-        memcpy(cm_sat_list_wdr, oem_cm_sat_list_wdr, sizeof(cm_sat_list_wdr));
+        if (use_tuning) {
+            memcpy(tiziano_ccm_a_linear, params + CCM_TPARAMS_A_LINEAR_OFF,
+                   sizeof(tiziano_ccm_a_linear));
+            memcpy(tiziano_ccm_t_linear, params + CCM_TPARAMS_T_LINEAR_OFF,
+                   sizeof(tiziano_ccm_t_linear));
+            memcpy(tiziano_ccm_d_linear, params + CCM_TPARAMS_D_LINEAR_OFF,
+                   sizeof(tiziano_ccm_d_linear));
+            memcpy(cm_sat_list, params + CCM_TPARAMS_SAT_LIST_OFF,
+                   sizeof(cm_sat_list));
+            memcpy(tiziano_ccm_a_wdr, params + CCM_TPARAMS_A_WDR_OFF,
+                   sizeof(tiziano_ccm_a_wdr));
+            memcpy(tiziano_ccm_t_wdr, params + CCM_TPARAMS_T_WDR_OFF,
+                   sizeof(tiziano_ccm_t_wdr));
+            memcpy(tiziano_ccm_d_wdr, params + CCM_TPARAMS_D_WDR_OFF,
+                   sizeof(tiziano_ccm_d_wdr));
+            memcpy(cm_sat_list_wdr, params + CCM_TPARAMS_SAT_LIST_WDR_OFF,
+                   sizeof(cm_sat_list_wdr));
+        } else {
+            memcpy(tiziano_ccm_a_linear, oem_ccm_a_linear,
+                   sizeof(tiziano_ccm_a_linear));
+            memcpy(tiziano_ccm_t_linear, oem_ccm_t_linear,
+                   sizeof(tiziano_ccm_t_linear));
+            memcpy(tiziano_ccm_d_linear, oem_ccm_d_linear,
+                   sizeof(tiziano_ccm_d_linear));
+            memcpy(cm_sat_list, oem_cm_sat_list, sizeof(cm_sat_list));
+            memcpy(tiziano_ccm_a_wdr, oem_ccm_a_wdr,
+                   sizeof(tiziano_ccm_a_wdr));
+            memcpy(tiziano_ccm_t_wdr, oem_ccm_t_wdr,
+                   sizeof(tiziano_ccm_t_wdr));
+            memcpy(tiziano_ccm_d_wdr, oem_ccm_d_wdr,
+                   sizeof(tiziano_ccm_d_wdr));
+            memcpy(cm_sat_list_wdr, oem_cm_sat_list_wdr,
+                   sizeof(cm_sat_list_wdr));
+        }
     }
 
-    tiziano_ccm_dp_cfg = oem_ccm_dp_blob[0];
-    data_aa470 = oem_ccm_dp_blob[1];
-    data_aa474 = oem_ccm_dp_blob[2];
-    data_aa47c = oem_ccm_dp_blob[3];
-    data_aa478 = oem_ccm_dp_blob[4];
-    memcpy(cm_ev_list, oem_cm_ev_list, sizeof(cm_ev_list));
-    memcpy(cm_ev_list_wdr, oem_cm_ev_list, sizeof(cm_ev_list_wdr));
-    memcpy(cm_awb_list, oem_cm_awb_list, sizeof(cm_awb_list));
+    if (use_tuning) {
+        memcpy(dp_blob, params + CCM_TPARAMS_DP_CFG_OFF, sizeof(dp_blob));
+        memcpy(cm_ev_list, params + CCM_TPARAMS_EV_LIST_OFF,
+               sizeof(cm_ev_list));
+        memcpy(cm_ev_list_wdr, params + CCM_TPARAMS_EV_LIST_WDR_OFF,
+               sizeof(cm_ev_list_wdr));
+        memcpy(cm_awb_list, params + CCM_TPARAMS_AWB_LIST_OFF,
+               sizeof(cm_awb_list));
+    } else {
+        memcpy(dp_blob, oem_ccm_dp_blob, sizeof(dp_blob));
+        memcpy(cm_ev_list, oem_cm_ev_list, sizeof(cm_ev_list));
+        memcpy(cm_ev_list_wdr, oem_cm_ev_list, sizeof(cm_ev_list_wdr));
+        memcpy(cm_awb_list, oem_cm_awb_list, sizeof(cm_awb_list));
+    }
+    tisp_ccm_dp_blob_set(dp_blob);
 
-    pr_info("tiziano_ccm_params_refresh: sensor=%s source=static-oem ctrl0=%u "
+    pr_info("tiziano_ccm_params_refresh: sensor=%s source=%s ctrl0=%u "
         "D=%04x,%04x,%04x T=%04x,%04x,%04x A=%04x,%04x,%04x "
         "sat0=%u ev0=%u awb=%u,%u\n",
-        sensor_name, ccm_ctrl.params[0],
+        sensor_name, source, ccm_ctrl.params[0],
         (uint32_t)tiziano_ccm_d_linear[0] & 0x3fff,
         (uint32_t)tiziano_ccm_d_linear[1] & 0x3fff,
         (uint32_t)tiziano_ccm_d_linear[2] & 0x3fff,
@@ -29427,9 +29412,9 @@ int apical_isp_hvflip_update(void *arg1, int arg2)
 	 * When == 1, decode arg2 into separate h/v flags for LSC. */
 	if (dev && dev[0x134 / 4] == 1) {
 		switch (arg2) {
-		case 0: hflip = 0; vflip = 1; break;
-		case 1: hflip = 0; vflip = 0; break;
-		case 2: hflip = 1; vflip = 1; break;
+		case 0: hflip = 0; vflip = 0; break;
+		case 1: hflip = 0; vflip = 1; break;
+		case 2: hflip = 1; vflip = 0; break;
 		case 3: hflip = 1; vflip = 1; break;
 		default: break;
 		}
@@ -35764,7 +35749,7 @@ static void tisp_set_sensor_integration_time(uint32_t time)
  * provide the full requested analog gain. */
 static uint32_t tisp_set_sensor_analog_gain(uint32_t requested_gain)
 {
-    unsigned int var_28;
+    unsigned int var_28 = 0;
     uint32_t log_result, gain_param, v0_2, final_gain;
 
     pr_debug("tisp_set_sensor_analog_gain: requested gain=0x%x\n", requested_gain);
@@ -35783,8 +35768,10 @@ static uint32_t tisp_set_sensor_analog_gain(uint32_t requested_gain)
      * Convert clipped log2 back to linear Q16. */
     v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
 
-    /* Write the sensor register value (the index from alloc_again). */
-    data_b2f04(var_28, 0);
+    /* OEM uses lhu on the alloc_again output slot before calling set_again.
+     * Several stock sensor drivers only store a 16-bit token through this
+     * ABI, so forwarding the whole word also forwards stale stack bits. */
+    data_b2f04((uint32_t)(uint16_t)var_28, 0);
 
     /* OEM EXACT: return $v0_2 u>> 6
      * Convert from Q16 linear back to Q10 linear. */
