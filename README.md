@@ -11,7 +11,9 @@ modular driver. T23, T40, and T41 retain large recovered core sources, but
 their modules now have separate adapters for shared facilities where
 applicable.
 
-The project goal is **behavioral equivalence with the OEM driver**, so Ingenic's proprietary user-space library `libimp.so` can run unmodified against the open-source driver.
+The project goal is **behavioral equivalence with the OEM driver** while
+supporting both Ingenic's unmodified proprietary `libimp.so` and the fully
+open [OpenIMP](https://github.com/opensensor/openimp) userspace stack.
 
 This is not a greenfield camera pipeline. It is a reverse-engineering and compatibility effort that combines:
 
@@ -20,9 +22,37 @@ This is not a greenfield camera pipeline. It is a reverse-engineering and compat
 - `libimp.so` ABI compatibility work
 - image-quality tuning and calibration recovery
 
+## T31 / SC301IOT Image-Quality Checkpoint
+
+![Wyze Video Doorbell v2 OEM stock stack versus the fully open Open TX-ISP and OpenIMP stack](docs/images/wyze-vdb2-sc301iot-oem-vs-full-open.png)
+
+[Download the 4:5 portrait version for social sharing.](docs/images/wyze-vdb2-sc301iot-oem-vs-full-open-linkedin.png)
+
+This is a current, same-scene A/B from a Wyze Video Doorbell v2 using the T31X
+SoC and SC301IOT sensor. The frames were captured 98 seconds apart on August
+15, 2026:
+
+- **Left:** OEM TX-ISP driver with OEM `libimp.so`
+- **Right:** Open TX-ISP at `a103ec61` with OpenIMP at `7c6ca71`
+
+Both stacks produced a stable 1920x1080 stream through the same Raptor
+userspace. The full-open result is now close to the OEM daylight rendering;
+the remaining visible difference in this scene is primarily exposure/color
+response around the sunlit foreground and deep plant shadows. This checkpoint
+is deliberately scoped to this camera, sensor, mode, and lighting condition.
+
 ## Current Status
 
-The project has moved well beyond initial bring-up.
+The project has moved beyond basic probe and stream bring-up. T31/SC301IOT is
+the strongest validated path and now has a working fully open capture stack,
+OEM-like daylight image quality, and persistent runtime flip control.
+
+| SoC | Current validation |
+|---|---|
+| T23 | Device-tested vendor-kernel path with live capture and shared registry, layout, ABI, and tuning primitives; broader sensor and image-quality validation continues. |
+| T31 | Device-tested on vendor Linux 3.10 and compatibility-tested on mainline Linux 7.1; OEM `libimp.so` and OpenIMP both stream, with near-OEM daylight parity demonstrated on SC301IOT. |
+| T40 | Recovered core is integrated with shared adapters; color-path, tuning, and device-matrix work remain active. |
+| T41 | Device-tested 2.5K open-stack baseline plus V4L2 MMAP and DMA-BUF capture; image-quality and delivered-FPS work remain active. |
 
 ### Working today
 
@@ -31,6 +61,15 @@ The project has moved well beyond initial bring-up.
 - core MMIO mapping and IRQ ownership are understood
 - stream bring-up is functional enough for live video
 - tuning infrastructure and many ISP blocks are implemented
+- the T31/SC301IOT pipeline streams with either OEM `libimp.so` or OpenIMP
+- T31 daylight color and lens-shading behavior on the Wyze Video Doorbell v2
+  are close to the current OEM reference
+- T31 GIB, DMSC, LSC, ADR, AE-statistics preservation, and runtime register
+  sequencing have been aligned with observed OEM behavior on SC301IOT
+- T31 H/V flip controls now update the real MSCA output-arbitration register
+  while preserving channel-enable bits
+- T31 builds on both the vendor 3.10 kernel and the mainline Linux 7.1
+  compatibility path
 - common interpolation/fixed-point primitives are used by T23, T31, and T41
 - T23, T31, and T41 share one typed sensor-registry implementation
 - T31 and T41 share a configurable frame-boundary day/night state machine
@@ -63,10 +102,15 @@ The project has moved well beyond initial bring-up.
 
 ### Still incomplete
 
-- image quality is **not yet OEM-equivalent**
-- some tuning tables are still synthetic or only partially reconstructed
-- several ISP blocks need additional parity work or better OEM-derived data
-- broader sensor, WDR, flip, and exposure-range coverage remains incomplete
+- the T31/SC301IOT daylight result is not a claim of universal OEM parity
+- night/IR, WDR, extreme exposure, and additional sensor combinations still
+  need comparable OEM-versus-open validation
+- some tuning tables on other sensors and SoCs remain synthetic or only
+  partially reconstructed
+- several ISP blocks still need broader parity testing or better OEM-derived
+  calibration data
+- OpenIMP streaming quality, rate control, and long-duration stability need a
+  wider device matrix even though the current T31 path is functional
 
 If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_PRD.md`.
 
@@ -140,15 +184,17 @@ Important driver files:
 
 1. Replace the proprietary TX-ISP kernel drivers on supported T23/T31/T40/T41 devices
 2. Preserve compatibility with Ingenic's `libimp.so`
-3. Match OEM register sequencing and control behavior closely
-4. Recover or reconstruct enough OEM tuning content for acceptable image quality
-5. Document the hardware and bring-up process so the work is maintainable
+3. Support a fully open kernel-and-userspace path with OpenIMP
+4. Match OEM register sequencing and control behavior closely
+5. Recover or reconstruct enough OEM tuning content for acceptable image quality
+6. Document the hardware and bring-up process so the work is maintainable
 
 ## Requirements
 
 - **Active target SoCs:** Ingenic T23, T31, T40, and T41
-- **Kernel focus:** Linux 3.10.14 vendor trees (T23/T31) and Linux 4.4.94 vendor trees (T40/T41)
-- **Userspace ABI target:** Ingenic `libimp.so`
+- **Kernel focus:** Linux 3.10.14 vendor trees (T23/T31), Linux 4.4.94
+  vendor trees (T40/T41), and the active T31 mainline compatibility path
+- **Userspace ABI targets:** Ingenic `libimp.so` and OpenIMP
 - **Sensor support model:** OEM-style sensor drivers and compatible sensor integrations from the Ingenic SDK ecosystem
 
 ## Build
@@ -205,13 +251,18 @@ Even when streaming works, image quality can still be wrong if one of the follow
 
 ## Limitations
 
-Current limitations are mostly in **image tuning parity**, not basic driver existence.
+Current limitations are mostly in **coverage and repeatable parity across
+sensors, modes, and lighting**, not basic driver existence. The T31/SC301IOT
+daylight checkpoint above is the first full-open path to reach near-OEM image
+quality.
 
 Known classes of remaining work include:
 
-- early color-path parity (for example DMSC / GIB / LSC / YDNS interactions)
-- OEM-calibrated table recovery for AE, CCM/BCSH/WB, ADR/WDR, and denoise banks
-- mode-complete validation for day/night, WDR, and sensor flip combinations
+- remaining color/exposure differences under difficult mixed and backlit light
+- OEM-calibrated table recovery for additional sensors and denoise/WDR banks
+- mode-complete validation for day/night, IR, WDR, and sensor flip combinations
+- long-duration full-open streaming and encoder-quality validation across the
+  supported SoCs
 
 ## Contributing
 
@@ -236,6 +287,7 @@ Thanks to the work and prior art from the broader Ingenic / Thingino / Wyze reve
 
 - [thingino-firmware](https://github.com/themactep/thingino-firmware)
 - [ingenic-sdk](https://github.com/themactep/ingenic-sdk)
+- [OpenIMP](https://github.com/opensensor/openimp)
 
 ## License
 
