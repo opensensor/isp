@@ -10,12 +10,14 @@
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
 #include <linux/math64.h>
+#include <linux/kthread.h>
+#include <linux/ktime.h>
 
 #ifndef READ_ONCE
 #define READ_ONCE(x) (*(volatile typeof(x) *)&(x))
 #endif
 
-#define ISP_MONITOR_VERSION "3.16"
+#define ISP_MONITOR_VERSION "3.20"
 #define TRACE_FILE_PATH "/tmp/isp-trace.txt"
 
 /* Two MMIO windows:
@@ -27,17 +29,27 @@
 
 #define BASE_ISP 0
 #define BASE_CSI 1
+#define BASE_CPM 2
+
+/* T31's vendor reset helper accesses CPM through the uncached KSEG1 alias.
+ * Use the same path here: on the Ingenic 3.10 kernel an ioremap() view of
+ * SRBC is not guaranteed to preserve the vendor transaction semantics. */
+#define CPM_KSEG1_BASE ((void __iomem *)0xb0000000UL)
 
 static void __iomem *isp_base;   /* 0x13300000 */
 static void __iomem *csi_base;   /* 0x10020000 */
 static DEFINE_MUTEX(trace_file_mutex);
 static struct file *trace_file;
 static struct delayed_work trace_work;
+static struct task_struct *t31_fast_reset_task;
 static bool tracing_active;
 static bool trace_sequence_mode;
 static bool trace_core_only;
 static bool trace_quality_only;
 static bool trace_t31_gib_only;
+static bool trace_t31_ingress_only;
+static bool trace_t31_ae_only;
+static bool trace_t31_front_only;
 static bool trace_snapshot_only;
 static uint trace_interval_ms = 1000;
 static unsigned long system_reg_read_addr;
@@ -55,6 +67,9 @@ static unsigned long stat_y_out_addr;
 static unsigned long msca_info_addr;
 static unsigned long mscaler_addr;
 static unsigned long msca_hardpar_addr;
+static unsigned long memory_addr;
+static uint memory_words;
+static char *memory_symbol;
 
 static u32 *reg_snapshot;
 static int snapshot_count;
@@ -141,7 +156,63 @@ static const struct trace_range t31_gib_trace_ranges[] = {
 	 * delaying ISP bring-up. */
 	{ BASE_ISP, 0x00000, 0x00030, "T31_TOP" },
 	{ BASE_ISP, 0x01000, 0x01070, "T31_GIB" },
+	{ BASE_ISP, 0x02800, 0x02898, "T31_DPC" },
 	{ BASE_ISP, 0x80000, 0x8017c, "T31_GIB_DEIR" },
+	/* Correlate the GIB gate/commit sequence with the primary VIC run latch.
+	 * A single register keeps the 1 ms probe light enough for first-frame
+	 * ordering while avoiding the read-sensitive VIC status aperture. */
+	{ BASE_ISP, 0xe0000, 0xe0000, "T31_VIC_CTRL" },
+};
+
+static const struct trace_range t31_ingress_trace_ranges[] = {
+	/* T31 input-latch comparison mode.  The primary VIC is at 0x133e0000,
+	 * i.e. ISP base + 0xe0000; the older +0x80000 alias is not the streaming
+	 * bank on this SoC.  Keep sparse wrapper registers as separate ranges so
+	 * a 1 ms trace does not perturb CSI bring-up. */
+	{ BASE_ISP, 0x00000, 0x00030, "T31_TOP" },
+	{ BASE_ISP, 0xe0000, 0xe01f4, "T31_VIC" },
+	{ BASE_ISP, 0xe03a0, 0xe03e4, "T31_VIC_STATUS" },
+	{ BASE_CSI, 0x02000, 0x02044, "T31_MIPI_PHY" },
+	{ BASE_CSI, 0x02128, 0x02128, "T31_MIPI_LANES" },
+	{ BASE_CSI, 0x02160, 0x02160, "T31_MIPI_RATE0" },
+	{ BASE_CSI, 0x021e0, 0x021e0, "T31_MIPI_RATE1" },
+	{ BASE_CSI, 0x02260, 0x02260, "T31_MIPI_RATE2" },
+	{ BASE_CSI, 0x03000, 0x03040, "T31_CSI_HOST" },
+};
+
+static const struct trace_range t31_ae_trace_ranges[] = {
+	/* T31 AE0/AE1 control, DMA-address, commit, and active-bank state.
+	 * The engines only expose configuration through 0x050; statistics live in
+	 * DMA memory and are deliberately not read through the MMIO aperture. */
+	{ BASE_ISP, 0x00000, 0x00030, "T31_TOP" },
+	{ BASE_ISP, 0x0a000, 0x0a050, "T31_AE0" },
+	{ BASE_ISP, 0x0a800, 0x0a850, "T31_AE1" },
+};
+
+static const struct trace_range t31_front_trace_ranges[] = {
+	/* T31 raw-front-end control/status that differs on SC301IOT while the
+	 * readable GIB and AE programming already matches stock.  Keep this
+	 * sparse enough for 1 ms boot sampling: 0x100-0x110 and 0x818-0x840 are
+	 * the unexplained upstream deltas, while TOP/GIB correlate their latch
+	 * transitions with the established reference trace. */
+	{ BASE_ISP, 0x00000, 0x00030, "T31_TOP" },
+	{ BASE_ISP, 0x00100, 0x00120, "T31_RAW_FRONT0" },
+	{ BASE_ISP, 0x00800, 0x00850, "T31_RAW_FRONT1" },
+	{ BASE_ISP, 0x01000, 0x01084, "T31_GIB" },
+	/* Preserve the relative ordering between the raw-front/GIB latch and the
+	 * MIPI receiver.  Open currently performs csi_core_ops_init() after
+	 * tisp_init(); stock ordering must be observed directly because all of
+	 * these registers converge to the same steady-state values. */
+	{ BASE_CSI, 0x02000, 0x02010, "T31_MIPI_PHY" },
+	{ BASE_CSI, 0x02128, 0x02128, "T31_MIPI_LANES" },
+	{ BASE_CSI, 0x03000, 0x03014, "T31_CSI_HOST" },
+	/* Correlate ISP +0x28's reset-state response with the clock gates and
+	 * exact SRBC handshake that drives it.  Keep the registers sparse so the
+	 * 1 ms startup probe remains non-invasive. */
+	{ BASE_CPM, 0x00020, 0x00020, "T31_CPM_CLKGR0" },
+	{ BASE_CPM, 0x00028, 0x00028, "T31_CPM_CLKGR1" },
+	{ BASE_CPM, 0x00030, 0x00030, "T31_CPM_VPUCDR" },
+	{ BASE_CPM, 0x000c4, 0x000c4, "T31_CPM_SRBC" },
 };
 
 static const struct trace_range *active_trace_ranges = trace_ranges;
@@ -151,6 +222,9 @@ module_param_named(sequence_mode, trace_sequence_mode, bool, 0644);
 module_param_named(core_only, trace_core_only, bool, 0644);
 module_param_named(quality_only, trace_quality_only, bool, 0644);
 module_param_named(t31_gib_only, trace_t31_gib_only, bool, 0644);
+module_param_named(t31_ingress_only, trace_t31_ingress_only, bool, 0644);
+module_param_named(t31_ae_only, trace_t31_ae_only, bool, 0644);
+module_param_named(t31_front_only, trace_t31_front_only, bool, 0644);
 module_param_named(snapshot_only, trace_snapshot_only, bool, 0644);
 module_param_named(interval_ms, trace_interval_ms, uint, 0644);
 module_param_named(system_reg_read_addr, system_reg_read_addr, ulong, 0400);
@@ -168,6 +242,9 @@ module_param_named(stat_y_out_addr, stat_y_out_addr, ulong, 0400);
 module_param_named(msca_info_addr, msca_info_addr, ulong, 0400);
 module_param_named(mscaler_addr, mscaler_addr, ulong, 0400);
 module_param_named(msca_hardpar_addr, msca_hardpar_addr, ulong, 0400);
+module_param_named(memory_addr, memory_addr, ulong, 0400);
+module_param_named(memory_words, memory_words, uint, 0400);
+module_param_named(memory_symbol, memory_symbol, charp, 0400);
 
 static void trace_write(const char *fmt, ...);
 static u32 trace_reg_read(u8 base_sel, u32 offset);
@@ -708,7 +785,11 @@ static void dump_msca_memory(void)
 
 static void __iomem *base_for(u8 sel)
 {
-	return sel == BASE_CSI ? csi_base : isp_base;
+	if (sel == BASE_CSI)
+		return csi_base;
+	if (sel == BASE_CPM)
+		return CPM_KSEG1_BASE;
+	return isp_base;
 }
 
 static u32 trace_reg_read(u8 base_sel, u32 offset)
@@ -791,6 +872,68 @@ static void trace_write(const char *fmt, ...)
 	}
 }
 
+static int t31_fast_reset_probe(void *unused)
+{
+	s64 start_ns = ktime_to_ns(ktime_get());
+	s64 now_ns;
+	u32 top = readl(isp_base + 0x28);
+	u32 clkgr0 = readl(CPM_KSEG1_BASE + 0x20);
+	u32 clkgr1 = readl(CPM_KSEG1_BASE + 0x28);
+	u32 srbc = readl(CPM_KSEG1_BASE + 0xc4);
+	u32 last_top = top;
+	u32 last_clkgr0 = clkgr0;
+	u32 last_clkgr1 = clkgr1;
+	u32 last_srbc = srbc;
+
+	/* delayed_work is quantized to 10 ms on the OEM CONFIG_HZ=100 kernel,
+	 * which can hide the short 1->4->2->1 reset response.  For the first four
+	 * seconds only, sample the four relevant words at sub-millisecond cadence.
+	 * The probe is read-only and sleeps between samples. */
+	trace_write("[T31_FAST_RESET] +0 us top=%08x clkgr0=%08x clkgr1=%08x srbc=%08x\n",
+		    top, clkgr0, clkgr1, srbc);
+
+	while (!kthread_should_stop()) {
+		now_ns = ktime_to_ns(ktime_get());
+		if (now_ns - start_ns >= 4000000000LL)
+			break;
+
+		top = readl(isp_base + 0x28);
+		clkgr0 = readl(CPM_KSEG1_BASE + 0x20);
+		clkgr1 = readl(CPM_KSEG1_BASE + 0x28);
+		srbc = readl(CPM_KSEG1_BASE + 0xc4);
+		if (top != last_top || clkgr0 != last_clkgr0 ||
+		    clkgr1 != last_clkgr1 || srbc != last_srbc) {
+			trace_write("[T31_FAST_RESET] +%lld us top=%08x clkgr0=%08x clkgr1=%08x srbc=%08x\n",
+				    (long long)div_s64(now_ns - start_ns, 1000),
+				    top, clkgr0, clkgr1, srbc);
+			last_top = top;
+			last_clkgr0 = clkgr0;
+			last_clkgr1 = clkgr1;
+			last_srbc = srbc;
+		}
+
+		usleep_range(100, 200);
+	}
+
+	trace_write("[T31_FAST_RESET] done\n");
+	return 0;
+}
+
+static void dump_memory_range(void)
+{
+	u32 off;
+	u32 words = min(memory_words, 1024U);
+
+	if (!words || !trace_kernel_ptr(memory_addr) ||
+	    !trace_kernel_ptr(memory_addr + words * sizeof(u32) - 1U))
+		return;
+
+	trace_write("[MEMORY] addr=0x%08lx words=%u:\n", memory_addr, words);
+	for (off = 0; off < words; ++off)
+		trace_write("  M+0x%04x = 0x%08x\n", off * 4U,
+			    READ_ONCE(*(u32 *)(uintptr_t)(memory_addr + off * 4U)));
+}
+
 static void dump_full_snapshot(const char *tag)
 {
 	int i;
@@ -825,6 +968,7 @@ static void dump_full_snapshot(const char *tag)
 	dump_ae_memory();
 	dump_awb_memory();
 	dump_msca_memory();
+	dump_memory_range();
 	trace_write("=== END %s ===\n\n", tag);
 }
 
@@ -872,10 +1016,38 @@ static void trace_check_changes(struct work_struct *work)
 static int __init isp_trace_init(void)
 {
 	int ret;
+	void *symbol_addr;
 
 	pr_info("ISP Tuning Trace v%s initializing vendor_read=%#lx\n",
 		ISP_MONITOR_VERSION, system_reg_read_addr);
-	if (trace_t31_gib_only) {
+	if (memory_symbol && memory_symbol[0]) {
+		symbol_addr = __symbol_get(memory_symbol);
+		if (!symbol_addr) {
+			pr_warn("isp-trace: exported symbol %s was not found\n",
+				memory_symbol);
+		} else {
+			memory_addr = (unsigned long)symbol_addr;
+			pr_info("isp-trace: resolved %s at 0x%08lx\n",
+				memory_symbol, memory_addr);
+			__symbol_put(memory_symbol);
+		}
+	}
+	if (trace_t31_front_only) {
+		active_trace_ranges = t31_front_trace_ranges;
+		active_trace_range_count = ARRAY_SIZE(t31_front_trace_ranges);
+		if (!trace_interval_ms)
+			trace_interval_ms = 1;
+	} else if (trace_t31_ae_only) {
+		active_trace_ranges = t31_ae_trace_ranges;
+		active_trace_range_count = ARRAY_SIZE(t31_ae_trace_ranges);
+		if (!trace_interval_ms)
+			trace_interval_ms = 1;
+	} else if (trace_t31_ingress_only) {
+		active_trace_ranges = t31_ingress_trace_ranges;
+		active_trace_range_count = ARRAY_SIZE(t31_ingress_trace_ranges);
+		if (!trace_interval_ms)
+			trace_interval_ms = 1;
+	} else if (trace_t31_gib_only) {
 		active_trace_ranges = t31_gib_trace_ranges;
 		active_trace_range_count = ARRAY_SIZE(t31_gib_trace_ranges);
 		if (!trace_interval_ms)
@@ -931,14 +1103,27 @@ static int __init isp_trace_init(void)
 	trace_write("ISP Tuning Trace v%s — %d registers across %d ranges mode=%s interval_ms=%u\n",
 		    ISP_MONITOR_VERSION, snapshot_count,
 		    active_trace_range_count,
-		    trace_t31_gib_only ? "t31-gib" :
+		    trace_t31_front_only ? "t31-front" :
+		    (trace_t31_ae_only ? "t31-ae" :
+		    (trace_t31_ingress_only ? "t31-ingress" :
+		    (trace_t31_gib_only ? "t31-gib" :
 		    (trace_quality_only ? "quality" :
 		    (trace_core_only ? "core" :
-		    (trace_sequence_mode ? "sequence" : "wide"))),
+		    (trace_sequence_mode ? "sequence" : "wide")))))),
 		    trace_interval_ms);
 
 	if (!trace_snapshot_only)
 		dump_full_snapshot("INITIAL");
+
+	if (trace_t31_front_only) {
+		t31_fast_reset_task = kthread_run(t31_fast_reset_probe, NULL,
+						  "t31-fast-reset");
+		if (IS_ERR(t31_fast_reset_task)) {
+			pr_warn("isp-trace: failed to start T31 fast reset probe: %ld\n",
+				PTR_ERR(t31_fast_reset_task));
+			t31_fast_reset_task = NULL;
+		}
+	}
 
 	INIT_DELAYED_WORK(&trace_work, trace_check_changes);
 	tracing_active = true;
@@ -953,6 +1138,10 @@ static int __init isp_trace_init(void)
 static void __exit isp_trace_exit(void)
 {
 	tracing_active = false;
+	if (t31_fast_reset_task) {
+		kthread_stop(t31_fast_reset_task);
+		t31_fast_reset_task = NULL;
+	}
 	cancel_delayed_work_sync(&trace_work);
 
 	if (!trace_snapshot_only && isp_base && reg_snapshot)
