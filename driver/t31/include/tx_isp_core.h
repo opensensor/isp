@@ -17,6 +17,59 @@ struct tisp_sensor_info_blob {
 	u32 words[TISP_SENSOR_INFO_SIZE / sizeof(u32)];
 };
 
+/*
+ * Private sensor-control object owned by the Tiziano firmware.
+ *
+ * This is not TX_ISP_SENSOR_CTRL from the public sensor ABI.  The stock T31
+ * module builds one 0xb4-byte object during tisp_init(), seeds its exposure
+ * limits from the attached sensor, and uses the callback table throughout AE.
+ * Keep the layout explicit because the recovered firmware accesses it by
+ * fixed offsets.
+ */
+struct tisp_sensor_ctrl_state {
+	u8 runtime[0x20];
+	u32 max_again;                         /* 0x20 */
+	u32 max_dgain;                         /* 0x24 */
+	u32 min_integration_time;              /* 0x28 */
+	u32 max_integration_time;              /* 0x2c */
+	u32 max_integration_time_native;       /* 0x30 */
+	u32 integration_time_limit;            /* 0x34 */
+	u8 reserved_38[2];
+	u8 integration_time_apply_delay;       /* 0x3a */
+	u8 again_apply_delay;                  /* 0x3b */
+	u8 dgain_apply_delay;                  /* 0x3c */
+	u8 reserved_3d[0x13];
+	u32 min_integration_time_short;        /* 0x50 */
+	u32 max_integration_time_short;        /* 0x54 */
+	u32 max_again_short;                   /* 0x58 */
+	int (*hw_reset_disable)(void);          /* 0x5c */
+	int (*hw_reset_enable)(void);           /* 0x60 */
+	int (*alloc_again)(int, void *);        /* 0x64 */
+	int (*alloc_again_short)(int, void *);  /* 0x68 */
+	int (*alloc_dgain)(int, void *);        /* 0x6c */
+	int (*alloc_integration_time)(int, void *);       /* 0x70 */
+	int (*alloc_integration_time_short)(int, void *); /* 0x74 */
+	int (*set_integration_time)(int);       /* 0x78 */
+	int (*set_integration_time_short)(int); /* 0x7c */
+	int (*start_changes)(void);             /* 0x80 */
+	int (*end_changes)(void);               /* 0x84 */
+	int (*set_again)(int);                  /* 0x88 */
+	int (*set_again_short)(int);            /* 0x8c */
+	int (*set_dgain)(int);                  /* 0x90 */
+	int (*get_normal_fps)(void);            /* 0x94 */
+	int (*read_black_pedestal)(void);       /* 0x98 */
+	int (*set_mode)(int);                   /* 0x9c */
+	int (*set_wdr_mode)(int);               /* 0xa0 */
+	int (*fps_control)(int, struct tisp_sensor_ctrl_state *); /* 0xa4 */
+	int (*get_id)(void);                    /* 0xa8 */
+	int (*disable_isp)(void);               /* 0xac */
+	int (*get_lines_per_second)(void);      /* 0xb0 */
+};
+
+extern struct tisp_sensor_ctrl_state tisp_sensor_ctrl;
+int sensor_init(struct tisp_sensor_ctrl_state *ctrl);
+void tisp_sensor_ctrl_sync(const struct tisp_sensor_info_blob *info);
+
 enum tisp_sensor_info_word {
 	TISP_SI_WORD_WIDTH = 0,
 	TISP_SI_WORD_HEIGHT = 1,

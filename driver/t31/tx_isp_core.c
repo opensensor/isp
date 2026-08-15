@@ -771,7 +771,6 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
 irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
-int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
 int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
@@ -1079,7 +1078,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;  /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     struct tx_isp_dev *isp_dev;
-    struct tx_isp_subdev **s3_1;
     struct frame_channel_device *frame_chan;
     int result = 0;
     int var_28 = 0;
@@ -1148,8 +1146,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
         extern int tisp_channel_stop(uint32_t channel_id);
-        s3_1 = &isp_dev->subdevs[0];
-
         /* Binary Ninja: if ($v0_3 == 4) */
         if (v0_3 == 4) {
             channel_count = num_channels;
@@ -1206,8 +1202,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
              * and preventing AWB convergence (pink image). */
         }
     } else {
-        s3_1 = &isp_dev->subdevs[0];
-
         if (v0_3 == 3) {
             /* Re-arm the OEM first-frame one-shots on each fresh STREAMON. */
             first_into = 1;
@@ -1219,69 +1213,17 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t result = 0 */
     result = 0;
 
-    /* CRITICAL: Binary Ninja shows the main subdev iteration loop here */
-    /* Binary Ninja: while (true) */
-    while (true) {
-        /* Binary Ninja: void* $a0_5 = *$s3_1 */
-        struct tx_isp_subdev *a0_5 = *s3_1;
-
-        /* Binary Ninja: if ($a0_5 != 0) */
-        if (a0_5 != NULL) {
-            /* Binary Ninja: int32_t* $v0_7 = *(*($a0_5 + 0xc4) + 4) */
-            struct tx_isp_subdev_video_ops *video_ops = NULL;
-            if (a0_5->ops && a0_5->ops->video) {
-                video_ops = a0_5->ops->video;
-            }
-
-            /* Binary Ninja: if ($v0_7 != 0) */
-            if (video_ops != NULL) {
-                /* Binary Ninja: int32_t $v0_8 = *$v0_7 */
-                int (*s_stream_func)(struct tx_isp_subdev *, int) = video_ops->s_stream;
-
-                /* Binary Ninja: if ($v0_8 == 0) */
-                if (s_stream_func == NULL) {
-                    /* Binary Ninja: result = 0xfffffdfd */
-                    result = -ENOIOCTLCMD;
-                } else {
-                    /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
-                    int result_1 = s_stream_func(a0_5, enable);
-                    result = result_1;
-
-                    pr_info("*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
-                            a0_5->module.name ? a0_5->module.name : "unknown", result_1);
-
-                    /* Binary Ninja: if (result_1 != 0) */
-                    if (result_1 != 0) {
-                        /* Binary Ninja: if (result_1 != 0xfffffdfd) */
-                        if (result_1 != -ENOIOCTLCMD) {
-                            /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
-                            /* Binary Ninja: break */
-                            break;
-                        }
-
-                        /* Binary Ninja: result = 0xfffffdfd */
-                        result = -ENOIOCTLCMD;
-                    }
-                }
-            } else {
-                /* Binary Ninja: result = 0xfffffdfd */
-                result = -ENOIOCTLCMD;
-            }
-
-            /* Binary Ninja: $s3_1 += 4 */
-            s3_1++;
-        } else {
-            /* Binary Ninja: $s3_1 += 4 */
-            s3_1++;
-        }
-
-        /* Binary Ninja: if (arg1 + 0x78 == $s3_1) */
-        if (s3_1 >= &isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
-            /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
-            /* Binary Ninja: break */
-            break;
-        }
-    }
+    /* The OEM walk here is over isp-m0's private child-module array at
+     * module+0x38.  It is not the root tx-isp device's global subdevice
+     * array.  The open T31 layout currently has no separate representation
+     * for those private children; walking isp_dev->subdevs here re-enters
+     * CSI, VIN/sensor and VIC after tx_isp_video_s_stream() already started
+     * them.  In particular, libimp's link rebuild then stops and restarts the
+     * physical sensor underneath a running VIC.
+     *
+     * Keep link_stream scoped to isp-m0 state, mask and IRQ ownership.  The
+     * root tx_isp_video_s_stream() remains the single owner of global CSI,
+     * VIN/sensor and VIC stream transitions, matching the stock hierarchy. */
 
     /* OEM: tisp_channel_start is called from the frame channel STREAMON event
      * (ispcore_pad_event_handle case 0x3000003), which runs AFTER SET_FORMAT
@@ -2622,6 +2564,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     int vic_state;
     int result = -EINVAL;
     int ret;
+    unsigned long state_flags;
 
     pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
     if (!sd) {
@@ -2747,7 +2690,15 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 return -EINVAL;
             }
 
-            /* OEM gate: init only proceeds from VIC ready state (2). */
+            /* Stock takes the ISP state lock after the reset transaction and
+             * validates the live state.  Do not use the snapshot captured at
+             * function entry: link setup can promote the core to READY while
+             * the reset handshake is in flight. */
+            spin_lock_irqsave(&isp_dev->lock, state_flags);
+            vic_state = isp_dev->state;
+            spin_unlock_irqrestore(&isp_dev->lock, state_flags);
+
+            /* OEM gate: init only proceeds from ISP ready state (2). */
             if (vic_state != 2) {
                 pr_err("ispcore_core_ops_init: Can't init ispcore when VIC state is %d\n",
                        vic_state);
@@ -5007,6 +4958,11 @@ int tiziano_sync_sensor_attr(const struct tisp_sensor_info_blob *attr)
 
     BUILD_BUG_ON(sizeof(*attr) != TISP_SENSOR_INFO_SIZE);
     tisp_sensor_info_update(attr);
+
+    /* Stock refreshes the same private sensor-control object that was built
+     * in tisp_init().  AE must not observe a second, independently-derived
+     * set of limits and frame-delay values. */
+    tisp_sensor_ctrl_sync(attr);
 
     again_val = tisp_si_again(attr);
     dgain_val = tisp_si_dgain(attr);

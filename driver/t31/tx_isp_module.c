@@ -995,12 +995,6 @@ static struct resource tx_isp_vic_resources[] = {
     },
 };
 
-/* VIC clock configuration array - EXACT Binary Ninja MCP */
-static struct tx_isp_device_clk vic_clks[] = {
-    {"cgu_isp", 0xffff},     /* Rate is owned by tx_isp_configure_clocks() */
-    {"isp", 0xffff},         /* Auto-rate ISP clock */
-};
-
 static struct tx_isp_pad_descriptor vic_pads[] = {
     { 0x01, 0x00 }, /* input  from isp-w01 */
     { 0x02, 0x00 }, /* output to isp-w00 */
@@ -1009,9 +1003,9 @@ static struct tx_isp_pad_descriptor vic_pads[] = {
 /* VIC platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data vic_pdata = {
     .interface_type = 1,  /* VIC interface */
-    .clk_num = 2,         /* Number of clocks needed */
+    .clk_num = 0,         /* OEM isp-w02 does not own ISP core clocks */
     .sensor_type = 0,     /* Default sensor type */
-    .clks = vic_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+    .clks = NULL,
     .pads_num = ARRAY_SIZE(vic_pads),
     .pads = vic_pads,
 };
@@ -1182,11 +1176,31 @@ static struct resource tx_isp_core_resources[] = {
     },
 };
 
+/* OEM isp-m0 owns the two ISP-domain clocks.  isp-w01 separately owns csi;
+ * keeping these handles on their native subdevices also preserves the stock
+ * activation/reset order. */
+static struct tx_isp_device_clk core_clks[] = {
+    {"cgu_isp", 85000000},
+    {"isp", 0xffff},
+};
+
+static struct tx_isp_subdev_platform_data core_pdata = {
+    .interface_type = 1,
+    .clk_num = ARRAY_SIZE(core_clks),
+    .sensor_type = 0,
+    .clks = core_clks,
+    .pads_num = 0,
+    .pads = NULL,
+};
+
 struct platform_device tx_isp_core_platform_device = {
     .name = "isp-m0",  /* FIXED: Must match tx_isp_core_driver name for probe to be called */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
     .resource = tx_isp_core_resources,
+    .dev = {
+        .platform_data = &core_pdata,
+    },
 };
 
 /*
@@ -1270,7 +1284,6 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
-extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
@@ -1729,106 +1742,77 @@ static int sensor_read_black_pedestal(void);
 static int sensor_set_mode(int mode);
 static int sensor_set_wdr_mode(int mode);
 int sensor_fps_control(int fps);
+static int sensor_fps_control_state(int fps,
+                                    struct tisp_sensor_ctrl_state *ctrl);
 static int sensor_get_id(void);
 static int sensor_disable_isp(void);
 static int sensor_get_lines_per_second(void);
 
-/* sensor_init - EXACT Binary Ninja implementation - Sets up sensor control structure */
-int sensor_init(struct tx_isp_dev *isp_dev)
+/* Build the single private sensor-control object used by stock T31 Tiziano. */
+int sensor_init(struct tisp_sensor_ctrl_state *sensor_ctrl)
 {
-    struct sensor_control_structure {
-        uint32_t reserved1[8];          /* 0x00-0x1c */
-        uint32_t width;                 /* 0x20 */
-        uint32_t height;                /* 0x24 */
-        uint32_t param1;                /* 0x28 */
-        uint32_t param2;                /* 0x2c */
-        uint32_t reserved2[8];          /* 0x30-0x4c */
-        uint32_t param3;                /* 0x50 */
-        uint32_t param4;                /* 0x54 */
-        uint32_t param5;                /* 0x58 */
-        /* Function pointers start at 0x5c */
-        int (*hw_reset_disable)(void);           /* 0x5c */
-        int (*hw_reset_enable)(void);            /* 0x60 */
-        int (*alloc_analog_gain)(int, void*);           /* 0x64 */
-        int (*alloc_analog_gain_short)(int, void*);     /* 0x68 */
-        int (*alloc_digital_gain)(int, void*);          /* 0x6c */
-        int (*alloc_integration_time)(int, void*);      /* 0x70 */
-        int (*alloc_integration_time_short)(int, void*); /* 0x74 */
-        int (*set_integration_time)(int);        /* 0x78 */
-        int (*set_integration_time_short)(int);  /* 0x7c */
-        int (*start_changes)(void);              /* 0x80 */
-        int (*end_changes)(void);                /* 0x84 */
-        int (*set_analog_gain)(int);             /* 0x88 */
-        int (*set_analog_gain_short)(int);       /* 0x8c */
-        int (*set_digital_gain)(int);            /* 0x90 */
-        int (*get_normal_fps)(void);             /* 0x94 */
-        int (*read_black_pedestal)(void);        /* 0x98 */
-        int (*set_mode)(int);                    /* 0x9c */
-        int (*set_wdr_mode)(int);                /* 0xa0 */
-        int (*fps_control)(int);                 /* 0xa4 */
-        int (*get_id)(void);                     /* 0xa8 */
-        int (*disable_isp)(void);                /* 0xac */
-        int (*get_lines_per_second)(void);       /* 0xb0 */
-    } *sensor_ctrl;
+    struct tx_isp_sensor_attribute *attr;
 
-    pr_info("*** sensor_init: EXACT Binary Ninja implementation - Setting up sensor IOCTL linkages ***\n");
+    BUILD_BUG_ON(sizeof(struct tisp_sensor_ctrl_state) != 0xb4);
+    BUILD_BUG_ON(offsetof(struct tisp_sensor_ctrl_state, max_again) != 0x20);
+    BUILD_BUG_ON(offsetof(struct tisp_sensor_ctrl_state, hw_reset_disable) != 0x5c);
+    BUILD_BUG_ON(offsetof(struct tisp_sensor_ctrl_state, get_lines_per_second) != 0xb0);
 
-    if (!isp_dev) {
-        pr_err("sensor_init: Invalid ISP device\n");
+    if (!sensor_ctrl || !ourISPdev || !ourISPdev->sensor) {
+        pr_err("sensor_init: attached sensor is unavailable\n");
         return -EINVAL;
     }
 
-    /* Allocate sensor control structure */
-    sensor_ctrl = kzalloc(sizeof(struct sensor_control_structure), GFP_KERNEL);
-    if (!sensor_ctrl) {
-        pr_err("sensor_init: Failed to allocate sensor control structure\n");
-        return -ENOMEM;
-    }
+    attr = ourISPdev->sensor->video.attr;
+    if (!attr)
+        attr = &ourISPdev->sensor->attr;
 
-    /* Binary Ninja: Copy values from global sensor info structure */
-    /* For now, use default values - these would come from *(g_ispcore + 0x120) */
-    sensor_ctrl->width = 1920;    /* Default HD width */
-    sensor_ctrl->height = 1080;   /* Default HD height */
-    sensor_ctrl->param1 = 0;      /* Would be zx.d(*($v0 + 0xa4)) */
-    sensor_ctrl->param2 = 0;      /* Would be zx.d(*($v0 + 0xb4)) */
-    sensor_ctrl->param3 = 0;      /* Would be zx.d(*($v0 + 0xd8)) */
-    sensor_ctrl->param4 = 0;      /* Would be zx.d(*($v0 + 0xda)) */
-    sensor_ctrl->param5 = 0;      /* Would be *($v0 + 0xe0) */
+    memset(sensor_ctrl, 0, sizeof(*sensor_ctrl));
+    sensor_ctrl->max_again = attr->max_again;
+    sensor_ctrl->max_dgain = attr->max_dgain;
+    sensor_ctrl->min_integration_time = attr->min_integration_time;
+    sensor_ctrl->max_integration_time = attr->max_integration_time;
+    sensor_ctrl->max_integration_time_native = attr->max_integration_time_native;
+    sensor_ctrl->integration_time_limit = attr->integration_time_limit;
+    sensor_ctrl->integration_time_apply_delay = attr->integration_time_apply_delay;
+    sensor_ctrl->again_apply_delay = attr->again_apply_delay;
+    sensor_ctrl->dgain_apply_delay = attr->dgain_apply_delay;
+    sensor_ctrl->min_integration_time_short = attr->min_integration_time_short;
+    sensor_ctrl->max_integration_time_short = attr->max_integration_time_short;
+    sensor_ctrl->max_again_short = attr->max_again_short;
 
     /* Binary Ninja: Set up all function pointers for sensor operations */
     sensor_ctrl->hw_reset_disable = sensor_hw_reset_disable;
     sensor_ctrl->hw_reset_enable = sensor_hw_reset_enable;
-    sensor_ctrl->alloc_analog_gain = sensor_alloc_analog_gain;
-    sensor_ctrl->alloc_analog_gain_short = sensor_alloc_analog_gain_short;
-    sensor_ctrl->alloc_digital_gain = sensor_alloc_digital_gain;
+    sensor_ctrl->alloc_again = sensor_alloc_analog_gain;
+    sensor_ctrl->alloc_again_short = sensor_alloc_analog_gain_short;
+    sensor_ctrl->alloc_dgain = sensor_alloc_digital_gain;
     sensor_ctrl->alloc_integration_time = sensor_alloc_integration_time;
     sensor_ctrl->alloc_integration_time_short = sensor_alloc_integration_time_short;
     sensor_ctrl->set_integration_time = sensor_set_integration_time;
     sensor_ctrl->set_integration_time_short = sensor_set_integration_time_short;
     sensor_ctrl->start_changes = sensor_start_changes;
     sensor_ctrl->end_changes = sensor_end_changes;
-    sensor_ctrl->set_analog_gain = sensor_set_analog_gain;
-    sensor_ctrl->set_analog_gain_short = sensor_set_analog_gain_short;
-    sensor_ctrl->set_digital_gain = sensor_set_digital_gain;
+    sensor_ctrl->set_again = sensor_set_analog_gain;
+    sensor_ctrl->set_again_short = sensor_set_analog_gain_short;
+    sensor_ctrl->set_dgain = sensor_set_digital_gain;
     sensor_ctrl->get_normal_fps = sensor_get_normal_fps;
     sensor_ctrl->read_black_pedestal = sensor_read_black_pedestal;
     sensor_ctrl->set_mode = sensor_set_mode;
     sensor_ctrl->set_wdr_mode = sensor_set_wdr_mode;
-    sensor_ctrl->fps_control = sensor_fps_control;
+    sensor_ctrl->fps_control = sensor_fps_control_state;
     sensor_ctrl->get_id = sensor_get_id;
     sensor_ctrl->disable_isp = sensor_disable_isp;
     sensor_ctrl->get_lines_per_second = sensor_get_lines_per_second;
 
-    /* Store sensor control structure in ISP device */
-    /* This would be stored at the appropriate offset in the ISP device structure */
-    /* For now, we'll just log that it's been set up */
-
-    pr_info("*** sensor_init: Sensor control structure fully initialized ***\n");
-    pr_info("*** sensor_init: All %zu function pointers set up ***\n",
-            sizeof(struct sensor_control_structure) / sizeof(void*) - 14); /* Subtract non-function fields */
-
-    /* Binary Ninja: return sensor_get_lines_per_second */
-    return (int)(uintptr_t)sensor_get_lines_per_second;
+    pr_info("sensor_init: shared Tiziano control max-again=%u max-dgain=%u it=%u..%u delays=%u/%u/%u\n",
+            sensor_ctrl->max_again, sensor_ctrl->max_dgain,
+            sensor_ctrl->min_integration_time,
+            sensor_ctrl->max_integration_time,
+            sensor_ctrl->integration_time_apply_delay,
+            sensor_ctrl->again_apply_delay,
+            sensor_ctrl->dgain_apply_delay);
+    return 0;
 }
 EXPORT_SYMBOL(sensor_init);
 
@@ -2034,6 +2018,34 @@ int sensor_fps_control(int fps) {
     return 0;
 }
 EXPORT_SYMBOL(sensor_fps_control);
+
+static int sensor_fps_control_state(int fps,
+                                    struct tisp_sensor_ctrl_state *ctrl)
+{
+    struct tx_isp_sensor_attribute *attr;
+    u32 raw_fps;
+
+    if (!ctrl || !ourISPdev || !ourISPdev->sensor)
+        return -ENODEV;
+
+    attr = ourISPdev->sensor->video.attr;
+    if (!attr)
+        attr = &ourISPdev->sensor->attr;
+
+    *(u16 *)&ctrl->runtime[2] = (u16)attr->total_width;
+    *(u16 *)&ctrl->runtime[4] = (u16)attr->total_height;
+    ctrl->min_integration_time = attr->min_integration_time;
+    ctrl->max_integration_time = attr->max_integration_time;
+    ctrl->max_integration_time_native = attr->max_integration_time_native;
+    ctrl->integration_time_limit = attr->integration_time_limit;
+    ctrl->min_integration_time_short = attr->min_integration_time_short;
+    ctrl->max_integration_time_short = attr->max_integration_time_short;
+
+    raw_fps = ourISPdev->sensor->video.fps;
+    if (!raw_fps)
+        raw_fps = (fps << 16) | 1;
+    return raw_fps;
+}
 
 static int sensor_get_id(void) {
     /* Binary Ninja: return zx.d(*(*(g_ispcore + 0x120) + 4)) */
@@ -2371,16 +2383,7 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** CSI_ACTIVATE_DEBUG: isp_dev=%p csi_dev=%p ourISPdev=%p ourISPdev->csi_dev=%p ***\n",
             isp_dev, isp_dev->csi_dev, ourISPdev, ourISPdev ? ourISPdev->csi_dev : NULL);
     csi_sd = isp_dev->csi_dev ? &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd : NULL;
-    if (csi_sd) {
-        pr_info("*** tx_isp_ispcore_activate_module_complete: ensuring CSI subdev is activated ***\n");
-        ret = tx_isp_csi_activate_subdev(csi_sd);
-        if (ret != 0 && ret != -ENOIOCTLCMD) {
-            pr_warn("*** tx_isp_ispcore_activate_module_complete: CSI activate failed: %d ***\n",
-                    ret);
-            return ret;
-        }
-
-    } else {
+    if (!csi_sd) {
         pr_warn("*** tx_isp_ispcore_activate_module_complete: CSI subdev unavailable - skipping CSI core init ***\n");
     }
 
@@ -2397,19 +2400,6 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         csi_sd = isp_dev->csi_dev ? &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd : NULL;
 
     if (csi_sd) {
-        /* OEM enables CSI clocks in tx_isp_csi_activate_subdev before
-         * csi_core_ops_init.  Ensure clocks are enabled so CSI PHY
-         * registers are accessible (without this, reads return zero). */
-        if (csi_sd->clks && csi_sd->clk_num > 0) {
-            int ci;
-            for (ci = 0; ci < csi_sd->clk_num; ci++) {
-                if (csi_sd->clks[ci])
-                    clk_enable(csi_sd->clks[ci]);
-            }
-            pr_info("*** tx_isp_ispcore_activate_module_complete: enabled %d CSI clock(s) ***\n",
-                    csi_sd->clk_num);
-        }
-
         pr_info("*** tx_isp_ispcore_activate_module_complete: calling csi_core_ops_init(on=1) after core init ***\n");
         ret = csi_core_ops_init(csi_sd, 1);
         if (ret != 0 && ret != -ENOIOCTLCMD) {
@@ -3381,7 +3371,9 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 clk_array = isp_dev->sd.clks;
                 clk_count = isp_dev->sd.clk_num;
 
-                /* Binary Ninja clock loop implementation */
+                /* OEM enables the isp-m0-owned clocks before walking the
+                 * child subdevices.  private_clk_enable() selects the vendor
+                 * clk_enable ABI or the mainline prepare/enable ABI. */
                 if (clk_array && clk_count > 0) {
                     for (i = 0; i < clk_count; i++) {
                         if (clk_array[i]) {
@@ -3390,9 +3382,12 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                                 clk_set_rate(clk_array[i], isp_clk);
                             }
 
-                            clk_prepare_enable(clk_array[i]);
+                            private_clk_enable(clk_array[i]);
                         }
                     }
+
+                    isp_dev->cgu_isp = clk_count > 0 ? clk_array[0] : NULL;
+                    isp_dev->isp_clk = clk_count > 1 ? clk_array[1] : NULL;
                 }
 
                 for (a2_1 = 0; a2_1 < num_channels && a2_1 < ISP_MAX_CHAN; a2_1++) {
@@ -3432,6 +3427,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                                     sd->module.name ? sd->module.name : "unknown");
                             break;
                         }
+
                     }
                 }
 
@@ -5865,30 +5861,27 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
 
-    /* RACE CONDITION FIX: tx_isp_create_subdev_graph() calls
-     * tx_isp_setup_pipeline() which sets isp_dev->state = 1.
-     * But tx_isp_detect_and_register_sensors() (line 5998) already tried
-     * to activate the ISP when state was still 0, so it returned early.
-     * Now that state == 1, retry the full activation sequence so the
-     * ISP reaches state 3 (needed for ispcore_video_s_stream to enable
-     * interrupts).  Without this, interrupts stay at 0 on first boot.
-     */
-    if (ourISPdev->state == 1 && ourISPdev->sensor) {
-        pr_info("*** RACE FIX: Retrying ISP activation now that state==1 ***\n");
-        ret = tx_isp_ispcore_activate_module_complete(ourISPdev);
-        if (ret != 0 && ret != -ENOIOCTLCMD)
-            pr_warn("*** RACE FIX: deferred activation returned %d ***\n", ret);
-        else
-            pr_info("*** RACE FIX: ISP activation complete, state=%d ***\n",
-                    ourISPdev->state);
-    }
-
     pr_info("*** V4L2 VIDEO DEVICES DISABLED - skipping /dev/videoX registration ***\n");
 
     ret = tx_isp_sinfo_init();
     if (ret) {
         pr_err("Failed to initialize sensor registry: %d\n", ret);
         goto err_cleanup_platforms;
+    }
+
+    /* Stock activates the isp-m0 and child clocks at the end of the ISP
+     * module insertion, immediately before the separate sensor module is
+     * inserted.  Sensor registration later invokes core init/reset.  Keep
+     * registry setup ahead of this point so it cannot stretch the powered
+     * pre-detection interval by seconds. */
+    if (ourISPdev->state == 1) {
+        pr_info("*** Activating ISP clocks before sensor registration ***\n");
+        ret = ispcore_activate_module(ourISPdev);
+        if (ret != 0 && ret != -ENOIOCTLCMD)
+            pr_warn("*** Early ISP clock activation returned %d ***\n", ret);
+        else
+            pr_info("*** Early ISP clock activation complete, state=%d ***\n",
+                    ourISPdev->state);
     }
 
     /* Netlink channel is initialized later in tisp_param_operate_init()
@@ -6184,7 +6177,6 @@ int private_reset_tx_isp_module(int arg)
 {
     volatile u32 * const cpm_srbc = (volatile u32 *)0xb00000c4;
     u32 reset_reg;
-    u32 reset_before;
     int timeout = 500; /* 0x1f4 iterations like Binary Ninja */
 
     if (arg != 0) {
@@ -6194,8 +6186,7 @@ int private_reset_tx_isp_module(int arg)
     /* The vendor SDK deliberately accesses CPM through its uncached KSEG1
      * alias.  Keep the reset transaction on that exact path: generic
      * ioremap() mappings are not equivalent on this Ingenic 3.10 kernel. */
-    reset_before = *cpm_srbc;
-    reset_reg = reset_before;
+    reset_reg = *cpm_srbc;
     reset_reg |= 0x200000;
     *cpm_srbc = reset_reg;
 
@@ -6212,19 +6203,14 @@ int private_reset_tx_isp_module(int arg)
             reset_reg = *cpm_srbc;
             reset_reg &= 0xffbfffff;
             *cpm_srbc = reset_reg;
-
-            pr_info("[CPM][OEM] private_reset_tx_isp_module: direct KSEG1 reset c4=%08x->%08x\n",
-                    reset_before, *cpm_srbc);
             return 0;
         }
 
         timeout--;
-        msleep(2);
+        private_msleep(2);
     }
 
-    pr_warn("[CPM][OEM] private_reset_tx_isp_module: timeout waiting for ready bit, final c4=0x%08x\n",
-            *cpm_srbc);
-    return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
+    return -1;
 }
 
 static inline spinlock_t *tx_vic_irq_lock(struct tx_isp_vic_device *vic_dev)

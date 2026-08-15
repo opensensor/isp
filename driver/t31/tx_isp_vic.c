@@ -652,17 +652,18 @@ static void vic_program_irq_registers(struct tx_isp_vic_device *vic_dev,
      *
      * OEM ISR formula: pending = (~mask) & status
      *
-     * Bank 1 (0x1e8): Unmask bit 0 (frame_done) — OEM minimum.
-     * Bank 2 (0x1ec): Unmask bits 0,1 (MDMA ch0/ch1 done) — CRITICAL for
-     *   frame delivery.  OEM vic_mdma_irq_function handles these.
-     *   HW is only 4 bits wide so 0xFFFFFFFC reads back as 0x0000000C.
+     * Stock leaves both banks fully unmasked while streaming.  This matters
+     * beyond frame delivery: masked VIC error bits remain latched instead of
+     * reaching the OEM acknowledgement/recovery path.  Keep the runtime
+     * state identical for every sensor/interface instead of selecting a
+     * sensor-specific subset here.
      */
     writel(0xFFFFFFFF, vic_base + 0x1f0);   /* clear all bank 1 pending */
     writel(0xFFFFFFFF, vic_base + 0x1f4);   /* clear all bank 2 pending */
     wmb();
 
-    writel(0xFFFFFFFE, vic_base + 0x1e8);   /* unmask bit 0 (frame_done) */
-    writel(0xFFFFFFFC, vic_base + 0x1ec);   /* unmask bits 0,1 (MDMA ch0/ch1) */
+    writel(0, vic_base + 0x1e8);
+    writel(0, vic_base + 0x1ec);
     wmb();
 
     pr_info("%s: VIC IRQ regs status=0x%08x/0x%08x mask=0x%08x/0x%08x\n",
@@ -3002,18 +3003,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     current_state = vic_dev->state;
 
     if (enable == 0) {
-        /* OEM BN: if state == 4, set state = 3. No hardware stop.
-         * This allows vic_core_s_stream(1) on re-enable to re-run
-         * tx_isp_vic_start, which fully reinitializes the VIC
-         * pipeline (reset→configure→run). Without this, AWB/AE
-         * stats DMA dies after stream restart. */
+        /* OEM BN: if state == 4, set state = 3. No hardware stop. */
         ret = 0;
         if (current_state == 4)
             vic_dev->state = 3;
         return ret;
     }
 
-    /* OEM BN: disable_irq -> vic_start -> state=4 -> enable_irq. No extras. */
+    /* OEM BN: disable_irq -> vic_start -> state=4 -> enable_irq. */
     if (current_state != 4) {
         tx_vic_disable_irq(vic_dev);
         ret = tx_isp_vic_start(vic_dev);
