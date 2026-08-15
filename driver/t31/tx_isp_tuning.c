@@ -344,6 +344,7 @@ int tisp_s_adr_enable(int enable);
 int tisp_s_defog_enable(int enable);
 int tisp_s_ccm_attr(const void *in);
 static int tisp_get_csc_attr(uint32_t *buf);
+static void tisp_apply_hvflip(struct isp_tuning_data *tuning);
 
 /* External hardware register write functions from tx_isp_module.c */
 extern void system_reg_write(u32 reg, u32 value);
@@ -352,6 +353,7 @@ extern void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3);
 extern void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3);
 extern void system_reg_write_gb(u32 arg1, u32 arg2, u32 arg3);
 extern uint32_t deir_en;
+extern uint32_t msca_dmaout_arb;
 
 /* CLM (Color Luminance Mapping) constants and data — declared early for param_array_set/get */
 #define CLM_H_LUT_SIZE      0x41A   /* 1050 bytes */
@@ -8324,8 +8326,8 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 break;
 
             case 0x80000e4: { /* Combined hvflip */
-                uint32_t hf = tuning->hflip ? 2 : 0;
-                uint32_t vf = tuning->vflip ? 1 : 0;
+                uint32_t hf = tuning->hflip ? 1 : 0;
+                uint32_t vf = tuning->vflip ? 2 : 0;
                 ctrl->value = hf | vf;
                 break;
             }
@@ -8692,23 +8694,13 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x980914:  // HFLIP
-            if (!tuning->regs) {
-                ret = -EINVAL;
-                goto out;
-            }
-            writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ad * 4);
             tuning->hflip = ctrl->value ? 1 : 0;
-            //set_framesource_changewait_cnt();
+            tisp_apply_hvflip(tuning);
             break;
 
         case 0x980915:  // VFLIP
-            if (!tuning->regs) {
-                ret = -EINVAL;
-                goto out;
-            }
-            writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ac * 4);
             tuning->vflip = ctrl->value ? 1 : 0;
-            //set_framesource_changewait_cnt();
+            tisp_apply_hvflip(tuning);
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
@@ -9182,10 +9174,11 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
         case 0x80000e4: { /* OEM: combined hvflip set */
             uint32_t hvflip = ctrl->value;
-            uint32_t hf = (hvflip & 2) >> 1;
-            uint32_t vf = hvflip & 1;
+            uint32_t hf = hvflip & 1;
+            uint32_t vf = (hvflip & 2) >> 1;
             tuning->hflip = hf;
             tuning->vflip = vf;
+            tisp_apply_hvflip(tuning);
             break;
         }
 
@@ -29490,9 +29483,39 @@ static void tisp_s_mscaler_hvflip_mask(u8 mask)
 
 static void tisp_hv_flip_enable(u8 mask)
 {
-	/* OEM writes ISP Bayer pattern swap for flip.
-	 * Adjusts CFA register to compensate for sensor mirror/flip. */
-	pr_debug("tisp_hv_flip_enable: 0x%x\n", mask);
+	u32 arb = msca_dmaout_arb;
+
+	/* OEM tisp_hv_flip_enable updates the MSCA output-arbitration shadow and
+	 * writes it to register 0x9818.  Keep the channel-enable bits intact:
+	 * bits 7..9 select horizontal flip and bits 4..6 select vertical flip. */
+	if (arb == ~0U)
+		arb = 0;
+
+	if (mask & 1)
+		arb |= 0x380;
+	else
+		arb &= ~0x380U;
+
+	if (mask & 2)
+		arb |= 0x70;
+	else
+		arb &= ~0x70U;
+
+	msca_dmaout_arb = arb;
+	system_reg_write(0x9818, arb);
+	pr_debug("tisp_hv_flip_enable: mask=0x%x arb=0x%08x\n", mask, arb);
+}
+
+static void tisp_apply_hvflip(struct isp_tuning_data *tuning)
+{
+	u8 mask;
+
+	if (!tuning)
+		return;
+
+	mask = (tuning->hflip ? 1 : 0) | (tuning->vflip ? 2 : 0);
+	tisp_s_mscaler_hvflip_mask(mask);
+	tisp_hv_flip_enable(mask);
 }
 
 /* OEM EXACT: apical_isp_hvflip_update (0x547c) — handle sensor H/V flip.
@@ -29509,8 +29532,8 @@ int apical_isp_hvflip_update(void *arg1, int arg2)
 	if (dev && dev[0x134 / 4] == 1) {
 		switch (arg2) {
 		case 0: hflip = 0; vflip = 0; break;
-		case 1: hflip = 0; vflip = 1; break;
-		case 2: hflip = 1; vflip = 0; break;
+		case 1: hflip = 1; vflip = 0; break;
+		case 2: hflip = 0; vflip = 1; break;
 		case 3: hflip = 1; vflip = 1; break;
 		default: break;
 		}
