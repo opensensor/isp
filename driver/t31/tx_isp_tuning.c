@@ -8879,29 +8879,25 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
             effective_fps = fps_den > 0 ? fps_num / fps_den : 25;
 
-            /* Store in tuning data - this is what the client expects */
+            /* Program the sensor first, then publish the new cadence only
+             * after the sensor driver accepts it. */
             if (ourISPdev && ourISPdev->tuning_data) {
-                ourISPdev->tuning_data->fps_num = fps_num;
-                ourISPdev->tuning_data->fps_den = fps_den;
-                tisp_si_set_word(&sensor_info, TISP_SI_WORD_FPS, fps_packed);
-                tisp_sensor_info_update(&sensor_info);
-                if (ourISPdev->sensor)
-                    ourISPdev->sensor->video.fps = fps_packed;
-
-                pr_info("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
-
-                /* OEM-aligned: cache the requested FPS without issuing a
-                 * direct TX_ISP_EVENT_SENSOR_FPS sensor IOCTL here. */
                 fps_ret = sensor_fps_control(effective_fps);
                 if (fps_ret == 0) {
-                    pr_info("*** SET FPS: OEM-aligned FPS bookkeeping successful - %d FPS cached ***\n",
-                            effective_fps);
-                } else {
-                    pr_warn("*** SET FPS: FPS bookkeeping failed: %d ***\n", fps_ret);
-                }
+                    ourISPdev->tuning_data->fps_num = fps_num;
+                    ourISPdev->tuning_data->fps_den = fps_den;
+                    tisp_si_set_word(&sensor_info, TISP_SI_WORD_FPS, fps_packed);
+                    tisp_sensor_info_update(&sensor_info);
+                    if (ourISPdev->sensor)
+                        ourISPdev->sensor->video.fps = fps_packed;
 
-                /* Sensor-side timing updates, if any, must come from the OEM
-                 * stream/control flow rather than this tuning helper. */
+                    pr_info("*** SET FPS: Physical sensor and ISP set to %d/%d FPS ***\n",
+                            fps_num, fps_den);
+                } else {
+                    pr_warn("*** SET FPS: Physical sensor update failed: %d ***\n",
+                            fps_ret);
+                    ret = fps_ret;
+                }
             } else {
                 pr_err("*** SET FPS: No tuning data available ***\n");
                 ret = -ENODEV;

@@ -1999,21 +1999,47 @@ static int sensor_set_wdr_mode(int mode) {
 }
 
 int sensor_fps_control(int fps) {
+    int packed_fps;
+    int ret;
+
     if (!ourISPdev || !ourISPdev->sensor) {
         pr_warn("sensor_fps_control: No ISP device or sensor available\n");
         return -ENODEV;
     }
 
-    /* OEM HLIL 0x0000cc50 does not issue TX_ISP_EVENT_SENSOR_FPS here.
-     * It only mirrors current sensor state into a caller-owned buffer.
-     * Keep this helper side-effect free so the tuning control path does not
-     * reprogram the sensor mid-transition before the OEM stream relink flow. */
+    if (fps <= 0 || fps > 120) {
+        pr_warn("sensor_fps_control: invalid rate %d/1 FPS\n", fps);
+        return -EINVAL;
+    }
+
+    if (!stored_sensor_ops.original_ops ||
+        !stored_sensor_ops.original_ops->sensor ||
+        !stored_sensor_ops.original_ops->sensor->ioctl ||
+        !stored_sensor_ops.sensor_sd) {
+        pr_warn("sensor_fps_control: sensor FPS ioctl is unavailable\n");
+        return -ENODEV;
+    }
+
+    /* The tuning API supplies an integer rate, while sensor drivers consume
+     * the usual 16.16 numerator/denominator value.  Program the physical
+     * sensor before advertising the new cadence to userspace; merely changing
+     * ISP bookkeeping leaves a 25 Hz sensor feeding a nominal 20 Hz encoder. */
+    packed_fps = (fps << 16) | 1;
+    ret = stored_sensor_ops.original_ops->sensor->ioctl(
+        stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_FPS, &packed_fps);
+    if (ret) {
+        pr_warn("sensor_fps_control: sensor rejected %d/1 FPS: %d\n",
+                fps, ret);
+        return ret;
+    }
+
+    ourISPdev->sensor->video.fps = packed_fps;
     if (ourISPdev->tuning_data) {
         ourISPdev->tuning_data->fps_num = fps;
         ourISPdev->tuning_data->fps_den = 1;
     }
 
-    pr_info("sensor_fps_control: OEM-aligned bookkeeping only, cached %d/1 FPS\n",
+    pr_info("sensor_fps_control: programmed physical sensor at %d/1 FPS\n",
             fps);
     return 0;
 }
