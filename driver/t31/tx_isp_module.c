@@ -79,6 +79,10 @@ static void sensor_expo_work_func(struct work_struct *work);
 DECLARE_WORK(sensor_expo_work, sensor_expo_work_func);
 EXPORT_SYMBOL(sensor_expo_work);
 static u32 sensor_expo_last_packed = ~0U;
+static uint sensor_expo_catchups;
+module_param_named(sensor_expo_catchups, sensor_expo_catchups, uint, S_IRUGO);
+MODULE_PARM_DESC(sensor_expo_catchups,
+                 "Exposure requests caught while an earlier sensor write was running");
 
 /*
  * SC2336 high-gain temporal-noise profile.
@@ -131,13 +135,33 @@ static void sensor_expo_work_func(struct work_struct *work)
 {
     int ret;
     unsigned int again, it;
+    unsigned int pass = 0;
 
-    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor_update_pending)
+    if (!ourISPdev || !ourISPdev->sensor)
         return;
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->sensor &&
-        stored_sensor_ops.original_ops->sensor->ioctl &&
-        stored_sensor_ops.sensor_sd) {
+
+    /*
+     * Consume the request before taking the attribute snapshot.  The old
+     * worker cleared sensor_update_pending after the I2C transaction.  If AE
+     * published a new tuple while that transaction was running, that final
+     * clear erased the new request and the already queued worker invocation
+     * returned without applying it.  The next AE frame would eventually
+     * retry, adding a data-dependent frame of sensor latency.
+     *
+     * xchg() gives the producer/consumer pair a real hand-off.  A request
+     * published during I2C remains set and is consumed by the next pass;
+     * one published after the final xchg queues another invocation.
+     */
+    while (xchg(&ourISPdev->sensor_update_pending, 0)) {
+        if (pass++ != 0)
+            sensor_expo_catchups++;
+
+        if (!stored_sensor_ops.original_ops ||
+            !stored_sensor_ops.original_ops->sensor ||
+            !stored_sensor_ops.original_ops->sensor->ioctl ||
+            !stored_sensor_ops.sensor_sd)
+            continue;
+
         again = ourISPdev->sensor->attr.again;
         it = ourISPdev->sensor->attr.integration_time;
         sensor_expo_update_mdns_profile(again);
@@ -148,8 +172,7 @@ static void sensor_expo_work_func(struct work_struct *work)
          * 29 for GC2053, 162 for SC2336). */
         if (it == 0) {
             pr_warn("sensor_expo_work: integration_time=0, skipping write\n");
-            ourISPdev->sensor_update_pending = 0;
-            return;
+            continue;
         }
 
         {
@@ -164,8 +187,7 @@ static void sensor_expo_work_func(struct work_struct *work)
              * cache needs no additional locking.
              */
             if ((u32)packed == sensor_expo_last_packed) {
-                ourISPdev->sensor_update_pending = 0;
-                return;
+                continue;
             }
             pr_info_ratelimited("sensor_expo_work: again=%u it=%u packed=0x%08x\n", again, it, packed);
             ret = stored_sensor_ops.original_ops->sensor->ioctl(
@@ -177,7 +199,6 @@ static void sensor_expo_work_func(struct work_struct *work)
             }
         }
     }
-    ourISPdev->sensor_update_pending = 0;
 }
 
 static int tx_isp_sensor_has_usable_attachment(struct tx_isp_sensor *sensor)

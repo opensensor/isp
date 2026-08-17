@@ -4183,11 +4183,96 @@ static uint32_t ae_hist_tail_enable = 1;
 static uint32_t data_c46d0 = 0;    /* AE gain distribution mode */
 static uint32_t ftune_wmeans_state = 0; /* OEM: ftune_wmeans.32574 */
 
-/* Working convergence state for the six-argument ae0_tune2 reconstruction.
- * These are deliberately kept separate from the tuning-file ABI objects
- * until the stock call-site argument directions are proven end-to-end. */
-static uint32_t ae0_conv_state[5];
+/* Diagnostic controls for comparing the T31 OEM-weighted AE path with the
+ * bounded full-frame controller proven on T23.  Defaults preserve the stock
+ * T31 behavior; writable parameters allow a live A/B without another module
+ * swap or changing the camera profile. */
+static int ae_full_frame_mean;
+module_param_named(ae_full_frame_mean, ae_full_frame_mean, int,
+		   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(ae_full_frame_mean,
+		 "Use the unweighted full-frame AE mean instead of the OEM zone map");
+
+static uint ae_fifo_depth_override;
+module_param_named(ae_fifo_depth_override, ae_fifo_depth_override, uint,
+		   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(ae_fifo_depth_override,
+		 "Override the tuning binary's measured-luma FIFO depth (0 = tuning, max 15)");
+
+/* Diagnostic override for the sensor-to-ISP gain phase.  Zero keeps the
+ * tuning binary's OEM value; GC2053 supplies two frames.  The recovered
+ * driver applies sensor exposure through an asynchronous worker, so a live
+ * three-frame comparison distinguishes transport latency from AE math. */
+static uint ae_effect_frame_override;
+module_param_named(ae_effect_frame_override, ae_effect_frame_override, uint,
+		   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(ae_effect_frame_override,
+		 "Override sensor gain effect delay (0 = tuning, max 14 frames)");
+
+/* Diagnostic exposure hold.  Stock implements control 0x8000034 by entering
+ * the existing AE manual path with the current exposure tuple.  Keep a
+ * separate flag here so the same behavior can also be toggled through sysfs
+ * without a userspace control helper. */
+static int ae_freeze;
+module_param_named(ae_freeze, ae_freeze, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(ae_freeze,
+		 "Hold the current sensor exposure tuple (0 = auto, 1 = frozen)");
+
+static int ae_freeze_integration;
+module_param_named(ae_freeze_integration, ae_freeze_integration, int,
+		   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(ae_freeze_integration,
+		 "Hold only the current sensor integration time (0 = auto, 1 = frozen)");
+
+static int ae_freeze_gain;
+module_param_named(ae_freeze_gain, ae_freeze_gain, int,
+		   S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(ae_freeze_gain,
+		 "Hold only the current sensor and ISP gain tuple (0 = auto, 1 = frozen)");
+
+static bool tisp_ae_integration_hold_active(void)
+{
+	return tisp_ae_ctrls[0] != 0 || ae_freeze != 0 ||
+	       ae_freeze_integration != 0;
+}
+
+static bool tisp_ae_gain_hold_active(void)
+{
+	return tisp_ae_ctrls[0] != 0 || ae_freeze != 0 ||
+	       ae_freeze_gain != 0;
+}
+
+static bool tisp_ae_manual_active(void)
+{
+	return tisp_ae_integration_hold_active() ||
+	       tisp_ae_gain_hold_active();
+}
+
+static int tisp_set_ae_freeze(uint32_t mode)
+{
+	if (mode > 1) {
+		pr_err("ae freeze mode error: mode is %u\n", mode);
+		return -EINVAL;
+	}
+
+	ae_freeze = mode;
+	pr_info("AE_FREEZE: mode=%u it=%u ag=0x%x sdg=0x%x isp_dg=0x%x\n",
+		mode, data_c46a8, data_c46a0, data_c46a4, data_c46ac);
+	return 0;
+}
+
+/* ae0_tune2 uses _ae_stat as its live convergence state.  The stock
+ * IspAeTuneParam table passes this object directly to the solver; keeping a
+ * second zero-initialized state changes both startup and motion response. */
 static uint32_t ae0_ev_fifo[16];
+
+/* Outputs from ae0_weight_mean2.  ae0_tune2 consumes the ratio pair, so
+ * these live with the rest of the shared AE solver state. */
+static uint32_t ae0_wm2_wmean;
+static int32_t ae0_wm2_ratios[2];
+static int32_t ae0_wm2_total;
+static uint32_t ae0_wm2_b_ratio;
+static uint32_t ae0_wm2_r_ratio;
 
 /* OEM ae0_tune2 scaled EV/auto-target arrays.  The stock ae0_tune2 argument
  * order is EV list (arg3), luma list (arg4), auto-target list (arg5).  Its
@@ -5438,14 +5523,17 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     uint32_t s0 = _AePointPos.data[0];  /* OEM: *arg14 = precision */
     uint32_t qm = s0 & 31;
 
-    uint32_t s5 = ae0_conv_state[0];     /* target from tisp_ae_target */
-    uint32_t v0_34 = ae0_conv_state[1];  /* convergence mode flag */
-    uint32_t var_c8 = ae0_conv_state[3]; /* scene mode */
-    uint32_t v0_38 = ae0_conv_state[4];  /* convergence counter */
+    uint32_t s5 = _ae_stat.data[0];     /* target from tisp_ae_target */
+    uint32_t v0_34 = _ae_stat.data[1];  /* convergence mode flag */
+    uint32_t var_c8 = _ae_stat.data[3]; /* scene mode */
+    uint32_t v0_38 = _ae_stat.data[4];  /* convergence counter */
 
-    uint32_t cur_it = _ae_reg.data[0];
-    uint32_t cur_ag = ae0_req_ag;
-    uint32_t cur_dg = ae0_req_dg;
+    /* Stock forms the base EV from _ae_result, the last applied exposure
+     * tuple.  _ae_reg is the output/hardware tuple and is not the solver's
+     * current-value input. */
+    uint32_t cur_it = _ae_result.data[0];
+    uint32_t cur_ag = _ae_result.data[1];
+    uint32_t cur_dg = _ae_result.data[2];
 
     if (IspAeFlag && cur_it == 0) {
         cur_it = 600;
@@ -5472,6 +5560,9 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     uint32_t v0_41 = _exp_parameter.data[8]; /* step param B */
     uint32_t v0_42 = _exp_parameter.data[0]; /* initial ref value */
     uint32_t v0_43 = _exp_parameter.data[1]; /* conv threshold */
+
+    if (ae_fifo_depth_override != 0)
+        s2 = ae_fifo_depth_override;
 
     /* OEM arg10: anti-flicker exposure-distribution mode.  The stock
      * SC2336 blob supplies [1, 0, 20], selecting the generated exposure-node
@@ -5534,13 +5625,30 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     }
 
     if (GIB_CFG_DEIR_EN != 0 && ae_hist_scale_enable == 1) {
-        /* Histogram-based wmean computation from 256 bins.
-         * OEM uses IspAeStatic[256] histogram; our wmean is already
-         * computed by ae0_weight_mean2 and passed as parameter.
-         * Scale factor: (256 - wmean/2) / 256 */
-        uint32_t clamped_wmean = (wmean > 255) ? 255 : wmean;
-        uint32_t scale = fix_point_div_32(s0,
-                (256 - (clamped_wmean >> 1)) << qm,
+        uint32_t hist_weighted_sum = 0;
+        uint32_t hist_pixel_count;
+        uint32_t hist_centroid;
+        uint32_t scale;
+
+        /* OEM derives this value from the primary 256-bin AE histogram.  It
+         * is not the zone-weighted mean passed to ae0_tune2: the two values
+         * describe different distributions and only happen to share the
+         * same 0..255 range. */
+        for (i = 0; i < 256; i++)
+            hist_weighted_sum += i * ae_hist_bins[i];
+
+        hist_pixel_count = _ae_parameter.data[19] *
+                           _ae_parameter.data[4] *
+                           _ae_parameter.data[1] *
+                           _ae_parameter.data[3];
+        hist_centroid = hist_pixel_count ?
+                        hist_weighted_sum / hist_pixel_count : 0;
+        if (hist_centroid > 255)
+            hist_centroid = 255;
+
+        /* Stock scale factor: (256 - histogram_centroid / 2) / 256. */
+        scale = fix_point_div_32(s0,
+                (256 - (hist_centroid >> 1)) << qm,
                 256 << qm);
 
         for (i = 0; i < 10; i++) {
@@ -5550,26 +5658,29 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
                     local_at[i] << qm, scale) >> qm;
         }
 
-        /* OEM pushes event 8 with wmean value */
+        /* OEM pushes event 8 with the histogram centroid. */
         {
             struct tisp_event_record ev = {0};
             ev.event_id = 8;
-            ev.args[0] = clamped_wmean;
+            ev.args[0] = hist_centroid;
             tisp_event_push(&ev);
         }
     }
 
-    /* ---- Phase B: AE mode processing (OEM EXACT) ----
-     * OEM arg17 = [ae_mode, weight_factor, secondary_factor]
-     * OEM arg20 = per-band weight table (10 entries)
+    /* ---- Phase B: AE compensation table processing (OEM EXACT) ----
+     * IspAeTuneParam maps the stock ae0_tune2 arguments as follows:
+     *   arg19: ae_comp_param     [mode, EV scale, AT scale, ...]
+     *   arg20: ae_comp_ev_list  (scaled EV output)
+     *   arg21: ae_comp_at_list  (scaled AT output)
+     *   arg22: ae_extra_at_list (per-band AT weight)
      *
-     * ae_mode comes from IspAeTuneParam (= _exp_parameter).
-     * For GC2053 default: ae_mode=0 (passthrough).
-     * Mode 1: weighted filter with per-band scaling. */
+     * The output tables are kept in private working arrays here, but the
+     * inputs and fixed-point operations match the stock pointer table. */
     {
-        uint32_t ae_mode = _exp_parameter.data[9];  /* OEM: *arg17 */
-        uint32_t weight_factor = _exp_parameter.data[10]; /* OEM: arg17[1] */
-        uint32_t secondary_factor = _exp_parameter.data[11]; /* OEM: arg17[2] */
+        static int ae_comp_logged;
+        uint32_t ae_mode = ae_comp_param.data[0];
+        uint32_t weight_factor = ae_comp_param.data[1];
+        uint32_t secondary_factor = ae_comp_param.data[2];
 
         if (ae_mode != 1) {
             /* Mode 0 (default): passthrough — copy tables directly */
@@ -5580,18 +5691,38 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
         } else {
             /* Mode 1: weighted filter.
              * OEM: ev[i] = (weight * ev[i]) >> 7
-             * OEM: at[i] = ((weight * at[i]) >> 7 * band_wt[i] * secondary) >> 14
-             * OEM arg20 = _ae_zone_weight band entries (reuse zone weight array). */
+             * OEM: at[i] = (((weight * at[i]) >> 7) *
+             *               extra_at[i] * secondary) >> 14 */
             for (i = 0; i < 10; i++) {
                 uint32_t scaled_ev = (weight_factor * local_ev[i]) >> 7;
                 uint32_t scaled_at = (weight_factor * local_at[i]) >> 7;
-                uint32_t band_wt = _ae_zone_weight.data[i];
+                uint32_t band_wt = ae_extra_at_list.data[i];
 
                 scaled_at = (scaled_at * band_wt * secondary_factor) >> 14;
 
                 ae0_scaled_ev[i] = (scaled_ev == 0) ? 1 : scaled_ev;
                 ae0_scaled_at[i] = (scaled_at == 0) ? 1 : scaled_at;
             }
+        }
+
+        if (!ae_comp_logged) {
+            ae_comp_logged = 1;
+            pr_info("AE_COMP: cfg=[%u,%u,%u] extra_at=[%u,%u,%u,%u,%u,%u,%u,%u,%u,%u]\n",
+                ae_mode, weight_factor, secondary_factor,
+                ae_extra_at_list.data[0], ae_extra_at_list.data[1],
+                ae_extra_at_list.data[2], ae_extra_at_list.data[3],
+                ae_extra_at_list.data[4], ae_extra_at_list.data[5],
+                ae_extra_at_list.data[6], ae_extra_at_list.data[7],
+                ae_extra_at_list.data[8], ae_extra_at_list.data[9]);
+            pr_info("AE_COMP: scaled_ev=[%u,%u,%u,%u,%u,%u,%u,%u,%u,%u] "
+                    "scaled_at=[%u,%u,%u,%u,%u,%u,%u,%u,%u,%u]\n",
+                ae0_scaled_ev[0], ae0_scaled_ev[1], ae0_scaled_ev[2],
+                ae0_scaled_ev[3], ae0_scaled_ev[4], ae0_scaled_ev[5],
+                ae0_scaled_ev[6], ae0_scaled_ev[7], ae0_scaled_ev[8],
+                ae0_scaled_ev[9], ae0_scaled_at[0], ae0_scaled_at[1],
+                ae0_scaled_at[2], ae0_scaled_at[3], ae0_scaled_at[4],
+                ae0_scaled_at[5], ae0_scaled_at[6], ae0_scaled_at[7],
+                ae0_scaled_at[8], ae0_scaled_at[9]);
         }
     }
     active_ev = ae0_scaled_ev;
@@ -5678,10 +5809,10 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
          * lies between the two stable_tol bounds. */
         if (v0_68 < v0_6 && v0_7 < v0_68) {
             s2_2 = var_b8;
-            ae0_conv_state[2] = fifo_target;
+            _ae_stat.data[2] = fifo_target;
             var_cc_2 = 1;
         }
-        ae0_conv_state[1] = 0;
+        _ae_stat.data[1] = 0;
         goto phase_e_check_margins;
     } else if (v0_34 == 0) {
 phase_e_check_margins:
@@ -5694,9 +5825,9 @@ phase_e_check_margins:
             goto phase_f_target;
         }
         /* Within deadband — set stable */
-        ae0_conv_state[1] = 1;
-        ae0_conv_state[2] = fifo_target;
-        ae0_conv_state[0] = s5;
+        _ae_stat.data[1] = 1;
+        _ae_stat.data[2] = fifo_target;
+        _ae_stat.data[0] = s5;
 
         if (data_a0df4 == 1) {
             /* OEM: goto phase_f_target to recompute s2_2 */
@@ -5720,7 +5851,7 @@ phase_f_target:
     /* ---- Phase F: Compute new target and EV interpolation ---- */
     data_a0df4 = 0;
     s5 = tisp_ae_target_ex(v0_69, active_ev, active_at, s0);
-    ae0_conv_state[0] = s5;
+    _ae_stat.data[0] = s5;
 
     {
         uint32_t diff;
@@ -5734,10 +5865,10 @@ phase_f_target:
         uint32_t v0_75 = fix_point_div_32(s0, diff << qm, s2_1 ? s2_1 : 1);
         uint32_t one_q = 1u << qm;
 
-        /* OEM EXACT: tisp_ae_tune (0x4fe84) — adapt var_dc/var_e0 BEFORE
-         * the 64-bit interpolation so the interpolation uses updated coefficients.
-         * OEM calls tisp_ae_tune(arg28, &var_dc, &var_e0, step, s0, one_q)
-         * with one_q (not computed s2_2) as the reference value. */
+        /* OEM tisp_ae_tune (0x507b4) adjusts the stack-local interpolation
+         * coefficients before the 64-bit interpolation.  Its first argument
+         * is the two-ratio output from ae0_weight_mean2, and each ratio is
+         * squared by fix_point_mult3_32. */
         {
             uint32_t step_count = 0;
             if (v0_15 == 0)
@@ -5746,8 +5877,8 @@ phase_f_target:
                 step_count = v0_41;
 
             if ((int32_t)step_count > 0) {
-                uint32_t tune_a = _exp_parameter.data[5];
-                uint32_t tune_b = _exp_parameter.data[6];
+                uint32_t tune_a = (uint32_t)ae0_wm2_ratios[0];
+                uint32_t tune_b = (uint32_t)ae0_wm2_ratios[1];
                 uint32_t s7_tune = step_count << qm;
                 uint32_t s3_tune = 0x80u << qm;
 
@@ -5759,13 +5890,11 @@ phase_f_target:
 
                 if (s3_tune == 0) s3_tune = 1;
                 var_dc = var_dc + fix_point_div_32(s0,
-                        fix_point_mult3_32(s0, s7_tune, tune_a, tune_a), s3_tune);
+                        fix_point_mult3_32(s0, s7_tune, tune_a, tune_a),
+                        s3_tune);
                 var_e0 = var_e0 + fix_point_div_32(s0,
-                        fix_point_mult3_32(s0, s7_tune, tune_b, tune_b), s3_tune);
-
-                /* Write back to persistent state */
-                ae_ev_step.data[0] = var_dc;
-                ae_ev_step.data[1] = var_e0;
+                        fix_point_mult3_32(s0, s7_tune, tune_b, tune_b),
+                        s3_tune);
             }
         }
 
@@ -5920,7 +6049,7 @@ phase_g:
                 }
 
                 /* Converged path */
-                ae0_conv_state[3] = var_c8;
+                _ae_stat.data[3] = var_c8;
                 var_d4 = v0_21;
                 var_c0_1 = v0_38 + ((v0_38 < 0xff) ? 1 : 0);
                 goto phase_h_output;
@@ -6097,7 +6226,7 @@ phase_g:
 
     phase_h_converged:
         /* OEM: converged or already at target */
-        ae0_conv_state[3] = var_c8;
+        _ae_stat.data[3] = var_c8;
         var_c0_1 = (s4_2_flag == 0) ? 0 :
                    (v0_38 + ((v0_38 < 0xff) ? 1 : 0));
         goto phase_h_output;
@@ -6146,7 +6275,7 @@ phase_g:
             }
         }
 
-        ae0_conv_state[3] = var_c8;
+        _ae_stat.data[3] = var_c8;
         var_c0_1 = (s4_2_flag == 0) ? 0 :
                    (v0_38 + ((v0_38 < 0xff) ? 1 : 0));
         goto phase_h_output;
@@ -6160,7 +6289,7 @@ phase_g:
         var_c4 = cur_it;
 
         /* OEM: check convergence counter */
-        ae0_conv_state[3] = var_c8;
+        _ae_stat.data[3] = var_c8;
         var_c0_1 = 0;
     }
 
@@ -6170,8 +6299,8 @@ phase_g:
         if (var_c0_1 == v0_43)
             converged = 1;
 
-        ae0_conv_state[1] = converged;
-        ae0_conv_state[4] = var_c0_1;
+        _ae_stat.data[1] = converged;
+        _ae_stat.data[4] = var_c0_1;
     }
 
     /* AE gain is a multiplicative tuple.  Zero AG/DG collapses the pipeline
@@ -6186,7 +6315,7 @@ phase_g:
     *ag_out = var_d4;
     *dg_out = var_d0;
 
-    return (ae0_conv_state[1] != 0) ? 1 : 0;
+    return (_ae_stat.data[1] != 0) ? 1 : 0;
 }
 
 /* tisp_set_ae0_ag — OEM EXACT (0x51870): Write analog + digital gain to sensor.
@@ -6216,7 +6345,7 @@ static void tisp_set_ae0_ag(uint32_t ag, uint32_t dg)
      * For simplicity, always process (OEM has early-out optimization). */
 
     /* OEM: Handle tisp_ae_ctrls override */
-    if (tisp_ae_ctrls[0] != 0) {
+    if (tisp_ae_gain_hold_active()) {
         ag = data_c46a0;
         dg = fix_point_mult2_32(q, data_c46a4, data_c46ac);
     }
@@ -6301,13 +6430,6 @@ static void tisp_set_ae0_ag(uint32_t ag, uint32_t dg)
 static uint32_t ae0_zone_dark[225];
 static uint32_t ae0_zone_bright[225];
 
-/* OEM: ae0_weight_mean2 output variables (persist across frames). */
-static uint32_t ae0_wm2_wmean;       /* arg19: weighted mean brightness */
-static int32_t  ae0_wm2_ratios[2];   /* arg20: [bright_ratio, dark_ratio] */
-static int32_t  ae0_wm2_total;       /* arg21: accumulated total norm */
-static uint32_t ae0_wm2_b_ratio;     /* arg22: B-weighted color ratio */
-static uint32_t ae0_wm2_r_ratio;     /* arg23: R-weighted color ratio */
-
 /* OEM: zone copy buffer for spinlock-protected output.
  * ae0_weight_mean2 copies the per-zone brightness here under lock;
  * tisp_ae_get_y_zone reads from this buffer for ioctl. */
@@ -6318,6 +6440,7 @@ static int tiziano_ae0_fpga_run(void)
     uint32_t q;
     uint32_t zones[225];
     uint32_t wmean = 0, total_wt = 0;
+    uint32_t flat_wmean = 0, solver_wmean = 0;
     uint32_t new_it, new_ag, new_dg;
     int32_t q_val;
     uint32_t *zone_r_plane;
@@ -6405,6 +6528,17 @@ static int tiziano_ae0_fpga_run(void)
     wmean = ae0_wm2_wmean;
     total_wt = ae0_wm2_total;
 
+    {
+        uint32_t zone_count = _ae_parameter.data[1] *
+                              _ae_parameter.data[3];
+
+        if (zone_count == 0)
+            zone_count = 225;
+        flat_wmean = total_wt / zone_count;
+        if (flat_wmean == 0)
+            flat_wmean = 1;
+    }
+
     /* Update the global zone data for tisp_ae_get_y_zone ioctl reads */
     tisp_ae_update_zone_data(ae0_zone_copy, sizeof(ae0_zone_copy));
 
@@ -6474,7 +6608,7 @@ static int tiziano_ae0_fpga_run(void)
         uint32_t s1_bin = scene_cfg[1];   /* histogram bin threshold */
         uint32_t s7_dark = scene_cfg[3];  /* dark bin threshold */
         uint32_t s5_curve = scene_cfg[6]; /* curve strength */
-        uint32_t ae_wmean = wmean;
+        uint32_t ae_wmean = ae_full_frame_mean ? flat_wmean : wmean;
 
         ae_hist_dark_sum = 0;
         ae_hist_bright_sum = 0;
@@ -6484,9 +6618,9 @@ static int tiziano_ae0_fpga_run(void)
         if (s1_bin > 0xff)
             s1_bin = 0xff;
 
-        for (hi = 0; hi <= (int)s7_dark; hi++)
+        for (hi = 0; hi < (int)s7_dark; hi++)
             ae_hist_dark_sum += ae_hist_bins[hi];
-        for (hi = (int)s1_bin; hi < 256; hi++)
+        for (hi = (int)s1_bin + 1; hi < 256; hi++)
             ae_hist_bright_sum += ae_hist_bins[hi];
 
         /* OEM: Histogram tail quadratic weighting ($s4==1 path).
@@ -6495,11 +6629,10 @@ static int tiziano_ae0_fpga_run(void)
          * This is the critical mechanism that breaks the convergence
          * deadlock when wmean ≈ 0 (dark scene at minimum exposure). */
         if (s4_mode == 1 && ae_hist_tail_enable == 1) {
-            uint32_t hist_th = s1_bin;
+            uint32_t hist_th = _ae_parameter.data[35];
             uint32_t curve_str;
             uint32_t v1_4 = 0;
 
-            if (hist_th == 0) hist_th = 128;
             if (hist_th < 0xff)
                 hist_th = (hist_th * 2) / 3;
 
@@ -6537,23 +6670,20 @@ static int tiziano_ae0_fpga_run(void)
                 if (row_sp == 0) row_sp = 36;
                 zone_area = cols * rows * col_sp * row_sp;
 
-                if (zone_area > 0 && wmean > 0) {
-                    uint64_t tmp = (uint64_t)(v1_4 + zone_area) * wmean;
+                if (zone_area > 0 && ae_wmean > 0) {
+                    uint64_t tmp = (uint64_t)(v1_4 + zone_area) * ae_wmean;
                     do_div(tmp, zone_area);
                     ae_wmean = (uint32_t)tmp;
                 }
-                else
-                    ae_wmean = wmean;
 
-                if (ae_wmean > 255) ae_wmean = 255;
-                if (ae_wmean < 1) ae_wmean = 1;
             }
         }
 
-        ae_scene_wmean = ae_wmean;
+        solver_wmean = ae_wmean;
+        ae_scene_wmean = solver_wmean;
         ae_scene_total = total_wt;
-
-        ae0_tune2(ae_wmean, q, ae_wmean, &new_it, &new_ag, &new_dg);
+        ae0_tune2(solver_wmean, q, solver_wmean,
+                  &new_it, &new_ag, &new_dg);
     }
     /* OEM ae0_tune2 sets _ae_ev directly; also compute here for logging */
     if (_ae_ev == 0)
@@ -6564,8 +6694,18 @@ static int tiziano_ae0_fpga_run(void)
         ae_frame_diag++;
         if ((ae_frame_diag % 30) == 0) {
             uint32_t ae_tgt = tisp_ae_target(_ae_ev, q);
-            pr_info("AE_CONV[%d]: wmean=%u target=%u ev=0x%x zone[0]=%u zone[112]=%u zone[224]=%u q=%u\n",
-                ae_frame_diag, wmean, ae_tgt, _ae_ev, zones[0], zones[112], zones[224], q);
+            pr_info("AE_CONV[%d]: wmean=%u flat=%u solver=%u target=%u ev=0x%x "
+                    "zone[0]=%u zone[112]=%u zone[224]=%u ratios=%d/%d "
+                    "stat=%u/%u/%u/%u/%u q=%u full=%d fifo=%u/%u "
+                    "freeze=%d/%d/%d\n",
+                ae_frame_diag, wmean, flat_wmean, solver_wmean, ae_tgt, _ae_ev,
+                zones[0], zones[112], zones[224],
+                ae0_wm2_ratios[0], ae0_wm2_ratios[1],
+                _ae_stat.data[0], _ae_stat.data[1], _ae_stat.data[2],
+                _ae_stat.data[3], _ae_stat.data[4], q,
+                ae_full_frame_mean, ae_fifo_depth_override,
+                _exp_parameter.data[2], ae_freeze,
+                ae_freeze_integration, ae_freeze_gain);
         }
     }
 
@@ -6593,6 +6733,16 @@ static int tiziano_ae0_fpga_run(void)
     tisp_set_ae0_ag(new_ag, new_dg);
 
     /* ---- Step 4: Update effect frame delay pipeline ---- */
+    /* OEM reloads data_a0cdc from _exp_parameter[10] on every pass before
+     * shifting the EV/AD and AG/DG delay lines.  The GC2053 tuning blob sets
+     * this to two frames.  Leaving EffectFrame at its BSS default of zero
+     * applies ISP DG compensation before the sensor AG change is visible. */
+    EffectFrame = ae_effect_frame_override ?
+                  ae_effect_frame_override : _exp_parameter.data[10];
+    if (EffectFrame > 14)
+        EffectFrame = 14;
+    EffectCount0 = EffectFrame;
+
     /* OEM has TWO separate shift loops with different iteration counts:
      *  - ev0/ad0: EffectFrame+1 iterations (reads at index EffectFrame+1)
      *  - ag0/dg0: EffectFrame iterations   (reads at index EffectFrame)
@@ -6698,7 +6848,7 @@ static int tiziano_ae0_fpga_run(void)
         total_gain_new = total_g;
 
         /* OEM: push event 4 only when gain changes or AE ctrl[0] != 0 */
-        if (total_g != total_gain_old || tisp_ae_ctrls[0] != 0) {
+        if (total_g != total_gain_old || tisp_ae_manual_active()) {
             total_gain_old = total_g;
             uint32_t log2_tg = tisp_log2_fixed_to_fixed(total_g, 0x10, 0x10);
             struct tisp_event_record ev = {0};
@@ -6716,7 +6866,7 @@ static int tiziano_ae0_fpga_run(void)
         uint32_t ag_val = ag0_cache[EffectFrame < 15 ? EffectFrame : 0] << 6;
         again_new = ag_val;
 
-        if (ag_val != again_old || tisp_ae_ctrls[0] != 0) {
+        if (ag_val != again_old || tisp_ae_manual_active()) {
             again_old = ag_val;
             uint32_t log2_ag = tisp_log2_fixed_to_fixed(ag_val, 0x10, 0x10);
             struct tisp_event_record ev = {0};
@@ -9098,7 +9248,9 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000034: /* OEM: tisp_set_ae_freeze */
-            /* OEM sets ae_freeze flag — not yet implemented */
+            ret = tisp_set_ae_freeze(ctrl->value);
+            if (ret)
+                goto out;
             break;
 
         case 0x8000037: /* OEM: tisp_s_BacklightComp */
@@ -35757,7 +35909,7 @@ static void tisp_set_sensor_integration_time(uint32_t time)
     /* OEM EXACT (0x4e5f0): Branch on tisp_ae_ctrls[0], NOT WDR mode.
      * When ctrls[0] != 0: use cached IT (data_c46a8), update cache+AG
      * When ctrls[0] == 0: use requested IT, adjust AG if clipped */
-    if (tisp_ae_ctrls[0] != 0) {
+    if (tisp_ae_integration_hold_active()) {
         /* AE ctrl active: use cached IT value */
         void *var_ptr = NULL;
         int32_t allocated_time = data_b2eec(data_c46a8, &var_ptr);
@@ -36125,7 +36277,10 @@ static int data_b2f04(uint32_t param, int flag)
         /* Queue deferred I2C write to sensor hardware.
          * Both IT and AG attributes are set by the time AG is written,
          * so one workqueue trigger here covers both. */
-        ourISPdev->sensor_update_pending = 1;
+        /* Publish the completed IT/AG attribute tuple atomically with the
+         * worker's consume operation.  A plain store paired with the old
+         * unconditional worker clear could lose a request during sensor I2C. */
+        xchg(&ourISPdev->sensor_update_pending, 1);
         {
             extern struct work_struct sensor_expo_work;
             schedule_work(&sensor_expo_work);
