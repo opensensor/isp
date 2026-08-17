@@ -179,11 +179,15 @@ static bool tx_isp_sinfo_key_supported(enum tx_isp_sinfo_key key)
 	case TX_ISP_SINFO_MCLK:
 	case TX_ISP_SINFO_BOOT:
 	case TX_ISP_SINFO_VIDEO_INTERFACE:
+		return config_flags &
+		       (TX_ISP_SINFO_EXTENDED_ATTRS |
+			TX_ISP_SINFO_REGINFO_WIRING);
 	case TX_ISP_SINFO_RST_GPIO:
 	case TX_ISP_SINFO_PWDN_GPIO:
 		return config_flags &
 		       (TX_ISP_SINFO_EXTENDED_ATTRS |
-			TX_ISP_SINFO_REGINFO_WIRING);
+			TX_ISP_SINFO_REGINFO_WIRING) ||
+		       tx_isp_sinfo_config.read_module_param_int;
 	default:
 		return true;
 	}
@@ -236,6 +240,7 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 	unsigned int wiring_interface_offset;
 	unsigned int wiring_rst_gpio_offset;
 	unsigned int wiring_pwdn_gpio_offset;
+	int gpio;
 
 	(void)unused;
 	mutex_lock(&tx_isp_sinfo_lock);
@@ -268,7 +273,8 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 		wiring_pwdn_gpio_offset =
 			tx_isp_sinfo_config.info_pwdn_gpio_offset;
 	} else {
-		wiring = attr;
+		wiring = (config_flags & TX_ISP_SINFO_EXTENDED_ATTRS) ?
+			 attr : NULL;
 		wiring_mclk_offset = tx_isp_sinfo_config.attr_mclk_offset;
 		wiring_boot_offset = tx_isp_sinfo_config.attr_boot_offset;
 		wiring_interface_offset =
@@ -402,26 +408,26 @@ static int tx_isp_sinfo_show(struct seq_file *m, void *unused)
 			seq_printf(m, "0\n");
 		break;
 	case TX_ISP_SINFO_RST_GPIO:
-		if (!(config_flags &
-		      (TX_ISP_SINFO_EXTENDED_ATTRS |
-		       TX_ISP_SINFO_REGINFO_WIRING)))
-			break;
 		if (wiring)
 			seq_printf(m, "%d\n",
 				   tx_isp_sinfo_s32_at(
 					   wiring, wiring_rst_gpio_offset));
+		else if (tx_isp_sinfo_config.read_module_param_int &&
+			 !tx_isp_sinfo_config.read_module_param_int(
+				 slot->owner, "reset_gpio", &gpio))
+			seq_printf(m, "%d\n", gpio);
 		else
 			seq_printf(m, "-1\n");
 		break;
 	case TX_ISP_SINFO_PWDN_GPIO:
-		if (!(config_flags &
-		      (TX_ISP_SINFO_EXTENDED_ATTRS |
-		       TX_ISP_SINFO_REGINFO_WIRING)))
-			break;
 		if (wiring)
 			seq_printf(m, "%d\n",
 				   tx_isp_sinfo_s32_at(
 					   wiring, wiring_pwdn_gpio_offset));
+		else if (tx_isp_sinfo_config.read_module_param_int &&
+			 !tx_isp_sinfo_config.read_module_param_int(
+				 slot->owner, "pwdn_gpio", &gpio))
+			seq_printf(m, "%d\n", gpio);
 		else
 			seq_printf(m, "-1\n");
 		break;

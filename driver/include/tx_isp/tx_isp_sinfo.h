@@ -55,6 +55,8 @@ struct tx_isp_sinfo_config {
 	void (*driver_removing)(struct i2c_driver *drv);
 	void (*sensor_bound)(void *subdev, struct module *owner);
 	void (*sensor_unbound)(void *subdev, struct module *owner);
+	int (*read_module_param_int)(struct module *owner, const char *name,
+				     int *value);
 };
 
 enum tx_isp_sinfo_config_status {
