@@ -57,6 +57,7 @@ struct tx_isp_v4l2_device {
 	struct tx_isp_v4l2_buffer *buffers[TX_ISP_V4L2_MAX_BUFFERS];
 	u32 buffer_count;
 	bool opened;
+	bool upstream_streaming;
 	bool streaming;
 	bool registered;
 };
@@ -64,6 +65,7 @@ struct tx_isp_v4l2_device {
 static struct tx_isp_v4l2_device tx_isp_video;
 
 extern struct tx_isp_dev *ourISPdev;
+extern int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
 extern long frame_channel_unlocked_ioctl(struct file *file,
 					 unsigned int command,
 					 unsigned long argument);
@@ -540,35 +542,64 @@ static int tx_isp_v4l2_stream_on(struct file *file, void *private,
 {
 	struct tx_isp_v4l2_device *video = video_drvdata(file);
 	u32 legacy_type = type;
+	int rollback_ret;
 	long ret;
 
 	if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE || !video->buffer_count)
 		return -EINVAL;
 	if (video->streaming)
 		return -EBUSY;
+	if (!ourISPdev)
+		return -ENODEV;
+
+	ret = tx_isp_video_s_stream(ourISPdev, 1);
+	if (ret)
+		return ret;
+	video->upstream_streaming = true;
+
 	ret = tx_isp_v4l2_legacy_ioctl(TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON,
 					       &legacy_type);
-	if (!ret)
-		video->streaming = true;
-	return ret;
+	if (ret) {
+		rollback_ret = tx_isp_video_s_stream(ourISPdev, 0);
+		if (!rollback_ret)
+			video->upstream_streaming = false;
+		return ret;
+	}
+	video->streaming = true;
+	return 0;
+}
+
+static int tx_isp_v4l2_stop_streaming(struct tx_isp_v4l2_device *video,
+				       u32 type)
+{
+	long channel_ret = 0;
+	int upstream_ret = 0;
+
+	if (video->streaming) {
+		channel_ret = tx_isp_v4l2_legacy_ioctl(
+			TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF, &type);
+		if (!channel_ret)
+			video->streaming = false;
+	}
+	if (video->upstream_streaming) {
+		upstream_ret = tx_isp_video_s_stream(ourISPdev, 0);
+		if (!upstream_ret)
+			video->upstream_streaming = false;
+	}
+
+	return channel_ret ? channel_ret : upstream_ret;
 }
 
 static int tx_isp_v4l2_stream_off(struct file *file, void *private,
 				  enum v4l2_buf_type type)
 {
 	struct tx_isp_v4l2_device *video = video_drvdata(file);
-	u32 legacy_type = type;
-	long ret;
 
 	if (type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-	if (!video->streaming)
+	if (!video->streaming && !video->upstream_streaming)
 		return 0;
-	ret = tx_isp_v4l2_legacy_ioctl(TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF,
-					       &legacy_type);
-	if (!ret)
-		video->streaming = false;
-	return ret;
+	return tx_isp_v4l2_stop_streaming(video, type);
 }
 
 static const struct v4l2_ioctl_ops tx_isp_v4l2_ioctl_ops = {
@@ -607,11 +638,8 @@ static int tx_isp_v4l2_release(struct file *file)
 	u32 type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	mutex_lock(&video->lock);
-	if (video->streaming) {
-		tx_isp_v4l2_legacy_ioctl(TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF,
-					  &type);
-		video->streaming = false;
-	}
+	if (video->streaming || video->upstream_streaming)
+		tx_isp_v4l2_stop_streaming(video, type);
 	tx_isp_v4l2_release_buffers(video, true);
 	video->opened = false;
 	mutex_unlock(&video->lock);
@@ -718,10 +746,10 @@ void tx_isp_v4l2_cleanup(void)
 
 	if (!video->registered)
 		return;
-	if (video->streaming)
-		tx_isp_v4l2_legacy_ioctl(TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF,
-					  &type);
+	if (video->streaming || video->upstream_streaming)
+		tx_isp_v4l2_stop_streaming(video, type);
 	video->streaming = false;
+	video->upstream_streaming = false;
 	tx_isp_v4l2_release_buffers(video, true);
 	video_unregister_device(video->video_device);
 	video->video_device = NULL;
