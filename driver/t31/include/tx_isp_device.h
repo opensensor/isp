@@ -662,6 +662,8 @@ struct frame_channel_device {
 
 extern struct frame_channel_device frame_channels[4]; /* Shared frame channel array */
 extern int num_channels; /* Shared frame channel count */
+void frame_channel_prepare(struct frame_channel_device *fcd,
+			   int channel_num, int minor);
 
 /*
  * Internal ops. Never call this from drivers, only the tx isp device can call

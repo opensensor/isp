@@ -2195,6 +2195,70 @@ static void frame_channel_bootstrap_slot(struct frame_channel_device *fcd,
     fcd->miscdev.minor = minor;
 }
 
+void frame_channel_prepare(struct frame_channel_device *fcd,
+                           int channel_num, int minor)
+{
+    if (!fcd)
+        return;
+
+    frame_channel_bootstrap_slot(fcd, channel_num, minor);
+
+    if (!fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev)
+        fcd->vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
+    if (!fcd->vic_subdev && ourISPdev && fcd->channel_num < ISP_MAX_CHAN)
+        fcd->vic_subdev = &ourISPdev->channels[fcd->channel_num].subdev;
+
+    spin_lock_init(&fcd->state.queue_lock);
+    INIT_LIST_HEAD(&fcd->state.queued_buffers);
+    INIT_LIST_HEAD(&fcd->state.completed_buffers);
+    fcd->state.queued_count = 0;
+    fcd->state.completed_count = 0;
+    fcd->state.pre_dequeue_ready = false;
+    fcd->state.drop_counter = 0;
+
+    spin_lock_init(&fcd->state.buffer_lock);
+    fcd->state.pre_dequeue_index = 0;
+    fcd->state.pre_dequeue_seq = 0;
+    memset(&fcd->state.pre_dequeue_ts, 0, sizeof(fcd->state.pre_dequeue_ts));
+    frame_channel_clear_tracked_buffers(fcd);
+
+    init_waitqueue_head(&fcd->state.frame_wait);
+    init_completion(&fcd->state.frame_done);
+    atomic_set(&fcd->state.frame_ready_count, 0);
+    spin_lock_init(&fcd->oem_buf_lock);
+    memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
+    fcd->oem_buf_count = 0;
+
+    if (fcd->state.width == 0) {
+        if (fcd->channel_num == 0) {
+            fcd->state.width = 1920;
+            fcd->state.height = 1080;
+            fcd->state.format = V4L2_PIX_FMT_NV12;
+        } else {
+            fcd->state.width = 640;
+            fcd->state.height = 360;
+            fcd->state.format = V4L2_PIX_FMT_NV12;
+        }
+
+        fcd->state.enabled = false;
+        fcd->state.streaming = false;
+        fcd->state.capture_active = false;
+        fcd->state.buffer_count = 0;
+        fcd->state.sequence = 0;
+        fcd->state.frame_ready = false;
+        fcd->magic = FRAME_CHANNEL_MAGIC;
+
+        pr_info("*** FRAME CHANNEL %d: Initialized state ***\n",
+                fcd->channel_num);
+    }
+    fcd->state.bytesperline = frame_channel_format_bytesperline(
+        frame_channel_export_pixfmt(fcd->channel_num, fcd->state.format),
+        fcd->state.width);
+    fcd->state.sizeimage = frame_channel_format_sizeimage(
+        frame_channel_export_pixfmt(fcd->channel_num, fcd->state.format),
+        fcd->state.width, fcd->state.height);
+}
+
 // Forward declarations for ISP channel control functions
 extern int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
 extern int tisp_channel_stop(uint32_t channel_id);
@@ -2243,69 +2307,7 @@ int frame_channel_open(struct inode *inode, struct file *file)
         return -ENODEV;
     }
 
-    frame_channel_bootstrap_slot(fcd, channel_num, minor);
-
-    if (!fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev)
-        fcd->vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
-    if (!fcd->vic_subdev && ourISPdev && fcd->channel_num < ISP_MAX_CHAN)
-        fcd->vic_subdev = &ourISPdev->channels[fcd->channel_num].subdev;
-
-    /* Initialize channel state - safe to call multiple times in kernel 3.10 */
-    /* Initialize queueing primitives for completed/queued buffers */
-    spin_lock_init(&fcd->state.queue_lock);
-    INIT_LIST_HEAD(&fcd->state.queued_buffers);
-    INIT_LIST_HEAD(&fcd->state.completed_buffers);
-    fcd->state.queued_count = 0;
-    fcd->state.completed_count = 0;
-    fcd->state.pre_dequeue_ready = false;
-    fcd->state.drop_counter = 0;
-
-    spin_lock_init(&fcd->state.buffer_lock);
-    fcd->state.pre_dequeue_index = 0;
-    fcd->state.pre_dequeue_seq = 0;
-    memset(&fcd->state.pre_dequeue_ts, 0, sizeof(fcd->state.pre_dequeue_ts));
-    frame_channel_clear_tracked_buffers(fcd);
-
-
-    init_waitqueue_head(&fcd->state.frame_wait);
-    init_completion(&fcd->state.frame_done);
-    atomic_set(&fcd->state.frame_ready_count, 0);
-    spin_lock_init(&fcd->oem_buf_lock);
-    memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
-    fcd->oem_buf_count = 0;
-
-    /* Set default format based on channel if not already set */
-    if (fcd->state.width == 0) {
-        if (fcd->channel_num == 0) {
-            /* Main channel - HD */
-            fcd->state.width = 1920;
-            fcd->state.height = 1080;
-            fcd->state.format = V4L2_PIX_FMT_NV12;
-        } else {
-            /* Sub channel - smaller */
-            fcd->state.width = 640;
-            fcd->state.height = 360;
-            fcd->state.format = V4L2_PIX_FMT_NV12;
-        }
-
-        fcd->state.enabled = false;
-        fcd->state.streaming = false;
-        fcd->state.capture_active = false;
-        fcd->state.buffer_count = 0;
-        fcd->state.sequence = 0;
-        fcd->state.frame_ready = false;
-        fcd->magic = FRAME_CHANNEL_MAGIC;
-
-        pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
-    }
-    /* Initialize geometry from defaults */
-    fcd->state.bytesperline = frame_channel_format_bytesperline(
-        frame_channel_export_pixfmt(fcd->channel_num, fcd->state.format),
-        fcd->state.width);
-    fcd->state.sizeimage = frame_channel_format_sizeimage(
-        frame_channel_export_pixfmt(fcd->channel_num, fcd->state.format),
-        fcd->state.width, fcd->state.height);
-
+    frame_channel_prepare(fcd, channel_num, minor);
 
     file->private_data = fcd;
 

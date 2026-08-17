@@ -4067,6 +4067,10 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
         else if (i < ISP_MAX_CHAN)
             frame_channels[i].vic_subdev = &isp_dev->channels[i].subdev;
 
+        /* Initialize queue state before misc_register() exposes the channel.
+         * Both the private node and the public V4L2 adapter share this state. */
+        frame_channel_prepare(&frame_channels[i], i, MISC_DYNAMIC_MINOR);
+
         /* Register the misc device */
         ret = misc_register(fs_miscdev);
         if (ret < 0) {
