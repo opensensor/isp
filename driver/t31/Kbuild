@@ -27,8 +27,9 @@ tx-isp-t31-objs := tx_isp_module.o \
                tx_isp_t31_exposure.o \
 	       tx_isp_t31_adr.o \
                tx_isp_tuning_abi.o \
-               tx_isp_v4l2.o \
                tx_isp_vin.o
+tx-isp-t31-$(CONFIG_TX_ISP_T31_V4L2) += tx_isp_v4l2.o
+ccflags-$(CONFIG_TX_ISP_T31_V4L2) += -DCONFIG_TX_ISP_T31_V4L2
 
 # Build both modules - changed tx-isp.o to tx-isp-t31.o
 obj-m := tx-isp-t31.o

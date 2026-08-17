@@ -50,6 +50,7 @@
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
 #include "tx_isp_t31_subdev_resolver.h"
+#include "tx_isp_v4l2.h"
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
@@ -62,8 +63,6 @@
 
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
-int tx_isp_v4l2_init(void);
-void tx_isp_v4l2_cleanup(void);
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -5917,7 +5916,10 @@ static int tx_isp_init(void)
         pr_err("Failed to register T31 V4L2 capture device: %d\n", ret);
         goto err_cleanup_platforms;
     }
-    pr_info("*** T31 V4L2 CAPTURE DEVICE REGISTERED ***\n");
+    if (TX_ISP_T31_V4L2_ENABLED)
+        pr_info("*** T31 V4L2 CAPTURE DEVICE REGISTERED ***\n");
+    else
+        pr_info("*** T31 V4L2 CAPTURE DEVICE DISABLED ***\n");
 
     ret = tx_isp_sinfo_init();
     if (ret) {
