@@ -5926,6 +5926,13 @@ static int tx_isp_init(void)
         goto err_cleanup_platforms;
     }
 
+    /* OEM T31 sensor modules enable cgu_cim but rely on TX-ISP to route its
+     * output to the package pin.  Without this, GC2053 identification reads
+     * return -EIO even though the clock divider is running. */
+    ret = private_jzgpio_set_func(GPIO_PORT_A, GPIO_FUNC_1, 1UL << 15);
+    if (ret)
+        pr_warn("Failed to route CIM MCLK to PA15: %d\n", ret);
+
     /* Stock activates the isp-m0 and child clocks at the end of the ISP
      * module insertion, immediately before the separate sensor module is
      * inserted.  Sensor registration later invokes core init/reset.  Keep
