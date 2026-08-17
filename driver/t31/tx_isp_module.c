@@ -62,6 +62,8 @@
 
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
+int tx_isp_v4l2_init(void);
+void tx_isp_v4l2_cleanup(void);
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -5908,11 +5910,17 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
 
-    pr_info("*** V4L2 VIDEO DEVICES DISABLED - skipping /dev/videoX registration ***\n");
+    ret = tx_isp_v4l2_init();
+    if (ret) {
+        pr_err("Failed to register T31 V4L2 capture device: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** T31 V4L2 CAPTURE DEVICE REGISTERED ***\n");
 
     ret = tx_isp_sinfo_init();
     if (ret) {
         pr_err("Failed to initialize sensor registry: %d\n", ret);
+        tx_isp_v4l2_cleanup();
         goto err_cleanup_platforms;
     }
 
@@ -5966,6 +5974,7 @@ static void tx_isp_exit(void)
     int i;
 
     pr_info("TX ISP driver exiting...\n");
+    tx_isp_v4l2_cleanup();
     tx_isp_sinfo_exit();
     tx_isp_remove_proc_entries();
 
