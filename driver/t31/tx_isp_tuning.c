@@ -53,6 +53,7 @@
 #include "../include/tx_isp/tx_isp_daynight.h"
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "tx_isp_t31_exposure.h"
+#include "tx_isp_t31_adr.h"
 
 #include "include/tx_isp_device.h"
 #include "include/tx_libimp.h"
@@ -2242,6 +2243,10 @@ static uint32_t *adr_mapb1_list_now = NULL;
 static uint32_t *adr_mapb2_list_now = NULL;
 static uint32_t *adr_mapb3_list_now = NULL;
 static uint32_t *adr_mapb4_list_now = NULL;
+static uint32_t adr_mapb1_list_work[TX_ISP_T31_ADR_MAP_POINTS];
+static uint32_t adr_mapb2_list_work[TX_ISP_T31_ADR_MAP_POINTS];
+static uint32_t adr_mapb3_list_work[TX_ISP_T31_ADR_MAP_POINTS];
+static uint32_t adr_mapb4_list_work[TX_ISP_T31_ADR_MAP_POINTS];
 static uint32_t *adr_ev_list_now = NULL;
 static uint32_t *adr_map_mode_now = NULL;
 static uint32_t *adr_block_light_now = NULL;
@@ -30445,7 +30450,7 @@ int tisp_adr_wdr_en(int enable)
 
     tiziano_adr_params_refresh();
     tiziano_adr_params_init();
-    return 0;
+    return tisp_s_adr_str_internal(adr_ratio);
 }
 
 static int defog_wdr_en = 0;
@@ -34291,67 +34296,38 @@ int tisp_g_BacklightComp(uint32_t *out)
 /* tisp_s_adr_str_internal - ADR strength internal control */
 int tisp_s_adr_str_internal(int strength)
 {
-    const uint32_t *src1;
-    const uint32_t *src2;
-    const uint32_t *src3;
-    const uint32_t *src4;
-    uint32_t value1;
-    uint32_t value2;
-    uint32_t value3;
-    uint32_t value4;
-    int i;
-
-    adr_ratio = strength;
+    const uint32_t *source[TX_ISP_T31_ADR_MAP_CHANNELS];
+    uint32_t *output[TX_ISP_T31_ADR_MAP_CHANNELS] = {
+        adr_mapb1_list_work,
+        adr_mapb2_list_work,
+        adr_mapb3_list_work,
+        adr_mapb4_list_work,
+    };
+    int ret;
 
     if (adr_wdr_en != 0) {
-        src1 = adr_mapb1_list_wdr;
-        src2 = adr_mapb2_list_wdr;
-        src3 = adr_mapb3_list_wdr;
-        src4 = adr_mapb4_list_wdr;
-        adr_mapb1_list_now = adr_mapb1_list_wdr;
-        adr_mapb2_list_now = adr_mapb2_list_wdr;
-        adr_mapb3_list_now = adr_mapb3_list_wdr;
-        adr_mapb4_list_now = adr_mapb4_list_wdr;
+        source[0] = adr_mapb1_list_wdr;
+        source[1] = adr_mapb2_list_wdr;
+        source[2] = adr_mapb3_list_wdr;
+        source[3] = adr_mapb4_list_wdr;
     } else {
-        src1 = adr_mapb1_list;
-        src2 = adr_mapb2_list;
-        src3 = adr_mapb3_list;
-        src4 = adr_mapb4_list;
-        adr_mapb1_list_now = adr_mapb1_list;
-        adr_mapb2_list_now = adr_mapb2_list;
-        adr_mapb3_list_now = adr_mapb3_list;
-        adr_mapb4_list_now = adr_mapb4_list;
+        source[0] = adr_mapb1_list;
+        source[1] = adr_mapb2_list;
+        source[2] = adr_mapb3_list;
+        source[3] = adr_mapb4_list;
     }
 
-    for (i = 0; i < 9; i++) {
-        if (strength < 0x81) {
-            value1 = (strength * src1[i]) >> 7;
-            value2 = (strength * src2[i]) >> 7;
-            value3 = (strength * src3[i]) >> 7;
-            value4 = (strength * src4[i]) >> 7;
-        } else {
-            value1 = src1[i] + ((((src1[i] >= 0x190) ? 0 : (0x190 - src1[i])) * (strength - 0x80)) >> 7);
-            value2 = src2[i] + ((((src2[i] >= 0x1f4) ? 0 : (0x1f4 - src2[i])) * (strength - 0x80)) >> 7);
-            value3 = src3[i] + ((((src3[i] >= 0x258) ? 0 : (0x258 - src3[i])) * (strength - 0x80)) >> 7);
-            value4 = src4[i] + ((((src4[i] >= 0x258) ? 0 : (0x258 - src4[i])) * (strength - 0x80)) >> 7);
-        }
+    ret = tx_isp_t31_adr_scale_mapb(strength, histSub_4096_diff,
+                                    source, output);
+    if (ret)
+        return ret;
 
-        if (value1 < histSub_4096_diff[0])
-            value1 = histSub_4096_diff[0];
-        if (value2 < histSub_4096_diff[1])
-            value2 = histSub_4096_diff[1];
-        if (value3 < histSub_4096_diff[2])
-            value3 = histSub_4096_diff[2];
-        if (value4 < histSub_4096_diff[3])
-            value4 = histSub_4096_diff[3];
-
-        adr_mapb1_list_now[i] = value1;
-        adr_mapb2_list_now[i] = value2;
-        adr_mapb3_list_now[i] = value3;
-        adr_mapb4_list_now[i] = value4;
-    }
-
+    adr_ratio = strength;
     tiziano_adr_params_init();
+    adr_mapb1_list_now = adr_mapb1_list_work;
+    adr_mapb2_list_now = adr_mapb2_list_work;
+    adr_mapb3_list_now = adr_mapb3_list_work;
+    adr_mapb4_list_now = adr_mapb4_list_work;
     ev_changed = 1;
     return 0;
 }

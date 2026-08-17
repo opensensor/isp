@@ -14,7 +14,7 @@ all: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 	tx_isp_frame_format_test \
 	tx_isp_frame_layout_test \
 	tx_isp_video_queue_test \
-	tx_isp_exposure_test tx_isp_scaler_test
+	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test
 
 tx_isp_math_test: tx_isp_math_test.c ../driver/include/tx_isp/tx_isp_math.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
@@ -105,6 +105,12 @@ tx_isp_exposure_test: tx_isp_exposure_test.c \
 		tx_isp_exposure_test.c ../driver/common/tx_isp_exposure.c \
 		../driver/t31/tx_isp_t31_exposure.c
 
+tx_isp_t31_adr_test: tx_isp_t31_adr_test.c \
+		../driver/t31/tx_isp_t31_adr.c \
+		../driver/t31/tx_isp_t31_adr.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ \
+		tx_isp_t31_adr_test.c ../driver/t31/tx_isp_t31_adr.c
+
 tx_isp_scaler_test: tx_isp_scaler_test.c \
 		../driver/t23/tx_isp_t23_scaler.c \
 		../driver/t23/tx_isp_t23_scaler.h \
@@ -127,7 +133,7 @@ check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 		tx_isp_frame_format_test \
 		tx_isp_frame_layout_test \
 		tx_isp_video_queue_test \
-		tx_isp_exposure_test tx_isp_scaler_test
+	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test
 	./tx_isp_math_test
 	./tx_isp_subdev_abi_test
 	./tx_isp_subdev_test
@@ -143,6 +149,7 @@ check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 	./tx_isp_frame_layout_test
 	./tx_isp_video_queue_test
 	./tx_isp_exposure_test
+	./tx_isp_t31_adr_test
 	./tx_isp_scaler_test
 
 clean:
@@ -156,4 +163,4 @@ clean:
 		tx_isp_frame_format_test \
 		tx_isp_frame_layout_test \
 		tx_isp_video_queue_test \
-		tx_isp_exposure_test tx_isp_scaler_test
+		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test
