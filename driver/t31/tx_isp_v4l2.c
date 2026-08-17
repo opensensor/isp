@@ -23,8 +23,10 @@
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 
 #define TX_ISP_V4L2_CHANNEL 0
-#define TX_ISP_V4L2_WIDTH 1920U
-#define TX_ISP_V4L2_HEIGHT 1080U
+#define TX_ISP_V4L2_DEFAULT_WIDTH 1920U
+#define TX_ISP_V4L2_DEFAULT_HEIGHT 1080U
+#define TX_ISP_V4L2_MIN_WIDTH 16U
+#define TX_ISP_V4L2_MIN_HEIGHT 16U
 #define TX_ISP_V4L2_FPS 30U
 #define TX_ISP_V4L2_MIN_BUFFERS 2U
 #define TX_ISP_V4L2_MAX_BUFFERS 4U
@@ -257,15 +259,25 @@ static void tx_isp_v4l2_release_buffers(struct tx_isp_v4l2_device *video,
 
 static void tx_isp_v4l2_try_format(struct v4l2_format *format)
 {
+	u32 width = format->fmt.pix.width;
+	u32 height = format->fmt.pix.height;
+
+	if (!width)
+		width = TX_ISP_V4L2_DEFAULT_WIDTH;
+	if (!height)
+		height = TX_ISP_V4L2_DEFAULT_HEIGHT;
+	width = clamp_t(u32, width, TX_ISP_V4L2_MIN_WIDTH,
+			TX_ISP_MAX_WIDTH) & ~1U;
+	height = clamp_t(u32, height, TX_ISP_V4L2_MIN_HEIGHT,
+			 TX_ISP_MAX_HEIGHT) & ~1U;
 	memset(&format->fmt.pix, 0, sizeof(format->fmt.pix));
 	format->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	format->fmt.pix.width = TX_ISP_V4L2_WIDTH;
-	format->fmt.pix.height = TX_ISP_V4L2_HEIGHT;
+	format->fmt.pix.width = width;
+	format->fmt.pix.height = height;
 	format->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
 	format->fmt.pix.field = V4L2_FIELD_NONE;
-	format->fmt.pix.bytesperline = TX_ISP_V4L2_WIDTH;
-	format->fmt.pix.sizeimage = TX_ISP_V4L2_WIDTH *
-		ALIGN(TX_ISP_V4L2_HEIGHT, 16) * 3 / 2;
+	format->fmt.pix.bytesperline = width;
+	format->fmt.pix.sizeimage = width * ALIGN(height, 16) * 3 / 2;
 	format->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
 }
 
