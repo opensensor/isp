@@ -54,6 +54,7 @@
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "tx_isp_t31_exposure.h"
 #include "tx_isp_t31_adr.h"
+#include "tx_isp_t31_mdns.h"
 
 #include "include/tx_isp_device.h"
 #include "include/tx_libimp.h"
@@ -123,6 +124,7 @@ static bool tisp_sc2336_oem_profile_active(void)
 
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
+extern int isp_memopt;
 
 
 #define TISP_TOP_BYPASS_DPC_BIT	BIT(2)
@@ -34141,23 +34143,15 @@ static int tisp_mdns_top_func_cfg(int enable)
 
     system_reg_write(0x7810, ctrl);
 
-    /* OEM reads mdns_y_con_thres_intp (pre-computed global) */
-    top1 = mdns_y_con_thres_intp |
-           (mdns_bgm_enable_array << 4) |
-           (mdns_ref_wei_byps_array << 8) |
-           (mdns_sta_group_num_array << 12) |
-           (mdns_psn_enable_array << 16) |
-           (mdns_psn_max_num_array << 20);
-
-    /*
-     * The shipping SC2336 pipeline leaves the low confidence-threshold bit
-     * and pixel-sample-noise path disabled in linear mode.  Enabling them
-     * turns stable, low-contrast walls into a frame-varying texture even
-     * though exposure and gain are constant.  This mask is taken from a
-     * same-camera, same-scene OEM register oracle (0x7814 = 0x00f01100).
-     */
-    if (tisp_sc2336_oem_profile_active() && !mdns_wdr_en)
-        top1 &= ~0x00010001U;
+    /* OEM packs ASS at bit 0. In reduced-memory mode it disables ASS, BGM,
+     * and PSN for every sensor because their reference planes are absent. */
+    top1 = tx_isp_t31_mdns_top1(mdns_ass_enable_array,
+                                mdns_bgm_enable_array,
+                                mdns_ref_wei_byps_array,
+                                mdns_sta_group_num_array,
+                                mdns_psn_enable_array,
+                                mdns_psn_max_num_array,
+                                isp_memopt == 1);
 
     system_reg_write(0x7814, top1);
     system_reg_write(0x7808, (mdns_uv_debug_array << 5) | mdns_y_debug_array);

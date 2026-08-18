@@ -441,7 +441,7 @@ mode control, and post-run `dmesg`, `logread`, and `logcat`.
 | SoC / sensor | Main stream | Sub stream | Mode coverage | Result |
 |---|---:|---:|---|---|
 | T23 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | clean geometry and color; no fatal or memory faults |
-| T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | two-buffer DMA-done rotation; monotonic timestamps; high-gain MDNS profile |
+| T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | two-buffer DMA-done rotation; monotonic timestamps; generic reduced-memory MDNS policy |
 | T40XP / GC4653 | 1920×1080 @ 25 fps | configured, not part of this gate | day | shared subdevice/link/event/state pass; eight decoded main frames and no fatal signature |
 | T41 / OS04D10 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | balanced `0x380/0x880` day AWB and dual-stream fanout |
 
@@ -465,13 +465,12 @@ luma change p95 from `0.3359` to `0.0641` (left wall), `0.0670` to `0.0192`
 (right wall), and `1.3114` to `0.0362` (upper wall). The remaining two-second
 IDR reset is an encoder rate-control boundary rather than ISP exposure motion.
 
-At the storm-light gain point, the SC2336-specific automatic MDNS profile
-selects ratio 160 only in the sensor's `0x8xx` high-gain stage and returns to
-128 below the hysteresis band. With that profile, mean flat-wall decoded luma
-change was `0.01512`, compared with stock `0.01478`. The policy remains
-T31/SC2336-local and can be disabled with `sc2336_mdns_auto=0`.
-Later wall observations were made while storm light was falling and are not
-treated as same-scene regression evidence.
+The recovered reduced-memory MDNS policy is sensor-independent. When
+`isp_memopt=1`, ASS, BGM, and PSN are disabled because their full reference
+planes are not allocated. T31 now packs bit 0 from the ASS control, as the OEM
+driver does, rather than from the unrelated luma confidence threshold. This
+retains the SC2336 stock value `0x00f01100` without a sensor-name check. MDNS
+strength remains controlled through the standard tuning interface.
 
 The latest T31 cycle also corrected three proprietary tuning-ABI hazards:
 

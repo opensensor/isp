@@ -85,53 +85,6 @@ module_param_named(sensor_expo_catchups, sensor_expo_catchups, uint, S_IRUGO);
 MODULE_PARM_DESC(sensor_expo_catchups,
                  "Exposure requests caught while an earlier sensor write was running");
 
-/*
- * SC2336 high-gain temporal-noise profile.
- *
- * The sensor LUT uses the 0x8xx register range for its high-gain stage.  In
- * that stage the OEM-like MDNS ratio of 0x80 leaves fixed walls visibly
- * active; 0xa0 matches the stock flat-region temporal metric without reducing
- * the accepted bright-scene detail.  Keep hysteresis between 0x400 and 0x800
- * so normal AE movement cannot toggle the profile every frame.
- */
-static int sc2336_mdns_auto = 1;
-module_param(sc2336_mdns_auto, int, S_IRUGO);
-MODULE_PARM_DESC(sc2336_mdns_auto,
-                 "Automatically strengthen MDNS in the SC2336 high-gain stage");
-
-static int sc2336_mdns_auto_state = -1;
-extern int tisp_s_mdns_ratio(int ratio);
-
-static void sensor_expo_update_mdns_profile(unsigned int again)
-{
-    int next_state;
-    int ratio;
-
-    if (!sc2336_mdns_auto || !ourISPdev || !ourISPdev->sensor)
-        return;
-    if (strncmp(ourISPdev->sensor->info.name, "sc2336", 6) != 0)
-        return;
-
-    if (again >= 0x800)
-        next_state = 1;
-    else if (again <= 0x400)
-        next_state = 0;
-    else if (sc2336_mdns_auto_state < 0)
-        next_state = 0;
-    else
-        return;
-
-    if (next_state == sc2336_mdns_auto_state)
-        return;
-
-    ratio = next_state ? 0xa0 : 0x80;
-    if (tisp_s_mdns_ratio(ratio) == 0) {
-        sc2336_mdns_auto_state = next_state;
-        pr_info("SC2336 MDNS profile: again=0x%x ratio=%d (%s gain)\n",
-                again, ratio, next_state ? "high" : "normal");
-    }
-}
-
 static void sensor_expo_work_func(struct work_struct *work)
 {
     int ret;
@@ -165,8 +118,6 @@ static void sensor_expo_work_func(struct work_struct *work)
 
         again = ourISPdev->sensor->attr.again;
         it = ourISPdev->sensor->attr.integration_time;
-        sensor_expo_update_mdns_profile(again);
-
         /* The sensor driver's set_again iterates its own LUT with
          * bounds checking against sensor_attr.max_again — no need
          * to clamp here.  The LUT size is sensor-specific (e.g.,
@@ -7261,8 +7212,6 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         if (enable)
             sensor_expo_last_packed = ~0U;
-        if (enable)
-            sc2336_mdns_auto_state = -1;
         ret = stored_sensor_ops.original_ops->video->s_stream(stored_sensor_ops.sensor_sd, enable);
 
         pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);

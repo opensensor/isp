@@ -25,6 +25,7 @@ tx-isp-t31-objs := tx_isp_module.o \
                tx_isp_reg_profile.o \
                tx_isp_frame_layout.o \
                tx_isp_t31_exposure.o \
+	       tx_isp_t31_mdns.o \
 	       tx_isp_t31_adr.o \
                tx_isp_tuning_abi.o \
                tx_isp_vin.o

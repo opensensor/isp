@@ -84,7 +84,9 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - day output has coherent color, geometry, lens shading, and tonal continuity
 - DMSC register `0x4800` is sourced only from the tuning blob's output/debug
   selector; Bayer routing is not synthesized into this register
-- the SC2336 linear-mode MDNS top word matches the same-camera stock oracle
+- reduced-memory MDNS follows the recovered OEM policy for every sensor by
+  disabling ASS, BGM, and PSN when their reference planes are absent; the
+  SC2336 top word remains the same-camera stock oracle
   (`0x7814=0x00f01100`)
 - duplicate sensor exposure tuples are suppressed after the first successful
   write, avoiding redundant 25 Hz SC2336 timing-register transactions
@@ -94,9 +96,8 @@ SC2336 camera through the stock Ingenic userspace and Raptor:
 - frame timestamps are captured at DMA completion instead of at userspace
   dequeue, eliminating scheduler-dependent PTS/DTS jitter and multi-second
   delivery gaps
-- SC2336 gain-stage hysteresis keeps the accepted MDNS ratio `0x80` at normal
-  gain and selects the device-validated `0xa0` profile in the `0x8xx`
-  high-gain stage; `sc2336_mdns_auto=0` disables this local policy
+- MDNS strength remains under the standard tuning control instead of applying
+  a sensor-named gain-stage override
 - a synchronized stock/open capture at approximately 1200 integration lines
   and sensor gain `0xc4` matched the functional DMSC, sharpen, MDNS/YDNS,
   RDNS, SDNS, and BCSH register programming
@@ -211,9 +212,9 @@ then reports scene-responsive exposure and luma instead of zeros.
   fallback is intentionally narrow.
 - Raptor's exposure summary still reports zero WB statistic gains even though
   the main WB ioctl returns live nonzero red/blue gains.
-- The same-light July 30 wall capture measured mean flat-region frame change
-  `0.01512` with the high-gain profile versus stock `0.01478`; continue
-  checking motion/detail tradeoffs as more sensors acquire automatic profiles.
+- Motion-region denoise parity still needs a synchronized stock/open capture;
+  static same-light register and flat-region measurements are not sufficient
+  to validate the MDNS motion classifier.
 - More tuning internals should move into logical files, but extractions must
   retain OEM callback order and be tested on-device.
 - T31's native 64-bit multiply shim can move to the common header only after
