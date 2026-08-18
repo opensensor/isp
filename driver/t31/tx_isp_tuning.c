@@ -317,6 +317,8 @@ int tisp_s_wb_frz(void *in_buf);
 int tisp_g_wb_frz(void *out_buf);
 static int tisp_s_wb_mode(uint32_t mode, uint32_t gain_gr, uint32_t gain_gb);
 static int tisp_g_wb_mode(void *out_buf);
+static u32 tisp_g_wb_stats_packed(void);
+static u32 tisp_g_wb_global_stats_packed(void);
 static int Tiziano_awb_set_gain(void *mf_para, uint32_t point_pos,
 			       const uint32_t *gain_base);
 static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct);
@@ -8570,23 +8572,15 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             ret = apical_isp_awb_zone_statis_g_attr((void __user *)(unsigned long)ctrl->value);
             break;
 
-        case 0x8000005: { /* OEM: pack WB attr words 5/6 into inline value */
-            uint32_t wb_attr[7] = {0};
-
-            ret = tisp_g_wb_attr(wb_attr);
-            if (!ret)
-                ctrl->value = (wb_attr[5] << 16) | (wb_attr[6] & 0xffff);
+        case TX_ISP_TUNING_CMD_WB_STATS:
+            /* OEM words 5/6 are the live Q16 reciprocal gains. */
+            ctrl->value = tisp_g_wb_stats_packed();
             break;
-        }
 
-        case 0x8000009: { /* OEM: pack WB attr words 3/4 into inline value */
-            uint32_t wb_attr[7] = {0};
-
-            ret = tisp_g_wb_attr(wb_attr);
-            if (!ret)
-                ctrl->value = (wb_attr[3] << 16) | (wb_attr[4] & 0xffff);
+        case TX_ISP_TUNING_CMD_WB_GLOBAL_STATS:
+            /* OEM words 3/4 are the global per-zone R/G and B/G ratios. */
+            ctrl->value = tisp_g_wb_global_stats_packed();
             break;
-        }
 
         case 0x800000d: { /* OEM: tisp_g_wb_ct — get WB color temperature (4 bytes) */
             uint32_t ct_val;
@@ -15863,6 +15857,18 @@ int tisp_set_ae_info(void *in_buf)
     memcpy(tisp_ae_ctrls, (u8 *)in_buf + 0xc, 0x98);
 
     return 0;
+}
+
+static u32 tisp_g_wb_stats_packed(void)
+{
+	return tx_isp_tuning_wb_stats_pack(wb_live_gain_gr_inv,
+					   wb_live_gain_gb_inv);
+}
+
+static u32 tisp_g_wb_global_stats_packed(void)
+{
+	return tx_isp_tuning_wb_stats_pack(awb_zone_rg_global,
+					   awb_zone_bg_global);
 }
 
 static int tisp_g_wb_mode(void *out_buf)

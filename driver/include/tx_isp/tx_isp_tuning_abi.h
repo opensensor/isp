@@ -18,6 +18,7 @@ typedef uint64_t u64;
  */
 #define TX_ISP_TUNING_CMD_WB			0x08000004U
 #define TX_ISP_TUNING_CMD_WB_STATS		0x08000005U
+#define TX_ISP_TUNING_CMD_WB_GLOBAL_STATS	0x08000009U
 #define TX_ISP_TUNING_CMD_AE_COMP		0x08000023U
 #define TX_ISP_TUNING_CMD_AE_ROI		0x08000024U
 #define TX_ISP_TUNING_CMD_EXPR			0x08000025U
@@ -211,6 +212,8 @@ int tx_isp_tuning_ev_pack(struct tx_isp_tuning_ev_attr *out, u32 ev,
 
 int tx_isp_tuning_wb_pack(struct tx_isp_tuning_wb *out,
 			  const u32 *words, u32 mode_count);
+
+u32 tx_isp_tuning_wb_stats_pack(u32 r_gain, u32 b_gain);
 
 int tx_isp_tuning_t41_ae_expr_pack(
 	void *out, unsigned int out_bytes,

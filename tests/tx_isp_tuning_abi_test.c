@@ -173,6 +173,9 @@ static void test_response_packers(void)
 	assert(wb.mode == 2);
 	assert(wb.r_gain == 0x2345);
 	assert(wb.b_gain == 0xabcd);
+	assert(tx_isp_tuning_wb_stats_pack(210, 91) == 0x00d2005bU);
+	assert(tx_isp_tuning_wb_stats_pack(0x12345, 0x2abcd) ==
+	       0x2345abcdU);
 	assert(tx_isp_tuning_wb_pack(&wb, wb_words, 2) == -EINVAL);
 
 	assert(tx_isp_tuning_t41_ae_expr_pack(t41_expr, sizeof(t41_expr),

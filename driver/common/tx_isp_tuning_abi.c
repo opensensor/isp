@@ -137,6 +137,11 @@ int tx_isp_tuning_wb_pack(struct tx_isp_tuning_wb *out,
 	return 0;
 }
 
+u32 tx_isp_tuning_wb_stats_pack(u32 r_gain, u32 b_gain)
+{
+	return ((r_gain & 0xffffU) << 16) | (b_gain & 0xffffU);
+}
+
 static void tx_isp_tuning_store_u16(u8 *bytes, unsigned int offset, u16 value)
 {
 	memcpy(bytes + offset, &value, sizeof(value));
