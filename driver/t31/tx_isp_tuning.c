@@ -115,13 +115,6 @@ void tisp_sensor_ctrl_sync(const struct tisp_sensor_info_blob *info)
 }
 EXPORT_SYMBOL(tisp_sensor_ctrl_sync);
 
-static bool tisp_sc2336_oem_profile;
-
-static bool tisp_sc2336_oem_profile_active(void)
-{
-	return tisp_sc2336_oem_profile;
-}
-
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
 extern int isp_memopt;
@@ -195,11 +188,8 @@ static int tisp_force_bypass_dpc = 0;
 module_param_named(force_bypass_dpc, tisp_force_bypass_dpc, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_dpc, "Force DPC (bit 2) bypass for AWB bisection");
 
-/*
- * The SC2336 tuning blob carries a usable LSC mesh. Bypassing it produces
- * broad corner/wall falloff that looks like a moving shadow as AE adapts.
- * Keep the diagnostic override, but match the shipping pipeline by default.
- */
+/* Use the loaded sensor tuning mesh by default. Keep bypass as an explicit
+ * diagnostic override only. */
 static int tisp_force_bypass_lsc;
 module_param_named(force_bypass_lsc, tisp_force_bypass_lsc, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(force_bypass_lsc,
@@ -2764,7 +2754,6 @@ static int tiziano_load_parameters(const char *param_name)
 		std_bin_path = std_path;
 	}
 
-	tisp_sc2336_oem_profile = strstr(std_bin_path, "sc2336") != NULL;
 	ret = tisp_load_single_bin_file(std_bin_path, 0);
 	if (ret)
 		return ret;
@@ -21160,28 +21149,6 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
         system_reg_write((uint32_t)(i + 0x2802) << 1, val);
     }
 
-    if (tisp_sc2336_oem_profile_active()) {
-        bool high_gain = ourISPdev && ourISPdev->tuning_data &&
-                         ourISPdev->tuning_data->total_gain >= 0x20000;
-
-        /* The generic CT detector currently runs beyond the SC2336 tuning
-         * range. Use the two measured OEM CCM anchors while retaining the
-         * generic path for every other T31 sensor. */
-        if (high_gain) {
-            system_reg_write(0x5004, 0x3f0a05e2);
-            system_reg_write(0x5008, 0x3e4b3f14);
-            system_reg_write(0x500c, 0x3e510765);
-            system_reg_write(0x5010, 0x3bee0027);
-            system_reg_write(0x5014, 0x000007e9);
-        } else {
-            system_reg_write(0x5004, 0x00300440);
-            system_reg_write(0x5008, 0x3f4e3f8f);
-            system_reg_write(0x500c, 0x3f1005a4);
-            system_reg_write(0x5010, 0x3e290083);
-            system_reg_write(0x5014, 0x00000551);
-        }
-    }
-
     /* OEM: additional DP configuration when ccm_real == 1 */
     if (ccm_real == 1) {
         system_reg_write(0x5018,
@@ -22858,10 +22825,8 @@ static int tisp_y_sp_sl_exp_cfg(void)
 /* OEM EXACT: tisp_y_sp_std_scope_cfg — reg 0x7004 */
 static int tisp_y_sp_std_scope_cfg(void)
 {
-    /* The SC2336 OEM oracle programs std_scope=7 in the upper halfword.
-     * Its shipped tuning block stores the pair in the opposite order from
-     * the reconstructed generic reader. */
-    system_reg_write(0x7004, 0x00070000);
+    system_reg_write(0x7004, (y_sp_std_cfg_array[0] << 16) |
+                    y_sp_std_cfg_array[1]);
     return 0;
 }
 
