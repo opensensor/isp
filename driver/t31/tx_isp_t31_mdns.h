@@ -14,4 +14,7 @@ u32 tx_isp_t31_mdns_top1(u32 ass_enable, u32 bgm_enable,
 			 u32 psn_enable, u32 psn_max_num,
 			 bool memory_optimized);
 
+void tx_isp_t31_mdns_scale_ratio_table(u32 dst[9], const u32 src[9],
+				       u32 ratio);
+
 #endif
