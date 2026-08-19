@@ -4869,15 +4869,6 @@ static uint32_t tisp_set_sensor_analog_gain(uint32_t requested_gain);
 static uint32_t tisp_set_sensor_digital_gain_short(uint32_t requested_gain);
 extern int tisp_ae_get_y_zone(void *buffer);
 
-/* Helper function implementations */
-/* Helper function implementations */
-static void tisp_dma_cache_sync_helper(int direction, void *addr, size_t size, int flags)
-{
-    /* OEM: indirect vtable call — likely no-op on T31 (XBurst1 cache-coherent DMA).
-     * Matching OEM: don't do real cache operations here. */
-    pr_debug("DMA cache sync: addr=%p, size=%zu\n", addr, size);
-}
-
 void private_complete(struct completion *comp)
 {
     if (comp) {
@@ -34755,9 +34746,9 @@ int ae0_interrupt_hist(void)
     uint32_t ae0_status = system_reg_read(0xa050);
     uint32_t buffer_offset = (ae0_status & 3) << 11;
 
-    /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f48, 0x800, 0) */
+    /* OEM invalidates the selected DMA bank before reading its histogram. */
     void *buffer_addr = (void *)(buffer_offset + data_b2f48);
-    tisp_dma_cache_sync_helper(0, buffer_addr, 0x800, 0);
+    private_dma_cache_sync(NULL, buffer_addr, 0x800, DMA_BIDIRECTIONAL);
 
     /* Binary Ninja: Determine histogram parameters */
     void *hist_base = (void *)data_b2f48;
@@ -34792,8 +34783,8 @@ int ae1_interrupt_static(void)
     uint32_t ae1_status = system_reg_read(0xa850);
     void *buffer_addr = (void *)((ae1_status << 8) & 0x3000) + data_b2f54;
 
-    /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f54, 0x1000, 0) */
-    tisp_dma_cache_sync_helper(0, buffer_addr, 0x1000, 0);
+    /* OEM invalidates the selected DMA bank before reading its statistics. */
+    private_dma_cache_sync(NULL, buffer_addr, 0x1000, DMA_BIDIRECTIONAL);
 
     /* Binary Ninja: tisp_ae1_get_statistics($s0 + data_b2f54, 0xf001f001) */
     tisp_ae1_get_statistics(buffer_addr, 0xf001f001);

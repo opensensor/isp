@@ -198,18 +198,17 @@ u16 integration_time_max
 u16 one_line_expr_in_us
 ```
 
-The recovered histogram path currently reports all samples in bin zero on
-this device.  `tisp_ae_g_luma` therefore uses the already-valid per-zone AE
-weighted mean only when the histogram-derived value is zero.  The live ioctl
-then reports scene-responsive exposure and luma instead of zeros.
+The histogram interrupt invalidates the selected DMA bank before unpacking
+it, matching the OEM driver.  A live T31L/SC2336 probe reported all 518,400
+pixels across 241 nonzero bins and a frame-responsive weighted mean.
+`tisp_ae_g_luma` retains the per-zone AE weighted mean as a defensive fallback
+only when the histogram-derived value is zero.
 
 ## Known Gaps
 
 - T23/T41 still need their own device-backed ownership tests before the full
   T31 queue lifecycle can move behind a common implementation rather than only
   sharing slot-state names.
-- The raw histogram DMA layout still needs recovery; the per-zone luma
-  fallback is intentionally narrow.
 - Raptor's exposure summary still reports zero WB statistic gains even though
   the main WB ioctl returns live nonzero red/blue gains.
 - Motion-region denoise parity still needs a synchronized stock/open capture;
