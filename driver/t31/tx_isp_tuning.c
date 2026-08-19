@@ -4421,7 +4421,6 @@ static struct tisp_sensor_info_blob sensor_info = {
 };
 static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
 static uint32_t data_b0d4c = 4;  /* Sensor height divisor */
-static uint32_t data_b0df8 = 0;    /* Initialization flag */
 
 static u32 tisp_sensor_fps_from_raw(u32 raw_fps)
 {
@@ -34961,8 +34960,10 @@ int tiziano_ae_params_refresh(void)
         memcpy(&ae_comp_ev_list,    p + 0x0e54, 0x28);
         memcpy(&ae_extra_at_list,   p + 0x0ea4, 0x28);
 
-        /* OEM EXACT: Conditional initial state (only on first init) */
-        if (data_b0df8 == 0) {
+        /* OEM 0x52d74: seed the exposure state only during initial setup.
+         * tiziano_ae_dn_params_refresh sets data_a0de8 before calling us so
+         * day/night bank changes preserve the live exposure tuple. */
+        if (data_a0de8 == 0) {
             memcpy(&_ae_result, p + 0x0dd4, 0x18);
             memcpy(&_ae_stat,  p + 0x0dec, 0x14);
             memcpy(&_ae_wm_q,  p + 0x0e00, 0x3c);
@@ -35000,8 +35001,9 @@ int tiziano_ae_params_refresh(void)
         memset(&ae1_comp_ev_list, 0, 0x28);
     }
 
-    /* OEM EXACT: set data_b0df8 = 0 BEFORE the zone spacing loops */
-    data_b0df8 = 0;
+    /* OEM 0x52e08: release the one-shot initialization guard before the
+     * per-frame AE loop resumes. */
+    data_a0de8 = 0;
 
     /* OEM EXACT (end of tiziano_ae_params_refresh @ 0x52b3c):
      * Compute zone column/row spacing from sensor dimensions.
@@ -35063,7 +35065,7 @@ int tiziano_ae_params_refresh(void)
         memset(&ae_extra_at_list_wdr, 0, sizeof(ae_extra_at_list_wdr));
     }
 
-    /* data_b0df8 already set to 0 above (before zone spacing loops) */
+    /* data_a0de8 already set to 0 above (before zone spacing loops) */
 
     pr_debug("tiziano_ae_params_refresh: AE parameters refreshed\n");
     return 0;
