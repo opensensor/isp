@@ -1,15 +1,15 @@
-# Open-Source TX-ISP Drivers for Ingenic T23, T31, T40, and T41
+# Open-Source TX-ISP Drivers for Ingenic T23, T30, T31, T40, and T41
 
 ![Ingenic ISP Logo](./ingenic_isp.webp)
 
 ## Overview
 
 This repository contains open-source reimplementations of the Ingenic TX-ISP
-kernel drivers for T23, T31, T40, and T41 cameras. The active cross-SoC
-refactoring work targets all four device-tested drivers. T31 is organized as a
-modular driver. T23, T40, and T41 retain large recovered core sources, but
-their modules now have separate adapters for shared facilities where
-applicable.
+kernel drivers for T23, T30, T31, T40, and T41 cameras. The active cross-SoC
+refactoring work targets the four device-tested drivers plus the new static T30
+recovery baseline. T31 is organized as a modular driver. T23, T30, T40, and
+T41 retain large recovered core sources, but their modules now have separate
+adapters for shared facilities where applicable.
 
 The project goal is **behavioral equivalence with the OEM driver** while
 supporting both Ingenic's unmodified proprietary `libimp.so` and the fully
@@ -50,6 +50,7 @@ OEM-like daylight image quality, and persistent runtime flip control.
 | SoC | Current validation |
 |---|---|
 | T23 | Device-tested vendor-kernel path with live capture and shared registry, layout, ABI, and tuning primitives; broader sensor and image-quality validation continues. |
+| T30 | Recovered whole-driver baseline builds cleanly against the vendor Linux 3.10.14 tree; final linked audit has no stubs or collapsed functions, but hardware validation is pending. |
 | T31 | Device-tested on vendor Linux 3.10 and compatibility-tested on mainline Linux 7.1; OEM `libimp.so` and OpenIMP both stream, with near-OEM daylight parity demonstrated on SC301IOT. |
 | T40 | Recovered core is integrated with shared adapters; color-path, tuning, and device-matrix work remain active. |
 | T41 | Device-tested 2.5K open-stack baseline plus V4L2 MMAP and DMA-BUF capture; image-quality and delivered-FPS work remain active. |
@@ -57,6 +58,8 @@ OEM-like daylight image quality, and persistent runtime flip control.
 ### Working today
 
 - kernel module architecture is in place
+- the T30 recovery baseline builds and links cleanly with its OEM/recovered
+  assembly audits checked in
 - major ISP subdevices exist and probe
 - core MMIO mapping and IRQ ownership are understood
 - stream bring-up is functional enough for live video
@@ -136,6 +139,7 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 | `driver/include/tx_isp/` | Reviewed cross-SoC interfaces and primitives |
 | `driver/common/` | Shared kernel implementation with explicit SoC adapters |
 | `driver/t23/` | T23 recovered driver and tuning data |
+| `driver/t30/` | T30 recovered whole-driver baseline and binary audits |
 | `driver/t31/` | T31 ISP kernel-driver implementation |
 | `driver/t31/include/` | T31-local headers and data structures |
 | `driver/t40/` | T40 recovered driver, shared-library adapters, and tuning data |
@@ -172,6 +176,7 @@ Important driver files:
 - `driver/include/tx_isp/tx_isp_frame_format.h` — compiler-independent 112/116-byte frame-image format ABI
 - `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
+- `driver/t30/tx_isp_t30_recovered.c` — T30 whole-driver recovery baseline
 - `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
 - `driver/t31/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
 - `driver/t31/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control
@@ -182,7 +187,7 @@ Important driver files:
 
 ## Project Goals
 
-1. Replace the proprietary TX-ISP kernel drivers on supported T23/T31/T40/T41 devices
+1. Replace the proprietary TX-ISP kernel drivers on supported T23/T30/T31/T40/T41 devices
 2. Preserve compatibility with Ingenic's `libimp.so`
 3. Support a fully open kernel-and-userspace path with OpenIMP
 4. Match OEM register sequencing and control behavior closely
@@ -191,8 +196,8 @@ Important driver files:
 
 ## Requirements
 
-- **Active target SoCs:** Ingenic T23, T31, T40, and T41
-- **Kernel focus:** Linux 3.10.14 vendor trees (T23/T31), Linux 4.4.94
+- **Active target SoCs:** Ingenic T23, T30, T31, T40, and T41
+- **Kernel focus:** Linux 3.10.14 vendor trees (T23/T30/T31), Linux 4.4.94
   vendor trees (T40/T41), and the active T31 mainline compatibility path
 - **Userspace ABI targets:** Ingenic `libimp.so` and OpenIMP
 - **Sensor support model:** OEM-style sensor drivers and compatible sensor integrations from the Ingenic SDK ecosystem
@@ -203,6 +208,7 @@ The local build helper selects a per-SoC driver with `SOC`:
 
 ```bash
 SOC=t23 ./build_local.sh
+SOC=t30 ./build_local.sh
 SOC=t31 ./build_local.sh
 SOC=t40 ./build_local.sh
 SOC=t41 ./build_local.sh

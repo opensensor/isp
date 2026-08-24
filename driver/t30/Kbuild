@@ -1,0 +1,11 @@
+obj-m += tx-isp-t30.o
+tx-isp-t30-objs := tx_isp_t30_recovered.o
+
+ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
+ccflags-y += -O0 -fno-tree-dce -fno-ipa-pure-const -fno-ipa-reference
+ccflags-y += -std=gnu99 -w
+ccflags-y += -Wno-error=strict-prototypes
+ccflags-y += -Wno-error=implicit-function-declaration
+ccflags-y += -Wno-error=implicit-int
+ccflags-y += -Wno-error=int-conversion
+ccflags-y += -Wno-error=incompatible-pointer-types

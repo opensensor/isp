@@ -1,0 +1,11 @@
+{
+  "apical_isp_core_ops_s_ctrl": [
+    "apical_isp_core_ops_s_ctrl",
+    "apical_isp_gamma_s_attr_isra_0",
+    "apical_isp_stab_s_attr_isra_0",
+    "apical_isp_ae_weight_s_attr_isra_0"
+  ],
+  "apical_isp_gamma_s_attr.isra.0": "apical_isp_gamma_s_attr_isra_0",
+  "apical_isp_stab_s_attr.isra.0": "apical_isp_stab_s_attr_isra_0",
+  "apical_isp_ae_weight_s_attr.isra.0": "apical_isp_ae_weight_s_attr_isra_0"
+}

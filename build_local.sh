@@ -25,6 +25,7 @@
 #
 # Examples:
 #   ./build_local.sh                       # autodetect everything, build modules
+#   SOC=t30 ./build_local.sh               # build the T30 recovery baseline
 #   SOC=t41 ./build_local.sh               # build the T41 driver instead
 #   ROOT=/path/to/output/t31_foo ./build_local.sh
 #   TH=~/src/thingino-firmware ./build_local.sh clean
