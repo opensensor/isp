@@ -3,6 +3,8 @@ tx-isp-t30-objs := tx_isp_t30_recovered.o \
 	tx_isp_t30_math.o \
 	tx_isp_t30_exports.o \
 	tx_isp_t30_frame.o \
+	tx_isp_t30_io.o \
+	tx_isp_t30_videobuf.o \
 	tx_isp_t30_sinfo.o \
 	tx_isp_t30_subdev.o
 
@@ -11,6 +13,8 @@ ccflags-y += -DTX_ISP_T30_SHARED_SINFO
 ccflags-y += -DTX_ISP_T30_SHARED_SUBDEV
 ccflags-y += -DTX_ISP_T30_SHARED_MATH
 ccflags-y += -DTX_ISP_T30_SHARED_FRAME
+ccflags-y += -DTX_ISP_T30_SHARED_IO
+ccflags-y += -DTX_ISP_T30_SHARED_VIDEOBUF
 ccflags-y += -I$(src)/../include
 ccflags-y += -O0 -fno-tree-dce -fno-ipa-pure-const -fno-ipa-reference
 ccflags-y += -std=gnu99 -w

@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS ?= -O2
 CFLAGS += -std=c99 -Wall -Wextra -Werror
 
-.PHONY: all check clean
+.PHONY: all check clean t30_storage_audit
 
 all: tx_isp_math_test tx_isp_modulation_test \
 	tx_isp_subdev_abi_test tx_isp_subdev_test \
@@ -13,8 +13,9 @@ all: tx_isp_math_test tx_isp_modulation_test \
 	tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 	tx_isp_frame_abi_test tx_isp_frame_channel_test \
 	tx_isp_frame_format_test \
-	tx_isp_frame_layout_test \
-	tx_isp_video_queue_test \
+		tx_isp_frame_layout_test \
+		tx_isp_video_queue_test \
+		tx_isp_region_allocator_test \
 	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_t31_mdns_test \
 	tx_isp_scaler_test
 
@@ -108,6 +109,13 @@ tx_isp_video_queue_test: tx_isp_video_queue_test.c \
 	$(CC) $(CFLAGS) -I../driver/include -o $@ \
 		tx_isp_video_queue_test.c ../driver/common/tx_isp_video_queue.c
 
+tx_isp_region_allocator_test: tx_isp_region_allocator_test.c \
+		../driver/common/tx_isp_region_allocator.c \
+		../driver/include/tx_isp/tx_isp_region_allocator.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ \
+		tx_isp_region_allocator_test.c \
+		../driver/common/tx_isp_region_allocator.c
+
 tx_isp_exposure_test: tx_isp_exposure_test.c \
 		../driver/t31/tx_isp_t31_exposure.c \
 		../driver/t31/tx_isp_t31_exposure.h \
@@ -146,8 +154,9 @@ check: tx_isp_math_test tx_isp_modulation_test \
 		tx_isp_frame_format_test \
 		tx_isp_frame_layout_test \
 		tx_isp_video_queue_test \
-	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
-	tx_isp_t31_mdns_test
+		tx_isp_region_allocator_test \
+		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
+		tx_isp_t31_mdns_test
 	./tx_isp_math_test
 	./tx_isp_modulation_test
 	./tx_isp_subdev_abi_test
@@ -163,10 +172,15 @@ check: tx_isp_math_test tx_isp_modulation_test \
 	./tx_isp_frame_format_test
 	./tx_isp_frame_layout_test
 	./tx_isp_video_queue_test
+	./tx_isp_region_allocator_test
 	./tx_isp_exposure_test
 	./tx_isp_t31_adr_test
 	./tx_isp_t31_mdns_test
 	./tx_isp_scaler_test
+	$(MAKE) t30_storage_audit
+
+t30_storage_audit:
+	../driver/t30/check_storage.sh
 
 clean:
 	$(RM) tx_isp_math_test tx_isp_modulation_test \
@@ -180,5 +194,6 @@ clean:
 		tx_isp_frame_format_test \
 		tx_isp_frame_layout_test \
 		tx_isp_video_queue_test \
+		tx_isp_region_allocator_test \
 		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
 		tx_isp_t31_mdns_test

@@ -104,12 +104,29 @@ matching SC4236 module has no unresolved `private_*`, `tx_isp_*`, log2, or exp2
 dependency after comparison with that export table. The initial recovery
 artifact exported only the four sensor-registry entry points.
 
+The recovered state layout no longer allocates address-named 16 KiB objects.
+The OEM symbol map proves that the `g_abs_50c*` references are fields inside
+the single 12,240-byte `__fw` object and that the `data_4cc*` references are
+bytes inside the 60-byte `stab` object. Mapping those references back to their
+real backing objects reduces linked BSS from 362,608 bytes to 34,720 bytes.
+That is 44 bytes above the OEM module's combined 34,676-byte `.bss + .sbss`
+footprint. `check_storage.sh` rejects new synthetic 16 KiB objects,
+address-named static storage, and inline address-building assembly.
+
+The Apical MMIO functions now live in `tx_isp_t30_io.c` and follow the SDK's
+`system_io.c` raw-access implementation. The shared fixed-region allocator
+replaces the recovered probe-time null dereference with the SDK's twenty-node,
+4 KiB-aligned first-fit policy. Its pure core is host-tested for validation,
+alignment, splitting, exhaustion, descriptor reuse, invalid frees, and
+adjacent-block coalescing; the T30 adapter owns the kernel mutex and reserved
+memory lookup.
+
 ## Validation boundary
 
 This is recovery-grade code. It has a clean static build against the matching
 vendor kernel and toolchain, but it has not been loaded on a T30 camera. Probe,
 streaming, sensor ABI, interrupt behavior, image quality, and OEM behavioral
-parity remain unvalidated until T30 hardware is available. The binary audit
-also shows substantial code and BSS expansion from the deliberately
-unoptimized recovery build, so future refactoring should reduce recovered
-state and replace raw-layout accesses with reviewed types.
+parity remain unvalidated until T30 hardware is available. The deliberately
+unoptimized recovery build still has substantial text expansion, so future
+refactoring should continue replacing raw-layout accesses with reviewed types
+and coherent SDK-backed subsystems.
