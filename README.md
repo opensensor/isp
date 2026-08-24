@@ -96,11 +96,11 @@ OEM-like daylight image quality, and persistent runtime flip control.
   generation-specific events above buffer completion; the common contract
   also owns the fixed 20-byte request-buffer wire object and legacy stream
   command IDs
-- T23, T31, T40, and T41 share checked 32-bit pad and active-link offsets,
+- T23, T30, T31, T40, and T41 share checked 32-bit pad and active-link offsets,
   including the event callback slot used for remote frame-channel dispatch
 - T31 applies evidence-backed SC2336 day/night DMSC correction profiles
-- T23, T40, and T41 link recovered cores with logical shared-library adapter
-  objects
+- T23, T30, T40, and T41 link recovered cores with logical shared-library
+  adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree
 
 ### Still incomplete

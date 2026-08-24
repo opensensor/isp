@@ -2,17 +2,18 @@
 
 ## Purpose
 
-The active T23, T31, T40, and T41 drivers share behavior only where device
-evidence shows that the contract is genuinely common. Shared code owns
-algorithms and small state-machine shells; each SoC adapter continues to own
-addresses, object layouts, tuning data, callbacks, and ordering differences.
+The active T23, T30, T31, T40, and T41 drivers share behavior only where OEM
+artifacts or device evidence show that the contract is genuinely common.
+Shared code owns algorithms and small state-machine shells; each SoC adapter
+continues to own addresses, object layouts, tuning data, callbacks, and
+ordering differences.
 
 ## Current Library
 
 | Unit | Interface | Implementation | Consumers |
 |---|---|---|---|
 | Fixed-point and interpolation math | `tx_isp_math.h` | header-only pure functions | T23, T31, T41 |
-| Sensor registry and checked offset policy | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T31, T40, T41 |
+| Sensor registry and checked offset policy | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T30, T31, T40, T41 |
 | Day/night transition shell | `tx_isp_daynight.h` | `common/tx_isp_daynight.c` | T31, T41 |
 | Ordered register profiles | `tx_isp_reg_profile.h` | `common/tx_isp_reg_profile.c` | T23, T31 |
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
@@ -22,9 +23,9 @@ addresses, object layouts, tuning data, callbacks, and ordering differences.
 | Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 | Capture queue ownership and metadata | `tx_isp_video_queue.h` | `common/tx_isp_video_queue.c` | private/V4L2 adapters (integration pending) |
-| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T31, T40, T41 |
-| Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T31, T40, T41 |
-| Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T40, T41 |
+| Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T30, T31, T40, T41 |
+| Subdevice graph resolver | `tx_isp_subdev.h` | `common/tx_isp_subdev.c` | T23, T30, T31, T40, T41 |
+| Remote pad event resolver | `tx_isp_remote_event.h` | `common/tx_isp_remote_event.c` | T23, T30, T40, T41 |
 | Recovered subdevice readiness | `tx_isp_state.h` | `common/tx_isp_state.c` | T23, T40, T41 |
 
 The common implementation is linked into each TX-ISP module rather than
@@ -43,8 +44,8 @@ remain valid, as required by the real attribute name field.
 The access-policy distinction is explicit in the check. Static metadata skips
 dynamic object and wiring traversal, while extended min/max fps remains an
 independent capability. Register-info wiring takes precedence over attribute
-wiring if both flags are selected. Host coverage locks down the T23, T31, T40,
-and T41 declarations plus every rejected configuration class.
+wiring if both flags are selected. Host coverage locks down the T23, T30, T31,
+T40, and T41 declarations plus every rejected configuration class.
 
 ### Subdevice pad and link ABI
 
@@ -84,16 +85,20 @@ The same interface defines the compiler-independent graph wire objects: an
 8-byte endpoint containing a 32-bit name pointer plus type/index bytes, a
 20-byte source/sink/flag link record, and an 8-byte record-pointer/count set.
 Host tests assert every offset and size; T31 additionally asserts its declared
-vendor structures against the contract at target compile time. T23/T41
+vendor structures against the contract at target compile time. T23/T30/T41
 adapters and T41's recovered link setup use the named offsets.
 
-The adapters keep every physical difference visible. T23 reads 16 subdevice
-pointers at graph offset `0x38` and uses the legacy `0xc8` through `0xd0`
-pad slots. T40 and T41 read their 16 pointers at `0x3c` and use the extended
-`0x100` through `0x108` slots. T31 uses its typed graph and retains its
+The adapters keep every physical difference visible. T23 and T30 read 16
+subdevice pointers at graph offset `0x38` and use the legacy `0xc8` through
+`0xd0` pad slots. T40 and T41 read their 16 pointers at `0x3c` and use the
+extended `0x100` through `0x108` slots. T31 uses its typed graph and retains its
 established raw input/output mapping, including the known reversal relative
 to the declared structure. Pointer validation also remains adapter policy;
 T40 keeps its stricter aligned kernel-address check.
+
+T30's graph, link, and registry adapters are statically validated against the
+matching SDK headers, object code, and recovered module. They remain untested
+on a live camera until T30 hardware is available.
 
 Host tests exercise valid input/output resolution and every failure status.
 One-shot device boots then exercised real graph creation on all three SoCs.

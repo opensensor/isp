@@ -23,6 +23,17 @@ static const struct tx_isp_sinfo_config t23_config = {
 	.static_fps = 25,
 };
 
+static const struct tx_isp_sinfo_config t30_config = {
+	.client_offset = 0x0d4,
+	.attr_offset = 0x200,
+	.width_offset = 0x1cc,
+	.height_offset = 0x1d0,
+	.fps_offset = 0x20c,
+	.adapter_nr_offset = 0x0e0,
+	.attr_name_offset = 0,
+	.attr_chip_id_offset = 4,
+};
+
 static const struct tx_isp_sinfo_config t31_config = {
 	.client_offset = 0x0d4,
 	.attr_offset = 0x268,
@@ -79,6 +90,8 @@ static void test_real_configs(void)
 {
 	EXPECT_STATUS("t23", TX_ISP_SINFO_CONFIG_OK, &t23_config,
 		      t23_config.flags);
+	EXPECT_STATUS("t30", TX_ISP_SINFO_CONFIG_OK, &t30_config,
+		      t30_config.flags);
 	EXPECT_STATUS("t31", TX_ISP_SINFO_CONFIG_OK, &t31_config,
 		      t31_config.flags);
 	EXPECT_STATUS("t40", TX_ISP_SINFO_CONFIG_OK, &t40_config,

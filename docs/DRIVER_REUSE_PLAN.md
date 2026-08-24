@@ -2,12 +2,16 @@
 
 ## Scope
 
-The active refactor covers the working T23, T31, T40, and T41 TX-ISP drivers.
+The active refactor covers the T23, T30, T31, T40, and T41 TX-ISP drivers.
 T31 already has core, CSI, VIC, VIN, frame-source, tuning, and support
-translation units. T23, T40, and T41 still have large recovered core
+translation units. T23, T30, T40, and T41 still have large recovered core
 translation units, but their modules now link separate shared-library adapter
 objects. This gives later extractions stable module boundaries without
 rewriting the recovered pipeline all at once.
+
+T30 currently has static build and SDK/object-code evidence only. Its shared
+adapters cannot receive the live smoke-test coverage required for completion
+until T30 hardware is available.
 
 The goal is one implementation where behavior is genuinely common, with small
 per-SoC adapters for recovered object layouts, register maps, capabilities,
@@ -218,8 +222,11 @@ one typed `struct tx_isp_sinfo_config`:
 
 - T23 supplies fixed SC2336 metadata plus lifecycle callbacks that retain its
   recovered sensor-client creation and cached-state side effects.
+- T30 supplies the client, attribute, dimensions, fps, and adapter offsets
+  confirmed by both its recovered traversal and matching SDK object code.
 - T31 supplies the recovered client, attribute, dimensions, fps, and adapter
   byte offsets.
+- T40 supplies its larger object offsets and register-info wiring layout.
 - T41 supplies its larger recovered layout and enables the extended sensor
   attributes.
 
@@ -229,7 +236,7 @@ missing static geometry, and misaligned object, attribute, extended-fps, or
 register-info offsets. The check follows the actual access policy: zero is a
 valid base-field offset, static metadata suppresses dynamic object traversal,
 and register-info wiring supersedes attribute wiring when both capabilities
-are present. Host tests cover all four active configurations and each failure
+are present. Host tests cover all five active configurations and each failure
 class.
 
 This is source sharing rather than a second runtime module: each TX-ISP module
@@ -271,8 +278,8 @@ one sensor, kept Raptor and the ISP interrupts live, and decoded 358 main
 frames in 12 seconds without a kernel fault.
 
 `driver/common/tx_isp_subdev.c` now owns the name/type/index graph search used
-by all four active generations. Small layout adapters retain T23's graph table
-at `0x38`, the T40/T41 tables at `0x3c`, their legacy/extended subdevice
+by all five active generations. Small layout adapters retain the T23/T30 graph
+table at `0x38`, the T40/T41 tables at `0x3c`, their legacy/extended subdevice
 prefixes, and T31's established raw direction mapping. The common resolver
 validates type, pad storage, and bounds and reports a host-tested failure
 status without owning logging or link mutation.
@@ -468,7 +475,7 @@ need to shape the eventual common interface.
 2. Preserve the existing exported or per-driver entry point as a thin wrapper
    during the first move.
 3. Express generation differences as explicit data, offsets, or callbacks.
-4. Add host tests for pure code and build all four active modules for every
+4. Add host tests for pure code and build all five active modules for every
    shared change.
 5. Run a full consumer smoke test on each affected SoC before declaring a
    kernel-facing extraction complete.

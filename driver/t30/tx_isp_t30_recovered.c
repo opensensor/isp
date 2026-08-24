@@ -53,6 +53,13 @@
 #endif
 #include <asm/uaccess.h>
 
+#ifdef TX_ISP_T30_SHARED_SINFO
+#include "../include/tx_isp/tx_isp_sinfo.h"
+#endif
+#ifdef TX_ISP_T30_SHARED_SUBDEV
+#include "tx_isp_t30_subdev.h"
+#endif
+
 #ifndef __regtrace_stringify
 #define __regtrace_stringify_1(x) #x
 #define __regtrace_stringify(x) __regtrace_stringify_1(x)
@@ -1997,6 +2004,7 @@ static unsigned char __attribute__((aligned(4))) configs[36] = {
     0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
 };
+#ifndef TX_ISP_T30_SHARED_SINFO
 static unsigned char data_50a14[16384];
 static unsigned char data_50ab4[16384];
 static unsigned char data_50b54[16384];
@@ -2008,6 +2016,7 @@ static unsigned char __attribute__((aligned(4))) sinfo_key_name[72] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 static uintptr_t sinfo_root;
+#endif
 struct stab_t {
     uint8_t  b0;
     uint8_t  b1;
@@ -2910,9 +2919,11 @@ static unsigned char __attribute__((aligned(4))) link1[112] = {
     0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0x00, 0x00,
     0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+#ifndef TX_ISP_T30_SHARED_SINFO
 static unsigned char __attribute__((aligned(4))) sinfo_lock[16] = {
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+#endif
 
 /* WHOLE_DRIVER_RECOVERED_GLOBALS */
 static struct file_operations isp_csi_fops;
@@ -5053,7 +5064,9 @@ static uintptr_t lost_cnt;
 static uintptr_t _qlock1;
 static unsigned char tx_isp_last_done[8];
 static uintptr_t chan_done_state;
+#ifndef TX_ISP_T30_SHARED_SINFO
 static unsigned char sinfo_slots[652];
+#endif
 static uintptr_t gb_avg;
 static unsigned char g_abs_50c00[16384];
 static unsigned char __fw[12240];
@@ -5627,7 +5640,11 @@ int32_t tx_isp_video_s_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2);
 int64_t tx_isp_open(uint32_t a0, uintptr_t a1);
 int32_t tx_isp_notify(uint32_t arg1, uint32_t arg2, uint32_t arg3);
+#ifdef TX_ISP_T30_SHARED_SUBDEV
+void *find_subdev_link_pad(void *graph, void *descriptor);
+#else
 int64_t find_subdev_link_pad(uintptr_t a0, uintptr_t a1);
+#endif
 int64_t isp_subdev_init_clks(uintptr_t a0, uintptr_t a1);
 void * tx_isp_unregister_platforms(int32_t *arg1);
 #ifndef REGTRACE_KERNEL_TREE_BUILD
@@ -5646,13 +5663,14 @@ int32_t tx_isp_release(uint32_t a0, uintptr_t a1);
 static long tx_isp_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 int32_t private_reset_tx_isp_module(uint32_t a0);
 int tx_isp_reg_set(void *arg1, int arg2, int arg3, int arg4, int arg5);
-int32_t tx_isp_send_event_to_remote(void *arg1);
+int32_t tx_isp_send_event_to_remote(void *pad, uint32_t event, void *data);
 int32_t tx_isp_module_init(uint32_t *arg1, void *arg2);
 int32_t tx_isp_module_deinit(uint32_t a0);
 int64_t tx_isp_subdev_init(uintptr_t a0, uintptr_t a1, uint32_t a2);
 int32_t tx_isp_subdev_deinit(uintptr_t a0);
 int64_t tx_isp_create_graph_and_nodes(uintptr_t a0);
 int tx_isp_probe(struct platform_device *pdev);
+#ifndef TX_ISP_T30_SHARED_SINFO
 int32_t sinfo_open(int32_t arg1, int32_t arg2);
 int32_t sinfo_count_open(void);
 int sinfo_count_show(struct seq_file *seq);
@@ -5664,6 +5682,7 @@ int32_t tx_isp_sinfo_sensor_bind(uint32_t a0, uint32_t a1);
 int sinfo_show(struct seq_file *seq);
 int32_t tx_isp_sinfo_init(void);
 void* tx_isp_sinfo_exit(void);
+#endif
 int32_t disable_all_frame_buffers(void);
 int32_t apical_get_fw(void);
 int32_t apical_init_calibrations(int32_t arg1);
@@ -6203,6 +6222,7 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)configs + 0x0) = (const void *)&link1;
     *(const void **)((char *)configs + 0x8) = (const void *)&link2;
     *(const void **)((char *)configs + 0x10) = (const void *)&link3;
+#ifndef TX_ISP_T30_SHARED_SINFO
     *(const void **)((char *)sinfo_key_name + 0x0) = (const void *)"name";
     *(const void **)((char *)sinfo_key_name + 0x4) = (const void *)"chip_id";
     *(const void **)((char *)sinfo_key_name + 0x8) = (const void *)"i2c_addr";
@@ -6218,6 +6238,7 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)sinfo_key_name + 0x30) = (const void *)"video_interface";
     *(const void **)((char *)sinfo_key_name + 0x34) = (const void *)"rst_gpio";
     *(const void **)((char *)sinfo_key_name + 0x38) = (const void *)"pwdn_gpio";
+#endif
     *(const void **)((char *)tx_isp_devices + 0x0) = (const void *)&tx_isp_core_platform_device;
     *(const void **)((char *)tx_isp_devices + 0x4) = (const void *)&tx_isp_vic_platform_device;
     *(const void **)((char *)tx_isp_devices + 0x8) = (const void *)&tx_isp_csi_platform_device;
@@ -6516,8 +6537,10 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)link1 + 0x44) = (const void *)"isp-fs";
     *(const void **)((char *)link1 + 0x50) = (const void *)"isp-m3";
     *(const void **)((char *)link1 + 0x58) = (const void *)"isp-fs";
+#ifndef TX_ISP_T30_SHARED_SINFO
     *(const void **)((char *)sinfo_lock + 0x4) = (const void *)((char *)((char *)&sinfo_lock + 0x4));
     *(const void **)((char *)sinfo_lock + 0x8) = (const void *)((char *)((char *)&sinfo_lock + 0x4));
+#endif
 }
 
 static struct file_operations isp_core_tunning_fops = {
@@ -6544,6 +6567,7 @@ static struct file_operations ncu_proc_fops = {
     .read = (ssize_t (*)(struct file *, char __user *, size_t, loff_t *))seq_read,
     .release = (int (*)(struct inode *, struct file *))single_release,
 };
+#ifndef TX_ISP_T30_SHARED_SINFO
 static struct file_operations sinfo_count_fops = {
     .owner = THIS_MODULE,
     .open = (int (*)(struct inode *, struct file *))sinfo_count_open,
@@ -6552,6 +6576,7 @@ static struct file_operations sinfo_fops = {
     .owner = THIS_MODULE,
     .open = (int (*)(struct inode *, struct file *))sinfo_open,
 };
+#endif
 static struct file_operations tx_isp_fops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = (long (*)(struct file *, unsigned int, unsigned long))tx_isp_unlocked_ioctl,
@@ -30135,6 +30160,7 @@ int32_t tx_isp_notify(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	return result;
 }
 
+#ifndef TX_ISP_T30_SHARED_SUBDEV
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001999c origin=fragment_seed original=find_subdev_link_pad */
 int64_t find_subdev_link_pad(uintptr_t a0, uintptr_t a1)
 {
@@ -30271,6 +30297,15 @@ find_subdev_link_pad0xdc:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#else
+void *find_subdev_link_pad(void *graph, void *descriptor)
+{
+	enum tx_isp_subdev_resolve_status status;
+
+	return (void *)tx_isp_t30_resolve_link_pad(
+		(unsigned long)graph, (unsigned long)descriptor, &status);
+}
+#endif /* TX_ISP_T30_SHARED_SUBDEV */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019a88 origin=fragment_seed original=isp_subdev_init_clks */
 int64_t isp_subdev_init_clks(uintptr_t a0, uintptr_t a1)
@@ -30489,34 +30524,53 @@ int32_t subdev_video_destroy_link_isra_0(int32_t *arg1) __asm__("subdev_video_de
 #endif
 int32_t subdev_video_destroy_link_isra_0(int32_t *arg1)
 {
-	int32_t result = arg1[3];
+#ifdef TX_ISP_T30_SHARED_SUBDEV
+	unsigned int source;
+	unsigned int reverse;
+	unsigned int sink;
 
-	if (result != 0) {
-		void *a1_1 = (void *)arg1[0];
-		int32_t *v0 = (int32_t *)arg1[2];
-		void *v1_1 = (void *)arg1[1];
+	if (!arg1 ||
+	    !*(unsigned int *)((char *)arg1 + TX_ISP_ABI_LINK_FLAG_OFFSET))
+		return 0;
 
-		((void **)arg1)[0] = 0;
-		((void **)arg1)[1] = 0;
-		((void **)arg1)[2] = 0;
-		((void **)arg1)[3] = 0;
+	tx_isp_subdev_detach_link(arg1, &source, &reverse, &sink);
+	if (source)
+		*(unsigned char *)((char *)(uintptr_t)source +
+				   TX_ISP_ABI_PAD_STATE_OFFSET) =
+			TX_ISP_ABI_PADSTATE_FREE;
+	if (reverse)
+		tx_isp_subdev_clear_link_endpoints((void *)(uintptr_t)reverse);
+	if (sink)
+		*(unsigned char *)((char *)(uintptr_t)sink +
+				   TX_ISP_ABI_PAD_STATE_OFFSET) =
+			TX_ISP_ABI_PADSTATE_FREE;
+	return 0;
+#else
+	void *source;
+	int32_t *reverse;
+	void *sink;
 
-		*(uintptr_t *)((uintptr_t)a1_1 + 7) = 2;
-
-		if (v0 != 0) {
-			((void **)v0)[0] = 0;
-			((void **)v0)[1] = 0;
-			((void **)v0)[2] = 0;
-			((void **)v0)[3] = 0;
-		}
-
-		result = 2;
-
-		if (v1_1 != 0)
-			*(uintptr_t *)((uintptr_t)v1_1 + 7) = 2;
+	if (!arg1 || !arg1[3])
+		return 0;
+	source = (void *)(uintptr_t)arg1[0];
+	sink = (void *)(uintptr_t)arg1[1];
+	reverse = (int32_t *)(uintptr_t)arg1[2];
+	arg1[0] = 0;
+	arg1[1] = 0;
+	arg1[2] = 0;
+	arg1[3] = 0;
+	if (source)
+		*(unsigned char *)((char *)source + 7) = 2;
+	if (reverse) {
+		reverse[0] = 0;
+		reverse[1] = 0;
+		reverse[2] = 0;
+		reverse[3] = 0;
 	}
-
-	return result;
+	if (sink)
+		*(unsigned char *)((char *)sink + 7) = 2;
+	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019d88 origin=model_output original=tx_isp_video_link_destroy.isra.0 */
@@ -30525,31 +30579,39 @@ int32_t tx_isp_video_link_destroy_isra_0(void *arg1) __asm__("tx_isp_video_link_
 #endif
 int32_t tx_isp_video_link_destroy_isra_0(void *arg1)
 {
-	int32_t idx = *(int32_t *)((char *)arg1 + 0x118);
+	int32_t index = *(int32_t *)((char *)arg1 + 0x118);
+	int32_t *config;
+	int32_t *record;
+	int32_t count;
+	int32_t i;
+	int32_t ret = 0;
 
-	if (idx < 0)
-		return ((char *)&apical_downscaler_lut + 0x1f0);
+	if (index < 0)
+		return 0;
+	if (index >= 3)
+		return -EINVAL;
 
-	int32_t *cfg_base = (int32_t *)((uintptr_t)&configs + (idx << 3));
-	int32_t count = cfg_base[1];
-	int32_t *s1 = &cfg_base[0];
-	int32_t s4 = 0;
+	config = (int32_t *)((char *)&configs + index * 8);
+	record = (int32_t *)(uintptr_t)config[0];
+	count = config[1];
+	for (i = 0; i < count; ++i, record += 5) {
+		void *source = find_subdev_link_pad(arg1, record);
+		void *sink = find_subdev_link_pad(arg1, (char *)record + 8);
 
-	do {
-		void *pad1 = find_subdev_link_pad(arg1, s1);
-		void *pad2 = find_subdev_link_pad(arg1, (char *)s1 + 8);
-
-		if (pad1 != 0 && pad2 != 0) {
-			subdev_video_destroy_link_isra_0((int32_t *)((char *)pad1 + 8));
-			subdev_video_destroy_link_isra_0((int32_t *)((char *)pad2 + 8));
-		}
-
-		s4 += 1;
-		s1 = (int32_t *)((char *)s1 + 20);
-	} while (count != s4);
+		if (!source || !sink)
+			continue;
+		ret = subdev_video_destroy_link_isra_0(
+			(int32_t *)((char *)source + 8));
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+		ret = subdev_video_destroy_link_isra_0(
+			(int32_t *)((char *)sink + 8));
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+	}
 
 	*(int32_t *)((char *)arg1 + 0x118) = -1;
-	return -1;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019e64 origin=fragment_seed original=tx_isp_release */
@@ -31840,13 +31902,32 @@ int tx_isp_reg_set(void *arg1, int arg2, int arg3, int arg4, int arg5)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ab58 origin=model_output original=tx_isp_send_event_to_remote */
-int32_t tx_isp_send_event_to_remote(void *arg1)
+#ifdef TX_ISP_T30_SHARED_SUBDEV
+static int tx_isp_t30_remote_pointer_valid(unsigned long address)
 {
+	return address >= 0x80000000UL && address < 0xfffff001UL &&
+	       !(address & (sizeof(unsigned int) - 1));
+}
+#endif
+
+int32_t tx_isp_send_event_to_remote(void *pad, uint32_t event, void *data)
+{
+#ifdef TX_ISP_T30_SHARED_SUBDEV
+	struct tx_isp_remote_event_target target;
+	enum tx_isp_remote_event_status status;
+
+	status = tx_isp_t30_resolve_remote_event(
+		pad, tx_isp_t30_remote_pointer_valid, &target);
+	if (status != TX_ISP_REMOTE_EVENT_OK)
+		return -ENOIOCTLCMD;
+	return ((tx_isp_remote_event_handler)(uintptr_t)target.handler)(
+		target.pad, event, data);
+#else
 	void *a0;
 	int32_t (*fn)(int);
 
-	if (arg1 != 0) {
-		a0 = *(void **)(arg1 + 0xc);
+	if (pad != 0) {
+		a0 = *(void **)(pad + 0xc);
 		if (a0 != 0) {
 			fn = *(void (**)(int))(a0 + 0x1c);
 			if (fn != 0)
@@ -31854,6 +31935,7 @@ int32_t tx_isp_send_event_to_remote(void *arg1)
 		}
 	}
 	return -515;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ab88 origin=model_output original=tx_isp_module_init */
@@ -32920,6 +33002,11 @@ int tx_isp_probe(struct platform_device *pdev)
     return ret;
 }
 
+#ifndef TX_ISP_T30_SHARED_SINFO
+/*
+ * Keep the raw recovery candidates available for binary-audit provenance.
+ * The kernel build uses the checked shared registry in tx_isp_t30_sinfo.c.
+ */
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b880 origin=model_output original=sinfo_open */
 int32_t sinfo_open(int32_t arg1, int32_t arg2)
 {
@@ -33488,6 +33575,7 @@ tx_isp_sinfo_exit0x74:
 
     return (void*)v0;
 }
+#endif /* !TX_ISP_T30_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001c160 origin=model_output original=disable_all_frame_buffers */
 int32_t disable_all_frame_buffers(void)
@@ -54358,7 +54446,12 @@ int32_t init_module(void)
 		return ret;
 	}
 
-	tx_isp_sinfo_init();
+	r = tx_isp_sinfo_init();
+	if (r != 0) {
+		private_platform_driver_unregister(&tx_isp_driver);
+		private_platform_device_unregister(&tx_isp_platform_device);
+		return r;
+	}
 	return 0;
 }
 

@@ -34,8 +34,9 @@ Expected artifact:
 
 `audit/reconstruction_audit.*` records the automated run before manual repair.
 It identified 10 stub candidates and 11 collapsed candidates in isolation.
-`audit/binary_audit.*` is the authoritative post-repair audit of the final
-linked module. Using the repository's standard thresholds, it reports:
+`audit/binary_audit.*` is the authoritative post-repair audit of the recovery
+baseline before the shared-library refactor. At that checkpoint, using the
+repository's standard thresholds, it reports:
 
 - 847 OEM and 858 recovered function symbols
 - 824 direct or explicitly mapped matches
@@ -58,6 +59,24 @@ The repair pass also:
 - replaced the decompiler's `.text` address-building inline assembly with
   direct source-backed sensor-event dispatch
 - removed the two unexpected modpost dependencies introduced by model output
+
+## Shared-library refactor
+
+The T30 module now links thin adapters for two behaviorally common subsystems:
+
+- `tx_isp_t30_sinfo.c` supplies the T30 sensor-object offsets to the checked
+  shared registry and owns the six exports consumed by matching sensor modules.
+- `tx_isp_t30_subdev.c` supplies the legacy pad layout and graph-table offset
+  to the shared endpoint and remote-event resolvers.
+
+The recovered registry candidates remain under a build-time guard for audit
+provenance, but they are no longer linked. This removes their malformed lock,
+procfs, count, and slot logic, reduces linked BSS by roughly 49 KiB, and makes
+registry allocation failure unwind the platform driver and device. The remote
+event entry point now preserves and forwards its pad, event, and data arguments
+instead of calling the recovered one-argument stub. Link teardown now uses the
+shared endpoint detach primitive, preserves the link-state word, updates the
+one-byte pad states, and returns the OEM success value.
 
 ## Validation boundary
 

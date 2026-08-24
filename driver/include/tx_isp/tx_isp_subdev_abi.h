@@ -2,7 +2,7 @@
 #define TX_ISP_SUBDEV_ABI_H
 
 /*
- * Recovered TX-ISP subdevice ABI facts shared by the four supported SoCs.
+ * Recovered TX-ISP subdevice ABI facts shared by the five supported SoCs.
  *
  * These are byte offsets in objects exchanged with OEM modules, not a
  * suggested C object model.  Keep the two pad slots physically named here:
@@ -39,7 +39,7 @@
 #define TX_ISP_ABI_LINK_STATE_OFFSET             0x10
 #define TX_ISP_ABI_LINK_SIZE                     0x14
 
-/* T23 and T31 share this recovered subdevice prefix. */
+/* T23, T30, and T31 share this recovered subdevice prefix. */
 #define TX_ISP_ABI_SUBDEV_NAME_OFFSET           0x08
 #define TX_ISP_ABI_LEGACY_SUBDEV_IRQDEV_OFFSET  0x80
 #define TX_ISP_ABI_LEGACY_SUBDEV_CLOCKS_OFFSET  0xbc

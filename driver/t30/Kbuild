@@ -1,7 +1,12 @@
 obj-m += tx-isp-t30.o
-tx-isp-t30-objs := tx_isp_t30_recovered.o
+tx-isp-t30-objs := tx_isp_t30_recovered.o \
+	tx_isp_t30_sinfo.o \
+	tx_isp_t30_subdev.o
 
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
+ccflags-y += -DTX_ISP_T30_SHARED_SINFO
+ccflags-y += -DTX_ISP_T30_SHARED_SUBDEV
+ccflags-y += -I$(src)/../include
 ccflags-y += -O0 -fno-tree-dce -fno-ipa-pure-const -fno-ipa-reference
 ccflags-y += -std=gnu99 -w
 ccflags-y += -Wno-error=strict-prototypes
