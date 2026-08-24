@@ -509,6 +509,71 @@ static void test_fixed_point_exp2(void)
 	}
 }
 
+static void test_legacy_apical_math(void)
+{
+	unsigned int seed = 0x30a91c5dU;
+	unsigned int iteration;
+	unsigned int value;
+	unsigned int expected_position;
+
+	assert(tx_isp_leading_one_u32(0) == 0);
+	assert(tx_isp_leading_one_u32(1) == 0);
+	assert(tx_isp_leading_one_u32(2) == 1);
+	assert(tx_isp_leading_one_u32(0x80000000U) == 31);
+	assert(tx_isp_leading_one_u64(0) == 0);
+	assert(tx_isp_leading_one_u64(1ULL << 40) == 40);
+	assert(tx_isp_leading_one_u64(1ULL << 63) == 63);
+	for (iteration = 0; iteration < 10000U; iteration++) {
+		unsigned int scan;
+
+		seed = seed * 1664525U + 1013904223U;
+		value = seed ? seed : 1U;
+		scan = value;
+		expected_position = 0;
+		while (scan > 1U) {
+			scan >>= 1;
+			expected_position++;
+		}
+		assert(tx_isp_leading_one_u32(value) == expected_position);
+	}
+
+	assert(tx_isp_isqrt_u32(0) == 0);
+	assert(tx_isp_isqrt_u32(1) == 1);
+	assert(tx_isp_isqrt_u32(2) == 1);
+	assert(tx_isp_isqrt_u32(3) == 1);
+	assert(tx_isp_isqrt_u32(4) == 2);
+	assert(tx_isp_isqrt_u32(0xfffe0000U) == 0xfffeU);
+	assert(tx_isp_isqrt_u32(0xffffffffU) == 0xffffU);
+	for (value = 0; value <= 0xffffU; value++) {
+		unsigned int root = tx_isp_isqrt_u16((unsigned short)value);
+
+		assert(root * root <= value);
+		if (root != 0xffU)
+			assert((root + 1U) * (root + 1U) > value);
+	}
+
+	assert(tx_isp_log_u16_q4(0) == 0);
+	assert(tx_isp_log_u16_q4(1) == 0);
+	assert(tx_isp_log_u16_q4(2) == 16);
+	assert(tx_isp_log_u16_q4(3) == 24);
+	assert(tx_isp_log_u16_q4(4) == 32);
+	assert(tx_isp_log_u16_q4(0xffffU) == 0xffU);
+
+	assert(tx_isp_multiply_fixed_u32(0x180U, 0x200U, 8) ==
+	       0x300U);
+	assert(tx_isp_multiply_fixed_u32(0xffffffffU, 2U, 1) ==
+	       0xffffffffU);
+	assert(tx_isp_multiply_fixed_u32(1, 1, 64) == 0);
+	assert(tx_isp_solve_linear_a_s32(20, 10, 4, 2, 5) == 160);
+	assert(tx_isp_solve_linear_a_s32(20, 10, 4, 4, 5) == 4);
+	assert(tx_isp_solve_linear_b_s32(20, 160, 4, 5) == 0);
+	assert(tx_isp_div_fixed_u32(3, 2, 8) == 384);
+	assert(tx_isp_div_fixed_u32(3, 0, 8) == 768);
+	assert(tx_isp_nth_root_045_s32(16, 4) == 64);
+	assert(tx_isp_line_offset_u16(1920, 2) == 3840);
+	assert(tx_isp_line_offset_u16(1921, 2) == 3968);
+}
+
 static void test_ratio_q7(void)
 {
 	unsigned int ratio;
@@ -586,6 +651,7 @@ int main(void)
 	test_fixed_point_divide();
 	test_fixed_point_log2();
 	test_fixed_point_exp2();
+	test_legacy_apical_math();
 	test_ratio_q7();
 	test_reference_equivalence();
 	puts("tx_isp_math_test: ok");

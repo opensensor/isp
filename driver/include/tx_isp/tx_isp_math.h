@@ -640,6 +640,181 @@ tx_isp_fixdiv_oem_u32(unsigned int point_pos, unsigned int numerator,
 }
 
 /*
+ * Legacy Apical scalar helpers used by the T20/T30-era firmware.  These are
+ * kept independent of Linux types so their arithmetic can be locked down by
+ * host tests and reused by any generation adapter with the same ABI.
+ */
+static inline unsigned char tx_isp_leading_one_u32(unsigned int value)
+{
+	unsigned char position = 0;
+
+	if (value >= (1U << 16)) {
+		value >>= 16;
+		position += 16;
+	}
+	if (value >= (1U << 8)) {
+		value >>= 8;
+		position += 8;
+	}
+	if (value >= (1U << 4)) {
+		value >>= 4;
+		position += 4;
+	}
+	if (value >= (1U << 2)) {
+		value >>= 2;
+		position += 2;
+	}
+	if (value >= (1U << 1))
+		position++;
+
+	return position;
+}
+
+static inline int tx_isp_leading_one_u64(unsigned long long value)
+{
+	int position = 0;
+
+	if (value >= (1ULL << 32)) {
+		value >>= 32;
+		position += 32;
+	}
+	if (value >= (1ULL << 16)) {
+		value >>= 16;
+		position += 16;
+	}
+	if (value >= (1ULL << 8)) {
+		value >>= 8;
+		position += 8;
+	}
+	if (value >= (1ULL << 4)) {
+		value >>= 4;
+		position += 4;
+	}
+	if (value >= (1ULL << 2)) {
+		value >>= 2;
+		position += 2;
+	}
+	if (value >= (1ULL << 1))
+		position++;
+
+	return position;
+}
+
+static inline unsigned short tx_isp_isqrt_u32(unsigned int value)
+{
+	unsigned int result = 0;
+	unsigned int bit;
+
+	for (bit = 0; bit < 16U; bit++) {
+		unsigned int candidate = result + (0x8000U >> bit);
+
+		if (candidate * candidate <= value)
+			result = candidate;
+	}
+
+	return (unsigned short)result;
+}
+
+static inline unsigned char tx_isp_isqrt_u16(unsigned short value)
+{
+	unsigned int result = 0;
+	unsigned int bit;
+
+	for (bit = 0; bit < 8U; bit++) {
+		unsigned int candidate = result + (0x80U >> bit);
+
+		if (candidate * candidate <= value)
+			result = candidate;
+	}
+
+	return (unsigned char)result;
+}
+
+static inline unsigned char tx_isp_log_u16_q4(unsigned short value)
+{
+	unsigned int result = 0;
+	unsigned int bit;
+
+	for (bit = 0; bit < 16U; bit++) {
+		unsigned int base = 1U << bit;
+
+		if (base < value)
+			result = (bit << 4) - 16U +
+				 ((unsigned int)value << 4) / base;
+	}
+
+	return (unsigned char)result;
+}
+
+static inline unsigned int
+tx_isp_multiply_fixed_u32(unsigned int first, unsigned int second,
+			  unsigned int output_fraction)
+{
+	if (output_fraction >= 64U)
+		return 0;
+
+	return (unsigned int)(((unsigned long long)first * second) >>
+			      output_fraction);
+}
+
+static inline int
+tx_isp_solve_linear_a_s32(int y1, int y2, int x1, int x2,
+			   int fraction_size)
+{
+	unsigned int numerator;
+	int denominator;
+
+	if (x1 == x2)
+		return x1;
+	numerator = ((unsigned int)y1 - (unsigned int)y2) <<
+		    ((unsigned int)fraction_size & 31U);
+	denominator = (int)((unsigned int)x1 - (unsigned int)x2);
+	return (int)numerator / denominator;
+}
+
+static inline int
+tx_isp_solve_linear_b_s32(int y1, int slope, int x1,
+			   int fraction_size)
+{
+	unsigned int intercept;
+
+	intercept = (unsigned int)y1 <<
+		    ((unsigned int)fraction_size & 31U);
+	intercept -= (unsigned int)slope * (unsigned int)x1;
+	return (int)intercept;
+}
+
+static inline unsigned int
+tx_isp_div_fixed_u32(unsigned int numerator, unsigned int denominator,
+		     int fraction_size)
+{
+	unsigned int shift = (unsigned int)fraction_size & 31U;
+
+	if (!denominator)
+		return numerator << shift;
+	return tx_isp_fixdiv_u32(shift, numerator, denominator);
+}
+
+static inline int tx_isp_nth_root_045_s32(int value, int fraction_size)
+{
+	unsigned int shift = (unsigned int)fraction_size & 31U;
+	int scaled = (int)((unsigned int)value << shift);
+	unsigned int result = 1U << shift;
+
+	result += (unsigned int)(scaled >> 2);
+	result -= (unsigned int)(scaled >> 4);
+	return (int)result;
+}
+
+static inline unsigned short
+tx_isp_line_offset_u16(unsigned short line_length,
+		       unsigned char bytes_per_pixel)
+{
+	return (unsigned short)(((unsigned int)line_length * bytes_per_pixel +
+				 127U) & 0xff80U);
+}
+
+/*
  * Three-segment Q7 strength blend used by the newer tuning engines.
  *
  * ratio 0..128 fades from zero to `strength`; ratio 128..255 fades from

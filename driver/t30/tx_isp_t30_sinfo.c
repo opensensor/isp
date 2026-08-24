@@ -4,7 +4,7 @@
  * The offsets are the T30 Linux 3.10.14 MIPS32 sensor ABI.  They are visible
  * both in the recovered sinfo_show() traversal and in the matching SDK's
  * tx-isp-sinfo.o instructions.  Registry state, procfs publication, and the
- * six sensor-module ABI entry points remain generation-neutral.
+ * four sensor-module ABI entry points remain generation-neutral.
  */
 
 #include <linux/module.h>

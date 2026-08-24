@@ -13,6 +13,10 @@
 #define TX_ISP_FRAME_EVENT_QUEUE_BUFFER		0x03000005U
 #define TX_ISP_FRAME_EVENT_BUFFER_DONE		0x03000006U
 
+/* T30-qualified extensions; later generations assign their tail differently. */
+#define TX_ISP_T30_FRAME_EVENT_FREE_BUFFER	0x03000007U
+#define TX_ISP_T30_FRAME_EVENT_SET_BANKS	0x03000008U
+
 /* Buffer ownership values recovered from the legacy frame-channel ABI. */
 enum tx_isp_frame_slot_state {
 	TX_ISP_FRAME_SLOT_FREE = 0,
@@ -47,7 +51,7 @@ struct tx_isp_frame_request_wire {
 #define TX_ISP_FRAME_STREAM_TYPE_BYTES		0x04U
 
 /*
- * T23/T31 retain the V4L2 ('V') ioctl family.  T41 uses its private 'T'
+ * T23/T30/T31 retain the V4L2 ('V') ioctl family.  T41 uses its private 'T'
  * family and the 116-byte extended format.
  */
 #define TX_ISP_FRAME_IOCTL_LEGACY_SET_FORMAT	0xc07056c3U

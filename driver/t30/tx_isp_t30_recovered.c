@@ -59,6 +59,13 @@
 #ifdef TX_ISP_T30_SHARED_SUBDEV
 #include "tx_isp_t30_subdev.h"
 #endif
+#ifdef TX_ISP_T30_SHARED_MATH
+#include "tx_isp_t30_math.h"
+#endif
+#ifdef TX_ISP_T30_SHARED_FRAME
+#include "../include/tx_isp/tx_isp_frame_channel.h"
+#include "tx_isp_t30_frame.h"
+#endif
 
 #ifndef __regtrace_stringify
 #define __regtrace_stringify_1(x) #x
@@ -5494,7 +5501,9 @@ int32_t system_chardev_init(void);
 int system_chardev_read(void *buf);
 int system_chardev_write(int arg1);
 int32_t system_chardev_destroy(void);
+#ifndef TX_ISP_T30_SHARED_MATH
 uint32_t private_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3);
+#endif
 int private_clk_enable(struct clk *clk);
 void private_clk_disable(struct clk *clk);
 void private_clk_put(struct clk *clk);
@@ -5511,12 +5520,14 @@ int private_jzgpio_set_func(int port, int func, unsigned long pins);
 void private_msleep(unsigned int msecs);
 bool private_capable(int cap);
 int32_t private_driver_get_interface(void);
+#ifndef TX_ISP_T30_SHARED_MATH
 uint32_t private_leading_one_position(uint32_t arg1);
 uint32_t private_log2_int_to_fixed(uint32_t arg1);
 int32_t private_log2_fixed_to_fixed(uint32_t arg1, int32_t arg2, int32_t arg3);
 int32_t private_leading_one_position_64(uint32_t a0, uint32_t a1);
 int32_t private_log2_int_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, int32_t arg4);
 int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg3, int32_t arg4);
+#endif
 int private_platform_driver_register(struct platform_driver *drv);
 void private_platform_driver_unregister(struct platform_driver *drv);
 void private_platform_set_drvdata(struct platform_device *pdev, void *data);
@@ -5711,6 +5722,7 @@ int32_t apical_fw_process(int32_t *arg1);
 uint32_t apical_fw_raise_event(void *arg1, int32_t arg2);
 int32_t apical_interrupt_frame_end(int32_t *arg1);
 uint32_t apical_isp_raise_event(void *arg1, int32_t arg2);
+#ifndef TX_ISP_T30_SHARED_MATH
 uint32_t calc_modulation_u16(uint16_t val, uint16_t *table, int32_t count);
 uint32_t calc_modulation_u32(uint32_t arg1, int32_t *arg2, uint32_t arg3);
 uint32_t calc_scaled_modulation_u16(int16_t arg1, int16_t arg2, int16_t arg3, int16_t *arg4, int32_t arg5);
@@ -5732,6 +5744,7 @@ int32_t solving_lin_equation_b(int32_t arg1, int32_t arg2, int32_t arg3, int32_t
 int32_t div_fixed(int32_t arg1, int32_t arg2, int32_t arg3);
 int32_t solving_nth_root_045(int32_t arg1, int32_t arg2);
 int32_t line_offset(uint32_t a0, uint32_t a1);
+#endif
 int32_t apical_cosine(int32_t arg1);
 int32_t apical_sine(int32_t arg1);
 uint32_t apical_event_queue_push(int32_t *arg1, char arg2);
@@ -14771,7 +14784,7 @@ ispcore_frame_channel_streamoff_isra_00x188:
     v0 = *(uint32_t *)((char *)s0 + 112);
 
     /* fragment 31: Branch */
-    s7 = 50331648;
+    s7 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
     if (a3 != v0) { goto ispcore_frame_channel_streamoff_isra_00x374; }
 
     /* fragment 32: Arithmetic */
@@ -21696,6 +21709,7 @@ int32_t system_chardev_destroy(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000112f0 origin=model_output original=private_math_exp2 */
+#ifndef TX_ISP_T30_SHARED_MATH
 uint32_t private_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3)
 {
     extern uint32_t __lshrdi3(uint32_t lo, uint32_t hi);
@@ -21728,6 +21742,7 @@ uint32_t private_math_exp2(int32_t arg1, int32_t arg2, int32_t arg3)
 
     return s1_2 >> (shift & 0x1f);
 }
+#endif
 
 int private_clk_enable(struct clk *clk)
 {
@@ -21848,6 +21863,7 @@ do_printk:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011554 origin=model_output original=private_leading_one_position */
+#ifndef TX_ISP_T30_SHARED_MATH
 uint32_t private_leading_one_position(uint32_t arg1)
 {
 	uint32_t *result;
@@ -22052,6 +22068,7 @@ int32_t private_log2_fixed_to_fixed_64(uint32_t arg1, uint32_t arg2, int32_t arg
 	tmp = arg3 << (shift & 0x1f);
 	return r - tmp;
 }
+#endif
 
 int private_platform_driver_register(struct platform_driver *drv)
 {
@@ -22891,7 +22908,7 @@ int32_t ncu_frame_channel_streamoff(void *arg1)
         }
 
         if (*(uint32_t *)((uintptr_t)s3 + 0x14) & 0x10)
-            ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s3), (uintptr_t)(0x3000007), (uintptr_t)(0));
+            ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s3), (uintptr_t)(TX_ISP_T30_FRAME_EVENT_FREE_BUFFER), (uintptr_t)(0));
 
         uint32_t buf = *(uint32_t *)((char *)s0 + 0x1a4);
         if (buf != 0) {
@@ -22899,7 +22916,7 @@ int32_t ncu_frame_channel_streamoff(void *arg1)
             *(uint32_t *)((char *)s0 + 0x1a4) = 0;
         }
 
-        int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s3), (uintptr_t)(0x3000004), (uintptr_t)(0));
+        int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s3), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
 
         if (result != 0 && result != 0xfffffdfd) {
             private_mutex_unlock((struct mutex *)((char *)s0 + 0x1a8));
@@ -23363,7 +23380,7 @@ ncu_pad_event_handle0xe8:
 ncu_pad_event_handle0x150:
     /* fragment 31: CallSetup */
     s0 = *(uint32_t *)((char *)(s1) + 32);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(v0) + 208), 50331648 + 2, s3); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(v0) + 208), TX_ISP_FRAME_EVENT_SET_FORMAT, s3); /* jalr target resolved by relocation */
 
     /* fragment 32: Branch */
     s2 = v0;
@@ -23544,7 +23561,7 @@ ncu_pad_event_handle0x354:
     if (v0 == 0) { goto ncu_pad_event_handle0x508; }
 
     /* fragment 72: Arithmetic */
-    a1 = 50331648;
+    a1 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
     s7 = (uintptr_t)&tx_isp_send_event_to_remote;
     a1 = a1 + 5;
     s7 = s7;
@@ -23608,7 +23625,7 @@ ncu_pad_event_handle0x3c4:
 
 ncu_pad_event_handle0x490:
     /* fragment 85: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(s5, 50331648 + 3, 0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(s5, TX_ISP_FRAME_EVENT_STREAM_ON, 0); /* jalr target resolved by relocation */
 
     /* fragment 86: Branch */
     s2 = v0;
@@ -23632,7 +23649,7 @@ ncu_pad_event_handle0x4cc:
 
 ncu_pad_event_handle0x4d0:
     /* fragment 92: Branch */
-    a1 = 50331648;
+    a1 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
     if (v0 == 0) { goto ncu_pad_event_handle0x31c; }
 
     /* fragment 93: CallSetup */
@@ -23662,7 +23679,7 @@ ncu_pad_event_handle0x528:
 
     /* fragment 99: Arithmetic */
     s2 = v0;
-    v0 = 50331648;
+    v0 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
 
     /* fragment 100: Branch */
     a1 = (uintptr_t)v0 | 5;
@@ -23898,7 +23915,7 @@ ncu_pad_event_handle0x7e0:
     if (a2 == 0) { goto ncu_pad_event_handle0x854; }
 
     /* fragment 152: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(s0, 50331648 + 5); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(s0, TX_ISP_FRAME_EVENT_QUEUE_BUFFER); /* jalr target resolved by relocation */
 
     /* fragment 153: MemoryAccess */
     v0 = *(uint32_t *)((char *)s1 + 448);
@@ -24352,7 +24369,7 @@ int ldc_frame_channel_streamoff(void *arg1)
 	uint8_t s4_state = *(uint8_t *)((char *)s4 + 7);
 
 	if (s4_state == 4 && *(uint8_t *)((char *)arg1 + 7) == s4_state) {
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s4), (uintptr_t)(0x3000007), (uintptr_t)(0));
+		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s4), (uintptr_t)(TX_ISP_T30_FRAME_EVENT_FREE_BUFFER), (uintptr_t)(0));
 		unsigned long flags = arch_local_irq_save();
 		*(uint32_t *)(entry_gp + 0x14) += 1;
 		*(uint32_t *)((char *)s0 + 0x178) = 3;
@@ -24369,7 +24386,7 @@ int ldc_frame_channel_streamoff(void *arg1)
 			msleep(2);
 		}
 
-		int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s4), (uintptr_t)(0x3000004), (uintptr_t)(0));
+		int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s4), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
 
 		if (result != 0 && result != 0xfffffdfd) {
 			private_mutex_unlock((struct mutex *)((char *)s0 + 0x1dc));
@@ -25051,8 +25068,8 @@ int32_t ldc_core_interrupt_service_routine(uintptr_t a0)
     if (v0 == 0) { goto ldc_core_interrupt_service_routine0x88; }
 
     /* fragment 3: CallSetup */
-    s4 = 50331648;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(a0) + 204), 50331648 + 6, *(uint32_t *)((char *)(s0) + 472)); /* jalr target resolved by relocation */
+    s4 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
+    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(a0) + 204), TX_ISP_FRAME_EVENT_BUFFER_DONE, *(uint32_t *)((char *)(s0) + 472)); /* jalr target resolved by relocation */
 
     /* fragment 4: CallSetup */
     *(uint32_t *)((char *)s0 + 472) = 0;
@@ -25119,11 +25136,11 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
     int32_t ret = 0;
     uint8_t type = *(uint8_t *)((char *)arg1 + 5);
 
-    if (type == 0 || (uint32_t)(arg2 - 0x3000001) >= 7)
+    if (type == 0 || (uint32_t)(arg2 - TX_ISP_FRAME_EVENT_GET_FORMAT) >= 7)
         return 0;
 
     switch (arg2) {
-    case 0x3000001: {
+    case TX_ISP_FRAME_EVENT_GET_FORMAT: {
         if (arg3 == 0)
             return 0;
         int32_t *dev = *(int32_t **)((char *)arg1 + 0x20);
@@ -25132,7 +25149,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
         memcpy(arg3, (char *)dev + 0x124, 0x4c);
         return 0;
     }
-    case 0x3000002: {
+    case TX_ISP_FRAME_EVENT_SET_FORMAT: {
         if (arg1 == 0 || (uint32_t)arg1 >= 0xfffff001)
             return -1;
         if (type != 2)
@@ -25169,14 +25186,14 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
                        arg3[1], arg3[2], max_w, max_h);
             return -22;
         }
-        int32_t r = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(uint32_t *)((char *)arg1 + 0xd0)), (uintptr_t)(0x3000002), (uintptr_t)(arg3));
+        int32_t r = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(uint32_t *)((char *)arg1 + 0xd0)), (uintptr_t)(TX_ISP_FRAME_EVENT_SET_FORMAT), (uintptr_t)(arg3));
         if (r != 0 && r != -515)
             return r;
         memcpy((char *)dev + 0x124, arg3, 0x4c);
         *(int32_t *)((uintptr_t)dev + 0x170) = arg3[1] * arg3[2];
         return 0;
     }
-    case 0x3000003: {
+    case TX_ISP_FRAME_EVENT_STREAM_ON: {
         if (type != 2)
             return 0;
         int32_t *dev = *(int32_t **)((char *)arg1 + 0x20);
@@ -25250,7 +25267,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
             *(int32_t *)((char *)dev + 0x1d8) = 0;
             *(int32_t *)((char *)dev + 0x1cc) = 0;
             private_spin_unlock_irqrestore((spinlock_t *)((char *)dev + 0x1dc), flags);
-            int32_t r = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(0x3000003), (uintptr_t)(0));
+            int32_t r = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_ON), (uintptr_t)(0));
             if (r == 0 || r == -515) {
                 private_mutex_unlock((struct mutex *)((char *)dev + 0x1dc));
                 return 0;
@@ -25258,7 +25275,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
             if (*(int32_t *)((char *)dev + 0x80) != 0)
                 (*(void (**)(void *))(*(int32_t *)((char *)dev + 0x88)))((void *)((char *)dev + 0x80));
             if (*(int32_t *)((char *)dev + 0x1c0) != 0) {
-                ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(0x3000007), (uintptr_t)(0));
+                ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(TX_ISP_T30_FRAME_EVENT_FREE_BUFFER), (uintptr_t)(0));
                 isp_free_buffer(ddr_flag);
             }
             private_mutex_unlock((struct mutex *)((char *)dev + 0x1dc));
@@ -25276,7 +25293,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
                     *entry = (int32_t)entry;
                     ((uint32_t *)entry)[1] = (int32_t)entry;
                     *(int32_t *)(uintptr_t)&_qlock2 = j * buf_size + buf;
-                    int32_t r = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(0x3000005), (uintptr_t)(0));
+                    int32_t r = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(TX_ISP_FRAME_EVENT_QUEUE_BUFFER), (uintptr_t)(0));
                     if (r != 0 && r != -515)
                         break;
                     j++;
@@ -25285,7 +25302,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
                     if (*(int32_t *)((char *)dev + 0x80) != 0)
                         (*(void (**)(void *))(*(int32_t *)((char *)dev + 0x88)))((void *)((char *)dev + 0x80));
                     if (*(int32_t *)((char *)dev + 0x1c0) != 0) {
-                        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(0x3000007), (uintptr_t)(0));
+                        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(remote), (uintptr_t)(TX_ISP_T30_FRAME_EVENT_FREE_BUFFER), (uintptr_t)(0));
                         isp_free_buffer(ddr_flag);
                     }
                     private_mutex_unlock((struct mutex *)((char *)dev + 0x1dc));
@@ -25302,9 +25319,9 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
         private_mutex_unlock((struct mutex *)((char *)dev + 0x1dc));
         return ret;
     }
-    case 0x3000004:
+    case TX_ISP_FRAME_EVENT_STREAM_OFF:
         return ldc_frame_channel_streamoff(arg1);
-    case 0x3000005: {
+    case TX_ISP_FRAME_EVENT_QUEUE_BUFFER: {
         if (*(int32_t *)((char *)arg1 + 0x14) & 0x20)
             return 0;
         int32_t *dev = *(int32_t **)((char *)arg1 + 0x20);
@@ -25327,7 +25344,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
             preempt_schedule();
         return 0;
     }
-    case 0x3000006: {
+    case TX_ISP_FRAME_EVENT_BUFFER_DONE: {
         if (*(int32_t *)((char *)arg1 + 0x14) & 0x20)
             return 0;
         int32_t *dev = *(int32_t **)((char *)arg1 + 0x20);
@@ -25370,7 +25387,7 @@ int32_t ldc_pad_event_handle(int32_t *arg1, int32_t arg2, int32_t *arg3)
             preempt_schedule();
         return 0;
     }
-    case 0x3000007: {
+    case TX_ISP_T30_FRAME_EVENT_FREE_BUFFER: {
         int32_t *dev = *(int32_t **)((char *)arg1 + 0x20);
         if (dev != 0) {
             unsigned long flags = arch_local_irq_save();
@@ -25758,7 +25775,7 @@ int mscaler_video_s_stream(void *arg1, int enable)
 					return 0;
 				}
 
-				((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_14), (uintptr_t)(0x3000004), (uintptr_t)(0));
+				((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_14), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
 				*(int *)((char *)s0 + 0xe8) = 3;
 				{
 					void *v1_6 = *(void **)((char *)s3_2 + 0x54);
@@ -25798,7 +25815,7 @@ int mscaler_video_s_stream(void *arg1, int enable)
 				{
 					int v0_9;
 					int a2_3;
-					v0_9 = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_5), (uintptr_t)(0x3000002), (uintptr_t)(s3_1));
+					v0_9 = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_5), (uintptr_t)(TX_ISP_FRAME_EVENT_SET_FORMAT), (uintptr_t)(s3_1));
 					a2_3 = v0_9;
 
 					if (v0_9 != 0 && v0_9 != -515) {
@@ -25840,7 +25857,7 @@ int mscaler_video_s_stream(void *arg1, int enable)
 						{
 							int v0_24;
 							int a2_4;
-							v0_24 = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)s3_1 + 0x54)), (uintptr_t)(0x3000003), (uintptr_t)(0));
+							v0_24 = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)s3_1 + 0x54)), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_ON), (uintptr_t)(0));
 							a2_4 = v0_24;
 
 							if (v0_24 == 0 || v0_24 == -515) {
@@ -25907,7 +25924,7 @@ int32_t channel_dma_buffer_done(void *arg1)
 		val_174 = *(uint32_t *)((char *)a0 + 0x174);
 		val_178 = *(uint32_t *)((char *)(v1 + offset) + 0x178);
 		event_data = val_174;
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)arg1 + 0x60)), (uintptr_t)(0x3000006), (uintptr_t)(&event_data));
+		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)arg1 + 0x60)), (uintptr_t)(TX_ISP_FRAME_EVENT_BUFFER_DONE), (uintptr_t)(&event_data));
 		counter = *(uint32_t *)((char *)arg1 + 0x8c);
 		*(uint32_t *)((char *)arg1 + 0x8c) = counter + 1;
 	}
@@ -25927,7 +25944,7 @@ void *msclaer_notify_front_module(void *arg1, int arg2)
 
     chan_done_state = (uintptr_t (*)())(uintptr_t)a1;
     if ((a1 & v1) == v1) {
-        result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((int32_t *)(a3[0x54 / 4]), (uintptr_t)(0x3000005u), (uintptr_t)(0u));
+        result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((int32_t *)(a3[0x54 / 4]), (uintptr_t)(TX_ISP_FRAME_EVENT_QUEUE_BUFFER), (uintptr_t)(0u));
         chan_done_state = 0;
     } else {
         result = a1;
@@ -27078,17 +27095,17 @@ int32_t mscaler_pad_event_handle(void *arg1, int32_t arg2, void **arg3)
 	if (pad_type == 0)
 		goto out;
 
-	if ((uint32_t)(arg2 - 0x3000001) >= 7)
+	if ((uint32_t)(arg2 - TX_ISP_FRAME_EVENT_GET_FORMAT) >= 7)
 		goto out;
 
 	switch (arg2) {
-	case 0x3000001:
+	case TX_ISP_FRAME_EVENT_GET_FORMAT:
 		if (pad_type == 2 && arg3 != 0 && chan != 0)
 			memcpy(arg3, chan, 0x4c);
 		ret = 0;
 		break;
 
-	case 0x3000002: {
+	case TX_ISP_FRAME_EVENT_SET_FORMAT: {
 		uint8_t crop_en = *(uint8_t *)((char *)arg3 + 0x24);
 		uint8_t scale_en = *(uint8_t *)((char *)arg3 + 0x38);
 		uint32_t in_w = *(uint32_t *)((char *)chan + 0x68);
@@ -27257,7 +27274,7 @@ int32_t mscaler_pad_event_handle(void *arg1, int32_t arg2, void **arg3)
 		break;
 	}
 
-	case 0x3000003: {
+	case TX_ISP_FRAME_EVENT_STREAM_ON: {
 		if (pad_state != 3)
 			return 0;
 
@@ -27286,12 +27303,12 @@ int32_t mscaler_pad_event_handle(void *arg1, int32_t arg2, void **arg3)
 		break;
 	}
 
-	case 0x3000004:
+	case TX_ISP_FRAME_EVENT_STREAM_OFF:
 		mscaler_frame_channel_streamoff_isra_0(arg1);
 		ret = 0;
 		break;
 
-	case 0x3000005: {
+	case TX_ISP_FRAME_EVENT_QUEUE_BUFFER: {
 		if (pad_type != 2) {
 			isp_printf(2, "The type of pad isn't OUTPUT!\n", 0);
 			return -22;
@@ -27319,7 +27336,7 @@ int32_t mscaler_pad_event_handle(void *arg1, int32_t arg2, void **arg3)
 		break;
 	}
 
-	case 0x3000007: {
+	case TX_ISP_T30_FRAME_EVENT_FREE_BUFFER: {
 		if (pad_type != 2) {
 			isp_printf(2, "The type of pad isn't OUTPUT!\n", 0);
 			return -22;
@@ -27690,6 +27707,7 @@ int frame_channel_open(int fd, void *file)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017c20 origin=model_output original=__fill_v4l2_buffer */
+#ifndef TX_ISP_T30_SHARED_FRAME
 int32_t __fill_v4l2_buffer(void *arg1, void *arg2)
 {
 	uint32_t *src = (uint32_t *)arg1;
@@ -27728,6 +27746,7 @@ int32_t __fill_v4l2_buffer(void *arg1, void *arg2)
 
 	return result;
 }
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017ce0 origin=model_output original=fs_activate_module */
 int32_t fs_activate_module(void *arg1)
@@ -27776,7 +27795,7 @@ void __vb2_queue_cancel(void *arg1)
         return;
 
     if (*flags & 1)
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*remote), (uintptr_t)(0x3000004), (uintptr_t)(0));
+        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*remote), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
 
     *flags &= 0xfe;
     *list_head = (unsigned int)list_head;
@@ -28199,7 +28218,7 @@ int32_t __enqueue_in_driver_isra_0(void *arg1)
 	*(int32_t *)((char *)arg1 + 0x48) = 3;
 	private_mutex_unlock((struct mutex *)((char *)s0 + 4));
 
-	result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((int32_t *)(*(void **)((char *)s0 + 0x26c)), (uintptr_t)(0x3000005), (uintptr_t)((char *)arg1 + 0x5c));
+	result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((int32_t *)(*(void **)((char *)s0 + 0x26c)), (uintptr_t)(TX_ISP_FRAME_EVENT_QUEUE_BUFFER), (uintptr_t)((char *)arg1 + 0x5c));
 
 	if (result != 0 && result != -515)
 		return isp_printf(2, "Failed to qbuf to driver; chan%d!\n", *(int32_t *)((char *)s0 + 0x270));
@@ -28368,7 +28387,7 @@ frame_channel_unlocked_ioctl0xd8:
     v0 = 8;
 
     /* fragment 27: Branch */
-    a1 = 50331648;
+    a1 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
     if (a0 == v0) { goto frame_channel_unlocked_ioctl0x104; }
 
     /* fragment 28: Arithmetic */
@@ -28466,7 +28485,7 @@ frame_channel_unlocked_ioctl0x1c4:
 
 frame_channel_unlocked_ioctl0x1cc:
     /* fragment 51: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(uintptr_t *) + 656), 50331648 + 1, &local_10); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(uintptr_t *) + 656), TX_ISP_FRAME_EVENT_GET_FORMAT, &local_10); /* jalr target resolved by relocation */
 
     /* fragment 52: Branch */
     s0 = v0;
@@ -28702,7 +28721,7 @@ frame_channel_unlocked_ioctl0x42c:
 frame_channel_unlocked_ioctl0x464:
     /* fragment 106: CallSetup */
     *(uint32_t *)((char *)s8 + 524) = s2;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(uintptr_t *) + 656), 50331648 + 8, &local_5c); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(uintptr_t *) + 656), TX_ISP_T30_FRAME_EVENT_SET_BANKS, &local_5c); /* jalr target resolved by relocation */
 
     /* fragment 107: Branch */
     s0 = v0;
@@ -29294,7 +29313,7 @@ frame_channel_unlocked_ioctl0xaa4:
     v0 = s1 + 76;
 
     /* fragment 244: Branch */
-    a1 = 50331648;
+    a1 = TX_ISP_FRAME_EVENT_BYPASS_ISP;
     if (s3 != v0) { goto frame_channel_unlocked_ioctl0xb08; }
 
     /* fragment 245: CallSetup */
@@ -29376,7 +29395,7 @@ frame_channel_unlocked_ioctl0xb48:
     if (v0 != 0) { goto frame_channel_unlocked_ioctl0xea8; }
 
     /* fragment 265: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(uintptr_t *) + 656), 50331648 + 8, &local_10); /* jalr target resolved by relocation */
+    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(uintptr_t *) + 656), TX_ISP_T30_FRAME_EVENT_SET_BANKS, &local_10); /* jalr target resolved by relocation */
 
     /* fragment 266: Branch */
     s1 = v0;
@@ -29722,7 +29741,7 @@ int32_t frame_chan_event(uintptr_t a0, uint32_t a1, uintptr_t a2)
     if (v0 == 0) { goto frame_chan_event0x220; }
 
     /* fragment 3: ConstantLoad */
-    v0 = 0x3000006;
+    v0 = TX_ISP_FRAME_EVENT_BUFFER_DONE;
 
     /* fragment 4: Branch */
     if (a1 != v0) { goto frame_chan_event0x228; }
@@ -34281,6 +34300,7 @@ uint32_t apical_isp_raise_event(void *arg1, int32_t arg2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001d240 origin=model_output original=calc_modulation_u16 */
+#ifndef TX_ISP_T30_SHARED_MATH
 uint32_t calc_modulation_u16(uint16_t val, uint16_t *table, int32_t count)
 {
     uint32_t uval = (uint32_t)val;
@@ -34930,6 +34950,7 @@ int32_t line_offset(uint32_t a0, uint32_t a1)
 
     return 0;
 }
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001dde4 origin=model_output original=apical_cosine */
 int32_t apical_cosine(int32_t arg1)

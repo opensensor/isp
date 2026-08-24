@@ -4,7 +4,7 @@
 #include "tx_isp_frame_abi.h"
 
 /*
- * Private frame-channel format shared by the 32-bit T23/T31 userspace ABI.
+ * Private frame-channel format shared by the 32-bit T23/T30/T31 userspace ABI.
  * T41 retains the same base and appends one low-byte flip-enable word.
  *
  * Enable fields are one byte followed by three explicit padding bytes.  This

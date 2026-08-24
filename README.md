@@ -50,7 +50,7 @@ OEM-like daylight image quality, and persistent runtime flip control.
 | SoC | Current validation |
 |---|---|
 | T23 | Device-tested vendor-kernel path with live capture and shared registry, layout, ABI, and tuning primitives; broader sensor and image-quality validation continues. |
-| T30 | Recovered whole-driver baseline builds cleanly against the vendor Linux 3.10.14 tree; final linked audit has no stubs or collapsed functions, but hardware validation is pending. |
+| T30 | Recovered whole-driver baseline builds cleanly against the vendor Linux 3.10.14 tree; shared math/modulation, frame ABI, registry, and subdevice adapters are linked and the OEM sensor export surface is restored, but hardware validation is pending. |
 | T31 | Device-tested on vendor Linux 3.10 and compatibility-tested on mainline Linux 7.1; OEM `libimp.so` and OpenIMP both stream, with near-OEM daylight parity demonstrated on SC301IOT. |
 | T40 | Recovered core is integrated with shared adapters; color-path, tuning, and device-matrix work remain active. |
 | T41 | Device-tested 2.5K open-stack baseline plus V4L2 MMAP and DMA-BUF capture; image-quality and delivered-FPS work remain active. |
@@ -73,7 +73,9 @@ OEM-like daylight image quality, and persistent runtime flip control.
   while preserving channel-enable bits
 - T31 builds on both the vendor 3.10 kernel and the mainline Linux 7.1
   compatibility path
-- common interpolation/fixed-point primitives are used by T23, T31, and T41
+- common interpolation/fixed-point primitives are used by T23, T30, T31, and T41
+- T30's pair/scaled/equidistant modulation and legacy Apical scalar math use
+  host-tested common primitives behind an SDK-compatible adapter
 - T23, T31, and T41 share one typed sensor-registry implementation
 - T31 and T41 share a configurable frame-boundary day/night state machine
 - T23 and T31 share ordered register-profile and bypass-mask primitives
@@ -91,7 +93,7 @@ OEM-like daylight image quality, and persistent runtime flip control.
 - the private frame-channel and future public V4L2 adapters now share an
   allocation-free queue core for buffer ownership, completion ordering,
   sequence/timestamp metadata, errors, and deterministic STREAMOFF recovery
-- T23, T31, and T41 share the proven frame-channel event namespace and exact
+- T23, T30, T31, and T41 share the proven frame-channel event namespace and exact
   legacy-`V`/T41-`T` private ioctl envelopes without conflating the
   generation-specific events above buffer completion; the common contract
   also owns the fixed 20-byte request-buffer wire object and legacy stream
@@ -163,6 +165,7 @@ Important driver files:
 - `driver/common/tx_isp_state.c` — value-level recovered subdevice readiness
   policy with generation-local field adapters
 - `driver/include/tx_isp/tx_isp_math.h` — shared fixed-point/interpolation primitives
+- `driver/include/tx_isp/tx_isp_modulation.h` — shared Apical pair and equidistant modulation primitives
 - `driver/include/tx_isp/tx_isp_sinfo.h` — typed registry configuration and lifecycle interface
 - `driver/include/tx_isp/tx_isp_subdev.h` — graph wire records, resolver
   interface, and shared link-state operations
@@ -176,7 +179,8 @@ Important driver files:
 - `driver/include/tx_isp/tx_isp_frame_format.h` — compiler-independent 112/116-byte frame-image format ABI
 - `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
-- `driver/t30/tx_isp_t30_recovered.c` — T30 whole-driver recovery baseline
+- `driver/t30/tx_isp_t30_recovered.c` and adapter objects — T30 whole-driver
+  recovery baseline with shared math, frame ABI, registry, and subdevice facilities
 - `driver/t31/tx_isp_module.c` — module init/exit, platform resources, shared register helpers
 - `driver/t31/tx_isp_core.c` — core probe, memory mappings, ISR path, first-frame logic
 - `driver/t31/tx_isp_tuning.c` — tuning subsystem, per-block init, parameter handling, image pipeline control

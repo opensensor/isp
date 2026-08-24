@@ -4,7 +4,8 @@ CFLAGS += -std=c99 -Wall -Wextra -Werror
 
 .PHONY: all check clean
 
-all: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
+all: tx_isp_math_test tx_isp_modulation_test \
+	tx_isp_subdev_abi_test tx_isp_subdev_test \
 	tx_isp_remote_event_test \
 	tx_isp_state_test \
 	tx_isp_sinfo_abi_test \
@@ -24,6 +25,10 @@ tx_isp_t31_mdns_test: tx_isp_t31_mdns_test.c \
 		tx_isp_t31_mdns_test.c ../driver/t31/tx_isp_t31_mdns.c
 
 tx_isp_math_test: tx_isp_math_test.c ../driver/include/tx_isp/tx_isp_math.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
+
+tx_isp_modulation_test: tx_isp_modulation_test.c \
+		../driver/include/tx_isp/tx_isp_modulation.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
 
 tx_isp_subdev_abi_test: tx_isp_subdev_abi_test.c \
@@ -130,7 +135,8 @@ tx_isp_scaler_test: tx_isp_scaler_test.c \
 		../driver/t23/tx_isp_t23_scaler.c \
 		../driver/t41/tx_isp_t41_scaler.c
 
-check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
+check: tx_isp_math_test tx_isp_modulation_test \
+		tx_isp_subdev_abi_test tx_isp_subdev_test \
 		tx_isp_remote_event_test \
 		tx_isp_state_test \
 		tx_isp_sinfo_abi_test \
@@ -143,6 +149,7 @@ check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
 	tx_isp_t31_mdns_test
 	./tx_isp_math_test
+	./tx_isp_modulation_test
 	./tx_isp_subdev_abi_test
 	./tx_isp_subdev_test
 	./tx_isp_remote_event_test
@@ -162,7 +169,8 @@ check: tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
 	./tx_isp_scaler_test
 
 clean:
-	$(RM) tx_isp_math_test tx_isp_subdev_abi_test tx_isp_subdev_test \
+	$(RM) tx_isp_math_test tx_isp_modulation_test \
+		tx_isp_subdev_abi_test tx_isp_subdev_test \
 		tx_isp_remote_event_test \
 		tx_isp_state_test \
 		tx_isp_sinfo_abi_test \

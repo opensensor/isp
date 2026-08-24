@@ -34,6 +34,10 @@ for:
 - OEM-compatible wrapped and full-range unsigned 32-bit fixed-point division
 - full-range unsigned 64-bit fixed-point division without compiler 128-bit
   arithmetic or libgcc division helpers
+- legacy leading-bit, integer square-root, Q4 log, linear-equation,
+  fixed multiply/divide, approximate-root, and aligned-line primitives
+- pair, scaled-pair, equidistant, and inverse-equidistant Apical modulation in
+  the separate kernel-independent `tx_isp_modulation.h`
 
 The per-SoC wrappers preserve their existing ABI and endpoint policy:
 
@@ -48,6 +52,10 @@ The per-SoC wrappers preserve their existing ABI and endpoint policy:
   endpoint and delegates its generic/32/64-bit fixed-point add/subtract,
   signed rounding, full-width multiply/divide, 32-/64-bit log2, exp2, and
   wrapped 32-bit divider wrappers.
+- T30 maps the SDK's public/private log2 and exp2 names directly onto the
+  existing common implementations. Its adapter also owns the Apical ABI names
+  for the remaining scalar and modulation helpers. The recovered square-root
+  acceptance and zero-returning line-offset bodies are no longer linked.
 - T23 retains its recovered unsuffixed/64-bit multiply bodies. Moving those
   symbols into the adapter reproducibly made `rvd` exit during startup on two
   clean boots, while rebuilding the committed local boundary restored Raptor
@@ -56,7 +64,9 @@ The per-SoC wrappers preserve their existing ABI and endpoint policy:
 `tests/tx_isp_math_test.c` covers boundary behavior, OEM interpolation
 rounding, signed 64-bit fixed-point rounding, wrapped 32/64-bit add/subtract
 and products, T23's split-product equivalence over Q1-Q31, Q0-Q63 64-bit
-products and quotients, typed tables, and randomized equivalence checks.
+products and quotients, typed tables, legacy T30 scalar arithmetic, and
+randomized equivalence checks. `tests/tx_isp_modulation_test.c` independently
+covers T30's pair/equidistant interpolation and inverse mappings.
 
 ### Day/night transition shell
 
@@ -152,7 +162,7 @@ state machine without adding dead production footprint.
 ### Frame-buffer wire ABI and state flags
 
 `driver/include/tx_isp/tx_isp_frame_abi.h` defines the shared 17-word
-MIPS32 `v4l2_buffer` wire shape used by all three active generations. Named
+MIPS32 `v4l2_buffer` wire shape used by T23, T30, T31, and T41. Named
 offsets replace raw indices in the T23 and T41 private frame-channel paths,
 and the common 68-byte size is asserted against T31's kernel
 `struct v4l2_buffer`.
@@ -165,7 +175,10 @@ shared inline policy; T41 uses a common statement form that retains the vendor
 load/write order and prevents compiler register-allocation drift across its
 recovered monolith. The integration is binary-neutral on T23, T31, and T41,
 providing a stable contract for later extraction of queue-copy helpers without
-changing live behavior. `tests/tx_isp_frame_abi_test.c` validates sizes,
+changing live behavior. T30 now links a small layout adapter for its SDK-proven
+queue/state offsets and corrects the recovered ERROR-state fallthrough that
+lost the ERROR flag. That adapter is statically built but cannot be exercised
+on hardware yet. `tests/tx_isp_frame_abi_test.c` validates sizes,
 offsets, flag merging, policy priority, every known state, and single
 evaluation by the T41 adapter.
 
@@ -174,7 +187,7 @@ evaluation by the T41 adapter.
 `driver/include/tx_isp/tx_isp_frame_format.h` owns the fixed private format
 layout separately from both queue state and image-size arithmetic. Its
 112-byte base contains the 48-byte pixel descriptor and crop/scaler/rate
-controls shared by T23/T31. T41 appends its recovered flip word for a
+controls shared by T23/T30/T31. T41 appends its recovered flip word for a
 116-byte generation-specific envelope.
 
 T31 no longer embeds the kernel's compiler-conditional `v4l2_pix_format`.
@@ -194,7 +207,7 @@ provides host-side size and offset regression coverage.
 
 `driver/include/tx_isp/tx_isp_frame_channel.h` names the common remote events
 from get-format through buffer-done and both generation-qualified ioctl
-families. T23/T31 use the legacy `V` family with a 112-byte format; T41 uses
+families. T23/T30/T31 use the legacy `V` family with a 112-byte format; T41 uses
 its private `T` family with the 116-byte flip extension. Small pure decoders
 make type, number, payload size, and direction testable on the host.
 
@@ -208,6 +221,8 @@ The common event range intentionally ends at `0x03000006`. Event meanings
 above buffer completion diverge between recovered generations and stay local
 until device evidence proves otherwise. T23's aliases, T31's frame/core/VIC
 handoffs, and T41's dispatch/IRQ paths now reference the common contract.
+T30 also consumes the common prefix and keeps its SDK-proven free-buffer and
+set-banks tail under T30-qualified names.
 `tests/tx_isp_frame_channel_test.c` covers every named envelope and the proven
 event sequence.
 

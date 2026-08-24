@@ -45,6 +45,27 @@ static void test_t31_states(void)
 	assert(tx_isp_frame_flags_t31(source, queue, 32) == base);
 }
 
+static void test_t30_states(void)
+{
+	const uint32_t source = 0xffffffffU;
+	const uint32_t queue = 0x00000401U;
+	const uint32_t base =
+		(source & TX_ISP_FRAME_FLAG_RETAIN_MASK) | queue;
+
+	assert(tx_isp_frame_flags_t30(source, queue, 0) == base);
+	assert(tx_isp_frame_flags_t30(source, queue, 1) ==
+	       (base | TX_ISP_FRAME_FLAG_QUEUED));
+	assert(tx_isp_frame_flags_t30(source, queue, 2) == base);
+	assert(tx_isp_frame_flags_t30(source, queue, 3) ==
+	       (base | TX_ISP_FRAME_FLAG_QUEUED));
+	assert(tx_isp_frame_flags_t30(source, queue, 4) ==
+	       (base | TX_ISP_FRAME_FLAG_DONE));
+	assert(tx_isp_frame_flags_t30(source, queue, 5) ==
+	       (base | TX_ISP_FRAME_FLAG_ERROR | TX_ISP_FRAME_FLAG_DONE));
+	assert(tx_isp_frame_flags_t30(source, queue, 6) == base);
+	assert(tx_isp_frame_flags_t30(source, queue, 32) == base);
+}
+
 static void test_t41_states(void)
 {
 	const uint32_t source = 0x12345678U;
@@ -98,6 +119,7 @@ static void test_policy_priority(void)
 
 int main(void)
 {
+	test_t30_states();
 	test_t31_states();
 	test_t41_states();
 	test_t41_statement_adapter();

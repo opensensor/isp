@@ -12,15 +12,16 @@ ordering differences.
 
 | Unit | Interface | Implementation | Consumers |
 |---|---|---|---|
-| Fixed-point and interpolation math | `tx_isp_math.h` | header-only pure functions | T23, T31, T41 |
+| Fixed-point and interpolation math | `tx_isp_math.h` | header-only pure functions | T23, T30, T31, T41 |
+| Apical pair/equidistant modulation | `tx_isp_modulation.h` | header-only pure functions | T30 |
 | Sensor registry and checked offset policy | `tx_isp_sinfo.h` | `common/tx_isp_sinfo.c` | T23, T30, T31, T40, T41 |
 | Day/night transition shell | `tx_isp_daynight.h` | `common/tx_isp_daynight.c` | T31, T41 |
 | Ordered register profiles | `tx_isp_reg_profile.h` | `common/tx_isp_reg_profile.c` | T23, T31 |
 | Ordered callback plans | `tx_isp_callback_plan.h` | `common/tx_isp_callback_plan.c` | T23, T31 |
 | Proprietary tuning wire ABI | `tx_isp_tuning_abi.h` | `common/tx_isp_tuning_abi.c` | T23, T31, T41 |
-| Frame-buffer wire ABI and state flags | `tx_isp_frame_abi.h` | header-only pure functions | T23, T31, T41 |
-| Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T31, T41 |
-| Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T31, T41 |
+| Frame-buffer wire ABI and state flags | `tx_isp_frame_abi.h` | header-only pure functions | T23, T30, T31, T41 |
+| Frame-channel events and ioctls | `tx_isp_frame_channel.h` | header-only descriptors and decoders | T23, T30, T31, T41 |
+| Frame-image format wire ABI | `tx_isp_frame_format.h` | compiler-independent wire types | T23, T30, T31, T41 |
 | Checked NV12 and MDNS layouts | `tx_isp_frame_layout.h` | `common/tx_isp_frame_layout.c` | T23, T31, T41 |
 | Capture queue ownership and metadata | `tx_isp_video_queue.h` | `common/tx_isp_video_queue.c` | private/V4L2 adapters (integration pending) |
 | Subdevice pad/link ABI | `tx_isp_subdev_abi.h` | header-only offsets, assertions, and detach helpers | T23, T30, T31, T40, T41 |
@@ -31,6 +32,35 @@ ordering differences.
 The common implementation is linked into each TX-ISP module rather than
 loaded as another kernel module. This preserves the exported symbol and
 dependency ABI expected by the matching sensor drivers and userspace.
+
+### T30 arithmetic and module ABI
+
+`tx_isp_t30_math.c` is the T30/Apical name-and-width adapter for the common
+math library. The matching GPL SDK source proves that its private 32/64-bit
+log2 routines and private exp2 routine use the same algorithms already in
+`tx_isp_math.h`.
+The adapter also uses common integer-root, linear-equation, fixed multiply,
+fixed divide, Q4 log, and aligned-line helpers in place of recovered bodies.
+
+`tx_isp_modulation.h` owns the remaining pair, scaled-pair, equidistant, and
+inverse-equidistant interpolation. It preserves the OEM MIPS low-word
+multiply behavior for 32-bit table values while rejecting invalid empty
+tables before dereference. `tx_isp_modulation_test.c` covers endpoints,
+interpolation, scaling, inverse mapping, low-word wraparound, and invalid
+inputs; the scalar helpers extend `tx_isp_math_test.c`.
+
+This extraction corrects three object-code-confirmed recovery errors: both
+integer square roots had inverted candidate acceptance, and `line_offset()`
+discarded its computed aligned stride and returned zero. The original bodies
+remain behind `TX_ISP_T30_SHARED_MATH` for reconstruction provenance but are
+not linked.
+
+`tx_isp_t30_exports.c` separately declares the reviewed sensor-module ABI.
+Its export set matches the OEM T30 module, including the private clock, I2C,
+GPIO, capability, math, driver-interface, and subdevice entry points. The
+SC4236 sensor module's complete `private_*`, `tx_isp_*`, log2, and exp2
+dependency subset is now supplied; the initial recovered module exposed only
+the sensor registry functions.
 
 ### Sensor registry ABI
 
@@ -237,13 +267,13 @@ it for their distinct 17- and 18-block refresh sequences.
 ### Frame-buffer ABI
 
 `tx_isp_frame_abi.h` names the exact 17-word, 68-byte MIPS32 frame-buffer
-contract used by the private T23, T31, and T41 frame-channel ioctls. It owns
+contract used by the private T23, T30, T31, and T41 frame-channel ioctls. It owns
 the stable word offsets, the 52-byte copied prefix, persistent flag mask, and
 V4L2 queued/done/error values without depending on the build host's pointer or
 `timeval` sizes.
 
 Buffer-state values are not assumed to be universal. The common pure flag
-builder takes explicit state masks, with small T31 and T41 policy wrappers for
+builder takes explicit state masks, with small T30, T31, and T41 policy wrappers for
 their recovered meanings. Queue lists, locks, DMA handoff, late-link replay,
 and completion ordering remain generation-local. The active adapters now use
 the shared word and flag names in place of numeric offsets while preserving
@@ -255,6 +285,15 @@ state load across the recovered flag block, perturbing register allocation
 throughout the large queue functions. The adapter retains the vendor operation
 order and keeps the validated T41 image byte-exact without duplicating policy
 in the recovered monolith.
+
+T30 links `tx_isp_t30_frame.c`, a layout adapter for the SDK's queue pointer
+at `0x44`, state at `0x48`, and timestamp flags at queue offset `0x14`. It
+uses the shared wire positions and the exact SDK switch policy. In particular,
+the SDK ERROR case sets `ERROR` and then falls through to set `DONE`; the
+recovered body lost the MIPS branch-delay-slot `ERROR` update. T30 state values
+outside the declared enum retain the no-op default of the compiled OEM object.
+This correction has target-build and host-test coverage but no live-device
+validation.
 
 `tests/tx_isp_frame_abi_test.c` checks every important wire offset, total size,
 prefix size, persistent/queue flag merging, each recovered state transition,
@@ -274,7 +313,12 @@ without manufacturing a false common command number across generations.
 Events `0x03000007` through `0x03000009` remain local. Recovered T31 and T41
 code assigns different queue-free, request, and VIC meanings in that range,
 so the shared namespace deliberately stops at the last contract supported by
-all three devices.
+all four generation implementations.
+
+T30 consumes the common `0x03000001` through `0x03000006` names and declares
+its SDK-proven free-buffer (`0x03000007`) and set-banks (`0x03000008`) events
+with T30-qualified names. Those extensions are not presented as cross-SoC
+contracts.
 
 T23's frame-channel compatibility aliases, T31's outer dispatcher and
 ISP/VIC event handoff, and T41's recovered dispatcher/IRQ handoff now consume
@@ -295,7 +339,7 @@ on all three active SoCs.
 ### Frame-image format ABI
 
 `tx_isp_frame_format.h` models the private frame-channel image format without
-using the build kernel's conditional `struct v4l2_pix_format`. T23 and T31 use
+using the build kernel's conditional `struct v4l2_pix_format`. T23, T30, and T31 use
 the 112-byte base: a fixed 48-byte pixel descriptor followed by crop, scaler,
 rate, and front-crop fields. T41 uses the same base plus its recovered
 four-byte flip-enable extension, for 116 bytes total.

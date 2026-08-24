@@ -9,7 +9,7 @@ typedef uint32_t u32;
 #endif
 
 /*
- * T23, T31, and T41 all expose the 32-bit MIPS v4l2_buffer layout through
+ * T23, T30, T31, and T41 all expose the 32-bit MIPS v4l2_buffer layout through
  * their private frame-channel ioctls.  Keep the wire layout independent of
  * the build host's pointer and timeval sizes.
  */
@@ -122,6 +122,20 @@ static inline u32 tx_isp_frame_flags_t31(u32 flags, u32 queue_flags,
 		flags |= TX_ISP_FRAME_FLAG_DONE;
 	else if (state == 4U)
 		flags |= TX_ISP_FRAME_FLAG_ERROR;
+	return flags;
+}
+
+/* T30's ERROR state intentionally falls through to DONE in the SDK source. */
+static inline u32 tx_isp_frame_flags_t30(u32 flags, u32 queue_flags,
+					 u32 state)
+{
+	flags = (flags & TX_ISP_FRAME_FLAG_RETAIN_MASK) | queue_flags;
+	if (state == 1U || state == 3U)
+		flags |= TX_ISP_FRAME_FLAG_QUEUED;
+	else if (state == 4U)
+		flags |= TX_ISP_FRAME_FLAG_DONE;
+	else if (state == 5U)
+		flags |= TX_ISP_FRAME_FLAG_ERROR | TX_ISP_FRAME_FLAG_DONE;
 	return flags;
 }
 

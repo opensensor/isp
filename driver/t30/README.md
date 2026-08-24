@@ -62,12 +62,19 @@ The repair pass also:
 
 ## Shared-library refactor
 
-The T30 module now links thin adapters for two behaviorally common subsystems:
+The T30 module now links thin adapters for behaviorally common subsystems:
 
 - `tx_isp_t30_sinfo.c` supplies the T30 sensor-object offsets to the checked
   shared registry and owns the six exports consumed by matching sensor modules.
 - `tx_isp_t30_subdev.c` supplies the legacy pad layout and graph-table offset
   to the shared endpoint and remote-event resolvers.
+- `tx_isp_t30_math.c` preserves the SDK's public/private Apical symbol names
+  while delegating log2, exp2, roots, fixed-point arithmetic, and modulation
+  to host-tested common helpers.
+- `tx_isp_t30_frame.c` supplies the T30 queue/state offsets to the shared
+  68-byte frame-buffer ABI and state-flag policy.
+- `tx_isp_t30_exports.c` owns the reviewed OEM sensor-module export surface
+  instead of scattering export policy through the recovered source.
 
 The recovered registry candidates remain under a build-time guard for audit
 provenance, but they are no longer linked. This removes their malformed lock,
@@ -77,6 +84,25 @@ event entry point now preserves and forwards its pad, event, and data arguments
 instead of calling the recovered one-argument stub. Link teardown now uses the
 shared endpoint detach primitive, preserves the link-state word, updates the
 one-byte pad states, and returns the OEM success value.
+
+The math extraction uses the GPL T30 SDK source where it is available and the
+matching OEM object for the remaining Apical routines. It fixes the recovered
+`sqrt32`/`sqrt16` candidate tests and the zero-returning `line_offset`, while
+mapping identical log2, exp2, multiply, and divide algorithms onto the generic
+math library. Pair/scaled/equidistant modulation is now one common pure
+implementation. The original recovered bodies remain behind a build guard for
+audit provenance but are not linked.
+
+The frame adapter restores the SDK's ERROR-to-DONE fallthrough. The recovered
+body lost the ERROR bit carried in a MIPS branch delay slot, so error buffers
+were reported only as done. Raw T30 frame-event values now use the common
+get/set/stream/queue/completion names; T30-only free-buffer and set-banks
+events remain explicitly generation-qualified.
+
+The resulting module exports the same 27-entry ABI as the OEM T30 module. The
+matching SC4236 module has no unresolved `private_*`, `tx_isp_*`, log2, or exp2
+dependency after comparison with that export table. The initial recovery
+artifact exported only the four sensor-registry entry points.
 
 ## Validation boundary
 
