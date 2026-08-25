@@ -36,6 +36,17 @@ int tx_isp_flicker_nodes_build(u32 step_numerator,
 			       u32 *node_count);
 
 /*
+ * Quantize an integration time down to a whole anti-flicker step.  Ingenic's
+ * APICAL CMOS controller always selects at least one step, even when the
+ * requested integration is shorter.  Sensor limits remain explicit inputs so
+ * callers do not have to bake a particular mode's timing into the ISP.
+ */
+int tx_isp_flicker_integration_floor(u32 integration, u32 step_lines,
+				     u32 min_integration,
+				     u32 max_integration,
+				     u32 *quantized_integration);
+
+/*
  * Split a desired linear exposure product into sensor integration and gain.
  *
  * Below the first anti-flicker node, an exposure may use arbitrary integration

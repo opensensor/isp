@@ -65,6 +65,7 @@
 #ifdef TX_ISP_T30_SHARED_MATH
 #include "tx_isp_t30_math.h"
 #endif
+#include "../include/tx_isp/tx_isp_exposure.h"
 #ifdef TX_ISP_T30_SHARED_FRAME
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 #include "tx_isp_t30_frame.h"
@@ -1548,6 +1549,12 @@ struct tx_isp_t30_simple_3a_state {
 };
 
 static struct tx_isp_t30_simple_3a_state tx_isp_t30_simple_3a;
+static int tx_isp_t30_tuning_set_antiflicker(int mode);
+static void tx_isp_t30_ae_apply_antiflicker(
+	const struct tx_isp_t30_core_sensor_view *core,
+	const struct tx_isp_t30_sensor_attribute_view *attr,
+	s32 total_exposure_log2, u32 min_integration, u32 max_integration,
+	u32 *integration_time, s32 *analog_gain_log2);
 static unsigned char isp_kfifo_in[4124];
 static unsigned char __attribute__((aligned(4))) isp_lock[16] = {
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -14591,9 +14598,8 @@ long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, unsign
 		if (copy_from_user(&control, (void __user *)arg,
 				   sizeof(control)))
 			return -EFAULT;
-		if (tx_isp_t30_tuning_set_trace_count++ < 12)
-			pr_err("tx-isp-t30: tuning set id=%08x value=%d\n",
-			       control.id, control.value);
+		tx_isp_t30_tuning_set_trace_count = 1;
+		ret = 0;
 		if (control.id == 0x08000164) {
 			/*
 			 * libimp stops and destroys the graph before this control, then
@@ -14601,6 +14607,8 @@ long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, unsign
 			 */
 			ret = tx_isp_t30_tuning_set_isp_process(core,
 							 control.value);
+		} else if (control.id == 0x00980918) {
+			ret = tx_isp_t30_tuning_set_antiflicker(control.value);
 		} else if (control.id == V4L2_CID_BRIGHTNESS) {
 			u32 reason = 0;
 
@@ -52656,6 +52664,10 @@ static void tx_isp_t30_simple_ae_update(void)
 		core, attr, state->total_exposure_request_log2,
 		min_integration, max_integration, &state->integration_time,
 		&state->analog_gain_request_log2);
+	tx_isp_t30_ae_apply_antiflicker(
+		core, attr, state->total_exposure_request_log2,
+		min_integration, max_integration, &state->integration_time,
+		&state->analog_gain_request_log2);
 
 	if (state->analog_gain_request_log2 < 0)
 		state->analog_gain_request_log2 = 0;
@@ -57443,6 +57455,60 @@ int32_t I2C_read(int32_t addr, int32_t data, int32_t size)
 {
 	((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))printk)((uintptr_t)("%s: {add = 0x%02x, data = %p} size = %d\n"), (uintptr_t)("I2C_read"), (uintptr_t)(addr), (uintptr_t)((void *)data), (uintptr_t)(size));
 	return 0;
+}
+
+static int tx_isp_t30_tuning_set_antiflicker(int mode)
+{
+	static const u8 frequency_hz[] = { 0, 50, 60 };
+
+	if ((u32)mode >= ARRAY_SIZE(frequency_hz))
+		return -EINVAL;
+	/* OEM control values are off/50 Hz/60 Hz; APICAL stores frequency. */
+	stab[52] = frequency_hz[mode];
+	pr_info("tx-isp-t30: anti-flicker mode=%d frequency=%uHz\n",
+		mode, frequency_hz[mode]);
+	return 0;
+}
+
+static void tx_isp_t30_ae_apply_antiflicker(
+	const struct tx_isp_t30_core_sensor_view *core,
+	const struct tx_isp_t30_sensor_attribute_view *attr,
+	s32 total_exposure_log2, u32 min_integration, u32 max_integration,
+	u32 *integration_time, s32 *analog_gain_log2)
+{
+	u32 fps_numerator = core->fps >> 16;
+	u32 fps_denominator = core->fps & 0xffff;
+	u32 frequency = stab[52];
+	u32 denominator;
+	u32 quantized;
+	u32 step_lines;
+	u64 line_rate;
+
+	if ((frequency != 50 && frequency != 60) ||
+	    !fps_numerator || !fps_denominator || !attr->total_height)
+		return;
+
+	/*
+	 * APICAL CMOS formula: frame rate * frame height divided by twice the
+	 * mains frequency.  Timing comes exclusively from the live sensor ABI.
+	 */
+	line_rate = (u64)fps_numerator * attr->total_height;
+	denominator = fps_denominator * frequency * 2;
+	step_lines = div64_u64(line_rate, denominator);
+	if (!step_lines ||
+	    tx_isp_flicker_integration_floor(*integration_time, step_lines,
+					      min_integration,
+					      max_integration,
+					      &quantized))
+		return;
+	if (quantized == *integration_time)
+		return;
+
+	*integration_time = quantized;
+	*analog_gain_log2 = clamp_t(s32,
+		total_exposure_log2 -
+		log2_fixed_to_fixed(quantized, 0, 16),
+		0, attr->max_again);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038ee0 origin=model_output original=init_module */

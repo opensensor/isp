@@ -6,7 +6,8 @@ tx-isp-t30-objs := tx_isp_t30_recovered.o \
 	tx_isp_t30_io.o \
 	tx_isp_t30_videobuf.o \
 	tx_isp_t30_sinfo.o \
-	tx_isp_t30_subdev.o
+	tx_isp_t30_subdev.o \
+	tx_isp_t30_exposure.o
 
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
 ccflags-y += -DTX_ISP_T30_SHARED_SINFO

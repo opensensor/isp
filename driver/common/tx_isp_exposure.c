@@ -59,6 +59,30 @@ int tx_isp_flicker_nodes_build(u32 step_numerator,
 	return 0;
 }
 
+int tx_isp_flicker_integration_floor(u32 integration, u32 step_lines,
+				     u32 min_integration,
+				     u32 max_integration,
+				     u32 *quantized_integration)
+{
+	u64 quantized;
+	u32 multiplier;
+
+	if (!integration || !step_lines || !min_integration ||
+	    min_integration > max_integration || !quantized_integration)
+		return -EINVAL;
+
+	multiplier = integration / step_lines;
+	if (!multiplier)
+		multiplier = 1;
+	quantized = (u64)multiplier * step_lines;
+	if (quantized < min_integration)
+		quantized = min_integration;
+	if (quantized > max_integration)
+		quantized = max_integration;
+	*quantized_integration = (u32)quantized;
+	return 0;
+}
+
 int tx_isp_exposure_plan_build(u64 desired_exposure,
 			       u32 min_integration, u32 max_integration,
 			       u32 min_again, u32 max_again,

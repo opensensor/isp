@@ -56,6 +56,26 @@ static void test_flicker_node_generation(void)
 					  &count) == -EINVAL);
 }
 
+static void test_flicker_integration_floor(void)
+{
+	u32 integration = 99;
+
+	assert(tx_isp_flicker_integration_floor(1433, 400, 3, 1916,
+						 &integration) == 0);
+	assert(integration == 1200);
+	assert(tx_isp_flicker_integration_floor(200, 400, 3, 1916,
+						 &integration) == 0);
+	assert(integration == 400);
+	assert(tx_isp_flicker_integration_floor(1916, 400, 3, 1916,
+						 &integration) == 0);
+	assert(integration == 1600);
+
+	integration = 99;
+	assert(tx_isp_flicker_integration_floor(1433, 0, 3, 1916,
+						 &integration) == -EINVAL);
+	assert(integration == 99);
+}
+
 static void test_t31_flicker_lut_adapter(void)
 {
 	u32 lut[TX_ISP_T31_FLICKER_LUT_ENTRIES];
@@ -183,6 +203,7 @@ int main(void)
 {
 	test_target_scaling();
 	test_flicker_node_generation();
+	test_flicker_integration_floor();
 	test_t31_flicker_lut_adapter();
 	test_short_and_flicker_floor();
 	test_node_and_gain_selection();
