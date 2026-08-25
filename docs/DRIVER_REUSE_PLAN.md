@@ -441,7 +441,8 @@ verified after each controlled experiment.
 | SoC | Staged coverage | Result |
 |---|---|---|
 | T23 | ten-object module, shared math/registry/subdevice resolver/register-mask/callback-plan/tuning-ABI/frame/channel/MDNS layout plus mode adapter, SC2336 | pass; exact `0x477e70` MDNS use/`0x478000` allocation, day/night/auto, and full-rate RTSP clean |
-| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS layout; SC2336 and GC2053 | transport/ABI pass; corrected 0x24-byte pad allocation contract, one GC2053 registration, 1920x1080/640x360 at 30 fps, and decoder-clean RTSP. CLM banks now match the GC2053 OEM image byte-for-byte; active-GIB color parity remains open |
+| T30 | shared math/modulation, registry, frame ABI, sensor exports, exposure planner, and recovered Apical control; SC4236 | live T30X bind, firmware IRQ/statistics, recognizable processed frames, tuning-derived AE/color, and balanced exposure allocation; production stability and flicker parity remain open |
+| T31 | shared math/registry/subdevice resolver/day-night/profiles/callback-plan/tuning-ABI/frame/channel/MDNS/exposure layout; SC2336, GC2053, and SC301IOT | transport/ABI pass on all three sensor families; GC2053 1920x1080/640x360 at 30 fps with exact CLM banks; three-unit SC301IOT fleet streaming and near-stock daylight checkpoint; sensor-specific color/night/WDR gaps remain explicit |
 | T40 | three-object module, shared registry/subdevice resolver/link/event/state policy, GC4653 | pass; day mode, active IRQ 38/39, and valid 1920x1080 RTSP decode; legacy full proc dump excluded |
 | T41 | nine-object module, shared math/registry/subdevice resolver/day-night/tuning-ABI/frame/channel/scaler/exposure, OS04D10 | transport/ABI pass; complete registry parity, correct 3,133,440-byte main pool, and full-rate RTSP; mixed-light tuning remains scene-dependent |
 

@@ -49,6 +49,30 @@ just cosmetic:
 Register addresses, recovered object layouts, IRQ acknowledgement, tuning
 tables, and sensor-specific profiles remain T31-local.
 
+## Current SC301IOT Runtime
+
+The August 13-25, 2026 Wyze Video Doorbell v2 work added a third live T31
+sensor family and exercised three separate SC301IOT units:
+
+- the open driver and OpenIMP deliver stable processed main/sub streams on the
+  2048x1536 sensor mode, including fleet runs on three physical doorbells
+- CSI lanes, Bayer code/phase, dimensions, integration/gain limits, apply
+  delays, and exposure capabilities are derived from the bound sensor rather
+  than GC2053 or SC2336 literals
+- the AE0 static and histogram DMA paths feed the recovered per-frame Tiziano
+  software controller; a same-scene stock/open daylight comparison reached
+  near-stock color and exposure on the validated doorbell profile
+- a live rear-door test exposed a delayed highlight-retention failure: the
+  first frame held a blue sky and later frames washed it out because a generic
+  zero scene-control request was encoded as an active OEM level
+- zero/no-override now preserves the active tuning bank's calibrated
+  highlight/backlight behavior, while explicit non-zero levels retain the OEM
+  encoding; the fix is generic policy, not an SC301IOT special case
+
+This proves the generic sensor-attribute path and the SC301IOT daylight AE
+loop. It does not claim night/IR, WDR, or every 50/60 Hz lighting condition is
+already at OEM parity.
+
 ## Current GC2053 Runtime
 
 The August 5, 2026 Wyze Cam v3 cycle added a second T31 sensor oracle:

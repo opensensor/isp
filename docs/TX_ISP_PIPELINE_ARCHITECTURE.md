@@ -7,6 +7,12 @@ kernel driver (`tx-isp-t31.ko`). It covers the full pipeline from sensor input t
 ISP processing to user-space frame delivery, including register maps, data structures,
 interrupt handling, and state machines.
 
+For the execution-domain boundary and the concise, current architecture, read
+[`T31_ISP_ARCHITECTURE.md`](T31_ISP_ARCHITECTURE.md) first. Recovered function
+names in this detailed reference do not prove that an algorithm is a hardware
+block. ISP statistics and per-pixel transforms are hardware; Tiziano AE/AWB
+policy runs as MIPS software.
+
 ---
 
 ## Table of Contents
@@ -33,7 +39,7 @@ interrupt handling, and state machines.
 
 ### 1.1 System Model
 
-The T31 camera stack processes image data through a multi-stage hardware pipeline:
+The T31 camera stack has a hardware pixel path and a software feedback loop:
 
 ```
                                     +------------------+
@@ -43,23 +49,20 @@ The T31 camera stack processes image data through a multi-stage hardware pipelin
                                              |
                                     ioctls / mmap / QBUF / DQBUF
                                              |
-  +----------+     +----------+     +--------+---------+     +----------------+
-  |  Image   |---->|   CSI    |---->|      VIC         |---->| Frame Channels |
-  |  Sensor  |MIPI |Receiver  |     | (Video Input     |     | /dev/framechanX|
-  |  (GC2053)|     |0x10022000|     |  Controller)     |     +----------------+
-  +----------+     +----+-----+     | 0x133e0000       |
-                        |           +--------+---------+
-                   W01 Wrapper               |
-                   0x10023000          ISP Core Regs
-                   (PHY timing)        0x13300000
-                                             |
-                                    +--------+---------+
-                                    |  ISP Processing  |
-                                    |  Pipeline        |
-                                    |  (AE/AWB/Gamma/  |
-                                    |   DMSC/Denoise/  |
-                                    |   Sharpen/etc.)  |
-                                    +------------------+
+  +----------+     +----------+     +----------+     +---------------+     +----------------+
+  | External |---->| D-PHY /  |---->| VIC/VIN  |---->| Tiziano ISP   |---->| MSCA / Frame   |
+  | sensor   |MIPI | CSI-2    |     | input    |     | pixel blocks  |     | Channels       |
+  +----------+     +----------+     +----+-----+     +-------+-------+     +----------------+
+                                         |                   |
+                                         | optional          +-> statistics engines
+                                         v                              |
+                                    VIC MDMA raw/debug             statistics DMA
+                                                                         |
+                                                                         v
+                                                               IRQ -> MIPS 3A software
+                                                                    |           |
+                                                                    v           v
+                                                               sensor I2C   ISP registers
 ```
 
 ### 1.2 Design Principles
@@ -69,6 +72,8 @@ The T31 camera stack processes image data through a multi-stage hardware pipelin
 - **Global device singleton** (`ourISPdev`) for simplified cross-module access
 - **Event-driven subdevice communication** via pad/link graph
 - **Dual-IRQ model** separating ISP core (IRQ 37) and VIC (IRQ 38) paths
+- **Sensor-derived configuration** for bus type, lanes, geometry, Bayer phase,
+  timing, gain limits, and application delays
 
 ### 1.3 Source Layout
 
@@ -90,7 +95,6 @@ driver/
   tx_isp_ae_zone.c         AE zone statistics management
   tx_isp_fixpt.c           Fixed-point math (Q16/Q24 for gain/exposure)
   tx_isp_reset.c           Hardware reset sequences
-  tx_isp_trace.c           Register change tracing to /opt/trace.txt
   tx_isp_vic_debug.c       VIC-specific debugging and MIPI PHY monitoring
   include/                 All shared headers
 ```
@@ -262,6 +266,10 @@ pad/link abstractions:
                                                      | (sd 4)  |
                                                      +---------+
 ```
+
+This is a software ownership/routing graph, not a literal silicon floorplan or
+proof of which DMA writes a consumer buffer. The physical processed path is
+CSI -> VIC/VIN -> ISP -> MSCA. VIC MDMA is independent.
 
 ### 4.2 Fixed Subdevice Array Layout
 
@@ -472,24 +480,27 @@ Errors are cleared by writing the status value back to the register.
 
 ### 6.1 Overview
 
-The Video Input Controller (VIC) captures frames from the CSI output FIFO and
-transfers them to DRAM via MDMA (Memory DMA). It manages a 5-bank circular
-buffer system for continuous frame capture.
+The Video Input Controller (VIC) admits and routes the CSI output toward the
+ISP. Its separate MDMA engine can also capture the incoming raw path into a
+five-bank DRAM ring for diagnostics or generation-specific use. MDMA is not
+the normal writer of processed frame-channel NV12 buffers; MSCA owns that
+output.
 
 ### 6.2 Architecture
 
 ```
-CSI Output -> VIC Input FIFO -> MDMA Engine -> DRAM Banks (0-4)
-                                    |
-                              IRQ 38 on completion
-                                    |
-                              Buffer rotation
-                              (queue -> free -> done -> hw -> delivered)
+CSI Output -> VIC Input/Routing -> ISP -> MSCA -> processed frame buffers
+                    |
+                    +-> optional VIC MDMA -> raw/debug DRAM banks (0-4)
+                                                |
+                                          IRQ 38 / rotation
 ```
 
-The VIC has two independent engines:
-- **Input engine**: Activated by VIC RUN (`vic_regs + 0x0 = 1`), captures from CSI
-- **Output engine**: Activated by MDMA enable (`vic_regs + 0x308 = 1`), writes to DRAM
+The VIC has two independently controlled functions:
+- **Input engine**: Activated by VIC RUN (`vic_regs + 0x0 = 1`), accepts and
+  routes the CSI stream toward the ISP
+- **MDMA engine**: Activated separately (`vic_regs + 0x308 = 1`), writes the
+  optional raw/debug path to DRAM
 
 These are controlled independently and sequentially in the pipeline.
 
@@ -933,23 +944,32 @@ the initialization, runtime adjustment, and mode switching of every ISP block.
 ### 9.4 AE Algorithm
 
 **Statistics collection**:
-- AE0 buffer (0x6000 bytes) collected via `ae0_interrupt_static()`
-- 256-zone grid parsing for luminance statistics
-- Histogram modes: color and B/W
+- AE0 uses rotating static-statistics and histogram DMA banks
+- `ae0_interrupt_static()` synchronizes one `0x1000`-byte bank and decodes the
+  15 x 15 R/G/B zone grid
+- `ae0_interrupt_hist()` synchronizes one `0x800`-byte bank; its first
+  `0x400` bytes contain 256 linear 21-bit histogram counts
 
 **Processing path**:
 ```
-ISP core IRQ (bit 0x1000) -> queue_work(fs_workqueue)
-  -> ispcore_irq_fs_work()
-    -> Read AE statistics from hardware DMA buffer
-    -> tisp_ae0_process() runs AE algorithm
-    -> Write exposure/gain to sensor via notify events
+ISP AE statistics engines [hardware]
+  -> rotating statistics DMA banks [hardware transport]
+  -> static/histogram IRQ handlers [kernel plumbing and decode]
+  -> AE event 1
+  -> tisp_ae0_process() once per frame [MIPS software]
+     -> ae0_weight_mean2() [metering/scene weighting software]
+     -> ae0_tune2() [convergence/anti-flicker allocation software]
+  -> sensor exposure event/I2C + ISP digital-gain registers
 ```
 
-**AE zone data** (`tx_isp_ae_zone.c`):
-- 15x15 zone grid = 225 zones, 0x384 bytes
-- Updated per-frame via `tisp_ae_update_zone_data()`
-- Read by user-space via `tisp_g_ae_zone()` -> `copy_to_user()`
+`Tiziano_ae0_fpga()` is a historical function name for CPU code; there is no
+evidence that this function executes in an FPGA. Hardware reduces each frame
+to histogram and zone data, so the CPU does not scan the delivered NV12 frame
+to run the normal T31 AE loop.
+
+AE1 is the secondary hardware statistics/software-control path used for WDR.
+Sensor timing, limits, gain allocation callbacks, and apply delays come from
+the bound sensor attributes.
 
 ### 9.5 AWB Algorithm
 
@@ -1425,54 +1445,46 @@ Under `/sys/devices/.../<device>/`:
 
 ## 15. End-to-End Data Flow
 
-### 15.1 Complete Frame Capture Example (1920x1080 RAW10 MIPI)
+### 15.1 Complete Processed-Frame Flow
 
 ```
 SENSOR OUTPUT
-  4 MIPI lanes, 10-bit Bayer, 1920x1080
+  └─ Bayer format, dimensions, bus type, lane count, and timing are supplied
+     by the bound sensor (device-tested examples include SC2336, GC2053, and
+     SC301IOT)
 
 CSI INITIALIZATION
-  ├─ Program N_LANES = 3 (4 lanes - 1)
-  ├─ Set lane_mask = 0x3f (all 4 lanes)
+  ├─ Program the sensor-declared lane count and lane mask
   ├─ Enable MIPI mode
-  ├─ Calculate and program rate_sel
+  ├─ Calculate and program the sensor-link rate selection
   ├─ Wait W01 phase lock (0x200 -> 0x630)
   └─ Enable CSI
 
 VIC INITIALIZATION
   ├─ Read sensor MIPI control attributes
   ├─ Set MIPI mode (standard or SONY)
-  ├─ Program packed bits = ((10 * 1920) + 31) >> 5
-  ├─ Set geometry = (1920 << 16) | 1080
+  ├─ Program packed width from sensor bit depth and active width
+  ├─ Set sensor-derived geometry
   ├─ Program crop windows
-  ├─ Set frame mode (0x4440 = linear)
+  ├─ Select the declared linear or WDR frame mode
   ├─ Arm: write 2, write 4, unlock
   ├─ Wait arm complete
   └─ VIC RUN (input engine starts)
 
-MDMA ENABLE (separate step)
-  ├─ Program stride = 1920 * 2 = 3840 bytes
-  ├─ Program bank addresses (5 banks)
-  ├─ Set frame dimensions
-  └─ Enable MDMA (output engine starts)
-
-PER-FRAME CAPTURE
+PER-FRAME PIXEL PATH
   ├─ CSI deserializes MIPI data to parallel stream
-  ├─ VIC FIFO absorbs and buffers incoming data
-  ├─ MDMA writes frame to current bank in DRAM
-  └─ Bank rotation: 0 -> 1 -> 2 -> 3 -> 4 -> 0...
+  ├─ VIC/VIN admits and routes the Bayer stream
+  ├─ ISP hardware applies the configured pixel blocks
+  └─ MSCA writes processed NV12 into queued frame-channel buffers
 
-IRQ 38 FIRES (VIC frame done)
-  ├─ Read and acknowledge interrupt status
-  ├─ Pop completed buffer from done_head
-  ├─ Deliver via raw_pipe callback to ISP core
-  ├─ Recycle buffer to free_head
-  └─ Refill next bank from queue
+OPTIONAL RAW/DEBUG PATH
+  └─ VIC MDMA can independently write the input path to its bank ring and
+     signal IRQ 38; this is not required for normal processed MSCA output
 
 IRQ 37 FIRES (ISP core)
   ├─ Read and acknowledge status at 0xb4/0xb8
   ├─ On first frame: mbus_to_bayer_write() + tisp_top_sel()
-  ├─ Queue AE/AWB work on frame sync workqueue
+  ├─ Dispatch statistics/event work for CPU-side AE/AWB
   ├─ Drain CH0/1/2 FIFOs (read 0x9974)
   └─ Signal frame_chan_event for channel completion
 
@@ -1502,8 +1514,9 @@ IOCTL: SET_PARAM (0x20007401)
   v
 tisp_code_tuning_ioctl() routes by parameter ID
   |
-  +-> AE: Write exposure/gain to sensor registers
-  +-> AWB: Write white balance gains to CCM
+  +-> AE controls: update software policy/calibration; per-frame AE later
+      requests integration/gain through the sensor event path
+  +-> AWB controls: update software policy and hardware WB/color gains
   +-> Gamma: Refresh LUT in hardware (tiziano_gamma_lut_parameter)
   +-> MDNS: Update motion denoise parameters (if enabled)
   +-> Sharpen/BCSH: Write directly to ISP registers
@@ -1575,8 +1588,8 @@ Common formats:
 
 | Document | Purpose |
 |----------|---------|
-| `CLAUDE.md` | Development workflow and MCP tool usage |
-| `docs/T31_ISP_ARCHITECTURE.md` | High-level architecture notes |
-| `driver/t31/REGMAP_ADR_YDNS.md` | ADR/YDNS register windows and OEM constraints |
-| `driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md` | Stream start verification notes |
-| `external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md` | OEM tuning blob status |
+| [`T31_ISP_ARCHITECTURE.md`](T31_ISP_ARCHITECTURE.md) | Current execution-domain and high-level architecture |
+| [`ISP_SOC_ALGORITHM_VARIANCE.md`](ISP_SOC_ALGORITHM_VARIANCE.md) | Cross-generation algorithm and hardware-contract comparison |
+| [`ISP_TUNING_MATH.md`](ISP_TUNING_MATH.md) | T31 fixed-point and tuning math |
+| [`../driver/t31/REGMAP_ADR_YDNS.md`](../driver/t31/REGMAP_ADR_YDNS.md) | ADR/YDNS register windows and OEM constraints |
+| [`../driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](../driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) | Stream start verification notes |

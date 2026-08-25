@@ -484,13 +484,18 @@ T31 returns the exact used size through its eight-byte contract.
 
 ## Validation Matrix
 
-The July 30-31, 2026 device cycles exercised the real Raptor consumer, RTSP,
-mode control, and post-run `dmesg`, `logread`, and `logcat`.
+The July 30 through August 25, 2026 device cycles exercised the real Raptor
+consumer, RTSP or direct processed output, mode/control paths, and captured
+kernel/service diagnostics. A row records the behavior actually gated; it is
+not a blanket image-parity claim.
 
 | SoC / sensor | Main stream | Sub stream | Mode coverage | Result |
 |---|---:|---:|---|---|
 | T23 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | clean geometry and color; no fatal or memory faults |
+| T30X / SC4236 | 1920×1080 processed output | not part of current gate | day / active AE work | live bind, firmware IRQ/statistics, recognizable frames, tuning AE/color, and balanced exposure allocation; flicker parity remains open |
 | T31 / SC2336 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | two-buffer DMA-done rotation; monotonic timestamps; generic reduced-memory MDNS policy |
+| T31X / GC2053 | 1920×1080 @ 30 fps | 640×360 @ 30 fps | day / controlled one-shot cycles | decoder-clean output and exact CLM banks; active-GIB/AWB color parity remains open |
+| T31X / SC301IOT | 1920×1080 @ 20 fps from 2048×1536 | 640×360 @ 20 fps | daylight plus fleet streaming | fully open driver/OpenIMP, sensor-derived configuration, live AE, and near-stock daylight checkpoint; three physical doorbells exercised |
 | T40XP / GC4653 | 1920×1080 @ 25 fps | configured, not part of this gate | day | shared subdevice/link/event/state pass; eight decoded main frames and no fatal signature |
 | T41 / OS04D10 | 1920×1080 @ 25 fps | 640×360 @ 25 fps | day, night, auto | balanced `0x380/0x880` day AWB and dual-stream fanout |
 

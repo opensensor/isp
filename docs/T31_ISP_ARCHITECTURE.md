@@ -1,235 +1,251 @@
-# Ingenic T31 ISP Architecture Notes
+# Ingenic T31 ISP Architecture
 
 ## Purpose
 
-This document captures the current shared understanding of the Ingenic T31 ISP hardware and the open-source `tx-isp-t31.ko` reimplementation in this repository. It is meant to be a durable architectural reference, not a point-in-time debugging log.
+This document defines the hardware/software boundary of the T31 camera path and
+the architecture of the open `tx-isp-t31.ko` implementation. It is a durable
+reference, not a bring-up log.
 
-## Ground Truth and Scope
+The short answer to "is AE hardware?" is: **the ISP hardware measures the
+image; software decides the exposure**. T31 hardware accumulates AE statistics
+and transports them through DMA. MIPS software meters those statistics, runs
+the convergence and anti-flicker policy, and asks the sensor to apply
+integration time and analog gain. The ISP also applies any requested digital
+gain and other image-processing updates in hardware.
 
-- Open-source implementation: `driver/`
-- OEM reference binary: `OEM-tx-isp-t31.ko`
-- User-space ABI consumer: Ingenic `libimp.so`
-- Primary goal: behavioral equivalence with the OEM driver so `libimp.so` works unmodified
+## Evidence Rules
 
-The OEM binary is the authoritative reference for register values, sequencing, ioctl contracts, and error behavior.
+Reverse-engineered names are useful labels, not proof of a physical block.
+Use evidence in this order:
 
-## High-Level System Model
+1. live register, DMA, IRQ, sensor-bus, and image observations;
+2. OEM binary behavior and call/relocation structure;
+3. recovered source and disassembly;
+4. names, strings, and comments.
 
-At a high level, the T31 camera stack is:
+The OEM module remains the primary compatibility reference for register
+values, sequencing, ioctl contracts, and error behavior. Live silicon wins
+when a recovered name or decompilation implies a different boundary. In
+particular, `Tiziano_ae0_fpga()` is ordinary kernel code executing on the MIPS
+CPU; its historical name does not establish the presence of an FPGA.
 
-1. Image sensor outputs raw Bayer data
-2. CSI receives serialized sensor data
-3. VIC/VIN/core path moves frames into the ISP processing pipeline
-4. ISP processing blocks transform raw Bayer into tuned output
-5. Frame-source devices expose processed frames/channels to user space
-6. `libimp.so` configures the pipeline through ioctls and tuning interfaces
+## Physical Data Path and Control Loop
 
-The open-source driver models this as a kernel module plus several logical/platform subdevices rather than one monolithic code path.
+```text
+Pixel path:
 
-## Major Hardware Resources
+external sensor -> D-PHY/CSI -> VIC/VIN -> Tiziano ISP -> MSCA DMA -> frame channel
+                                      \
+                                       +-> VIC MDMA (independent raw/debug path)
 
-The current driver models the T31 ISP around these key resources:
+Control path:
 
-| Resource | Address / IRQ | Notes |
-|---|---:|---|
-| ISP core MMIO | `0x13300000` | Main ISP register space; mapped large enough to cover LUT windows used by OEM writes |
-| CSI window | `0x10022000` | Camera Serial Interface / DPHY-facing window |
-| VIC window | `0x133e0000` | VIC control/config window |
-| Primary IRQ | `37` | `isp-m0`, ISP core path |
-| Secondary IRQ | `38` | `isp-w02`, VIC / secondary path |
+ISP statistics engines -> statistics DMA -> IRQ/event -> MIPS software 3A
+        ^                                         |          |
+        |                                         |          +-> sensor I2C
+        +--------------- ISP register updates <---+
+```
 
-Important implementation detail: `tx_isp_init_memory_mappings()` maps the ISP core at size `0x90000`, specifically to cover large OEM register ranges such as LSC and DEIR/GIB-related windows.
+The subdevice graph used by the driver represents software ownership, routing,
+and event delivery. It is not a floorplan of the silicon. For example, a graph
+edge involving VIC and the ISP does not mean that processed frame-channel
+buffers are written by VIC MDMA. Normal processed output is written by MSCA;
+VIC MDMA is a separate capture path.
+
+## What Is Hardware and What Is Software?
+
+| Component | Execution domain | Responsibility |
+|---|---|---|
+| Image sensor | External hardware | Pixel integration, rolling readout, sensor analog gain, and often sensor digital gain |
+| D-PHY / CSI-2 receiver | SoC hardware | Electrical receive, lane recovery, packet decode, and error reporting |
+| VIC / VIN | SoC hardware plus kernel control | Input timing, Bayer stream admission, routing, and the independent VIC MDMA path |
+| Tiziano pixel pipeline | ISP hardware | DPC, LSC, green balance, demosaic, color/tone processing, denoise, sharpening, and related per-pixel math |
+| AE/AWB/AF statistics engines | ISP hardware | Histograms, zone accumulations, thresholds, counters, and focus metrics |
+| MSCA, VIC MDMA, statistics DMA | SoC hardware | Move pixels or statistics; these engines do not choose exposure or white balance policy |
+| IRQ/event plumbing | Hardware plus kernel driver | Report completion and schedule the appropriate consumer |
+| Tiziano adaptive algorithms | MIPS kernel software | AE/AWB decisions, target interpolation, scene weighting, anti-flicker allocation, and gain/EV/CT fanout |
+| Sensor driver | MIPS kernel software controlling external hardware | Validate sensor limits and translate requested integration/gain into sensor register writes |
+| `libimp.so` / OpenIMP | MIPS user space | Configure streams, modes, tuning controls, and consume frames |
+
+It is therefore directionally useful to call CSI, VIC, and ISP the main imaging
+hardware blocks, but not literally complete. The SoC also contains D-PHY,
+MSCA, DMA, interrupt, clock, and bus hardware. More importantly, "ISP" itself
+contains both the per-pixel processing blocks and the metering blocks used by
+software 3A.
 
 ## Driver Decomposition
 
-The source tree is organized by functional block:
-
-| File | Role |
+| File | Primary role |
 |---|---|
-| `driver/t31/tx_isp_module.c` | Module entry/exit, platform devices, shared register helpers, IRQ adoption/dispatch |
-| `driver/t31/tx_isp_core.c` | Core probe, MMIO mappings, core init, ISP ISR, first-frame bring-up logic |
-| `driver/t31/tx_isp_csi.c` | CSI device / stream control |
-| `driver/t31/tx_isp_vic.c` | VIC device / frame movement / buffer handling |
+| `driver/t31/tx_isp_module.c` | Module lifecycle, platform devices, shared register helpers, IRQ adoption/dispatch |
+| `driver/t31/tx_isp_core.c` | Core probe, MMIO mapping, ISP ISR, and first-frame bring-up |
+| `driver/t31/tx_isp_csi.c` | CSI device and stream control |
+| `driver/t31/tx_isp_vic.c` | VIC input and independent MDMA handling |
 | `driver/t31/tx_isp_vin.c` | VIN-facing subdevice |
-| `driver/t31/tx_isp_fs.c` | Frame-source channels presented to user space |
-| `driver/t31/tx_isp_tuning.c` | Tuning subsystem, ISP block init, parameter IOCTLs, per-block updates |
-| `driver/t31/tx_isp_subdev*.c` | Subdevice registration, graph creation, pad/link management |
-| `driver/t31/include/` | Shared headers, structs, register-map helpers |
+| `driver/t31/tx_isp_fs.c` | Processed frame-source channels presented to user space |
+| `driver/t31/tx_isp_tuning.c` | ISP block programming, tuning ABI, statistics consumers, and software 3A |
+| `driver/t31/tx_isp_subdev*.c` | Software graph, pad, and link management |
+| `driver/t31/include/` | T31-local ABI, state, and register definitions |
 
-## Platform and Subdevice Model
+The `tiziano_*` prefix does not identify an execution domain. Some functions
+write hardware registers or LUTs; others are algorithms running on the CPU.
+Read the data flow and side effects before classifying a function.
 
-`tx_isp_module.c` creates logical platform devices for:
+## Hardware Resources
 
-- `tx-isp` (top-level wrapper)
-- `isp-m0` (core / primary IRQ domain)
-- `isp-w00` (VIN)
-- `isp-w01` (CSI)
-- `isp-w02` (VIC)
-- `isp-fs` (frame source)
+| Resource | Address / IRQ | Role |
+|---|---:|---|
+| ISP core MMIO | `0x13300000` | Main ISP blocks, statistics engines, LUT windows, and MSCA controls |
+| CSI window | `0x10022000` | CSI / D-PHY-facing controls |
+| VIC window | `0x133e0000` | VIC input and MDMA controls |
+| Primary IRQ | `37` | `isp-m0`, ISP events |
+| Secondary IRQ | `38` | `isp-w02`, VIC events |
 
-The subdevice graph is constructed in `tx_isp_subdev_mgmt.c`.
+`tx_isp_init_memory_mappings()` maps the ISP core through `0x90000` so that
+the high register/LUT windows used by the OEM sequence are covered.
 
-- `tx_isp_create_subdev_graph()` builds the runtime graph
-- `tx_isp_create_basic_pipeline()` creates the basic CSI → VIC pipeline when no registry is present
+## Bring-Up and Processed Output
 
-This graph-based model is the main in-tree abstraction for representing how the ISP hardware blocks are wired together.
+The important ordering is:
 
-## MMIO Access Model
+1. `tx_isp_init()` allocates the shared device, registers platform devices and
+   drivers, creates the tuning node, and builds the software graph.
+2. `tx_isp_core_probe()` establishes mappings before tuning state can touch
+   hardware.
+3. `ispcore_core_ops_init()` activates the core and calls `tisp_init()` after
+   the VIC input path is ready.
+4. On the first frame, `mbus_to_bayer_write()` derives the CFA phase from the
+   live sensor format and flip state, and `tisp_top_sel()` releases top-level
+   processing.
+5. MSCA writes processed output buffers and signals frame-channel completion.
 
-The shared helpers in `tx_isp_module.c` are central:
+Wrong CFA phase corrupts demosaic output. Wrong clock/reset/IRQ order can fail
+silently. Enabling VIC MDMA is not required for normal processed output and
+must not be used as a substitute for MSCA.
 
-- `system_reg_write(u32 reg, u32 value)`
-- `system_reg_read(u32 reg)`
+## ISP Pixel Processing and Statistics
 
-These helpers resolve the live ISP base from `ourISPdev->core_regs` and are the preferred way to program ISP offsets from tuning code. Many OEM-aligned helpers (`system_reg_write_awb`, `system_reg_write_clm`, `system_reg_write_gib`, etc.) use the same base mechanism and prepend block-enable writes when needed.
+### Per-pixel hardware
 
-## Bring-Up Sequence
+The major hardware-controlled families include DPC, GIB/GB, LSC, DMSC, CCM,
+gamma, BCSH/CLM, sharpening, SDNS/MDNS/RDNS/YDNS, defog, ADR, and WDR-related
+processing. Software loads their register banks and LUTs; hardware applies the
+math at pixel rate.
 
-The current driver bring-up is split across module init, platform probe, and core init:
+The top bypass value is composed in
+`tisp_compute_top_bypass_from_params()` and written to ISP register `0xc`.
+Bypass polarity, shadow-bank selection, and write order are hardware-specific
+contracts, even when the policy that selects a bank is software.
 
-1. `tx_isp_init()` in `tx_isp_module.c`
-   - allocates `ourISPdev`
-   - registers platform devices
-   - registers/initializes subdevice platform drivers
-   - creates the tuning node
-   - builds the subdevice graph
-2. `tx_isp_core_probe()` in `tx_isp_core.c`
-   - binds the existing `ourISPdev`
-   - initializes memory mappings first
-   - initializes tuning state after MMIO is available
-3. `ispcore_core_ops_init()`
-   - runs the core activation sequence
-   - calls `tisp_init()` once the VIC is in the ready state
+### Metering hardware
 
-This ordering matters: many failures seen during bring-up were caused by programming registers before mappings, clocks, or IRQ ownership were correct.
+T31 AE0 hardware produces two complementary streams:
 
-## Stream Start and First-Frame Behavior
+- a 256-bin primary histogram, stored as linear 21-bit counts in the first
+  `0x400` bytes of a rotating `0x800`-byte histogram bank;
+- a 15 x 15 zone-statistics grid containing channel sums and threshold counts,
+  transported in a rotating `0x1000`-byte static-statistics bank.
 
-During stream-on / early ISR handling, two actions are especially important:
+AWB, AF, ADR, DPC, and WDR-related paths have their own statistics or event
+contracts. Having a hardware statistics block does not imply that its adaptive
+control algorithm is hardware.
 
-- `mbus_to_bayer_write()` writes ISP register `0x8` with the live CFA/Bayer pattern derived from sensor mbus format plus `shvflip`
-- `tisp_top_sel()` sets bit 31 of ISP register `0xc` on first interrupt to release top-level processing
+## AE0 Per-Frame Flow
 
-If CFA phase is wrong, demosaic output is visibly corrupted.
+```text
+AE0 static-stat IRQ
+  -> select completed static DMA bank
+  -> synchronize 0x1000 bytes
+  -> ae0_interrupt_static() decodes/caches 15 x 15 zone data
 
-## Tuning Subsystem Model
+AE0 histogram IRQ
+  -> select completed histogram DMA bank
+  -> synchronize 0x800 bytes
+  -> ae0_interrupt_hist() decodes 256 histogram bins
+  -> push AE event 1
 
-`driver/t31/tx_isp_tuning.c` is the bulk of the ISP behavior model. It contains:
+AE event 1, once per frame
+  -> tisp_ae0_process()
+  -> Tiziano_ae0_fpga()                  [MIPS software]
+     -> ae0_weight_mean2()               [MIPS metering/scene weighting]
+     -> ae0_tune2()                      [MIPS convergence/allocation]
+  -> request integration + analog gain  [sensor event / I2C]
+  -> update ISP digital gain and gain-dependent blocks
+  -> wait for the sensor-declared application delays
+```
 
-- block initialization (`tiziano_*_init`)
-- parameter bank storage and IOCTL set/get handlers
-- day/night and WDR mode switching
-- gain / EV / CT refresh hooks
-- DMA-backed statistics setup for AE/AWB/ADR/DPC-style paths
+The software controller combines zone weighting with histogram-tail behavior,
+uses tuning-derived targets and convergence state, constrains the result to
+sensor-published integration/gain limits, and applies anti-flicker exposure
+nodes. AE1 is the secondary statistics/control path used for WDR modes.
 
-The current `tisp_init()` sequence initializes blocks in an OEM-inspired order, including:
+This answers a common misconception: the CPU does not normally inspect every
+output pixel to run AE. Hardware reduces the frame to compact statistics; CPU
+software performs the slower policy calculation once per statistics event.
 
-- AE / AWB / Gamma
-- GIB / LSC / CCM / DMSC
-- Sharpen / SDNS / MDNS / CLM
-- DPC / Defog / ADR / AF / BCSH / YDNS / RDNS
+## The Washed-Sky AE Failure
 
-## Top Bypass Register and Block Enables
+The rear-door SC301IOT test exposed a software policy bug, not missing AE
+hardware. The first frame retained the calibrated scene behavior and rendered
+the blue sky correctly. A later generic tuning write converted a zero
+highlight/backlight request into an active level, disabling the calibrated
+bright-tail response. AE then converged toward foreground brightness and
+washed out the sky.
 
-ISP top-level block bypass is computed in `tisp_compute_top_bypass_from_params()` and written to register `0xc`.
+The permanent rule is:
 
-The in-tree documented block bits are:
+- zero means no generic override and preserves the active sensor/tuning-bank
+  calibration;
+- an explicit non-zero request is translated through the OEM scalar level
+  encoding;
+- sensor timing, limits, delays, Bayer phase, and bus type come from the active
+  sensor attributes rather than driver literals.
 
-- bit 2: DPC
-- bit 4: LSC
-- bit 5: GIB
-- bit 7: ADR
-- bit 8: DMSC
-- bit 10: Gamma
-- bit 11: Defog
-- bit 12: CLM / BCSH path
-- bit 14: Sharpen
-- bit 15: SDNS
-- bit 16: MDNS
-- bit 17: YDNS
+This is why a generic control plane must distinguish "no override" from an
+encoded hardware or OEM algorithm level.
 
-The first 32 words of the active tuning block contribute to OEM bypass computation, then local safety/debug masks can re-bypass specific blocks.
+## Tuning and Runtime Switching
 
-## Major ISP Processing Blocks
+The active day, night, and WDR parameter banks are a recovered control plane.
+They contain both calibration data loaded into hardware and thresholds/LUTs
+consumed by CPU algorithms. A tuning blob is not firmware executed by the ISP.
 
-The main image-processing blocks currently modeled in-tree are:
+Mode changes are ordered transitions rather than a single enable bit. They can
+select new hardware banks and cause gain-, EV-, or color-temperature-dependent
+software fanout. ABI-compatible structure layout and ioctl sizes must remain
+stable for `libimp.so`, but algorithm internals can be made common where the
+hardware contracts have adapters.
 
-- **AE / AWB / AF**: exposure, white balance, autofocus statistics/control
-- **DPC**: defect-pixel correction
-- **GIB / GB**: green imbalance / green-balance related stages
-- **LSC**: lens shading correction
-- **DMSC**: demosaic
-- **CCM / BCSH / CLM**: color correction, brightness/contrast/saturation/hue, color luminance mapping
-- **Gamma**: LUT-based tone mapping
-- **Sharpen**: detail enhancement
-- **SDNS / MDNS / RDNS / YDNS**: spatial, motion, raw, and luma denoise families
-- **Defog / ADR / WDR**: dynamic range and tone-mapping related paths
+## Device Coverage and Limits of the Claim
 
-`driver/t31/REGMAP_ADR_YDNS.md` documents the ADR/YDNS register windows and some OEM ordering constraints.
+The open T31 driver is not a one-sensor experiment:
 
-## Banked Modes and Runtime Switching
+- **T31L / SC2336:** main/sub streaming, exposure and gain-dependent tuning,
+  day/night/auto, MDNS, frame ABI, and stock/open register comparisons;
+- **T31X / GC2053:** main/sub streaming at 30 fps, live AE recovery, exact CLM
+  bank comparison, and a GIB/AWB-zone failure isolated with a stock oracle;
+- **T31X / SC301IOT:** fully open driver/OpenIMP streaming, sensor-derived ISP
+  configuration, live histogram/zone AE, and stock/open daylight comparison.
+  Three separate Wyze Video Doorbell v2 units have been exercised in the fleet
+  archive.
 
-Several subsystems maintain separate linear and WDR banks. The important global switches are:
-
-- `tisp_s_wdr_en()` for WDR transition sequencing
-- day/night control paths that swap `tparams_day`, `tparams_night`, and `tparams_active`
-
-Mode changes are not just single-bit toggles; they trigger ordered re-initialization or re-selection of multiple per-block parameter banks.
-
-## Data Sources for Tuning
-
-The driver uses multiple classes of tuning data:
-
-- active day/night tuning blobs (`tparams_day`, `tparams_night`, `tparams_active`)
-- hand-modeled or reverse-engineered parameter arrays in `tx_isp_tuning.c`
-- DMA-fed runtime statistics for AE/AWB/ADR-style logic
-- synthetic placeholder tables where OEM-calibrated content is still missing
-
-`external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md` is the best current map of which subsystem tables are still synthetic or only partially populated.
-
-## Known Reverse-Engineering Rules
-
-These rules have repeatedly proven important:
-
-- OEM register writes and write ordering matter
-- clock/reset ordering matters
-- IRQ ownership must not be duplicated or double-disabled
-- struct layouts and ioctl sizes must remain compatible with `libimp.so`
-- image-path fixes must be validated against both live output and OEM HLIL/decompilation
-
-## What We Know Well vs Poorly
-
-### Strongly understood
-
-- dual-IRQ model (`37` + `38`)
-- MMIO base ownership and `system_reg_*` access pattern
-- overall source-file/module decomposition
-- top-bypass architecture
-- major block inventory and many register windows
-
-### Still incomplete
-
-- exact image-quality parity for all enabled blocks
-- some runtime statistics consumers and per-frame tuning decisions
-- full confidence in every block's live enable state under all modes
-- OEM ae0_tune2 gain distribution (Phase H) needs exact threshold-based mode
-- tisp_ae_tune function (scene-adaptive EV table adjustment) not yet implemented
-
-## AE Subsystem — Deep Dive
-
-The AE (Auto-Exposure) subsystem is the most complex algorithm in the ISP driver. See `docs/AE_CONVERGENCE_ARCHITECTURE.md` for the full reverse-engineered architecture including:
-
-- OEM ae0_tune2 (0x500b8): 34-argument convergence controller with EV-domain FIFO, 64-bit interpolation, histogram-based brightness feedback
-- Critical domain mismatch discovery: `_lum_list` values (100-140000) are EV-domain targets, NOT 0-255 brightness
-- The `data_9a2ec` flag enables brightness feedback by scaling ev_list/lum_list tables based on wmean
-- Zone data format: 4-word DMA entries with packed 21-bit R/G/B per zone
-- OEM ae0_weight_mean2 (0x4f93c): separate R/G/B channel processing with 64-bit weighted accumulation
+The detailed histogram-tail regression in this document was reproduced and
+fixed on SC301IOT. The other two sensors independently prove substantial
+transport, mode, exposure, tuning, and image behavior, but do not turn that
+SC301IOT result into universal image-quality parity. Night/IR, WDR, extreme
+exposure, and both 50/60 Hz regimes still need sensor-specific controlled
+comparisons. Each claim must name its sensor and be backed by attributes,
+tuning bank, live statistics, sensor writes, and output frames.
 
 ## Related Documents
 
-- `README.md`
-- `CLAUDE.md`
-- `docs/AE_CONVERGENCE_ARCHITECTURE.md` — AE convergence algorithm deep dive
-- `driver/t31/REGMAP_ADR_YDNS.md`
-- `driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`
-- `external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md`
+- [`ISP_SOC_ALGORITHM_VARIANCE.md`](ISP_SOC_ALGORITHM_VARIANCE.md) - proven
+  cross-generation algorithm differences, unification boundaries, and
+  performance hypotheses
+- [`ISP_TUNING_MATH.md`](ISP_TUNING_MATH.md) - fixed-point and tuning math
+- [`TX_ISP_PIPELINE_ARCHITECTURE.md`](TX_ISP_PIPELINE_ARCHITECTURE.md) -
+  detailed T31 register, interrupt, and buffer reference
+- [`../driver/t31/REGMAP_ADR_YDNS.md`](../driver/t31/REGMAP_ADR_YDNS.md) -
+  ADR/YDNS register notes
+- [`../driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](../driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) -
+  stream-control verification

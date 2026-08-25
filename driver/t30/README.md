@@ -123,10 +123,29 @@ memory lookup.
 
 ## Validation boundary
 
-This is recovery-grade code. It has a clean static build against the matching
-vendor kernel and toolchain, but it has not been loaded on a T30 camera. Probe,
-streaming, sensor ABI, interrupt behavior, image quality, and OEM behavioral
-parity remain unvalidated until T30 hardware is available. The deliberately
-unoptimized recovery build still has substantial text expansion, so future
-refactoring should continue replacing raw-layout accesses with reviewed types
-and coherent SDK-backed subsystems.
+This remains recovery-grade code, but it is no longer static-only. The August
+25, 2026 Wyze Video Doorbell v1 T30X/SC4236 cycles proved:
+
+- the recovered module and matching SC4236 sensor module bind on the real
+  Linux 3.10.14 target;
+- the ISP firmware IRQ/statistics path runs and the processed 1920x1080 path
+  has produced recognizable open-driver frames;
+- sensor timing/gain calibration now reaches the open simple 3A path;
+- the compressed 256-bin histogram decoder, tuning-derived target correction,
+  balanced integration/gain partition, and requested anti-flicker mode are
+  active in the live branch;
+- stock/open exposure traces exposed a real policy difference: stock held
+  approximately 1/50-second integration and added gain, while an open
+  checkpoint used longer integration and less gain for similar still-frame
+  brightness.
+
+The last item is not closed by a good-looking still. Visible flicker remains a
+current live defect, and later experimental cycles also include failed
+bring-up candidates. The durable validation claim is therefore device bind,
+statistics/IRQ execution, processed output, and active AE allocation—not OEM
+motion/flicker parity or production stability. Controlled 50/60 Hz tests must
+verify integration/gain traces and banding before that claim is upgraded.
+
+The deliberately unoptimized recovery build still has substantial text
+expansion. Future refactoring should continue replacing raw-layout accesses
+with reviewed types and coherent SDK-backed subsystems.

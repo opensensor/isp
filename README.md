@@ -6,8 +6,8 @@
 
 This repository contains open-source reimplementations of the Ingenic TX-ISP
 kernel drivers for T21, T23, T30, T31, T40, and T41 cameras. The active
-cross-SoC refactoring work includes the device-tested drivers plus static T21
-and T30 recovery baselines. T31 is organized as a modular driver. T21, T23,
+cross-SoC work includes device-tested T23, T30, T31, T40, and T41 drivers plus
+the static T21 recovery baseline. T31 is organized as a modular driver. T21, T23,
 T30, T40, and T41 retain large recovered core sources, but their modules now
 have separate adapters for shared facilities where applicable.
 
@@ -51,9 +51,9 @@ OEM-like daylight image quality, and persistent runtime flip control.
 |---|---|
 | T21 | First recovered whole-driver baseline is integrated and builds against the vendor Linux 3.10.14 tree; stock T21/T23/T31 comparison backs the shared math adapter and two IRQ collapse repairs, but hardware validation is pending. |
 | T23 | Device-tested vendor-kernel path with live capture and shared registry, layout, ABI, and tuning primitives; broader sensor and image-quality validation continues. |
-| T30 | Recovered whole-driver baseline builds cleanly against the vendor Linux 3.10.14 tree; shared math/modulation, frame ABI, registry, and subdevice adapters are linked and the OEM sensor export surface is restored, but hardware validation is pending. |
-| T31 | Device-tested on vendor Linux 3.10 and compatibility-tested on mainline Linux 7.1; OEM `libimp.so` and OpenIMP both stream, with near-OEM daylight parity demonstrated on SC301IOT. |
-| T40 | Recovered core is integrated with shared adapters; color-path, tuning, and device-matrix work remain active. |
+| T30 | Device-tested on a T30X Wyze Video Doorbell v1 with SC4236: open ISP frames, firmware IRQ/statistics, tuning-derived AE/color, and balanced exposure allocation are live; anti-flicker/shutter allocation remains under active comparison with stock. |
+| T31 | Device-tested with SC2336, GC2053, and SC301IOT on vendor Linux 3.10 and compatibility-tested on mainline Linux 7.1; OEM `libimp.so` and OpenIMP both stream, with near-OEM daylight parity demonstrated on SC301IOT. |
+| T40 | Device-tested on T40XP/GC4653 with processed streaming, userspace AE/AWB, denoise/tuning recovery, and stock/open register comparisons; statistics restart stability remains a known limitation. |
 | T41 | Device-tested 2.5K open-stack baseline plus V4L2 MMAP and DMA-BUF capture; image-quality and delivered-FPS work remain active. |
 
 ### Working today
@@ -61,12 +61,15 @@ OEM-like daylight image quality, and persistent runtime flip control.
 - kernel module architecture is in place
 - the T21 recovery baseline builds and links with a stock-backed shared math
   adapter, current binary audit, and restored public IRQ callback paths
-- the T30 recovery baseline builds and links cleanly with its OEM/recovered
-  assembly audits checked in
+- the T30 recovery builds, links, and has produced live SC4236 output through
+  the real T30X consumer; compressed histogram AE, tuning target correction,
+  balanced exposure partitioning, and userspace 50/60 Hz control are active
 - major ISP subdevices exist and probe
 - core MMIO mapping and IRQ ownership are understood
 - stream bring-up is functional enough for live video
 - tuning infrastructure and many ISP blocks are implemented
+- the T31 driver has live sensor coverage on SC2336, GC2053, and SC301IOT;
+  three separate SC301IOT doorbells were exercised in the fleet archive
 - the T31/SC301IOT pipeline streams with either OEM `libimp.so` or OpenIMP
 - T31 daylight color and lens-shading behavior on the Wyze Video Doorbell v2
   are close to the current OEM reference
@@ -125,6 +128,7 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 ## Key Documentation
 
 - [`docs/T31_ISP_ARCHITECTURE.md`](docs/T31_ISP_ARCHITECTURE.md) — current hardware / driver architecture notes
+- [`docs/ISP_SOC_ALGORITHM_VARIANCE.md`](docs/ISP_SOC_ALGORITHM_VARIANCE.md) — proven T23/T30/T31/T40/T41 algorithm differences, hardware boundaries, and unification hypotheses; T20 explicitly deferred
 - [`driver/t21/COMPARATIVE_ANALYSIS.md`](driver/t21/COMPARATIVE_ANALYSIS.md) — stock T21/T23/T31 overlap, extraction decisions, and next repair queue
 - [`docs/DRIVER_REUSE_PLAN.md`](docs/DRIVER_REUSE_PLAN.md) — cross-SoC commonality map and staged reuse plan
 - [`docs/SHARED_DRIVER_LIBRARY.md`](docs/SHARED_DRIVER_LIBRARY.md) — landed shared interfaces, adapters, invariants, and device matrix
@@ -135,7 +139,6 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 - [`docs/V4L2_CAPTURE_PATH.md`](docs/V4L2_CAPTURE_PATH.md) — additive V4L2 capture architecture, landed queue core, and adapter phases
 - [`driver/t31/REGMAP_ADR_YDNS.md`](driver/t31/REGMAP_ADR_YDNS.md) — ADR / YDNS register-map notes
 - [`driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md`](driver/t31/TX_ISP_VIDEO_S_STREAM_VERIFIED.md) — stream-control verification notes
-- [`external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md`](external/ingenic-sdk/3.10/isp/t31/OEM_TUNING_BLOB_MANIFEST.md) — current map of recovered vs synthetic tuning data
 
 ## Repository Layout
 
