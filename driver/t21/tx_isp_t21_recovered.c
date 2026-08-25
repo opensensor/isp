@@ -17724,37 +17724,152 @@ subdev_video_destroy_link0x54:
     return 0;
 }
 
+struct t21_link_pad_desc {
+	const char *name;
+	u8 type;
+	u8 index;
+	u16 reserved;
+};
+
+struct t21_video_link_desc {
+	struct t21_link_pad_desc source;
+	struct t21_link_pad_desc sink;
+	u32 flags;
+};
+
+struct t21_video_link_set {
+	const struct t21_video_link_desc *links;
+	u32 count;
+};
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a44c origin=model_output original=tx_isp_video_link_destroy.isra.1 */
 #ifndef REGTRACE_KERNEL_TREE_BUILD
 int32_t tx_isp_video_link_destroy_isra_1(void *arg1) __asm__("tx_isp_video_link_destroy.isra.1");
 #endif
 int32_t tx_isp_video_link_destroy_isra_1(void *arg1)
 {
-	int32_t idx = *(int32_t *)((char *)arg1 + 0x118);
-	int32_t i;
-	int32_t *cfg_base;
-	int32_t pad1;
-	int32_t pad2;
+	const struct t21_video_link_set *sets =
+		(const struct t21_video_link_set *)configs;
+	const struct t21_video_link_set *set;
+	int32_t idx;
+	u32 i;
+	u8 *pad1;
+	u8 *pad2;
 	int32_t ret;
 
+	BUILD_BUG_ON(sizeof(struct t21_link_pad_desc) != 8);
+	BUILD_BUG_ON(sizeof(struct t21_video_link_desc) != 0x14);
+	BUILD_BUG_ON(sizeof(struct t21_video_link_set) != 8);
+
+	if (!arg1 || (uintptr_t)arg1 >= (uintptr_t)-4095)
+		return -EINVAL;
+
+	idx = *(int32_t *)((char *)arg1 + 0x118);
 	if (idx < 0)
 		return 0;
+	if (idx >= ARRAY_SIZE(configs) / sizeof(*sets))
+		return -EINVAL;
 
-	cfg_base = (uintptr_t)&configs[idx << 3];
+	set = &sets[idx];
+	if (!set->links || (uintptr_t)set->links >= (uintptr_t)-4095)
+		return -EINVAL;
 
-	for (i = 0; i < 0x3c; i += 0x14) {
-		pad1 = find_subdev_link_pad(arg1, cfg_base + i);
-		pad2 = find_subdev_link_pad(arg1, cfg_base + i + 8);
+	for (i = 0; i < set->count; i++) {
+		const struct t21_video_link_desc *link = &set->links[i];
 
-		if (pad1 != 0 && pad2 != 0) {
-			subdev_video_destroy_link(pad1 + 8);
-			ret = subdev_video_destroy_link(pad2 + 8);
+		pad1 = (u8 *)(uintptr_t)find_subdev_link_pad(arg1,
+					(int32_t *)&link->source);
+		pad2 = (u8 *)(uintptr_t)find_subdev_link_pad(arg1,
+					(int32_t *)&link->sink);
+
+		if (pad1 && pad2) {
+			ret = subdev_video_destroy_link((uintptr_t)(pad1 + 8));
+			if (ret && ret != -515)
+				return ret;
+			ret = subdev_video_destroy_link((uintptr_t)(pad2 + 8));
 			if (ret != 0 && ret != -515)
 				return ret;
 		}
 	}
 
 	*(int32_t *)((char *)arg1 + 0x118) = -1;
+	return 0;
+}
+
+static int t21_tx_isp_video_link_setup(void *arg1, int32_t index)
+{
+	const struct t21_video_link_set *sets =
+		(const struct t21_video_link_set *)configs;
+	const struct t21_video_link_set *set;
+	u32 i;
+
+	BUILD_BUG_ON(sizeof(struct t21_link_pad_desc) != 8);
+	BUILD_BUG_ON(sizeof(struct t21_video_link_desc) != 0x14);
+	BUILD_BUG_ON(sizeof(struct t21_video_link_set) != 8);
+
+	if (!arg1 || (uintptr_t)arg1 >= (uintptr_t)-4095)
+		return -EINVAL;
+	if (index < 0 || index >= ARRAY_SIZE(configs) / sizeof(*sets)) {
+		isp_printf(2, "link(%d) is invalid!\n", index);
+		return -EINVAL;
+	}
+	if (*(int32_t *)((u8 *)arg1 + 0x118) == index)
+		return 0;
+
+	set = &sets[index];
+	if (!set->links || (uintptr_t)set->links >= (uintptr_t)-4095)
+		return -EINVAL;
+
+	for (i = 0; i < set->count; i++) {
+		const struct t21_video_link_desc *link = &set->links[i];
+		u8 *source = (u8 *)(uintptr_t)find_subdev_link_pad(
+			arg1, (int32_t *)&link->source);
+		u8 *sink = (u8 *)(uintptr_t)find_subdev_link_pad(
+			arg1, (int32_t *)&link->sink);
+		u32 flags;
+		int ret;
+
+		if (!source || !sink) {
+			isp_printf(2, "Can't find pads for link %u\n", i);
+			return -ENODEV;
+		}
+
+		flags = link->flags;
+		if (!(flags & source[6] & sink[6])) {
+			isp_printf(2, "The link type is mismatch!\n");
+			return -1;
+		}
+		if (source[7] == 4 || sink[7] == 4) {
+			isp_printf(2, "Please stop active links firstly! %d\n", 198);
+			return -1;
+		}
+
+		if (source[7] == 3 && *(u8 **)(source + 0xc) != sink) {
+			ret = subdev_video_destroy_link((uintptr_t)(source + 8));
+			if (ret && ret != -515)
+				return ret;
+		}
+		if (sink[7] == 3 && *(u8 **)(sink + 0xc) != source) {
+			ret = subdev_video_destroy_link((uintptr_t)(sink + 8));
+			if (ret && ret != -515)
+				return ret;
+		}
+
+		flags |= 1;
+		*(u8 **)(source + 8) = source;
+		*(u8 **)(source + 0xc) = sink;
+		*(u8 **)(source + 0x10) = sink + 8;
+		*(u32 *)(source + 0x14) = flags;
+		source[7] = 3;
+
+		*(u8 **)(sink + 8) = sink;
+		*(u8 **)(sink + 0xc) = source;
+		*(u8 **)(sink + 0x10) = source + 8;
+		*(u32 *)(sink + 0x14) = flags;
+		sink[7] = 3;
+	}
+
+	*(int32_t *)((u8 *)arg1 + 0x118) = index;
 	return 0;
 }
 
@@ -17843,7 +17958,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 	void *priv = *(void **)((char *)file + 0x70);
 	void *base = (char *)priv - 0xc;
 	int32_t ret;
-	int32_t buf[0x50];
+	/* Largest ioctl payload is 0x50 bytes, not 0x50 words. */
+	int32_t buf[0x14];
 	int32_t val;
 	int32_t *reg_ptr;
 	int32_t i;
@@ -18796,6 +18912,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 		return tx_isp_video_s_stream(base, 1);
 	case 0x80045613:
 		return tx_isp_video_s_stream(base, 0);
+	case 0x800456d0:
+		if (private_copy_from_user(&val, (void __user *)arg, sizeof(val))) {
+			isp_printf(2, "[%s][%d] copy from user error\n",
+				   "tx_isp_video_link_setup", 178);
+			return -EFAULT;
+		}
+		return t21_tx_isp_video_link_setup(base, val);
 	case 0x800456d1:
 		tx_isp_video_link_destroy_isra_1(base);
 		return 0;

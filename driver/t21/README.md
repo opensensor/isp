@@ -72,6 +72,14 @@ their computed return values or call state.
 - Corrected the recovered `JZ_Isp_Ae_Reg2par` word/byte indexing that could
   otherwise overwrite its caller's stack, plus the brightness/contrast custom
   effect byte updates and the stream-state scalar type.
+- Restored ioctl `0x800456d0`, the OEM video-link graph setup command. The
+  driver now walks the three stock 20-byte link descriptors, resolves each
+  source/sink pad, validates link capability and active state, replaces stale
+  links, and writes the reciprocal pad linkage before recording config zero.
+  The matching destroy path now dereferences the link-set header correctly.
+- Corrected the top-level ioctl scratch allocation from 0x50 words to the OEM
+  0x50-byte payload. Its MIPS stack frame is now 152 bytes versus 168 OEM,
+  instead of 392 bytes.
 
 ## Audit and validation boundary
 
@@ -80,7 +88,7 @@ their computed return values or call state.
 Instruction-count parity is structural triage, not proof of semantics.
 
 The current audit has 612 directly matched functions, 4 syntactic stub
-findings, 26 collapsed findings, and a 0.785 matched-instruction ratio. Three
+findings, 25 collapsed findings, and a 0.787 matched-instruction ratio. Three
 of the four stub findings are intentional tail-call aliases; the only true
 empty body is `Tiziano_Awb_Ct_Detect`.
 

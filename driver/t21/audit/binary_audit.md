@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 630 | 682 |
 | Functions with disassembly | 630 | 682 |
-| Executable section bytes | 215240 | 169232 |
+| Executable section bytes | 215240 | 169856 |
 | Initialized writable bytes | 283936 | 276528 |
 | Uninitialized writable bytes | 101040 | 452144 |
 
 - direct matches: 612
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=18 recovered-only=70
-- matched instructions: OEM=52693 recovered=41338 ratio=0.785
-- classes: stub=4 collapsed=26 shorter=110 same_count=137 similar=317 larger=11 expanded=7
+- matched instructions: OEM=52693 recovered=41474 ratio=0.787
+- classes: stub=4 collapsed=25 shorter=111 same_count=137 similar=317 larger=11 expanded=7
 
 ## Allocated Section Delta
 
@@ -40,8 +40,8 @@
 | `.rodata.cst32` | 0 | 192 | +192 |
 | `.rodata.cst4` | 0 | 16 | +16 |
 | `.rodata.cst8` | 0 | 16 | +16 |
-| `.rodata.str1.4` | 11016 | 9332 | -1684 |
-| `.text` | 214336 | 169232 | -45104 |
+| `.rodata.str1.4` | 11016 | 9512 | -1504 |
+| `.text` | 214336 | 169856 | -44480 |
 | `__ksymtab` | 240 | 240 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 32 | 32 | +0 |
@@ -58,7 +58,6 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | stub | exact_name | `tisp_sdns_intp_reg_refresh` | `tisp_sdns_intp_reg_refresh` | 27 | 4 | 0.148 | -23 | 5->0 | 0->1 |
 | collapsed | exact_name | `Tiziano_adr_fpga` | `Tiziano_adr_fpga` | 2379 | 39 | 0.016 | -2340 | 136->1 | 164->2 |
 | collapsed | exact_name | `ae_tune2` | `ae_tune2` | 1147 | 27 | 0.024 | -1120 | 68->1 | 113->1 |
-| collapsed | exact_name | `tx_isp_unlocked_ioctl` | `tx_isp_unlocked_ioctl` | 766 | 297 | 0.388 | -469 | 40->18 | 141->41 |
 | collapsed | exact_name | `apical_isp_core_ops_s_ctrl` | `apical_isp_core_ops_s_ctrl` | 691 | 249 | 0.360 | -442 | 26->10 | 153->59 |
 | collapsed | exact_name | `Tiziano_defog_fpga` | `Tiziano_defog_fpga` | 627 | 179 | 0.285 | -448 | 24->4 | 77->12 |
 | collapsed | exact_name | `tisp_mdns_param_array_get` | `tisp_mdns_param_array_get` | 558 | 48 | 0.086 | -510 | 2->2 | 132->4 |
@@ -101,6 +100,7 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | oem_only | oem_only | `tisp_hldc_par_refresh.part.0` |  | 15 | 0 | 0.000 | -15 | 1->0 | 1->0 |
 | oem_only | oem_only | `tx_isp_driver_exit` |  | 11 | 0 | 0.000 | -11 | 1->0 | 1->0 |
 | shorter | exact_name | `frame_channel_unlocked_ioctl` | `frame_channel_unlocked_ioctl` | 953 | 605 | 0.635 | -348 | 57->26 | 209->65 |
+| shorter | exact_name | `tx_isp_unlocked_ioctl` | `tx_isp_unlocked_ioctl` | 766 | 437 | 0.570 | -329 | 40->29 | 141->62 |
 | shorter | exact_name | `tisp_mdns_y_2d_param_cfg` | `tisp_mdns_y_2d_param_cfg` | 645 | 494 | 0.766 | -151 | 30->30 | 0->0 |
 | shorter | exact_name | `Tiziano_awb_fpga` | `Tiziano_awb_fpga` | 625 | 413 | 0.661 | -212 | 14->12 | 55->35 |
 | shorter | exact_name | `tisp_param_operate_process` | `tisp_param_operate_process` | 608 | 484 | 0.796 | -124 | 20->23 | 104->91 |
@@ -130,7 +130,7 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tisp_sharpen_param_array_get` | `tisp_sharpen_param_array_get` | 81 | 48 | 0.593 | -33 | 2->2 | 15->4 |
 | shorter | exact_name | `ispcore_irq_thread_handle` | `ispcore_irq_thread_handle` | 73 | 57 | 0.781 | -16 | 2->2 | 10->6 |
 | shorter | exact_name | `tiziano_lsc_lut_parameter` | `tiziano_lsc_lut_parameter` | 69 | 47 | 0.681 | -22 | 5->5 | 2->1 |
-| shorter | exact_name | `tx_isp_release` | `tx_isp_release` | 65 | 51 | 0.785 | -14 | 2->1 | 15->9 |
+| shorter | exact_name | `tx_isp_release` | `tx_isp_release` | 65 | 47 | 0.723 | -18 | 2->2 | 15->9 |
 | shorter | exact_name | `tisp_sharpen_v1_sigma_np_cfg` | `tisp_sharpen_v1_sigma_np_cfg` | 63 | 43 | 0.683 | -20 | 3->3 | 0->0 |
 | shorter | exact_name | `tx_vic_disable_irq` | `tx_vic_disable_irq` | 63 | 46 | 0.730 | -17 | 4->3 | 10->4 |
 | shorter | exact_name | `tisp_set_saturation` | `tisp_set_saturation` | 63 | 47 | 0.746 | -16 | 4->2 | 5->3 |
@@ -294,7 +294,7 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | recovered_only | recovered_only |  | `tx_isp_irq_line_enable` | 0 | 10 | n/a | +0 | 0->1 | 0->0 |
 | recovered_only | recovered_only |  | `tx_isp_platform_device_platform_release` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |
 | recovered_only | recovered_only |  | `tx_isp_vic_platform_device_platform_release` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |
-| recovered_only | recovered_only |  | `tx_isp_video_link_destroy_isra_1` | 0 | 50 | n/a | +0 | 0->4 | 0->4 |
+| recovered_only | recovered_only |  | `tx_isp_video_link_destroy_isra_1` | 0 | 72 | n/a | +0 | 0->4 | 0->12 |
 | recovered_only | recovered_only |  | `tx_isp_vin_platform_device_platform_release` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |
 | recovered_only | recovered_only |  | `vic_core_ops_ioctl_1` | 0 | 25 | n/a | +0 | 0->1 | 0->4 |
 | recovered_only | recovered_only |  | `video_input_strncmp` | 0 | 17 | n/a | +0 | 0->0 | 0->4 |
