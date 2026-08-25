@@ -697,6 +697,15 @@ static int print_level = 1;
 module_param(print_level, int, 0);
 MODULE_PARM_DESC(print_level, "isp print level");
 
+static unsigned int fw_irq_mask = BIT(3) | BIT(4);
+module_param(fw_irq_mask, uint, 0);
+MODULE_PARM_DESC(fw_irq_mask, "APICAL firmware interrupt sources to dispatch");
+
+static bool simple_3a = true;
+module_param(simple_3a, bool, 0);
+MODULE_PARM_DESC(simple_3a,
+		 "use the calibration-driven recovery AE/AWB path");
+
 static int isp_m2_bufs = 2;
 module_param(isp_m2_bufs, int, 0);
 MODULE_PARM_DESC(isp_m2_bufs, "isp inter buffers");
@@ -1474,6 +1483,67 @@ static struct tx_isp_customer_parameter tx_isp_customer_parameter;
 static void *apical_io_base;
 #endif
 static void *ispcore;
+
+/*
+ * T30 sensor ABI fields used by the firmware-side exposure fallback.  Keep
+ * this as a narrow, named view rather than spreading recovered byte offsets
+ * through the control loop.  uintptr_t is 32-bit for the target ABI, so the
+ * callback and attribute slots retain the OEM layout without importing the
+ * private SDK header into the recovered module.
+ */
+struct tx_isp_t30_sensor_attribute_view {
+	u8 reserved_00[0x58];
+	u32 max_again;
+	u32 max_dgain;
+	u32 again;
+	u32 dgain;
+	u16 min_integration_time;
+	u16 min_integration_time_native;
+	u16 max_integration_time_native;
+	u16 integration_time_limit;
+	u32 integration_time;
+	u16 total_width;
+	u16 total_height;
+	u16 max_integration_time;
+	u16 integration_time_apply_delay;
+	u16 again_apply_delay;
+	u16 dgain_apply_delay;
+	u16 one_line_expr_in_us;
+	uintptr_t alloc_again;
+	uintptr_t alloc_dgain;
+	uintptr_t priv;
+};
+
+struct tx_isp_t30_sensor_message {
+	u32 pending;
+	u32 value;
+};
+
+struct tx_isp_t30_core_sensor_view {
+	u8 reserved_00[0x120];
+	uintptr_t sensor_attr;
+	u8 reserved_124[0x180 - 0x124];
+	struct tx_isp_t30_sensor_message messages[3];
+};
+
+struct tx_isp_t30_simple_3a_state {
+	u32 integration_time;
+	s32 analog_gain_log2;
+	u16 analog_gain_code;
+	u16 red_gain;
+	u16 green_red_gain;
+	u16 green_blue_gain;
+	u16 blue_gain;
+	s32 red_error_accum;
+	s32 blue_error_accum;
+	u8 ae_cooldown;
+	bool ae_initialized;
+	bool awb_initialized;
+	u32 ae_updates;
+	u32 awb_updates;
+};
+
+static struct tx_isp_t30_simple_3a_state tx_isp_t30_simple_3a;
 static unsigned char isp_kfifo_in[4124];
 static unsigned char __attribute__((aligned(4))) isp_lock[16] = {
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -2177,26 +2247,27 @@ static const uint16_t matrix_yuv_src[12] __attribute__((section(".rodata"))) = {
 	0, 0, 0
 };
 struct apical_isp_fsm_slot {
+	uint32_t owner;
+	uint32_t state;
 	uint32_t status;
 	uint32_t pending;
-	uint32_t pad[252];
 };
 struct apical_isp {
-	uint32_t pad0[0x100 / 4];
+	uint8_t pad0[0x100];
 	struct apical_isp_fsm_slot cmos;
-	uint32_t pad1[0x200 / 4];
+	uint8_t pad1[0x308 - 0x110];
 	struct apical_isp_fsm_slot ae;
-	uint32_t pad2[0x440 / 4];
+	uint8_t pad2[0x748 - 0x318];
 	struct apical_isp_fsm_slot awb;
-	uint32_t pad3[0x800 / 4];
+	uint8_t pad3[0xee8 - 0x758];
 	struct apical_isp_fsm_slot color_matrix;
-	uint32_t pad4[0x3b8 / 4];
+	uint8_t pad4[0xfd4 - 0xef8];
 	struct apical_isp_fsm_slot iridix;
-	uint32_t pad5[0x54 / 4];
+	uint8_t pad5[0x14a0 - 0xfe4];
 	struct apical_isp_fsm_slot crop;
-	uint32_t pad6[0x44 / 4];
+	uint8_t pad6[0x14e8 - 0x14b0];
 	struct apical_isp_fsm_slot general;
-	uint32_t pad7[0x44 / 4];
+	uint8_t pad7[0x152c - 0x14f8];
 	struct apical_isp_fsm_slot dis;
 };
 struct noise_reduction_fsm_state {
@@ -5723,6 +5794,7 @@ static unsigned char __fw[12240];
 /* Offsets from the OEM __fw symbol at Binary Ninja address 0x50c00. */
 enum tx_isp_t30_fw_offset {
 	TX_ISP_T30_FW_BUSY = 0x004,
+	TX_ISP_T30_FW_ISP_CONTEXT = 0x018,
 	TX_ISP_T30_FW_FSM_CONTEXT = 0x04c,
 	TX_ISP_T30_FW_FSM_CONFIG = 0x064,
 	TX_ISP_T30_FW_SENSOR_WIDTH = 0x06a,
@@ -5736,6 +5808,8 @@ enum tx_isp_t30_fw_offset {
 	TX_ISP_T30_FW_CROP = 0x14b8,
 };
 #define TX_ISP_T30_FW_PTR(offset) ((void *)&__fw[(offset)])
+#define TX_ISP_T30_ISP_PTR(offset) \
+	TX_ISP_T30_FW_PTR(TX_ISP_T30_FW_ISP_CONTEXT + (offset))
 static unsigned char api_cmd_buffer[4100];
 static unsigned char api[12];
 static unsigned char apical_api_buffer[1036];
@@ -5913,7 +5987,6 @@ static unsigned char fmv_9018[8];
 static unsigned char sp_9024[8];
 static unsigned char fsp_9025[8];
 static unsigned char fmv_9026[8];
-static unsigned char jump_table_3ac40[48];
 /*
  * Scratch calibration directory used while sizing and loading a sensor's
  * day/night parameter tables.  The OEM driver uses a complete
@@ -18767,6 +18840,23 @@ static void tx_isp_t30_ispcore_enable_lfb_channel(
 	}
 }
 
+static void tx_isp_t30_dispatch_firmware_irqs(u32 status)
+{
+	unsigned int source;
+
+	/*
+	 * APICAL interrupt status bits are the firmware source indices installed
+	 * through system_set_interrupt_handler().  AE and AWB depend on this
+	 * callback edge; acknowledging the hardware interrupt alone leaves both
+	 * algorithms frozen at their reset values.
+	 */
+	status &= fw_irq_mask;
+	for (source = 0; source < ARRAY_SIZE(isr_func); source++) {
+		if ((status & BIT(source)) && isr_func[source])
+			isr_func[source](isr_param[source]);
+	}
+}
+
 static int tx_isp_t30_ispcore_interrupt(struct tx_isp_t30_subdev *sd)
 {
 	struct tx_isp_t30_core_video_view *core;
@@ -18827,6 +18917,9 @@ static int tx_isp_t30_ispcore_interrupt(struct tx_isp_t30_subdev *sd)
 			g_switch_lfb_on = 0;
 		}
 	}
+	tx_isp_t30_dispatch_firmware_irqs(irq_status);
+	if (simple_3a && (irq_status & fw_irq_mask & BIT(3)))
+		ret = IRQ_WAKE_THREAD;
 
 	return ret;
 }
@@ -22556,12 +22649,30 @@ int32_t sensor_hw_reset_enable(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010938 origin=model_output original=sensor_alloc_analog_gain */
 int32_t sensor_alloc_analog_gain(int32_t arg1, int16_t *arg2)
 {
-    int32_t var_10 = 0;
-    int32_t *base = (int32_t *)ispcore;
-    int32_t *ops = (int32_t *)(base[0x120 / 4]);
-    int32_t result = ((int32_t (*)(int32_t, int32_t, int32_t *))ops[0x84 / 4])(arg1, 0x10, &var_10);
-    *arg2 = (int16_t)var_10;
-    return result;
+	struct tx_isp_t30_core_sensor_view *core = ispcore;
+	struct tx_isp_t30_sensor_attribute_view *attr;
+	u32 sensor_code = 0;
+	u32 (*alloc_again)(u32, u8, u32 *);
+
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_sensor_attribute_view,
+			      max_again) != 0x58);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_sensor_attribute_view,
+			      integration_time) != 0x70);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_sensor_attribute_view,
+			      alloc_again) != 0x84);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_sensor_view,
+			      sensor_attr) != 0x120);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_sensor_view,
+			      messages) != 0x180);
+	if (!core || !arg2)
+		return arg1;
+	attr = (void *)(uintptr_t)core->sensor_attr;
+	if (!attr || !attr->alloc_again)
+		return arg1;
+	alloc_again = (void *)(uintptr_t)attr->alloc_again;
+	arg1 = alloc_again(arg1, 16, &sensor_code);
+	*arg2 = (u16)sensor_code;
+	return arg1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010980 origin=model_output original=sensor_alloc_digital_gain */
@@ -22627,71 +22738,41 @@ sensor_alloc_integration_time0x40:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010a10 origin=fragment_seed original=sensor_set_integration_time */
 uint32_t sensor_set_integration_time(uint32_t a0, uint32_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct tx_isp_t30_core_sensor_view *core = ispcore;
+	struct tx_isp_t30_sensor_attribute_view *attr;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&ispcore));
-    v1 = *(uint32_t *)((char *)v0 + 288);
-    a0 = *(uint32_t *)((char *)v1 + 112);
-
-    /* fragment 2: Branch */
-    if (a1 == a0) { goto sensor_set_integration_time0x28; }
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)v1 + 112) = a1;
-    v1 = 1;
-    *(uint32_t *)((char *)v0 + 400) = v1;
-    *(uint32_t *)((char *)v0 + 404) = a1;
-
-sensor_set_integration_time0x28:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 10a3c:	00000000 	nop */
-
-    return (uint32_t)v0;
+	(void)a0;
+	if (!core)
+		return 0;
+	attr = (void *)(uintptr_t)core->sensor_attr;
+	if (!attr)
+		return 0;
+	if (attr->integration_time != a1) {
+		attr->integration_time = a1;
+		core->messages[0].value = a1;
+		core->messages[0].pending = 1;
+	}
+	return (u32)(uintptr_t)core;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010a40 origin=fragment_seed original=sensor_set_analog_gain */
 uint32_t sensor_set_analog_gain(uint32_t a0, uint32_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct tx_isp_t30_core_sensor_view *core = ispcore;
+	struct tx_isp_t30_sensor_attribute_view *attr;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&ispcore));
-    v1 = *(uint32_t *)((char *)v0 + 288);
-    a0 = *(uint32_t *)((char *)v1 + 96);
-
-    /* fragment 2: Branch */
-    if (a0 == a1) { goto sensor_set_analog_gain0x28; }
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)v1 + 96) = a1;
-    v1 = 1;
-    *(uint32_t *)((char *)v0 + 384) = v1;
-    *(uint32_t *)((char *)v0 + 388) = a1;
-
-sensor_set_analog_gain0x28:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 10a6c:	00000000 	nop */
-
-    return (uint32_t)v0;
+	(void)a0;
+	if (!core)
+		return 0;
+	attr = (void *)(uintptr_t)core->sensor_attr;
+	if (!attr)
+		return 0;
+	if (attr->again != a1) {
+		attr->again = a1;
+		core->messages[2].value = a1;
+		core->messages[2].pending = 1;
+	}
+	return (u32)(uintptr_t)core;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010a70 origin=fragment_seed original=sensor_set_digital_gain */
@@ -23071,6 +23152,7 @@ int32_t apical_sensor_early_init(uint32_t arg1)
         return -22;
     if (ispcore == 0)
         ispcore = (uintptr_t (*)())(uintptr_t)arg1;
+	memset(&tx_isp_t30_simple_3a, 0, sizeof(tx_isp_t30_simple_3a));
     return 0;
 }
 
@@ -48948,24 +49030,33 @@ int32_t apical_isp_process_interrupt(void *arg1, char arg2)
 	uint32_t status;
 	int32_t *result;
 
+	BUILD_BUG_ON(offsetof(struct apical_isp, cmos) != 0x100);
+	BUILD_BUG_ON(offsetof(struct apical_isp, ae) != 0x308);
+	BUILD_BUG_ON(offsetof(struct apical_isp, awb) != 0x748);
+	BUILD_BUG_ON(offsetof(struct apical_isp, color_matrix) != 0xee8);
+	BUILD_BUG_ON(offsetof(struct apical_isp, iridix) != 0xfd4);
+	BUILD_BUG_ON(offsetof(struct apical_isp, crop) != 0x14a0);
+	BUILD_BUG_ON(offsetof(struct apical_isp, general) != 0x14e8);
+	BUILD_BUG_ON(offsetof(struct apical_isp, dis) != 0x152c);
+
 	hit = mask & (uintptr_t)isp->cmos.status;
 	if (hit) {
 		isp->cmos.status = (~hit | (uintptr_t)isp->cmos.pending) & (uintptr_t)isp->cmos.status;
-		cmos_fsm_process_interrupt(&isp->cmos, mask);
+		cmos_fsm_process_interrupt(&isp->cmos, arg2);
 	}
 
 	status = isp->cmos.status;
 	hit = mask & (uintptr_t)isp->ae.status;
 	if (hit) {
 		isp->ae.status = (~hit | (uintptr_t)isp->ae.pending) & (uintptr_t)isp->ae.status;
-		AE_fsm_process_interrupt(&isp->ae, mask);
+		AE_fsm_process_interrupt(&isp->ae, arg2);
 	}
 
 	status = isp->ae.status;
 	hit = mask & (uintptr_t)isp->awb.status;
 	if (hit) {
 		isp->awb.status = (~hit | (uintptr_t)isp->awb.pending) & (uintptr_t)isp->awb.status;
-		AWB_fsm_process_interrupt(&isp->awb, mask);
+		AWB_fsm_process_interrupt(&isp->awb, arg2);
 	}
 
 	status = isp->awb.status;
@@ -48979,28 +49070,28 @@ int32_t apical_isp_process_interrupt(void *arg1, char arg2)
 	hit = mask & (uintptr_t)isp->iridix.status;
 	if (hit) {
 		isp->iridix.status = (~hit | (uintptr_t)isp->iridix.pending) & (uintptr_t)isp->iridix.status;
-		iridix_fsm_process_interrupt(&isp->iridix, mask);
+		iridix_fsm_process_interrupt(&isp->iridix, arg2);
 	}
 
 	status = isp->iridix.status;
 	hit = mask & (uintptr_t)isp->crop.status;
 	if (hit) {
 		isp->crop.status = (~hit | (uintptr_t)isp->crop.pending) & (uintptr_t)isp->crop.status;
-		crop_fsm_process_interrupt(&isp->crop, mask);
+		crop_fsm_process_interrupt(&isp->crop, arg2);
 	}
 
 	status = isp->crop.status;
 	hit = mask & (uintptr_t)isp->general.status;
 	if (hit) {
 		isp->general.status = (~hit | (uintptr_t)isp->general.pending) & (uintptr_t)isp->general.status;
-		general_fsm_process_interrupt(&isp->general, mask);
+		general_fsm_process_interrupt(&isp->general, arg2);
 	}
 
-	status = isp->general.status;
+	status = isp->dis.status;
 	hit = mask & status;
 	if (hit) {
 		isp->dis.status = (~hit | (uintptr_t)isp->dis.pending) & status;
-		result = dis_fsm_process_interrupt(&isp->dis, mask);
+		result = dis_fsm_process_interrupt(&isp->dis, arg2);
 	} else {
 		result = status;
 	}
@@ -49813,7 +49904,7 @@ int32_t AWB_fsm_switch_state(int32_t *arg1, int32_t arg2)
 	}
 	if (arg2 != 3)
 		goto check4;
-	return awb_calc_avg_weighted_gr_gb((int32_t *)0);
+	return awb_calc_avg_weighted_gr_gb(arg1);
 check4:
 	if (arg2 != 4)
 		goto check5;
@@ -49829,7 +49920,7 @@ check6:
 check7:
 	if (arg2 != 7)
 		goto check8;
-	return awb_normalise((int32_t *)0);
+	return (int32_t)(uintptr_t)awb_normalise(arg1);
 check8:
 	if (arg2 != 8)
 		goto check9;
@@ -49838,11 +49929,11 @@ check8:
 check9:
 	if (arg2 != 9)
 		goto check10;
-	return awb_detect_light_source(0);
+	return awb_detect_light_source((uintptr_t)arg1);
 check10:
 	if (arg2 != 10)
 		goto check11;
-	return awb_process_light_source((int32_t *)0);
+	return awb_process_light_source(arg1);
 check11:
 	if (arg2 != 11)
 		return result;
@@ -49852,46 +49943,23 @@ check11:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002ed00 origin=model_output original=AWB_fsm_process_state */
 int32_t AWB_fsm_process_state(int32_t *arg1)
 {
-	int32_t state = arg1[1];
-	int32_t next_state;
+	static const uint8_t next_states[11] = {
+		1, 0xff, 0xff, 5, 3, 9, 7, 8, 0xff, 10, 6,
+	};
+	uint32_t state;
 
-	if (state >= 11)
-		return 0;
-
-	next_state = *(int32_t *)((char *)&jump_table_3ac40 + (state << 2));
-
-	switch (next_state) {
-	case 0x2ed4c:
-		next_state = 3;
-		break;
-	case 0x2ed54:
-		next_state = 9;
-		break;
-	case 0x2ed5c:
-		next_state = 7;
-		break;
-	case 0x2ed64:
-		next_state = 8;
-		break;
-	case 0x2ed6c:
-		next_state = 10;
-		break;
-	case 0x2ed74:
-		next_state = 6;
-		break;
-	case 0x2ed7c:
-		next_state = 1;
-		break;
-	case 0x2ed84:
-		next_state = 5;
-		break;
-	default:
-		return 0;
+	/*
+	 * The OEM implementation uses a relocated .rodata jump table.  Preserve
+	 * the state graph explicitly: the recovered zero-filled placeholder left
+	 * AWB in state 0, before it subscribed to the statistics interrupt.
+	 */
+	for (;;) {
+		state = (uint32_t)arg1[1];
+		if (state >= ARRAY_SIZE(next_states) ||
+		    next_states[state] == 0xff)
+			return 0;
+		AWB_fsm_switch_state(arg1, next_states[state]);
 	}
-
-	AWB_fsm_switch_state(arg1, next_state);
-
-	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002edbc origin=model_output original=AWB_fsm_process_event */
@@ -49914,7 +49982,7 @@ int32_t AWB_fsm_process_event(int32_t *arg1, int32_t arg2)
 			return 0;
 		result = 0;
 		if (arg1[1] == 0xb) {
-			arg2 = 0xb;
+			/* OEM transitions from the wait state to event/source 4. */
 			AWB_fsm_switch_state(arg1, arg2);
 			AWB_fsm_process_state(arg1);
 			return 1;
@@ -52277,16 +52345,189 @@ ae_read_full_histogram_data0xc8:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031f6c origin=model_output original=AE_fsm_process_interrupt */
+static u32 tx_isp_t30_decode_histogram_bin(u32 raw)
+{
+	u32 value = raw & 0xfff;
+	u32 exponent = (raw >> 12) & 0xf;
+
+	if (exponent)
+		value = (value | 0x1000) << (exponent - 1);
+	return value;
+}
+
+static u32 tx_isp_t30_histogram_mean(void)
+{
+	u64 weighted = 0;
+	u32 population = 0;
+	u32 i;
+
+	for (i = 0; i < 256; i++) {
+		u32 count = tx_isp_t30_decode_histogram_bin(
+			APICAL_READ_32(0x10000 + i * sizeof(u32)));
+
+		population += count;
+		weighted += (u64)count * i;
+	}
+	if (!population)
+		return 0;
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+	do_div(weighted, population);
+	return (u32)weighted;
+#else
+	return (u32)(weighted / population);
+#endif
+}
+
+enum tx_isp_t30_calibration_id {
+	TX_ISP_T30_CAL_AE_BALANCED_LINEAR = 146,
+	TX_ISP_T30_CAL_STATIC_WB = 233,
+	TX_ISP_T30_CAL_AWB_AVG_COEF = 262,
+};
+
+static const void *tx_isp_t30_calibration_data(u32 id, u16 min_cols,
+					       u16 width)
+{
+	struct tx_isp_t30_lookup_table *table;
+
+	table = (void *)(uintptr_t)_GET_LOOKUP_PTR(id);
+	if (!table || !table->ptr || table->rows != 1 ||
+	    table->cols < min_cols || table->width != width)
+		return NULL;
+	return table->ptr;
+}
+
+static void tx_isp_t30_simple_ae_update(void)
+{
+	struct tx_isp_t30_core_sensor_view *core = ispcore;
+	struct tx_isp_t30_sensor_attribute_view *attr;
+	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
+	const u32 *ae;
+	s32 requested_gain;
+	s32 error;
+	u32 correction;
+	u32 delta;
+	u32 divisor;
+	u32 min_integration;
+	u32 max_integration;
+	u32 target;
+	u32 pi_coefficient;
+	u32 gain_accuracy;
+	u32 mean;
+	s16 sensor_code;
+
+	if (!simple_3a || !core)
+		return;
+	attr = (void *)(uintptr_t)core->sensor_attr;
+	if (!attr || !attr->alloc_again)
+		return;
+	ae = tx_isp_t30_calibration_data(
+		TX_ISP_T30_CAL_AE_BALANCED_LINEAR, 7, sizeof(*ae));
+	if (!ae)
+		return;
+	pi_coefficient = ae[0];
+	target = ae[1];
+	gain_accuracy = ae[6];
+	if (!pi_coefficient || !target || target > 255 || !gain_accuracy)
+		return;
+
+	min_integration = max_t(u32, attr->min_integration_time,
+				attr->min_integration_time_native);
+	max_integration = attr->integration_time_limit;
+	if (!max_integration ||
+	    (attr->max_integration_time_native &&
+	     attr->max_integration_time_native < max_integration))
+		max_integration = attr->max_integration_time_native;
+	if (!max_integration ||
+	    (attr->max_integration_time &&
+	     attr->max_integration_time < max_integration))
+		max_integration = attr->max_integration_time;
+	if (!min_integration || max_integration <= min_integration)
+		return;
+
+	mean = tx_isp_t30_histogram_mean();
+	if (!mean)
+		return;
+	if (!state->ae_initialized) {
+		/*
+		 * Sensor timing and limits come from the sensor attribute ABI.  If
+		 * the sensor has not published a current integration time, start at
+		 * its declared limit and let the tuning-bin target drive convergence.
+		 */
+		state->integration_time = attr->integration_time;
+		if (state->integration_time < min_integration ||
+		    state->integration_time > max_integration)
+			state->integration_time = max_integration;
+		state->analog_gain_log2 = 0;
+		state->ae_initialized = true;
+	} else {
+		if (state->ae_cooldown) {
+			state->ae_cooldown--;
+			return;
+		}
+		error = (s32)target - (s32)mean;
+		if (error > 1 || error < -1) {
+			correction = DIV_ROUND_UP((u32)abs(error) * gain_accuracy,
+						  pi_coefficient);
+			divisor = target * pi_coefficient;
+			delta = DIV_ROUND_UP(state->integration_time *
+					     (u32)abs(error), divisor);
+			if (!delta)
+				delta = 1;
+
+			if (error > 0) {
+				if (state->integration_time < max_integration)
+					state->integration_time = min_t(
+						u32, max_integration,
+						state->integration_time + delta);
+				else
+					state->analog_gain_log2 += correction;
+			} else if (state->analog_gain_log2 > 0) {
+				state->analog_gain_log2 = max_t(
+					s32, 0,
+					state->analog_gain_log2 - (s32)correction);
+			} else if (state->integration_time > min_integration) {
+				state->integration_time = max_t(
+					u32, min_integration,
+					state->integration_time - min_t(
+						u32, delta, state->integration_time -
+						min_integration));
+			}
+		}
+	}
+
+	if (state->analog_gain_log2 < 0)
+		state->analog_gain_log2 = 0;
+	if ((u32)state->analog_gain_log2 > attr->max_again)
+		state->analog_gain_log2 = attr->max_again;
+	requested_gain = sensor_alloc_analog_gain(state->analog_gain_log2,
+						     &sensor_code);
+	state->analog_gain_log2 = requested_gain;
+	state->analog_gain_code = (u16)sensor_code;
+	sensor_set_integration_time(0, state->integration_time);
+	sensor_set_analog_gain(0, state->analog_gain_code);
+
+	/* The OEM black-level modulation is indexed by total log2 gain. */
+	*(s32 *)TX_ISP_T30_ISP_PTR(0x2cc) = state->analog_gain_log2;
+	sensor_update_black((int32_t *)TX_ISP_T30_ISP_PTR(0x100));
+	state->ae_cooldown = max_t(u8, attr->integration_time_apply_delay,
+				   attr->again_apply_delay);
+	state->ae_updates++;
+	if (state->ae_updates <= 8 || !(state->ae_updates & 0x1f))
+		pr_info("tx-isp-t30: calibrated AE mean=%u target=%u int=%u gain=%d code=0x%x\n",
+			mean, target, state->integration_time,
+			state->analog_gain_log2, state->analog_gain_code);
+}
+
 int32_t AE_fsm_process_interrupt(int32_t *arg1, char arg2)
 {
-	int32_t *p;
-
 	if ((arg2 & 0xff) != 3)
 		return 3;
-
+	if (simple_3a) {
+		tx_isp_t30_simple_ae_update();
+		return 0;
+	}
 	ae_read_full_histogram_data(arg1);
-	p = arg1;
-	return apical_isp_raise_event(*p, 1);
+	return apical_isp_raise_event(*arg1, 1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031fc0 origin=model_output original=ae_calculate_exposure_ratio */
@@ -53322,50 +53563,160 @@ int32_t awb_set_identity(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033680 origin=model_output original=awb_read_statistics */
 int32_t awb_read_statistics(void *arg1)
 {
-    uint16_t *stats;
-    uint32_t count;
-    uint32_t *i;
-    uint32_t val;
-    uint32_t r;
-    uint32_t g;
-    uint32_t *b;
-    uint32_t sum;
+	uint16_t *stats;
+	uint32_t count;
+	uint32_t i;
+	uint32_t val;
+	uint32_t r;
+	uint32_t g;
+	uint32_t population;
 
-    *(uint32_t *)((char *)arg1 + 0x14) = 0;
-    count = *(uint16_t *)((char *)arg1 + 0x10);
-    i = 0;
+	*(uint32_t *)((char *)arg1 + 0x14) = 0;
+	count = *(uint16_t *)((char *)arg1 + 0x10);
 
-    while (i < count) {
-        val = APICAL_READ_32((((uintptr_t)i << 1) + 0x1d0) << 2 + 0x8000);
-        r = (val & 0xfff) * *(uint16_t *)((char *)arg1 + 0x18);
-        r = (uint16_t)(r >> 8);
-        if (r == 0)
-            r = 1;
-        g = ((val >> 16) & 0xfff) * *(uint16_t *)((char *)arg1 + 0x1a);
-        g = (uint16_t)(g >> 8);
-        if (g == 0)
-            g = 1;
-        stats = (uint16_t *)((char *)arg1 + (((uintptr_t)i + 0xb) << 3));
-        i++;
-        ((void **)(uintptr_t)stats)[0] = (uint16_t)(0xffff / r);
-        ((void **)(uintptr_t)stats)[1] = (uint16_t)(0xffff / g);
-        b = APICAL_READ_32((((uintptr_t)i << 1) + 0x1d1) << 2 + 0x8000);
-        sum = *(uint32_t *)((char *)arg1 + 0x14);
-        *(uint32_t *)((char *)stats + 4) = b;
-        *(uint32_t *)((char *)arg1 + 0x14) = sum + (uintptr_t)b;
-    }
+	for (i = 0; i < count; i++) {
+		val = APICAL_READ_32(0x8000 + ((2 * i + 0x1d0) << 2));
+		r = ((val & 0xfff) *
+		     *(uint16_t *)((char *)arg1 + 0x18)) >> 8;
+		g = (((val >> 16) & 0xfff) *
+		     *(uint16_t *)((char *)arg1 + 0x1a)) >> 8;
+		if (!r)
+			r = 1;
+		if (!g)
+			g = 1;
 
-    return 0;
+		stats = (uint16_t *)((char *)arg1 + ((i + 0xb) << 3));
+		stats[0] = (uint16_t)(0xffff / r);
+		stats[1] = (uint16_t)(0xffff / g);
+		population = APICAL_READ_32(0x8000 +
+					    ((2 * i + 0x1d1) << 2));
+		*(uint32_t *)&stats[2] = population;
+		*(uint32_t *)((char *)arg1 + 0x14) += population;
+	}
+
+	return 0;
+}
+
+static void tx_isp_t30_awb_apply_calibrated_gains(void)
+{
+	static bool reported;
+	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
+	const uint16_t *gain =
+		tx_isp_t30_calibration_data(TX_ISP_T30_CAL_STATIC_WB, 4,
+					   sizeof(*gain));
+	uint32_t red;
+	uint32_t green_red;
+	uint32_t green_blue;
+	uint32_t blue;
+
+	if (!gain)
+		return;
+	red = gain[0];
+	green_red = gain[1];
+	green_blue = gain[2];
+	blue = gain[3];
+
+	/*
+	 * The OEM AWB clear path seeds these four values from
+	 * CALIBRATION_STATIC_WB before its mesh algorithm starts.  The values are
+	 * owned by the loaded sensor tuning bin; this recovery path must never
+	 * substitute a sensor-specific compile-time gain.
+	 */
+	if (red < 0x40 || red > 0xfff ||
+	    green_red < 0x40 || green_red > 0xfff ||
+	    green_blue < 0x40 || green_blue > 0xfff ||
+	    blue < 0x40 || blue > 0xfff)
+		return;
+	if (!state->awb_initialized) {
+		state->red_gain = red;
+		state->green_red_gain = green_red;
+		state->green_blue_gain = green_blue;
+		state->blue_gain = blue;
+		state->awb_initialized = true;
+	}
+
+	APICAL_WRITE_32(0x300, (APICAL_READ_32(0x300) & ~0xfffU) |
+			state->red_gain);
+	APICAL_WRITE_32(0x304,
+			(APICAL_READ_32(0x304) & ~0xfffU) |
+			state->green_red_gain);
+	APICAL_WRITE_32(0x308,
+			(APICAL_READ_32(0x308) & ~0xfffU) |
+			state->green_blue_gain);
+	APICAL_WRITE_32(0x30c, (APICAL_READ_32(0x30c) & ~0xfffU) |
+			state->blue_gain);
+
+	if (!reported) {
+		pr_info("tx_isp_t30_recovered: AWB calibration gains 0x%x/0x%x/0x%x/0x%x\n",
+			red, green_red, green_blue, blue);
+		reported = true;
+	}
+}
+
+static void tx_isp_t30_simple_awb_update(void)
+{
+	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
+	const u8 *average_coefficient;
+	s32 red_correction;
+	s32 blue_correction;
+	u32 red_ratio;
+	u32 blue_ratio;
+	u32 coefficient;
+
+	tx_isp_t30_awb_apply_calibrated_gains();
+	if (!state->awb_initialized)
+		return;
+	average_coefficient = tx_isp_t30_calibration_data(
+		TX_ISP_T30_CAL_AWB_AVG_COEF, 1, sizeof(*average_coefficient));
+	if (!average_coefficient || !average_coefficient[0])
+		return;
+	coefficient = average_coefficient[0];
+	red_ratio = APICAL_READ_32(0x858) & 0xfff;
+	blue_ratio = APICAL_READ_32(0x85c) & 0xfff;
+	if (red_ratio < 0x40 || red_ratio > 0x400 ||
+	    blue_ratio < 0x40 || blue_ratio > 0x400)
+		return;
+
+	/*
+	 * Ratios use APICAL's Q8 unity.  Accumulate their error and apply the
+	 * tuning-bin averaging coefficient as the loop's smoothing divisor.
+	 */
+	state->red_error_accum += (s32)red_ratio - 0x100;
+	state->blue_error_accum += (s32)blue_ratio - 0x100;
+	red_correction = state->red_error_accum / (s32)coefficient;
+	blue_correction = state->blue_error_accum / (s32)coefficient;
+	state->red_error_accum -= red_correction * coefficient;
+	state->blue_error_accum -= blue_correction * coefficient;
+	state->red_gain = clamp_t(s32,
+				    (s32)state->red_gain + red_correction,
+				    0x40, 0xfff);
+	state->blue_gain = clamp_t(s32,
+				     (s32)state->blue_gain + blue_correction,
+				     0x40, 0xfff);
+
+	APICAL_WRITE_32(0x300, (APICAL_READ_32(0x300) & ~0xfffU) |
+			state->red_gain);
+	APICAL_WRITE_32(0x30c, (APICAL_READ_32(0x30c) & ~0xfffU) |
+			state->blue_gain);
+	state->awb_updates++;
+	if (state->awb_updates <= 8 || !(state->awb_updates & 0x1f))
+		pr_info("tx-isp-t30: calibrated AWB ratio=%u/%u gain=0x%x/0x%x\n",
+			red_ratio, blue_ratio, state->red_gain,
+			state->blue_gain);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000337a8 origin=model_output original=AWB_fsm_process_interrupt */
 int32_t AWB_fsm_process_interrupt(int32_t *arg1, char arg2)
 {
-    if ((arg2 & 0xff) != 4)
-        return 4;
+	if ((arg2 & 0xff) != 4)
+		return 4;
 
-    awb_read_statistics(arg1);
-    return apical_isp_raise_event(*arg1, 4);
+	if (simple_3a)
+		tx_isp_t30_simple_awb_update();
+	else
+		tx_isp_t30_awb_apply_calibrated_gains();
+	/* The quarantined OEM mesh normally re-arms source 4 via its state graph. */
+	return simple_3a ? AWB_request_interrupt(arg1, BIT(4)) : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000337fc origin=model_output original=awb_zones_calculate */
@@ -53877,116 +54228,7 @@ label_34440:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034e08 origin=model_output original=awb_calc_avg_weighted_gr_gb */
 int32_t awb_calc_avg_weighted_gr_gb(int32_t *arg1)
 {
-    int32_t *s3 = *(int32_t **)arg1;
-    int32_t s0 = (int32_t)arg1;
-    int32_t val_870 = APICAL_READ_32(0x870);
-    int32_t val_870_hi = (val_870 & 0xff00) >> 8;
-    int32_t val_870_lo = val_870 & 0xff;
-    int32_t mesh_size = val_870_hi * val_870_lo;
-    int32_t cols = _GET_COLS(0xef);
-    int16_t *mesh_ptr = (int16_t *)_GET_USHORT_PTR(0xef);
-    int32_t *i = mesh_size;
-    int32_t *result;
-
-    if (i >= 0xe2)
-        return 0;
-
-    int32_t var_bf0[0x326];
-    int8_t var_154[0xe4];
-    int8_t var_238[0xe4];
-    int8_t var_4e4[0xe4];
-    int8_t var_400[0xe4];
-    int8_t var_31c[0xe4];
-    int32_t idx;
-
-    for (idx = 0; idx < i; idx++) {
-        ((void **)var_bf0)[idx] = 0;
-        ((void **)var_154)[idx] = 0;
-        ((void **)var_238)[idx] = 0;
-        ((void **)var_4e4)[idx] = 1;
-        ((void **)var_400)[idx] = 0;
-        ((void **)var_31c)[idx] = 0;
-    }
-
-    int32_t s3_1 = *(int32_t *)((char *)s3 + 0x11c);
-    int32_t hdr_idx = _GET_HDR_TABLE_INDEX(0x97, *(uint8_t *)((char *)arg1 + 0x1524));
-    int32_t s4_1 = hdr_idx & 0xff;
-    int32_t *hdr_table = (int32_t *)_GET_UINT_PTR(s4_1);
-    int32_t var_68_1;
-
-    if (s3_1 >= *hdr_table) {
-        int32_t len = _GET_LEN(s4_1);
-        if (s3_1 < hdr_table[len - 1]) {
-            int32_t fp_1 = 1;
-            int32_t s4_2;
-            while (1) {
-                if (fp_1 >= len) {
-                    s4_2 = fp_1 - 1;
-                    break;
-                }
-                if (s3_1 < hdr_table[fp_1]) {
-                    s4_2 = fp_1 - 1;
-                    break;
-                }
-                fp_1++;
-            }
-            int32_t *lut_f3 = (int32_t *)_GET_UINT_PTR(0xf3);
-            var_68_1 = interpl(s3_1, hdr_table[s4_2], lut_f3[s4_2], hdr_table[fp_1], lut_f3[fp_1]) & 0xffff;
-        } else {
-			var_68_1 = ((int32_t *)_GET_UINT_PTR(0xf3))[len - 1] & 0xffff;
-        }
-    } else {
-        int32_t *lut_f3 = (int32_t *)_GET_UINT_PTR(0xf3);
-        var_68_1 = lut_f3[0] & 0xffff;
-    }
-
-    uint32_t var_48_1;
-    uint32_t var_4c_1;
-
-    if (var_68_1 >= 0x1389) {
-        var_48_1 = 0x63;
-        var_4c_1 = 1;
-    } else {
-        int16_t *p_fa = (int16_t *)_GET_USHORT_PTR(0xfa);
-        int16_t *p_fc = (int16_t *)_GET_USHORT_PTR(0xfc);
-        int16_t *p_f4 = (int16_t *)_GET_USHORT_PTR(0xf4);
-        int16_t *p_fd = (int16_t *)_GET_USHORT_PTR(0xfd);
-        int32_t x = var_68_1;
-        int32_t y = x / 0x100;
-        int32_t z = x % 0x100;
-        int32_t a = p_fa[y * cols + z];
-        int32_t b = p_fc[y * cols + z];
-        int32_t c = p_f4[y * cols + z];
-        int32_t d = p_fd[y * cols + z];
-        var_48_1 = (a + b + c + d) >> 2;
-        var_4c_1 = 0;
-    }
-
-    *(uint16_t *)((char *)arg1 + 0x1528) = var_48_1;
-    *(uint8_t *)((char *)arg1 + 0x152a) = var_4c_1;
-
-    int32_t sum_gr = 0;
-    int32_t sum_gb = 0;
-    int32_t count = 0;
-
-    for (idx = 0; idx < i; idx++) {
-        int32_t *row = idx / cols;
-        int32_t col = idx % cols;
-        int16_t gr_val = mesh_ptr[(uintptr_t)row * cols + col];
-        int16_t gb_val = mesh_ptr[((uintptr_t)row + 1) * cols + col];
-        int32_t w_gr = ((void **)var_4e4)[idx];
-        int32_t w_gb = ((void **)var_400)[idx];
-        sum_gr += gr_val * w_gr;
-        sum_gb += gb_val * w_gb;
-        count += w_gr + w_gb;
-    }
-
-    if (count == 0)
-        return 0;
-
-    result = (sum_gr + sum_gb) / (2 * count);
-    *(int32_t *)((char *)arg1 + 0x152c) = result;
-    return result;
+	return awb_calc_avg_weighted_gr_gb_mesh(arg1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034e18 origin=model_output original=awb_process_temp_and_shift */
