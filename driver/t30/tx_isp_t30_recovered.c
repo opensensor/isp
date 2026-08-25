@@ -1522,12 +1522,15 @@ struct tx_isp_t30_sensor_message {
 struct tx_isp_t30_core_sensor_view {
 	u8 reserved_00[0x120];
 	uintptr_t sensor_attr;
-	u8 reserved_124[0x180 - 0x124];
+	u8 reserved_124[0x12c - 0x124];
+	u32 fps;
+	u8 reserved_130[0x180 - 0x130];
 	struct tx_isp_t30_sensor_message messages[3];
 };
 
 struct tx_isp_t30_simple_3a_state {
 	u32 integration_time;
+	s32 total_exposure_request_log2;
 	s32 analog_gain_request_log2;
 	s32 analog_gain_log2;
 	u16 analog_gain_code;
@@ -52489,6 +52492,75 @@ static u32 tx_isp_t30_ae_corrected_target(u32 target, u32 integration_time,
 	return max_t(u32, 1, math_exp2(target_log2, 16, 0));
 }
 
+static u32 tx_isp_t30_integration_lines_for_ms(
+	const struct tx_isp_t30_core_sensor_view *core,
+	const struct tx_isp_t30_sensor_attribute_view *attr, u32 milliseconds,
+	u32 min_integration, u32 max_integration)
+{
+	u32 fps_numerator = core->fps >> 16;
+	u32 fps_denominator = core->fps & 0xffff;
+	u32 fps_q8;
+	u32 lines_per_second;
+	u32 lines;
+
+	if (!fps_numerator || !fps_denominator || !attr->total_height)
+		return max_integration;
+	fps_q8 = (fps_numerator << 8) / fps_denominator;
+	lines_per_second = (fps_q8 * attr->total_height) >> 8;
+	lines = lines_per_second * milliseconds / 1000;
+	return clamp_t(u32, lines, min_integration, max_integration);
+}
+
+static void tx_isp_t30_ae_partition_exposure(
+	const struct tx_isp_t30_core_sensor_view *core,
+	const struct tx_isp_t30_sensor_attribute_view *attr,
+	s32 total_exposure_log2, u32 min_integration, u32 max_integration,
+	u32 *integration_time, s32 *analog_gain_log2)
+{
+	s32 accumulated[2] = { 0, 0 };
+	s32 remaining = total_exposure_log2;
+	u32 index;
+
+	/*
+	 * Match the OEM balanced split policy: alternate integration-time and
+	 * sensor-gain limits at 10 ms/2x, 30 ms/4x, 60 ms/6x, 100 ms/8x,
+	 * then consume the sensor-published limits.  The policy is ISP-generic;
+	 * all line timing and gain ceilings come from the active sensor ABI.
+	 */
+	for (index = 0; index < ARRAY_SIZE(exposure_partition_lut); index++) {
+		u32 type = exposure_partitions_balanced[index * 2];
+		u32 value = exposure_partitions_balanced[index * 2 + 1];
+		s32 limit;
+		s32 step;
+		s32 take;
+
+		if (type > 1 || remaining <= 0)
+			continue;
+		if (type == 0) {
+			u32 lines = value ?
+				tx_isp_t30_integration_lines_for_ms(
+					core, attr, value, min_integration,
+					max_integration) : max_integration;
+
+			limit = log2_fixed_to_fixed(lines, 0, 16);
+		} else {
+			limit = value ?
+				log2_fixed_to_fixed(value, 0, 16) :
+				attr->max_again;
+		}
+		step = max_t(s32, 0, limit - accumulated[type]);
+		take = min_t(s32, remaining, step);
+		accumulated[type] += take;
+		remaining -= take;
+	}
+
+	*integration_time = clamp_t(u32,
+		math_exp2(accumulated[0], 16, 0),
+		min_integration, max_integration);
+	*analog_gain_log2 = clamp_t(s32, accumulated[1], 0,
+		attr->max_again);
+}
+
 static void tx_isp_t30_simple_ae_update(void)
 {
 	struct tx_isp_t30_core_sensor_view *core = ispcore;
@@ -52498,10 +52570,10 @@ static void tx_isp_t30_simple_ae_update(void)
 	s32 requested_gain;
 	s32 error;
 	u32 correction;
-	u32 delta;
-	u32 divisor;
 	u32 min_integration;
 	u32 max_integration;
+	s32 min_exposure_log2;
+	s32 max_exposure_log2;
 	u32 target;
 	u32 pi_coefficient;
 	u32 gain_accuracy;
@@ -52537,6 +52609,9 @@ static void tx_isp_t30_simple_ae_update(void)
 		max_integration = attr->max_integration_time;
 	if (!min_integration || max_integration <= min_integration)
 		return;
+	min_exposure_log2 = log2_fixed_to_fixed(min_integration, 0, 16);
+	max_exposure_log2 = log2_fixed_to_fixed(max_integration, 0, 16) +
+		attr->max_again;
 
 	mean = tx_isp_t30_histogram_metered_mean(ae[2]);
 	if (!mean)
@@ -52553,6 +52628,8 @@ static void tx_isp_t30_simple_ae_update(void)
 			state->integration_time = max_integration;
 		state->analog_gain_log2 = 0;
 		state->analog_gain_request_log2 = 0;
+		state->total_exposure_request_log2 =
+			log2_fixed_to_fixed(state->integration_time, 0, 16);
 		state->ae_initialized = true;
 	} else {
 		if (state->ae_cooldown) {
@@ -52566,33 +52643,19 @@ static void tx_isp_t30_simple_ae_update(void)
 		if (error > 1 || error < -1) {
 			correction = DIV_ROUND_UP((u32)abs(error) * gain_accuracy,
 						  pi_coefficient);
-			divisor = target * pi_coefficient;
-			delta = DIV_ROUND_UP(state->integration_time *
-					     (u32)abs(error), divisor);
-			if (!delta)
-				delta = 1;
-
-			if (error > 0) {
-				if (state->integration_time < max_integration)
-					state->integration_time = min_t(
-						u32, max_integration,
-						state->integration_time + delta);
-				else
-					state->analog_gain_request_log2 += correction;
-			} else if (state->analog_gain_request_log2 > 0) {
-				state->analog_gain_request_log2 = max_t(
-					s32, 0,
-					state->analog_gain_request_log2 -
-					(s32)correction);
-			} else if (state->integration_time > min_integration) {
-				state->integration_time = max_t(
-					u32, min_integration,
-					state->integration_time - min_t(
-						u32, delta, state->integration_time -
-						min_integration));
-			}
+			if (error > 0)
+				state->total_exposure_request_log2 += correction;
+			else
+				state->total_exposure_request_log2 -= correction;
+			state->total_exposure_request_log2 = clamp_t(
+				s32, state->total_exposure_request_log2,
+				min_exposure_log2, max_exposure_log2);
 		}
 	}
+	tx_isp_t30_ae_partition_exposure(
+		core, attr, state->total_exposure_request_log2,
+		min_integration, max_integration, &state->integration_time,
+		&state->analog_gain_request_log2);
 
 	if (state->analog_gain_request_log2 < 0)
 		state->analog_gain_request_log2 = 0;
