@@ -1528,6 +1528,7 @@ struct tx_isp_t30_core_sensor_view {
 
 struct tx_isp_t30_simple_3a_state {
 	u32 integration_time;
+	s32 analog_gain_request_log2;
 	s32 analog_gain_log2;
 	u16 analog_gain_code;
 	u16 red_gain;
@@ -36605,7 +36606,8 @@ struct stab_t *init_stab(void)
     state->b49 = 50;
     state->b50 = 50;
     state->b51 = 0;
-    state->b53 = 50;
+    /* OEM AE compensation is neutral at 0x80; byte 52 is the 50 default. */
+    state->b53 = 0x80;
     state->b54 = 0;
     state->h56 = 0;
     state->h58 = 0;
@@ -52360,31 +52362,50 @@ static u32 tx_isp_t30_decode_histogram_bin(u32 raw)
 	return value;
 }
 
-static u32 tx_isp_t30_histogram_mean(void)
+static u32 tx_isp_t30_histogram_metered_mean(u32 highlight_tail)
 {
 	u64 weighted = 0;
 	u32 population = 0;
+	u32 tail_start;
 	u32 i;
 
+	highlight_tail = min_t(u32, highlight_tail, 256);
+	tail_start = 256 - highlight_tail;
 	for (i = 0; i < 256; i++) {
 		u32 count = tx_isp_t30_decode_histogram_bin(
 			APICAL_READ_32(0x10000 + i * sizeof(u32)));
+		u32 weight = 1;
+
+		/*
+		 * The OEM linear AE path treats each histogram bin as its
+		 * half-step centre (2 * i + 1).  The third value in the
+		 * CALIBRATION_AE_BALANCED table selects a progressively weighted
+		 * highlight tail, making exposure react to clipped areas without
+		 * embedding a sensor- or scene-specific target in the driver.
+		 */
+		if (i >= tail_start) {
+			weight = (i + highlight_tail - 254) >> 1;
+			if (!weight)
+				weight = 1;
+		}
 
 		population += count;
-		weighted += (u64)count * i;
+		weighted += (u64)count * (2 * i + 1) * weight;
 	}
 	if (!population)
 		return 0;
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-	do_div(weighted, population);
+	do_div(weighted, population * 2);
 	return (u32)weighted;
 #else
-	return (u32)(weighted / population);
+	return (u32)(weighted / (population * 2));
 #endif
 }
 
 enum tx_isp_t30_calibration_id {
+	TX_ISP_T30_CAL_AE_CORRECTION_LINEAR = 41,
 	TX_ISP_T30_CAL_AE_BALANCED_LINEAR = 146,
+	TX_ISP_T30_CAL_AE_EXPOSURE_CORRECTION = 206,
 	TX_ISP_T30_CAL_STATIC_WB = 233,
 	TX_ISP_T30_CAL_AWB_AVG_COEF = 262,
 };
@@ -52399,6 +52420,73 @@ static const void *tx_isp_t30_calibration_data(u32 id, u16 min_cols,
 	    table->cols < min_cols || table->width != width)
 		return NULL;
 	return table->ptr;
+}
+
+static u8 tx_isp_t30_ae_exposure_correction(u32 exposure_q6)
+{
+	struct tx_isp_t30_lookup_table *correction_table;
+	struct tx_isp_t30_lookup_table *exposure_table;
+	const u8 *correction;
+	const u32 *exposure;
+	u32 count;
+	u32 index;
+
+	correction_table = (void *)(uintptr_t)_GET_LOOKUP_PTR(
+		TX_ISP_T30_CAL_AE_CORRECTION_LINEAR);
+	exposure_table = (void *)(uintptr_t)_GET_LOOKUP_PTR(
+		TX_ISP_T30_CAL_AE_EXPOSURE_CORRECTION);
+	if (!correction_table || !exposure_table ||
+	    !correction_table->ptr || !exposure_table->ptr ||
+	    correction_table->rows != 1 || exposure_table->rows != 1 ||
+	    correction_table->width != sizeof(*correction) ||
+	    exposure_table->width != sizeof(*exposure) ||
+	    !correction_table->cols ||
+	    correction_table->cols != exposure_table->cols)
+		return 0x80;
+
+	correction = correction_table->ptr;
+	exposure = exposure_table->ptr;
+	count = exposure_table->cols;
+	if (exposure_q6 <= exposure[0])
+		return correction[0];
+	for (index = 1; index < count; index++) {
+		u32 low = exposure[index - 1];
+		u32 high = exposure[index];
+		s32 low_correction = correction[index - 1];
+
+		if (exposure_q6 >= high)
+			continue;
+		if (high != low) {
+			s32 span = high - low;
+			s32 position = exposure_q6 - low;
+			s32 slope = (s32)correction[index] - low_correction;
+
+			low_correction += slope * position / span;
+		}
+		return clamp_t(s32, low_correction, 0, 0xff);
+	}
+	return correction[count - 1];
+}
+
+static u32 tx_isp_t30_ae_corrected_target(u32 target, u32 integration_time,
+					 s32 analog_gain_log2, u8 *curve_value)
+{
+	s32 exposure_log2;
+	s32 target_log2;
+	u32 exposure_q6;
+	u8 correction;
+
+	exposure_log2 = log2_fixed_to_fixed(integration_time, 0, 16) +
+		analog_gain_log2;
+	exposure_q6 = math_exp2(exposure_log2, 16, 6);
+	correction = tx_isp_t30_ae_exposure_correction(exposure_q6);
+	if (curve_value)
+		*curve_value = correction;
+
+	/* The correction byte is a signed 1/32-stop offset around 0x80. */
+	target_log2 = log2_fixed_to_fixed(target, 0, 16) +
+		(((s32)correction - 0x80) << 11);
+	return max_t(u32, 1, math_exp2(target_log2, 16, 0));
 }
 
 static void tx_isp_t30_simple_ae_update(void)
@@ -52418,6 +52506,7 @@ static void tx_isp_t30_simple_ae_update(void)
 	u32 pi_coefficient;
 	u32 gain_accuracy;
 	u32 mean;
+	u8 curve_value = 0x80;
 	s16 sensor_code;
 
 	if (!simple_3a || !core)
@@ -52449,7 +52538,7 @@ static void tx_isp_t30_simple_ae_update(void)
 	if (!min_integration || max_integration <= min_integration)
 		return;
 
-	mean = tx_isp_t30_histogram_mean();
+	mean = tx_isp_t30_histogram_metered_mean(ae[2]);
 	if (!mean)
 		return;
 	if (!state->ae_initialized) {
@@ -52463,12 +52552,16 @@ static void tx_isp_t30_simple_ae_update(void)
 		    state->integration_time > max_integration)
 			state->integration_time = max_integration;
 		state->analog_gain_log2 = 0;
+		state->analog_gain_request_log2 = 0;
 		state->ae_initialized = true;
 	} else {
 		if (state->ae_cooldown) {
 			state->ae_cooldown--;
 			return;
 		}
+		target = tx_isp_t30_ae_corrected_target(
+			target, state->integration_time,
+			state->analog_gain_log2, &curve_value);
 		error = (s32)target - (s32)mean;
 		if (error > 1 || error < -1) {
 			correction = DIV_ROUND_UP((u32)abs(error) * gain_accuracy,
@@ -52485,11 +52578,12 @@ static void tx_isp_t30_simple_ae_update(void)
 						u32, max_integration,
 						state->integration_time + delta);
 				else
-					state->analog_gain_log2 += correction;
-			} else if (state->analog_gain_log2 > 0) {
-				state->analog_gain_log2 = max_t(
+					state->analog_gain_request_log2 += correction;
+			} else if (state->analog_gain_request_log2 > 0) {
+				state->analog_gain_request_log2 = max_t(
 					s32, 0,
-					state->analog_gain_log2 - (s32)correction);
+					state->analog_gain_request_log2 -
+					(s32)correction);
 			} else if (state->integration_time > min_integration) {
 				state->integration_time = max_t(
 					u32, min_integration,
@@ -52500,12 +52594,12 @@ static void tx_isp_t30_simple_ae_update(void)
 		}
 	}
 
-	if (state->analog_gain_log2 < 0)
-		state->analog_gain_log2 = 0;
-	if ((u32)state->analog_gain_log2 > attr->max_again)
-		state->analog_gain_log2 = attr->max_again;
-	requested_gain = sensor_alloc_analog_gain(state->analog_gain_log2,
-						     &sensor_code);
+	if (state->analog_gain_request_log2 < 0)
+		state->analog_gain_request_log2 = 0;
+	if ((u32)state->analog_gain_request_log2 > attr->max_again)
+		state->analog_gain_request_log2 = attr->max_again;
+	requested_gain = sensor_alloc_analog_gain(
+		state->analog_gain_request_log2, &sensor_code);
 	state->analog_gain_log2 = requested_gain;
 	state->analog_gain_code = (u16)sensor_code;
 	sensor_set_integration_time(0, state->integration_time);
@@ -52518,8 +52612,8 @@ static void tx_isp_t30_simple_ae_update(void)
 				   attr->again_apply_delay);
 	state->ae_updates++;
 	if (state->ae_updates <= 8 || !(state->ae_updates & 0x1f))
-		pr_info("tx-isp-t30: calibrated AE mean=%u target=%u int=%u gain=%d code=0x%x\n",
-			mean, target, state->integration_time,
+		pr_info("tx-isp-t30: calibrated AE mean=%u target=%u curve=%u int=%u gain=%d code=0x%x\n",
+			mean, target, curve_value, state->integration_time,
 			state->analog_gain_log2, state->analog_gain_code);
 }
 
