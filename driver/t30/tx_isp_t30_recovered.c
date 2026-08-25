@@ -39,6 +39,7 @@
 #include <linux/firmware.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
+#include <linux/videodev2.h>
 #include <linux/completion.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
@@ -2403,6 +2404,22 @@ struct tx_isp_t30_subdev {
 	void *host_priv;
 };
 
+/*
+ * T30/T21 CSI device ABI from the OEM tx-isp-csi.h.  The recovered probe
+ * retained the slab-cache lookup but lost the kzalloc(sizeof(*csd)) request,
+ * leaving the 0x48-byte vin copy below free to run past the allocation.
+ */
+struct tx_isp_t30_csi_device {
+	struct tx_isp_t30_subdev sd;
+	u8 vin[0x48];
+	int state;
+	struct mutex mlock;
+	struct resource *phy_res;
+	void __iomem *phy_base;
+	void *pdata;
+	unsigned int lanes;
+};
+
 struct tx_isp_t30_device_clk {
 	const char *name;
 	unsigned long rate;
@@ -2448,6 +2465,12 @@ static inline void tx_isp_t30_validate_subdev_abi(void)
 	BUILD_BUG_ON(offsetof(struct tx_isp_t30_subdev, outpads) != 0xcc);
 	BUILD_BUG_ON(offsetof(struct tx_isp_t30_subdev, inpads) != 0xd0);
 	BUILD_BUG_ON(sizeof(struct tx_isp_t30_subdev) != 0xdc);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_csi_device, vin) != 0xdc);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_csi_device, state) != 0x124);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_csi_device, mlock) != 0x128);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_csi_device, phy_res) != 0x134);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_csi_device, phy_base) != 0x138);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_csi_device) != 0x144);
 	BUILD_BUG_ON(sizeof(struct tx_isp_t30_subdev_pad) != 0x24);
 	BUILD_BUG_ON(sizeof(struct tx_isp_t30_subdev_descriptor) != 0x14);
 	BUILD_BUG_ON(sizeof(struct tx_isp_t30_widget_descriptor) != 0x0c);
@@ -5507,7 +5530,7 @@ int vic_core_ops_ioctl_1(void *file, unsigned int cmd, unsigned int arg);
 int32_t vin_s_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_vin_activate_subdev(uintptr_t a0);
 int tx_isp_vin_init(void *arg1, int arg2);
-int64_t subdev_sensor_ops_set_input(uintptr_t a0, uintptr_t a1, uint32_t a2);
+int subdev_sensor_ops_set_input(void *vin, int *input);
 int video_input_cmd_open(struct inode *inode, struct file *file);
 int tx_isp_vin_probe(struct platform_device *pdev);
 int video_input_cmd_set(void *arg1, void *arg2, int arg3);
@@ -5515,7 +5538,8 @@ int32_t tx_isp_vin_reset(void *arg1);
 int video_input_cmd_show(struct seq_file *m, void *v);
 int32_t subdev_sensor_ops_release_all_sensor(void *arg1);
 int32_t tx_isp_vin_slake_subdev(uintptr_t a0);
-int32_t isp_i2c_new_subdev_board(struct i2c_adapter *adap, const struct i2c_board_info *info);
+void *isp_i2c_new_subdev_board(struct i2c_adapter *adap,
+			       const struct i2c_board_info *info);
 int32_t subdev_sensor_ops_enum_input(void *arg1, int32_t *arg2);
 int subdev_sensor_ops_ioctl(void *file, unsigned int cmd, void *arg);
 int dump_isp_csi_open(struct inode *inode, struct file *file);
@@ -5523,7 +5547,7 @@ int32_t isp_csi_show(struct seq_file *m);
 int tx_isp_csi_probe(struct platform_device *pdev);
 int32_t csi_video_s_stream(void *arg1, int32_t arg2, int32_t arg3);
 int csi_sensor_ops_ioctl(void *file, unsigned int cmd);
-int32_t csi_sensor_ops_sync_sensor_attr(uint32_t a0, uint32_t a1, uint32_t a2);
+int32_t csi_sensor_ops_sync_sensor_attr(void *subdev, void *video_in);
 int32_t tx_isp_csi_activate_subdev(uintptr_t a0);
 int32_t dump_csi_reg(void *arg1);
 void check_csi_error(void);
@@ -5578,12 +5602,12 @@ int32_t ispcore_sensor_ops_release_all_sensor(uintptr_t a0);
 int ispcore_sensor_ops_ioctl(void *file, unsigned int cmd, void *arg);
 int32_t ispcore_link_setup(void);
 int32_t isp_core_config_top_ctl_register(int32_t arg1, int32_t arg2);
-int32_t ispcore_core_ops_ioctl(void *file, uint32_t cmd, uint32_t arg);
+int32_t ispcore_core_ops_ioctl(void *file, uint32_t cmd, void *arg);
 int32_t isp_fw_process(void);
 int32_t ispcore_frame_channel_set_scaler(void *arg1, void *arg2, int32_t arg3);
 int dump_isp_info_open(struct inode *inode, struct file *file);
 int32_t isp_info_show(struct seq_file *m);
-int32_t ispcore_sync_sensor_attr(void *arg1, int32_t arg2, int32_t arg3);
+int32_t ispcore_sync_sensor_attr(void *subdev, void *video_in);
 int32_t ispcore_irq_thread_handle(void *arg1);
 #ifndef REGTRACE_KERNEL_TREE_BUILD
 int64_t ispcore_frame_channel_streamoff_isra_0(uintptr_t a0) __asm__("ispcore_frame_channel_streamoff.isra.0");
@@ -5819,7 +5843,7 @@ void * msclaer_notify_front_module(void *arg1, int arg2);
 int32_t mscaler_core_interrupt_service_routine(uintptr_t a0);
 int32_t dump_isp_mscaler_open(uint32_t a0, uint32_t a1);
 int32_t isp_mscaler_show(struct seq_file *m);
-int32_t mscaler_sync_sensor_attr(void *arg1, int32_t arg2, int32_t arg3);
+int32_t mscaler_sync_sensor_attr(void *subdev, void *video_in);
 int tx_isp_mscaler_probe(struct platform_device *pdev);
 #ifndef REGTRACE_KERNEL_TREE_BUILD
 int32_t mscaler_frame_channel_streamoff_isra_0(uintptr_t a0) __asm__("mscaler_frame_channel_streamoff.isra.0");
@@ -5850,7 +5874,7 @@ int32_t frame_chan_event(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t tx_isp_video_s_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2);
 int tx_isp_open(struct inode *inode, struct file *file);
-int32_t tx_isp_notify(uint32_t arg1, uint32_t arg2, uint32_t arg3);
+int32_t tx_isp_notify(void *module, uint32_t event, void *data);
 #ifdef TX_ISP_T30_SHARED_SUBDEV
 void *find_subdev_link_pad(void *graph, void *descriptor);
 #else
@@ -8743,7 +8767,8 @@ int tx_isp_vin_init(void *arg1, int arg2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000017a4 origin=fragment_seed original=subdev_sensor_ops_set_input */
-int64_t subdev_sensor_ops_set_input(uintptr_t a0, uintptr_t a1, uint32_t a2)
+static int64_t subdev_sensor_ops_set_input_raw(uintptr_t a0, uintptr_t a1,
+					       uint32_t a2)
 {
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
@@ -9006,6 +9031,93 @@ subdev_sensor_ops_set_input0x204:
     goto subdev_sensor_ops_set_input0x68;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+
+static int tx_isp_t30_notify_module(void *module, unsigned int event,
+				    void *data)
+{
+	int (*notify)(void *, unsigned int, void *);
+
+	if (!module)
+		return -EINVAL;
+	notify = *(int (**)(void *, unsigned int, void *))
+		 ((char *)module + 0x7c);
+	if (!notify)
+		return -ENOIOCTLCMD;
+	return notify(module, event, data);
+}
+
+int subdev_sensor_ops_set_input(void *vin, int *input)
+{
+	struct list_head *head;
+	struct list_head *pos;
+	void *sensor = NULL;
+	void *active;
+	int enable = 0;
+	int ret;
+
+	if (!vin || !input)
+		return -EINVAL;
+
+	active = *(void **)((char *)vin + 0xe4);
+	if (active) {
+		if (*(int *)((char *)active + 0xdc) == *input)
+			return 0;
+		if (*(int *)((char *)vin + 0xf4) == 4) {
+			isp_printf(1, "sensor is running, please stop it firstly.\n");
+			return -1;
+		}
+
+		ret = tx_isp_t30_notify_module(vin, 0x01000000, &enable);
+		if (ret) {
+			isp_printf(1, "Failed to deinit the sensor(%s)\n",
+				   *(char **)((char *)active + 0x13c));
+			return ret;
+		}
+		*(void **)((char *)vin + 0xe4) = NULL;
+
+		ret = tx_isp_t30_notify_module(active, 0x01000001, NULL);
+		if (ret)
+			return ret;
+	}
+
+	if (*input == -1)
+		return 0;
+
+	head = (struct list_head *)((char *)vin + 0xdc);
+	private_mutex_lock((struct mutex *)((char *)vin + 0xe8));
+	list_for_each(pos, head) {
+		void *candidate = (char *)pos - 0xe4;
+
+		if (*(int *)((char *)candidate + 0xdc) == *input) {
+			sensor = candidate;
+			break;
+		}
+	}
+	private_mutex_unlock((struct mutex *)((char *)vin + 0xe8));
+
+	if (!sensor) {
+		isp_printf(2, "Failed to find sensor index %d\n", *input);
+		return -EINVAL;
+	}
+
+	*(void **)((char *)vin + 0xe4) = sensor;
+	ret = tx_isp_t30_notify_module(sensor, 0x01000001,
+				       (char *)sensor + 0x1cc);
+	if (ret)
+		return ret;
+
+	enable = 1;
+	ret = tx_isp_t30_notify_module(sensor, 0x01000000, &enable);
+	if (ret) {
+		isp_printf(1, "Failed to init the sensor(%s)\n",
+			   *(char **)((char *)sensor + 0x13c));
+		return ret;
+	}
+
+	*input = (*(u32 *)((char *)sensor + 0x204) << 16) |
+		 *(u16 *)((char *)sensor + 0x208);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000019c0 origin=model_output original=video_input_cmd_open */
@@ -9466,90 +9578,73 @@ tx_isp_vin_slake_subdev0xe0:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000021f4 origin=model_output original=isp_i2c_new_subdev_board */
-int32_t isp_i2c_new_subdev_board(struct i2c_adapter *adap, const struct i2c_board_info *info)
+void *isp_i2c_new_subdev_board(struct i2c_adapter *adap,
+			       const struct i2c_board_info *info)
 {
     struct i2c_client *client;
-    struct device *dev;
-    struct module *mod;
+    struct module *owner;
     void *data;
+
+	if (!adap || !info)
+		return NULL;
 
     __request_module(1, "i2c:%s", info->type);
 
     if (info->addr == 0)
-        return 0;
+        return NULL;
 
     client = private_i2c_new_device(adap, info);
     if (client == NULL)
-        return 0;
+        return NULL;
 
-    dev = (struct device *)((char *)client + 0x1c);
-    if (dev == NULL)
+	/* OEM tx-isp-video-in.o, isp_i2c_new_subdev_board+0x54. */
+	if (!client->driver || !client->driver->driver.owner)
         goto unregister;
 
-    mod = (struct module *)((char *)dev + 0x2c);
-    if (!private_try_module_get(mod))
+	owner = client->driver->driver.owner;
+    if (!private_try_module_get(owner))
         goto unregister;
 
-    private_i2c_get_clientdata(client);
-    data = 0;
-    private_module_put(mod);
+    data = private_i2c_get_clientdata(client);
+    private_module_put(owner);
 
     if (data != NULL)
-        return (int32_t)(uintptr_t)data;
+		return data;
 
 unregister:
     private_i2c_unregister_device(client);
-    return 0;
+    return NULL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000022d8 origin=model_output original=subdev_sensor_ops_enum_input */
 int32_t subdev_sensor_ops_enum_input(void *arg1, int32_t *arg2)
 {
-    int *i = 0;
-	if (!arg1)
-		return -22;
+	struct list_head *head;
+	struct list_head *pos;
+	unsigned int index = 0;
+	bool found = false;
 
-	if (arg2) {
-		private_mutex_lock((char *)arg1 + 0xe8);
-		int32_t *node = (int32_t *)((uintptr_t)(*(int32_t *)((char *)arg1 + 0xdc)) - 0xe4);
-		int32_t idx = 0;
-		int32_t *list_base = (int32_t *)((char *)arg1 + 0xdc);
-		int found = 0;
+	if (!arg1 || !arg2)
+		return -EINVAL;
 
-		while ((char *)list_base != (char *)node + 0xe4) {
-			*(int32_t *)((char *)node + 0xdc) = idx;
-			uint8_t *src = (uint8_t *)((char *)node + 0xec);
+	head = (struct list_head *)((char *)arg1 + 0xdc);
+	private_mutex_lock((struct mutex *)((char *)arg1 + 0xe8));
+	list_for_each(pos, head) {
+		void *sensor = (char *)pos - 0xe4;
 
-			if (*arg2 == idx) {
-				*(int32_t *)((char *)arg2 + 0x24) = *(int32_t *)((char *)node + 0xe0);
-				int32_t *i = 0x20;
-				uint8_t *dst = (void *)((uintptr_t)arg2 + 4);
-
-				do {
-					uint8_t c = *src;
-					i--;
-					*dst = c;
-					dst++;
-					if (!c)
-						break;
-					src++;
-				} while (i != 0);
-				found = 1;
-			}
-
-			if (!found) {
-				idx++;
-				node = (int32_t *)((uintptr_t)(*(int32_t *)((char *)node + 0xe4)) - 0xe4);
-			}
+		*(unsigned int *)((char *)sensor + 0xdc) = index;
+		if (*arg2 == index) {
+			*(unsigned int *)((char *)arg2 + 0x24) =
+				*(unsigned int *)((char *)sensor + 0xe0);
+			strlcpy((char *)arg2 + 4, (char *)sensor + 0xec, 0x20);
+			found = true;
+			break;
 		}
-
-		private_mutex_unlock((struct mutex *)0);
-
-		if (*(int32_t *)((char *)node + 0xdc) == *arg2)
-			return 0;
+		index++;
 	}
+	private_mutex_unlock((struct mutex *)((char *)arg1 + 0xe8));
 
-	return -22;
+	return found ? 0 : -EINVAL;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000023c4 origin=model_output original=subdev_sensor_ops_ioctl */
@@ -9583,20 +9678,24 @@ int subdev_sensor_ops_ioctl(void *file, unsigned int cmd, void *arg)
 			int type = *(int *)((char *)arg + 0x20);
 			void *subdev = NULL;
 			if (type == 1) {
-				int adapter = private_i2c_get_adapter(*(int *)((char *)arg + 0x3c));
+				struct i2c_adapter *adapter =
+					private_i2c_get_adapter(*(int *)((char *)arg + 0x3c));
 				if (!adapter) {
 					isp_printf(2, "Failed to get I2C adapter %d, deferring probe\n", *(int *)((char *)arg + 0x3c));
 					return -22;
 				}
-				char buf[0x28];
-				memset(buf, 0, 0x28);
-				memcpy(buf, (char *)arg + 0x24, 0x14);
-				*(int16_t *)((char *)buf + 0x26) = *(int16_t *)((char *)arg + 0x38);
-				subdev = (void *)isp_i2c_new_subdev_board((void *)adapter, buf);
+				struct i2c_board_info board_info;
+
+				memset(&board_info, 0, sizeof(board_info));
+				memcpy(board_info.type, (char *)arg + 0x24,
+				       sizeof(board_info.type));
+				board_info.addr = *(u16 *)((char *)arg + 0x38);
+				subdev = isp_i2c_new_subdev_board(adapter,
+								       &board_info);
 				if (subdev && (unsigned int)subdev < 0xfffff001) {
 					goto register_sensor;
 				}
-				private_i2c_put_adapter((void *)adapter);
+				private_i2c_put_adapter(adapter);
 				isp_printf(2, "Failed to acquire subdev %s, deferring probe\n", (char *)arg + 0x24);
 				return -22;
 			}
@@ -9611,15 +9710,14 @@ register_sensor:
 				if (subdev) {
 					void *ops_ptr = *(void **)((char *)subdev + 0xc4);
 					if (ops_ptr) {
-						int (*probe_fn)(void *, void *) = *(int (**)(void *, void *))ops_ptr;
+						void *core_ops = *(void **)ops_ptr;
+						int (*probe_fn)(void *, void *) = core_ops ?
+							*(int (**)(void *, void *))core_ops : NULL;
 						if (probe_fn && probe_fn(subdev, (char *)subdev + 0x8c) == 0) {
 							private_mutex_lock((char *)file + 0xe8);
-							void **list_head = (void **)((char *)file + 0xe0);
-							void *new_node = (char *)sensor + 0xe4;
-							*list_head = new_node;
-							*(void **)((char *)new_node + 0) = (char *)file + 0xdc;
-							*(void **)((char *)new_node + 4) = *list_head;
-							*list_head = new_node;
+							list_add_tail(
+								(struct list_head *)((char *)sensor + 0xe4),
+								(struct list_head *)((char *)file + 0xdc));
 							private_mutex_unlock((char *)file + 0xe8);
 							*(int *)((char *)subdev + 0x78) = *(int *)((char *)file + 0x78);
 							isp_printf(0, "Registered sensor subdevice %s\n", *(char **)((char *)subdev + 8));
@@ -9712,7 +9810,7 @@ register_sensor:
 				*(int *)arg = *(int *)((char *)active + 0xdc);
 			return 0;
 		case 0x2000004:
-			ret = subdev_sensor_ops_set_input(file, arg, arg);
+			ret = subdev_sensor_ops_set_input(file, arg);
 			break;
 		case 0x2000005:
 		case 0x2000006:
@@ -9826,149 +9924,60 @@ int32_t isp_csi_show(struct seq_file *m)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002a88 origin=fragment_seed original=tx_isp_csi_probe */
 int tx_isp_csi_probe(struct platform_device *pdev)
 {
-    uintptr_t a0 = (uintptr_t)pdev;
+	struct tx_isp_t30_csi_device *csd;
+	struct tx_isp_t30_subdev *sd;
+	struct tx_isp_t30_descriptor *desc;
+	struct resource *res;
+	int ret;
 
-    uint32_t *local_10 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t *a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    char *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uintptr_t *s3 = 0;
-    uint32_t s4 = 0;
-    uintptr_t *v0 = 0;
+	tx_isp_t30_validate_subdev_abi();
+	csd = kzalloc(sizeof(*csd), GFP_KERNEL);
+	if (!csd) {
+		isp_printf(2, "Failed to allocate csi device\n");
+		return -ENOMEM;
+	}
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	desc = pdev->dev.platform_data;
+	sd = &csd->sd;
+	ret = tx_isp_subdev_init(pdev, sd, &csi_subdev_ops);
+	if (ret) {
+		if (desc)
+			isp_printf(2, "Failed to init isp module(%d.%d)\n",
+				   desc->parentid, desc->unitid);
+		ret = -ENOMEM;
+		goto fail_subdev;
+	}
 
-    /* fragment 1: CallSetup */
-    s3 = a0;
-    v0 = (uintptr_t *)kmem_cache_alloc((void *)(int32_t *)(*(uint32_t *)((char *)&kmalloc_caches + 36)), 32976); /* jalr target resolved by relocation */
+	res = request_mem_region(0x10022000, 0x1000, "mipi-phy");
+	if (!res) {
+		isp_printf(2, "%s: MIPI PHY resource is busy\n", __func__);
+		ret = -EBUSY;
+		goto fail_resource;
+	}
 
-    /* fragment 2: Branch */
-    a2 = (uintptr_t)&tx_isp_platform_device;
-    if (v0 != 0) { goto tx_isp_csi_probe0x80; }
+	csd->phy_base = ioremap(res->start, resource_size(res));
+	if (!csd->phy_base) {
+		isp_printf(2, "%s: unable to map MIPI PHY registers\n", __func__);
+		ret = -ENXIO;
+		goto fail_ioremap;
+	}
 
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(2, &LC4); /* jalr target resolved by relocation */
+	csd->phy_res = res;
+	sd->module.debug_ops = &isp_csi_fops;
+	mutex_init(&csd->mlock);
+	private_platform_set_drvdata(pdev, &sd->module);
+	sd->dev_priv = csd;
+	csd->state = 1; /* TX_ISP_MODULE_SLAKE */
+	dump_csd = csd;
+	return 0;
 
-    /* fragment 4: Arithmetic */
-    s1 = -12;
-
-tx_isp_csi_probe0x5c:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int)v0;
-
-tx_isp_csi_probe0x60:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = s1;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int)v0;
-
-tx_isp_csi_probe0x80:
-    /* fragment 9: CallSetup */
-    s0 = v0;
-    s2 = *(uint32_t *)((char *)(s3) + 88);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tx_isp_subdev_init)(s3, v0, &csi_subdev_ops); /* OEM tx-isp-csi.c */
-
-    /* fragment 10: Branch */
-    s1 = v0;
-    if (v0 == 0) { goto tx_isp_csi_probe0xe4; }
-
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC5, *(uint8_t *)((char *)(s2) + 2), *(uint8_t *)((char *)(s2) + 3)); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    s1 = -12;
-    v0 = (uintptr_t *)&kfree;
-
-tx_isp_csi_probe0xd0:
-    /* fragment 13: CallSetup */
-    kfree((void *)(uintptr_t)s0); /* jalr target resolved by relocation */
-
-    /* fragment 14: Branch */
-    goto tx_isp_csi_probe0x60;
-
-tx_isp_csi_probe0xe4:
-    /* fragment 15: CallSetup */
-    local_10 = 0;
-    v0 = (uintptr_t *)__request_region((void *)(uintptr_t)&iomem_resource, 268566528 + 8192, 4096, (const char *)(uintptr_t)&LC6, local_10); /* jalr target resolved by relocation */
-
-    /* fragment 16: Branch */
-    s2 = v0;
-    if (v0 != 0) { goto tx_isp_csi_probe0x158; }
-
-    /* fragment 17: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC7, 0 + 240, 361); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    s1 = -16;
-
-tx_isp_csi_probe0x140:
-    /* fragment 19: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_subdev_deinit)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 20: Branch */
-    v0 = (uintptr_t *)&kfree;
-    goto tx_isp_csi_probe0xd0;
-
-tx_isp_csi_probe0x158:
-    /* fragment 21: CallSetup */
-    v0 = (uintptr_t *)__ioremap(*(uint32_t *)((char *)(v0) + 0), ((*(uint32_t *)((char *)(v0) + 4)) + 1) - (*(uint32_t *)((char *)(v0) + 0)), 1024); /* jalr target resolved by relocation */
-
-    /* fragment 22: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 312) = v0;
-    v0 = *(uint32_t *)((char *)s0 + 184);
-
-    /* fragment 23: Branch */
-    a2 = 0;
-    if (v0 != 0) { goto tx_isp_csi_probe0x1d4; }
-
-    /* fragment 24: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC8, 0 + 240, 368); /* jalr target resolved by relocation */
-
-    /* fragment 25: CallSetup */
-    __release_region((void *)(uintptr_t)&iomem_resource, *(uint32_t *)((char *)(s2) + 0), ((*(uint32_t *)((char *)(s2) + 4)) + 1) - (*(uint32_t *)((char *)(s2) + 0))); /* jalr target resolved by relocation */
-
-    /* fragment 26: Branch */
-    s1 = -6;
-    goto tx_isp_csi_probe0x140;
-
-tx_isp_csi_probe0x1d4:
-    /* fragment 27: CallSetup */
-    *(uint32_t *)((char *)s0 + 52) = (uintptr_t)&isp_csi_fops;
-    *(uint32_t *)((char *)s0 + 308) = s2;
-    __mutex_init((void *)(uintptr_t)(s0 + 296), (const char *)(uintptr_t)&LC9, (void *)(uintptr_t)a2); /* jalr target resolved by relocation */
-
-    /* fragment 28: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)private_platform_set_drvdata)(s3, s0); /* jalr target resolved by relocation */
-
-    /* fragment 29: Arithmetic */
-    v0 = 1;
-
-    /* fragment 30: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 292) = v0;
-    *(uint32_t *)((char *)s0 + 212) = s0;
-
-    /* fragment 31: Branch */
-    dump_csd = s0;
-    goto tx_isp_csi_probe0x5c;
-
-    return 0;
+fail_ioremap:
+	release_mem_region(res->start, resource_size(res));
+fail_resource:
+	tx_isp_subdev_deinit(sd);
+fail_subdev:
+	kfree(csd);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002cb4 origin=model_output original=csi_video_s_stream */
@@ -10012,67 +10021,22 @@ int csi_sensor_ops_ioctl(void *file, unsigned int cmd)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002d9c origin=fragment_seed original=csi_sensor_ops_sync_sensor_attr */
-int32_t csi_sensor_ops_sync_sensor_attr(uint32_t a0, uint32_t a1, uint32_t a2)
+int32_t csi_sensor_ops_sync_sensor_attr(void *subdev, void *video_in)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	struct tx_isp_t30_subdev *sd = subdev;
+	struct tx_isp_t30_csi_device *csd;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (!sd || IS_ERR(sd)) {
+		isp_printf(2, "The parameter is invalid!\n");
+		return -EINVAL;
+	}
 
-    /* fragment 1: Branch */
-    if (a0 == 0) { goto csi_sensor_ops_sync_sensor_attr0x1c; }
-
-    /* fragment 2: Arithmetic */
-    v1 = a0 < -4095;
-
-    /* fragment 3: Branch */
-    a0 = a0 + 220;
-    if (v1 != 0) { goto csi_sensor_ops_sync_sensor_attr0x44; }
-
-    /* fragment 4: CallSetup */
-    a0 = a0 - 220;
-
-csi_sensor_ops_sync_sensor_attr0x1c:
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(2, &LC0); /* jalr target resolved by relocation */
-
-    /* fragment 6: Arithmetic */
-    v0 = -22;
-
-csi_sensor_ops_sync_sensor_attr0x38:
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-csi_sensor_ops_sync_sensor_attr0x44:
-    /* fragment 8: Branch */
-    a2 = 72;
-    if (a1 == 0) { goto csi_sensor_ops_sync_sensor_attr0x64; }
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)&memcpy;
-    v0 = v0;
-
-csi_sensor_ops_sync_sensor_attr0x54:
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)a0, (void *)(uintptr_t)a1, a2); /* jalr target resolved by relocation */
-
-    /* fragment 11: Branch */
-    v0 = 0;
-    goto csi_sensor_ops_sync_sensor_attr0x38;
-
-csi_sensor_ops_sync_sensor_attr0x64:
-    /* fragment 12: Arithmetic */
-    v0 = (uintptr_t *)&memset;
-
-    /* fragment 13: Branch */
-    v0 = (uintptr_t *)&memset;
-    goto csi_sensor_ops_sync_sensor_attr0x54;
-
-    return 0;
+	csd = container_of(sd, struct tx_isp_t30_csi_device, sd);
+	if (video_in)
+		memcpy(csd->vin, video_in, sizeof(csd->vin));
+	else
+		memset(csd->vin, 0, sizeof(csd->vin));
+	return 0;
 }
 
 static void tx_isp_t30_set_subdev_clks(struct tx_isp_t30_subdev *sd,
@@ -14363,97 +14327,81 @@ int32_t isp_core_config_top_ctl_register(int32_t arg1, int32_t arg2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a324 origin=model_output original=ispcore_core_ops_ioctl */
-int32_t ispcore_core_ops_ioctl(void *file, uint32_t cmd, uint32_t arg)
+static int tx_isp_t30_ispcore_call_core_event(void *subdev, uint32_t event,
+					      void *data)
 {
-    int32_t ret;
-    void *entry;
-    void *ops;
-    void *fn;
-    void **iter;
-    void **end;
+	struct tx_isp_t30_subdev *sd = subdev;
+	int ret;
 
-    if (cmd == 0x1000000) {
-        ret = -ENODEV;
-        if (file == NULL) {
-            isp_printf(2, "%s %d Failed to ioctl!\n", "ispcore_core_ops_ioctl");
-            return ret;
-        }
-        ops = *(void **)((char *)file + 0xc4);
-        fn = *(void **)ops;
-        if (fn == NULL) {
-            ret = -EIO;
-            goto loop;
-        }
-        fn = *(void **)((char *)fn + 4);
-        if (fn == NULL) {
-            ret = -EIO;
-            goto loop;
-        }
-        ret = ((int32_t (*)(void))fn)();
-        if (ret == 0 || ret == -EIO)
-            goto loop;
-        isp_printf(2, "%s %d Failed to ioctl!\n", "ispcore_core_ops_ioctl");
-        return ret;
-    } else if (cmd != 0x1000001) {
-        ret = 0;
-        goto loop;
-    } else {
-        ret = -ENODEV;
-        if (file == NULL) {
-            isp_printf(2, "%s %d Failed to ioctl!\n", "ispcore_core_ops_ioctl");
-            return ret;
-        }
-        ops = *(void **)((char *)file + 0xc4);
-        fn = *(void **)((char *)ops + 0xc);
-        if (fn == NULL) {
-            ret = -EIO;
-            goto loop;
-        }
-        fn = *(void **)((char *)fn + 4);
-        if (fn == NULL) {
-            ret = -EIO;
-            goto loop;
-        }
-        ret = ((int32_t (*)(uint32_t))fn)(arg);
-        if (ret == 0 || ret == -EIO)
-            goto loop;
-        isp_printf(2, "%s %d Failed to ioctl!\n", "ispcore_core_ops_ioctl");
-        return ret;
-    }
+	if (!sd || !sd->ops)
+		return -ENOIOCTLCMD;
 
-loop:
-    iter = (void **)((char *)file + 0x38);
-    end = (void **)((char *)file + 0x78);
-    while (iter != end) {
-        entry = *iter;
-        if (entry != NULL) {
-            if (cmd == 0x1000000) {
-                ops = *(void **)((char *)entry + 0xc4);
-                fn = *(void **)ops;
-                if (fn != NULL) {
-                    fn = *(void **)((char *)fn + 4);
-                    if (fn != NULL) {
-                        ret = ((int32_t (*)(void))fn)();
-                        if (ret != 0 && ret != -EIO)
-                            break;
-                    }
-                }
-            } else if (cmd == 0x1000001) {
-                ops = *(void **)((char *)entry + 0xc4);
-                fn = *(void **)((char *)ops + 0xc);
-                if (fn != NULL) {
-                    fn = *(void **)((char *)fn + 4);
-                    if (fn != NULL) {
-                        ret = ((int32_t (*)(uint32_t))fn)(arg);
-                        if (ret != 0 && ret != -EIO)
-                            break;
-                    }
-                }
-            }
-        }
-        iter++;
-    }
-    return 0;
+	if (event == 0x01000000) {
+		int (*init)(void *, int);
+
+		if (!data || !sd->ops->core)
+			return -ENOIOCTLCMD;
+		init = *(int (**)(void *, int))((char *)sd->ops->core + 4);
+		if (!init)
+			return -ENOIOCTLCMD;
+		pr_err("tx-isp-t30 sync: init sd=%p fn=%p begin\n", sd, init);
+		ret = init(sd, *(int *)data);
+		pr_err("tx-isp-t30 sync: init sd=%p ret=%d\n", sd, ret);
+		return ret;
+	}
+
+	if (event == 0x01000001) {
+		void *sensor_ops = sd->ops->sensor;
+		int (*sync_sensor_attr)(void *, void *);
+
+		if (!sensor_ops)
+			return -ENOIOCTLCMD;
+		sync_sensor_attr = *(int (**)(void *, void *))
+				   ((char *)sensor_ops + 4);
+		if (!sync_sensor_attr)
+			return -ENOIOCTLCMD;
+		pr_err("tx-isp-t30 sync: attr sd=%p fn=%p begin\n", sd,
+		       sync_sensor_attr);
+		ret = sync_sensor_attr(sd, data);
+		pr_err("tx-isp-t30 sync: attr sd=%p ret=%d\n", sd, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+int32_t ispcore_core_ops_ioctl(void *file, uint32_t cmd, void *arg)
+{
+	struct tx_isp_t30_module *module;
+	unsigned int index;
+	int ret;
+
+	if (!file) {
+		isp_printf(2, "%s Failed to ioctl!\n", __func__);
+		return -ENODEV;
+	}
+	if (cmd != 0x01000000 && cmd != 0x01000001)
+		return 0;
+
+	ret = tx_isp_t30_ispcore_call_core_event(file, cmd, arg);
+	if (ret && ret != -ENOIOCTLCMD) {
+		isp_printf(2, "%s Failed to ioctl!\n", __func__);
+		return ret;
+	}
+
+	module = file;
+	for (index = 0; index < ARRAY_SIZE(module->submods); index++) {
+		if (!module->submods[index])
+			continue;
+		pr_err("tx-isp-t30 sync: child[%u]=%p event=%08x\n", index,
+		       module->submods[index], cmd);
+		ret = tx_isp_t30_ispcore_call_core_event(
+			module->submods[index], cmd, arg);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+	}
+
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a4e4 origin=model_output original=isp_fw_process */
@@ -14872,34 +14820,33 @@ int32_t isp_info_show(struct seq_file *m)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b470 origin=model_output original=ispcore_sync_sensor_attr */
-int32_t ispcore_sync_sensor_attr(void *arg1, int32_t arg2, int32_t arg3)
+int32_t ispcore_sync_sensor_attr(void *subdev, void *video_in)
 {
-    void *s0_1;
-    void *v0_1_2;
-    uint16_t v1_3_3;
+	void *core;
+	void *attr;
 
-    if (arg1 == NULL || (uint32_t)arg1 >= 0xfffff001u) {
-        isp_printf(2, "The parameter is invalid!\n", arg3);
-        return -22;
-    }
+	if (!subdev || IS_ERR(subdev)) {
+		isp_printf(2, "The parameter is invalid!\n");
+		return -EINVAL;
+	}
 
-    s0_1 = *(void **)((char *)arg1 + 0xd4);
+	core = *(void **)((char *)subdev + 0xd4);
+	if (!core || IS_ERR(core)) {
+		isp_printf(2, "The parameter is invalid!\n");
+		return -EINVAL;
+	}
 
-    if (s0_1 == NULL || (uint32_t)s0_1 >= 0xfffff001u) {
-        isp_printf(2, "The parameter is invalid!\n", arg3);
-        return -22;
-    }
+	if (!video_in) {
+		memset((char *)core + 0xec, 0, 0x48);
+		return 0;
+	}
 
-    if (arg2 == 0) {
-        memset((char *)s0_1 + 0xec, 0, 0x48);
-        return 0;
-    }
-
-    memcpy((char *)s0_1 + 0xec, (void *)arg2, 0x48);
-    v0_1_2 = *(void **)((char *)s0_1 + 0x120);
-    v1_3_3 = *(uint16_t *)((char *)v0_1_2 + 0x78);
-    stab[0] = (uint8_t)v1_3_3;
-    return 0;
+	memcpy((char *)core + 0xec, video_in, 0x48);
+	attr = *(void **)((char *)core + 0x120);
+	if (!attr || IS_ERR(attr))
+		return -EINVAL;
+	*(u16 *)(stab + 0x1a) = *(u16 *)((char *)attr + 0x78);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b514 origin=model_output original=ispcore_irq_thread_handle */
@@ -26638,188 +26585,127 @@ int32_t isp_mscaler_show(struct seq_file *m)
     return result;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_00000000000160f0 origin=model_output original=mscaler_sync_sensor_attr */
-int32_t mscaler_sync_sensor_attr(void *arg1, int32_t arg2, int32_t arg3)
+/* OEM T30 frame_image_format ABI. */
+struct tx_isp_t30_frame_image_format {
+	u32 type;
+	struct v4l2_pix_format pix;
+	u8 crop_enable;
+	u8 crop_pad[3];
+	u32 crop_top;
+	u32 crop_left;
+	u32 crop_width;
+	u32 crop_height;
+	u8 scaler_enable;
+	u8 scaler_pad[3];
+	u32 scaler_out_width;
+	u32 scaler_out_height;
+	u32 rate_bits;
+	u32 rate_mask;
+};
+
+/* WHOLE_DRIVER_CANDIDATE fn_00000000000160f0 origin=oem_source original=mscaler_sync_sensor_attr */
+int32_t mscaler_sync_sensor_attr(void *subdev, void *video_in)
 {
-    void *s0;
-    uint32_t *v0;
-    uint32_t v1;
-    uint32_t t0;
-    uint32_t t1;
-    uint32_t a2;
-    uint32_t *a3;
-    uint32_t *s1;
-    uint32_t *s3;
-    uint32_t var_68[19];
-    uint32_t var_4c;
-    uint32_t var_44;
-    uint32_t var_40;
-    uint32_t var_3c;
-    uint32_t *var_38;
-    uint32_t var_34;
-    uint32_t var_30;
-    uint32_t var_2c;
-    uint32_t *var_28;
-    uint32_t var_64;
-    uint32_t *var_60;
-    uint32_t var_5c;
+	struct tx_isp_t30_frame_image_format fmt;
+	void *mscaler;
+	void *input;
+	u32 source_width;
+	u32 source_height;
+	u32 width = 0;
+	u32 height = 0;
+	u32 top = 0;
+	u32 left = 0;
 
-    if (arg1 == 0 || (uint32_t)arg1 >= 0xfffff001u) {
-        isp_printf(2, "The parameter is invalid!\n", arg3);
-        return -22;
-    }
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_frame_image_format) != 0x4c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_image_format,
+			      crop_enable) != 0x24);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_image_format,
+			      scaler_enable) != 0x38);
 
-    s0 = *(void **)((char *)arg1 + 0xd4);
-    if (s0 == 0 || (uint32_t)s0 >= 0xfffff001u) {
-        isp_printf(2, "The parameter is invalid!\n", arg3);
-        return -22;
-    }
+	if (!subdev || IS_ERR(subdev)) {
+		isp_printf(2, "The parameter is invalid!\n");
+		return -EINVAL;
+	}
+	mscaler = *(void **)((char *)subdev + 0xd4);
+	if (!mscaler || IS_ERR(mscaler)) {
+		isp_printf(2, "The parameter is invalid!\n");
+		return -EINVAL;
+	}
 
-    if (arg2 == 0) {
-        memset((char *)s0 + 0xec, 0, 0x48);
-        return 0;
-    }
+	if (!video_in) {
+		memset((char *)mscaler + 0xec, 0, 0x48);
+		return 0;
+	}
 
-    v0 = *(uint32_t *)((char *)s0 + 0x144);
-    s3 = v0;
-    memcpy((char *)s0 + 0xec, (void *)arg2, 0x48);
-    memset(var_68, 0, 0x4c);
-    var_4c = 8;
-    v0 = *(uint32_t *)((char *)s0 + 0xec);
+	input = *(void **)((char *)mscaler + 0x144);
+	if (!input || IS_ERR(input)) {
+		isp_printf(2, "The mscaler input channel is invalid!\n");
+		return -EINVAL;
+	}
 
-    if (ispcrop != 0) {
-        var_44 = 1;
-        a3 = ispcropwh;
-        a2 = (uintptr_t)a3 >> 16;
-        t0 = a2;
-        if (a2 == 0)
-            t0 = v0;
-        a3 = (uintptr_t)a3 & 0xffff;
-        v1 = a3;
-        var_64 = t0;
-        if (a3 == 0)
-            v1 = *(uint32_t *)((char *)s0 + 0xf0);
-        var_60 = v1;
+	memcpy((char *)mscaler + 0xec, video_in, 0x48);
+	memset(&fmt, 0, sizeof(fmt));
+	fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+	source_width = *(u32 *)((char *)mscaler + 0xec);
+	source_height = *(u32 *)((char *)mscaler + 0xf0);
 
-        if (v0 >= a2) {
-            s1 = *(uint32_t *)((char *)s0 + 0xf0);
-            if (s1 >= a3) {
-                a3 = ispcroptl;
-                t1 = (uintptr_t)a3 >> 16;
-                a3 = (uintptr_t)a3 & 0xffff;
-                if (a3 == 0)
-                    a3 = ((uintptr_t)v0 - a2) >> 1;
-                if (t1 == 0)
-                    t1 = ((uintptr_t)s1 - (uintptr_t)a3) >> 1;
-                var_3c = a3;
-                var_38[0] = a2;
-                var_40 = t1;
-                var_34 = a3;
+	if (ispcrop || ispscaler) {
+		if (ispcrop) {
+			fmt.crop_enable = 1;
+			width = ((u32)ispcropwh >> 16) & 0xffff;
+			height = (u32)ispcropwh & 0xffff;
+			fmt.pix.width = width ? width : source_width;
+			fmt.pix.height = height ? height : source_height;
+			if (width > source_width || height > source_height) {
+				isp_printf(2, "ISP crop output resolution is wrong(%d*%d)!\n",
+					   width, height);
+				private_mutex_unlock((struct mutex *)
+						     ((char *)mscaler + 0xdc));
+				return -EPERM;
+			}
+			top = ((u32)ispcroptl >> 16) & 0xffff;
+			left = (u32)ispcroptl & 0xffff;
+			fmt.crop_left = left ? left :
+				(source_width - width) >> 1;
+			fmt.crop_top = top ? top :
+				(source_height - height) >> 1;
+			fmt.crop_width = width;
+			fmt.crop_height = height;
+		}
 
-                if (ispscaler != 0) {
-                    var_30 = 1;
-                    a3 = *(uint32_t *)&isp_mscaler_show;
-                    a2 = (uintptr_t)a3 >> 16;
-                    t0 = a2;
-                    if (a2 == 0)
-                        t0 = v0;
-                    a3 = (uintptr_t)a3 & 0xffff;
-                    v1 = a3;
-                    var_64 = t0;
-                    if (a3 == 0)
-                        v1 = *(uint32_t *)((char *)s0 + 0xf0);
-                    var_60 = v1;
+		if (ispscaler) {
+			fmt.scaler_enable = 1;
+			width = ((u32)ispscalerwh >> 16) & 0xffff;
+			height = (u32)ispscalerwh & 0xffff;
+			fmt.pix.width = width ? width : source_width;
+			fmt.pix.height = height ? height : source_height;
+			if (width > source_width || height > source_height) {
+				isp_printf(2, "ISP scaler output resolution is wrong(%d*%d)!\n",
+					   width, height);
+				private_mutex_unlock((struct mutex *)
+						     ((char *)mscaler + 0xdc));
+				return -EPERM;
+			}
+			fmt.scaler_out_width = width;
+			fmt.scaler_out_height = height;
+		}
+	} else {
+		fmt.pix.width = source_width;
+		fmt.pix.height = source_height;
+	}
 
-                    if (v0 >= a2 && *(uint32_t *)((char *)s0 + 0xf0) >= a3) {
-                        var_2c = a2;
-                        var_28 = a3;
-                        var_5c = 0x3231564e;
-                        v0 = t0;
-                        ispw = v0;
-                        isph = v1;
-                        if (v0 < 0xa21 && v1 < 0x801) {
-                            memcpy((void *)s3, var_68, 0x4c);
-                            return 0;
-                        }
-                        a2 = v0;
-                        isp_printf(2, "ISP output resolution is wrong(%d*%d)!!!\n", a2);
-                        private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-                        return -1;
-                    }
-                    isp_printf(2, "ISP scaler output resolution is wrong(%d*%d)!\n", v0);
-                    private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-                    return -1;
-                }
-                var_30 = 0;
-                var_5c = 0x3231564e;
-                v0 = t0;
-                ispw = v0;
-                isph = v1;
-                if (v0 < 0xa21 && v1 < 0x801) {
-                    memcpy((void *)s3, var_68, 0x4c);
-                    return 0;
-                }
-                a2 = v0;
-                isp_printf(2, "ISP output resolution is wrong(%d*%d)!!!\n", a2);
-                private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-                return -1;
-            }
-        }
-        isp_printf(2, "ISP crop output resolution is wrong(%d*%d)!\n", v0);
-        private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-        return -1;
-    }
+	fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
+	ispw = fmt.pix.width;
+	isph = fmt.pix.height;
+	if (fmt.pix.width > 2592 || fmt.pix.height > 2048) {
+		isp_printf(2, "ISP output resolution is wrong(%d*%d)!!!\n",
+			   fmt.pix.width, fmt.pix.height);
+		private_mutex_unlock((struct mutex *)((char *)mscaler + 0xdc));
+		return -EPERM;
+	}
 
-    if (ispscaler != 0) {
-        var_44 = 0;
-        a3 = *(uint32_t *)&isp_mscaler_show;
-        a2 = (uintptr_t)a3 >> 16;
-        t0 = a2;
-        if (a2 == 0)
-            t0 = v0;
-        a3 = (uintptr_t)a3 & 0xffff;
-        v1 = a3;
-        var_64 = t0;
-        if (a3 == 0)
-            v1 = *(uint32_t *)((char *)s0 + 0xf0);
-        var_60 = v1;
-
-        if (v0 >= a2 && *(uint32_t *)((char *)s0 + 0xf0) >= a3) {
-            var_2c = a2;
-            var_28 = a3;
-            var_5c = 0x3231564e;
-            v0 = t0;
-            ispw = v0;
-            isph = v1;
-            if (v0 < 0xa21 && v1 < 0x801) {
-                memcpy((void *)s3, var_68, 0x4c);
-                return 0;
-            }
-            a2 = v0;
-            isp_printf(2, "ISP output resolution is wrong(%d*%d)!!!\n", a2);
-            private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-            return -1;
-        }
-        isp_printf(2, "ISP scaler output resolution is wrong(%d*%d)!\n", v0);
-        private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-        return -1;
-    }
-
-    v1 = *(uint32_t *)((char *)s0 + 0xf0);
-    var_64 = v0;
-    var_60 = v1;
-    var_5c = 0x3231564e;
-    var_30 = 0;
-    var_44 = 0;
-    isph = v1;
-    if (v0 < 0xa21 && v1 < 0x801) {
-        memcpy((void *)s3, var_68, 0x4c);
-        return 0;
-    }
-    a2 = v0;
-    isp_printf(2, "ISP output resolution is wrong(%d*%d)!!!\n", a2);
-    private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-    return -1;
+	memcpy(input, &fmt, sizeof(fmt));
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016378 origin=fragment_seed original=tx_isp_mscaler_probe */
@@ -30887,57 +30773,44 @@ int tx_isp_open(struct inode *inode, struct file *file)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000198a8 origin=model_output original=tx_isp_notify */
-int32_t tx_isp_notify(uint32_t arg1, uint32_t arg2, uint32_t arg3)
+int32_t tx_isp_notify(void *module, uint32_t event, void *data)
 {
-	uint32_t *i;
-	uint32_t *end;
-	uint32_t *mask;
-	uint32_t *result;
-	uint32_t *dev;
-	uint32_t *ops;
-	uint32_t cb;
-	uint32_t fn;
-	uint32_t ret;
+	struct tx_isp_t30_device *ispdev = globe_ispdev;
+	unsigned int index;
+	unsigned int event_class = event & 0xff000000;
+	int ret = 0;
 
-	i = (uintptr_t)globe_ispdev + 0x38;
-	end = (uintptr_t)globe_ispdev + 0x78;
-	mask = arg2 & 0xff000000;
-	result = 0;
+	(void)module;
+	if (!ispdev)
+		return -ENODEV;
 
-	while (i != end) {
-		dev = *i;
-		if (dev != 0) {
-			if (mask == 0x1000000) {
-				ops = *(uint32_t *)(dev + 0xc4);
-				cb = ops;
-				if (cb != 0)
-					fn = *(uint32_t *)(cb + 0x14);
-				else
-					fn = 0;
-			} else if (mask == 0x2000000) {
-				ops = *(uint32_t *)(dev + 0xc4);
-				cb = *(uint32_t *)(ops + 0xc);
-				if (cb != 0)
-					fn = *(uint32_t *)(cb + 8);
-				else
-					fn = 0;
-			} else {
-				fn = 0;
-			}
+	for (index = 0; index < ARRAY_SIZE(ispdev->module.submods); index++) {
+		struct tx_isp_t30_module *submod = ispdev->module.submods[index];
+		struct tx_isp_t30_subdev *sd;
+		int (*handler)(void *, unsigned int, void *) = NULL;
 
-			if (fn != 0) {
-				ret = ((int32_t (*)(uint32_t, uint32_t, uint32_t))fn)(dev, arg2, arg3);
-				if (ret != 0 && ret != -515) {
-					result = ret;
-					return result;
-				}
-			}
-		}
-		i++;
-		result = 0;
+		if (!submod)
+			continue;
+		sd = container_of(submod, struct tx_isp_t30_subdev, module);
+		if (!sd->ops)
+			continue;
+
+		if (event_class == 0x01000000 && sd->ops->core)
+			handler = *(int (**)(void *, unsigned int, void *))
+				  ((char *)sd->ops->core + 0x14);
+		else if (event_class == 0x02000000 && sd->ops->sensor)
+			handler = *(int (**)(void *, unsigned int, void *))
+				  ((char *)sd->ops->sensor + 0x8);
+
+		if (!handler)
+			continue;
+		ret = handler(sd, event, data);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+		ret = 0;
 	}
 
-	return result;
+	return ret;
 }
 
 #ifndef TX_ISP_T30_SHARED_SUBDEV
