@@ -80,6 +80,10 @@ their computed return values or call state.
 - Corrected the top-level ioctl scratch allocation from 0x50 words to the OEM
   0x50-byte payload. Its MIPS stack frame is now 152 bytes versus 168 OEM,
   instead of 392 bytes.
+- Rebuilt `ispcore_activate_module` from the stock T21 activation walk. It now
+  enables the core clocks, validates and advances every configured channel,
+  sends the tuning-mode event, invokes all 16 child activation slots, and only
+  then records the active state. Its audit ratio improved from 0.707 to 0.864.
 
 ## Audit and validation boundary
 
@@ -88,7 +92,7 @@ their computed return values or call state.
 Instruction-count parity is structural triage, not proof of semantics.
 
 The current audit has 612 directly matched functions, 4 syntactic stub
-findings, 25 collapsed findings, and a 0.787 matched-instruction ratio. Three
+findings, 25 collapsed findings, and a 0.788 matched-instruction ratio. Three
 of the four stub findings are intentional tail-call aliases; the only true
 empty body is `Tiziano_Awb_Ct_Detect`.
 

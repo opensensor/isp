@@ -70,10 +70,10 @@ use generation-specific policy already represented by the T23 adapter.
 
 ## Next evidence-driven work
 
-1. Audit the activation/VIC-start sequence reached after the now-restored
-   `tx_isp_unlocked_ioctl` video-link setup, then run a module/probe-only camera
-   smoke test. `isp_vic_cmd_set` is a raw-snapshot proc handler and is not on
-   this startup path.
+1. Audit `tx_isp_vic_start` and its stream-state transitions after the restored
+   video-link setup and `ispcore_activate_module` walk, then run a
+   module/probe-only camera smoke test. `isp_vic_cmd_set` is a raw-snapshot proc
+   handler and is not on this startup path.
 2. Reconstruct `Tiziano_Awb_Ct_Detect` from the T21 HLIL, keeping its 19-argument
    ABI and T21 global work arrays; use T31 only to name the phases before the
    first streaming test.

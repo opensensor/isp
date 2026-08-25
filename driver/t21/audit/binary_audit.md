@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 630 | 682 |
 | Functions with disassembly | 630 | 682 |
-| Executable section bytes | 215240 | 169856 |
+| Executable section bytes | 215240 | 169952 |
 | Initialized writable bytes | 283936 | 276528 |
 | Uninitialized writable bytes | 101040 | 452144 |
 
 - direct matches: 612
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=18 recovered-only=70
-- matched instructions: OEM=52693 recovered=41474 ratio=0.787
-- classes: stub=4 collapsed=25 shorter=111 same_count=137 similar=317 larger=11 expanded=7
+- matched instructions: OEM=52693 recovered=41497 ratio=0.788
+- classes: stub=4 collapsed=25 shorter=110 same_count=137 similar=318 larger=11 expanded=7
 
 ## Allocated Section Delta
 
@@ -41,14 +41,14 @@
 | `.rodata.cst4` | 0 | 16 | +16 |
 | `.rodata.cst8` | 0 | 16 | +16 |
 | `.rodata.str1.4` | 11016 | 9512 | -1504 |
-| `.text` | 214336 | 169856 | -44480 |
+| `.text` | 214336 | 169952 | -44384 |
 | `__ksymtab` | 240 | 240 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 32 | 32 | +0 |
 
 ## Function Outliers
 
-Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
+Showing 245 of 245 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -114,7 +114,6 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `cm_control` | `cm_control` | 229 | 140 | 0.611 | -89 | 9->9 | 15->2 |
 | shorter | exact_name | `JZ_Isp_Awb` | `JZ_Isp_Awb` | 206 | 161 | 0.782 | -45 | 3->3 | 14->10 |
 | shorter | exact_name | `tisp_mdns_c_adj_param_cfg` | `tisp_mdns_c_adj_param_cfg` | 158 | 116 | 0.734 | -42 | 9->8 | 0->1 |
-| shorter | exact_name | `ispcore_activate_module` | `ispcore_activate_module` | 147 | 104 | 0.707 | -43 | 9->7 | 25->13 |
 | shorter | exact_name | `tisp_day_or_night_s_ctrl` | `tisp_day_or_night_s_ctrl` | 129 | 99 | 0.767 | -30 | 20->14 | 5->5 |
 | shorter | exact_name | `tisp_adr_process` | `tisp_adr_process` | 124 | 89 | 0.718 | -35 | 11->10 | 6->5 |
 | shorter | exact_name | `tiziano_af_params_refresh` | `tiziano_af_params_refresh` | 124 | 93 | 0.750 | -31 | 19->19 | 0->0 |
