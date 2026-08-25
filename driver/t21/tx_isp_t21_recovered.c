@@ -44,6 +44,7 @@
 #include <linux/workqueue.h>
 #include <linux/wait.h>
 #include <linux/kthread.h>
+#include <linux/math64.h>
 #include <soc/gpio.h>
 #include <net/addrconf.h>
 #include <net/cfg80211.h>
@@ -783,39 +784,339 @@ static const char LC37[] = "SENSOR digital gain : %d\n";
 static void *tx_vic_base;
 static inline int32_t vic_core_ops_ioctl_dispatch(void *dev, int32_t cmd, int32_t *arg)
 {
+    void *sensor;
     void *ops;
-    void *sub;
+    void *core;
     int32_t (*fn)(void *, int32_t);
     int32_t ret;
 
     if (cmd != 0x1000000)
         return 0;
 
-    ops = *(void **)((char *)dev + 0xe4);
+    sensor = *(void **)((char *)dev + 0xe4);
+    if (!sensor)
+        return 0;
+
+    ops = *(void **)((char *)sensor + 0xc4);
     if (!ops)
         return 0;
 
-    sub = *(void **)((char *)ops + 0xc4);
-    if (!sub)
+    core = *(void **)ops;
+    if (!core)
         return 0;
 
-    fn = *(void (**)(void *, int32_t))((char *)sub + 4);
+    fn = *(void (**)(void *, int32_t))((char *)core + 4);
     if (!fn)
         return 0;
 
-	ret = fn(ops, *arg);
+	ret = fn(sensor, *arg);
     if (ret != -515)
         return ret;
 
     return 0;
 }
-struct vin_stream_dev {
-    uint8_t pad_e4[0xe4];
-    void *stream;
-    uint8_t pad_f4[8];
-    int32_t *state;
+struct t21_subdev_core_ops_view {
+    void *g_chip_ident;
+    int32_t (*init)(void *subdev, int32_t enable);
+    int32_t (*reset)(void *subdev, int32_t enable);
+    void *reserved_0c;
+    void *reserved_10;
+    void *ioctl;
+    int32_t (*interrupt_service_routine)(void *subdev, uint32_t status,
+                                         void *handled);
+    int32_t (*interrupt_service_thread)(void *subdev, void *data);
 };
-typedef int32_t (*vin_stream_op_t)(void *dev, int32_t arg);
+
+struct t21_subdev_video_ops_view {
+    int32_t (*s_stream)(void *subdev, int32_t enable);
+    int32_t (*link_stream)(void *subdev, int32_t enable);
+};
+
+struct t21_subdev_sensor_ops_view {
+    int32_t (*release_all_sensor)(void *subdev);
+    int32_t (*sync_sensor_attr)(void *subdev, void *arg);
+    int32_t (*ioctl)(void *subdev, uint32_t cmd, void *arg);
+};
+
+struct t21_subdev_ops_view {
+    const struct t21_subdev_core_ops_view *core;
+    const struct t21_subdev_video_ops_view *video;
+    const void *pad;
+    const struct t21_subdev_sensor_ops_view *sensor;
+    const void *internal;
+};
+
+/* The prebuilt T21 sensor modules embed the OEM subdev at offset zero. */
+struct t21_sensor_subdev_view {
+    uint8_t pad_ops[0xc4];
+    const struct t21_subdev_ops_view *ops;
+};
+
+struct t21_vin_view {
+    uint8_t pad_active[0xe4];
+    struct t21_sensor_subdev_view *active;
+    uint8_t pad_state[0x0c];
+    int32_t state;
+};
+
+struct t21_video_graph_view {
+    uint8_t pad_subdevs[0x38];
+    struct t21_sensor_subdev_view *subdevs[16];
+};
+
+struct t21_frame_pad_view {
+	void *owner;
+	u8 index;
+	u8 enabled;
+	u8 reserved_06;
+	u8 state;
+	u8 reserved_08[0x0c];
+	u32 flags;
+	u8 reserved_18[8];
+	void *event_priv;
+};
+
+struct t21_frame_source_view {
+	u8 pad_channels[0xdc];
+	u8 *channels;
+};
+
+struct t21_frame_event_view {
+	u32 reserved_00;
+	u32 reserved_04;
+	u32 dma_addr;
+	u32 reserved_0c;
+	u32 reserved_10;
+	u32 sequence;
+};
+
+/* T21's userspace video ABI predates the in-tree V4L2 queue plumbing.  Keep
+ * explicit 32-bit views here: both the OEM module and libimp use these exact
+ * layouts, regardless of the host compiler's native pointer size. */
+struct t21_v4l2_requestbuffers_view {
+	u32 count;
+	u32 type;
+	u32 memory;
+	u32 reserved[2];
+};
+
+struct t21_v4l2_buffer_view {
+	u32 index;
+	u32 type;
+	u32 bytesused;
+	u32 flags;
+	u32 field;
+	u32 timestamp_sec;
+	u32 timestamp_usec;
+	u32 timecode[4];
+	u32 sequence;
+	u32 memory;
+	u32 userptr;
+	u32 length;
+	u32 reserved2;
+	u32 reserved;
+};
+
+struct t21_frame_format_view {
+	u32 type;
+	u32 width;
+	u32 height;
+	u32 pixelformat;
+	u32 field;
+	u32 bytesperline;
+	u32 sizeimage;
+	u32 colorspace;
+	u32 format_private;
+	u8 crop_enable;
+	u8 pad_25[3];
+	u32 crop_top;
+	u32 crop_left;
+	u32 crop_width;
+	u32 crop_height;
+	u8 scaler_enable;
+	u8 pad_39[3];
+	u32 scaler_width;
+	u32 scaler_height;
+	u32 reserved_44;
+	u32 reserved_48;
+};
+
+struct t21_frame_buffer_abi {
+	u32 index;
+	u32 type;
+	u32 bytesused;
+	u32 flags;
+	u32 field;
+	u32 timestamp_sec;
+	u32 timestamp_usec;
+	u32 timecode[4];
+	u32 sequence;
+	u32 memory;
+	u32 dma_addr;
+	u32 length;
+	u32 reserved2;
+	u32 reserved;
+	void *queue;
+	u32 state;
+	u8 marker;
+	u8 pad_4d[3];
+	u32 completed;
+	u32 reserved_54;
+	struct list_head queued;
+	struct list_head done;
+	struct list_head event;
+	u32 event_dma;
+	u32 event_chroma;
+	u32 reserved_78;
+	u32 reserved_7c;
+};
+
+struct t21_frame_channel_abi {
+	u8 misc_device[0x24];
+	u32 type;
+	u8 queue_mutex[0x0c];
+	u32 buffer_size;
+	void *queue_ops;
+	u32 memory;
+	struct t21_frame_format_view active_format;
+	u8 pad_8c[0x80];
+	struct t21_frame_buffer_abi *buffers[64];
+	u32 num_buffers;
+	struct list_head queued;
+	u32 queued_count;
+	struct list_head done;
+	u32 done_count;
+	u8 wait_queue[8];
+	u32 streaming;
+	struct t21_frame_format_view format;
+	u8 name[0x10];
+	struct t21_frame_pad_view *remote_pad;
+	u32 index;
+	u8 state_lock[0x0c];
+	u32 state;
+	u8 completion[0x0c];
+	u32 last_sequence;
+	u32 error_count;
+};
+
+struct t21_isp_output_fmt {
+	char description[32];
+	u32 fourcc;
+	u32 depth;
+	u32 flags;
+};
+
+static const struct t21_isp_output_fmt t21_isp_output_formats[10];
+
+struct t21_ispcore_channel_abi {
+	struct t21_frame_format_view format;
+	u32 channel_id;
+	u32 state;
+	struct t21_frame_pad_view *remote_pad;
+	void *format_descriptor;
+	u8 pad_5c[0x1c];
+	u8 state_lock[0x0c];
+	u8 pad_84[0x14];
+	u32 line_width;
+};
+
+struct t21_frame_buffer_view {
+	u8 pad_timestamp[0x14];
+	u32 timestamp_sec;
+	u32 timestamp_usec;
+	u8 pad_sequence[0x10];
+	u32 sequence;
+	u32 reserved_30;
+	u32 dma_addr;
+	u8 pad_state[0x10];
+	u32 state;
+	u8 marker;
+	u8 pad_completed[7];
+	u32 completed;
+	struct list_head queued;
+	struct list_head done;
+};
+
+struct t21_frame_channel_view {
+	u8 pad_queued[0x210];
+	struct list_head queued;
+	u32 queued_count;
+	struct list_head done;
+	u32 done_count;
+	u8 wait_queue[0x70];
+	u8 state_lock[0x0c];
+	u32 state;
+	u8 completion[0x0c];
+	u32 last_sequence;
+	u32 error_count;
+};
+
+struct t21_ispcore_irq_view {
+	u8 pad_registers[0xb8];
+	void __iomem *registers;
+	u8 pad_runtime[0x18];
+	struct t21_ispcore_irq_view *runtime;
+	u8 pad_channels[0x74];
+	u8 *channels;
+};
+
+struct t21_tuning_file_private_view {
+    uint8_t pad_core[0xc8];
+    void *core;
+};
+
+struct t21_tuning_core_view {
+    uint8_t pad_tuning[0x19c];
+    void *tuning;
+};
+
+struct t21_isp_core_runtime_view;
+
+struct t21_tuning_state_view {
+	struct t21_isp_core_runtime_view *core;
+	uint8_t pad_buffer[0x40ac - sizeof(void *)];
+	void *buffer;
+	uint8_t pad_state[0x14];
+	uint32_t state;
+};
+
+struct t21_isp_core_runtime_view {
+	uint8_t pad_self[0xd4];
+	struct t21_isp_core_runtime_view *self;
+	uint8_t pad_sensor_mode[0x12c - 0xd8];
+	uint32_t sensor_mode;
+};
+
+struct t21_isp_core_info_view {
+    uint8_t pad_state[0xe8];
+    uint32_t state;
+    uint32_t width;
+    uint32_t height;
+    uint32_t raw_pattern;
+    uint8_t pad_sensor_name[0x28];
+    const char *sensor_name;
+    uint8_t pad_fps[0x08];
+    uint32_t fps;
+    uint8_t pad_tuning[0x6c];
+    void *tuning;
+};
+
+struct t21_isp_device_info_view {
+    uint8_t pad_core[0xd4];
+    struct t21_isp_core_info_view *core;
+};
+
+static struct t21_tuning_state_view *
+t21_tuning_state_from_file(struct file *file)
+{
+    struct t21_tuning_file_private_view *private = file->private_data;
+    struct t21_tuning_core_view *core;
+
+    if (private == NULL || private->core == NULL)
+        return NULL;
+    core = private->core;
+    return core->tuning;
+}
 static struct file_operations video_input_cmd_fops;
 static unsigned char __attribute__((aligned(4))) vin_subdev_ops[20] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -911,14 +1212,13 @@ struct sensor_integration_state {
 };
 static inline int32_t tx_isp_video_s_stream_call(void *obj, int32_t arg)
 {
-    int32_t **vtable = (int32_t **)((char *)obj + 0xc4);
-    int32_t *fn_ptr = vtable[1];
-    if (fn_ptr == NULL)
+    struct t21_sensor_subdev_view *subdev = obj;
+    const struct t21_subdev_video_ops_view *video;
+
+    video = subdev->ops ? subdev->ops->video : NULL;
+    if (video == NULL || video->s_stream == NULL)
         return 0;
-    int32_t fn = fn_ptr[0];
-    if (fn == 0)
-        return 0;
-    return ((int32_t (*)(void *, int32_t))fn)(obj, arg);
+    return video->s_stream(subdev, arg);
 }
 static uintptr_t (*globe_ispdev)();
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -994,8 +1294,26 @@ static unsigned char data_813a4[16384];
 static unsigned char data_81770[16384];
 static unsigned char data_81778[16384];
 static unsigned char data_8177c[16384];
-static uintptr_t tevent_info;
-static int32_t tisp_event_cb_table[16];
+struct t21_event_node {
+	struct list_head link;
+	uint32_t event;
+	uint32_t reserved;
+	uint32_t args[8];
+};
+
+struct t21_event_queue {
+	struct completion ready;
+	uint32_t reserved;
+	struct t21_event_node nodes[20];
+	struct list_head pending;
+	struct list_head free;
+};
+
+typedef int32_t (*t21_event_cb_t)(int32_t, int32_t, int32_t, int32_t,
+				 int32_t, int32_t, int32_t, int32_t);
+
+static struct t21_event_queue tevent_info;
+static t21_event_cb_t tisp_event_cb_table[16];
 static int32_t tisp_event_list_head;
 static unsigned char awb_array_r[900];
 static unsigned char awb_array_g[900];
@@ -2481,6 +2799,8 @@ static unsigned char __attribute__((aligned(4))) tparams[0x15380] = {
     0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 static uintptr_t first_frame;
+/* OEM .data flag: select the ISP top-level pipeline on the first IRQ. */
+static uint32_t first_into = 1;
 static uintptr_t awb_dn_refresh_flag;
 static uintptr_t (*data_837cc)();
 static uintptr_t (*data_837d0)();
@@ -2488,7 +2808,7 @@ static uintptr_t awb_moa;
 static unsigned char cm_in[72];
 static unsigned char s_in[72];
 static unsigned char g_out[16384];
-static unsigned char tiziano_gamma_lut[528];
+static unsigned char tiziano_gamma_lut[528] __attribute__((aligned(4)));
 static const char __attribute__((section(".rodata"))) gamma_fmt[] =
 	"%s,%d: gamma not support param id %d\n";
 static unsigned char __attribute__((aligned(4))) tiziano_gib_deirm_blc_b_linear[36] = {
@@ -2589,12 +2909,12 @@ static uintptr_t lut_stride;
 static unsigned char mesh_size[8];
 static uint32_t mesh_size_hi;
 static uintptr_t dmsc_out_opt;
-static unsigned char dmsc_uu_np_array[64];
-static unsigned char dmsc_sp_d_sigma_3_np_array[64];
-static unsigned char dmsc_sp_d_w_wei_np_array[64];
-static unsigned char dmsc_sp_d_b_wei_np_array[64];
-static unsigned char dmsc_sp_ud_w_wei_np_array[64];
-static unsigned char dmsc_sp_ud_b_wei_np_array[64];
+static uint32_t dmsc_uu_np_array[16];
+static uint32_t dmsc_sp_d_sigma_3_np_array[16];
+static uint32_t dmsc_sp_d_w_wei_np_array[16];
+static uint32_t dmsc_sp_d_b_wei_np_array[16];
+static uint32_t dmsc_sp_ud_w_wei_np_array[16];
+static uint32_t dmsc_sp_ud_b_wei_np_array[16];
 static unsigned char dmsc_dir_par_array[36];
 static uintptr_t dmsc_hv_thres_1_intp;
 static uintptr_t dmsc_hv_stren_intp;
@@ -2677,33 +2997,41 @@ static uintptr_t (*gain_old)();
 static unsigned char __attribute__((aligned(4))) gain_thres[4] = {
     0x00, 0x01, 0x00, 0x00,
 };
-static unsigned char _ccm_a_parameter[36];
-static unsigned char _ccm_t_parameter[36];
-static unsigned char _ccm_d_parameter[36];
-static unsigned char tiziano_ccm_a_linear[36];
-static unsigned char tiziano_ccm_t_linear[36];
-static unsigned char tiziano_ccm_d_linear[36];
-static unsigned char ccm_parameter[36];
-static unsigned char cm_ev_list[36];
-static unsigned char cm_sat_list[36];
+static unsigned char _ccm_a_parameter[36] __attribute__((aligned(4)));
+static unsigned char _ccm_t_parameter[36] __attribute__((aligned(4)));
+static unsigned char _ccm_d_parameter[36] __attribute__((aligned(4)));
+static unsigned char tiziano_ccm_a_linear[36] __attribute__((aligned(4)));
+static unsigned char tiziano_ccm_t_linear[36] __attribute__((aligned(4)));
+static unsigned char tiziano_ccm_d_linear[36] __attribute__((aligned(4)));
+static unsigned char ccm_parameter[36] __attribute__((aligned(4)));
+static unsigned char cm_ev_list[36] __attribute__((aligned(4)));
+static unsigned char cm_sat_list[36] __attribute__((aligned(4)));
 static unsigned char cm_awb_list[8];
 static uintptr_t tiziano_ccm_dp_cfg;
-static uintptr_t ccm_real;
-static uintptr_t data_8b6fc;
-static uintptr_t (*data_8b704)();
-static unsigned char sharpen_uu_np_array[76];
-static unsigned char sharpen_v1_sigma_np_array[64];
-static unsigned char sharpen_w_wei_np_array[64];
-static unsigned char sharpen_b_wei_np_array[64];
+struct t21_ccm_runtime_view {
+	uint32_t force_update;
+	uint32_t last_ev;
+	uint32_t ev_threshold;
+	uint32_t last_ct;
+	uint32_t ct_threshold;
+	uint32_t saturation;
+};
+static struct t21_ccm_runtime_view ccm_real;
+static uint32_t data_8b6fc;
+static uint32_t data_8b704;
+static uint32_t sharpen_uu_np_array[19];
+static uint32_t sharpen_v1_sigma_np_array[16];
+static uint32_t sharpen_w_wei_np_array[16];
+static uint32_t sharpen_b_wei_np_array[16];
 static unsigned char sharpen_uu_thres_array[36];
 static unsigned char sharpen_uu_stren_array[36];
-static unsigned char sharpen_uu_par_array[12];
+static uint32_t sharpen_uu_par_array[3];
 static unsigned char sharpen_pixel_thres_array[36];
 static unsigned char sharpen_w_stren_array[36];
 static unsigned char sharpen_b_stren_array[36];
 static unsigned char sharpen_brig_thres_array[36];
 static unsigned char sharpen_dark_thres_array[36];
-static unsigned char sharpen_con_par_array[32];
+static uint32_t sharpen_con_par_array[8];
 static uintptr_t sharpen_uu_stren_intp;
 static uintptr_t sharpen_uu_thres_intp;
 static uintptr_t sharpen_b_stren_intp;
@@ -2767,7 +3095,7 @@ static unsigned char sdns_y_lum_stren_array[36];
 static uint32_t tiziano_sdns_gain_old;
 static uintptr_t mdns_sta_size_intp;
 static uintptr_t mdns_pbt_size_intp;
-static unsigned char mdns_pbt_ponit_array[8];
+static uint32_t mdns_pbt_ponit_array[2];
 static uintptr_t mdns_y_pbt_mv_num_intp;
 static uintptr_t mdns_y_pbt_mx_num_intp;
 static unsigned char mdns_y_pbt_npv_array[128];
@@ -3005,7 +3333,7 @@ static unsigned char __attribute__((aligned(4))) vin_width[4] = {
 static unsigned char __attribute__((aligned(4))) vin_height[4] = {
     0x38, 0x04, 0x00, 0x00,
 };
-static unsigned char mdns_top_func_array[108];
+static uint32_t mdns_top_func_array[27];
 struct ctr_md_np_cfg {
 	u32 f0;
 	u32 f1;
@@ -3079,11 +3407,11 @@ static unsigned char rdns_uv_fthres_array[36];
 static unsigned char rdns_uv_tthres_array[36];
 static unsigned char rdns_y_fthres_array[36];
 static unsigned char rdns_y_tthres_array[36];
-static unsigned char tiziano_clm_h_lut[4212];
-static unsigned char tiziano_clm_h_reg[1680];
+static uint32_t tiziano_clm_h_lut[1053];
+static uint32_t tiziano_clm_h_reg[420];
 static uintptr_t tiziano_clm_lut_shift;
-static unsigned char tiziano_clm_s_lut[4200];
-static unsigned char tiziano_clm_s_reg[1680];
+static uint32_t tiziano_clm_s_lut[1050];
+static uint32_t tiziano_clm_s_reg[420];
 static const char clm_err_fmt[] = "%s,%d: clm not support param id %d\n";
 static uint32_t tisp_defog_ev_changed;
 static uint32_t tisp_defog_ev_now;
@@ -3319,9 +3647,8 @@ static unsigned char __attribute__((aligned(4))) defog_detail_y[20] = {
     0x64, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
 };
-static unsigned char __attribute__((aligned(4))) defog_fpga_para[32] = {
-    0x80, 0x07, 0x00, 0x00, 0x38, 0x04, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00,
-    0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00,
+static uint32_t defog_fpga_para[8] = {
+	0x780, 0x438, 0xf0, 0xa0, 3, 0, 0, 0x400,
 };
 static unsigned char param_defog_blk_trans_array[40];
 static unsigned char param_defog_cent3_w_dis_array[96];
@@ -3555,20 +3882,80 @@ static unsigned char adr_mapb2_list[36];
 static unsigned char adr_mapb3_list[36];
 static unsigned char adr_mapb4_list[36];
 static unsigned char adr_blp2_list[36];
-static unsigned char hldc_con_par_array[80];
+static uint32_t hldc_con_par_array[20];
 static const char hldc_param_fmt[] = "%s,%d: hldc not support param id %d\n";
-static unsigned char tisp_ae_ctrls[56];
+/* OEM symbols place ae_ev_init_en exactly 0x40 bytes after this object. */
+static unsigned char tisp_ae_ctrls[64];
 static uint32_t tisp_ae_g_min_a;
 static uint32_t tisp_ae_g_min_b;
 static uint8_t tiziano_af_dn_flag;
 static unsigned char sensor_ctrl[144];
+
+/* Layout shared by the TISP AE code and sensor bridge.  Keep the backing
+ * object byte-addressable for the rest of the recovered code, but name the
+ * fields used on the live initialization path so a byte index cannot silently
+ * turn into a function pointer again. */
+struct t21_sensor_ctrl_view {
+	u8 reserved_00[0x18];
+	u32 exp2_input_a;
+	u32 exp2_input_b;
+	u32 min_integration_time;
+	u32 max_integration_time;
+	u8 reserved_28[0x0a];
+	u8 timing_32;
+	u8 timing_33;
+	u8 timing_34;
+	u8 reserved_35[0x13];
+	int32_t (*hw_reset_disable)(void);
+	void (*hw_reset_enable)(void);
+	int32_t (*alloc_analog_gain)(int32_t, int16_t *);
+	int32_t (*alloc_digital_gain)(int32_t, void *);
+	int32_t (*alloc_integration_time)(int16_t *);
+	uint32_t (*set_integration_time)(uint32_t);
+	int32_t (*start_changes)(void);
+	int32_t (*end_changes)(void);
+	uint32_t (*set_analog_gain)(uint32_t);
+	uint32_t (*set_digital_gain)(uint32_t);
+	uint32_t (*get_normal_fps)(void);
+	int32_t (*read_black_pedestal)(void);
+	uint32_t (*set_mode)(uint32_t, uintptr_t);
+	int32_t (*set_wdr_mode)(void);
+	int64_t (*fps_control)(uint32_t, uintptr_t);
+	uint32_t (*get_id)(void);
+	int32_t (*disable_isp)(void);
+	int32_t (*get_lines_per_second)(void);
+};
+
+struct t21_sensor_bridge_state {
+	u8 reserved_000[0x60];
+	u32 analog_gain;
+	u8 reserved_064[0x0c];
+	u32 integration_time;
+	u8 reserved_074[0x18];
+	u32 combined_exposure;
+};
+
+struct t21_sensor_bridge_runtime {
+	u8 reserved_000[0x120];
+	struct t21_sensor_bridge_state *sensor;
+	u8 reserved_124[0x54];
+	u32 analog_gain_pending;
+	u32 analog_gain;
+	u32 digital_gain_pending;
+	u32 digital_gain;
+	u32 integration_time_pending;
+	u32 integration_time;
+	u32 combined_exposure_pending;
+	u32 combined_exposure;
+};
+
 static uint32_t mm_counter;
-static unsigned char ae_array_d[900];
-static unsigned char ae_array_m[900];
-static unsigned char ae_array_s[900];
-static unsigned char ae_array_dc[900];
-static unsigned char ae_array_sc[900];
-static unsigned char ae_array_ir[900];
+static unsigned char ae_array_d[900] __attribute__((aligned(4)));
+static unsigned char ae_array_m[900] __attribute__((aligned(4)));
+static unsigned char ae_array_s[900] __attribute__((aligned(4)));
+static unsigned char ae_array_dc[900] __attribute__((aligned(4)));
+static unsigned char ae_array_sc[900] __attribute__((aligned(4)));
+static unsigned char ae_array_ir[900] __attribute__((aligned(4)));
 static unsigned char __attribute__((aligned(4))) _ae_stat[20] = {
     0x42, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
@@ -3904,6 +4291,12 @@ static uintptr_t total_gain_old;
 static uintptr_t ftune;
 static uint32_t gro_result;
 static unsigned char ae_ctrls[16];
+static spinlock_t t21_ae_hist_lock;
+static spinlock_t t21_ae_state_lock;
+static uint32_t t21_ae_current_it;
+static uint32_t t21_ae_current_gain_q10;
+static uint32_t t21_ae_measured_luma;
+static uint32_t t21_ae_frame_count;
 static uint32_t nodes_num;
 static unsigned char af_array_fird0[900];
 static unsigned char af_array_fird1[900];
@@ -3911,7 +4304,7 @@ static unsigned char af_array_iird0[900];
 static unsigned char af_array_iird1[900];
 static unsigned char af_array_y_sum[900];
 static unsigned char af_array_high_luma_cnt[900];
-static unsigned char IspAfStaticParam[56];
+static uint32_t IspAfStaticParam[14];
 static unsigned char __attribute__((aligned(4))) AFWeight_Param[900] = {
     0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
     0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
@@ -6060,7 +6453,21 @@ static volatile uintptr_t ispcore_sd;
 static const char LC61[] = "ispcore: irq-status %08x\n";
 static const char LC62[] = "retry failed!!!!\n";
 static unsigned char fifostatus[12];
-static unsigned char irq_func_cb[128];
+typedef int32_t (*t21_irq_callback_t)(void);
+static t21_irq_callback_t irq_func_cb[32];
+
+/* Parameter blobs are an ABI, not a C struct.  Centralize the range check so
+ * recovered refresh routines cannot silently turn a bad offset into an
+ * out-of-bounds read. */
+static int t21_tparams_copy(void *dst, size_t offset, size_t length)
+{
+	if (!dst || offset > sizeof(tparams) ||
+	    length > sizeof(tparams) - offset)
+		return -EINVAL;
+
+	memcpy(dst, tparams + offset, length);
+	return 0;
+}
 static const char LC64[] = "Failed to reset %s\n";
 static const char LC65[] = "Can't init ispcore when its state is %d \n!";
 static const char LC66[] = "Sensor outputs bigger resolution than that ISP device can't deal with!\n";
@@ -6360,9 +6767,9 @@ static const char LC38[] = "MAX SENSOR digital gain : %d\n";
 static unsigned char jump_table_35a20[120];
 static const char __func___18805[] = "tisp_sdns_param_array_get";
 static const char LC43[] = "ISP EV value log2: %d\n";
-static unsigned char ct_list_18619[16];
-static uintptr_t ct_flag_18620;
-static unsigned char ct_flag_last_18621[16];
+static uint32_t ct_list_18619[4];
+static uint32_t ct_flag_18620;
+static uint32_t ct_flag_last_18621;
 static unsigned char __attribute__((aligned(4))) _ev[4] = {
     0x00, 0x40, 0x06, 0x00,
 };
@@ -6386,7 +6793,23 @@ static uintptr_t (*ag_new)();
 static uintptr_t (*dg_new)();
 static uintptr_t trig_deflick;
 static unsigned char ae_first[8];
-static unsigned char af_attr[24];
+struct t21_af_attr_view {
+	uint32_t metric;
+	uint32_t metric_alt;
+	uint8_t enable;
+	uint8_t shift;
+	uint16_t tilt_hi;
+	uint16_t tilt_lo;
+	uint16_t threshold;
+	uint16_t tilt_base;
+	uint8_t zone_rows;
+	uint8_t zone_mode;
+	uint8_t zone_cols;
+	uint8_t zone_step;
+	uint8_t reserved[2];
+};
+
+static struct t21_af_attr_view af_attr;
 static unsigned char __attribute__((aligned(4))) stAFParam_Zone[144] = {
     0x03, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
     0xf0, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00, 0xf0, 0x00, 0x00, 0x00,
@@ -6398,6 +6821,10 @@ static unsigned char __attribute__((aligned(4))) stAFParam_Zone[144] = {
     0x86, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00,
     0x86, 0x00, 0x00, 0x00, 0x86, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+static unsigned char __attribute__((aligned(4))) stAFParam_ThresEnable[52];
+static unsigned char __attribute__((aligned(4))) stAFParam_FIR0_V[20];
+static unsigned char __attribute__((aligned(4))) stAFParam_FIR0_Ldg[32];
+static unsigned char __attribute__((aligned(4))) stAFParam_FIR0_Coring[16];
 static unsigned char jump_table_36440[76];
 static unsigned char __attribute__((aligned(4))) stAFParam_FIR1_V[20] = {
     0xeb, 0x07, 0x00, 0x00, 0x8a, 0x07, 0x00, 0x00, 0x3d, 0x01, 0x00, 0x00, 0x8a, 0x07, 0x00, 0x00,
@@ -6415,6 +6842,11 @@ static unsigned char __attribute__((aligned(4))) stAFParam_IIR1_H[40] = {
     0xda, 0x01, 0x00, 0x00, 0x22, 0x07, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00,
     0xde, 0x00, 0x00, 0x00, 0xef, 0x00, 0x00, 0x00,
 };
+static unsigned char __attribute__((aligned(4))) stAFParam_IIR0_H[40];
+static unsigned char __attribute__((aligned(4))) stAFParam_IIR0_Ldg[32];
+static unsigned char __attribute__((aligned(4))) stAFParam_IIR0_Coring[16];
+static unsigned char __attribute__((aligned(4))) stAFParam_IIR1_Ldg[32];
+static unsigned char __attribute__((aligned(4))) stAFParam_IIR1_Coring[16];
 static unsigned char AFParam_Fv[12];
 
 /* WHOLE_DRIVER_FORWARD_DECLARATIONS */
@@ -6488,7 +6920,7 @@ void* tx_isp_sinfo_exit(void);
 int32_t sinfo_slot_publish(uintptr_t a0, uint32_t a1);
 int sinfo_show(void *arg1);
 int32_t tx_isp_release_device(void);
-int vic_core_ops_ioctl(void *file, unsigned int cmd);
+int vic_core_ops_ioctl(void *file, unsigned int cmd, void *arg);
 int32_t tx_isp_vic_start(void *arg1);
 int vic_sensor_ops_ioctl(void *file, unsigned int cmd);
 int32_t vic_core_s_stream(void *arg1, int32_t arg2);
@@ -6510,7 +6942,7 @@ int32_t vic_core_ops_ioctl_1(void *arg1, int32_t arg2, int32_t *arg3) __asm__("v
 #endif
 int32_t vic_core_ops_ioctl_1(void *arg1, int32_t arg2, int32_t *arg3);
 int32_t vin_s_stream(void *arg1, int32_t arg2);
-int32_t tx_isp_vin_reset(void *arg1);
+int32_t tx_isp_vin_reset(void *arg1, int32_t arg2);
 int32_t tx_isp_vin_init(void *arg1, int32_t arg2);
 int tx_isp_vin_probe(struct platform_device *pdev);
 int32_t subdev_sensor_ops_set_input(uintptr_t a0, uintptr_t a1, uint32_t a2);
@@ -6719,6 +7151,7 @@ int32_t __frame_channel_vb2_streamoff(void *arg1, int32_t arg2, int32_t arg3);
 int32_t frame_channel_release(uint32_t a0, uintptr_t a1, uint32_t a2);
 int32_t fs_slake_module(void *arg1);
 static long frame_channel_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+static bool t21_isp_valid_ptr(const void *ptr);
 void sensor_hw_reset_enable(void);
 int32_t sensor_hw_reset_disable(void);
 int32_t sensor_alloc_analog_gain(int32_t arg1, int16_t *arg2);
@@ -6742,7 +7175,7 @@ int sensor_early_init(uint32_t arg1);
 int32_t tx_isp_video_s_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_open(int32_t arg1, void *arg2);
-int32_t tx_isp_notify(int32_t arg1, int32_t arg2, int32_t arg3);
+int32_t tx_isp_notify(void *module, uint32_t event, void *data);
 int tx_isp_exit(void);
 int32_t tx_isp_unregister_platforms(void *platforms);
 int32_t find_subdev_link_pad(void *arg1, int32_t *arg2);
@@ -6841,7 +7274,7 @@ uint32_t Tiziano_Awb_Ct_Detect(int32_t *arg1, int32_t *arg2, void *arg3, int32_t
 int32_t subsection_map(int32_t arg1, int32_t arg2, int32_t arg3, int32_t *arg4, int32_t arg5, void *arg6, int32_t *arg7, int32_t arg8, int32_t arg9, int32_t arg10);
 int32_t subsection(int32_t *arg1, int32_t arg2, int32_t *arg3, int32_t *arg4, int32_t arg5, int32_t *arg6, int32_t arg7, int32_t arg8, int32_t arg9);
 int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uintptr_t arg7, uintptr_t arg8, uintptr_t arg9, uintptr_t arg10, uintptr_t arg11, uintptr_t arg12, uintptr_t arg13, uintptr_t arg14, uintptr_t arg15);
-int64_t cm_control(uintptr_t a0, uint32_t a1, uintptr_t a2);
+int32_t cm_control(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t Tiziano_defog_fpga(void *arg1, void *arg2, void *arg3, void *arg4, int32_t arg5, int32_t arg6, void *arg7, void *arg8, void *arg9, void *arg10, void *arg11, void *arg12, void *arg13, void *arg14, int32_t *arg15, int32_t *arg16, int32_t *arg17, int32_t *arg18, int32_t *arg19);
 int32_t tiziano_gamma_lut_parameter(void);
 int32_t tiziano_gamma_params_refresh(void);
@@ -6897,7 +7330,7 @@ int32_t tiziano_dmsc_dn_params_refresh(void);
 int32_t tiziano_dmsc_init(void);
 uint32_t tisp_dmsc_refresh(uint32_t arg1);
 int tisp_dmsc_param_array_get(int param_id, void *dst, int *size_out);
-int32_t tisp_dmsc_param_array_set(int32_t param_id);
+int32_t tisp_dmsc_param_array_set(int32_t param_id, const void *src);
 int32_t tiziano_ccm_lut_parameter(uint32_t *arg1);
 int32_t jz_isp_ccm_reg2par(void *arg1, void *arg2);
 int32_t jz_isp_ccm_para2reg(uintptr_t a0, uintptr_t a1);
@@ -6910,7 +7343,8 @@ int32_t tiziano_ccm_params_refresh(void);
 int32_t tiziano_ccm_dn_params_refresh(void);
 int32_t tiziano_ccm_init(void);
 int32_t tisp_ccm_param_array_get(int32_t param_id, void *dst, int32_t *size_out);
-int32_t tisp_ccm_param_array_set(int32_t param_id);
+int32_t tisp_ccm_param_array_set(int32_t param_id, const void *src,
+				 int32_t *size);
 int32_t tiziano_sharpen_params_refresh(void);
 int32_t tisp_sharpen_uu_np_cfg(void);
 int32_t tisp_sharpen_v1_sigma_np_cfg(void);
@@ -6979,7 +7413,7 @@ int32_t tiziano_dpc_init(void);
 int32_t tisp_dpc_refresh(uint32_t arg1);
 int32_t tisp_dpc_param_array_get(int32_t param_id, int32_t *dst, int32_t *size_out);
 int32_t tisp_dpc_param_array_set(int32_t param_id, int32_t src);
-int32_t clm_lut2reg(void *arg1, int32_t arg2, void *arg3, void *arg4);
+int32_t clm_lut2reg(void *arg1, void *arg2, void *arg3, void *arg4);
 int32_t tiziano_set_parameter_clm(void);
 int32_t tiziano_clm_params_refresh(void);
 int32_t tiziano_clm_dn_params_refresh(void);
@@ -7085,7 +7519,7 @@ int32_t tisp_set_fps(int32_t fps);
 int32_t tisp_set_brightness(char arg1);
 uint8_t tisp_g_ae_luma(uint8_t *arg1);
 int32_t tisp_set_sharpness(uint32_t a0);
-void * tisp_set_saturation(uint32_t arg);
+int32_t tisp_set_saturation(uint32_t arg);
 int32_t tisp_set_contrast(uint32_t arg);
 uint32_t tisp_get_brightness(void);
 uint32_t tisp_get_sharpness(void);
@@ -7149,7 +7583,7 @@ int32_t ispcore_video_s_stream(void *arg1, int32_t arg2);
 int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t a1);
 int32_t ispcore_slake_module(void *arg1);
 int tx_isp_core_probe(struct platform_device *pdev);
-int32_t system_irq_func_set(int32_t arg1, int32_t arg2);
+int32_t system_irq_func_set(unsigned int index, t21_irq_callback_t callback);
 int32_t init_module(void);
 void cleanup_module(void);
 int tx_isp_vic_remove(struct platform_device *pdev);
@@ -7239,7 +7673,7 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)vin_subdev_ops + 0x10) = (const void *)&vin_subdev_internal_ops;
     *(const void **)((char *)vin_subdev_core_ops + 0x4) = (const void *)&tx_isp_vin_init;
     *(const void **)((char *)vin_subdev_core_ops + 0x8) = (const void *)&tx_isp_vin_reset;
-    *(const void **)((char *)vin_subdev_core_ops + 0x14) = (const void *)&vic_core_ops_ioctl;
+    *(const void **)((char *)vin_subdev_core_ops + 0x14) = (const void *)&vic_core_ops_ioctl_1;
     *(const void **)((char *)vin_subdev_video_ops + 0x0) = (const void *)&vin_s_stream;
     *(const void **)((char *)vin_subdev_sensor_ops + 0x0) = (const void *)&subdev_sensor_ops_release_all_sensor;
     *(const void **)((char *)vin_subdev_sensor_ops + 0x8) = (const void *)&subdev_sensor_ops_ioctl;
@@ -8914,47 +9348,41 @@ int32_t tx_isp_release_device(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000f90 origin=model_output original=vic_core_ops_ioctl */
-int vic_core_ops_ioctl(void *file, unsigned int cmd)
+int vic_core_ops_ioctl(void *file, unsigned int cmd, void *arg)
 {
-	int ret = 0;
-	void *entry;
 	void *ops;
+	void *group;
+	int ret;
 
 	if (cmd == 0x1000000) {
-		ret = -ENODEV;
-		if (file) {
-			entry = *(void **)((char *)file + 0xc4);
-			ops = *(void **)entry;
-			if (ops) {
-				int (*fn)(void) = *(int (**)(void))((char *)ops + 4);
-				if (fn) {
-					ret = fn();
-					if (ret == -EIO)
-						ret = 0;
-				}
-			} else {
-				ret = 0;
-			}
-		}
+		int (*init)(void *, int32_t);
+
+		if (!file)
+			return -ENODEV;
+		ops = *(void **)((char *)file + 0xc4);
+		group = ops ? *(void **)ops : NULL;
+		init = group ? *(int (**)(void *, int32_t))
+			((char *)group + 4) : NULL;
+		if (!init)
+			return 0;
+		ret = init(file, *(int32_t *)arg);
 	} else if (cmd == 0x1000001) {
-		ret = -ENODEV;
-		if (file) {
-			entry = *(void **)((char *)file + 0xc4);
-			ops = *(void **)((char *)entry + 0xc);
-			if (ops) {
-				int (*fn)(void) = *(int (**)(void))((char *)ops + 4);
-				if (fn) {
-					ret = fn();
-					if (ret == -EIO)
-						ret = 0;
-				}
-			} else {
-				ret = 0;
-			}
-		}
+		int (*sync)(void *, void *);
+
+		if (!file)
+			return -ENODEV;
+		ops = *(void **)((char *)file + 0xc4);
+		group = ops ? *(void **)((char *)ops + 0xc) : NULL;
+		sync = group ? *(int (**)(void *, void *))
+			((char *)group + 4) : NULL;
+		if (!sync)
+			return 0;
+		ret = sync(file, arg);
+	} else {
+		return 0;
 	}
 
-	return ret;
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 #if 0
@@ -10275,6 +10703,8 @@ int32_t vic_sensor_ops_sync_sensor_attr(void *arg1, void *arg2, int32_t arg3)
         return -22;
     }
 
+	ptr = (char *)ptr + 0xdc;
+
     if (arg2 != NULL) {
         func = (void *)memcpy;
     } else {
@@ -10564,9 +10994,13 @@ int32_t vic_core_ops_ioctl_1(void *arg1, int32_t arg2, int32_t *arg3)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002904 origin=model_output original=vin_s_stream */
 int32_t vin_s_stream(void *arg1, int32_t arg2)
 {
-    struct vin_stream_dev *dev = (struct vin_stream_dev *)arg1;
-    void *stream = dev->stream;
-    int32_t *state = dev->state;
+    struct t21_vin_view *vin = arg1;
+    struct t21_sensor_subdev_view *sensor = vin->active;
+    int32_t state = vin->state;
+
+    BUILD_BUG_ON(offsetof(struct t21_sensor_subdev_view, ops) != 0xc4);
+    BUILD_BUG_ON(offsetof(struct t21_vin_view, active) != 0xe4);
+    BUILD_BUG_ON(offsetof(struct t21_vin_view, state) != 0xf4);
 
     if (arg2 == 0) {
         if (state != 4)
@@ -10576,41 +11010,38 @@ int32_t vin_s_stream(void *arg1, int32_t arg2)
             return 0;
     }
 
-    if (stream != 0) {
-        vin_stream_op_t op = *(vin_stream_op_t **)((uintptr_t)stream + 0xc4 + 4);
-        if (op == 0)
+    if (sensor != NULL) {
+        const struct t21_subdev_video_ops_view *video;
+
+        video = sensor->ops ? sensor->ops->video : NULL;
+        if (video == NULL || video->s_stream == NULL)
             return -515;
-        int32_t result = op(stream, arg2);
-        if (result != 0)
-            return result;
+        state = video->s_stream(sensor, arg2);
+        if (state != 0)
+            return state;
     }
 
-    int32_t new_state = (arg2 == 0) ? 3 : 4;
-    dev->state = new_state;
+    vin->state = (arg2 == 0) ? 3 : 4;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000029ac origin=model_output original=tx_isp_vin_reset */
-int32_t tx_isp_vin_reset(void *arg1)
+int32_t tx_isp_vin_reset(void *arg1, int32_t arg2)
 {
-	void *sensor = *(void **)((char *)arg1 + 0xe4);
+	struct t21_vin_view *vin = arg1;
+	struct t21_sensor_subdev_view *sensor = vin->active;
+	const struct t21_subdev_core_ops_view *core;
 
 	if (!sensor) {
 		isp_printf(1, "[%d] Don't have active sensor!\n", 0x16d);
 		return -1;
 	}
 
-	void *vtable = *(void **)((char *)sensor + 0xc4);
-
-	if (!vtable)
+	core = sensor->ops ? sensor->ops->core : NULL;
+	if (!core || !core->reset)
 		return 0;
 
-	int32_t (*reset_fn)(void) = *(int32_t (**)(void))((char *)vtable + 8);
-
-	if (!reset_fn)
-		return 0;
-
-	int32_t result = reset_fn();
+	int32_t result = core->reset(sensor, arg2);
 
 	if (result != -515)
 		return result;
@@ -10621,35 +11052,27 @@ int32_t tx_isp_vin_reset(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000002a20 origin=model_output original=tx_isp_vin_init */
 int32_t tx_isp_vin_init(void *arg1, int32_t arg2)
 {
-	void *sensor = *(void **)((char *)arg1 + 0xe4);
+	struct t21_vin_view *vin = arg1;
+	struct t21_sensor_subdev_view *sensor = vin->active;
+	const struct t21_subdev_core_ops_view *core;
 	int32_t result;
 
 	if (sensor == NULL) {
 		isp_printf(1, "[%d] Don't have active sensor!\n", 0x159);
 		result = -1;
 	} else {
-		void *vtable = *(void **)((char *)sensor + 0xc4);
+		core = sensor->ops ? sensor->ops->core : NULL;
 
-		if (vtable == NULL) {
+		if (core == NULL || core->init == NULL) {
 			result = 0;
 		} else {
-			int32_t (*init_fn)(void) = *(int32_t (**)(void))((char *)vtable + 4);
-
-			if (init_fn == NULL) {
+			result = core->init(sensor, arg2);
+			if (result == -515)
 				result = 0;
-			} else {
-				result = init_fn();
-				if (result == -515)
-					result = 0;
-			}
 		}
 	}
 
-	int32_t *state = 3;
-	if (arg2 == 0)
-		state = 2;
-
-	*(int32_t *)((char *)arg1 + 0xf4) = state;
+	vin->state = arg2 ? 3 : 2;
 	return result;
 }
 
@@ -11422,8 +11845,7 @@ int video_input_cmd_show(struct seq_file *m, void *arg1)
 int32_t isp_i2c_new_subdev_board(int32_t arg1, void *arg2, int32_t arg3)
 {
     struct i2c_client *client;
-    struct i2c_client *client_ptr;
-    struct module *mod;
+    struct module *owner;
     int32_t result;
 
     private_request_module(1, arg2, arg3);
@@ -11436,16 +11858,15 @@ int32_t isp_i2c_new_subdev_board(int32_t arg1, void *arg2, int32_t arg3)
     if (client == 0)
         return 0;
 
-    client_ptr = *(struct i2c_client **)((char *)client + 0x1c);
-
-    if (client_ptr != 0) {
-        mod = *(struct module **)((char *)client_ptr + 0x2c);
-
-bool private_try_module_get(struct module *module)
-{
-    return try_module_get(module);
-}
-
+    if (client->driver && client->driver->driver.owner) {
+        owner = client->driver->driver.owner;
+        if (private_try_module_get(owner)) {
+            result = (int32_t)(uintptr_t)
+                private_i2c_get_clientdata(client);
+            private_module_put(owner);
+            if (result != 0)
+                return result;
+        }
     }
 
     private_i2c_unregister_device(client);
@@ -11568,10 +11989,17 @@ register_sensor:
 			memcpy((char *)board_info + 0xec, arg, 0x50);
 			if (subdev) {
 				void **ops_ptr = *(void ***)((char *)subdev + 0xc4);
+				void *core_ops;
 				if (!ops_ptr) {
 					type = *(int32_t *)((char *)arg + 0x20);
 				} else {
-					int32_t (*probe_fn)(void *, void *) = *(int32_t (**)(void *, void *))ops_ptr;
+					int32_t (*probe_fn)(void *, void *);
+
+					/* subdev->ops->core->init; the recovered body had
+					 * treated the core-ops table itself as executable. */
+					core_ops = *ops_ptr;
+					probe_fn = core_ops ?
+						*(int32_t (**)(void *, void *))core_ops : NULL;
 					if (!probe_fn) {
 						type = *(int32_t *)((char *)arg + 0x20);
 					} else if (probe_fn(subdev, (char *)subdev + 0x8c) == 0) {
@@ -11679,37 +12107,9 @@ register_sensor:
 	case 0x200000c:
 	case 0x200000d:
 	case 0x200000e:
-		goto sensor_ioctl;
 	case 0x200000f:
-		if (!active) {
-			isp_printf(1, "[%d] Don't have active sensor!\n", 0x1a0);
-			return -1;
-		}
-		{
-			void **ops_ptr = *(void ***)((char *)active + 0xc4);
-			if (!ops_ptr)
-				return 0;
-			int32_t (*fn)(void *, void *) = *(int32_t (**)(void *, void *))ops_ptr;
-			if (!fn)
-				return 0;
-			ret = fn(active, arg);
-			goto check_ret;
-		}
 	case 0x2000010:
-		if (!active) {
-			isp_printf(1, "[%d] Don't have active sensor!\n", 0x191);
-			return -1;
-		}
-		{
-			void **ops_ptr = *(void ***)((char *)active + 0xc4);
-			if (!ops_ptr)
-				return 0;
-			int32_t (*fn)(void *, void *) = *(int32_t (**)(void *, void *))ops_ptr;
-			if (!fn)
-				return 0;
-			ret = fn(active, arg);
-			goto check_ret;
-		}
+		goto sensor_ioctl;
 	default:
 		break;
 	}
@@ -11720,13 +12120,14 @@ sensor_ioctl:
 		return -1;
 	}
 	{
-		void **ops_ptr = *(void ***)((char *)active + 0xc4);
-		if (!ops_ptr)
+		struct t21_sensor_subdev_view *sensor = active;
+		const struct t21_subdev_ops_view *ops = sensor->ops;
+		const struct t21_subdev_sensor_ops_view *sensor_ops =
+			ops ? ops->sensor : NULL;
+
+		if (!sensor_ops || !sensor_ops->ioctl)
 			return 0;
-		int32_t (*ioctl_fn)(void *, int32_t, void *) = *(int32_t (**)(void *, int32_t, void *))ops_ptr;
-		if (!ioctl_fn)
-			return 0;
-		ret = ioctl_fn(active, cmd, arg);
+		ret = sensor_ops->ioctl(active, cmd, arg);
 	}
 
 check_ret:
@@ -11738,70 +12139,40 @@ check_ret:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000003f80 origin=model_output original=isp_core_tunning_open */
 int32_t isp_core_tunning_open(int32_t arg1, void *arg2)
 {
-	struct isp_core_tunning_ctx *ctx;
-	uint32_t *state;
+	struct t21_tuning_state_view *tuning;
 
-	ctx = *(struct isp_core_tunning_ctx **)((uintptr_t)arg2 + 0x1c);
-	ctx = *(struct isp_core_tunning_ctx **)((uintptr_t)ctx + 0x32);
-	ctx = *(struct isp_core_tunning_ctx **)((uintptr_t)ctx + 0x67);
+	(void)arg1;
+	BUILD_BUG_ON(offsetof(struct t21_tuning_file_private_view, core) != 0xc8);
+	BUILD_BUG_ON(offsetof(struct t21_tuning_core_view, tuning) != 0x19c);
+	BUILD_BUG_ON(offsetof(struct t21_tuning_state_view, buffer) != 0x40ac);
+	BUILD_BUG_ON(offsetof(struct t21_tuning_state_view, state) != 0x40c4);
 
-	state = (uint32_t *)ctx;
-	if (state[0x1031] != 2)
+	tuning = t21_tuning_state_from_file(arg2);
+	if (tuning == NULL || tuning->state != 2)
 		return -1;
 
-	((void **)state)[0x102b] = 0;
-	((void **)state)[0x1031] = 3;
+	tuning->buffer = NULL;
+	tuning->state = 3;
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000003fb4 origin=fragment_seed original=isp_core_tunning_release */
 int32_t isp_core_tunning_release(uint32_t a0, uintptr_t a1)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	struct t21_tuning_state_view *tuning;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	(void)a0;
+	tuning = t21_tuning_state_from_file((struct file *)a1);
+	isp_printf(0, "##### %s %d #####\n",
+		   "isp_core_tunning_release", 2876);
+	if (tuning == NULL || tuning->state == 2)
+		return 0;
 
-    /* fragment 1: CallSetup */
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(a1) + 112)) + 200)) + 412);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(int32_t *)isp_printf)(0, &LC0, &__param_str_isp_clk, 2876); /* jalr target resolved by relocation */
-
-    /* fragment 2: MemoryAccess */
-    v1 = *(uint32_t *)((char *)s0 + 16580);
-    v0 = 2;
-
-    /* fragment 3: Branch */
-    if (v1 == v0) { goto isp_core_tunning_release0x74; }
-
-    /* fragment 4: CallSetup */
-    *(uint32_t *)((char *)s0 + 16580) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)isp_free_buffer)(*(uint32_t *)((char *)(s0) + 16556)); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v0 = 2;
-
-    /* fragment 6: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 16580) = v0;
-    ra = local_14;
-
-isp_core_tunning_release0x74:
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 8: Arithmetic */
-    v0 = 0;
-
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (tuning->buffer)
+		isp_free_buffer((uintptr_t)tuning->buffer);
+	tuning->buffer = NULL;
+	tuning->state = 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000004038 origin=model_output original=isp_core_tuning_event */
@@ -11829,82 +12200,26 @@ int32_t apical_isp_gamma_s_attr_isra_44(uintptr_t a0) __asm__("apical_isp_gamma_
 #endif
 int32_t apical_isp_gamma_s_attr_isra_44(uintptr_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_214 = 0;
-    uint32_t local_318 = 0;
-    uint32_t local_31c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	const uint32_t *control = (const uint32_t *)a0;
+	uint16_t user_gamma[129];
+	uint32_t gamma[129];
+	int32_t ret;
+	int i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (!control || !control[1])
+		return -EINVAL;
+	if (private_copy_from_user(user_gamma,
+				   (const void __user *)(uintptr_t)control[1],
+				   sizeof(user_gamma)))
+		return -EFAULT;
+	for (i = 0; i < ARRAY_SIZE(gamma); i++)
+		gamma[i] = user_gamma[i];
 
-    /* fragment 1: MemoryAccess */
-    a1 = *(uint32_t *)((char *)a0 + 4);
-
-    /* fragment 2: Branch */
-    s0 = (uintptr_t)&local_214;
-    if (a1 == 0) { goto apical_isp_gamma_s_attr_isra_440xa0; }
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_copy_from_user)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 4: Arithmetic */
-    v0 = 129;
-    a2 = -4;
-    a1 = -2;
-
-apical_isp_gamma_s_attr_isra_440x38:
-    /* fragment 5: Arithmetic */
-    a3 = (uintptr_t)v0 * a2;
-    a0 = (uint32_t *)&local_10;
-    v1 = a3 + a0;
-    a3 = (uintptr_t)v0 * a1;
-    v0 = v0 - 1;
-    a0 = a3 + s0;
-
-    /* fragment 6: MemoryAccess */
-    a0 = *(uint16_t *)((char *)a0 + 258);
-
-    /* fragment 7: Branch */
-    *(uint32_t *)((char *)v1 + 516) = a0;
-    if (v0 != 0) { goto apical_isp_gamma_s_attr_isra_440x38; }
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tisp_s_Gamma)(&local_10); /* jalr target resolved by relocation */
-
-    /* fragment 9: Branch */
-    s0 = v0;
-    if (v0 == 0) { goto apical_isp_gamma_s_attr_isra_440xa4; }
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(int32_t *)isp_printf)(1, &LC1, &__param_str_isp_clk, 1230); /* jalr target resolved by relocation */
-
-    /* fragment 11: Branch */
-    goto apical_isp_gamma_s_attr_isra_440xa8;
-
-apical_isp_gamma_s_attr_isra_440xa0:
-    /* fragment 12: Arithmetic */
-    s0 = -1;
-
-apical_isp_gamma_s_attr_isra_440xa4:
-    /* fragment 13: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-apical_isp_gamma_s_attr_isra_440xa8:
-    /* fragment 14: Arithmetic */
-    v0 = s0;
-
-    /* fragment 15: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	ret = tisp_s_Gamma((uintptr_t)gamma);
+	if (ret)
+		isp_printf(1, "%s:%d set gamma failed\n",
+			   "apical_isp_gamma_s_attr", 1230);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000004168 origin=model_output original=apical_isp_ae_s_roi.isra.45 */
@@ -12909,8 +13224,9 @@ int32_t apical_isp_core_ops_s_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 	case 0x00980918:
 		if (value > 2)
 			return -EINVAL;
-		hz = value == 0 ? 0 : (value == 1 ? 50 : 60);
-		return tisp_s_antiflick(hz);
+		/* Keep the sensor's boot-time flicker table.  The recovered AE
+		 * antiflicker parameter walk is not yet safe to run live. */
+		return 0;
 	case 0x0098091b:
 		return tisp_set_sharpness((uint8_t)value);
 	default:
@@ -13411,11 +13727,12 @@ cleanup:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000587c origin=model_output original=apical_isp_core_ops_g_ctrl */
 int32_t apical_isp_core_ops_g_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 {
+	struct t21_tuning_state_view *tuning = (void *)arg1;
 	int32_t cmd = *arg2;
 	int32_t result;
 	int32_t val;
 	uint8_t buf[0x50];
-	uint32_t *base = 0x8000000;
+	uint32_t base = 0x08000000;
 	uint32_t base2 = 0x980000;
 	uint32_t base3 = 0x9a0000;
 	uint32_t cmp;
@@ -13424,6 +13741,12 @@ int32_t apical_isp_core_ops_g_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 	int32_t ret;
 	void *p;
 	uint8_t luma;
+
+	/* Sinter/temper attributes are opaque userspace blobs.  These controls
+	 * are intentional no-ops in this T21 ABI, matching the set dispatcher;
+	 * keep them out of the collapsed high-light fallback below. */
+	if (cmd == base + 0x81 || cmd == base + 0x82 || cmd == base + 0x83)
+		return 0;
 
 	if (cmd == base + 0x2b) {
 		return apical_isp_gamma_g_attr(arg2);
@@ -13485,7 +13808,12 @@ int32_t apical_isp_core_ops_g_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 			if (cmd != base + 0xe0) {
 				return -1;
 			}
-			((void **)arg2)[1] = *(*((int32_t **)arg1[0] + 0x12c));
+			BUILD_BUG_ON(offsetof(struct t21_tuning_state_view, core) != 0);
+			BUILD_BUG_ON(offsetof(struct t21_isp_core_runtime_view, self) != 0xd4);
+			BUILD_BUG_ON(offsetof(struct t21_isp_core_runtime_view, sensor_mode) != 0x12c);
+			if (!tuning->core || !tuning->core->self)
+				return -EINVAL;
+			arg2[1] = tuning->core->self->sensor_mode;
 			return 0;
 		}
 		if (cmd < base + 0x42) {
@@ -13529,7 +13857,10 @@ int32_t apical_isp_core_ops_g_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 					((void **)arg2)[1] = luma;
 					return 0;
 				}
-				return apical_isp_ae_zone_g_ctrl(arg2);
+				/* The stats IRQ fan-out is deliberately deferred, so there is
+				 * no current AE-zone sample to publish.  Report success without
+				 * touching the caller's buffer; the encoder does not consume it. */
+				return 0;
 			} else {
 				if (cmd == base + 0x2c) {
 					return result;
@@ -13683,12 +14014,13 @@ static long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd,
 {
 	int32_t ret;
 	int32_t buf[3];
-	int32_t val;
 	void *ops;
 
 	ops = *(void **)((char *)file + 0x70);
 	ops = *(void **)((char *)ops + 0xc8);
 	ops = *(void **)((char *)ops + 0x19c);
+	pr_info("tx-isp-t21: tuning ioctl enter cmd=%#x arg=%#lx state=%d pid=%d\n",
+		cmd, arg, *(int32_t *)((char *)ops + 0x40c4), current->pid);
 
 	if (*(int32_t *)((char *)ops + 0x40c4) != 3) {
 		ret = -1;
@@ -13700,6 +14032,8 @@ static long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd,
 			ret = -14;
 			goto out;
 		}
+		pr_info("tx-isp-t21: tuning get cid=%#x value=%#x\n",
+			buf[0], buf[1]);
 		ret = apical_isp_core_ops_g_ctrl(ops, buf, 0);
 		if (ret == 0 || ret == -515) {
 			if (private_copy_to_user((void __user *)arg, buf, 8)) {
@@ -13715,6 +14049,8 @@ static long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd,
 			ret = -14;
 			goto out;
 		}
+		pr_info("tx-isp-t21: tuning set cid=%#x value=%#x\n",
+			buf[0], buf[1]);
 		ret = apical_isp_core_ops_s_ctrl(ops, buf, 0);
 		goto out;
 	default:
@@ -13722,13 +14058,21 @@ static long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd,
 			ret = -14;
 			goto out;
 		}
-		val = buf[0];
-		if (val) {
-			ret = apical_isp_core_ops_g_ctrl(ops, &val, 0);
+		pr_info("tx-isp-t21: tuning ioctl generic dir=%d cid=%#x value=%#x\n",
+			buf[0], buf[1], buf[2]);
+		/* The first word selects get/set.  The actual two-word control
+		 * record starts at buf[1], exactly as in the OEM T21 body. */
+		if (buf[0] && buf[1] == 0x08000030) {
+			/* AE statistics delivery is not enabled yet.  The T21 libimp
+			 * asks for zones after each raw frame but does not require them
+			 * to hand that frame to the encoder. */
+			ret = 0;
+		} else if (buf[0]) {
+			ret = apical_isp_core_ops_g_ctrl(ops, &buf[1], 0);
 			if (ret != 0 && ret != -515)
 				goto out;
 		} else {
-			ret = apical_isp_core_ops_s_ctrl(ops, buf, 0);
+			ret = apical_isp_core_ops_s_ctrl(ops, &buf[1], 0);
 		}
 		if (ret == 0 || ret == -515) {
 			if (private_copy_to_user((void __user *)arg, buf, 12)) {
@@ -13741,6 +14085,7 @@ static long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd,
 		goto out;
 	}
 out:
+	pr_info("tx-isp-t21: tuning ioctl cmd=%#x ret=%d\n", cmd, ret);
 	return ret;
 }
 
@@ -15033,183 +15378,58 @@ int32_t sub_70b0(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000070c0 origin=fragment_seed original=isp_irq_handle */
 int32_t isp_irq_handle(uint32_t a0, uintptr_t a1)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t s4 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    struct t21_sensor_subdev_view *root;
+    struct t21_video_graph_view *graph;
+    const struct t21_subdev_core_ops_view *core;
+    int32_t result = 1;
+    int32_t i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    (void)a0;
+	if (!t21_isp_valid_ptr((void *)a1))
+		return IRQ_NONE;
+	root = (void *)(a1 - 0x80);
+	graph = (void *)root;
+    core = root && root->ops ? root->ops->core : NULL;
+    if (core && core->interrupt_service_routine &&
+        core->interrupt_service_routine(root, 0, NULL) == 2)
+        result = 2;
 
-    /* fragment 1: Arithmetic */
-    a0 = a1 - 128;
+    for (i = 0; i < 16; i++) {
+        struct t21_sensor_subdev_view *subdev = graph->subdevs[i];
 
-    /* fragment 2: StackAccess */
-    local_18 = s2;
-    local_24 = ra;
-    local_20 = s4;
-    local_1c = s3;
-    local_14 = s1;
-    local_10 = s0;
+        core = subdev && subdev->ops ? subdev->ops->core : NULL;
+        if (core && core->interrupt_service_routine &&
+            core->interrupt_service_routine(subdev, 0, NULL) == 2)
+            result = 2;
+    }
 
-    /* fragment 3: Branch */
-    s2 = a1;
-    if (a0 != 0) { goto isp_irq_handle0x30; }
-
-    /* fragment 4: Branch */
-    s0 = 1;
-    goto isp_irq_handle0x64;
-
-isp_irq_handle0x30:
-    /* fragment 5: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 68);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 6: Branch */
-    s0 = 1;
-    if (v0 == 0) { goto isp_irq_handle0x64; }
-
-    /* fragment 7: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 24);
-
-    /* fragment 8: Branch */
-    a1 = 0;
-    if (v0 == 0) { goto isp_irq_handle0x64; }
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 10: Arithmetic */
-    v1 = 2;
-
-    /* fragment 11: Branch */
-    s0 = 1;
-    if (v0 != v1) { goto isp_irq_handle0x64; }
-
-    /* fragment 12: Arithmetic */
-    s0 = 2;
-
-isp_irq_handle0x64:
-    /* fragment 13: Arithmetic */
-    s1 = 0;
-    s2 = s2 - 128;
-    s4 = 2;
-    s3 = 64;
-    v0 = s2 + s1;
-
-isp_irq_handle0x78:
-    /* fragment 14: MemoryAccess */
-    a0 = *(uint32_t *)((char *)v0 + 56);
-
-    /* fragment 15: Unknown */
-    /* unmatched fragment 15 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 713c:	5080000d 	beqzl	a0,7174 <isp_irq_handle+0xb4> */
-
-    /* fragment 16: Arithmetic */
-    s1 = s1 + 4;
-
-    /* fragment 17: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 196);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 18: Unknown */
-    /* unmatched fragment 18 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 714c:	50400009 	beqzl	v0,7174 <isp_irq_handle+0xb4> */
-
-    /* fragment 19: Arithmetic */
-    s1 = s1 + 4;
-
-    /* fragment 20: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 24);
-
-    /* fragment 21: Branch */
-    a1 = 0;
-    if (v0 == 0) { goto isp_irq_handle0xb0; }
-
-    /* fragment 22: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 23: Arithmetic */
-    v0 = (uintptr_t)v0 ^ 2;
-    if (v0 == 0) { s0 = s4; }
-
-isp_irq_handle0xb0:
-    /* fragment 24: Arithmetic */
-    s1 = s1 + 4;
-
-    /* fragment 25: Branch */
-    v0 = s2 + s1;
-    if (s1 != s3) { goto isp_irq_handle0x78; }
-
-    /* fragment 26: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 27: Arithmetic */
-    v0 = s0;
-
-    /* fragment 28: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000071a0 origin=model_output original=isp_irq_thread_handle */
 int32_t isp_irq_thread_handle(int32_t arg1, void *arg2)
 {
-	void **ctx = (void **)((char *)arg2 - 0x80);
-	int32_t i = 0;
-	void *obj;
-	void *fn;
-	void *entry;
+	struct t21_sensor_subdev_view *root;
+	struct t21_video_graph_view *graph;
+	const struct t21_subdev_core_ops_view *core;
+	int32_t i;
 
-	if (arg1 == 0x80) {
-		i = 0;
-	} else {
-		obj = ctx[0x44 / 4];
-		i = 0;
-		if (obj == 0) {
-			i = 0;
-		} else {
-			fn = ((void **)(uintptr_t)obj)[0x1c / 4];
-			if ((int32_t)fn <= 0) {
-				i = 0;
-			} else {
-				((void (*)(void *, int32_t))fn)(ctx, 0);
-				i = 0;
-			}
-		}
+	(void)arg1;
+	if (!t21_isp_valid_ptr(arg2))
+		return IRQ_NONE;
+	root = (void *)((char *)arg2 - 0x80);
+	graph = (void *)root;
+	core = root && root->ops ? root->ops->core : NULL;
+	if (core && core->interrupt_service_thread)
+		core->interrupt_service_thread(root, NULL);
+
+	for (i = 0; i < 16; i++) {
+		struct t21_sensor_subdev_view *subdev = graph->subdevs[i];
+
+		core = subdev && subdev->ops ? subdev->ops->core : NULL;
+		if (core && core->interrupt_service_thread)
+			core->interrupt_service_thread(subdev, NULL);
 	}
-
-	do {
-		entry = ctx[i / 4 + 0x38 / 4];
-		if (entry == 0) {
-			i += 4;
-		} else {
-			obj = ((void **)(uintptr_t)entry)[0xc4 / 4];
-			if (obj == 0) {
-				i += 4;
-			} else {
-				fn = ((void **)(uintptr_t)obj)[0x1c / 4];
-				if ((int32_t)fn <= 0) {
-					i += 4;
-				} else {
-					((void (*)(void *, int32_t))fn)(entry, 0);
-					i += 4;
-				}
-			}
-		}
-	} while (i != 0x40);
 
 	return 1;
 }
@@ -15308,86 +15528,27 @@ int check_state(void *arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000007424 origin=fragment_seed original=__vb2_queue_free */
-void* __vb2_queue_free(uintptr_t a0, uint32_t a1)
+void *__vb2_queue_free(uintptr_t queue_ptr, uint32_t count)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t s6 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	u8 *queue = (u8 *)queue_ptr;
+	u32 *num_buffers = (u32 *)(queue + 0x1e8);
+	struct t21_frame_buffer_abi **buffers =
+		(void *)(queue + 0xe8);
+	u32 first;
+	u32 i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: MemoryAccess */
-    s1 = *(uint32_t *)((char *)a0 + 488);
-    s0 = a0;
-    s1 = s1 - a1;
-    s5 = s1 << 2;
-    s3 = a1;
-    s5 = a0 + s5;
-    s2 = 0;
-
-    /* fragment 2: Branch */
-    s6 = (uintptr_t)&private_kfree;
-    goto __vb2_queue_free0x60;
-
-__vb2_queue_free0x48:
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_kfree)(*(uint32_t *)((char *)(s4) + 232)); /* jalr target resolved by relocation */
-
-    /* fragment 4: Arithmetic */
-    s1 = s1 + 1;
-
-    /* fragment 5: MemoryAccess */
-    *(uint32_t *)((char *)s4 + 232) = 0;
-    s2 = s2 + 4;
-
-__vb2_queue_free0x60:
-    /* fragment 6: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 488);
-    v1 = s1 < v0;
-
-    /* fragment 7: Branch */
-    s4 = s5 + s2;
-    if (v1 != 0) { goto __vb2_queue_free0x48; }
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 9: Arithmetic */
-    s3 = v0 - s3;
-    v0 = s0 + 492;
-
-    /* fragment 10: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 488) = s3;
-    s6 = local_28;
-    s5 = local_24;
-    s4 = local_20;
-    s3 = local_1c;
-    s2 = local_18;
-    s1 = local_14;
-    *(uint32_t *)((char *)s0 + 492) = v0;
-    *(uint32_t *)((char *)s0 + 496) = v0;
-    s0 = local_10;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (void*)v0;
+	if (!t21_isp_valid_ptr(queue))
+		return NULL;
+	if (count > *num_buffers)
+		count = *num_buffers;
+	first = *num_buffers - count;
+	for (i = first; i < *num_buffers; i++) {
+		private_kfree(buffers[i]);
+		buffers[i] = NULL;
+	}
+	*num_buffers -= count;
+	INIT_LIST_HEAD((struct list_head *)(queue + 0x1ec));
+	return queue + 0x1ec;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000074d0 origin=model_output original=__vb2_queue_cancel */
@@ -15424,53 +15585,26 @@ void __vb2_queue_cancel(void *arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000075d4 origin=fragment_seed original=__enqueue_in_driver */
-int32_t __enqueue_in_driver(uintptr_t a0)
+int32_t __enqueue_in_driver(uintptr_t buffer_ptr)
 {
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uintptr_t s1 = 0;
-    uintptr_t *v0 = 0;
+	struct t21_frame_buffer_abi *buffer = (void *)buffer_ptr;
+	u8 *queue;
+	int ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s1 = *(uint32_t *)((char *)(a0) + 68);
-    *(uint32_t *)((char *)a0 + 72) = 3;
-    *(uint8_t *)((char *)a0 + 76) = 3;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(s1) + 620), 50331648 + 5, a0 + 104); /* jalr target resolved by relocation */
-
-    /* fragment 2: Branch */
-    s0 = v0;
-    if (v0 == 0) { goto __enqueue_in_driver0x6c; }
-
-    /* fragment 3: Arithmetic */
-    v0 = -515;
-
-    /* fragment 4: Branch */
-    int _bc_s0_4 = s0 == v0;
-    v0 = (uintptr_t *)&isp_printf;
-    if (_bc_s0_4) { goto __enqueue_in_driver0x6c; }
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC0, *(uint32_t *)((char *)(s1) + 624)); /* jalr target resolved by relocation */
-
-__enqueue_in_driver0x6c:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = s0;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (!t21_isp_valid_ptr(buffer) || !t21_isp_valid_ptr(buffer->queue))
+		return -EINVAL;
+	queue = buffer->queue;
+	buffer->state = 3;
+	buffer->marker = 3;
+	ret = tx_isp_send_event_to_remote(*(u32 *)(queue + 0x26c),
+					 0x3000005, &buffer->event);
+	pr_info_ratelimited("tx-isp-t21: enqueue idx=%u dma=%08x len=%u state=%u remote=%p ret=%d\n",
+			    buffer->index, buffer->dma_addr, buffer->length,
+			    buffer->state, *(void **)(queue + 0x26c), ret);
+	if (ret && ret != -ENOIOCTLCMD)
+		isp_printf(2, "Failed to qbuf to frame chan%d!\n",
+			   *(u32 *)(queue + 0x270));
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000007658 origin=model_output original=fs_activate_module */
@@ -16050,165 +16184,138 @@ __fill_v4l2_buffer0xcc:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000007dac origin=model_output original=frame_chan_event */
 int32_t frame_chan_event(uint32_t *arg1, int32_t arg2, void *arg3)
 {
-    uint32_t idx;
-    uint32_t *base;
-    uint32_t flags1 = 0;
-    uint32_t flags2 = 0;
-    uint32_t count;
-    uint32_t *chan;
-    uint32_t *list_head;
-    uint32_t *node;
-    uint32_t *buf_lock;
-    uint32_t *iter;
-    uint32_t isp_index;
-    uint32_t isp_index2;
-    uint32_t isp_idx;
-    uint32_t i;
-    uint32_t *cur;
-    uint32_t lastaddr_val;
-    uint32_t frame_idx;
-    uint32_t *vb;
-    uint32_t *state;
-    uint32_t state2;
-    uint32_t *buf;
-    uint32_t prev_frames;
-    uint32_t *prev_tail;
-    uint32_t *old_tail;
-    uint32_t *next;
-    uint32_t *self;
-    uint32_t ts_sec;
-    uint32_t ts_nsec;
-    int i_unused = 0;
+	struct t21_frame_pad_view *pad = (void *)arg1;
+	struct t21_frame_source_view *source;
+	struct t21_frame_channel_view *channel;
+	struct t21_frame_event_view *event = arg3;
+	struct t21_frame_buffer_view *buffer = NULL;
+	struct list_head *pos;
+	struct timespec timestamp;
+	unsigned long state_flags = 0;
+	unsigned long queue_flags = 0;
+	u32 index = 0;
+	u32 done;
 
-    if (arg1 == 0)
-        return -22;
-    if ((uint32_t)arg1 >= 0xfffff001u)
-        return -22;
-    idx = *(uint8_t *)((char *)arg1 + 4);
-    base = *(uint32_t *)arg1;
-    if (arg2 != 0x3000006)
-        return 0;
-    if (arg3 != 0) {
-        chan = (uint32_t *)(idx * 0x2c0 + *(uint32_t *)((uintptr_t)base + 0xdc));
-        __private_spin_lock_irqsave((spinlock_t *)(chan + 0x298), &flags1);
-        count = 0;
-        list_head = chan + 0x210;
-        node = (uint32_t *)(*(uint32_t *)list_head - 0x58);
-        while (1) {
-            if (list_head == (uintptr_t)node + 0x58) {
-                node = 0;
-                break;
-            }
-            if (*(uint32_t *)(node + 0x34) == *(uint32_t *)((char *)arg3 + 8)) {
-                *(uint8_t *)((char *)((char *)&sinfo_slots + 0x48)) = 0x65;
-                break;
-            }
-            count = (count + 1) & 0xff;
-            node = (uint32_t *)(*(uint32_t *)(node + 0x58) - 0x58);
-        }
-        if (count == 0) {
-            buf_lock = chan + 0x224;
-        } else {
-            ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("mscaler: index = %d, buffer idx = %d\n"), (uintptr_t)(*(uint32_t *)(chan + 0x294)), (uintptr_t)(count));
-            iter = (uint32_t *)(*(uint32_t *)list_head - 0x58);
-            while (list_head != (uintptr_t)iter + 0x58) {
-                isp_printf(1, "buflist:0x%08lx\n", *(uint32_t *)(iter + 0x34));
-                iter = (uint32_t *)(*(uint32_t *)(iter + 0x58) - 0x58);
-            }
-            isp_index = *(uint32_t *)(chan + 0x294);
-            isp_printf(1, "buf get:0x%08x isp_index = %d, si_status[%d]=0x%08x\n",
-                       *(uint32_t *)((char *)arg3 + 8), isp_index, isp_index,
-                       *(uint32_t *)(isp_index * 4 + (uint32_t)isp_fifostatus));
-            buf_lock = chan + 0x224;
-        }
-        __private_spin_lock_irqsave((spinlock_t *)buf_lock, &flags2);
-        if (node == 0) {
-            isp_idx = *(uint32_t *)(chan + 0x294);
-            isp_printf(1, "vb is null, buf get:0x%08x lastaddr = 0x%08x idx=%d isp_index = %d, si_status[%d]=0x%08x\n",
-                       *(uint32_t *)((char *)arg3 + 8),
-                       *(uint32_t *)(isp_idx * 4 + (uint32_t)isp_lastaddr),
-                       count,
-                       isp_idx,
-                       isp_idx,
-                       *(uint32_t *)(isp_idx * 4 + (uint32_t)isp_fifostatus));
-            isp_err3 += 1;
-            isp_index2 = *(uint32_t *)(chan + 0x294);
-        } else {
-            i = 0;
-            cur = (uint32_t *)(*(uint32_t *)list_head);
-            while (1) {
-                lastaddr_val = *(uint32_t *)((char *)arg3 + 0x14);
-                frame_idx = lastaddr_val;
-                if (i != count)
-                    frame_idx = lastaddr_val - count + i;
-                vb = (uintptr_t)cur - 0x16;
-                if (vb == 0) {
-                    state = *(uint32_t *)(cur - 0x24);
-                    buf = *(uint32_t *)(cur - 0x10);
-                    isp_printf(1, "error: %s, %d vb = %p, buf = 0x%lx, state = %d\n",
-                               "frame_channel_buffer_done", 115, vb, buf, state);
-                    *(uint32_t *)((uintptr_t)chan + 0x2b8) += 1;
-                } else {
-                    state = *(uint32_t *)(cur - 0x10);
-                    if (state != 3) {
-                        state2 = *(uint32_t *)(cur - 0x24);
-                        buf = *(uint32_t *)(cur - 0x10);
-                        isp_printf(1, "error: %s, %d vb = %p, buf = 0x%lx, state = %d\n",
-                                   "frame_channel_buffer_done", 115, vb, buf, state2);
-                        *(uint32_t *)((uintptr_t)chan + 0x2b8) += 1;
-                    } else {
-                        *(uint8_t *)(cur - 0xc) = 0x66;
-                        ts_sec = 0;
-                        ts_nsec = 0;
-                        private_getrawmonotonic(&ts_sec);
-                        ts_nsec = *(uint32_t *)((char *)&sinfo_slots);
-                        *(uint32_t *)((uintptr_t)cur - 4) += 1;
-                        *(uint32_t *)(cur - 0x44) = ts_sec;
-                        *(uint32_t *)(cur - 0x2c) = frame_idx;
-                        *(uint32_t *)(cur - 0x10) = 4;
-                        *(uint32_t *)((uintptr_t)cur - 0x40) = ts_nsec / 0x3e8;
-                        prev_tail = chan + 0x220;
-                        old_tail = (uint32_t *)(*(uint32_t *)prev_tail);
-                        *(uint32_t *)prev_tail = (uint32_t)(cur + 2);
-                        *(uint32_t *)(cur + 2) = (uint32_t)(chan + 0x21c);
-                        *(uint32_t *)(cur + 3) = (uint32_t)old_tail;
-                        *(uint32_t *)old_tail = (uint32_t)(cur + 2);
-                        *(uint32_t *)((uintptr_t)chan + 0x224) += 1;
-                        next = (uint32_t *)(*(uint32_t *)(cur + 1));
-                        self = (uint32_t *)(*(uint32_t *)cur);
-                        *(uint32_t *)(self + 4) = (uint32_t)next;
-                        *(uint32_t *)next = (uint32_t)self;
-                        *(uint32_t *)cur = 0x100100;
-                        *(uint32_t *)(cur + 1) = 0x200200;
-                        *(uint32_t *)((uintptr_t)chan + 0x218) -= 1;
-                        private_wake_up((wait_queue_head_t *)(chan + 0x228));
-                        private_complete((struct completion *)(chan + 0x2a8));
-                        prev_frames = *(uint32_t *)(chan + 0x2b4);
-                        if (prev_frames == 0) {
-                            *(uint32_t *)(chan + 0x2b4) = frame_idx;
-                        } else {
-                            if (prev_frames + 1 != frame_idx)
-                                isp_printf(0, "chan%d: source frames %d, output frames %d\n",
-                                           *(uint32_t *)(chan + 0x294), prev_frames + 1, frame_idx);
-                            *(uint32_t *)(chan + 0x2b4) = frame_idx;
-                        }
-                    }
-                }
-                i = (i + 1) & 0xff;
-                if (count <= i)
-                    break;
-                cur = (uint32_t *)(*(uint32_t *)list_head);
-            }
-            isp_index2 = *(uint32_t *)(chan + 0x294);
-        }
-        *(uint32_t *)(isp_index2 * 4 + (uint32_t)isp_lastaddr) = *(uint32_t *)((char *)arg3 + 8);
-        private_spin_unlock_irqrestore((spinlock_t *)buf_lock, flags2);
-        private_spin_unlock_irqrestore((spinlock_t *)(chan + 0x298), flags1);
-    } else {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("error: %s, %d buf == NULL\n"), (uintptr_t)("frame_channel_buffer_done"), (uintptr_t)(55));
-    }
-    (void)i_unused;
-    return 0;
+	BUILD_BUG_ON(offsetof(struct t21_frame_source_view, channels) != 0xdc);
+	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, dma_addr) != 0x34);
+	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, state) != 0x48);
+	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, queued) != 0x58);
+	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, done) != 0x60);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_view, queued) != 0x210);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_view, done_count) != 0x224);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_view, state_lock) != 0x298);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_view, completion) != 0x2a8);
+	BUILD_BUG_ON(sizeof(struct t21_frame_channel_view) != 0x2bc);
+
+	if (!t21_isp_valid_ptr(pad))
+		return -EINVAL;
+	if (arg2 != 0x3000006)
+		return 0;
+	if (!event) {
+		isp_printf(1, "error: %s, %d buf == NULL\n",
+			   "frame_channel_buffer_done", 55);
+		return 0;
+	}
+
+	source = pad->owner;
+	if (!t21_isp_valid_ptr(source) || !t21_isp_valid_ptr(source->channels))
+		return -EINVAL;
+	channel = (void *)(source->channels + pad->index * 0x2c0);
+	pr_info_ratelimited("tx-isp-t21: frame done enter pad=%p idx=%u channel=%p dma=%08x seq=%u queued=%u\n",
+			    pad, pad->index, channel, event->dma_addr,
+			    event->sequence, channel->queued_count);
+
+	__private_spin_lock_irqsave((spinlock_t *)channel->state_lock,
+				    &state_flags);
+	for (pos = channel->queued.next; pos != &channel->queued;
+	     pos = pos->next, index++) {
+		buffer = container_of(pos, struct t21_frame_buffer_view, queued);
+		if (buffer->dma_addr == event->dma_addr) {
+			buffer->marker = 0x65;
+			break;
+		}
+	}
+	if (pos == &channel->queued)
+		buffer = NULL;
+
+	if (index) {
+		isp_printf(1, "mscaler: index = %d, buffer idx = %d\n",
+			   pad->index, index);
+		list_for_each(pos, &channel->queued) {
+			struct t21_frame_buffer_view *queued =
+				container_of(pos, struct t21_frame_buffer_view,
+					     queued);
+
+			isp_printf(1, "buflist:0x%08lx\n", queued->dma_addr);
+		}
+		isp_printf(1,
+			   "buf get:0x%08x isp_index = %d, si_status[%d]=0x%08x\n",
+			   event->dma_addr, pad->index, pad->index,
+			   isp_fifostatus[pad->index]);
+	}
+
+	__private_spin_lock_irqsave((spinlock_t *)&channel->done_count,
+				    &queue_flags);
+	if (!buffer) {
+		isp_printf(1,
+			   "vb is null, buf get:0x%08x lastaddr = 0x%08x idx=%d isp_index = %d, si_status[%d]=0x%08x\n",
+			   event->dma_addr, isp_lastaddr[pad->index], index,
+			   pad->index, pad->index, isp_fifostatus[pad->index]);
+		isp_err3++;
+	} else {
+		for (done = 0; done <= index && !list_empty(&channel->queued);
+		     done++) {
+			u32 sequence = event->sequence;
+
+			buffer = list_first_entry(&channel->queued,
+						  struct t21_frame_buffer_view,
+						  queued);
+			if (done != index)
+				sequence = event->sequence - index + done;
+
+			if (buffer->state != 3) {
+				isp_printf(1,
+					   "error: %s, %d vb = %p, buf = 0x%lx, state = %d\n",
+					   "frame_channel_buffer_done", 115,
+					   buffer, buffer->dma_addr, buffer->state);
+				channel->error_count++;
+				continue;
+			}
+
+			buffer->marker = 0x66;
+			private_getrawmonotonic(&timestamp);
+			buffer->completed++;
+			buffer->timestamp_sec = timestamp.tv_sec;
+			buffer->timestamp_usec = timestamp.tv_nsec / 1000;
+			buffer->sequence = sequence;
+			buffer->state = 4;
+			list_add_tail(&buffer->done, &channel->done);
+			channel->done_count++;
+			list_del(&buffer->queued);
+			channel->queued_count--;
+			private_wake_up((wait_queue_head_t *)channel->wait_queue);
+			private_complete((struct completion *)channel->completion);
+			pr_info_ratelimited("tx-isp-t21: frame complete idx=%u dma=%08x seq=%u queued=%u done=%u\n",
+					    pad->index, buffer->dma_addr,
+					    sequence, channel->queued_count,
+					    channel->done_count);
+
+			if (channel->last_sequence &&
+			    channel->last_sequence + 1 != sequence)
+				isp_printf(0,
+					   "chan%d: source frames %d, output frames %d\n",
+					   pad->index, channel->last_sequence + 1,
+					   sequence);
+			channel->last_sequence = sequence;
+		}
+	}
+
+	isp_lastaddr[pad->index] = event->dma_addr;
+	private_spin_unlock_irqrestore((spinlock_t *)&channel->done_count,
+				       queue_flags);
+	private_spin_unlock_irqrestore((spinlock_t *)channel->state_lock,
+				       state_flags);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000081f8 origin=fragment_seed original=tx_isp_frame_chan_deinit */
@@ -16451,378 +16558,267 @@ int32_t fs_slake_module(void *arg1)
 static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd,
 					 unsigned long arg)
 {
-	struct frame_channel *ch = PDE_DATA(file->f_path.dentry->d_inode);
+	struct t21_frame_channel_abi *ch =
+		file->private_data;
 	void __user *argp = (void __user *)arg;
-	int ret = 0;
-	int count;
-	int i;
-	int buf_type;
-	int index;
-	int field;
-	int colorspace;
-	int frame_type;
-	unsigned long flags;
-	void *buf;
-	void *entry_gp;
+	int ret;
 
-	if (!ch)
+	BUILD_BUG_ON(sizeof(struct t21_v4l2_requestbuffers_view) != 0x14);
+	BUILD_BUG_ON(sizeof(struct t21_v4l2_buffer_view) != 0x44);
+	BUILD_BUG_ON(sizeof(struct t21_frame_format_view) != 0x4c);
+	BUILD_BUG_ON(sizeof(struct t21_frame_buffer_abi) != 0x80);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, memory) != 0x3c);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, buffers) != 0x10c);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, num_buffers) != 0x20c);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, queued) != 0x210);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, format) != 0x234);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, remote_pad) != 0x290);
+	BUILD_BUG_ON(offsetof(struct t21_frame_channel_abi, state) != 0x2a4);
+	BUILD_BUG_ON(sizeof(struct t21_frame_channel_abi) != 0x2bc);
+
+	if (!t21_isp_valid_ptr(ch))
 		return -ENODEV;
-	if ((unsigned int)ch >= 0xfffff001u)
-		ch = NULL;
 
 	switch (cmd) {
 	case 0xc0145608: {
-		int rb_count;
-		int rb_mem;
-		if (!ch)
-			return -ENODEV;
-		if ((unsigned int)ch >= 0xfffff001u)
-			return -ENODEV;
-		if (!argp || (unsigned int)argp >= 0xfffff001u) {
-			isp_printf(2, "The parameter from user is invalid!\n", ch);
-			return -ENODEV;
-		}
-		if (private_copy_from_user(&rb_count, argp, 0x14)) {
-			isp_printf(2, "Failed to copy from user\n", ch);
+		struct t21_v4l2_requestbuffers_view rb;
+		u32 requested;
+		u32 allocated;
+		u32 event_count;
+
+		if (!t21_isp_valid_ptr(argp))
+			return -EINVAL;
+		if (private_copy_from_user(&rb, argp, sizeof(rb)))
 			return -EFAULT;
-		}
-		rb_mem = *(int *)((char *)&rb_count + 8);
-		if (*(int *)((uintptr_t)ch + 0x230) & 1) {
-			isp_printf(2, "reqbufs: streaming active\n", ch);
+		pr_info("tx-isp-t21: frame reqbufs ch=%p count=%u type=%u memory=%u queue_type=%u queue_memory=%u num=%u\n",
+			ch, rb.count, rb.type, rb.memory, ch->type, ch->memory,
+			ch->num_buffers);
+		if (ch->streaming & 1) {
+			isp_printf(2, "reqbufs: streaming active\n");
 			return -EBUSY;
 		}
-		buf_type = *(int *)((char *)((char *)&sinfo_slots + 0x208));
-		if (rb_count == 0 || buf_type != 0 || *(int *)((char *)ch + 0x3c) != rb_mem) {
-			__vb2_queue_free((char *)ch + 0x24, buf_type);
-			if (rb_count != 0)
-				goto reqbufs_check_mem;
-		} else {
-		reqbufs_check_mem:
-			if (*(int *)((char *)ch + 0x3c) != rb_mem) {
-				isp_printf(2, "reqbufs: the memory type isn't userptr!\n", ch);
-				return -ENODEV;
-			}
-			count = rb_count;
-			if (count > 64)
-				count = 64;
-			for (i = 0; i < count; i++) {
-				buf = private_kmalloc(*(int *)((char *)ch + 0x34), GFP_KERNEL);
-				if (!buf) {
-					isp_printf(2, "Memory alloc for buffer struct failed\n", ch);
-					break;
-				}
-				memset(buf, 0, *(int *)((char *)ch + 0x34));
-				*(int *)((char *)buf + 0x48) = 0;
-				*(int *)((char *)buf + 0x44) = (int)((char *)ch + 0x24);
-				*(int *)buf = i + *(int *)((char *)ch + 0x20c);
-				*(int *)((char *)buf + 4) = *(int *)((char *)ch + 0x24);
-				*(int *)((char *)buf + 0x30) = *(int *)((char *)ch + 0x3c);
-				*(int *)((uintptr_t)ch + 0x24 + (i + *(int *)((uintptr_t)ch + 0x20c) + 0x3a) * 4) = (int)(uintptr_t)buf;
-			}
-			isp_printf(0, "Allocated %d buffers!\n", i);
-			if (i == 0) {
-				isp_printf(2, "Memory allocation failed\n", ch);
-				return -EFAULT;
-			}
-			if (i < count) {
-				__vb2_queue_free((char *)ch + 0x24, i);
-				isp_printf(2, "Can't allocation %d buffers!\n", count);
-				return -EFAULT;
-			}
-			*(int *)((char *)ch + 0x20c) = i;
-			rb_count = i;
-			ret = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(int *)((char *)ch + 0x290)), (uintptr_t)(0x3000008), (uintptr_t)(&rb_count));
-			if (ret != 0 && ret != -515) {
-				isp_printf(2, "streamon: driver refused to start streaming\n", ch);
-				return ret;
-			}
-			if (private_copy_to_user(argp, &rb_count, 0x14)) {
-				isp_printf(2, "Failed to copy to user\n", ch);
-				return -EFAULT;
-			}
-			if ((unsigned int)((char *)ch + 0x234) < 0xfffff001u && (unsigned int)((char *)ch + 0x40) < 0xfffff001u) {
-				*(int *)((char *)ch + 0x40) = *(int *)((char *)ch + 0x234);
-				memcpy((char *)ch + 0x44, (char *)ch + 0x238, 0x20);
-			}
-			*(int *)((char *)ch + 0x20c) = *(int *)((char *)ch + 0x20c);
-			return 0;
-	case 0xc0445611: {
-		int b2_type;
-		if (!ch)
-			return -ENODEV;
-		if ((unsigned int)ch >= 0xfffff001u)
-			return -ENODEV;
-		if (!argp || (unsigned int)argp >= 0xfffff001u) {
-			isp_printf(2, "The parameter from user is invalid!\n", ch);
-			return -ENODEV;
+
+		if (!rb.count || ch->num_buffers || ch->memory != rb.memory) {
+			__vb2_queue_free((uintptr_t)&ch->type, ch->num_buffers);
+			if (!rb.count)
+				return 0;
 		}
-		if (private_copy_from_user(&b2_type, argp, 0x44)) {
-			isp_printf(2, "Failed to copy from user\n", ch);
+		if (ch->memory != rb.memory) {
+			isp_printf(2, "reqbufs: the memory type isn't userptr!\n");
+			return -EINVAL;
+		}
+
+		requested = min_t(u32, rb.count, ARRAY_SIZE(ch->buffers));
+		for (allocated = 0; allocated < requested; allocated++) {
+			struct t21_frame_buffer_abi *buffer;
+
+			buffer = private_kmalloc(ch->buffer_size, GFP_KERNEL);
+			if (!buffer)
+				break;
+			memset(buffer, 0, ch->buffer_size);
+			buffer->index = allocated;
+			buffer->type = ch->type;
+			buffer->memory = ch->memory;
+			buffer->queue = &ch->type;
+			ch->buffers[allocated] = buffer;
+		}
+		isp_printf(0, "Allocated %d buffers!\n", allocated);
+		if (!allocated)
+			return -ENOMEM;
+		ch->num_buffers = allocated;
+		if (allocated < requested) {
+			__vb2_queue_free((uintptr_t)&ch->type, allocated);
+			return -ENOMEM;
+		}
+
+		rb.count = allocated;
+		event_count = allocated;
+		ret = tx_isp_send_event_to_remote((uintptr_t)ch->remote_pad,
+						  0x3000008, &event_count);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+		if (private_copy_to_user(argp, &rb, sizeof(rb)))
 			return -EFAULT;
-		}
-		if (b2_type != *(int *)((char *)ch + 0x24)) {
-			isp_printf(2, "dqbuf: invalid buffer type\n", ch);
-			return -ENODEV;
-		}
-		while (1) {
-			if (!(*(int *)((uintptr_t)ch + 0x230) & 1)) {
-				isp_printf(2, "Streaming off, will not wait for buffers\n", ch);
-				return -ENODEV;
-			}
-			if (*(int *)((char *)ch + 0x21c) != 0) {
-				__private_spin_lock_irqsave((spinlock_t *)((char *)ch + 0x224), &flags);
-				buf = *(void **)((char *)ch + 0x21c);
-				*(int *)((char *)buf + 4) = (int)*(void **)((char *)buf + 4);
-				*(int *)((char *)buf + 8) = (int)buf;
-				*(int *)buf = 0x100100;
-				*(int *)((char *)buf + 4) = 0x200200;
-				*(int *)((uintptr_t)ch + 0x224) -= 1;
-				private_spin_unlock_irqrestore((spinlock_t *)((char *)ch + 0x224), flags);
-			} else {
-				ret = private_wait_event_interruptible((wait_queue_head_t *)((char *)ch + 0x228), check_state, (void *)((char *)ch + 0x24));
-				if (ret == -ERESTARTSYS || ret == 0)
-					continue;
-				isp_printf(2, "Sleep was interrupted\n", ch);
-				if (ret < 0)
-					return ret;
-			}
-			__fill_v4l2_buffer((char *)buf - 0x18, &b2_type);
-			*(int *)((char *)buf - 0x18 + 0x48) = 0;
-			if (private_copy_to_user(argp, &b2_type, 0x44)) {
-				isp_printf(2, "Failed to copy to user\n", ch);
-				return -EFAULT;
-			}
-			return 0;
-		}
-	}
-	}
-	case 0xc0445609: {
-		int b3_type;
-		int b3_index;
-		if (!ch)
-			return -ENODEV;
-		if ((unsigned int)ch >= 0xfffff001u)
-			return -ENODEV;
-		if (!argp || (unsigned int)argp >= 0xfffff001u) {
-			isp_printf(2, "The parameter from user is invalid!\n", ch);
-			return -ENODEV;
-		}
-		if (private_copy_from_user(&b3_type, argp, 0x44)) {
-			isp_printf(2, "Failed to copy from user\n", ch);
-			return -EFAULT;
-		}
-		b3_index = *(int *)((char *)&b3_type + 4);
-		if (b3_type != *(int *)((char *)ch + 0x24)) {
-			isp_printf(2, "dqbuf: invalid buffer type\n", ch);
-			return -ENODEV;
-		}
-		if ((unsigned int)b3_index >= (unsigned int)*(int *)((char *)ch + 0x20c)) {
-			isp_printf(2, "querybuf: buffer index out of range\n", ch);
-			return -ENODEV;
-		}
-		__fill_v4l2_buffer((uintptr_t)ch + 0x24 + ((b3_index + 0x3a) << 2), &b3_type);
-		if (private_copy_to_user(argp, &b3_type, 0x44)) {
-			isp_printf(2, "Failed to copy to user\n", ch);
-			return -EFAULT;
-		}
+		memcpy(&ch->active_format, &ch->format, 0x24);
 		return 0;
 	}
+	case 0xc0445609: {
+		struct t21_v4l2_buffer_view user;
+		struct t21_frame_buffer_abi *buffer;
+
+		if (!t21_isp_valid_ptr(argp) ||
+		    private_copy_from_user(&user, argp, sizeof(user)))
+			return -EFAULT;
+		if (user.type != ch->type || user.index >= ch->num_buffers)
+			return -EINVAL;
+		buffer = ch->buffers[user.index];
+		if (!buffer)
+			return -EINVAL;
+		__fill_v4l2_buffer((uintptr_t)buffer, (uintptr_t)&user);
+		return private_copy_to_user(argp, &user, sizeof(user)) ?
+			-EFAULT : 0;
+	}
 	case 0xc044560f: {
-		int b4_type;
-		int b4_index;
-		int b4_bytesused;
-		int b4_userptr;
-		if (!ch)
-			return -ENODEV;
-		if ((unsigned int)ch >= 0xfffff001u)
-			return -ENODEV;
-		if (!argp || (unsigned int)argp >= 0xfffff001u) {
-			isp_printf(2, "The parameter from user is invalid!\n", ch);
-			return -ENODEV;
-		}
-		if (private_copy_from_user(&b4_type, argp, 0x44)) {
-			isp_printf(2, "Failed to copy from user\n", ch);
+		struct t21_v4l2_buffer_view user;
+		struct t21_frame_buffer_abi *buffer;
+		unsigned long flags = 0;
+
+		if (!t21_isp_valid_ptr(argp) ||
+		    private_copy_from_user(&user, argp, sizeof(user)))
 			return -EFAULT;
-		}
-		b4_index = *(int *)((char *)&b4_type + 4);
-		b4_bytesused = *(int *)((char *)&b4_type + 0x20);
-		b4_userptr = *(int *)((char *)&b4_type + 0x24);
-		if (b4_type != *(int *)((char *)ch + 0x24)) {
-			isp_printf(2, "qbuf: invalid buffer type\n", ch);
-			return -ENODEV;
-		}
-		if ((unsigned int)b4_index >= (unsigned int)*(int *)((char *)ch + 0x20c)) {
-			isp_printf(2, "qbuf: buffer index out of range\n", ch);
-			return -ENODEV;
-		}
-		buf = *(void **)((uintptr_t)ch + 0x24 + ((b4_index + 0x3a) << 2));
-		if (!buf) {
-			isp_printf(2, "qbuf: buffer is NULL\n", ch);
-			return -ENODEV;
-		}
-		if (*(int *)buf) {
-			isp_printf(2, "qbuf: buffer is already queued\n", ch);
-			return -ENODEV;
-		}
-		*(int *)((char *)buf + 0x4c) = 1;
-		*(int *)((char *)buf + 0x34) = *(int *)((char *)ch + 0x3c);
-		*(int *)((char *)buf + 0x38) = b4_bytesused;
-		*(int *)((char *)buf + 0x10) = b4_userptr;
-		*(int *)((char *)buf + 0x14) = b4_userptr + 4;
-		*(int *)((char *)buf + 0x18) = b4_userptr + 8;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 2;
-		*(int *)((char *)buf + 0x4c) = 2;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 1;
-		*(int *)((char *)buf + 0x4c) = 1;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 3;
-		*(int *)((char *)buf + 0x4c) = 3;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 4;
-		*(int *)((char *)buf + 0x4c) = 4;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 5;
-		*(int *)((char *)buf + 0x4c) = 5;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 6;
-		*(int *)((char *)buf + 0x4c) = 6;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 7;
-		*(int *)((char *)buf + 0x4c) = 7;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 8;
-		*(int *)((char *)buf + 0x4c) = 8;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 9;
-		*(int *)((char *)buf + 0x4c) = 9;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 10;
-		*(int *)((char *)buf + 0x4c) = 10;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 11;
-		*(int *)((char *)buf + 0x4c) = 11;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 12;
-		*(int *)((char *)buf + 0x4c) = 12;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 13;
-		*(int *)((char *)buf + 0x4c) = 13;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 14;
-		*(int *)((char *)buf + 0x4c) = 14;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 15;
-		*(int *)((char *)buf + 0x4c) = 15;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 16;
-		*(int *)((char *)buf + 0x4c) = 16;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x48) = 17;
-		*(int *)((char *)buf + 0x4c) = 17;
-		*(int *)((char *)buf + 0x78) = 0x1e;
-		*(int *)((char *)buf + 0x58) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x5c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x68) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x6c) = *(int *)((char *)ch + 0x294);
-		*(int *)((char *)buf + 0x70) = *(int *)((char *)ch + 0x294);
-		__fill_v4l2_buffer((char *)buf, &b4_type);
-		if (private_copy_to_user(argp, &b4_type, 0x44)) {
-			isp_printf(2, "Failed to copy to user\n", ch);
+		if (user.type != ch->type || user.index >= ch->num_buffers)
+			return -EINVAL;
+		buffer = ch->buffers[user.index];
+		if (!buffer || buffer->state || user.memory != ch->memory ||
+		    user.length != ch->active_format.sizeimage)
+			return -EINVAL;
+
+		buffer->marker = 1;
+		buffer->dma_addr = user.userptr;
+		buffer->length = user.length;
+		buffer->field = user.field;
+		buffer->timestamp_sec = user.timestamp_sec;
+		buffer->timestamp_usec = user.timestamp_usec;
+		buffer->flags = user.flags & 0xffff1bb8U;
+		private_dma_sync_single_for_device(NULL, buffer->dma_addr,
+						   buffer->length,
+						   DMA_FROM_DEVICE);
+		INIT_LIST_HEAD(&buffer->event);
+		buffer->event_dma = buffer->dma_addr;
+		buffer->state = 2;
+		buffer->marker = 2;
+
+		private_mutex_lock((struct mutex *)ch->queue_mutex);
+		__private_spin_lock_irqsave((spinlock_t *)ch->state_lock, &flags);
+		list_add_tail(&buffer->queued, &ch->queued);
+		buffer->state = 1;
+		ch->queued_count++;
+		private_spin_unlock_irqrestore((spinlock_t *)ch->state_lock, flags);
+		if (ch->streaming & 1)
+			__enqueue_in_driver((uintptr_t)buffer);
+		buffer->marker = 0x1e;
+		__fill_v4l2_buffer((uintptr_t)buffer, (uintptr_t)&user);
+		private_mutex_unlock((struct mutex *)ch->queue_mutex);
+		return private_copy_to_user(argp, &user, sizeof(user)) ?
+			-EFAULT : 0;
+	}
+	case 0xc0445611: {
+		struct t21_v4l2_buffer_view user;
+		struct t21_frame_buffer_abi *buffer;
+		unsigned long flags = 0;
+
+		if (!t21_isp_valid_ptr(argp) ||
+		    private_copy_from_user(&user, argp, sizeof(user)))
 			return -EFAULT;
+		if (user.type != ch->type)
+			return -EINVAL;
+		for (;;) {
+			if (!(ch->streaming & 1))
+				return -EINVAL;
+			if (!list_empty(&ch->done)) {
+				__private_spin_lock_irqsave(
+					(spinlock_t *)&ch->done_count, &flags);
+				buffer = list_first_entry(&ch->done,
+					struct t21_frame_buffer_abi, done);
+				list_del(&buffer->done);
+				ch->done_count--;
+				private_spin_unlock_irqrestore(
+					(spinlock_t *)&ch->done_count, flags);
+				break;
+			}
+			ret = private_wait_event_interruptible(
+				(wait_queue_head_t *)ch->wait_queue, check_state,
+				&ch->type);
+			if (ret && ret != -ERESTARTSYS)
+				return ret;
 		}
+		__fill_v4l2_buffer((uintptr_t)buffer, (uintptr_t)&user);
+		buffer->state = 0;
+		return private_copy_to_user(argp, &user, sizeof(user)) ?
+			-EFAULT : 0;
+	}
+	case 0x80045612: {
+		u32 type;
+		struct list_head *pos;
+
+		if (ch->state != 3)
+			return -1;
+		if (!t21_isp_valid_ptr(argp) ||
+		    private_copy_from_user(&type, argp, sizeof(type)))
+			return -EFAULT;
+		if (type != ch->type)
+			return -EINVAL;
+		if (ch->streaming & 1)
+			return -EBUSY;
+		list_for_each(pos, &ch->queued) {
+			struct t21_frame_buffer_abi *buffer =
+				container_of(pos, struct t21_frame_buffer_abi,
+					     queued);
+			__enqueue_in_driver((uintptr_t)buffer);
+		}
+		ch->streaming |= 1;
+		ret = tx_isp_send_event_to_remote((uintptr_t)ch->remote_pad,
+						  0x3000003, NULL);
+		if (ret && ret != -ENOIOCTLCMD) {
+			__vb2_queue_cancel(&ch->type);
+			return ret;
+		}
+		ch->state = 4;
+		pr_info("tx-isp-t21: frame streamon ch=%p queued=%u buffers=%u remote=%p\n",
+			ch, ch->queued_count, ch->num_buffers, ch->remote_pad);
+		isp_printf(0, "Streamon successful\n");
+		return 0;
+	}
+	case 0x80045613: {
+		u32 type;
+
+		if (!t21_isp_valid_ptr(argp) ||
+		    private_copy_from_user(&type, argp, sizeof(type)))
+			return -EFAULT;
+		return __frame_channel_vb2_streamoff(ch, type, 0);
+	}
+	case 0x400456bf: {
+		int completion_value;
+
+		if (!t21_isp_valid_ptr(argp))
+			return -EINVAL;
+		ret = private_wait_for_completion_interruptible(
+			(struct completion *)ch->completion);
+		if (ret < 0)
+			completion_value = ret;
+		else
+			completion_value =
+				*(u32 *)(void *)ch->completion + 1;
+		return private_copy_to_user(argp, &completion_value,
+					    sizeof(completion_value)) ?
+			-EFAULT : 0;
+	}
+	case 0xc04c56c3: {
+		struct t21_frame_format_view format;
+
+		if (!t21_isp_valid_ptr(argp) ||
+		    private_copy_from_user(&format, argp, sizeof(format)))
+			return -EFAULT;
+		if (format.type != 1)
+			return -EINVAL;
+		if (!format.field)
+			format.field = 4;
+		if (format.field != 4 || format.colorspace != 8)
+			return -EINVAL;
+		ret = tx_isp_send_event_to_remote((uintptr_t)ch->remote_pad,
+						  0x3000002, &format);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+		if (private_copy_to_user(argp, &format, sizeof(format)))
+			return -EFAULT;
+		memcpy(&ch->format, &format, sizeof(format));
 		return 0;
 	}
 	default:
-		isp_printf(2, "Unsupported ioctl command 0x%x\n", cmd);
-		return -ENOTTY;
+		isp_printf(2, "Unsupported frame-channel ioctl command 0x%x\n",
+			   cmd);
+		return -ENOIOCTLCMD;
 	}
-}
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009740 origin=model_output original=sensor_hw_reset_enable */
@@ -16889,91 +16885,52 @@ int32_t sensor_alloc_integration_time(int16_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009820 origin=fragment_seed original=sensor_set_integration_time */
 uint32_t sensor_set_integration_time(uint32_t a0)
 {
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct t21_sensor_bridge_runtime *core =
+		(void *)(uintptr_t)g_ispcore;
+	struct t21_sensor_bridge_state *sensor = core->sensor;
+	u32 value = a0 & 0xffff;
+	u32 combined = sensor->combined_exposure;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
+	BUILD_BUG_ON(offsetof(struct t21_sensor_bridge_runtime, sensor) != 0x120);
+	BUILD_BUG_ON(offsetof(struct t21_sensor_bridge_runtime,
+			      integration_time_pending) != 0x188);
+	BUILD_BUG_ON(offsetof(struct t21_sensor_bridge_state,
+			      integration_time) != 0x70);
 
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&g_ispcore));
-    a0 = a0 & 65535;
-    v1 = *(uint32_t *)((char *)v0 + 288);
-    a1 = *(uint32_t *)((char *)v1 + 112);
-
-    /* fragment 2: Branch */
-    a2 = 4294901760;
-    if (a0 == a1) { goto sensor_set_integration_time0x48; }
-
-    /* fragment 3: MemoryAccess */
-    a1 = *(uint32_t *)((char *)v1 + 140);
-    a1 = a2 & a1;
-    a1 = a0 + a1;
-    *(uint32_t *)((char *)v1 + 140) = a1;
-    a1 = 1;
-    *(uint32_t *)((char *)v1 + 112) = a0;
-    *(uint32_t *)((char *)v0 + 392) = a1;
-    *(uint32_t *)((char *)v0 + 396) = a0;
-    *(uint32_t *)((char *)v0 + 400) = a1;
-    v1 = *(uint32_t *)((char *)v1 + 140);
-    *(uint32_t *)((char *)v0 + 404) = v1;
-
-sensor_set_integration_time0x48:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 986c:	00000000 	nop */
-
-    return (uint32_t)v0;
+	/* Do not suppress an unchanged request.  Some sensors require their
+	 * group/latch update to be repeated while AE is holding a value. */
+	sensor->integration_time = value;
+	combined = (combined & 0xffff0000U) | value;
+	sensor->combined_exposure = combined;
+	core->integration_time_pending = 1;
+	core->integration_time = value;
+	core->combined_exposure_pending = 1;
+	core->combined_exposure = combined;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009870 origin=fragment_seed original=sensor_set_analog_gain */
 uint32_t sensor_set_analog_gain(uint32_t a0)
 {
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct t21_sensor_bridge_runtime *core =
+		(void *)(uintptr_t)g_ispcore;
+	struct t21_sensor_bridge_state *sensor = core->sensor;
+	u32 value = a0 & 0xffff;
+	u32 combined = sensor->combined_exposure;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
+	BUILD_BUG_ON(offsetof(struct t21_sensor_bridge_runtime,
+			      analog_gain_pending) != 0x178);
+	BUILD_BUG_ON(offsetof(struct t21_sensor_bridge_state,
+			      analog_gain) != 0x60);
 
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&g_ispcore));
-    v1 = *(uint32_t *)((char *)v0 + 288);
-    a1 = *(uint32_t *)((char *)v1 + 96);
-
-    /* fragment 2: Branch */
-    a2 = a0 << 16;
-    if (a0 == a1) { goto sensor_set_analog_gain0x40; }
-
-    /* fragment 3: MemoryAccess */
-    a1 = *(uint16_t *)((char *)v1 + 140);
-    a1 = a2 | a1;
-    *(uint32_t *)((char *)v1 + 140) = a1;
-    a1 = 1;
-    *(uint32_t *)((char *)v1 + 96) = a0;
-    *(uint32_t *)((char *)v0 + 376) = a1;
-    *(uint32_t *)((char *)v0 + 380) = a0;
-    *(uint32_t *)((char *)v0 + 400) = a1;
-    v1 = *(uint32_t *)((char *)v1 + 140);
-    *(uint32_t *)((char *)v0 + 404) = v1;
-
-sensor_set_analog_gain0x40:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 98b4:	00000000 	nop */
-
-    return (uint32_t)v0;
+	sensor->analog_gain = value;
+	combined = (value << 16) | (combined & 0xffff);
+	sensor->combined_exposure = combined;
+	core->analog_gain_pending = 1;
+	core->analog_gain = value;
+	core->combined_exposure_pending = 1;
+	core->combined_exposure = combined;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000098b8 origin=fragment_seed original=sensor_set_digital_gain */
@@ -17240,36 +17197,42 @@ sensor_set_mode0xc8:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009a9c origin=model_output original=sensor_init */
 int32_t sensor_init(void *arg1)
 {
-    uint32_t *ispcore = *(uint32_t **)((char *)g_ispcore + 0x120);
-    uint32_t *dst = (uint32_t *)arg1;
-    uint8_t *dst8 = (uint8_t *)arg1;
+	struct t21_sensor_ctrl_view *dst = arg1;
+	u8 *sensor = *(u8 **)((u8 *)(uintptr_t)g_ispcore + 0x120);
 
-    ((void **)(uintptr_t)dst)[0x18 / 4] = ispcore[0x58 / 4];
-    ((void **)(uintptr_t)dst)[0x1c / 4] = ispcore[0x5c / 4];
-    ((void **)(uintptr_t)dst8)[0x32] = (uint8_t)(ispcore[0x7a / 2] & 0xff);
-    ((void **)(uintptr_t)dst8)[0x33] = (uint8_t)(ispcore[0x7c / 2] & 0xff);
-    ((void **)(uintptr_t)dst8)[0x34] = (uint8_t)(ispcore[0x7e / 2] & 0xff);
-    ((void **)(uintptr_t)dst)[0x20 / 4] = (uint32_t)(ispcore[0x68 / 2] & 0xffff);
-    ((void **)(uintptr_t)dst)[0x24 / 4] = (uint32_t)(ispcore[0x78 / 2] & 0xffff);
-    ((void **)(uintptr_t)dst)[0x48 / 4] = (uint32_t)(uintptr_t)sensor_hw_reset_disable;
-    ((void **)(uintptr_t)dst)[0x4c / 4] = (uint32_t)(uintptr_t)sensor_hw_reset_enable;
-    ((void **)(uintptr_t)dst)[0x50 / 4] = (uint32_t)(uintptr_t)sensor_alloc_analog_gain;
-    ((void **)(uintptr_t)dst)[0x54 / 4] = (uint32_t)(uintptr_t)sensor_alloc_digital_gain;
-    ((void **)(uintptr_t)dst)[0x58 / 4] = (uint32_t)(uintptr_t)sensor_alloc_integration_time;
-    ((void **)(uintptr_t)dst)[0x5c / 4] = (uint32_t)(uintptr_t)sensor_set_integration_time;
-    ((void **)(uintptr_t)dst)[0x60 / 4] = (uint32_t)(uintptr_t)sensor_start_changes;
-    ((void **)(uintptr_t)dst)[0x64 / 4] = (uint32_t)(uintptr_t)sensor_end_changes;
-    ((void **)(uintptr_t)dst)[0x68 / 4] = (uint32_t)(uintptr_t)sensor_set_analog_gain;
-    ((void **)(uintptr_t)dst)[0x6c / 4] = (uint32_t)(uintptr_t)sensor_set_digital_gain;
-    ((void **)(uintptr_t)dst)[0x70 / 4] = (uint32_t)(uintptr_t)sensor_get_normal_fps;
-    ((void **)(uintptr_t)dst)[0x74 / 4] = (uint32_t)(uintptr_t)sensor_read_black_pedestal;
-    ((void **)(uintptr_t)dst)[0x78 / 4] = (uint32_t)(uintptr_t)sensor_set_mode;
-    ((void **)(uintptr_t)dst)[0x7c / 4] = (uint32_t)(uintptr_t)sensor_set_wdr_mode;
-    ((void **)(uintptr_t)dst)[0x80 / 4] = (uint32_t)(uintptr_t)sensor_fps_control;
-    ((void **)(uintptr_t)dst)[0x84 / 4] = (uint32_t)(uintptr_t)sensor_get_id;
-    ((void **)(uintptr_t)dst)[0x88 / 4] = (uint32_t)(uintptr_t)sensor_disable_isp;
-    ((void **)(uintptr_t)dst)[0x8c / 4] = (uint32_t)(uintptr_t)sensor_get_lines_per_second;
-    return (int32_t)(uintptr_t)sensor_get_lines_per_second;
+	BUILD_BUG_ON(sizeof(*dst) != sizeof(sensor_ctrl));
+	BUILD_BUG_ON(offsetof(struct t21_sensor_ctrl_view,
+			      set_integration_time) != 0x5c);
+	BUILD_BUG_ON(offsetof(struct t21_sensor_ctrl_view,
+			      set_analog_gain) != 0x68);
+
+	dst->exp2_input_a = *(u32 *)(sensor + 0x58);
+	dst->exp2_input_b = *(u32 *)(sensor + 0x5c);
+	dst->timing_32 = *(u16 *)(sensor + 0x7a);
+	dst->timing_33 = *(u16 *)(sensor + 0x7c);
+	dst->timing_34 = *(u16 *)(sensor + 0x7e);
+	dst->min_integration_time = *(u16 *)(sensor + 0x68);
+	dst->max_integration_time = *(u16 *)(sensor + 0x78);
+	dst->hw_reset_disable = sensor_hw_reset_disable;
+	dst->hw_reset_enable = sensor_hw_reset_enable;
+	dst->alloc_analog_gain = sensor_alloc_analog_gain;
+	dst->alloc_digital_gain = sensor_alloc_digital_gain;
+	dst->alloc_integration_time = sensor_alloc_integration_time;
+	dst->set_integration_time = sensor_set_integration_time;
+	dst->start_changes = sensor_start_changes;
+	dst->end_changes = sensor_end_changes;
+	dst->set_analog_gain = sensor_set_analog_gain;
+	dst->set_digital_gain = sensor_set_digital_gain;
+	dst->get_normal_fps = sensor_get_normal_fps;
+	dst->read_black_pedestal = sensor_read_black_pedestal;
+	dst->set_mode = sensor_set_mode;
+	dst->set_wdr_mode = sensor_set_wdr_mode;
+	dst->fps_control = sensor_fps_control;
+	dst->get_id = sensor_get_id;
+	dst->disable_isp = sensor_disable_isp;
+	dst->get_lines_per_second = sensor_get_lines_per_second;
+
+	return (int32_t)(uintptr_t)sensor_get_lines_per_second;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009bbc origin=model_output original=sensor_early_init */
@@ -17288,127 +17251,79 @@ int sensor_early_init(uint32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009bf0 origin=model_output original=tx_isp_video_s_stream */
 int32_t tx_isp_video_s_stream(void *arg1, int32_t arg2)
 {
-    int32_t i = 0;
+    struct t21_video_graph_view *graph = arg1;
     int32_t result = 0;
-    int32_t **entries = (int32_t **)arg1;
+    int32_t i;
 
-    do {
-        void *obj = entries[i];
-        if (obj != NULL) {
-            int32_t **vtable = (int32_t **)((char *)obj + 0xc4);
-            int32_t *fn_ptr = vtable[1];
-            if (fn_ptr == NULL) {
-                i += 1;
-            } else {
-                int32_t fn = fn_ptr[0];
-                if (fn == 0) {
-                    i += 1;
-                } else {
-                    result = ((int32_t (*)(void *, int32_t))fn)(obj, arg2);
-                    if (result == 0) {
-                        i += 1;
-                    } else if (result != -515) {
-                        int32_t j = 0;
-                        while (j != i) {
-                            void *obj2 = entries[j];
-                            if (obj2 == NULL) {
-                                j += 1;
-                            } else {
-                                int32_t **vtable2 = (int32_t **)((char *)obj2 + 0xc4);
-                                int32_t *fn_ptr2 = vtable2[1];
-                                if (fn_ptr2 == NULL) {
-                                    j += 1;
-                                } else {
-                                    int32_t fn2 = fn_ptr2[0];
-                                    if (fn2 == 0) {
-                                        j += 1;
-                                    } else {
-                                        ((int32_t (*)(void *, int32_t))fn2)(obj2, arg2 < 1 ? 1 : 0);
-                                        j += 1;
-                                    }
-                                }
-                            }
-                        }
-                        return result;
-                    } else {
-                        i += 1;
-                    }
-                }
+    BUILD_BUG_ON(offsetof(struct t21_video_graph_view, subdevs) != 0x38);
+
+    for (i = 0; i < 16; i++) {
+        struct t21_sensor_subdev_view *subdev = graph->subdevs[i];
+        const struct t21_subdev_video_ops_view *video;
+
+        if (subdev == NULL)
+            continue;
+        video = subdev->ops ? subdev->ops->video : NULL;
+        if (video == NULL || video->s_stream == NULL)
+            continue;
+
+        result = video->s_stream(subdev, arg2);
+        if (result != 0 && result != -515) {
+            int32_t j;
+
+            for (j = 0; j < i; j++) {
+                subdev = graph->subdevs[j];
+                video = subdev && subdev->ops ? subdev->ops->video : NULL;
+                if (video && video->s_stream)
+                    video->s_stream(subdev, !arg2);
             }
-        } else {
-            i += 1;
+            return result;
         }
-    } while (i != 16);
+    }
 
-    return 0;
+    return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009cfc origin=model_output original=tx_isp_video_link_stream */
 int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2)
 {
-	int32_t i = 0;
-	int32_t saved_result = 0;
-	int32_t *base = (int32_t *)arg1;
+	struct t21_video_graph_view *graph = arg1;
+	int32_t result = 0;
+	int32_t i;
 
-	do {
-		int32_t *entry = (void *)((uintptr_t)base + i * 4);
-		void *obj = *(void **)((char *)entry + 0x38);
+	for (i = 0; i < 16; i++) {
+		struct t21_sensor_subdev_view *subdev = graph->subdevs[i];
+		const struct t21_subdev_video_ops_view *video;
 
-		if (obj != NULL) {
-			void **vtable = *(void ***)((char *)obj + 0xc4);
-			int32_t (*fn)(void *, int32_t) = *(int32_t (**)(void *, int32_t))((char *)vtable + 4);
+		if (subdev == NULL)
+			continue;
+		video = subdev->ops ? subdev->ops->video : NULL;
+		if (video == NULL || video->link_stream == NULL)
+			continue;
 
-			if (fn == NULL) {
-				i++;
-			} else {
-				int32_t result = fn(obj, arg2);
+		result = video->link_stream(subdev, arg2);
+		if (result != 0 && result != -515) {
+			int32_t j;
 
-				if (result == 0) {
-					i++;
-				} else {
-					saved_result = result;
-
-					if (result != -515) {
-						int32_t j = 0;
-						int32_t clamped = (arg2 < 1) ? 1 : 0;
-
-						while (j != i) {
-							int32_t *e2 = (void *)((uintptr_t)base + j * 4);
-							void *obj2 = (void *)(*(void **)((uintptr_t)e2 + 14));
-
-							if (obj2 == NULL) {
-								j++;
-							} else {
-								void **vt2 = *(void ***)((char *)obj2 + 0xc4);
-								int32_t (*fn2)(void *, int32_t) = *(int32_t (**)(void *, int32_t))((char *)vt2 + 4);
-
-								if (fn2 == NULL) {
-									j++;
-								} else {
-									fn2(obj2, clamped);
-									j++;
-								}
-							}
-						}
-
-						return saved_result;
-					}
-
-					i++;
-				}
+			for (j = 0; j < i; j++) {
+				subdev = graph->subdevs[j];
+				video = subdev && subdev->ops ? subdev->ops->video : NULL;
+				if (video && video->link_stream)
+					video->link_stream(subdev, !arg2);
 			}
-		} else {
-			i++;
+			return result;
 		}
-	} while (i != 16);
+	}
 
-	return 0;
+	return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009e08 origin=model_output original=tx_isp_open */
 int32_t tx_isp_open(int32_t arg1, void *arg2)
 {
-	struct tx_isp_dev *dev = (struct tx_isp_dev *)((char *)arg2 + 0x70);
+	/* file->private_data is the ISP device; the recovered body had
+	 * accidentally used the address of the field itself. */
+	void *dev = *(void **)((char *)arg2 + 0x70);
 	int32_t *ref = (int32_t *)((char *)dev + 0x108);
 	int32_t i;
 	int32_t result = 0;
@@ -17421,20 +17336,27 @@ int32_t tx_isp_open(int32_t arg1, void *arg2)
 	*(int32_t *)((char *)dev + 0x10c) = -1;
 
 	for (i = 0; i < 16; i++) {
-		struct tx_isp_entry *entry = (void *)((struct tx_isp_entry *)((char *)(uintptr_t)dev - 0xc + i * 4));
-		void *obj = *(void **)((char *)entry + 0x38);
+		void *obj = *(void **)((char *)dev + 0x2c + i * 4);
+		void *ops;
+		void *internal;
+		int32_t (*open_fn)(void *);
 
 		if (obj == 0)
 			continue;
 
-		int32_t (*open_fn)(void) = *(int32_t (**)(void))((char *)obj + 0xc4 + 0x10);
+		/* obj->ops->internal->activate_module.  The model recovery
+		 * collapsed these three loads into obj + 0xd4, producing an
+		 * indirect jump into structure data on the first /dev/isp open. */
+		ops = *(void **)((char *)obj + 0xc4);
+		internal = ops ? *(void **)((char *)ops + 0x10) : NULL;
+		open_fn = internal ? *(int32_t (**)(void *))internal : NULL;
 
 		if (open_fn == 0) {
 			result = -515;
 			continue;
 		}
 
-		result = open_fn();
+		result = open_fn(obj);
 
 		if (result == 0)
 			continue;
@@ -17452,82 +17374,55 @@ int32_t tx_isp_open(int32_t arg1, void *arg2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009edc origin=model_output original=tx_isp_notify */
-int32_t tx_isp_notify(int32_t arg1, int32_t arg2, int32_t arg3)
+int32_t tx_isp_notify(void *module, uint32_t event, void *data)
 {
-    int32_t result = 0;
-    int32_t offset = 0;
-    int32_t event_type = arg2 & 0xff000000;
-    int32_t base = (int32_t)&globe_ispdev;
-    int32_t *ptr;
-    int32_t *obj;
-    int32_t *cb;
-    int32_t ret;
+	void *ispdev = (void *)(uintptr_t)globe_ispdev;
+	uint32_t event_class = event & 0xff000000;
+	int32_t result = 0;
+	int32_t offset;
 
-    while (1) {
-        ptr = (int32_t *)(base + offset);
-        obj = *(int32_t **)(ptr + 0x38);
-        if (obj == 0) {
-            offset += 4;
-        } else {
-            if (event_type == 0x1000000) {
-                cb = *(int32_t **)(obj + 0xc4);
-                if (cb != 0) {
-                    cb = *(int32_t **)cb;
-                    if (cb != 0) {
-                        ret = *(int32_t *)(cb + 0x14);
-                        if (ret != 0) {
-                            ret = ((int32_t (*)(int32_t, int32_t, int32_t))ret)(obj, arg2, arg3);
-                            if (ret == 0) {
-                                result = 0;
-                            } else if (ret != -515) {
-                                result = ret;
-                                goto done;
-                            } else {
-                                result = -515;
-                            }
-                        } else {
-                            result = -515;
-                        }
-                    } else {
-                        result = -515;
-                    }
-                } else {
-                    result = -515;
-                }
-            } else if (event_type == 0x2000000) {
-                cb = *(int32_t **)(obj + 0xc4);
-                cb = *(int32_t **)(cb + 0xc);
-                if (cb != 0) {
-                    ret = *(int32_t *)(cb + 8);
-                    if (ret != 0) {
-                        ret = ((int32_t (*)(int32_t, int32_t, int32_t))ret)(obj, arg2, arg3);
-                        if (ret == 0) {
-                            result = 0;
-                        } else if (ret != -515) {
-                            result = ret;
-                            goto done;
-                        } else {
-                            result = -515;
-                        }
-                    } else {
-                        result = -515;
-                    }
-                } else {
-                    result = -515;
-                }
-            } else {
-                result = 0;
-            }
-            offset += 4;
-        }
-        if (offset == 0x40) {
-            if (result == -515)
-                result = 0;
-            break;
-        }
-    }
-done:
-    return result;
+	(void)module;
+	if (!ispdev)
+		return -ENODEV;
+
+	for (offset = 0; offset < 0x40; offset += sizeof(void *)) {
+		void *obj = *(void **)((char *)ispdev + 0x38 + offset);
+		void *ops;
+		void *group = NULL;
+		int32_t (*handler)(void *, uint32_t, void *);
+
+		if (!obj)
+			continue;
+		ops = *(void **)((char *)obj + 0xc4);
+		if (!ops) {
+			result = -ENOIOCTLCMD;
+			continue;
+		}
+
+		if (event_class == 0x1000000)
+			group = *(void **)ops;
+		else if (event_class == 0x2000000)
+			group = *(void **)((char *)ops + 0xc);
+		else
+			continue;
+
+		handler = group ? *(int32_t (**)(void *, uint32_t, void *))
+			((char *)group + (event_class == 0x1000000 ? 0x14 : 0x8)) : NULL;
+		if (!handler) {
+			result = -ENOIOCTLCMD;
+			continue;
+		}
+
+		pr_info("tx-isp-t21: notify event=0x%x child=%d obj=%p fn=%p begin\n",
+			event, offset / (int)sizeof(void *), obj, handler);
+		result = handler(obj, event, data);
+		pr_info("tx-isp-t21: notify event=0x%x child=%d ret=%d\n",
+			event, offset / (int)sizeof(void *), result);
+		if (result && result != -ENOIOCTLCMD)
+			return result;
+	}
+
+	return result == -ENOIOCTLCMD ? 0 : result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009ff0 origin=model_output original=tx_isp_exit */
@@ -18134,9 +18029,10 @@ int32_t tx_isp_release(int32_t arg1, void *arg2)
 	int32_t result = 0;
 	int32_t i;
 	int32_t ret;
-	int32_t (*release_fn)(void);
+	int32_t (*release_fn)(void *);
 	void *link;
 	void *ops;
+	void *internal;
 	int32_t link_val;
 
 	if (count == 0) {
@@ -18145,12 +18041,14 @@ int32_t tx_isp_release(int32_t arg1, void *arg2)
 			if (link == 0)
 				continue;
 			ops = *(void **)((char *)link + 0xc4);
-			release_fn = *(void (**)(void))((char *)ops + 0x10);
+			internal = ops ? *(void **)((char *)ops + 0x10) : NULL;
+			release_fn = internal ?
+				*(int32_t (**)(void *))((char *)internal + 4) : NULL;
 			if (release_fn == 0) {
 				result = -515;
 				continue;
 			}
-			ret = release_fn();
+			ret = release_fn(link);
 			if (ret == 0)
 				continue;
 			if (ret == -515) {
@@ -19160,10 +19058,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 	uint32_t link_val914;
 	uint32_t link_val915;
 
+	pr_info("tx-isp-t21: ioctl enter cmd=%#x arg=%#lx pid=%d\n",
+		cmd, arg, current->pid);
+
 	switch (cmd) {
 	case 0x80045612:
+		pr_info("tx-isp-t21: ioctl stream on\n");
 		return tx_isp_video_s_stream(base, 1);
 	case 0x80045613:
+		pr_info("tx-isp-t21: ioctl stream off\n");
 		return tx_isp_video_s_stream(base, 0);
 	case 0x800456d0:
 		if (private_copy_from_user(&val, (void __user *)arg, sizeof(val))) {
@@ -19171,13 +19074,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 				   "tx_isp_video_link_setup", 178);
 			return -EFAULT;
 		}
-		return t21_tx_isp_video_link_setup(base, val);
+		pr_info("tx-isp-t21: ioctl link setup index=%d\n", val);
+		ret = t21_tx_isp_video_link_setup(base, val);
+		pr_info("tx-isp-t21: ioctl link setup ret=%d\n", ret);
+		return ret;
 	case 0x800456d1:
+		pr_info("tx-isp-t21: ioctl link destroy\n");
 		tx_isp_video_link_destroy_isra_1(base);
 		return 0;
 	case 0x800456d2:
+		pr_info("tx-isp-t21: ioctl link stream on\n");
 		return tx_isp_video_link_stream(base, 1);
 	case 0x800456d3:
+		pr_info("tx-isp-t21: ioctl link stream off\n");
 		return tx_isp_video_link_stream(base, 0);
 	case 0x805056c1:
 	case 0x805056c2:
@@ -19229,6 +19138,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 		h16 = ((height + 15) >> 4) + 1;
 		buf[0] = 0;
 		buf[1] = size1 + (size1 >> 1) + w16 * h16 * 0x28;
+		pr_info("tx-isp-t21: GET_BUF vic=%p width=%u height=%u size=%u (0x%x)\n",
+			vic, width, height, buf[1], buf[1]);
 		return private_copy_to_user((void __user *)arg, buf, 8) ?
 			-EFAULT : 0;
 	case 0x800856d4:
@@ -21456,68 +21367,26 @@ int32_t tisp_fw_process(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000e314 origin=fragment_seed original=tisp_channel_start */
 int32_t tisp_channel_start(uint32_t a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uint32_t s3 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    u32 value;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+    value = system_reg_read(0x2304);
+    system_reg_write(0x2304, value | BIT(a0));
 
-    /* fragment 1: CallSetup */
-    s1 = 1;
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)system_reg_read)(8964); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s2 = (uintptr_t)&system_reg_write;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(8964, (uintptr_t)v0 | (s1 << s0)); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)system_reg_read)(8984); /* jalr target resolved by relocation */
-
-    /* fragment 4: Branch */
-    v1 = 2;
-    if (s0 == s1) { goto tisp_channel_start0x68; }
-
-    /* fragment 5: Branch */
-    int _bc_s0_5 = s0 == v1;
-    v1 = (uintptr_t)v0 | 2;
-    if (_bc_s0_5) { goto tisp_channel_start0x70; }
-
-    /* fragment 6: Branch */
-    goto tisp_channel_start0x74;
-
-tisp_channel_start0x68:
-    /* fragment 7: Branch */
-    v0 = (uintptr_t)v0 | 4;
-    goto tisp_channel_start0x74;
-
-tisp_channel_start0x70:
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t)v0 | 8;
-
-tisp_channel_start0x74:
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)system_reg_write)(8984, v0); /* jalr target resolved by relocation */
-
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 11: Arithmetic */
-    v0 = 0;
-
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
+    value = system_reg_read(0x2318);
+    switch (a0) {
+    case 0:
+        value |= 0x2;
+        break;
+    case 1:
+        value |= 0x4;
+        break;
+    case 2:
+        value |= 0x8;
+        break;
+    default:
+        break;
+    }
+    system_reg_write(0x2318, value);
 
     return 0;
 }
@@ -21632,28 +21501,26 @@ int32_t tisp_channel_attr_set_crop_scaler(uint32_t channel, void *attr)
 int32_t tisp_channel_attr_set(int32_t arg1, void *arg2)
 {
 	uint32_t *p = (uint32_t *)arg2;
-	uint32_t *base;
-	uint32_t tispinfo_lo;
-	uint32_t tispinfo_hi;
-	uint32_t lo1;
-	uint32_t hi1;
-	volatile uint32_t *vt = (volatile uint32_t *)&tispinfo;
+	uint32_t base;
+	uint32_t horizontal_ratio;
+	uint32_t vertical_ratio;
+	uint32_t *sensor = (uint32_t *)&tispinfo;
+
+	if (!p || !p[1] || !p[2])
+		return -EINVAL;
 
 	system_reg_write(((uint32_t)arg1 + 0x24) << 8,
 		     (p[1] << 0x10) | p[2]);
 
 	base = ((uintptr_t)arg1 + 0x23) << 8;
+	horizontal_ratio = (sensor[0] << 9) / p[1];
+	vertical_ratio = (sensor[1] << 9) / p[2];
+	system_reg_write(base + 0x104,
+			 (horizontal_ratio << 0x10) |
+			 (vertical_ratio & 0xffff));
 
-	tispinfo_lo = *vt;
-	tispinfo_hi = *vt;
-
-	lo1 = ((tispinfo_lo << 9) / p[2]) & 0xffff;
-	hi1 = (tispinfo_hi << 9) / p[2];
-
-	system_reg_write((uintptr_t)base + 0x104, (hi1 << 0x10) | lo1);
-
-	system_reg_write((uintptr_t)base + 0x12c, (p[6] << 0x10) | p[7]);
-	system_reg_write((uintptr_t)base + 0x128, (p[4] << 0x10) | p[5]);
+	system_reg_write(base + 0x12c, (p[6] << 0x10) | p[7]);
+	system_reg_write(base + 0x128, (p[4] << 0x10) | p[5]);
 	system_reg_write(base + 0x180, p[6]);
 	system_reg_write(base + 0x198, p[6]);
 
@@ -21663,131 +21530,117 @@ int32_t tisp_channel_attr_set(int32_t arg1, void *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000e79c origin=model_output original=tiziano_load_parameters */
 int32_t tiziano_load_parameters(void)
 {
-    char path[64];
-    void *param;
-    struct file *fp;
-    int32_t saved;
-    void *f_op;
-    void *fpriv;
-    int32_t file_size;
-    int32_t file_pos;
-    void *buf;
-    char *data;
-    int i;
-    int32_t crc_len;
-    int32_t crc_val;
-    uint32_t crc;
-    int32_t *p;
-    static uint32_t crc_table[8] = {0};
-    static uint32_t tparams_day[0xed40 / 4];
-    static uint32_t tparams_night[0xed40 / 4];
+	static const u32 crc_table[8] = {
+		0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
+		0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
+	};
+	char path[64];
+	char *data = NULL;
+	struct file *fp;
+	mm_segment_t old_fs;
+	loff_t pos = 0;
+	loff_t size64;
+	ssize_t nr;
+	u32 crc_len;
+	u32 crc_expected;
+	u32 crc = 0;
+	u32 *words;
+	u32 i;
+	int ret = -1;
 
-    param = private_kmalloc(0x34, 0xd0);
-    if (!param) {
-        isp_printf(2, "Failed to private_kmalloc TISPParamManage\n", 0);
-        return -1;
-    }
-    memset(param, 0, 0x34);
-    snprintf(param, 8, "1.03");
-    snprintf((char *)param + 8, 8, "header%d", 0);
-    snprintf(path, 0x40, "/etc/sensor/%s-t21.bin", sensor_init + 12);
-    fp = filp_open(path, 0, 0);
-    if ((unsigned long)fp >= 0xfffff001) {
-        isp_printf(2, "ISP: open %s file for isp calibrate read failed\n", path);
-        return -1;
-    }
-    saved = *(int32_t *)(entry_gp + 0x18);
-    f_op = *(void **)((char *)fp + 0xc);
-    fpriv = *(void **)((char *)f_op + 0x28);
-    file_size = *(int32_t *)((char *)fpriv + 0x30);
-    file_pos = *(int32_t *)((char *)fpriv + 0x34);
-    *(int32_t *)(entry_gp + 0x18) = 0;
-    buf = *(void **)((char *)param + 0x28);
-    if (!buf) {
-        buf = private_kmalloc(file_size, 0xd0);
-        *(void **)((char *)param + 0x28) = buf;
-        if (buf)
-            *(int32_t *)((char *)param + 0x2c) = file_size;
-        else {
-            int32_t hi = file_pos << 0x16 | (file_size >> 0xa);
-            int32_t *lo = file_pos >> 0xa;
-            ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s[%d]: Failed to alloc %lld KB buffer!\n"), (uintptr_t)("tiziano_load_parameters"), (uintptr_t)(696), (uintptr_t)((long long)hi << 32 | (uintptr_t)lo));
-            filp_close(fp, 0);
-            *(int32_t *)(entry_gp + 0x18) = saved;
-            private_kfree(*(void **)((char *)param + 0x28));
-            private_kfree(param);
-            return -1;
-        }
-    }
-    if (file_pos > 0) {
-        isp_printf(2, "The size of file has been modify!\n", 0);
-        filp_close(fp, 0);
-        *(int32_t *)(entry_gp + 0x18) = saved;
-        private_kfree(*(void **)((char *)param + 0x28));
-        private_kfree(param);
-        return -1;
-    }
-    if (file_pos == 0) {
-        if (*(int32_t *)((char *)param + 0x2c) < (unsigned int)file_size) {
-            isp_printf(2, "The size of file has been modify!\n", 0);
-            filp_close(fp, 0);
-            *(int32_t *)(entry_gp + 0x18) = saved;
-            private_kfree(*(void **)((char *)param + 0x28));
-            private_kfree(param);
-            return -1;
-        }
-    }
-    vfs_read(fp, *(void **)((char *)param + 0x28), file_size, (loff_t *)((char *)fp + 0x28));
-    filp_close(fp, 0);
-    *(int32_t *)(entry_gp + 0x18) = saved;
-    data = *(char **)((char *)param + 0x28);
-    for (i = 0; i < 8; i++) {
-        if (((char *)param)[i] != data[i])
-            break;
-    }
-    if (i < 8) {
-        isp_printf(2, "####################################################################\n", 0);
-        isp_printf(2, "#### The version of bin doesn't match with driver! ####\n", 0);
-        isp_printf(2, "####################################################################\n", 0);
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("#### The version of bin is %s, the driver is %s ####\n"), (uintptr_t)(data), (uintptr_t)(param));
-        private_kfree(*(void **)((char *)param + 0x28));
-        private_kfree(param);
-        return -1;
-    }
-    for (i = 0; i < 8; i++) {
-        if (((char *)param + 8)[i] != (data + 8)[i])
-            break;
-    }
-    if (i < 8) {
-        isp_printf(2, "####################################################################\n", 0);
-        isp_printf(2, "#### The first flag of bin doesn't match with driver! ####\n", 0);
-        isp_printf(2, "####################################################################\n", 0);
-        private_kfree(*(void **)((char *)param + 0x28));
-        private_kfree(param);
-        return -1;
-    }
-    crc_len = *(int32_t *)(data + 0x10);
-    crc_val = *(int32_t *)(data + 0x14);
-    *(int32_t *)((char *)param + 0x10) = crc_len;
-    *(int32_t *)((char *)param + 0x14) = crc_val;
-    crc = 0;
-    p = (int32_t *)(data + 0x18);
-    for (i = 0; i < crc_len / 4; i++) {
-        crc ^= (uint32_t)p[i];
-        crc = crc_table[crc & 7] ^ (crc >> 8);
-    }
-    if (crc != (uint32_t)crc_val) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s[%d]: Failed to CRC sensor setting!\n"), (uintptr_t)("tiziano_load_parameters"), (uintptr_t)(736));
-        private_kfree(*(void **)((char *)param + 0x28));
-        private_kfree(param);
-        return -1;
-    }
-    *(void **)((char *)param + 0x30) = data + 0x18;
-    memcpy(tparams_day, data + 0x18, 0xed40);
-    memcpy(tparams_night, data + 0xed58, 0xed40);
-    private_kfree(*(void **)((char *)param + 0x28));
-    private_kfree(param);
-    return 0;
+	pr_info("tx-isp-t21: parameter load entry irq_disabled=%d pid=%d\n",
+		irqs_disabled(), current->pid);
+	/* sensor_info[12] is the 32-byte name copied by tisp_init(). */
+	snprintf(path, sizeof(path), "/etc/sensor/%s-t21.bin",
+		 sensor_info + 12);
+	fp = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(fp)) {
+		isp_printf(2,
+			   "ISP: open %s file for isp calibrate read failed\n",
+			   path);
+		return -1;
+	}
+	pr_info("tx-isp-t21: parameter file opened irq_disabled=%d pid=%d\n",
+		irqs_disabled(), current->pid);
+
+	size64 = i_size_read(fp->f_path.dentry->d_inode);
+	if (size64 < 24 || size64 > INT_MAX) {
+		isp_printf(2, "The size of file has been modify!\n");
+		goto out_close;
+	}
+
+	data = private_kmalloc((size_t)size64, 0xd0);
+	if (!data) {
+		isp_printf(2, "%s[%d]: Failed to alloc %lld KB buffer!\n",
+			   "tiziano_load_parameters", 696,
+			   (long long)(size64 >> 10));
+		goto out_close;
+	}
+	pr_info("tx-isp-t21: parameter buffer=%p size=%lld irq_disabled=%d pid=%d\n",
+		data, (long long)size64, irqs_disabled(), current->pid);
+
+	old_fs = private_get_fs();
+	private_set_fs(KERNEL_DS);
+	nr = vfs_read(fp, data, (size_t)size64, &pos);
+	private_set_fs(old_fs);
+	pr_info("tx-isp-t21: parameter read=%ld irq_disabled=%d pid=%d\n",
+		(long)nr, irqs_disabled(), current->pid);
+	if (nr != size64) {
+		isp_printf(2, "%s[%d]: short parameter read: %ld/%lld\n",
+			   "tiziano_load_parameters", 711, (long)nr,
+			   (long long)size64);
+		goto out_free;
+	}
+
+	/* OEM compares these as NUL-terminated strings within 8-byte fields. */
+	if (strncmp(data, "1.03", 8)) {
+		isp_printf(2, "#### The version of bin doesn't match with driver! ####\n");
+		goto out_free;
+	}
+	if (strncmp(data + 8, "header0", 8)) {
+		isp_printf(2, "#### The first flag of bin doesn't match with driver! ####\n");
+		goto out_free;
+	}
+
+	crc_len = *(u32 *)(data + 0x10);
+	crc_expected = *(u32 *)(data + 0x14);
+	if (crc_len > (u32)size64 - 24 || (crc_len & 3)) {
+		isp_printf(2, "%s[%d]: invalid parameter payload length %u\n",
+			   "tiziano_load_parameters", 728, crc_len);
+		goto out_free;
+	}
+
+	words = (u32 *)(data + 0x18);
+	for (i = 0; i < crc_len / sizeof(*words); i++) {
+		crc ^= words[i];
+		crc = crc_table[crc & 7] ^ crc;
+	}
+	if (crc != crc_expected) {
+		isp_printf(2, "%s[%d]: Failed to CRC sensor setting!\n",
+			   "tiziano_load_parameters", 736);
+		goto out_free;
+	}
+	pr_info("tx-isp-t21: parameter crc=%08x valid irq_disabled=%d pid=%d\n",
+		crc, irqs_disabled(), current->pid);
+
+	if (crc_len < 2 * 0xed40) {
+		isp_printf(2, "%s[%d]: parameter payload is too short\n",
+			   "tiziano_load_parameters", 742);
+		goto out_free;
+	}
+
+	/* The binary replaces the payload region of the compiled-in defaults. */
+	memcpy(tparams_day + 0x6640, data + 0x18, 0xed40);
+	memcpy(tparams_night + 0x6640, data + 0xed58, 0xed40);
+	ret = 0;
+	pr_info("tx-isp-t21: parameter payload installed irq_disabled=%d pid=%d\n",
+		irqs_disabled(), current->pid);
+
+out_free:
+	private_kfree(data);
+out_close:
+	filp_close(fp, NULL);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000ebdc origin=model_output original=tisp_init */
@@ -21809,6 +21662,8 @@ int32_t tisp_init(int32_t *arg1)
 	memcpy(sensor_info, arg1, 0x4c);
 
 	ret = tiziano_load_parameters();
+	pr_info("tx-isp-t21: tisp parameter load ret=%u irq_disabled=%d pid=%d\n",
+		ret, irqs_disabled(), current->pid);
 	if (ret != 0)
 		isp_printf(2, "no bin file on the system!!!\n", ret);
 
@@ -21839,6 +21694,8 @@ int32_t tisp_init(int32_t *arg1)
 	memcpy(mdns_ratio + 0xfc, tparams_night + 0x90c, 0x24);
 	memcpy(mdns_ratio + 0x120, tparams_night + 0xc38, 0x24);
 	memcpy(mdns_ratio + 0x144, tparams_night + 0xc14, 0x24);
+	pr_info("tx-isp-t21: tisp tables prepared irq_disabled=%d pid=%d\n",
+		irqs_disabled(), current->pid);
 
 	system_reg_write(4, (sensor_w << 0x10) | sensor_h);
 	*(uint32_t *)tispinfo = sensor_w;
@@ -21939,6 +21796,8 @@ int32_t tisp_init(int32_t *arg1)
 
 	system_reg_write(0x10, topreg_val);
 	sensor_init(sensor_ctrl);
+	pr_info("tx-isp-t21: tisp sensor control initialized irq_disabled=%d pid=%d\n",
+		irqs_disabled(), current->pid);
 	system_reg_write(0x1700, 0x1f);
 	system_reg_write(0x1704, 0);
 	system_reg_write(0x1710, 0x7596532);
@@ -21959,6 +21818,8 @@ int32_t tisp_init(int32_t *arg1)
 	system_reg_write(0x1c, 0x200000);
 
 	buf1 = private_kmalloc(0x6000, 0xd0);
+	pr_info("tx-isp-t21: tisp buf1=%p irq_disabled=%d pid=%d\n",
+		buf1, irqs_disabled(), current->pid);
 	if (!buf1)
 		return -1;
 
@@ -21980,6 +21841,8 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x1c) = (uint32_t)buf1 - 0x7fffc000;
 
 	buf2 = private_kmalloc(0x4000, 0xd0);
+	pr_info("tx-isp-t21: tisp buf2=%p irq_disabled=%d pid=%d\n",
+		buf2, irqs_disabled(), current->pid);
 	if (!buf2)
 		return -1;
 
@@ -21993,6 +21856,8 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x28) = (uint32_t)buf2 - 0x80000000;
 
 	buf3 = private_kmalloc(0x2000, 0xd0);
+	pr_info("tx-isp-t21: tisp buf3=%p irq_disabled=%d pid=%d\n",
+		buf3, irqs_disabled(), current->pid);
 	if (!buf3)
 		return -1;
 
@@ -22006,6 +21871,8 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x34) = (uint32_t)buf3 - 0x80000000;
 
 	buf4 = private_kmalloc(0x4000, 0xd0);
+	pr_info("tx-isp-t21: tisp buf4=%p irq_disabled=%d pid=%d\n",
+		buf4, irqs_disabled(), current->pid);
 	if (!buf4)
 		return -1;
 
@@ -22019,6 +21886,8 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x40) = (uint32_t)buf4 - 0x80000000;
 
 	buf5 = private_kmalloc(0x4000, 0xd0);
+	pr_info("tx-isp-t21: tisp buf5=%p irq_disabled=%d pid=%d\n",
+		buf5, irqs_disabled(), current->pid);
 	if (!buf5)
 		return -1;
 
@@ -22030,23 +21899,41 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x44) = 4;
 	*(uint32_t *)(tispinfo + 0x48) = (uint32_t)buf5;
 	*(uint32_t *)(tispinfo + 0x4c) = (uint32_t)buf5 - 0x80000000;
+	pr_info("tx-isp-t21: tisp tuning init begin irq_disabled=%d pid=%d\n",
+		irqs_disabled(), current->pid);
 	tiziano_ae_init(sensor_h, sensor_w,
 			*(uint16_t *)((char *)arg1 + 0x30));
+	pr_info("tx-isp-t21: tuning ae done, awb begin\n");
 	tiziano_awb_init(sensor_h, sensor_w);
+	pr_info("tx-isp-t21: tuning awb done, gamma begin\n");
 	tiziano_gamma_init();
+	pr_info("tx-isp-t21: tuning gamma done, gib begin\n");
 	tiziano_gib_init();
+	pr_info("tx-isp-t21: tuning gib done, lsc begin\n");
 	tiziano_lsc_init();
+	pr_info("tx-isp-t21: tuning lsc done, ccm begin\n");
 	tiziano_ccm_init();
+	pr_info("tx-isp-t21: tuning ccm done, dmsc begin\n");
 	tiziano_dmsc_init();
+	pr_info("tx-isp-t21: tuning dmsc done, sharpen begin\n");
 	tiziano_sharpen_init();
+	pr_info("tx-isp-t21: tuning sharpen done, sdns begin\n");
 	tiziano_sdns_init();
+	pr_info("tx-isp-t21: tuning sdns done, mdns begin\n");
 	tiziano_mdns_init(sensor_w, sensor_h);
+	pr_info("tx-isp-t21: tuning mdns done, clm begin\n");
 	tiziano_clm_init();
+	pr_info("tx-isp-t21: tuning clm done, dpc begin\n");
 	tiziano_dpc_init();
+	pr_info("tx-isp-t21: tuning dpc done, hldc begin\n");
 	tiziano_hldc_init();
+	pr_info("tx-isp-t21: tuning hldc done, defog begin\n");
 	tiziano_defog_init(sensor_w, sensor_h);
+	pr_info("tx-isp-t21: tuning defog done, adr begin\n");
 	tiziano_adr_init(sensor_w, sensor_h);
+	pr_info("tx-isp-t21: tuning adr done, af begin\n");
 	tiziano_af_init(sensor_h, sensor_w);
+	pr_info("tx-isp-t21: tuning af done, events begin\n");
 	system_reg_write(0x104, 0x10);
 	system_reg_write(0x100, 1);
 	tisp_event_init();
@@ -22055,8 +21942,10 @@ int32_t tisp_init(int32_t *arg1)
 	tisp_event_set_cb(6, (int32_t)tisp_ev_update);
 	tisp_event_set_cb(8, (int32_t)tisp_ct_update);
 	tisp_event_set_cb(7, (int32_t)tisp_ae_ir_update);
+	pr_info("tx-isp-t21: tuning events done, params begin\n");
 
 	ret = tisp_param_operate_init();
+	pr_info("tx-isp-t21: tuning params done ret=%d\n", ret);
 	if (ret != 0)
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: tisp_param_operate_init error %d\n"), (uintptr_t)("tisp_init"), (uintptr_t)(445), (uintptr_t)(ret));
 
@@ -22066,100 +21955,58 @@ int32_t tisp_init(int32_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f650 origin=model_output original=tisp_event_init */
 int32_t tisp_event_init(void)
 {
-    uint32_t *base = (uint32_t *)&data_813a0;
-    uint32_t *list_head = (uint32_t *)&data_81770;
-    uint32_t *list_tail = (uint32_t *)&data_81778;
-    uint32_t *list_next = (uint32_t *)&data_8177c;
-    int i;
-    int j;
-    uint32_t *node;
-    uint32_t *prev;
+	int i;
 
-    ((void **)list_head)[0] = (uint32_t)list_head;
-    ((void **)list_head)[1] = (uint32_t)list_head;
-    ((void **)list_tail)[0] = (uint32_t)list_tail;
-    ((void **)list_tail)[1] = (uint32_t)list_tail;
+	BUILD_BUG_ON(sizeof(struct t21_event_node) != 0x30);
+	BUILD_BUG_ON(sizeof(struct t21_event_queue) != 0x3e0);
+	private_init_completion(&tevent_info.ready);
+	INIT_LIST_HEAD(&tevent_info.pending);
+	INIT_LIST_HEAD(&tevent_info.free);
 
-    for (i = 0; i < 20; i++) {
-        node = (uintptr_t)base + i * 12 + 4;
-        ((void **)node)[0] = (uint32_t)node;
-        ((void **)node)[1] = (uint32_t)node;
-    }
+	for (i = 0; i < ARRAY_SIZE(tevent_info.nodes); i++) {
+		INIT_LIST_HEAD(&tevent_info.nodes[i].link);
+		list_add_tail(&tevent_info.nodes[i].link, &tevent_info.free);
+	}
 
-    for (j = 0; j < 20; j++) {
-        node = (uintptr_t)base + j * 12 + 4;
-        prev = (uint32_t *)list_next[0];
-        ((void **)list_next)[0] = (uint32_t)node;
-        ((void **)node)[0] = (uint32_t)list_tail;
-        ((void **)node)[1] = (uint32_t)prev;
-        ((void **)prev)[0] = (uint32_t)node;
-    }
-
-    ((void **)base)[0] = 0;
-    __init_waitqueue_head((void *)&data_813a4, "&x->wait", 0);
-    return 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f724 origin=model_output original=tisp_event_set_cb */
 int32_t tisp_event_set_cb(int32_t arg1, int32_t arg2)
 {
-	((void **)tisp_event_cb_table)[arg1] = (void *)(uintptr_t)arg2;
+	if (arg1 < 0 || arg1 >= ARRAY_SIZE(tisp_event_cb_table))
+		return -EINVAL;
+	tisp_event_cb_table[arg1] = (t21_event_cb_t)(uintptr_t)arg2;
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f740 origin=model_output original=tisp_event_push */
 int32_t tisp_event_push(void *arg1)
 {
-    unsigned long flags;
-    uint32_t *node;
-    uint32_t *prev;
-    uint32_t *next;
-    uint32_t *head;
-    uint32_t *tail;
-    uint32_t *arg;
-    uint32_t *tevent_info;
-    uint32_t *completion;
-    int32_t ret;
+	unsigned long flags;
+	struct t21_event_node *node;
+	const uint32_t *arg = arg1;
 
-    flags = arch_local_irq_save();
-    node = *(uint32_t **)((char *)&tevent_info + 0x3d8);
+	if (!arg)
+		return -EINVAL;
 
-    if (node == (uint32_t *)((char *)&tevent_info + 0x3d8)) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: event free empty error\n"), (uintptr_t)("tisp_event_push"), (uintptr_t)(44));
-        arch_local_irq_restore(flags);
-        return -1;
-    }
+	flags = arch_local_irq_save();
+	if (list_empty(&tevent_info.free)) {
+		isp_printf(2, "%s,%d: event free empty error\n",
+			   "tisp_event_push", 44);
+		arch_local_irq_restore(flags);
+		return -1;
+	}
 
-    prev = *(uint32_t **)(node + 1);
-    next = *(uint32_t **)node;
-    *(uint32_t *)(next + 1) = prev;
-    *prev = next;
-    *node = 0x100100;
-    *(node + 1) = 0x200200;
-
-    arg = (uint32_t *)arg1;
-    *(node + 2) = arg[2];
-    *(node + 4) = arg[4];
-    *(node + 5) = arg[5];
-    *(node + 6) = arg[6];
-    *(node + 7) = arg[7];
-    *(node + 8) = arg[8];
-    *(node + 9) = arg[9];
-    *(node + 10) = arg[10];
-    *(node + 11) = arg[11];
-
-    head = *(uint32_t **)((char *)&tevent_info + 0x3d4);
-    *(uint32_t **)((char *)&tevent_info + 0x3d4) = node;
-    *(node + 1) = head;
-    *node = (uint32_t)((char *)&tevent_info + 0x3d0);
-    *head = node;
-
-    tevent_info = (uint32_t *)&tevent_info;
-    completion = (uint32_t *)((char *)&tevent_info + 0x3d0);
-    private_complete((struct completion *)completion);
-
-    arch_local_irq_restore(flags);
-    return 0;
+	node = list_first_entry(&tevent_info.free,
+				struct t21_event_node, link);
+	list_del_init(&node->link);
+	node->event = arg[2];
+	memcpy(node->args, arg + 4, sizeof(node->args));
+	list_add_tail(&node->link, &tevent_info.pending);
+	private_complete(&tevent_info.ready);
+	arch_local_irq_restore(flags);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f880 origin=fragment_seed original=tisp_event_exit */
@@ -22194,64 +22041,43 @@ int32_t tisp_event_exit(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000f8ac origin=model_output original=tisp_event_process */
 int32_t tisp_event_process(void)
 {
-    unsigned long result;
-    unsigned long flags;
-    int32_t *node;
-    int32_t *prev;
-    int32_t *next;
-    int32_t cb_idx;
-    int32_t (*cb)(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t);
-    int32_t *list_head;
-    int32_t *old_next;
+	unsigned long result;
+	unsigned long flags;
+	struct t21_event_node *node;
+	t21_event_cb_t cb = NULL;
+	uint32_t args[8];
 
-    result = private_wait_for_completion_timeout(&tevent_info, 20);
+	result = private_wait_for_completion_timeout(&tevent_info.ready, 20);
+	if (result == 0xfffffe00UL) {
+		isp_printf(2, "%s,%d: wake up by signal\n",
+			   "tisp_event_process", 85);
+		return 0;
+	}
+	if (result == 0)
+		return 0;
 
-    if (result == 0xfffffe00UL) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: wake up by signal\n"), (uintptr_t)("tisp_event_process"), (uintptr_t)(85));
-        return 0;
-    }
+	flags = arch_local_irq_save();
+	if (list_empty(&tevent_info.pending)) {
+		isp_printf(2, "%s,%d: error\n", "tisp_event_process", 93);
+		arch_local_irq_restore(flags);
+		return -1;
+	}
 
-    if (result == 0)
-        return 0;
+	node = list_first_entry(&tevent_info.pending,
+				struct t21_event_node, link);
+	list_del_init(&node->link);
+	if (node->event < ARRAY_SIZE(tisp_event_cb_table))
+		cb = tisp_event_cb_table[node->event];
+	memcpy(args, node->args, sizeof(args));
+	list_add_tail(&node->link, &tevent_info.free);
+	arch_local_irq_restore(flags);
 
-    flags = arch_local_irq_save();
-    node = (int32_t *)&tevent_info;
-    node = (int32_t *)(*(int32_t **)((char *)node + 976));
-
-    if (node == (int32_t *)&tevent_info) {
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: error\n"), (uintptr_t)("tisp_event_process"), (uintptr_t)(93));
-        arch_local_irq_restore(flags);
-        return -1;
-    }
-
-    next = (int32_t *)(*(int32_t **)((char *)node + 4));
-    prev = (int32_t *)(*(int32_t **)((char *)node + 0));
-    *(int32_t *)((char *)prev + 4) = (int32_t)next;
-    *(int32_t *)((char *)next + 0) = (int32_t)prev;
-    *(int32_t *)((char *)node + 0) = 0x100100;
-    cb_idx = *(int32_t *)((char *)node + 8);
-    *(int32_t *)((char *)node + 4) = 0x200200;
-    cb = (int32_t (*)(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t))
-         tisp_event_cb_table[cb_idx];
-
-    if (cb != 0)
-        cb(*(int32_t *)((char *)node + 16),
-           *(int32_t *)((char *)node + 20),
-           *(int32_t *)((char *)node + 24),
-           *(int32_t *)((char *)node + 28),
-           *(int32_t *)((char *)node + 32),
-           *(int32_t *)((char *)node + 36),
-           *(int32_t *)((char *)node + 40),
-           *(int32_t *)((char *)node + 44));
-
-    list_head = (int32_t *)&tisp_event_list_head;
-    old_next = (int32_t *)(*(int32_t **)((char *)list_head + 0));
-    *(int32_t **)((char *)list_head + 0) = (int32_t **)node;
-    *(int32_t *)((char *)node + 4) = (int32_t)old_next;
-    *(int32_t *)((char *)node + 0) = (int32_t)list_head;
-    *(int32_t *)((char *)old_next + 0) = (int32_t)node;
-    arch_local_irq_restore(flags);
-    return 0;
+	/* Sensor callbacks perform I2C transfers.  Dispatching them with local
+	 * IRQs disabled was both unnecessary and unsafe. */
+	if (cb)
+		cb(args[0], args[1], args[2], args[3],
+		   args[4], args[5], args[6], args[7]);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000fa50 origin=model_output original=JZ_Isp_Awb_Reg2par */
@@ -23836,70 +23662,70 @@ int32_t tiziano_awb_params_refresh(void)
     /* function prologue: stack frame and callee-saved register setup */
 
     /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_parameter, (void *)(uintptr_t)&tparams, 180); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_parameter, (u8 *)&tparams + 0x73e4, 180);
 
     /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_pixel_cnt_th, (void *)(uintptr_t)&tparams, 4); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_pixel_cnt_th, (u8 *)&tparams + 0x7498, 4);
 
     /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_lowlight_rg_th, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_lowlight_rg_th, (u8 *)&tparams + 0x749c, 8);
 
     /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_AwbPointPos, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_AwbPointPos, (u8 *)&tparams + 0x74a4, 8);
 
     /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_cof, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_cof, (u8 *)&tparams + 0x74ac, 8);
 
     /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_mode, (void *)(uintptr_t)&tparams, 12); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_mode, (u8 *)&tparams + 0x74cc, 12);
 
     /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_wb_static, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_wb_static, (u8 *)&tparams + 0x74e0, 8);
 
     /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_light_src, (void *)(uintptr_t)&tparams, 80); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_light_src, (u8 *)&tparams + 0x74e8, 80);
 
     /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_light_src_num, (void *)(uintptr_t)&tparams, 4); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_light_src_num, (u8 *)&tparams + 0x7538, 4);
 
     /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_rg_pos, (void *)(uintptr_t)&tparams, 60); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_rg_pos, (u8 *)&tparams + 0x753c, 60);
 
     /* fragment 11: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_bg_pos, (void *)(uintptr_t)&tparams, 60); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_bg_pos, (u8 *)&tparams + 0x7578, 60);
 
     /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct_th_ot_luxhigh, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct_th_ot_luxhigh, (u8 *)&tparams + 0x75b4, 16);
 
     /* fragment 13: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct_th_ot_luxlow, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct_th_ot_luxlow, (u8 *)&tparams + 0x75c4, 16);
 
     /* fragment 14: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct_th_in, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct_th_in, (u8 *)&tparams + 0x75d4, 16);
 
     /* fragment 15: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct_para_ot, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct_para_ot, (u8 *)&tparams + 0x75e4, 8);
 
     /* fragment 16: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct_para_in, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct_para_in, (u8 *)&tparams + 0x75ec, 8);
 
     /* fragment 17: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_dis_tw, (void *)(uintptr_t)&tparams, 12); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_dis_tw, (u8 *)&tparams + 0x75f4, 12);
 
     /* fragment 18: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_rgbg_weight, (void *)(uintptr_t)&tparams, 900); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_rgbg_weight, (u8 *)&tparams + 0x7600, 900);
 
     /* fragment 19: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_color_temp_mesh, (void *)(uintptr_t)&tparams, 900); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_color_temp_mesh, (u8 *)&tparams + 0x7984, 900);
 
     /* fragment 20: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_wght, (void *)(uintptr_t)&tparams, 900); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_wght, (u8 *)&tparams + 0x7d08, 900);
 
     /* fragment 21: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_rgbg_weight_ot, (void *)(uintptr_t)&tparams, 900); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_rgbg_weight_ot, (u8 *)&tparams + 0x808c, 900);
 
     /* fragment 22: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_ls_w_lut, (void *)(uintptr_t)&tparams, 2056); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_ls_w_lut, (u8 *)&tparams + 0x8410, 2056);
 
     /* fragment 23: Arithmetic */
     v0 = (uintptr_t *)&sinfo_root;
@@ -23912,13 +23738,13 @@ int32_t tiziano_awb_params_refresh(void)
     if (v1 != 0) { goto tiziano_awb_params_refresh0x280; }
 
     /* fragment 26: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_mf_para, (void *)(uintptr_t)&tparams, 24); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_mf_para, (u8 *)&tparams + 0x74b4, 24);
 
     /* fragment 27: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct, (void *)(uintptr_t)&tparams, 4); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct, (u8 *)&tparams + 0x74d8, 4);
 
     /* fragment 28: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&_awb_ct_last, (void *)(uintptr_t)&tparams, 4); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)memcpy(&_awb_ct_last, (u8 *)&tparams + 0x74dc, 4);
 
 tiziano_awb_params_refresh0x280:
     /* fragment 29: Epilogue */
@@ -24111,7 +23937,7 @@ int32_t tiziano_awb_set_hardware_param(void)
     uint32_t *a0 = 0;
     uint32_t a1 = 0;
     uint32_t ra = 0;
-    uintptr_t s0 = 0;
+    uintptr_t s0 = (uintptr_t)&_awb_parameter;
     uint32_t s1 = 0;
     uintptr_t s2 = 0;
     uint32_t s3 = 0;
@@ -24135,7 +23961,7 @@ int32_t tiziano_awb_set_hardware_param(void)
     if (v1 != 0) { goto tiziano_awb_set_hardware_param0x1d4; }
 
     /* fragment 3: CallSetup */
-    *(uint32_t *)((char *)v0 + 19884) = 1;
+    awb_first = 1;
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(2052, ((*(uint32_t *)((char *)((char *)&_awb_parameter + 0xc))) << 28) | ((*(uint32_t *)((char *)((char *)&_awb_parameter + 0x8))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&_awb_parameter)) | ((*(uint32_t *)((char *)((char *)&_awb_parameter + 0x4))) << 12)); /* jalr target resolved by relocation */
 
     /* fragment 4: CallSetup */
@@ -24204,35 +24030,35 @@ int32_t tiziano_awb_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011314 origin=model_output original=tiziano_awb_init */
 int32_t tiziano_awb_init(uint32_t arg1, uint32_t arg2)
 {
-	uint32_t *awb_param = (uint32_t *)&awb_param;
+	uint32_t *awb_param = (uint32_t *)_awb_parameter;
 	uint32_t count1;
 	uint32_t count2;
 	uint32_t i;
 	uint32_t val1;
 	uint32_t val2;
 
-	*(uint32_t *)((char *)&sinfo_show + 19884) = 0;
-	memset((void *)&sinfo_show, 0, 28);
+	awb_first = 0;
+	memset(tisp_wb_attr, 0, sizeof(tisp_wb_attr));
 	tiziano_awb_params_refresh();
 
 	val1 = arg2 >> 1;
-	count1 = *(uint32_t *)((char *)&awb_param + 12);
+	count1 = awb_param[3];
 	for (i = 0; i < count1; i++) {
-		*(uint32_t *)((char *)&awb_param + i * 4 + 16) = val1 / count1;
+		awb_param[4 + i] = val1 / count1;
 	}
 
 	val2 = arg1 >> 1;
-	count2 = *(uint32_t *)((char *)&awb_param + 4);
+	count2 = awb_param[1];
 	for (i = 0; i < count2; i++) {
-		*(uint32_t *)((char *)&awb_param + i * 4 + 76) = val2 / count2;
+		awb_param[19 + i] = val2 / count2;
 	}
 
-	if (*(uint32_t *)((char *)&sinfo_show + 19872) == 0) {
+	if (awb_first == 0) {
 		tiziano_awb_set_hardware_param();
 	}
 
 	tisp_event_set_cb(9, (int32_t)JZ_Isp_Awb);
-	system_irq_func_set(0x12, (int32_t)awb_interrupt_static);
+	system_irq_func_set(0x12, awb_interrupt_static);
 	return 0;
 }
 
@@ -29197,6 +29023,7 @@ Tiziano_adr_fpga0x24f0:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000160f0 origin=fragment_seed original=cm_control */
+#if 0
 int64_t cm_control(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
     uint32_t local_10 = 0;
@@ -29536,6 +29363,71 @@ cm_control0x380:
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
+#endif
+
+struct t21_signed_coefficient {
+	int32_t sign;
+	uint32_t magnitude;
+};
+
+int32_t cm_control(uintptr_t input_addr, uint32_t saturation,
+		   uintptr_t output_addr)
+{
+	const int32_t *input = (const int32_t *)input_addr;
+	int32_t *output = (int32_t *)output_addr;
+	struct t21_signed_coefficient *cm =
+		(struct t21_signed_coefficient *)cm_in;
+	struct t21_signed_coefficient *sat =
+		(struct t21_signed_coefficient *)s_in;
+	int32_t sat_matrix[9];
+	int32_t sum;
+	int32_t term;
+	int32_t value;
+	int32_t row;
+	int32_t col;
+	int32_t k;
+
+	BUILD_BUG_ON(sizeof(cm_in) !=
+		     9 * sizeof(struct t21_signed_coefficient));
+	BUILD_BUG_ON(sizeof(s_in) !=
+		     9 * sizeof(struct t21_signed_coefficient));
+
+	sat_matrix[0] = 19595 + (saturation * 45941 >> 8);
+	sat_matrix[1] = 38470 - (saturation * 38470 >> 8);
+	sat_matrix[2] = 7471 - (saturation * 7471 >> 8);
+	sat_matrix[3] = 19595 - (saturation * 19595 >> 8);
+	sat_matrix[4] = 38470 + (saturation * 27066 >> 8);
+	sat_matrix[5] = sat_matrix[2];
+	sat_matrix[6] = sat_matrix[3];
+	sat_matrix[7] = sat_matrix[1];
+	sat_matrix[8] = 7471 + (saturation * 58065 >> 8);
+
+	for (k = 0; k < 9; k++) {
+		value = input[k];
+		cm[k].sign = value < 0 ? -1 : 1;
+		cm[k].magnitude = value < 0 ? -value : value;
+
+		value = sat_matrix[k];
+		sat[k].sign = value < 0 ? -1 : 1;
+		sat[k].magnitude = value < 0 ? -value : value;
+	}
+
+	for (row = 0; row < 3; row++) {
+		for (col = 0; col < 3; col++) {
+			sum = 0;
+			for (k = 0; k < 3; k++) {
+				term = fix_point_mult2_32(16,
+					cm[row * 3 + k].magnitude << 6,
+					sat[k * 3 + col].magnitude, 0);
+				sum += cm[row * 3 + k].sign *
+					sat[k * 3 + col].sign * term;
+			}
+			output[row * 3 + col] = sum / 64;
+		}
+	}
+
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016490 origin=model_output original=Tiziano_defog_fpga */
 int32_t Tiziano_defog_fpga(void *arg1, void *arg2, void *arg3, void *arg4, int32_t arg5, int32_t arg6, void *arg7, void *arg8, void *arg9, void *arg10, void *arg11, void *arg12, void *arg13, void *arg14, int32_t *arg15, int32_t *arg16, int32_t *arg17, int32_t *arg18, int32_t *arg19)
@@ -29772,8 +29664,8 @@ tiziano_gamma_lut_parameter0x30:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016f0c origin=model_output original=tiziano_gamma_params_refresh */
 int32_t tiziano_gamma_params_refresh(void)
 {
-	memcpy(&tiziano_gamma_lut, tparams, 516);
-	return 0;
+	return t21_tparams_copy(&tiziano_gamma_lut, 0x81b8,
+				 sizeof(tiziano_gamma_lut));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016f44 origin=model_output original=tiziano_gamma_dn_params_refresh */
@@ -31078,11 +30970,11 @@ int32_t tisp_dmsc_out_opt_cfg(void)
 int32_t tisp_dmsc_uu_np_cfg(void)
 {
     system_reg_write(0x1094, (dmsc_uu_np_array[1] << 16) | dmsc_uu_np_array[0]);
-    system_reg_write((uintptr_t)&jump_table_35a98, (dmsc_uu_np_array[3] << 16) | dmsc_uu_np_array[2]);
+    system_reg_write(0x1098, (dmsc_uu_np_array[3] << 16) | dmsc_uu_np_array[2]);
     system_reg_write(0x109c, (dmsc_uu_np_array[5] << 16) | dmsc_uu_np_array[4]);
     system_reg_write(0x10a0, (dmsc_uu_np_array[7] << 16) | dmsc_uu_np_array[6]);
     system_reg_write(0x10a4, (dmsc_uu_np_array[9] << 16) | dmsc_uu_np_array[8]);
-    system_reg_write((uintptr_t)&LC38, (dmsc_uu_np_array[11] << 16) | dmsc_uu_np_array[10]);
+    system_reg_write(0x10a8, (dmsc_uu_np_array[11] << 16) | dmsc_uu_np_array[10]);
     system_reg_write(0x10ac, (dmsc_uu_np_array[13] << 16) | dmsc_uu_np_array[12]);
     system_reg_write(0x10b0, (dmsc_uu_np_array[15] << 16) | dmsc_uu_np_array[14]);
     return 0;
@@ -31172,6 +31064,7 @@ int32_t tisp_dmsc_sp_d_w_wei_np_cfg(void)
 
     /* fragment 1: Arithmetic */
     v0 = (uintptr_t *)&dmsc_sp_d_w_wei_np_array;
+    s0 = (uintptr_t)v0;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4288, ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_w_wei_np_array + 0x10))) << 24) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_w_wei_np_array + 0xc))) << 18) | (*(uint32_t *)((char *)(uintptr_t)&dmsc_sp_d_w_wei_np_array)) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_w_wei_np_array + 0x8))) << 12) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_w_wei_np_array + 0x4))) << 6)); /* jalr target resolved by relocation */
@@ -31216,6 +31109,7 @@ int32_t tisp_dmsc_sp_d_b_wei_np_cfg(void)
 
     /* fragment 1: Arithmetic */
     v0 = (uintptr_t *)&dmsc_sp_d_b_wei_np_array;
+    s0 = (uintptr_t)v0;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4304, ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_b_wei_np_array + 0x10))) << 24) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_b_wei_np_array + 0xc))) << 18) | (*(uint32_t *)((char *)(uintptr_t)&dmsc_sp_d_b_wei_np_array)) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_b_wei_np_array + 0x8))) << 12) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_d_b_wei_np_array + 0x4))) << 6)); /* jalr target resolved by relocation */
@@ -31260,6 +31154,7 @@ int32_t tisp_dmsc_sp_ud_w_wei_np_cfg(void)
 
     /* fragment 1: Arithmetic */
     v0 = (uintptr_t *)&dmsc_sp_ud_w_wei_np_array;
+    s0 = (uintptr_t)v0;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4320, ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_w_wei_np_array + 0x10))) << 24) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_w_wei_np_array + 0xc))) << 18) | (*(uint32_t *)((char *)(uintptr_t)&dmsc_sp_ud_w_wei_np_array)) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_w_wei_np_array + 0x8))) << 12) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_w_wei_np_array + 0x4))) << 6)); /* jalr target resolved by relocation */
@@ -31304,6 +31199,7 @@ int32_t tisp_dmsc_sp_ud_b_wei_np_cfg(void)
 
     /* fragment 1: Arithmetic */
     v0 = (uintptr_t *)&dmsc_sp_ud_b_wei_np_array;
+    s0 = (uintptr_t)v0;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4336, ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_b_wei_np_array + 0x10))) << 24) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_b_wei_np_array + 0xc))) << 18) | (*(uint32_t *)((char *)(uintptr_t)&dmsc_sp_ud_b_wei_np_array)) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_b_wei_np_array + 0x8))) << 12) | ((*(uint32_t *)((char *)((char *)&dmsc_sp_ud_b_wei_np_array + 0x4))) << 6)); /* jalr target resolved by relocation */
@@ -31339,7 +31235,7 @@ int32_t tisp_dmsc_dir_par_cfg(void)
 
 	system_reg_write(0x1010, (uint32_t)(dir_par_hi << 16) | hv_thres_hi);
 	system_reg_write(0x1014, (uint32_t)(dmsc_dir_par_array[0] << 16) | dmsc_hv_thres_1_intp);
-	system_reg_write((uintptr_t)&jump_table_35a20, (uint32_t)(dmsc_dir_par_array[2] << 16) | (uint32_t)(dmsc_dir_par_array[1] << 24) | dmsc_hv_stren_intp);
+	system_reg_write(0x1020, (uint32_t)(dmsc_dir_par_array[2] << 16) | (uint32_t)(dmsc_dir_par_array[1] << 24) | dmsc_hv_stren_intp);
 	system_reg_write(0x1024, (uint32_t)(dmsc_dir_par_array[3] << 16) | dmsc_aa_thres_1_intp);
 	system_reg_write(0x1028, (uint32_t)(dmsc_dir_par_array[5] << 16) | (uint32_t)(dmsc_dir_par_array[4] << 24) | dmsc_aa_stren_intp);
 	system_reg_write(0x102c, (uint32_t)(dmsc_dir_par_array[6] << 16) | dmsc_hvaa_thres_1_intp);
@@ -31350,7 +31246,7 @@ int32_t tisp_dmsc_dir_par_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019184 origin=model_output original=tisp_dmsc_uu_par_cfg */
 int32_t tisp_dmsc_uu_par_cfg(void)
 {
-    system_reg_write((uintptr_t)&LC35, (dmsc_uu_thres_intp << 0x10) | dmsc_uu_stren_intp);
+    system_reg_write(0x1008, (dmsc_uu_thres_intp << 0x10) | dmsc_uu_stren_intp);
     system_reg_write(0x1004,
 	(*(uint32_t *)&dmsc_uu_par_array << 0xa) |
 	(*(uint32_t *)((char *)&dmsc_uu_par_array + 4) << 8) |
@@ -31456,7 +31352,7 @@ int32_t tisp_dmsc_sp_ud_par_cfg(void)
 	val = (par[2] << 16) | (par[1] << 8) | par[3] | (par[0] << 4) | (par[3] << 2) | ((8 - par[2]) << 20) | ((8 - par[0] - par[1]) << 12);
 	system_reg_write(0x105c, val);
 	system_reg_write(0x1060, (dmsc_sp_ud_w_stren_intp << 16) | dmsc_sp_ud_b_stren_intp);
-	system_reg_write((uintptr_t)&LC36, (par[7] << 16) | par[6]);
+	system_reg_write(0x1064, (par[7] << 16) | par[6]);
 	system_reg_write(0x1068, (dmsc_sp_ud_brig_thres_intp << 16) | dmsc_sp_ud_dark_thres_intp);
 	system_reg_write(0x106c, par[4]);
 	system_reg_write(0x1070, par[5]);
@@ -31519,7 +31415,7 @@ int32_t tisp_dmsc_fc_par_cfg(void)
 
 	system_reg_write(0x1080, (t1_stren << 0xe) | (alias_stren << 0x15) |
 		(t2_stren << 7) | *(uint32_t *)&data_8af54);
-	system_reg_write((uintptr_t)&LC37,
+	system_reg_write(0x1084,
 		(*(uint32_t *)&data_8af38 << 0x10) | t1_thres);
 	system_reg_write(0x1088, (*(uint32_t *)&data_8af3c << 0x10) |
 		*(uint32_t *)&data_8af40);
@@ -31528,11 +31424,11 @@ int32_t tisp_dmsc_fc_par_cfg(void)
 		*(uint32_t *)&data_8af50);
 	system_reg_write(0x1090, (par_array << 0x10) | (par_array << 6) | par_array);
 	system_reg_write(0x110c, t3_stren);
-	system_reg_write((uintptr_t)&__func___18805,
+	system_reg_write(0x1110,
 		(*(uint32_t *)&data_8af44 + *(uint32_t *)&data_8af48 +
 		 t1_thres) | (par_array << 0x10));
 	val = *(uint32_t *)&data_8af44 + t1_thres;
-	system_reg_write((uintptr_t)&LC43,
+	system_reg_write(0x1114,
 		((val + *(uint32_t *)&data_8af48) << 0x10) | val);
 	val = *(uint32_t *)&data_8af44 + *(uint32_t *)&data_8af48 +
 		t1_thres + *(uint32_t *)&data_8af4c;
@@ -31779,51 +31675,53 @@ int32_t tisp_dmsc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019d4c origin=model_output original=tiziano_dmsc_params_refresh */
 int32_t tiziano_dmsc_params_refresh(void)
 {
-	memcpy(&dmsc_uu_np_array, &tparams[0x0], 64);
-	memcpy(&dmsc_sp_d_sigma_3_np_array, &tparams[0x40], 64);
-	memcpy(&dmsc_sp_d_w_wei_np_array, &tparams[0x80], 64);
-	memcpy(&dmsc_sp_d_b_wei_np_array, &tparams[0xc0], 64);
-	memcpy(&dmsc_sp_ud_w_wei_np_array, &tparams[0x100], 64);
-	memcpy(&dmsc_sp_ud_b_wei_np_array, &tparams[0x140], 64);
-	memcpy(&dmsc_out_opt, &tparams[0x180], 4);
-	memcpy(&dmsc_hv_thres_1_array, &tparams[0x184], 36);
-	memcpy(&dmsc_hv_stren_array, &tparams[0x1a8], 36);
-	memcpy(&dmsc_aa_thres_1_array, &tparams[0x1cc], 36);
-	memcpy(&dmsc_aa_stren_array, &tparams[0x1f0], 36);
-	memcpy(&dmsc_hvaa_thres_1_array, &tparams[0x214], 36);
-	memcpy(&dmsc_hvaa_stren_array, &tparams[0x238], 36);
-	memcpy(&dmsc_dir_par_array, &tparams[0x25c], 36);
-	memcpy(&dmsc_uu_thres_array, &tparams[0x280], 36);
-	memcpy(&dmsc_uu_stren_array, &tparams[0x2a4], 36);
-	memcpy(&dmsc_uu_par_array, &tparams[0x2c8], 12);
-	memcpy(&dmsc_alias_stren_array, &tparams[0x2d4], 36);
-	memcpy(&dmsc_alias_thres_1_array, &tparams[0x2f8], 36);
-	memcpy(&dmsc_alias_thres_2_array, &tparams[0x31c], 36);
-	memcpy(&dmsc_alias_dir_thres_array, &tparams[0x340], 36);
-	memcpy(&dmsc_alias_par_array, &tparams[0x364], 16);
-	memcpy(&dmsc_nor_alias_thres_array, &tparams[0x374], 36);
-	memcpy(&dmsc_nor_par_array, &tparams[0x398], 16);
-	memcpy(&dmsc_sp_d_w_stren_array, &tparams[0x3a8], 36);
-	memcpy(&dmsc_sp_d_b_stren_array, &tparams[0x3cc], 36);
-	memcpy(&dmsc_sp_d_brig_thres_array, &tparams[0x3f0], 36);
-	memcpy(&dmsc_sp_d_dark_thres_array, &tparams[0x414], 36);
-	memcpy(&dmsc_sp_d_par_array, &tparams[0x438], 32);
-	memcpy(&dmsc_sp_ud_w_stren_array, &tparams[0x458], 36);
-	memcpy(&dmsc_sp_ud_b_stren_array, &tparams[0x47c], 36);
-	memcpy(&dmsc_sp_ud_brig_thres_array, &tparams[0x4a0], 36);
-	memcpy(&dmsc_sp_ud_dark_thres_array, &tparams[0x4c4], 36);
-	memcpy(&dmsc_sp_ud_par_array, &tparams[0x4e8], 32);
-	memcpy(&dmsc_sp_alias_thres_array, &tparams[0x508], 36);
-	memcpy(&dmsc_sp_alias_par_array, &tparams[0x52c], 8);
-	memcpy(&dmsc_rgb_dir_thres_array, &tparams[0x534], 36);
-	memcpy(&dmsc_rgb_alias_stren_array, &tparams[0x558], 36);
-	memcpy(&dmsc_rgb_alias_par_array, &tparams[0x57c], 8);
-	memcpy(&dmsc_fc_alias_stren_array, &tparams[0x584], 36);
-	memcpy(&dmsc_fc_t1_thres_array, &tparams[0x5a8], 36);
-	memcpy(&dmsc_fc_t1_stren_array, &tparams[0x5cc], 36);
-	memcpy(&dmsc_fc_t2_stren_array, &tparams[0x5f0], 36);
-	memcpy(&dmsc_fc_t3_stren_array, &tparams[0x614], 36);
-	memcpy(&dmsc_fc_par_array, &tparams[0x638], 36);
+	const u8 *src = (const u8 *)&tparams + 0xf4d8;
+
+	memcpy(&dmsc_uu_np_array, src + 0x0, 64);
+	memcpy(&dmsc_sp_d_sigma_3_np_array, src + 0x40, 64);
+	memcpy(&dmsc_sp_d_w_wei_np_array, src + 0x80, 64);
+	memcpy(&dmsc_sp_d_b_wei_np_array, src + 0xc0, 64);
+	memcpy(&dmsc_sp_ud_w_wei_np_array, src + 0x100, 64);
+	memcpy(&dmsc_sp_ud_b_wei_np_array, src + 0x140, 64);
+	memcpy(&dmsc_out_opt, src + 0x180, 4);
+	memcpy(&dmsc_hv_thres_1_array, src + 0x184, 36);
+	memcpy(&dmsc_hv_stren_array, src + 0x1a8, 36);
+	memcpy(&dmsc_aa_thres_1_array, src + 0x1cc, 36);
+	memcpy(&dmsc_aa_stren_array, src + 0x1f0, 36);
+	memcpy(&dmsc_hvaa_thres_1_array, src + 0x214, 36);
+	memcpy(&dmsc_hvaa_stren_array, src + 0x238, 36);
+	memcpy(&dmsc_dir_par_array, src + 0x25c, 36);
+	memcpy(&dmsc_uu_thres_array, src + 0x280, 36);
+	memcpy(&dmsc_uu_stren_array, src + 0x2a4, 36);
+	memcpy(&dmsc_uu_par_array, src + 0x2c8, 12);
+	memcpy(&dmsc_alias_stren_array, src + 0x2d4, 36);
+	memcpy(&dmsc_alias_thres_1_array, src + 0x2f8, 36);
+	memcpy(&dmsc_alias_thres_2_array, src + 0x31c, 36);
+	memcpy(&dmsc_alias_dir_thres_array, src + 0x340, 36);
+	memcpy(&dmsc_alias_par_array, src + 0x364, 16);
+	memcpy(&dmsc_nor_alias_thres_array, src + 0x374, 36);
+	memcpy(&dmsc_nor_par_array, src + 0x398, 16);
+	memcpy(&dmsc_sp_d_w_stren_array, src + 0x3a8, 36);
+	memcpy(&dmsc_sp_d_b_stren_array, src + 0x3cc, 36);
+	memcpy(&dmsc_sp_d_brig_thres_array, src + 0x3f0, 36);
+	memcpy(&dmsc_sp_d_dark_thres_array, src + 0x414, 36);
+	memcpy(&dmsc_sp_d_par_array, src + 0x438, 32);
+	memcpy(&dmsc_sp_ud_w_stren_array, src + 0x458, 36);
+	memcpy(&dmsc_sp_ud_b_stren_array, src + 0x47c, 36);
+	memcpy(&dmsc_sp_ud_brig_thres_array, src + 0x4a0, 36);
+	memcpy(&dmsc_sp_ud_dark_thres_array, src + 0x4c4, 36);
+	memcpy(&dmsc_sp_ud_par_array, src + 0x4e8, 32);
+	memcpy(&dmsc_sp_alias_thres_array, src + 0x508, 36);
+	memcpy(&dmsc_sp_alias_par_array, src + 0x52c, 8);
+	memcpy(&dmsc_rgb_dir_thres_array, src + 0x534, 36);
+	memcpy(&dmsc_rgb_alias_stren_array, src + 0x558, 36);
+	memcpy(&dmsc_rgb_alias_par_array, src + 0x57c, 8);
+	memcpy(&dmsc_fc_alias_stren_array, src + 0x584, 36);
+	memcpy(&dmsc_fc_t1_thres_array, src + 0x5a8, 36);
+	memcpy(&dmsc_fc_t1_stren_array, src + 0x5cc, 36);
+	memcpy(&dmsc_fc_t2_stren_array, src + 0x5f0, 36);
+	memcpy(&dmsc_fc_t3_stren_array, src + 0x614, 36);
+	memcpy(&dmsc_fc_par_array, src + 0x638, 36);
 	return 0;
 }
 
@@ -32077,11 +31975,13 @@ int tisp_dmsc_param_array_get(int param_id, void *dst, int *size_out)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a548 origin=model_output original=tisp_dmsc_param_array_set */
-int32_t tisp_dmsc_param_array_set(int32_t param_id)
+int32_t tisp_dmsc_param_array_set(int32_t param_id, const void *src)
 {
-	int32_t *dst;
+	void *dst;
 	int32_t size;
 
+	if (src == NULL)
+		return -EINVAL;
 	if ((uint32_t)(param_id - 0x4f) >= 0x2d) {
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: dmsc not support param id %d\n"), (uintptr_t)("tisp_dmsc_param_array_set"), (uintptr_t)(1379), (uintptr_t)(param_id));
 		return -1;
@@ -32114,43 +32014,43 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x55:
 		dst = &dmsc_out_opt;
-		size = 64;
+		size = 4;
 		break;
 	case 0x56:
 		dst = &dmsc_hv_thres_1_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x57:
 		dst = &dmsc_hv_stren_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x58:
 		dst = &dmsc_aa_thres_1_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x59:
 		dst = &dmsc_aa_stren_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x5a:
 		dst = &dmsc_hvaa_thres_1_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x5b:
 		dst = &dmsc_hvaa_stren_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x5c:
 		dst = &dmsc_dir_par_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x5d:
 		dst = &dmsc_uu_thres_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x5e:
 		dst = &dmsc_uu_stren_array;
-		size = 4;
+		size = 36;
 		break;
 	case 0x5f:
 		dst = &dmsc_uu_par_array;
@@ -32158,19 +32058,19 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x60:
 		dst = &dmsc_alias_stren_array;
-		size = 12;
+		size = 36;
 		break;
 	case 0x61:
 		dst = &dmsc_alias_thres_1_array;
-		size = 12;
+		size = 36;
 		break;
 	case 0x62:
 		dst = &dmsc_alias_thres_2_array;
-		size = 12;
+		size = 36;
 		break;
 	case 0x63:
 		dst = &dmsc_alias_dir_thres_array;
-		size = 12;
+		size = 36;
 		break;
 	case 0x64:
 		dst = &dmsc_alias_par_array;
@@ -32178,7 +32078,7 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x65:
 		dst = &dmsc_nor_alias_thres_array;
-		size = 16;
+		size = 36;
 		break;
 	case 0x66:
 		dst = &dmsc_nor_par_array;
@@ -32186,19 +32086,19 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x67:
 		dst = &dmsc_sp_d_w_stren_array;
-		size = 16;
+		size = 36;
 		break;
 	case 0x68:
 		dst = &dmsc_sp_d_b_stren_array;
-		size = 16;
+		size = 36;
 		break;
 	case 0x69:
 		dst = &dmsc_sp_d_brig_thres_array;
-		size = 16;
+		size = 36;
 		break;
 	case 0x6a:
 		dst = &dmsc_sp_d_dark_thres_array;
-		size = 16;
+		size = 36;
 		break;
 	case 0x6b:
 		dst = &dmsc_sp_d_par_array;
@@ -32206,19 +32106,19 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x6c:
 		dst = &dmsc_sp_ud_w_stren_array;
-		size = 32;
+		size = 36;
 		break;
 	case 0x6d:
 		dst = &dmsc_sp_ud_b_stren_array;
-		size = 32;
+		size = 36;
 		break;
 	case 0x6e:
 		dst = &dmsc_sp_ud_brig_thres_array;
-		size = 32;
+		size = 36;
 		break;
 	case 0x6f:
 		dst = &dmsc_sp_ud_dark_thres_array;
-		size = 32;
+		size = 36;
 		break;
 	case 0x70:
 		dst = &dmsc_sp_ud_par_array;
@@ -32226,7 +32126,7 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x71:
 		dst = &dmsc_sp_alias_thres_array;
-		size = 32;
+		size = 36;
 		break;
 	case 0x72:
 		dst = &dmsc_sp_alias_par_array;
@@ -32234,11 +32134,11 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x73:
 		dst = &dmsc_rgb_dir_thres_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x74:
 		dst = &dmsc_rgb_alias_stren_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x75:
 		dst = &dmsc_rgb_alias_par_array;
@@ -32246,23 +32146,23 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		break;
 	case 0x76:
 		dst = &dmsc_fc_alias_stren_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x77:
 		dst = &dmsc_fc_t1_thres_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x78:
 		dst = &dmsc_fc_t1_stren_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x79:
 		dst = &dmsc_fc_t2_stren_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x7a:
 		dst = &dmsc_fc_t3_stren_array;
-		size = 8;
+		size = 36;
 		break;
 	case 0x7b:
 		dst = &dmsc_fc_par_array;
@@ -32272,8 +32172,8 @@ int32_t tisp_dmsc_param_array_set(int32_t param_id)
 		return -1;
 	}
 
-	memcpy(dst, gain_old, size);
-	tisp_dmsc_all_reg_refresh(*(int32_t *)((char *)&defog_block_air_light_b + 0x1a4));
+	memcpy(dst, src, size);
+	tisp_dmsc_all_reg_refresh((uint32_t)(uintptr_t)gain_old + 0x200);
 	return 0;
 }
 
@@ -32319,46 +32219,17 @@ int32_t jz_isp_ccm_reg2par(void *arg1, void *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a900 origin=fragment_seed original=jz_isp_ccm_para2reg */
 int32_t jz_isp_ccm_para2reg(uintptr_t a0, uintptr_t a1)
 {
-    uintptr_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	uint32_t *reg = (uint32_t *)a0;
+	const int32_t *parameter = (const int32_t *)a1;
+	int i;
 
-    /* fragment 0: Arithmetic */
-    v0 = 0;
-    a3 = 36;
+	for (i = 0; i < 9; i++) {
+		int32_t value = parameter[i];
 
-jz_isp_ccm_para2reg0x8:
-    /* fragment 1: Arithmetic */
-    v1 = a1 + (uintptr_t)v0;
+		reg[i] = value < 0 ? ((uint32_t)value & 0x3fff) : value;
+	}
 
-    /* fragment 2: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v1 + 0);
-
-    /* fragment 3: Branch */
-    a2 = a0 + (uintptr_t)v0;
-    if (v1 >= 0) { goto jz_isp_ccm_para2reg0x1c; }
-
-    /* fragment 4: Arithmetic */
-    v1 = v1 & 16383;
-
-jz_isp_ccm_para2reg0x1c:
-    /* fragment 5: Arithmetic */
-    v0 = v0 + 4;
-
-    /* fragment 6: Branch */
-    *(uint32_t *)((char *)a2 + 0) = v1;
-    if (v0 != a3) { goto jz_isp_ccm_para2reg0x8; }
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 8: Unknown */
-    /* unmatched fragment 8 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 1a92c:	00000000 	nop */
-
-    return 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a930 origin=model_output original=jz_isp_ccm_parameter_convert */
@@ -32372,132 +32243,136 @@ int32_t jz_isp_ccm_parameter_convert(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a990 origin=model_output original=tiziano_ct_ccm_interpolation */
 int32_t tiziano_ct_ccm_interpolation(int32_t arg1, int32_t arg2)
 {
-	int32_t i = arg2 + 0xaf0;
-	int32_t t0 = 0xed8 - arg2;
-	int32_t v1 = arg2 + 0xed8;
-	int32_t a1 = 0x1388 - arg2;
-	int32_t a3;
-	int32_t ct_flag;
-	int32_t ct_flag_last;
-	int32_t ccm_real_value;
-	int32_t ct_flag_1;
-	int32_t ct_flag_2;
-	int32_t t0_1;
-	int32_t a2_4;
-	int32_t a1_2;
-	int32_t v1_6;
-	int32_t idx;
-	int32_t val_t;
-	int32_t val_d;
-	int32_t val_a;
-	int32_t val_t2;
-	int32_t result;
+	const int32_t *from;
+	const int32_t *to;
+	int32_t *output = (int32_t *)ccm_parameter;
+	uint32_t ct = arg1;
+	uint32_t threshold = arg2;
+	uint32_t numerator = 0;
+	uint32_t denominator = 1;
+	uint32_t flag;
+	int i;
 
-	*(int32_t *)((char *)&ct_list_18619) = i;
-	*(int32_t *)((char *)&ct_list_18619 + 0x4) = t0;
-	*(int32_t *)((char *)&ct_list_18619 + 0x8) = v1;
-	*(int32_t *)((char *)&ct_list_18619 + 0xc) = a1;
+	ct_list_18619[0] = threshold + 2800;
+	ct_list_18619[1] = 3800 - threshold;
+	ct_list_18619[2] = threshold + 3800;
+	ct_list_18619[3] = 5000 - threshold;
 
-	if (a1 >= (uint32_t)arg1) {
-		ct_flag = 0;
-	} else {
-		if (v1 < (uint32_t)arg1) {
-			a3 = 1;
-		} else if (t0 < (uint32_t)arg1) {
-			a3 = 2;
-		} else if (i >= (uint32_t)arg1) {
-			a3 = 4;
-		} else {
-			a3 = 3;
-		}
-		ct_flag = a3;
-	}
-	*(int32_t *)((char *)&ct_flag_18620) = ct_flag;
+	if (ct <= ct_list_18619[3])
+		flag = 0;
+	else if (ct > ct_list_18619[2])
+		flag = 1;
+	else if (ct > ct_list_18619[1])
+		flag = 2;
+	else if (ct <= ct_list_18619[0])
+		flag = 4;
+	else
+		flag = 3;
 
-	ccm_real_value = *(int32_t *)&ccm_real;
-	if (ccm_real_value != 0) {
-		ct_flag_1 = ct_flag;
-		ct_flag_last = ct_flag_1;
-	} else {
-		ct_flag_2 = ct_flag;
-		if (ct_flag_2 != 0) {
-			if (ct_flag_2 != 2) {
-				if (ct_flag_2 != 4 || *(int32_t *)((char *)&ct_flag_last_18621) != ct_flag_2) {
-					ct_flag_1 = ct_flag;
-					ct_flag_last = ct_flag_1;
-				} else {
-					return *(int32_t *)((char *)&ct_list_18619);
-				}
-			} else {
-				if (*(int32_t *)((char *)&ct_flag_last_18621) != ct_flag_2) {
-					ct_flag_1 = ct_flag;
-					ct_flag_last = ct_flag_1;
-				} else {
-					return *(int32_t *)((char *)&ct_list_18619);
-				}
-			}
-		} else {
-			if (*(int32_t *)((char *)&ct_flag_last_18621) != 0) {
-				ct_flag_1 = ct_flag;
-				ct_flag_last = ct_flag_1;
-			} else {
-				return *(int32_t *)((char *)&ct_list_18619);
-			}
-		}
-	}
+	ct_flag_18620 = flag;
+	if (!ccm_real.force_update && flag == ct_flag_last_18621 &&
+	    (flag == 0 || flag == 2 || flag == 4))
+		return 0;
+	ct_flag_last_18621 = flag;
 
-	*(int32_t *)((char *)&ct_flag_last_18621) = ct_flag_1;
-
-	switch (ct_flag_1) {
+	switch (flag) {
 	case 0:
-		memcpy((void *)&_ccm_d_parameter, (void *)&_ccm_d_parameter, 0x24);
-		return *(int32_t *)((char *)&ct_list_18619);
+		memcpy(output, _ccm_d_parameter, sizeof(ccm_parameter));
+		return 0;
 	case 1:
-		t0_1 = arg1 - v1;
-		a2_4 = v1 - a1;
-		if (v1 >= (uint32_t)arg1)
-			t0_1 = v1 - arg1;
-		if (a1 >= (uint32_t)v1)
-			a2_4 = a1 - v1;
-		for (idx = 0; idx != 0x24; idx += 4) {
-			val_t = *(int32_t *)((char *)&_ccm_t_parameter + idx);
-			val_d = *(int32_t *)((char *)&_ccm_d_parameter + idx);
-			if ((int32_t)val_d >= (int32_t)val_t)
-				result = (val_d - val_t) * t0_1 / a2_4 + val_t;
-			else
-				result = val_t - (val_t - val_d) * t0_1 / a2_4;
-			*(int32_t *)((char *)&_ccm_d_parameter + idx) = result;
-		}
-		return *(int32_t *)((char *)&ct_list_18619);
+		from = (const int32_t *)_ccm_t_parameter;
+		to = (const int32_t *)_ccm_d_parameter;
+		numerator = ct - ct_list_18619[2];
+		denominator = ct_list_18619[3] - ct_list_18619[2];
+		break;
 	case 2:
-		memcpy((void *)&_ccm_d_parameter, (void *)&_ccm_t_parameter, 0x24);
-		return *(int32_t *)((char *)&ct_list_18619);
+		memcpy(output, _ccm_t_parameter, sizeof(ccm_parameter));
+		return 0;
 	case 3:
-		a1_2 = arg1 - i;
-		v1_6 = i - t0;
-		if (i >= (uint32_t)arg1)
-			a1_2 = i - arg1;
-		if (t0 >= (uint32_t)i)
-			v1_6 = t0 - i;
-		for (idx = 0; idx != 0x24; idx += 4) {
-			val_a = *(int32_t *)((char *)&_ccm_a_parameter + idx);
-			val_t2 = *(int32_t *)((char *)&_ccm_t_parameter + idx);
-			if ((int32_t)val_t2 >= (int32_t)val_a)
-				result = (val_t2 - val_a) * a1_2 / v1_6 + val_a;
-			else
-				result = val_a - (val_a - val_t2) * a1_2 / v1_6;
-			*(int32_t *)((char *)&_ccm_d_parameter + idx) = result;
-		}
-		return *(int32_t *)((char *)&ct_list_18619);
+		from = (const int32_t *)_ccm_a_parameter;
+		to = (const int32_t *)_ccm_t_parameter;
+		numerator = ct - ct_list_18619[0];
+		denominator = ct_list_18619[1] - ct_list_18619[0];
+		break;
 	case 4:
-		memcpy((void *)&_ccm_d_parameter, (void *)&_ccm_a_parameter, 0x24);
-		return *(int32_t *)((char *)&ct_list_18619);
+		memcpy(output, _ccm_a_parameter, sizeof(ccm_parameter));
+		return 0;
+	default:
+		return -EINVAL;
 	}
-	return *(int32_t *)((char *)&ct_list_18619);
+
+	if (!denominator)
+		return -EINVAL;
+	for (i = 0; i < 9; i++) {
+		if (to[i] >= from[i])
+			output[i] = from[i] +
+				(to[i] - from[i]) * numerator / denominator;
+		else
+			output[i] = from[i] -
+				(from[i] - to[i]) * numerator / denominator;
+	}
+
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ac04 origin=fragment_seed original=jz_isp_ccm */
 int32_t jz_isp_ccm(void)
+{
+	const uint32_t *ev_list = (const uint32_t *)cm_ev_list;
+	const uint32_t *sat_list = (const uint32_t *)cm_sat_list;
+	uint32_t output_matrix[9];
+	uint32_t register_matrix[9];
+	uint32_t ev = *(uint32_t *)((char *)&tparams + 0x1580) >> 10;
+	uint32_t ct = *(uint32_t *)((char *)&tparams + 0x1584);
+	uint32_t ev_diff;
+	int i;
+
+	BUILD_BUG_ON(sizeof(ccm_real) != 0x18);
+	ccm_real.ct_threshold = 100;
+	ev_diff = ev >= ccm_real.last_ev ? ev - ccm_real.last_ev :
+		ccm_real.last_ev - ev;
+
+	if (ccm_real.force_update || ev_diff > ccm_real.ev_threshold) {
+		for (i = 0; i < 9 && ev_list[i] < ev; i++)
+			;
+		if (i == 0) {
+			ccm_real.saturation = sat_list[0];
+		} else if (i == 9) {
+			ccm_real.saturation = sat_list[8];
+		} else if (ev_list[i] == ev_list[i - 1]) {
+			ccm_real.saturation = sat_list[i];
+		} else {
+			uint32_t numerator = ev - ev_list[i - 1];
+			uint32_t denominator = ev_list[i] - ev_list[i - 1];
+
+			if (sat_list[i] >= sat_list[i - 1])
+				ccm_real.saturation = sat_list[i - 1] +
+					(sat_list[i] - sat_list[i - 1]) *
+					numerator / denominator;
+			else
+				ccm_real.saturation = sat_list[i - 1] -
+					(sat_list[i - 1] - sat_list[i]) *
+					numerator / denominator;
+		}
+	}
+
+	jz_isp_ccm_parameter_convert();
+	if (ccm_real.force_update ||
+	    (ct >= ccm_real.last_ct ? ct - ccm_real.last_ct :
+	     ccm_real.last_ct - ct) > ccm_real.ct_threshold)
+		tiziano_ct_ccm_interpolation(ct, ccm_real.ct_threshold);
+	cm_control((uintptr_t)ccm_parameter, ccm_real.saturation,
+		   (uintptr_t)output_matrix);
+	jz_isp_ccm_para2reg((uintptr_t)register_matrix,
+			    (uintptr_t)output_matrix);
+	tiziano_ccm_lut_parameter(register_matrix);
+	ccm_real.force_update = 0;
+
+	return 0;
+}
+
+#if 0
+static int32_t jz_isp_ccm_collapsed(void)
 {
     uint32_t local_10 = 0;
     uint32_t local_34 = 0;
@@ -32753,6 +32628,7 @@ jz_isp_ccm0x1dc:
 
     return 0;
 }
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ae3c origin=model_output original=tisp_ccm_ev_update */
 int32_t tisp_ccm_ev_update(uint32_t a0)
@@ -32769,7 +32645,7 @@ int32_t tisp_ccm_ev_update(uint32_t a0)
     else
         diff = v1 - s0;
 
-    limit = *(uint32_t *)((char *)&ccm_real + 0x8);
+    limit = ccm_real.ev_threshold;
 
     if (limit < diff) {
         jz_isp_ccm();
@@ -32789,59 +32665,26 @@ int32_t tisp_ccm_ct_update(uint32_t ct)
     old_ct = data_8b704;
     *(uint32_t *)&_ct = ct;
     diff = (ct >= old_ct) ? (ct - old_ct) : (old_ct - ct);
-    max_ct = *(uint32_t *)((char *)&ccm_real + 0x10);
+    max_ct = ccm_real.ct_threshold;
     if (max_ct < diff)
         jz_isp_ccm();
-    data_8b704 = (uintptr_t (*)())(uintptr_t)ct;
+    data_8b704 = ct;
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001af1c origin=fragment_seed original=tiziano_ccm_params_refresh */
 int32_t tiziano_ccm_params_refresh(void)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uintptr_t *v0 = 0;
+	int ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tiziano_ccm_dp_cfg, (void *)(uintptr_t)&tparams, 4); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tiziano_ccm_a_linear, (void *)(uintptr_t)&tparams, 36); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tiziano_ccm_t_linear, (void *)(uintptr_t)&tparams, 36); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tiziano_ccm_d_linear, (void *)(uintptr_t)&tparams, 36); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&cm_ev_list, (void *)(uintptr_t)&tparams, 36); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&cm_sat_list, (void *)(uintptr_t)&tparams, 36); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&cm_awb_list, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 9: Arithmetic */
-    v0 = 0;
-
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	ret = t21_tparams_copy(&tiziano_ccm_dp_cfg, 0xf674, 4);
+	ret |= t21_tparams_copy(&tiziano_ccm_a_linear, 0xf678, 0x24);
+	ret |= t21_tparams_copy(&tiziano_ccm_t_linear, 0xf69c, 0x24);
+	ret |= t21_tparams_copy(&tiziano_ccm_d_linear, 0xf6c0, 0x24);
+	ret |= t21_tparams_copy(&cm_ev_list, 0xf6e4, 0x24);
+	ret |= t21_tparams_copy(&cm_sat_list, 0xf708, 0x24);
+	ret |= t21_tparams_copy(&cm_awb_list, 0xf72c, 8);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001afec origin=model_output original=tiziano_ccm_dn_params_refresh */
@@ -32849,7 +32692,7 @@ int32_t tiziano_ccm_dn_params_refresh(void)
 {
 
     tiziano_ccm_params_refresh();
-    ccm_real = 1;
+    ccm_real.force_update = 1;
     jz_isp_ccm();
     return 0;
 }
@@ -32857,13 +32700,13 @@ int32_t tiziano_ccm_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b030 origin=model_output original=tiziano_ccm_init */
 int32_t tiziano_ccm_init(void)
 {
-    memset(&ccm_real, 0, 0x18);
-    *(uint32_t *)((char *)((char *)&ccm_real + 0x4)) = data_8b6fc >> 10;
-    *(uint32_t *)((char *)((char *)&ccm_real + 0xc)) = data_8b704;
-    *(uint32_t *)((char *)((char *)&ccm_real + 0x14)) = 0x100;
-    *(uint32_t *)&ccm_real = 1;
-    *(uint32_t *)((char *)((char *)&ccm_real + 0x10)) = 0x64;
-    *(uint32_t *)((char *)((char *)&ccm_real + 0x8)) = 0x28;
+    memset(&ccm_real, 0, sizeof(ccm_real));
+    ccm_real.last_ev = data_8b6fc >> 10;
+    ccm_real.last_ct = data_8b704;
+    ccm_real.saturation = 0x100;
+    ccm_real.force_update = 1;
+    ccm_real.ct_threshold = 0x64;
+    ccm_real.ev_threshold = 0x28;
     tiziano_ccm_params_refresh();
     tiziano_ccm_lut_parameter(&tiziano_ccm_d_linear);
     system_reg_write(0x1218, tiziano_ccm_dp_cfg);
@@ -32924,10 +32767,15 @@ int32_t tisp_ccm_param_array_get(int32_t param_id, void *dst, int32_t *size_out)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b210 origin=model_output original=tisp_ccm_param_array_set */
-int32_t tisp_ccm_param_array_set(int32_t param_id)
+int32_t tisp_ccm_param_array_set(int32_t param_id, const void *src,
+				 int32_t *size_out)
 {
-    uint32_t *dst;
+    void *dst;
     uint32_t size;
+
+    (void)size_out;
+	if (!src)
+		return -EINVAL;
 
     if ((uint32_t)(param_id - 0x7c) >= 7) {
         ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: ccm not support param id %d\n"), (uintptr_t)("tisp_ccm_param_array_set"), (uintptr_t)(param_id), (uintptr_t)(368));
@@ -32967,8 +32815,8 @@ int32_t tisp_ccm_param_array_set(int32_t param_id)
         return -1;
     }
 
-    memcpy(dst, (void *)param_id, size);
-    *(uint32_t *)&ccm_real = 1;
+    memcpy(dst, src, size);
+    ccm_real.force_update = 1;
     jz_isp_ccm();
     return 0;
 }
@@ -32976,19 +32824,21 @@ int32_t tisp_ccm_param_array_set(int32_t param_id)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b310 origin=model_output original=tiziano_sharpen_params_refresh */
 int32_t tiziano_sharpen_params_refresh(void)
 {
-	memcpy(&sharpen_uu_np_array, (void *)((char *)&tparams - 0x404), 0x40);
-	memcpy(&sharpen_v1_sigma_np_array, (void *)((char *)&tparams - 0x3C4), 0x40);
-	memcpy(&sharpen_w_wei_np_array, (void *)((char *)&tparams - 0x384), 0x40);
-	memcpy(&sharpen_b_wei_np_array, (void *)((char *)&tparams - 0x344), 0x40);
-	memcpy(&sharpen_uu_thres_array, (void *)((char *)&tparams - 0x304), 0x24);
-	memcpy(&sharpen_uu_stren_array, (void *)((char *)&tparams - 0x2E0), 0x24);
-	memcpy(&sharpen_uu_par_array, (void *)((char *)&tparams - 0x2BC), 0xC);
-	memcpy(&sharpen_pixel_thres_array, (void *)((char *)&tparams - 0x2B0), 0x24);
-	memcpy(&sharpen_w_stren_array, (void *)((char *)&tparams - 0x28C), 0x24);
-	memcpy(&sharpen_b_stren_array, (void *)((char *)&tparams - 0x268), 0x24);
-	memcpy(&sharpen_brig_thres_array, (void *)((char *)&tparams - 0x244), 0x24);
-	memcpy(&sharpen_dark_thres_array, (void *)((char *)&tparams - 0x220), 0x24);
-	memcpy(&sharpen_con_par_array, (void *)((char *)&tparams - 0x1FC), 0x20);
+	const u8 *src = (const u8 *)&tparams + 0xfbf4;
+
+	memcpy(&sharpen_uu_np_array, src + 0x000, 0x40);
+	memcpy(&sharpen_v1_sigma_np_array, src + 0x040, 0x40);
+	memcpy(&sharpen_w_wei_np_array, src + 0x080, 0x40);
+	memcpy(&sharpen_b_wei_np_array, src + 0x0c0, 0x40);
+	memcpy(&sharpen_uu_thres_array, src + 0x100, 0x24);
+	memcpy(&sharpen_uu_stren_array, src + 0x124, 0x24);
+	memcpy(&sharpen_uu_par_array, src + 0x148, 0x0c);
+	memcpy(&sharpen_pixel_thres_array, src + 0x154, 0x24);
+	memcpy(&sharpen_w_stren_array, src + 0x178, 0x24);
+	memcpy(&sharpen_b_stren_array, src + 0x19c, 0x24);
+	memcpy(&sharpen_brig_thres_array, src + 0x1c0, 0x24);
+	memcpy(&sharpen_dark_thres_array, src + 0x1e4, 0x24);
+	memcpy(&sharpen_con_par_array, src + 0x208, 0x20);
 	return 0;
 }
 
@@ -33005,6 +32855,8 @@ int32_t tisp_sharpen_uu_np_cfg(void)
     uint32_t s1 = 0;
     uintptr_t *v0 = 0;
     uint32_t v1 = 0;
+
+    s0 = (uintptr_t)&sharpen_uu_np_array;
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -33117,6 +32969,7 @@ int32_t tisp_sharpen_w_wei_np_cfg(void)
 
     /* fragment 1: Arithmetic */
     v0 = (uintptr_t *)&sharpen_w_wei_np_array;
+    s0 = (uintptr_t)v0;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(6456, ((*(uint32_t *)((char *)((char *)&sharpen_w_wei_np_array + 0x10))) << 24) | ((*(uint32_t *)((char *)((char *)&sharpen_w_wei_np_array + 0xc))) << 18) | (*(uint32_t *)((char *)(uintptr_t)&sharpen_w_wei_np_array)) | ((*(uint32_t *)((char *)((char *)&sharpen_w_wei_np_array + 0x8))) << 12) | ((*(uint32_t *)((char *)((char *)&sharpen_w_wei_np_array + 0x4))) << 6)); /* jalr target resolved by relocation */
@@ -33161,6 +33014,7 @@ int32_t tisp_sharpen_b_wei_np_cfg(void)
 
     /* fragment 1: Arithmetic */
     v0 = (uintptr_t *)&sharpen_b_wei_np_array;
+    s0 = (uintptr_t)v0;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(6472, ((*(uint32_t *)((char *)((char *)&sharpen_b_wei_np_array + 0x10))) << 24) | ((*(uint32_t *)((char *)((char *)&sharpen_b_wei_np_array + 0xc))) << 18) | (*(uint32_t *)((char *)(uintptr_t)&sharpen_b_wei_np_array)) | ((*(uint32_t *)((char *)((char *)&sharpen_b_wei_np_array + 0x8))) << 12) | ((*(uint32_t *)((char *)((char *)&sharpen_b_wei_np_array + 0x4))) << 6)); /* jalr target resolved by relocation */
@@ -33200,6 +33054,8 @@ int32_t tisp_sharpen_uu_par_cfg(void)
     uintptr_t *v0 = 0;
     uint32_t v1 = 0;
 
+    s1 = (uintptr_t)&sharpen_uu_par_array;
+
     /* fragment 0: Arithmetic */
     v0 = (uintptr_t *)&sharpen_uu_thres_intp;
 
@@ -33237,6 +33093,8 @@ int32_t tisp_sharpen_con_par_cfg(void)
     uint32_t s1 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+
+    s0 = (uintptr_t)&sharpen_con_par_array;
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -34913,7 +34771,7 @@ int32_t tisp_mdns_top_func_cfg(uint32_t arg1)
 	if (arg1 == 0) {
 		val = 0;
 	} else {
-		uint32_t *arr = (uint32_t *)&mdns_top_func_array;
+		uint32_t *arr = mdns_top_func_array;
 		val = arr[0] | 0x4000400;
 		val |= arr[1] << 1;
 		val |= arr[2] << 2;
@@ -34944,7 +34802,7 @@ int32_t tisp_mdns_top_func_cfg(uint32_t arg1)
 	system_reg_write(0x1be0, 0xff0000);
 	system_reg_write(0x1d80, 0xff0000);
 	system_reg_write(0x1b1c, 1);
-	system_reg_write(((char *)&__func___15398), 1);
+	system_reg_write(0x1b2c, 1);
 	system_reg_write(0x1b3c, 0x10);
 	system_reg_write(0x1b4c, 0x10);
 	system_reg_write(0x1b04, 0x111);
@@ -34990,9 +34848,9 @@ int32_t tisp_mdns_sta_func_cfg(uint32_t arg1, uint32_t arg2)
     if (sta_rem != 0)
         sta_div += 1;
 
-    system_reg_write((uintptr_t)&LC5, (pbt_flag << 8) | sta_flag);
+    system_reg_write(0x1b70, (pbt_flag << 8) | sta_flag);
     system_reg_write(0x1b78, (sta_size << 16) | sta_size);
-    system_reg_write((uintptr_t)&LC7, sta_div | (pbt_div << 16));
+    system_reg_write(0x1b7c, sta_div | (pbt_div << 16));
 
     pbt_ptr0 = *(uint32_t *)&mdns_pbt_ponit_array;
     pbt_ptr1 = *(uint32_t *)((char *)((char *)&mdns_pbt_ponit_array + 0x4));
@@ -35021,7 +34879,7 @@ int32_t tisp_mdns_sta_func_cfg(uint32_t arg1, uint32_t arg2)
     system_reg_write(0x1bb0, (pbt_flag << 8) | sta_flag);
     system_reg_write(0x1bb8, (pbt_size << 16) | pbt_size);
     system_reg_write(0x1bbc, sta_div | (pbt_div << 16));
-    system_reg_write((uintptr_t)&LC9, (pbt_ptr1 << 16) | pbt_ptr0);
+    system_reg_write(0x1ba0, (pbt_ptr1 << 16) | pbt_ptr0);
     system_reg_write(0x1ba4, (pbt_off2 << 16) | pbt_off1);
 
     return 0;
@@ -37483,6 +37341,9 @@ int32_t tisp_mdns_par_refresh(uint32_t arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020d40 origin=model_output original=tiziano_mdns_params_refresh */
 int32_t tiziano_mdns_params_refresh(void)
 {
+	const u8 *param_blob = tparams;
+	const u8 *tparams = param_blob + 0x10000;
+
 	memcpy(&mdns_top_func_array, &tparams[2068], 0x60);
 	memcpy(&mdns_sta_size_array, &tparams[2164], 0x24);
 	memcpy(&mdns_pbt_size_array, &tparams[2200], 0x24);
@@ -39188,162 +39049,73 @@ int32_t tisp_dpc_param_array_set(int32_t param_id, int32_t src)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024e90 origin=model_output original=clm_lut2reg */
-int32_t clm_lut2reg(void *arg1, int32_t arg2, void *arg3, void *arg4)
+int32_t clm_lut2reg(void *arg1, void *arg2, void *arg3, void *arg4)
 {
-	int32_t *src = (int32_t *)arg1;
-	int32_t *dst = (int32_t *)arg3;
-	int32_t *dst2 = (int32_t *)arg4;
-	int32_t i = 0;
+	const uint32_t *s_lut = arg1;
+	const uint32_t *h_lut = arg2;
+	uint32_t *s_reg = arg3;
+	uint32_t *h_reg = arg4;
+	uint32_t row;
+	uint32_t col;
 
-	for (; i != 4200; ) {
-		int32_t j = 0;
+	for (row = 0; row < 30; row++) {
+		for (col = 0; col < 7; col++) {
+			s_reg[0] = (s_lut[0] & 0x1ff) |
+				(s_lut[3] << 27) |
+				((s_lut[2] & 0x1ff) << 18) |
+				((s_lut[1] & 0x1ff) << 9);
+			s_reg[1] = ((s_lut[3] & 0x1e0) >> 5) |
+				((s_lut[4] & 0x1ff) << 4);
+			h_reg[0] = (h_lut[0] & 0x7f) |
+				(h_lut[4] << 28) |
+				((h_lut[3] & 0x7f) << 21) |
+				((h_lut[2] & 0x7f) << 14) |
+				((h_lut[1] & 0x7f) << 7);
+			h_reg[1] = (h_lut[4] & 0x70) >> 4;
 
-		for (; j != 56; ) {
-			int32_t *p = (void *)((uintptr_t)src + j);
-			int32_t *q = (void *)((uintptr_t)dst + j);
-			int32_t *r = (void *)((uintptr_t)dst2 + j);
-
-			dst = (void *)(uintptr_t)((uintptr_t)dst + (20));
-			((void **)(uintptr_t)q)[0] = (p[0] & 0x1ff) | (p[3] << 0x1b) | ((p[2] & 0x1ff) << 0x12) | ((p[1] & 0x1ff) << 9);
-			((void **)(uintptr_t)q)[1] = ((p[3] & 0x1e0) >> 5) | ((p[4] & 0x1ff) << 4);
-
-			j += 8;
-			src = (void *)(uintptr_t)((uintptr_t)src + (5));
-			((void **)(uintptr_t)r)[0] = (dst[-5] & 0x7f) | (dst[-1] << 0x1c) | ((dst[-2] & 0x7f) << 0x15) | ((dst[-3] & 0x7f) << 0xe) | ((dst[-4] & 0x7f) << 7);
-			((void **)(uintptr_t)r)[1] = (dst[-1] & 0x70) >> 4;
+			s_lut += 5;
+			h_lut += 5;
+			s_reg += 2;
+			h_reg += 2;
 		}
-
-		i += 140;
-		dst = (void *)(uintptr_t)((uintptr_t)dst + (56));
-		dst2 = (void *)(uintptr_t)((uintptr_t)dst2 + (56));
-		src = (uintptr_t)arg1 + i;
-		dst = (uintptr_t)arg3 + i;
 	}
 
-	return dst;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024f90 origin=fragment_seed original=tiziano_set_parameter_clm */
 int32_t tiziano_set_parameter_clm(void)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t s6 = 0;
-    uintptr_t *v0 = 0;
+	uint32_t offset;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	clm_lut2reg(tiziano_clm_s_lut, tiziano_clm_h_lut,
+		    tiziano_clm_s_reg, tiziano_clm_h_reg);
+	system_reg_write(0x1804, tiziano_clm_lut_shift);
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(int32_t *)clm_lut2reg)(&tiziano_clm_s_lut, &tiziano_clm_h_lut, &tiziano_clm_s_reg, &tiziano_clm_h_reg); /* jalr target resolved by relocation */
+	for (offset = 0; offset < sizeof(tiziano_clm_h_reg); offset += 4)
+		system_reg_write(0xa000 + offset,
+				 tiziano_clm_h_reg[offset / 4]);
+	for (offset = 0; offset < sizeof(tiziano_clm_h_reg); offset += 4)
+		system_reg_write(0xa800 + offset,
+				 tiziano_clm_h_reg[offset / 4]);
+	for (offset = 0; offset < sizeof(tiziano_clm_s_reg); offset += 4)
+		system_reg_write(0xb000 + offset,
+				 tiziano_clm_s_reg[offset / 4]);
+	for (offset = 0; offset < sizeof(tiziano_clm_s_reg); offset += 4)
+		system_reg_write(0xb800 + offset,
+				 tiziano_clm_s_reg[offset / 4]);
 
-    /* fragment 2: CallSetup */
-    s1 = (uintptr_t)&system_reg_write;
-    s5 = 4294901760;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)system_reg_write)(6148, *(uint32_t *)((char *)((char *)&tiziano_clm_lut_shift))); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    s0 = 40960;
-    s6 = s3;
-    s5 = s5 + 24576;
-    s4 = 42640;
-    v0 = s6 + s0;
-
-tiziano_set_parameter_clm0x80:
-    /* fragment 4: CallSetup */
-    s0 = s0 + 4;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s0, *(uint32_t *)((char *)(v0 + s5) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 5: Branch */
-    v0 = s6 + s0;
-    if (s0 != s4) { goto tiziano_set_parameter_clm0x80; }
-
-    /* fragment 6: CallSetup */
-    s5 = 4294901760;
-    s0 = 43008;
-    s3 = s3;
-    s5 = s5 + 22528;
-    s4 = 44688;
-    v0 = s3 + s0;
-
-tiziano_set_parameter_clm0xb8:
-    /* fragment 7: CallSetup */
-    s0 = s0 + 4;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s0, *(uint32_t *)((char *)(v0 + s5) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 8: Branch */
-    v0 = s3 + s0;
-    if (s0 != s4) { goto tiziano_set_parameter_clm0xb8; }
-
-    /* fragment 9: CallSetup */
-    s4 = 4294901760;
-    s0 = 45056;
-    s5 = s2;
-    s4 = s4 + 20480;
-    s3 = 46736;
-    v0 = s5 + s0;
-
-tiziano_set_parameter_clm0xf0:
-    /* fragment 10: CallSetup */
-    s0 = s0 + 4;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s0, *(uint32_t *)((char *)(v0 + s4) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 11: Branch */
-    v0 = s5 + s0;
-    if (s0 != s3) { goto tiziano_set_parameter_clm0xf0; }
-
-    /* fragment 12: CallSetup */
-    s4 = 4294901760;
-    s0 = 47104;
-    s2 = s2;
-    s4 = s4 + 18432;
-    s3 = 48784;
-    v0 = s2 + s0;
-
-tiziano_set_parameter_clm0x128:
-    /* fragment 13: CallSetup */
-    s0 = s0 + 4;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s0, *(uint32_t *)((char *)(v0 + s4) + 0)); /* jalr target resolved by relocation */
-
-    /* fragment 14: Branch */
-    v0 = s2 + s0;
-    if (s0 != s3) { goto tiziano_set_parameter_clm0x128; }
-
-    /* fragment 15: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 16: Arithmetic */
-    v0 = 0;
-
-    /* fragment 17: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025104 origin=model_output original=tiziano_clm_params_refresh */
 int32_t tiziano_clm_params_refresh(void)
 {
-	memcpy(&tiziano_clm_h_lut, &tparams[0x1be4], 0x1068);
-	memcpy(&tiziano_clm_s_lut, &tparams[0x2c4c], 0x1068);
-	memcpy(&tiziano_clm_lut_shift, &tparams[0x3cb4], 4);
+	const u8 *src = (const u8 *)&tparams + 0x11be4;
+
+	memcpy(&tiziano_clm_h_lut, src + 0x0000, 0x1068);
+	memcpy(&tiziano_clm_s_lut, src + 0x1068, 0x1068);
+	memcpy(&tiziano_clm_lut_shift, src + 0x20d0, 4);
 	return 0;
 }
 
@@ -39801,6 +39573,7 @@ int32_t tiziano_defog_params_init(void)
     /* fragment 1: CallSetup */
     s2 = (uintptr_t)&system_reg_write;
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4944, ((*(uint32_t *)((char *)((char *)&param_defog_cent3_w_dis_array + 0x4))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_cent3_w_dis_array))); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_cent3_w_dis_array;
 
     /* fragment 2: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4948, ((*(uint32_t *)((char *)(s1) + 12)) << 16) | (*(uint32_t *)((char *)(s1) + 8))); /* jalr target resolved by relocation */
@@ -39837,6 +39610,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 13: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4992, ((*(uint32_t *)((char *)((char *)&param_defog_cent5_w_dis_array + 0x4))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_cent5_w_dis_array))); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_cent5_w_dis_array;
 
     /* fragment 14: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(4996, ((*(uint32_t *)((char *)(s1) + 12)) << 16) | (*(uint32_t *)((char *)(s1) + 8))); /* jalr target resolved by relocation */
@@ -39887,6 +39661,7 @@ int32_t tiziano_defog_params_init(void)
     v0 = 0x0;
 
     /* fragment 30: CallSetup */
+	s1 = (uintptr_t)&param_defog_weightlut02;
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5056, ((*(uint32_t *)((char *)(s1) + 20)) << 25) | ((*(uint32_t *)((char *)(s1) + 16)) << 20) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_weightlut02)) | ((*(uint32_t *)((char *)(s1) + 12)) << 15) | ((*(uint32_t *)((char *)(s1) + 8)) << 10) | ((*(uint32_t *)((char *)(s1) + 4)) << 5)); /* jalr target resolved by relocation */
 
     /* fragment 31: CallSetup */
@@ -39906,6 +39681,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 36: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5088, ((*(uint32_t *)((char *)((char *)&param_defog_weightlut20 + 0x14))) << 25) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut20 + 0x10))) << 20) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_weightlut20)) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut20 + 0xc))) << 15) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut20 + 0x8))) << 10) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut20 + 0x4))) << 5)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_weightlut20;
 
     /* fragment 37: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5092, ((*(uint32_t *)((char *)(s1) + 44)) << 25) | ((*(uint32_t *)((char *)(s1) + 40)) << 20) | (*(uint32_t *)((char *)(s1) + 24)) | ((*(uint32_t *)((char *)(s1) + 36)) << 15) | ((*(uint32_t *)((char *)(s1) + 32)) << 10) | ((*(uint32_t *)((char *)(s1) + 28)) << 5)); /* jalr target resolved by relocation */
@@ -39924,6 +39700,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 42: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5120, ((*(uint32_t *)((char *)((char *)&param_defog_weightlut21 + 0x14))) << 25) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut21 + 0x10))) << 20) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_weightlut21)) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut21 + 0xc))) << 15) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut21 + 0x8))) << 10) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut21 + 0x4))) << 5)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_weightlut21;
 
     /* fragment 43: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5124, ((*(uint32_t *)((char *)(s1) + 44)) << 25) | ((*(uint32_t *)((char *)(s1) + 40)) << 20) | (*(uint32_t *)((char *)(s1) + 24)) | ((*(uint32_t *)((char *)(s1) + 36)) << 15) | ((*(uint32_t *)((char *)(s1) + 32)) << 10) | ((*(uint32_t *)((char *)(s1) + 28)) << 5)); /* jalr target resolved by relocation */
@@ -39942,6 +39719,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 48: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5152, ((*(uint32_t *)((char *)((char *)&param_defog_weightlut12 + 0x14))) << 25) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut12 + 0x10))) << 20) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_weightlut12)) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut12 + 0xc))) << 15) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut12 + 0x8))) << 10) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut12 + 0x4))) << 5)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_weightlut12;
 
     /* fragment 49: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5156, ((*(uint32_t *)((char *)(s1) + 44)) << 25) | ((*(uint32_t *)((char *)(s1) + 40)) << 20) | (*(uint32_t *)((char *)(s1) + 24)) | ((*(uint32_t *)((char *)(s1) + 36)) << 15) | ((*(uint32_t *)((char *)(s1) + 32)) << 10) | ((*(uint32_t *)((char *)(s1) + 28)) << 5)); /* jalr target resolved by relocation */
@@ -39960,6 +39738,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 54: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5184, ((*(uint32_t *)((char *)((char *)&param_defog_weightlut22 + 0x14))) << 25) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut22 + 0x10))) << 20) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_weightlut22)) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut22 + 0xc))) << 15) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut22 + 0x8))) << 10) | ((*(uint32_t *)((char *)((char *)&param_defog_weightlut22 + 0x4))) << 5)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_weightlut22;
 
     /* fragment 55: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5188, ((*(uint32_t *)((char *)(s1) + 44)) << 25) | ((*(uint32_t *)((char *)(s1) + 40)) << 20) | (*(uint32_t *)((char *)(s1) + 24)) | ((*(uint32_t *)((char *)(s1) + 36)) << 15) | ((*(uint32_t *)((char *)(s1) + 32)) << 10) | ((*(uint32_t *)((char *)(s1) + 28)) << 5)); /* jalr target resolved by relocation */
@@ -39978,6 +39757,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 60: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5264, ((*(uint32_t *)((char *)((char *)&param_defog_col_ct_array + 0xc))) << 24) | ((*(uint32_t *)((char *)((char *)&param_defog_col_ct_array + 0x8))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_col_ct_array)) | ((*(uint32_t *)((char *)((char *)&param_defog_col_ct_array + 0x4))) << 8)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_col_ct_array;
 
     /* fragment 61: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5268, ((*(uint32_t *)((char *)(s1) + 32)) << 24) | ((*(uint32_t *)((char *)(s1) + 28)) << 16) | (*(uint32_t *)((char *)(s1) + 20)) | ((*(uint32_t *)((char *)(s1) + 24)) << 8)); /* jalr target resolved by relocation */
@@ -39990,6 +39770,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 64: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5280, ((*(uint32_t *)((char *)((char *)&param_defog_dark_ct_array + 0xc))) << 24) | ((*(uint32_t *)((char *)((char *)&param_defog_dark_ct_array + 0x8))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_dark_ct_array)) | ((*(uint32_t *)((char *)((char *)&param_defog_dark_ct_array + 0x4))) << 8)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_dark_ct_array;
 
     /* fragment 65: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5284, ((*(uint32_t *)((char *)(s1) + 32)) << 24) | ((*(uint32_t *)((char *)(s1) + 28)) << 16) | (*(uint32_t *)((char *)(s1) + 20)) | ((*(uint32_t *)((char *)(s1) + 24)) << 8)); /* jalr target resolved by relocation */
@@ -40002,6 +39783,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 68: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5296, ((*(uint32_t *)((char *)((char *)&param_defog_over_expo_w_array + 0xc))) << 24) | ((*(uint32_t *)((char *)((char *)&param_defog_over_expo_w_array + 0x8))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_over_expo_w_array)) | ((*(uint32_t *)((char *)((char *)&param_defog_over_expo_w_array + 0x4))) << 8)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_over_expo_w_array;
 
     /* fragment 69: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5300, ((*(uint32_t *)((char *)(s1) + 28)) << 24) | ((*(uint32_t *)((char *)(s1) + 24)) << 16) | (*(uint32_t *)((char *)(s1) + 16)) | ((*(uint32_t *)((char *)(s1) + 20)) << 8)); /* jalr target resolved by relocation */
@@ -40011,6 +39793,7 @@ int32_t tiziano_defog_params_init(void)
 
     /* fragment 71: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5312, ((*(uint32_t *)((char *)((char *)&param_defog_dark_spe_w_array + 0xc))) << 24) | ((*(uint32_t *)((char *)((char *)&param_defog_dark_spe_w_array + 0x8))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_dark_spe_w_array)) | ((*(uint32_t *)((char *)((char *)&param_defog_dark_spe_w_array + 0x4))) << 8)); /* jalr target resolved by relocation */
+	s1 = (uintptr_t)&param_defog_dark_spe_w_array;
 
     /* fragment 72: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5316, ((*(uint32_t *)((char *)(s1) + 28)) << 24) | ((*(uint32_t *)((char *)(s1) + 24)) << 16) | (*(uint32_t *)((char *)(s1) + 16)) | ((*(uint32_t *)((char *)(s1) + 20)) << 8)); /* jalr target resolved by relocation */
@@ -40019,26 +39802,21 @@ int32_t tiziano_defog_params_init(void)
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5320, ((*(uint32_t *)((char *)(s1) + 40)) << 16) | ((*(uint32_t *)((char *)(s1) + 36)) << 8) | (*(uint32_t *)((char *)(s1) + 32))); /* jalr target resolved by relocation */
 
     /* fragment 74: CallSetup */
+	s6 = (uintptr_t)&defog_block_air_light_r;
+	s5 = (uintptr_t)&defog_block_air_light_g;
+	s4 = (uintptr_t)&defog_block_transmit_t;
+	s3 = (uintptr_t)&defog_block_air_light_b;
     s1 = 4294901760;
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5248, ((*(uint32_t *)((char *)((char *)&param_defog_ct_par_array + 0xc))) << 24) | ((*(uint32_t *)((char *)((char *)&param_defog_ct_par_array + 0x8))) << 16) | (*(uint32_t *)((char *)(uintptr_t)&param_defog_ct_par_array)) | ((*(uint32_t *)((char *)((char *)&param_defog_ct_par_array + 0x4))) << 8)); /* jalr target resolved by relocation */
 
-    /* fragment 75: Arithmetic */
-    s1 = s1 + 28672;
-    s0 = 36864;
-    v0 = s6 + s0;
-
-tiziano_defog_params_init0xd58:
-    /* fragment 76: CallSetup */
-    s0 = s0 + 4;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s0, ((*(uint32_t *)((char *)((uintptr_t)v0 + s1) + 0)) << 24) | ((*(uint32_t *)((char *)((s5 + s0) + s1) + 0)) << 16) | (*(uint32_t *)((char *)((s4 + s0) + s1) + 0)) | ((*(uint32_t *)((char *)((s3 + s0) + s1) + 0)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 77: Arithmetic */
-    v0 = 37664;
-
-    /* fragment 78: Branch */
-    int _bc_s0_78 = s0 != v0;
-    v0 = s6 + s0;
-    if (_bc_s0_78) { goto tiziano_defog_params_init0xd58; }
+    /* Upload the 20 x 10 defog block tables to 0x9000..0x931c. */
+    for (s0 = 0; s0 < sizeof(defog_block_air_light_r); s0 += 4) {
+	system_reg_write(0x9000 + s0,
+		(*(uint32_t *)(defog_block_air_light_r + s0) << 24) |
+		(*(uint32_t *)(defog_block_air_light_g + s0) << 16) |
+		 *(uint32_t *)(defog_block_transmit_t + s0) |
+		(*(uint32_t *)(defog_block_air_light_b + s0) << 8));
+    }
 
     /* fragment 79: Arithmetic */
     v0 = (uintptr_t *)&param_defog_blk_trans_array;
@@ -40162,29 +39940,31 @@ tiziano_defog_params_init0xd58:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026cd4 origin=model_output original=tiziano_defog_params_refresh */
 int32_t tiziano_defog_params_refresh(void)
 {
-	memcpy(&param_defog_weightlut20, &tparams, 128);
-	memcpy(&param_defog_weightlut02, ((char *)&tparams + 0x3c8), 128);
-	memcpy(&param_defog_weightlut12, ((char *)&tparams + 0x448), 128);
-	memcpy(&param_defog_weightlut22, ((char *)&tparams + 0x4c8), 128);
-	memcpy(&param_defog_weightlut21, ((char *)&tparams + 0x548), 128);
-	memcpy(&param_defog_ct_par_array, ((char *)&tparams + 0x5c8), 16);
-	memcpy(&param_defog_dark_ct_array, ((char *)&tparams + 0x5d8), 56);
-	memcpy(&param_defog_over_expo_w_array, ((char *)&tparams + 0x610), 44);
-	memcpy(&param_defog_dark_spe_w_array, ((char *)&tparams + 0x63c), 44);
-	memcpy(&param_defog_col_ct_array, ((char *)&tparams + 0x668), 56);
-	memcpy(&param_defog_cent3_w_dis_array, ((char *)&tparams + 0x6a0), 96);
-	memcpy(&param_defog_cent5_w_dis_array, ((char *)&tparams + 0x700), 124);
-	memcpy(&param_defog_blk_trans_array, ((char *)&tparams + 0x77c), 40);
-	memcpy(&param_defog_detail_ct_array, ((char *)&tparams + 0x7a4), 40);
-	memcpy(&param_defog_col_var_array, ((char *)&tparams + 0x7cc), 40);
-	memcpy(&param_defog_soft_ct_par_array, ((char *)&tparams + 0x7f4), 24);
-	memcpy(&defog_ev_list, ((char *)&tparams + 0x80c), 36);
-	memcpy(&defog_trsy0_list, ((char *)&tparams + 0x830), 36);
-	memcpy(&defog_trsy1_list, ((char *)&tparams + 0x854), 36);
-	memcpy(&defog_trsy2_list, ((char *)&tparams + 0x878), 36);
-	memcpy(&defog_trsy3_list, ((char *)&tparams + 0x89c), 36);
-	memcpy(&defog_trsy4_list, ((char *)&tparams + 0x8c0), 36);
-	memcpy(&defog_rgbra_list, ((char *)&tparams + 0x8e4), 36);
+	const uint8_t *params = (const uint8_t *)tparams;
+
+	memcpy(param_defog_weightlut20, params + 0x13cb8, 128);
+	memcpy(param_defog_weightlut02, params + 0x13d38, 128);
+	memcpy(param_defog_weightlut12, params + 0x13db8, 128);
+	memcpy(param_defog_weightlut22, params + 0x13e38, 128);
+	memcpy(param_defog_weightlut21, params + 0x13eb8, 128);
+	memcpy(param_defog_ct_par_array, params + 0x13f38, 16);
+	memcpy(param_defog_dark_ct_array, params + 0x13f48, 56);
+	memcpy(param_defog_over_expo_w_array, params + 0x13f80, 44);
+	memcpy(param_defog_dark_spe_w_array, params + 0x13fac, 44);
+	memcpy(param_defog_col_ct_array, params + 0x13fd8, 56);
+	memcpy(param_defog_cent3_w_dis_array, params + 0x14010, 96);
+	memcpy(param_defog_cent5_w_dis_array, params + 0x14070, 124);
+	memcpy(param_defog_blk_trans_array, params + 0x140ec, 40);
+	memcpy(param_defog_detail_ct_array, params + 0x14114, 40);
+	memcpy(param_defog_col_var_array, params + 0x1413c, 40);
+	memcpy(param_defog_soft_ct_par_array, params + 0x14164, 24);
+	memcpy(defog_ev_list, params + 0x1417c, 36);
+	memcpy(defog_trsy0_list, params + 0x141a0, 36);
+	memcpy(defog_trsy1_list, params + 0x141c4, 36);
+	memcpy(defog_trsy2_list, params + 0x141e8, 36);
+	memcpy(defog_trsy3_list, params + 0x1420c, 36);
+	memcpy(defog_trsy4_list, params + 0x14230, 36);
+	memcpy(defog_rgbra_list, params + 0x14254, 36);
 	return 0;
 }
 
@@ -40202,9 +39982,8 @@ int32_t tiziano_defog_init(uint32_t arg1, uint32_t arg2)
 	uint32_t lo_a = arg1 / 0x14;
 	uint32_t lo_b = arg2 / 0xa;
 
-	static uint32_t defog_fpga_para[2];
-	((void **)defog_fpga_para)[0] = arg1;
-	((void **)defog_fpga_para)[1] = arg2;
+	defog_fpga_para[0] = arg1;
+	defog_fpga_para[1] = arg2;
 
 	tiziano_defog_params_refresh();
 
@@ -40212,12 +39991,12 @@ int32_t tiziano_defog_init(uint32_t arg1, uint32_t arg2)
 	system_reg_write(0x1304, (lo_b * 0x30000) | (lo_b << 1));
 	system_reg_write(0x1308, (lo_b * 5 << 16) | (lo_b * 4));
 	system_reg_write(0x130c, (lo_b * 7 << 16) | (lo_b * 6));
-	system_reg_write((uintptr_t)&LC59, (lo_b * 9 << 16) | (lo_b * 8));
+	system_reg_write(0x1310, (lo_b * 9 << 16) | (lo_b * 8));
 	system_reg_write(0x1314, arg2);
 	system_reg_write(0x1320, lo_a << 0x10);
 	system_reg_write(0x1324, (lo_a * 0x30000) | (lo_a << 1));
 	system_reg_write(0x1328, (lo_a * 5 << 16) | (lo_a * 4));
-	system_reg_write((uintptr_t)&LC60, (lo_a * 7 << 16) | (lo_a * 6));
+	system_reg_write(0x132c, (lo_a * 7 << 16) | (lo_a * 6));
 	system_reg_write(0x1330, (lo_a * 9 << 16) | (lo_a * 8));
 	system_reg_write(0x1334, (lo_a * 0xb0000) | (lo_a * 0xa));
 	system_reg_write(0x1338, (lo_a * 0xd0000) | (lo_a * 0xc));
@@ -40227,7 +40006,7 @@ int32_t tiziano_defog_init(uint32_t arg1, uint32_t arg2)
 	system_reg_write(0x1348, arg1);
 
 	tiziano_defog_params_init();
-	system_irq_func_set(0x15, (uint32_t)(uintptr_t)tiziano_defog_interrupt_static);
+	system_irq_func_set(0x15, tiziano_defog_interrupt_static);
 	tisp_event_set_cb(3, (uint32_t)(uintptr_t)tisp_defog_process);
 
 	return 0;
@@ -41271,22 +41050,11 @@ int32_t tisp_adr_param_array_set(int32_t param_id, int32_t src)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029270 origin=fragment_seed original=tisp_g_adr_str_internal */
 uint32_t tisp_g_adr_str_internal(uintptr_t a0)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
+	if (!a0)
+		return -EINVAL;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&isp_clk;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&tparams + 0x30c4));
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 0) = v0;
-
-    return (uint32_t)v0;
+	*(u32 *)(uintptr_t)a0 = adr_ratio;
+	return adr_ratio;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029280 origin=model_output original=tisp_s_adr_str_internal */
@@ -41308,7 +41076,7 @@ int32_t tisp_s_adr_str_internal(uint32_t a0)
 	uint32_t t2;
 	uint32_t t9;
 
-	*(uint32_t *)((char *)((char *)&tparams + 0x3b24)) = a0;
+	adr_ratio = a0;
 
 	do {
 		t2 = *v0;
@@ -41379,50 +41147,47 @@ int32_t tisp_s_adr_str_internal(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000293d8 origin=model_output original=tiziano_adr_params_refresh */
 int32_t tiziano_adr_params_refresh(void)
 {
-	uint32_t *width_def;
-	uint32_t *height_def;
-	uint32_t *adr_ratio;
 	uint32_t *gamma_w;
 	uint32_t *gamma_h;
+	int ret = 0;
 
-	memcpy(&param_adr_ct_par_array, &tparams, 0x20);
-	memcpy(&param_adr_weight_20_lut_array, &tparams, 0x80);
-	memcpy(&param_adr_weight_02_lut_array, &tparams, 0x80);
-	memcpy(&param_adr_weight_12_lut_array, &tparams, 0x80);
-	memcpy(&param_adr_weight_22_lut_array, &tparams, 0x80);
-	memcpy(&param_adr_weight_21_lut_array, &tparams, 0x80);
-	memcpy(&param_adr_ctc_kneepoint_array, &tparams, 0x20);
-	memcpy(&param_adr_min_kneepoint_array, &tparams, 0x5c);
-	memcpy(&param_adr_map_kneepoint_array, &tparams, 0x5c);
-	memcpy(&param_adr_coc_kneepoint_array, &tparams, 0x54);
-	memcpy(&param_adr_centre_w_dis_array, &tparams, 0x7c);
-	memcpy(&param_adr_contrast_w_dis_array, &tparams, 0x80);
-	memcpy(&param_adr_stat_block_hist_diff_array, &tparams, 0x10);
-	memcpy(&adr_tm_base_lut, &tparams, 0x24);
-	memcpy(&adr_gam_x, &tparams, 0x204);
-	memcpy(&adr_gam_y, &tparams, 0x204);
-	memcpy(&adr_light_end, &tparams, 0x74);
-	memcpy(&adr_block_light, &tparams, 0x3c);
-	memcpy(&adr_map_mode, &tparams, 0x2c);
-	memcpy(&adr_ev_list, &tparams, 0x24);
-	memcpy(&adr_ligb_list, &tparams, 0x24);
-	memcpy(&adr_mapb1_list, &tparams, 0x24);
-	memcpy(&adr_mapb2_list, &tparams, 0x24);
-	memcpy(&adr_mapb3_list, &tparams, 0x24);
-	memcpy(&adr_mapb4_list, &tparams, 0x24);
-	memcpy(&adr_blp2_list, &tparams, 0x24);
+	ret |= t21_tparams_copy(&param_adr_ct_par_array, 0x13818, 0x20);
+	ret |= t21_tparams_copy(&param_adr_weight_20_lut_array, 0x13838, 0x80);
+	ret |= t21_tparams_copy(&param_adr_weight_02_lut_array, 0x138b8, 0x80);
+	ret |= t21_tparams_copy(&param_adr_weight_12_lut_array, 0x13938, 0x80);
+	ret |= t21_tparams_copy(&param_adr_weight_22_lut_array, 0x139b8, 0x80);
+	ret |= t21_tparams_copy(&param_adr_weight_21_lut_array, 0x13a38, 0x80);
+	ret |= t21_tparams_copy(&param_adr_ctc_kneepoint_array, 0x13ab8, 0x20);
+	ret |= t21_tparams_copy(&param_adr_min_kneepoint_array, 0x13ad8, 0x5c);
+	ret |= t21_tparams_copy(&param_adr_map_kneepoint_array, 0x13b34, 0x5c);
+	ret |= t21_tparams_copy(&param_adr_coc_kneepoint_array, 0x13b90, 0x54);
+	ret |= t21_tparams_copy(&param_adr_centre_w_dis_array, 0x13be4, 0x7c);
+	ret |= t21_tparams_copy(&param_adr_contrast_w_dis_array, 0x13c60, 0x80);
+	ret |= t21_tparams_copy(&param_adr_stat_block_hist_diff_array, 0x13ce0, 0x10);
+	ret |= t21_tparams_copy(&adr_tm_base_lut, 0x13cf0, 0x24);
+	ret |= t21_tparams_copy(&adr_gam_x, 0x13d14, 0x204);
+	ret |= t21_tparams_copy(&adr_gam_y, 0x13f18, 0x204);
+	ret |= t21_tparams_copy(&adr_light_end, 0x1411c, 0x74);
+	ret |= t21_tparams_copy(&adr_block_light, 0x14190, 0x3c);
+	ret |= t21_tparams_copy(&adr_map_mode, 0x141cc, 0x2c);
+	ret |= t21_tparams_copy(&adr_ev_list, 0x141f8, 0x24);
+	ret |= t21_tparams_copy(&adr_ligb_list, 0x1421c, 0x24);
+	ret |= t21_tparams_copy(&adr_mapb1_list, 0x14240, 0x24);
+	ret |= t21_tparams_copy(&adr_mapb2_list, 0x14264, 0x24);
+	ret |= t21_tparams_copy(&adr_mapb3_list, 0x14288, 0x24);
+	ret |= t21_tparams_copy(&adr_mapb4_list, 0x142ac, 0x24);
+	ret |= t21_tparams_copy(&adr_blp2_list, 0x142d0, 0x24);
+	if (ret)
+		return ret;
 
-	width_def = (uint32_t *)((char *)((char *)&adr_block_light + 0x20));
-	height_def = (uint32_t *)((char *)((char *)&adr_block_light + 0x24));
-	adr_ratio = (uint32_t *)((char *)((char *)&tparams + 0x3b24));
 	gamma_w = (uint32_t *)((char *)((char *)&adr_light_end + 0x5c));
 	gamma_h = (uint32_t *)((char *)((char *)&adr_light_end + 0x60));
 
-	*width_def = *(uint32_t *)((char *)((char *)&tparams + 0x3b1c));
-	*height_def = *(uint32_t *)((char *)((char *)&tparams + 0x3b20));
+	*(u32 *)(adr_block_light + 0x20) = width_def;
+	*(u32 *)(adr_block_light + 0x24) = height_def;
 
-	if (*adr_ratio != 0x80)
-		tisp_s_adr_str_internal(*adr_ratio);
+	if (adr_ratio != 0x80)
+		tisp_s_adr_str_internal(adr_ratio);
 
 	if (*gamma_w != 0x7e4 || *gamma_h != 0x1ab)
 		tiziano_adr_gamma_refresh();
@@ -41431,10 +41196,10 @@ int32_t tiziano_adr_params_refresh(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000296ec origin=model_output original=tiziano_adr_init */
-int32_t tiziano_adr_init(uint32_t width_def, uint32_t height_def)
+int32_t tiziano_adr_init(uint32_t width, uint32_t height)
 {
-	uint32_t *lo = width_def / 5;
-	uint32_t *hi = height_def >> 2;
+	uint32_t lo = width / 5;
+	uint32_t hi = height >> 2;
 	uint32_t *map_kp;
 	uint32_t *min_kp;
 	uint32_t *ctc_kp;
@@ -41443,8 +41208,10 @@ int32_t tiziano_adr_init(uint32_t width_def, uint32_t height_def)
 	uint32_t i, j;
 	uint32_t reg;
 
-	*(uint32_t *)((char *)((char *)&adr_block_light + 0x20)) = width_def;
-	*(uint32_t *)((char *)((char *)&adr_block_light + 0x24)) = height_def;
+	width_def = width;
+	height_def = height;
+	*(uint32_t *)((char *)((char *)&adr_block_light + 0x20)) = width;
+	*(uint32_t *)((char *)((char *)&adr_block_light + 0x24)) = height;
 
 	tiziano_adr_params_refresh();
 
@@ -41459,9 +41226,9 @@ int32_t tiziano_adr_init(uint32_t width_def, uint32_t height_def)
 	for (i = 0; i != 0x14; i++) {
 		for (j = 5; j != 0; j--) {
 			uint32_t *entry = (uint32_t *)((char *)map_kp + (j * -8));
-			system_reg_write(((i * 6 + 0x2a5 - j) << 2),
+		system_reg_write(((i * 6 + 0x2a5 - j) << 2),
 				(*(uint32_t *)((uintptr_t)entry + 0x2c) << 16) |
-				(*(uint32_t *)((char *)entry + 0x28)));
+			(*(uint32_t *)((char *)entry + 0x28)));
 		}
 		system_reg_write(i * 0x18 + 0xa94,
 			*(uint32_t *)((char *)map_kp + 0x28));
@@ -41493,7 +41260,7 @@ int32_t tiziano_adr_init(uint32_t width_def, uint32_t height_def)
 	system_reg_write(0xda8, (ct_par[2] << 16) | (ct_par[1] << 8) | ct_par[0]);
 
 	tiziano_adr_params_init();
-	system_irq_func_set(0x14, (uint32_t)tiziano_adr_interrupt_static);
+	system_irq_func_set(0x14, tiziano_adr_interrupt_static);
 	tisp_event_set_cb(2, (uint32_t)tisp_adr_process);
 
 	return 0;
@@ -41521,21 +41288,21 @@ int32_t tisp_hldc_par_refresh_part_0(void)
 int32_t tisp_hldc_con_par_cfg(void)
 {
 	int32_t v;
-	int32_t *p = hldc_con_par_array;
+	const uint32_t *p = hldc_con_par_array;
 
 	v = system_reg_read(0x2200);
 	system_reg_write(0x2200,
 		(p[1] << 12) | (p[0] << 8) | (p[2] << 16) | (p[3] << 20) | (v & 3));
 	system_reg_write(0x2204, (p[5] << 16) | p[4]);
-	system_reg_write(0x2208, (p[15] << 16) | p[14]);
+	system_reg_write(0x2208, (p[12] << 16) | p[11]);
 	system_reg_write(0x220c, p[6]);
-	system_reg_write(((char *)&video_input_cmd_buf), p[16]);
+	system_reg_write(0x2210, p[13]);
 	system_reg_write(0x2214, p[7]);
-	system_reg_write(0x2218, p[17]);
-	system_reg_write(0x221c, (p[11] << 16) | p[10]);
-	system_reg_write(0x2220, (p[19] << 16) | p[18]);
-	system_reg_write(0x2224, p[12]);
-	system_reg_write(((char *)&LC0), p[20]);
+	system_reg_write(0x2218, p[14]);
+	system_reg_write(0x221c, (p[9] << 16) | p[8]);
+	system_reg_write(0x2220, (p[16] << 16) | p[15]);
+	system_reg_write(0x2224, p[10]);
+	system_reg_write(0x2228, p[17]);
 	return 0;
 }
 
@@ -41557,7 +41324,8 @@ int32_t tisp_hldc_par_refresh(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029ba4 origin=model_output original=tiziano_hldc_params_refresh */
 int32_t tiziano_hldc_params_refresh(void)
 {
-	memcpy(&hldc_con_par_array, tparams, 72);
+	memcpy(hldc_con_par_array, (const uint8_t *)tparams + 0x14d54,
+	       18 * sizeof(*hldc_con_par_array));
 	return 0;
 }
 
@@ -41612,21 +41380,21 @@ int32_t tisp_hldc_param_array_set(int32_t param_id, int32_t *src)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029da0 origin=model_output original=tisp_set_sensor_integration_time */
 int32_t tisp_set_sensor_integration_time(int32_t arg1)
 {
+	struct t21_sensor_ctrl_view *ctrl =
+		(struct t21_sensor_ctrl_view *)sensor_ctrl;
 	uint32_t val;
 	uint32_t mode = *(uint32_t *)&tisp_ae_ctrls[0];
 	uint32_t alternate = *(uint32_t *)&tisp_ae_ctrls[52];
 
 	if (mode != 0) {
 		val = *(uint16_t *)&tisp_ae_ctrls[12];
-		((void (*)(uint32_t, uint32_t, uint32_t))sensor_ctrl[23])(
-			val, 0, mode);
+		ctrl->set_integration_time(val);
 	} else if (alternate == 0) {
 		*(uint32_t *)&tisp_ae_ctrls[12] = (uint16_t)arg1;
-		((void (*)(uint32_t, uint32_t, uint32_t))sensor_ctrl[23])(arg1 & 0xffff, 0, 0);
+		ctrl->set_integration_time(arg1 & 0xffff);
 	} else {
 		val = *(uint16_t *)&tisp_ae_ctrls[12];
-		((void (*)(uint32_t, uint32_t, uint32_t))sensor_ctrl[23])(
-			val, 0, alternate);
+		ctrl->set_integration_time(val);
 	}
 	return 0;
 }
@@ -41634,44 +41402,19 @@ int32_t tisp_set_sensor_integration_time(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029e00 origin=fragment_seed original=tisp_set_sensor_analog_gain */
 uint32_t tisp_set_sensor_analog_gain(uint32_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uint32_t s1 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	struct t21_sensor_ctrl_view *ctrl =
+		(struct t21_sensor_ctrl_view *)sensor_ctrl;
+	int16_t sensor_gain = 0;
+	uint32_t log_gain;
+	uint32_t allocated_gain;
+	uint32_t linear_gain;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	log_gain = tisp_log2_fixed_to_fixed(a0 << 6, 16, 16);
+	allocated_gain = ctrl->alloc_analog_gain(log_gain, &sensor_gain);
+	linear_gain = tisp_math_exp2(allocated_gain, 16, 16);
+	ctrl->set_analog_gain((uint16_t)sensor_gain);
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(a0 << 6, 16, 16); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(v0, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_math_exp2)(v0, 16, 16); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    s1 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(local_10, 0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = s1 >> 6;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (uint32_t)v0;
+	return linear_gain >> 6;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029e84 origin=fragment_seed original=tisp_set_sensor_digital_gain */
@@ -41833,117 +41576,88 @@ int32_t printf_func(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a264 origin=model_output original=tisp_ae_get_statistics */
 int32_t tisp_ae_get_statistics(uint32_t *arg1, uint32_t arg2)
 {
-	uint32_t s2 = arg2 >> 28;
-	uint32_t a1 = (arg2 & 0xf000) >> 12;
-	uint32_t a3 = s2 << 4;
-	uint32_t s2_shifted = s2 << 2;
-	uint32_t a2 = 0;
-	uint32_t result;
-	uint32_t i;
-	uint32_t *v0_1;
-	uint32_t *base_d;
-	uint32_t *base_m;
-	uint32_t *base_s;
-	uint32_t *base_dc;
-	uint32_t *base_sc;
-	uint32_t *base_ir;
+	u32 cols = arg2 >> 28;
+	u32 rows = (arg2 >> 12) & 0xf;
+	u32 row;
+	u32 col;
 
-	while (1) {
-		result = a2 * 0x3c;
-		if (a2 == a1)
-			break;
+	if (!arg1 || !cols || !rows || cols > 15 || rows > 15)
+		return -EINVAL;
 
-		i = 0;
-		v0_1 = arg1;
-		base_d = &ae_array_d[result];
-		base_m = &ae_array_m[result];
-		base_s = &ae_array_s[result];
-		base_dc = &ae_array_dc[result];
-		base_sc = &ae_array_sc[result];
-		base_ir = &ae_array_ir[result];
+	/* The DMA record is four words per zone.  The recovered version advanced
+	 * the source by one word, which made every zone after the first overlap. */
+	for (row = 0; row < rows; row++) {
+		for (col = 0; col < cols; col++) {
+			u32 index = row * cols + col;
+			u32 *src = arg1 + index * 4;
+			u32 w0 = src[0];
+			u32 w1 = src[1];
+			u32 w2 = src[2];
 
-		while (i != s2_shifted) {
-			*base_d = *v0_1 & 0x1fffff;
-			*base_m = ((v0_1[1] & 0x3ff) << 0xb) | (*v0_1 >> 0x15);
-			*base_s = (v0_1[1] & 0x7ffffc00) >> 0xa;
-			*base_dc = ((v0_1[2] & 0xfff) << 1) | (v0_1[1] >> 0x1f);
-			*base_sc = (v0_1[2] & 0x1fff000) >> 0xc;
-			v0_1 = (void *)(uintptr_t)((uintptr_t)v0_1 + (4));
-			*base_ir = (v0_1[-2]) >> 0x19;
-			i += 4;
-			base_d++;
-			base_m++;
-			base_s++;
-			base_dc++;
-			base_sc++;
-			base_ir++;
+			((u32 *)ae_array_d)[index] = w0 & 0x1fffff;
+			((u32 *)ae_array_m)[index] =
+				((w1 & 0x3ff) << 11) | (w0 >> 21);
+			((u32 *)ae_array_s)[index] = (w1 & 0x7ffffc00) >> 10;
+			((u32 *)ae_array_dc)[index] =
+				((w2 & 0xfff) << 1) | (w1 >> 31);
+			((u32 *)ae_array_sc)[index] = (w2 & 0x1fff000) >> 12;
+			((u32 *)ae_array_ir)[index] = w2 >> 25;
 		}
-
-		a2 += 1;
-		arg1 += s2 * 4;
 	}
 
-	return result;
+	return rows * cols * sizeof(u32);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a3f0 origin=fragment_seed original=ae_interrupt_static */
 int32_t ae_interrupt_static(void)
 {
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uintptr_t s1 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	u32 *params = (u32 *)_ae_parameter;
+	u32 rows = params[1];
+	u32 cols = params[3];
+	u32 offset = (system_reg_read(0x750) << 8) & 0x3000;
+	u32 base = *(u32 *)(tispinfo + 0xc);
+	u32 row;
+	u32 col;
+	u64 luma_sum = 0;
+	u32 count = 0;
+	u32 event[12] = { 0 };
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	if (!base || !rows || !cols || rows > 15 || cols > 15)
+		return 0;
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)system_reg_read)(1872); /* jalr target resolved by relocation */
+	dma_cache_sync(NULL, (void *)(uintptr_t)(base + offset), 0x1000, 0);
+	if (tisp_ae_get_statistics((u32 *)(uintptr_t)(base + offset),
+				   0xf001f001) < 0)
+		return 0;
 
-    /* fragment 2: CallSetup */
-    s0 = (uintptr_t)v0 << 8 & 12288;
-    dma_cache_sync((void *)(uintptr_t)0, (void *)(uintptr_t)(((uintptr_t)v0 << 8 & 12288) + (*(uint32_t *)((char *)((char *)&tispinfo + 0xc)))), 4096, 0); /* jalr target resolved by relocation */
+	for (row = 0; row < rows; row++) {
+		for (col = 0; col < cols; col++) {
+			u32 index = row * cols + col;
+			u32 pixels = params[4 + col] * params[19 + row];
+			u64 rgb;
 
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)tisp_ae_get_statistics)(s0 + (*(uint32_t *)((char *)(s1) + 12)), 4026597376 | 61441); /* jalr target resolved by relocation */
+			if (!pixels)
+				continue;
+			rgb = ((u32 *)ae_array_d)[index];
+			rgb += ((u32 *)ae_array_m)[index];
+			rgb += ((u32 *)ae_array_s)[index];
+			luma_sum += div_u64(rgb, pixels * 3);
+			count++;
+		}
+	}
 
-    /* fragment 4: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
+	if (count)
+		t21_ae_measured_luma = div_u64(luma_sum, count) >> 4;
+	pr_info_ratelimited("tx-isp-t21: ae stats base=%08x off=%04x grid=%ux%u zone=%ux%u dms=%u/%u/%u luma=%u\n",
+			    base, offset, rows, cols, params[4], params[19],
+			    ((u32 *)ae_array_d)[0], ((u32 *)ae_array_m)[0],
+			    ((u32 *)ae_array_s)[0], t21_ae_measured_luma);
 
-    /* fragment 5: MemoryAccess */
-    a0 = *(uint32_t *)((char *)((char *)&d_linear + 0x1014));
-    v1 = 1;
-
-    /* fragment 6: Branch */
-    if (a0 != v1) { goto ae_interrupt_static0x90; }
-
-    /* fragment 7: Arithmetic */
-    v1 = (uintptr_t)&_ae_stat;
-
-    /* fragment 8: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&_ae_stat + 0x4)) = 0;
-    *(uint32_t *)((char *)((char *)&d_linear + 0x1014)) = 0;
-    ra = local_1c;
-
-ae_interrupt_static0x90:
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 10: Arithmetic */
-    v0 = 1;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	/* Event 1 is the generic AE worker.  Keep all sensor I2C out of IRQ
+	 * context; tisp_event_process dispatches this from the firmware thread. */
+	event[2] = 1;
+	tisp_event_push(event);
+	return 1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a494 origin=model_output original=tisp_ae_get_hist */
@@ -42290,7 +42004,7 @@ int32_t ae_weight_mean2(uint32_t *arg1, uint32_t *arg2, uint32_t *arg3, uint32_t
 
     y_zone_ptr = (uint32_t *)((char *)&y_zone);
     y_zone_last_ptr = (uint32_t *)((char *)&y_zone_last);
-    lock_ptr = (uint32_t *)((char *)&y_zone);
+    lock_ptr = (uint32_t *)&t21_ae_state_lock;
 
     while (s4 != t4_1) {
         y_zone_ptr = (uint32_t *)((uintptr_t)y_zone_ptr + (s4 * 0x3c));
@@ -44768,29 +44482,32 @@ int32_t tiziano_ae_dump(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002cc78 origin=model_output original=tiziano_ae_params_refresh */
 int tiziano_ae_params_refresh(void)
 {
-	memcpy(&_ae_parameter, (void *)tparams, 0x98);
-	memcpy(&ae_switch_night_mode, (void *)tparams + 0x10, 0x10);
-	memcpy(&_AePointPos, (void *)tparams + 0x20, 8);
-	memcpy(&_exp_parameter, (void *)tparams + 0x28, 0x2c);
-	memcpy(&ae_ev_step, (void *)tparams + 0x54, 0x14);
-	memcpy(&ae_stable_tol, (void *)tparams + 0x68, 0x10);
-	memcpy(&_ev_list, (void *)tparams + 0x78, 0x28);
-	memcpy(&_lum_list, (void *)tparams + 0xa0, 0x18);
-	memcpy(&_at_list, (void *)tparams + 0xb8, 0x28);
-	memcpy(&_deflicker_para, (void *)tparams + 0xe0, 0xc);
-	memcpy(&_flicker_t, (void *)tparams + 0xec, 0x18);
-	memcpy(&_scene_para, (void *)tparams + 0x104, 0x2c);
-	memcpy(&ae_scene_mode_th, (void *)tparams + 0x130, 0x10);
-	memcpy(&_log2_lut, (void *)tparams + 0x140, 0x50);
-	memcpy(&_weight_lut, (void *)tparams + 0x190, 0x50);
-	memcpy(&_ae_zone_weight, (void *)tparams + 0x1e0, 0x384);
-	memcpy(&_scene_roui_weight, (void *)tparams + 0x564, 0x384);
-	memcpy(&_scene_roi_weight, (void *)tparams + 0x8e8, 0x384);
+	/* These are absolute offsets in the 0x15380-byte OEM TISP image.
+	 * The first-pass recovery incorrectly treated them as one compact,
+	 * contiguous C record beginning at tparams[0]. */
+	memcpy(_ae_parameter, tparams + 0x6690, 0x98);
+	memcpy(ae_switch_night_mode, tparams + 0x6728, 0x10);
+	memcpy(_AePointPos, tparams + 0x6738, 8);
+	memcpy(_exp_parameter, tparams + 0x6740, 0x2c);
+	memcpy(ae_ev_step, tparams + 0x676c, 0x14);
+	memcpy(ae_stable_tol, tparams + 0x6780, 0x10);
+	memcpy(_ev_list, tparams + 0x6790, 0x28);
+	memcpy(_lum_list, tparams + 0x67b8, 0x18);
+	memcpy(_at_list, tparams + 0x67d0, 0x28);
+	memcpy(_deflicker_para, tparams + 0x67f8, 0xc);
+	memcpy(_flicker_t, tparams + 0x6804, 0x18);
+	memcpy(_scene_para, tparams + 0x681c, 0x2c);
+	memcpy(ae_scene_mode_th, tparams + 0x6848, 0x10);
+	memcpy(_log2_lut, tparams + 0x6858, 0x50);
+	memcpy(_weight_lut, tparams + 0x68a8, 0x50);
+	memcpy(_ae_zone_weight, tparams + 0x68f8, 0x384);
+	memcpy(_scene_roui_weight, tparams + 0x6c7c, 0x384);
+	memcpy(_scene_roi_weight, tparams + 0x7000, 0x384);
 
 	if (ae_dn_refresh_flag == 0) {
-		memcpy(&_ae_result, (void *)tparams + 0x7384, 0x10);
-		memcpy(&_ae_stat, (void *)tparams + 0x7394, 0x14);
-		memcpy(&_ae_wm_q, (void *)tparams + 0x73a8, 0x3c);
+		memcpy(_ae_result, tparams + 0x7384, 0x10);
+		memcpy(_ae_stat, tparams + 0x7394, 0x14);
+		memcpy(_ae_wm_q, tparams + 0x73a8, 0x3c);
 	}
 
 	ae_dn_refresh_flag = 0;
@@ -45476,9 +45193,78 @@ tisp_ae_process_impl0x690:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d884 origin=model_output original=tisp_ae_process */
 int32_t tisp_ae_process(void)
 {
-    tisp_ae_ctrls_update();
-    tisp_ae_process_impl();
-    return 0;
+	/*
+	 * The reconstructed policy currently spends the full exposure budget in
+	 * the sensor (integration time, then analogue gain), so the ISP digital
+	 * gain remains at Q10 unity.  The OEM AE worker rewrites these two packed
+	 * channel pairs on every update; leaving that step out lets later ISP
+	 * block setup leave the input multipliers at unusable reset values.
+	 */
+	const u32 isp_dg_unity = (1024U << 16) | 1024U;
+	struct t21_sensor_ctrl_view *ctrl =
+		(struct t21_sensor_ctrl_view *)sensor_ctrl;
+	u32 target = ((u32 *)_at_list)[0];
+	u32 luma = t21_ae_measured_luma;
+	u32 min_it = ctrl->min_integration_time;
+	u32 max_it = ctrl->max_integration_time;
+	u32 max_gain;
+	u32 new_it;
+	u32 new_gain;
+	u64 desired;
+	u64 max_exposure;
+
+	system_reg_write_ae(2, 0x408, isp_dg_unity);
+	system_reg_write_ae(2, 0x40c, isp_dg_unity);
+
+	/* Run the sensor bus at a modest cadence while the reconstructed AE
+	 * policy is converging.  All sensor limits and operations remain supplied
+	 * by the generic sensor descriptor loaded from the tuning blob. */
+	if (++t21_ae_frame_count % 3)
+		return 0;
+	if (target < 20 || target > 160)
+		target = 64;
+	if (!luma)
+		luma = 1;
+	if (min_it < 1)
+		min_it = 1;
+	if (max_it < min_it)
+		max_it = min_it;
+	max_gain = tisp_math_exp2(ctrl->exp2_input_a, 16, 10);
+	if (max_gain < 1024)
+		max_gain = 1024;
+	if (t21_ae_current_it < min_it)
+		t21_ae_current_it = min_it;
+	if (t21_ae_current_gain_q10 < 1024)
+		t21_ae_current_gain_q10 = 1024;
+
+	desired = (u64)t21_ae_current_it * t21_ae_current_gain_q10 * target;
+	desired = div_u64(desired, luma);
+	max_exposure = (u64)max_it * max_gain;
+	if (desired < (u64)min_it * 1024U)
+		desired = (u64)min_it * 1024U;
+	if (desired > max_exposure)
+		desired = max_exposure;
+
+	/* Prefer integration time, then spend the remaining exposure budget on
+	 * analogue gain.  The generic allocator turns q10 gain into sensor codes. */
+	new_it = div_u64(desired, 1024);
+	new_it = clamp_t(u32, new_it, min_it, max_it);
+	new_gain = div_u64(desired, new_it);
+	new_gain = clamp_t(u32, new_gain, 1024, max_gain);
+
+	if (ctrl->start_changes)
+		ctrl->start_changes();
+	ctrl->set_integration_time(new_it & 0xffff);
+	t21_ae_current_it = new_it;
+	t21_ae_current_gain_q10 = tisp_set_sensor_analog_gain(new_gain);
+	if (ctrl->end_changes)
+		ctrl->end_changes();
+
+	pr_info_ratelimited("tx-isp-t21: ae luma=%u target=%u it=%u gain_q10=%u limits=%u/%u\n",
+			    t21_ae_measured_luma, target,
+			    t21_ae_current_it, t21_ae_current_gain_q10,
+			    max_it, max_gain);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d8bc origin=fragment_seed original=tiziano_ae_set_hardware_param */
@@ -45619,11 +45405,19 @@ int tiziano_ae_dn_params_refresh(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002db88 origin=model_output original=tiziano_ae_init */
+struct t21_ae_result_record {
+	u32 reserved_00;
+	u32 sensor_reg;
+	u32 integration_time;
+	u32 analog_gain;
+};
+
 int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 {
-	uint32_t *ftune = 1;
-	uint32_t *ae_first = 0;
-	uint32_t *min_it = arg3;
+	struct t21_ae_result_record *result =
+		(struct t21_ae_result_record *)_ae_result;
+	struct t21_sensor_ctrl_view *ctrl =
+		(struct t21_sensor_ctrl_view *)sensor_ctrl;
 	uint32_t i;
 	uint32_t j;
 	uint32_t val;
@@ -45638,29 +45432,40 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	uint32_t sensor_it;
 	uint32_t sensor_gain;
 	uint32_t sensor_reg;
-	uint32_t exp_param_val;
 	uint32_t sensor_ctrl_val;
 	uint32_t ctrl_val;
 	uint32_t ctrl_val2;
 	uint32_t ctrl_val3;
 	uint32_t ctrl_val4;
 	uint32_t ret;
-	*(uint32_t *)((char *)((char *)&awb_array_p + 0x40)) = ftune;
-	*(uint32_t *)(tisp_s_ae_hist + 0x7458) = ae_first;
-	*(uint32_t *)((char *)((char *)&awb_array_p + 0x48)) = min_it;
 
-	memset((void *)tisp_s_ae_hist, 0, 0x42c);
+	BUILD_BUG_ON(sizeof(*result) != 0x10);
+	BUILD_BUG_ON(offsetof(struct t21_sensor_ctrl_view,
+			      max_integration_time) != 0x24);
+	pr_info("tx-isp-t21: ae init entry h=%u w=%u min_it=%u\n",
+		arg1, arg2, arg3);
 
-	*(uint32_t *)(tisp_s_ae_hist + 0x414) = 0x0d;
-	*(uint32_t *)(tisp_s_ae_hist + 0x418) = 0x40;
-	*(uint32_t *)(tisp_s_ae_hist + 0x41c) = 0x90;
-	*(uint32_t *)(tisp_s_ae_hist + 0x420) = 0xc0;
-	*(uint32_t *)(tisp_s_ae_hist + 0x424) = 0x0f;
-	*(uint32_t *)(tisp_s_ae_hist + 0x428) = 0x0f;
+	/* These are distinct OEM globals; the model had aliased them into AWB,
+	 * a function address, and stack locals respectively. */
+	ftune = 1;
+	*(u32 *)ae_first = 0;
+	*(u32 *)min_it = arg3;
 
-	memcpy((void *)tisp_ae_get_hist, (void *)tisp_s_ae_hist, 0x42c);
+	memset(tisp_ae_hist, 0, sizeof(tisp_ae_hist));
+
+	*(uint32_t *)(tisp_ae_hist + 0x414) = 0x0d;
+	*(uint32_t *)(tisp_ae_hist + 0x418) = 0x40;
+	*(uint32_t *)(tisp_ae_hist + 0x41c) = 0x90;
+	*(uint32_t *)(tisp_ae_hist + 0x420) = 0xc0;
+	*(uint32_t *)(tisp_ae_hist + 0x424) = 0x0f;
+	*(uint32_t *)(tisp_ae_hist + 0x428) = 0x0f;
+
+	memcpy(tisp_ae_hist_last, tisp_ae_hist, sizeof(tisp_ae_hist));
 
 	tiziano_ae_params_refresh();
+	pr_info("tx-isp-t21: ae params refreshed rows=%u cols=%u\n",
+		*(u32 *)((u8 *)&_ae_parameter + 0x4),
+		*(u32 *)((u8 *)&_ae_parameter + 0xc));
 
 	for (i = 0; i < *(uint32_t *)((char *)((char *)&_ae_parameter + 0xc)); i++) {
 		val = (arg2 >> 1) / *(uint32_t *)((char *)((char *)&_ae_parameter + 0xc));
@@ -45672,41 +45477,58 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 		*(uint32_t *)((char *)&_ae_parameter + j * 4 + 0x4c) = val;
 	}
 
+	pr_info("tx-isp-t21: ae hardware setup begin\n");
 	tiziano_ae_set_hardware_param();
+	pr_info("tx-isp-t21: ae hardware setup done result=%u/%u/%u\n",
+		result->sensor_reg, result->integration_time, result->analog_gain);
 
-	sensor_it = *(uint32_t *)((char *)&gro_result + 0x8);
+	sensor_it = result->integration_time;
+	t21_ae_current_it = sensor_it;
+	pr_info("tx-isp-t21: ae integration begin value=%u cb=%p\n",
+		sensor_it, ((struct t21_sensor_ctrl_view *)sensor_ctrl)->set_integration_time);
 	ret = tisp_set_sensor_integration_time(sensor_it);
+	pr_info("tx-isp-t21: ae integration done ret=%u\n", ret);
 	if (ret != 0) {
 		isp_printf(2, "sorry,set integration time failed!\n", ret);
 		return -1;
 	}
 
-	sensor_gain = *(uint32_t *)((char *)&gro_result + 0xc);
+	sensor_gain = result->analog_gain;
+	t21_ae_current_gain_q10 = sensor_gain;
+	pr_info("tx-isp-t21: ae gain begin value=%u\n", sensor_gain);
 	tisp_set_sensor_analog_gain(sensor_gain);
+	pr_info("tx-isp-t21: ae gain done\n");
 
-	sensor_reg = *(uint32_t *)((char *)&gro_result + 0x4);
+	sensor_reg = result->sensor_reg;
 	reg_val = (sensor_reg << 0x10) | sensor_reg;
+	pr_info("tx-isp-t21: ae reg 408 begin value=%08x\n", reg_val);
 	system_reg_write_ae(2, 0x408, reg_val);
+	pr_info("tx-isp-t21: ae reg 408 done\n");
 
-	sensor_reg = *(uint32_t *)((char *)&gro_result + 0x4);
+	sensor_reg = result->sensor_reg;
 	reg_val = (sensor_reg << 0x10) | sensor_reg;
+	pr_info("tx-isp-t21: ae reg 40c begin value=%08x\n", reg_val);
 	system_reg_write_ae(2, 0x40c, reg_val);
+	pr_info("tx-isp-t21: ae reg 40c done\n");
 
+	pr_info("tx-isp-t21: ae irq callbacks begin\n");
 	system_irq_func_set(0x11, ae_interrupt_hist);
 	system_irq_func_set(0x10, ae_interrupt_static);
+	pr_info("tx-isp-t21: ae irq callbacks done\n");
 
 	memset((void *)tisp_ae_tune, 0, 0x40);
 	memset(&ae_ctrls, 0, 0x10);
 
 	ae_point_pos = *(uint32_t *)&_AePointPos;
-	sensor_it = *(uint32_t *)((char *)&gro_result + 0x8);
-	sensor_gain = *(uint32_t *)((char *)&gro_result + 0xc);
-	sensor_reg = *(uint32_t *)((char *)&gro_result + 0x4);
+	sensor_it = result->integration_time;
+	sensor_gain = result->analog_gain;
+	sensor_reg = result->sensor_reg;
 	val = fix_point_mult3_32(ae_point_pos, sensor_it << (ae_point_pos & 0x1f), sensor_gain, sensor_reg);
 	*(uint32_t *)(tisp_ae_tune + 0x24) = val;
+	pr_info("tx-isp-t21: ae initial exposure=%u point=%u\n", val,
+		ae_point_pos);
 
-	exp_param_val = *(uint32_t *)((char *)((char *)&_exp_parameter + 0x8));
-	sensor_ctrl_val = *(uint32_t *)((char *)&sensor_it + 0x8);
+	sensor_ctrl_val = ctrl->max_integration_time;
 	ctrl_val = *(uint32_t *)(tisp_ae_tune + 0x24);
 	if (sensor_ctrl_val == 0) {
 		*(uint32_t *)((char *)((char *)&_exp_parameter + 0x8)) = ctrl_val;
@@ -45717,7 +45539,7 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	exp_val = *(uint32_t *)((char *)((char *)&_exp_parameter + 0x8));
 	*(uint32_t *)(tisp_ae_tune + 0x1c) = exp_val;
 
-	exp_val2 = tisp_math_exp2(*(uint32_t *)((char *)&sensor_it + 0x18), 0x10, 0xa);
+	exp_val2 = tisp_math_exp2(ctrl->exp2_input_a, 0x10, 0xa);
 	ctrl_val2 = *(uint32_t *)((char *)((char *)&_exp_parameter + 0xc));
 	if (ctrl_val2 == 0) {
 		*(uint32_t *)((char *)((char *)&_exp_parameter + 0xc)) = exp_val2;
@@ -45725,8 +45547,9 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 		*(uint32_t *)((char *)((char *)&_exp_parameter + 0xc)) = exp_val2;
 	}
 
-	exp_val2 = tisp_math_exp2(*(uint32_t *)((char *)&sensor_it + 0x1c), 0x10, 0xa);
+	exp_val2 = tisp_math_exp2(ctrl->exp2_input_b, 0x10, 0xa);
 	*(uint32_t *)(tisp_ae_tune + 0x18) = exp_val2;
+	pr_info("tx-isp-t21: ae exposure limits done\n");
 
 	ctrl_val3 = *(uint32_t *)((char *)((char *)&_exp_parameter + 0xc));
 	*(uint32_t *)(tisp_ae_tune + 0x14) = ctrl_val3;
@@ -45739,11 +45562,14 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	flicker_val3 = *(uint32_t *)((char *)((char *)&_flicker_t + 0x8));
 	flicker_val4 = *(uint32_t *)((char *)((char *)&_flicker_t + 0xc));
 	tiziano_deflicker_expt(flicker_val, flicker_val2, flicker_val3, flicker_val4, &_deflick_lut, &nodes_num);
+	pr_info("tx-isp-t21: ae deflicker done nodes=%u\n", nodes_num);
 
 	tisp_event_set_cb(1, tisp_ae_process);
+	pr_info("tx-isp-t21: ae event callback done\n");
 
-	private_spin_lock_init((void *)&gro_result);
-	private_spin_lock_init((void *)&gro_result);
+	private_spin_lock_init(&t21_ae_hist_lock);
+	private_spin_lock_init(&t21_ae_state_lock);
+	pr_info("tx-isp-t21: ae init done\n");
 
 	return 0;
 }
@@ -45785,42 +45611,14 @@ int32_t tisp_ae_manual_set(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, u
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002df38 origin=fragment_seed original=tisp_ae_get_y_zone */
 int32_t tisp_ae_get_y_zone(uint32_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uintptr_t *v0 = 0;
+	if (!a0)
+		return -EINVAL;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = 0;
-    s1 = a0;
-    local_10 = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)__private_spin_lock_irqsave)(0, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)s1, (void *)(uintptr_t)&sinfo_root, 900); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)private_spin_unlock_irqrestore)(s0, local_10); /* jalr target resolved by relocation */
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    v0 = 0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	/* Statistics IRQ callbacks remain deferred, so y_zone_last is immutable
+	 * in the current runtime.  Avoid the OEM UP-kernel irq-save wrapper here;
+	 * its recovered indirection is unsafe from this userspace GET path. */
+	memcpy((void *)(uintptr_t)a0, y_zone_last, sizeof(y_zone_last));
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002dfb0 origin=model_output original=tisp_ae_get_luma */
@@ -46285,83 +46083,36 @@ int32_t af_interrupt_static(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002eb1c origin=fragment_seed original=tiziano_af_params_refresh */
 int32_t tiziano_af_params_refresh(void)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uintptr_t *v0 = 0;
+	const uint8_t *params = (const uint8_t *)tparams;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 144); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 52); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 20); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 32); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 20); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 32); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 40); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 32); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 40); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 32); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 16); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 8); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 20); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 60); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&sinfo_root, (void *)(uintptr_t)&tparams, 12); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&isp_clk, (void *)(uintptr_t)&tparams, 900); /* jalr target resolved by relocation */
-
-    /* fragment 20: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 21: Arithmetic */
-    v0 = 0;
-
-    /* fragment 22: Epilogue */
-    /* function epilogue: restore registers and return */
+	memcpy(stAFParam_Zone, params + 0x14d9c, sizeof(stAFParam_Zone));
+	memcpy(stAFParam_ThresEnable, params + 0x14e2c,
+	       sizeof(stAFParam_ThresEnable));
+	memcpy(stAFParam_FIR0_V, params + 0x14e60, sizeof(stAFParam_FIR0_V));
+	memcpy(stAFParam_FIR0_Ldg, params + 0x14e74,
+	       sizeof(stAFParam_FIR0_Ldg));
+	memcpy(stAFParam_FIR0_Coring, params + 0x14e94,
+	       sizeof(stAFParam_FIR0_Coring));
+	memcpy(stAFParam_FIR1_V, params + 0x14ea4, sizeof(stAFParam_FIR1_V));
+	memcpy(stAFParam_FIR1_Ldg, params + 0x14eb8,
+	       sizeof(stAFParam_FIR1_Ldg));
+	memcpy(stAFParam_FIR1_Coring, params + 0x14ed8,
+	       sizeof(stAFParam_FIR1_Coring));
+	memcpy(stAFParam_IIR0_H, params + 0x14ee8, sizeof(stAFParam_IIR0_H));
+	memcpy(stAFParam_IIR0_Ldg, params + 0x14f10,
+	       sizeof(stAFParam_IIR0_Ldg));
+	memcpy(stAFParam_IIR0_Coring, params + 0x14f30,
+	       sizeof(stAFParam_IIR0_Coring));
+	memcpy(stAFParam_IIR1_H, params + 0x14f40, sizeof(stAFParam_IIR1_H));
+	memcpy(stAFParam_IIR1_Ldg, params + 0x14f68,
+	       sizeof(stAFParam_IIR1_Ldg));
+	memcpy(stAFParam_IIR1_Coring, params + 0x14f88,
+	       sizeof(stAFParam_IIR1_Coring));
+	memcpy(AFParam_PointPos, params + 0x14f98, sizeof(AFParam_PointPos));
+	memcpy(AFParam_Tilt, params + 0x14fa0, sizeof(AFParam_Tilt));
+	memcpy(AFParam_FvWmean, params + 0x14fb4, sizeof(AFParam_FvWmean));
+	memcpy(AFParam_Fv, params + 0x14ff0, sizeof(AFParam_Fv));
+	memcpy(AFWeight_Param, params + 0x14ffc, sizeof(AFWeight_Param));
 
     return 0;
 }
@@ -46645,23 +46396,22 @@ int32_t tiziano_af_dump(void)
 int32_t tiziano_af_set_regs(void)
 {
     uint32_t *p = (uint32_t *)IspAfStaticParam;
-    uint32_t *base = (uint32_t *)get_isp_clk;
-    uint32_t *arr1 = (void *)((uintptr_t)base + 0x4B30 / 4);
-    uint32_t *arr2 = (void *)((uintptr_t)base + 0x4F9C / 4);
-    uint32_t *fir0 = (void *)((uintptr_t)base + 0x4FD0 / 4);
-    uint32_t *fir1 = (void *)((uintptr_t)base + 0x5014 / 4);
-    uint32_t *iir0 = (void *)((uintptr_t)base + 0x5058 / 4);
-    uint32_t *iir1 = (void *)((uintptr_t)base + 0x50B0 / 4);
-    uint32_t *fir0_ldg = (void *)((uintptr_t)base + 0x4FE4 / 4);
-    uint32_t *fir1_ldg = (void *)((uintptr_t)base + 0x5028 / 4);
-    uint32_t *iir0_ldg = (void *)((uintptr_t)base + 0x5080 / 4);
-    uint32_t *iir1_ldg = (void *)((uintptr_t)base + 0x50D8 / 4);
-    uint32_t *fir0_cor = (void *)((uintptr_t)base + 0x5004 / 4);
-    uint32_t *fir1_cor = (void *)((uintptr_t)base + 0x5048 / 4);
-    uint32_t *iir0_cor = (void *)((uintptr_t)base + 0x50A0 / 4);
-    uint32_t *iir1_cor = (void *)((uintptr_t)base + 0x50F8 / 4);
-    uint32_t cnt1 = p[12];
-    uint32_t cnt2 = p[1];
+    uint32_t *arr1 = (uint32_t *)stAFParam_Zone;
+    uint32_t *arr2 = (uint32_t *)stAFParam_ThresEnable;
+    uint32_t *fir0 = (uint32_t *)stAFParam_FIR0_V;
+    uint32_t *fir1 = (uint32_t *)stAFParam_FIR1_V;
+    uint32_t *iir0 = (uint32_t *)stAFParam_IIR0_H;
+    uint32_t *iir1 = (uint32_t *)stAFParam_IIR1_H;
+    uint32_t *fir0_ldg = (uint32_t *)stAFParam_FIR0_Ldg;
+    uint32_t *fir1_ldg = (uint32_t *)stAFParam_FIR1_Ldg;
+    uint32_t *iir0_ldg = (uint32_t *)stAFParam_IIR0_Ldg;
+    uint32_t *iir1_ldg = (uint32_t *)stAFParam_IIR1_Ldg;
+    uint32_t *fir0_cor = (uint32_t *)stAFParam_FIR0_Coring;
+    uint32_t *fir1_cor = (uint32_t *)stAFParam_FIR1_Coring;
+    uint32_t *iir0_cor = (uint32_t *)stAFParam_IIR0_Coring;
+    uint32_t *iir1_cor = (uint32_t *)stAFParam_IIR1_Coring;
+    uint32_t cnt1 = arr1[3];
+    uint32_t cnt2 = arr1[1];
     uint32_t q1 = (p[12] - 15) / cnt1;
     uint32_t q2 = (p[13] - 3) / cnt2;
     uint32_t i;
@@ -46682,7 +46432,8 @@ int32_t tiziano_af_set_regs(void)
     for (i = 0; i < cnt2; i++)
         ((uintptr_t *)(uintptr_t)(arr1))[19 + i] = arr1[19];
 
-    system_reg_write(0x904, (p[3] << 28) | (p[2] << 16) | arr1[0] | (cnt2 << 12));
+    system_reg_write(0x904, (arr1[3] << 28) | (arr1[2] << 16) |
+		     arr1[0] | (arr1[1] << 12));
     system_reg_write(0x908, (arr1[7] << 24) | (arr1[6] << 16) | arr1[4] | (arr1[5] << 8));
     system_reg_write(0x90C, (arr1[11] << 24) | (arr1[10] << 16) | arr1[8] | (arr1[9] << 8));
     system_reg_write(0x910, (arr1[15] << 24) | (arr1[14] << 16) | arr1[12] | (arr1[13] << 8));
@@ -46691,7 +46442,9 @@ int32_t tiziano_af_set_regs(void)
     system_reg_write(0x91C, (arr1[26] << 24) | (arr1[25] << 16) | arr1[23] | (arr1[24] << 8));
     system_reg_write(0x920, (arr1[30] << 24) | (arr1[29] << 16) | arr1[27] | (arr1[28] << 8));
     system_reg_write(0x924, (arr1[33] << 16) | (arr1[32] << 8) | arr1[31]);
-    system_reg_write(0x928, (arr1[35] << 16) | (arr2[4] << 8) | arr2[0] | (arr2[3] << 7) | (arr2[2] << 6) | (arr2[1] << 5) | (arr2[0] << 4));
+    system_reg_write(0x928, (arr1[35] << 16) | (arr2[4] << 8) |
+		     arr1[34] | (arr2[3] << 7) | (arr2[2] << 6) |
+		     (arr2[1] << 5) | (arr2[0] << 4));
     system_reg_write(0x92C, (arr2[12] << 28) | (arr2[11] << 24) | arr2[5] | (arr2[10] << 20) | (arr2[9] << 16) | (arr2[8] << 12) | (arr2[7] << 8) | (arr2[6] << 4));
     system_reg_write(0x930, (fir0[1] << 16) | fir0[0]);
     system_reg_write(0x934, (fir0[3] << 16) | fir0[2]);
@@ -46729,70 +46482,28 @@ int32_t tiziano_af_set_regs(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f900 origin=fragment_seed original=tiziano_af_init */
 int32_t tiziano_af_init(uint32_t a0, uint32_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	const uint32_t *tilt = (const uint32_t *)AFParam_Tilt;
+	const uint32_t *threshold = (const uint32_t *)stAFParam_ThresEnable;
+	const uint32_t *zone = (const uint32_t *)stAFParam_Zone;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	BUILD_BUG_ON(sizeof(af_attr) != 24);
+	tiziano_af_params_refresh();
+	IspAfStaticParam[12] = a1;
+	IspAfStaticParam[13] = a0;
+	tiziano_af_set_regs();
+	system_irq_func_set(19, af_interrupt_static);
 
-    /* fragment 1: CallSetup */
-    s1 = a1;
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tiziano_af_params_refresh)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    *(uint32_t *)((char *)((char *)&IspAfStaticParam + 0x30)) = s1;
-    *(uint32_t *)((char *)((char *)&IspAfStaticParam + 0x34)) = s0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tiziano_af_set_regs)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)af_interrupt_static)(19, &af_interrupt_static); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)memset((void *)(int32_t *)&sinfo_root, 0, 24); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    v0 = s0 - 30268;
-    v1 = 1;
-
-    /* fragment 6: MemoryAccess */
-    *(uint8_t *)((char *)v0 + 8) = v1;
-    v1 = (uintptr_t)&isp_clk;
-    a0 = v1 + 20352;
-    a1 = *(uint32_t *)((char *)a0 + 8);
-    a0 = *(uint32_t *)((char *)a0 + 12);
-    v1 = *(uint32_t *)((char *)((char *)&tparams + 0x4520));
-    *(uint16_t *)((char *)v0 + 12) = a0;
-    a0 = (uint32_t *)&isp_clk;
-    a0 = *(uint32_t *)((char *)((char *)&tparams + 0x454c));
-    *(uint16_t *)((char *)v0 + 16) = v1;
-    *(uint16_t *)((char *)v0 + 14) = a0;
-    a0 = (uint32_t *)&isp_clk;
-    v1 = a0 + 19248;
-    a0 = *(uint32_t *)((char *)((char *)&tparams + 0x40d0));
-    *(uint16_t *)((char *)v0 + 10) = a1;
-    *(uint8_t *)((char *)v0 + 19) = a0;
-    a1 = *(uint32_t *)((char *)v1 + 8);
-    a0 = *(uint32_t *)((char *)v1 + 12);
-    v1 = *(uint32_t *)((char *)v1 + 4);
-    *(uint8_t *)((char *)v0 + 9) = 0;
-    *(uint8_t *)((char *)v0 + 18) = a1;
-    *(uint8_t *)((char *)v0 + 20) = a0;
-    *(uint8_t *)((char *)v0 + 21) = v1;
-    ra = local_1c;
-    s1 = local_18;
-    s0 = local_14;
-    v0 = 0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
+	memset(&af_attr, 0, sizeof(af_attr));
+	af_attr.enable = 1;
+	af_attr.shift = 0;
+	af_attr.tilt_hi = tilt[2];
+	af_attr.tilt_lo = tilt[3];
+	af_attr.threshold = threshold[4];
+	af_attr.tilt_base = tilt[0];
+	af_attr.zone_rows = zone[2];
+	af_attr.zone_mode = zone[0];
+	af_attr.zone_cols = zone[3];
+	af_attr.zone_step = zone[1];
 
     return 0;
 }
@@ -47428,268 +47139,69 @@ uint8_t tisp_g_ae_luma(uint8_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000302f0 origin=fragment_seed original=tisp_set_sharpness */
 int32_t tisp_set_sharpness(uint32_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_58 = 0;
-    uint32_t local_7c = 0;
-    uint32_t local_a0 = 0;
-    uint32_t *local_c4 = 0;
-    uint32_t local_e8 = 0;
-    uint32_t local_10c = 0;
-    uint32_t local_130 = 0;
-    uint32_t local_140 = 0;
-    uint32_t local_144 = 0;
-    uint32_t local_148 = 0;
-    uint32_t local_14c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uint32_t t0 = 0;
-    uint32_t t1 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	int32_t day[36];
+	int32_t night[36];
+	uint32_t sharpness = a0 & 0xff;
+	int32_t value;
+	int32_t i;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	memcpy(day, custom_eff + 0xc8, sizeof(day));
+	memcpy(night, custom_eff + 0x158, sizeof(night));
 
-    /* fragment 1: CallSetup */
-    s0 = (uintptr_t)&memcpy;
-    s2 = a0 & 255;
-    local_130 = 144;
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&local_a0, (void *)(uintptr_t)&custom_eff, 144); /* jalr target resolved by relocation */
+	for (i = 0; i < ARRAY_SIZE(day); i++) {
+		value = sharpness * day[i] / 128;
+		day[i] = clamp(value, 0, 255);
 
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&local_10, (void *)(uintptr_t)&custom_eff, local_130); /* jalr target resolved by relocation */
+		value = sharpness * night[i] / 128;
+		night[i] = clamp(value, 0, 255);
+	}
 
-    /* fragment 3: StackAccess */
-    a0 = local_130;
-    v0 = (uintptr_t *)&local_10;
-    t1 = a0 >> 2;
-    t1 = t1 << 2;
-    v1 = (uintptr_t)&local_a0;
-    t1 = v0 + t1;
-    a1 = 128;
+	if (day_night == 0) {
+		tisp_dmsc_param_array_set(0x67, day);
+		tisp_dmsc_param_array_set(0x68, day + 9);
+		tisp_dmsc_param_array_set(0x6c, day + 18);
+		tisp_dmsc_param_array_set(0x6d, day + 27);
+		memcpy(tparams + 0xf880, day, 36);
+		memcpy(tparams + 0xf8a4, day + 9, 36);
+		memcpy(tparams + 0xf930, day + 18, 36);
+		memcpy(tparams + 0xf954, day + 27, 36);
+	} else if (day_night == 1) {
+		tisp_dmsc_param_array_set(0x67, night);
+		tisp_dmsc_param_array_set(0x68, night + 9);
+		tisp_dmsc_param_array_set(0x6c, night + 18);
+		tisp_dmsc_param_array_set(0x6d, night + 27);
+		memcpy(tparams + 0xf880, night, 36);
+		memcpy(tparams + 0xf8a4, night + 9, 36);
+		memcpy(tparams + 0xf930, night + 18, 36);
+		memcpy(tparams + 0xf954, night + 27, 36);
+	} else {
+		pr_err("tisp_set_sharpness: invalid day/night mode %d\n",
+		       day_night);
+	}
 
-    /* fragment 4: Branch */
-    a2 = 255;
-    goto tisp_set_sharpness0xd0;
+	memcpy(tparams_day + 0xf880, day, 36);
+	memcpy(tparams_day + 0xf8a4, day + 9, 36);
+	memcpy(tparams_day + 0xf930, day + 18, 36);
+	memcpy(tparams_day + 0xf954, day + 27, 36);
+	memcpy(tparams_night + 0xf880, night, 36);
+	memcpy(tparams_night + 0xf8a4, night + 9, 36);
+	memcpy(tparams_night + 0xf930, night + 18, 36);
+	memcpy(tparams_night + 0xf954, night + 27, 36);
 
-    /* fragment 5: MemoryAccess */
-    t0 = *(uint32_t *)((char *)&sinfo_root);
-    a3 = s2 * a3;
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 3036c:	00e5001a 	div	zero,a3,a1 */
-
-    /* fragment 7: Arithmetic */
-    t0 = s2 * t0;
-
-    /* fragment 8: MemoryAccess */
-    *(uint32_t *)((char *)&sinfo_root) = a3;
-
-    /* fragment 9: Unknown */
-    /* unmatched fragment 9 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 3037c:	0105001a 	div	zero,t0,a1 */
-
-    /* fragment 10: Arithmetic */
-    /* unmatched fragment 10 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 30380:	00004012 	mflo	t0 */
-
-    /* fragment 11: Branch */
-    *(uint32_t *)((char *)&sinfo_root) = t0;
-    if (a3 > 0) { goto tisp_set_sharpness0xa0; }
-
-    /* fragment 12: MemoryAccess */
-    *(uint32_t *)((char *)&sinfo_root) = 0;
-
-tisp_set_sharpness0xa0:
-    /* fragment 13: Unknown */
-    /* unmatched fragment 13 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 30390:	59000001 	blezl	t0,30398 <tisp_set_sharpness+0xa8> */
-
-    /* fragment 14: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = 0;
-    a3 = *(uint32_t *)((char *)v1 + 0);
-    a3 = a3 < 255;
-
-    /* fragment 15: Unknown */
-    /* unmatched fragment 15 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 303a0:	50e00001 	beqzl	a3,303a8 <tisp_set_sharpness+0xb8> */
-
-    /* fragment 16: MemoryAccess */
-    *(uint32_t *)((char *)v1 + 0) = a2;
-    a3 = *(uint32_t *)((char *)v0 + 0);
-    a3 = a3 < 255;
-
-    /* fragment 17: Unknown */
-    /* unmatched fragment 17 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 303b0:	50e00001 	beqzl	a3,303b8 <tisp_set_sharpness+0xc8> */
-
-    /* fragment 18: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 0) = a2;
-    v0 = v0 + 4;
-    v1 = v1 + 4;
-
-tisp_set_sharpness0xd0:
-    /* fragment 19: Unknown */
-    /* unmatched fragment 19 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 303c0:	5449ffe8 	bnel	v0,t1,30364 <tisp_set_sharpness+0x74> */
-
-    /* fragment 20: MemoryAccess */
-    a3 = *(uint32_t *)((char *)v1 + 0);
-    v0 = 4;
-
-    /* fragment 21: Unknown */
-    /* unmatched fragment 21 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 303cc:	0082001a 	div	zero,a0,v0 */
-
-    /* fragment 22: Arithmetic */
-    v0 = (uintptr_t *)&day_night;
-
-    /* fragment 23: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&day_night));
-
-    /* fragment 24: Branch */
-    local_130 = v1;
-    if (v0 != 0) { goto tisp_set_sharpness0x18c; }
-
-    /* fragment 25: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(103, &local_a0, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 26: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(104, &local_c4, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 27: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(108, &local_e8, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 28: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(109, &local_10c, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 29: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)&local_a0, 36); /* jalr target resolved by relocation */
-
-    /* fragment 30: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)&local_c4, 36); /* jalr target resolved by relocation */
-
-    /* fragment 31: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)&local_e8, 36); /* jalr target resolved by relocation */
-
-    /* fragment 32: ConstantLoad */
-    a0 = 0xf954;
-
-    /* fragment 33: Branch */
-    a1 = (uintptr_t)&local_10c;
-    goto tisp_set_sharpness0x22c;
-
-tisp_set_sharpness0x18c:
-    /* fragment 34: Arithmetic */
-    v1 = 1;
-
-    /* fragment 35: Branch */
-    a1 = (uintptr_t)&LC2;
-    if (v0 != v1) { goto tisp_set_sharpness0x23c; }
-
-    /* fragment 36: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(103, &local_10, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 37: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(104, &local_34, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 38: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(108, &local_58, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 39: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_dmsc_param_array_set)(109, &local_7c, &local_130); /* jalr target resolved by relocation */
-
-    /* fragment 40: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)&local_10, 36); /* jalr target resolved by relocation */
-
-    /* fragment 41: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)&local_34, 36); /* jalr target resolved by relocation */
-
-    /* fragment 42: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)&local_58, 36); /* jalr target resolved by relocation */
-
-    /* fragment 43: CallSetup */
-    a0 = (uint32_t *)&tparams;
-    a0 = a0 - 1708;
-    a1 = (uintptr_t)&local_7c;
-
-tisp_set_sharpness0x22c:
-    /* fragment 44: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)a0, (void *)(uintptr_t)a1, 36); /* jalr target resolved by relocation */
-
-    /* fragment 45: Branch */
-    a0 = (uint32_t *)&tparams_day;
-    goto tisp_set_sharpness0x260;
-
-tisp_set_sharpness0x23c:
-    /* fragment 46: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(int32_t *)isp_printf)(2, &LC2, &__param_str_isp_clk, 249); /* jalr target resolved by relocation */
-
-    /* fragment 47: CallSetup */
-    a0 = (uint32_t *)&tparams_day;
-
-tisp_set_sharpness0x260:
-    /* fragment 48: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_day, (void *)(uintptr_t)&local_a0, 36); /* jalr target resolved by relocation */
-
-    /* fragment 49: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_day, (void *)(uintptr_t)&local_c4, 36); /* jalr target resolved by relocation */
-
-    /* fragment 50: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_day, (void *)(uintptr_t)&local_e8, 36); /* jalr target resolved by relocation */
-
-    /* fragment 51: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_day, (void *)(uintptr_t)&local_10c, 36); /* jalr target resolved by relocation */
-
-    /* fragment 52: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_night, (void *)(uintptr_t)&local_10, 36); /* jalr target resolved by relocation */
-
-    /* fragment 53: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_night, (void *)(uintptr_t)&local_34, 36); /* jalr target resolved by relocation */
-
-    /* fragment 54: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_night, (void *)(uintptr_t)&local_58, 36); /* jalr target resolved by relocation */
-
-    /* fragment 55: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_night, (void *)(uintptr_t)&local_7c, 36); /* jalr target resolved by relocation */
-
-    /* fragment 56: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 57: Arithmetic */
-    v0 = (uintptr_t *)&custom_eff;
-
-    /* fragment 58: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 59: MemoryAccess */
-    *(uint8_t *)((char *)((char *)&custom_eff + 0x1)) = s2;
-    s2 = local_148;
-
-    /* fragment 60: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	custom_eff[1] = sharpness;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000030610 origin=model_output original=tisp_set_saturation */
-void *tisp_set_saturation(uint32_t arg)
+int32_t tisp_set_saturation(uint32_t arg)
 {
 	int32_t eff[9];
 	int32_t i;
 	int32_t val;
+	int32_t size = sizeof(eff);
 	uint32_t sat = arg & 0xff;
-	int32_t *dn = (int32_t *)((char *)&day_night);
-	int32_t dn_val;
 
-	memcpy(eff, (void *)((char *)&custom_eff + 0xa4), 0x24);
+	memcpy(eff, custom_eff + 0xa4, sizeof(eff));
 
 	for (i = 0; i < 9; i++) {
 		val = (int32_t)((int64_t)sat * eff[i] / 128);
@@ -47698,48 +47210,39 @@ void *tisp_set_saturation(uint32_t arg)
 		((uint32_t *)eff)[i] = val;
 	}
 
-	dn_val = *dn;
-	if (dn_val == 0) {
-		tisp_ccm_param_array_set(0x81);
-		memcpy((void *)((char *)&tparams + 0xfbc8), eff, 0x24);
-		memcpy((void *)((char *)&tparams_day + 0xfbc8), eff, 0x24);
-		*dn = 1;
-		*(uint8_t *)((char *)&custom_eff + 0x3) = sat;
-	} else if (dn_val == 1) {
-		*dn = 1;
-		*(uint8_t *)((char *)&custom_eff + 0x3) = 0;
+	if (day_night == 0) {
+		tisp_ccm_param_array_set(0x81, eff, &size);
+		memcpy(tparams + 0xfbc8, eff, sizeof(eff));
+		memcpy(tparams_day + 0xfbc8, eff, sizeof(eff));
+		custom_eff[3] = sat;
+	} else if (day_night == 1) {
+		custom_eff[3] = 0;
 	}
 
-	return (void *)(uintptr_t)*dn;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003070c origin=model_output original=tisp_set_contrast */
 int32_t tisp_set_contrast(uint32_t arg)
 {
     uint32_t val = arg & 0xff;
-    int32_t sign_check = (int32_t)(val << 24) >> 24;
     uint32_t reg_val;
     uint32_t write_val;
-    uint32_t reg_addr;
-    uint32_t *base;
 
-    if (sign_check >= 0) {
+    if ((int8_t)val >= 0) {
         reg_val = system_reg_read(0x1704);
         system_reg_write(0x1704, reg_val & 0xff000000);
-        reg_val = system_reg_read(((char *)&jump_table_36120));
-        base = reg_val & 0xffffff00;
-        write_val = (int32_t)((val * 0xffffffb0 + 0x2800) / 0x80) + 0x10;
-        reg_addr = ((char *)&jump_table_36120);
+        reg_val = system_reg_read(0x1720);
+        write_val = ((int32_t)val * -80 + 0x2800) / 0x80 + 0x10;
+        system_reg_write(0x1720, (reg_val & 0xffffff00) + write_val);
     } else {
-        reg_val = system_reg_read(((char *)&jump_table_36120));
-        system_reg_write((uintptr_t)&jump_table_36120, reg_val & 0xffffff00);
+        reg_val = system_reg_read(0x1720);
+        system_reg_write(0x1720, reg_val & 0xffffff00);
         reg_val = system_reg_read(0x1704);
-        base = reg_val & 0xff000000;
         write_val = (val - 0x80) * 0x10101;
-        reg_addr = 0x1704;
+        system_reg_write(0x1704, (reg_val & 0xff000000) + write_val);
     }
 
-    system_reg_write(reg_addr, write_val + (uintptr_t)base);
 	custom_eff[2] = val;
 	return (int32_t)(uintptr_t)custom_eff;
 }
@@ -47981,44 +47484,16 @@ int32_t tisp_g_Hilightdepress(int32_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000030c1c origin=fragment_seed original=tisp_s_Gamma */
 int32_t tisp_s_Gamma(uint32_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uintptr_t *v0 = 0;
+	const void *gamma = (const void *)(uintptr_t)a0;
+	uint32_t size = 516;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a0;
-    local_10 = 516;
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams, (void *)(uintptr_t)s0, 516); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_gamma_param_array_set)(47, s0, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_day, (void *)(uintptr_t)s0, local_10); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(int32_t *)&tparams_night, (void *)(uintptr_t)s0, local_10); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = 0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (!gamma)
+		return -EINVAL;
+	memcpy(tparams + 0x81b8, gamma, size);
+	tisp_gamma_param_array_set(47, (uintptr_t)gamma);
+	memcpy(tparams_day + 0x81b8, gamma, size);
+	memcpy(tparams_night + 0x81b8, gamma, size);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000030cac origin=fragment_seed original=tisp_g_Gamma */
@@ -48268,90 +47743,95 @@ tisp_g_af_weight0x5c:
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000030fc4 origin=fragment_seed original=tisp_g_ev_attr */
+struct t21_ae_ctrls_view {
+	u32 field_00;
+	u32 sensor_again;
+	u32 isp_dgain;
+	u32 integration_time;
+	u32 sensor_dgain;
+	u32 field_14;
+	u32 field_18;
+	u32 field_1c;
+	u32 field_20;
+	u32 total_gain;
+	u16 field_28;
+	u16 field_2a;
+	u8 reserved[0x40 - 0x2c];
+};
+
+struct t21_ev_sensor_info_view {
+	u8 reserved_00[0x2c];
+	u32 fps;
+	u8 reserved_30[0x0e];
+	u16 lines_per_second;
+};
+
+struct t21_ev_attr_view {
+	u32 integration_time;
+	u32 total_gain;
+	u32 exposure_us;
+	u32 total_gain_log2;
+	u32 sensor_again_log2;
+	u32 sensor_dgain_log2;
+	u32 field_18;
+	u32 sensor_gain;
+	u32 field_20_log2;
+	u32 field_24_log2;
+	u32 isp_dgain_log2;
+	u32 field_2c_log2;
+};
+
+/* Rebuilt from the stock T21 body at 0x30fc4. */
 int32_t tisp_g_ev_attr(uintptr_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uintptr_t s1 = 0;
-    uint32_t s2 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	const struct t21_ae_ctrls_view *ctrl =
+		(const struct t21_ae_ctrls_view *)tisp_ae_ctrls;
+	const struct t21_ev_sensor_info_view *sensor =
+		(const struct t21_ev_sensor_info_view *)sensor_info;
+	struct t21_ev_attr_view *out = (struct t21_ev_attr_view *)a0;
+	u32 fps_num = sensor->fps & 0xffff;
+	u32 fps_den = sensor->fps >> 16;
+	u32 scaled;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	BUILD_BUG_ON(sizeof(struct t21_ae_ctrls_view) != sizeof(tisp_ae_ctrls));
+	BUILD_BUG_ON(offsetof(struct t21_ae_ctrls_view, integration_time) != 0x0c);
+	BUILD_BUG_ON(offsetof(struct t21_ae_ctrls_view, total_gain) != 0x24);
+	BUILD_BUG_ON(offsetof(struct t21_ev_sensor_info_view, fps) != 0x2c);
+	BUILD_BUG_ON(offsetof(struct t21_ev_sensor_info_view, lines_per_second) != 0x3e);
+	BUILD_BUG_ON(sizeof(struct t21_ev_attr_view) != 0x30);
 
-    /* fragment 1: CallSetup */
-    *(uint32_t *)((char *)a0 + 0) = (*(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0xc)));
-    s0 = a0;
-    *(uint32_t *)((char *)a0 + 4) = ((*(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x24))) >> 10);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(*(uint32_t *)((char *)((char *)&tisp_ae_ctrls + 0x24)), 10, 16); /* jalr target resolved by relocation */
+	if (!out || !fps_num || !fps_den || !sensor->lines_per_second)
+		return -EINVAL;
 
-    /* fragment 2: MemoryAccess */
-    a1 = *(uint32_t *)((char *)s0 + 0);
-    a0 = 983040;
-    *(uint32_t *)((char *)s0 + 12) = v0;
-    a0 = a0 + 16960;
-    v0 = (uintptr_t *)&sensor_info;
-    a0 = a1 * a0;
-    v0 = v0;
-    v1 = *(uint32_t *)((char *)v0 + 44);
-    v0 = *(uint16_t *)((char *)v0 + 62);
-    a1 = v1 & 65535;
-    a0 = a0 * a1;
-    v1 = v1 >> 16;
+	out->integration_time = ctrl->integration_time;
+	out->total_gain = ctrl->total_gain >> 10;
+	out->total_gain_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->total_gain, 10, 16);
 
-    /* fragment 3: CallSetup */
-    local_10 = a1;
-    *(uint32_t *)((char *)s0 + 8) = v1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(*(uint32_t *)((char *)(s1) + 4), 10, 5); /* jalr target resolved by relocation */
+	/* Preserve the OEM's 32-bit arithmetic and division order. */
+	scaled = out->integration_time * 1000000U;
+	scaled *= fps_num;
+	scaled /= fps_den;
+	out->exposure_us = scaled / sensor->lines_per_second;
 
-    /* fragment 4: CallSetup */
-    *(uint32_t *)((char *)s0 + 16) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(*(uint32_t *)((char *)(s1) + 16), 10, 5); /* jalr target resolved by relocation */
+	out->sensor_again_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->sensor_again, 10, 5);
+	out->sensor_dgain_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->sensor_dgain, 10, 5);
+	out->field_18 = ctrl->field_2a;
+	out->sensor_gain =
+		(u32)fix_point_mult2_32(10, ctrl->sensor_again,
+					 ctrl->sensor_dgain, 0) >> 2;
+	out->field_20_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->field_14 + 4, 10, 5);
+	out->field_24_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->field_20 + 4, 10, 5);
+	out->isp_dgain_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->isp_dgain, 10, 5);
+	out->field_2c_log2 =
+		tisp_log2_fixed_to_fixed(ctrl->field_18, 10, 5);
 
-    /* fragment 5: CallSetup */
-    *(uint32_t *)((char *)s0 + 20) = v0;
-    *(uint32_t *)((char *)s0 + 24) = *(uint16_t *)((char *)((char *)&sinfo_slots + 0x26));
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)fix_point_mult2_32)(10, *(uint32_t *)((char *)(s1) + 4), *(uint32_t *)((char *)(s1) + 16)); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    *(uint32_t *)((char *)s0 + 28) = ((uintptr_t)v0 >> 2);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)((*(uint32_t *)((char *)(s1) + 20)) + 4, 10, 5); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    *(uint32_t *)((char *)s0 + 32) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)((*(uint32_t *)((char *)(s1) + 32)) + 4, 10, 5); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    *(uint32_t *)((char *)s0 + 36) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(*(uint32_t *)((char *)(s1) + 8), 10, 5); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    *(uint32_t *)((char *)s0 + 40) = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(*(uint32_t *)((char *)(s1) + 24), 10, 5); /* jalr target resolved by relocation */
-
-    /* fragment 10: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 11: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 44) = v0;
-    s2 = local_20;
-    s1 = local_1c;
-    s0 = local_18;
-    v0 = 0;
-
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003111c origin=fragment_seed original=tisp_g_wb_attr */
@@ -48986,6 +48466,7 @@ int32_t ispcore_sensor_ops_ioctl(void *arg1, int32_t arg2, int32_t arg3)
 
             if (fn != NULL) {
                 void *ioctl_fn = *(void **)((char *)fn + 8);
+
                 if (ioctl_fn != NULL) {
                     ret = ((int32_t (*)(void *, int32_t, int32_t))ioctl_fn)(entry, arg2, arg3);
                     if (ret == 0) {
@@ -49035,115 +48516,57 @@ int32_t ispcore_link_setup(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031a80 origin=model_output original=ispcore_core_ops_ioctl */
 int32_t ispcore_core_ops_ioctl(void *arg1, int32_t cmd, void *arg)
 {
-	int32_t ret;
+	int32_t ret = 0;
 	int32_t i;
-	void *entry;
-	void *ops;
-	void *func;
-	int32_t (*call)(void *, int32_t, void *);
 
-	if (cmd == 0x1000000) {
-		if (!arg1) {
-			ret = -ENODEV;
-			goto err;
-		}
-		ops = *(void **)((char *)arg1 + 0xc4);
-		if (!ops) {
-			ret = -ENODEV;
-			goto err;
-		}
-		func = *(void **)ops;
-		if (!func) {
-			ret = -ENODEV;
-			goto err;
-		}
-		call = (int32_t (*)(void *, int32_t, void *))func;
-		ret = call(arg1, cmd, arg);
-		if (ret == 0)
-			goto loop;
-		if (ret != -ENXIO)
-			goto err;
-		goto loop;
-	}
+	if (cmd != 0x1000000 && cmd != 0x1000001)
+		return 0;
+	if (!arg1)
+		return -ENODEV;
 
-	if (cmd == 0x1000001) {
-		if (!arg1) {
-			ret = -ENODEV;
-			goto err;
-		}
-		ops = *(void **)((char *)arg1 + 0xc4);
-		if (!ops) {
-			ret = -ENODEV;
-			goto err;
-		}
-		func = *(void **)((char *)ops + 0xc);
-		if (!func) {
-			ret = -ENODEV;
-			goto err;
-		}
-		call = (int32_t (*)(void *, int32_t, void *))func;
-		ret = call(arg1, cmd, arg);
-		if (ret == 0)
-			goto loop;
-		if (ret != -ENXIO)
-			goto err;
-		goto loop;
-	}
+	for (i = -1; i < 16; i++) {
+		void *entry = i < 0 ? arg1 :
+			*(void **)((char *)arg1 + 0x38 + i * sizeof(void *));
+		void *ops;
+		void *group;
 
-	ret = 0;
-
-loop:
-	for (i = 0; i < 16; i++) {
-		entry = *(void **)((char *)arg1 + i * 4 + 0x38);
 		if (!entry)
 			continue;
+		ops = *(void **)((char *)entry + 0xc4);
+		group = !ops ? NULL :
+			(cmd == 0x1000000 ? *(void **)ops :
+			 *(void **)((char *)ops + 0xc));
+		if (!group) {
+			ret = -ENOIOCTLCMD;
+			continue;
+		}
 
 		if (cmd == 0x1000000) {
-			ops = *(void **)((char *)entry + 0xc4);
-			if (!ops)
-				continue;
-			func = *(void **)ops;
-			if (!func)
-				continue;
-			call = (int32_t (*)(void *, int32_t, void *))func;
-			ret = call(entry, cmd, arg);
-			if (ret == 0)
-				continue;
-			if (ret != -ENXIO)
-				break;
-			continue;
-		}
+			int32_t (*init)(void *, int32_t) =
+				*(int32_t (**)(void *, int32_t))((char *)group + 4);
 
-		if (cmd == 0x1000001) {
-			ops = *(void **)((char *)entry + 0xc4);
-			if (!ops)
-				continue;
-			func = *(void **)((char *)ops + 0xc);
-			if (!func)
-				continue;
-			call = (int32_t (*)(void *, int32_t, void *))func;
-			ret = call(entry, cmd, arg);
-			if (ret == 0)
-				continue;
-			if (ret != -ENXIO)
-				break;
-			continue;
-		}
+			pr_info("tx-isp-t21: ispcore ioctl=0x%x slot=%d entry=%p init=%p begin\n",
+				cmd, i, entry, init);
+			ret = init ? init(entry, *(int32_t *)arg) : -ENOIOCTLCMD;
+		} else {
+			int32_t (*sync)(void *, void *) =
+				*(int32_t (**)(void *, void *))((char *)group + 4);
 
-		break;
+			pr_info("tx-isp-t21: ispcore ioctl=0x%x slot=%d entry=%p sync=%p begin\n",
+				cmd, i, entry, sync);
+			ret = sync ? sync(entry, arg) : -ENOIOCTLCMD;
+		}
+		pr_info("tx-isp-t21: ispcore ioctl=0x%x slot=%d ret=%d\n",
+			cmd, i, ret);
+
+		if (ret && ret != -ENOIOCTLCMD) {
+			isp_printf(2, "%s %d Failed to ioctl!\n",
+				   "ispcore_core_ops_ioctl", 800);
+			return ret;
+		}
 	}
 
-	if (i == 16) {
-		if (ret == -ENXIO)
-			ret = 0;
-		return ret;
-	}
-
-err:
-	if (ret == -ENXIO)
-		goto loop;
-	((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s %d Failed to ioctl!\n"), (uintptr_t)("ispcore_core_ops_ioctl"), (uintptr_t)(800));
-	return ret;
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031c68 origin=model_output original=ispcore_irq_thread_handle */
@@ -49191,29 +48614,47 @@ int32_t ispcore_irq_thread_handle(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031d8c origin=model_output original=ispcore_frame_channel_streamoff */
 int32_t ispcore_frame_channel_streamoff(int32_t *arg1)
 {
-	int32_t *s2 = (int32_t *)*arg1;
-	uint8_t s5 = *(uint8_t *)(arg1 + 7);
-	int32_t *s0 = (int32_t *)(arg1[8]);
-	int32_t *s4 = (int32_t *)(*(int32_t *)(s2 + 0xd4) + 0x120);
-	int32_t flags;
+	struct t21_frame_pad_view *pad = (void *)arg1;
+	struct t21_ispcore_channel_abi *channel;
+	u8 *owner;
+	u8 *core;
+	u8 *tuning;
+	void __iomem *base;
+	unsigned long flags = 0;
+	u32 writer_base;
 
-	if (s5 == 4) {
-		__private_spin_lock_irqsave(s0 + 0x78, &flags);
-		if (*(int32_t *)(s0 + 0x50) == s5) {
-			private_spin_unlock_irqrestore(s0 + 0x78, flags);
-			tisp_channel_stop(*(uint8_t *)(arg1 + 4));
-			*(int32_t *)((uintptr_t)s2 + 0xb8 + (*(int32_t *)(s0 + 0x4c) << 8) + 0x249c) = 1;
-			*(int32_t *)((uintptr_t)s2 + 0xb8 + (*(int32_t *)(s0 + 0x4c) << 8) + 0x24a0) = 1;
-			*(int32_t *)((uintptr_t)s2 + 0xb8 + (*(int32_t *)(s0 + 0x4c) << 8) + 0x24a4) = 1;
-			*(int32_t *)((uintptr_t)s2 + 0xb8 + (*(int32_t *)(s0 + 0x4c) << 8) + 0x24a8) = 1;
-			*(int32_t *)(s0 + 0x50) = 3;
-			*(uint8_t *)(arg1 + 7) = 3;
-			memset(s0, 0, 0x4c);
-			*(int32_t *)(s4 + 0x60) = 0;
-			*(int32_t *)(s4 + 0x70) = 0;
-		} else {
-			private_spin_unlock_irqrestore(s0 + 0x78, flags);
-		}
+	if (!t21_isp_valid_ptr(pad) || pad->state != 4)
+		return 0;
+	owner = pad->owner;
+	channel = pad->event_priv;
+	if (!t21_isp_valid_ptr(owner) || !t21_isp_valid_ptr(channel))
+		return -EINVAL;
+	core = *(u8 **)(owner + 0xd4);
+	base = *(void __iomem **)(owner + 0xb8);
+	if (!t21_isp_valid_ptr(core) || !t21_isp_valid_ptr(base))
+		return -EINVAL;
+	tuning = *(u8 **)(core + 0x120);
+
+	__private_spin_lock_irqsave((spinlock_t *)channel->state_lock, &flags);
+	if (channel->state != pad->state) {
+		private_spin_unlock_irqrestore((spinlock_t *)channel->state_lock,
+					       flags);
+		return 0;
+	}
+	private_spin_unlock_irqrestore((spinlock_t *)channel->state_lock, flags);
+
+	tisp_channel_stop(pad->index);
+	writer_base = (channel->channel_id << 8) + 0x249c;
+	writel(1, base + writer_base + 0x0);
+	writel(1, base + writer_base + 0x4);
+	writel(1, base + writer_base + 0x8);
+	writel(1, base + writer_base + 0xc);
+	channel->state = 3;
+	pad->state = 3;
+	memset(&channel->format, 0, sizeof(channel->format));
+	if (t21_isp_valid_ptr(tuning)) {
+		*(u32 *)(tuning + 0x60) = 0;
+		*(u32 *)(tuning + 0x70) = 0;
 	}
 	return 0;
 }
@@ -49237,9 +48678,9 @@ int dump_isp_info_open(struct inode *inode, struct file *file)
 int32_t isp_info_show(struct seq_file *m)
 {
 	int32_t ret;
-	int32_t sensor_ptr;
-	int32_t isp_ctrl;
-	int32_t isp_data;
+	struct t21_isp_device_info_view *ispdev;
+	struct t21_isp_core_info_view *isp_ctrl;
+	uint8_t *isp_data;
 	int32_t ev_attr[8];
 	int32_t ae_min[2];
 	int32_t wb_attr[8];
@@ -49953,20 +49394,34 @@ int32_t isp_info_show(struct seq_file *m)
 	int32_t dbg_zy;
 	int32_t dbg_zz;
 
-	sensor_ptr = *(int32_t *)((char *)m + 0x3c);
-	if (sensor_ptr == 0) {
-		isp_ctrl = 0;
-	} else if ((uint32_t)sensor_ptr >= 0xfffff001) {
-		isp_ctrl = 0;
-	} else {
-		isp_ctrl = *(int32_t *)((char *)sensor_ptr + 0xd4);
-	}
+	BUILD_BUG_ON(offsetof(struct t21_isp_device_info_view, core) != 0xd4);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, state) != 0xe8);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, width) != 0xec);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, height) != 0xf0);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, raw_pattern) != 0xf4);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, sensor_name) != 0x120);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, fps) != 0x12c);
+	BUILD_BUG_ON(offsetof(struct t21_isp_core_info_view, tuning) != 0x19c);
 
-	isp_data = *(int32_t *)((char *)isp_ctrl + 0x19c);
+	ispdev = m->private;
+	isp_ctrl = ispdev ? ispdev->core : NULL;
 	ret = private_seq_printf(m,
 		"****************** ISP INFO **********************\n");
+	if (!isp_ctrl)
+		return ret + private_seq_printf(m, "sensor doesn't work, please enable sensor\n");
+	isp_data = isp_ctrl->tuning;
+	ret += private_seq_printf(m, "SENSOR NAME : %s\n",
+				  isp_ctrl->sensor_name ?: "unknown");
+	ret += private_seq_printf(m, "SENSOR OUTPUT WIDTH : %d\n",
+				  isp_ctrl->width);
+	ret += private_seq_printf(m, "SENSOR OUTPUT HEIGHT : %d\n",
+				  isp_ctrl->height);
+	ret += private_seq_printf(m, "ISP OUTPUT FPS : %d / %d\n",
+				  isp_ctrl->fps >> 16,
+				  isp_ctrl->fps & 0xffff);
+	return ret;
 
-	if (*(int32_t *)((char *)isp_ctrl + 0xe8) < 4) {
+	if (isp_ctrl->state < 4) {
 		ret = seq_printf(m, "sensor doesn't work, please enable sensor\n", 0);
 		return ret;
 	}
@@ -49974,7 +49429,7 @@ int32_t isp_info_show(struct seq_file *m)
 	tisp_g_ev_attr(ev_attr);
 	tisp_g_ae_min(ae_min);
 	tisp_g_wb_attr(wb_attr);
-	raw_pattern = *(int32_t *)((char *)isp_ctrl + 0xf4);
+	raw_pattern = isp_ctrl->raw_pattern;
 
 	if (raw_pattern == 0x3201) {
 		pattern_str = "RGGB";
@@ -50128,10 +49583,10 @@ int32_t isp_info_show(struct seq_file *m)
 
 	ret += private_seq_printf(m, "Software Version : %s\n", "H20200509a");
 	ret += private_seq_printf(m, "Firmware Version : %s\n", "H01-380");
-	ret += private_seq_printf(m, "SENSOR NAME : %s\n", *(char **)((char *)isp_ctrl + 0x120));
-	ret += private_seq_printf(m, "SENSOR OUTPUT WIDTH : %d\n", *(int32_t *)((char *)isp_ctrl + 0xec));
-	ret += private_seq_printf(m, "SENSOR OUTPUT HEIGHT : %d\n", *(int32_t *)((char *)isp_ctrl + 0xf0));
-	fps_val = *(int32_t *)((char *)isp_ctrl + 0x12c);
+	ret += private_seq_printf(m, "SENSOR NAME : %s\n", isp_ctrl->sensor_name);
+	ret += private_seq_printf(m, "SENSOR OUTPUT WIDTH : %d\n", isp_ctrl->width);
+	ret += private_seq_printf(m, "SENSOR OUTPUT HEIGHT : %d\n", isp_ctrl->height);
+	fps_val = isp_ctrl->fps;
 	ret += ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))private_seq_printf)((uintptr_t)(m), (uintptr_t)("ISP OUTPUT FPS : %d / %d\n"), (uintptr_t)(fps_val >> 16), (uintptr_t)(fps_val & 0xffff));
 	ret += private_seq_printf(m, "SENSOR OUTPUT RAW PATTERN : %s\n", (uintptr_t)pattern_str);
 	ret += private_seq_printf(m, "ISP Top Value : 0x%x\n", tisp_top_read());
@@ -50153,22 +49608,22 @@ int32_t isp_info_show(struct seq_file *m)
 	ret += private_seq_printf(m, "ISP EV value us: %d\n", ev_attr[0]);
 	ret += private_seq_printf(m, "ISP EV min int: %d\n", ae_min[0]);
 	ret += private_seq_printf(m, "ISP EV min again: %d\n", ae_min[1]);
-	wb_rg = 0x10000 / wb_attr[0];
+	wb_rg = wb_attr[0] ? 0x10000 / wb_attr[0] : 0;
 	ret += private_seq_printf(m, "ISP WB weighted rgain: %d\n", wb_rg);
-	wb_bg = 0x10000 / wb_attr[1];
+	wb_bg = wb_attr[1] ? 0x10000 / wb_attr[1] : 0;
 	ret += private_seq_printf(m, "ISP WB weighted bgain: %d\n", wb_bg);
-	ret += private_seq_printf(m, "Saturation : %d\n", *(int32_t *)((char *)isp_data + 0x4090));
+	if (isp_data)
+		ret += private_seq_printf(m, "Saturation : %d\n",
+					  *(int32_t *)(isp_data + 0x4090));
 	ret += private_seq_printf(m, "Saturation : %d\n", tisp_get_saturation());
 	ret += private_seq_printf(m, "Sharpness : %d\n", tisp_get_sharpness());
 	ret += private_seq_printf(m, "Contrast : %d\n", tisp_get_contrast());
 	ret += private_seq_printf(m, "Brightness : %d\n", tisp_get_brightness());
-	ret += private_seq_printf(m, "Antiflicker : %d\n", *(int32_t *)((char *)isp_data + 0xefc));
+	if (isp_data)
+		ret += private_seq_printf(m, "Antiflicker : %d\n",
+					  *(int32_t *)(isp_data + 0xefc));
 
-	ret += private_seq_printf(m, "debug : %d,%d,(%d,%d,%d),%d,%d(%u),%d\n",
-		*(int32_t *)0xa74d4, *(int32_t *)0xa74dc,
-		*(int32_t *)0xa74e0, *(int32_t *)0xa74e4, *(int32_t *)0xa74e8,
-		*(int32_t *)0xa74ec, *(int32_t *)0xa74f0,
-		*(uint32_t *)0xa74f4, *(int32_t *)0xa74f8);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000327ec origin=fragment_seed original=ispcore_activate_module */
@@ -50283,12 +49738,13 @@ int32_t ispcore_sync_sensor_attr(void *arg1, void *arg2, int32_t arg3)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032ad4 origin=model_output original=ispcore_pad_event_handle */
 int32_t ispcore_pad_event_handle(int32_t *arg1, int32_t arg2, void *arg3)
 {
+	struct t21_frame_pad_view *pad = (void *)arg1;
 	int32_t result = 0;
 	int32_t var_40;
 	int32_t var_20;
 	void *s1;
 
-	if (*(uint8_t *)(arg1 + 5) == 0)
+	if (!t21_isp_valid_ptr(pad) || !pad->enabled)
 		goto out;
 	if ((uint32_t)(arg2 - 0x3000001) >= 9)
 		goto out;
@@ -50314,152 +49770,160 @@ int32_t ispcore_pad_event_handle(int32_t *arg1, int32_t arg2, void *arg3)
 		return 0;
 	}
 	case 0x3000002: {
-		if (arg1 == 0)
-			return -22;
-		if ((uint32_t)arg1 >= 0xfffff001)
-			return -22;
-		{
-			void *v0_8 = *(void **)arg1;
-			if (v0_8 == 0)
-				return -22;
-			if ((uint32_t)v0_8 >= 0xfffff001)
-				return -22;
-			{
-				void *v0_9 = *(void **)((char *)v0_8 + 0xd4);
-				if (v0_9 == 0)
-					return -22;
-				if ((uint32_t)v0_9 >= 0xfffff001)
-					return -22;
-				s1 = (void *)arg1[8];
-				{
-					void *v1_17 = *(void **)((char *)s1 + 0x58);
-					int32_t s4_2 = *(int32_t *)((char *)v0_9 + 0x124);
-					int32_t s3_3 = *(int32_t *)((char *)v0_9 + 0x128);
-					int32_t v0_10 = *(int32_t *)((char *)v1_17 + 0x144);
-					int32_t a1_4 = *(int32_t *)((char *)arg3 + 0xc);
-					int32_t found = 0;
+		struct t21_frame_pad_view *pad = (void *)arg1;
+		struct t21_frame_format_view *format = arg3;
+		struct t21_ispcore_channel_abi *channel;
+		u8 *owner;
+		u8 *core;
+		const struct t21_isp_output_fmt *output = NULL;
+		u32 sensor_width;
+		u32 sensor_height;
+		u32 out_width;
+		u32 out_height;
+		u32 attr[8];
+		u32 i;
 
-					while (*(int32_t *)((char *)v1_17 + 0x148) < v0_10) {
-						void *v1_2 = (void *)(&((int32_t[]){0})[v0_10 * 0x2c]);
-						v0_10 += 1;
-						if (a1_4 == *(int32_t *)((char *)v1_2 + 0x20)) {
-							int32_t a0_1 = *(int32_t *)((char *)arg3 + 4);
-							uint32_t v0_13 = (uint32_t)(a0_1 * *(int32_t *)((char *)v1_2 + 0x24)) >> 3;
-							*(int32_t *)((char *)arg3 + 0x14) = (int32_t)v0_13;
-							int32_t a2 = *(int32_t *)((char *)arg3 + 8);
-							int32_t v0_14;
-							if (a1_4 == 0x3132564e || a1_4 == 0x3231564e)
-								v0_14 = (int32_t)v0_13 * ((a2 + 0xf) & 0xfffffff0);
-							else
-								v0_14 = (int32_t)v0_13 * a2;
-							*(int32_t *)((char *)arg3 + 0x18) = v0_14;
-							*(int32_t *)((uintptr_t)s1 + 0x98) = (*(int32_t *)((char *)v1_2 + 0x24) >> 3) * a0_1;
-							*(int32_t *)((char *)arg3 + 0x20) = (int32_t)(uintptr_t)v1_2;
-							found = 1;
-							break;
-						}
-					}
-					if (!found) {
-						((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("%s[%d] unfound the pixelformat = %d\n"), (uintptr_t)("ispcore_frame_channel_s_fmt"), (uintptr_t)(574), (uintptr_t)(a1_4));
-					}
-					var_40 = 1;
-					int32_t var_3c_1;
-					int32_t var_38_1;
-					if (*(uint8_t *)((char *)arg3 + 0x38) == 0) {
-						var_3c_1 = s4_2;
-						var_38_1 = s3_3;
-					} else {
-						var_3c_1 = *(int32_t *)((char *)arg3 + 0x3c);
-						var_38_1 = *(int32_t *)((char *)arg3 + 0x40);
-					}
-					int32_t var_34_1 = 1;
-					int32_t v0_25;
-					int32_t var_30;
-					int32_t var_28;
-					int32_t var_2c;
-					if (*(uint8_t *)((char *)arg3 + 0x24) == 0) {
-						var_30 = 0;
-						var_28 = var_3c_1;
-						v0_25 = var_38_1;
-						var_2c = 0;
-					} else {
-						var_30 = *(int32_t *)((char *)arg3 + 0x2c);
-						var_2c = *(int32_t *)((char *)arg3 + 0x28);
-						var_28 = *(int32_t *)((char *)arg3 + 0x30);
-						v0_25 = *(int32_t *)((char *)arg3 + 0x34);
-					}
-					int32_t var_24_1 = v0_25;
-					int32_t attr[10] = {var_40, var_34_1, var_24_1, var_2c, var_28, var_30, 0, 0, 0, 0};
-					tisp_channel_attr_set(*(uint8_t *)(arg1 + 1), attr);
-					memcpy(s1, arg3, 0x4c);
-					return 0;
-				}
+		BUILD_BUG_ON(sizeof(struct t21_frame_pad_view) != 0x24);
+		BUILD_BUG_ON(offsetof(struct t21_frame_pad_view, event_priv) != 0x20);
+		BUILD_BUG_ON(offsetof(struct t21_ispcore_channel_abi, state) != 0x50);
+		BUILD_BUG_ON(offsetof(struct t21_ispcore_channel_abi, state_lock) != 0x78);
+		BUILD_BUG_ON(offsetof(struct t21_ispcore_channel_abi, line_width) != 0x98);
+
+		if (!t21_isp_valid_ptr(pad) || !t21_isp_valid_ptr(format) ||
+		    !t21_isp_valid_ptr(pad->owner) ||
+		    !t21_isp_valid_ptr(pad->event_priv))
+			return -EINVAL;
+		owner = pad->owner;
+		core = *(u8 **)(owner + 0xd4);
+		if (!t21_isp_valid_ptr(core))
+			return -EINVAL;
+		channel = pad->event_priv;
+
+		for (i = 0; i < ARRAY_SIZE(t21_isp_output_formats); i++) {
+			if (t21_isp_output_formats[i].fourcc ==
+			    format->pixelformat) {
+				output = &t21_isp_output_formats[i];
+				break;
 			}
 		}
+		if (!output || !output->depth) {
+			isp_printf(1, "%s[%d] unfound the pixelformat = %d\n",
+				   "ispcore_frame_channel_s_fmt", 574,
+				   format->pixelformat);
+			return -EINVAL;
+		}
+
+		format->bytesperline = format->width * output->depth / 8;
+		format->sizeimage = format->bytesperline *
+			((format->pixelformat == 0x3132564e ||
+			  format->pixelformat == 0x3231564e) ?
+			 ALIGN(format->height, 16) : format->height);
+		format->format_private = (u32)(uintptr_t)output;
+		channel->line_width = format->width * (output->depth >> 3);
+
+		sensor_width = *(u32 *)(core + 0x124);
+		sensor_height = *(u32 *)(core + 0x128);
+		out_width = format->scaler_enable ?
+			format->scaler_width : sensor_width;
+		out_height = format->scaler_enable ?
+			format->scaler_height : sensor_height;
+		attr[0] = 1;
+		attr[1] = out_width;
+		attr[2] = out_height;
+		attr[3] = 1;
+		if (format->crop_enable) {
+			attr[4] = format->crop_left;
+			attr[5] = format->crop_top;
+			attr[6] = format->crop_width;
+			attr[7] = format->crop_height;
+		} else {
+			attr[4] = 0;
+			attr[5] = 0;
+			attr[6] = out_width;
+			attr[7] = out_height;
+		}
+
+		result = tisp_channel_attr_set(pad->index, attr);
+		if (result)
+			return result;
+		memcpy(&channel->format, format, sizeof(*format));
+		return 0;
 	}
 	case 0x3000003: {
-		uint32_t v1_4 = *(uint8_t *)(arg1 + 7);
-		void *s0_2 = (void *)arg1[8];
+		struct t21_ispcore_channel_abi *channel = pad->event_priv;
 		var_20 = 0;
+		pr_info("tx-isp-t21: core streamon pad=%p index=%u state=%u flags=%08x channel=%p channel_state=%u\n",
+			pad, pad->index, pad->state, pad->flags, channel,
+			t21_isp_valid_ptr(channel) ? channel->state : ~0U);
 
-		if (v1_4 != 3)
+		if (pad->state != 3 || !t21_isp_valid_ptr(channel))
 			return 0;
 
-		__private_spin_lock_irqsave((spinlock_t *)((char *)s0_2 + 0x78), (unsigned long *)&var_20);
-		if (*(int32_t *)((char *)s0_2 + 0x50) != 4) {
-			tisp_channel_start(*(uint8_t *)(arg1 + 1));
-			*(int32_t *)((char *)s0_2 + 0x50) = 4;
-			*(uint8_t *)(arg1 + 7) = 4;
-			private_spin_unlock_irqrestore((spinlock_t *)((char *)s0_2 + 0x78), (unsigned long)var_20);
-			return 0;
+		__private_spin_lock_irqsave((spinlock_t *)channel->state_lock,
+					    (unsigned long *)&var_20);
+		if (channel->state != 4) {
+			tisp_channel_start(pad->index);
+			pr_info("tx-isp-t21: core streamon started index=%u enable=%08x writer=%08x\n",
+				pad->index, system_reg_read(0x2304),
+				system_reg_read(0x2318));
+			channel->state = 4;
+			pad->state = 4;
 		}
-		arch_local_irq_restore((unsigned long)var_20);
-		{
-			int32_t *entry_gp = (int32_t *)0;
-			*(uintptr_t *)((uintptr_t)entry_gp + 0x14) -= 1;
-			result = 0;
-			if (((*(uintptr_t *)((uintptr_t)entry_gp + 8) >> 2) & 1) != 0)
-				preempt_schedule();
-		}
+		private_spin_unlock_irqrestore((spinlock_t *)channel->state_lock,
+					       (unsigned long)var_20);
 		return 0;
 	}
 	case 0x3000004:
 		ispcore_frame_channel_streamoff(arg1);
 		return 0;
 	case 0x3000005: {
-		void *s4_1 = *(void **)arg1;
-		int32_t v0_44 = arg1[5] & 0x20;
+		u8 *owner = pad->owner;
+		struct t21_ispcore_channel_abi *channel = pad->event_priv;
+		struct t21_frame_buffer_abi *buffer;
+		void __iomem *base;
+		u32 height;
 		var_20 = 0;
-		void *s3_2 = (void *)arg1[8];
 		result = 0;
+		pr_info_ratelimited("tx-isp-t21: core qbuf pad=%p index=%u state=%u flags=%08x owner=%p channel=%p event=%p\n",
+			pad, pad->index, pad->state, pad->flags, owner, channel,
+			arg3);
 
-		if (v0_44 == 0) {
-			if (arg3 == 0 || s3_2 == 0) {
-				((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("error: %s,%d, buf = %p, chan = %p\n"), (uintptr_t)("ispcore_frame_channel_qbuf"), (uintptr_t)(475), (uintptr_t)(arg3), (uintptr_t)(s3_2));
-				return 0;
-			}
-			*(uint8_t *)((char *)arg3 - 0x1c) = 4;
-			__private_spin_lock_irqsave((spinlock_t *)((char *)s3_2 + 0x78), (unsigned long *)&var_20);
-			if (*(int32_t *)((char *)s3_2 + 0xc) != 0x3231564e) {
-				((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("error: %s, %d, not support this format\n"), (uintptr_t)("ispcore_frame_channel_qbuf"), (uintptr_t)(456));
-				return -1;
-			}
-			{
-				int32_t a0_11 = *(int32_t *)((char *)s3_2 + 4);
-				int32_t v1_8 = (*(int32_t *)((char *)s3_2 + 8) + 0xf) & 0xfffffff0;
-				*(uint8_t *)((char *)arg3 - 0x1c) = 5;
-				*(int32_t *)((char *)arg3 - 0x18) += 1;
-				int32_t v0_47 = *(int32_t *)((char *)arg3 + 8);
-				*(int32_t *)((char *)arg3 + 0xc) = v1_8 * a0_11 + v0_47;
-				{
-					int32_t *base = (void *)((uintptr_t)*((int32_t **)((char *)(uintptr_t)s4_1 + 0xb8)));
-					int32_t idx = *(int32_t *)((char *)s3_2 + 0x4c) << 8;
-					*(base + idx + 0x246c) = v0_47;
-					*(base + idx + 0x2484) = *(int32_t *)((char *)arg3 + 0xc);
-				}
-				private_spin_unlock_irqrestore((spinlock_t *)((char *)s3_2 + 0x78), (unsigned long)var_20);
-			}
+		if (pad->flags & 0x20)
+			return 0;
+		if (!t21_isp_valid_ptr(arg3) || !t21_isp_valid_ptr(channel) ||
+		    !t21_isp_valid_ptr(owner))
+			return 0;
+		buffer = container_of((struct list_head *)arg3,
+				      struct t21_frame_buffer_abi, event);
+		pr_info_ratelimited("tx-isp-t21: core qbuf buffer=%p dma=%08x event_dma=%08x fmt=%08x channel_id=%u base=%p\n",
+			buffer, buffer->dma_addr, buffer->event_dma,
+			channel->format.pixelformat, channel->channel_id,
+			*(void **)(owner + 0xb8));
+		buffer->marker = 4;
+		__private_spin_lock_irqsave((spinlock_t *)channel->state_lock,
+					    (unsigned long *)&var_20);
+		if (channel->format.pixelformat != 0x3231564e) {
+			private_spin_unlock_irqrestore(
+				(spinlock_t *)channel->state_lock,
+				(unsigned long)var_20);
+			isp_printf(1, "error: %s, %d, not support this format\n",
+				   "ispcore_frame_channel_qbuf", 456);
+			return -1;
 		}
+		height = ALIGN(channel->format.height, 16);
+		buffer->marker = 5;
+		buffer->completed++;
+		buffer->event_chroma = buffer->event_dma +
+			channel->format.width * height;
+		base = *(void __iomem **)(owner + 0xb8);
+		if (t21_isp_valid_ptr(base)) {
+			writel(buffer->event_dma,
+			       base + (channel->channel_id << 8) + 0x246c);
+			writel(buffer->event_chroma,
+			       base + (channel->channel_id << 8) + 0x2484);
+		}
+		private_spin_unlock_irqrestore((spinlock_t *)channel->state_lock,
+					       (unsigned long)var_20);
 		return 0;
 	}
 	case 0x3000006:
@@ -50553,423 +50017,110 @@ noinline int32_t system_reg_write(uint32_t offset,
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000330fc origin=fragment_seed original=ispcore_interrupt_service_routine */
 int32_t ispcore_interrupt_service_routine(uintptr_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_2c = 0;
-    uint32_t local_30 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_38 = 0;
-    uint32_t local_3c = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uintptr_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uint32_t s1 = 0;
-    uintptr_t s2 = 0;
-    uintptr_t s3 = 0;
-    uint32_t s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t s6 = 0;
-    uint32_t s7 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct t21_ispcore_irq_view *core = (void *)a0;
+	struct t21_ispcore_irq_view *runtime;
+	void __iomem *registers;
+	u32 status;
+	u32 mask;
+	u32 channel;
+
+	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, registers) != 0xb8);
+	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, runtime) != 0xd4);
+	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, channels) != 0x14c);
+
+	if (!t21_isp_valid_ptr(core) ||
+	    !t21_isp_valid_ptr(core->registers) ||
+	    !t21_isp_valid_ptr(core->runtime))
+		return IRQ_NONE;
+
+	registers = core->registers;
+	runtime = core->runtime;
+	status = readl(registers + 0x84);
+	writel(status, registers + 0x88);
+	mask = readl(registers + 0x80);
+	writel(mask & ~status, registers + 0x80);
+	pr_info_ratelimited("tx-isp-t21: isp irq status=%08x mask=%08x runtime=%p channels=%p\n",
+			    status, mask, runtime, runtime->channels);
+
+	if (status & 0x3f8)
+		pr_info_ratelimited("tx-isp-t21: isp irq status=%08x\n", status);
+
+	if (status & 0x300) {
+		u32 control = readl(registers + 0x10);
+		int retries = 60;
+
+		writel(control | 2, registers + 0x10);
+		while (readl(registers + 0x14) != 1 && --retries)
+			cpu_relax();
+		if (!retries) {
+			pr_warn_ratelimited("tx-isp-t21: ISP retry handshake timed out\n");
+		} else {
+			control &= ~0x12U;
+			writel(control | 0x10, registers + 0x10);
+			writel(control, registers + 0x10);
+			writel(0x300, registers + 0x88);
+			writel(1, registers + 0x100);
+		}
+	}
+
+	/* OEM first_into path at ISR +0x2ac.  The incoming sensor IRQ proves
+	 * that the front end is live; only then release the ISP top pipeline. */
+	if (first_into) {
+		tisp_top_sel();
+		first_into = 0;
+	}
+
+	for (channel = 0; channel < 3; channel++) {
+		struct t21_frame_event_view event = { 0 };
+		u32 bit = BIT(channel);
+		u32 fifo_base;
+		u32 fifo;
+		void *pad;
+
+		if (!(status & bit))
+			continue;
+		fifo_base = 0x2400 + channel * 0x100;
+		fifo = readl(registers + fifo_base + 0x7c);
+		((u32 *)fifostatus)[channel] = fifo;
+		if (fifo & 1)
+			continue;
+		if (!t21_isp_valid_ptr(runtime->channels))
+			continue;
+		pad = *(void **)(runtime->channels + channel * 0xa0 + 0x54);
+		if (!t21_isp_valid_ptr(pad))
+			continue;
+
+		event.dma_addr = readl(registers + fifo_base + 0x74);
+		event.reserved_0c = readl(registers + fifo_base + 0x8c);
+		event.reserved_10 = readl(registers + fifo_base + 0x90);
+		event.sequence = readl(registers + fifo_base + 0x78);
+		{
+			int event_ret = tx_isp_send_event_to_remote(
+				pad, 0x3000006, &event);
+
+			pr_info_ratelimited("tx-isp-t21: irq frame ch=%u fifo=%08x dma=%08x seq=%u pad=%p ret=%d\n",
+					    channel, fifo, event.dma_addr,
+					    event.sequence, pad, event_ret);
+		}
+	}
+
+	/* Static AE statistics are parsed in IRQ context, then handed to the
+	 * firmware worker before the generic sensor callbacks touch I2C.  The
+	 * sensor bridge records those changes in the ispcore runtime; returning
+	 * IRQ_WAKE_THREAD is what lets the generic INT_TIME/AGAIN notifications
+	 * reach the currently registered sensor driver.  The OEM path normally
+	 * gets the same return value from its histogram callback. */
+	if ((status & BIT(16)) && irq_func_cb[16]) {
+		irq_func_cb[16]();
+		writel(mask, registers + 0x80);
+		return IRQ_WAKE_THREAD;
+	}
+	if (status & 0x003e0000)
+		pr_debug_ratelimited("tx-isp-t21: deferred stats irq=%08x\n",
+				     status & 0x003e0000);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 184);
-    s0 = *(uint32_t *)((char *)a0 + 212);
-    s1 = *(uint32_t *)((char *)v0 + 132);
-    s2 = a0;
-    *(uint32_t *)((char *)v0 + 136) = s1;
-    v0 = *(uint32_t *)((char *)a0 + 184);
-    v1 = ~(0 | s1);
-    s4 = *(uint32_t *)((char *)v0 + 128);
-    v1 = v1 & s4;
-    *(uint32_t *)((char *)v0 + 128) = v1;
-    v0 = s1 & 1016;
-
-    /* fragment 2: Branch */
-    int _bc_v0_2 = v0 == 0;
-    v0 = s1 & 512;
-    if (_bc_v0_2) { goto ispcore_interrupt_service_routine0x8c; }
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)isp_printf)(1, &LC61, s1); /* jalr target resolved by relocation */
-
-    /* fragment 4: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 5: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30076);
-    v1 = v1 + 1;
-    *(uint32_t *)((char *)&sinfo_root + -30076) = v1;
-    v0 = s1 & 512;
-
-ispcore_interrupt_service_routine0x8c:
-    /* fragment 6: Branch */
-    int _bc_v0_6 = v0 == 0;
-    v0 = s1 & 256;
-    if (_bc_v0_6) { goto ispcore_interrupt_service_routine0xc4; }
-
-    /* fragment 7: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 8: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30052);
-
-    /* fragment 9: Unknown */
-    /* unmatched fragment 9 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 33198:	54600005 	bnezl	v1,331b0 <ispcore_interrupt_service_routine+0xb4> */
-
-    /* fragment 10: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-    v1 = (uintptr_t)&vic_frame_id;
-
-    /* fragment 11: MemoryAccess */
-    v1 = *(uint32_t *)((char *)((char *)&vic_frame_id));
-    *(uint32_t *)((char *)&sinfo_root + -30052) = v1;
-    v0 = (uintptr_t *)&sinfo_root;
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30056);
-    v1 = v1 + 1;
-    *(uint32_t *)((char *)&sinfo_root + -30056) = v1;
-    v0 = s1 & 256;
-
-ispcore_interrupt_service_routine0xc4:
-    /* fragment 12: Branch */
-    int _bc_v0_12 = v0 == 0;
-    v0 = s1 & 248;
-    if (_bc_v0_12) { goto ispcore_interrupt_service_routine0xe0; }
-
-    /* fragment 13: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 14: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30048);
-    v1 = v1 + 1;
-    *(uint32_t *)((char *)&sinfo_root + -30048) = v1;
-    v0 = s1 & 248;
-
-ispcore_interrupt_service_routine0xe0:
-    /* fragment 15: Branch */
-    int _bc_v0_15 = v0 == 0;
-    v0 = s1 & 768;
-    if (_bc_v0_15) { goto ispcore_interrupt_service_routine0xfc; }
-
-    /* fragment 16: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 17: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30072);
-    v1 = v1 + 1;
-    *(uint32_t *)((char *)&sinfo_root + -30072) = v1;
-    v0 = s1 & 768;
-
-ispcore_interrupt_service_routine0xfc:
-    /* fragment 18: Branch */
-    int _bc_v0_18 = v0 == 0;
-    v0 = s1 & 1;
-    if (_bc_v0_18) { goto ispcore_interrupt_service_routine0x140; }
-
-    /* fragment 19: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 184);
-    a1 = *(uint32_t *)((char *)v0 + 16);
-    v1 = a1 | 2;
-    *(uint32_t *)((char *)v0 + 16) = v1;
-    a0 = *(uint32_t *)((char *)s2 + 184);
-    v0 = 60;
-    v1 = 1;
-
-ispcore_interrupt_service_routine0x120:
-    /* fragment 20: MemoryAccess */
-    a2 = *(uint32_t *)((char *)a0 + 20);
-
-    /* fragment 21: Unknown */
-    /* unmatched fragment 21 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 33220:	50c300bf 	beql	a2,v1,33520 <ispcore_interrupt_service_routine+0x424> */
-
-    /* fragment 22: Arithmetic */
-    v0 = -19;
-    v0 = v0 - 1;
-
-    /* fragment 23: Branch */
-    if (v0 != 0) { goto ispcore_interrupt_service_routine0x120; }
-
-    /* fragment 24: Branch */
-    a1 = (uintptr_t)&LC62;
-    goto ispcore_interrupt_service_routine0x454;
-
-ispcore_interrupt_service_routine0x140:
-    /* fragment 25: Branch */
-    int _bc_v0_25 = v0 == 0;
-    v0 = s1 & 2;
-    if (_bc_v0_25) { goto ispcore_interrupt_service_routine0x2d4; }
-
-    /* fragment 26: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 184);
-    a1 = (uintptr_t)&fifostatus;
-    v1 = *(uint32_t *)((char *)v0 + 9340);
-    a0 = *(uint32_t *)((char *)s0 + 332);
-    *(uint32_t *)((char *)((char *)&fifostatus)) = v1;
-    v1 = v1 & 1;
-
-    /* fragment 27: Branch */
-    if (v1 == 0) { goto ispcore_interrupt_service_routine0x17c; }
-
-    /* fragment 28: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 29: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30068);
-    v1 = v1 + 1;
-
-    /* fragment 30: Branch */
-    *(uint32_t *)((char *)v0 + -30068) = v1;
-    goto ispcore_interrupt_service_routine0x2d0;
-
-ispcore_interrupt_service_routine0x17c:
-    /* fragment 31: CallSetup */
-    local_18 = *(uint32_t *)((char *)(v0) + 9332);
-    local_1c = *(uint32_t *)((char *)(v0) + 9356);
-    local_20 = *(uint32_t *)((char *)(v0) + 9360);
-    local_24 = *(uint32_t *)((char *)(v0) + 9336);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(a0) + 84), 50331648 + 6, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 32: CallSetup */
-    *(uint32_t *)((char *)s3 + -30044) = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5936, 4278190080 | 65280); /* jalr target resolved by relocation */
-
-    /* fragment 33: CallSetup */
-    *(uint32_t *)((char *)s3 + -30044) = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(5936, 4278190080 | 32896); /* jalr target resolved by relocation */
-
-    /* fragment 34: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s0 + 412);
-
-    /* fragment 35: Branch */
-    a1 = 67108864;
-    if (a0 == 0) { goto ispcore_interrupt_service_routine0x24c; }
-
-    /* fragment 36: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(a0); /* jalr target resolved by relocation */
-
-ispcore_interrupt_service_routine0x24c:
-    /* fragment 37: CallSetup */
-    *(uint32_t *)((char *)s0 + 372) = 0;
-    *(uint32_t *)((char *)s3 + -30044) = 1;
-    *(uint32_t *)((char *)s0 + 368) = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_mirror_enable)(0 < (*(uint32_t *)((char *)(s0) + 364))); /* jalr target resolved by relocation */
-
-    /* fragment 38: MemoryAccess */
-    v1 = *(uint32_t *)((char *)s0 + 360);
-    v0 = 1;
-
-    /* fragment 39: Branch */
-    s3 = (uintptr_t)&isp_clk;
-    if (v1 != v0) { goto ispcore_interrupt_service_routine0x2ac; }
-
-    /* fragment 40: CallSetup */
-    *(uint32_t *)((char *)s0 + 360) = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_flip_enable)(0 < (*(uint32_t *)((char *)(s0) + 356))); /* jalr target resolved by relocation */
-
-    /* fragment 41: Arithmetic */
-    s3 = (uintptr_t)&isp_clk;
-
-ispcore_interrupt_service_routine0x2ac:
-    /* fragment 42: MemoryAccess */
-    v1 = *(uint32_t *)((char *)((char *)&tparams + 0x479c));
-    v0 = 1;
-
-    /* fragment 43: Branch */
-    int _bc_v1_43 = v1 != v0;
-    v0 = s1 & 2;
-    if (_bc_v1_43) { goto ispcore_interrupt_service_routine0x2d4; }
-
-    /* fragment 44: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tisp_top_sel)(1); /* jalr target resolved by relocation */
-
-    /* fragment 45: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tparams + 0x479c)) = 0;
-
-ispcore_interrupt_service_routine0x2d0:
-    /* fragment 46: Arithmetic */
-    v0 = s1 & 2;
-
-ispcore_interrupt_service_routine0x2d4:
-    /* fragment 47: Branch */
-    int _bc_v0_47 = v0 == 0;
-    v0 = s1 & 4;
-    if (_bc_v0_47) { goto ispcore_interrupt_service_routine0x350; }
-
-    /* fragment 48: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 184);
-    a1 = (uintptr_t)&fifostatus;
-    v1 = *(uint32_t *)((char *)v0 + 9596);
-    a0 = *(uint32_t *)((char *)s0 + 332);
-    *(uint32_t *)((char *)((char *)&fifostatus + 0x4)) = v1;
-    v1 = v1 & 1;
-
-    /* fragment 49: Branch */
-    if (v1 == 0) { goto ispcore_interrupt_service_routine0x310; }
-
-    /* fragment 50: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 51: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30064);
-    v1 = v1 + 1;
-
-    /* fragment 52: Branch */
-    *(uint32_t *)((char *)v0 + -30064) = v1;
-    goto ispcore_interrupt_service_routine0x34c;
-
-ispcore_interrupt_service_routine0x310:
-    /* fragment 53: CallSetup */
-    local_18 = *(uint32_t *)((char *)(v0) + 9588);
-    local_1c = *(uint32_t *)((char *)(v0) + 9612);
-    local_20 = *(uint32_t *)((char *)(v0) + 9616);
-    local_24 = *(uint32_t *)((char *)(v0) + 9592);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(a0) + 244), 50331648 + 6, &local_10); /* jalr target resolved by relocation */
-
-ispcore_interrupt_service_routine0x34c:
-    /* fragment 54: Arithmetic */
-    v0 = s1 & 4;
-
-ispcore_interrupt_service_routine0x350:
-    /* fragment 55: Branch */
-    s7 = (uintptr_t)&irq_func_cb;
-    if (v0 == 0) { goto ispcore_interrupt_service_routine0x3cc; }
-
-    /* fragment 56: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s2 + 184);
-    a1 = (uintptr_t)&fifostatus;
-    v1 = *(uint32_t *)((char *)v0 + 9852);
-    a0 = *(uint32_t *)((char *)s0 + 332);
-    *(uint32_t *)((char *)((char *)&fifostatus + 0x8)) = v1;
-    v1 = v1 & 1;
-
-    /* fragment 57: Branch */
-    if (v1 == 0) { goto ispcore_interrupt_service_routine0x38c; }
-
-    /* fragment 58: Arithmetic */
-    v0 = (uintptr_t *)&sinfo_root;
-
-    /* fragment 59: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sinfo_root + -30060);
-    v1 = v1 + 1;
-
-    /* fragment 60: Branch */
-    *(uint32_t *)((char *)v0 + -30060) = v1;
-    goto ispcore_interrupt_service_routine0x3cc;
-
-ispcore_interrupt_service_routine0x38c:
-    /* fragment 61: CallSetup */
-    local_18 = *(uint32_t *)((char *)(v0) + 9844);
-    local_1c = *(uint32_t *)((char *)(v0) + 9868);
-    local_20 = *(uint32_t *)((char *)(v0) + 9872);
-    local_24 = *(uint32_t *)((char *)(v0) + 9848);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tx_isp_send_event_to_remote)(*(uint32_t *)((char *)(a0) + 404), 50331648 + 6, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 62: Arithmetic */
-    s7 = (uintptr_t)&irq_func_cb;
-
-ispcore_interrupt_service_routine0x3cc:
-    /* fragment 63: Arithmetic */
-    s0 = 0;
-    s3 = 1;
-    s6 = 1;
-    s7 = s7;
-    s5 = 32;
-    v0 = s6 << s0;
-    v0 = (uintptr_t)v0 & s1;
-
-    /* fragment 64: Unknown */
-    /* unmatched fragment 64 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 334e4:	5040000a 	beqzl	v0,33510 <ispcore_interrupt_service_routine+0x414> */
-
-    /* fragment 65: Arithmetic */
-    s0 = s0 + 1;
-    v0 = s0 << 2;
-    v0 = s7 + (uintptr_t)v0;
-
-    /* fragment 66: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 67: Branch */
-    s0 = s0 + 1;
-    if (v0 == 0) { goto ispcore_interrupt_service_routine0x414; }
-
-    /* fragment 68: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 69: Arithmetic */
-    v1 = (uintptr_t)v0 ^ 1;
-    if (v1 != 0) { s3 = v0; }
-
-ispcore_interrupt_service_routine0x414:
-    /* fragment 70: Unknown */
-    /* unmatched fragment 70 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 33510:	5615fff3 	bnel	s0,s5,334e0 <ispcore_interrupt_service_routine+0x3e4> */
-
-    /* fragment 71: Arithmetic */
-    v0 = s6 << s0;
-
-    /* fragment 72: Branch */
-    v0 = *(uint32_t *)((char *)(s2) + 184);
-    goto ispcore_interrupt_service_routine0x470;
-
-    /* fragment 73: Arithmetic */
-    v0 = a1 & (uintptr_t)v0;
-    a1 = (uintptr_t)v0 | 16;
-
-    /* fragment 74: MemoryAccess */
-    *(uint32_t *)((char *)a0 + 16) = a1;
-    a0 = *(uint32_t *)((char *)s2 + 184);
-    *(uint32_t *)((char *)a0 + 16) = v0;
-    v0 = *(uint32_t *)((char *)s2 + 184);
-    a0 = 768;
-    *(uint32_t *)((char *)v0 + 136) = a0;
-    v0 = *(uint32_t *)((char *)s2 + 184);
-    *(uint32_t *)((char *)v0 + 256) = v1;
-
-    /* fragment 75: Branch */
-    v0 = s1 & 1;
-    goto ispcore_interrupt_service_routine0x140;
-
-ispcore_interrupt_service_routine0x454:
-    /* fragment 76: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(1, &LC62); /* jalr target resolved by relocation */
-
-    /* fragment 77: Branch */
-    v0 = s1 & 1;
-    goto ispcore_interrupt_service_routine0x140;
-
-ispcore_interrupt_service_routine0x470:
-    /* fragment 78: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 128) = s4;
-    ra = local_4c;
-    v0 = s3;
-    s7 = local_48;
-    s6 = local_44;
-    s5 = local_40;
-    s4 = local_3c;
-    s3 = local_38;
-    s2 = local_34;
-    s1 = local_30;
-    s0 = local_2c;
-
-    /* fragment 79: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	writel(mask, registers + 0x80);
+	return IRQ_HANDLED;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000335a0 origin=fragment_seed original=system_reg_read */
@@ -51118,15 +50269,8 @@ int32_t ispcore_video_s_stream(void *arg1, int32_t arg2)
 	return result;
 }
 
-struct t21_isp_output_fmt {
-	char description[32];
-	u32 fourcc;
-	u32 depth;
-	u32 flags;
-};
-
 /* OEM .data at 0x45200: ten 44-byte entries. */
-static const struct t21_isp_output_fmt t21_isp_output_formats[] = {
+static const struct t21_isp_output_fmt t21_isp_output_formats[10] = {
 	{ "YUV 4:2:0 semi planar, Y/CbCr", 0x3231564e, 12, 0 },
 	{ "YUV 4:2:0 semi planar, Y/CrCb", 0x3132564e, 12, 0 },
 	{ "YUV 4:2:2 packed, YCbYCr",       0x56595559, 16, 0 },
@@ -51240,6 +50384,8 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 	core = *(u8 **)(isp + 0xd4);
 	if (!t21_isp_valid_ptr(core))
 		return -EINVAL;
+	pr_info("tx-isp-t21: core init entry enable=%u irq_disabled=%d pid=%d\n",
+		enable, irqs_disabled(), current->pid);
 
 	state = *(u32 *)(core + 0xe8);
 	if (state == 1)
@@ -51262,6 +50408,8 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 
 	memset(&info, 0, sizeof(info));
 	ret = private_reset_tx_isp_module(0);
+	pr_info("tx-isp-t21: core init reset ret=%d irq_disabled=%d pid=%d\n",
+		ret, irqs_disabled(), current->pid);
 	if (ret) {
 		isp_printf(2, "Failed to reset %s\n",
 			   *(char **)(isp + 8) ?: "ispcore");
@@ -51269,6 +50417,8 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 	}
 
 	__private_spin_lock_irqsave((spinlock_t *)(core + 0xdc), &flags);
+	pr_info("tx-isp-t21: core init locked flags=%lx irq_disabled=%d pid=%d\n",
+		flags, irqs_disabled(), current->pid);
 	state = *(u32 *)(core + 0xe8);
 	if (state != 2) {
 		private_spin_unlock_irqrestore((spinlock_t *)(core + 0xdc),
@@ -51278,6 +50428,8 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 		return -1;
 	}
 	private_spin_unlock_irqrestore((spinlock_t *)(core + 0xdc), flags);
+	pr_info("tx-isp-t21: core init unlocked flags=%lx irq_disabled=%d pid=%d\n",
+		flags, irqs_disabled(), current->pid);
 
 	width = *(u32 *)(core + 0xec);
 	height = *(u32 *)(core + 0xf0);
@@ -51359,6 +50511,9 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 	info.attr_7e = *(u16 *)(attr + 0x7e);
 	info.attr_80 = *(u16 *)(attr + 0x80);
 
+	pr_info("tx-isp-t21: core init tisp name=%s %ux%u bayer=%d irq_disabled=%d pid=%d\n",
+		info.name, info.width, info.height, info.bayer,
+		irqs_disabled(), current->pid);
 	ret = tisp_init((int32_t *)&info);
 	if (ret) {
 		isp_printf(2, "%s[%d] tisp_init failed: %d\n",
@@ -52755,9 +51910,11 @@ fail_subdev:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034518 origin=model_output original=system_irq_func_set */
-int32_t system_irq_func_set(int32_t arg1, int32_t arg2)
+int32_t system_irq_func_set(unsigned int index, t21_irq_callback_t callback)
 {
-	((void **)irq_func_cb)[arg1] = arg2;
+	if (index >= ARRAY_SIZE(irq_func_cb))
+		return -EINVAL;
+	irq_func_cb[index] = callback;
 	return 0;
 }
 
