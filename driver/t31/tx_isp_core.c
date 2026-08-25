@@ -438,20 +438,12 @@ static bool tisp_initialized = false;
 static u32 tisp_raw_fps_from_sensor(struct tx_isp_dev *isp_dev,
                                     struct tx_isp_sensor_attribute *sensor_attr)
 {
-    u32 fps = 25 << 16 | 1;
-
     (void)sensor_attr;
 
-    if (isp_dev && isp_dev->sensor) {
-        u32 raw_fps = isp_dev->sensor->video.fps;
+    if (isp_dev && isp_dev->sensor)
+        return isp_dev->sensor->video.fps;
 
-        if ((raw_fps >> 16) != 0)
-            fps = raw_fps;
-    }
-
-    /* fps is not in tx_isp_sensor_attribute in stock - fallback only */
-
-    return fps;
+    return 0;
 }
 
 static u32 tisp_fps_from_raw(u32 raw_fps)
@@ -459,10 +451,8 @@ static u32 tisp_fps_from_raw(u32 raw_fps)
     u32 num = raw_fps >> 16;
     u32 den = raw_fps & 0xffff;
 
-    if (num == 0)
-        return 25;
-    if (den == 0)
-        return num;
+    if (num == 0 || den == 0)
+        return 0;
 
     return (num + (den / 2)) / den;
 }
@@ -507,53 +497,62 @@ static u32 tisp_cfa_apply_flip(u32 idx, unsigned int shvflip)
     return idx;
 }
 
-static u32 tisp_bayer_from_sensor(struct tx_isp_dev *isp_dev)
+static int tisp_bayer_from_sensor(struct tx_isp_dev *isp_dev, u32 *bayer)
 {
-    if (isp_dev && isp_dev->sensor)
-        return tisp_cfa_apply_flip(
-            tisp_cfa_base_from_mbus(isp_dev->sensor->video.mbus.code),
-            isp_dev->sensor->video.shvflip);
+    u32 code;
 
+    if (!isp_dev || !isp_dev->sensor || !bayer)
+        return -EINVAL;
+
+    code = isp_dev->sensor->video.mbus.code;
+    if (code < 0x3001 || code > 0x3014)
+        return -EINVAL;
+
+    *bayer = tisp_cfa_apply_flip(tisp_cfa_base_from_mbus(code),
+                                 isp_dev->sensor->video.shvflip);
     return 0;
 }
 
-static void tisp_fill_sensor_info_blob(struct tx_isp_dev *isp_dev,
-                                       struct tx_isp_sensor_attribute *sensor_attr,
-                                       struct tisp_sensor_info_blob *info)
+static int tisp_fill_sensor_info_blob(struct tx_isp_dev *isp_dev,
+                                      struct tx_isp_sensor_attribute *sensor_attr,
+                                      struct tisp_sensor_info_blob *info)
 {
-    u32 active_width = 1920;
-    u32 active_height = 1080;
+    u32 active_width;
+    u32 active_height;
+    u32 bayer;
     u32 raw_fps;
+    int ret;
 
     BUILD_BUG_ON(sizeof(*info) != TISP_SENSOR_INFO_SIZE);
+    if (!isp_dev || !isp_dev->sensor || !sensor_attr || !info)
+        return -EINVAL;
+
+    ret = tx_isp_sensor_active_dimensions(isp_dev->sensor, &active_width,
+                                          &active_height);
+    if (ret)
+        return ret;
+    ret = tisp_bayer_from_sensor(isp_dev, &bayer);
+    if (ret) {
+        pr_err("TISP sensor info: unsupported mbus code 0x%x\n",
+               isp_dev->sensor->video.mbus.code);
+        return ret;
+    }
+
+    raw_fps = tisp_raw_fps_from_sensor(isp_dev, sensor_attr);
+    if (!tisp_fps_from_raw(raw_fps)) {
+        pr_err("TISP sensor info: invalid packed frame rate 0x%08x\n",
+               raw_fps);
+        return -EINVAL;
+    }
+
     memset(info, 0, sizeof(*info));
 
     tisp_si_set_word(info, TISP_SI_WORD_WIDTH, active_width);
     tisp_si_set_word(info, TISP_SI_WORD_HEIGHT, active_height);
-    raw_fps = tisp_raw_fps_from_sensor(isp_dev, sensor_attr);
     tisp_si_set_word(info, TISP_SI_WORD_FPS, raw_fps);
     /* Keep sensor-info Bayer as the flipped base CFA index (0..3).
      * The extended programming values live only inside tisp_init(). */
-    tisp_si_set_word(info, TISP_SI_WORD_BAYER, tisp_bayer_from_sensor(isp_dev));
-
-    if (isp_dev && isp_dev->sensor) {
-        if (isp_dev->sensor->video.mbus.width)
-            active_width = isp_dev->sensor->video.mbus.width;
-        if (isp_dev->sensor->video.mbus.height)
-            active_height = isp_dev->sensor->video.mbus.height;
-    }
-
-    if (sensor_attr) {
-        if (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
-            if (sensor_attr->mipi.image_twidth)
-                active_width = sensor_attr->mipi.image_twidth;
-            if (sensor_attr->mipi.image_theight)
-                active_height = sensor_attr->mipi.image_theight;
-        }
-    }
-
-    tisp_si_set_word(info, TISP_SI_WORD_WIDTH, active_width);
-    tisp_si_set_word(info, TISP_SI_WORD_HEIGHT, active_height);
+    tisp_si_set_word(info, TISP_SI_WORD_BAYER, bayer);
 
     if (sensor_attr) {
         u32 total_width = sensor_attr->total_width ? sensor_attr->total_width : active_width;
@@ -625,6 +624,7 @@ static void tisp_fill_sensor_info_blob(struct tx_isp_dev *isp_dev,
     pr_info("TISP_SENSOR_INFO: %08x %08x %08x %08x %08x %08x\n",
             info->words[18], info->words[19], info->words[20], info->words[21],
             info->words[22], info->words[23]);
+    return 0;
 }
 
 static void isp_core_early_cpm_bringup(void)
@@ -1268,65 +1268,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Binary Ninja: return result */
     return result;
-}
-
-/* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
-int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
-{
-    int result = 0;
-    int i;
-    static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
-    static int expo_value = 0x300;  /* Default exposure value for AE */
-
-    if (!isp_dev) {
-        return -ENODEV;
-    }
-
-    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
-
-    /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
-    struct tx_isp_sensor *sensor = ourISPdev->sensor;
-    if (sensor && sensor->sd.ops &&
-        sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
-
-        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
-
-        /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
-
-        /* Update FPS from tuning data if available */
-        if (isp_dev && isp_dev->tuning_data) {
-            struct isp_tuning_data *td = isp_dev->tuning_data;
-            int new_fps = (td->fps_num << 16) | (td->fps_den & 0xffff);
-            if (new_fps && new_fps != fps_value) {
-                fps_value = new_fps;
-                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to 0x%x from tuning data ***\n", fps_value);
-            }
-        }
-
-        /* Skip the FPS logging since we're now using EXPO instead */
-
-        /* CRITICAL FIX: Use supported sensor IOCTL command instead of unsupported FPS command */
-        /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
-        /* Frame sync work should do Auto Exposure (AE) operations instead */
-
-        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
-
-        /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
-        result = sensor->sd.ops->sensor->ioctl(&sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
-
-        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
-
-        if (result == 0) {
-            pr_info("*** ispcore_sensor_ops_ioctl: Sensor AE operation successful - should see exposure I2C writes ***\n");
-        } else {
-            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor AE operation failed: %d ***\n", result);
-        }
-    } else {
-        pr_warn("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
-        result = -ENODEV;
-    }
-
-    return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
 /* Frame sync work function - Safe implementation without dangerous offsets */
@@ -2713,7 +2654,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             (void)init_sensor;
 
             if (!tisp_initialized) {
-                tisp_fill_sensor_info_blob(isp_dev, sensor_attr, &sensor_info);
+                ret = tisp_fill_sensor_info_blob(isp_dev, sensor_attr,
+                                                 &sensor_info);
+                if (ret) {
+                    pr_err("ispcore_core_ops_init: invalid sensor attributes: %d\n",
+                           ret);
+                    return ret;
+                }
 
                 /* OEM CRITICAL: Store sensor width/height into globals BEFORE
                  * calling tisp_init.  The OEM sets tispinfo/data_b2f34 before
@@ -3338,6 +3285,8 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
     extern uint8_t tispinfo[];
     extern uint32_t data_b2f34;  /* Frame height */
     extern uint32_t data_b2e04, data_b2e08, data_b2e0c, data_b2e10, data_b2e14;
+    extern uint32_t data_b2de8, data_b2dec, data_b2db4, data_b2db8;
+    extern uint32_t data_b2d80, data_b2d84;
 
     int32_t tispinfo_1;
     memcpy(&tispinfo_1, tispinfo, sizeof(tispinfo_1)); /* OEM: read *(int32_t*)tispinfo = ISP width */
@@ -3428,6 +3377,20 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
     } else {
         tispinfo_4 = arg2[1];
         s7_1 = arg2[2];
+    }
+
+    if (!tispinfo_4 || !s7_1)
+        return -EINVAL;
+
+    if (channel_id == 0) {
+        data_b2de8 = tispinfo_4;
+        data_b2dec = s7_1;
+    } else if (channel_id == 1) {
+        data_b2db4 = tispinfo_4;
+        data_b2db8 = s7_1;
+    } else if (channel_id == 2) {
+        data_b2d80 = tispinfo_4;
+        data_b2d84 = s7_1;
     }
 
     int32_t s1_2 = ((channel_id + 0x99) << 8);
@@ -3550,17 +3513,17 @@ uint32_t msca_dmaout_arb = 0xffffffff;
 EXPORT_SYMBOL(msca_dmaout_arb);
 
 /* Additional missing global variables referenced in Binary Ninja */
-uint32_t data_b2de8 = 1920;  /* Default channel 0 width */
+uint32_t data_b2de8;         /* Channel 0 width, supplied by mode setup */
 EXPORT_SYMBOL(data_b2de8);
-uint32_t data_b2dec = 1080;  /* Default channel 0 height */
+uint32_t data_b2dec;         /* Channel 0 height, supplied by mode setup */
 EXPORT_SYMBOL(data_b2dec);
-uint32_t data_b2db4 = 960;   /* Default channel 1 width */
+uint32_t data_b2db4;         /* Channel 1 width from channel attributes */
 EXPORT_SYMBOL(data_b2db4);
-uint32_t data_b2db8 = 540;   /* Default channel 1 height */
+uint32_t data_b2db8;         /* Channel 1 height from channel attributes */
 EXPORT_SYMBOL(data_b2db8);
-uint32_t data_b2d80 = 480;   /* Default channel 2 width */
+uint32_t data_b2d80;         /* Channel 2 width from channel attributes */
 EXPORT_SYMBOL(data_b2d80);
-uint32_t data_b2d84 = 270;   /* Default channel 2 height */
+uint32_t data_b2d84;         /* Channel 2 height from channel attributes */
 EXPORT_SYMBOL(data_b2d84);
 
 /**
@@ -3570,6 +3533,10 @@ EXPORT_SYMBOL(data_b2d84);
 int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5)
 {
     uint32_t msca_ch_en_1 = msca_ch_en;
+    u32 channel0_width = data_b2de8 ? data_b2de8 :
+                         tisp_channel_sensor_width(g_ispcore);
+    u32 channel0_height = data_b2dec ? data_b2dec :
+                          tisp_channel_sensor_height(g_ispcore);
     int32_t arg_0 = arg1;
 
     if (!(msca_ch_en_1 != 0)) {
@@ -3605,15 +3572,21 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
         uint32_t msca_ch_en_2 = msca_ch_en;
 
         if ((msca_ch_en & 1) != 0) {
+            if (!channel0_width || !channel0_height) {
+                isp_printf(2, "error: channel 0 geometry is unavailable\n");
+                return -EINVAL;
+            }
             system_reg_write(0x9904,
-                ((arg4 << 9) / data_b2de8) << 0x10 |
-                (uint16_t)((arg5 << 9) / data_b2dec));
+                ((arg4 << 9) / channel0_width) << 0x10 |
+                (uint16_t)((arg5 << 9) / channel0_height));
             msca_ch_en_2 = msca_ch_en;
         }
 
         uint32_t msca_ch_en_3 = msca_ch_en;
 
         if ((msca_ch_en_2 & 2) != 0) {
+            if (!data_b2db4 || !data_b2db8)
+                return -EINVAL;
             system_reg_write(0x9a04,
                 ((arg4 << 9) / data_b2db4) << 0x10 |
                 (uint16_t)((arg5 << 9) / data_b2db8));
@@ -3623,6 +3596,8 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
         if ((msca_ch_en_3 & 4) == 0) {
             msca_ch_en_4 = msca_ch_en;
         } else {
+            if (!data_b2d80 || !data_b2d84)
+                return -EINVAL;
             system_reg_write(0x9b04,
                 ((arg4 << 9) / data_b2d80) << 0x10 |
                 (uint16_t)((arg5 << 9) / data_b2d84));
@@ -3864,9 +3839,13 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             ch_w = qbuf_ch->width;
             ch_h = qbuf_ch->height;
             if (!ch_w || !ch_h) {
-                /* Fallback to sensor dimensions */
-                ch_w = isp_dev->sensor_width ? isp_dev->sensor_width : 1920;
-                ch_h = isp_dev->sensor_height ? isp_dev->sensor_height : 1080;
+                result = tx_isp_sensor_active_dimensions(isp_dev->sensor,
+                                                         &ch_w, &ch_h);
+                if (result) {
+                    isp_printf(2, "error: active sensor geometry unavailable (%d)\n",
+                               result);
+                    break;
+                }
             }
 
             /* OEM: Y addr from *(arg3 + 8), UV = Y + aligned_h * width */
@@ -4832,6 +4811,9 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_sensor_attribute *stored_attr;
     uint32_t again, dgain;
+    u32 active_width;
+    u32 active_height;
+    int ret;
     /* CRITICAL FIX: OEM Binary Ninja showed 0x4c but that only covers fields up to
      * inside the union — total_width/total_height are at offset 0x78+.
      * Use full struct size to copy ALL fields including dimensions. */
@@ -4895,10 +4877,15 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
 
     /* Set VIC frame dimensions from sensor — used by vic_mdma_enable for
      * stride/frame_size calculations. Without this, width=0 → broken DMA. */
-    if (isp_dev->sensor && isp_dev->sensor->video.mbus.width)
-        vic_dev->width = isp_dev->sensor->video.mbus.width;
-    if (isp_dev->sensor && isp_dev->sensor->video.mbus.height)
-        vic_dev->height = isp_dev->sensor->video.mbus.height;
+    ret = tx_isp_sensor_active_dimensions(isp_dev->sensor, &active_width,
+                                          &active_height);
+    if (ret) {
+        pr_err("ispcore_sync_sensor_attr: active sensor geometry is invalid: %d\n",
+               ret);
+        return ret;
+    }
+    vic_dev->width = active_width;
+    vic_dev->height = active_height;
 
     pr_info("*** ispcore_sync_sensor_attr: copied %zu bytes, total_width=%u total_height=%u vic=%ux%u ***\n",
             sensor_attr_bytes, attr->total_width, attr->total_height,
@@ -4918,8 +4905,12 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     {
         struct tisp_sensor_info_blob sync_info;
 
-        tisp_fill_sensor_info_blob(isp_dev, stored_attr, &sync_info);
-        tiziano_sync_sensor_attr(&sync_info);
+        ret = tisp_fill_sensor_info_blob(isp_dev, stored_attr, &sync_info);
+        if (ret)
+            return ret;
+        ret = tiziano_sync_sensor_attr(&sync_info);
+        if (ret)
+            return ret;
     }
 
     pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");

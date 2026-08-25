@@ -17,6 +17,7 @@ all: tx_isp_math_test tx_isp_modulation_test \
 		tx_isp_video_queue_test \
 		tx_isp_region_allocator_test \
 	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_t31_mdns_test \
+	tx_isp_t31_sensor_policy_test \
 	tx_isp_scaler_test
 
 tx_isp_t31_mdns_test: tx_isp_t31_mdns_test.c \
@@ -24,6 +25,13 @@ tx_isp_t31_mdns_test: tx_isp_t31_mdns_test.c \
 		../driver/t31/tx_isp_t31_mdns.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ \
 		tx_isp_t31_mdns_test.c ../driver/t31/tx_isp_t31_mdns.c
+
+tx_isp_t31_sensor_policy_test: tx_isp_t31_sensor_policy_test.c \
+		../driver/t31/tx_isp_t31_sensor_policy.c \
+		../driver/t31/tx_isp_t31_sensor_policy.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ \
+		tx_isp_t31_sensor_policy_test.c \
+		../driver/t31/tx_isp_t31_sensor_policy.c
 
 tx_isp_math_test: tx_isp_math_test.c ../driver/include/tx_isp/tx_isp_math.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
@@ -156,7 +164,7 @@ check: tx_isp_math_test tx_isp_modulation_test \
 		tx_isp_video_queue_test \
 		tx_isp_region_allocator_test \
 		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
-		tx_isp_t31_mdns_test
+		tx_isp_t31_mdns_test tx_isp_t31_sensor_policy_test
 	./tx_isp_math_test
 	./tx_isp_modulation_test
 	./tx_isp_subdev_abi_test
@@ -176,6 +184,7 @@ check: tx_isp_math_test tx_isp_modulation_test \
 	./tx_isp_exposure_test
 	./tx_isp_t31_adr_test
 	./tx_isp_t31_mdns_test
+	./tx_isp_t31_sensor_policy_test
 	./tx_isp_scaler_test
 	$(MAKE) t30_storage_audit
 
@@ -196,4 +205,4 @@ clean:
 		tx_isp_video_queue_test \
 		tx_isp_region_allocator_test \
 		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
-		tx_isp_t31_mdns_test
+		tx_isp_t31_mdns_test tx_isp_t31_sensor_policy_test

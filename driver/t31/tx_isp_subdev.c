@@ -107,8 +107,6 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd);
 int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 int vic_event_handler(void *subdev, int event_type, void *data);
 int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
-static void cache_sensor_dimensions_from_proc(void);
-static void get_cached_sensor_dimensions(u32 *width, u32 *height);
 
 static void tx_isp_irq_info_enable(struct tx_isp_irq_info *irq_info)
 {
@@ -1077,109 +1075,6 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
 
-/* Static variables to cache sensor dimensions (read once during probe) */
-static u32 cached_sensor_width = 1920;   /* Default fallback */
-static u32 cached_sensor_height = 1080;  /* Default fallback */
-static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
-
-/* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
-static int read_sensor_dimensions(u32 *width, u32 *height)
-{
-    struct file *width_file, *height_file;
-    mm_segment_t old_fs;
-    char width_buf[16], height_buf[16];
-    loff_t pos;
-    int ret = 0;
-
-    /* Set default values in case of failure */
-    *width = 1920;
-    *height = 1080;
-
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-
-    /* Read width from /proc/jz/sensor/width */
-    width_file = filp_open("/proc/jz/sensor/width", O_RDONLY, 0);
-    if (!IS_ERR(width_file)) {
-        pos = 0;
-        memset(width_buf, 0, sizeof(width_buf));
-        if (vfs_read(width_file, width_buf, sizeof(width_buf)-1, &pos) > 0) {
-            width_buf[sizeof(width_buf)-1] = '\0';
-            *width = simple_strtol(width_buf, NULL, 10);
-        }
-        filp_close(width_file, NULL);
-    } else {
-        pr_warn("read_sensor_dimensions: Failed to open /proc/jz/sensor/width\n");
-        ret = -1;
-    }
-
-    /* Read height from /proc/jz/sensor/height */
-    height_file = filp_open("/proc/jz/sensor/height", O_RDONLY, 0);
-    if (!IS_ERR(height_file)) {
-        pos = 0;
-        memset(height_buf, 0, sizeof(height_buf));
-        if (vfs_read(height_file, height_buf, sizeof(height_buf)-1, &pos) > 0) {
-            height_buf[sizeof(height_buf)-1] = '\0';
-            *height = simple_strtol(height_buf, NULL, 10);
-        }
-        filp_close(height_file, NULL);
-    } else {
-        pr_warn("read_sensor_dimensions: Failed to open /proc/jz/sensor/height\n");
-        ret = -1;
-    }
-
-    set_fs(old_fs);
-
-    /* Validate dimensions */
-    if (*width == 0 || *height == 0 || *width > 4096 || *height > 4096) {
-        pr_warn("read_sensor_dimensions: Invalid dimensions %dx%d, using defaults 1920x1080\n", *width, *height);
-        *width = 1920;
-        *height = 1080;
-        ret = -1;
-    } else {
-        pr_info("read_sensor_dimensions: Successfully read %dx%d from /proc/jz/sensor/\n", *width, *height);
-    }
-
-    return ret;
-}
-
-/* Cache sensor dimensions during probe (process context - sleeping allowed) */
-static void cache_sensor_dimensions_from_proc(void)
-{
-    u32 width, height;
-    int ret;
-
-    pr_info("*** cache_sensor_dimensions_from_proc: Reading sensor dimensions during probe ***\n");
-
-    ret = read_sensor_dimensions(&width, &height);
-    if (ret == 0) {
-        cached_sensor_width = width;
-        cached_sensor_height = height;
-        sensor_dimensions_cached = 1;
-        pr_info("*** cache_sensor_dimensions_from_proc: Successfully cached %dx%d ***\n", width, height);
-    } else {
-        /* Keep defaults */
-        cached_sensor_width = 1920;
-        cached_sensor_height = 1080;
-        sensor_dimensions_cached = 1;  /* Mark as cached even with defaults */
-        pr_info("*** cache_sensor_dimensions_from_proc: Using default dimensions %dx%d ***\n",
-                cached_sensor_width, cached_sensor_height);
-    }
-}
-
-/* Get cached sensor dimensions (safe for atomic context) */
-static void get_cached_sensor_dimensions(u32 *width, u32 *height)
-{
-    if (!sensor_dimensions_cached) {
-        pr_warn("get_cached_sensor_dimensions: Dimensions not cached, using defaults\n");
-        *width = 1920;
-        *height = 1080;
-    } else {
-        *width = cached_sensor_width;
-        *height = cached_sensor_height;
-    }
-}
-
 /* Auto-linking function to connect subdevices to global ISP device */
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd)
 {
@@ -1363,9 +1258,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                     pr_info("*** SENSOR ops->sensor: %p ***\n", sd->ops->sensor);
                 }
 
-                /* CRITICAL FIX: Cache sensor dimensions now that sensor is loaded and /proc entries exist */
-                pr_info("*** SENSOR REGISTERED: Caching sensor dimensions from /proc/jz/sensor/ ***\n");
-                cache_sensor_dimensions_from_proc();
+                /* Geometry is consumed from sensor->video.mbus after the
+                 * normal sensor registration/attribute-sync handshake. */
             } else {
                 pr_err("*** No available slot for sensor '%s' ***\n", dev_name);
             }

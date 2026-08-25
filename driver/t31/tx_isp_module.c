@@ -50,6 +50,7 @@
 #include "include/tx_isp_core_device.h"
 #include "include/tx_isp_subdev_helpers.h"
 #include "tx_isp_t31_subdev_resolver.h"
+#include "tx_isp_t31_sensor_policy.h"
 #include "tx_isp_v4l2.h"
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
@@ -74,6 +75,52 @@ struct sensor_ops_storage {
     struct tx_isp_subdev *sensor_sd;
 };
 static struct sensor_ops_storage stored_sensor_ops;
+
+static void tx_isp_build_sensor_policy(
+    const struct tx_isp_sensor *sensor,
+    const struct tx_isp_sensor_attribute *attr,
+    struct tx_isp_t31_sensor_policy *policy)
+{
+    memset(policy, 0, sizeof(*policy));
+    if (!sensor)
+        return;
+
+    policy->mbus_width = sensor->video.mbus.width;
+    policy->mbus_height = sensor->video.mbus.height;
+    policy->raw_fps = sensor->video.fps;
+    if (!attr)
+        attr = sensor->video.attr ? sensor->video.attr : &sensor->attr;
+    if (!attr)
+        return;
+
+    policy->dbus_type = attr->dbus_type;
+    if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+        policy->mipi_width = attr->mipi.image_twidth;
+        policy->mipi_height = attr->mipi.image_theight;
+    }
+    policy->data_type = attr->data_type;
+    policy->wdr_cache = attr->wdr_cache;
+}
+
+int tx_isp_sensor_active_dimensions(const struct tx_isp_sensor *sensor,
+                                    u32 *width, u32 *height)
+{
+    struct tx_isp_t31_sensor_policy policy;
+
+    if (!sensor)
+        return -ENODEV;
+    tx_isp_build_sensor_policy(sensor, NULL, &policy);
+    return tx_isp_t31_sensor_active_dimensions(&policy, width, height);
+}
+EXPORT_SYMBOL_GPL(tx_isp_sensor_active_dimensions);
+
+int tx_isp_sensor_fps_q8(const struct tx_isp_sensor *sensor, u32 *fps_q8)
+{
+    if (!sensor)
+        return -ENODEV;
+    return tx_isp_t31_sensor_fps_q8(sensor->video.fps, fps_q8);
+}
+EXPORT_SYMBOL_GPL(tx_isp_sensor_fps_q8);
 
 /* Deferred sensor I2C write — runs in workqueue context (process context, no locks) */
 static void sensor_expo_work_func(struct work_struct *work);
@@ -155,6 +202,9 @@ static void sensor_expo_work_func(struct work_struct *work)
 
 static int tx_isp_sensor_has_usable_attachment(struct tx_isp_sensor *sensor)
 {
+    u32 width;
+    u32 height;
+
     if (!sensor || !sensor->video.attr)
         return 0;
 
@@ -165,6 +215,9 @@ static int tx_isp_sensor_has_usable_attachment(struct tx_isp_sensor *sensor)
         return 0;
 
     if (sensor->video.mbus.code == 0)
+        return 0;
+
+    if (tx_isp_sensor_active_dimensions(sensor, &width, &height))
         return 0;
 
     return 1;
@@ -230,7 +283,9 @@ static void tx_isp_refresh_sensor_attachment(struct tx_isp_dev *isp_dev,
     pr_info("*** %s: ISP sensor attachment refreshed sd=%p sensor=%p dbus=%u lanes=%u ***\n",
             reason, sd, sensor,
             sensor->video.attr ? sensor->video.attr->dbus_type : 0,
-            sensor->video.attr ? sensor->video.attr->mipi.lans : 0);
+            sensor->video.attr &&
+                sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI ?
+                sensor->video.attr->mipi.lans : 0);
 }
 
 // Simple sensor registration structure
@@ -1884,12 +1939,10 @@ static int sensor_set_integration_time(int time) {
 }
 
 static int sensor_set_integration_time_short(int time) {
-    /* Binary Ninja: Sets short integration time for WDR mode */
-
-    if (!ourISPdev || !ourISPdev->sensor) {
+    if (!ourISPdev || !ourISPdev->sensor)
         return -ENODEV;
-    }
 
+    ourISPdev->sensor->attr.integration_time_short = (uint16_t)time;
     pr_debug("sensor_set_integration_time_short: time=%d\n", time);
     return 0;
 }
@@ -1912,23 +1965,19 @@ static int sensor_set_analog_gain(int gain) {
 }
 
 static int sensor_set_analog_gain_short(int gain) {
-    /* Binary Ninja: Sets short exposure analog gain for WDR mode */
-
-    if (!ourISPdev || !ourISPdev->sensor) {
+    if (!ourISPdev || !ourISPdev->sensor)
         return -ENODEV;
-    }
 
+    ourISPdev->sensor->attr.again_short = gain;
     pr_debug("sensor_set_analog_gain_short: gain=%d\n", gain);
     return 0;
 }
 
 static int sensor_set_digital_gain(int gain) {
-    /* Binary Ninja: Sets digital gain */
-
-    if (!ourISPdev || !ourISPdev->sensor) {
+    if (!ourISPdev || !ourISPdev->sensor)
         return -ENODEV;
-    }
 
+    ourISPdev->sensor->attr.dgain = gain;
     pr_debug("sensor_set_digital_gain: gain=%d\n", gain);
     return 0;
 }
@@ -1939,13 +1988,20 @@ static int sensor_get_normal_fps(void) {
      * int32_t $v0_1 = $v0 & 0xffff
      * return zx.d(((($v1 u% $v0_1) << 8) u/ $v0_1).w + (($v1 u/ $v0_1) << 8).w) */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
-        return 25; /* Default 25 FPS */
+    u32 fps_q8;
+    int ret;
+
+    if (!ourISPdev || !ourISPdev->sensor)
+        return -ENODEV;
+
+    ret = tx_isp_sensor_fps_q8(ourISPdev->sensor, &fps_q8);
+    if (ret) {
+        pr_warn("sensor_get_normal_fps: invalid packed rate 0x%08x\n",
+                ourISPdev->sensor->video.fps);
+        return ret;
     }
 
-    /* This would calculate FPS from ISP timing registers */
-    pr_debug("sensor_get_normal_fps called\n");
-    return 25; /* Default 25 FPS */
+    return (int)fps_q8;
 }
 
 static int sensor_read_black_pedestal(void) {
@@ -2071,7 +2127,6 @@ static int sensor_get_lines_per_second(void) {
 static int csi_device_probe(struct tx_isp_dev *isp_dev);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
-static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
@@ -2148,6 +2203,9 @@ static void frame_channel_bootstrap_slot(struct frame_channel_device *fcd,
 void frame_channel_prepare(struct frame_channel_device *fcd,
                            int channel_num, int minor)
 {
+    u32 sensor_width = 0;
+    u32 sensor_height = 0;
+
     if (!fcd)
         return;
 
@@ -2181,8 +2239,15 @@ void frame_channel_prepare(struct frame_channel_device *fcd,
 
     if (fcd->state.width == 0) {
         if (fcd->channel_num == 0) {
-            fcd->state.width = 1920;
-            fcd->state.height = 1080;
+            if (!ourISPdev ||
+                tx_isp_sensor_active_dimensions(ourISPdev->sensor,
+                                                &sensor_width,
+                                                &sensor_height)) {
+                sensor_width = TX_ISP_MAX_WIDTH;
+                sensor_height = TX_ISP_MAX_HEIGHT;
+            }
+            fcd->state.width = sensor_width;
+            fcd->state.height = sensor_height;
             fcd->state.format = V4L2_PIX_FMT_NV12;
         } else {
             fcd->state.width = 640;
@@ -2453,21 +2518,38 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
         isp_dev->sensor_name[sizeof(isp_dev->sensor_name) - 1] = '\0';
     }
 
-    actual_width = stable_attr->mipi.image_twidth ?
-                   stable_attr->mipi.image_twidth : stable_attr->total_width;
-    actual_height = stable_attr->mipi.image_theight ?
-                    stable_attr->mipi.image_theight : stable_attr->total_height;
-    if (!actual_width)
-        actual_width = 1920;
-    if (!actual_height)
-        actual_height = 1080;
+    ret = tx_isp_sensor_active_dimensions(sensor, &actual_width,
+                                          &actual_height);
+    if (ret) {
+        pr_err("tx_isp_sync_sensor_attr: sensor %s has no active geometry\n",
+               stable_attr->name ? stable_attr->name : "(unnamed)");
+        return ret;
+    }
 
     isp_dev->sensor_width = actual_width;
     isp_dev->sensor_height = actual_height;
     pr_info("*** tx_isp_sync_sensor_attr: synced %s dbus=%u lanes=%u dims=%ux%u ***\n",
             stable_attr->name ? stable_attr->name : "(unnamed)",
-            stable_attr->dbus_type, stable_attr->mipi.lans,
+            stable_attr->dbus_type,
+            stable_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI ?
+                stable_attr->mipi.lans : 0,
             actual_width, actual_height);
+
+    /* Channel zero represents the full-resolution sensor output.  Refresh
+     * its bootstrap format until userspace has committed buffers or begun
+     * streaming; subchannels remain independent scaler policy. */
+    if (!frame_channels[0].state.streaming &&
+        frame_channels[0].state.buffer_count == 0) {
+        frame_channels[0].state.width = actual_width;
+        frame_channels[0].state.height = actual_height;
+        frame_channels[0].state.format = V4L2_PIX_FMT_NV12;
+        frame_channels[0].state.bytesperline =
+            frame_channel_format_bytesperline(V4L2_PIX_FMT_NV12,
+                                               actual_width);
+        frame_channels[0].state.sizeimage =
+            frame_channel_format_sizeimage(V4L2_PIX_FMT_NV12,
+                                           actual_width, actual_height);
+    }
 
     vic_dev = isp_dev->vic_dev;
     if (vic_dev) {
@@ -2545,40 +2627,6 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
 
     /* Call the Binary Ninja method directly */
     return tx_isp_csi_activate_subdev(&csi_dev->sd);
-}
-
-/* csi_sensor_ops_sync_sensor_attr - Binary Ninja implementation */
-static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr)
-{
-    struct tx_isp_csi_device *csi_dev;
-    struct tx_isp_dev *isp_dev;
-
-    if (!sd || !sensor_attr) {
-        pr_err("csi_sensor_ops_sync_sensor_attr: Invalid parameters\n");
-        return -EINVAL;
-    }
-
-    /* Cast isp pointer properly */
-    isp_dev = ourISPdev;
-    if (!isp_dev) {
-        pr_err("csi_sensor_ops_sync_sensor_attr: Invalid ISP device\n");
-        return -EINVAL;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    if (!csi_dev) {
-        pr_err("csi_sensor_ops_sync_sensor_attr: No CSI device\n");
-        return -EINVAL;
-    }
-
-    pr_info("csi_sensor_ops_sync_sensor_attr: Syncing sensor attributes for interface %d\n",
-            sensor_attr->dbus_type);
-
-    /* Store sensor attributes in CSI device */
-    csi_dev->interface_type = sensor_attr->dbus_type;
-    csi_dev->lanes = (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ? 2 : 1; /* MIPI uses 2 lanes, DVP uses 1 */
-
-    return 0;
 }
 
 /* csi_device_probe - EXACT Binary Ninja implementation (tx_isp_csi_probe) */
@@ -3726,8 +3774,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* Calculate buffer size based on current format geometry */
             {
-                u32 w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
-                u32 h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
+                u32 w = state->width ? (u32)state->width :
+                        (channel == 0 ? TX_ISP_MAX_WIDTH : 640U);
+                u32 h = state->height ? (u32)state->height :
+                        (channel == 0 ? TX_ISP_MAX_HEIGHT : 360U);
                 buffer_size = state->sizeimage ?
                               state->sizeimage :
                               frame_channel_format_sizeimage(
@@ -3925,9 +3975,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * treating it as a frame-pool base makes MSCA overwrite/read the wrong
          * object and produces stable striped frames. */
         buffer_w = state->width ? (u32)state->width :
-                   (channel == 0 ? 1920U : 640U);
+                   (channel == 0 ? TX_ISP_MAX_WIDTH : 640U);
         buffer_h = state->height ? (u32)state->height :
-                   (channel == 0 ? 1080U : 360U);
+                   (channel == 0 ? TX_ISP_MAX_HEIGHT : 360U);
         buffer_size = state->sizeimage ?
                       state->sizeimage :
                       frame_channel_format_sizeimage(
@@ -3996,8 +4046,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          */
         if (ourISPdev && ourISPdev->core_regs && channel >= 0 && channel < 3) {
             /* OEM: UV offset uses per-CHANNEL width/height, NOT sensor resolution.
-             * Channel 0 is typically full-res (1920x1080), but channel 1 may be
-             * scaled (e.g., 640x360).  Using vic->width for all channels puts
+             * Channel 0 is the full sensor mode, but channel 1 may be scaled.
+             * Using vic->width for all channels puts
              * the UV plane at the wrong offset → green/magenta corruption. */
             /* DMA addresses are submitted below only when this slot becomes
              * ACTIVE. A second userspace QBUF must remain QUEUED instead of
@@ -4091,7 +4141,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Reference waits for completed buffer and returns it
         // For now, return dummy buffer data using current geometry
         buffer.index = 0;
-        buffer.bytesused = state->sizeimage ? state->sizeimage : nv12_sizeimage(state->width ? state->width : 1920, state->height ? state->height : 1080);
+        buffer.bytesused = state->sizeimage ? state->sizeimage :
+            nv12_sizeimage(state->width ? state->width :
+                           (channel == 0 ? TX_ISP_MAX_WIDTH : 640U),
+                           state->height ? state->height :
+                           (channel == 0 ? TX_ISP_MAX_HEIGHT : 360U));
         buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
         buffer.sequence = 0;
 
@@ -4395,8 +4449,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         if (ret == 0xfffffdfd) {
             format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            format.pix.width = state->width ? state->width : 1920;
-            format.pix.height = state->height ? state->height : 1080;
+            format.pix.width = state->width ? state->width :
+                               (channel == 0 ? TX_ISP_MAX_WIDTH : 640U);
+            format.pix.height = state->height ? state->height :
+                                (channel == 0 ? TX_ISP_MAX_HEIGHT : 360U);
             format.pix.pixelformat = frame_channel_export_pixfmt(channel, state->format);
             format.pix.bytesperline = state->bytesperline ?
                                       state->bytesperline :
@@ -4617,6 +4673,35 @@ static struct tx_isp_subdev_ops sensor_subdev_ops = {
     .video = &sensor_subdev_video_ops,
     .sensor = &sensor_subdev_sensor_ops,  /* Now points to delegation structure */
 };
+
+static int tx_isp_active_sensor_geometry(struct tx_isp_dev *isp_dev,
+                                         u32 *width, u32 *height)
+{
+    int ret;
+
+    if (!isp_dev || !isp_dev->sensor)
+        return -ENODEV;
+
+    ret = tx_isp_sensor_active_dimensions(isp_dev->sensor, width, height);
+    if (ret)
+        return ret;
+
+    isp_dev->sensor_width = *width;
+    isp_dev->sensor_height = *height;
+    return 0;
+}
+
+static int tx_isp_sensor_wdr_buffer_layout(struct tx_isp_dev *isp_dev,
+                                           u32 *size, u32 *stride, u32 *lines)
+{
+    struct tx_isp_t31_sensor_policy policy;
+
+    if (!isp_dev || !isp_dev->sensor)
+        return -ENODEV;
+
+    tx_isp_build_sensor_policy(isp_dev->sensor, NULL, &policy);
+    return tx_isp_t31_wdr_buffer_layout(&policy, size, stride, lines);
+}
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
@@ -4952,11 +5037,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         uint32_t width, height;
         int layout_ret;
 
-        /* Get dimensions from ISP device */
-        width = isp_dev->sensor_width;
-        height = isp_dev->sensor_height;
-        if (!width) width = 1920;
-        if (!height) height = 1080;
+        layout_ret = tx_isp_active_sensor_geometry(isp_dev, &width, &height);
+        if (layout_ret)
+            return layout_ret;
 
         layout_ret = tx_isp_mdns_layout_build(width, height,
                                               isp_memopt != 0, &layout);
@@ -4990,13 +5073,10 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
             return -EFAULT;
 
-        // Get dimensions from ISP device (OEM uses tispinfo/data_b2f34)
-        width = isp_dev->sensor_width;
-        height = isp_dev->sensor_height;
-        if (!width)
-            width = 1920;
-        if (!height)
-            height = 1080;
+        /* OEM uses the active tispinfo/data_b2f34 geometry. */
+        layout_ret = tx_isp_active_sensor_geometry(isp_dev, &width, &height);
+        if (layout_ret)
+            return layout_ret;
 
         pr_info("ISP set buffer: addr=0x%x size=%d width=%u height=%u isp_memopt=%d\n",
                 buf_setup.addr, buf_setup.size, width, height, isp_memopt);
@@ -5103,41 +5183,45 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // WDR buffer address
             uint32_t size;   // WDR buffer size
         } wdr_setup;
-        uint32_t wdr_width = 1920;
-        uint32_t wdr_height = 1080;
-        uint32_t wdr_mode = 1; // Linear mode by default
         uint32_t required_size;
+        uint32_t stride;
         uint32_t stride_lines;
+        int layout_ret;
 
         if (copy_from_user(&wdr_setup, argp, sizeof(wdr_setup)))
             return -EFAULT;
 
         pr_info("WDR buffer setup: addr=0x%x size=%d\n", wdr_setup.addr, wdr_setup.size);
 
-        if (wdr_mode == 1) {
-            // Linear mode calculation
-            stride_lines = wdr_height;
-            required_size = (stride_lines * wdr_width) << 1; // 16-bit per pixel
-        } else if (wdr_mode == 2) {
-            // WDR mode calculation - different formula
-            required_size = wdr_width * wdr_height * 2; // Different calculation for WDR
-            stride_lines = required_size / (wdr_width << 1);
-        } else {
-            pr_err("Unsupported WDR mode: %d\n", wdr_mode);
-            return -EINVAL;
+        layout_ret = tx_isp_sensor_wdr_buffer_layout(isp_dev,
+                                                     &required_size,
+                                                     &stride,
+                                                     &stride_lines);
+        if (layout_ret) {
+            pr_err("WDR buffer requested for unsupported sensor mode %u: %d\n",
+                   isp_dev->sensor && isp_dev->sensor->video.attr ?
+                       isp_dev->sensor->video.attr->data_type : 0,
+                   layout_ret);
+            return layout_ret == -ENODATA ? -EINVAL : layout_ret;
         }
 
-        pr_info("WDR mode %d: required_size=%d stride_lines=%d\n",
-                wdr_mode, required_size, stride_lines);
+        pr_info("WDR sensor mode %u: required_size=%u stride=%u lines=%u\n",
+                isp_dev->sensor->video.attr->data_type, required_size,
+                stride, stride_lines);
 
         if (wdr_setup.size < required_size) {
             pr_err("WDR buffer too small: need %d, got %d\n", required_size, wdr_setup.size);
+            isp_dev->wdr_mode = 0;
+            tisp_s_wdr_en(0);
             return -EFAULT;
         }
 
-        // Configure WDR registers (like reference 0x2004, 0x2008, 0x200c)
-        pr_info("Configuring WDR registers: addr=0x%x stride=%d lines=%d\n",
-                wdr_setup.addr, wdr_width << 1, stride_lines);
+        /* OEM tx_isp_wdr_set_buf programs the physical cache directly. */
+        system_reg_write(0x2004, wdr_setup.addr);
+        system_reg_write(0x2008, stride);
+        system_reg_write(0x200c, stride_lines);
+        pr_info("Configured WDR buffer: addr=0x%x stride=%u lines=%u\n",
+                wdr_setup.addr, stride, stride_lines);
 
         return 0;
     }
@@ -5146,26 +5230,22 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t addr;   // WDR buffer address (usually 0)
             uint32_t size;   // Calculated WDR buffer size
         } wdr_result;
-        uint32_t wdr_width = 1920;
-        uint32_t wdr_height = 1080;
-        uint32_t wdr_mode = 1; // Linear mode
         uint32_t wdr_size;
+        uint32_t stride;
+        uint32_t lines;
+        int layout_ret;
 
-        pr_info("WDR buffer calculation: width=%d height=%d mode=%d\n",
-                wdr_width, wdr_height, wdr_mode);
-
-        if (wdr_mode == 1) {
-            // Linear mode: ($s1_13 * *($s2_23 + 0x124)) << 1
-            wdr_size = (wdr_height * wdr_width) << 1;
-        } else if (wdr_mode == 2) {
-            // WDR mode: different calculation
-            wdr_size = wdr_width * wdr_height * 2;
-        } else {
-            pr_err("WDR mode not supported\n");
-            return -EINVAL;
+        layout_ret = tx_isp_sensor_wdr_buffer_layout(isp_dev, &wdr_size,
+                                                     &stride, &lines);
+        if (layout_ret == -ENODATA) {
+            /* Stock reports a zero-sized cache for a linear sensor. */
+            wdr_size = 0;
+        } else if (layout_ret) {
+            return layout_ret;
         }
 
-        pr_info("WDR calculated buffer size: %d bytes (0x%x)\n", wdr_size, wdr_size);
+        pr_info("WDR calculated buffer size: %u bytes (0x%x)\n",
+                wdr_size, wdr_size);
 
         wdr_result.addr = 0;
         wdr_result.size = wdr_size;
@@ -6926,8 +7006,10 @@ static int __submit_buffer_to_msca(int channel, u32 phys_addr)
         return -EINVAL;
 
     state = &frame_channels[channel].state;
-    width = state->width ? state->width : (channel == 0 ? 1920U : 640U);
-    height = state->height ? state->height : (channel == 0 ? 1080U : 360U);
+    width = state->width ? state->width :
+            (channel == 0 ? TX_ISP_MAX_WIDTH : 640U);
+    height = state->height ? state->height :
+             (channel == 0 ? TX_ISP_MAX_HEIGHT : 360U);
     aligned_height = (height + 0xf) & ~0xfU;
     uv_addr = phys_addr + width * aligned_height;
 
@@ -7369,7 +7451,9 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
                     sensor ? sensor->video.attr : NULL,
                     (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)",
                     (sensor && sensor->video.attr) ? sensor->video.attr->dbus_type : 0,
-                    (sensor && sensor->video.attr) ? sensor->video.attr->mipi.lans : 0);
+                    (sensor && sensor->video.attr &&
+                     sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ?
+                        sensor->video.attr->mipi.lans : 0);
         }
 
         /* Check if any channel is already streaming and set state accordingly */

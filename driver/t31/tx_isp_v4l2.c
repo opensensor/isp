@@ -23,11 +23,8 @@
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 
 #define TX_ISP_V4L2_CHANNEL 0
-#define TX_ISP_V4L2_DEFAULT_WIDTH 1920U
-#define TX_ISP_V4L2_DEFAULT_HEIGHT 1080U
 #define TX_ISP_V4L2_MIN_WIDTH 16U
 #define TX_ISP_V4L2_MIN_HEIGHT 16U
-#define TX_ISP_V4L2_FPS 30U
 #define TX_ISP_V4L2_MIN_BUFFERS 2U
 #define TX_ISP_V4L2_MAX_BUFFERS 4U
 
@@ -263,11 +260,23 @@ static void tx_isp_v4l2_try_format(struct v4l2_format *format)
 {
 	u32 width = format->fmt.pix.width;
 	u32 height = format->fmt.pix.height;
+	u32 sensor_width;
+	u32 sensor_height;
 
+	if ((!width || !height) && ourISPdev &&
+	    !tx_isp_sensor_active_dimensions(ourISPdev->sensor,
+					     &sensor_width, &sensor_height)) {
+		if (!width)
+			width = sensor_width;
+		if (!height)
+			height = sensor_height;
+	}
+	/* Registration can precede an external sensor module.  Advertise the
+	 * SoC envelope until sensor sync supplies active geometry. */
 	if (!width)
-		width = TX_ISP_V4L2_DEFAULT_WIDTH;
+		width = TX_ISP_MAX_WIDTH;
 	if (!height)
-		height = TX_ISP_V4L2_DEFAULT_HEIGHT;
+		height = TX_ISP_MAX_HEIGHT;
 	width = clamp_t(u32, width, TX_ISP_V4L2_MIN_WIDTH,
 			TX_ISP_MAX_WIDTH) & ~1U;
 	height = clamp_t(u32, height, TX_ISP_V4L2_MIN_HEIGHT,
@@ -369,13 +378,26 @@ static int tx_isp_v4l2_set_format(struct file *file, void *private,
 static int tx_isp_v4l2_get_parameters(struct file *file, void *private,
 				      struct v4l2_streamparm *parameters)
 {
+	u32 raw_fps;
+	u32 numerator;
+	u32 denominator;
+
 	if (parameters->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
+	if (!ourISPdev || !ourISPdev->sensor)
+		return -ENODEV;
+
+	raw_fps = ourISPdev->sensor->video.fps;
+	numerator = raw_fps >> 16;
+	denominator = raw_fps & 0xffffU;
+	if (!numerator || !denominator)
+		return -EINVAL;
+
 	memset(&parameters->parm.capture, 0,
 	       sizeof(parameters->parm.capture));
 	parameters->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	parameters->parm.capture.timeperframe.numerator = 1;
-	parameters->parm.capture.timeperframe.denominator = TX_ISP_V4L2_FPS;
+	parameters->parm.capture.timeperframe.numerator = denominator;
+	parameters->parm.capture.timeperframe.denominator = numerator;
 	parameters->parm.capture.readbuffers = TX_ISP_V4L2_MIN_BUFFERS;
 	return 0;
 }
@@ -621,13 +643,18 @@ static const struct v4l2_ioctl_ops tx_isp_v4l2_ioctl_ops = {
 static int tx_isp_v4l2_open(struct file *file)
 {
 	struct tx_isp_v4l2_device *video = video_drvdata(file);
+	struct v4l2_format format;
 	int ret = 0;
 
 	mutex_lock(&video->lock);
 	if (video->opened)
 		ret = -EBUSY;
-	else
+	else {
+		memset(&format, 0, sizeof(format));
+		tx_isp_v4l2_try_format(&format);
+		video->format = format.fmt.pix;
 		video->opened = true;
+	}
 	mutex_unlock(&video->lock);
 	return ret;
 }

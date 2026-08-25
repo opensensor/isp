@@ -627,7 +627,9 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, void *arg)
             sensor_attr ? "copied into" : "cleared",
             cached_attr,
             sensor_attr ? sensor_attr->dbus_type : 0,
-            sensor_attr ? sensor_attr->mipi.lans : 0);
+            sensor_attr &&
+                sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI ?
+                sensor_attr->mipi.lans : 0);
 
     return 0;
 }
@@ -776,7 +778,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
     isp_csi_regs = csi_get_wrapper_regs(csi_dev);
     pr_info("csi_core_ops_init: sensor dbus=%d lanes=%d slot13c=%p\n",
-            interface_type, sensor_attr->mipi.lans, isp_csi_regs);
+            interface_type,
+            interface_type == TX_SENSOR_DATA_INTERFACE_MIPI ?
+                sensor_attr->mipi.lans : 0,
+            isp_csi_regs);
 
     if (interface_type == 1) {
 

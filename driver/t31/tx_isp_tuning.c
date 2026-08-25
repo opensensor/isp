@@ -2463,7 +2463,7 @@ static const uint16_t tisp_dmsc_param_sizes[TISP_DMSC_PARAM_COUNT] = {
 	0x24, 0x24, 0x24, 0x24, 0x24, 0x0c,
 };
 static void *sensor_info_ptr = NULL;
-static uint32_t data_b2e1c = 1080; /* Sensor height */
+static uint32_t data_b2e1c; /* Sensor height from the active sensor-info blob */
 static uint32_t data_b2e54;
 static uint32_t data_b2e56;
 
@@ -4408,17 +4408,8 @@ static uint32_t data_d2c98[256];
 static uint32_t data_d301c[256];
 static uint32_t data_d33a0[256];
 
-/* Sensor info structure */
-static struct tisp_sensor_info_blob sensor_info = {
-    .words = {
-        [TISP_SI_WORD_WIDTH] = 1920,
-        [TISP_SI_WORD_HEIGHT] = 1080,
-        [TISP_SI_WORD_BAYER] = 0,
-        [TISP_SI_WORD_FPS] = (25 << 16) | 1,
-        [TISP_SI_WORD_LINE_SHORT_MIN] = 28,
-        [TISP_SI_WORD_TOTAL_SIZE] = (1080 << 16) | 1920,
-    },
-};
+/* Populated from the attached sensor before any tuning block is initialized. */
+static struct tisp_sensor_info_blob sensor_info;
 static uint32_t data_b0d54 = 4;  /* Sensor width divisor */
 static uint32_t data_b0d4c = 4;  /* Sensor height divisor */
 
@@ -4427,10 +4418,8 @@ static u32 tisp_sensor_fps_from_raw(u32 raw_fps)
     u32 num = raw_fps >> 16;
     u32 den = raw_fps & 0xffff;
 
-    if (num == 0)
-        return 25;
-    if (den == 0)
-        return num;
+    if (num == 0 || den == 0)
+        return 0;
 
     return (num + (den / 2)) / den;
 }
@@ -4439,11 +4428,6 @@ static void tisp_sensor_split_raw_fps(u32 raw_fps, u32 *num, u32 *den)
 {
     u32 fps_num = raw_fps >> 16;
     u32 fps_den = raw_fps & 0xffff;
-
-    if (fps_num == 0)
-        fps_num = 25;
-    if (fps_den == 0)
-        fps_den = 1;
 
     if (num)
         *num = fps_num;
@@ -4498,7 +4482,8 @@ int tisp_sensor_info_update(const struct tisp_sensor_info_blob *info)
     u32 fps_num;
     u32 fps_den;
 
-    if (!info)
+    if (!info || !tisp_si_width(info) || !tisp_si_height(info) ||
+        !tisp_sensor_fps_from_raw(tisp_si_fps(info)))
         return -EINVAL;
 
     BUILD_BUG_ON(sizeof(*info) != TISP_SENSOR_INFO_SIZE);
@@ -7121,16 +7106,7 @@ int tisp_init(void *sensor_info_arg, char *param_name)
     int ret;
     u32 fps_num, fps_den;
     u32 reg_1c;
-    struct tisp_sensor_info_blob sensor_params = {
-        .words = {
-            [TISP_SI_WORD_WIDTH] = 1920,
-            [TISP_SI_WORD_HEIGHT] = 1080,
-            [TISP_SI_WORD_BAYER] = 0,
-            [TISP_SI_WORD_FPS] = (25 << 16) | 1,
-            [TISP_SI_WORD_LINE_SHORT_MIN] = 28,
-            [TISP_SI_WORD_TOTAL_SIZE] = (1080 << 16) | 1920,
-        },
-    };
+    struct tisp_sensor_info_blob sensor_params;
 
     pr_info("*** tisp_init: INITIALIZING ISP HARDWARE PIPELINE - Binary Ninja EXACT implementation ***\n");
 
@@ -7139,13 +7115,18 @@ int tisp_init(void *sensor_info_arg, char *param_name)
         return -ENODEV;
     }
 
-    /* Binary Ninja: Basic sensor parameter setup */
-    if (sensor_info_arg) {
-        /* Use provided sensor info if available */
-        memcpy(&sensor_params, sensor_info_arg, sizeof(sensor_params));
+    if (!sensor_info_arg) {
+        pr_err("tisp_init: active sensor parameters are required\n");
+        return -EINVAL;
     }
 
-    tisp_sensor_info_update(&sensor_params);
+    memcpy(&sensor_params, sensor_info_arg, sizeof(sensor_params));
+
+    ret = tisp_sensor_info_update(&sensor_params);
+    if (ret) {
+        pr_err("tisp_init: invalid active sensor parameters\n");
+        return ret;
+    }
     tisp_sensor_split_raw_fps(tisp_si_fps(&sensor_params), &fps_num, &fps_den);
 
     pr_info("tisp_init: Using sensor parameters - %dx%d@%u/%u (~%u fps), bayer=%u mode=%u\n",
@@ -36238,10 +36219,10 @@ static int data_b2f08(uint32_t param, int flag)
         return -ENODEV;
     }
 
-    /* Set short analog gain via sensor attribute - no direct field, use dgain as fallback */
+    /* Cache the short-path sensor token in its dedicated attribute field. */
     if (ourISPdev->sensor) {
-        ourISPdev->sensor->attr.dgain = param; /* Use dgain for short gain */
-        pr_debug("data_b2f08: Set sensor dgain (short gain) to %u\n", param);
+        ourISPdev->sensor->attr.again_short = param;
+        pr_debug("data_b2f08: Set sensor again_short to %u\n", param);
         return 0;
     }
 

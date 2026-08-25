@@ -16,6 +16,7 @@ int tisp_code_destroy_tuning_node(void);
 int tisp_dmsc_reprogram_sensor_cfa(void);
 int tiziano_awb_stream_start_refresh(void);
 int tx_isp_tuning_notify(struct tx_isp_dev *dev, uint32_t event);
+int tisp_s_wdr_en(int enable);
 /* ISP event callback function array - exported for external SDK */
 extern void (*isp_event_func_cb[32])(void);
 

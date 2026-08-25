@@ -516,10 +516,10 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
      */
     vic_raw_regs_set(vic_dev, vic_dev->vic_regs);
 
-    /* Initialize VIC device dimensions — defaults overwritten by sensor attr sync */
-    vic_dev->width = 1920;
-    vic_dev->height = 1080;
-    vic_dev->stride = vic_dev->width;
+    /* Geometry is unknown until the probed sensor publishes its active mode. */
+    vic_dev->width = 0;
+    vic_dev->height = 0;
+    vic_dev->stride = 0;
     vic_dev->pixel_format = V4L2_PIX_FMT_NV12;
     vic_raw_dims_set(vic_dev, vic_dev->width, vic_dev->height);
 
@@ -563,13 +563,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Initialize empty lists - buffers allocated later when needed */
     pr_info("*** VIC: Buffer lists initialized - allocation deferred to prevent memory pressure ***\n");
 
-    /* Set up sensor attributes with defaults */
+    /* Do not invent a sensor bus or pixel format before attribute sync. */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
     vic_dev->sensor_attr_ptr = &vic_dev->sensor_attr;
-    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
-    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
     vic_raw_sensor_attr_sync(vic_dev, &vic_dev->sensor_attr);
 
     /* *** CRITICAL: Link VIC device to ISP core *** */
@@ -600,8 +596,8 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
      * before probe/stream-on touch the object.
      */
     {
-        u32 seed_width = 1920;
-        u32 seed_height = 1080;
+        u32 seed_width = 0;
+        u32 seed_height = 0;
 
         if (isp_dev->sensor_width && isp_dev->sensor_height) {
             seed_width = isp_dev->sensor_width;
@@ -1170,6 +1166,101 @@ cleanup:
     return ret;
 }
 
+static int vic_sensor_wire_bits(const struct tx_isp_sensor_attribute *attr,
+                                u32 *bits)
+{
+    if (!attr || !bits)
+        return -EINVAL;
+
+    switch (attr->dbus_type) {
+    case TX_SENSOR_DATA_INTERFACE_MIPI:
+        switch (attr->mipi.mipi_sc.sensor_csi_fmt) {
+        case TX_SENSOR_RAW8:
+            *bits = 8;
+            return 0;
+        case TX_SENSOR_RAW10:
+            *bits = 10;
+            return 0;
+        case TX_SENSOR_RAW12:
+            *bits = 12;
+            return 0;
+        case TX_SENSOR_YUV422:
+            *bits = 16;
+            return 0;
+        default:
+            return -EINVAL;
+        }
+    case TX_SENSOR_DATA_INTERFACE_DVP:
+        switch (attr->dvp.gpio) {
+        case DVP_PA_LOW_10BIT:
+        case DVP_PA_HIGH_10BIT:
+            *bits = 10;
+            return 0;
+        case DVP_PA_12BIT:
+            *bits = 12;
+            return 0;
+        case DVP_PA_LOW_8BIT:
+        case DVP_PA_HIGH_8BIT:
+            *bits = 8;
+            return 0;
+        default:
+            return -EINVAL;
+        }
+    case TX_SENSOR_DATA_INTERFACE_BT601:
+        *bits = attr->bt601bus.gpio == SENSOR_BT_16BIT ? 16 : 8;
+        return 0;
+    case TX_SENSOR_DATA_INTERFACE_BT656:
+        *bits = attr->bt656bus.gpio == SENSOR_BT_16BIT ? 16 : 8;
+        return 0;
+    case TX_SENSOR_DATA_INTERFACE_BT1120:
+        *bits = attr->bt1120.gpio == SENSOR_BT_16BIT ? 16 : 8;
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
+static bool vic_sensor_is_yuv422(const struct tx_isp_sensor *sensor)
+{
+    const struct tx_isp_sensor_attribute *attr;
+    u32 code;
+
+    if (!sensor || !sensor->video.attr)
+        return false;
+
+    attr = sensor->video.attr;
+    if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI)
+        return attr->mipi.mipi_sc.sensor_csi_fmt == TX_SENSOR_YUV422;
+
+    if (attr->dbus_type == TX_SENSOR_DATA_INTERFACE_BT601 ||
+        attr->dbus_type == TX_SENSOR_DATA_INTERFACE_BT656 ||
+        attr->dbus_type == TX_SENSOR_DATA_INTERFACE_BT1120)
+        return true;
+
+    code = sensor->video.mbus.code;
+    switch (code) {
+    case V4L2_MBUS_FMT_UYVY8_1_5X8:
+    case V4L2_MBUS_FMT_VYUY8_1_5X8:
+    case V4L2_MBUS_FMT_YUYV8_1_5X8:
+    case V4L2_MBUS_FMT_YVYU8_1_5X8:
+    case V4L2_MBUS_FMT_UYVY8_2X8:
+    case V4L2_MBUS_FMT_VYUY8_2X8:
+    case V4L2_MBUS_FMT_YUYV8_2X8:
+    case V4L2_MBUS_FMT_YVYU8_2X8:
+    case V4L2_MBUS_FMT_UYVY8_1X16:
+    case V4L2_MBUS_FMT_VYUY8_1X16:
+    case V4L2_MBUS_FMT_YUYV8_1X16:
+    case V4L2_MBUS_FMT_YVYU8_1X16:
+    case V4L2_MBUS_FMT_YUYV10_2X10:
+    case V4L2_MBUS_FMT_YVYU10_2X10:
+    case V4L2_MBUS_FMT_YUYV10_1X20:
+    case V4L2_MBUS_FMT_YVYU10_1X20:
+        return true;
+    default:
+        return false;
+    }
+}
+
 int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
 {
     uint32_t vic_ctrl, vic_status, vic_intr, vic_addr;
@@ -1188,11 +1279,18 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     /* Extra diagnostics for logging to file */
     u32 dims_reg = 0, w_hw_snap = 0, h_hw_snap = 0;
     u32 stride_reg = 0, stride_used = 0;
+    u32 wire_bits;
     size_t sample_n = 0; u32 sample_sum = 0; u8 sample_min = 0xFF, sample_max = 0x00;
 
-    if (!sd) {
+    if (!sd || !isp_dev || !isp_dev->sensor || !isp_dev->sensor->video.attr) {
         pr_err("No VIC or sensor device\n");
         return -EINVAL;
+    }
+
+    ret = vic_sensor_wire_bits(isp_dev->sensor->video.attr, &wire_bits);
+    if (ret) {
+        pr_err("vic_snapraw: unsupported sensor bus format\n");
+        return ret;
     }
 
     /* Prefer live VIC hardware-configured dims over cached sensor totals */
@@ -1212,30 +1310,35 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         }
     }
 
+    if (!width || !height) {
+        pr_err("vic_snapraw: active sensor geometry is unavailable\n");
+        return -EINVAL;
+    }
+
     if (width >= 0xa81) {
         pr_err("Can't output the width(%d)!\n", width);
         return -EINVAL;
     }
 
-    /* Determine stride from VIC if available; fallback to 2 bytes per pixel */
+    /* Derive the minimum line payload from the active sensor bus format. */
     {
-        /* Determine RAW10 stride: ceil(width*10/8), 16B aligned; prefer VIC stride regs if >= estimate */
-        u32 raw10_bpl = (width * 10 + 7) >> 3;           /* bytes per line, packed RAW10 */
-        u32 stride_tmp = (raw10_bpl + 15) & ~15;         /* 16-byte align fallback */
+        u32 wire_bpl = (width * wire_bits + 7) >> 3;
+        u32 stride_tmp = (wire_bpl + 15) & ~15;
         if (isp_dev && isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
             u32 s0 = readl(isp_dev->vic_dev->vic_regs + 0x310);
             u32 s1 = readl(isp_dev->vic_dev->vic_regs + 0x314);
             stride_reg = s0 ? s0 : s1;
-            if (s0 >= raw10_bpl && s0 <= 0x20000)
+            if (s0 >= wire_bpl && s0 <= 0x20000)
                 stride_tmp = s0;
-            else if (s1 >= raw10_bpl && s1 <= 0x20000)
+            else if (s1 >= wire_bpl && s1 <= 0x20000)
                 stride_tmp = s1;
         }
         stride_used = stride_tmp;
-        frame_size = stride_tmp * height;                 /* RAW10 single plane */
+        frame_size = stride_tmp * height;
         buf_size = frame_size * savenum;
-        pr_info("vic_snapraw: RAW10 dims=%ux%u bpl_est=%u stride=%u frame_size=%u total_size=%u savenum=%u\n",
-                width, height, raw10_bpl, stride_tmp, frame_size, buf_size, savenum);
+        pr_info("vic_snapraw: %u-bit dims=%ux%u bpl_est=%u stride=%u frame_size=%u total_size=%u savenum=%u\n",
+                wire_bits, width, height, wire_bpl, stride_tmp,
+                frame_size, buf_size, savenum);
     }
 
     // Map VIC registers
@@ -1267,7 +1370,7 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
 
     // Setup DMA
     writel(dma_addr, vic_base + 0x7820);  // DMA target address
-    /* Program stride/height for capture DMA using previously determined RAW10 stride */
+    /* Program stride/height for capture DMA using the sensor-derived stride. */
     writel(stride_used, vic_base + 0x7824);  // Stride (bytes per line)
     writel(height,     vic_base + 0x7828);  // Number of lines
     pr_info("vic_snapraw: programmed stride=%u height=%u\n", stride_used, height);
@@ -1565,6 +1668,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     actual_width = vic_raw_width_get(vic_dev);
     actual_height = vic_raw_height_get(vic_dev);
 
+    if (!actual_width || !actual_height) {
+        pr_err("tx_isp_vic_start: sensor active geometry is unavailable\n");
+        return -EINVAL;
+    }
+
     vic_regs = vic_stream_regs_resolve(vic_dev);
     if (!vic_regs)
         return -EINVAL;
@@ -1605,7 +1713,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
         /* The vendor kernel leaves the CSI-2 data type preconfigured for
-         * sensors such as GC2053, whose attribute table advertises RAW10 but
+         * sensors whose attribute table advertises RAW10 but
          * leaves data_type_value at zero.  Mainline starts from reset, so
          * derive the missing value without overriding sensors that provide
          * an explicit CSI-2 data type.
@@ -1889,7 +1997,7 @@ dvp_apply:
 
         writel(1, vic_regs + 0xc);
 
-        int gpio_mode = sensor_attr->dbus_type;
+        int gpio_mode = sensor_attr->bt601bus.gpio;
         u32 bt601_config;
 
         if (gpio_mode == 0) {
@@ -2398,8 +2506,7 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		u32 width = vic_dev->width;
 		u32 height = vic_dev->height;
 		struct tx_isp_sensor_attribute *sattr = vic_raw_sensor_attr_get(vic_dev);
-		int is_nv12 = sattr &&
-			sattr->mipi.mipi_sc.sensor_csi_fmt == TX_SENSOR_YUV422;
+		int is_nv12 = vic_sensor_is_yuv422(ourISPdev ? ourISPdev->sensor : NULL);
 		u32 stride_line, frame_size, savenum, total_size;
 		u32 saved_7810, saved_7814, saved_7804, saved_7820;
 		bool was_processing;
@@ -2411,6 +2518,13 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		if (count > 8)
 			savenum = simple_strtoul(&cmdbuf[8], NULL, 0);
 		if (savenum < 1) savenum = 1;
+
+		if ((!width || !height) && ourISPdev && ourISPdev->sensor)
+			tx_isp_sensor_active_dimensions(ourISPdev->sensor, &width, &height);
+		if (!width || !height) {
+			pr_err("snapraw: active sensor geometry is unavailable\n");
+			goto out;
+		}
 
 		/* Calculate frame size: raw=width*2*height, NV12=width*1.5*height */
 		stride_line = width << 1;
@@ -2503,9 +2617,8 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			int fmt_arg = 0;
 			was_processing = vic_dev->processing;
 
-			/* OEM tests sensor_attribute::data_type at +0x90 here.
-			 * Linear GC2053 is single-channel; total_width is geometry and
-			 * must not be used as a proxy for WDR/dual-channel capture. */
+			/* OEM tests sensor_attribute::data_type at +0x90 here.  Timing
+			 * geometry must not be used as a proxy for dual-channel capture. */
 			if (!is_nv12 && sattr &&
 			    sattr->data_type != TX_SENSOR_DATA_TYPE_LINEAR)
 				dual = 1;
@@ -2603,11 +2716,16 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		 *
 		 * When NOT streaming, fall back to OEM MDMA capture via reg 0x7820. */
 		extern struct frame_channel_device frame_channels[];
-		u32 width = vic_dev->width ? vic_dev->width : 1920;
-		u32 height = vic_dev->height ? vic_dev->height : 1080;
+		u32 width = vic_dev->width;
+		u32 height = vic_dev->height;
 		u32 aligned_h = (height + 0xf) & ~0xf;
 		u32 frame_size = width * aligned_h * 3 / 2;  /* NV12 */
 		u32 y_phys;
+
+		if (!width || !height) {
+			pr_err("saveraw: active sensor geometry is unavailable\n");
+			return -EINVAL;
+		}
 
 		/* Get latest completed frame address */
 		y_phys = frame_channels[0].state.last_done_phys;
@@ -2828,8 +2946,12 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     if (!vic_base)
         return;
 
-    width = vic_dev->width ? vic_dev->width : 1920;
-    height = vic_dev->height ? vic_dev->height : 1080;
+    width = vic_dev->width;
+    height = vic_dev->height;
+    if (!width || !height) {
+        pr_err("vic_pipo_mdma_enable: active sensor geometry is unavailable\n");
+        return;
+    }
     stride = width << 1;
 
     writel(1, vic_base + 0x308);
@@ -3230,19 +3352,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         u32 seed_width = vic_raw_width_get(vic_dev);
         u32 seed_height = vic_raw_height_get(vic_dev);
 
-        if ((!seed_width || !seed_height) &&
-            vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
-            seed_width = vic_dev->sensor_attr.total_width;
-            seed_height = vic_dev->sensor_attr.total_height;
-        }
         if ((!seed_width || !seed_height) && ourISPdev &&
             ourISPdev->sensor_width && ourISPdev->sensor_height) {
             seed_width = ourISPdev->sensor_width;
             seed_height = ourISPdev->sensor_height;
-        }
-        if (!seed_width || !seed_height) {
-            seed_width = 1920;
-            seed_height = 1080;
         }
 
         vic_dev->width = seed_width;

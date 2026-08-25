@@ -75,6 +75,10 @@ struct ddr_device {
 
 struct frame_source_device;
 
+int tx_isp_sensor_active_dimensions(const struct tx_isp_sensor *sensor,
+                                    u32 *width, u32 *height);
+int tx_isp_sensor_fps_q8(const struct tx_isp_sensor *sensor, u32 *fps_q8);
+
 
 // CSI device structure for MIPI interface (based on Binary Ninja analysis)
 struct tx_isp_csi_device {
