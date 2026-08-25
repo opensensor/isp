@@ -322,13 +322,13 @@
   },
   "recovered": {
     "path": "driver/t21/tx-isp-t21.ko",
-    "file_bytes": 651668,
+    "file_bytes": 653340,
     "elf_class": "elf32",
     "endianness": "little",
     "machine": "0x8",
     "function_symbols": 682,
     "functions_with_disassembly": 682,
-    "executable_section_bytes": 168608,
+    "executable_section_bytes": 169232,
     "initialized_writable_bytes": 276528,
     "uninitialized_writable_bytes": 452144,
     "sections": [
@@ -479,7 +479,7 @@
       {
         "name": ".rel.text",
         "address": "0x0",
-        "bytes": 87896,
+        "bytes": 88144,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -506,7 +506,7 @@
       {
         "name": ".rodata",
         "address": "0x0",
-        "bytes": 5040,
+        "bytes": 5408,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -524,7 +524,7 @@
       {
         "name": ".rodata.cst32",
         "address": "0x0",
-        "bytes": 160,
+        "bytes": 192,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -551,7 +551,7 @@
       {
         "name": ".rodata.str1.4",
         "address": "0x0",
-        "bytes": 9120,
+        "bytes": 9332,
         "alloc": true,
         "executable": false,
         "writable": false,
@@ -578,7 +578,7 @@
       {
         "name": ".strtab",
         "address": "0x0",
-        "bytes": 33834,
+        "bytes": 33912,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -587,7 +587,7 @@
       {
         "name": ".symtab",
         "address": "0x0",
-        "bytes": 32704,
+        "bytes": 32816,
         "alloc": false,
         "executable": false,
         "writable": false,
@@ -596,7 +596,7 @@
       {
         "name": ".text",
         "address": "0x0",
-        "bytes": 168608,
+        "bytes": 169232,
         "alloc": true,
         "executable": true,
         "writable": false,
@@ -604,7 +604,7 @@
       },
       {
         "name": "__ksymtab",
-        "address": "0x292a0",
+        "address": "0x29510",
         "bytes": 240,
         "alloc": true,
         "executable": false,
@@ -641,14 +641,14 @@
     "recovered_only": 70,
     "same_instruction_count": 137,
     "similar": 317,
-    "shorter": 109,
+    "shorter": 110,
     "stub": 4,
-    "collapsed": 27,
+    "collapsed": 26,
     "larger": 11,
     "expanded": 7,
     "matched_oem_instructions": 52693,
-    "matched_recovered_instructions": 41182,
-    "matched_instruction_ratio": 0.7815459358928131
+    "matched_recovered_instructions": 41338,
+    "matched_instruction_ratio": 0.7845064809367468
   },
   "functions": [
     {
@@ -710,7 +710,7 @@
         {
           "name": "tisp_log2_int_to_fixed_64",
           "section": ".text",
-          "address": "0x2914c",
+          "address": "0x293bc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -750,7 +750,7 @@
         {
           "name": "tisp_math_exp2",
           "section": ".text",
-          "address": "0x28e4c",
+          "address": "0x290bc",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -950,7 +950,7 @@
         {
           "name": "apical_isp_core_ops_s_ctrl",
           "section": ".text",
-          "address": "0x23e20",
+          "address": "0x24090",
           "binding": "global",
           "symbol_bytes": 996,
           "instructions": 249,
@@ -1129,46 +1129,6 @@
         "calls": 16,
         "returns": 1,
         "relocations": 47
-      }
-    },
-    {
-      "match_kind": "exact_name",
-      "classification": "collapsed",
-      "oem": {
-        "name": "ispcore_core_ops_init",
-        "section": ".text",
-        "address": "0x3389c",
-        "binding": "local",
-        "symbol_bytes": 1736,
-        "instructions": 434,
-        "branches": 114,
-        "calls": 15,
-        "returns": 1,
-        "relocations": 52
-      },
-      "recovered": [
-        {
-          "name": "ispcore_core_ops_init",
-          "section": ".text",
-          "address": "0x23200",
-          "binding": "global",
-          "symbol_bytes": 540,
-          "instructions": 135,
-          "branches": 16,
-          "calls": 14,
-          "returns": 1,
-          "relocations": 35
-        }
-      ],
-      "instruction_ratio": 0.31105990783410137,
-      "instruction_delta": -299,
-      "recovered_totals": {
-        "symbol_bytes": 540,
-        "instructions": 135,
-        "branches": 16,
-        "calls": 14,
-        "returns": 1,
-        "relocations": 35
       }
     },
     {
@@ -2498,7 +2458,7 @@
         {
           "name": "tisp_param_operate_process",
           "section": ".text",
-          "address": "0x24d2c",
+          "address": "0x24f9c",
           "binding": "global",
           "symbol_bytes": 1936,
           "instructions": 484,
@@ -2538,7 +2498,7 @@
         {
           "name": "apical_isp_core_ops_g_ctrl",
           "section": ".text",
-          "address": "0x254ec",
+          "address": "0x2575c",
           "binding": "global",
           "symbol_bytes": 1048,
           "instructions": 262,
@@ -2557,6 +2517,46 @@
         "calls": 8,
         "returns": 1,
         "relocations": 34
+      }
+    },
+    {
+      "match_kind": "exact_name",
+      "classification": "shorter",
+      "oem": {
+        "name": "ispcore_core_ops_init",
+        "section": ".text",
+        "address": "0x3389c",
+        "binding": "local",
+        "symbol_bytes": 1736,
+        "instructions": 434,
+        "branches": 114,
+        "calls": 15,
+        "returns": 1,
+        "relocations": 52
+      },
+      "recovered": [
+        {
+          "name": "ispcore_core_ops_init",
+          "section": ".text",
+          "address": "0x23200",
+          "binding": "global",
+          "symbol_bytes": 1164,
+          "instructions": 291,
+          "branches": 39,
+          "calls": 17,
+          "returns": 1,
+          "relocations": 66
+        }
+      ],
+      "instruction_ratio": 0.6705069124423964,
+      "instruction_delta": -143,
+      "recovered_totals": {
+        "symbol_bytes": 1164,
+        "instructions": 291,
+        "branches": 39,
+        "calls": 17,
+        "returns": 1,
+        "relocations": 66
       }
     },
     {
@@ -2658,7 +2658,7 @@
         {
           "name": "ispcore_interrupt_service_routine",
           "section": ".text",
-          "address": "0x2423c",
+          "address": "0x244ac",
           "binding": "global",
           "symbol_bytes": 788,
           "instructions": 197,
@@ -2938,7 +2938,7 @@
         {
           "name": "tisp_day_or_night_s_ctrl",
           "section": ".text",
-          "address": "0x23ae4",
+          "address": "0x23d54",
           "binding": "global",
           "symbol_bytes": 396,
           "instructions": 99,
@@ -4378,7 +4378,7 @@
         {
           "name": "private_leading_one_position_64",
           "section": ".text",
-          "address": "0x28b2c",
+          "address": "0x28d9c",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -4498,7 +4498,7 @@
         {
           "name": "fix_point_div_32",
           "section": ".text",
-          "address": "0x28f70",
+          "address": "0x291e0",
           "binding": "global",
           "symbol_bytes": 116,
           "instructions": 29,
@@ -4538,7 +4538,7 @@
         {
           "name": "tx_isp_vic_remove",
           "section": ".text",
-          "address": "0x2851c",
+          "address": "0x2878c",
           "binding": "global",
           "symbol_bytes": 100,
           "instructions": 25,
@@ -4658,7 +4658,7 @@
         {
           "name": "tx_isp_vin_remove",
           "section": ".text",
-          "address": "0x28580",
+          "address": "0x287f0",
           "binding": "global",
           "symbol_bytes": 104,
           "instructions": 26,
@@ -4738,7 +4738,7 @@
         {
           "name": "isp_core_tuning_event",
           "section": ".text",
-          "address": "0x23c70",
+          "address": "0x23ee0",
           "binding": "global",
           "symbol_bytes": 84,
           "instructions": 21,
@@ -5418,7 +5418,7 @@
         {
           "name": "tisp_log2_fixed_to_fixed",
           "section": ".text",
-          "address": "0x2913c",
+          "address": "0x293ac",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -6738,7 +6738,7 @@
         {
           "name": "init_module",
           "section": ".text",
-          "address": "0x25db8",
+          "address": "0x26028",
           "binding": "global",
           "symbol_bytes": 10040,
           "instructions": 2510,
@@ -6778,7 +6778,7 @@
         {
           "name": "private_log2_fixed_to_fixed_64",
           "section": ".text",
-          "address": "0x28d04",
+          "address": "0x28f74",
           "binding": "global",
           "symbol_bytes": 328,
           "instructions": 82,
@@ -6818,7 +6818,7 @@
         {
           "name": "tisp_log2_fixed_to_fixed_64",
           "section": ".text",
-          "address": "0x2915c",
+          "address": "0x293cc",
           "binding": "global",
           "symbol_bytes": 324,
           "instructions": 81,
@@ -6858,7 +6858,7 @@
         {
           "name": "private_log2_fixed_to_fixed",
           "section": ".text",
-          "address": "0x28a4c",
+          "address": "0x28cbc",
           "binding": "global",
           "symbol_bytes": 224,
           "instructions": 56,
@@ -7178,7 +7178,7 @@
         {
           "name": "private_log2_int_to_fixed",
           "section": ".text",
-          "address": "0x28954",
+          "address": "0x28bc4",
           "binding": "global",
           "symbol_bytes": 248,
           "instructions": 62,
@@ -7218,7 +7218,7 @@
         {
           "name": "fix_point_mult3_32",
           "section": ".text",
-          "address": "0x28ef8",
+          "address": "0x29168",
           "binding": "global",
           "symbol_bytes": 120,
           "instructions": 30,
@@ -9558,7 +9558,7 @@
         {
           "name": "isp_info_show",
           "section": ".text",
-          "address": "0x24560",
+          "address": "0x247d0",
           "binding": "global",
           "symbol_bytes": 1848,
           "instructions": 462,
@@ -9918,7 +9918,7 @@
         {
           "name": "tiziano_af_dump",
           "section": ".text",
-          "address": "0x23614",
+          "address": "0x23884",
           "binding": "global",
           "symbol_bytes": 1232,
           "instructions": 308,
@@ -10158,7 +10158,7 @@
         {
           "name": "tx_isp_core_probe",
           "section": ".text",
-          "address": "0x25a68",
+          "address": "0x25cd8",
           "binding": "global",
           "symbol_bytes": 820,
           "instructions": 205,
@@ -11118,7 +11118,7 @@
         {
           "name": "ispcore_slake_module",
           "section": ".text",
-          "address": "0x2341c",
+          "address": "0x2368c",
           "binding": "global",
           "symbol_bytes": 504,
           "instructions": 126,
@@ -11798,7 +11798,7 @@
         {
           "name": "isp_core_tunning_unlocked_ioctl",
           "section": ".text",
-          "address": "0x25904",
+          "address": "0x25b74",
           "binding": "local",
           "symbol_bytes": 356,
           "instructions": 89,
@@ -11878,7 +11878,7 @@
         {
           "name": "private_log2_int_to_fixed_64",
           "section": ".text",
-          "address": "0x28b9c",
+          "address": "0x28e0c",
           "binding": "global",
           "symbol_bytes": 360,
           "instructions": 90,
@@ -13518,7 +13518,7 @@
         {
           "name": "tisp_log2_int_to_fixed",
           "section": ".text",
-          "address": "0x29050",
+          "address": "0x292c0",
           "binding": "global",
           "symbol_bytes": 236,
           "instructions": 59,
@@ -14518,7 +14518,7 @@
         {
           "name": "tisp_set_contrast",
           "section": ".text",
-          "address": "0x23d4c",
+          "address": "0x23fbc",
           "binding": "global",
           "symbol_bytes": 212,
           "instructions": 53,
@@ -14798,7 +14798,7 @@
         {
           "name": "private_math_exp2",
           "section": ".text",
-          "address": "0x287e0",
+          "address": "0x28a50",
           "binding": "global",
           "symbol_bytes": 260,
           "instructions": 65,
@@ -15518,7 +15518,7 @@
         {
           "name": "tx_isp_fs_remove",
           "section": ".text",
-          "address": "0x285e8",
+          "address": "0x28858",
           "binding": "global",
           "symbol_bytes": 176,
           "instructions": 44,
@@ -15758,7 +15758,7 @@
         {
           "name": "tx_isp_core_remove",
           "section": ".text",
-          "address": "0x28730",
+          "address": "0x289a0",
           "binding": "global",
           "symbol_bytes": 168,
           "instructions": 42,
@@ -16158,7 +16158,7 @@
         {
           "name": "tisp_g_ncuinfo",
           "section": ".text",
-          "address": "0x24c98",
+          "address": "0x24f08",
           "binding": "global",
           "symbol_bytes": 148,
           "instructions": 37,
@@ -16598,7 +16598,7 @@
         {
           "name": "tx_isp_remove",
           "section": ".text",
-          "address": "0x28698",
+          "address": "0x28908",
           "binding": "global",
           "symbol_bytes": 152,
           "instructions": 38,
@@ -17518,7 +17518,7 @@
         {
           "name": "private_leading_one_position",
           "section": ".text",
-          "address": "0x288e4",
+          "address": "0x28b54",
           "binding": "global",
           "symbol_bytes": 112,
           "instructions": 28,
@@ -17718,7 +17718,7 @@
         {
           "name": "tisp_simple_intp",
           "section": ".text",
-          "address": "0x28fe4",
+          "address": "0x29254",
           "binding": "global",
           "symbol_bytes": 108,
           "instructions": 27,
@@ -19038,7 +19038,7 @@
         {
           "name": "tisp_flip_enable",
           "section": ".text",
-          "address": "0x23d08",
+          "address": "0x23f78",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -19078,7 +19078,7 @@
         {
           "name": "tisp_mirror_enable",
           "section": ".text",
-          "address": "0x23cc4",
+          "address": "0x23f34",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -19438,7 +19438,7 @@
         {
           "name": "tisp_g_module_control",
           "section": ".text",
-          "address": "0x254bc",
+          "address": "0x2572c",
           "binding": "global",
           "symbol_bytes": 48,
           "instructions": 12,
@@ -23038,7 +23038,7 @@
         {
           "name": "fix_point_sub_32",
           "section": ".text",
-          "address": "0x28e64",
+          "address": "0x290d4",
           "binding": "global",
           "symbol_bytes": 80,
           "instructions": 20,
@@ -23598,7 +23598,7 @@
         {
           "name": "fix_point_mult2_32",
           "section": ".text",
-          "address": "0x28eb4",
+          "address": "0x29124",
           "binding": "global",
           "symbol_bytes": 68,
           "instructions": 17,
@@ -23918,7 +23918,7 @@
         {
           "name": "tisp_top_sel",
           "section": ".text",
-          "address": "0x24204",
+          "address": "0x24474",
           "binding": "global",
           "symbol_bytes": 56,
           "instructions": 14,
@@ -24398,7 +24398,7 @@
         {
           "name": "cleanup_module",
           "section": ".text",
-          "address": "0x284f0",
+          "address": "0x28760",
           "binding": "global",
           "symbol_bytes": 44,
           "instructions": 11,
@@ -25198,7 +25198,7 @@
         {
           "name": "system_irq_func_set",
           "section": ".text",
-          "address": "0x25d9c",
+          "address": "0x2600c",
           "binding": "global",
           "symbol_bytes": 28,
           "instructions": 7,
@@ -26558,7 +26558,7 @@
         {
           "name": "tisp_top_read",
           "section": ".text",
-          "address": "0x24550",
+          "address": "0x247c0",
           "binding": "global",
           "symbol_bytes": 16,
           "instructions": 4,
@@ -26838,7 +26838,7 @@
         {
           "name": "fix_point_add_32",
           "section": ".text",
-          "address": "0x28e5c",
+          "address": "0x290cc",
           "binding": "global",
           "symbol_bytes": 8,
           "instructions": 2,

@@ -56,6 +56,22 @@ their computed return values or call state.
   `private_get_isp_priv_mem` through its OEM slot at `0x164`. The integrated
   module therefore has no reconstruction-created MODPOST dependency on a
   nonexistent standalone `get_isp_priv_mem` symbol.
+- Restored the stock 30-symbol module export surface in a separate adapter.
+  The recovered module's `__ksymtab` and `__ksymtab_strings` sizes now match
+  the OEM module exactly.
+- Rebuilt `tisp_init` around its real global parameter buffers and 80-byte
+  runtime state instead of the decompiler-created 255 KiB stack frame. The
+  repaired path restores the sensor callback, Bayer/top-register selection,
+  AE initialization, working-buffer bookkeeping, and the OEM custom-effect
+  copies without writing beyond `tispinfo`.
+- Rebuilt `ispcore_core_ops_init` from the T21 stock disassembly. Its exact
+  76-byte TISP sensor record, 10-entry output-format table, media-bus/Bayer
+  conversion, channel layout, state transitions, and firmware-thread failure
+  handling are now explicit C. The audit moved it from `collapsed` at 0.311
+  of OEM instructions to `shorter` at 0.671.
+- Corrected the recovered `JZ_Isp_Ae_Reg2par` word/byte indexing that could
+  otherwise overwrite its caller's stack, plus the brightness/contrast custom
+  effect byte updates and the stream-state scalar type.
 
 ## Audit and validation boundary
 
@@ -63,12 +79,24 @@ their computed return values or call state.
 `audit/collapse_repair_notes.md` records the earlier standalone repair pass.
 Instruction-count parity is structural triage, not proof of semantics.
 
+The current audit has 612 directly matched functions, 4 syntactic stub
+findings, 26 collapsed findings, and a 0.785 matched-instruction ratio. Three
+of the four stub findings are intentional tail-call aliases; the only true
+empty body is `Tiziano_Awb_Ct_Detect`.
+
 The highest-priority remaining findings are the T21-specific AWB, ADR, AE,
 defog, ioctl, and parameter-copy paths. In particular,
 `Tiziano_Awb_Ct_Detect` is still a true empty body. The stock T21, T23, and
 T31 versions are 1,439, 1,845, and 2,156 instructions respectively, so the
 T31 implementation must not be copied wholesale. The T21 HLIL export is the
 authoritative source for that repair.
+
+The built-in parameter images currently materialize only the recovered first
+16 KiB of each OEM 0x15380-byte day/night buffer. Their remaining bytes are
+zero until `tiziano_load_parameters()` loads the sensor parameter file. A
+probe-only smoke test is appropriate once lab access is available, but a
+stream test must confirm that parameter load succeeded before enabling the
+firmware loop.
 
 See `COMPARATIVE_ANALYSIS.md` for the cross-generation measurements and the
 next extraction candidates.

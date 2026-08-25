@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 630 | 682 |
 | Functions with disassembly | 630 | 682 |
-| Executable section bytes | 215240 | 168608 |
+| Executable section bytes | 215240 | 169232 |
 | Initialized writable bytes | 283936 | 276528 |
 | Uninitialized writable bytes | 101040 | 452144 |
 
 - direct matches: 612
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=18 recovered-only=70
-- matched instructions: OEM=52693 recovered=41182 ratio=0.782
-- classes: stub=4 collapsed=27 shorter=109 same_count=137 similar=317 larger=11 expanded=7
+- matched instructions: OEM=52693 recovered=41338 ratio=0.785
+- classes: stub=4 collapsed=26 shorter=110 same_count=137 similar=317 larger=11 expanded=7
 
 ## Allocated Section Delta
 
@@ -35,13 +35,13 @@
 | `.modinfo` | 252 | 252 | +0 |
 | `.note.gnu.build-id` | 36 | 36 | +0 |
 | `.reginfo` | 24 | 24 | +0 |
-| `.rodata` | 7296 | 5040 | -2256 |
+| `.rodata` | 7296 | 5408 | -1888 |
 | `.rodata.cst16` | 0 | 80 | +80 |
-| `.rodata.cst32` | 0 | 160 | +160 |
+| `.rodata.cst32` | 0 | 192 | +192 |
 | `.rodata.cst4` | 0 | 16 | +16 |
 | `.rodata.cst8` | 0 | 16 | +16 |
-| `.rodata.str1.4` | 11016 | 9120 | -1896 |
-| `.text` | 214336 | 168608 | -45728 |
+| `.rodata.str1.4` | 11016 | 9332 | -1684 |
+| `.text` | 214336 | 169232 | -45104 |
 | `__ksymtab` | 240 | 240 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 32 | 32 | +0 |
@@ -64,7 +64,6 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | collapsed | exact_name | `tisp_mdns_param_array_get` | `tisp_mdns_param_array_get` | 558 | 48 | 0.086 | -510 | 2->2 | 132->4 |
 | collapsed | exact_name | `tiziano_defog_algorithm` | `tiziano_defog_algorithm` | 465 | 171 | 0.368 | -294 | 2->2 | 26->16 |
 | collapsed | exact_name | `isp_vic_cmd_set` | `isp_vic_cmd_set` | 436 | 168 | 0.385 | -268 | 41->16 | 53->18 |
-| collapsed | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 434 | 135 | 0.311 | -299 | 15->14 | 114->16 |
 | collapsed | exact_name | `tisp_ae_process_impl` | `tisp_ae_process_impl` | 432 | 123 | 0.285 | -309 | 15->1 | 23->3 |
 | collapsed | exact_name | `tiziano_adr_algorithm` | `tiziano_adr_algorithm` | 397 | 75 | 0.189 | -322 | 1->1 | 25->1 |
 | collapsed | exact_name | `Tiziano_ae_fpga` | `Tiziano_ae_fpga` | 230 | 94 | 0.409 | -136 | 6->6 | 20->6 |
@@ -106,6 +105,7 @@ Showing 246 of 246 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `Tiziano_awb_fpga` | `Tiziano_awb_fpga` | 625 | 413 | 0.661 | -212 | 14->12 | 55->35 |
 | shorter | exact_name | `tisp_param_operate_process` | `tisp_param_operate_process` | 608 | 484 | 0.796 | -124 | 20->23 | 104->91 |
 | shorter | exact_name | `apical_isp_core_ops_g_ctrl` | `apical_isp_core_ops_g_ctrl` | 441 | 262 | 0.594 | -179 | 20->8 | 113->72 |
+| shorter | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 434 | 291 | 0.671 | -143 | 15->17 | 114->39 |
 | shorter | exact_name | `subdev_sensor_ops_ioctl` | `subdev_sensor_ops_ioctl` | 371 | 280 | 0.755 | -91 | 26->21 | 74->51 |
 | shorter | exact_name | `jz_isp_lsc_ct` | `jz_isp_lsc_ct` | 356 | 220 | 0.618 | -136 | 12->6 | 48->20 |
 | shorter | exact_name | `ispcore_interrupt_service_routine` | `ispcore_interrupt_service_routine` | 297 | 197 | 0.663 | -100 | 12->11 | 32->20 |

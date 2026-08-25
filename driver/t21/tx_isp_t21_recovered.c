@@ -50773,7 +50773,7 @@ int32_t ispcore_video_s_stream(void *arg1, int32_t arg2)
 {
 	void *s0 = *(void **)((char *)arg1 + 0xd4);
 	unsigned long flags;
-	int32_t *state;
+	int32_t state;
 	int32_t result;
 	int32_t offset;
 	void *base;
@@ -50781,7 +50781,7 @@ int32_t ispcore_video_s_stream(void *arg1, int32_t arg2)
 	void *ops_ptr;
 	int32_t (*ops_fn)(void *, int32_t);
 	void *hw;
-	int32_t (*irq_fn)(void *);
+	int32_t (*irq_fn)(uintptr_t);
 
 	__private_spin_lock_irqsave((spinlock_t *)((char *)s0 + 0xdc), &flags);
 
@@ -50865,13 +50865,275 @@ int32_t ispcore_video_s_stream(void *arg1, int32_t arg2)
 		*(int32_t *)((char *)hw + 0x80) = 0x283f03ff;
 		irq_fn = tx_isp_enable_irq;
 	}
-	irq_fn(arg1);
+	irq_fn((uintptr_t)arg1);
 
 	if (result == -515)
 		result = 0;
 	return result;
 }
 
+struct t21_isp_output_fmt {
+	char description[32];
+	u32 fourcc;
+	u32 depth;
+	u32 flags;
+};
+
+/* OEM .data at 0x45200: ten 44-byte entries. */
+static const struct t21_isp_output_fmt t21_isp_output_formats[] = {
+	{ "YUV 4:2:0 semi planar, Y/CbCr", 0x3231564e, 12, 0 },
+	{ "YUV 4:2:0 semi planar, Y/CrCb", 0x3132564e, 12, 0 },
+	{ "YUV 4:2:2 packed, YCbYCr",       0x56595559, 16, 0 },
+	{ "YUV 4:2:2 packed, CbYCrY",       0x59565955, 16, 0 },
+	{ "YUV 4:4:4 packed, YCbCr",        0x34343459, 32, 0 },
+	{ "RGB565, RGB-5-6-5",              0x50424752, 16, 0 },
+	{ "BGR24, RGB-8-8-8-3",             0x33524742, 24, 0 },
+	{ "BGR32, RGB-8-8-8-4",             0x34524742, 32, 0 },
+	{ "RGB101010, RGB-10-10-10",        0x41424752, 32, 0 },
+	{ "undetermine",                    0,          0, 0 },
+};
+
+/* Exact argument layout consumed by tisp_init(). */
+struct t21_tisp_sensor_info {
+	u32 width;
+	u32 height;
+	u32 bayer;
+	char name[16];
+	u32 attr_58;
+	u32 attr_5c;
+	u32 attr_60;
+	u32 attr_64;
+	u32 sensor_mode;
+	u16 attr_68;
+	u16 attr_6a;
+	u16 attr_6c;
+	u16 attr_6e;
+	u32 attr_70;
+	u16 attr_74;
+	u16 attr_76;
+	u16 attr_78;
+	u16 attr_7a;
+	u16 attr_7c;
+	u16 attr_7e;
+	u16 attr_80;
+	u16 reserved;
+};
+
+static bool t21_isp_valid_ptr(const void *ptr)
+{
+	return ptr && (uintptr_t)ptr < (uintptr_t)-4095;
+}
+
+static int t21_isp_mbus_code_to_bayer(u32 code)
+{
+	switch (code) {
+	case 0x300d:
+	case 0x300f:
+	case 0x3012:
+	case 0x3014:
+		return 0;
+	case 0x3002:
+	case 0x3009:
+	case 0x300a:
+	case 0x3011:
+		return 1;
+	case 0x3001:
+	case 0x3003:
+	case 0x3004:
+	case 0x3005:
+	case 0x3006:
+	case 0x3007:
+	case 0x3008:
+	case 0x300b:
+		return 2;
+	case 0x300c:
+	case 0x300e:
+	case 0x3010:
+	case 0x3013:
+		return 3;
+	default:
+		break;
+	}
+
+	if ((code >= 0x3100 && code <= 0x310f) ||
+	    (code >= 0x3200 && code <= 0x320f) ||
+	    (code >= 0x3300 && code <= 0x330f))
+		return 4 + (code & 0xf);
+
+	return -EINVAL;
+}
+
+/*
+ * Stock-derived repair of the core transition into the TISP firmware.  The
+ * disabled fragment below is retained as recovery provenance, but it lost
+ * most of the format tree and assembled its 76-byte argument through aliases.
+ */
+int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
+{
+	u8 *isp = (u8 *)a0;
+	u8 *core;
+	u8 *attr;
+	const char *sensor_name;
+	struct t21_tisp_sensor_info info;
+	struct task_struct *thread;
+	unsigned long flags = 0;
+	u32 state;
+	u32 width;
+	u32 height;
+	u32 format_index;
+	u32 channel_count;
+	u32 i;
+	int bayer;
+	int ret;
+
+	BUILD_BUG_ON(sizeof(info) != 0x4c);
+
+	if (!t21_isp_valid_ptr(isp))
+		return -EINVAL;
+
+	core = *(u8 **)(isp + 0xd4);
+	if (!t21_isp_valid_ptr(core))
+		return -EINVAL;
+
+	state = *(u32 *)(core + 0xe8);
+	if (state == 1)
+		return 0;
+
+	if (!enable) {
+		if (state == 4)
+			ispcore_video_s_stream(isp, 0);
+
+		if (*(u32 *)(core + 0xe8) == 3) {
+			thread = *(struct task_struct **)(core + 0x198);
+			if (t21_isp_valid_ptr(thread))
+				private_kthread_stop(thread);
+			*(u32 *)(core + 0xe8) = 2;
+		}
+
+		tisp_deinit();
+		return 0;
+	}
+
+	memset(&info, 0, sizeof(info));
+	ret = private_reset_tx_isp_module(0);
+	if (ret) {
+		isp_printf(2, "Failed to reset %s\n",
+			   *(char **)(isp + 8) ?: "ispcore");
+		return -EINVAL;
+	}
+
+	__private_spin_lock_irqsave((spinlock_t *)(core + 0xdc), &flags);
+	state = *(u32 *)(core + 0xe8);
+	if (state != 2) {
+		private_spin_unlock_irqrestore((spinlock_t *)(core + 0xdc),
+					       flags);
+		isp_printf(2, "Can't init ispcore when its state is %d \n!",
+			   state);
+		return -1;
+	}
+	private_spin_unlock_irqrestore((spinlock_t *)(core + 0xdc), flags);
+
+	width = *(u32 *)(core + 0xec);
+	height = *(u32 *)(core + 0xf0);
+	if (width < 2689 && height < 2049) {
+		*(u16 *)(core + 0x13c) = (u16)width;
+		*(u16 *)(core + 0x13e) = (u16)height;
+
+		if (*(u32 *)(core + 0xe8) != 4) {
+			u8 *channels = *(u8 **)(core + 0x14c);
+
+			format_index = *(u32 *)(core + 0x148);
+			if (format_index >= ARRAY_SIZE(t21_isp_output_formats)) {
+				isp_printf(2, "%s[%d] invalid output format index %u\n",
+					   "ispcore_core_ops_init", 1102,
+					   format_index);
+				format_index = ARRAY_SIZE(t21_isp_output_formats) - 1;
+			}
+
+			channel_count = *(u32 *)(core + 0x150);
+			if (t21_isp_valid_ptr(channels)) {
+				for (i = 0; i < channel_count; i++) {
+					u8 *channel = channels + i * 0xa0;
+					u32 stride;
+
+					if (!*(u32 *)(channel + 0x50))
+						continue;
+
+					*(u32 *)(channel + 4) = width;
+					*(u32 *)(channel + 8) = height;
+					*(u32 *)(channel + 0xc) =
+						t21_isp_output_formats[format_index].fourcc;
+					stride = (width *
+						t21_isp_output_formats[format_index].depth) >> 3;
+					*(u32 *)(channel + 0x14) = stride;
+					*(u32 *)(channel + 0x18) = stride * height;
+				}
+			}
+		}
+	} else {
+		isp_printf(1, "Sensor outputs bigger resolution than that ISP device can't deal with!\n");
+	}
+
+	bayer = t21_isp_mbus_code_to_bayer(*(u32 *)(core + 0xf4));
+	if (bayer < 0) {
+		isp_printf(2,
+			   "%s[%d] the format(0x%08x) of input couldn't be handled!\n",
+			   "ispcore_core_ops_init", 1135,
+			   *(u32 *)(core + 0xf4));
+		/* The OEM zero-filled record falls back to Bayer mode zero. */
+		bayer = 0;
+	}
+
+	attr = *(u8 **)(core + 0x120);
+	if (!t21_isp_valid_ptr(attr))
+		return -EINVAL;
+	sensor_name = *(const char **)attr;
+	if (!t21_isp_valid_ptr(sensor_name))
+		return -EINVAL;
+
+	info.width = *(u32 *)(core + 0x124);
+	info.height = *(u32 *)(core + 0x128);
+	info.bayer = bayer;
+	strlcpy(info.name, sensor_name, sizeof(info.name));
+	info.attr_58 = *(u32 *)(attr + 0x58);
+	info.attr_5c = *(u32 *)(attr + 0x5c);
+	info.attr_60 = *(u32 *)(attr + 0x60);
+	info.attr_64 = *(u32 *)(attr + 0x64);
+	info.sensor_mode = *(u32 *)(core + 0x12c);
+	info.attr_68 = *(u16 *)(attr + 0x68);
+	info.attr_6a = *(u16 *)(attr + 0x6a);
+	info.attr_6c = *(u16 *)(attr + 0x6c);
+	info.attr_6e = *(u16 *)(attr + 0x6e);
+	info.attr_70 = *(u32 *)(attr + 0x70);
+	info.attr_74 = *(u16 *)(attr + 0x74);
+	info.attr_76 = *(u16 *)(attr + 0x76);
+	info.attr_78 = *(u16 *)(attr + 0x78);
+	info.attr_7a = *(u16 *)(attr + 0x7a);
+	info.attr_7c = *(u16 *)(attr + 0x7c);
+	info.attr_7e = *(u16 *)(attr + 0x7e);
+	info.attr_80 = *(u16 *)(attr + 0x80);
+
+	ret = tisp_init((int32_t *)&info);
+	if (ret) {
+		isp_printf(2, "%s[%d] tisp_init failed: %d\n",
+			   "ispcore_core_ops_init", 1161, ret);
+		return ret;
+	}
+
+	thread = private_kthread_run((int (*)(void *))isp_fw_process, NULL,
+				     "isp_fw_process");
+	*(struct task_struct **)(core + 0x198) = thread;
+	if (!t21_isp_valid_ptr(thread)) {
+		isp_printf(2, "%s[%d] kthread_run was failed!\n",
+			   "ispcore_core_ops_init", 1169);
+		return -EINVAL;
+	}
+
+	*(u32 *)(core + 0xe8) = 3;
+	return 0;
+}
+
+#if 0 /* Superseded decompiler-fragment body; retained for provenance. */
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003389c origin=fragment_seed original=ispcore_core_ops_init */
 int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t a1)
 {
@@ -51679,6 +51941,7 @@ ispcore_core_ops_init0x6b4:
 
     return (int32_t)(long)v0;
 }
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033f64 origin=model_output original=ispcore_slake_module */
 int32_t ispcore_slake_module(void *arg1)

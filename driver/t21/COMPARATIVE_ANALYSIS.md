@@ -61,7 +61,8 @@ use generation-specific policy already represented by the T23 adapter.
   the T21 HLIL and use T31 only as a control-flow/data-structure guide.
 - Large ADR, AE, defog, ioctl, and core-init findings have different stock
   sizes or signatures. Register layout and sequencing stay generation-local
-  until field-level equivalence is proven.
+  until field-level equivalence is proven. The T21 core-init path was therefore
+  repaired from its own stock disassembly rather than copied from T31.
 - Parameter-array handlers often share a protocol shape but have different
   sizes because block tables and payload layouts differ. A future common
   bounds/copy shell should take explicit per-block descriptors rather than
@@ -69,13 +70,18 @@ use generation-specific policy already represented by the T23 adapter.
 
 ## Next evidence-driven work
 
-1. Reconstruct `Tiziano_Awb_Ct_Detect` from the T21 HLIL, keeping its 19-argument
-   ABI and T21 global work arrays; use T31 only to name the phases.
-2. Type the o32 64-bit fixed-point call sites, then evaluate moving the exact
+1. Repair the startup-facing `isp_vic_cmd_set` and `tx_isp_unlocked_ioctl`
+   dispatch paths from the T21 stock control flow, then run a module/probe-only
+   camera smoke test.
+2. Reconstruct `Tiziano_Awb_Ct_Detect` from the T21 HLIL, keeping its 19-argument
+   ABI and T21 global work arrays; use T31 only to name the phases before the
+   first streaming test.
+3. Type the o32 64-bit fixed-point call sites, then evaluate moving the exact
    T21/T31 unsuffixed and `_64` arithmetic to a native-ABI adapter.
-3. Split parameter-array access into a common validated copy engine plus
+4. Split parameter-array access into a common validated copy engine plus
    generation-local descriptor tables.
-4. Repair the large ADR/AE/defog paths in descending audit severity and rerun
+5. Repair the large ADR/AE/defog paths in descending audit severity and rerun
    the binary audit after every coherent subsystem.
-5. Do not start hardware testing until probe/remove ownership, allocator
-   bounds, and the remaining true stubs have been reviewed.
+6. Keep initial hardware work non-persistent: module load, probe, diagnostics,
+   and reboot first. Gate the firmware stream on successful sensor-parameter
+   loading and repair of the remaining true AWB stub.

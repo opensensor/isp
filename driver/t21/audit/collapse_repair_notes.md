@@ -2,6 +2,10 @@
 
 Date: 2026-08-25
 
+This file records the earlier standalone recovery checkpoint. For live counts
+after upstream integration and subsequent startup repairs, use
+`binary_audit.md`, `binary_audit.json`, and `binary_audit.csv` in this directory.
+
 ## Build result
 
 - `tx_isp_t21_recovered.ko` builds and links against the T21 3.10.14 Thingino
