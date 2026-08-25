@@ -40,6 +40,7 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/videodev2.h>
+#include <media/v4l2-mediabus.h>
 #include <linux/completion.h>
 #include <linux/semaphore.h>
 #include <linux/spinlock.h>
@@ -2379,6 +2380,14 @@ struct tx_isp_t30_subdev_core_ops {
 		struct tx_isp_t30_subdev *sd, void *data);
 };
 
+struct tx_isp_t30_subdev_video_ops {
+	int (*s_stream)(struct tx_isp_t30_subdev *sd, int enable);
+	int (*link_stream)(struct tx_isp_t30_subdev *sd, int enable);
+	int (*link_setup)(const struct tx_isp_t30_subdev_pad *local,
+			  const struct tx_isp_t30_subdev_pad *remote,
+			  u32 flags);
+};
+
 struct tx_isp_t30_subdev_internal_ops {
 	int (*activate_module)(struct tx_isp_t30_subdev *sd);
 	int (*slake_module)(struct tx_isp_t30_subdev *sd);
@@ -2386,7 +2395,7 @@ struct tx_isp_t30_subdev_internal_ops {
 
 struct tx_isp_t30_subdev_ops {
 	struct tx_isp_t30_subdev_core_ops *core;
-	void *video;
+	struct tx_isp_t30_subdev_video_ops *video;
 	void *pad;
 	void *sensor;
 	struct tx_isp_t30_subdev_internal_ops *internal;
@@ -2423,6 +2432,15 @@ struct tx_isp_t30_csi_device {
 	void __iomem *phy_base;
 	void *pdata;
 	unsigned int lanes;
+};
+
+struct tx_isp_t30_vin_device {
+	struct tx_isp_t30_subdev sd;
+	struct list_head sensors;
+	struct tx_isp_t30_subdev *active;
+	struct mutex mlock;
+	int state;
+	u32 refcnt;
 };
 
 struct tx_isp_t30_device_clk {
@@ -5271,19 +5289,65 @@ static unsigned char __attribute__((aligned(4))) _calibration_awb_scene_presets[
     0xd2, 0x00, 0x33, 0x01, 0x39, 0x01, 0xbb, 0x00, 0xa0, 0x00, 0x78, 0x01, 0x00, 0x00, 0x00, 0x00,
 };
 static unsigned char dump_vsd[16];
+/*
+ * The OEM dump_vsd symbol is a VIC-device pointer.  A collapsed relocation in
+ * the recovered APICAL table initializer also targets the recovered byte
+ * array above, so keep the live device pointer in an independent object.
+ */
+static struct tx_isp_t30_subdev *tx_isp_t30_vic_sd;
 static uintptr_t frame_delay_10417;
 static uintptr_t __key_0;
 static unsigned char video_input_cmd_buf[128];
 static unsigned char sp_9007[8];
 static int32_t g_switch_lfb_off;
+static int tx_isp_t30_streamoff_trace_count;
+static int tx_isp_t30_total_gain_trace_count;
+static int tx_isp_t30_irq_trace_count;
+static int tx_isp_t30_irq_entry_trace_count;
+static int tx_isp_t30_tuning_set_trace_count;
 static uintptr_t rg_avg;
 static unsigned char csp_9009[8];
 static unsigned char fsp_9016[8];
 static unsigned char __attribute__((aligned(4))) dis_context[0x12c];
 static int32_t g_switch_lfb_on;
-static unsigned char isr_param[64];
-static unsigned char isr_func[64];
+static void *isr_param[16];
+static void (*isr_func[16])(void *);
 static unsigned char manager[12];
+
+#define TX_ISP_T30_CALIBRATION_COUNT 277
+
+struct tx_isp_t30_lookup_table {
+	void *ptr;
+	u16 rows;
+	u16 cols;
+	u16 width;
+};
+
+struct tx_isp_t30_calibrations {
+	struct tx_isp_t30_lookup_table *table[TX_ISP_T30_CALIBRATION_COUNT];
+};
+
+struct tx_isp_t30_param_header {
+	char flag[8];
+	u32 size;
+	u32 crc;
+};
+
+struct tx_isp_t30_param_manager {
+	char version[8];
+	struct tx_isp_t30_param_header headers[2];
+	void *data;
+	u32 data_size;
+	void *fw_data;
+	struct tx_isp_t30_calibrations isp_param[2];
+	struct tx_isp_t30_lookup_table
+		param_table[TX_ISP_T30_CALIBRATION_COUNT * 2];
+	void *base_buf;
+	void *customer;
+	void *customer_buf;
+};
+
+static struct tx_isp_t30_param_manager *tx_isp_t30_param_manager;
 static unsigned char customer[16];
 static unsigned char pfaces[16];
 static uintptr_t _qlock2;
@@ -5292,6 +5356,365 @@ static uintptr_t lost_cnt;
 static uintptr_t _qlock1;
 static unsigned char tx_isp_last_done[8];
 static uintptr_t chan_done_state;
+
+/* OEM T30 frame-channel ABI shared by the ISP core and mscaler. */
+struct tx_isp_t30_frame_image_format {
+	u32 type;
+	struct v4l2_pix_format pix;
+	u8 crop_enable;
+	u8 crop_pad[3];
+	u32 crop_top;
+	u32 crop_left;
+	u32 crop_width;
+	u32 crop_height;
+	u8 scaler_enable;
+	u8 scaler_pad[3];
+	u32 scaler_out_width;
+	u32 scaler_out_height;
+	u32 rate_bits;
+	u32 rate_mask;
+};
+
+struct tx_isp_t30_frame_channel_format {
+	u8 name[32];
+	u32 fourcc;
+	u32 depth;
+	u32 priv;
+};
+
+struct tx_isp_t30_frame_buffer {
+	struct list_head entry;
+	u32 addr;
+	u32 priv;
+};
+
+/*
+ * OEM T30 frame-source queue.  Keep this as a real structure rather than an
+ * offset view: frame-channel ioctls share the object with open/release and the
+ * buffer-done event path.
+ */
+enum tx_isp_t30_fs_buffer_state {
+	TX_ISP_T30_FS_DEQUEUED,
+	TX_ISP_T30_FS_QUEUED,
+	TX_ISP_T30_FS_PREPARED,
+	TX_ISP_T30_FS_ACTIVE,
+	TX_ISP_T30_FS_DONE,
+	TX_ISP_T30_FS_ERROR,
+};
+
+struct tx_isp_t30_fs_queue;
+
+struct tx_isp_t30_fs_buffer {
+	struct v4l2_buffer v4l2_buf;
+	struct tx_isp_t30_fs_queue *queue;
+	enum tx_isp_t30_fs_buffer_state state;
+	struct list_head queued_entry;
+	struct list_head done_entry;
+};
+
+struct tx_isp_t30_fs_queue {
+	enum v4l2_buf_type type;
+	struct mutex mlock;
+	u32 buf_struct_size;
+	u32 timestamp_type;
+	enum v4l2_memory memory;
+	struct v4l2_format format;
+	struct tx_isp_t30_fs_buffer *bufs[64];
+	u32 num_buffers;
+	struct list_head queued_list;
+	u32 queued_count;
+	struct list_head done_list;
+	spinlock_t done_lock;
+	u32 done_count;
+	wait_queue_head_t done_wq;
+	u32 streaming:1;
+};
+
+struct tx_isp_t30_frame_video_buffer {
+	struct tx_isp_t30_fs_buffer vb;
+	struct tx_isp_t30_frame_buffer buffer;
+};
+
+struct tx_isp_t30_frame_channel {
+	struct miscdevice misc;
+	struct tx_isp_t30_fs_queue queue;
+	struct tx_isp_t30_frame_image_format fmt;
+	char name[16];
+	struct tx_isp_t30_subdev_pad *pad;
+	int index;
+	spinlock_t slock;
+	struct mutex mlock;
+	int state;
+	struct completion comp;
+	u32 out_frames;
+	u32 lost_frames;
+	void *priv;
+};
+
+struct tx_isp_t30_frame_sources {
+	struct tx_isp_t30_subdev sd;
+	struct tx_isp_t30_frame_channel *channels;
+	u32 num_channels;
+	int state;
+};
+
+/* OEM T30 tx_isp_video_in ABI copied by sensor synchronization. */
+struct tx_isp_t30_video_in {
+	struct v4l2_mbus_framefmt mbus;
+	u32 mbus_change;
+	void *attr;
+	u32 max_width;
+	u32 max_height;
+	u32 fps;
+	int group_id;
+};
+
+struct tx_isp_t30_mscaler_device;
+
+struct tx_isp_t30_mscaler_output {
+	struct tx_isp_t30_frame_image_format fmt;
+	int index;
+	int state;
+	struct completion stop_comp;
+	struct tx_isp_t30_subdev_pad *pad;
+	struct tx_isp_t30_mscaler_device *mscaler;
+	u32 max_width;
+	u32 max_height;
+	u32 min_width;
+	u32 min_height;
+	bool has_crop;
+	bool has_scaler;
+	struct list_head fifo;
+	spinlock_t slock;
+	u32 lineoffset;
+	u8 dma_state;
+	u8 reset_dma_flag;
+	u8 vflip_state;
+	u8 usingbanks;
+	u32 frame_count;
+};
+
+struct tx_isp_t30_mscaler_input {
+	struct tx_isp_t30_frame_image_format fmt;
+	int index;
+	int state;
+	struct tx_isp_t30_subdev_pad *pad;
+	spinlock_t slock;
+	struct tx_isp_t30_mscaler_device *mscaler;
+};
+
+struct tx_isp_t30_mscaler_device {
+	struct tx_isp_t30_subdev sd;
+	spinlock_t slock;
+	struct mutex mlock;
+	int state;
+	struct tx_isp_t30_video_in vin;
+	void *pdata;
+	struct tx_isp_t30_mscaler_output *outputs;
+	u32 num_outputs;
+	int rgb_channel_active;
+	struct tx_isp_t30_mscaler_input *inputs;
+	u32 num_inputs;
+};
+
+static const struct tx_isp_t30_frame_channel_format
+tx_isp_t30_mscaler_formats[] = {
+	{ "NV12", V4L2_PIX_FMT_NV12, 12, 0x00 },
+	{ "NV21", V4L2_PIX_FMT_NV21, 12, 0x01 },
+	{ "RGB565", V4L2_PIX_FMT_RGB565, 16, 0x1f },
+	{ "BGR32", V4L2_PIX_FMT_BGR32, 32, 0x02 },
+	{ "", 0, 0, 0 },
+};
+
+#define TX_ISP_T30_FRAME_IOCTL_SET_FORMAT 0xc04c56c3U
+#define TX_ISP_T30_FRAME_IOCTL_GET_FORMAT 0x404c56c4U
+#define TX_ISP_T30_FRAME_IOCTL_SET_BANKS  0x400456c5U
+#define TX_ISP_T30_FRAME_IOCTL_LISTEN     0x400456bfU
+
+/* Layout-checked view of the OEM T30 ISP output-channel object. */
+struct tx_isp_t30_core_output_channel {
+	struct tx_isp_t30_frame_image_format fmt;
+	int index;
+	int state;
+	struct tx_isp_t30_subdev_pad *pad;
+	void *core;
+	u32 max_width;
+	u32 max_height;
+	u32 min_width;
+	u32 min_height;
+	u8 has_crop;
+	u8 has_scaler;
+	struct list_head fifo;
+	spinlock_t slock;
+	u8 bank_flag[5];
+	u8 vflip_flag[5];
+	u32 banks_addr[5];
+	u32 lineoffset;
+	u8 dma_state;
+	u8 reset_dma_flag;
+	u8 vflip_state;
+	u8 usingbanks;
+};
+
+/* Only the common prefix is needed by the channel stream transition. */
+struct tx_isp_t30_core_device_prefix {
+	struct tx_isp_t30_subdev sd;
+	spinlock_t slock;
+	struct mutex mlock;
+	int state;
+};
+
+struct tx_isp_t30_core_input_control {
+	u32 input_format;
+	u16 input_width;
+	u16 input_height;
+	u32 pattern;
+	int format_start;
+	int format_end;
+};
+
+struct tx_isp_t30_core_stream_view {
+	u8 before_control[0x140];
+	struct tx_isp_t30_core_input_control control;
+};
+
+/* Fields used by the OEM ISP-wide stream transition. */
+struct tx_isp_t30_core_video_view {
+	struct tx_isp_t30_subdev sd;
+	spinlock_t slock;
+	struct mutex mlock;
+	int state;
+	struct tx_isp_t30_video_in vin;
+	void *pdata;
+	u32 top_low;
+	u32 top_high;
+	struct tx_isp_t30_core_input_control control;
+	struct tx_isp_t30_core_output_channel *channels;
+	u32 num_channels;
+	u32 channel_state;
+	int bypass;
+	u32 frame_sequence;
+	volatile u32 frame_state;
+	u32 vflip_state;
+	u32 vflip_change;
+	u32 hflip_state;
+	u32 hflip_change;
+	u32 daynight_switch;
+};
+
+enum tx_isp_t30_module_state {
+	TX_ISP_T30_MODULE_SLAKE = 1,
+	TX_ISP_T30_MODULE_ACTIVATE = 2,
+	TX_ISP_T30_MODULE_INIT = 3,
+	TX_ISP_T30_MODULE_RUNNING = 4,
+};
+
+/* Layout-checked fields exercised when userspace opens the tuning node. */
+struct tx_isp_t30_tuning_open_view {
+	u8 before_temper_limits[0xec4];
+	u32 temper_max;
+	u32 temper_min;
+	u8 before_temper_paddr[0x40b4 - 0xecc];
+	u32 temper_paddr;
+	u8 before_state[0x40cc - 0x40b8];
+	int state;
+};
+
+/*
+ * The OEM APICAL system table is 60 bytes.  Keep the gain fields named even
+ * though the rest of the recovered firmware still treats the table as a byte
+ * array; these three members are the ABI for IMAGE_TUNING_CID_GET_TOTAL_GAIN.
+ */
+struct tx_isp_t30_system_gain_view {
+	u8 reserved_00[0x1c];
+	u8 sensor_analog_gain;
+	u8 max_sensor_analog_gain;
+	u8 sensor_digital_gain;
+	u8 max_sensor_digital_gain;
+	u8 isp_digital_gain;
+	u8 max_isp_digital_gain;
+	u8 reserved_22[60 - 0x22];
+};
+
+/* Userspace ABI for IMAGE_TUNING_CID_TEMPER_ATTR. */
+struct tx_isp_t30_temper_attr {
+	int mode;
+	u8 manual_strength;
+	u8 reserved[3];
+};
+
+struct tx_isp_t30_core_tuning_view {
+	u8 before_daynight_switch[0x17c];
+	int isp_daynight_switch;
+	u8 before_param[0x19c - 0x180];
+	struct tx_isp_t30_param_manager *param;
+	struct tx_isp_t30_tuning_open_view *tuning;
+};
+
+/* OEM tx_isp_ncu_device layout used by the frame-event fast path. */
+struct tx_isp_t30_ncu_device {
+	struct tx_isp_t30_subdev sd;
+	u8 vin_prefix[0x38];
+	u32 vin_max_width;
+	u32 vin_max_height;
+	u32 vin_fps;
+	int vin_group;
+	struct tx_isp_t30_frame_image_format fmt;
+	u32 uv_offset;
+	int state;
+	struct completion stop_comp;
+	void *pdata;
+	struct tx_isp_t30_frame_buffer *inbufs;
+	u32 buf_addr;
+	int num_inbufs;
+	struct list_head infifo;
+	struct tx_isp_t30_frame_buffer *current_inbuf;
+	int ms_flag;
+	u32 ref_frame_addr;
+	spinlock_t slock;
+	struct mutex mlock;
+	u64 start_cnt;
+	u64 done_cnt;
+	u32 reset_cnt;
+	struct task_struct *process_thread;
+};
+
+enum tx_isp_t30_ncu_register {
+	TX_ISP_T30_NCU_RESET = 0x00,
+	TX_ISP_T30_NCU_START = 0x04,
+	TX_ISP_T30_NCU_STOP = 0x08,
+	TX_ISP_T30_NCU_SREG_CONTROL = 0x0c,
+	TX_ISP_T30_NCU_INT_CONTROL = 0x10,
+	TX_ISP_T30_NCU_FUNCTION_CONTROL = 0x24,
+	TX_ISP_T30_NCU_FRAME_SIZE = 0x2c,
+	TX_ISP_T30_NCU_Y_CURRENT_STRIDE = 0x34,
+	TX_ISP_T30_NCU_Y_REFERENCE0_STRIDE = 0x3c,
+	TX_ISP_T30_NCU_UV_CURRENT_STRIDE = 0x44,
+	TX_ISP_T30_NCU_UV_REFERENCE0_STRIDE = 0x4c,
+	TX_ISP_T30_NCU_Y_REFERENCE1_STRIDE = 0x54,
+	TX_ISP_T30_NCU_UV_REFERENCE1_STRIDE = 0x5c,
+};
+
+/*
+ * This table is a distinct OEM object. Several recovered functions had its
+ * relocation collapsed onto tx_isp_platform_device, then indexed thousands
+ * of bytes beyond that object.
+ */
+static struct tx_isp_t30_frame_channel_format tx_isp_t30_isp_output_fmt[] = {
+	{ "NV12", V4L2_PIX_FMT_NV12, 12, 0x4d },
+	{ "NV21", V4L2_PIX_FMT_NV21, 12, 0x8d },
+	{ "YUYV", V4L2_PIX_FMT_YUYV, 16, 0x0a },
+	{ "UYVY", V4L2_PIX_FMT_UYVY, 16, 0x0b },
+	{ "YUV444", V4L2_PIX_FMT_YUV444, 32, 0x08 },
+	{ "RGB565", V4L2_PIX_FMT_RGB565, 16, 0x03 },
+	{ "BGR24", V4L2_PIX_FMT_BGR24, 24, 0x04 },
+	{ "BGR32", V4L2_PIX_FMT_BGR32, 32, 0x01 },
+	{ "RGB310", v4l2_fourcc('R', 'G', 'B', 'A'), 32, 0x02 },
+	{ "raw", 0, 0, 0 },
+};
+#include "tx_isp_t30_mscaler_coe.h"
+#include "tx_isp_t30_isp_config_seq.h"
+static const u8 tx_isp_t30_isp_sequence[] = SENSOR_ISP_SEQUENCE_DEFAULT;
 #ifndef TX_ISP_T30_SHARED_SINFO
 static unsigned char sinfo_slots[652];
 #endif
@@ -5491,6 +5914,13 @@ static unsigned char sp_9024[8];
 static unsigned char fsp_9025[8];
 static unsigned char fmv_9026[8];
 static unsigned char jump_table_3ac40[48];
+/*
+ * Scratch calibration directory used while sizing and loading a sensor's
+ * day/night parameter tables.  The OEM driver uses a complete
+ * ApicalCalibrations object here (277 pointers), separate from vic_cmd_buf.
+ */
+static unsigned char tmp_isp_param[277 * sizeof(uint32_t)]
+	__attribute__((aligned(4)));
 
 /* WHOLE_DRIVER_FORWARD_DECLARATIONS */
 #define apical_isp_table_s_attr apical_isp_table_s_attr_isra_0
@@ -5830,7 +6260,7 @@ void tx_isp_disable_irq(struct tx_isp_t30_irq_device *irqdev);
 int tx_isp_request_irq(struct platform_device *pdev,
 		       struct tx_isp_t30_irq_device *irqdev);
 void tx_isp_free_irq(struct tx_isp_t30_irq_device *irqdev);
-int64_t ncu_core_ops_ioctl(uintptr_t a0, uint32_t a1);
+int32_t ncu_core_ops_ioctl(void *subdev, uint32_t event, void *data);
 int32_t ncu_link_setup(void);
 int32_t ncu_core_interrupt_service_routine(void *arg1);
 int32_t tx_isp_ncu_open(uint32_t a0, uint32_t a1);
@@ -5843,7 +6273,7 @@ int32_t ncu_slake_module(void *arg1);
 int ncu_activate_module(void *arg1);
 int64_t ncu_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int64_t tx_isp_sync_ncu(void);
-int64_t ldc_core_ops_ioctl(uintptr_t a0, uint32_t a1);
+int32_t ldc_core_ops_ioctl(void *subdev, uint32_t event, void *data);
 int32_t ldc_link_setup(void);
 int32_t tx_isp_ldc_open(uint32_t a0, uint32_t a1);
 int tx_isp_ldc_show(struct seq_file *m);
@@ -5863,11 +6293,19 @@ int32_t mscaler_link_setup(void);
 int mscaler_video_s_stream(void *arg1, int enable);
 int32_t channel_dma_buffer_done(void *arg1);
 void * msclaer_notify_front_module(void *arg1, int arg2);
-int32_t mscaler_core_interrupt_service_routine(uintptr_t a0);
+irqreturn_t mscaler_core_interrupt_service_routine(
+	struct tx_isp_t30_subdev *sd, u32 status, bool *handled);
+static inline u32 tx_isp_t30_mscaler_read(
+	struct tx_isp_t30_mscaler_device *mscaler, u32 reg);
+static inline void tx_isp_t30_mscaler_write(
+	struct tx_isp_t30_mscaler_device *mscaler, u32 reg, u32 value);
+static void tx_isp_t30_mscaler_configure_dma(
+	struct tx_isp_t30_mscaler_output *chan);
 int32_t dump_isp_mscaler_open(uint32_t a0, uint32_t a1);
 int32_t isp_mscaler_show(struct seq_file *m);
 int32_t mscaler_sync_sensor_attr(void *subdev, void *video_in);
 int tx_isp_mscaler_probe(struct platform_device *pdev);
+static inline void tx_isp_t30_check_mscaler_layout(void);
 #ifndef REGTRACE_KERNEL_TREE_BUILD
 int32_t mscaler_frame_channel_streamoff_isra_0(uintptr_t a0) __asm__("mscaler_frame_channel_streamoff.isra.0");
 #endif
@@ -5893,6 +6331,9 @@ int32_t __enqueue_in_driver_isra_0(void *arg1) __asm__("__enqueue_in_driver.isra
 #endif
 int32_t __enqueue_in_driver_isra_0(void *arg1);
 static long frame_channel_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+static long frame_channel_unlocked_ioctl_raw(struct file *filp,
+					      unsigned int cmd,
+					      unsigned long arg);
 int32_t frame_chan_event(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t tx_isp_video_s_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2);
@@ -7266,6 +7707,28 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000005d0 origin=fragment_seed original=isp_vic_interrupt_service_routine */
+static int tx_isp_t30_vic_interrupt(struct tx_isp_t30_subdev *sd)
+{
+	void __iomem *base;
+	u32 mask;
+	u32 state;
+	u32 pending;
+	u32 control;
+
+	if (!sd || IS_ERR(sd) || !sd->base)
+		return IRQ_HANDLED;
+	base = sd->base;
+	mask = __raw_readl(base + 0x2001c);
+	state = __raw_readl(base + 0x2000c);
+	pending = state & ~mask;
+	__raw_writel(pending, base + 0x20004);
+	if (pending & (BIT(20) | BIT(21))) {
+		control = __raw_readl(base);
+		__raw_writel(control | BIT(4), base);
+	}
+	return IRQ_HANDLED;
+}
+
 int32_t isp_vic_interrupt_service_routine(uintptr_t a0)
 {
     uint32_t *local_10 = 0;
@@ -7286,6 +7749,8 @@ int32_t isp_vic_interrupt_service_routine(uintptr_t a0)
     uintptr_t *s3 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+
+	return tx_isp_t30_vic_interrupt((void *)a0);
 
     /* fragment 0: Branch */
     if (a0 == 0) { goto isp_vic_interrupt_service_routine0x1fc; }
@@ -7516,6 +7981,7 @@ tx_isp_vic_probe0xcc:
 
     /* fragment 17: Branch */
     *(void **)dump_vsd = s0;
+	tx_isp_t30_vic_sd = (struct tx_isp_t30_subdev *)s0;
     goto tx_isp_vic_probe0x54;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
@@ -8046,36 +8512,24 @@ tx_isp_vic_activate_subdev0xe0:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000e68 origin=fragment_seed original=isp_lfb_ctrl_flb_enable */
+static void __iomem *tx_isp_t30_vic_register_base(void)
+{
+	if (IS_ERR_OR_NULL(tx_isp_t30_vic_sd))
+		return NULL;
+	return tx_isp_t30_vic_sd->base;
+}
+
 int32_t isp_lfb_ctrl_flb_enable(uint32_t a0)
 {
-    uint32_t local_0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	void __iomem *base = tx_isp_t30_vic_register_base();
+	u32 value;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&dump_vsd));
-    a1 = -2;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    v0 = *(uint32_t *)((char *)v1 + 512);
-    local_0 = v0;
-    v0 = local_0;
-    v0 = (uintptr_t)v0 & (uintptr_t)a1;
-    local_0 = v0;
-    v0 = local_0;
-    a0 = a0 | (uintptr_t)v0;
-    local_0 = a0;
-    v0 = local_0;
-    *(uint32_t *)((char *)v1 + 512) = v0;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (!base)
+		return -ENODEV;
+	value = __raw_readl(base + 0x200);
+	value = (value & ~BIT(0)) | (a0 ? BIT(0) : 0);
+	__raw_writel(value, base + 0x200);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000eac origin=model_output original=isp_lfb_reset */
@@ -8090,78 +8544,41 @@ void *isp_lfb_reset(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000ec4 origin=fragment_seed original=isp_lfb_ctrl_hw_recovery */
 int32_t isp_lfb_ctrl_hw_recovery(uint32_t a0)
 {
-    uint32_t local_0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	void __iomem *base = tx_isp_t30_vic_register_base();
+	u32 value;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&dump_vsd));
-    a1 = -5;
-    a0 = a0 << 2;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    a0 = a0 & 4;
-    v0 = *(uint32_t *)((char *)v1 + 512);
-    local_0 = v0;
-    v0 = local_0;
-    v0 = (uintptr_t)v0 & (uintptr_t)a1;
-    local_0 = v0;
-    v0 = local_0;
-    a0 = a0 | (uintptr_t)v0;
-    local_0 = a0;
-    v0 = local_0;
-    *(uint32_t *)((char *)v1 + 512) = v0;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (!base)
+		return -ENODEV;
+	value = __raw_readl(base + 0x200);
+	value = (value & ~BIT(2)) | ((a0 & 1) << 2);
+	__raw_writel(value, base + 0x200);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000f10 origin=model_output original=isp_lfb_ctrl_select_fr */
 int32_t isp_lfb_ctrl_select_fr(void)
 {
-	void *v1 = *(void **)((char *)dump_vsd + 0xb8);
-	int32_t result = *(int32_t *)((uintptr_t)v1 + 0x200) & 0xfffffff7;
-	*(int32_t *)((char *)v1 + 0x200) = result;
-	return result;
+	void __iomem *base = tx_isp_t30_vic_register_base();
+	u32 value;
+
+	if (!base)
+		return -ENODEV;
+	value = __raw_readl(base + 0x200) & ~BIT(3);
+	__raw_writel(value, base + 0x200);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000f50 origin=fragment_seed original=isp_lfb_ctrl_select_ds1 */
 int32_t isp_lfb_ctrl_select_ds1(void)
 {
-    uint32_t local_0 = 0;
-    uint32_t a0 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	void __iomem *base = tx_isp_t30_vic_register_base();
+	u32 value;
 
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&dump_vsd));
-    a0 = -9;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    v0 = *(uint32_t *)((char *)v1 + 512);
-    local_0 = v0;
-    v0 = local_0;
-    v0 = (uintptr_t)v0 & a0;
-    local_0 = v0;
-    v0 = local_0;
-    v0 = (uintptr_t)v0 | 8;
-    local_0 = v0;
-    v0 = local_0;
-    *(uint32_t *)((char *)v1 + 512) = v0;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (!base)
+		return -ENODEV;
+	value = __raw_readl(base + 0x200) | BIT(3);
+	__raw_writel(value, base + 0x200);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000f94 origin=fragment_seed original=isp_lfb_ctrl_output_ncu */
@@ -8363,84 +8780,30 @@ void* isp_lfb_restart(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000001118 origin=fragment_seed original=isp_lfb_config_default_dma */
 uint32_t isp_lfb_config_default_dma(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-    uint32_t local_0 = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	void __iomem *base = tx_isp_t30_vic_register_base();
+	u32 config = BIT(16) | (a2 & 0xffff);
 
-    /* fragment 0: Arithmetic */
-    v0 = 65536;
-    a2 = a2 | (uintptr_t)v0;
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: MemoryAccess */
-    v0 = *(uint32_t *)((char *)((char *)&dump_vsd));
-    local_0 = a2;
-    t0 = local_0;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    a3 = a3 << 2;
-    *(uint32_t *)((char *)v1 + 528) = t0;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    v1 = v1 + a3;
-    *(uint32_t *)((char *)v1 + 536) = a0;
-
-    /* fragment 2: Branch */
-    if (a1 == 0) { goto isp_lfb_config_default_dma0x5c; }
-
-    /* fragment 3: StackAccess */
-    local_0 = a2;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    a2 = local_0;
-    a0 = a0 + a1;
-    *(uint32_t *)((char *)v1 + 560) = a2;
-    v0 = *(uint32_t *)((char *)v0 + 184);
-    v0 = v0 + a3;
-    *(uint32_t *)((char *)v0 + 568) = a0;
-
-isp_lfb_config_default_dma0x5c:
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (uint32_t)v0;
+	if (!base || a3 >= 5)
+		return -EINVAL;
+	__raw_writel(config, base + 0x210);
+	__raw_writel(a0, base + 0x218 + a3 * 4);
+	if (a1) {
+		__raw_writel(config, base + 0x230);
+		__raw_writel(a0 + a1, base + 0x238 + a3 * 4);
+	}
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000117c origin=fragment_seed original=isp_lfb_config_resolution */
 void* isp_lfb_config_resolution(uint32_t a0, uint32_t a1)
 {
-    uint32_t local_0 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	void __iomem *base = tx_isp_t30_vic_register_base();
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v0 = a1 << 16;
-    v0 = (uintptr_t)v0 | a0;
-
-    /* fragment 2: StackAccess */
-    local_0 = v0;
-    v0 = (uintptr_t *)&vic_cmd_buf;
-    a2 = local_0;
-    v0 = *(uint32_t *)((char *)((char *)&dump_vsd));
-    a1 = a1 >> 1;
-    a1 = a1 << 16;
-    v1 = *(uint32_t *)((char *)v0 + 184);
-    a0 = a0 >> 1;
-    a1 = a1 | a0;
-    *(uint32_t *)((char *)v1 + 532) = a2;
-    v0 = *(uint32_t *)((char *)v0 + 184);
-    local_0 = a1;
-    v1 = local_0;
-    *(uint32_t *)((char *)v0 + 564) = v1;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (void*)v0;
+	if (!base)
+		return NULL;
+	__raw_writel((a1 << 16) | a0, base + 0x214);
+	__raw_writel(((a1 >> 1) << 16) | (a0 >> 1), base + 0x234);
+	return base;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000011c8 origin=fragment_seed original=isp_lfb_read_error_reg */
@@ -8648,60 +9011,32 @@ int vic_core_ops_ioctl(void *file, unsigned int cmd, unsigned int arg)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000015f8 origin=model_output original=vin_s_stream */
 int32_t vin_s_stream(void *arg1, int32_t arg2)
 {
-	void *a0 = *(void **)((char *)arg1 + 0xe4);
-	int32_t v1 = *(int32_t *)((char *)arg1 + 0xf4);
-	int32_t *v0;
+	struct tx_isp_t30_subdev *sd = arg1;
+	struct tx_isp_t30_vin_device *vin;
+	struct tx_isp_t30_subdev *sensor;
+	struct tx_isp_t30_subdev_video_ops *video_ops;
+	int ret = 0;
 
-	if (arg2 == 0) {
-		if (v1 != 4)
-			return 0;
-		if (a0 != 0)
-			goto label_1660;
-		v0 = 3;
-		goto label_169c;
-	}
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_vin_device, active) != 0xe4);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_vin_device, mlock) != 0xe8);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_vin_device, state) != 0xf4);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_vin_device) != 0xfc);
+	if (!sd || IS_ERR(sd))
+		return -EINVAL;
+	vin = container_of(sd, struct tx_isp_t30_vin_device, sd);
+	if (arg2 && vin->state == TX_ISP_T30_MODULE_RUNNING)
+		return 0;
+	if (!arg2 && vin->state != TX_ISP_T30_MODULE_RUNNING)
+		return 0;
 
-	if (v1 != 4) {
-		if (a0 == 0) {
-			v0 = 4;
-			goto label_169c;
-		}
-		goto label_1660;
-	}
-
-label_1660:
-	{
-		int32_t *v0_2 = *(int32_t **)((char *)a0 + 0xc4);
-		int32_t *v0_3 = (void *)(*(int32_t **)((uintptr_t)v0_2 + 1));
-		int32_t (*fn)(int);
-		int32_t v0_4;
-
-		if (v0_3 == 0) {
-			v0 = -515;
-			goto label_1650;
-		}
-		v0_4 = *v0_3;
-		if (v0_4 == 0) {
-			v0 = -515;
-			goto label_1650;
-		}
-		fn = (int32_t (*)(int))v0_4;
-		v0 = fn(0);
-		if (v0 != 0)
-			return v0;
-		if (arg2 == 0) {
-			v0 = 3;
-			goto label_169c;
-		}
-		v0 = 4;
-	}
-
-label_169c:
-	*(int32_t *)((char *)arg1 + 0xf4) = v0;
-	return 0;
-
-label_1650:
-	return v0;
+	sensor = vin->active;
+	video_ops = sensor && sensor->ops ? sensor->ops->video : NULL;
+	if (video_ops && video_ops->s_stream)
+		ret = video_ops->s_stream(sensor, arg2);
+	if (!ret)
+		vin->state = arg2 ? TX_ISP_T30_MODULE_RUNNING :
+			TX_ISP_T30_MODULE_INIT;
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000016a4 origin=fragment_seed original=tx_isp_vin_activate_subdev */
@@ -8769,16 +9104,17 @@ int tx_isp_vin_init(void *arg1, int arg2)
 		isp_printf(1, "[%d] Don't have active sensor!\n", 0x157);
 		ret = -1;
 	} else {
-		int (*ops)(void) = *(int (**)(void))((char *)sensor + 0xc4);
-		if (ops == NULL) {
+		struct tx_isp_t30_subdev *sensor_sd = sensor;
+		struct tx_isp_t30_subdev_core_ops *core;
+
+		core = sensor_sd->ops ? sensor_sd->ops->core : NULL;
+		if (core == NULL || core->init == NULL) {
 			ret = 0;
 		} else {
-			int (*init_fn)(void) = *(int (**)(void))((char *)ops + 4);
-			if (init_fn == NULL) {
+			ret = ((int (*)(struct tx_isp_t30_subdev *, int))
+			       core->init)(sensor_sd, arg2);
+			if (ret == -ENOIOCTLCMD)
 				ret = 0;
-			} else {
-				ret = tx_isp_vin_init_call(init_fn);
-			}
 		}
 	}
 
@@ -10299,7 +10635,7 @@ int64_t csi_core_ops_init(uintptr_t a0, uint32_t a1)
     uint32_t ra = 0;
     uintptr_t *s0 = 0;
     uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
+    uint32_t s2 = 0;
     uint32_t *s3 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
@@ -10695,58 +11031,53 @@ tx_isp_csi_slake_subdev0x124:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000035a0 origin=fragment_seed original=isp_core_tunning_open */
 int32_t isp_core_tunning_open(uint32_t a0, uintptr_t a1)
 {
-    uintptr_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct file *file = (struct file *)a1;
+	struct miscdevice *miscdev;
+	struct tx_isp_t30_module *module;
+	struct tx_isp_t30_subdev *sd;
+	struct tx_isp_t30_core_tuning_view *core;
+	struct tx_isp_t30_tuning_open_view *tuning;
+	struct tx_isp_t30_lookup_table *temper;
+	size_t entries;
+	u16 *values;
 
-    /* fragment 0: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a1 + 112);
-    a1 = 2;
-    a0 = *(uint32_t *)((char *)v0 + 200);
-    v1 = *(uint32_t *)((char *)a0 + 416);
-    a2 = *(uint32_t *)((char *)v1 + 16588);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_tuning_view, param) != 0x19c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_tuning_view, tuning) != 0x1a0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_tuning_open_view, temper_max) != 0xec4);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_tuning_open_view, temper_paddr) != 0x40b4);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_tuning_open_view, state) != 0x40cc);
+	(void)a0;
+	if (!file || IS_ERR(file))
+		return -EINVAL;
+	miscdev = file->private_data;
+	if (!miscdev || IS_ERR(miscdev))
+		return -EINVAL;
+	module = container_of(miscdev, struct tx_isp_t30_module, miscdev);
+	sd = container_of(module, struct tx_isp_t30_subdev, module);
+	core = sd->dev_priv;
+	if (!core || IS_ERR(core) || !core->param || IS_ERR(core->param) ||
+	    !core->tuning || IS_ERR(core->tuning))
+		return -EINVAL;
+	tuning = core->tuning;
+	if (tuning->state != 2)
+		return -EPERM;
 
-    /* fragment 1: Branch */
-    v0 = -1;
-    if (a2 != a1) { goto isp_core_tunning_open0x78; }
-
-    /* fragment 2: MemoryAccess */
-    a2 = *(uint32_t *)((char *)a0 + 412);
-    v0 = 1;
-    *(uint32_t *)((char *)a0 + 380) = v0;
-    *(uint32_t *)((char *)v1 + 16564) = 0;
-    a0 = *(uint32_t *)((char *)a2 + 872);
-    a1 = 2147418112;
-    a1 = a1 | 65535;
-    v0 = *(uint16_t *)((char *)a0 + 4);
-    a3 = *(uint16_t *)((char *)a0 + 6);
-    a0 = *(uint32_t *)((char *)a0 + 0);
-    t0 = (uintptr_t)v0 * (uintptr_t)a3;
-    v0 = t0 + a1;
-    v0 = (uintptr_t)v0 << 1;
-    v0 = a0 + (uintptr_t)v0;
-    v0 = *(uint16_t *)((char *)v0 + 0);
-    *(uint32_t *)((char *)v1 + 3780) = v0;
-    v0 = *(uint32_t *)((char *)a2 + 872);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-    v0 = *(uint16_t *)((char *)v0 + 2);
-    *(uint32_t *)((char *)v1 + 3784) = v0;
-    v0 = 3;
-    *(uint32_t *)((char *)v1 + 16588) = v0;
-    v0 = 0;
-
-isp_core_tunning_open0x78:
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Unknown */
-    /* unmatched fragment 4 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 361c:	00000000 	nop */
-
-    return 0;
+	/* _CALIBRATION_TEMPER_STRENGTH is entry 205 in the OEM T30 ABI. */
+	temper = core->param->isp_param[0].table[205];
+	if (!temper || !temper->ptr || temper->width != sizeof(u16))
+		return -EINVAL;
+	entries = (size_t)temper->rows * temper->cols;
+	if (entries < 2)
+		return -EINVAL;
+	values = temper->ptr;
+	core->isp_daynight_switch = 1;
+	tuning->temper_paddr = 0;
+	tuning->temper_max = values[entries - 1];
+	tuning->temper_min = values[1];
+	tuning->state = 3;
+	pr_err("tx-isp-t30: tuning opened temper=%u..%u\n",
+	       tuning->temper_min, tuning->temper_max);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000003620 origin=model_output original=apical_isp_wb_s_control */
@@ -14080,94 +14411,274 @@ apical_isp_core_ops_g_ctrl0x13b0:
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
 
+static int tx_isp_t30_tuning_set_isp_process(
+	struct tx_isp_t30_core_tuning_view *core, int enable)
+{
+	struct tx_isp_t30_core_video_view *video_core = (void *)core;
+	u32 top44 = APICAL_READ_32(0x0044);
+	u32 top40 = APICAL_READ_32(0x0040);
+	u32 mbus_code;
+
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, vin) != 0xec);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, bypass) != 0x160);
+	mbus_code = video_core->vin.mbus.code;
+	if (enable) {
+		top44 &= ~0x00006200U;
+		if (mbus_code == V4L2_MBUS_FMT_RGB565_2X8_LE ||
+		    mbus_code == V4L2_MBUS_FMT_Y8_1X8 - 0x10)
+			top44 |= 0x00000200U;
+		else if (mbus_code == V4L2_MBUS_FMT_YUYV8_1X16)
+			top44 |= 0x00006200U;
+		top40 &= ~0x40000000U;
+		video_core->bypass = 0;
+	} else {
+		top44 = (top44 & ~0x00006200U) | 0x00004200U;
+		top40 |= 0x40000000U;
+		video_core->bypass = 1;
+	}
+	APICAL_WRITE_32(0x0044, top44);
+	APICAL_WRITE_32(0x0040, top40);
+	pr_err("tx-isp-t30: ISP process=%d mbus=%#x bypass=%d\n",
+	       enable, mbus_code, video_core->bypass);
+	return 0;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009ddc origin=model_output original=isp_core_tunning_unlocked_ioctl */
 long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	uint32_t *ctrl;
-	uint32_t val;
-	uint32_t buf[3];
-	uint32_t ret;
-	uint32_t flags;
-	uint32_t *mask;
-	uint32_t ptr_mask = (arg + 8) | arg;
+	struct {
+		u32 direction;
+		struct v4l2_control control;
+	} default_control;
+	struct miscdevice *miscdev;
+	struct tx_isp_t30_module *module;
+	struct tx_isp_t30_subdev *sd;
+	struct tx_isp_t30_core_tuning_view *core;
+	struct tx_isp_t30_tuning_open_view *tuning;
+	struct v4l2_control control;
+	long ret;
+	u32 temper_ctrl;
+	struct tx_isp_t30_temper_attr temper_attr;
+	struct tx_isp_t30_core_video_view *video_core;
+	struct tx_isp_t30_system_gain_view *system_gain;
 
-	ctrl = *(uint32_t **)(*(uint32_t **)(*(uint32_t **)((char *)file + 0x70) + 0xc8) + 0x1a0);
-	flags = *(uint32_t *)(ctrl + 0x40cc);
+	if (!file || IS_ERR(file))
+		return -EINVAL;
+	miscdev = file->private_data;
+	if (!miscdev || IS_ERR(miscdev))
+		return -EINVAL;
+	module = container_of(miscdev, struct tx_isp_t30_module, miscdev);
+	sd = container_of(module, struct tx_isp_t30_subdev, module);
+	core = sd->dev_priv;
+	if (!core || IS_ERR(core) || !core->tuning || IS_ERR(core->tuning))
+		return -EINVAL;
+	tuning = core->tuning;
+	if (tuning->state != 3)
+		return -EPERM;
 
-	if (flags != 3)
-		return -1;
+	pr_err("tx-isp-t30: tuning ioctl cmd=%08x\n", cmd);
+	switch (cmd) {
+	case VIDIOC_S_CTRL:
+		if (copy_from_user(&control, (void __user *)arg,
+				   sizeof(control)))
+			return -EFAULT;
+		if (tx_isp_t30_tuning_set_trace_count++ < 12)
+			pr_err("tx-isp-t30: tuning set id=%08x value=%d\n",
+			       control.id, control.value);
+		if (control.id == 0x08000164) {
+			/*
+			 * libimp stops and destroys the graph before this control, then
+			 * recreates it only when the control succeeds.
+			 */
+			ret = tx_isp_t30_tuning_set_isp_process(core,
+							 control.value);
+		} else if (control.id == V4L2_CID_BRIGHTNESS) {
+			u32 reason = 0;
 
-	mask = *(uint32_t *)(ctrl + 0x40cc);
+			apical_command(4, 0x77, control.value & 0xff, 0,
+				       &reason);
+			ret = 0;
+		} else if (control.id == V4L2_CID_CONTRAST) {
+			u32 reason = 0;
 
-	if (cmd == 0xc008561b) {
-		if (ptr_mask & (uintptr_t)mask)
-			return -14;
+			/* OEM apical_isp_contrast_s_control(), default midpoint. */
+			apical_command(4, 0x78, control.value & 0xff, 0,
+				       &reason);
+			ret = 0;
+		} else if (control.id == V4L2_CID_SATURATION) {
+			u32 reason = 0;
 
-		__might_sleep("include/linux/kernel.h", 0xc9, 0);
+			apical_command(4, 0x79, control.value & 0xff, 0,
+				       &reason);
+			ret = 0;
+		} else if (control.id == V4L2_CID_SHARPNESS) {
+			u32 reason = 0;
 
-		if (copy_from_user(&val, (const void __user *)(uintptr_t)((void __user *)arg), 8))
-			return -14;
-
-		ret = apical_isp_core_ops_g_ctrl(ctrl, &val);
-
-		if (ret == 0) {
-			if (ptr_mask & (uintptr_t)mask)
-				return -14;
-
-			__might_sleep("include/linux/kernel.h", 0xc9, 0);
-
-			if (copy_to_user((void __user *)(uintptr_t)((void __user *)arg), &val, 8))
-				return -14;
-
-			return 0;
-		}
-		return ret;
-	} else if (cmd == 0xc008561c) {
-
-		if (ptr_mask & (uintptr_t)mask)
-			return -14;
-
-		__might_sleep("include/linux/kernel.h", 0xc9, 0);
-
-		if (copy_from_user(&val, (const void __user *)(uintptr_t)((void __user *)arg), 8))
-			return -14;
-
-		ret = apical_isp_core_ops_s_ctrl(ctrl, &val, 0);
-
-		if (ret == -515)
-			return 0;
-
-		return ret;
-	} else {
-
-		if (ptr_mask & (uintptr_t)mask)
-			return -14;
-
-		__might_sleep("include/linux/kernel.h", 0xc9, 0);
-
-		if (copy_from_user(buf, (const void __user *)(uintptr_t)((void __user *)arg), 0xc))
-			return -14;
-
-		if (buf[0] == 0) {
-			ret = apical_isp_core_ops_s_ctrl(ctrl, buf, 0);
+			apical_command(4, 0x76, control.value & 0xff, 0,
+				       &reason);
+			ret = 0;
 		} else {
-			ret = apical_isp_core_ops_g_ctrl(ctrl, buf);
-
-			if (ret == 0) {
-				if (ptr_mask & (uintptr_t)mask)
-					return -14;
-
-				__might_sleep("include/linux/kernel.h", 0xc9, 0);
-
-				if (copy_to_user((void __user *)(uintptr_t)((void __user *)arg), buf, 0xc))
-					return -14;
-
-				return 0;
-			}
+			ret = apical_isp_core_ops_s_ctrl((void **)tuning,
+							  (int32_t *)&control, 0);
 		}
-
-		return ret;
+		if (ret)
+			pr_err("tx-isp-t30: tuning set id=%08x failed ret=%ld\n",
+			       control.id, ret);
+		break;
+	case VIDIOC_G_CTRL:
+		if (copy_from_user(&control, (void __user *)arg,
+				   sizeof(control)))
+			return -EFAULT;
+		if (control.id == 0x08000027) {
+			BUILD_BUG_ON(sizeof(struct tx_isp_t30_system_gain_view) !=
+				     sizeof(stab));
+			BUILD_BUG_ON(offsetof(struct tx_isp_t30_system_gain_view,
+					      sensor_analog_gain) != 0x1c);
+			BUILD_BUG_ON(offsetof(struct tx_isp_t30_system_gain_view,
+					      sensor_digital_gain) != 0x1e);
+			BUILD_BUG_ON(offsetof(struct tx_isp_t30_system_gain_view,
+					      isp_digital_gain) != 0x20);
+			system_gain = (void *)stab;
+			control.value = math_exp2(system_gain->sensor_analog_gain +
+					system_gain->sensor_digital_gain +
+					system_gain->isp_digital_gain, 5, 8);
+			if (tx_isp_t30_total_gain_trace_count++ < 4)
+				pr_err("tx-isp-t30: total gain a=%u d=%u isp=%u total=%d\n",
+				       system_gain->sensor_analog_gain,
+				       system_gain->sensor_digital_gain,
+				       system_gain->isp_digital_gain,
+				       control.value);
+			ret = 0;
+		} else {
+			ret = apical_isp_core_ops_g_ctrl((uintptr_t)tuning,
+						  (uintptr_t)&control);
+		}
+		if (ret && ret != -ENOIOCTLCMD)
+			break;
+		if (copy_to_user((void __user *)arg, &control,
+				 sizeof(control)))
+			return -EFAULT;
+		break;
+	default:
+		if (copy_from_user(&default_control, (void __user *)arg,
+				   sizeof(default_control)))
+			return -EFAULT;
+		pr_err("tx-isp-t30: tuning default dir=%u id=%08x value=%d\n",
+		       default_control.direction, default_control.control.id,
+		       default_control.control.value);
+		if (default_control.direction == 0) {
+			if (default_control.control.id == 0x08000164) {
+				ret = tx_isp_t30_tuning_set_isp_process(core,
+						default_control.control.value);
+			} else if (default_control.control.id == 0x08000083) {
+				/*
+				 * IMAGE_TUNING_CID_TEMPER_ATTR.  Keep the userspace
+				 * pointer out of the recovered switch and apply the OEM
+				 * T30 register sequence through a layout-checked core view.
+				 */
+				BUILD_BUG_ON(sizeof(temper_attr) != 8);
+				BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view,
+						      control) != 0x140);
+				if (copy_from_user(&temper_attr,
+						   (void __user *)(uintptr_t)
+						   default_control.control.value,
+						   sizeof(temper_attr))) {
+					ret = -EFAULT;
+				} else if (temper_attr.mode < 0 ||
+					   temper_attr.mode > 2) {
+					ret = -EINVAL;
+				} else {
+					video_core = (void *)core;
+					if (temper_attr.mode) {
+						temper_ctrl = APICAL_READ_32(0x02c0);
+						temper_ctrl |= 0x00000080;
+						APICAL_WRITE_32(0x02c0, temper_ctrl);
+						APICAL_WRITE_32(0x0a10,
+							video_core->control.input_width);
+						APICAL_WRITE_32(0x0a14,
+							video_core->control.input_height);
+						APICAL_WRITE_32(0x0a24,
+							video_core->control.input_width * 4);
+					}
+					temper_ctrl = APICAL_READ_32(0x0a28);
+					APICAL_WRITE_32(0x0a28, temper_ctrl | 1);
+					temper_ctrl = APICAL_READ_32(0x0040);
+					if (temper_attr.mode)
+						temper_ctrl &= ~0x00000400;
+					else
+						temper_ctrl |= 0x00000400;
+					APICAL_WRITE_32(0x0040, temper_ctrl);
+					temper_ctrl = APICAL_READ_32(0x02c0);
+					if (temper_attr.mode)
+						temper_ctrl |= 1;
+					else
+						temper_ctrl &= ~1U;
+					APICAL_WRITE_32(0x02c0, temper_ctrl);
+					pr_err("tx-isp-t30: temper mode=%d strength=%u %ux%u\n",
+					       temper_attr.mode,
+					       temper_attr.manual_strength,
+					       video_core->control.input_width,
+					       video_core->control.input_height);
+					ret = 0;
+				}
+			} else if (default_control.control.id == 0x080000e1 &&
+				   default_control.control.value == 0) {
+				/* Initial day-mode request matches the firmware default. */
+				ret = 0;
+			} else if (default_control.control.id == 0x0800002a &&
+				   default_control.control.value == 0) {
+				/* Default highlight-depression strength is a no-op. */
+				ret = 0;
+			} else if (default_control.control.id == 0x08000084) {
+				/*
+				 * IMAGE_TUNING_CID_TEMPER_BUF.  This is the exact OEM
+				 * apical_isp_temper_dns_s_buf() register sequence; the
+				 * recovered s_ctrl switch lost this private-control arm.
+				 */
+				if (default_control.control.value) {
+					APICAL_WRITE_32(0x0a18,
+						default_control.control.value);
+					APICAL_WRITE_32(0x0a1c,
+						default_control.control.value);
+					temper_ctrl = APICAL_READ_32(0x0a00);
+					temper_ctrl &= ~0x03000000;
+					temper_ctrl |= 0x00030000;
+					APICAL_WRITE_32(0x0a00, temper_ctrl);
+				}
+				ret = 0;
+			} else {
+				ret = apical_isp_core_ops_s_ctrl((void **)tuning,
+						(int32_t *)&default_control.control, 0);
+			}
+		} else {
+			if (default_control.control.id == 0x08000027) {
+				BUILD_BUG_ON(sizeof(struct tx_isp_t30_system_gain_view) !=
+					     sizeof(stab));
+				system_gain = (void *)stab;
+				default_control.control.value = math_exp2(
+					system_gain->sensor_analog_gain +
+					system_gain->sensor_digital_gain +
+					system_gain->isp_digital_gain, 5, 8);
+				if (tx_isp_t30_total_gain_trace_count++ < 4)
+					pr_err("tx-isp-t30: total gain a=%u d=%u isp=%u total=%d\n",
+					       system_gain->sensor_analog_gain,
+					       system_gain->sensor_digital_gain,
+					       system_gain->isp_digital_gain,
+					       default_control.control.value);
+				ret = 0;
+			} else {
+				ret = apical_isp_core_ops_g_ctrl((uintptr_t)tuning,
+						(uintptr_t)&default_control.control);
+			}
+			if (ret && ret != -ENOIOCTLCMD)
+				break;
+			if (copy_to_user((void __user *)arg, &default_control,
+					 sizeof(default_control)))
+				return -EFAULT;
+		}
+		break;
 	}
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a03c origin=model_output original=isp_core_tuning_init */
@@ -14360,6 +14871,11 @@ static int tx_isp_t30_ispcore_call_core_event(void *subdev, uint32_t event,
 
 	if (!sd || !sd->ops)
 		return -ENOIOCTLCMD;
+	pr_err("tx-isp-t30 sync: dispatch sd=%p name=%s ops=%p core=%p init=%p sensor=%p expected-vin-ops=%p expected-vin-core=%p\n",
+	       sd, sd->module.name ? sd->module.name : "<null>", sd->ops,
+	       sd->ops->core,
+	       sd->ops->core ? sd->ops->core->init : NULL,
+	       sd->ops->sensor, vin_subdev_ops, vin_subdev_core_ops);
 
 	if (event == 0x01000000) {
 		int (*init)(void *, int);
@@ -14907,7 +15423,191 @@ int32_t ispcore_irq_thread_handle(void *arg1)
 #ifndef REGTRACE_KERNEL_TREE_BUILD
 int64_t ispcore_frame_channel_streamoff_isra_0(uintptr_t a0) __asm__("ispcore_frame_channel_streamoff.isra.0");
 #endif
+static int tx_isp_t30_ispcore_stream_off(struct tx_isp_t30_subdev_pad *pad)
+{
+	struct tx_isp_t30_core_output_channel *chan;
+	struct tx_isp_t30_core_stream_view *core;
+	struct tx_isp_t30_frame_channel_format *format;
+	unsigned long flags;
+	u32 base;
+	u32 value;
+	int retry;
+
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_stream_view, control) != 0x140);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_core_input_control) != 0x14);
+	if (!pad || IS_ERR(pad) || pad->state != TX_ISP_ABI_PADSTATE_STREAM)
+		return 0;
+	if (tx_isp_t30_streamoff_trace_count < 12)
+		pr_err("tx-isp-t30: core streamoff entry irqs=%d\n",
+		       irqs_disabled());
+	chan = pad->priv;
+	if (!chan || IS_ERR(chan) || chan->pad != pad ||
+	    !chan->core || IS_ERR(chan->core))
+		return -EINVAL;
+	core = chan->core;
+	spin_lock_irqsave(&chan->slock, flags);
+	if (chan->state != 4) {
+		spin_unlock_irqrestore(&chan->slock, flags);
+		return 0;
+	}
+	spin_unlock_irqrestore(&chan->slock, flags);
+
+	if (pad->link.flag & BIT(5)) {
+		if (tx_isp_t30_streamoff_trace_count++ < 12)
+			pr_err("tx-isp-t30: core LFB wait irqs=%d\n",
+			       irqs_disabled());
+		g_switch_lfb_off = 1;
+		for (retry = 100; retry && g_switch_lfb_off; retry--)
+			private_msleep(5);
+		if (!retry && g_switch_lfb_off)
+			pr_err("tx-isp-t30: LFB close handshake timed out\n");
+	}
+
+	base = 0xb00 + chan->index * 0x100;
+	switch (chan->fmt.pix.pixelformat) {
+	case V4L2_PIX_FMT_NV12:
+	case V4L2_PIX_FMT_NV21:
+		for (retry = 100000;
+		     retry && (APICAL_READ_32(base + 0xa4) & BIT(16)); retry--)
+			cpu_relax();
+		value = APICAL_READ_32(base + 0x80) & ~BIT(9);
+		APICAL_WRITE_32(base + 0x80, value);
+		APICAL_WRITE_32(base + 0x9c, 0x08);
+		/* OEM fall-through disables the Y writer too. */
+	case V4L2_PIX_FMT_YUYV:
+	case V4L2_PIX_FMT_UYVY:
+	case V4L2_PIX_FMT_YUV444:
+	case V4L2_PIX_FMT_RGB565:
+	case V4L2_PIX_FMT_BGR24:
+	case V4L2_PIX_FMT_BGR32:
+	default:
+		for (retry = 100000;
+		     retry && (APICAL_READ_32(base + 0x24) & BIT(16)); retry--)
+			cpu_relax();
+		value = APICAL_READ_32(base) & ~BIT(9);
+		APICAL_WRITE_32(base, value);
+		APICAL_WRITE_32(base + 0x1c, 0x08);
+		break;
+	}
+
+	spin_lock_irqsave(&chan->slock, flags);
+	chan->state = 2;
+	pad->state = TX_ISP_ABI_PADSTATE_LINKED;
+	INIT_LIST_HEAD(&chan->fifo);
+	memset(chan->bank_flag, 0, sizeof(chan->bank_flag));
+	memset(chan->vflip_flag, 0, sizeof(chan->vflip_flag));
+	memset(chan->banks_addr, 0, sizeof(chan->banks_addr));
+	spin_unlock_irqrestore(&chan->slock, flags);
+
+	if (core->control.format_end >= 0 &&
+	    core->control.format_end < ARRAY_SIZE(tx_isp_t30_isp_output_fmt)) {
+		format = &tx_isp_t30_isp_output_fmt[core->control.format_end];
+		chan->fmt.pix.width = core->control.input_width;
+		chan->fmt.pix.height = core->control.input_height;
+		chan->fmt.pix.pixelformat = format->fourcc;
+		chan->fmt.pix.bytesperline = chan->fmt.pix.width *
+			format->depth / 8;
+		chan->fmt.pix.sizeimage = chan->fmt.pix.bytesperline *
+			chan->fmt.pix.height;
+	}
+	chan->fmt.crop_enable = 0;
+	chan->fmt.scaler_enable = 0;
+	chan->usingbanks = 0;
+	pr_err("tx-isp-t30: core stream ch=%d stopped\n", chan->index);
+	return 0;
+}
+
 int64_t ispcore_frame_channel_streamoff_isra_0(uintptr_t a0)
+{
+	return tx_isp_t30_ispcore_stream_off((void *)a0);
+}
+
+static int tx_isp_t30_ispcore_video_stream_off(
+	struct tx_isp_t30_subdev *sd)
+{
+	struct tx_isp_t30_core_video_view *core;
+	struct tx_isp_t30_core_output_channel *chan;
+	struct tx_isp_t30_module *submod;
+	struct tx_isp_t30_subdev *subdev;
+	struct tx_isp_t30_subdev_video_ops *video_ops;
+	unsigned long flags;
+	u32 reason = 0;
+	u32 status;
+	u32 index;
+	int ret = 0;
+
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, state) !=
+		     0xe8);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, channels) !=
+		     0x154);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, num_channels) !=
+		     0x158);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, channel_state) !=
+		     0x15c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, frame_sequence) !=
+		     0x164);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, frame_state) !=
+		     0x168);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_core_output_channel) != 0xa0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_output_channel, state) !=
+		     0x50);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_output_channel, pad) !=
+		     0x54);
+
+	if (!sd || IS_ERR(sd))
+		return -EINVAL;
+	core = sd->dev_priv;
+	if (!core || IS_ERR(core))
+		return -EINVAL;
+
+	spin_lock_irqsave(&core->slock, flags);
+	if (core->state < TX_ISP_T30_MODULE_INIT) {
+		spin_unlock_irqrestore(&core->slock, flags);
+		return -EPERM;
+	}
+	spin_unlock_irqrestore(&core->slock, flags);
+
+	core->frame_state = 0;
+	core->vflip_state = 0;
+	core->hflip_state = 0;
+	core->frame_sequence = 0;
+	if (core->state == TX_ISP_T30_MODULE_RUNNING) {
+		if (!core->channels || IS_ERR(core->channels))
+			return -EINVAL;
+		for (index = 0; index < min_t(u32, core->num_channels, 3);
+		     index++) {
+			chan = &core->channels[index];
+			if (chan->state == TX_ISP_T30_MODULE_RUNNING) {
+				ret = tx_isp_t30_ispcore_stream_off(chan->pad);
+				if (ret)
+					return ret;
+			}
+		}
+
+		status = apical_command(1, 9, 0, 0, &reason);
+		if (status)
+			ret = -EINVAL;
+		else
+			core->state = TX_ISP_T30_MODULE_INIT;
+	}
+
+	for (index = ARRAY_SIZE(sd->module.submods); index-- > 0;) {
+		submod = sd->module.submods[index];
+		if (!submod)
+			continue;
+		subdev = container_of(submod, struct tx_isp_t30_subdev, module);
+		video_ops = subdev->ops ? subdev->ops->video : NULL;
+		if (!video_ops || !video_ops->s_stream)
+			continue;
+		ret = video_ops->s_stream(subdev, 0);
+		if (ret && ret != -ENOIOCTLCMD)
+			break;
+	}
+
+	return ret == -ENOIOCTLCMD ? 0 : ret;
+}
+
+static int64_t ispcore_frame_channel_streamoff_raw(uintptr_t a0)
 {
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
@@ -15309,8 +16009,10 @@ ispcore_frame_channel_streamoff_isra_00x3bc:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b9ac origin=fragment_seed original=ispcore_video_s_stream */
-int64_t ispcore_video_s_stream(uintptr_t a0, uint32_t a1)
+static int64_t tx_isp_t30_ispcore_video_s_stream_raw(uintptr_t a0,
+						      uint32_t a1)
 {
+	unsigned long flags;
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -15337,7 +16039,10 @@ int64_t ispcore_video_s_stream(uintptr_t a0, uint32_t a1)
     uint32_t s6 = 0;
     uint32_t s7 = 0;
     uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	uint32_t v1 = 0;
+
+	if (!a1)
+		return tx_isp_t30_ispcore_video_stream_off((void *)a0);
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -15346,15 +16051,9 @@ int64_t ispcore_video_s_stream(uintptr_t a0, uint32_t a1)
     s0 = *(uint32_t *)((char *)(a0) + 212);
     s4 = a0;
     s3 = a1;
-    v0 = (uintptr_t *)arch_local_irq_save(); /* jalr target resolved by relocation */
+	spin_lock_irqsave((spinlock_t *)((char *)s0 + 0xdc), flags);
 
-    /* fragment 2: Arithmetic */
-    s2 = v0;
-
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint32_t *)((char *)&sp_9007);
-    v0 = v0 + 1;
-    *(uint32_t *)((char *)&sp_9007) = v0;
+	/* fragment 3: MemoryAccess */
     v0 = *(uint32_t *)((char *)s0 + 232);
     s1 = (uintptr_t *)&private_spin_unlock_irqrestore;
     v0 = v0 < 3;
@@ -15367,7 +16066,7 @@ int64_t ispcore_video_s_stream(uintptr_t a0, uint32_t a1)
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC90, 0 + 1756, 1874); /* jalr target resolved by relocation */
 
     /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_spin_unlock_irqrestore)(s0 + 220, s2); /* jalr target resolved by relocation */
+	spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 0xdc), flags);
 
     /* fragment 7: Arithmetic */
     v0 = -1;
@@ -15384,7 +16083,7 @@ ispcore_video_s_stream0xa0:
 
 ispcore_video_s_stream0xc4:
     /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_spin_unlock_irqrestore)(s0 + 220, s2); /* jalr target resolved by relocation */
+	spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 0xdc), flags);
 
     /* fragment 11: MemoryAccess */
     s6 = *(uint32_t *)((char *)s0 + 232);
@@ -15478,7 +16177,8 @@ ispcore_video_s_stream0x1fc:
 
 ispcore_video_s_stream0x200:
     /* fragment 35: Arithmetic */
-    s0 = s4 + 120;
+    /* Walk submods[15]..submods[0]; +0x78 is the parent field. */
+    s0 = s4 + 116;
     s1 = -515;
     s4 = s4 + 52;
 
@@ -15879,7 +16579,8 @@ ispcore_video_s_stream0x674:
 
 ispcore_video_s_stream0x6a4:
     /* fragment 123: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_release_device)(a0); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)(long)
+	((int (*)(void *, int))(uintptr_t)v0)((void *)a0, s3);
 
     /* fragment 124: Branch */
     if (v0 == 0) { goto ispcore_video_s_stream0x238; }
@@ -15891,7 +16592,141 @@ ispcore_video_s_stream0x6a4:
     s7 = local_40;
     goto ispcore_video_s_stream0xa0;
 
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+
+static u32 tx_isp_t30_bayer_pattern(u32 mbus_code, u32 fallback)
+{
+	switch (mbus_code) {
+	case V4L2_MBUS_FMT_SBGGR8_1X8:
+	case V4L2_MBUS_FMT_SBGGR10_1X10:
+	case V4L2_MBUS_FMT_SBGGR12_1X12:
+		return 3;
+	case V4L2_MBUS_FMT_SGBRG8_1X8:
+	case V4L2_MBUS_FMT_SGBRG10_1X10:
+	case V4L2_MBUS_FMT_SGBRG12_1X12:
+		return 2;
+	case V4L2_MBUS_FMT_SGRBG8_1X8:
+	case V4L2_MBUS_FMT_SGRBG10_1X10:
+	case V4L2_MBUS_FMT_SGRBG12_1X12:
+		return 1;
+	case V4L2_MBUS_FMT_SRGGB8_1X8:
+	case V4L2_MBUS_FMT_SRGGB10_1X10:
+	case V4L2_MBUS_FMT_SRGGB12_1X12:
+		return 0;
+	default:
+		return fallback & 3;
+	}
+}
+
+static void tx_isp_t30_restore_linear_irq_pipeline(
+	struct tx_isp_t30_core_video_view *core)
+{
+	u32 width = core->vin.mbus.width;
+	u32 height = core->vin.mbus.height;
+	u32 pattern = tx_isp_t30_bayer_pattern(core->vin.mbus.code,
+					       core->control.pattern);
+
+	/* Match isp_config_input_port() to the synchronized sensor mode. */
+	APICAL_WRITE_32(0x100, 0x00100001);
+	APICAL_WRITE_32(0x10, width);
+	APICAL_WRITE_32(0x14, height);
+	APICAL_WRITE_32(0x18, pattern);
+	core->control.input_width = width;
+	core->control.input_height = height;
+	core->control.pattern = pattern;
+	pr_err("tx-isp-t30: ISP input restored %ux%u code=%08x pattern=%u\n",
+	       width, height, core->vin.mbus.code, pattern);
+
+	/* OEM T30 linear-mode module enables the processing blocks below. */
+	APICAL_WRITE_32(0x40, 0x33242193);
+	APICAL_WRITE_32(0x44, 0x00000c76);
+
+	/*
+	 * APICAL source routing: frame end, AE/AWB statistics, FR/DS writers,
+	 * frame start, DS2 writer, and the VIC frame event used by the core.
+	 */
+	APICAL_WRITE_32(0x80, 0x00000017);
+	APICAL_WRITE_32(0x84, 0x000b0000);
+	APICAL_WRITE_32(0x88, 0x000e0009);
+	APICAL_WRITE_32(0x8c, 0x0018000f);
+	APICAL_WRITE_32(0x90, 0x00000000);
+	APICAL_WRITE_32(0x94, 0x00000000);
+	APICAL_WRITE_32(0x98, 0x00320001);
+	APICAL_WRITE_32(0x9c, 0x00000000);
+}
+
+#define TX_ISP_T30_INPUT_PORT_MODE_REQUEST	0x130
+#define TX_ISP_T30_INPUT_PORT_MODE_MASK		0x7
+#define TX_ISP_T30_INPUT_PORT_MODE_RUN		0x1
+
+static void tx_isp_t30_start_input_port(void)
+{
+	u32 mode = APICAL_READ_32(TX_ISP_T30_INPUT_PORT_MODE_REQUEST);
+
+	/*
+	 * This is the register transition made by the OEM firmware's
+	 * isp_system_state(..., ISP_SYSTEM_STATE_RUN, ...).  VIN starts the
+	 * sensor at the end of the child walk, so make the transition here,
+	 * after that edge, instead of leaving the port in urgent-stop mode.
+	 */
+	mode &= ~TX_ISP_T30_INPUT_PORT_MODE_MASK;
+	mode |= TX_ISP_T30_INPUT_PORT_MODE_RUN;
+	APICAL_WRITE_32(TX_ISP_T30_INPUT_PORT_MODE_REQUEST, mode);
+}
+
+int64_t ispcore_video_s_stream(uintptr_t a0, uint32_t a1)
+{
+	struct tx_isp_t30_subdev *sd = (void *)a0;
+	struct tx_isp_t30_core_video_view *core;
+	struct tx_isp_t30_module *submod;
+	struct tx_isp_t30_subdev *subdev;
+	struct tx_isp_t30_subdev_video_ops *video_ops;
+	u32 index;
+	int ret;
+
+	if (!a1)
+		return tx_isp_t30_ispcore_video_stream_off(sd);
+	if (!sd || IS_ERR(sd))
+		return -EINVAL;
+	core = sd->dev_priv;
+	if (!core || IS_ERR(core))
+		return -EINVAL;
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_video_in) != 0x48);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, vin) != 0xec);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, control) != 0x140);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_video_view, channels) != 0x154);
+
+	/*
+	 * Keep the recovered core hardware transition for now, then perform the
+	 * OEM child walk explicitly.  The recovered control flow reaches RUN but
+	 * loses this traversal, leaving VIC completely unprogrammed.
+	 */
+	ret = tx_isp_t30_ispcore_video_s_stream_raw(a0, a1);
+	if (ret)
+		return ret;
+	tx_isp_t30_restore_linear_irq_pipeline(core);
+
+	for (index = ARRAY_SIZE(sd->module.submods); index-- > 0;) {
+		submod = sd->module.submods[index];
+		if (!submod)
+			continue;
+		subdev = container_of(submod, struct tx_isp_t30_subdev, module);
+		video_ops = subdev->ops ? subdev->ops->video : NULL;
+		if (!video_ops || !video_ops->s_stream)
+			continue;
+		pr_err("tx-isp-t30: core stream child[%u]=%s enable=1\n",
+		       index, subdev->module.name ? subdev->module.name : "<null>");
+		ret = video_ops->s_stream(subdev, 1);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+	}
+
+	/* Child VIN starts the sensor last; retain ISP geometry after that edge. */
+	tx_isp_t30_restore_linear_irq_pipeline(core);
+	tx_isp_t30_start_input_port();
+
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000c070 origin=model_output original=ispcore_frame_channel_set_crop.isra.0 */
@@ -15993,48 +16828,35 @@ int32_t isp_set_buffer_address_vflip_disable_isra_0(void *arg1, void *arg2, int3
 #endif
 int32_t isp_set_buffer_address_vflip_disable_isra_0(void *arg1, void *arg2, int32_t arg3)
 {
-	struct {
-		int32_t f0;
-		int32_t width;
-		int32_t height;
-		int32_t magic;
-		int32_t pad1[17];
-		void *cfg;
-		int32_t pad2[13];
-		uint32_t base;
-		int32_t pad3[11];
-		int32_t extra;
-	} *s = (void *)arg1;
-	struct {
-		int32_t f0;
-		int32_t addr;
-	} *d = (void *)arg2;
-	int32_t v1 = s->magic;
-	void *s6 = s->cfg;
-	int32_t s3 = arg3 << 2;
-	int32_t s1;
+	struct tx_isp_t30_core_output_channel *chan = arg1;
+	struct tx_isp_t30_frame_buffer *buf = arg2;
+	u32 offset = 0;
+	u32 base;
 
-	if (v1 != 0x3132564e)
-		s1 = 0;
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_core_output_channel) != 0xa0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_output_channel, pad) != 0x54);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_output_channel, lineoffset) != 0x98);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_output_channel, usingbanks) != 0x9f);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_buffer, addr) != 0x08);
 
-	if (v1 == 0x3132564e || v1 == 0x3231564e) {
-		int32_t a0 = s->width;
-		int32_t v0_1 = s->height;
-		s1 = a0 * v0_1;
-
-		if (((*(int32_t *)((uintptr_t)s6 + 0x14)) & 0x40) != 0)
-			s1 = ((v0_1 + 0xf) & 0xfffffff0) * a0;
-
-		APICAL_WRITE_32(((s->base) << 8) + (uintptr_t)s3 + 0xb88, (uintptr_t)s1 + d->addr);
+	if (!chan || IS_ERR(chan) || !buf || IS_ERR(buf) ||
+	    !chan->pad || IS_ERR(chan->pad) || arg3 < 0 || arg3 >= 5)
+		return -EINVAL;
+	base = 0xb00 + chan->index * 0x100;
+	if (chan->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+	    chan->fmt.pix.pixelformat == V4L2_PIX_FMT_NV21) {
+		offset = chan->fmt.pix.width * chan->fmt.pix.height;
+		if (chan->pad->link.flag & BIT(6))
+			offset = chan->fmt.pix.width *
+				 ((chan->fmt.pix.height + 0x0f) & ~0x0f);
+		APICAL_WRITE_32(base + 0x88 + arg3 * 4,
+				buf->addr + offset);
 	}
-
-	APICAL_WRITE_32(((s->base) << 8) + (uintptr_t)s3 + 0xb08, d->addr);
-	int32_t result = (*(int32_t *)((uintptr_t)s6 + 0x14)) & 0x20;
-
-	if (result == 0)
-		return result;
-
-	return isp_lfb_config_default_dma(d->addr, s1, s->extra, arg3);
+	APICAL_WRITE_32(base + 0x08 + arg3 * 4, buf->addr);
+	if (chan->pad->link.flag & BIT(5))
+		return isp_lfb_config_default_dma(buf->addr, offset,
+						  chan->lineoffset, arg3);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000c444 origin=model_output original=isp_configure_base_addr.isra.0 */
@@ -16097,7 +16919,286 @@ int isp_configure_base_addr_isra_0(void *arg1)
         s4 += 1;
     }
 
-    return result;
+	return result;
+}
+
+static struct tx_isp_t30_frame_channel_format *
+tx_isp_t30_find_output_format(u32 fourcc, u32 start, u32 end)
+{
+	u32 index;
+
+	if (start >= ARRAY_SIZE(tx_isp_t30_isp_output_fmt))
+		return NULL;
+	if (end >= ARRAY_SIZE(tx_isp_t30_isp_output_fmt))
+		end = ARRAY_SIZE(tx_isp_t30_isp_output_fmt) - 1;
+	for (index = start; index <= end; index++) {
+		if (tx_isp_t30_isp_output_fmt[index].fourcc == fourcc)
+			return &tx_isp_t30_isp_output_fmt[index];
+	}
+	return NULL;
+}
+
+static int tx_isp_t30_ispcore_config_dma(void *chan,
+			struct tx_isp_t30_frame_image_format *fmt,
+			struct tx_isp_t30_frame_channel_format *cfmt)
+{
+	void *core = *(void **)((char *)chan + 0x58);
+	u32 index = *(u32 *)((char *)chan + 0x4c);
+	u32 base = 0xb00 + index * 0x100;
+	int command_ret = 0;
+
+	if (fmt->pix.pixelformat != V4L2_PIX_FMT_NV12 &&
+	    fmt->pix.pixelformat != V4L2_PIX_FMT_NV21)
+		return -EINVAL;
+
+	/* UV writer followed by the Y writer, matching OEM fall-through. */
+	pr_err("tx-isp-t30: core fmt ch=%u dma UV begin\n", index);
+	APICAL_WRITE_32(base + 0x80, cfmt->priv);
+	APICAL_WRITE_32(base + 0x84,
+			(fmt->pix.height << 16) | fmt->pix.width);
+	APICAL_WRITE_32(base + 0xa0, *(u32 *)((char *)chan + 0x98));
+
+	/* FR/DS1/DS2 CSC bits are 22/28/36 in apical_isp_top_ctl_bit. */
+	if (index == 0)
+		isp_core_config_top_ctl_register(22, 0);
+	else if (index == 1)
+		isp_core_config_top_ctl_register(28, 0);
+	else if (index == 2)
+		isp_core_config_top_ctl_register(36, 0);
+	else
+		return -EINVAL;
+	if (*(u32 *)((char *)core + 0x150) == 9)
+		isp_core_config_top_ctl_register(16, 0);
+	pr_err("tx-isp-t30: core fmt ch=%u dma top configured\n", index);
+
+	APICAL_WRITE_32(base, cfmt->priv & 0x0f);
+	APICAL_WRITE_32(base + 0x04,
+			(fmt->pix.height << 16) | fmt->pix.width);
+	APICAL_WRITE_32(base + 0x20, *(u32 *)((char *)chan + 0x98));
+
+	/* TSCENE_MODES, FR/DS output-mode ID, YUV420, COMMAND_SET. */
+	pr_err("tx-isp-t30: core fmt ch=%u output command begin\n", index);
+	apical_command(4, 0x73 + index, 0x57, 0, &command_ret);
+	pr_err("tx-isp-t30: core fmt ch=%u output command complete ret=%d\n",
+	       index, command_ret);
+	APICAL_WRITE_32(index == 0 ? 0x570 : index == 1 ? 0x6b0 : 0x7b0,
+			0x0f);
+	return 0;
+}
+
+static int tx_isp_t30_ispcore_stream_on(struct tx_isp_t30_subdev_pad *pad)
+{
+	struct tx_isp_t30_core_output_channel *chan;
+	struct tx_isp_t30_core_device_prefix *core;
+	struct tx_isp_t30_frame_buffer buf = { };
+	unsigned long flags;
+	u32 base;
+	u32 primary;
+	int retry;
+	int ret;
+
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_core_output_channel) != 0xa0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_output_channel, state) != 0x50);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_core_device_prefix, state) != 0xe8);
+	if (!pad || IS_ERR(pad) || pad->state != TX_ISP_ABI_PADSTATE_LINKED)
+		return -EPERM;
+	chan = pad->priv;
+	if (!chan || IS_ERR(chan) || chan->pad != pad ||
+	    !chan->core || IS_ERR(chan->core))
+		return -EINVAL;
+	core = chan->core;
+	if (core->state != 4) {
+		pr_err("tx-isp-t30: core stream ch=%d rejected, core state=%d\n",
+		       chan->index, core->state);
+		return -EPERM;
+	}
+	base = 0xb00 + chan->index * 0x100;
+
+	if (pad->link.flag & BIT(5)) {
+		chan->usingbanks = 2;
+		buf.addr = 0xf0000000;
+		ret = isp_set_buffer_address_vflip_disable_isra_0(chan, &buf, 0);
+		if (ret)
+			return ret;
+		buf.addr = 0xf8000000;
+		ret = isp_set_buffer_address_vflip_disable_isra_0(chan, &buf, 1);
+		if (ret)
+			return ret;
+		if (chan->index == 0)
+			ret = isp_lfb_ctrl_select_fr();
+		else if (chan->index == 1)
+			ret = isp_lfb_ctrl_select_ds1();
+		else
+			ret = 0;
+		if (ret)
+			return ret;
+		isp_lfb_config_resolution(chan->fmt.pix.width,
+					  chan->fmt.pix.height);
+		ret = isp_lfb_ctrl_hw_recovery(1);
+		if (ret)
+			return ret;
+		g_switch_lfb_on = 1;
+		for (retry = 100; retry && g_switch_lfb_on; retry--)
+			private_msleep(5);
+		if (!retry && g_switch_lfb_on)
+			pr_err("tx-isp-t30: LFB open handshake timed out\n");
+	}
+
+	memset(chan->bank_flag, 0, sizeof(chan->bank_flag));
+	memset(chan->vflip_flag, 0, sizeof(chan->vflip_flag));
+	memset(chan->banks_addr, 0, sizeof(chan->banks_addr));
+	chan->dma_state = 0;
+	chan->vflip_state = 0xff;
+	chan->state = 2;
+
+	switch (chan->fmt.pix.pixelformat) {
+	case V4L2_PIX_FMT_NV12:
+	case V4L2_PIX_FMT_NV21:
+		primary = APICAL_READ_32(base + 0x80) | BIT(9);
+		APICAL_WRITE_32(base + 0x80, primary);
+		APICAL_WRITE_32(base + 0x9c,
+				chan->usingbanks ? chan->usingbanks - 1 : 0);
+		/* OEM fall-through: enable the Y writer as well. */
+		primary = APICAL_READ_32(base) | BIT(9);
+		APICAL_WRITE_32(base, primary);
+		APICAL_WRITE_32(base + 0x1c,
+				chan->usingbanks ? chan->usingbanks - 1 : 0);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	spin_lock_irqsave(&chan->slock, flags);
+	chan->state = 4;
+	pad->state = TX_ISP_ABI_PADSTATE_STREAM;
+	spin_unlock_irqrestore(&chan->slock, flags);
+	/* apical_isp_input_port_field_mode_write(0). */
+	APICAL_WRITE_32(0x104, APICAL_READ_32(0x104) & 0xf800ffff);
+	pr_err("tx-isp-t30: core stream ch=%d running banks=%u link=%08x\n",
+	       chan->index, chan->usingbanks, pad->link.flag);
+	return 0;
+}
+
+static int tx_isp_t30_ispcore_set_format(void *pad, void *data)
+{
+	struct tx_isp_t30_frame_image_format *fmt = data;
+	struct tx_isp_t30_frame_channel_format *cfmt;
+	void *sd;
+	void *core;
+	void *chan;
+	u32 width;
+	u32 height;
+	u32 start;
+	u32 end;
+	u32 index;
+	int ret;
+
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_frame_image_format) != 0x4c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_image_format,
+			      crop_enable) != 0x24);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_image_format,
+			      scaler_enable) != 0x38);
+
+	if (!pad || IS_ERR(pad) || !fmt || IS_ERR(fmt))
+		return -EINVAL;
+	sd = *(void **)pad;
+	if (!sd || IS_ERR(sd))
+		return -EINVAL;
+	core = *(void **)((char *)sd + 0xd4);
+	chan = *(void **)((char *)pad + 0x20);
+	if (!core || IS_ERR(core) || !chan || IS_ERR(chan))
+		return -EINVAL;
+
+	index = *(u32 *)((char *)chan + 0x4c);
+	pr_err("tx-isp-t30: core set fmt ch=%u %ux%u fourcc=%08x crop=%u scaler=%u\n",
+	       index, fmt->pix.width, fmt->pix.height, fmt->pix.pixelformat,
+	       fmt->crop_enable, fmt->scaler_enable);
+
+	if (*(u32 *)((char *)core + 0x160) == 1 &&
+	    (fmt->crop_enable || fmt->scaler_enable))
+		return -EPERM;
+	if (*(u32 *)((char *)core + 0xf4) == 0x2009 &&
+	    (fmt->crop_enable || fmt->scaler_enable))
+		return -EINVAL;
+	if (fmt->crop_enable && !*(u8 *)((char *)chan + 0x6c))
+		return -EINVAL;
+	if (fmt->scaler_enable && !*(u8 *)((char *)chan + 0x6d))
+		return -EINVAL;
+
+	width = *(u32 *)((char *)chan + 0x04);
+	height = *(u32 *)((char *)chan + 0x08);
+	if (fmt->crop_enable) {
+		if (fmt->crop_top + fmt->crop_height >
+		    *(u32 *)((char *)chan + 0x60) ||
+		    fmt->crop_left + fmt->crop_width >
+		    *(u32 *)((char *)chan + 0x5c))
+			return -EINVAL;
+		width = fmt->crop_width;
+		height = fmt->crop_height;
+	}
+	if (fmt->scaler_enable) {
+		if (width < fmt->scaler_out_width ||
+		    height < fmt->scaler_out_height)
+			return -EINVAL;
+		width = fmt->scaler_out_width;
+		height = fmt->scaler_out_height;
+	}
+	if (width < *(u32 *)((char *)chan + 0x64) ||
+	    height < *(u32 *)((char *)chan + 0x68) ||
+	    width != fmt->pix.width || height != fmt->pix.height) {
+		pr_err("tx-isp-t30: core ch=%u geometry %ux%u outside/requested %ux%u\n",
+		       index, width, height, fmt->pix.width, fmt->pix.height);
+		return -EINVAL;
+	}
+
+	start = *(u32 *)((char *)core + 0x14c);
+	end = *(u32 *)((char *)core + 0x150);
+	cfmt = tx_isp_t30_find_output_format(fmt->pix.pixelformat,
+					      start, end);
+	if (!cfmt) {
+		pr_err("tx-isp-t30: core ch=%u unsupported fourcc=%08x range=%u..%u\n",
+		       index, fmt->pix.pixelformat, start, end);
+		return -EINVAL;
+	}
+	pr_err("tx-isp-t30: core set fmt ch=%u validated table=%s\n",
+	       index, cfmt->name);
+
+	if (fmt->crop_enable) {
+		ret = ispcore_frame_channel_set_crop_isra_0(index, fmt);
+		if (ret)
+			return ret;
+	}
+	if (fmt->scaler_enable) {
+		ret = ispcore_frame_channel_set_scaler(chan, fmt, 0);
+		if (ret)
+			goto disable_crop;
+	}
+
+	fmt->pix.bytesperline = fmt->pix.width * (cfmt->depth / 8);
+	if (fmt->pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+	    fmt->pix.pixelformat == V4L2_PIX_FMT_NV21)
+		fmt->pix.sizeimage = fmt->pix.bytesperline *
+				      ((fmt->pix.height + 0x0f) & ~0x0f);
+	else
+		fmt->pix.sizeimage = fmt->pix.bytesperline * fmt->pix.height;
+	*(u32 *)((char *)chan + 0x98) =
+		fmt->pix.width * (cfmt->depth / 8);
+	fmt->pix.priv = (u32)(uintptr_t)cfmt;
+	pr_err("tx-isp-t30: core set fmt ch=%u dma configure begin\n", index);
+	ret = tx_isp_t30_ispcore_config_dma(chan, fmt, cfmt);
+	if (ret)
+		goto disable_scaler;
+	pr_err("tx-isp-t30: core set fmt ch=%u dma configure complete\n", index);
+	memcpy(chan, fmt, sizeof(*fmt));
+	return 0;
+
+disable_scaler:
+	if (fmt->scaler_enable)
+		ispcore_frame_channel_set_scaler(chan, NULL, 0);
+disable_crop:
+	if (fmt->crop_enable)
+		ispcore_frame_channel_set_crop_isra_0(index, NULL);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000c5dc origin=fragment_seed original=ispcore_pad_event_handle */
@@ -16134,19 +17235,21 @@ int64_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
+	if (a1 == TX_ISP_FRAME_EVENT_SET_FORMAT)
+		return tx_isp_t30_ispcore_set_format((void *)a0, (void *)a2);
+	if (a1 == TX_ISP_FRAME_EVENT_STREAM_ON)
+		return tx_isp_t30_ispcore_stream_on((void *)a0);
 
     /* fragment 1: MemoryAccess */
     v0 = *(uint8_t *)((char *)a0 + 5);
 
     /* fragment 2: Branch */
     int _bc_v0_2 = v0 == 0;
-    v0 = 4244570112;
     if (_bc_v0_2) { goto ispcore_pad_event_handle0xbc; }
 
-    /* fragment 3: Arithmetic */
-    v0 = (uintptr_t)v0 | 65535;
-    a1 = a1 + (uintptr_t)v0;
-    v0 = a1 < 8;
+    /* Normalize GET_FMT through SET_BANKS; BYPASS remains a no-op. */
+    a1 -= TX_ISP_FRAME_EVENT_GET_FORMAT;
+    v0 = (uintptr_t *)(a1 < 8);
 
     /* fragment 4: Branch */
     int _bc_v0_4 = v0 == 0;
@@ -16155,12 +17258,8 @@ int64_t ispcore_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
 
     /* fragment 5: Arithmetic */
     a1 = a1 << 2;
-    v0 = v0 + 1456;
-    v0 = v0 + a1;
     s1 = a0;
-
-    /* fragment 6: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 0);
+	s0 = (uintptr_t *)a2;
 
     /* fragment 7: IndirectTailCall */
     switch (a1) {
@@ -16323,7 +17422,9 @@ ispcore_pad_event_handle0x1a4:
 
 ispcore_pad_event_handle0x1b0:
     /* fragment 42: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(2); /* jalr target resolved by relocation */
+	isp_printf(2, "ispcore: channel %u rejected crop/scaler request\n",
+		   *(uint32_t *)((char *)s1 + 76));
+	v0 = 0;
 
 ispcore_pad_event_handle0x1c0:
     /* fragment 43: Branch */
@@ -16405,7 +17506,10 @@ ispcore_pad_event_handle0x248:
 
 ispcore_pad_event_handle0x264:
     /* fragment 61: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(2); /* jalr target resolved by relocation */
+	isp_printf(2,
+		   "ispcore: channel %u rejected requested crop/scaler geometry\n",
+		   *(uint32_t *)((char *)s1 + 76));
+	v0 = 0;
 
     /* fragment 62: Branch */
     s2 = -22;
@@ -16475,7 +17579,10 @@ ispcore_pad_event_handle0x2ec:
 
 ispcore_pad_event_handle0x2fc:
     /* fragment 77: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(2); /* jalr target resolved by relocation */
+	isp_printf(2, "ispcore: channel %u cannot output %u x %u\n",
+		   *(uint32_t *)((char *)s1 + 76), (uint32_t)a3,
+		   (uint32_t)(uintptr_t)v0);
+	v0 = 0;
 
     /* fragment 78: Branch */
     s2 = -22;
@@ -16984,7 +18091,8 @@ ispcore_pad_event_handle_stream_on:
 
 ispcore_pad_event_handle0x7fc:
     /* fragment 201: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_printf)(2); /* jalr target resolved by relocation */
+	isp_printf(2, "ispcore: channel stream request rejected by state\n");
+	v0 = 0;
 
     /* fragment 202: Branch */
     s2 = -1;
@@ -17634,6 +18742,95 @@ uint32_t isp_modify_dma_direction_isra_0(void *arg1)
 	}
 }
 
+static void tx_isp_t30_ispcore_enable_lfb_channel(
+	struct tx_isp_t30_core_output_channel *chan)
+{
+	u32 base;
+
+	if (!chan || chan->state != TX_ISP_T30_MODULE_RUNNING ||
+	    !chan->pad || !(chan->pad->link.flag & BIT(5)) || chan->dma_state)
+		return;
+
+	base = 0xb00 + chan->index * 0x100;
+	switch (chan->fmt.pix.pixelformat) {
+	case V4L2_PIX_FMT_NV12:
+	case V4L2_PIX_FMT_NV21:
+		/* UV writer, followed by the Y writer through OEM fall-through. */
+		APICAL_WRITE_32(base + 0xa4, 0x02);
+		APICAL_WRITE_32(base + 0x24, 0x02);
+		chan->dma_state = 1;
+		break;
+	default:
+		APICAL_WRITE_32(base + 0x24, 0x02);
+		chan->dma_state = 1;
+		break;
+	}
+}
+
+static int tx_isp_t30_ispcore_interrupt(struct tx_isp_t30_subdev *sd)
+{
+	struct tx_isp_t30_core_video_view *core;
+	u32 irq_status;
+	u32 clear;
+	int ret = IRQ_HANDLED;
+
+	if (!sd || IS_ERR(sd))
+		return IRQ_HANDLED;
+	core = sd->dev_priv;
+	if (!core || IS_ERR(core))
+		return IRQ_HANDLED;
+
+	irq_status = APICAL_READ_32(0xa0) & 0xffff;
+	if (tx_isp_t30_irq_entry_trace_count++ < 8)
+		pr_err("tx-isp-t30: ISP IRQ entry sd=%p status=%04x ack=%08x\n",
+		       sd, irq_status, APICAL_READ_32(0xa4));
+	if (!irq_status) {
+		/*
+		 * The event-clear register is edge operated.  Core stream-on clears
+		 * all stale events with a 0 -> 0xffff transition, but the clear
+		 * inputs must then be returned to zero before a new event can latch.
+		 * The OEM ISR normally does that as part of acknowledging its first
+		 * pending event.  Arm it explicitly when the first IRQ races the
+		 * status latch, otherwise every subsequent event is suppressed.
+		 */
+		clear = APICAL_READ_32(0xa4) & 0xffff0000;
+		if (APICAL_READ_32(0xa4) & 0xffff)
+			APICAL_WRITE_32(0xa4, clear);
+		return IRQ_HANDLED;
+	}
+	clear = APICAL_READ_32(0xa4) & 0xffff0000;
+	APICAL_WRITE_32(0xa4, clear);
+	APICAL_WRITE_32(0xa4, clear | irq_status);
+	if (tx_isp_t30_irq_trace_count++ < 8)
+		pr_err("tx-isp-t30: ISP irq=%04x frame=%u sequence=%u\n",
+		       irq_status, core->frame_state, core->frame_sequence);
+
+	if (irq_status & BIT(7)) {
+		core->frame_state = 1;
+		core->frame_sequence++;
+		ret = IRQ_WAKE_THREAD;
+	}
+	if (irq_status & BIT(0)) {
+		core->frame_state = 0;
+		/*
+		 * OEM enables the FR writer from the first frame-end interrupt.
+		 * Omitting this leaves both writers at zero and starves LFB/NCU.
+		 */
+		if (core->channels && core->num_channels)
+			tx_isp_t30_ispcore_enable_lfb_channel(&core->channels[0]);
+		if (g_switch_lfb_off) {
+			isp_lfb_ctrl_flb_enable(0);
+			g_switch_lfb_off = 0;
+		}
+		if (g_switch_lfb_on) {
+			isp_lfb_ctrl_flb_enable(1);
+			g_switch_lfb_on = 0;
+		}
+	}
+
+	return ret;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000d4bc origin=fragment_seed original=ispcore_interrupt_service_routine */
 int32_t ispcore_interrupt_service_routine(uintptr_t a0)
 {
@@ -17672,6 +18869,8 @@ int32_t ispcore_interrupt_service_routine(uintptr_t a0)
     uintptr_t t0 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+
+	return tx_isp_t30_ispcore_interrupt((void *)a0);
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -18987,6 +20186,246 @@ int32_t system_program_interrupt_event(int32_t arg1, int32_t arg2)
     return APICAL_WRITE_32(addr, data);
 }
 
+static const u32 tx_isp_t30_param_crc_table[8] = {
+	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
+	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
+};
+
+static u32 tx_isp_t30_param_crc32(const u32 *words, u32 count)
+{
+	u32 crc = tx_isp_t30_param_crc_table[0];
+	u32 index;
+
+	for (index = 0; index < count; index++) {
+		crc ^= words[index];
+		crc ^= tx_isp_t30_param_crc_table[crc & 7];
+	}
+	return crc;
+}
+
+static bool tx_isp_t30_param_range_valid(const u8 *cursor, size_t bytes,
+					 const u8 *end)
+{
+	return cursor <= end && bytes <= (size_t)(end - cursor);
+}
+
+static void tx_isp_t30_discard_param_manager(void)
+{
+	struct tx_isp_t30_param_manager *param = tx_isp_t30_param_manager;
+
+	if (!param)
+		return;
+	init_tx_isp_customer_parameter(0);
+	kfree(param->data);
+	kfree(param->fw_data);
+	kfree(param);
+	tx_isp_t30_param_manager = NULL;
+}
+
+static struct tx_isp_t30_param_manager *
+tx_isp_t30_load_parameters(void *sensor_attr)
+{
+	struct tx_isp_t30_param_manager *param;
+	struct tx_isp_t30_calibrations *defaults;
+	struct tx_isp_t30_param_header *disk_header;
+	struct tx_isp_t30_lookup_table *disk_table;
+	struct tx_isp_t30_lookup_table *day;
+	struct tx_isp_t30_lookup_table *night;
+	const char *sensor_name;
+	struct file *file;
+	mm_segment_t old_fs;
+	loff_t pos = 0;
+	ssize_t read_bytes;
+	size_t file_size;
+	size_t table_bytes;
+	size_t fw_used = 0;
+	size_t fw_size;
+	u8 *cursor;
+	u8 *end;
+	u8 *base_end;
+	char file_name[64];
+	u32 index;
+
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_lookup_table) != 0x0c);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_calibrations) != 0x454);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_param_manager, isp_param) != 0x34);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_param_manager, param_table) != 0x8dc);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_param_manager) != 0x22e0);
+	if (!sensor_attr || IS_ERR(sensor_attr))
+		return NULL;
+	sensor_name = *(const char **)sensor_attr;
+	if (!sensor_name || IS_ERR(sensor_name))
+		return NULL;
+	if (tx_isp_t30_param_manager)
+		return tx_isp_t30_param_manager;
+
+	param = kzalloc(sizeof(*param), GFP_KERNEL);
+	if (!param)
+		return NULL;
+	strlcpy(param->version, "1.38", sizeof(param->version));
+	strlcpy(param->headers[0].flag, "header0",
+		 sizeof(param->headers[0].flag));
+	strlcpy(param->headers[1].flag, "header1",
+		 sizeof(param->headers[1].flag));
+	for (index = 0; index < TX_ISP_T30_CALIBRATION_COUNT; index++) {
+		param->isp_param[0].table[index] =
+			&param->param_table[index * 2];
+		param->isp_param[1].table[index] =
+			&param->param_table[index * 2 + 1];
+	}
+
+	memset(tmp_isp_param, 0, sizeof(tmp_isp_param));
+	get_dynamic_calibrations(tmp_isp_param);
+	get_static_calibrations(tmp_isp_param);
+	defaults = (struct tx_isp_t30_calibrations *)tmp_isp_param;
+
+	snprintf(file_name, sizeof(file_name), "/etc/sensor/%s.bin",
+		 sensor_name);
+	file = filp_open(file_name, O_RDONLY, 0);
+	if (IS_ERR(file)) {
+		pr_err("tx-isp-t30: cannot open calibration %s (%ld)\n",
+		       file_name, PTR_ERR(file));
+		goto failed_param;
+	}
+	file_size = file->f_dentry->d_inode->i_size;
+	if (file_size < sizeof(param->version) + sizeof(*disk_header)) {
+		pr_err("tx-isp-t30: calibration %s is truncated\n", file_name);
+		goto failed_file;
+	}
+	param->data = kmalloc(file_size, GFP_KERNEL);
+	if (!param->data)
+		goto failed_file;
+	param->data_size = file_size;
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	read_bytes = vfs_read(file, param->data, file_size, &pos);
+	set_fs(old_fs);
+	filp_close(file, NULL);
+	file = NULL;
+	if (read_bytes != file_size) {
+		pr_err("tx-isp-t30: calibration %s read %d of %u bytes\n",
+		       file_name, (int)read_bytes, (u32)file_size);
+		goto failed_param;
+	}
+
+	cursor = param->data;
+	end = cursor + file_size;
+	if (memcmp(cursor, param->version, sizeof(param->version))) {
+		pr_err("tx-isp-t30: calibration %s version mismatch\n",
+		       file_name);
+		goto failed_param;
+	}
+	cursor += sizeof(param->version);
+	disk_header = (struct tx_isp_t30_param_header *)cursor;
+	if (memcmp(disk_header->flag, param->headers[0].flag,
+		   sizeof(disk_header->flag)) ||
+	    disk_header->size & 3 ||
+	    !tx_isp_t30_param_range_valid(cursor + sizeof(*disk_header),
+					 disk_header->size, end)) {
+		pr_err("tx-isp-t30: calibration %s has invalid base header\n",
+		       file_name);
+		goto failed_param;
+	}
+	param->headers[0] = *disk_header;
+	cursor += sizeof(*disk_header);
+	base_end = cursor + disk_header->size;
+	if (tx_isp_t30_param_crc32((u32 *)cursor,
+				     disk_header->size / sizeof(u32)) !=
+	    disk_header->crc) {
+		pr_err("tx-isp-t30: calibration %s base CRC mismatch\n",
+		       file_name);
+		goto failed_param;
+	}
+	fw_size = disk_header->size / 2;
+	param->fw_data = kmalloc(fw_size, GFP_KERNEL);
+	if (!param->fw_data)
+		goto failed_param;
+	param->base_buf = cursor;
+
+	for (index = 0; index < TX_ISP_T30_CALIBRATION_COUNT; index++) {
+		if (!defaults->table[index] || !defaults->table[index]->ptr)
+			continue;
+		if (!tx_isp_t30_param_range_valid(cursor,
+						 sizeof(*disk_table), base_end))
+			goto invalid_tables;
+		disk_table = (struct tx_isp_t30_lookup_table *)cursor;
+		table_bytes = (size_t)disk_table->rows * disk_table->cols *
+			disk_table->width;
+		if (!tx_isp_t30_param_range_valid(cursor + sizeof(*disk_table),
+						 table_bytes, base_end) ||
+		    table_bytes > fw_size - fw_used)
+			goto invalid_tables;
+		day = param->isp_param[0].table[index];
+		day->ptr = cursor + sizeof(*disk_table);
+		day->rows = disk_table->rows;
+		day->cols = disk_table->cols;
+		day->width = disk_table->width;
+		defaults->table[index]->ptr = (u8 *)param->fw_data + fw_used;
+		defaults->table[index]->rows = day->rows;
+		defaults->table[index]->cols = day->cols;
+		defaults->table[index]->width = day->width;
+		memcpy(defaults->table[index]->ptr, day->ptr, table_bytes);
+		fw_used += table_bytes;
+		cursor += sizeof(*disk_table) + table_bytes;
+
+		if (!tx_isp_t30_param_range_valid(cursor,
+						 sizeof(*disk_table), base_end))
+			goto invalid_tables;
+		disk_table = (struct tx_isp_t30_lookup_table *)cursor;
+		if ((size_t)disk_table->rows * disk_table->cols *
+		    disk_table->width != table_bytes ||
+		    !tx_isp_t30_param_range_valid(cursor + sizeof(*disk_table),
+						 table_bytes, base_end))
+			goto invalid_tables;
+		night = param->isp_param[1].table[index];
+		night->ptr = cursor + sizeof(*disk_table);
+		night->rows = disk_table->rows;
+		night->cols = disk_table->cols;
+		night->width = disk_table->width;
+		cursor += sizeof(*disk_table) + table_bytes;
+	}
+	if (cursor != base_end)
+		pr_warn("tx-isp-t30: calibration base has %u unused bytes\n",
+			(u32)(base_end - cursor));
+	cursor = base_end;
+	if (!tx_isp_t30_param_range_valid(cursor, sizeof(*disk_header), end))
+		goto invalid_tables;
+	disk_header = (struct tx_isp_t30_param_header *)cursor;
+	if (memcmp(disk_header->flag, param->headers[1].flag,
+		   sizeof(disk_header->flag)) ||
+	    disk_header->size & 3 ||
+	    !tx_isp_t30_param_range_valid(cursor + sizeof(*disk_header),
+					 disk_header->size, end))
+		goto invalid_tables;
+	param->headers[1] = *disk_header;
+	cursor += sizeof(*disk_header);
+	if (disk_header->size) {
+		if (tx_isp_t30_param_crc32((u32 *)cursor,
+					     disk_header->size / sizeof(u32)) !=
+		    disk_header->crc)
+			goto invalid_tables;
+		param->customer_buf = cursor;
+		param->customer = cursor;
+	}
+	tx_isp_t30_param_manager = param;
+	init_tx_isp_customer_parameter((u32)(uintptr_t)param->customer);
+	pr_err("tx-isp-t30: loaded %s (%u bytes, %u table bytes)\n",
+	       file_name, (u32)file_size, (u32)fw_used);
+	return param;
+
+invalid_tables:
+	pr_err("tx-isp-t30: calibration %s table layout is invalid\n",
+	       file_name);
+failed_param:
+	kfree(param->data);
+	kfree(param->fw_data);
+	kfree(param);
+	return NULL;
+failed_file:
+	filp_close(file, NULL);
+	goto failed_param;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000e44c origin=model_output original=ispcore_core_ops_init */
 int32_t ispcore_core_ops_init(void *arg1, int32_t arg2)
 {
@@ -19025,9 +20464,13 @@ int32_t ispcore_core_ops_init(void *arg1, int32_t arg2)
 			return -EPERM;
 		}
 
-		*(void **)((char *)core + 0x19c) = (void *)(uintptr_t)
-			load_tx_isp_parameters(
-				(uintptr_t)*(void **)((char *)core + 0x120));
+		*(void **)((char *)core + 0x19c) =
+			tx_isp_t30_load_parameters(
+				*(void **)((char *)core + 0x120));
+		if (!*(void **)((char *)core + 0x19c)) {
+			pr_err("tx-isp-t30: ISP calibration load failed\n");
+			return -EINVAL;
+		}
 		apical_init();
 		system_program_interrupt_event(0xd, 50);
 		thread = kthread_run(isp_fw_process, NULL,
@@ -19221,7 +20664,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 			*(uint32_t *)((char *)pad_ptr + 0x1c) =
 				(uint32_t)ispcore_pad_event_handle;
 			*(uint32_t *)((char *)pad_ptr + 0x20) =
-				(uint32_t)((char *)ch_ptr - 0x1c);
+				(uint32_t)((char *)ch_ptr - 0x70);
 		} else {
 			*(uint32_t *)((char *)ch_ptr - 0x20) = 0;
 		}
@@ -19659,6 +21102,7 @@ uint32_t free_tx_isp_priv_param_manage(void)
 	uint32_t *manager_cursor = (uint32_t *)(void *)manager;
 	uint32_t *ptr;
 
+	tx_isp_t30_discard_param_manager();
 	ptr = *manager_cursor;
 	if (ptr) {
 		*(uint32_t *)((char *)ptr + 0x22d8) = 0;
@@ -19772,10 +21216,10 @@ load_tx_isp_parameters0xb0:
     v0 = (uintptr_t *)snprintf((const char *)(int32_t *)(s0 + 24), 8, "%s", ({ uintptr_t __regtrace_cstr = (uintptr_t)((const char *)(uintptr_t)&LC3); (const char *)(__regtrace_cstr ? __regtrace_cstr : (uintptr_t)"<null>"); })); /* jalr target resolved by relocation */
 
     /* fragment 16: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)get_dynamic_calibrations)(&vic_cmd_buf); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)get_dynamic_calibrations)((int32_t *)tmp_isp_param); /* jalr target resolved by relocation */
 
     /* fragment 17: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)get_static_calibrations)(&vic_cmd_buf); /* jalr target resolved by relocation */
+    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)get_static_calibrations)((int32_t *)tmp_isp_param); /* jalr target resolved by relocation */
 
     /* fragment 18: Arithmetic */
     v1 = s0 + 2268;
@@ -20066,8 +21510,7 @@ load_tx_isp_parameters0x458:
 
     /* fragment 85: MemoryAccess */
     s0 = *(uint32_t *)((char *)((char *)&manager));
-    s7 = (uintptr_t)&vic_cmd_buf;
-    s7 = s7 + 5664;
+    s7 = (uintptr_t)tmp_isp_param;
     a3 = (uint32_t *)&memcpy;
     s8 = *(uint32_t *)((char *)s0 + 48);
     *(uint32_t *)((char *)s0 + 8916) = v1;
@@ -20853,19 +22296,7 @@ int32_t init_tx_isp_customer_parameter(uint32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000106bc origin=fragment_seed original=apical_custom_sequence */
 int32_t apical_custom_sequence(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&tx_isp_platform_device;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v0 = v0 - 27008;
-
-    return 0;
+	return (int32_t)(uintptr_t)tx_isp_t30_isp_sequence;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000106d0 origin=model_output original=init_sensor_interface */
@@ -22809,94 +24240,11 @@ void tx_isp_free_irq(struct tx_isp_t30_irq_device *irqdev)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012330 origin=fragment_seed original=ncu_core_ops_ioctl */
-int64_t ncu_core_ops_ioctl(uintptr_t a0, uint32_t a1)
+int32_t ncu_core_ops_ioctl(void *subdev, uint32_t event, void *data)
 {
-    uint32_t local_14 = 0;
-    uintptr_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	int ret = tx_isp_t30_ispcore_call_core_event(subdev, event, data);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v1 = 16777216;
-
-    /* fragment 2: Branch */
-    if (a1 == v1) { goto ncu_core_ops_ioctl0x6c; }
-
-    /* fragment 3: Arithmetic */
-    v1 = v1 + 1;
-
-    /* fragment 4: Branch */
-    v0 = 0;
-    if (a1 != v1) { goto ncu_core_ops_ioctl0x24; }
-
-    /* fragment 5: Branch */
-    v0 = -19;
-    if (a0 != 0) { goto ncu_core_ops_ioctl0x30; }
-
-ncu_core_ops_ioctl0x24:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-ncu_core_ops_ioctl0x30:
-    /* fragment 7: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 196);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 8: Branch */
-    if (v0 != 0) { goto ncu_core_ops_ioctl0x48; }
-
-ncu_core_ops_ioctl0x40:
-    /* fragment 9: Branch */
-    v0 = 0;
-    goto ncu_core_ops_ioctl0x24;
-
-ncu_core_ops_ioctl0x48:
-    /* fragment 10: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 11: Branch */
-    a1 = a2;
-    if (v0 == 0) { goto ncu_core_ops_ioctl0x40; }
-
-ncu_core_ops_ioctl0x54:
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_release_device)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 13: Arithmetic */
-    v1 = -515;
-    v1 = (uintptr_t)v0 ^ v1;
-
-    /* fragment 14: Branch */
-    goto ncu_core_ops_ioctl0x24;
-
-ncu_core_ops_ioctl0x6c:
-    /* fragment 15: Branch */
-    v0 = -19;
-    if (a0 == 0) { goto ncu_core_ops_ioctl0x24; }
-
-    /* fragment 16: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 196);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 17: Branch */
-    if (v0 == 0) { goto ncu_core_ops_ioctl0x40; }
-
-    /* fragment 18: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 19: Branch */
-    if (v0 == 0) { goto ncu_core_ops_ioctl0x40; }
-
-    /* fragment 20: Branch */
-    a1 = *(uint32_t *)((char *)(a2) + 0);
-    goto ncu_core_ops_ioctl0x54;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000123c8 origin=fragment_seed original=ncu_link_setup */
@@ -23038,79 +24386,79 @@ out:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001264c origin=model_output original=ncu_frame_channel_streamoff */
 int32_t ncu_frame_channel_streamoff(void *arg1)
 {
-    int *i = 0;
-    if (*(uint8_t *)((char *)arg1 + 5) != 2)
-        return 0;
+	struct tx_isp_t30_subdev_pad *pad = arg1;
+	struct tx_isp_t30_subdev_pad *inpad;
+	struct tx_isp_t30_ncu_device *ncu;
+	struct tx_isp_t30_irq_device *irqdev;
+	unsigned long flags;
+	unsigned int loop = 200;
+	int index;
+	int ret = 0;
 
-    void *s0 = *(void **)((char *)arg1 + 0x20);
-    void *s3 = *(void **)((char *)s0 + 0xd0);
-    void *s2 = arg1;
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_ncu_device) != 0x1d0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, state) != 0x174);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, slock) != 0x1a8);
+	if (!pad || IS_ERR(pad) || pad->type != TX_ISP_ABI_PADTYPE_OUTPUT)
+		return 0;
+	ncu = pad->priv;
+	if (!ncu || IS_ERR(ncu) || pad->sd != &ncu->sd ||
+	    !ncu->sd.inpads || IS_ERR(ncu->sd.inpads) || !ncu->sd.base)
+		return -EINVAL;
+	inpad = ncu->sd.inpads;
+	irqdev = &ncu->sd.irqdev;
 
-    private_mutex_lock((struct mutex *)((char *)s0 + 0x1a8));
+	if (tx_isp_t30_streamoff_trace_count < 12)
+		pr_err("tx-isp-t30: NCU streamoff entry irqs=%d\n",
+		       irqs_disabled());
+	private_mutex_lock(&ncu->mlock);
+	if (inpad->state != TX_ISP_ABI_PADSTATE_STREAM ||
+	    pad->state != TX_ISP_ABI_PADSTATE_STREAM)
+		goto out_unlock;
 
-    uint8_t s3_state = *(uint8_t *)((char *)s3 + 7);
+	spin_lock_irqsave(&ncu->slock, flags);
+	ncu->state = 3;
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_STOP, 0, 0, 1);
+	spin_unlock_irqrestore(&ncu->slock, flags);
 
-    if (s3_state == 4 && *(uint8_t *)((char *)s2 + 7) == s3_state) {
-        unsigned long flags = arch_local_irq_save();
-        *(uint32_t *)(entry_gp + 0x14) += 1;
-        *(uint32_t *)((char *)s0 + 0x174) = 3;
-        tx_isp_reg_set(s0, 8, 0, 0, 1);
-        private_spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 0x1a8), flags);
+	while (!(readl((u8 __iomem *)ncu->sd.base + TX_ISP_T30_NCU_START) &
+		 BIT(16)) && loop--)
+		msleep(2);
+	if (inpad->link.flag & BIT(4))
+		tx_isp_send_event_to_remote(inpad,
+					TX_ISP_T30_FRAME_EVENT_FREE_BUFFER, NULL);
+	if (ncu->ref_frame_addr) {
+		isp_free_buffer(ncu->ref_frame_addr);
+		ncu->ref_frame_addr = 0;
+	}
 
-        int32_t s7 = 0xc9;
-        while (1) {
-            s7 -= 1;
-            if ((*(*(uint32_t **)((uintptr_t)s0 + 0xb8) + 1) & 0x10000) != 0)
-                break;
-            if (s7 == 0)
-                break;
-            msleep(2);
-        }
+	if (tx_isp_t30_streamoff_trace_count < 12)
+		pr_err("tx-isp-t30: NCU remote streamoff irqs=%d\n",
+		       irqs_disabled());
+	ret = tx_isp_send_event_to_remote(inpad,
+					  TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
+	if (ret && ret != -ENOIOCTLCMD)
+		goto out_unlock;
 
-        if (*(uint32_t *)((uintptr_t)s3 + 0x14) & 0x10)
-            ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s3), (uintptr_t)(TX_ISP_T30_FRAME_EVENT_FREE_BUFFER), (uintptr_t)(0));
+	if (ncu->num_inbufs) {
+		if (ncu->buf_addr)
+			isp_free_buffer(ncu->buf_addr);
+		for (index = 0; index < ncu->num_inbufs; index++) {
+			INIT_LIST_HEAD(&ncu->inbufs[index].entry);
+			ncu->inbufs[index].addr = 0;
+		}
+		ncu->buf_addr = 0;
+	}
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_INT_CONTROL, 0, 0, 0);
+	if (irqdev->irq && irqdev->disable_irq)
+		irqdev->disable_irq(irqdev);
+	spin_lock_irqsave(&ncu->slock, flags);
+	inpad->state = TX_ISP_ABI_PADSTATE_LINKED;
+	pad->state = TX_ISP_ABI_PADSTATE_LINKED;
+	spin_unlock_irqrestore(&ncu->slock, flags);
 
-        uint32_t buf = *(uint32_t *)((char *)s0 + 0x1a4);
-        if (buf != 0) {
-            isp_free_buffer(buf);
-            *(uint32_t *)((char *)s0 + 0x1a4) = 0;
-        }
-
-        int32_t result = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(s3), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
-
-        if (result != 0 && result != 0xfffffdfd) {
-            private_mutex_unlock((struct mutex *)((char *)s0 + 0x1a8));
-            return result;
-        }
-
-        if (*(uint32_t *)((char *)s0 + 0x190) != 0) {
-            isp_free_buffer(*(uint32_t *)((char *)s0 + 0x18c));
-            int32_t *i = 0;
-            while (i < *(uint32_t *)((char *)s0 + 0x190)) {
-                uint32_t offset = (uintptr_t)i << 4;
-                uint32_t *ptr = 0;
-                i = (void *)(uintptr_t)((uintptr_t)i + (1));
-                *ptr = (uint32_t)ptr;
-                ((uint32_t *)ptr)[1] = (uint32_t)ptr;
-                *(uint32_t *)((char *)&_qlock2) = 0;
-            }
-            *(uint32_t *)((char *)s0 + 0x18c) = 0;
-        }
-
-        tx_isp_reg_set(s0, 0x10, 0, 0, 0);
-
-        if (*(uint32_t *)((char *)s0 + 0x80) != 0)
-            ((void (*)(void *))(*(uint32_t *)((char *)s0 + 0x88)))((void *)((char *)s0 + 0x80));
-
-        flags = arch_local_irq_save();
-        *(uint32_t *)(entry_gp + 0x14) += 1;
-        *(uint8_t *)((char *)s3 + 7) = 3;
-        *(uint8_t *)((char *)s2 + 7) = 3;
-        private_spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 0x1a8), flags);
-    }
-
-    private_mutex_unlock((struct mutex *)((char *)s0 + 0x1a8));
-    return 0;
+out_unlock:
+	private_mutex_unlock(&ncu->mlock);
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000128e0 origin=model_output original=ncu_core_ops_init */
@@ -23139,8 +24487,7 @@ int32_t ncu_core_ops_init(void *arg1, int32_t arg2)
 	if (arg2 == 0) {
 		if (state == 4)
 			ncu_frame_channel_streamoff(*(void **)((char *)arg1 + 0xcc));
-		flags = arch_local_irq_save();
-		*(int32_t *)(entry_gp + 0x14) += 1;
+		spin_lock_irqsave((spinlock_t *)((char *)s1 + 0x1a8), flags);
 		*(int32_t *)((char *)s1 + 0x174) = 2;
 		private_spin_unlock_irqrestore((spinlock_t *)((char *)s1 + 0x1a8), flags);
 		return result;
@@ -23153,8 +24500,7 @@ int32_t ncu_core_ops_init(void *arg1, int32_t arg2)
 		return -EINVAL;
 	}
 
-	flags = arch_local_irq_save();
-	*(int32_t *)(entry_gp + 0x14) += 1;
+	spin_lock_irqsave((spinlock_t *)((char *)s1 + 0x1a8), flags);
 	state = *(int32_t *)((char *)s1 + 0x174);
 	if (state == 2) {
 		*(int32_t *)((char *)s1 + 0x174) = 3;
@@ -23170,27 +24516,26 @@ int32_t ncu_core_ops_init(void *arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012a58 origin=model_output original=tx_isp_ncu_probe */
 int tx_isp_ncu_probe(struct platform_device *pdev)
 {
-	void *ncu_dev;
+	struct tx_isp_t30_ncu_device *ncu_dev;
+	struct tx_isp_t30_subdev *sd;
 	int ret;
-	int m2_bufs;
-	void *m2_buf;
-	int *i;
-	uint32_t *list_head;
-	uint32_t *buf_entry;
+	int i;
 	uint8_t *ver;
-	uint32_t *pad1;
-	uint32_t *pad2;
-	uint32_t *pad3;
-	uint32_t *pad4;
 
-	/* OEM kzalloc(sizeof(struct tx_isp_ncu_device)): 0x1d0 bytes. */
-	ncu_dev = kzalloc(0x1d0, GFP_KERNEL);
+	BUILD_BUG_ON(sizeof(*ncu_dev) != 0x1d0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, fmt) != 0x124);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, uv_offset) != 0x170);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, state) != 0x174);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, mlock) != 0x1a8);
+
+	ncu_dev = kzalloc(sizeof(*ncu_dev), GFP_KERNEL);
 	if (!ncu_dev) {
 		isp_printf(2, "Failed to allocate sensor device\n", 0);
 		return -ENOMEM;
 	}
+	sd = &ncu_dev->sd;
 
-	ret = tx_isp_subdev_init(pdev, ncu_dev, &ncu_subdev_ops);
+	ret = tx_isp_subdev_init(pdev, sd, &ncu_subdev_ops);
 	if (ret) {
 		ver = (uint8_t *)pdev->dev.driver;
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("Failed to init isp module(%d.%d)\n"), (uintptr_t)(ver[2]), (uintptr_t)(ver[3]));
@@ -23198,63 +24543,48 @@ int tx_isp_ncu_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	m2_bufs = isp_m2_bufs;
-	*(int *)((char *)ncu_dev + 0x190) = m2_bufs;
-
-	if (m2_bufs) {
-		m2_buf = __kmalloc(m2_bufs << 4, GFP_KERNEL);
-		*(uint32_t *)((char *)ncu_dev + 0x188) = (uint32_t)m2_buf;
-		if (m2_buf) {
-			for (i = 0; i < m2_bufs; i++) {
-				buf_entry = (uint32_t *)((uintptr_t)m2_buf + ((uintptr_t)i << 4));
-				((uint32_t *)buf_entry)[0] = (uint32_t)buf_entry;
-				((uint32_t *)buf_entry)[1] = (uint32_t)buf_entry;
-				*(uint32_t *)((char *)buf_entry + 0xc) = (uint32_t)ncu_dev;
-			}
-			list_head = (uint32_t *)((char *)ncu_dev + 0x194);
-		} else {
+	ncu_dev->num_inbufs = isp_m2_bufs;
+	if (ncu_dev->num_inbufs) {
+		ncu_dev->inbufs = kcalloc(ncu_dev->num_inbufs,
+					 sizeof(*ncu_dev->inbufs), GFP_KERNEL);
+		if (!ncu_dev->inbufs) {
 			isp_printf(2, "Can't alloc memory!\n", 0);
 			ret = -ENOMEM;
-			tx_isp_subdev_deinit(ncu_dev);
-			kfree(ncu_dev);
-			return ret;
+			goto failed;
 		}
-	} else {
-		list_head = (uint32_t *)((char *)ncu_dev + 0x194);
+		for (i = 0; i < ncu_dev->num_inbufs; i++) {
+			INIT_LIST_HEAD(&ncu_dev->inbufs[i].entry);
+			ncu_dev->inbufs[i].priv = (u32)ncu_dev;
+		}
 	}
+	INIT_LIST_HEAD(&ncu_dev->infifo);
+	spin_lock_init(&ncu_dev->slock);
+	mutex_init(&ncu_dev->mlock);
+	ncu_dev->pdata = pdev->dev.platform_data;
 
-	*(uint32_t *)((char *)ncu_dev + 0x194) = list_head;
-	*(uint32_t *)((char *)ncu_dev + 0x198) = list_head;
-	__mutex_init((struct mutex *)((char *)ncu_dev + 0x1a8), "(&ncu_dev->mlock)", &ncu_mlock_key);
-	*(uint32_t *)((char *)ncu_dev + 0x184) = (uint32_t)pdev->dev.driver;
-
-	pad1 = *(uint16_t *)((char *)ncu_dev + 0xca);
-	if (pad1) {
-		pad2 = *(uint32_t *)((char *)ncu_dev + 0xd0);
-		*(uint32_t *)((char *)pad2 + 0x1c) = (uint32_t)ncu_pad_event_handle;
-		*(uint32_t *)((char *)pad2 + 0x20) = (uint32_t)ncu_dev;
-	}
-
-	pad3 = *(uint16_t *)((char *)ncu_dev + 0xc8);
-	if (!pad1 || !pad3) {
+	if (!sd->num_inpads || !sd->num_outpads ||
+	    !sd->inpads || !sd->outpads) {
 		ret = -ENODEV;
-		tx_isp_subdev_deinit(ncu_dev);
-		kfree(ncu_dev);
-		return ret;
+		goto failed;
 	}
+	sd->inpads->event = ncu_pad_event_handle;
+	sd->inpads->priv = ncu_dev;
+	sd->outpads->event = ncu_pad_event_handle;
+	sd->outpads->priv = ncu_dev;
 
-	pad4 = *(uint32_t *)((char *)ncu_dev + 0xcc);
-	*(uint32_t *)((char *)pad4 + 0x1c) = (uint32_t)ncu_pad_event_handle;
-	*(uint32_t *)((char *)pad4 + 0x20) = (uint32_t)ncu_dev;
-
-	private_init_completion((struct completion *)((char *)ncu_dev + 0x178));
-	*(int *)((char *)ncu_dev + 0x174) = 1;
-	private_platform_set_drvdata(pdev, ncu_dev);
-	*(uint32_t *)((char *)ncu_dev + 0x34) = (uint32_t)&ncu_proc_fops;
-	*(uint32_t *)((char *)ncu_dev + 0xd4) = (uint32_t)ncu_dev;
+	private_init_completion(&ncu_dev->stop_comp);
+	ncu_dev->state = 1;
+	private_platform_set_drvdata(pdev, &sd->module);
+	sd->module.debug_ops = &ncu_proc_fops;
+	sd->dev_priv = ncu_dev;
 	g_ncu = ncu_dev;
-
 	return 0;
+
+failed:
+	kfree(ncu_dev->inbufs);
+	tx_isp_subdev_deinit(sd);
+	kfree(ncu_dev);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012c90 origin=model_output original=ncu_sync_sensor_attr */
@@ -23422,7 +24752,195 @@ static int ncu_activate_module_raw(void *arg1)
     *(int *)((char *)s0 + 0x174) = 2;
     private_spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 0x1a8), flags);
 
-    return 0;
+	return 0;
+}
+
+static int tx_isp_t30_ncu_get_format(struct tx_isp_t30_subdev_pad *pad,
+				     void *data)
+{
+	struct tx_isp_t30_ncu_device *ncu;
+
+	if (!pad || IS_ERR(pad) || !data || IS_ERR(data))
+		return -EINVAL;
+	ncu = pad->priv;
+	if (!ncu || IS_ERR(ncu))
+		return -EINVAL;
+	memcpy(data, &ncu->fmt, sizeof(ncu->fmt));
+	return 0;
+}
+
+static int tx_isp_t30_ncu_set_format(struct tx_isp_t30_subdev_pad *pad,
+				     void *data)
+{
+	struct tx_isp_t30_frame_image_format *fmt = data;
+	struct tx_isp_t30_ncu_device *ncu;
+	int ret;
+
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_frame_image_format) != 0x4c);
+	if (!pad || IS_ERR(pad) || !fmt || IS_ERR(fmt))
+		return -EINVAL;
+	ncu = pad->priv;
+	if (!ncu || IS_ERR(ncu) || pad->sd != &ncu->sd)
+		return -EINVAL;
+	if (pad->type == TX_ISP_ABI_PADTYPE_UNDEFINED)
+		return -EPERM;
+	if (pad->type != TX_ISP_ABI_PADTYPE_OUTPUT)
+		return 0;
+	if (fmt->pix.pixelformat != V4L2_PIX_FMT_NV12 &&
+	    fmt->pix.pixelformat != V4L2_PIX_FMT_NV21) {
+		pr_err("tx-isp-t30: NCU rejects format %08x\n",
+		       fmt->pix.pixelformat);
+		return -EINVAL;
+	}
+	ret = tx_isp_send_event_to_remote(ncu->sd.inpads,
+					  TX_ISP_FRAME_EVENT_SET_FORMAT, fmt);
+	if (ret && ret != -ENOIOCTLCMD)
+		return ret;
+	if (fmt->pix.width > ncu->vin_max_width ||
+	    fmt->pix.height > ncu->vin_max_height) {
+		pr_err("tx-isp-t30: NCU resolution %ux%u exceeds sensor %ux%u\n",
+		       fmt->pix.width, fmt->pix.height,
+		       ncu->vin_max_width, ncu->vin_max_height);
+		return -EINVAL;
+	}
+	memcpy(&ncu->fmt, fmt, sizeof(ncu->fmt));
+	ncu->uv_offset = ncu->fmt.pix.width * ncu->fmt.pix.height;
+	pr_err("tx-isp-t30: NCU format %ux%u fourcc=%08x\n",
+	       ncu->fmt.pix.width, ncu->fmt.pix.height,
+	       ncu->fmt.pix.pixelformat);
+	return 0;
+}
+
+static void tx_isp_t30_ncu_writel(struct tx_isp_t30_ncu_device *ncu,
+				  u32 reg, u32 value)
+{
+	writel(value, (u8 __iomem *)ncu->sd.base + reg);
+}
+
+static int tx_isp_t30_ncu_stream_on(struct tx_isp_t30_subdev_pad *pad)
+{
+	struct tx_isp_t30_ncu_device *ncu;
+	struct tx_isp_t30_subdev_pad *inpad;
+	struct tx_isp_t30_irq_device *irqdev;
+	unsigned long flags;
+	u32 control = 0;
+	u32 addr = 0;
+	int index;
+	int ret = 0;
+
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_ncu_device) != 0x1d0);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, fmt) != 0x124);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ncu_device, mlock) != 0x1a8);
+	if (!pad || IS_ERR(pad))
+		return -EINVAL;
+	ncu = pad->priv;
+	if (!ncu || IS_ERR(ncu) || pad->sd != &ncu->sd ||
+	    !ncu->sd.inpads || IS_ERR(ncu->sd.inpads) || !ncu->sd.base)
+		return -EINVAL;
+	if (pad->type != TX_ISP_ABI_PADTYPE_OUTPUT)
+		return 0;
+	inpad = ncu->sd.inpads;
+	irqdev = &ncu->sd.irqdev;
+
+	private_mutex_lock(&ncu->mlock);
+	if (inpad->state != TX_ISP_ABI_PADSTATE_LINKED ||
+	    pad->state != TX_ISP_ABI_PADSTATE_LINKED) {
+		pr_err("tx-isp-t30: NCU stream requires linked pads (in=%u out=%u)\n",
+		       inpad->state, pad->state);
+		ret = -EPERM;
+		goto out_unlock;
+	}
+	if (pad->link.flag & BIT(4)) {
+		pr_err("tx-isp-t30: NCU output link must be LFB\n");
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_Y_CURRENT_STRIDE,
+				ncu->fmt.pix.width);
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_UV_CURRENT_STRIDE,
+				ncu->fmt.pix.width);
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_Y_REFERENCE0_STRIDE,
+				ncu->fmt.pix.width);
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_UV_REFERENCE0_STRIDE,
+				ncu->fmt.pix.width);
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_Y_REFERENCE1_STRIDE,
+				ncu->fmt.pix.width);
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_UV_REFERENCE1_STRIDE,
+				ncu->fmt.pix.width);
+
+	if (inpad->link.flag & BIT(4)) {
+		if (!ncu->num_inbufs || !ncu->inbufs) {
+			pr_err("tx-isp-t30: NCU DDR input has no isp_m2 buffers\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+		addr = isp_malloc_buffer(ncu->fmt.pix.sizeimage *
+					 ncu->num_inbufs);
+		if (!addr) {
+			ret = -ENOMEM;
+			goto out_unlock;
+		}
+		for (index = 0; index < ncu->num_inbufs; index++) {
+			INIT_LIST_HEAD(&ncu->inbufs[index].entry);
+			ncu->inbufs[index].addr = addr +
+				index * ncu->fmt.pix.sizeimage;
+			ret = tx_isp_send_event_to_remote(inpad,
+					TX_ISP_FRAME_EVENT_QUEUE_BUFFER,
+					&ncu->inbufs[index]);
+			if (ret && ret != -ENOIOCTLCMD)
+				goto failed_buffers;
+		}
+		ncu->buf_addr = addr;
+		control |= BIT(4);
+	}
+
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_RESET, 0, 0, 0);
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_FUNCTION_CONTROL,
+			   0, 7, control);
+	tx_isp_t30_ncu_writel(ncu, TX_ISP_T30_NCU_FRAME_SIZE,
+				(ncu->fmt.pix.height << 16) |
+				ncu->fmt.pix.width);
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_STOP, 0, 0, 0);
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_START, 1, 1, 1);
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_INT_CONTROL, 0, 0, 1);
+	tx_isp_reg_set(&ncu->sd, TX_ISP_T30_NCU_SREG_CONTROL, 0, 0, 1);
+	if (irqdev->irq && irqdev->enable_irq)
+		irqdev->enable_irq(irqdev);
+
+	ret = tx_isp_send_event_to_remote(inpad,
+					  TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
+	if (ret && ret != -ENOIOCTLCMD)
+		goto failed_stream;
+
+	spin_lock_irqsave(&ncu->slock, flags);
+	inpad->state = TX_ISP_ABI_PADSTATE_STREAM;
+	pad->state = TX_ISP_ABI_PADSTATE_STREAM;
+	ncu->state = 4;
+	ncu->ms_flag = 0;
+	ncu->start_cnt = 0;
+	ncu->done_cnt = 0;
+	ncu->reset_cnt = 0;
+	spin_unlock_irqrestore(&ncu->slock, flags);
+	pr_err("tx-isp-t30: NCU stream running %ux%u input=%08x output=%08x\n",
+	       ncu->fmt.pix.width, ncu->fmt.pix.height,
+	       inpad->link.flag, pad->link.flag);
+	private_mutex_unlock(&ncu->mlock);
+	return 0;
+
+failed_stream:
+	if (irqdev->irq && irqdev->disable_irq)
+		irqdev->disable_irq(irqdev);
+failed_buffers:
+	if (addr) {
+		tx_isp_send_event_to_remote(inpad,
+					TX_ISP_T30_FRAME_EVENT_FREE_BUFFER, NULL);
+		isp_free_buffer(addr);
+		ncu->buf_addr = 0;
+	}
+out_unlock:
+	private_mutex_unlock(&ncu->mlock);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000012f1c origin=fragment_seed original=ncu_pad_event_handle */
@@ -23458,6 +24976,13 @@ int64_t ncu_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
 
+	if (a1 == TX_ISP_FRAME_EVENT_GET_FORMAT)
+		return tx_isp_t30_ncu_get_format((void *)a0, (void *)a2);
+	if (a1 == TX_ISP_FRAME_EVENT_SET_FORMAT)
+		return tx_isp_t30_ncu_set_format((void *)a0, (void *)a2);
+	if (a1 == TX_ISP_FRAME_EVENT_STREAM_ON)
+		return tx_isp_t30_ncu_stream_on((void *)a0);
+
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
 
@@ -23465,13 +24990,11 @@ int64_t ncu_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
     v1 = *(uint8_t *)((char *)a0 + 5);
 
     /* fragment 2: Branch */
-    v0 = 4244570112;
     if (v1 == 0) { goto ncu_pad_event_handle0x70; }
 
-    /* fragment 3: Arithmetic */
-    v0 = (uintptr_t)v0 | 65535;
-    a1 = a1 + (uintptr_t)v0;
-    v0 = a1 < 6;
+    /* Normalize the six contiguous frame-channel events. */
+    a1 -= TX_ISP_FRAME_EVENT_GET_FORMAT;
+    v0 = (uintptr_t *)(a1 < 6);
 
     /* fragment 4: Branch */
     int _bc_v0_4 = v0 == 0;
@@ -23480,12 +25003,8 @@ int64_t ncu_pad_event_handle(uintptr_t a0, uint32_t a1, uintptr_t a2)
 
     /* fragment 5: Arithmetic */
     a1 = a1 << 2;
-    v0 = v0 + 2256;
-    v0 = v0 + a1;
     s1 = a0;
-
-    /* fragment 6: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 0);
+	s3 = (uintptr_t *)a2;
 
     /* fragment 7: IndirectTailCall */
     switch (a1) {
@@ -24327,94 +25846,11 @@ tx_isp_sync_ncu0x78:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013950 origin=fragment_seed original=ldc_core_ops_ioctl */
-int64_t ldc_core_ops_ioctl(uintptr_t a0, uint32_t a1)
+int32_t ldc_core_ops_ioctl(void *subdev, uint32_t event, void *data)
 {
-    uint32_t local_14 = 0;
-    uintptr_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	int ret = tx_isp_t30_ispcore_call_core_event(subdev, event, data);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: Arithmetic */
-    v1 = 16777216;
-
-    /* fragment 2: Branch */
-    if (a1 == v1) { goto ldc_core_ops_ioctl0x6c; }
-
-    /* fragment 3: Arithmetic */
-    v1 = v1 + 1;
-
-    /* fragment 4: Branch */
-    v0 = 0;
-    if (a1 != v1) { goto ldc_core_ops_ioctl0x24; }
-
-    /* fragment 5: Branch */
-    v0 = -19;
-    if (a0 != 0) { goto ldc_core_ops_ioctl0x30; }
-
-ldc_core_ops_ioctl0x24:
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int64_t)v0;
-
-ldc_core_ops_ioctl0x30:
-    /* fragment 7: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 196);
-    v0 = *(uint32_t *)((char *)v0 + 12);
-
-    /* fragment 8: Branch */
-    if (v0 != 0) { goto ldc_core_ops_ioctl0x48; }
-
-ldc_core_ops_ioctl0x40:
-    /* fragment 9: Branch */
-    v0 = 0;
-    goto ldc_core_ops_ioctl0x24;
-
-ldc_core_ops_ioctl0x48:
-    /* fragment 10: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 11: Branch */
-    a1 = a2;
-    if (v0 == 0) { goto ldc_core_ops_ioctl0x40; }
-
-ldc_core_ops_ioctl0x54:
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_release_device)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 13: Arithmetic */
-    v1 = -515;
-    v1 = (uintptr_t)v0 ^ v1;
-
-    /* fragment 14: Branch */
-    goto ldc_core_ops_ioctl0x24;
-
-ldc_core_ops_ioctl0x6c:
-    /* fragment 15: Branch */
-    v0 = -19;
-    if (a0 == 0) { goto ldc_core_ops_ioctl0x24; }
-
-    /* fragment 16: MemoryAccess */
-    v0 = *(uint32_t *)((char *)a0 + 196);
-    v0 = *(uint32_t *)((char *)v0 + 0);
-
-    /* fragment 17: Branch */
-    if (v0 == 0) { goto ldc_core_ops_ioctl0x40; }
-
-    /* fragment 18: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v0 + 4);
-
-    /* fragment 19: Branch */
-    if (v0 == 0) { goto ldc_core_ops_ioctl0x40; }
-
-    /* fragment 20: Branch */
-    a1 = *(uint32_t *)((char *)(a2) + 0);
-    goto ldc_core_ops_ioctl0x54;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	return ret == -ENOIOCTLCMD ? 0 : ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000139e8 origin=fragment_seed original=ldc_link_setup */
@@ -24641,6 +26077,7 @@ int ldc_frame_channel_streamoff(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013f0c origin=fragment_seed original=ldc_core_ops_init */
 int64_t ldc_core_ops_init(uintptr_t a0, uint32_t a1)
 {
+	unsigned long irq_flags;
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     char local_18[64];
@@ -24722,7 +26159,7 @@ ldc_core_ops_init0xb4:
 ldc_core_ops_init0xb8:
     /* fragment 15: Epilogue */
     /* function epilogue: restore registers and return */
-    return (int64_t)v0;
+    return (int64_t)(int32_t)(uintptr_t)s2;
 
 ldc_core_ops_init0xbc:
     /* fragment 16: Epilogue */
@@ -24798,17 +26235,12 @@ ldc_core_ops_init0xe4:
 
 ldc_core_ops_init0x1cc:
     /* fragment 33: CallSetup */
-    v0 = (uintptr_t *)&arch_local_irq_save;
 
 ldc_core_ops_init0x1d0:
     /* fragment 34: CallSetup */
-    v0 = (uintptr_t *)arch_local_irq_save(); /* jalr target resolved by relocation */
+    spin_lock_irqsave((spinlock_t *)((char *)s0 + 476), irq_flags);
 
     /* fragment 35: MemoryAccess */
-    v1 = *(uint32_t *)((char *)&sp_9007);
-    a1 = v0;
-    v1 = v1 + 1;
-    *(uint32_t *)((char *)&sp_9007) = v1;
     a2 = *(uint32_t *)((char *)s0 + 376);
     v1 = (uintptr_t)&private_spin_unlock_irqrestore;
     v0 = 2;
@@ -24820,7 +26252,7 @@ ldc_core_ops_init0x1d0:
 
     /* fragment 37: CallSetup */
     s2 = -1;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_spin_unlock_irqrestore)(a0); /* jalr target resolved by relocation */
+    private_spin_unlock_irqrestore((spinlock_t *)a0, irq_flags);
 
     /* fragment 38: CallSetup */
     v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)isp_printf)(2, &LC18, *(uint32_t *)((char *)(s0) + 376)); /* jalr target resolved by relocation */
@@ -24920,7 +26352,7 @@ ldc_core_ops_init0x324:
 ldc_core_ops_init0x354:
     /* fragment 59: CallSetup */
     *(uint32_t *)((char *)s0 + 376) = 3;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_spin_unlock_irqrestore)(a0); /* jalr target resolved by relocation */
+    private_spin_unlock_irqrestore((spinlock_t *)a0, irq_flags);
 
     /* fragment 60: Branch */
     goto ldc_core_ops_init0xbc;
@@ -24939,12 +26371,12 @@ ldc_core_ops_init0x368:
 
 ldc_core_ops_init0x380:
     /* fragment 64: CallSetup */
-    v0 = (uintptr_t *)arch_local_irq_save(); /* jalr target resolved by relocation */
+    spin_lock_irqsave((spinlock_t *)((char *)s0 + 476), irq_flags);
 
     /* fragment 65: CallSetup */
-    *(uint32_t *)((char *)&sp_9007) = ((*(uint32_t *)((char *)(gp) + 20)) + 1);
     *(uint32_t *)((char *)s0 + 376) = 2;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)private_spin_unlock_irqrestore)(s0 + 476, v0); /* jalr target resolved by relocation */
+    private_spin_unlock_irqrestore((spinlock_t *)((char *)s0 + 476),
+					   irq_flags);
 
     /* fragment 66: Branch */
     s2 = 0;
@@ -25977,182 +27409,146 @@ int32_t mscaler_link_setup(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000015790 origin=model_output original=mscaler_video_s_stream */
 int mscaler_video_s_stream(void *arg1, int enable)
 {
-    int *i = 0;
-	void *s0 = *(void **)((char *)arg1 + 0xd4);
-	void *s3 = arg1;
-	void *s5 = *(void **)((char *)s0 + 0x144);
-	int s6 = enable;
-	int a2;
+	void *mscaler;
+	void *input;
+	void *pad;
+	volatile u32 *regs;
+	void *irqdev;
+	void (*irq_control)(void *);
 	int ret;
+	int index;
 
-	private_mutex_lock((struct mutex *)((char *)s0 + 0xdc));
-	a2 = *(int *)((char *)s0 + 0xe8);
+	if (!arg1 || IS_ERR(arg1))
+		return -EINVAL;
+	mscaler = *(void **)((char *)arg1 + 0xd4);
+	if (!mscaler || IS_ERR(mscaler))
+		return -EINVAL;
+	input = *(void **)((char *)mscaler + 0x144);
+	if (!input || IS_ERR(input))
+		return -EINVAL;
+	pad = *(void **)((char *)input + 0x54);
+	if (!pad || IS_ERR(pad))
+		return -EINVAL;
 
-	if (a2 < 3) {
-		isp_printf(2, "%s[%d] the device hasn't been inited!\n", "mscaler_video_s_stream");
-		private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-		return -1;
+	private_mutex_lock((struct mutex *)((char *)mscaler + 0xdc));
+	if (*(int *)((char *)mscaler + 0xe8) < 3) {
+		pr_err("tx-isp-t30: mscaler is not initialized\n");
+		ret = -EPERM;
+		goto unlock;
 	}
+	if (*(u8 *)((char *)pad + 7) < 3) {
+		ret = 0;
+		goto unlock;
+	}
+	if ((*(u32 *)((char *)pad + 0x14) & 0x20) == 0) {
+		pr_err("tx-isp-t30: mscaler input link is not LFB\n");
+		ret = -EINVAL;
+		goto unlock;
+	}
+	private_mutex_unlock((struct mutex *)((char *)mscaler + 0xdc));
 
-	{
-		void *v1 = *(void **)((char *)s5 + 0x54);
-		int a2_1;
+	regs = *(volatile u32 **)((char *)mscaler + 0xb8);
+	irqdev = (char *)mscaler + 0x80;
 
-		if (*(unsigned char *)((char *)v1 + 7) < 3) {
-			a2_1 = *(int *)((char *)s3 + 8);
-			isp_printf(0, "Don't use the %s!\n", a2_1);
-			private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
+	if (!enable) {
+		if (tx_isp_t30_streamoff_trace_count < 12)
+			pr_err("tx-isp-t30: mscaler streamoff entry irqs=%d\n",
+			       irqs_disabled());
+		private_mutex_lock((struct mutex *)((char *)mscaler + 0xdc));
+		if (*(int *)((char *)input + 0x50) != 4) {
+			private_mutex_unlock((struct mutex *)((char *)mscaler + 0xdc));
 			return 0;
 		}
-
-		if ((*(int *)((uintptr_t)v1 + 0x14) & 0x20) == 0) {
-			isp_printf(2, "The link must be LFB!\n", a2);
-			private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-			return -22;
-		}
-	}
-
-	private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-	a2 = *(int *)((char *)s0 + 0xe8);
-
-	if (s6 == 0) {
-		if (a2 != 4)
+		if (*(u8 *)((char *)pad + 7) < 3) {
+			private_mutex_unlock((struct mutex *)((char *)mscaler + 0xdc));
 			return 0;
-
-		{
-			void *s3_2 = *(void **)((char *)s0 + 0x144);
-			private_mutex_lock((struct mutex *)((char *)s0 + 0xdc));
-
-			if (*(int *)((char *)s3_2 + 0x50) != a2) {
-				private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-				return 0;
-			}
-
-			{
-				void *a0_14 = *(void **)((char *)s3_2 + 0x54);
-				int a2_1;
-
-				if (*(unsigned char *)((char *)a0_14 + 7) < 3) {
-					a2_1 = *(int *)((char *)s0 + 8);
-					isp_printf(0, "Don't use the %s!\n", a2_1);
-					private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-					return 0;
-				}
-
-				((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_14), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
-				*(int *)((char *)s0 + 0xe8) = 3;
-				{
-					void *v1_6 = *(void **)((char *)s3_2 + 0x54);
-					*(int *)((char *)s3_2 + 0x50) = 3;
-					*(unsigned char *)((char *)v1_6 + 7) = 3;
-				}
-				private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-				((uint32_t *)*(void **)((char *)s0 + 0xb8))[0x10 / 4] = 0x1ff;
-				ret = *(int *)((char *)s0 + 0x80);
-				if (ret == 0)
-					return ret;
-				(*(void (**)(void *))((char *)s0 + 0x88))(*(uint32_t *)((char *)s0 + 0x80));
-				return 0;
-			}
 		}
+		tx_isp_send_event_to_remote(pad, TX_ISP_FRAME_EVENT_STREAM_OFF,
+					    NULL);
+		*(int *)((char *)mscaler + 0xe8) = 3;
+		*(int *)((char *)input + 0x50) = 3;
+		*(u8 *)((char *)pad + 7) = 3;
+		private_mutex_unlock((struct mutex *)((char *)mscaler + 0xdc));
+		regs[0x10 / 4] = 0x1ff;
+		if (*(int *)irqdev) {
+			irq_control = *(void (**)(void *))((char *)irqdev + 8);
+			if (irq_control)
+				irq_control(irqdev);
+		}
+		return 0;
 	}
 
-	if (a2 != 3)
+	if (*(int *)((char *)mscaler + 0xe8) != 3)
 		return 0;
 
-	{
-		void *s3_1 = *(void **)((char *)s0 + 0x144);
-		int a2_2;
-		private_mutex_lock((struct mutex *)((char *)s0 + 0xdc));
-		a2_2 = *(int *)((char *)s3_1 + 0x54);
-		void *a0_5 = *(void **)((char *)s3_1 + 0x54);
-
-		if (*(unsigned char *)((char *)a0_5 + 7) >= 3) {
-			int v0_8 = *(int *)((char *)s3_1 + 0x50);
-
-			if (v0_8 >= 3) {
-				if (v0_8 == 4) {
-					private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-					return 0;
-				}
-
-				{
-					int v0_9;
-					int a2_3;
-					v0_9 = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(a0_5), (uintptr_t)(TX_ISP_FRAME_EVENT_SET_FORMAT), (uintptr_t)(s3_1));
-					a2_3 = v0_9;
-
-					if (v0_9 != 0 && v0_9 != -515) {
-						isp_printf(2, "Failed to set ms input format!\n", a2_3);
-						private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-						return -22;
-					}
-
-					{
-						int *reg_base = *(int **)((char *)s0 + 0xb8);
-						reg_base[0xa0 / 4] = 4;
-						reg_base[0xa4 / 4] = (*(int *)((uintptr_t)s3_1 + 4)) << 16 | (*(int *)((uintptr_t)s3_1 + 8));
-						reg_base[0x400 / 4] = 0x4ad;
-						reg_base[0x404 / 4] = 0x669;
-						reg_base[0x408 / 4] = 0x193;
-						reg_base[0x40c / 4] = 0x344;
-						reg_base[0x410 / 4] = 0x81a;
-						reg_base[0x414 / 4] = 0x800010;
-						reg_base[0x418 / 4] = 0x80;
-
-					{
-						int *i = (int *)((char *)&apical_downscaler_lut + 0x1f0);
-						int *end = (void *)((uintptr_t)((char *)&apical_downscaler_lut + 0x1f0) + 512);
-						while (i != end) {
-							reg_base[0x80 / 4] = *i;
-							i++;
-						}
-					}
-
-						reg_base[0x14 / 4] = 0x1ff;
-						reg_base[0x10 / 4] = 0;
-
-						if (*(int *)((char *)s0 + 0x80) != 0)
-							(*(void (**)(void *))((char *)s0 + 0x84))(*(uint32_t *)((char *)s0 + 0x80));
-
-						tx_isp_reg_set(s0, 0x18, 7, 7, 1);
-						tx_isp_reg_set(s0, 0x18, 8, 0xa, 7);
-
-						{
-							int v0_24;
-							int a2_4;
-							v0_24 = ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*(void **)((char *)s3_1 + 0x54)), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_ON), (uintptr_t)(0));
-							a2_4 = v0_24;
-
-							if (v0_24 == 0 || v0_24 == -515) {
-								*(unsigned char *)((char *)*(uint32_t *)((char *)s3_1 + 0x54) + 7) = 4;
-								*(int *)((char *)s3_1 + 0x50) = 4;
-								*(int *)((char *)s0 + 0xe8) = 4;
-								private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-								return 0;
-							}
-
-							isp_printf(2, "Failed to enable ms input!\n", a2_4);
-							reg_base[0x10 / 4] = 0x1ff;
-
-							if (*(int *)((char *)s0 + 0x80) != 0)
-								(*(void (**)(void *))((char *)s0 + 0x88))(*(uint32_t *)((char *)s0 + 0x80));
-
-							private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-							return -22;
-						}
-					}
-				}
-			} else {
-				isp_printf(2, "Please init the module firstly!\n", a2_2);
-			}
-		} else {
-			isp_printf(2, "Please setup link firstly!\n", a2_2);
-		}
+	private_mutex_lock((struct mutex *)((char *)mscaler + 0xdc));
+	if (*(u8 *)((char *)pad + 7) < 3) {
+		ret = -EPERM;
+		goto unlock;
+	}
+	if (*(int *)((char *)input + 0x50) < 3) {
+		ret = -EPERM;
+		goto unlock;
+	}
+	if (*(int *)((char *)input + 0x50) == 4) {
+		ret = 0;
+		goto unlock;
 	}
 
-	private_mutex_unlock((struct mutex *)((char *)s0 + 0xdc));
-	return -1;
+	ret = tx_isp_send_event_to_remote(pad, TX_ISP_FRAME_EVENT_SET_FORMAT,
+					  input);
+	if (ret && ret != -ENOIOCTLCMD) {
+		pr_err("tx-isp-t30: failed to set mscaler input format: %d\n",
+		       ret);
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	regs[0xa0 / 4] = 4;
+	regs[0xa4 / 4] = (*(u32 *)((char *)input + 4) << 16) |
+			     *(u32 *)((char *)input + 8);
+	regs[0x400 / 4] = 0x4ad;
+	regs[0x404 / 4] = 0x669;
+	regs[0x408 / 4] = 0x193;
+	regs[0x40c / 4] = 0x344;
+	regs[0x410 / 4] = 0x81a;
+	regs[0x414 / 4] = 0x800010;
+	regs[0x418 / 4] = 0x80;
+	for (index = 0; index < ARRAY_SIZE(tx_isp_t30_mscaler_coefficient);
+	     index++)
+		regs[0x80 / 4] = tx_isp_t30_mscaler_coefficient[index];
+
+	regs[0x14 / 4] = 0x1ff;
+	regs[0x10 / 4] = 0;
+	if (*(int *)irqdev) {
+		irq_control = *(void (**)(void *))((char *)irqdev + 4);
+		if (irq_control)
+			irq_control(irqdev);
+	}
+	tx_isp_reg_set(mscaler, 0x18, 7, 7, 1);
+	tx_isp_reg_set(mscaler, 0x18, 8, 0x0a, 7);
+
+	ret = tx_isp_send_event_to_remote(pad, TX_ISP_FRAME_EVENT_STREAM_ON,
+					  NULL);
+	if (ret && ret != -ENOIOCTLCMD) {
+		pr_err("tx-isp-t30: failed to enable mscaler input: %d\n", ret);
+		regs[0x10 / 4] = 0x1ff;
+		if (*(int *)irqdev) {
+			irq_control = *(void (**)(void *))((char *)irqdev + 8);
+			if (irq_control)
+				irq_control(irqdev);
+		}
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	*(u8 *)((char *)pad + 7) = 4;
+	*(int *)((char *)input + 0x50) = 4;
+	*(int *)((char *)mscaler + 0xe8) = 4;
+	ret = 0;
+unlock:
+	private_mutex_unlock((struct mutex *)((char *)mscaler + 0xdc));
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000015b90 origin=model_output original=channel_dma_buffer_done */
@@ -26216,8 +27612,82 @@ void *msclaer_notify_front_module(void *arg1, int arg2)
     return (void *)result;
 }
 
+static void tx_isp_t30_mscaler_channel_done(
+	struct tx_isp_t30_mscaler_output *chan)
+{
+	struct tx_isp_t30_mscaler_device *mscaler = chan->mscaler;
+	struct tx_isp_t30_frame_buffer buffer;
+	u32 base = (u32)chan->index * 0x100;
+	unsigned int budget = 8;
+
+	/*
+	 * The hardware last-address FIFO is only a few entries deep.  Keep the
+	 * OEM drain semantics, with a finite bound so corrupt recovery state can
+	 * never pin the CPU in hard-IRQ context.
+	 */
+	while (budget-- &&
+	       !(tx_isp_t30_mscaler_read(mscaler, base + 0x17c) & BIT(0))) {
+		if (chan->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+		    chan->fmt.pix.pixelformat == V4L2_PIX_FMT_NV21) {
+			tx_isp_t30_mscaler_read(mscaler, base + 0x18c);
+			tx_isp_t30_mscaler_read(mscaler, base + 0x190);
+		}
+		buffer.addr = tx_isp_t30_mscaler_read(mscaler, base + 0x174);
+		buffer.priv = tx_isp_t30_mscaler_read(mscaler, base + 0x178);
+		tx_isp_send_event_to_remote(chan->pad,
+					    TX_ISP_FRAME_EVENT_BUFFER_DONE,
+					    &buffer);
+		chan->frame_count++;
+	}
+	tx_isp_t30_mscaler_configure_dma(chan);
+}
+
+static void tx_isp_t30_mscaler_notify_input(
+	struct tx_isp_t30_mscaler_device *mscaler, unsigned int channel)
+{
+	u32 active = tx_isp_t30_mscaler_read(mscaler, 0x08) & 0x7;
+
+	chan_done_state |= BIT(channel);
+	if ((active & chan_done_state) == active) {
+		if (mscaler->inputs && mscaler->inputs[0].pad)
+			tx_isp_send_event_to_remote(mscaler->inputs[0].pad,
+						    TX_ISP_FRAME_EVENT_QUEUE_BUFFER,
+						    NULL);
+		chan_done_state = 0;
+	}
+}
+
+irqreturn_t mscaler_core_interrupt_service_routine(
+	struct tx_isp_t30_subdev *sd, u32 status, bool *handled)
+{
+	struct tx_isp_t30_mscaler_device *mscaler;
+	u32 state;
+	u32 mask;
+	u32 pending;
+	unsigned int channel;
+
+	(void)status;
+	if (IS_ERR_OR_NULL(sd) || IS_ERR_OR_NULL(sd->dev_priv) || !sd->base)
+		return IRQ_HANDLED;
+	mscaler = sd->dev_priv;
+	state = tx_isp_t30_mscaler_read(mscaler, 0x0c);
+	mask = tx_isp_t30_mscaler_read(mscaler, 0x10);
+	pending = state & ~mask;
+	tx_isp_t30_mscaler_write(mscaler, 0x14, state);
+	if (handled)
+		*handled = pending != 0;
+
+	for (channel = 0; channel < min(mscaler->num_outputs, 3U); channel++) {
+		if (!(pending & BIT(channel)))
+			continue;
+		tx_isp_t30_mscaler_channel_done(&mscaler->outputs[channel]);
+		tx_isp_t30_mscaler_notify_input(mscaler, channel);
+	}
+	return IRQ_HANDLED;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000015cc8 origin=fragment_seed original=mscaler_core_interrupt_service_routine */
-int32_t mscaler_core_interrupt_service_routine(uintptr_t a0)
+static int32_t mscaler_core_interrupt_service_routine_raw(uintptr_t a0)
 {
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -26460,24 +27930,6 @@ int32_t isp_mscaler_show(struct seq_file *m)
     return result;
 }
 
-/* OEM T30 frame_image_format ABI. */
-struct tx_isp_t30_frame_image_format {
-	u32 type;
-	struct v4l2_pix_format pix;
-	u8 crop_enable;
-	u8 crop_pad[3];
-	u32 crop_top;
-	u32 crop_left;
-	u32 crop_width;
-	u32 crop_height;
-	u8 scaler_enable;
-	u8 scaler_pad[3];
-	u32 scaler_out_width;
-	u32 scaler_out_height;
-	u32 rate_bits;
-	u32 rate_mask;
-};
-
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000160f0 origin=oem_source original=mscaler_sync_sensor_attr */
 int32_t mscaler_sync_sensor_attr(void *subdev, void *video_in)
 {
@@ -26583,8 +28035,15 @@ int32_t mscaler_sync_sensor_attr(void *subdev, void *video_in)
 	return 0;
 }
 
+/*
+ * Retain the fragment reconstruction for comparison, but do not use it in a
+ * kernel build.  In particular, the recovered calls below lost kzalloc's
+ * zeroing semantics, leaving sd->num_{in,out}pads dependent on stale slab
+ * contents.
+ */
+#if 0
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016378 origin=fragment_seed original=tx_isp_mscaler_probe */
-int tx_isp_mscaler_probe(struct platform_device *pdev)
+static int tx_isp_mscaler_probe_raw(struct platform_device *pdev)
 {
     uintptr_t a0 = (uintptr_t)pdev;
 
@@ -26871,7 +28330,8 @@ tx_isp_mscaler_probe0x308:
     a2 = local_10;
     v1 = v1 + s6;
     v0 = local_14;
-    *(uint32_t *)((char *)v1 + 28) = s8;
+    *(uint32_t *)((char *)v1 + 28) =
+	(uint32_t)(uintptr_t)&mscaler_pad_event_handle;
     v1 = *(uint32_t *)((char *)s0 + 204);
     a1 = 36;
     v1 = v1 + s6;
@@ -26937,7 +28397,8 @@ tx_isp_mscaler_probe0x3e4:
     *(uint32_t *)((char *)v1 + 88) = s0;
     a3 = *(uint32_t *)((char *)s0 + 208);
     a3 = (uintptr_t)a3 + (uintptr_t)a1;
-    *(uint32_t *)((char *)a3 + 28) = a2;
+    *(uint32_t *)((char *)a3 + 28) =
+	(uint32_t)(uintptr_t)&mscaler_pad_event_handle;
     a3 = *(uint32_t *)((char *)s0 + 208);
     a1 = (uintptr_t)a3 + (uintptr_t)a1;
 
@@ -26946,6 +28407,136 @@ tx_isp_mscaler_probe0x3e4:
     goto tx_isp_mscaler_probe0x3d8;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+static int tx_isp_t30_mscaler_output_channels_init(
+	struct tx_isp_t30_mscaler_device *mscaler)
+{
+	struct tx_isp_t30_subdev *sd = &mscaler->sd;
+	struct tx_isp_t30_mscaler_output *outputs;
+	unsigned int index;
+
+	mscaler->num_outputs = sd->num_outpads;
+	outputs = kcalloc(mscaler->num_outputs, sizeof(*outputs), GFP_KERNEL);
+	if (!outputs)
+		return -ENOMEM;
+
+	for (index = 0; index < mscaler->num_outputs; index++) {
+		struct tx_isp_t30_mscaler_output *chan = &outputs[index];
+		struct tx_isp_t30_subdev_pad *pad = &sd->outpads[index];
+
+		chan->index = index;
+		chan->pad = pad;
+		if (pad->type == TX_ISP_ABI_PADTYPE_UNDEFINED) {
+			chan->state = 0;
+			continue;
+		}
+
+		if (index == 0) {
+			chan->max_width = 2592;
+			chan->max_height = 2048;
+		} else {
+			chan->max_width = 1920;
+			chan->max_height = 1080;
+		}
+		chan->min_width = 128;
+		chan->min_height = 128;
+		chan->has_crop = true;
+		chan->has_scaler = true;
+		chan->state = TX_ISP_T30_MODULE_SLAKE;
+		init_completion(&chan->stop_comp);
+		INIT_LIST_HEAD(&chan->fifo);
+		spin_lock_init(&chan->slock);
+		chan->mscaler = mscaler;
+		pad->event = mscaler_pad_event_handle;
+		pad->priv = chan;
+	}
+
+	mscaler->outputs = outputs;
+	return 0;
+}
+
+static int tx_isp_t30_mscaler_input_channels_init(
+	struct tx_isp_t30_mscaler_device *mscaler)
+{
+	struct tx_isp_t30_subdev *sd = &mscaler->sd;
+	struct tx_isp_t30_mscaler_input *inputs;
+	unsigned int index;
+
+	mscaler->num_inputs = sd->num_inpads;
+	inputs = kcalloc(mscaler->num_inputs, sizeof(*inputs), GFP_KERNEL);
+	if (!inputs)
+		return -ENOMEM;
+
+	for (index = 0; index < mscaler->num_inputs; index++) {
+		struct tx_isp_t30_mscaler_input *chan = &inputs[index];
+		struct tx_isp_t30_subdev_pad *pad = &sd->inpads[index];
+
+		chan->index = index;
+		chan->pad = pad;
+		if (pad->type == TX_ISP_ABI_PADTYPE_UNDEFINED) {
+			chan->state = 0;
+			continue;
+		}
+		spin_lock_init(&chan->slock);
+		chan->mscaler = mscaler;
+		pad->event = mscaler_pad_event_handle;
+		pad->priv = chan;
+	}
+
+	mscaler->inputs = inputs;
+	return 0;
+}
+
+int tx_isp_mscaler_probe(struct platform_device *pdev)
+{
+	struct tx_isp_t30_mscaler_device *mscaler;
+	struct tx_isp_t30_subdev *sd;
+	int ret;
+
+	tx_isp_t30_check_mscaler_layout();
+	mscaler = kzalloc(sizeof(*mscaler), GFP_KERNEL);
+	if (!mscaler)
+		return -ENOMEM;
+
+	sd = &mscaler->sd;
+	ret = tx_isp_subdev_init(pdev, sd, &mscaler_subdev_ops);
+	if (ret)
+		goto fail_device;
+
+	ret = tx_isp_t30_mscaler_output_channels_init(mscaler);
+	if (ret)
+		goto fail_subdev;
+	ret = tx_isp_t30_mscaler_input_channels_init(mscaler);
+	if (ret)
+		goto fail_outputs;
+
+	spin_lock_init(&mscaler->slock);
+	mutex_init(&mscaler->mlock);
+	mscaler->pdata = pdev->dev.platform_data;
+	mscaler->state = TX_ISP_T30_MODULE_SLAKE;
+	private_platform_set_drvdata(pdev, &sd->module);
+	sd->module.debug_ops = &isp_mscaler_fops;
+	sd->dev_priv = mscaler;
+
+	if (ispw || isph) {
+		ispcrop = 1;
+		ispcropwh = ((u32)ispw << 16) | (u16)isph;
+		ispcroptl = ((u32)isptop << 16) | (u16)ispleft;
+	}
+	pr_info("tx-isp-t30: mscaler probe inputs=%u outputs=%u\n",
+		mscaler->num_inputs, mscaler->num_outputs);
+	return 0;
+
+fail_outputs:
+	kfree(mscaler->outputs);
+	mscaler->outputs = NULL;
+fail_subdev:
+	tx_isp_subdev_deinit(sd);
+fail_device:
+	kfree(mscaler);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001677c origin=fragment_seed original=mscaler_frame_channel_streamoff.isra.0 */
@@ -27243,8 +28834,7 @@ int mscaler_core_ops_init(void *arg1, int arg2)
 						}
 						mscaler_video_s_stream(arg1, 0);
 					}
-					flags = arch_local_irq_save();
-					*(int *)(entry_gp + 0x14) += 1;
+					spin_lock_irqsave((spinlock_t *)((char *)s0 + 0xdc), flags);
 					*(int *)((char *)s0 + 0xe8) = 2;
 					vid_base = *(void **)((char *)s0 + 0x144);
 					vid_count = *(int *)((char *)s0 + 0x148);
@@ -27255,8 +28845,7 @@ int mscaler_core_ops_init(void *arg1, int arg2)
 				} else {
 					ret = private_reset_tx_isp_module(3);
 					if (ret == 0) {
-						flags = arch_local_irq_save();
-						*(int *)(entry_gp + 0x14) += 1;
+						spin_lock_irqsave((spinlock_t *)((char *)s0 + 0xdc), flags);
 						if (*(int *)((char *)s0 + 0xe8) == 2) {
 							*(int *)((char *)s0 + 0xe8) = 3;
 							ch_base = *(void **)((char *)s0 + 0x138);
@@ -27285,8 +28874,310 @@ int mscaler_core_ops_init(void *arg1, int arg2)
 	return result;
 }
 
+static inline void tx_isp_t30_check_mscaler_layout(void)
+{
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_mscaler_output) != 0x90);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, index) != 0x4c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, state) != 0x50);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, pad) != 0x60);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, mscaler) != 0x64);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, fifo) != 0x7c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, lineoffset) != 0x84);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_output, frame_count) != 0x8c);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_mscaler_input) != 0x5c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_input, pad) != 0x54);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_input, mscaler) != 0x58);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_device, state) != 0xe8);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_device, vin) != 0xec);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_device, outputs) != 0x138);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_mscaler_device, inputs) != 0x144);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_mscaler_device) != 0x14c);
+}
+
+static inline u32 tx_isp_t30_mscaler_read(
+	struct tx_isp_t30_mscaler_device *mscaler, u32 reg)
+{
+	return readl((u8 __iomem *)mscaler->sd.base + reg);
+}
+
+static inline void tx_isp_t30_mscaler_write(
+	struct tx_isp_t30_mscaler_device *mscaler, u32 reg, u32 value)
+{
+	writel(value, (u8 __iomem *)mscaler->sd.base + reg);
+}
+
+static inline u32 tx_isp_t30_mscaler_channel_reg(
+	struct tx_isp_t30_mscaler_output *chan, u32 reg)
+{
+	return (u32)chan->index * 0x100 + reg;
+}
+
+static void tx_isp_t30_mscaler_configure_dma(
+	struct tx_isp_t30_mscaler_output *chan)
+{
+	struct tx_isp_t30_mscaler_device *mscaler = chan->mscaler;
+	struct tx_isp_t30_frame_buffer *buffer;
+	u32 base = (u32)chan->index * 0x100;
+	u32 uv_offset;
+
+	while (!(tx_isp_t30_mscaler_read(mscaler, base + 0x170) & BIT(1))) {
+		if (list_empty(&chan->fifo))
+			break;
+		buffer = list_first_entry(&chan->fifo,
+					  struct tx_isp_t30_frame_buffer, entry);
+		list_del(&buffer->entry);
+		if (chan->fmt.pix.pixelformat == V4L2_PIX_FMT_NV12 ||
+		    chan->fmt.pix.pixelformat == V4L2_PIX_FMT_NV21) {
+			uv_offset = chan->fmt.pix.width *
+				((chan->fmt.pix.height + 15) & ~15U);
+			tx_isp_t30_mscaler_write(mscaler, base + 0x184,
+						     buffer->addr + uv_offset);
+		}
+		tx_isp_t30_mscaler_write(mscaler, base + 0x16c,
+					     buffer->addr);
+	}
+}
+
+static int tx_isp_t30_mscaler_set_format(
+	struct tx_isp_t30_subdev_pad *pad,
+	struct tx_isp_t30_frame_image_format *fmt)
+{
+	struct tx_isp_t30_mscaler_output *chan = pad->priv;
+	struct tx_isp_t30_mscaler_device *mscaler;
+	struct tx_isp_t30_mscaler_input *input;
+	const struct tx_isp_t30_frame_channel_format *format;
+	u32 width;
+	u32 height;
+	u32 step_width;
+	u32 step_height;
+	u32 base;
+
+	if (pad->type == TX_ISP_ABI_PADTYPE_UNDEFINED)
+		return -EPERM;
+	if (pad->type != TX_ISP_ABI_PADTYPE_OUTPUT)
+		return 0;
+	if (IS_ERR_OR_NULL(chan) || IS_ERR_OR_NULL(fmt) ||
+	    IS_ERR_OR_NULL(chan->mscaler) ||
+	    IS_ERR_OR_NULL(chan->mscaler->inputs))
+		return -EINVAL;
+	mscaler = chan->mscaler;
+	input = mscaler->inputs;
+	if (fmt->crop_enable && !chan->has_crop)
+		return -EINVAL;
+	if (fmt->scaler_enable && !chan->has_scaler)
+		return -EINVAL;
+
+	width = chan->max_width;
+	height = chan->max_height;
+	if (fmt->scaler_enable) {
+		if (width < fmt->scaler_out_width ||
+		    height < fmt->scaler_out_height)
+			return -EINVAL;
+		width = fmt->scaler_out_width;
+		height = fmt->scaler_out_height;
+	} else {
+		width = min(width, input->fmt.pix.width);
+		height = min(height, input->fmt.pix.height);
+	}
+	if (fmt->crop_enable) {
+		if (fmt->crop_top + fmt->crop_height > height ||
+		    fmt->crop_left + fmt->crop_width > width)
+			return -EINVAL;
+		width = fmt->crop_width;
+		height = fmt->crop_height;
+	}
+	if (width < chan->min_width || height < chan->min_height ||
+	    width != fmt->pix.width || height != fmt->pix.height)
+		return -EINVAL;
+
+	for (format = tx_isp_t30_mscaler_formats; format->fourcc; format++)
+		if (format->fourcc == fmt->pix.pixelformat)
+			break;
+	if (!format->fourcc)
+		return -EINVAL;
+
+	mutex_lock(&mscaler->mlock);
+	if (fmt->pix.pixelformat == V4L2_PIX_FMT_RGB565 ||
+	    fmt->pix.pixelformat == V4L2_PIX_FMT_BGR32) {
+		if (mscaler->rgb_channel_active) {
+			mutex_unlock(&mscaler->mlock);
+			return -EPERM;
+		}
+		mscaler->rgb_channel_active = 1;
+	}
+	mutex_unlock(&mscaler->mlock);
+
+	fmt->pix.bytesperline = fmt->pix.width * format->depth / 8;
+	fmt->pix.sizeimage = fmt->pix.bytesperline *
+		((fmt->pix.height + 15) & ~15U);
+	fmt->pix.priv = (u32)(uintptr_t)format;
+	chan->lineoffset = fmt->pix.width * (format->depth / 8);
+
+	base = (u32)chan->index * 0x100;
+	if (fmt->scaler_enable) {
+		step_width = input->fmt.pix.width * 512 /
+			fmt->scaler_out_width;
+		step_height = input->fmt.pix.height * 512 /
+			fmt->scaler_out_height;
+		width = fmt->scaler_out_width;
+		height = fmt->scaler_out_height;
+	} else {
+		step_width = 512;
+		step_height = 512;
+		width = input->fmt.pix.width;
+		height = input->fmt.pix.height;
+	}
+	tx_isp_t30_mscaler_write(mscaler, base + 0x104,
+				     step_width << 16 | step_height);
+	tx_isp_t30_mscaler_write(mscaler, base + 0x100,
+				     width << 16 | height);
+	if (fmt->crop_enable) {
+		tx_isp_t30_mscaler_write(mscaler, base + 0x128,
+					     fmt->crop_left << 16 |
+					     fmt->crop_top);
+		tx_isp_t30_mscaler_write(mscaler, base + 0x12c,
+					     fmt->crop_width << 16 |
+					     fmt->crop_height);
+	} else {
+		tx_isp_t30_mscaler_write(mscaler, base + 0x128, 0);
+		tx_isp_t30_mscaler_write(mscaler, base + 0x12c,
+					     width << 16 | height);
+	}
+	fmt->rate_bits = min(fmt->rate_bits, 31U);
+	if (!fmt->rate_mask)
+		fmt->rate_mask = 1;
+	tx_isp_t30_mscaler_write(mscaler, base + 0x130, fmt->rate_bits);
+	tx_isp_t30_mscaler_write(mscaler, base + 0x134, fmt->rate_mask);
+	tx_isp_t30_mscaler_write(mscaler, base + 0x168, format->priv);
+	chan->fmt = *fmt;
+	pr_info("tx-isp-t30: mscaler ch%d format %ux%u size=%u stride=%u\n",
+		chan->index, fmt->pix.width, fmt->pix.height,
+		fmt->pix.sizeimage, fmt->pix.bytesperline);
+	return 0;
+}
+
+static int tx_isp_t30_mscaler_stream_on(
+	struct tx_isp_t30_subdev_pad *pad)
+{
+	struct tx_isp_t30_mscaler_output *chan = pad->priv;
+	struct tx_isp_t30_mscaler_device *mscaler;
+	unsigned long flags;
+
+	if (pad->state != TX_ISP_ABI_PADSTATE_LINKED)
+		return 0;
+	if (IS_ERR_OR_NULL(chan) || IS_ERR_OR_NULL(chan->mscaler))
+		return -EINVAL;
+	mscaler = chan->mscaler;
+	spin_lock_irqsave(&chan->slock, flags);
+	if (chan->state == TX_ISP_T30_MODULE_RUNNING) {
+		spin_unlock_irqrestore(&chan->slock, flags);
+		return 0;
+	}
+	tx_isp_t30_mscaler_write(mscaler,
+		tx_isp_t30_mscaler_channel_reg(chan, 0x180), chan->lineoffset);
+	tx_isp_t30_mscaler_write(mscaler,
+		tx_isp_t30_mscaler_channel_reg(chan, 0x198), chan->lineoffset);
+	tx_isp_t30_mscaler_configure_dma(chan);
+	tx_isp_reg_set(&mscaler->sd, 0x04, chan->index, chan->index, 1);
+	chan->frame_count = 0;
+	chan->state = TX_ISP_T30_MODULE_RUNNING;
+	pad->state = TX_ISP_ABI_PADSTATE_STREAM;
+	spin_unlock_irqrestore(&chan->slock, flags);
+	return 0;
+}
+
+static int tx_isp_t30_mscaler_stream_off(
+	struct tx_isp_t30_subdev_pad *pad)
+{
+	struct tx_isp_t30_mscaler_output *chan = pad->priv;
+	struct tx_isp_t30_mscaler_device *mscaler;
+	unsigned long flags;
+	unsigned int retry = 200;
+
+	if (pad->state != TX_ISP_ABI_PADSTATE_STREAM)
+		return 0;
+	if (IS_ERR_OR_NULL(chan) || IS_ERR_OR_NULL(chan->mscaler))
+		return -EINVAL;
+	mscaler = chan->mscaler;
+	spin_lock_irqsave(&chan->slock, flags);
+	if (chan->state != TX_ISP_T30_MODULE_RUNNING) {
+		spin_unlock_irqrestore(&chan->slock, flags);
+		return 0;
+	}
+	tx_isp_reg_set(&mscaler->sd, 0x04, chan->index, chan->index, 0);
+	chan->state = TX_ISP_T30_MODULE_INIT;
+	spin_unlock_irqrestore(&chan->slock, flags);
+	while ((tx_isp_t30_mscaler_read(mscaler, 0x08) & BIT(chan->index)) &&
+	       retry--)
+		msleep(2);
+
+	spin_lock_irqsave(&chan->slock, flags);
+	if (chan->fmt.pix.pixelformat == V4L2_PIX_FMT_RGB565 ||
+	    chan->fmt.pix.pixelformat == V4L2_PIX_FMT_BGR32)
+		mscaler->rgb_channel_active = 0;
+	INIT_LIST_HEAD(&chan->fifo);
+	pad->state = TX_ISP_ABI_PADSTATE_LINKED;
+	spin_unlock_irqrestore(&chan->slock, flags);
+	return 0;
+}
+
+static int tx_isp_t30_mscaler_queue_buffer(
+	struct tx_isp_t30_subdev_pad *pad,
+	struct tx_isp_t30_frame_buffer *buffer)
+{
+	struct tx_isp_t30_mscaler_output *chan = pad->priv;
+	unsigned long flags;
+
+	if (pad->type != TX_ISP_ABI_PADTYPE_OUTPUT)
+		return -EINVAL;
+	if (!buffer || IS_ERR_OR_NULL(chan))
+		return 0;
+	spin_lock_irqsave(&chan->slock, flags);
+	list_add_tail(&buffer->entry, &chan->fifo);
+	tx_isp_t30_mscaler_configure_dma(chan);
+	spin_unlock_irqrestore(&chan->slock, flags);
+	return 0;
+}
+
+int32_t mscaler_pad_event_handle(void *pad_pointer, int32_t event,
+				 void **data)
+{
+	struct tx_isp_t30_subdev_pad *pad = pad_pointer;
+	struct tx_isp_t30_mscaler_output *chan;
+	unsigned long flags;
+
+	tx_isp_t30_check_mscaler_layout();
+	if (IS_ERR_OR_NULL(pad) || pad->type == TX_ISP_ABI_PADTYPE_UNDEFINED)
+		return 0;
+	chan = pad->priv;
+	switch (event) {
+	case TX_ISP_FRAME_EVENT_GET_FORMAT:
+		if (pad->type == TX_ISP_ABI_PADTYPE_OUTPUT && data && chan)
+			memcpy(data, &chan->fmt, sizeof(chan->fmt));
+		return 0;
+	case TX_ISP_FRAME_EVENT_SET_FORMAT:
+		return tx_isp_t30_mscaler_set_format(pad, (void *)data);
+	case TX_ISP_FRAME_EVENT_STREAM_ON:
+		return tx_isp_t30_mscaler_stream_on(pad);
+	case TX_ISP_FRAME_EVENT_STREAM_OFF:
+		return tx_isp_t30_mscaler_stream_off(pad);
+	case TX_ISP_FRAME_EVENT_QUEUE_BUFFER:
+		return tx_isp_t30_mscaler_queue_buffer(pad, (void *)data);
+	case TX_ISP_T30_FRAME_EVENT_FREE_BUFFER:
+		if (pad->type != TX_ISP_ABI_PADTYPE_OUTPUT || !chan)
+			return -EINVAL;
+		spin_lock_irqsave(&chan->slock, flags);
+		INIT_LIST_HEAD(&chan->fifo);
+		spin_unlock_irqrestore(&chan->slock, flags);
+		return 0;
+	default:
+		return 0;
+	}
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016c9c origin=model_output original=mscaler_pad_event_handle */
-int32_t mscaler_pad_event_handle(void *arg1, int32_t arg2, void **arg3)
+static int32_t mscaler_pad_event_handle_raw(void *arg1, int32_t arg2,
+					   void **arg3)
 {
 	uint32_t pad_type = *(uint8_t *)((char *)arg1 + 5);
 	uint32_t pad_state = *(uint8_t *)((char *)arg1 + 7);
@@ -28709,8 +30600,9 @@ int32_t __enqueue_in_driver_isra_0(void *arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000184f4 origin=fragment_seed original=frame_channel_unlocked_ioctl */
-static long frame_channel_unlocked_ioctl(struct file *a0_file, unsigned int a1,
-					 unsigned long a2)
+static long frame_channel_unlocked_ioctl_raw(struct file *a0_file,
+					     unsigned int a1,
+					     unsigned long a2)
 {
 	uintptr_t a0 = (uintptr_t)a0_file;
     uint32_t *local_10 = 0;
@@ -30190,8 +32082,567 @@ frame_channel_unlocked_ioctl0xeb0:
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
 }
 
+static inline void tx_isp_t30_check_frame_channel_layout(void)
+{
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_fs_queue) != 0x210);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, queue) != 0x24);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, fmt) != 0x234);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, pad) != 0x290);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, index) != 0x294);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, mlock) != 0x298);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, state) != 0x2a4);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, comp) != 0x2a8);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, out_frames) != 0x2b4);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_frame_channel, priv) != 0x2bc);
+	BUILD_BUG_ON(sizeof(struct tx_isp_t30_frame_channel) != 0x2c0);
+}
+
+static long tx_isp_t30_frame_channel_set_format(
+	struct tx_isp_t30_frame_channel *chan, unsigned long arg)
+{
+	struct tx_isp_t30_frame_image_format fmt;
+	long ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&fmt, (void __user *)arg, sizeof(fmt)))
+		return -ENOMEM;
+
+	if (fmt.type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+	if (fmt.pix.field == V4L2_FIELD_ANY)
+		fmt.pix.field = V4L2_FIELD_INTERLACED;
+	else if (fmt.pix.field != V4L2_FIELD_INTERLACED)
+		return -EINVAL;
+	if (fmt.pix.colorspace != V4L2_COLORSPACE_SRGB)
+		return -EINVAL;
+
+	ret = tx_isp_send_event_to_remote(chan->pad,
+					  TX_ISP_FRAME_EVENT_SET_FORMAT, &fmt);
+	pr_info("tx-isp-t30: frame%d remote format ret=%ld size=%u pad=%p sink=%p handler=%p\n",
+		chan->index, ret, fmt.pix.sizeimage, chan->pad,
+		chan->pad ? chan->pad->link.sink : NULL,
+		chan->pad && chan->pad->link.sink ?
+		((struct tx_isp_t30_subdev_pad *)
+		 chan->pad->link.sink)->event : NULL);
+	if (ret && ret != -ENOIOCTLCMD)
+		return ret;
+	if (copy_to_user((void __user *)arg, &fmt, sizeof(fmt)))
+		return -ENOMEM;
+
+	chan->fmt = fmt;
+	return 0;
+}
+
+static long tx_isp_t30_frame_channel_get_format(
+	struct tx_isp_t30_frame_channel *chan, unsigned long arg)
+{
+	struct tx_isp_t30_frame_image_format fmt;
+	long ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	ret = tx_isp_send_event_to_remote(chan->pad,
+					  TX_ISP_FRAME_EVENT_GET_FORMAT, &fmt);
+	if (ret && ret != -ENOIOCTLCMD)
+		return ret;
+
+	fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+	fmt.pix.field = V4L2_FIELD_INTERLACED;
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	if (copy_to_user((void __user *)arg, &fmt, sizeof(fmt)))
+		return -ENOMEM;
+	chan->fmt = fmt;
+	return 0;
+}
+
+static void tx_isp_t30_frame_fill_v4l2_buffer(
+	struct tx_isp_t30_fs_buffer *vb, struct v4l2_buffer *buffer)
+{
+	struct tx_isp_t30_fs_queue *queue = vb->queue;
+
+	memcpy(buffer, &vb->v4l2_buf, offsetof(struct v4l2_buffer, m));
+	buffer->reserved2 = vb->v4l2_buf.reserved2;
+	buffer->reserved = vb->v4l2_buf.reserved;
+	buffer->flags &= ~(V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED |
+		V4L2_BUF_FLAG_DONE | V4L2_BUF_FLAG_ERROR |
+		V4L2_BUF_FLAG_PREPARED | V4L2_BUF_FLAG_TIMESTAMP_MASK);
+	buffer->flags |= queue->timestamp_type;
+
+	switch (vb->state) {
+	case TX_ISP_T30_FS_QUEUED:
+	case TX_ISP_T30_FS_ACTIVE:
+		buffer->flags |= V4L2_BUF_FLAG_QUEUED;
+		break;
+	case TX_ISP_T30_FS_ERROR:
+		buffer->flags |= V4L2_BUF_FLAG_ERROR;
+		/* fall through */
+	case TX_ISP_T30_FS_DONE:
+		buffer->flags |= V4L2_BUF_FLAG_DONE;
+		break;
+	default:
+		break;
+	}
+}
+
+static void tx_isp_t30_frame_queue_free(struct tx_isp_t30_fs_queue *queue,
+					 unsigned int buffers)
+{
+	unsigned int first;
+	unsigned int index;
+
+	if (buffers > queue->num_buffers)
+		buffers = queue->num_buffers;
+	first = queue->num_buffers - buffers;
+	for (index = first; index < queue->num_buffers; index++) {
+		kfree(queue->bufs[index]);
+		queue->bufs[index] = NULL;
+	}
+	queue->num_buffers -= buffers;
+	INIT_LIST_HEAD(&queue->queued_list);
+}
+
+static int tx_isp_t30_frame_queue_alloc(struct tx_isp_t30_fs_queue *queue,
+					unsigned int count)
+{
+	unsigned int index;
+
+	for (index = 0; index < count; index++) {
+		struct tx_isp_t30_fs_buffer *vb;
+
+		vb = kzalloc(queue->buf_struct_size, GFP_KERNEL);
+		if (!vb)
+			break;
+		vb->state = TX_ISP_T30_FS_DEQUEUED;
+		vb->queue = queue;
+		vb->v4l2_buf.index = queue->num_buffers + index;
+		vb->v4l2_buf.type = queue->type;
+		vb->v4l2_buf.memory = queue->memory;
+		queue->bufs[queue->num_buffers + index] = vb;
+	}
+	return index;
+}
+
+static int tx_isp_t30_frame_reqbufs(struct tx_isp_t30_frame_channel *chan,
+				    unsigned long arg)
+{
+	struct tx_isp_t30_fs_queue *queue;
+	struct v4l2_requestbuffers request;
+	unsigned int wanted;
+	unsigned int allocated;
+	int ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&request, (void __user *)arg, sizeof(request)))
+		return -ENOMEM;
+
+	queue = &chan->queue;
+	if (queue->streaming)
+		return -EBUSY;
+	if (!request.count || queue->num_buffers ||
+	    queue->memory != request.memory) {
+		tx_isp_t30_frame_queue_free(queue, queue->num_buffers);
+		if (!request.count)
+			return 0;
+	}
+	if (queue->memory != request.memory)
+		return -EINVAL;
+
+	wanted = min_t(unsigned int, request.count, ARRAY_SIZE(queue->bufs));
+	allocated = tx_isp_t30_frame_queue_alloc(queue, wanted);
+	if (allocated != wanted) {
+		tx_isp_t30_frame_queue_free(queue, allocated);
+		return -ENOMEM;
+	}
+	queue->num_buffers = allocated;
+	request.count = allocated;
+
+	ret = tx_isp_send_event_to_remote(chan->pad,
+					  TX_ISP_T30_FRAME_EVENT_SET_BANKS,
+					  &allocated);
+	if (ret && ret != -ENOIOCTLCMD) {
+		tx_isp_t30_frame_queue_free(queue, queue->num_buffers);
+		return ret;
+	}
+	if (copy_to_user((void __user *)arg, &request, sizeof(request)))
+		return -ENOMEM;
+
+	queue->format.type = chan->fmt.type;
+	memcpy(&queue->format.fmt, &chan->fmt.pix, sizeof(chan->fmt.pix));
+	return 0;
+}
+
+static int tx_isp_t30_frame_enqueue(struct tx_isp_t30_fs_buffer *vb)
+{
+	struct tx_isp_t30_fs_queue *queue = vb->queue;
+	struct tx_isp_t30_frame_video_buffer *video =
+		container_of(vb, struct tx_isp_t30_frame_video_buffer, vb);
+	struct tx_isp_t30_frame_channel *chan =
+		container_of(queue, struct tx_isp_t30_frame_channel, queue);
+	int ret;
+
+	mutex_lock(&queue->mlock);
+	vb->state = TX_ISP_T30_FS_ACTIVE;
+	mutex_unlock(&queue->mlock);
+	ret = tx_isp_send_event_to_remote(chan->pad,
+					  TX_ISP_FRAME_EVENT_QUEUE_BUFFER,
+					  &video->buffer);
+	return (ret == -ENOIOCTLCMD) ? 0 : ret;
+}
+
+static int tx_isp_t30_frame_qbuf(struct tx_isp_t30_frame_channel *chan,
+				 unsigned long arg)
+{
+	struct tx_isp_t30_fs_queue *queue;
+	struct tx_isp_t30_fs_buffer *vb;
+	struct tx_isp_t30_frame_video_buffer *video;
+	struct v4l2_buffer buffer;
+	unsigned long flags;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&buffer, (void __user *)arg, sizeof(buffer)))
+		return -ENOMEM;
+	queue = &chan->queue;
+	if (buffer.type != queue->type || buffer.index >= queue->num_buffers ||
+	    buffer.memory != queue->memory) {
+		pr_info("tx-isp-t30: frame%d qbuf ABI type=%u/%u index=%u/%u memory=%u/%u\n",
+			chan->index, buffer.type, queue->type, buffer.index,
+			queue->num_buffers, buffer.memory, queue->memory);
+		return -EINVAL;
+	}
+	vb = queue->bufs[buffer.index];
+	if (!vb || buffer.length != queue->format.fmt.pix.sizeimage ||
+	    vb->state != TX_ISP_T30_FS_DEQUEUED) {
+		pr_info("tx-isp-t30: frame%d qbuf data vb=%p length=%u/%u state=%d\n",
+			chan->index, vb, buffer.length,
+			queue->format.fmt.pix.sizeimage,
+			vb ? vb->state : -1);
+		return -EINVAL;
+	}
+
+	vb->v4l2_buf.m.userptr = buffer.m.userptr;
+	vb->v4l2_buf.length = buffer.length;
+	vb->v4l2_buf.field = buffer.field;
+	vb->v4l2_buf.timestamp = buffer.timestamp;
+	vb->v4l2_buf.flags = buffer.flags &
+		~(V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED |
+		  V4L2_BUF_FLAG_DONE | V4L2_BUF_FLAG_ERROR |
+		  V4L2_BUF_FLAG_PREPARED | V4L2_BUF_FLAG_TIMESTAMP_MASK);
+	dma_sync_single_for_device(NULL, (dma_addr_t)buffer.m.userptr,
+				   buffer.length, DMA_FROM_DEVICE);
+	video = container_of(vb, struct tx_isp_t30_frame_video_buffer, vb);
+	video->buffer.addr = buffer.m.userptr;
+	INIT_LIST_HEAD(&video->buffer.entry);
+	vb->state = TX_ISP_T30_FS_PREPARED;
+
+	spin_lock_irqsave(&chan->slock, flags);
+	list_add_tail(&vb->queued_entry, &queue->queued_list);
+	vb->state = TX_ISP_T30_FS_QUEUED;
+	queue->queued_count++;
+	spin_unlock_irqrestore(&chan->slock, flags);
+	if (queue->streaming)
+		tx_isp_t30_frame_enqueue(vb);
+
+	tx_isp_t30_frame_fill_v4l2_buffer(vb, &buffer);
+	if (copy_to_user((void __user *)arg, &buffer, sizeof(buffer)))
+		return -ENOMEM;
+	return 0;
+}
+
+static long tx_isp_t30_frame_querybuf(struct tx_isp_t30_frame_channel *chan,
+				      unsigned long arg)
+{
+	struct v4l2_buffer buffer;
+	struct tx_isp_t30_fs_queue *queue;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&buffer, (void __user *)arg, sizeof(buffer)))
+		return -ENOMEM;
+	queue = &chan->queue;
+	if (buffer.type != queue->type || buffer.index >= queue->num_buffers)
+		return -EINVAL;
+	tx_isp_t30_frame_fill_v4l2_buffer(queue->bufs[buffer.index], &buffer);
+	if (copy_to_user((void __user *)arg, &buffer, sizeof(buffer)))
+		return -ENOMEM;
+	return 0;
+}
+
+static int tx_isp_t30_frame_dqbuf(struct tx_isp_t30_frame_channel *chan,
+				  unsigned long arg)
+{
+	struct tx_isp_t30_fs_queue *queue;
+	struct tx_isp_t30_fs_buffer *vb;
+	struct v4l2_buffer buffer;
+	unsigned long flags;
+	int ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&buffer, (void __user *)arg, sizeof(buffer)))
+		return -ENOMEM;
+	queue = &chan->queue;
+	if (buffer.type != queue->type)
+		return -EINVAL;
+
+	for (;;) {
+		if (!queue->streaming)
+			return -EINVAL;
+		if (!list_empty(&queue->done_list))
+			break;
+		ret = wait_event_interruptible(queue->done_wq,
+			!list_empty(&queue->done_list) || !queue->streaming);
+		if (ret == -ERESTARTSYS)
+			continue;
+		if (ret)
+			return ret;
+	}
+
+	spin_lock_irqsave(&queue->done_lock, flags);
+	vb = list_first_entry(&queue->done_list,
+			      struct tx_isp_t30_fs_buffer, done_entry);
+	list_del(&vb->done_entry);
+	queue->done_count--;
+	spin_unlock_irqrestore(&queue->done_lock, flags);
+	tx_isp_t30_frame_fill_v4l2_buffer(vb, &buffer);
+	vb->state = TX_ISP_T30_FS_DEQUEUED;
+	if (copy_to_user((void __user *)arg, &buffer, sizeof(buffer)))
+		return -ENOMEM;
+	return 0;
+}
+
+static void tx_isp_t30_frame_queue_cancel(
+	struct tx_isp_t30_frame_channel *chan)
+{
+	struct tx_isp_t30_fs_queue *queue = &chan->queue;
+	unsigned long flags;
+	unsigned int index;
+
+	if (queue->streaming)
+		tx_isp_send_event_to_remote(chan->pad,
+					    TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
+	queue->streaming = 0;
+	INIT_LIST_HEAD(&queue->queued_list);
+	spin_lock_irqsave(&queue->done_lock, flags);
+	INIT_LIST_HEAD(&queue->done_list);
+	queue->queued_count = 0;
+	queue->done_count = 0;
+	spin_unlock_irqrestore(&queue->done_lock, flags);
+	wake_up_all(&queue->done_wq);
+	for (index = 0; index < queue->num_buffers; index++)
+		if (queue->bufs[index])
+			queue->bufs[index]->state = TX_ISP_T30_FS_DEQUEUED;
+}
+
+static int tx_isp_t30_frame_streamon(struct tx_isp_t30_frame_channel *chan,
+				     unsigned long arg)
+{
+	struct tx_isp_t30_fs_queue *queue;
+	struct tx_isp_t30_fs_buffer *vb;
+	enum v4l2_buf_type type;
+	int ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (chan->state != TX_ISP_T30_MODULE_INIT)
+		return -EPERM;
+	if (copy_from_user(&type, (void __user *)arg, sizeof(type)))
+		return -ENOMEM;
+	queue = &chan->queue;
+	if (type != queue->type)
+		return -EINVAL;
+	if (queue->streaming)
+		return -EBUSY;
+
+	list_for_each_entry(vb, &queue->queued_list, queued_entry) {
+		ret = tx_isp_t30_frame_enqueue(vb);
+		if (ret)
+			return ret;
+	}
+	ret = tx_isp_send_event_to_remote(chan->pad,
+					  TX_ISP_FRAME_EVENT_STREAM_ON, NULL);
+	if (ret && ret != -ENOIOCTLCMD) {
+		tx_isp_t30_frame_queue_cancel(chan);
+		return ret;
+	}
+	queue->streaming = 1;
+	chan->state = TX_ISP_T30_MODULE_RUNNING;
+	return 0;
+}
+
+static int tx_isp_t30_frame_streamoff(struct tx_isp_t30_frame_channel *chan,
+				      unsigned long arg)
+{
+	enum v4l2_buf_type type;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&type, (void __user *)arg, sizeof(type)))
+		return -ENOMEM;
+	if (type != chan->queue.type || !chan->queue.streaming)
+		return -EINVAL;
+	tx_isp_t30_frame_queue_cancel(chan);
+	chan->state = TX_ISP_T30_MODULE_INIT;
+	return 0;
+}
+
+static int tx_isp_t30_frame_set_banks(struct tx_isp_t30_frame_channel *chan,
+				      unsigned long arg)
+{
+	int count;
+	int ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	if (copy_from_user(&count, (void __user *)arg, sizeof(count)))
+		return -ENOMEM;
+	ret = tx_isp_send_event_to_remote(chan->pad,
+					  TX_ISP_T30_FRAME_EVENT_SET_BANKS,
+					  &count);
+	return (ret == -ENOIOCTLCMD) ? 0 : ret;
+}
+
+static int tx_isp_t30_frame_listen(struct tx_isp_t30_frame_channel *chan,
+				   unsigned long arg)
+{
+	int buffers;
+	int ret;
+
+	if (IS_ERR_OR_NULL(chan) || !arg)
+		return -EINVAL;
+	ret = wait_for_completion_interruptible(&chan->comp);
+	buffers = ret < 0 ? ret : chan->comp.done + 1;
+	if (copy_to_user((void __user *)arg, &buffers, sizeof(buffers)))
+		return -ENOMEM;
+	return ret;
+}
+
+/*
+ * Keep the remaining recovered commands observable while their inlined OEM
+ * helpers are replaced.  The limit avoids turning a working DQBUF loop into a
+ * printk flood once streaming starts.
+ */
+static long frame_channel_unlocked_ioctl(struct file *filp, unsigned int cmd,
+					 unsigned long arg)
+{
+	static atomic_t trace_count = ATOMIC_INIT(0);
+	struct miscdevice *misc = filp ? filp->private_data : NULL;
+	struct tx_isp_t30_frame_channel *chan;
+	long ret;
+	int trace = atomic_inc_return(&trace_count);
+
+	tx_isp_t30_check_frame_channel_layout();
+	chan = IS_ERR_OR_NULL(misc) ? NULL :
+		container_of(misc, struct tx_isp_t30_frame_channel, misc);
+
+	switch (cmd) {
+	case TX_ISP_T30_FRAME_IOCTL_SET_FORMAT:
+		ret = tx_isp_t30_frame_channel_set_format(chan, arg);
+		break;
+	case TX_ISP_T30_FRAME_IOCTL_GET_FORMAT:
+		ret = tx_isp_t30_frame_channel_get_format(chan, arg);
+		break;
+	case VIDIOC_REQBUFS:
+		ret = tx_isp_t30_frame_reqbufs(chan, arg);
+		break;
+	case VIDIOC_QUERYBUF:
+		ret = tx_isp_t30_frame_querybuf(chan, arg);
+		break;
+	case VIDIOC_QBUF:
+		ret = tx_isp_t30_frame_qbuf(chan, arg);
+		break;
+	case VIDIOC_DQBUF:
+		ret = tx_isp_t30_frame_dqbuf(chan, arg);
+		break;
+	case VIDIOC_STREAMON:
+		ret = tx_isp_t30_frame_streamon(chan, arg);
+		break;
+	case VIDIOC_STREAMOFF:
+		ret = tx_isp_t30_frame_streamoff(chan, arg);
+		break;
+	case TX_ISP_T30_FRAME_IOCTL_SET_BANKS:
+		ret = tx_isp_t30_frame_set_banks(chan, arg);
+		break;
+	case TX_ISP_T30_FRAME_IOCTL_LISTEN:
+		ret = tx_isp_t30_frame_listen(chan, arg);
+		break;
+	default:
+		ret = frame_channel_unlocked_ioctl_raw(filp, cmd, arg);
+		break;
+	}
+
+	if (trace <= 64)
+		pr_info("tx-isp-t30: frame%d ioctl cmd=%08x ret=%ld state=%d\n",
+			chan ? chan->index : -1, cmd, ret,
+			chan ? chan->state : -1);
+	return ret;
+}
+
+static int tx_isp_t30_frame_buffer_done(
+	struct tx_isp_t30_frame_channel *chan,
+	struct tx_isp_t30_frame_buffer *buffer)
+{
+	struct tx_isp_t30_fs_queue *queue = &chan->queue;
+	struct tx_isp_t30_fs_buffer *vb;
+	struct tx_isp_t30_fs_buffer *found = NULL;
+	struct timespec timestamp;
+	unsigned long flags;
+
+	if (!buffer)
+		return 0;
+	spin_lock_irqsave(&chan->slock, flags);
+	list_for_each_entry(vb, &queue->queued_list, queued_entry) {
+		if (vb->v4l2_buf.m.userptr == buffer->addr) {
+			found = vb;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&chan->slock, flags);
+
+	if (!found || found->state != TX_ISP_T30_FS_ACTIVE) {
+		chan->lost_frames++;
+		return 0;
+	}
+
+	getrawmonotonic(&timestamp);
+	found->v4l2_buf.timestamp.tv_sec = timestamp.tv_sec;
+	found->v4l2_buf.timestamp.tv_usec = timestamp.tv_nsec / 1000;
+	found->v4l2_buf.sequence = buffer->priv;
+	spin_lock_irqsave(&queue->done_lock, flags);
+	found->state = TX_ISP_T30_FS_DONE;
+	list_add_tail(&found->done_entry, &queue->done_list);
+	queue->done_count++;
+	list_del(&found->queued_entry);
+	queue->queued_count--;
+	spin_unlock_irqrestore(&queue->done_lock, flags);
+	wake_up(&queue->done_wq);
+	complete(&chan->comp);
+	chan->out_frames = buffer->priv;
+	return 0;
+}
+
+int32_t frame_chan_event(uintptr_t pad_address, uint32_t event,
+			 uintptr_t data_address)
+{
+	struct tx_isp_t30_subdev_pad *pad = (void *)pad_address;
+	struct tx_isp_t30_frame_sources *sources;
+
+	if (IS_ERR_OR_NULL(pad) || IS_ERR_OR_NULL(pad->sd))
+		return -EINVAL;
+	if (event != TX_ISP_FRAME_EVENT_BUFFER_DONE)
+		return 0;
+	sources = pad->sd->dev_priv;
+	if (IS_ERR_OR_NULL(sources) || IS_ERR_OR_NULL(sources->channels) ||
+	    pad->index >= sources->num_channels)
+		return -EINVAL;
+	return tx_isp_t30_frame_buffer_done(&sources->channels[pad->index],
+					    (void *)data_address);
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000193bc origin=fragment_seed original=frame_chan_event */
-int32_t frame_chan_event(uintptr_t a0, uint32_t a1, uintptr_t a2)
+static int32_t frame_chan_event_raw(uintptr_t a0, uint32_t a1, uintptr_t a2)
 {
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
@@ -30404,93 +32855,105 @@ frame_chan_event0x228:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000195f0 origin=model_output original=tx_isp_video_s_stream */
 int32_t tx_isp_video_s_stream(void *arg1, int32_t arg2)
 {
-	int32_t *s3 = (void *)((uintptr_t)arg1 + 14);
-	int32_t *i = 0;
-	int32_t *result = 0;
+	struct tx_isp_t30_device *ispdev = arg1;
+	unsigned int index;
+	int ret;
 
-	for (i = 0; i != 16; ) {
-		void *a0 = *(void **)s3;
+	if (!ispdev)
+		return -EINVAL;
 
-		if (a0 != 0) {
-			int32_t *v0_2 = (void *)(*(int32_t **)((uintptr_t)a0 + 49));
+	for (index = 0; index < ARRAY_SIZE(ispdev->module.submods); index++) {
+		struct tx_isp_t30_module *submod = ispdev->module.submods[index];
+		struct tx_isp_t30_subdev *sd;
+		void *video_ops;
+		int (*s_stream)(void *, int);
 
-			if (v0_2 != 0) {
-				int32_t (*fn)(int) = (int32_t (*)(int))*v0_2;
+		if (!submod)
+			continue;
+		sd = container_of(submod, struct tx_isp_t30_subdev, module);
+		if (IS_ERR_OR_NULL(sd->ops))
+			continue;
+		video_ops = sd->ops->video;
+		if (IS_ERR_OR_NULL(video_ops))
+			continue;
+		s_stream = video_ops ? *(int (**)(void *, int))video_ops : NULL;
+		if (!s_stream)
+			continue;
 
-				if (fn != 0) {
-					int32_t ret = fn(0);
-
-					if (ret != 0 && ret != -515) {
-						int32_t *j = (void *)((uintptr_t)arg1 + ((uintptr_t)i << 2));
-
-						while ((void *)arg1 != (void *)j) {
-							void *a0_1 = (void *)(*(void **)((uintptr_t)j + 14));
-
-							if (a0_1 != 0) {
-								int32_t *v0_5 = (void *)(*(int32_t **)((uintptr_t)a0_1 + 49));
-
-								if (v0_5 != 0) {
-									int32_t (*fn2)(void *, int32_t) =
-										(int32_t (*)(void *, int32_t))*v0_5;
-
-									if (fn2 != 0)
-										fn2((uintptr_t)a0_1, arg2 ^ 1);
-								}
-							}
-							j = (void *)(uintptr_t)((uintptr_t)j - (1));
-						}
-						return ret;
-					}
-				}
+		ret = s_stream(sd, arg2);
+		if (ret && ret != -ENOIOCTLCMD) {
+			while (index--) {
+				submod = ispdev->module.submods[index];
+				if (!submod)
+					continue;
+				sd = container_of(submod,
+						  struct tx_isp_t30_subdev, module);
+				if (IS_ERR_OR_NULL(sd->ops))
+					continue;
+				video_ops = sd->ops->video;
+				if (IS_ERR_OR_NULL(video_ops))
+					continue;
+				s_stream = video_ops ?
+					*(int (**)(void *, int))video_ops : NULL;
+				if (s_stream)
+					s_stream(sd, arg2 ^ 1);
 			}
+			return ret;
 		}
-		i = (void *)(uintptr_t)((uintptr_t)i + (1));
-		s3 = (uintptr_t)s3 + 1;
 	}
 
-	return result;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000196ec origin=model_output original=tx_isp_video_link_stream */
 int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2)
 {
-	int32_t *s3 = (void *)((uintptr_t)arg1 + 0x38 / 4);
-	int32_t *i = 0;
+	struct tx_isp_t30_device *ispdev = arg1;
+	unsigned int index;
+	int ret;
 
-	for (i = 0; (uintptr_t)i != 0x10; i = (uintptr_t)i + 1, s3 = (uintptr_t)s3 + 1) {
-		void *a0 = (void *)*s3;
+	if (!ispdev)
+		return -EINVAL;
 
-		if (a0 != 0) {
-			void *v0_2 = (void *)(*(void **)((char *)(uintptr_t)a0 + 0xc4 + 4));
+	for (index = 0; index < ARRAY_SIZE(ispdev->module.submods); index++) {
+		struct tx_isp_t30_module *submod = ispdev->module.submods[index];
+		struct tx_isp_t30_subdev *sd;
+		void *video_ops;
+		int (*link_stream)(void *, int);
 
-			if (v0_2 != 0) {
-				int32_t (*v0_3)(void) = (int32_t (*)(void))*(void **)((char *)v0_2 + 4);
+		if (!submod)
+			continue;
+		sd = container_of(submod, struct tx_isp_t30_subdev, module);
+		if (IS_ERR_OR_NULL(sd->ops))
+			continue;
+		video_ops = sd->ops->video;
+		if (IS_ERR_OR_NULL(video_ops))
+			continue;
+		link_stream = video_ops ?
+			*(int (**)(void *, int))((char *)video_ops + 4) : NULL;
+		if (!link_stream)
+			continue;
 
-				if (v0_3 != 0) {
-					int32_t result = v0_3();
-
-					if (result != 0 && result != 0xfffffdfd) {
-						void *j = (void *)((void *)arg1 + ((uintptr_t)i << 2));
-
-						for (; (void *)arg1 != (uintptr_t)j; j = (uintptr_t)j - 4) {
-							void *a0_1 = *(void **)((char *)j + 0x38);
-
-							if (a0_1 != 0) {
-								void *v0_5 = (void *)(*(void **)((char *)(uintptr_t)a0_1 + 0xc4 + 4));
-
-								if (v0_5 != 0) {
-									int32_t (*v0_6)(void *, int32_t) =
-										(int32_t (*)(void *, int32_t))*(void **)((char *)v0_5 + 4);
-
-									if (v0_6 != 0)
-										v0_6((uintptr_t)a0_1, arg2 ^ 1);
-								}
-							}
-						}
-						return result;
-					}
-				}
+		ret = link_stream(sd, arg2);
+		if (ret && ret != -ENOIOCTLCMD) {
+			while (index--) {
+				submod = ispdev->module.submods[index];
+				if (!submod)
+					continue;
+				sd = container_of(submod,
+						  struct tx_isp_t30_subdev, module);
+				if (IS_ERR_OR_NULL(sd->ops))
+					continue;
+				video_ops = sd->ops->video;
+				if (IS_ERR_OR_NULL(video_ops))
+					continue;
+				link_stream = video_ops ?
+					*(int (**)(void *, int))
+					 ((char *)video_ops + 4) : NULL;
+				if (link_stream)
+					link_stream(sd, arg2 ^ 1);
 			}
+			return ret;
 		}
 	}
 
@@ -31233,6 +33696,11 @@ static long tx_isp_t30_sensor_ioctl(struct file *file, unsigned int cmd,
 		size = sizeof(sensor_info);
 		copy_back = false;
 		break;
+	case 0x805056c2: /* TX_ISP_EVENT_SENSOR_RELEASE */
+		event = 0x02000001;
+		size = sizeof(sensor_info);
+		copy_back = false;
+		break;
 	case 0xc050561a: /* TX_ISP_EVENT_SENSOR_ENUM_INPUT */
 		event = 0x02000002;
 		size = sizeof(sensor_info);
@@ -31270,11 +33738,149 @@ static long tx_isp_t30_sensor_ioctl(struct file *file, unsigned int cmd,
 	return 0;
 }
 
+static int tx_isp_t30_video_link_setup(struct tx_isp_t30_device *ispdev,
+				       unsigned long arg)
+{
+	u32 link;
+	u32 geometry;
+	u32 *set;
+	u8 *record;
+	unsigned int count;
+	unsigned int index;
+
+	if (copy_from_user(&link, (void __user *)arg, sizeof(link)))
+		return -EFAULT;
+	if (link >= 3) {
+		isp_printf(2, "link(%d) is invalid!\n", link);
+		return -EINVAL;
+	}
+	if ((int)link == ispdev->active_link)
+		return 0;
+
+	set = (u32 *)(configs + link * TX_ISP_SUBDEV_LINK_SET_SIZE);
+	record = (u8 *)(uintptr_t)set[0];
+	count = set[1];
+	if (!record || !count)
+		return -EINVAL;
+
+	/* OEM T30 selects the scaler-facing ISP output when requested. */
+	if ((link == 0 || link == 2) && ispscalerwh > 0)
+		record[TX_ISP_SUBDEV_DESC_INDEX_OFFSET] = 1;
+
+	for (index = 0; index < count; index++,
+	     record += TX_ISP_SUBDEV_LINK_CONFIG_SIZE) {
+		void *source = find_subdev_link_pad(ispdev, record);
+		void *sink = find_subdev_link_pad(
+			ispdev, record + TX_ISP_SUBDEV_LINK_SINK_OFFSET);
+		u32 flags;
+		u32 enabled_flags;
+		enum tx_isp_subdev_link_status status;
+		int ret;
+
+		pr_info("tx-isp-t30: link%u[%u] %s/%u/%u=%p -> %s/%u/%u=%p flags=%08x\n",
+			link, index,
+			*(char **)(record + TX_ISP_SUBDEV_DESC_NAME_OFFSET),
+			*(u8 *)(record + TX_ISP_SUBDEV_DESC_TYPE_OFFSET),
+			*(u8 *)(record + TX_ISP_SUBDEV_DESC_INDEX_OFFSET), source,
+			*(char **)(record + TX_ISP_SUBDEV_LINK_SINK_OFFSET +
+				   TX_ISP_SUBDEV_DESC_NAME_OFFSET),
+			*(u8 *)(record + TX_ISP_SUBDEV_LINK_SINK_OFFSET +
+				  TX_ISP_SUBDEV_DESC_TYPE_OFFSET),
+			*(u8 *)(record + TX_ISP_SUBDEV_LINK_SINK_OFFSET +
+				  TX_ISP_SUBDEV_DESC_INDEX_OFFSET), sink,
+			*(u32 *)(record + TX_ISP_SUBDEV_LINK_FLAG_OFFSET));
+		if (!source || !sink)
+			continue;
+		flags = *(u32 *)(record + TX_ISP_SUBDEV_LINK_FLAG_OFFSET);
+		status = tx_isp_subdev_validate_link(
+			*(u8 *)((char *)source + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET),
+			*(u8 *)((char *)sink + TX_ISP_ABI_PAD_LINKS_TYPE_OFFSET),
+			*(u8 *)((char *)source + TX_ISP_ABI_PAD_STATE_OFFSET),
+			*(u8 *)((char *)sink + TX_ISP_ABI_PAD_STATE_OFFSET),
+			flags, &enabled_flags);
+		if (status == TX_ISP_SUBDEV_LINK_TYPE_MISMATCH) {
+			isp_printf(2, "The link type is mismatch!\n");
+			return -EINVAL;
+		}
+		if (status == TX_ISP_SUBDEV_LINK_BUSY) {
+			isp_printf(2, "Please stop active links firstly! %d\n",
+				   __LINE__);
+			return -EBUSY;
+		}
+		if (status != TX_ISP_SUBDEV_LINK_OK)
+			return -EINVAL;
+
+		if (*(u8 *)((char *)source + TX_ISP_ABI_PAD_STATE_OFFSET) ==
+			TX_ISP_ABI_PADSTATE_LINKED &&
+		    *(void **)((char *)source + TX_ISP_ABI_PAD_LINK_OFFSET +
+			      TX_ISP_ABI_LINK_SINK_OFFSET) != sink) {
+			ret = subdev_video_destroy_link_isra_0(
+				(int32_t *)((char *)source + TX_ISP_ABI_PAD_LINK_OFFSET));
+			if (ret && ret != -ENOIOCTLCMD)
+				return ret;
+		}
+		if (*(u8 *)((char *)sink + TX_ISP_ABI_PAD_STATE_OFFSET) ==
+			TX_ISP_ABI_PADSTATE_LINKED &&
+		    *(void **)((char *)sink + TX_ISP_ABI_PAD_LINK_OFFSET +
+			      TX_ISP_ABI_LINK_SINK_OFFSET) != source) {
+			ret = subdev_video_destroy_link_isra_0(
+				(int32_t *)((char *)sink + TX_ISP_ABI_PAD_LINK_OFFSET));
+			if (ret && ret != -ENOIOCTLCMD)
+				return ret;
+		}
+
+		tx_isp_subdev_connect_link_pair(source, sink, enabled_flags);
+	}
+
+	ispdev->active_link = link;
+	geometry = ((u32)ispw << 16) | ((u32)isph & 0xffff);
+	printk(KERN_INFO
+	       "tx-isp-t30: video link %u configured, geometry=%ux%u\n",
+	       link, (u32)ispw, (u32)isph);
+	if (copy_to_user((void __user *)arg, &geometry, sizeof(geometry)))
+		return -EFAULT;
+	return 0;
+}
+
+static long tx_isp_t30_video_ioctl(struct file *file, unsigned int cmd,
+				    unsigned long arg, bool *handled)
+{
+	struct miscdevice *miscdev = file->private_data;
+	struct tx_isp_t30_module *module;
+	struct tx_isp_t30_device *ispdev;
+
+	*handled = true;
+	if (!miscdev)
+		return -EINVAL;
+	module = container_of(miscdev, struct tx_isp_t30_module, miscdev);
+	ispdev = container_of(module, struct tx_isp_t30_device, module);
+
+	switch (cmd) {
+	case 0x800456d0:
+		return tx_isp_t30_video_link_setup(ispdev, arg);
+	case 0x800456d1:
+		return tx_isp_video_link_destroy_isra_0(ispdev);
+	case 0x800456d2:
+		return tx_isp_video_link_stream(ispdev, 1);
+	case 0x800456d3:
+		return tx_isp_video_link_stream(ispdev, 0);
+	case 0x80045612:
+		return tx_isp_video_s_stream(ispdev, 1);
+	case 0x80045613:
+		return tx_isp_video_s_stream(ispdev, 0);
+	default:
+		*handled = false;
+		return 0;
+	}
+}
+
 static long tx_isp_unlocked_ioctl(struct file *a0_file, unsigned int a1,
 				  unsigned long a2)
 {
 	bool sensor_ioctl_handled;
+	bool video_ioctl_handled;
 	long sensor_ioctl_ret;
+	long video_ioctl_ret;
 	uintptr_t a0 = (uintptr_t)a0_file;
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -31323,10 +33929,16 @@ static long tx_isp_unlocked_ioctl(struct file *a0_file, unsigned int a1,
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
 
+	printk(KERN_INFO "tx-isp-t30: ioctl cmd=%#x arg=%#lx\n", a1, a2);
+
 	sensor_ioctl_ret = tx_isp_t30_sensor_ioctl(a0_file, a1, a2,
 						   &sensor_ioctl_handled);
 	if (sensor_ioctl_handled)
 		return sensor_ioctl_ret;
+	video_ioctl_ret = tx_isp_t30_video_ioctl(a0_file, a1, a2,
+					       &video_ioctl_handled);
+	if (video_ioctl_handled)
+		return video_ioctl_ret;
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -32459,23 +35071,22 @@ int32_t private_reset_tx_isp_module(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001aaf8 origin=model_output original=tx_isp_reg_set */
 int tx_isp_reg_set(void *arg1, int arg2, int arg3, int arg4, int arg5)
 {
-    int count = arg4 - arg3 + 1;
-    int *i = 0;
-    int *mask = 0;
-    int *reg;
-    int val;
+	struct tx_isp_t30_subdev *sd = arg1;
+	void __iomem *reg;
+	u32 mask = 0;
+	u32 value;
+	int bit;
 
-    while (i < count) {
-        mask = (void *)(uintptr_t)((uintptr_t)mask + (1 << (((uintptr_t)i + arg3) & 0x1f)));
-        i++;
-    }
-
-    reg = *(int **)((char *)arg1 + 0xb8) + arg2;
-    val = *reg;
-    val = (~(uintptr_t)mask) & val;
-    val |= arg5 << (arg3 & 0x1f);
-    *reg = val;
-    return 0;
+	if (!sd || IS_ERR(sd) || !sd->base ||
+	    arg2 < 0 || arg3 < 0 || arg4 < arg3 || arg4 > 31)
+		return -EINVAL;
+	for (bit = arg3; bit <= arg4; bit++)
+		mask |= BIT(bit);
+	reg = (u8 __iomem *)sd->base + arg2;
+	value = readl(reg);
+	value = (value & ~mask) | ((u32)arg5 << arg3 & mask);
+	writel(value, reg);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ab58 origin=model_output original=tx_isp_send_event_to_remote */
@@ -33821,19 +36432,7 @@ int32_t disable_all_frame_buffers(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001c1c8 origin=fragment_seed original=apical_get_fw */
 int32_t apical_get_fw(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&vic_cmd_buf;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: Arithmetic */
-    v0 = v0 + 16544;
-
-    return 0;
+	return (int32_t)(uintptr_t)&__fw;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001c1d4 origin=model_output original=apical_init_calibrations */
@@ -34356,17 +36955,179 @@ int32_t apical_get_current_isp_index(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001cd00 origin=model_output original=load_isp_sequence */
+static u16 tx_isp_t30_sequence_u16(const u8 *data)
+{
+	return (u16)data[0] | ((u16)data[1] << 8);
+}
+
+static u32 tx_isp_t30_sequence_u32(const u8 *data)
+{
+	return (u32)data[0] | ((u32)data[1] << 8) |
+	       ((u32)data[2] << 16) | ((u32)data[3] << 24);
+}
+
+static void tx_isp_t30_sequence_write(u32 address, const u8 *data,
+				      unsigned int count)
+{
+	while (count && (address & 1)) {
+		APICAL_WRITE_8((void *)(uintptr_t)address, *data++);
+		address++;
+		count--;
+	}
+	while (count >= sizeof(u32)) {
+		APICAL_WRITE_32(address, tx_isp_t30_sequence_u32(data));
+		address += sizeof(u32);
+		data += sizeof(u32);
+		count -= sizeof(u32);
+	}
+	while (count >= sizeof(u16)) {
+		APICAL_WRITE_16((void *)(uintptr_t)address,
+				tx_isp_t30_sequence_u16(data));
+		address += sizeof(u16);
+		data += sizeof(u16);
+		count -= sizeof(u16);
+	}
+	if (count)
+		APICAL_WRITE_8((void *)(uintptr_t)address, *data);
+}
+
+static int tx_isp_t30_apply_isp_sequence(const u8 *sequence, size_t size,
+					 u8 group, unsigned int depth,
+					 unsigned int *write_count)
+{
+	const u8 *end = sequence + size;
+	const u8 *data;
+	u32 offset = 0;
+
+	if (depth >= 16 || (size_t)group * 2 + 1 >= size)
+		return -EINVAL;
+	data = sequence + tx_isp_t30_sequence_u16(sequence + group * 2);
+	if (data < sequence || data >= end)
+		return -EINVAL;
+
+	while (data < end) {
+		u8 op = *data;
+		u8 kind = op >> 4;
+		unsigned int length;
+		u32 address;
+
+		switch (op) {
+		case 0x00:
+			return 0;
+		case 0x01:
+			if (end - data < 3)
+				return -EINVAL;
+			offset = tx_isp_t30_sequence_u16(data + 1);
+			data += 3;
+			continue;
+		case 0x02:
+			if (end - data < 5)
+				return -EINVAL;
+			offset = tx_isp_t30_sequence_u32(data + 1);
+			data += 5;
+			continue;
+		case 0x10:
+		case 0x11:
+			if (end - data < 2)
+				return -EINVAL;
+			if (op == 0x10)
+				offset += data[1];
+			else
+				offset -= data[1];
+			data += 2;
+			continue;
+		case 0xe0:
+			if (end - data < 2)
+				return -EINVAL;
+			usleep_range(data[1], data[1] + 100);
+			data += 2;
+			continue;
+		case 0xe1: {
+			u32 delay;
+
+			if (end - data < 3)
+				return -EINVAL;
+			delay = tx_isp_t30_sequence_u16(data + 1);
+			usleep_range(delay, delay + 100);
+			data += 3;
+			continue;
+		}
+		case 0xe2: {
+			u32 delay;
+
+			if (end - data < 5)
+				return -EINVAL;
+			delay = tx_isp_t30_sequence_u32(data + 1);
+			usleep_range(delay, delay + 100);
+			data += 5;
+			continue;
+		}
+		default:
+			break;
+		}
+
+		if (kind == 0x0f) {
+			int ret = tx_isp_t30_apply_isp_sequence(sequence, size,
+					op & 0x0f, depth + 1, write_count);
+
+			if (ret)
+				return ret;
+			data++;
+			continue;
+		}
+		if (kind != 0x02 && kind != 0x03) {
+			data++;
+			continue;
+		}
+
+		length = (op & 0x0f) + 1;
+		if (end - data < 2 + length * (kind == 0x03 ? 2 : 1))
+			return -EINVAL;
+		address = offset + data[1];
+		if (kind == 0x02) {
+			tx_isp_t30_sequence_write(address, data + 2, length);
+			*write_count += length;
+			data += length + 2;
+			continue;
+		}
+
+		if (length <= sizeof(u32)) {
+			u8 merged[sizeof(u32)];
+			const u8 *values = data + 2;
+			const u8 *masks = values + length;
+			unsigned int index;
+
+			for (index = 0; index < length; index++) {
+				u8 old = APICAL_READ_8(address + index);
+
+				merged[index] = (old & ~masks[index]) |
+						(values[index] & masks[index]);
+			}
+			tx_isp_t30_sequence_write(address, merged, length);
+			*write_count += length;
+		}
+		data += 2 + length * 2;
+	}
+
+	return -EINVAL;
+}
+
 char *load_isp_sequence(uint32_t arg1)
 {
-	uint32_t *local_10;
-	uint32_t ret;
+	unsigned int writes = 0;
+	int ret;
 
-	apical_sbus_isp_init(&local_10);
-	local_10 = 0xa7;
-	ret = apical_custom_sequence();
-	if (ret)
-		ret = (uint32_t)(uintptr_t)sensor_load_binary_sequence(&local_10, (void *)(uintptr_t)ret, arg1 & 0xff);
-	return (char *)(uintptr_t)ret;
+	ret = tx_isp_t30_apply_isp_sequence(tx_isp_t30_isp_sequence,
+					    sizeof(tx_isp_t30_isp_sequence),
+					    arg1 & 0xff, 0, &writes);
+	if (ret) {
+		pr_err("tx-isp-t30: ISP sequence %u failed: %d\n",
+		       arg1 & 0xff, ret);
+		return NULL;
+	}
+	pr_err("tx-isp-t30: ISP sequence %u applied (%u bytes written)\n",
+	       arg1 & 0xff, writes);
+	return (char *)tx_isp_t30_isp_sequence;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001cd64 origin=model_output original=apical_fw_interrupts_init */
@@ -36294,80 +39055,71 @@ int32_t sensor_load_array_sequence(int32_t *arg1, void *arg2, int32_t arg3)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f2e0 origin=model_output original=APICAL_READ_32 */
 int32_t APICAL_READ_32(int32_t arg1)
 {
-	if ((uint32_t)arg1 < 0x1ffffu)
+	uint32_t addr = (uint32_t)arg1;
+	uint32_t off;
+
+	if (addr < 0x1ffffu)
 		return system_isp_read_32(arg1);
 
-	{
-		int32_t off = arg1 - 0x40100;
-		int32_t *v0;
-		int32_t v1;
-		uint8_t *base;
+	off = addr - 0x40100u;
+	if (off > sizeof(apical_ext_sytem_mem) - sizeof(uint32_t))
+		return 0;
 
-		if ((uint32_t)off < 0xf8u)
-			return 0;
-
-		base = &apical_ext_sytem_mem[off];
-		v1 = 5;
-		v0 = 0;
-		while (1) {
-			v1 -= 1;
-			if (v1 == 0)
-				break;
-			v0 = (int32_t *)(((uintptr_t)v0 << 8) | base[v1]);
-		}
-		return v0;
-	}
+	return (uint32_t)apical_ext_sytem_mem[off] |
+	       ((uint32_t)apical_ext_sytem_mem[off + 1] << 8) |
+	       ((uint32_t)apical_ext_sytem_mem[off + 2] << 16) |
+	       ((uint32_t)apical_ext_sytem_mem[off + 3] << 24);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f360 origin=model_output original=APICAL_READ_16 */
 uint32_t APICAL_READ_16(uint32_t addr)
 {
-    uint32_t offset;
-    uint8_t high;
-    uint8_t low;
+	uint32_t off;
 
-    if (addr < 0x1ffff)
-        return system_isp_read_16(addr);
+	if (addr < 0x1ffffu)
+		return system_isp_read_16(addr);
 
-    offset = addr - 0x40100;
-    if (offset >= 0xf8)
-        return 0;
+	off = addr - 0x40100u;
+	if (off > sizeof(apical_ext_sytem_mem) - sizeof(uint16_t))
+		return 0;
 
-    high = *(volatile uint8_t *)(apical_ext_sytem_mem + 0xfffc0000 + 0x4e5f0 - 0xff);
-    low = *(volatile uint8_t *)(apical_ext_sytem_mem + 0x4e5f0 + offset);
-    return ((uint32_t)high << 8) | low;
+	return (uint32_t)apical_ext_sytem_mem[off] |
+	       ((uint32_t)apical_ext_sytem_mem[off + 1] << 8);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f3d0 origin=model_output original=APICAL_READ_8 */
 uint32_t APICAL_READ_8(uint32_t addr)
 {
+	uint32_t off;
+
 	if (addr < 0x1ffff)
 		return system_isp_read_8(addr);
 
-	if ((addr - 0x40100) >= 0xf8)
+	off = addr - 0x40100u;
+	if (off >= sizeof(apical_ext_sytem_mem))
 		return 0;
 
-	return apical_ext_sytem_mem[addr - 0x40100];
+	return apical_ext_sytem_mem[off];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f420 origin=model_output original=APICAL_WRITE_32 */
 int32_t APICAL_WRITE_32(int32_t addr, uint32_t val)
 {
-    if ((uint32_t)addr < 0x1ffffu)
-        return system_isp_write_32(addr, val);
+	uint32_t uaddr = (uint32_t)addr;
+	uint32_t off;
 
-    int32_t *i = 0;
+	if (uaddr < 0x1ffffu)
+		return system_isp_write_32(addr, val);
 
-    if ((uint32_t)(addr - 0x40100) < 0xf8u) {
-        uint8_t *base = &apical_ext_sytem_mem[addr - 0x40100];
-        do {
-            ((void **)base)[(uintptr_t)i] = (uint8_t)val;
-            i++;
-            val >>= 8;
-        } while (i != 4);
-    }
+	off = uaddr - 0x40100u;
+	if (off > sizeof(apical_ext_sytem_mem) - sizeof(uint32_t))
+		return 0;
 
-    return i;
+	apical_ext_sytem_mem[off] = (uint8_t)val;
+	apical_ext_sytem_mem[off + 1] = (uint8_t)(val >> 8);
+	apical_ext_sytem_mem[off + 2] = (uint8_t)(val >> 16);
+	apical_ext_sytem_mem[off + 3] = (uint8_t)(val >> 24);
+	return 4;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f490 origin=model_output original=APICAL_WRITE_16 */
@@ -36375,38 +39127,36 @@ void *APICAL_WRITE_16(void *arg1, int16_t arg2)
 {
 	unsigned int addr = (unsigned int)arg1;
 	unsigned short value = (unsigned short)arg2;
-	unsigned int *base = apical_ext_sytem_mem;
-	unsigned int *result;
+	unsigned int off;
 
 	if (addr < 0x1ffffu)
 		return system_isp_write_16(addr, value);
 
-	result = addr - 0x40100u;
-	if (result < 0xf8u) {
-		*(unsigned char *)((uintptr_t)base + (uintptr_t)result) = (unsigned char)value;
-		*(unsigned char *)((uintptr_t)base + (uintptr_t)result + 0x1a4u) = (unsigned char)(value >> 8);
-	}
+	off = addr - 0x40100u;
+	if (off > sizeof(apical_ext_sytem_mem) - sizeof(uint16_t))
+		return arg1;
 
-	return (void *)(addr + (uintptr_t)base);
+	apical_ext_sytem_mem[off] = (uint8_t)value;
+	apical_ext_sytem_mem[off + 1] = (uint8_t)(value >> 8);
+	return &apical_ext_sytem_mem[off];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f4f8 origin=model_output original=APICAL_WRITE_8 */
 char *APICAL_WRITE_8(void *arg1, char arg2)
 {
-    char *result;
+	unsigned long addr = (unsigned long)arg1;
+	unsigned long off;
 
-    if ((unsigned long)arg1 < 0x1ffff) {
-        return (char *)system_isp_write_8((uint32_t)(unsigned long)arg1, (uint8_t)arg2);
-    }
+	if (addr < 0x1ffffu)
+		return (char *)system_isp_write_8((uint32_t)addr,
+						 (uint8_t)arg2);
 
-    result = (char *)arg1 - 0x40100;
+	off = addr - 0x40100u;
+	if (off >= sizeof(apical_ext_sytem_mem))
+		return (char *)arg1;
 
-    if ((unsigned long)result < 0xf8) {
-        result = (void *)(uintptr_t)((uintptr_t)result + ((long)&apical_ext_sytem_mem));
-        *result = arg2;
-    }
-
-    return result;
+	apical_ext_sytem_mem[off] = (uint8_t)arg2;
+	return (char *)&apical_ext_sytem_mem[off];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001f550 origin=model_output original=read_data */
@@ -38132,8 +40882,9 @@ int32_t selftest_calibration_revision(int32_t arg1, int32_t arg2, char arg3, int
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020df4 origin=model_output original=isp_system_state */
 int32_t isp_system_state(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 {
+	uint8_t *state_ptr;
 	uint32_t state;
-	int32_t *result;
+	int32_t result;
 	uint32_t reg_val;
 	uint32_t shift;
 	int32_t shifted;
@@ -38141,9 +40892,10 @@ int32_t isp_system_state(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 
 	*arg4 = 0;
 	state = (uint32_t)arg3 & 0xff;
+	state_ptr = (uint8_t *)*(void **)((char *)arg1 + 4) + 0x10;
 
 	if (state == 1) {
-		cur = *(uint8_t *)((char *)*(void **)((char *)arg1 + 4) + 0x10);
+		cur = *state_ptr;
 		if (cur == state)
 			*arg4 = cur;
 		return 0;
@@ -38155,7 +40907,7 @@ int32_t isp_system_state(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 		return result;
 
 	if (arg2 == 0) {
-		cur = *(uint8_t *)((char *)*(void **)((char *)arg1 + 4) + 0x10);
+		cur = *state_ptr;
 		if (cur == 0)
 			return 0;
 		result = 5;
@@ -38168,11 +40920,12 @@ int32_t isp_system_state(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 			shifted = (int32_t)(0x54000000u << shift);
 			if (shifted < 0) {
 				APICAL_WRITE_32(0x130, APICAL_READ_32(0x130) & 0xfffffff8);
-				*(uint8_t *)((char *)*(void **)((char *)arg1 + 4) + 0x10) = 0;
+				*state_ptr = 0;
 				return 0;
 			}
 		}
 	} else if (arg2 == 1) {
+		cur = *state_ptr;
 		if (cur == arg2)
 			return 0;
 		result = 5;
@@ -38182,7 +40935,7 @@ int32_t isp_system_state(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 				result = 0;
 			if (reg_val == 0 || reg_val == 2) {
 				APICAL_WRITE_32(0x130, (APICAL_READ_32(0x130) & 0xfffffff8) | 1);
-				*(uint8_t *)((char *)*(void **)((char *)arg1 + 4) + 0x10) = 1;
+				*state_ptr = 1;
 				return 0;
 			}
 		}
@@ -40667,34 +43420,31 @@ int32_t sharpening_strength(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 {
 	uint32_t mode = (uint32_t)(uint8_t)arg3;
 	uint32_t value;
-	int32_t *result;
 
 	*arg4 = 0;
 
 	if (mode != 0) {
-		result = 2;
 		if (mode == 1) {
 			value = *(uint8_t *)((uintptr_t)arg1 + 0x1036);
 			*arg4 = value;
 			return 0;
 		}
-		return result;
+		return 2;
 	}
 
-	result = 2;
-	if (arg2 < 256) {
+	if ((uint32_t)arg2 < 256) {
 		*(uint8_t *)((uintptr_t)arg1 + 0x1036) = (uint8_t)arg2;
 		if (arg2 < 129) {
 			*(uint16_t *)((uintptr_t)arg1 + 0x1034) = (uint16_t)arg2;
-			return result;
+			return 0;
 		}
 		value = (uint32_t)arg2 * (uint32_t)arg2;
 		value = value * value;
 		*(uint16_t *)((uintptr_t)arg1 + 0x1034) = (uint16_t)(value >> 0x15);
-		return result;
+		return 0;
 	}
 
-	return result;
+	return 2;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000240d4 origin=model_output original=fr_output_mode */
@@ -40723,7 +43473,7 @@ int32_t fr_output_mode(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 			val = 4;
 		}
 
-		((void **)base)[0x2e1c] = val;
+		base[0x2e1c] = val;
 		matrix_yuv_update(base + 0x2d74);
 		return 0;
 	}
@@ -40787,7 +43537,7 @@ int32_t ds1_output_mode(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
     if (m != 1)
         return 1;
 
-    uint8_t *cur = *mode;
+    uint8_t cur = *mode;
 
     if (cur == 2) {
         *arg4 = 0x56;
@@ -40869,7 +43619,7 @@ int32_t brightness_strength(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
     *arg4 = 0;
 
     if (mode == 0) {
-        ((void **)base)[0x2e18] = (uint8_t)arg2;
+        base[0x2e18] = (uint8_t)arg2;
         if ((uint32_t)arg2 < 0x100) {
             matrix_yuv_update(arg1 + 0x2d74);
             return 0;
@@ -40892,7 +43642,7 @@ int32_t contrast_strength(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
     *arg4 = 0;
 
     if (mode == 0) {
-        ((void **)p)[0x2e17] = (uint8_t)arg2;
+        p[0x2e17] = (uint8_t)arg2;
         if ((uint32_t)arg2 < 0x100) {
             matrix_yuv_update((void *)(arg1 + 0x2d74));
             return 0;
@@ -40913,7 +43663,7 @@ int32_t saturation_strength(void *arg1, int32_t arg2, char arg3, int32_t *arg4)
 
     if (mode == 0) {
         *arg4 = 0;
-        ((void **)p)[0x2e16] = (uint8_t)arg2;
+        p[0x2e16] = (uint8_t)arg2;
         if ((uint32_t)arg2 < 256) {
             matrix_yuv_update(arg1 + 0x2d74);
             return 0;
@@ -43591,160 +46341,114 @@ final_write:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000287cc origin=model_output original=iridix_control_strength_calculate */
-unsigned int iridix_control_strength_calculate(int32_t *arg1) {
-    int32_t *s1 = (int32_t *)(uintptr_t)*arg1;
-    int32_t s4 = 0;
-    uint32_t lo = (uint32_t)(uint16_t)_GET_USHORT_PTR(0xd0) * (uint32_t)s1[0x738 / 4] / 0x64;
-    int32_t s0_1 = 0;
-    int32_t i = 0;
-    int32_t v1_2 = 0;
-    uint32_t s0_2;
-    int32_t v0_6;
-    uint32_t v0_8;
-    uint16_t v0_13;
-    int32_t v0_21;
-    int32_t lo_3;
-    int32_t fp_1;
-    int32_t s4_4;
-    uint32_t s0_8;
-    int32_t v0_40;
-    uint32_t v0_45;
-    int16_t *v0_9;
-    uint32_t v0_10;
+unsigned int iridix_control_strength_calculate(int32_t *arg1)
+{
+	uint8_t *isp = (uint8_t *)(uintptr_t)arg1[0];
+	uint16_t max_iroi = *(uint16_t *)(uintptr_t)_GET_USHORT_PTR(0xd0);
+	uint16_t max_avg = *(uint16_t *)(uintptr_t)_GET_USHORT_PTR(0xd1);
+	uint16_t min_strength = *(uint16_t *)(uintptr_t)_GET_USHORT_PTR(0xd2);
+	uint32_t exposure_min = *(uint32_t *)(uintptr_t)_GET_UINT_PTR(0xd3);
+	uint8_t mode = *(uint8_t *)(isp + 0x1524);
+	uint32_t histogram_limit;
+	uint32_t histogram_sum = 0;
+	uint32_t weighted_sum = 0;
+	uint32_t average;
+	uint32_t divisor;
+	int32_t strength;
+	int32_t exposure_strength = 100;
+	uint32_t exposure = *(uint32_t *)(isp + 0x11c);
+	uint32_t exposure_max;
+	unsigned int i;
 
-    do {
-        int32_t v1_4 = s1[(0x308 + v1_2 + 0x30) / 4];
-        s0_1 += v1_4;
-        s4 += v1_4 * (uintptr_t)i;
+	histogram_limit = max_iroi * *(uint32_t *)(isp + 0x738) / 100;
+	for (i = 0; i < 0x100; i++) {
+		uint32_t bin = *(uint32_t *)(isp + 0x338 + i * sizeof(uint32_t));
 
-        if (lo < (uint32_t)s0_1)
-            break;
+		histogram_sum += bin;
+		weighted_sum += bin * i;
+		if (histogram_limit < histogram_sum)
+			break;
+	}
 
-        i = (void *)(uintptr_t)((uintptr_t)i + (1));
-        v1_2 = (uintptr_t)i << 2;
-    } while (i != 0x100);
+	if (weighted_sum == 0) {
+		average = max_avg;
+	} else {
+		divisor = max_iroi << 8;
+		divisor = divisor ? weighted_sum / divisor : 0;
+		average = divisor ? histogram_sum / divisor : max_avg;
+	}
 
-    if (s4 == 0)
-        s0_2 = (uint32_t)(uint16_t)_GET_USHORT_PTR(0xd1);
-    else {
-        uint32_t v0_4 = (uint32_t)(uint16_t)_GET_USHORT_PTR(0xd0) << 8;
-        uint32_t lo_1 = (uint32_t)s4 / v0_4;
+	if (mode == 1) {
+		int16_t *lut = (int16_t *)(uintptr_t)_GET_MOD_ENTRY16_PTR(0x105);
 
-        if (v0_4 == 0)
-            __builtin_trap();
+		return (uint16_t)(calc_modulation_u16(
+			APICAL_READ_32(0x24c) & 0xfff,
+			(uintptr_t)lut, _GET_ROWS(0x105)) << 8);
+	}
 
-        if (lo_1 == 0)
-            __builtin_trap();
+	if (mode == 0)
+		average = ((int32_t)average +
+			((int32_t)average < 0 ? 3 : 0)) >> 2;
+	if (average > max_avg)
+		average = max_avg;
 
-        s0_2 = (uint32_t)s0_1 / lo_1;
-    }
+	divisor = max_avg - 1;
+	if (divisor == 0)
+		divisor = 1;
+	strength = ((int32_t)average - 1) * 100 / (int32_t)divisor;
 
-    if ((uint32_t)(uint8_t)(*(int32_t *)((char *)(uintptr_t)*arg1 + 0x1524)) != 1)
-        v0_6 = *arg1;
-    else {
-        s0_2 = (uint32_t)(uint16_t)_GET_USHORT_PTR(0xd1) << 2;
-        v0_6 = *arg1;
-    }
+	exposure_max = *(uint32_t *)(uintptr_t)_GET_UINT_PTR(
+		_GET_HDR_TABLE_INDEX(0x24, mode));
+	if (exposure >= exposure_min) {
+		exposure_strength = 0;
+		if (exposure_max >= exposure) {
+			divisor = exposure_max - exposure_min;
+			if (divisor == 0)
+				divisor = 1;
+			exposure_strength = 100 -
+				(exposure - exposure_min) * 100 / divisor;
+		}
+	}
 
-    v0_8 = (uint32_t)(uint8_t)(*(int32_t *)((char *)(uintptr_t)v0_6 + 0x1524));
+	if (exposure_strength < min_strength) {
+		if (exposure < exposure_min)
+			exposure_strength = min_strength;
+		else if (exposure_strength < 0)
+			exposure_strength = 0;
+	}
+	if (exposure_strength < strength)
+		strength = exposure_strength;
 
-    if (v0_8 != 1) {
-        if (v0_8 == 0) {
-            if ((int32_t)s0_2 < 0)
-                s0_2 += 3;
-
-            s0_2 = (uint32_t)((int32_t)s0_2 >> 2);
-        }
-
-        if ((int32_t)(uint16_t)_GET_USHORT_PTR(0xd1) < (int32_t)s0_2)
-            s0_2 = (uint32_t)(uint16_t)_GET_USHORT_PTR(0xd1);
-
-        v0_21 = (int32_t)(uint16_t)_GET_USHORT_PTR(0xd1) - 1;
-
-        if (v0_21 == 0)
-            v0_21 = 1;
-
-        lo_3 = ((int32_t)s0_2 - 1) * 0x64 / v0_21;
-
-        if (v0_21 == 0)
-            __builtin_trap();
-
-        fp_1 = *(int32_t *)(uintptr_t)_GET_UINT_PTR(_GET_HDR_TABLE_INDEX(0x24, (uint32_t)(uint8_t)(*(int32_t *)((char *)(uintptr_t)*arg1 + 0x1524))));
-        s4_4 = (lo_3 & ~(lo_3 << 0x10 >> 0x10)) >> 0x1f << 0x10 >> 0x10;
-        s0_8 = 0x64;
-
-        if ((uint32_t)s1[0x11c / 4] >= (uint32_t)(uintptr_t)_GET_UINT_PTR(0xd3)) {
-            int32_t v1_9 = s1[0x11c / 4];
-            s0_8 = 0;
-
-            if ((uint32_t)fp_1 >= (uint32_t)v1_9) {
-                int32_t s0_10 = v1_9 - (int32_t)(uintptr_t)_GET_UINT_PTR(0xd3);
-                int32_t v0_36 = fp_1 - (int32_t)(uintptr_t)_GET_UINT_PTR(0xd3);
-
-                if (v0_36 == 0)
-                    v0_36 = 1;
-
-                if (v0_36 == 0)
-                    __builtin_trap();
-
-                s0_8 = 0x64 - (uint32_t)s0_10 * 0x64 / (uint32_t)v0_36;
-            }
-        }
-
-        v0_40 = (int32_t)s0_8 < s4_4 ? 1 : 0;
-
-        if ((int32_t)s0_8 < (int32_t)(uint16_t)_GET_USHORT_PTR(0xd2)) {
-            if ((uint32_t)s1[0x11c / 4] < (uint32_t)(uintptr_t)_GET_UINT_PTR(0xd3))
-                s0_8 = (uint32_t)(uint16_t)_GET_USHORT_PTR(0xd2);
-            else if ((int32_t)s0_8 < 0)
-                s0_8 = 0;
-
-            v0_40 = (int32_t)s0_8 < s4_4 ? 1 : 0;
-        }
-
-        if (v0_40 != 0)
-            s4_4 = (int32_t)s0_8 << 0x10 >> 0x10;
-
-        v0_45 = (uint32_t)stab[42];
-        v0_13 = (uint16_t)(((int32_t)((int32_t)stab[41] - (int32_t)v0_45) << 8) * (int32_t)s4_4 / 0x64) + (uint16_t)((int32_t)v0_45 << 8);
-    } else {
-        v0_9 = (int16_t *)(uintptr_t)_GET_MOD_ENTRY16_PTR(0x105);
-        v0_10 = (uint32_t)_GET_ROWS(0x105);
-        v0_13 = (uint16_t)((int32_t)calc_modulation_u16(APICAL_READ_32(0x24c) & 0xfff, (uintptr_t)v0_9, v0_10) << 8);
-    }
-
-    return (uint32_t)v0_13;
+	return (uint16_t)((((int32_t)stab[41] - (int32_t)stab[42]) << 8) *
+		strength / 100 + ((uint32_t)stab[42] << 8));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000028b4c origin=model_output original=iridix_update */
 int16_t iridix_update(int32_t *arg1)
 {
-    int32_t *s1 = arg1;
-    uint32_t val;
-    int16_t *result;
-    uint32_t upper;
-    uint32_t lower;
+	uint32_t value;
+	uint16_t result;
+	uint32_t minimum;
+	uint32_t maximum;
 
-    if (stab[9]) {
-        val = (uint32_t)stab[40] << 8;
-    } else {
-        int32_t calc = iridix_control_strength_calculate(arg1);
-        stab[40] = (unsigned char)(calc >> 8);
-        val = (uint32_t)calc;
-    }
+	if (stab[9]) {
+		value = (uint32_t)stab[40] << 8;
+	} else {
+		value = iridix_control_strength_calculate(arg1);
+		stab[40] = value >> 8;
+	}
 
-    result = (int32_t *)val;
+	result = (uint16_t)value;
+	minimum = (uint32_t)stab[42] << 8;
+	if (value < (minimum & 0xff00))
+		result = (uint16_t)minimum;
 
-    upper = (uint32_t)stab[42] << 8;
-    if ((uint32_t)result < (upper & 0xff00))
-        result = (int32_t *)upper;
+	maximum = (uint32_t)stab[41] << 8;
+	if ((maximum & 0xff00) < result)
+		result = (uint16_t)maximum;
 
-    lower = (uint32_t)stab[41] << 8;
-    if ((lower & 0xff00) < (uint32_t)(uint16_t)(uintptr_t)result)
-        result = (int32_t *)lower;
-
-    *(int16_t *)((char *)s1 + 0x10) = result;
-    return result;
+	*(uint16_t *)((uint8_t *)arg1 + 0x10) = result;
+	return (int16_t)result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000028c00 origin=model_output original=_update_ds */
@@ -45923,7 +48627,8 @@ int32_t apical_command(uint32_t cmd, uint32_t subcmd, uint32_t value, uint32_t f
 
 	fw_base = apical_get_fw();
 	fw_size = *(uint32_t *)fw_base;
-	api_base = (fw_size * 0x2fb8) + fw_base;
+	/* OEM selects the per-context API block at __fw + 0x18. */
+	api_base = (fw_size * 0x2fb8) + fw_base + 0x18;
 
 	switch ((uintptr_t)s3) {
 	case 0:
@@ -53995,7 +56700,8 @@ int tx_isp_ldc_remove(struct platform_device *pdev)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038880 origin=fragment_seed original=tx_isp_mscaler_remove */
-int tx_isp_mscaler_remove(struct platform_device *pdev)
+#if 0
+static int tx_isp_mscaler_remove_raw(struct platform_device *pdev)
 {
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
@@ -54039,6 +56745,29 @@ int tx_isp_mscaler_remove(struct platform_device *pdev)
     /* function epilogue: restore registers and return */
 
     return 0;
+}
+#endif
+
+int tx_isp_mscaler_remove(struct platform_device *pdev)
+{
+	struct tx_isp_t30_module *module = private_platform_get_drvdata(pdev);
+	struct tx_isp_t30_subdev *sd;
+	struct tx_isp_t30_mscaler_device *mscaler;
+
+	if (!module)
+		return 0;
+	sd = container_of(module, struct tx_isp_t30_subdev, module);
+	mscaler = sd->dev_priv;
+	private_platform_set_drvdata(pdev, NULL);
+	if (!mscaler)
+		return 0;
+	kfree(mscaler->inputs);
+	kfree(mscaler->outputs);
+	mscaler->inputs = NULL;
+	mscaler->outputs = NULL;
+	tx_isp_subdev_deinit(sd);
+	kfree(mscaler);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000388f4 origin=model_output original=tx_isp_fs_remove */
