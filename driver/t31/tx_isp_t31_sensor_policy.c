@@ -98,3 +98,20 @@ int tx_isp_t31_wdr_buffer_layout(
 
 	return -ENODATA;
 }
+
+u32 tx_isp_t31_ae_scene_strength(u32 calibrated_strength,
+				 int requested_level)
+{
+	/*
+	 * A zero scalar is the generic userspace default.  Preserve the active
+	 * tuning bank's calibrated strength in that case instead of replacing it
+	 * with the OEM scalar encoding for "off" (1).  Nonzero controls retain
+	 * the stock level + 1 representation and are bounded by the public
+	 * 8-bit control range.
+	 */
+	if (requested_level <= 0)
+		return calibrated_strength ? calibrated_strength : 1U;
+	if (requested_level > 255)
+		requested_level = 255;
+	return (u32)requested_level + 1U;
+}

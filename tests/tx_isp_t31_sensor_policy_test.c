@@ -99,6 +99,22 @@ static void test_dol_wdr_uses_sensor_cache_size(void)
 					     &lines) == -ENODATA);
 }
 
+static void test_ae_scene_zero_preserves_sensor_calibration(void)
+{
+	assert(tx_isp_t31_ae_scene_strength(2, 0) == 2);
+	assert(tx_isp_t31_ae_scene_strength(5, 0) == 5);
+	assert(tx_isp_t31_ae_scene_strength(0, 0) == 1);
+	assert(tx_isp_t31_ae_scene_strength(2, -1) == 2);
+}
+
+static void test_ae_scene_explicit_levels_keep_oem_encoding(void)
+{
+	assert(tx_isp_t31_ae_scene_strength(5, 1) == 2);
+	assert(tx_isp_t31_ae_scene_strength(2, 10) == 11);
+	assert(tx_isp_t31_ae_scene_strength(2, 255) == 256);
+	assert(tx_isp_t31_ae_scene_strength(2, 1000) == 256);
+}
+
 int main(void)
 {
 	test_active_dimensions_prefer_video_mode();
@@ -106,6 +122,8 @@ int main(void)
 	test_fps_uses_oem_q8_conversion();
 	test_frame_stitch_wdr_uses_active_geometry();
 	test_dol_wdr_uses_sensor_cache_size();
+	test_ae_scene_zero_preserves_sensor_calibration();
+	test_ae_scene_explicit_levels_keep_oem_encoding();
 	puts("tx_isp_t31_sensor_policy tests passed");
 	return 0;
 }

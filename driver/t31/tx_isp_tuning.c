@@ -55,6 +55,7 @@
 #include "tx_isp_t31_exposure.h"
 #include "tx_isp_t31_adr.h"
 #include "tx_isp_t31_mdns.h"
+#include "tx_isp_t31_sensor_policy.h"
 
 #include "include/tx_isp_device.h"
 #include "include/tx_libimp.h"
@@ -2444,6 +2445,10 @@ static void *tparams_day = NULL;
 static void *tparams_night = NULL;
 static void *tparams_cust = NULL;
 static void *tparams_active = NULL;
+static u32 tisp_ae_backlight_calibrated = 1;
+static u32 tisp_ae_highlight_calibrated = 1;
+static int tisp_ae_backlight_requested;
+static int tisp_ae_highlight_requested;
 static uint8_t tispPollValue;
 static wait_queue_head_t dumpQueue;  /* OEM: poll wait queue for /dev/isp-m0 day/night events */
 static bool tuning_bin_loaded = false;
@@ -2624,6 +2629,32 @@ static int tisp_alloc_param_block(void **dst, const char *name)
 static void tisp_capture_loaded_ae_at_lists(void);
 static void tisp_sync_active_ae_at_lists(const void *src);
 
+static void tisp_sync_active_ae_scene_controls(const void *src)
+{
+	u32 backlight;
+	u32 highlight;
+
+	memcpy(&backlight,
+	       (const u8 *)src + TISP_PARAM_AE_SCENE_OFFSET + 5 * sizeof(u32),
+	       sizeof(backlight));
+	memcpy(&highlight,
+	       (const u8 *)src + TISP_PARAM_AE_SCENE_OFFSET + 6 * sizeof(u32),
+	       sizeof(highlight));
+	tisp_ae_backlight_calibrated =
+		tx_isp_t31_ae_scene_strength(backlight, 0);
+	tisp_ae_highlight_calibrated =
+		tx_isp_t31_ae_scene_strength(highlight, 0);
+
+	backlight = tx_isp_t31_ae_scene_strength(
+		tisp_ae_backlight_calibrated, tisp_ae_backlight_requested);
+	highlight = tx_isp_t31_ae_scene_strength(
+		tisp_ae_highlight_calibrated, tisp_ae_highlight_requested);
+	memcpy((u8 *)tparams_active + TISP_PARAM_AE_SCENE_OFFSET +
+	       5 * sizeof(u32), &backlight, sizeof(backlight));
+	memcpy((u8 *)tparams_active + TISP_PARAM_AE_SCENE_OFFSET +
+	       6 * sizeof(u32), &highlight, sizeof(highlight));
+}
+
 static int tisp_set_active_param_block(const void *src, const char *name)
 {
 	int ret;
@@ -2636,6 +2667,7 @@ static int tisp_set_active_param_block(const void *src, const char *name)
 		return ret;
 
 	memcpy(tparams_active, src, TISP_PARAM_BLOCK_SIZE);
+	tisp_sync_active_ae_scene_controls(src);
 	tisp_sync_active_ae_at_lists(src);
 	pr_debug("tisp_set_active_param_block: loaded %s params into active block\n",
 		name ? name : "unknown");
@@ -34153,11 +34185,10 @@ static int tisp_mdns_reg_trigger(void)
 
 /* OEM tisp_s_BacklightComp (0x63ac4 in the stock T31 module).
  *
- * These scalar libimp controls are also the runtime initialization path for
- * the AE scene parameters.  In particular, setting backlight compensation
- * to zero changes scene_para[6] from the tuning-file value 2 to 1.  The stock
- * module updates its embedded active tuning bank and the live AE structure;
- * it deliberately does not alter the allocated day/night source banks. */
+ * Generic streamers initialize both scalar controls to zero.  Treat zero as
+ * no user override so it cannot erase sensor-calibrated scene strengths from
+ * the active tuning bank.  A nonzero level keeps the OEM level + 1 encoding.
+ * Applying either scalar also preserves the other control. */
 int tisp_s_BacklightComp(int comp_level)
 {
     struct scene_para scene;
@@ -34169,9 +34200,12 @@ int tisp_s_BacklightComp(int comp_level)
     else
         memcpy(&scene, &_scene_para, sizeof(scene));
 
+    tisp_ae_backlight_requested = comp_level;
     scene.data[0] = 1;
-    scene.data[5] = comp_level + 1;
-    scene.data[6] = 1;
+    scene.data[5] = tx_isp_t31_ae_scene_strength(
+        tisp_ae_backlight_calibrated, tisp_ae_backlight_requested);
+    scene.data[6] = tx_isp_t31_ae_scene_strength(
+        tisp_ae_highlight_calibrated, tisp_ae_highlight_requested);
 
     if (tparams_active)
         memcpy((u8 *)tparams_active + TISP_PARAM_AE_SCENE_OFFSET, &scene,
@@ -34194,9 +34228,12 @@ int tisp_s_Hilightdepress(int depress_level)
     else
         memcpy(&scene, &_scene_para, sizeof(scene));
 
+    tisp_ae_highlight_requested = depress_level;
     scene.data[0] = 1;
-    scene.data[5] = 1;
-    scene.data[6] = depress_level + 1;
+    scene.data[5] = tx_isp_t31_ae_scene_strength(
+        tisp_ae_backlight_calibrated, tisp_ae_backlight_requested);
+    scene.data[6] = tx_isp_t31_ae_scene_strength(
+        tisp_ae_highlight_calibrated, tisp_ae_highlight_requested);
 
     if (tparams_active)
         memcpy((u8 *)tparams_active + TISP_PARAM_AE_SCENE_OFFSET, &scene,
