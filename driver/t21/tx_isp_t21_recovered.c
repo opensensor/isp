@@ -6417,6 +6417,7 @@ static unsigned char AFParam_Fv[12];
 #define apical_isp_af_weight_g_attr apical_isp_af_weight_g_attr_isra_74
 #define tx_isp_video_link_destroy tx_isp_video_link_destroy_isra_1
 int32_t isp_printf(uint32_t level, const char *fmt, ...);
+static bool t21_isp_valid_ptr(const void *ptr);
 uint32_t get_isp_clk(void);
 struct resource *private_request_mem_region(resource_size_t start, resource_size_t n, const char *name);
 void private_release_mem_region(resource_size_t start, resource_size_t n);
@@ -16213,119 +16214,117 @@ tx_isp_frame_chan_deinit0x6c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000826c origin=model_output original=tx_isp_fs_probe */
 int tx_isp_fs_probe(struct platform_device *pdev)
 {
-	void *fs;
-	int32_t ret;
-	uint16_t chan_count;
-	void *chan_buf;
-	uint32_t i;
-	uint32_t *chan;
-	uint8_t *chan_info;
-	uint8_t chan_id;
-	uint8_t chan_flag;
+	u8 *fs;
+	u8 *channels = NULL;
+	u8 *pads;
+	u16 channel_count;
+	u32 initialized = 0;
+	u32 i;
+	int ret;
 
 	fs = private_kmalloc(0xe8, 0xd0);
-	if (fs == 0) {
+	if (!fs) {
 		isp_printf(2, "Failed to allocate csi device\n", 0);
-		return -12;
+		return -ENOMEM;
 	}
-
 	memset(fs, 0, 0xe8);
 
 	ret = tx_isp_subdev_init(pdev, fs, &fs_subdev_ops);
-	if (ret != 0) {
+	if (ret) {
+		u8 *pdata = *(u8 **)((u8 *)pdev + 0x58);
+
 		isp_printf(2, "Failed to init isp module(%d.%d)\n",
-			*(uint8_t *)((char *)pdev + 0x16 * 4 + 2),
-			*(uint8_t *)((char *)pdev + 0x16 * 4 + 3));
-		ret = -12;
+			   pdata[2], pdata[3]);
 		private_kfree(fs);
-		return ret;
+		return -ENOMEM;
 	}
 
-	chan_count = *(uint16_t *)((char *)fs + 0xc8);
-	*(uint32_t *)((char *)fs + 0xe0) = chan_count;
-
-	if (chan_count != 0) {
-		chan_buf = private_kmalloc((uint32_t)chan_count * 0x2c0, 0xd0);
-		if (!chan_buf) {
-			private_kfree(fs);
-			return -ENOMEM;
+	channel_count = *(u16 *)(fs + 0xc8);
+	*(u32 *)(fs + 0xe0) = channel_count;
+	if (channel_count) {
+		channels = private_kmalloc(channel_count * 0x2c0, 0xd0);
+		if (!channels) {
+			ret = -ENOMEM;
+			goto fail_subdev;
 		}
-		*(uint32_t *)((char *)fs + 0xdc) = (uint32_t)chan_buf;
-		memset((uintptr_t)chan_buf, 0, (uint32_t)chan_count * 0x2c0);
-
-		for (i = 0; i < chan_count; i++) {
-			chan = (uint32_t *)((uintptr_t)chan_buf + i * 0x2c0);
-			chan_info = (uint8_t *)((uintptr_t)fs + 0xcc + i * 0x24);
-			chan_id = chan_info[4];
-			chan_flag = chan_info[5];
-
-			if (chan == 0 || (uint32_t)chan >= 0xfffff001) {
-				ret = -22;
-				goto err_cleanup;
-			}
-			if (chan_info == 0 || (uint32_t)chan_info >= 0xfffff001) {
-				ret = -22;
-				goto err_cleanup;
-			}
-
-			((void **)chan)[0xa4] = (uint32_t)chan_info;
-			((void **)chan)[0xa5] = chan_id;
-
-			if (chan_flag == 0) {
-				((void **)chan)[0xa9] = 0;
-				continue;
-			}
-
-			sprintf((char *)&chan[0xa0], "framechan%d", chan_id);
-			((void **)chan)[0] = 0xff;
-			((void **)chan)[1] = (uint32_t)&chan[0xa0];
-			((void **)chan)[2] = (uint32_t)&fs_channel_ops;
-
-			if (private_misc_register((struct miscdevice *)chan) < 0) {
-				isp_printf(2, "Failed to register framechan%d!\n", chan_id);
-				ret = -2;
-				goto err_cleanup;
-			}
-
-			memset((char *)&chan[9], 0, 0x210);
-			((void **)chan)[0xf] = 2;
-			((void **)chan)[0xd] = 0x80;
-			((void **)chan)[0xe] = (uint32_t)&data_2000;
-			((void **)chan)[0x84] = (uint32_t)&chan[0x84];
-			((void **)chan)[0x85] = (uint32_t)&chan[0x84];
-			((void **)chan)[9] = 1;
-			((void **)chan)[0x87] = (uint32_t)&chan[0x87];
-			((void **)chan)[0x88] = (uint32_t)&chan[0x87];
-			((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))private_raw_mutex_init)((uintptr_t)((char *)&chan[0xa]), (uintptr_t)("&q->mlock"), (uintptr_t)(0), (uintptr_t)(0x134), (uintptr_t)(0x12c), (uintptr_t)(0x134), (uintptr_t)(1));
-			((void **)chan)[0x86] = 0;
-			((void **)chan)[0x89] = 0;
-			((uintptr_t (*)(uintptr_t, uintptr_t))private_init_waitqueue_head)((uintptr_t)((char *)&chan[0x8a]), (uintptr_t)(0x2bc));
-			((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))private_raw_mutex_init)((uintptr_t)((char *)&chan[0xa6]), (uintptr_t)("&chan->mlock"), (uintptr_t)(0), (uintptr_t)(0x134), (uintptr_t)((char *)&chan[0xa6]));
-			private_init_completion((char *)&chan[0xaa]);
-			*(uint32_t *)(chan_info + 0x1c) = (uint32_t)frame_chan_event;
-			((void **)chan)[0xa9] = 1;
-			continue;
-			continue;
-
-		err_cleanup:
-			{
-				uint32_t j;
-				for (j = i; j > 0; j--) {
-					tx_isp_frame_chan_deinit((uintptr_t)chan_buf + (j - 1) * 0x2c0);
-				}
-			}
-			private_kfree(chan_buf);
-			private_kfree(fs);
-			return ret;
-		}
+		memset(channels, 0, channel_count * 0x2c0);
+		*(u8 **)(fs + 0xdc) = channels;
 	}
 
-	*(uint32_t *)((char *)fs + 0xe4) = 1;
+	pads = *(u8 **)(fs + 0xcc);
+	for (i = 0; i < channel_count; i++) {
+		u8 *channel = channels + i * 0x2c0;
+		u8 *pad = pads + i * 0x24;
+		u8 channel_id;
+
+		if (!t21_isp_valid_ptr(channel) || !t21_isp_valid_ptr(pad)) {
+			ret = -EINVAL;
+			goto fail_channels;
+		}
+
+		channel_id = pad[4];
+		*(u8 **)(channel + 0x290) = pad;
+		*(u32 *)(channel + 0x294) = channel_id;
+		if (!pad[5]) {
+			*(u32 *)(channel + 0x2a4) = 0;
+			continue;
+		}
+
+		sprintf(channel + 0x280, "framechan%d", channel_id);
+		*(u32 *)(channel + 0) = 0xff;
+		*(u8 **)(channel + 4) = channel + 0x280;
+		*(void **)(channel + 8) = &fs_channel_ops;
+		ret = private_misc_register((struct miscdevice *)channel);
+		if (ret < 0) {
+			isp_printf(2, "Failed to register framechan%d!\n",
+				   channel_id);
+			ret = -ENOENT;
+			goto fail_channels;
+		}
+
+		memset(channel + 0x24, 0, 0x210);
+		*(u32 *)(channel + 0x3c) = 2;
+		*(u32 *)(channel + 0x34) = 0x80;
+		*(void **)(channel + 0x38) = &data_2000;
+		*(u8 **)(channel + 0x210) = channel + 0x210;
+		*(u8 **)(channel + 0x214) = channel + 0x210;
+		*(u32 *)(channel + 0x24) = 1;
+		*(u8 **)(channel + 0x21c) = channel + 0x21c;
+		*(u8 **)(channel + 0x220) = channel + 0x21c;
+		private_spin_lock_init((spinlock_t *)(channel + 0x224));
+		private_raw_mutex_init((struct mutex *)(channel + 0x28),
+				       "&q->mlock", NULL);
+		*(u32 *)(channel + 0x218) = 0;
+		*(u32 *)(channel + 0x224) = 0;
+		private_init_waitqueue_head((wait_queue_head_t *)(channel + 0x228));
+		private_spin_lock_init((spinlock_t *)(channel + 0x298));
+		private_raw_mutex_init((struct mutex *)(channel + 0x298),
+				       "&chan->mlock", NULL);
+		private_init_completion((struct completion *)(channel + 0x2a8));
+		*(void **)(pad + 0x1c) = frame_chan_event;
+		*(u32 *)(channel + 0x2a4) = 1;
+		initialized = i + 1;
+	}
+
+	*(u32 *)(fs + 0xe4) = 1;
 	private_platform_set_drvdata(pdev, fs);
-	*(uint32_t *)((char *)fs + 0x34) = (uint32_t)&isp_framesource_fops;
-	*(uint32_t *)((char *)fs + 0xd4) = (uint32_t)fs;
-
+	*(struct file_operations **)(fs + 0x34) = &isp_framesource_fops;
+	*(u8 **)(fs + 0xd4) = fs;
 	return 0;
+
+fail_channels:
+	while (initialized) {
+		initialized--;
+		if (*(u32 *)(channels + initialized * 0x2c0 + 0x2a4))
+			tx_isp_frame_chan_deinit(
+				(uintptr_t)(channels + initialized * 0x2c0));
+	}
+	private_kfree(channels);
+	*(u8 **)(fs + 0xdc) = NULL;
+fail_subdev:
+	tx_isp_subdev_deinit((uintptr_t)fs);
+	private_kfree(fs);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000864c origin=model_output original=__frame_channel_vb2_streamoff */
@@ -52761,13 +52760,26 @@ int tx_isp_vin_remove(struct platform_device *pdev)
 int tx_isp_fs_remove(struct platform_device *pdev)
 {
 	void *subdev = private_platform_get_drvdata(pdev);
-	u8 *fs = *(u8 **)((u8 *)subdev + 0xd4);
+	u8 *fs;
 	u8 *channels;
 	u32 i;
 
+	if (!t21_isp_valid_ptr(subdev)) {
+		private_platform_set_drvdata(pdev, NULL);
+		return 0;
+	}
+	fs = *(u8 **)((u8 *)subdev + 0xd4);
+	private_platform_set_drvdata(pdev, NULL);
+	if (!t21_isp_valid_ptr(fs)) {
+		tx_isp_subdev_deinit((uintptr_t)subdev);
+		return 0;
+	}
+
 	for (i = 0; i < *(u32 *)(fs + 0xe0); i++) {
 		channels = *(u8 **)(fs + 0xdc);
-		tx_isp_frame_chan_deinit((uintptr_t)(channels + i * 0x2c0));
+		if (*(u32 *)(channels + i * 0x2c0 + 0x2a4))
+			tx_isp_frame_chan_deinit(
+				(uintptr_t)(channels + i * 0x2c0));
 	}
 
 	channels = *(u8 **)(fs + 0xdc);
@@ -52802,8 +52814,20 @@ int tx_isp_remove(struct platform_device *pdev)
 int tx_isp_core_remove(struct platform_device *pdev)
 {
 	void *subdev = private_platform_get_drvdata(pdev);
-	u8 *core = *(u8 **)((u8 *)subdev + 0xd4);
-	void *tuning = *(void **)(core + 0x19c);
+	u8 *core;
+	void *tuning;
+
+	if (!t21_isp_valid_ptr(subdev)) {
+		private_platform_set_drvdata(pdev, NULL);
+		return 0;
+	}
+	core = *(u8 **)((u8 *)subdev + 0xd4);
+	private_platform_set_drvdata(pdev, NULL);
+	if (!t21_isp_valid_ptr(core)) {
+		tx_isp_subdev_deinit((uintptr_t)subdev);
+		return 0;
+	}
+	tuning = *(void **)(core + 0x19c);
 
 	if (tuning) {
 		isp_core_tuning_deinit((int32_t)(uintptr_t)tuning);

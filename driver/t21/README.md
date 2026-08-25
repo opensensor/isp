@@ -94,7 +94,11 @@ their computed return values or call state.
   allocates the input/output pad groups with the OEM counts, stores the real
   ops table, and unwinds IRQ, mapping, region, pad, and clock resources in
   reverse order. The graph builder retains child drvdata and uses the OEM misc
-  registration condition; child unregister invokes each remove callback.
+  registration condition; child unregister invokes each remove callback. The
+  frame-source probe now dereferences the real pad table when constructing its
+  0x2c0-byte channels, initializes both queue/channel locks, and unwinds all
+  registered nodes on failure. Core/frame remove callbacks are safe when a
+  child probe failed before publishing drvdata.
 - Rebuilt `tx_isp_core_probe` and `ispcore_slake_module` from the T21 stock
   disassembly. Core probe now installs `core_subdev_ops`, zeroes and initializes
   the 0xa0-byte output channels, assigns `ispcore_pad_event_handle`, publishes
@@ -110,7 +114,7 @@ their computed return values or call state.
 Instruction-count parity is structural triage, not proof of semantics.
 
 The current audit has 612 directly matched functions, 4 syntactic stub
-findings, 25 collapsed findings, and a 0.791 matched-instruction ratio. Three
+findings, 25 collapsed findings, and a 0.792 matched-instruction ratio. Three
 of the four stub findings are intentional tail-call aliases; the only true
 empty body is `Tiziano_Awb_Ct_Detect`.
 

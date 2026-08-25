@@ -72,9 +72,10 @@ use generation-specific policy already represented by the T23 adapter.
 
 1. Run a module/probe-only camera smoke test now that subdevice mapping, pad and
    clock ownership, graph creation, core output-channel construction, and the
-   probe/unload unwind paths have been repaired. Capture `dmesg`, `logread`, and
-   module state before attempting firmware streaming. `isp_vic_cmd_set` is a
-   raw-snapshot proc handler and is not on this startup path.
+   frame-channel descriptor/lock setup and probe/unload unwind paths have been
+   repaired. Capture `dmesg`, `logread`, and module state before attempting
+   firmware streaming. `isp_vic_cmd_set` is a raw-snapshot proc handler and is
+   not on this startup path.
 2. Reconstruct `Tiziano_Awb_Ct_Detect` from the T21 HLIL, keeping its 19-argument
    ABI and T21 global work arrays; use T31 only to name the phases before the
    first streaming test.

@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 630 | 683 |
 | Functions with disassembly | 630 | 683 |
-| Executable section bytes | 215240 | 170656 |
+| Executable section bytes | 215240 | 170992 |
 | Initialized writable bytes | 283936 | 276624 |
 | Uninitialized writable bytes | 101040 | 452176 |
 
 - direct matches: 612
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=18 recovered-only=71
-- matched instructions: OEM=52693 recovered=41670 ratio=0.791
-- classes: stub=4 collapsed=25 shorter=107 same_count=141 similar=317 larger=11 expanded=7
+- matched instructions: OEM=52693 recovered=41752 ratio=0.792
+- classes: stub=4 collapsed=25 shorter=107 same_count=141 similar=315 larger=13 expanded=7
 
 ## Allocated Section Delta
 
@@ -41,14 +41,14 @@
 | `.rodata.cst4` | 0 | 16 | +16 |
 | `.rodata.cst8` | 0 | 16 | +16 |
 | `.rodata.str1.4` | 11016 | 9664 | -1352 |
-| `.text` | 214336 | 170656 | -43680 |
+| `.text` | 214336 | 170992 | -43344 |
 | `__ksymtab` | 240 | 240 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 32 | 32 | +0 |
 
 ## Function Outliers
 
-Showing 243 of 243 outliers. JSON and CSV contain every comparison row.
+Showing 245 of 245 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -218,6 +218,8 @@ Showing 243 of 243 outliers. JSON and CSV contain every comparison row.
 | larger | exact_name | `tisp_defog_param_array_set` | `tisp_defog_param_array_set` | 116 | 154 | 1.328 | +38 | 4->3 | 25->26 |
 | larger | exact_name | `tisp_set_fps` | `tisp_set_fps` | 53 | 69 | 1.302 | +16 | 3->3 | 3->3 |
 | larger | exact_name | `private_log2_int_to_fixed` | `private_log2_int_to_fixed` | 48 | 62 | 1.292 | +14 | 1->0 | 7->9 |
+| larger | exact_name | `tx_isp_fs_remove` | `tx_isp_fs_remove` | 46 | 80 | 1.739 | +34 | 5->9 | 3->8 |
+| larger | exact_name | `tx_isp_core_remove` | `tx_isp_core_remove` | 44 | 76 | 1.727 | +32 | 6->10 | 2->6 |
 | larger | exact_name | `fix_point_mult3_32` | `fix_point_mult3_32` | 20 | 30 | 1.500 | +10 | 1->0 | 1->0 |
 | larger | exact_name | `tisp_hldc_par_refresh` | `tisp_hldc_par_refresh` | 19 | 25 | 1.316 | +6 | 2->2 | 1->2 |
 | larger | exact_name | `private_gpio_free` | `private_gpio_free` | 5 | 9 | 1.800 | +4 | 0->0 | 1->2 |
