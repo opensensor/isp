@@ -2252,6 +2252,38 @@ struct apical_isp_fsm_slot {
 	uint32_t status;
 	uint32_t pending;
 };
+struct tx_isp_t30_color_matrix_fsm {
+	u32 owner;
+	s32 state;
+	u32 status;
+	u32 pending;
+	u8 reserved_10;
+	u8 field_11;
+	u8 field_12;
+	u8 reserved_13[0x26 - 0x13];
+	u16 output_ccm[9];
+	s16 active_ccm[9];
+	s16 saturation_ccm[9];
+	u8 ccm_mode_5c;
+	u8 ccm_mode_5d;
+	u8 active_ccm_mode;
+	u8 previous_ccm_mode;
+	u8 transition_length;
+	u8 transition_remaining;
+	s16 ccm_a[9];
+	s16 ccm_d40[9];
+	s16 ccm_d50[9];
+	s16 identity_ccm[9];
+	u16 mesh_blend;
+	u8 mesh_page;
+	u8 mesh_source;
+	u8 emergency_override;
+	u8 reserved_af;
+	u16 emergency_ccm[9];
+	u8 reserved_c2[2];
+	s32 color_temperature_threshold[8];
+	u8 reserved_e4[0xec - 0xe4];
+};
 struct apical_isp {
 	uint8_t pad0[0x100];
 	struct apical_isp_fsm_slot cmos;
@@ -40785,54 +40817,46 @@ int32_t system_minimum_temper_strength(int32_t arg1, char arg2, char arg3, int32
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020ba4 origin=model_output original=system_awb_red_gain */
 int32_t system_awb_red_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
+	u32 direction = (u8)arg3;
 
-    if (v != 1) {
-        if (v != 0) {
-            ((void **)stab)[49] = (unsigned char)arg2;
-            return 2;
-        }
-        return 0;
-    }
-
-    *arg4 = (int32_t)stab[49];
-    return 0;
+	*arg4 = 0;
+	if (direction == 1)
+		*arg4 = stab[49];
+	else if (direction == 0)
+		stab[49] = (u8)arg2;
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020be0 origin=model_output original=system_awb_blue_gain */
 int32_t system_awb_blue_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
+	u32 direction = (u8)arg3;
 
-    if (v != 1) {
-        if (v != 0) {
-            ((void **)stab)[50] = (uint8_t)arg2;
-            return 2;
-        }
-    } else {
-        *arg4 = 0;
-        *arg4 = stab[50];
-    }
-
-    return 0;
+	*arg4 = 0;
+	if (direction == 1)
+		*arg4 = stab[50];
+	else if (direction == 0)
+		stab[50] = (u8)arg2;
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020c1c origin=model_output original=system_saturation_target */
 int32_t system_saturation_target(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)arg3 & 0xff;
+	u32 direction = (u8)arg3;
 
-    if (v != 1) {
-        if (v != 0) {
-            return 2;
-        }
-        ((void **)stab)[51] = (uint8_t)arg2;
-        return 0;
-    }
-
-    *arg4 = 0;
-    *arg4 = (int32_t)stab[51];
-    return 0;
+	*arg4 = 0;
+	if (direction == 1)
+		*arg4 = stab[51];
+	else if (direction == 0)
+		stab[51] = (u8)arg2;
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020c58 origin=model_output original=system_anti_flicker_frequency */
@@ -45692,20 +45716,21 @@ int32_t mesh_shading_modulate_strength(int32_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026d3c origin=model_output original=saturation_modulate_strength */
 int32_t saturation_modulate_strength(int32_t *arg1)
 {
-    struct sat_ctx *ctx = (struct sat_ctx *)*arg1;
-    int32_t sum;
-    int32_t idx;
-    int32_t mod_ptr;
-    int32_t rows;
-    int32_t *result;
+	u8 *isp = (u8 *)(uintptr_t)(u32)*arg1;
+	u32 sum;
+	u32 result;
+	int idx;
 
-    sum = (uintptr_t)ctx->f_0x2cc + (uintptr_t)ctx->f_0x2d0 + (uintptr_t)ctx->f_0x2d4;
-    idx = _GET_HDR_TABLE_INDEX(0x56, ctx->f_0x1524);
-    mod_ptr = _GET_MOD_ENTRY16_PTR(idx);
-    rows = _GET_ROWS(idx);
-    result = calc_modulation_u16((sum >> 8) & 0xffff, mod_ptr, rows);
-    ((void **)stab)[51] = (uint8_t)result;
-    return result;
+	if (!isp)
+		return 0;
+	sum = *(u32 *)(isp + 0x2cc) + *(u32 *)(isp + 0x2d0) +
+	      *(u32 *)(isp + 0x2d4);
+	idx = _GET_HDR_TABLE_INDEX(0x56, isp[0x1524]);
+	result = calc_modulation_u16((sum >> 8) & 0xffff,
+				     (u16 *)(uintptr_t)_GET_MOD_ENTRY16_PTR(idx),
+				     _GET_ROWS(idx));
+	stab[51] = (u8)result;
+	return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026de0 origin=model_output original=color_matrix_fsm_process_interrupt */
@@ -45725,25 +45750,19 @@ int32_t matrix_matrix_multiply(void *arg1, void *arg2, void *arg3, int32_t arg4,
 	const int16_t *a = (const int16_t *)arg1;
 	const int16_t *b = (const int16_t *)arg2;
 	int16_t *c = (int16_t *)arg3;
-	int32_t row_stride = arg6 << 1;
-	int32_t col_stride = arg5 << 1;
-	uintptr_t i;
+	int32_t i;
 	int32_t j;
 	int32_t k;
 
 	for (i = 0; i < arg4; i++) {
 		for (j = 0; j < arg6; j++) {
 			int32_t sum = 0;
-			int32_t b_off = (j - arg6) << 1;
-			for (k = 0; k < arg5; k++) {
-				int32_t va = (int32_t)a[k];
-				int32_t vb = (int32_t)b[b_off + k * (arg6 << 1)];
-				sum += (va * vb) >> 8;
-			}
-			((void **)c)[j] = (int16_t)sum;
+
+			for (k = 0; k < arg5; k++)
+				sum += ((int32_t)a[i * arg5 + k] *
+					(int32_t)b[k * arg6 + j]) >> 8;
+			c[i * arg6 + j] = (int16_t)sum;
 		}
-		c = (void *)(uintptr_t)((uintptr_t)c + (row_stride));
-		a = (void *)(uintptr_t)((uintptr_t)a + (col_stride));
 	}
 	return 0;
 }
@@ -45751,24 +45770,21 @@ int32_t matrix_matrix_multiply(void *arg1, void *arg2, void *arg3, int32_t arg4,
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026e84 origin=model_output original=matrix_vector_multiply */
 int32_t matrix_vector_multiply(void *arg1, void *arg2, void *arg3, int32_t arg4, int32_t arg5)
 {
-    int16_t *a = (int16_t *)arg1;
-    uint16_t *b = (uint16_t *)arg2;
-    int16_t *out = (int16_t *)arg3;
-    int32_t row = 0;
-    int32_t cols = arg5;
+	const int16_t *a = (const int16_t *)arg1;
+	const uint16_t *b = (const uint16_t *)arg2;
+	int16_t *out = (int16_t *)arg3;
+	int32_t row;
+	int32_t col;
 
-    while (row < arg4) {
-        int32_t acc = 0;
-        int32_t col = 0;
-        while (col < cols) {
-            acc += (int32_t)((int32_t)a[col] * (int32_t)b[col]) >> 8;
-            col++;
-        }
-        ((void **)(uintptr_t)out)[(uintptr_t)row] = (int16_t)acc;
-        row++;
-        a = (void *)(uintptr_t)((uintptr_t)a + (cols));
-    }
-    return row;
+	for (row = 0; row < arg4; row++) {
+		int32_t sum = 0;
+
+		for (col = 0; col < arg5; col++)
+			sum += ((int32_t)a[row * arg5 + col] *
+				(int32_t)b[col]) >> 8;
+		out[row] = (int16_t)sum;
+	}
+	return row;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026ef0 origin=model_output original=complement_to_direct */
@@ -45800,15 +45816,14 @@ int32_t direct_to_complement(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026f3c origin=model_output original=color_matrix_recalculate */
 int32_t color_matrix_recalculate(int32_t *arg1)
 {
+	struct tx_isp_t30_color_matrix_fsm *fsm = (void *)arg1;
 	int16_t buf1[9];
 	int16_t buf2[9];
 	int32_t strength;
 	int32_t scaled;
 	int32_t inv_scaled;
 	int32_t i;
-	int32_t *result;
-	int16_t *dst;
-	int16_t *src;
+	int32_t result = 0;
 
 	if (stab[15] == 0)
 		saturation_modulate_strength(arg1);
@@ -45820,21 +45835,19 @@ int32_t color_matrix_recalculate(int32_t *arg1)
 	scaled = strength << 1;
 	inv_scaled = 256 - scaled;
 
-	dst = (int16_t *)((char *)arg1 + 0x4a);
-	src = (int16_t *)buf1;
+	for (i = 0; i < ARRAY_SIZE(fsm->saturation_ccm); i++) {
+		int32_t v1 = (int32_t)buf1[i] * scaled + 128;
+		int32_t v2 = (int32_t)buf2[i] * inv_scaled + 128;
 
-	for (i = 0; (uintptr_t)i < 18; i = (uintptr_t)i + 2) {
-		int32_t v1 = (int32_t)src[(uintptr_t)i / 2] * scaled + 128;
-		int32_t v2 = (int32_t)buf2[(uintptr_t)i / 2] * inv_scaled + 128;
-		((void **)(uintptr_t)dst)[(uintptr_t)i / 2] = (int16_t)((v1 >> 8) + (v2 >> 8));
+		fsm->saturation_ccm[i] = (int16_t)((v1 >> 8) + (v2 >> 8));
 	}
 
-	matrix_matrix_multiply((char *)arg1 + 0x4a, (char *)arg1 + 0x38, (char *)arg1 + 0x26, 3, 3, 3);
+	matrix_matrix_multiply(fsm->saturation_ccm, fsm->active_ccm,
+			       fsm->output_ccm, 3, 3, 3);
 
-	for (i = 0; (uintptr_t)i < 18; i = (uintptr_t)i + 2) {
-		int16_t *p = (int16_t *)((char *)arg1 + i);
-		result = complement_to_direct((int32_t *)p[0x26 / 2]);
-		((void **)(uintptr_t)p)[0x26 / 2] = (int16_t)(uintptr_t)result;
+	for (i = 0; i < ARRAY_SIZE(fsm->output_ccm); i++) {
+		result = complement_to_direct((int16_t)fsm->output_ccm[i]);
+		fsm->output_ccm[i] = (u16)result;
 	}
 
 	return result;
@@ -45846,17 +45859,19 @@ int32_t color_matrix_setup(int16_t *arg1, int16_t arg2, int16_t arg3,
                            int16_t arg7, int16_t arg8, int16_t arg9,
                            int16_t arg10)
 {
-    ((void **)arg1)[0] = direct_to_complement((uint32_t)(uint16_t)arg2);
-    ((void **)arg1)[1] = direct_to_complement((uint32_t)(uint16_t)arg3);
-    ((void **)arg1)[2] = direct_to_complement((uint32_t)(uint16_t)arg4);
-    ((void **)arg1)[3] = direct_to_complement((uint32_t)(uint16_t)arg5);
-    ((void **)arg1)[4] = direct_to_complement((uint32_t)(uint16_t)arg6);
-    ((void **)arg1)[5] = direct_to_complement((uint32_t)(uint16_t)arg7);
-    ((void **)arg1)[6] = direct_to_complement((uint32_t)(uint16_t)arg8);
-    ((void **)arg1)[7] = direct_to_complement((uint32_t)(uint16_t)arg9);
-    int16_t result = direct_to_complement((uint32_t)(uint16_t)arg10);
-    ((void **)arg1)[8] = result;
-    return result;
+	int16_t result;
+
+	arg1[0] = direct_to_complement((uint16_t)arg2);
+	arg1[1] = direct_to_complement((uint16_t)arg3);
+	arg1[2] = direct_to_complement((uint16_t)arg4);
+	arg1[3] = direct_to_complement((uint16_t)arg5);
+	arg1[4] = direct_to_complement((uint16_t)arg6);
+	arg1[5] = direct_to_complement((uint16_t)arg7);
+	arg1[6] = direct_to_complement((uint16_t)arg8);
+	arg1[7] = direct_to_complement((uint16_t)arg9);
+	result = direct_to_complement((uint16_t)arg10);
+	arg1[8] = result;
+	return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027184 origin=model_output original=shading_mesh_reload */
@@ -46004,167 +46019,153 @@ int32_t color_matrix_write(void *arg1)
     return APICAL_WRITE_32(0x4a0, (APICAL_READ_32(0x4a0) & 0xffff0000) | val);
 }
 
+static const s16 *tx_isp_t30_color_ccm(
+	const struct tx_isp_t30_color_matrix_fsm *fsm, u8 mode)
+{
+	switch (mode) {
+	case 1:
+		return fsm->ccm_a;
+	case 3:
+		return fsm->ccm_d50;
+	case 2:
+	default:
+		return fsm->ccm_d40;
+	}
+}
+
+static void tx_isp_t30_color_select_mesh_page(u8 page)
+{
+	u32 value = APICAL_READ_32(0x394);
+
+	value &= ~(0x7U | (0x7U << 8) | (0x7U << 16));
+	value |= (page & 0x7U) | ((page & 0x7U) << 8) |
+		 ((page & 0x7U) << 16);
+	APICAL_WRITE_32(0x394, value);
+}
+
+static void tx_isp_t30_color_write_mesh_blend(u8 blend)
+{
+	u32 value = APICAL_READ_32(0x398);
+
+	value &= 0xff000000U;
+	value |= blend | ((u32)blend << 8) | ((u32)blend << 16);
+	APICAL_WRITE_32(0x398, value);
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002789c origin=model_output original=color_matrix_update */
 int32_t color_matrix_update(int32_t *arg1)
 {
-	uint8_t *p = (uint8_t *)arg1;
-	int32_t *base = (int32_t *)*arg1;
-	int32_t cur = *(int32_t *)((char *)base + 0xec0);
-	int32_t *i;
-	int32_t val;
+	struct tx_isp_t30_color_matrix_fsm *fsm = (void *)arg1;
+	u8 *isp = (u8 *)(uintptr_t)fsm->owner;
+	const s16 *from;
+	const s16 *to;
+	s32 cur;
+	s32 lo;
+	s32 hi;
+	int i;
 
-	if (p[0x61] != 0) {
-		int32_t mode1 = p[0x5f];
-		int32_t mode2 = p[0x5e];
-		int16_t *src1;
-		int16_t *src2;
-		int32_t strength = p[0x60];
-		int32_t denom = strength - 1;
-		int32_t diff = strength - p[0x61];
+	if (!isp)
+		return -EINVAL;
+	if (fsm->transition_remaining) {
+		from = tx_isp_t30_color_ccm(fsm, fsm->previous_ccm_mode);
+		to = tx_isp_t30_color_ccm(fsm, fsm->active_ccm_mode);
+		if (fsm->transition_length >= 2) {
+			for (i = 0; i < ARRAY_SIZE(fsm->active_ccm); i++) {
+				s32 value = from[i] +
+					(to[i] - from[i]) *
+					(fsm->transition_length -
+					 fsm->transition_remaining) /
+					(fsm->transition_length - 1);
 
-		if (mode1 == 2)
-			src1 = (int16_t *)(p + 0x26);
-		else if (mode1 == 3)
-			src1 = (int16_t *)(p + 0x86);
-		else if (mode1 == 1)
-			src1 = (int16_t *)(p + 0x62);
-		else
-			src1 = (int16_t *)(p + 0x74);
-
-		if (mode2 == 2)
-			src2 = (int16_t *)(p + 0x26);
-		else if (mode2 == 3)
-			src2 = (int16_t *)(p + 0x86);
-		else if (mode2 == 1)
-			src2 = (int16_t *)(p + 0x62);
-		else
-			src2 = (int16_t *)(p + 0x74);
-
-		for (i = 0; (uintptr_t)i < 18; i = (uintptr_t)i + 2) {
-			if (strength >= 2) {
-				int32_t s1 = src1[(uintptr_t)i / 2];
-				int32_t s2 = src2[(uintptr_t)i / 2];
-				int32_t num = (s2 - s1) * diff;
-				int32_t q = num / denom;
-				*(int16_t *)((uintptr_t)p + 0x38 + (uintptr_t)i) = (int16_t)(q + s1);
+				fsm->active_ccm[i] = (s16)value;
 			}
 		}
 	}
 
-	if (cur < arg1[0xc4 / 4]) {
-		APICAL_WRITE_32(0x394, APICAL_READ_32(0x394) & 0xfffffff8);
-		APICAL_WRITE_32(0x394, APICAL_READ_32(0x394) & 0xfffff8ff);
-		APICAL_WRITE_32(0x394, APICAL_READ_32(0x394) & 0xfff8ffff);
-		*(uint16_t *)(p + 0xaa) = 0;
-		((void **)p)[0xad] = 1;
-	} else {
-		int32_t lo;
-		int32_t hi;
-
-		if (arg1[0xc8 / 4] >= cur)
-			lo = arg1[0xd0 / 4];
-		else
-			lo = arg1[0xcc / 4];
-
-		if (lo < cur) {
-			APICAL_WRITE_32(0x394, (APICAL_READ_32(0x394) & 0xfffffff8) | 2);
-			APICAL_WRITE_32(0x394, (APICAL_READ_32(0x394) & 0xfffff8ff) | 0x200);
-			APICAL_WRITE_32(0x394, (APICAL_READ_32(0x394) & 0xfff8ffff) | 0x20000);
-			((void **)p)[0xac] = 0;
-			*(uint16_t *)(p + 0xaa) = 0;
-			((void **)p)[0xad] = 3;
-		} else {
-			if (arg1[0xdc / 4] >= cur)
-				hi = arg1[0xe0 / 4];
-			else
-				hi = arg1[0xd8 / 4];
-
-			if (hi < cur && cur < arg1[0xe0 / 4]) {
-				APICAL_WRITE_32(0x394, (APICAL_READ_32(0x394) & 0xfffffff8) | 1);
-				APICAL_WRITE_32(0x394, (APICAL_READ_32(0x394) & 0xfffff8ff) | 0x100);
-				APICAL_WRITE_32(0x394, (APICAL_READ_32(0x394) & 0xfff8ffff) | 0x10000);
-				hi = arg1[0xe0 / 4];
-				lo = arg1[0xdc / 4];
-			} else if (cur >= arg1[0xd8 / 4]) {
-				hi = arg1[0xe0 / 4];
-			} else {
-				APICAL_WRITE_32(0x394, APICAL_READ_32(0x394) & 0xfffffff8);
-				APICAL_WRITE_32(0x394, APICAL_READ_32(0x394) & 0xfffff8ff);
-				APICAL_WRITE_32(0x394, APICAL_READ_32(0x394) & 0xfff8ffff);
-				hi = arg1[0xd8 / 4];
-				lo = arg1[0xdc / 4];
-			}
-
-			if (hi != lo) {
-				int32_t range = hi - lo;
-				val = ((cur - lo) * 0xff) / range;
-				*(uint16_t *)(p + 0xaa) = (uint16_t)val;
-			}
-		}
+	cur = *(s32 *)(isp + 0xec0);
+	if (cur < fsm->color_temperature_threshold[0]) {
+		tx_isp_t30_color_select_mesh_page(0);
+		fsm->mesh_blend = 0;
+		fsm->mesh_source = 1;
+	} else if (cur > fsm->color_temperature_threshold[1] &&
+		   cur < fsm->color_temperature_threshold[2]) {
+		tx_isp_t30_color_select_mesh_page(1);
+		fsm->mesh_page = 1;
+		fsm->mesh_blend = 0;
+		fsm->mesh_source = 2;
+	} else if (fsm->color_temperature_threshold[3] < cur) {
+		tx_isp_t30_color_select_mesh_page(2);
+		fsm->mesh_page = 0;
+		fsm->mesh_blend = 0;
+		fsm->mesh_source = 3;
+	} else if (fsm->color_temperature_threshold[4] < cur &&
+		   cur < fsm->color_temperature_threshold[5]) {
+		tx_isp_t30_color_select_mesh_page(0);
+		lo = fsm->color_temperature_threshold[4];
+		hi = fsm->color_temperature_threshold[5];
+		fsm->mesh_blend = (u16)(((cur - lo) * 0xff) / (hi - lo));
+	} else if (fsm->color_temperature_threshold[6] < cur &&
+		   cur < fsm->color_temperature_threshold[7]) {
+		tx_isp_t30_color_select_mesh_page(1);
+		lo = fsm->color_temperature_threshold[6];
+		hi = fsm->color_temperature_threshold[7];
+		fsm->mesh_blend = (u16)(((cur - lo) * 0xff) / (hi - lo));
 	}
 
-	APICAL_WRITE_32(0x398, (APICAL_READ_32(0x398) & 0xffffff00) | *(uint16_t *)((uintptr_t)p + 0xaa));
-	APICAL_WRITE_32(0x398, (APICAL_READ_32(0x398) & 0xffff00ff) | (*(uint16_t *)((uintptr_t)p + 0xaa) << 8));
-	APICAL_WRITE_32(0x398, (APICAL_READ_32(0x398) & 0xff00ffff) | (*(uint16_t *)((uintptr_t)p + 0xaa) << 16));
+	tx_isp_t30_color_write_mesh_blend((u8)fsm->mesh_blend);
 	color_matrix_recalculate(arg1);
 	color_matrix_write(arg1);
 	mesh_shading_modulate_strength(arg1);
 
-	if (p[0x61] != 0)
-		((void **)p)[0x61] = p[0x61] - 1;
+	if (fsm->transition_remaining)
+		fsm->transition_remaining--;
 
-	return p[0x61];
+	return fsm->transition_remaining;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027d2c origin=model_output original=color_matrix_change_CCMs */
 int32_t color_matrix_change_CCMs(int32_t *arg1)
 {
-	int32_t *base = *(int32_t **)arg1;
-	uint8_t mode = *(uint8_t *)((char *)base + 0x1524);
+	struct tx_isp_t30_color_matrix_fsm *fsm = (void *)arg1;
+	u8 *isp = (u8 *)(uintptr_t)fsm->owner;
+	uint8_t mode;
+	bool hdr_mode;
 	int32_t lut_idx;
 	int16_t *lut;
 	int16_t *dst;
-	int32_t *i;
+	int32_t i;
 
-	lut_idx = (mode - 1) < 2 ? 0xf2 : 0xd5;
-	lut = (int16_t *)_GET_USHORT_PTR(lut_idx);
-	dst = (int16_t *)((char *)arg1 + 0x62);
+	if (!isp)
+		return -EINVAL;
+	mode = isp[0x1524];
+	hdr_mode = mode == 1 || mode == 2;
+
+	lut_idx = hdr_mode ? 0xf2 : 0xd5;
+	lut = (int16_t *)(uintptr_t)_GET_USHORT_PTR(lut_idx);
+	dst = fsm->ccm_a;
 	color_matrix_setup(dst, lut[0], lut[1], lut[2], lut[3], lut[4], lut[5], lut[6], lut[7], lut[8]);
 
-	base = *(int32_t **)arg1;
-	mode = *(uint8_t *)((char *)base + 0x1524);
-	lut_idx = (mode - 1) < 2 ? 0xed : 0xdc;
-	lut = (int16_t *)_GET_USHORT_PTR(lut_idx);
-	dst = (int16_t *)((char *)arg1 + 0x74);
+	lut_idx = hdr_mode ? 0xed : 0xdc;
+	lut = (int16_t *)(uintptr_t)_GET_USHORT_PTR(lut_idx);
+	dst = fsm->ccm_d40;
 	color_matrix_setup(dst, lut[0], lut[1], lut[2], lut[3], lut[4], lut[5], lut[6], lut[7], lut[8]);
 
-	base = *(int32_t **)arg1;
-	mode = *(uint8_t *)((char *)base + 0x1524);
-	lut_idx = (mode - 1) < 2 ? 0xf9 : 0xdb;
-	lut = (int16_t *)_GET_USHORT_PTR(lut_idx);
-	dst = (int16_t *)((char *)arg1 + 0x86);
+	lut_idx = hdr_mode ? 0xf9 : 0xdb;
+	lut = (int16_t *)(uintptr_t)_GET_USHORT_PTR(lut_idx);
+	dst = fsm->ccm_d50;
 	color_matrix_setup(dst, lut[0], lut[1], lut[2], lut[3], lut[4], lut[5], lut[6], lut[7], lut[8]);
 
-	dst = (int16_t *)((char *)arg1 + 0x98);
+	dst = fsm->identity_ccm;
 	color_matrix_setup(dst, 0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100);
 
-	if (*(uint8_t *)((char *)arg1 + 0x61) != 0)
+	if (fsm->transition_remaining)
 		goto update;
 
-	mode = *(uint8_t *)((char *)arg1 + 0x5e);
-	if (mode == 2)
-		dst = (int16_t *)((char *)arg1 + 0x74);
-	else if (mode == 3)
-		dst = (int16_t *)((char *)arg1 + 0x86);
-	else if (mode == 1)
-		dst = (int16_t *)((char *)arg1 + 0x62);
-	else
-		dst = (int16_t *)((char *)arg1 + 0x74);
+	dst = (int16_t *)tx_isp_t30_color_ccm(fsm, fsm->active_ccm_mode);
+	for (i = 0; i < ARRAY_SIZE(fsm->active_ccm); i++)
+		fsm->active_ccm[i] = dst[i];
 
-	for (i = 0; (uintptr_t)i != 0x12; i = (uintptr_t)i + 2)
-		*(int16_t *)((char *)arg1 + (uintptr_t)i + 0x38) = dst[(uintptr_t)i / 2];
-
-	return i;
+	return sizeof(fsm->active_ccm);
 
 update:
 	return color_matrix_update(arg1);
@@ -46173,54 +46174,58 @@ update:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027f74 origin=model_output original=color_matrix_initialize */
 int32_t color_matrix_initialize(int32_t *arg1)
 {
-    uint8_t *b = (uint8_t *)arg1;
-    uint32_t *w = (uint32_t *)arg1;
-    uint16_t *h = (uint16_t *)arg1;
-    uint32_t *base;
-    uint32_t r;
+	static const s32 color_temperature_threshold[] = {
+		0x0bb8, 0x0f3c, 0x1004, 0x1324,
+		0x0bb7, 0x0f3b, 0x1003, 0x1323,
+	};
+	struct tx_isp_t30_color_matrix_fsm *fsm = (void *)arg1;
+	u8 *isp = (u8 *)(uintptr_t)fsm->owner;
 
-    color_matrix_change_CCMs(arg1);
+	BUILD_BUG_ON(sizeof(*fsm) != 0xec);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_color_matrix_fsm,
+			      output_ccm) != 0x26);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_color_matrix_fsm,
+			      active_ccm) != 0x38);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_color_matrix_fsm,
+			      ccm_a) != 0x62);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_color_matrix_fsm,
+			      mesh_blend) != 0xaa);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_color_matrix_fsm,
+			      color_temperature_threshold) != 0xc4);
+	if (!isp)
+		return -EINVAL;
 
-    ((void **)b)[0x12] = 0x80;
-    ((void **)b)[0x11] = 0;
-    ((void **)stab)[0x33] = 0x80;
+	color_matrix_change_CCMs(arg1);
+	fsm->field_12 = 0x80;
+	fsm->field_11 = 0;
+	stab[51] = 0x80;
+	shading_mesh_load(isp[0x1524]);
+	fsm->mesh_page = 2;
+	fsm->mesh_blend = 0;
+	fsm->mesh_source = 3;
+	tx_isp_t30_color_select_mesh_page(2);
+	tx_isp_t30_color_write_mesh_blend(0);
+	memcpy(fsm->color_temperature_threshold, color_temperature_threshold,
+	       sizeof(color_temperature_threshold));
 
-    base = w[0];
-    r = *(uint8_t *)((uintptr_t)base + 0x1524);
-    shading_mesh_load(r);
-
-    ((void **)b)[0xac] = 2;
-    ((void **)(uintptr_t)h)[0xaa / 2] = 0;
-    ((void **)b)[0xad] = 3;
-
-    r = APICAL_READ_32(0x394);
-    APICAL_WRITE_32(0x394, (r & 0xfffffff8u) | 0x2u);
-
-    r = APICAL_READ_32(0x394);
-    APICAL_WRITE_32(0x394, (r & 0xfffff8ffu) | 0x200u);
-
-    r = APICAL_READ_32(0x394);
-    APICAL_WRITE_32(0x394, (r & 0xfff8ffffu) | 0x20000u);
-
-    r = APICAL_READ_32(0x398);
-    APICAL_WRITE_32(0x398, r & 0xffffff00u);
-
-    r = APICAL_READ_32(0x398);
-    APICAL_WRITE_32(0x398, r & 0xffff00ffu);
-
-    r = APICAL_READ_32(0x398);
-    APICAL_WRITE_32(0x398, r & 0xff00ffffu);
-
-    ((void **)w)[0x31] = 0x00000bb8;
-    ((void **)w)[0x32] = 0x00000f3c;
-    ((void **)w)[0x33] = 0x00001004;
-    ((void **)w)[0x34] = 0x00001324;
-    ((void **)w)[0x35] = 0x00000bb7;
-    ((void **)w)[0x36] = 0x00000f3b;
-    ((void **)w)[0x37] = 0x00001003;
-    ((void **)w)[0x38] = 0x00001323;
-
-    return 0x1323;
+	/*
+	 * Stock applies the initialized CCM on the first frame-end event.  The
+	 * recovery interrupt mask intentionally keeps that wider FSM fanout
+	 * quarantined, so perform the same tuning-driven update once here.
+	 */
+	color_matrix_update(arg1);
+	pr_info("tx-isp-t30: tuning CCM mode=%u ct=%d d50=%04x/%04x/%04x %04x/%04x/%04x %04x/%04x/%04x\n",
+		fsm->active_ccm_mode, *(s32 *)(isp + 0xec0),
+		(u16)fsm->ccm_d50[0], (u16)fsm->ccm_d50[1],
+		(u16)fsm->ccm_d50[2], (u16)fsm->ccm_d50[3],
+		(u16)fsm->ccm_d50[4], (u16)fsm->ccm_d50[5],
+		(u16)fsm->ccm_d50[6], (u16)fsm->ccm_d50[7],
+		(u16)fsm->ccm_d50[8]);
+	pr_info("tx-isp-t30: applied CCM %04x/%04x/%04x %04x/%04x/%04x %04x/%04x/%04x\n",
+		fsm->output_ccm[0], fsm->output_ccm[1], fsm->output_ccm[2],
+		fsm->output_ccm[3], fsm->output_ccm[4], fsm->output_ccm[5],
+		fsm->output_ccm[6], fsm->output_ccm[7], fsm->output_ccm[8]);
+	return 0x1323;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000280f0 origin=model_output original=iridix_fsm_process_interrupt */
@@ -50013,15 +50018,15 @@ int32_t AWB_fsm_process_event(int32_t *arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002eea0 origin=model_output original=color_matrix_fsm_clear */
 int32_t color_matrix_fsm_clear(void *arg1)
 {
-	uint8_t *p = (uint8_t *)arg1;
+	struct tx_isp_t30_color_matrix_fsm *fsm = arg1;
 
-	((void **)p)[0x5c] = 3;
-	((void **)p)[0x5d] = 3;
-	((void **)p)[0x5e] = 3;
-	((void **)p)[0x5f] = 3;
-	((void **)p)[0x60] = 0x14;
-	((void **)p)[0x61] = 0;
-	((void **)p)[0xae] = 0;
+	fsm->ccm_mode_5c = 3;
+	fsm->ccm_mode_5d = 3;
+	fsm->active_ccm_mode = 3;
+	fsm->previous_ccm_mode = 3;
+	fsm->transition_length = 0x14;
+	fsm->transition_remaining = 0;
+	fsm->emergency_override = 0;
 
 	return 0x14;
 }
