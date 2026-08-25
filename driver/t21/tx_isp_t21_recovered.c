@@ -920,7 +920,7 @@ static uintptr_t (*globe_ispdev)();
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static struct platform_driver tx_isp_driver = {
     .driver = {
-        .name = "tx-isp-driver",
+        .name = "tx-isp",
         .owner = THIS_MODULE,
     },
 };
@@ -932,7 +932,7 @@ static void tx_isp_platform_device_platform_release(struct device *dev) { (void)
 static u64 tx_isp_platform_device_dma_mask = ~(u64)0;
 static struct platform_device tx_isp_platform_device = {
     .name = "tx-isp",
-    .id = 0,
+    .id = -1,
     .dev = {
         .dma_mask = &tx_isp_platform_device_dma_mask,
         .coherent_dma_mask = 0xffffffff,
@@ -949,7 +949,6 @@ static struct platform_device tx_isp_platform_device;
 static unsigned char __attribute__((aligned(4))) configs[8] = {
     0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
 };
-static struct miscdevice misc_registered;
 static struct miscdevice misc_ret;
 static struct file_operations tx_isp_fops;
 static unsigned char __attribute__((aligned(4))) isp_drivers[28] = {
@@ -6083,6 +6082,11 @@ static unsigned char __attribute__((aligned(4))) tx_isp_devices[20] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
 };
+/* Stock .data symbol tx_video_device: root module id plus four children. */
+static unsigned char __attribute__((aligned(4))) tx_video_device[12] = {
+    0x00, 0x04, 0xff, 0x00, 0x04, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+};
 static unsigned char __attribute__((aligned(4))) tx_isp_subdev_framesource[20] = {
     0x01, 0x02, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
@@ -6090,6 +6094,15 @@ static unsigned char __attribute__((aligned(4))) tx_isp_subdev_framesource[20] =
 static unsigned char __attribute__((aligned(4))) tx_isp_subdev_ispcore[20] = {
     0x01, 0x03, 0x00, 0x10, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00,
+};
+/* Stock VIC/VIN platform descriptors (module type, parent and instance id). */
+static unsigned char __attribute__((aligned(4))) tx_isp_widget_vic[16] = {
+    0x02, 0x04, 0x10, 0x21, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+};
+static unsigned char __attribute__((aligned(4))) tx_isp_widget_vin[16] = {
+    0x02, 0x01, 0x10, 0x20, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 static unsigned char __attribute__((aligned(4))) tx_isp_core_resource[56] = {
     0x00, 0x00, 0x30, 0x13, 0xff, 0xff, 0x30, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
@@ -6180,7 +6193,7 @@ static unsigned char __attribute__((aligned(4))) trig_cal[4] = {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static struct platform_driver tx_isp_vin_driver = {
     .driver = {
-        .name = "tx-isp-vin-driver",
+        .name = "isp-w00",
         .owner = THIS_MODULE,
     },
 };
@@ -6190,7 +6203,7 @@ static struct platform_driver tx_isp_vin_driver;
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static struct platform_driver tx_isp_vic_driver = {
     .driver = {
-        .name = "tx-isp-vic-driver",
+        .name = "isp-w02",
         .owner = THIS_MODULE,
     },
 };
@@ -6200,7 +6213,7 @@ static struct platform_driver tx_isp_vic_driver;
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static struct platform_driver tx_isp_core_driver = {
     .driver = {
-        .name = "tx-isp-core-driver",
+        .name = "isp-m0",
         .owner = THIS_MODULE,
     },
 };
@@ -6210,7 +6223,7 @@ static struct platform_driver tx_isp_core_driver;
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static struct platform_driver tx_isp_fs_driver = {
     .driver = {
-        .name = "tx-isp-fs-driver",
+        .name = "isp-fs",
         .owner = THIS_MODULE,
     },
 };
@@ -6221,8 +6234,8 @@ static struct platform_driver tx_isp_fs_driver;
 static void tx_isp_core_platform_device_platform_release(struct device *dev) { (void)dev; }
 static u64 tx_isp_core_platform_device_dma_mask = ~(u64)0;
 static struct platform_device tx_isp_core_platform_device = {
-    .name = "tx-isp-core",
-    .id = 0,
+    .name = "isp-m0",
+    .id = -1,
     .dev = {
         .dma_mask = &tx_isp_core_platform_device_dma_mask,
         .coherent_dma_mask = 0xffffffff,
@@ -6240,8 +6253,8 @@ static struct platform_device tx_isp_core_platform_device;
 static void tx_isp_vic_platform_device_platform_release(struct device *dev) { (void)dev; }
 static u64 tx_isp_vic_platform_device_dma_mask = ~(u64)0;
 static struct platform_device tx_isp_vic_platform_device = {
-    .name = "tx-isp-vic",
-    .id = 0,
+    .name = "isp-w02",
+    .id = -1,
     .dev = {
         .dma_mask = &tx_isp_vic_platform_device_dma_mask,
         .coherent_dma_mask = 0xffffffff,
@@ -6259,8 +6272,8 @@ static struct platform_device tx_isp_vic_platform_device;
 static void tx_isp_vin_platform_device_platform_release(struct device *dev) { (void)dev; }
 static u64 tx_isp_vin_platform_device_dma_mask = ~(u64)0;
 static struct platform_device tx_isp_vin_platform_device = {
-    .name = "tx-isp-vin",
-    .id = 0,
+    .name = "isp-w00",
+    .id = -1,
     .dev = {
         .dma_mask = &tx_isp_vin_platform_device_dma_mask,
         .coherent_dma_mask = 0xffffffff,
@@ -6278,8 +6291,8 @@ static struct platform_device tx_isp_vin_platform_device;
 static void tx_isp_fs_platform_device_platform_release(struct device *dev) { (void)dev; }
 static u64 tx_isp_fs_platform_device_dma_mask = ~(u64)0;
 static struct platform_device tx_isp_fs_platform_device = {
-    .name = "tx-isp-fs",
-    .id = 0,
+    .name = "isp-fs",
+    .id = -1,
     .dev = {
         .dma_mask = &tx_isp_fs_platform_device_dma_mask,
         .coherent_dma_mask = 0xffffffff,
@@ -7142,6 +7155,30 @@ int tx_isp_core_remove(struct platform_device *pdev);
 /* WHOLE_DRIVER_RELOCATED_DATA_PATCHES */
 static void regtrace_patch_relocated_data(void)
 {
+    /* Recover the platform binding graph from the stock module's .data. */
+    tx_isp_driver.probe = tx_isp_probe;
+    tx_isp_driver.remove = tx_isp_remove;
+    tx_isp_vin_driver.probe = tx_isp_vin_probe;
+    tx_isp_vin_driver.remove = tx_isp_vin_remove;
+    tx_isp_vic_driver.probe = tx_isp_vic_probe;
+    tx_isp_vic_driver.remove = tx_isp_vic_remove;
+    tx_isp_core_driver.probe = tx_isp_core_probe;
+    tx_isp_core_driver.remove = tx_isp_core_remove;
+    tx_isp_fs_driver.probe = tx_isp_fs_probe;
+    tx_isp_fs_driver.remove = tx_isp_fs_remove;
+
+    tx_isp_platform_device.dev.platform_data = tx_video_device;
+    tx_isp_core_platform_device.dev.platform_data = tx_isp_subdev_ispcore;
+    tx_isp_core_platform_device.num_resources = 2;
+    tx_isp_core_platform_device.resource =
+        (struct resource *)(void *)tx_isp_core_resource;
+    tx_isp_vic_platform_device.dev.platform_data = tx_isp_widget_vic;
+    tx_isp_vic_platform_device.num_resources = 2;
+    tx_isp_vic_platform_device.resource =
+        (struct resource *)(void *)tx_isp_vic_resource;
+    tx_isp_vin_platform_device.dev.platform_data = tx_isp_widget_vin;
+    tx_isp_fs_platform_device.dev.platform_data = tx_isp_subdev_framesource;
+
     *(const void **)((char *)sinfo_key_name + 0x0) = (const void *)"name";
     *(const void **)((char *)sinfo_key_name + 0x4) = (const void *)"chip_id";
     *(const void **)((char *)sinfo_key_name + 0x8) = (const void *)"i2c_addr";
@@ -7168,6 +7205,7 @@ static void regtrace_patch_relocated_data(void)
     *(const void **)((char *)tx_isp_devices + 0x4) = (const void *)&tx_isp_vic_platform_device;
     *(const void **)((char *)tx_isp_devices + 0x8) = (const void *)&tx_isp_vin_platform_device;
     *(const void **)((char *)tx_isp_devices + 0xc) = (const void *)&tx_isp_fs_platform_device;
+    *(const void **)((char *)tx_video_device + 0x8) = (const void *)&tx_isp_devices;
     *(const void **)((char *)tx_isp_subdev_framesource + 0x10) = (const void *)&tx_isp_fs_pads;
     *(const void **)((char *)tx_isp_subdev_ispcore + 0x8) = (const void *)&isp_core_clk_info;
     *(const void **)((char *)tx_isp_subdev_ispcore + 0x10) = (const void *)&tx_isp_core_pads;
@@ -14409,8 +14447,7 @@ int private_misc_register(struct miscdevice *mdev)
 
 int private_misc_deregister(struct miscdevice *mdev)
 {
-    misc_deregister((struct miscdevice *)(uintptr_t)&misc_registered);
-    return 0;
+    return misc_deregister(mdev);
 }
 
 
@@ -19929,7 +19966,7 @@ int tx_isp_probe(struct platform_device *pdev)
     }
 
     *(struct proc_dir_entry **)((char *)dev + 0x11c) =
-        private_jz_proc_mkdir("tx-isp");
+        private_jz_proc_mkdir("isp");
     if (!*(struct proc_dir_entry **)((char *)dev + 0x11c)) {
         isp_printf(2, "Failed to create debug directory of tx-isp!\n");
         result = -ENODEV;

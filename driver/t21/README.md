@@ -24,8 +24,8 @@ Expected artifact: `driver/t21/tx-isp-t21.ko`.
 
 The current module compiles and completes MODPOST against the vendor kernel.
 It still emits many recovery-grade type and prototype warnings; those are a
-repair queue, not harmless noise. No T21 camera load or stream claim is made
-at this checkpoint.
+repair queue, not harmless noise. A probe-only load/unload cycle now passes on
+a T21N camera; no sensor-bind or stream claim is made at this checkpoint.
 
 ## Shared math boundary
 
@@ -106,6 +106,14 @@ their computed return values or call state.
   updates the actual channel array, calls all 16 child shutdown hooks, and
   disables clocks in reverse acquisition order. Their current audit ratios are
   0.886 and 0.942 respectively.
+- Restored the stock platform binding graph: the root and four child device
+  descriptors, exact `tx-isp`/`isp-m0`/`isp-w02`/`isp-w00`/`isp-fs` names,
+  probe/remove callbacks, VIC/core resources, and platform data are all wired
+  before registration. Also corrected `private_misc_deregister()` to forward
+  its caller's device and restored the stock `/proc/jz/isp` directory name.
+  On 2026-08-25 a Wansview W6 (T21N) probe-only cycle created `/dev/tx-isp`,
+  `/dev/isp-m0`, all three frame channels, `/proc/jz/isp/*`, and IRQs 37/38;
+  unload returned zero and removed each of them before a clean reboot.
 
 ## Audit and validation boundary
 
