@@ -2,9 +2,9 @@
 
 ## Scope
 
-The active refactor covers the T23, T30, T31, T40, and T41 TX-ISP drivers.
+The active refactor covers the T21, T23, T30, T31, T40, and T41 TX-ISP drivers.
 T31 already has core, CSI, VIC, VIN, frame-source, tuning, and support
-translation units. T23, T30, T40, and T41 still have large recovered core
+translation units. T21, T23, T30, T40, and T41 still have large recovered core
 translation units, but their modules now link separate shared-library adapter
 objects. This gives later extractions stable module boundaries without
 rewriting the recovered pipeline all at once.
@@ -41,6 +41,12 @@ for:
 
 The per-SoC wrappers preserve their existing ABI and endpoint policy:
 
+- T21 uses signed interpolation with its eight-step endpoint and delegates its
+  private/public log2 and exp2 plus 32-bit add/subtract/wrapped
+  multiply/divide entry points. Stock comparison found 206 exact
+  relocation-normalized bodies among 561 common T21/T31 function names; the
+  unsuffixed and `_64` arithmetic remains local until its o32 call sites are
+  typed.
 - T23 uses signed interpolation with its eight-step table endpoint and
   delegates its generic/32/64-bit add/subtract and generation-specific wrapped
   multiply/divide entry points.
