@@ -10,25 +10,25 @@
 
 | Metric | OEM | Recovered |
 |---|---:|---:|
-| Function symbols | 630 | 682 |
-| Functions with disassembly | 630 | 682 |
-| Executable section bytes | 215240 | 170256 |
-| Initialized writable bytes | 283936 | 276528 |
-| Uninitialized writable bytes | 101040 | 452144 |
+| Function symbols | 630 | 683 |
+| Functions with disassembly | 630 | 683 |
+| Executable section bytes | 215240 | 170656 |
+| Initialized writable bytes | 283936 | 276624 |
+| Uninitialized writable bytes | 101040 | 452176 |
 
 - direct matches: 612
 - replacement matches: 0 (missing=0)
-- unmatched: OEM-only=18 recovered-only=70
-- matched instructions: OEM=52693 recovered=41573 ratio=0.789
-- classes: stub=4 collapsed=25 shorter=109 same_count=138 similar=318 larger=11 expanded=7
+- unmatched: OEM-only=18 recovered-only=71
+- matched instructions: OEM=52693 recovered=41670 ratio=0.791
+- classes: stub=4 collapsed=25 shorter=107 same_count=141 similar=317 larger=11 expanded=7
 
 ## Allocated Section Delta
 
 | Section | OEM bytes | Recovered bytes | Delta |
 |---|---:|---:|---:|
 | `.MIPS.abiflags` | 24 | 24 | +0 |
-| `.bss` | 101040 | 452144 | +351104 |
-| `.data` | 283648 | 276240 | -7408 |
+| `.bss` | 101040 | 452176 | +351136 |
+| `.data` | 283648 | 276336 | -7312 |
 | `.exit.text` | 832 | 0 | -832 |
 | `.gnu.linkonce.this_module` | 288 | 288 | +0 |
 | `.init.text` | 72 | 0 | -72 |
@@ -40,15 +40,15 @@
 | `.rodata.cst32` | 0 | 192 | +192 |
 | `.rodata.cst4` | 0 | 16 | +16 |
 | `.rodata.cst8` | 0 | 16 | +16 |
-| `.rodata.str1.4` | 11016 | 9512 | -1504 |
-| `.text` | 214336 | 170256 | -44080 |
+| `.rodata.str1.4` | 11016 | 9664 | -1352 |
+| `.text` | 214336 | 170656 | -43680 |
 | `__ksymtab` | 240 | 240 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 32 | 32 | +0 |
 
 ## Function Outliers
 
-Showing 244 of 244 outliers. JSON and CSV contain every comparison row.
+Showing 243 of 243 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -105,8 +105,8 @@ Showing 244 of 244 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `Tiziano_awb_fpga` | `Tiziano_awb_fpga` | 625 | 413 | 0.661 | -212 | 14->12 | 55->35 |
 | shorter | exact_name | `tisp_param_operate_process` | `tisp_param_operate_process` | 608 | 484 | 0.796 | -124 | 20->23 | 104->91 |
 | shorter | exact_name | `apical_isp_core_ops_g_ctrl` | `apical_isp_core_ops_g_ctrl` | 441 | 262 | 0.594 | -179 | 20->8 | 113->72 |
-| shorter | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 434 | 291 | 0.671 | -143 | 15->17 | 114->39 |
-| shorter | exact_name | `subdev_sensor_ops_ioctl` | `subdev_sensor_ops_ioctl` | 371 | 280 | 0.755 | -91 | 26->21 | 74->51 |
+| shorter | exact_name | `ispcore_core_ops_init` | `ispcore_core_ops_init` | 434 | 296 | 0.682 | -138 | 15->24 | 114->33 |
+| shorter | exact_name | `subdev_sensor_ops_ioctl` | `subdev_sensor_ops_ioctl` | 371 | 276 | 0.744 | -95 | 26->20 | 74->51 |
 | shorter | exact_name | `jz_isp_lsc_ct` | `jz_isp_lsc_ct` | 356 | 220 | 0.618 | -136 | 12->6 | 48->20 |
 | shorter | exact_name | `ispcore_interrupt_service_routine` | `ispcore_interrupt_service_routine` | 297 | 197 | 0.663 | -100 | 12->11 | 32->20 |
 | shorter | exact_name | `isp_framesource_show` | `isp_framesource_show` | 293 | 202 | 0.689 | -91 | 24->22 | 23->9 |
@@ -153,10 +153,8 @@ Showing 244 of 244 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `vic_sensor_ops_sync_sensor_attr` | `vic_sensor_ops_sync_sensor_attr` | 39 | 29 | 0.744 | -10 | 2->2 | 11->5 |
 | shorter | exact_name | `tisp_gib_deir_ir_update` | `tisp_gib_deir_ir_update` | 39 | 30 | 0.769 | -9 | 1->1 | 4->4 |
 | shorter | exact_name | `fix_point_div_32` | `fix_point_div_32` | 38 | 29 | 0.763 | -9 | 1->0 | 6->6 |
-| shorter | exact_name | `tx_isp_vic_remove` | `tx_isp_vic_remove` | 37 | 25 | 0.676 | -12 | 4->4 | 3->0 |
 | shorter | exact_name | `fix_point_sub_64` | `fix_point_sub_64` | 34 | 20 | 0.588 | -14 | 1->1 | 3->2 |
 | shorter | exact_name | `fix_point_sub` | `fix_point_sub` | 34 | 23 | 0.676 | -11 | 1->1 | 3->2 |
-| shorter | exact_name | `tx_isp_vin_remove` | `tx_isp_vin_remove` | 33 | 26 | 0.788 | -7 | 4->4 | 2->0 |
 | shorter | exact_name | `tisp_s_ae_attr` | `tisp_s_ae_attr` | 31 | 20 | 0.645 | -11 | 1->0 | 2->1 |
 | shorter | exact_name | `isp_core_tuning_event` | `isp_core_tuning_event` | 30 | 21 | 0.700 | -9 | 1->1 | 4->4 |
 | shorter | exact_name | `tisp_ae_get_y_zone` | `tisp_ae_get_y_zone` | 30 | 23 | 0.767 | -7 | 3->3 | 0->0 |
@@ -208,7 +206,7 @@ Showing 244 of 244 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `tiziano_ae_s_ev_start` | `tiziano_ae_s_ev_start` | 6 | 2 | 0.333 | -4 | 0->0 | 0->0 |
 | shorter | exact_name | `tisp_netlink_event_set_cb` | `tisp_netlink_event_set_cb` | 4 | 2 | 0.500 | -2 | 0->0 | 0->0 |
 | shorter | exact_name | `tisp_s_ev_start` | `tisp_s_ev_start` | 4 | 2 | 0.500 | -2 | 0->0 | 1->0 |
-| expanded | exact_name | `init_module` | `init_module` | 18 | 2510 | 139.444 | +2492 | 2->2 | 1->1 |
+| expanded | exact_name | `init_module` | `init_module` | 18 | 2516 | 139.778 | +2498 | 2->2 | 1->1 |
 | expanded | exact_name | `private_log2_fixed_to_fixed_64` | `private_log2_fixed_to_fixed_64` | 18 | 82 | 4.556 | +64 | 1->1 | 0->8 |
 | expanded | exact_name | `tisp_log2_fixed_to_fixed_64` | `tisp_log2_fixed_to_fixed_64` | 18 | 81 | 4.500 | +63 | 1->1 | 0->8 |
 | expanded | exact_name | `private_log2_fixed_to_fixed` | `private_log2_fixed_to_fixed` | 18 | 56 | 3.111 | +38 | 1->0 | 0->9 |
@@ -283,6 +281,7 @@ Showing 244 of 244 outliers. JSON and CSV contain every comparison row.
 | recovered_only | recovered_only |  | `sub_6d04` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |
 | recovered_only | recovered_only |  | `sub_70a0` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |
 | recovered_only | recovered_only |  | `sub_70b0` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |
+| recovered_only | recovered_only |  | `t21_isp_valid_ptr` | 0 | 3 | n/a | +0 | 0->0 | 0->0 |
 | recovered_only | recovered_only |  | `tisp_ccm_param_array_set.part.0` | 0 | 30 | n/a | +0 | 0->2 | 0->2 |
 | recovered_only | recovered_only |  | `tisp_hldc_par_refresh_part_0` | 0 | 15 | n/a | +0 | 0->1 | 0->1 |
 | recovered_only | recovered_only |  | `tx_isp_core_platform_device_platform_release` | 0 | 2 | n/a | +0 | 0->0 | 0->0 |

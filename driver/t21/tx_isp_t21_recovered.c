@@ -6724,10 +6724,10 @@ int32_t tx_isp_video_link_stream(void *arg1, int32_t arg2);
 int32_t tx_isp_open(int32_t arg1, void *arg2);
 int32_t tx_isp_notify(int32_t arg1, int32_t arg2, int32_t arg3);
 int tx_isp_exit(void);
-int32_t tx_isp_unregister_platforms(uintptr_t a0);
+int32_t tx_isp_unregister_platforms(void *platforms);
 int32_t find_subdev_link_pad(void *arg1, int32_t *arg2);
 int32_t isp_subdev_release_clks(uintptr_t a0);
-int32_t isp_subdev_init_clks(uintptr_t a0, uintptr_t a1);
+int32_t isp_subdev_init_clks(void *subdev, const void *clock_info);
 int32_t subdev_video_destroy_link(uintptr_t a0);
 #ifndef REGTRACE_KERNEL_TREE_BUILD
 int32_t tx_isp_video_link_destroy_isra_1(void *arg1) __asm__("tx_isp_video_link_destroy.isra.1");
@@ -6742,7 +6742,7 @@ int32_t tx_isp_send_event_to_remote(void *arg1, uint32_t event, void *data);
 int32_t tx_isp_module_init(void *arg1, void *arg2);
 int32_t tx_isp_module_deinit(uint32_t a0);
 int32_t tx_isp_subdev_deinit(uintptr_t a0);
-int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3);
+int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, void *ops);
 int32_t tx_isp_create_graph_and_nodes(void *arg1);
 int tx_isp_probe(struct platform_device *pdev);
 uint32_t tisp_math_exp2(int32_t arg1, char arg2, char arg3);
@@ -10617,7 +10617,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
 	*(uint32_t *)((char *)vin + 0xe4) = 0;
 
 	clk = *(void **)((char *)pdev + 0x58);
-	ret = tx_isp_subdev_init(pdev, vin, (int32_t)&vin_subdev_ops);
+	ret = tx_isp_subdev_init(pdev, vin, &vin_subdev_ops);
 	if (ret != 0) {
 		isp_printf(2, "Failed to init isp module(%d.%d)\n",
 			   *(uint8_t *)((char *)clk + 2),
@@ -17484,6 +17484,7 @@ int tx_isp_exit(void)
 	return 0;
 }
 
+#if 0
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a028 origin=fragment_seed original=tx_isp_unregister_platforms */
 int32_t tx_isp_unregister_platforms(uintptr_t a0)
 {
@@ -17534,6 +17535,26 @@ tx_isp_unregister_platforms0x54:
     /* function epilogue: restore registers and return */
 
     return 0;
+}
+#endif
+
+/* Rebuilt from the stock T21 16-entry child teardown walk at 0xa028. */
+int32_t tx_isp_unregister_platforms(void *arg0)
+{
+	u8 *platforms = arg0;
+	u32 i;
+
+	for (i = 0; i < 16; i++) {
+		struct platform_device *pdev =
+			*(struct platform_device **)(platforms + i * 8);
+		void **driver = *(void ***)(platforms + i * 8 + 4);
+
+		if (driver && driver[1])
+			((int (*)(struct platform_device *))driver[1])(pdev);
+		if (pdev)
+			private_platform_device_unregister(pdev);
+	}
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a0a4 origin=model_output original=find_subdev_link_pad */
@@ -17621,6 +17642,7 @@ int32_t isp_subdev_release_clks(uintptr_t a0)
     return 0;
 }
 
+#if 0
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a218 origin=fragment_seed original=isp_subdev_init_clks */
 int32_t isp_subdev_init_clks(uintptr_t a0, uintptr_t a1)
 {
@@ -17781,6 +17803,70 @@ isp_subdev_init_clks0x1a4:
     /* function epilogue: restore registers and return */
 
     return 0;
+}
+#endif
+
+struct t21_device_clk {
+	const char *name;
+	unsigned long rate;
+};
+
+/* Rebuilt from the stock T21 clock acquisition loop at 0xa218. */
+int32_t isp_subdev_init_clks(void *arg0, const void *arg1)
+{
+	u8 *subdev = arg0;
+	const struct t21_device_clk *info =
+		(const struct t21_device_clk *)arg1;
+	struct clk **clks;
+	u32 count = *(u32 *)(subdev + 0xc0);
+	u32 i;
+	int ret;
+
+	BUILD_BUG_ON(sizeof(struct t21_device_clk) != 8);
+
+	if (!count) {
+		*(struct clk ***)(subdev + 0xbc) = NULL;
+		return 0;
+	}
+
+	clks = private_kmalloc(count * sizeof(*clks), 0xd0);
+	if (!clks) {
+		isp_printf(2,
+			   "isp_subdev_init_clks[%d] Failed to allocate core's clks\n",
+			   972);
+		return -ENOMEM;
+	}
+	memset(clks, 0, count * sizeof(*clks));
+
+	for (i = 0; i < count; i++) {
+		clks[i] = private_clk_get(*(struct device **)(subdev + 4),
+					      info[i].name);
+		if ((uintptr_t)clks[i] >= (uintptr_t)-4095) {
+			ret = (int)(long)clks[i];
+			isp_printf(2, "Failed to get %s clock %d\n",
+				   info[i].name, ret);
+			goto fail;
+		}
+
+		if (info[i].rate != 0xffff) {
+			ret = private_clk_set_rate(clks[i], info[i].rate);
+			if (ret) {
+				isp_printf(2, "Failed to set %s clock rate(%lu)\n",
+					   info[i].name, info[i].rate);
+				private_clk_put(clks[i]);
+				goto fail;
+			}
+		}
+	}
+
+	*(struct clk ***)(subdev + 0xbc) = clks;
+	return 0;
+
+fail:
+	while (i--)
+		private_clk_put(clks[i]);
+	private_kfree(clks);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a3f0 origin=fragment_seed original=subdev_video_destroy_link */
@@ -19268,6 +19354,7 @@ tx_isp_module_deinit0x18:
     return 0;
 }
 
+#if 0
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b554 origin=fragment_seed original=tx_isp_subdev_deinit */
 int32_t tx_isp_subdev_deinit(uintptr_t a0)
 {
@@ -19362,9 +19449,47 @@ tx_isp_subdev_deinit0xcc:
 
     return 0;
 }
+#endif
+
+/* Rebuilt from the stock T21 teardown sequence at 0xb554. */
+int32_t tx_isp_subdev_deinit(uintptr_t a0)
+{
+	u8 *subdev = (u8 *)a0;
+	struct resource *mem;
+	void *mapped;
+
+	if (!subdev)
+		return 0;
+
+	if (*(u32 *)(subdev + 0x30))
+		private_misc_deregister((struct miscdevice *)(subdev + 0xc));
+
+	isp_subdev_release_clks((uintptr_t)subdev);
+	if (*(void **)(subdev + 0xcc))
+		private_kfree(*(void **)(subdev + 0xcc));
+	if (*(void **)(subdev + 0xd0))
+		private_kfree(*(void **)(subdev + 0xd0));
+
+	mapped = *(void **)(subdev + 0xb8);
+	if (mapped)
+		private_iounmap(mapped);
+
+	mem = *(struct resource **)(subdev + 0xb4);
+	if (mem) {
+		private_release_mem_region(mem->start,
+					   mem->end + 1 - mem->start);
+		*(struct resource **)(subdev + 0xb4) = NULL;
+	}
+
+	if (*(u32 *)(subdev + 0x80))
+		tx_isp_free_irq((int32_t *)(subdev + 0x80));
+	tx_isp_module_deinit((uint32_t)(uintptr_t)subdev);
+	*(void **)(subdev + 0xc4) = NULL;
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000b640 origin=model_output original=tx_isp_subdev_init */
-int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3)
+int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, void *ops)
 {
 	int32_t ret;
 	int32_t irq_ret;
@@ -19454,7 +19579,7 @@ int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3
 		return -22;
 	}
 
-	*(int32_t *)((char *)isp + 0xc4) = arg3;
+	*(void **)((char *)isp + 0xc4) = ops;
 	ret = tx_isp_module_init(pdev, isp);
 	if (ret != 0) {
 		isp_printf(2, "Failed to init isp module(%s)\n", *(char **)(pdev));
@@ -19501,8 +19626,7 @@ int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3
 		}
 		mapped_addr = *(uint32_t *)mem_res;
 		mapped_size = *(uint32_t *)((char *)mem_res + 4) + 1 - mapped_addr;
-		private_ioremap(mapped_addr, mapped_size);
-		mapped = 0;
+		mapped = private_ioremap(mapped_addr, mapped_size);
 		*(void **)((char *)isp + 0xb8) = mapped;
 		if (mapped == NULL) {
 			((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s[%d] Unable to ioremap registers\n"), (uintptr_t)("tx_isp_subdev_init"), (uintptr_t)(1153));
@@ -19518,13 +19642,15 @@ int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3
 	pad_type = *(uint8_t *)clk_cfg;
 	if (pad_type == 1 || pad_type == 2) {
 		*(uint8_t *)((char *)isp + 0xc0) = *(uint8_t *)((char *)clk_cfg + 4);
-		ret = isp_subdev_init_clks(isp, *(uint32_t *)((char *)clk_cfg + 8));
+		ret = isp_subdev_init_clks(
+			isp, (const void *)(uintptr_t)
+				*(uint32_t *)((char *)clk_cfg + 8));
 		if (ret == 0) {
 			outpad_count = 0;
 			inpad_count = 0;
 			for (i = 0; i < *(uint8_t *)((char *)clk_cfg + 0xc); i++) {
 				pad_type_val = *(uint8_t *)((uintptr_t)pad_types + (i << 1));
-				if (pad_type_val != 2) {
+				if (pad_type_val == 2) {
 					outpad_count++;
 				} else {
 					inpad_count++;
@@ -19564,7 +19690,7 @@ int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3
 				inpad_buf = private_kmalloc(inpad_size, 0xd0);
 				if (inpad_buf == NULL) {
 					isp_printf(2, "Failed to malloc %s's inpads\n", *(char **)((char *)isp + 8));
-					private_kfree(NULL);
+					private_kfree(outpad_buf);
 					isp_subdev_release_clks(isp);
 					ret = -12;
 					goto cleanup_subdev_fail;
@@ -19599,7 +19725,7 @@ int32_t tx_isp_subdev_init(struct platform_device *pdev, void *isp, int32_t arg3
 		isp_printf(2, "[%d] Failed to init subdev!\n", 1169);
 		private_iounmap(*(void **)((char *)isp + 0xb8));
 		if (mem_res != NULL) {
-			mapped_addr = 0;
+			mapped_addr = *(uint32_t *)mem_res;
 			mapped_size = *(uint32_t *)((char *)mem_res + 4) + 1 - mapped_addr;
 			private_release_mem_region(mapped_addr, mapped_size);
 		}
@@ -19628,81 +19754,93 @@ cleanup_free_irq:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000bbd0 origin=model_output original=tx_isp_create_graph_and_nodes */
 int32_t tx_isp_create_graph_and_nodes(void *arg1)
 {
-    int32_t i;
-    int32_t count;
-    int32_t j;
-    void *drv;
-    uint8_t type;
-    uint8_t parent_idx;
-    uint8_t child_idx;
-    void *parent;
-    int32_t misc_registered;
-    int32_t ret;
+	u8 *root = arg1;
+	u32 count = *(u32 *)(root + 0x80);
+	u32 i;
 
-    count = *(int32_t *)((char *)arg1 + 0x80);
+	/* Publish each header module into the root's 16-slot module table. */
+	for (i = 0; i < count; i++) {
+		struct platform_device *pdev =
+			*(struct platform_device **)(root + 0x84 + i * 8);
+		u8 *subdev = private_platform_get_drvdata(pdev);
 
-    for (i = 0; i < count; i++) {
-        private_platform_get_drvdata(*(void **)((char *)arg1 + ((i + 0x10) << 3) + 4));
-        drv = 0;
-        if (drv == 0 || (uintptr_t)drv >= 0xfffff001) {
-            isp_printf(0, "Can't find the module(%d) driver!\n", i);
-            continue;
-        }
-        type = *(uint8_t *)drv;
-        if (type != 1)
-            continue;
-        child_idx = *(uint8_t *)((char *)drv + 3);
-        *(void **)((char *)arg1 + (((child_idx & 0xf) + 0xe) << 2)) = (uintptr_t)drv;
-    }
+		if (!subdev || (uintptr_t)subdev >= (uintptr_t)-4095) {
+			isp_printf(0, "Can't find the module(%d) driver!\n", i);
+			continue;
+		}
+		if (subdev[0] == 1)
+			*(void **)(root + ((subdev[3] & 0xf) + 0xe) * 4) =
+				subdev;
+	}
 
-    for (j = 0; j < count; j++) {
-        private_platform_get_drvdata(*(void **)((char *)arg1 + ((j + 0x10) << 3) + 4));
-        drv = 0;
-        type = *(uint8_t *)drv;
-        if (type != 2)
-            continue;
-        parent_idx = *(uint8_t *)((char *)drv + 2);
-        parent = *(void **)((char *)arg1 + (((parent_idx & 0xf) + 0xe) << 2));
-        if (parent == 0) {
-            ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("the module(%d.%d) doesn't have parent!\n"), (uintptr_t)(parent_idx), (uintptr_t)(*(uint8_t *)((char *)drv + 3)));
-            return 0;
-        }
-        child_idx = *(uint8_t *)((char *)drv + 3);
-        *(void **)((uintptr_t)parent + (((child_idx & 0xf) + 0xe) << 2)) = (uintptr_t)drv;
-    }
+	/* Attach child modules to the header selected by their parent index. */
+	for (i = 0; i < count; i++) {
+		struct platform_device *pdev =
+			*(struct platform_device **)(root + 0x84 + i * 8);
+		u8 *subdev = private_platform_get_drvdata(pdev);
+		u8 *parent;
 
-    for (j = 0; j < count; j++) {
-        private_platform_get_drvdata(*(void **)((char *)arg1 + ((j + 0x10) << 3) + 4));
-        drv = 0;
-        misc_registered = *(int32_t *)((char *)drv + 0x30);
-        if (misc_registered == 0) {
-            int32_t name_ptr = *(int32_t *)((char *)drv + 8);
-            *(int32_t *)((char *)drv + 0x14) = misc_registered;
-            *(int32_t *)((char *)drv + 0xc) = 0xff;
-            *(int32_t *)((char *)drv + 0x10) = name_ptr;
-            ret = private_misc_register((struct miscdevice *)((char *)drv + 0xc));
-            if (ret < 0) {
-                isp_printf(2, "Failed to register tx-isp miscdev(%d.%d)!\n",
-                           *(uint8_t *)((char *)drv + 2), *(uint8_t *)((char *)drv + 3));
-                j--;
-                while (j >= 0) {
-                    private_platform_get_drvdata(*(void **)((char *)arg1 + ((j + 0x10) << 3) + 4));
-                    void *d = 0;
-                    if (*(int32_t *)((char *)d + 0x30) != 0)
-                        private_misc_deregister((struct miscdevice *)((char *)d + 0xc));
-                    j--;
-                }
-                return -2;
-            }
-        }
-        int32_t proc_fops = *(int32_t *)((char *)drv + 0x34);
-        if (proc_fops != 0)
-            private_proc_create_data(*(char **)((char *)drv + 8), 0x124,
-                                     *(struct proc_dir_entry **)((char *)arg1 + 0x11c),
-                                     (const struct file_operations *)proc_fops, drv);
-    }
+		if (!subdev || (uintptr_t)subdev >= (uintptr_t)-4095)
+			continue;
+		if (subdev[0] != 2)
+			continue;
 
-    return 0;
+		parent = *(u8 **)(root + ((subdev[2] & 0xf) + 0xe) * 4);
+		if (!parent) {
+			isp_printf(2,
+				   "the module(%d.%d) doesn't have parent!\n",
+				   subdev[2], subdev[3]);
+			break;
+		}
+		*(void **)(parent + ((subdev[3] & 0xf) + 0xe) * 4) = subdev;
+	}
+
+	/* Register the per-subdevice misc and proc nodes. */
+	for (i = 0; i < count; i++) {
+		struct platform_device *pdev =
+			*(struct platform_device **)(root + 0x84 + i * 8);
+		u8 *subdev = private_platform_get_drvdata(pdev);
+		u32 misc_flag;
+		void *proc_fops;
+		int ret;
+
+		if (!subdev || (uintptr_t)subdev >= (uintptr_t)-4095)
+			continue;
+
+		misc_flag = *(u32 *)(subdev + 0x30);
+		if (misc_flag) {
+			*(u32 *)(subdev + 0x14) = misc_flag;
+			*(u32 *)(subdev + 0xc) = 0xff;
+			*(void **)(subdev + 0x10) = *(void **)(subdev + 8);
+			ret = private_misc_register(
+				(struct miscdevice *)(subdev + 0xc));
+			if (ret < 0) {
+				isp_printf(2,
+					   "Failed to register tx-isp miscdev(%d.%d)!\n",
+					   subdev[2], subdev[3]);
+				while (i-- > 0) {
+					pdev = *(struct platform_device **)
+						(root + 0x84 + i * 8);
+					subdev = private_platform_get_drvdata(pdev);
+					if (subdev &&
+					    (uintptr_t)subdev < (uintptr_t)-4095 &&
+					    *(u32 *)(subdev + 0x30))
+						private_misc_deregister(
+							(struct miscdevice *)(subdev + 0xc));
+				}
+				return -ENOENT;
+			}
+		}
+
+		proc_fops = *(void **)(subdev + 0x34);
+		if (proc_fops)
+			private_proc_create_data(
+				*(char **)(subdev + 8), 0x124,
+				*(struct proc_dir_entry **)(root + 0x11c),
+				(const struct file_operations *)proc_fops, subdev);
+	}
+
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000be74 origin=model_output original=tx_isp_probe */
@@ -19820,7 +19958,7 @@ out_deregister:
 out_deinit:
     tx_isp_module_deinit(dev);
 out_unregister:
-    tx_isp_unregister_platforms((uintptr_t)((char *)dev + 0x84));
+    tx_isp_unregister_platforms((char *)dev + 0x84);
 out_free:
     private_kfree(dev);
     return result;
@@ -51998,6 +52136,7 @@ ispcore_core_ops_init0x6b4:
 #endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033f64 origin=model_output original=ispcore_slake_module */
+#if 0
 int32_t ispcore_slake_module(void *arg1)
 {
     void *s0;
@@ -52099,8 +52238,73 @@ ok:
 err:
     return -22;
 }
+#endif
+
+/* Rebuilt from the stock T21 core shutdown walk at 0x33f64. */
+int32_t ispcore_slake_module(void *arg1)
+{
+	u8 *subdev = arg1;
+	u8 *core;
+	u8 *channels;
+	void *tuning;
+	void **clks;
+	u32 state;
+	u32 i;
+	int ret;
+
+	if (!t21_isp_valid_ptr(subdev))
+		return -EINVAL;
+	core = *(u8 **)(subdev + 0xd4);
+	if (!t21_isp_valid_ptr(core))
+		return -EINVAL;
+
+	state = *(u32 *)(core + 0xe8);
+	if (state == 1)
+		return 0;
+	if (state >= 3) {
+		isp_printf(1, "%s,%d: \n", "ispcore_slake_module", 1328);
+		ispcore_core_ops_init((uintptr_t)subdev, 0);
+	}
+
+	channels = *(u8 **)(core + 0x14c);
+	for (i = 0; i < *(u32 *)(core + 0x150); i++)
+		*(u32 *)(channels + i * 0xa0 + 0x50) = 1;
+
+	tuning = *(void **)(core + 0x19c);
+	((void (*)(void *, u32, u32))
+	 *(void **)((u8 *)tuning + 0x40cc))(tuning, 0x4000001, 0);
+	*(u32 *)(core + 0xe8) = 1;
+
+	for (i = 0; i < 16; i++) {
+		u8 *child = *(u8 **)(core + 0x38 + i * 4);
+		void **ops;
+		int (*slake)(void *);
+
+		if (!t21_isp_valid_ptr(child))
+			continue;
+		ops = *(void ***)(child + 0xc4);
+		if (!ops || !ops[4])
+			continue;
+		slake = *(int (**)(void *))((u8 *)ops[4] + 4);
+		if (!slake)
+			continue;
+		ret = slake(child);
+		if (ret && ret != -ENOIOCTLCMD) {
+			isp_printf(2, "Failed to slake %s\n",
+				   *(char **)(child + 8));
+			break;
+		}
+	}
+
+	isp_printf(0, "%s,%d: \n", "ispcore_slake_module", 1353);
+	clks = *(void ***)(subdev + 0xbc);
+	for (i = *(u32 *)(subdev + 0xc0); i > 0; i--)
+		private_clk_disable(clks[i - 1]);
+	return 0;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034188 origin=fragment_seed original=tx_isp_core_probe */
+#if 0
 int tx_isp_core_probe(struct platform_device *pdev)
 {
     uintptr_t a0 = (uintptr_t)pdev;
@@ -52391,6 +52595,110 @@ tx_isp_core_probe0x360:
 
     return 0;
 }
+#endif
+
+/* Rebuilt from the stock T21 core probe at 0x34188. */
+int tx_isp_core_probe(struct platform_device *pdev)
+{
+	u8 *core;
+	u8 *channels;
+	void *tuning;
+	u16 channel_count;
+	u32 i;
+	int ret;
+
+	core = private_kmalloc(0x1a0, 0xd0);
+	if (!core) {
+		isp_printf(2, LC72);
+		return -ENOMEM;
+	}
+	memset(core, 0, 0x1a0);
+
+	ret = tx_isp_subdev_init(pdev, core, &core_subdev_ops);
+	if (ret) {
+		u8 *pdata = *(u8 **)((u8 *)pdev + 0x58);
+
+		isp_printf(2, LC73, pdata[2], pdata[3]);
+		private_kfree(core);
+		return -ENOMEM;
+	}
+
+	private_spin_lock_init((spinlock_t *)(core + 0xdc));
+	private_raw_mutex_init((struct mutex *)(core + 0xdc), LC74, NULL);
+
+	channel_count = *(u16 *)(core + 0xc8);
+	*(u32 *)(core + 0x150) = channel_count;
+	*(void **)(core + 0x134) = *(void **)((u8 *)pdev + 0x58);
+
+	channels = private_kmalloc(channel_count * 0xa0, 0xd0);
+	if (!channels) {
+		isp_printf(2, LC72);
+		isp_printf(2, LC75);
+		ret = -EINVAL;
+		goto fail_subdev;
+	}
+	memset(channels, 0, channel_count * 0xa0);
+
+	for (i = 0; i < channel_count; i++) {
+		u8 *channel = channels + i * 0xa0;
+		u8 *pad = *(u8 **)(core + 0xcc) + i * 0x24;
+
+		*(u32 *)(channel + 0x4c) = i;
+		*(u8 **)(channel + 0x54) = pad;
+		if (!pad[5]) {
+			*(u32 *)(channel + 0x50) = 0;
+			continue;
+		}
+
+		if (i == 0) {
+			*(u32 *)(channel + 0x5c) = 2688;
+			*(u32 *)(channel + 0x60) = 2048;
+			channel[0x6c] = 1;
+			channel[0x6d] = 0;
+		} else if (i == 1) {
+			*(u32 *)(channel + 0x5c) = 1920;
+			*(u32 *)(channel + 0x60) = 1080;
+			channel[0x6c] = 1;
+			channel[0x6d] = 1;
+		}
+
+		*(u32 *)(channel + 0x64) = 128;
+		*(u32 *)(channel + 0x68) = 128;
+		*(u32 *)(channel + 0x50) = 1;
+		private_spin_lock_init((spinlock_t *)(channel + 0x78));
+		*(u8 **)(channel + 0x58) = core;
+		*(void **)(pad + 0x1c) = ispcore_pad_event_handle;
+		*(u8 **)(pad + 0x20) = channel;
+	}
+	*(u8 **)(core + 0x14c) = channels;
+
+	tuning = isp_core_tuning_init(core);
+	*(void **)(core + 0x19c) = tuning;
+	if (!tuning) {
+		isp_printf(2, LC76);
+		if (*(u32 *)(core + 0xe8) >= 2)
+			ispcore_slake_module(core);
+		private_kfree(channels);
+		*(u32 *)(core + 0x154) = 1;
+		*(void **)(core + 0x14c) = NULL;
+		ret = -EINVAL;
+		goto fail_subdev;
+	}
+
+	*(u32 *)(core + 0xe8) = 1;
+	private_platform_set_drvdata(pdev, core);
+	*(u8 **)(core + 0xd4) = core;
+	*(void **)(core + 0x30) = *(void **)((u8 *)tuning + 0x40c8);
+	*(struct file_operations **)(core + 0x34) = &isp_info_proc_fops;
+	ispcore_sd = (uintptr_t)core;
+	sensor_early_init((uint32_t)(uintptr_t)core);
+	return 0;
+
+fail_subdev:
+	tx_isp_subdev_deinit((uintptr_t)core);
+	private_kfree(core);
+	return ret;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034518 origin=model_output original=system_irq_func_set */
 int32_t system_irq_func_set(int32_t arg1, int32_t arg2)
@@ -52421,77 +52729,53 @@ void cleanup_module(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000345bc origin=model_output original=tx_isp_vic_remove */
 int tx_isp_vic_remove(struct platform_device *pdev)
 {
-	struct platform_device *dev = pdev;
+	void *subdev = private_platform_get_drvdata(pdev);
+	void *vic;
 
-	void *data;
-	void *priv;
-	void *buf;
-
-	private_platform_get_drvdata(dev);
-	data = 0;
-	priv = data;
-	if (data == NULL || (unsigned long)data >= 0xfffff001UL) {
-		priv = NULL;
-		buf = NULL;
+	if (!subdev || (uintptr_t)subdev >= (uintptr_t)-4095) {
+		subdev = NULL;
+		vic = NULL;
 	} else {
-		buf = *(void **)((char *)data + 0xd4);
+		vic = *(void **)((u8 *)subdev + 0xd4);
 	}
-	private_platform_set_drvdata(dev, NULL);
-	tx_isp_subdev_deinit(priv);
-	private_kfree(buf);
+	private_platform_set_drvdata(pdev, NULL);
+	tx_isp_subdev_deinit((uintptr_t)subdev);
+	private_kfree(vic);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034650 origin=model_output original=tx_isp_vin_remove */
 int tx_isp_vin_remove(struct platform_device *pdev)
 {
-	uintptr_t arg1 = (uintptr_t)pdev;
+	void *vin = private_platform_get_drvdata(pdev);
 
-	private_platform_get_drvdata((const struct platform_device *)0);
-	int32_t *v0 = 0;
-	int32_t s0;
-
-	if (v0 == 0)
-		s0 = 0;
-	else {
-		if ((uint32_t)v0 >= 0xfffff001u)
-			v0 = 0;
-		s0 = v0;
-	}
-
-	private_platform_set_drvdata(arg1, 0);
-	tx_isp_subdev_deinit(s0);
-	private_kfree(s0);
+	if (!vin || (uintptr_t)vin >= (uintptr_t)-4095)
+		vin = NULL;
+	private_platform_set_drvdata(pdev, NULL);
+	tx_isp_subdev_deinit((uintptr_t)vin);
+	private_kfree(vin);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000346d4 origin=model_output original=tx_isp_fs_remove */
 int tx_isp_fs_remove(struct platform_device *pdev)
 {
-    void *dev;
-    void *s1;
-    uint32_t i;
-    uint32_t count;
-    void *base;
+	void *subdev = private_platform_get_drvdata(pdev);
+	u8 *fs = *(u8 **)((u8 *)subdev + 0xd4);
+	u8 *channels;
+	u32 i;
 
-    private_platform_get_drvdata(NULL);
-    dev = 0;
-    s1 = *(void **)((char *)dev + 0xd4);
-    i = 0;
+	for (i = 0; i < *(u32 *)(fs + 0xe0); i++) {
+		channels = *(u8 **)(fs + 0xdc);
+		tx_isp_frame_chan_deinit((uintptr_t)(channels + i * 0x2c0));
+	}
 
-    while (i < *(uint32_t *)((char *)s1 + 0xe0)) {
-        base = *(void **)((char *)s1 + 0xdc);
-        tx_isp_frame_chan_deinit((uintptr_t)((uintptr_t)base + i * 0x2c0));
-        i++;
-    }
-
-    base = *(void **)((char *)s1 + 0xdc);
-    if (base)
-        private_kfree(base);
-
-    tx_isp_subdev_deinit((uintptr_t)dev);
-    private_kfree(s1);
-    return 0;
+	channels = *(u8 **)(fs + 0xdc);
+	if (channels)
+		private_kfree(channels);
+	tx_isp_subdev_deinit((uintptr_t)subdev);
+	private_kfree(fs);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003478c origin=model_output original=tx_isp_remove */
@@ -52517,24 +52801,22 @@ int tx_isp_remove(struct platform_device *pdev)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034820 origin=model_output original=tx_isp_core_remove */
 int tx_isp_core_remove(struct platform_device *pdev)
 {
-	private_platform_get_drvdata((const struct platform_device *)0);
-	void *dev = 0;
-	void *core = *(void **)((char *)dev + 0xd4);
-	int32_t tuning = *(int32_t *)((char *)core + 0x19c);
+	void *subdev = private_platform_get_drvdata(pdev);
+	u8 *core = *(u8 **)((u8 *)subdev + 0xd4);
+	void *tuning = *(void **)(core + 0x19c);
 
-	if (tuning != 0) {
-		isp_core_tuning_deinit(tuning);
-		*(int32_t *)((char *)core + 0x19c) = 0;
+	if (tuning) {
+		isp_core_tuning_deinit((int32_t)(uintptr_t)tuning);
+		*(void **)(core + 0x19c) = NULL;
 	}
 
-	if (*(int32_t *)((char *)core + 0xe8) >= 2) {
+	if (*(u32 *)(core + 0xe8) >= 2)
 		ispcore_slake_module(core);
-	}
 
-	private_kfree(*(void **)((char *)core + 0x14c));
-	*(int32_t *)((char *)core + 0x154) = 1;
-	*(void **)((char *)core + 0x14c) = 0;
-	tx_isp_subdev_deinit(dev);
+	private_kfree(*(void **)(core + 0x14c));
+	*(u32 *)(core + 0x154) = 1;
+	*(void **)(core + 0x14c) = NULL;
+	tx_isp_subdev_deinit((uintptr_t)subdev);
 	private_kfree(core);
 	return 0;
 }

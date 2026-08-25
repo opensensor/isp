@@ -89,6 +89,19 @@ their computed return values or call state.
   words, restores the 16-bit timing fields and error-path programming, and
   preserves the volatile VIC control transition from 2 to 1. Its audit ratio
   improved from 0.592 to 0.906 with the OEM call count intact.
+- Repaired the complete child probe/unwind ownership path before hardware
+  testing. `tx_isp_subdev_init` now retains the mapped register address,
+  allocates the input/output pad groups with the OEM counts, stores the real
+  ops table, and unwinds IRQ, mapping, region, pad, and clock resources in
+  reverse order. The graph builder retains child drvdata and uses the OEM misc
+  registration condition; child unregister invokes each remove callback.
+- Rebuilt `tx_isp_core_probe` and `ispcore_slake_module` from the T21 stock
+  disassembly. Core probe now installs `core_subdev_ops`, zeroes and initializes
+  the 0xa0-byte output channels, assigns `ispcore_pad_event_handle`, publishes
+  the tuning/proc interfaces, and has deterministic failure cleanup. Slake now
+  updates the actual channel array, calls all 16 child shutdown hooks, and
+  disables clocks in reverse acquisition order. Their current audit ratios are
+  0.886 and 0.942 respectively.
 
 ## Audit and validation boundary
 
@@ -97,7 +110,7 @@ their computed return values or call state.
 Instruction-count parity is structural triage, not proof of semantics.
 
 The current audit has 612 directly matched functions, 4 syntactic stub
-findings, 25 collapsed findings, and a 0.789 matched-instruction ratio. Three
+findings, 25 collapsed findings, and a 0.791 matched-instruction ratio. Three
 of the four stub findings are intentional tail-call aliases; the only true
 empty body is `Tiziano_Awb_Ct_Detect`.
 
