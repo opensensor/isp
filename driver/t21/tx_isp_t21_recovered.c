@@ -54,6 +54,10 @@
 #endif
 #include <asm/uaccess.h>
 
+#ifdef TX_ISP_T21_SHARED_SINFO
+#include "../include/tx_isp/tx_isp_sinfo.h"
+#endif
+
 #ifndef __regtrace_stringify
 #define __regtrace_stringify_1(x) #x
 #define __regtrace_stringify(x) __regtrace_stringify_1(x)
@@ -6473,14 +6477,16 @@ void private_getrawmonotonic(struct timespec *ts);
 int32_t sinfo_open(uint32_t a0, uint32_t a1);
 int sinfo_count_open(struct inode *inode, struct file *file);
 int sinfo_count_show(struct seq_file *seq);
+#ifndef TX_ISP_T21_SHARED_SINFO
 int32_t tx_isp_sinfo_driver_del(uint32_t a0);
 void tx_isp_sinfo_sensor_unbind(int32_t sensor_id);
-int32_t sinfo_slot_publish(uintptr_t a0, uint32_t a1);
 int tx_isp_sinfo_driver_add(void *arg1, int16_t arg2, int32_t arg3);
 int32_t tx_isp_sinfo_sensor_bind(uint32_t sensor, uint32_t sensor_id);
-int sinfo_show(void *arg1);
 int32_t tx_isp_sinfo_init(void);
 void* tx_isp_sinfo_exit(void);
+#endif
+int32_t sinfo_slot_publish(uintptr_t a0, uint32_t a1);
+int sinfo_show(void *arg1);
 int32_t tx_isp_release_device(void);
 int vic_core_ops_ioctl(void *file, unsigned int cmd);
 int32_t tx_isp_vic_start(void *arg1);
@@ -8412,6 +8418,7 @@ int sinfo_count_show(struct seq_file *seq)
     return 0;
 }
 
+#ifndef TX_ISP_T21_SHARED_SINFO
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000078c origin=fragment_seed original=tx_isp_sinfo_driver_del */
 int32_t tx_isp_sinfo_driver_del(uint32_t a0)
 {
@@ -8498,8 +8505,10 @@ tx_isp_sinfo_driver_del0x88:
 
     return 0;
 }
+#endif /* !TX_ISP_T21_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000844 origin=model_output original=tx_isp_sinfo_sensor_unbind */
+#ifndef TX_ISP_T21_SHARED_SINFO
 void tx_isp_sinfo_sensor_unbind(int32_t sensor_id)
 {
     int i = 0;
@@ -8515,6 +8524,7 @@ void tx_isp_sinfo_sensor_unbind(int32_t sensor_id)
 
     mutex_unlock(&spin_lock);
 }
+#endif /* !TX_ISP_T21_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000008cc origin=fragment_seed original=sinfo_slot_publish */
 int32_t sinfo_slot_publish(uintptr_t a0, uint32_t a1)
@@ -8600,6 +8610,7 @@ sinfo_slot_publish0xc8:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000009b8 origin=model_output original=tx_isp_sinfo_driver_add */
+#ifndef TX_ISP_T21_SHARED_SINFO
 int tx_isp_sinfo_driver_add(void *arg1, int16_t arg2, int32_t arg3)
 {
     uint8_t *slot_ptr;
@@ -8635,8 +8646,10 @@ int tx_isp_sinfo_driver_add(void *arg1, int16_t arg2, int32_t arg3)
     printk("sinfo: no free slot for %d\n", *(int32_t *)((char *)arg1 + 0x24));
     return -28;
 }
+#endif /* !TX_ISP_T21_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000acc origin=model_output original=tx_isp_sinfo_sensor_bind */
+#ifndef TX_ISP_T21_SHARED_SINFO
 int32_t tx_isp_sinfo_sensor_bind(uint32_t sensor, uint32_t sensor_id)
 {
     uint8_t *slots;
@@ -8713,6 +8726,7 @@ int32_t tx_isp_sinfo_sensor_bind(uint32_t sensor, uint32_t sensor_id)
 out:
     return ret;
 }
+#endif /* !TX_ISP_T21_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000c84 origin=model_output original=sinfo_show */
 int sinfo_show(void *arg1)
@@ -8822,6 +8836,7 @@ unlock:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000e74 origin=fragment_seed original=tx_isp_sinfo_init */
+#ifndef TX_ISP_T21_SHARED_SINFO
 int32_t tx_isp_sinfo_init(void)
 {
 	sinfo_root = (uintptr_t)proc_mkdir(LC8, NULL);
@@ -8834,8 +8849,10 @@ int32_t tx_isp_sinfo_init(void)
 			 &sinfo_count_fops, NULL);
 	return 0;
 }
+#endif /* !TX_ISP_T21_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000ef4 origin=fragment_seed original=tx_isp_sinfo_exit */
+#ifndef TX_ISP_T21_SHARED_SINFO
 void* tx_isp_sinfo_exit(void)
 {
     uint32_t local_10 = 0;
@@ -8879,6 +8896,7 @@ tx_isp_sinfo_exit0x74:
 
     return (void*)v0;
 }
+#endif /* !TX_ISP_T21_SHARED_SINFO */
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000000f80 origin=fragment_seed original=tx_isp_release_device */
 int32_t tx_isp_release_device(void)

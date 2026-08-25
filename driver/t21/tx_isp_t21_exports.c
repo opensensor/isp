@@ -47,10 +47,6 @@ extern u32 tisp_math_exp2(s32 value, char in_precision, char out_precision);
 
 extern int tx_isp_exit(void);
 extern int tx_isp_init(void);
-extern int tx_isp_sinfo_driver_add(void *driver, s16 sensor_id, s32 flags);
-extern s32 tx_isp_sinfo_driver_del(u32 driver);
-extern s32 tx_isp_sinfo_sensor_bind(u32 sensor, u32 sensor_id);
-extern void tx_isp_sinfo_sensor_unbind(s32 sensor_id);
 extern s32 tx_isp_subdev_deinit(unsigned long subdev);
 extern s32 tx_isp_subdev_init(struct platform_device *device, void *subdev,
 			      s32 ops);
@@ -79,9 +75,5 @@ EXPORT_SYMBOL(tisp_log2_fixed_to_fixed);
 EXPORT_SYMBOL(tisp_math_exp2);
 EXPORT_SYMBOL(tx_isp_exit);
 EXPORT_SYMBOL(tx_isp_init);
-EXPORT_SYMBOL(tx_isp_sinfo_driver_add);
-EXPORT_SYMBOL(tx_isp_sinfo_driver_del);
-EXPORT_SYMBOL(tx_isp_sinfo_sensor_bind);
-EXPORT_SYMBOL(tx_isp_sinfo_sensor_unbind);
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
 EXPORT_SYMBOL(tx_isp_subdev_init);

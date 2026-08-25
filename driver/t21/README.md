@@ -24,8 +24,9 @@ Expected artifact: `driver/t21/tx-isp-t21.ko`.
 
 The current module compiles and completes MODPOST against the vendor kernel.
 It still emits many recovery-grade type and prototype warnings; those are a
-repair queue, not harmless noise. A probe-only load/unload cycle now passes on
-a T21N camera; no sensor-bind or stream claim is made at this checkpoint.
+repair queue, not harmless noise. Probe and stock OV2735B sensor-module
+registration load/unload cycles now pass on a T21N camera; no subdevice bind,
+sensor I/O, or stream claim is made at this checkpoint.
 
 ## Shared math boundary
 
@@ -44,6 +45,20 @@ The recovered bodies stay behind `TX_ISP_T21_SHARED_MATH` for provenance, but
 are not linked in the normal module. This also replaces the recovered
 `fix_point_add_32` and `fix_point_mult3_32` fragment bodies, both of which lost
 their computed return values or call state.
+
+## Shared sensor registry
+
+`tx_isp_t21_sinfo.c` supplies the sensor-module registry ABI through the common
+implementation used by the newer recovered drivers. Its small adapter records
+the T21-specific client, attribute, image-size, frame-rate, and I2C-adapter
+offsets established from the OEM module and recovered `sinfo_show()` traversal.
+The six broken recovered public registry functions remain available behind
+`TX_ISP_T21_SHARED_SINFO` for provenance, while normal builds use the shared
+locking, slot ownership, procfs publication, and teardown paths.
+
+The common implementation owns the four sensor registry exports, so the T21
+export adapter no longer duplicates them. The linked module still exposes the
+exact 30-symbol OEM export surface.
 
 ## Repairs made during integration
 
@@ -114,6 +129,15 @@ their computed return values or call state.
   On 2026-08-25 a Wansview W6 (T21N) probe-only cycle created `/dev/tx-isp`,
   `/dev/isp-m0`, all three frame channels, `/proc/jz/isp/*`, and IRQs 37/38;
   unload returned zero and removed each of them before a clean reboot.
+- Replaced the corrupted recovered sensor-info state machine with the shared
+  registry and T21 ABI offsets. The recovered `tx_isp_sinfo_driver_add()` had
+  called `mutex_lock()` on a text address and treated `sinfo_show()` as its
+  slot array, causing the stock sensor module to fault during registration.
+  On 2026-08-25 the Wansview W6 loaded the recovered ISP and stock OV2735B
+  module with `sensor_gpio_func=0`; `/proc/jz/sensor/count` reported one slot
+  named `ov2735b` at address `0x3c`. Sensor and ISP unload both returned zero,
+  the registry recorded one balanced driver add/delete, both proc trees were
+  removed, and the camera completed a clean reboot into its stock module stack.
 
 ## Audit and validation boundary
 

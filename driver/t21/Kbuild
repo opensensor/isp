@@ -1,11 +1,13 @@
 tx-isp-t21-objs := tx_isp_t21_recovered.o \
 			  tx_isp_t21_math.o \
+			  tx_isp_t21_sinfo.o \
 			  tx_isp_t21_exports.o
 obj-m += tx-isp-t21.o
 
 ccflags-y += -I$(src)/../include
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
 ccflags-y += -DTX_ISP_T21_SHARED_MATH
+ccflags-y += -DTX_ISP_T21_SHARED_SINFO
 ccflags-y += -std=gnu99
 ccflags-y += -fpermissive
 ccflags-y += -Wno-error
