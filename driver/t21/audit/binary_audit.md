@@ -12,15 +12,15 @@
 |---|---:|---:|
 | Function symbols | 630 | 682 |
 | Functions with disassembly | 630 | 682 |
-| Executable section bytes | 215240 | 169952 |
+| Executable section bytes | 215240 | 170256 |
 | Initialized writable bytes | 283936 | 276528 |
 | Uninitialized writable bytes | 101040 | 452144 |
 
 - direct matches: 612
 - replacement matches: 0 (missing=0)
 - unmatched: OEM-only=18 recovered-only=70
-- matched instructions: OEM=52693 recovered=41497 ratio=0.788
-- classes: stub=4 collapsed=25 shorter=110 same_count=137 similar=318 larger=11 expanded=7
+- matched instructions: OEM=52693 recovered=41573 ratio=0.789
+- classes: stub=4 collapsed=25 shorter=109 same_count=138 similar=318 larger=11 expanded=7
 
 ## Allocated Section Delta
 
@@ -41,14 +41,14 @@
 | `.rodata.cst4` | 0 | 16 | +16 |
 | `.rodata.cst8` | 0 | 16 | +16 |
 | `.rodata.str1.4` | 11016 | 9512 | -1504 |
-| `.text` | 214336 | 169952 | -44384 |
+| `.text` | 214336 | 170256 | -44080 |
 | `__ksymtab` | 240 | 240 | +0 |
 | `__ksymtab_strings` | 637 | 637 | +0 |
 | `__param` | 32 | 32 | +0 |
 
 ## Function Outliers
 
-Showing 245 of 245 outliers. JSON and CSV contain every comparison row.
+Showing 244 of 244 outliers. JSON and CSV contain every comparison row.
 
 | Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
 |---|---|---|---|---:|---:|---:|---:|---:|---:|
@@ -110,7 +110,6 @@ Showing 245 of 245 outliers. JSON and CSV contain every comparison row.
 | shorter | exact_name | `jz_isp_lsc_ct` | `jz_isp_lsc_ct` | 356 | 220 | 0.618 | -136 | 12->6 | 48->20 |
 | shorter | exact_name | `ispcore_interrupt_service_routine` | `ispcore_interrupt_service_routine` | 297 | 197 | 0.663 | -100 | 12->11 | 32->20 |
 | shorter | exact_name | `isp_framesource_show` | `isp_framesource_show` | 293 | 202 | 0.689 | -91 | 24->22 | 23->9 |
-| shorter | exact_name | `tx_isp_vic_start` | `tx_isp_vic_start` | 233 | 138 | 0.592 | -95 | 3->1 | 46->29 |
 | shorter | exact_name | `cm_control` | `cm_control` | 229 | 140 | 0.611 | -89 | 9->9 | 15->2 |
 | shorter | exact_name | `JZ_Isp_Awb` | `JZ_Isp_Awb` | 206 | 161 | 0.782 | -45 | 3->3 | 14->10 |
 | shorter | exact_name | `tisp_mdns_c_adj_param_cfg` | `tisp_mdns_c_adj_param_cfg` | 158 | 116 | 0.734 | -42 | 9->8 | 0->1 |
@@ -223,8 +222,8 @@ Showing 245 of 245 outliers. JSON and CSV contain every comparison row.
 | larger | exact_name | `private_log2_int_to_fixed` | `private_log2_int_to_fixed` | 48 | 62 | 1.292 | +14 | 1->0 | 7->9 |
 | larger | exact_name | `fix_point_mult3_32` | `fix_point_mult3_32` | 20 | 30 | 1.500 | +10 | 1->0 | 1->0 |
 | larger | exact_name | `tisp_hldc_par_refresh` | `tisp_hldc_par_refresh` | 19 | 25 | 1.316 | +6 | 2->2 | 1->2 |
+| larger | exact_name | `private_gpio_free` | `private_gpio_free` | 5 | 9 | 1.800 | +4 | 0->0 | 1->2 |
 | larger | exact_name | `private_init_completion` | `private_init_completion` | 5 | 9 | 1.800 | +4 | 0->0 | 1->1 |
-| larger | exact_name | `private_gpio_free` | `private_gpio_free` | 5 | 8 | 1.600 | +3 | 0->0 | 1->2 |
 | larger | exact_name | `tisp_awb_set_frz` | `tisp_awb_set_frz` | 4 | 6 | 1.500 | +2 | 0->0 | 0->0 |
 | larger | exact_name | `tisp_s_wb_frz` | `tisp_s_wb_frz` | 4 | 6 | 1.500 | +2 | 0->0 | 1->0 |
 | recovered_only | recovered_only |  | `__private_spin_lock_irqsave.constprop.0` | 0 | 16 | n/a | +0 | 0->1 | 0->1 |

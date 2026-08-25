@@ -8900,6 +8900,7 @@ int vic_core_ops_ioctl(void *file, unsigned int cmd)
 	return ret;
 }
 
+#if 0
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000001034 origin=model_output original=tx_isp_vic_start */
 int32_t tx_isp_vic_start(void *arg1)
 {
@@ -9181,6 +9182,118 @@ cleanup:
     }
     return result;
 }
+#endif
+
+/* Rebuilt from the stock T21 DVP control flow at 0x1034. */
+int32_t tx_isp_vic_start(void *arg1)
+{
+	u8 *vic = (u8 *)arg1;
+	u8 *sensor = *(u8 **)(vic + 0x110);
+	u8 *regs = *(u8 **)(vic + 0xb8);
+	volatile u32 *reg32 = (volatile u32 *)regs;
+	u32 interface = *(u32 *)(sensor + 0x14);
+	u32 format = *(u32 *)(vic + 0xe4);
+	u32 dvp_mode = *(u32 *)(sensor + 0x18);
+	u32 sensor_type = *(u32 *)(sensor + 0x1c);
+	u32 config = 0;
+	u32 width = *(u32 *)(vic + 0xdc);
+	u32 height = *(u32 *)(vic + 0xe0);
+	u32 value;
+	int ret = 0;
+
+	if (interface == 1) {
+		isp_printf(1, "%s[%d] do not support mipi interface\n",
+			   "tx_isp_vic_start", 105);
+		return -1;
+	}
+	if (interface != 2) {
+		isp_printf(1, "%s[%d] do not support this interface\n",
+			   "tx_isp_vic_start", 255);
+		return -1;
+	}
+
+	reg32[0xc / 4] = 3;
+
+	if (format == 0x1006) {
+		config = 0xa0000;
+	} else if (format == 0x1008) {
+		config = 0x80000;
+	} else if ((format >= 0x2002 && format < 0x2006) ||
+		   format == 0x2011) {
+		config = 0xc0000;
+	} else if (format == 0x3008 ||
+		   (format >= 0x3010 && format < 0x3013) ||
+		   (format >= 0x3300 && format < 0x3310)) {
+		config = sensor_type == 2 ? 0x50000 : 0x40000;
+	} else if ((format >= 0x3001 && format < 0x3003) ||
+		   (format >= 0x3013 && format < 0x3015) ||
+		   (format >= 0x3100 && format < 0x3110)) {
+		if (dvp_mode == 3) {
+			config = 0;
+		} else if (dvp_mode == 4) {
+			config = 0x100000;
+		} else {
+			isp_printf(1,
+				   "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n",
+				   "tx_isp_vic_start", 135);
+			ret = -1;
+		}
+	} else if (format == 0x3007 || format == 0x300a ||
+		   (format >= 0x300e && format < 0x3010) ||
+		   (format >= 0x3200 && format < 0x3210)) {
+		if (sensor_type == 2) {
+			if (dvp_mode == 0)
+				config = 0x30000;
+			else if (dvp_mode == 1)
+				config = 0x130000;
+			else {
+				isp_printf(1,
+					   "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n",
+					   "tx_isp_vic_start", 165);
+				ret = -1;
+			}
+		} else {
+			if (dvp_mode == 0)
+				config = 0x20000;
+			else if (dvp_mode == 1)
+				config = 0x120000;
+			else {
+				isp_printf(1,
+					   "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\n",
+					   "tx_isp_vic_start", 174);
+				ret = -1;
+			}
+		}
+	} else {
+		isp_printf(1, "%s[%d] VIC do not support this format %d\n",
+			   "tx_isp_vic_start", 219, format);
+		ret = -1;
+	}
+
+	if (*(u8 *)(sensor + 0x24) == 2)
+		config |= 2;
+	if (*(u8 *)(sensor + 0x25) == 2)
+		config |= 1;
+	reg32[0x10 / 4] = config;
+
+	value = *(u16 *)(sensor + 0x22);
+	if (value)
+		reg32[0x20 / 4] = (value << 16) + width;
+	value = *(u16 *)(sensor + 0x20);
+	if (value)
+		reg32[0x3c / 4] = value;
+
+	reg32[0x20 / 4] =
+		((u32)*(u16 *)(sensor + 0x22) << 16) + width;
+	reg32[0x4 / 4] = (width << 16) | height;
+	reg32[0x50 / 4] = 0x21;
+	reg32[0x8 / 4] = *(u32 *)(sensor + 0x28) == 1 ? 0 : 3;
+	reg32[0x0 / 4] = 2;
+	reg32[0x0 / 4] = 1;
+	reg32[0x54 / 4] = 0x10000;
+
+	return ret;
+}
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000013d8 origin=model_output original=vic_sensor_ops_ioctl */
 int vic_sensor_ops_ioctl(void *file, unsigned int cmd)
@@ -9219,7 +9332,7 @@ int32_t vic_core_s_stream(void *arg1, int32_t arg2)
 {
     void *s0;
     int32_t result;
-    int32_t *state;
+    int32_t state;
 
     if (arg1 == 0)
         return -22;

@@ -84,6 +84,11 @@ their computed return values or call state.
   enables the core clocks, validates and advances every configured channel,
   sends the tuning-mode event, invokes all 16 child activation slots, and only
   then records the active state. Its audit ratio improved from 0.707 to 0.864.
+- Rebuilt `tx_isp_vic_start` around the stock DVP format groups and register
+  sequence. This removes recovered pointers masquerading as configuration
+  words, restores the 16-bit timing fields and error-path programming, and
+  preserves the volatile VIC control transition from 2 to 1. Its audit ratio
+  improved from 0.592 to 0.906 with the OEM call count intact.
 
 ## Audit and validation boundary
 
@@ -92,7 +97,7 @@ their computed return values or call state.
 Instruction-count parity is structural triage, not proof of semantics.
 
 The current audit has 612 directly matched functions, 4 syntactic stub
-findings, 25 collapsed findings, and a 0.788 matched-instruction ratio. Three
+findings, 25 collapsed findings, and a 0.789 matched-instruction ratio. Three
 of the four stub findings are intentional tail-call aliases; the only true
 empty body is `Tiziano_Awb_Ct_Detect`.
 

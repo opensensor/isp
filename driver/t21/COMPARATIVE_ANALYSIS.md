@@ -70,8 +70,8 @@ use generation-specific policy already represented by the T23 adapter.
 
 ## Next evidence-driven work
 
-1. Audit `tx_isp_vic_start` and its stream-state transitions after the restored
-   video-link setup and `ispcore_activate_module` walk, then run a
+1. Audit the remaining probe/remove and core stream-state transitions after the
+   restored video-link, activation, and VIC-start paths, then run a
    module/probe-only camera smoke test. `isp_vic_cmd_set` is a raw-snapshot proc
    handler and is not on this startup path.
 2. Reconstruct `Tiziano_Awb_Ct_Detect` from the T21 HLIL, keeping its 19-argument
