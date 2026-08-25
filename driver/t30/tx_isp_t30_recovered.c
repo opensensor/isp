@@ -5575,7 +5575,7 @@ static long isp_core_tunning_unlocked_ioctl(struct file *filp, unsigned int cmd,
 void * isp_core_tuning_init(void *arg1);
 int32_t isp_core_tuning_deinit(uint32_t a0);
 int32_t ispcore_sensor_ops_release_all_sensor(uintptr_t a0);
-int ispcore_sensor_ops_ioctl(void *file);
+int ispcore_sensor_ops_ioctl(void *file, unsigned int cmd, void *arg);
 int32_t ispcore_link_setup(void);
 int32_t isp_core_config_top_ctl_register(int32_t arg1, int32_t arg2);
 int32_t ispcore_core_ops_ioctl(void *file, uint32_t cmd, uint32_t arg);
@@ -14299,7 +14299,7 @@ ispcore_sensor_ops_release_all_sensor0x70:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a1b4 origin=model_output original=ispcore_sensor_ops_ioctl */
-int ispcore_sensor_ops_ioctl(void *file)
+int ispcore_sensor_ops_ioctl(void *file, unsigned int cmd, void *arg)
 {
     void **ptr = (void **)((char *)file + 0x38);
     void **end = (void **)((char *)file + 0x78);
@@ -14311,9 +14311,10 @@ int ispcore_sensor_ops_ioctl(void *file)
             void *ops = *(void **)((char *)dev + 0xc4);
             void *ops2 = *(void **)((char *)ops + 0xc);
             if (ops2) {
-				int (*fn)(int) = *(int (**)(int))((char *)ops2 + 8);
+				int (*fn)(void *, unsigned int, void *) =
+					*(int (**)(void *, unsigned int, void *))((char *)ops2 + 8);
                 if (fn) {
-                    ret = fn(0);
+                    ret = fn(dev, cmd, arg);
                     if (ret != 0 && ret != -515)
                         break;
                 }
@@ -22629,8 +22630,7 @@ int private_misc_register(struct miscdevice *mdev)
 
 int private_misc_deregister(struct miscdevice *mdev)
 {
-    misc_deregister((struct miscdevice *)(uintptr_t)&misc_dev);
-    return 0;
+	return misc_deregister(mdev);
 }
 
 
@@ -28818,67 +28818,112 @@ tx_isp_fs_probe0x358:
 
 int tx_isp_fs_probe(struct platform_device *pdev)
 {
-	struct tx_isp_t30_subdev_descriptor *desc;
 	struct tx_isp_t30_subdev *sd;
 	char *fs;
 	char *channels;
-	unsigned int channel = 0;
 	unsigned int i;
+	unsigned int registered = 0;
+	unsigned int num_channels;
 	int ret;
 
-	ret = tx_isp_fs_probe_raw(pdev);
-	if (ret)
-		return ret;
-
-	sd = private_platform_get_drvdata(pdev);
-	if (IS_ERR_OR_NULL(sd) || IS_ERR_OR_NULL(sd->dev_priv))
-		return -EINVAL;
-	desc = pdev->dev.platform_data;
-	fs = sd->dev_priv;
-	channels = *(char **)(fs + 0xdc);
-	if (!desc || (sd->num_outpads && !channels))
-		return -EINVAL;
-
 	/*
-	 * Reassert the OEM postcondition after the raw inlined channel init.
-	 * The recovery had allowed a later output pad to retain type UNDEFINE,
-	 * which left frame channel 1 in state 0 and aborted the first ISP open.
+	 * OEM T30 allocates a 0xe8-byte frame-source object whose first 0xdc
+	 * bytes are the subdevice.  Keep the byte-exact ABI here: the recovered
+	 * raw probe had several uintptr_t-pointer increments that scaled byte
+	 * offsets by four.  Besides corrupting the heap, that made its integer
+	 * channel counter jump 0 -> 4 and initialized only framechan0.
 	 */
-	for (i = 0; i < desc->pads_num; i++) {
-		struct tx_isp_t30_subdev_pad *pad;
-		char *frame_channel;
-		int *channel_state;
+	fs = kzalloc(0xe8, GFP_KERNEL);
+	if (!fs)
+		return -ENOMEM;
+	sd = (struct tx_isp_t30_subdev *)fs;
 
-		if (desc->pads[i].type != 2)
-			continue;
-		if (channel >= sd->num_outpads)
-			return -EINVAL;
-
-		pad = &sd->outpads[channel];
-		frame_channel = channels + channel * 0x2c0;
-		channel_state = (int *)(frame_channel + 0x2a4);
-		if (pad->type != desc->pads[i].type ||
-		    pad->links_type != desc->pads[i].links_type ||
-		    *channel_state != 1)
-			printk(KERN_WARNING
-			       "tx-isp: repairing frame channel %u init (pad=%u/%u state=%d)\n",
-			       channel, pad->type, pad->links_type,
-			       *channel_state);
-
-		pad->sd = sd;
-		pad->index = channel;
-		pad->type = desc->pads[i].type;
-		pad->links_type = desc->pads[i].links_type;
-		*(struct tx_isp_t30_subdev_pad **)(frame_channel + 0x290) = pad;
-		*(int *)(frame_channel + 0x294) = channel;
-		*channel_state = 1;
-		channel++;
+	ret = tx_isp_subdev_init(pdev, sd, &fs_subdev_ops);
+	if (ret) {
+		isp_printf(2, "Failed to init isp module(%u.%u)\n",
+			   pdev->dev.platform_data ?
+			   ((u8 *)pdev->dev.platform_data)[2] : 0,
+			   pdev->dev.platform_data ?
+			   ((u8 *)pdev->dev.platform_data)[3] : 0);
+		kfree(fs);
+		return -ENOMEM;
 	}
 
-	if (channel != sd->num_outpads)
-		return -EINVAL;
+	sd->dev_priv = fs;
+	num_channels = sd->num_outpads;
+	*(unsigned int *)(fs + 0xe0) = num_channels;
+	channels = NULL;
+	if (num_channels) {
+		channels = kzalloc(num_channels * 0x2c0, GFP_KERNEL);
+		if (!channels) {
+			ret = -ENOMEM;
+			goto fail_subdev;
+		}
+	}
+	*(char **)(fs + 0xdc) = channels;
+
+	for (i = 0; i < num_channels; i++) {
+		struct tx_isp_t30_subdev_pad *pad = &sd->outpads[i];
+		struct miscdevice *miscdev;
+		char *channel = channels + i * 0x2c0;
+		char *name = channel + 0x280;
+
+		if (pad->type == 0) {
+			*(int *)(channel + 0x2a4) = 0;
+			continue;
+		}
+
+		snprintf(name, 0x10, "framechan%u", pad->index);
+		miscdev = (struct miscdevice *)channel;
+		miscdev->minor = MISC_DYNAMIC_MINOR;
+		miscdev->name = name;
+		miscdev->fops = (const struct file_operations *)fs_channel_ops;
+		ret = private_misc_register(miscdev);
+		if (ret < 0) {
+			isp_printf(2, "Failed to register framechan%u!\n",
+				   pad->index);
+			ret = -ENOENT;
+			goto fail_channels;
+		}
+		registered++;
+
+		/* OEM tx-isp-frame-channel.o, tx_isp_fs_probe+0x258. */
+		memset(channel + 0x24, 0, 0x210);
+		*(int *)(channel + 0x24) = 1;
+		*(int *)(channel + 0x34) = 108;
+		*(int *)(channel + 0x38) = 8192;
+		*(int *)(channel + 0x3c) = 2;
+		INIT_LIST_HEAD((struct list_head *)(channel + 0x210));
+		INIT_LIST_HEAD((struct list_head *)(channel + 0x21c));
+		mutex_init((struct mutex *)(channel + 0x28));
+		init_waitqueue_head((wait_queue_head_t *)(channel + 0x228));
+		mutex_init((struct mutex *)(channel + 0x298));
+		private_init_completion((struct completion *)(channel + 0x2a8));
+
+		*(struct tx_isp_t30_subdev_pad **)(channel + 0x290) = pad;
+		*(int *)(channel + 0x294) = pad->index;
+		pad->event = (void *)frame_chan_event;
+		*(int *)(channel + 0x2a4) = 1;
+		printk(KERN_INFO "tx-isp: initialized %s (state=1)\n", name);
+	}
+
 	*(int *)(fs + 0xe4) = 1;
+	private_platform_set_drvdata(pdev, fs);
+	*(const struct file_operations **)(fs + 0x34) =
+		&isp_framesource_fops;
 	return 0;
+
+fail_channels:
+	while (registered) {
+		registered--;
+		misc_deregister((struct miscdevice *)(channels +
+				registered * 0x2c0));
+	}
+	kfree(channels);
+fail_subdev:
+	tx_isp_subdev_deinit(sd);
+	kfree(fs);
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018448 origin=model_output original=__enqueue_in_driver.isra.0 */
@@ -31383,9 +31428,101 @@ int tx_isp_release(struct inode *inode, struct file *file)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019f28 origin=fragment_seed original=tx_isp_unlocked_ioctl */
+static int tx_isp_t30_sensor_ioctl_walk(struct tx_isp_t30_device *ispdev,
+					unsigned int event, void *data)
+{
+	unsigned int index;
+	int ret = 0;
+
+	for (index = 0; index < ARRAY_SIZE(ispdev->module.submods); index++) {
+		struct tx_isp_t30_module *submod = ispdev->module.submods[index];
+		struct tx_isp_t30_subdev *sd;
+		void *sensor_ops;
+		int (*ioctl_fn)(void *, unsigned int, void *);
+
+		if (!submod)
+			continue;
+		sd = container_of(submod, struct tx_isp_t30_subdev, module);
+		sensor_ops = sd->ops ? sd->ops->sensor : NULL;
+		ioctl_fn = sensor_ops ?
+			*(int (**)(void *, unsigned int, void *))
+			 ((char *)sensor_ops + 0x8) : NULL;
+		if (!ioctl_fn)
+			continue;
+
+		ret = ioctl_fn(sd, event, data);
+		printk(KERN_INFO
+		       "tx-isp: sensor event %#x subdev=%u ret=%d\n",
+		       event, index, ret);
+		if (ret && ret != -ENOIOCTLCMD)
+			return ret;
+	}
+
+	return 0;
+}
+
+static long tx_isp_t30_sensor_ioctl(struct file *file, unsigned int cmd,
+				    unsigned long arg, bool *handled)
+{
+	struct miscdevice *miscdev = file->private_data;
+	struct tx_isp_t30_module *module;
+	struct tx_isp_t30_device *ispdev;
+	u8 sensor_info[0x50];
+	u32 input;
+	unsigned int event;
+	size_t size;
+	bool copy_back;
+	int ret;
+
+	*handled = true;
+	switch (cmd) {
+	case 0x805056c1: /* TX_ISP_EVENT_SENSOR_REGISTER */
+		event = 0x02000000;
+		size = sizeof(sensor_info);
+		copy_back = false;
+		break;
+	case 0xc050561a: /* TX_ISP_EVENT_SENSOR_ENUM_INPUT */
+		event = 0x02000002;
+		size = sizeof(sensor_info);
+		copy_back = true;
+		break;
+	case 0x40045626: /* TX_ISP_EVENT_SENSOR_GET_INPUT */
+		event = 0x02000003;
+		size = sizeof(input);
+		copy_back = true;
+		break;
+	case 0xc0045627: /* TX_ISP_EVENT_SENSOR_SET_INPUT */
+		event = 0x02000004;
+		size = sizeof(input);
+		copy_back = true;
+		break;
+	default:
+		*handled = false;
+		return 0;
+	}
+
+	if (!miscdev)
+		return -EINVAL;
+	module = container_of(miscdev, struct tx_isp_t30_module, miscdev);
+	ispdev = container_of(module, struct tx_isp_t30_device, module);
+	memset(sensor_info, 0, sizeof(sensor_info));
+	if (copy_from_user(sensor_info, (void __user *)arg, size))
+		return -EFAULT;
+
+	printk(KERN_INFO "tx-isp: ioctl %#x sensor event %#x\n", cmd, event);
+	ret = tx_isp_t30_sensor_ioctl_walk(ispdev, event, sensor_info);
+	if (ret)
+		return ret;
+	if (copy_back && copy_to_user((void __user *)arg, sensor_info, size))
+		return -EFAULT;
+	return 0;
+}
+
 static long tx_isp_unlocked_ioctl(struct file *a0_file, unsigned int a1,
 				  unsigned long a2)
 {
+	bool sensor_ioctl_handled;
+	long sensor_ioctl_ret;
 	uintptr_t a0 = (uintptr_t)a0_file;
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -31433,6 +31570,11 @@ static long tx_isp_unlocked_ioctl(struct file *a0_file, unsigned int a1,
     uint32_t t9 = 0;
     uintptr_t *v0 = 0;
     uintptr_t v1 = 0;
+
+	sensor_ioctl_ret = tx_isp_t30_sensor_ioctl(a0_file, a1, a2,
+						   &sensor_ioctl_handled);
+	if (sensor_ioctl_handled)
+		return sensor_ioctl_ret;
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
