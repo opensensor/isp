@@ -52886,6 +52886,9 @@ static void tx_isp_t30_simple_ae_update(void)
 	struct tx_isp_t30_core_sensor_view *core = ispcore;
 	struct tx_isp_t30_sensor_attribute_view *attr;
 	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
+	struct tx_isp_t30_system_gain_view *system_gain = (void *)stab;
+	struct tx_isp_t30_nr_owner_view *isp =
+		(void *)TX_ISP_T30_ISP_PTR(0);
 	const u32 *ae;
 	s32 requested_gain;
 	s32 error;
@@ -52992,8 +52995,25 @@ static void tx_isp_t30_simple_ae_update(void)
 	sensor_set_integration_time(0, state->integration_time);
 	sensor_set_analog_gain(0, state->analog_gain_code);
 
-	/* The OEM black-level modulation is indexed by total log2 gain. */
-	*(s32 *)TX_ISP_T30_ISP_PTR(0x2cc) = state->analog_gain_log2;
+	/*
+	 * Publish the applied Q16 log2 gain through both OEM state interfaces.
+	 * The APICAL system table stores gain in Q5 and backs the public total-gain
+	 * control.  The ISP owner keeps Q16 values consumed by black-level, DPC,
+	 * demosaic, sharpening, and noise-reduction modulation.  The compact AE
+	 * bypasses cmos_update_exposure_history(), which normally synchronizes
+	 * these fields, so leaving either interface stale makes every downstream
+	 * block tune as though the sensor were still at unity gain.
+	 */
+	BUILD_BUG_ON(sizeof(*system_gain) != sizeof(stab));
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_nr_owner_view,
+			      sensor_analog_gain) != 0x2cc);
+	system_gain->sensor_analog_gain = clamp_t(s32,
+		state->analog_gain_log2 >> 11, 0, 0xff);
+	system_gain->sensor_digital_gain = 0;
+	system_gain->isp_digital_gain = 0;
+	isp->sensor_analog_gain = state->analog_gain_log2;
+	isp->sensor_digital_gain = 0;
+	isp->isp_digital_gain = 0;
 	sensor_update_black((int32_t *)TX_ISP_T30_ISP_PTR(0x100));
 	state->ae_cooldown = max_t(u8, attr->integration_time_apply_delay,
 				   attr->again_apply_delay);
