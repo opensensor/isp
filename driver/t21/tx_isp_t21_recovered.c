@@ -22153,10 +22153,111 @@ int32_t awb_interrupt_static(void)
 	return 1;
 }
 
-/* The recovered OEM AWB worker is not yet structurally sound, but the T21
- * statistics engine already applies the sensor-bin thresholds and reports
- * selected R/G/B sums for each zone.  Use those filtered statistics for a
- * small, sensor-independent gray-world controller. */
+static uint32_t t21_awb_mesh_index(const uint32_t *axis, uint32_t value)
+{
+	uint32_t index;
+
+	for (index = 0; index < 14; index++) {
+		if (value < axis[index + 1])
+			break;
+	}
+
+	return index < 14 ? index : 13;
+}
+
+static uint32_t t21_awb_mesh_lerp(uint32_t q, uint32_t value,
+				 uint32_t x0, uint32_t x1,
+				 uint32_t y0_q, uint32_t y1_q)
+{
+	uint32_t fraction_q;
+	uint64_t delta;
+
+	if (x1 <= x0 || value <= x0)
+		return y0_q;
+	if (value >= x1)
+		return y1_q;
+
+	fraction_q = div_u64((uint64_t)(value - x0) << q, x1 - x0);
+	if (y1_q >= y0_q) {
+		delta = (uint64_t)(y1_q - y0_q) * fraction_q;
+		return y0_q + (uint32_t)(delta >> q);
+	}
+
+	delta = (uint64_t)(y0_q - y1_q) * fraction_q;
+	return y0_q - (uint32_t)(delta >> q);
+}
+
+/* The AWB colour-temperature mesh is indexed by calibrated R/G and B/G,
+ * both supplied by the selected tuning binary.  Keep the interpolation here
+ * independent of any particular sensor: the axes, mesh, fixed-point format,
+ * and static channel calibration all come from that binary. */
+static uint32_t t21_awb_estimate_ct(uint32_t rg, uint32_t bg)
+{
+	const uint32_t *rg_axis = (const uint32_t *)_rg_pos;
+	const uint32_t *bg_axis = (const uint32_t *)_bg_pos;
+	const uint32_t *mesh = (const uint32_t *)_color_temp_mesh;
+	uint32_t q = get_unaligned_le32(_AwbPointPos) & 0x1f;
+	uint32_t rg_index;
+	uint32_t bg_index;
+	uint32_t row0_q;
+	uint32_t row1_q;
+	uint32_t mesh_q;
+
+	/* The OEM tables use small fixed-point shifts.  Reject a malformed bin
+	 * rather than overflowing the interpolation arithmetic. */
+	if (q > 16 || !rg_axis[0] || !bg_axis[0])
+		return get_unaligned_le32(_awb_ct);
+
+	if (rg < rg_axis[0])
+		rg = rg_axis[0];
+	else if (rg > rg_axis[14])
+		rg = rg_axis[14];
+	if (bg < bg_axis[0])
+		bg = bg_axis[0];
+	else if (bg > bg_axis[14])
+		bg = bg_axis[14];
+
+	rg_index = t21_awb_mesh_index(rg_axis, rg);
+	bg_index = t21_awb_mesh_index(bg_axis, bg);
+	row0_q = t21_awb_mesh_lerp(q, rg,
+				    rg_axis[rg_index], rg_axis[rg_index + 1],
+				    mesh[bg_index * 15 + rg_index] << q,
+				    mesh[bg_index * 15 + rg_index + 1] << q);
+	row1_q = t21_awb_mesh_lerp(q, rg,
+				    rg_axis[rg_index], rg_axis[rg_index + 1],
+				    mesh[(bg_index + 1) * 15 + rg_index] << q,
+				    mesh[(bg_index + 1) * 15 + rg_index + 1] << q);
+	mesh_q = t21_awb_mesh_lerp(q, bg,
+				   bg_axis[bg_index], bg_axis[bg_index + 1],
+				   row0_q, row1_q);
+	if (!mesh_q)
+		return get_unaligned_le32(_awb_ct);
+
+	return div_u64(((uint64_t)1000000 << q) + (mesh_q >> 1), mesh_q);
+}
+
+static uint32_t t21_awb_calibrated_ratio(uint64_t color_sum,
+					 uint32_t green_sum,
+					 uint32_t static_gain)
+{
+	uint32_t q = get_unaligned_le32(_AwbPointPos) & 0x1f;
+	uint32_t rounding;
+	uint32_t raw_q;
+	uint64_t calibrated_q;
+
+	if (!green_sum || !static_gain || q > 16)
+		return 0;
+
+	raw_q = div_u64(color_sum << q, green_sum);
+	calibrated_q = (uint64_t)raw_q * 0x100 * static_gain;
+	calibrated_q >>= q;
+	rounding = q ? 1U << (q - 1) : 0;
+	return (uint32_t)((calibrated_q + rounding) >> q);
+}
+
+/* The full recovered OEM AWB worker is not yet structurally sound.  Consume
+ * the same bin-filtered statistics with a conservative controller while also
+ * restoring the OEM calibrated colour-temperature path used by CCM and LSC. */
 static int32_t t21_awb_process(void)
 {
 	static uint32_t red_gain = 0x400;
@@ -22170,6 +22271,11 @@ static int32_t t21_awb_process(void)
 	uint64_t blue_sum = 0;
 	uint32_t target_red;
 	uint32_t target_blue;
+	uint32_t calibrated_rg;
+	uint32_t calibrated_bg;
+	uint32_t old_ct;
+	uint32_t new_ct;
+	uint32_t event[12] = { 0 };
 	uint32_t i;
 
 	for (i = 0; i < 15 * 15; i++) {
@@ -22199,9 +22305,27 @@ static int32_t t21_awb_process(void)
 	blue_gain = (blue_gain * 7 + target_blue) >> 3;
 	system_reg_write(0x604, (0x400 << 16) | red_gain);
 	system_reg_write(0x608, (0x400 << 16) | blue_gain);
-	pr_debug_ratelimited("tx-isp-t21: awb sums=%llu/%llu/%llu gains=%03x/%03x\n",
+
+	calibrated_rg = t21_awb_calibrated_ratio(red_sum,
+						 (uint32_t)green_sum,
+						 get_unaligned_le32(_wb_static));
+	calibrated_bg = t21_awb_calibrated_ratio(blue_sum,
+						 (uint32_t)green_sum,
+						 get_unaligned_le32(_wb_static + 4));
+	old_ct = get_unaligned_le32(_awb_ct);
+	new_ct = t21_awb_estimate_ct(calibrated_rg, calibrated_bg);
+	if (new_ct && new_ct != old_ct) {
+		put_unaligned_le32(old_ct, _awb_ct_last);
+		put_unaligned_le32(new_ct, _awb_ct);
+		event[2] = 8;
+		event[4] = new_ct;
+		tisp_event_push(event);
+	}
+
+	pr_debug_ratelimited("tx-isp-t21: awb sums=%llu/%llu/%llu gains=%03x/%03x ratios=%u/%u ct=%u\n",
 			    red_sum, green_sum, blue_sum,
-			    red_gain, blue_gain);
+			    red_gain, blue_gain,
+			    calibrated_rg, calibrated_bg, new_ct);
 	return 0;
 }
 
