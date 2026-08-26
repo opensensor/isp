@@ -29792,29 +29792,27 @@ static int mscaler_activate_module_raw(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000176a0 origin=model_output original=__vb2_queue_free */
 void *__vb2_queue_free(void *arg1, int32_t arg2)
 {
-	struct vb2_queue *q = arg1;
-	int32_t *count = (int32_t *)((char *)q + 0x1e8);
-	int32_t *i = *count - arg2;
-	char *p = (void *)((char *)(uintptr_t)q + ((uintptr_t)i << 2));
-	int32_t *cur;
+	struct tx_isp_t30_fs_queue *queue = arg1;
+	unsigned int buffers;
+	unsigned int first;
+	unsigned int index;
 
-	while (1) {
-		cur = *count;
-		if ((uint32_t)i >= (uint32_t)cur)
-			break;
-		{
-			int32_t *slot = (int32_t *)(p + 0xe8);
-			kfree(*(void **)slot);
-			p = (void *)(uintptr_t)((uintptr_t)p + (4));
-			i = (void *)(uintptr_t)((uintptr_t)i + (1));
-			*(int32_t *)(p + 0xe4) = 0;
-		}
+	if (IS_ERR_OR_NULL(queue))
+		return NULL;
+
+	/* OEM __vb2_queue_free(), expressed through the recovered queue type. */
+	buffers = arg2 < 0 ? 0 : (unsigned int)arg2;
+	if (buffers > queue->num_buffers)
+		buffers = queue->num_buffers;
+	first = queue->num_buffers - buffers;
+	for (index = first; index < queue->num_buffers; index++) {
+		kfree(queue->bufs[index]);
+		queue->bufs[index] = NULL;
 	}
+	queue->num_buffers -= buffers;
+	INIT_LIST_HEAD(&queue->queued_list);
 
-	*count = cur - arg2;
-	*(void **)((char *)q + 0x1ec) = (void *)((char *)q + 0x1ec);
-	*(void **)((char *)q + 0x1f0) = (void *)((char *)q + 0x1ec);
-	return (void *)((char *)q + 0x1ec);
+	return &queue->queued_list;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017730 origin=fragment_seed original=dump_isp_framesource_open */
@@ -30116,49 +30114,32 @@ static int32_t fs_activate_module_raw(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017d90 origin=model_output original=__vb2_queue_cancel */
 void __vb2_queue_cancel(void *arg1)
 {
-    unsigned char *flags = (unsigned char *)arg1 + 0x20c;
-    unsigned int *count = (void *)((uintptr_t)arg1 + 0x1e8);
-    unsigned int **entries = (unsigned int **)arg1 + 0xe8;
-    unsigned int *list_head = (void *)((uintptr_t)arg1 + 0x1ec);
-    unsigned int *list_tail = (void *)((uintptr_t)arg1 + 0x1f0);
-    unsigned int *list_next = (void *)((uintptr_t)arg1 + 0x1f4);
-    unsigned int *list_prev = (void *)((uintptr_t)arg1 + 0x1f8);
-    unsigned int *list_prev2 = (void *)((uintptr_t)arg1 + 0x1fc);
-    unsigned int *lock = (void *)((uintptr_t)arg1 + 0x200);
-    unsigned int *waitq = (void *)((uintptr_t)arg1 + 0x204);
-    unsigned int *remote = (void *)((uintptr_t)arg1 + 0x26c);
-    unsigned int *i;
-    unsigned int irq_flags;
+	struct tx_isp_t30_fs_queue *queue = arg1;
+	struct tx_isp_t30_frame_channel *chan;
+	unsigned long flags;
+	unsigned int index;
 
-    if (arg1 == 0)
-        return;
+	if (IS_ERR_OR_NULL(queue))
+		return;
 
-    if ((unsigned int)arg1 >= 0xfffff001u)
-        return;
+	chan = container_of(queue, struct tx_isp_t30_frame_channel, queue);
+	if (queue->streaming)
+		tx_isp_send_event_to_remote(chan->pad,
+					    TX_ISP_FRAME_EVENT_STREAM_OFF, NULL);
+	queue->streaming = 0;
 
-    if (*flags & 1)
-        ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tx_isp_send_event_to_remote)((uintptr_t)(*remote), (uintptr_t)(TX_ISP_FRAME_EVENT_STREAM_OFF), (uintptr_t)(0));
+	INIT_LIST_HEAD(&queue->queued_list);
+	spin_lock_irqsave(&queue->done_lock, flags);
+	INIT_LIST_HEAD(&queue->done_list);
+	queue->queued_count = 0;
+	queue->done_count = 0;
+	spin_unlock_irqrestore(&queue->done_lock, flags);
+	wake_up_all(&queue->done_wq);
 
-    *flags &= 0xfe;
-    *list_head = (unsigned int)list_head;
-    *list_tail = (unsigned int)list_head;
-
-    irq_flags = arch_local_irq_save();
-
-    *list_next = 0;
-    *list_prev = (unsigned int)list_prev;
-    *list_prev2 = (unsigned int)list_prev;
-    *lock = 0;
-
-    private_spin_unlock_irqrestore(lock, irq_flags);
-
-    __wake_up(waitq, 3, 0, 0);
-
-    for (i = 0; i < *count; i++) {
-        unsigned int *entry = entries[(uintptr_t)i];
-        if (entry)
-            ((void **)entry)[0x48 / 4] = 0;
-    }
+	for (index = 0; index < queue->num_buffers; index++) {
+		if (queue->bufs[index])
+			queue->bufs[index]->state = TX_ISP_T30_FS_DEQUEUED;
+	}
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000017e94 origin=model_output original=__frame_channel_vb2_streamoff */
@@ -30273,20 +30254,17 @@ static int32_t fs_slake_module_raw(void *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000018074 origin=model_output original=tx_isp_frame_chan_deinit */
 int32_t tx_isp_frame_chan_deinit(void *arg1)
 {
-    int32_t result = (uint32_t)arg1 < 0xfffff001u ? 1 : 0;
+	struct tx_isp_t30_frame_channel *chan = arg1;
 
-    if (arg1 == 0)
-        return result;
+	if (IS_ERR_OR_NULL(chan))
+		return 0;
 
-    if (result != 0) {
-        private_misc_deregister((struct miscdevice *)arg1);
-        __vb2_queue_cancel((char *)arg1 + 0x24);
-        __vb2_queue_free((char *)arg1 + 0x24, *(int32_t *)((char *)arg1 + 0x20c));
-        result = 1;
-        *(int32_t *)((char *)arg1 + 0x2a4) = 1;
-    }
+	private_misc_deregister(&chan->misc);
+	__vb2_queue_cancel(&chan->queue);
+	__vb2_queue_free(&chan->queue, chan->queue.num_buffers);
+	chan->state = TX_ISP_T30_MODULE_SLAKE;
 
-    return result;
+	return 1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000180e8 origin=fragment_seed original=tx_isp_fs_probe */
@@ -33590,13 +33568,34 @@ void *tx_isp_unregister_platforms(int32_t *arg1)
 		(struct tx_isp_t30_platform *)arg1;
 	int i;
 
+	/*
+	 * Quiesce every child IRQ before releasing any graph object.  The root
+	 * IRQ dispatcher walks child submods, so freeing core/channel state while
+	 * another ISP IRQ is in flight turns module removal into an interrupt-time
+	 * use-after-free.
+	 */
+	for (i = 0; i < 16; i++) {
+		struct platform_device *pdev = platforms[i].dev;
+		struct tx_isp_t30_module *module;
+		struct tx_isp_t30_subdev *sd;
+
+		if (!pdev || !platforms[i].drv)
+			continue;
+		module = private_platform_get_drvdata(pdev);
+		if (IS_ERR_OR_NULL(module))
+			continue;
+		sd = container_of(module, struct tx_isp_t30_subdev, module);
+		tx_isp_free_irq(&sd->irqdev);
+	}
+
 	for (i = 0; i < 16; i++) {
 		struct platform_device *pdev = platforms[i].dev;
 		struct platform_driver *pdrv = platforms[i].drv;
 
-		if (pdrv && pdrv->remove)
+		/* Child probes are invoked manually, so pair them exactly once. */
+		if (pdev && pdrv && pdrv->remove)
 			pdrv->remove(pdev);
-		if (pdev)
+		if (pdev && pdrv)
 			private_platform_device_unregister(pdev);
 
 		platforms[i].dev = NULL;
@@ -35594,6 +35593,9 @@ void tx_isp_subdev_deinit(void *subdev)
 
 	if (!sd)
 		return;
+	/* Stop and synchronize the handler before any state it visits is freed. */
+	if (sd->irqdev.irq)
+		tx_isp_free_irq(&sd->irqdev);
 	if (sd->module.ops)
 		private_misc_deregister(&sd->module.miscdev);
 
@@ -35613,9 +35615,6 @@ void tx_isp_subdev_deinit(void *subdev)
 		release_mem_region(sd->res->start, resource_size(sd->res));
 		sd->res = NULL;
 	}
-	if (sd->irqdev.irq)
-		tx_isp_free_irq(&sd->irqdev);
-
 	tx_isp_module_deinit((uint32_t)(uintptr_t)&sd->module);
 	sd->ops = NULL;
 }
@@ -36009,10 +36008,27 @@ int tx_isp_probe(struct platform_device *pdev)
 				goto failed_platforms;
 			}
 
-			if (driver->probe)
-				driver->probe(child);
+			if (driver->probe) {
+				ret = driver->probe(child);
+				if (ret) {
+					printk(KERN_ERR
+					       "tx-isp: child %u (%s) probe failed: %d\n",
+					       dev_index, child->name, ret);
+					private_platform_device_unregister(child);
+					platforms[dev_index].dev = NULL;
+					goto failed_platforms;
+				}
+			}
 			platforms[dev_index].drv = driver;
 			break;
+		}
+		if (!platforms[dev_index].drv) {
+			printk(KERN_ERR
+			       "tx-isp: no child driver for %u (%s)\n",
+			       dev_index, child->name);
+			ret = -ENODEV;
+			platforms[dev_index].dev = NULL;
+			goto failed_platforms;
 		}
 	}
 
@@ -56998,226 +57014,128 @@ int32_t get_gmv_gauss_method_fast_v3(void *arg1, int32_t arg2, int32_t *arg3)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038530 origin=model_output original=tx_isp_vic_remove */
 int tx_isp_vic_remove(struct platform_device *pdev)
 {
-	uintptr_t arg1 = (uintptr_t)pdev;
+	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
+	void *vic;
 
-	private_platform_get_drvdata((const struct platform_device *)0);
-	int32_t *v0 = 0;
-	int32_t *s0 = 0;
-
-	if (v0 != 0) {
-		if ((uint32_t)v0 >= 0xfffff001u) {
-			v0 = 0;
-			s0 = 0;
-		} else {
-			s0 = *(int32_t *)((char *)((char *)&video_input_cmd_buf + 0x34));
-		}
-	}
-
-	private_platform_set_drvdata(arg1, 0);
-	tx_isp_subdev_deinit(v0);
-	kfree(s0);
+	if (IS_ERR_OR_NULL(sd))
+		return 0;
+	vic = sd->dev_priv;
+	private_platform_set_drvdata(pdev, NULL);
+	*(void **)dump_vsd = NULL;
+	tx_isp_t30_vic_sd = NULL;
+	tx_isp_subdev_deinit(sd);
+	kfree(vic);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000385bc origin=fragment_seed original=tx_isp_vin_remove */
 int tx_isp_vin_remove(struct platform_device *pdev)
 {
-    uintptr_t a0 = (uintptr_t)pdev;
+	struct tx_isp_t30_vin_device *vin = private_platform_get_drvdata(pdev);
 
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    local_18 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_platform_get_drvdata)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s0 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)private_platform_set_drvdata)(local_18, 0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_subdev_deinit)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    kfree((void *)(uintptr_t)s0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = 0;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (IS_ERR_OR_NULL(vin))
+		return 0;
+	private_platform_set_drvdata(pdev, NULL);
+	tx_isp_subdev_deinit(&vin->sd);
+	kfree(vin);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038630 origin=fragment_seed original=tx_isp_csi_remove */
 int tx_isp_csi_remove(struct platform_device *pdev)
 {
-    uintptr_t a0 = (uintptr_t)pdev;
+	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
+	struct tx_isp_t30_csi_device *csd;
+	u32 value;
 
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t *a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    local_20 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_platform_get_drvdata)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s0 = v0;
-    s1 = *(uint32_t *)((char *)(s0) + 308);
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)((uintptr_t)s0) + 184)) + 16) = ((*(uint32_t *)((char *)(*(uint32_t *)((char *)((uintptr_t)s0) + 184)) + 16)) & (-2));
-    *(uint32_t *)((char *)(*(uint32_t *)((char *)((uintptr_t)s0) + 184)) + 16) = (*(uint32_t *)((char *)(*(uint32_t *)((char *)((uintptr_t)s0) + 184)) + 16) | 1);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)private_platform_set_drvdata)(local_20, 0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)private_iounmap)(*(uint32_t *)((char *)(s0) + 312)); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    __release_region((void *)(uintptr_t)&iomem_resource, *(uint32_t *)((char *)(s1) + 0), ((*(uint32_t *)((char *)(s1) + 4)) + 1) - (*(uint32_t *)((char *)(s1) + 0))); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_subdev_deinit)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    kfree((void *)(uintptr_t)s0); /* jalr target resolved by relocation */
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 8: Arithmetic */
-    v0 = 0;
-
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (IS_ERR_OR_NULL(sd))
+		return 0;
+	csd = sd->dev_priv;
+	private_platform_set_drvdata(pdev, NULL);
+	dump_csd = NULL;
+	if (!IS_ERR_OR_NULL(sd->base)) {
+		value = readl(sd->base + 0x10);
+		writel((value & ~BIT(0)) | BIT(0), sd->base + 0x10);
+	}
+	if (csd && csd->phy_base) {
+		private_iounmap(csd->phy_base);
+		csd->phy_base = NULL;
+	}
+	if (csd && csd->phy_res) {
+		release_mem_region(csd->phy_res->start,
+				   resource_size(csd->phy_res));
+		csd->phy_res = NULL;
+	}
+	tx_isp_subdev_deinit(sd);
+	kfree(csd);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003870c origin=model_output original=tx_isp_core_remove */
 int tx_isp_core_remove(struct platform_device *pdev)
 {
-    void *s0;
-    uint32_t tuning;
-    uint32_t state;
+	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
+	struct tx_isp_t30_core_video_view *core;
+	struct tx_isp_t30_core_tuning_view *tuning;
 
-    s0 = private_platform_get_drvdata(pdev);
-    tuning = *(uint32_t *)((char *)s0 + 0x1a0);
+	if (IS_ERR_OR_NULL(sd))
+		return 0;
+	core = sd->dev_priv;
+	if (IS_ERR_OR_NULL(core))
+		core = (void *)sd;
+	tuning = (void *)core;
+	private_platform_set_drvdata(pdev, NULL);
 
-    if (tuning != 0) {
-        isp_core_tuning_deinit(tuning);
-        *(uint32_t *)((char *)s0 + 0x1a0) = 0;
-    }
+	if (tuning->tuning) {
+		isp_core_tuning_deinit((uintptr_t)tuning->tuning);
+		tuning->tuning = NULL;
+	}
+	if (core->state >= TX_ISP_T30_MODULE_ACTIVATE)
+		ispcore_slake_module(sd);
 
-    state = *(uint32_t *)((char *)s0 + 0xe8);
-    if (state >= 2) {
-        ispcore_slake_module(s0);
-    }
-
-    kfree(*(void **)((char *)s0 + 0x154));
-    *(uint32_t *)((char *)s0 + 0x15c) = 1;
-    *(uint32_t *)((char *)s0 + 0x154) = 0;
-    free_tx_isp_priv_param_manage();
-    tx_isp_subdev_deinit(pdev);
-    kfree(s0);
-    return 0;
+	kfree(core->channels);
+	core->channels = NULL;
+	core->channel_state = TX_ISP_T30_MODULE_SLAKE;
+	free_tx_isp_priv_param_manage();
+	tx_isp_subdev_deinit(sd);
+	kfree(core);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000387c8 origin=fragment_seed original=tx_isp_ncu_remove */
 int tx_isp_ncu_remove(struct platform_device *pdev)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t a0 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
+	struct tx_isp_t30_ncu_device *ncu;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_platform_get_drvdata)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s0 = *(uint32_t *)((char *)((char *)&video_input_cmd_buf + 0x34));
-    *(uint32_t *)((char *)((char *)&g_ncu)) = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_subdev_deinit)(v0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    kfree((void *)(uintptr_t)s0); /* jalr target resolved by relocation */
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    v0 = 0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (IS_ERR_OR_NULL(sd))
+		return 0;
+	ncu = sd->dev_priv;
+	private_platform_set_drvdata(pdev, NULL);
+	g_ncu = 0;
+	tx_isp_subdev_deinit(sd);
+	if (ncu) {
+		kfree(ncu->inbufs);
+		ncu->inbufs = NULL;
+	}
+	kfree(ncu);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038824 origin=fragment_seed original=tx_isp_ldc_remove */
 int tx_isp_ldc_remove(struct platform_device *pdev)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t a0 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
+	void *ldc;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)private_platform_get_drvdata)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    s0 = *(uint32_t *)((char *)((char *)&video_input_cmd_buf + 0x34));
-    *(uint32_t *)((char *)((char *)&g_ldc)) = 0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tx_isp_subdev_deinit)(v0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    kfree((void *)(uintptr_t)s0); /* jalr target resolved by relocation */
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    v0 = 0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	if (IS_ERR_OR_NULL(sd))
+		return 0;
+	ldc = sd->dev_priv;
+	private_platform_set_drvdata(pdev, NULL);
+	g_ldc = NULL;
+	tx_isp_subdev_deinit(sd);
+	kfree(ldc);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038880 origin=fragment_seed original=tx_isp_mscaler_remove */
@@ -57275,17 +57193,17 @@ int tx_isp_mscaler_remove(struct platform_device *pdev)
 	struct tx_isp_t30_subdev *sd;
 	struct tx_isp_t30_mscaler_device *mscaler;
 
-	if (!module)
+	if (IS_ERR_OR_NULL(module))
 		return 0;
 	sd = container_of(module, struct tx_isp_t30_subdev, module);
 	mscaler = sd->dev_priv;
 	private_platform_set_drvdata(pdev, NULL);
-	if (!mscaler)
-		return 0;
-	kfree(mscaler->inputs);
-	kfree(mscaler->outputs);
-	mscaler->inputs = NULL;
-	mscaler->outputs = NULL;
+	if (mscaler) {
+		kfree(mscaler->inputs);
+		kfree(mscaler->outputs);
+		mscaler->inputs = NULL;
+		mscaler->outputs = NULL;
+	}
 	tx_isp_subdev_deinit(sd);
 	kfree(mscaler);
 	return 0;
@@ -57294,53 +57212,42 @@ int tx_isp_mscaler_remove(struct platform_device *pdev)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000388f4 origin=model_output original=tx_isp_fs_remove */
 int tx_isp_fs_remove(struct platform_device *pdev)
 {
-    void *dev;
-    void *s1;
-    void *s3;
-    int32_t *s0;
-    int32_t count;
-    int32_t *base;
+	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
+	struct tx_isp_t30_frame_sources *fs;
+	unsigned int i;
 
-    private_platform_get_drvdata(NULL);
-    dev = 0;
-    s1 = *(void **)((char *)dev + 0xd4);
-    s3 = dev;
-    s0 = 0;
-    count = *(int32_t *)((char *)s1 + 0xe0);
-
-    while (s0 < count) {
-        base = *(int32_t *)((char *)s1 + 0xdc);
-        tx_isp_frame_chan_deinit((void *)((uintptr_t)base + (uintptr_t)s0 * 0x2c0));
-        s0++;
-        count = *(int32_t *)((char *)s1 + 0xe0);
-    }
-
-    base = *(int32_t *)((char *)s1 + 0xdc);
-    if (base != 0)
-        kfree((void *)base);
-
-    tx_isp_subdev_deinit(s3);
-    kfree(s1);
-    return 0;
+	if (IS_ERR_OR_NULL(sd))
+		return 0;
+	fs = sd->dev_priv;
+	private_platform_set_drvdata(pdev, NULL);
+	if (!IS_ERR_OR_NULL(fs)) {
+		for (i = 0; i < fs->num_channels; i++)
+			tx_isp_frame_chan_deinit(&fs->channels[i]);
+		kfree(fs->channels);
+		fs->channels = NULL;
+		fs->num_channels = 0;
+	}
+	tx_isp_subdev_deinit(sd);
+	kfree(fs);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000389ac origin=model_output original=tx_isp_remove */
 int tx_isp_remove(struct platform_device *pdev)
 {
-	void *priv;
-	struct miscdevice *misc;
-	struct proc_dir_entry *proc;
-	struct device *dev;
+	struct tx_isp_t30_device *ispdev = platform_get_drvdata(pdev);
 
-	priv = platform_get_drvdata(pdev);
-	misc = (struct miscdevice *)((char *)priv + 0xc);
-	misc_deregister(misc);
-	proc = *(struct proc_dir_entry **)((char *)priv + 0x11c);
-	proc_remove(proc);
-	tx_isp_unregister_platforms((int32_t *)((char *)priv + 0x84));
-	dev = (struct device *)((char *)pdev + 0x10);
-	dev_set_drvdata(dev, NULL);
-	kfree(priv);
+	if (IS_ERR_OR_NULL(ispdev))
+		return 0;
+	private_platform_set_drvdata(pdev, NULL);
+	globe_ispdev = NULL;
+	private_misc_deregister(&ispdev->module.miscdev);
+	if (ispdev->proc) {
+		proc_remove(ispdev->proc);
+		ispdev->proc = NULL;
+	}
+	tx_isp_unregister_platforms((int32_t *)ispdev->pdevs);
+	kfree(ispdev);
 	return 0;
 }
 
