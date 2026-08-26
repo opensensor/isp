@@ -3041,7 +3041,7 @@ static unsigned char dmsc_sp_ud_w_stren_array[36];
 static unsigned char dmsc_uu_stren_array[36];
 static unsigned char dmsc_uu_thres_array[36];
 static uintptr_t (*gain_old)();
-static unsigned char __attribute__((aligned(4))) gain_thres[4] = {
+static volatile unsigned char __attribute__((aligned(4))) gain_thres[4] = {
     0x00, 0x01, 0x00, 0x00,
 };
 static unsigned char _ccm_a_parameter[36] __attribute__((aligned(4)));
@@ -31740,18 +31740,28 @@ int32_t tisp_dmsc_sp_ud_b_wei_np_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019050 origin=model_output original=tisp_dmsc_dir_par_cfg */
 int32_t tisp_dmsc_dir_par_cfg(void)
 {
-	int32_t dir_par = dmsc_dir_par_array[0];
+	uint32_t dir_par[9];
 	uint32_t hv_thres = dmsc_hv_thres_1_intp;
-	int32_t dir_par_hi = dir_par - (dir_par >> 3);
+	int32_t dir_par_hi;
 	uint32_t hv_thres_hi = hv_thres - (hv_thres >> 3);
+	unsigned int i;
+
+	/* Tuning arrays are packed little-endian words.  Keep the byte-array ABI
+	 * and decode elements explicitly instead of indexing individual bytes. */
+	for (i = 0; i < ARRAY_SIZE(dir_par); i++)
+		dir_par[i] = get_unaligned_le32(dmsc_dir_par_array + i * 4);
+	dir_par_hi = (int32_t)dir_par[0] - ((int32_t)dir_par[0] >> 3);
 
 	system_reg_write(0x1010, (uint32_t)(dir_par_hi << 16) | hv_thres_hi);
-	system_reg_write(0x1014, (uint32_t)(dmsc_dir_par_array[0] << 16) | dmsc_hv_thres_1_intp);
-	system_reg_write(0x1020, (uint32_t)(dmsc_dir_par_array[2] << 16) | (uint32_t)(dmsc_dir_par_array[1] << 24) | dmsc_hv_stren_intp);
-	system_reg_write(0x1024, (uint32_t)(dmsc_dir_par_array[3] << 16) | dmsc_aa_thres_1_intp);
-	system_reg_write(0x1028, (uint32_t)(dmsc_dir_par_array[5] << 16) | (uint32_t)(dmsc_dir_par_array[4] << 24) | dmsc_aa_stren_intp);
-	system_reg_write(0x102c, (uint32_t)(dmsc_dir_par_array[6] << 16) | dmsc_hvaa_thres_1_intp);
-	system_reg_write(0x1030, (uint32_t)(dmsc_dir_par_array[8] << 16) | (uint32_t)(dmsc_dir_par_array[7] << 24) | dmsc_hvaa_stren_intp);
+	system_reg_write(0x1014, (dir_par[0] << 16) | dmsc_hv_thres_1_intp);
+	system_reg_write(0x1020, (dir_par[2] << 16) | (dir_par[1] << 24) |
+			 dmsc_hv_stren_intp);
+	system_reg_write(0x1024, (dir_par[3] << 16) | dmsc_aa_thres_1_intp);
+	system_reg_write(0x1028, (dir_par[5] << 16) | (dir_par[4] << 24) |
+			 dmsc_aa_stren_intp);
+	system_reg_write(0x102c, (dir_par[6] << 16) | dmsc_hvaa_thres_1_intp);
+	system_reg_write(0x1030, (dir_par[8] << 16) | (dir_par[7] << 24) |
+			 dmsc_hvaa_stren_intp);
 	return 0;
 }
 
@@ -31791,12 +31801,16 @@ int32_t tisp_dmsc_alias_par_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000192ac origin=model_output original=tisp_dmsc_nor_par_cfg */
 int32_t tisp_dmsc_nor_par_cfg(void)
 {
+	uint32_t par[4];
 	uint32_t v;
+	unsigned int i;
 
-	v = (dmsc_nor_par_array[0] << 16) | dmsc_nor_alias_thres_intp;
+	for (i = 0; i < ARRAY_SIZE(par); i++)
+		par[i] = get_unaligned_le32(dmsc_nor_par_array + i * 4);
+	v = (par[0] << 16) | dmsc_nor_alias_thres_intp;
 	system_reg_write(0x103c, v);
 
-	v = (dmsc_nor_par_array[1] << 16) | (dmsc_nor_par_array[2] << 6) | dmsc_nor_par_array[3];
+	v = (par[1] << 16) | (par[2] << 6) | par[3];
 	system_reg_write(0x1040, v);
 
 	return 0;
@@ -31805,52 +31819,23 @@ int32_t tisp_dmsc_nor_par_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019324 origin=model_output original=tisp_dmsc_sp_d_par_cfg */
 int32_t tisp_dmsc_sp_d_par_cfg(void)
 {
-	int32_t *v0;
-	int32_t v1;
-	int32_t *a0;
-	int32_t a1;
-	int32_t a2;
+	uint32_t par[8];
+	uint32_t val;
+	unsigned int i;
 
-	v1 = dmsc_sp_d_par_array[0];
-	a0 = dmsc_sp_d_par_array[1];
-	a1 = v1 << 7;
-	a2 = (uintptr_t)a0 << 0x11;
-	v0 = dmsc_sp_d_par_array[3];
-	a2 = a2 | a1;
-	a1 = dmsc_sp_d_par_array[2];
-	a2 = a2 | (uintptr_t)v0;
-	a1 = a1 << 6;
-	a1 = a2 | a1;
-	a2 = (uintptr_t)v0 << 4;
-	a1 = a1 | a2;
-	v0 = (uintptr_t)v0 << 2;
-	a1 = a1 | (uintptr_t)v0;
-	v0 = 8;
-	a0 = (uintptr_t)v0 - (uintptr_t)a0;
-	v0 = 16;
-	a0 = (uintptr_t)a0 << 0x15;
-	v1 = v0 - v1;
-	v1 = v1 << 0xc;
-	a1 = a1 | (uintptr_t)a0;
-	a1 = a1 | v1;
-
-	system_reg_write(0x1044, a1);
-	a1 = dmsc_sp_d_w_stren_intp;
-	v0 = dmsc_sp_d_b_stren_intp;
-	a1 = a1 << 0x10;
-	system_reg_write(0x1048, a1 | (uintptr_t)v0);
-	a1 = dmsc_sp_d_par_array[7];
-	v0 = dmsc_sp_d_par_array[6];
-	a1 = a1 << 0x10;
-	system_reg_write(0x104c, a1 | (uintptr_t)v0);
-	a1 = dmsc_sp_d_brig_thres_intp;
-	v0 = dmsc_sp_d_dark_thres_intp;
-	a1 = a1 << 0x10;
-	system_reg_write(0x1050, a1 | (uintptr_t)v0);
-	a1 = dmsc_sp_d_par_array[4];
-	system_reg_write(0x1054, a1);
-	a1 = dmsc_sp_d_par_array[5];
-	system_reg_write(0x1058, a1);
+	for (i = 0; i < ARRAY_SIZE(par); i++)
+		par[i] = get_unaligned_le32(dmsc_sp_d_par_array + i * 4);
+	val = (par[1] << 17) | (par[0] << 7) | par[3] |
+		(par[2] << 6) | (par[3] << 4) | (par[3] << 2) |
+		((8 - par[1]) << 21) | ((16 - par[0]) << 12);
+	system_reg_write(0x1044, val);
+	system_reg_write(0x1048, (dmsc_sp_d_w_stren_intp << 16) |
+			 dmsc_sp_d_b_stren_intp);
+	system_reg_write(0x104c, (par[7] << 16) | par[6]);
+	system_reg_write(0x1050, (dmsc_sp_d_brig_thres_intp << 16) |
+			 dmsc_sp_d_dark_thres_intp);
+	system_reg_write(0x1054, par[4]);
+	system_reg_write(0x1058, par[5]);
 
 	return 0;
 }
@@ -31921,29 +31906,26 @@ int32_t tisp_dmsc_fc_par_cfg(void)
 	uint32_t alias_stren = dmsc_fc_alias_stren_intp;
 	uint32_t t2_stren = dmsc_fc_t2_stren_intp;
 	uint32_t t1_thres = dmsc_fc_t1_thres_intp;
-	uint32_t par_array = *(uint32_t *)&dmsc_fc_par_array;
 	uint32_t t3_stren = dmsc_fc_t3_stren_intp;
+	uint32_t par[9];
 	uint32_t val;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(par); i++)
+		par[i] = get_unaligned_le32(dmsc_fc_par_array + i * 4);
 
 	system_reg_write(0x1080, (t1_stren << 0xe) | (alias_stren << 0x15) |
-		(t2_stren << 7) | *(uint32_t *)&data_8af54);
-	system_reg_write(0x1084,
-		(*(uint32_t *)&data_8af38 << 0x10) | t1_thres);
-	system_reg_write(0x1088, (*(uint32_t *)&data_8af3c << 0x10) |
-		*(uint32_t *)&data_8af40);
-	system_reg_write(0x108c,
-		((*(uint32_t *)&data_8af44 + t1_thres) << 0x10) |
-		*(uint32_t *)&data_8af50);
-	system_reg_write(0x1090, (par_array << 0x10) | (par_array << 6) | par_array);
+		(t2_stren << 7) | par[8]);
+	system_reg_write(0x1084, (par[1] << 16) | t1_thres);
+	system_reg_write(0x1088, (par[2] << 16) | par[3]);
+	system_reg_write(0x108c, ((par[4] + t1_thres) << 16) | par[7]);
+	system_reg_write(0x1090, (par[0] << 16) | (par[0] << 6) | par[0]);
 	system_reg_write(0x110c, t3_stren);
-	system_reg_write(0x1110,
-		(*(uint32_t *)&data_8af44 + *(uint32_t *)&data_8af48 +
-		 t1_thres) | (par_array << 0x10));
-	val = *(uint32_t *)&data_8af44 + t1_thres;
-	system_reg_write(0x1114,
-		((val + *(uint32_t *)&data_8af48) << 0x10) | val);
-	val = *(uint32_t *)&data_8af44 + *(uint32_t *)&data_8af48 +
-		t1_thres + *(uint32_t *)&data_8af4c;
+	system_reg_write(0x1110, (par[0] << 16) |
+			 (par[4] + par[5] + t1_thres));
+	val = par[4] + t1_thres;
+	system_reg_write(0x1114, ((val + par[5]) << 16) | val);
+	val = par[4] + par[5] + t1_thres + par[6];
 	if (val < 0x1000)
 		system_reg_write(0x1118, val);
 	else
@@ -32157,25 +32139,22 @@ int32_t tisp_dmsc_intp_reg_refresh(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000019cb8 origin=model_output original=tisp_dmsc_par_refresh */
 int32_t tisp_dmsc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 {
-	uint32_t gain_old_1 = gain_old;
+	uint32_t gain_old_1 = *(uint32_t *)&gain_old;
 	uint32_t diff;
 
-	if (gain_old_1 != 0xffffffff) {
+	if (gain_old_1 == 0xffffffff) {
+		*(uint32_t *)&gain_old = a0;
+		tisp_dmsc_all_reg_refresh(a0);
+	} else {
 		if (a0 < gain_old_1)
 			diff = gain_old_1 - a0;
 		else
 			diff = a0 - gain_old_1;
 
 		if (diff >= a1) {
-			gain_old = (uintptr_t (*)())(uintptr_t)a0;
+			*(uint32_t *)&gain_old = a0;
 			tisp_dmsc_intp_reg_refresh(a0);
-		} else {
-			gain_old = (uintptr_t (*)())(uintptr_t)a0;
-			tisp_dmsc_all_reg_refresh(a0);
 		}
-	} else {
-		gain_old = (uintptr_t (*)())(uintptr_t)a0;
-		tisp_dmsc_all_reg_refresh(a0);
 	}
 
 	if (a2 == 1)
@@ -32281,7 +32260,9 @@ int32_t tiziano_dmsc_init(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001a248 origin=model_output original=tisp_dmsc_refresh */
 uint32_t tisp_dmsc_refresh(uint32_t arg1)
 {
-	tisp_dmsc_par_refresh(arg1, gain_thres, 0);
+	uint32_t threshold = *(volatile uint32_t *)gain_thres;
+
+	tisp_dmsc_par_refresh(arg1, threshold, 0);
 	return 0;
 }
 
