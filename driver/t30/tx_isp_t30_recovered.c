@@ -704,6 +704,12 @@ module_param(simple_3a, bool, 0);
 MODULE_PARM_DESC(simple_3a,
 		 "use the calibration-driven recovery AE/AWB path");
 
+/* Keep AE active while allowing live AWB diagnostics to hold the tuning seed. */
+static bool simple_awb = true;
+module_param(simple_awb, bool, 0644);
+MODULE_PARM_DESC(simple_awb,
+		 "enable calibration-driven recovery AWB updates");
+
 static int isp_m2_bufs = 2;
 module_param(isp_m2_bufs, int, 0);
 MODULE_PARM_DESC(isp_m2_bufs, "isp inter buffers");
@@ -1539,6 +1545,9 @@ struct tx_isp_t30_simple_3a_state {
 	u16 gain_11;
 	u32 red_target_sum;
 	u32 blue_target_sum;
+	u16 awb_red_scale;
+	u16 awb_blue_scale;
+	u16 awb_color_temperature;
 	u8 ae_cooldown;
 	bool ae_initialized;
 	bool awb_initialized;
@@ -2347,6 +2356,26 @@ struct tx_isp_t30_nr_owner_view {
 	s32 isp_digital_gain;
 	u8 reserved2d8[0x1524 - 0x2d8];
 	u8 wdr_mode;
+};
+
+/*
+ * APICAL owner fields shared by AE and the tuning-driven Iridix controller.
+ * The OEM AE reader publishes the decoded hardware histogram here, while the
+ * CMOS FSM publishes its current Q16 log2 exposure target.  Several other
+ * firmware blocks consume the same ABI, so keep the offsets layout-checked
+ * instead of spelling them as byte arithmetic at each call site.
+ */
+struct tx_isp_t30_ae_statistics_view {
+	u8 reserved000[0x11c];
+	s32 exposure_log2;
+	u8 reserved120[0x338 - 0x120];
+	u32 histogram[256];
+	u32 histogram_total;
+};
+
+struct tx_isp_t30_awb_owner_view {
+	u8 reserved000[0xec0];
+	s32 color_temperature;
 };
 struct apical_sbus_dev {
 	uint32_t flags;
@@ -37598,12 +37627,19 @@ static int tx_isp_t30_apply_isp_sequence(const u8 *sequence, size_t size,
 			continue;
 		}
 
-		if (length <= sizeof(u32)) {
-			u8 merged[sizeof(u32)];
+		{
+			u8 merged[16];
 			const u8 *values = data + 2;
 			const u8 *masks = values + length;
 			unsigned int index;
 
+			/*
+			 * The binary sequence format encodes up to sixteen adjacent
+			 * read/modify/write bytes.  The earlier recovery handled only
+			 * lengths up to sizeof(u32), silently skipping the longer SDK
+			 * records that establish complete ISP block defaults.
+			 */
+			BUILD_BUG_ON(ARRAY_SIZE(merged) < 16);
 			for (index = 0; index < length; index++) {
 				u8 old = APICAL_READ_8(address + index);
 
@@ -46731,6 +46767,17 @@ int32_t iridix_init_pre_post_gamma(int32_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000028568 origin=model_output original=iridix_initialize */
 int32_t iridix_initialize(int32_t *arg1)
 {
+	/*
+	 * These are the T30 Iridix statistics-engine reset defaults from
+	 * apical_isp_config.h.  The recovered register sequence only restores
+	 * CONTROL_0's low byte; after a full ISP reset the upper statistics bits
+	 * therefore remained clear (0x0029 instead of the OEM 0x4629).  Keep the
+	 * hardware defaults here rather than relying on boot-loader residue.
+	 */
+	const u32 iridix_statistics_mask = (1U << 9) | (1U << 10) |
+		(3U << 14);
+	const u32 iridix_statistics_default = (1U << 9) | (1U << 10) |
+		(1U << 14);
 	uint32_t i;
 	uint32_t width;
 	uint32_t len;
@@ -46747,6 +46794,9 @@ int32_t iridix_initialize(int32_t *arg1)
 	uint8_t data_4cc59;
 
 	((void **)arg1)[3] = 1;
+	APICAL_WRITE_32(0x3c0,
+		(APICAL_READ_32(0x3c0) & ~iridix_statistics_mask) |
+		iridix_statistics_default);
 	iridix_init_pre_post_gamma(arg1);
 
 	width = _GET_WIDTH(0xcf);
@@ -52675,7 +52725,8 @@ static u32 tx_isp_t30_decode_histogram_bin(u32 raw)
 	return value;
 }
 
-static u32 tx_isp_t30_histogram_metered_mean(u32 highlight_tail)
+static u32 tx_isp_t30_histogram_metered_mean(
+	u32 highlight_tail, struct tx_isp_t30_ae_statistics_view *statistics)
 {
 	u64 weighted = 0;
 	u32 population = 0;
@@ -52688,6 +52739,8 @@ static u32 tx_isp_t30_histogram_metered_mean(u32 highlight_tail)
 		u32 count = tx_isp_t30_decode_histogram_bin(
 			APICAL_READ_32(0x10000 + i * sizeof(u32)));
 		u32 weight = 1;
+
+		statistics->histogram[i] = count;
 
 		/*
 		 * The OEM linear AE path treats each histogram bin as its
@@ -52705,6 +52758,7 @@ static u32 tx_isp_t30_histogram_metered_mean(u32 highlight_tail)
 		population += count;
 		weighted += (u64)count * (2 * i + 1) * weight;
 	}
+	statistics->histogram_total = population;
 	if (!population)
 		return 0;
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -52719,7 +52773,11 @@ enum tx_isp_t30_calibration_id {
 	TX_ISP_T30_CAL_AE_CORRECTION_LINEAR = 41,
 	TX_ISP_T30_CAL_AE_BALANCED_LINEAR = 146,
 	TX_ISP_T30_CAL_AE_EXPOSURE_CORRECTION = 206,
+	TX_ISP_T30_CAL_MESH_COLOR_TEMPERATURE = 214,
+	TX_ISP_T30_CAL_RG_POS = 226,
 	TX_ISP_T30_CAL_STATIC_WB = 233,
+	TX_ISP_T30_CAL_MESH_RGBG_WEIGHT = 238,
+	TX_ISP_T30_CAL_BG_POS = 251,
 	TX_ISP_T30_CAL_AWB_AVG_COEF = 262,
 };
 
@@ -52733,6 +52791,18 @@ static const void *tx_isp_t30_calibration_data(u32 id, u16 min_cols,
 	    table->cols < min_cols || table->width != width)
 		return NULL;
 	return table->ptr;
+}
+
+static const struct tx_isp_t30_lookup_table *
+tx_isp_t30_calibration_table(u32 id, u16 rows, u16 cols, u16 width)
+{
+	struct tx_isp_t30_lookup_table *table;
+
+	table = (void *)(uintptr_t)_GET_LOOKUP_PTR(id);
+	if (!table || !table->ptr || table->rows != rows ||
+	    table->cols != cols || table->width != width)
+		return NULL;
+	return table;
 }
 
 static u8 tx_isp_t30_ae_exposure_correction(u32 exposure_q6)
@@ -52882,6 +52952,8 @@ static void tx_isp_t30_simple_ae_update(void)
 	struct tx_isp_t30_system_gain_view *system_gain = (void *)stab;
 	struct tx_isp_t30_nr_owner_view *isp =
 		(void *)TX_ISP_T30_ISP_PTR(0);
+	struct tx_isp_t30_ae_statistics_view *statistics =
+		(void *)TX_ISP_T30_ISP_PTR(0);
 	const u32 *ae;
 	s32 requested_gain;
 	s32 error;
@@ -52932,7 +53004,13 @@ static void tx_isp_t30_simple_ae_update(void)
 	max_exposure_log2 = log2_fixed_to_fixed(max_integration, 0, 16) +
 		attr->max_again + max_isp_digital_gain_log2;
 
-	mean = tx_isp_t30_histogram_metered_mean(ae[2]);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ae_statistics_view,
+			      exposure_log2) != 0x11c);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ae_statistics_view,
+			      histogram) != 0x338);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ae_statistics_view,
+			      histogram_total) != 0x738);
+	mean = tx_isp_t30_histogram_metered_mean(ae[2], statistics);
 	if (!mean)
 		return;
 	if (!state->ae_initialized) {
@@ -53020,10 +53098,19 @@ static void tx_isp_t30_simple_ae_update(void)
 	isp->sensor_analog_gain = state->analog_gain_log2;
 	isp->sensor_digital_gain = 0;
 	isp->isp_digital_gain = state->isp_digital_gain_log2;
+	statistics->exposure_log2 = state->total_exposure_request_log2;
 	APICAL_WRITE_32(0x01a0,
 		(APICAL_READ_32(0x01a0) & 0xfffff000) |
 		(math_exp2(state->isp_digital_gain_log2, 16, 8) & 0xfff));
 	sensor_update_black((int32_t *)TX_ISP_T30_ISP_PTR(0x100));
+	/*
+	 * cmos_fsm_switch_state() raises event 19 after applying an OEM exposure
+	 * update.  The compact AE path deliberately bypasses that state machine,
+	 * so reproduce its event after publishing the same owner fields.  This
+	 * drives Iridix from the current histogram and exposure instead of leaving
+	 * it pinned at the initialization strength.
+	 */
+	apical_isp_raise_event(statistics, 19);
 	state->ae_cooldown = max_t(u8, attr->integration_time_apply_delay,
 				   attr->again_apply_delay);
 	state->ae_updates++;
@@ -54157,6 +54244,9 @@ static void tx_isp_t30_awb_apply_calibrated_gains(void)
 		state->gain_01 = green_red;
 		state->gain_10 = green_blue;
 		state->gain_11 = blue;
+		state->awb_red_scale = 0x100;
+		state->awb_blue_scale = 0x100;
+		state->awb_color_temperature = 5000;
 		state->awb_initialized = true;
 	}
 
@@ -54178,85 +54268,246 @@ static void tx_isp_t30_awb_apply_calibrated_gains(void)
 	}
 }
 
-static void tx_isp_t30_simple_awb_update(void)
+static void tx_isp_t30_simple_awb_update(int32_t *awb_fsm)
 {
 	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
+	struct tx_isp_t30_awb_owner_view *owner =
+		(void *)(uintptr_t)awb_fsm[0];
+	const struct tx_isp_t30_lookup_table *rg_table;
+	const struct tx_isp_t30_lookup_table *bg_table;
+	const struct tx_isp_t30_lookup_table *weight_table;
+	const struct tx_isp_t30_lookup_table *ct_table;
 	const u8 *average_coefficient;
-	u16 *red_gain;
-	u16 *blue_gain;
-	u32 red_ratio;
-	u32 blue_ratio;
-	u32 desired_red_gain;
-	u32 desired_blue_gain;
+	const u16 *static_wb;
+	const u16 *rg_pos;
+	const u16 *bg_pos;
+	const u16 *weight_mesh;
+	const u16 *ct_mesh;
+	u64 weighted_rg = 0;
+	u64 weighted_bg = 0;
+	u64 total_weight = 0;
+	u32 desired_red_scale;
+	u32 desired_blue_scale;
+	u32 average_rg;
+	u32 average_bg;
+	u32 gains[4];
+	u32 minimum_gain;
 	u32 coefficient;
-	bool current_stats_mode;
+	u32 active_zones = 0;
+	u32 zone;
 
 	tx_isp_t30_awb_apply_calibrated_gains();
 	if (!state->awb_initialized)
 		return;
+	static_wb = tx_isp_t30_calibration_data(
+		TX_ISP_T30_CAL_STATIC_WB, 4, sizeof(*static_wb));
 	average_coefficient = tx_isp_t30_calibration_data(
 		TX_ISP_T30_CAL_AWB_AVG_COEF, 1, sizeof(*average_coefficient));
-	if (!average_coefficient || !average_coefficient[0])
+	rg_table = tx_isp_t30_calibration_table(
+		TX_ISP_T30_CAL_RG_POS, 1, 15, sizeof(*rg_pos));
+	bg_table = tx_isp_t30_calibration_table(
+		TX_ISP_T30_CAL_BG_POS, 1, 15, sizeof(*bg_pos));
+	weight_table = tx_isp_t30_calibration_table(
+		TX_ISP_T30_CAL_MESH_RGBG_WEIGHT, 15, 15,
+		sizeof(*weight_mesh));
+	ct_table = tx_isp_t30_calibration_table(
+		TX_ISP_T30_CAL_MESH_COLOR_TEMPERATURE, 15, 15,
+		sizeof(*ct_mesh));
+	if (!static_wb || !average_coefficient || !average_coefficient[0] ||
+	    !rg_table || !bg_table || !weight_table || !ct_table)
 		return;
 	coefficient = average_coefficient[0];
-	red_ratio = APICAL_READ_32(0x858) & 0xfff;
-	blue_ratio = APICAL_READ_32(0x85c) & 0xfff;
-	if (red_ratio < 0x40 || red_ratio > 0x400 ||
-	    blue_ratio < 0x40 || blue_ratio > 0x400)
-		return;
+	rg_pos = rg_table->ptr;
+	bg_pos = bg_table->ptr;
+	weight_mesh = weight_table->ptr;
+	ct_mesh = ct_table->ptr;
 
 	/*
-	 * APICAL names these registers by color, not by the active CFA position:
-	 * gain_00 is R, gain_01 is Gr, gain_10 is Gb, and gain_11 is B.  Bayer
-	 * order is handled by the ISP input formatter before white balance, so
-	 * remapping these gains for BGGR/GRBG would exchange red and blue.
+	 * The OEM T30 AWB reader consumes 225 two-word zones at 0x8740.  Each
+	 * first word contains two Q8 chroma ratios; the second is the zone
+	 * population.  The ratios are scaled by AWB's own feedback factors before
+	 * being reciprocated into the tuning mesh.  Keeping those factors separate
+	 * from the four hardware gains is essential: using the hardware gains here
+	 * applies the correction twice and produces the red/blue runaway seen in
+	 * the initial recovery path.
 	 */
-	red_gain = &state->gain_00;
-	blue_gain = &state->gain_11;
+	for (zone = 0; zone < 225; zone++) {
+		u32 packed = APICAL_READ_32(0x8740 + zone * 8);
+		u32 population = APICAL_READ_32(0x8744 + zone * 8);
+		u32 raw_rg = packed & 0xfff;
+		u32 raw_bg = (packed >> 16) & 0xfff;
+		u32 scaled_rg;
+		u32 scaled_bg;
+		u32 mesh_rg;
+		u32 mesh_bg;
+		u32 x_index = 13;
+		u32 y_index = 13;
+		u32 x_fraction;
+		u32 y_fraction;
+		u32 row0;
+		u32 row1;
+		u32 mesh_weight;
+		u64 zone_weight;
+		u32 i;
 
-	/*
-	 * The stats-mode bit is part of the T30 APICAL hardware ABI.  Legacy mode
-	 * reports G/R and B/R; current mode reports R/G and B/G.  These metering
-	 * outputs are taken before static WB on T30, so they convert directly to
-	 * absolute Q8 gains.  Treating legacy G/R as R/G reverses the red channel,
-	 * while treating B/R as B/G overstates the blue correction.
-	 */
-	current_stats_mode = !!(APICAL_READ_32(0x868) & BIT(0));
-	if (current_stats_mode) {
-		desired_red_gain = (0x10000U + red_ratio / 2) / red_ratio;
-		desired_blue_gain = (0x10000U + blue_ratio / 2) / blue_ratio;
-	} else {
-		desired_red_gain = red_ratio;
-		desired_blue_gain = (0x100U * red_ratio +
-			blue_ratio / 2) / blue_ratio;
+		if (!population || !raw_rg || !raw_bg ||
+		    raw_rg == 0xfff || raw_bg == 0xfff)
+			continue;
+		scaled_rg = (raw_rg * state->awb_red_scale) >> 8;
+		scaled_bg = (raw_bg * state->awb_blue_scale) >> 8;
+		if (!scaled_rg || !scaled_bg)
+			continue;
+		mesh_rg = 0xffffU / scaled_rg;
+		mesh_bg = 0xffffU / scaled_bg;
+		/*
+		 * OEM 0x33c98 accepts only zones inside the calibrated domain and
+		 * above its B/G floor.  Clamping rejected colors onto an edge makes
+		 * saturated blue and red objects dominate the edge cells, which
+		 * drives the solution away from the neutral-light locus.
+		 */
+		if (mesh_rg < rg_pos[0] || mesh_rg > rg_pos[14] ||
+		    mesh_bg < max_t(u32, bg_pos[0], 0x101) ||
+		    mesh_bg > bg_pos[14])
+			continue;
+
+		for (i = 0; i < 14; i++) {
+			if (mesh_rg <= rg_pos[i + 1]) {
+				x_index = i;
+				break;
+			}
+		}
+		for (i = 0; i < 14; i++) {
+			if (mesh_bg <= bg_pos[i + 1]) {
+				y_index = i;
+				break;
+			}
+		}
+		x_fraction = ((mesh_rg - rg_pos[x_index]) << 8) /
+			max_t(u32, 1, rg_pos[x_index + 1] - rg_pos[x_index]);
+		y_fraction = ((mesh_bg - bg_pos[y_index]) << 8) /
+			max_t(u32, 1, bg_pos[y_index + 1] - bg_pos[y_index]);
+		row0 = (weight_mesh[y_index * 15 + x_index] *
+			 (256 - x_fraction) +
+			 weight_mesh[y_index * 15 + x_index + 1] *
+			 x_fraction + 128) >> 8;
+		row1 = (weight_mesh[(y_index + 1) * 15 + x_index] *
+			 (256 - x_fraction) +
+			 weight_mesh[(y_index + 1) * 15 + x_index + 1] *
+			 x_fraction + 128) >> 8;
+		mesh_weight = (row0 * (256 - y_fraction) +
+			row1 * y_fraction + 128) >> 8;
+		/* OEM awb_calc_avg_weighted_gr_gb_mesh() rejects weak cells. */
+		if (mesh_weight < 0x3c)
+			continue;
+		zone_weight = (u64)mesh_weight * population;
+		weighted_rg += zone_weight * mesh_rg;
+		weighted_bg += zone_weight * mesh_bg;
+		total_weight += zone_weight;
+		active_zones++;
 	}
-	desired_red_gain = clamp_t(u32, desired_red_gain, 0x40, 0xfff);
-	desired_blue_gain = clamp_t(u32, desired_blue_gain, 0x40, 0xfff);
+	if (!active_zones || !total_weight)
+		return;
+	average_rg = div64_u64(weighted_rg + total_weight / 2, total_weight);
+	average_bg = div64_u64(weighted_bg + total_weight / 2, total_weight);
+	{
+		u32 x_index = 13;
+		u32 y_index = 13;
+		u32 x_fraction;
+		u32 y_fraction;
+		u32 row0;
+		u32 row1;
+		u32 mired;
+		u32 i;
+
+		for (i = 0; i < 14; i++) {
+			if (average_rg <= rg_pos[i + 1]) {
+				x_index = i;
+				break;
+			}
+		}
+		for (i = 0; i < 14; i++) {
+			if (average_bg <= bg_pos[i + 1]) {
+				y_index = i;
+				break;
+			}
+		}
+		x_fraction = ((average_rg - rg_pos[x_index]) << 8) /
+			max_t(u32, 1, rg_pos[x_index + 1] - rg_pos[x_index]);
+		y_fraction = ((average_bg - bg_pos[y_index]) << 8) /
+			max_t(u32, 1, bg_pos[y_index + 1] - bg_pos[y_index]);
+		row0 = (ct_mesh[y_index * 15 + x_index] *
+			 (256 - x_fraction) +
+			 ct_mesh[y_index * 15 + x_index + 1] *
+			 x_fraction + 128) >> 8;
+		row1 = (ct_mesh[(y_index + 1) * 15 + x_index] *
+			 (256 - x_fraction) +
+			 ct_mesh[(y_index + 1) * 15 + x_index + 1] *
+			 x_fraction + 128) >> 8;
+		mired = (row0 * (256 - y_fraction) +
+			 row1 * y_fraction + 128) >> 8;
+		if (mired)
+			state->awb_color_temperature = min_t(u32,
+				1000000U / mired, 0xffff);
+	}
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_awb_owner_view,
+			      color_temperature) != 0xec0);
+	if (owner)
+		owner->color_temperature = state->awb_color_temperature;
+	desired_red_scale = 0xffffU / max_t(u32, 1, average_rg);
+	desired_blue_scale = 0xffffU / max_t(u32, 1, average_bg);
+	desired_red_scale = clamp_t(u32, desired_red_scale, 0x40, 0x400);
+	desired_blue_scale = clamp_t(u32, desired_blue_scale, 0x40, 0x400);
 
 	/*
 	 * Restore the OEM fifo_push() filter at 0x328dc.  Each accumulator holds
-	 * coefficient times the filtered absolute target:
+	 * coefficient times the filtered feedback factor:
 	 *
 	 *     sum = target + sum - sum / coefficient
-	 *
-	 * Its recovered pointer types are collapsed, so keep the safe typed state
-	 * here while preserving the exact tuning-controlled arithmetic.
 	 */
 	if (!state->red_target_sum && !state->blue_target_sum) {
-		state->red_target_sum = coefficient * desired_red_gain;
-		state->blue_target_sum = coefficient * desired_blue_gain;
+		state->red_target_sum = coefficient * desired_red_scale;
+		state->blue_target_sum = coefficient * desired_blue_scale;
 	} else {
-		state->red_target_sum += desired_red_gain -
+		state->red_target_sum += desired_red_scale -
 			state->red_target_sum / coefficient;
-		state->blue_target_sum += desired_blue_gain -
+		state->blue_target_sum += desired_blue_scale -
 			state->blue_target_sum / coefficient;
 	}
-	*red_gain = clamp_t(u32,
+	state->awb_red_scale = clamp_t(u32,
 		(state->red_target_sum + coefficient / 2) / coefficient,
-		0x40, 0xfff);
-	*blue_gain = clamp_t(u32,
+		0x40, 0x400);
+	state->awb_blue_scale = clamp_t(u32,
 		(state->blue_target_sum + coefficient / 2) / coefficient,
+		0x40, 0x400);
+
+	/*
+	 * awb_normalise() combines the two feedback factors with all four values
+	 * from CALIBRATION_STATIC_WB, then raises the minimum channel to unity.
+	 * Express the same operation in the hardware's Q8 linear gain domain.
+	 */
+	gains[0] = ((u32)static_wb[0] * state->awb_red_scale + 0x80) >> 8;
+	gains[1] = static_wb[1];
+	gains[2] = static_wb[2];
+	gains[3] = ((u32)static_wb[3] * state->awb_blue_scale + 0x80) >> 8;
+	minimum_gain = min(min(gains[0], gains[1]), min(gains[2], gains[3]));
+	if (!minimum_gain)
+		return;
+	gains[0] = clamp_t(u32,
+		(gains[0] * 0x100U + minimum_gain / 2) / minimum_gain,
 		0x40, 0xfff);
+	gains[1] = clamp_t(u32,
+		(gains[1] * 0x100U + minimum_gain / 2) / minimum_gain,
+		0x40, 0xfff);
+	gains[2] = clamp_t(u32,
+		(gains[2] * 0x100U + minimum_gain / 2) / minimum_gain,
+		0x40, 0xfff);
+	gains[3] = clamp_t(u32,
+		(gains[3] * 0x100U + minimum_gain / 2) / minimum_gain,
+		0x40, 0xfff);
+	state->gain_00 = gains[0];
+	state->gain_01 = gains[1];
+	state->gain_10 = gains[2];
+	state->gain_11 = gains[3];
 
 	APICAL_WRITE_32(0x300, (APICAL_READ_32(0x300) & ~0xfffU) |
 			state->gain_00);
@@ -54268,9 +54519,12 @@ static void tx_isp_t30_simple_awb_update(void)
 			state->gain_11);
 	state->awb_updates++;
 	if (state->awb_updates <= 8 || !(state->awb_updates & 0x1f))
-		pr_info("tx-isp-t30: calibrated AWB mode=%u ratio=%u/%u target=0x%x/0x%x gain=0x%x/0x%x\n",
-			current_stats_mode, red_ratio, blue_ratio, desired_red_gain,
-			desired_blue_gain, *red_gain, *blue_gain);
+		pr_info("tx-isp-t30: calibrated AWB zones=%u mesh=%u/%u ct=%u scale=%u/%u gain=0x%x/0x%x/0x%x/0x%x\n",
+			active_zones, average_rg, average_bg,
+			state->awb_color_temperature,
+			state->awb_red_scale, state->awb_blue_scale,
+			state->gain_00, state->gain_01,
+			state->gain_10, state->gain_11);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000337a8 origin=model_output original=AWB_fsm_process_interrupt */
@@ -54279,8 +54533,8 @@ int32_t AWB_fsm_process_interrupt(int32_t *arg1, char arg2)
 	if ((arg2 & 0xff) != 4)
 		return 4;
 
-	if (simple_3a)
-		tx_isp_t30_simple_awb_update();
+	if (simple_3a && simple_awb)
+		tx_isp_t30_simple_awb_update(arg1);
 	else
 		tx_isp_t30_awb_apply_calibrated_gains();
 	/* The quarantined OEM mesh normally re-arms source 4 via its state graph. */
