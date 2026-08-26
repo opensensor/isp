@@ -699,10 +699,6 @@ static int print_level = 1;
 module_param(print_level, int, 0);
 MODULE_PARM_DESC(print_level, "isp print level");
 
-static unsigned int fw_irq_mask = BIT(3) | BIT(4);
-module_param(fw_irq_mask, uint, 0);
-MODULE_PARM_DESC(fw_irq_mask, "APICAL firmware interrupt sources to dispatch");
-
 static bool simple_3a = true;
 module_param(simple_3a, bool, 0);
 MODULE_PARM_DESC(simple_3a,
@@ -1540,8 +1536,8 @@ struct tx_isp_t30_simple_3a_state {
 	u16 gain_01;
 	u16 gain_10;
 	u16 gain_11;
-	s32 red_error_accum;
-	s32 blue_error_accum;
+	u32 red_target_sum;
+	u32 blue_target_sum;
 	u8 ae_cooldown;
 	bool ae_initialized;
 	bool awb_initialized;
@@ -2236,12 +2232,19 @@ static unsigned char __attribute__((aligned(4))) exposure_partition_int_priority
     0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
     0x00, 0x00, 0x01, 0x00,
 };
-static unsigned char __attribute__((aligned(4))) exposure_partitions_balanced[66] = {
+static unsigned char __attribute__((aligned(4))) exposure_partitions_balanced[20] = {
     0x00, 0x0a, 0x01, 0x02, 0x00, 0x1e, 0x01, 0x04, 0x00, 0x3c, 0x01, 0x06, 0x00, 0x64, 0x01, 0x08,
-    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-    0x4c, 0x00, 0x96, 0x00, 0x1d, 0x00, 0x4c, 0x00, 0x96, 0x00, 0x1d, 0x00, 0x4c, 0x00, 0x96, 0x00,
-    0x1d, 0x00,
+    0x00, 0x00, 0x01, 0x00,
+};
+static const s16 tx_isp_t30_saturation_identity[9] = {
+	0x100, 0, 0,
+	0, 0x100, 0,
+	0, 0, 0x100,
+};
+static const s16 tx_isp_t30_saturation_gray[9] = {
+	0x4c, 0x96, 0x1d,
+	0x4c, 0x96, 0x1d,
+	0x4c, 0x96, 0x1d,
 };
 static int32_t exposure_partition_lut[10];
 struct sat_ctx {
@@ -2315,8 +2318,33 @@ struct apical_isp {
 	struct apical_isp_fsm_slot dis;
 };
 struct noise_reduction_fsm_state {
-    int32_t field0;
-    int32_t field4;
+	void *isp;
+	int32_t state;
+	u8 reserved08[8];
+	u16 temper_long;
+	u16 temper_short;
+	s16 sinter_long;
+	s16 sinter_short;
+	u8 temper_ratio;
+	u8 temper_scaled;
+	u8 temper_factor;
+	u8 sinter_log_offset;
+	u8 sinter_strength;
+	u8 reserved1d;
+	u16 temper_strength;
+	u16 sinter_strength_base;
+	u8 update_sinter;
+	u8 update_temper;
+};
+
+struct tx_isp_t30_nr_owner_view {
+	u8 reserved000[0x2ca];
+	u16 exposure_ratio;
+	s32 sensor_analog_gain;
+	s32 sensor_digital_gain;
+	s32 isp_digital_gain;
+	u8 reserved2d8[0x1524 - 0x2d8];
+	u8 wdr_mode;
 };
 struct apical_sbus_dev {
 	uint32_t flags;
@@ -5431,6 +5459,10 @@ static int tx_isp_t30_total_gain_trace_count;
 static int tx_isp_t30_irq_trace_count;
 static int tx_isp_t30_irq_entry_trace_count;
 static int tx_isp_t30_tuning_set_trace_count;
+static int tx_isp_t30_nr_trace_count;
+static int tx_isp_t30_nr_event_trace_count;
+static int tx_isp_t30_frame_end_trace_count;
+static int tx_isp_t30_fw_dispatch_trace_count;
 static uintptr_t rg_avg;
 static unsigned char csp_9009[8];
 static unsigned char fsp_9016[8];
@@ -6877,7 +6909,8 @@ int noise_reduction_fsm_clear(void *fsm);
 int32_t noise_reduction_request_interrupt(int32_t *arg1, int32_t arg2);
 int32_t noise_reduction_fsm_switch_state(void *arg1, int32_t arg2);
 int32_t noise_reduction_fsm_process_state(struct noise_reduction_fsm_state *state);
-int32_t noise_reduction_fsm_process_event(uintptr_t a0, uint32_t a1);
+int32_t noise_reduction_fsm_process_event(struct noise_reduction_fsm_state *state,
+					 uint32_t event);
 int32_t sharpening_fsm_clear(uintptr_t a0);
 int32_t sharpening_request_interrupt(int32_t *arg1, int32_t arg2);
 int32_t sharpening_fsm_switch_state(int32_t *fsm, int32_t new_state);
@@ -6975,11 +7008,11 @@ int32_t awb_update(void);
 int32_t * awb_normalise(int32_t *arg1);
 int32_t dynamic_dpc_strength_calculate(int32_t *arg1);
 uint32_t stitching_error_calculate(int32_t *arg1);
-int32_t sinter_strength_calculate(uintptr_t a0);
-uint32_t temper_strength_calculate(int32_t *arg1);
+int32_t sinter_strength_calculate(struct noise_reduction_fsm_state *state);
+uint32_t temper_strength_calculate(struct noise_reduction_fsm_state *state);
 int32_t noise_reduction_hw_init(void);
 int32_t noise_reduction_initialize(void *arg1);
-int32_t noise_reduction_update(uintptr_t a0);
+int32_t noise_reduction_update(struct noise_reduction_fsm_state *state);
 uint32_t histogramspace_to_gamma_space(int32_t arg1);
 int32_t au_read_histogram(int32_t *arg1);
 int32_t setup_parameters_to_default(uintptr_t a0);
@@ -14779,6 +14812,8 @@ long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, unsign
 				 * recovered s_ctrl switch lost this private-control arm.
 				 */
 				if (default_control.control.value) {
+					tuning->temper_paddr =
+						default_control.control.value;
 					APICAL_WRITE_32(0x0a18,
 						default_control.control.value);
 					APICAL_WRITE_32(0x0a1c,
@@ -16797,6 +16832,14 @@ static void tx_isp_t30_restore_linear_irq_pipeline(
 	APICAL_WRITE_32(0x10, width);
 	APICAL_WRITE_32(0x14, height);
 	APICAL_WRITE_32(0x18, pattern);
+	/*
+	 * load_isp_sequence() carries the profile used to build the module in
+	 * these input-port registers.  The sensor notification is authoritative
+	 * at run time, so keep the active and crop windows in step with it too.
+	 */
+	APICAL_WRITE_32(0x110, width);
+	APICAL_WRITE_32(0x118, width);
+	APICAL_WRITE_32(0x124, height);
 	core->control.input_width = width;
 	core->control.input_height = height;
 	core->control.pattern = pattern;
@@ -19032,15 +19075,22 @@ static void tx_isp_t30_ispcore_enable_lfb_channel(
 
 static void tx_isp_t30_dispatch_firmware_irqs(u32 status)
 {
+	const u32 recovered_sources = BIT(0) | BIT(3) | BIT(4);
 	unsigned int source;
 
 	/*
 	 * APICAL interrupt status bits are the firmware source indices installed
-	 * through system_set_interrupt_handler().  AE and AWB depend on this
-	 * callback edge; acknowledging the hardware interrupt alone leaves both
-	 * algorithms frozen at their reset values.
+	 * through system_set_interrupt_handler().  The OEM module dispatches every
+	 * asserted source, but several recovered callbacks are not yet safe enough
+	 * to do that.  Source 7 enters the incomplete CMOS history state machine
+	 * and corrupts the live pipeline.  Keep frame end (0), AE (3), and AWB (4):
+	 * source 0 is required for event 0xb and per-frame tuning/NR updates.
 	 */
-	status &= fw_irq_mask;
+	if (tx_isp_t30_fw_dispatch_trace_count++ < 8)
+		pr_err("tx-isp-t30: APICAL dispatch status=%04x fe=%p ae=%p awb=%p ctx=%p\n",
+		       status, isr_func[0], isr_func[3], isr_func[4],
+		       isr_param[0]);
+	status &= recovered_sources;
 	for (source = 0; source < ARRAY_SIZE(isr_func); source++) {
 		if ((status & BIT(source)) && isr_func[source])
 			isr_func[source](isr_param[source]);
@@ -19108,7 +19158,7 @@ static int tx_isp_t30_ispcore_interrupt(struct tx_isp_t30_subdev *sd)
 		}
 	}
 	tx_isp_t30_dispatch_firmware_irqs(irq_status);
-	if (simple_3a && (irq_status & fw_irq_mask & BIT(3)))
+	if (simple_3a && (irq_status & BIT(3)))
 		ret = IRQ_WAKE_THREAD;
 
 	return ret;
@@ -37595,7 +37645,10 @@ int32_t apical_fw_interrupts_init(void *arg1)
     system_set_interrupt_handler(6, (int32_t)apical_interrupt_frame_buffer_ds, (int32_t)arg1);
     apical_program_interrupt_event_part_0(0xc, 1);
     system_set_interrupt_handler(0xc, (int32_t)apical_interrupt_frame_buffer_ds2, (int32_t)arg1);
-    return system_set_interrupt_handler(0xa, (int32_t)apical_interrupt_fpga_frame_wdr, (int32_t)arg1);
+    system_set_interrupt_handler(0xa, (int32_t)apical_interrupt_fpga_frame_wdr, (int32_t)arg1);
+	pr_err("tx-isp-t30: APICAL handlers fe=%p ae=%p awb=%p ctx=%p\n",
+	       isr_func[0], isr_func[3], isr_func[4], isr_param[0]);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001cea8 origin=model_output original=apical_fw_init */
@@ -37666,6 +37719,10 @@ int32_t apical_interrupt_frame_end(int32_t *arg1)
     int32_t *result;
 
     ctx[1] += 1;
+
+	if (tx_isp_t30_frame_end_trace_count++ < 6)
+		pr_err("tx-isp-t30: APICAL frame-end ctx=%p depth=%d\n",
+		       ctx, ctx[1]);
 
     if (stab[0] == 0) {
         saved_val = ctx[0];
@@ -45241,7 +45298,7 @@ uint32_t cmos_move_exposure_history(uint32_t *arg1)
 	uint32_t *cur;
 	uint32_t *prev;
 	uint32_t *hw;
-	uint32_t *result;
+	uint32_t result;
 	uint32_t val;
 	uint32_t exp_val;
 	uint32_t div;
@@ -45253,15 +45310,15 @@ uint32_t cmos_move_exposure_history(uint32_t *arg1)
 	hw = (uint32_t *)arg1[0];
 	*(uint32_t *)((char *)arg1 + 0x1a4) = idx;
 
-	cmos_get_frame_exposure_set(arg1, (int32_t *)(uint8_t)((char *)hw)[0x7e]);
-	cur = 0;
+	cur = cmos_get_frame_exposure_set(arg1,
+					   (uint8_t)((char *)hw)[0x7e]);
 	memcpy(cur, (char *)arg1 + 0x20, 0x28);
 
 	val = (uint32_t)(uint8_t)((char *)hw)[0x1524];
 
 	if (val == 1 || val == 3) {
-		cmos_get_frame_exposure_set(arg1, (uintptr_t)(uint8_t)((char *)hw)[0x7e] - 1);
-		prev = 0;
+		prev = cmos_get_frame_exposure_set(arg1,
+						    (uint8_t)((char *)hw)[0x7e] - 1);
 		result = *(uint16_t *)((char *)arg1 + 0x1ca);
 
 		if (result != 0x40) {
@@ -45271,15 +45328,15 @@ uint32_t cmos_move_exposure_history(uint32_t *arg1)
 			uint32_t c8 = cur[2];
 
 			if (flag != 0) {
-				((void **)cur)[9] = c10;
+				cur[9] = c10;
 				exp_val = math_exp2((int32_t)(prev[1] + prev[2] - (c4 + c8)), 16, 6);
 				div = cur[9];
 
 				if (div == 0) {
-					((void **)cur)[8] = 0x40;
+					cur[8] = 0x40;
 				} else {
 					tmp = exp_val * prev[9];
-					((void **)(uintptr_t)cur)[8] = tmp / div;
+					cur[8] = tmp / div;
 				}
 			} else {
 				uint32_t p8 = prev[2];
@@ -45287,34 +45344,34 @@ uint32_t cmos_move_exposure_history(uint32_t *arg1)
 				uint32_t scaled;
 
 				scaled = ((uint32_t)(uint16_t)(*(uint16_t *)((char *)arg1 + 0x1ca)) * c10) >> 6;
-				((void **)cur)[9] = scaled;
+				cur[9] = scaled;
 				exp_val = math_exp2((int32_t)((c4 + c8) - (p4 + p8)), 16, 6);
 				div = cur[4];
 
 				if (div == 0) {
-					((void **)cur)[8] = 0x40;
+					cur[8] = 0x40;
 				} else {
 					tmp = exp_val * cur[9];
-					((void **)(uintptr_t)cur)[8] = tmp / div;
+					cur[8] = tmp / div;
 				}
 
-				((void **)cur)[7] = prev[7];
+				cur[7] = prev[7];
 			}
 
 			result = (cur[8] < 0x40) ? 1 : 0;
 
 			if (result != 0) {
 				result = 0x40;
-				((void **)cur)[8] = result;
+				cur[8] = result;
 			}
 		} else {
-			((void **)cur)[9] = cur[4];
-			((void **)cur)[8] = result;
+			cur[9] = cur[4];
+			cur[8] = result;
 		}
 	} else {
-		((void **)cur)[9] = cur[4];
+		cur[9] = cur[4];
 		result = 0x40;
-		((void **)cur)[8] = result;
+		cur[8] = result;
 	}
 
 	return result;
@@ -46146,30 +46203,29 @@ int32_t direct_to_complement(int32_t arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000026f3c origin=model_output original=color_matrix_recalculate */
-int32_t color_matrix_recalculate(int32_t *arg1)
+static int32_t tx_isp_t30_color_matrix_recalculate(int32_t *arg1,
+						    bool modulate)
 {
 	struct tx_isp_t30_color_matrix_fsm *fsm = (void *)arg1;
-	int16_t buf1[9];
-	int16_t buf2[9];
 	int32_t strength;
 	int32_t scaled;
 	int32_t inv_scaled;
 	int32_t i;
 	int32_t result = 0;
 
-	if (stab[15] == 0)
+	if (modulate && stab[15] == 0)
 		saturation_modulate_strength(arg1);
 
 	strength = stab[51];
-	memcpy(buf1, (void *)((char *)&exposure_partitions_balanced + 0x1c), 18);
-	memcpy(buf2, (void *)((char *)&exposure_partitions_balanced + 0x30), 18);
 
 	scaled = strength << 1;
 	inv_scaled = 256 - scaled;
 
 	for (i = 0; i < ARRAY_SIZE(fsm->saturation_ccm); i++) {
-		int32_t v1 = (int32_t)buf1[i] * scaled + 128;
-		int32_t v2 = (int32_t)buf2[i] * inv_scaled + 128;
+		int32_t v1 = (int32_t)tx_isp_t30_saturation_identity[i] *
+			     scaled + 128;
+		int32_t v2 = (int32_t)tx_isp_t30_saturation_gray[i] *
+			     inv_scaled + 128;
 
 		fsm->saturation_ccm[i] = (int16_t)((v1 >> 8) + (v2 >> 8));
 	}
@@ -46183,6 +46239,11 @@ int32_t color_matrix_recalculate(int32_t *arg1)
 	}
 
 	return result;
+}
+
+int32_t color_matrix_recalculate(int32_t *arg1)
+{
+	return tx_isp_t30_color_matrix_recalculate(arg1, true);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027088 origin=model_output original=color_matrix_setup */
@@ -46541,11 +46602,13 @@ int32_t color_matrix_initialize(int32_t *arg1)
 	       sizeof(color_temperature_threshold));
 
 	/*
-	 * Stock applies the initialized CCM on the first frame-end event.  The
-	 * recovery interrupt mask intentionally keeps that wider FSM fanout
-	 * quarantined, so perform the same tuning-driven update once here.
+	 * The recovered interrupt path does not yet fan frame-end out to the
+	 * complete color FSM.  Apply the OEM neutral initial matrix here without
+	 * prematurely running gain-based saturation modulation.
 	 */
-	color_matrix_update(arg1);
+	tx_isp_t30_color_matrix_recalculate(arg1, false);
+	color_matrix_write(arg1);
+	mesh_shading_modulate_strength(arg1);
 	pr_info("tx-isp-t30: tuning CCM mode=%u ct=%d d50=%04x/%04x/%04x %04x/%04x/%04x %04x/%04x/%04x\n",
 		fsm->active_ccm_mode, *(s32 *)(isp + 0xec0),
 		(u16)fsm->ccm_d50[0], (u16)fsm->ccm_d50[1],
@@ -50542,135 +50605,65 @@ int32_t noise_reduction_request_interrupt(int32_t *arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f38c origin=model_output original=noise_reduction_fsm_switch_state */
 int32_t noise_reduction_fsm_switch_state(void *arg1, int32_t arg2)
 {
-    int32_t *state = (int32_t *)((uintptr_t)arg1 + 4);
-    int32_t (*fn)(void *);
+	struct noise_reduction_fsm_state *fsm = arg1;
+	int32_t (*fn)(void *);
 
-    if (arg2 == *state)
-        return 0;
+	if (arg2 == fsm->state)
+		return 0;
 
-    *state = arg2;
+	fsm->state = arg2;
 
-    if (arg2 == 1) {
-        fn = (int32_t (*)(void *))noise_reduction_initialize;
-    } else {
-        if (arg2 != 2)
-            return 0;
-        fn = (int32_t (*)(void *))noise_reduction_hw_init;
-    }
+	if (arg2 == 1) {
+		fn = noise_reduction_initialize;
+	} else {
+		if (arg2 != 2)
+			return 0;
+		fn = (int32_t (*)(void *))noise_reduction_hw_init;
+	}
 
-    return fn(arg1);
+	return fn(fsm);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f3cc origin=model_output original=noise_reduction_fsm_process_state */
 int32_t noise_reduction_fsm_process_state(struct noise_reduction_fsm_state *state)
 {
-    if (state->field4 != 2)
-        return 2;
-    return noise_reduction_fsm_switch_state(state, 0);
+	if (state->state != 2)
+		return 2;
+	return noise_reduction_fsm_switch_state(state, 0);
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000002f3f0 origin=fragment_seed original=noise_reduction_fsm_process_event */
-int32_t noise_reduction_fsm_process_event(uintptr_t a0, uint32_t a1)
+/* Exact OEM event/state transitions; the raw recovery lost branch-likely edges. */
+int32_t noise_reduction_fsm_process_event(struct noise_reduction_fsm_state *state,
+					 uint32_t event)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	if ((event == 11 || event == 15 || event == 16) &&
+	    tx_isp_t30_nr_event_trace_count++ < 12)
+		pr_err("tx-isp-t30: nr event=%u state=%d fsm=%p owner=%p\n",
+		       event, state->state, state, state->isp);
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	switch (event) {
+	case 15:
+		if (state->state != 1)
+			return 0;
+		state->state = 0;
+		break;
+	case 16:
+		if (state->state != 0)
+			return 0;
+		noise_reduction_fsm_switch_state(state, 1);
+		break;
+	case 11:
+		if (state->state != 1)
+			return 0;
+		noise_reduction_update(state);
+		noise_reduction_fsm_switch_state(state, 1);
+		break;
+	default:
+		return 0;
+	}
 
-    /* fragment 1: Arithmetic */
-    v0 = 15;
-
-    /* fragment 2: StackAccess */
-    local_10 = s0;
-    local_14 = ra;
-
-    /* fragment 3: Branch */
-    s0 = a0;
-    if (a1 == v0) { goto noise_reduction_fsm_process_event0x38; }
-
-    /* fragment 4: Arithmetic */
-    v0 = 16;
-
-    /* fragment 5: Unknown */
-    /* unmatched fragment 5 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2f40c:	50a20015 	beql	a1,v0,2f464 <noise_reduction_fsm_process_event+0x74> */
-
-    /* fragment 6: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a0 + 4);
-    v0 = 11;
-
-    /* fragment 7: Unknown */
-    /* unmatched fragment 7 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2f418:	54a2001f 	bnel	a1,v0,2f498 <noise_reduction_fsm_process_event+0xa8> */
-
-    /* fragment 8: Arithmetic */
-    v0 = 0;
-
-    /* fragment 9: Branch */
-    a1 = *(uint32_t *)((char *)(a0) + 4);
-    goto noise_reduction_fsm_process_event0x50;
-
-noise_reduction_fsm_process_event0x38:
-    /* fragment 10: MemoryAccess */
-    a0 = *(uint32_t *)((char *)a0 + 4);
-    v1 = 1;
-
-    /* fragment 11: Branch */
-    v0 = 0;
-    if (a0 != v1) { goto noise_reduction_fsm_process_event0xa8; }
-
-    /* fragment 12: Branch */
-    *(uint32_t *)((char *)s0 + 4) = 0;
-    goto noise_reduction_fsm_process_event0x94;
-
-noise_reduction_fsm_process_event0x50:
-    /* fragment 13: Arithmetic */
-    v1 = 1;
-
-    /* fragment 14: Branch */
-    v0 = 0;
-    if (a1 != v1) { goto noise_reduction_fsm_process_event0xa8; }
-
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)noise_reduction_update)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 16: Branch */
-    a0 = s0;
-    goto noise_reduction_fsm_process_event0x7c;
-
-    /* fragment 17: Branch */
-    v0 = 0;
-    if (v1 != 0) { goto noise_reduction_fsm_process_event0xa8; }
-
-noise_reduction_fsm_process_event0x7c:
-    /* fragment 18: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)noise_reduction_fsm_switch_state)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 19: Branch */
-    v0 = (uintptr_t *)&noise_reduction_fsm_process_state;
-    goto noise_reduction_fsm_process_event0x98;
-
-noise_reduction_fsm_process_event0x94:
-    /* fragment 20: CallSetup */
-    v0 = (uintptr_t *)&noise_reduction_fsm_process_state;
-
-noise_reduction_fsm_process_event0x98:
-    /* fragment 21: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)noise_reduction_fsm_process_state)(s0); /* jalr target resolved by relocation */
-
-    /* fragment 22: Arithmetic */
-    v0 = 1;
-
-noise_reduction_fsm_process_event0xa8:
-    /* fragment 23: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	noise_reduction_fsm_process_state(state);
+	return 1;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f4b0 origin=fragment_seed original=sharpening_fsm_clear */
@@ -53017,7 +53010,13 @@ int32_t AE_fsm_process_interrupt(int32_t *arg1, char arg2)
 		return 3;
 	if (simple_3a) {
 		tx_isp_t30_simple_ae_update();
-		return 0;
+		/*
+		 * The OEM state graph re-arms histogram source 3 after consuming
+		 * each statistics buffer.  The compact controller bypasses that
+		 * graph, so it must preserve the re-arm explicitly or AE runs once
+		 * at stream-on and the image remains at its dark startup exposure.
+		 */
+		return AE_request_interrupt(arg1, BIT(3));
 	}
 	ae_read_full_histogram_data(arg1);
 	return apical_isp_raise_event(*arg1, 1);
@@ -54150,27 +54149,21 @@ static void tx_isp_t30_simple_awb_update(void)
 {
 	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
 	const u8 *average_coefficient;
-	const u16 *base_gain;
 	u16 *red_gain;
 	u16 *blue_gain;
-	const u16 *base_red_gain;
-	const u16 *base_blue_gain;
-	s32 red_correction;
-	s32 blue_correction;
 	u32 red_ratio;
 	u32 blue_ratio;
 	u32 desired_red_gain;
 	u32 desired_blue_gain;
 	u32 coefficient;
+	bool current_stats_mode;
 
 	tx_isp_t30_awb_apply_calibrated_gains();
 	if (!state->awb_initialized)
 		return;
 	average_coefficient = tx_isp_t30_calibration_data(
 		TX_ISP_T30_CAL_AWB_AVG_COEF, 1, sizeof(*average_coefficient));
-	base_gain = tx_isp_t30_calibration_data(TX_ISP_T30_CAL_STATIC_WB, 4,
-					       sizeof(*base_gain));
-	if (!average_coefficient || !average_coefficient[0] || !base_gain)
+	if (!average_coefficient || !average_coefficient[0])
 		return;
 	coefficient = average_coefficient[0];
 	red_ratio = APICAL_READ_32(0x858) & 0xfff;
@@ -54187,32 +54180,50 @@ static void tx_isp_t30_simple_awb_update(void)
 	 */
 	red_gain = &state->gain_00;
 	blue_gain = &state->gain_11;
-	base_red_gain = &base_gain[0];
-	base_blue_gain = &base_gain[3];
 
 	/*
-	 * Match the working T31/Tiziano method: convert each measured Q8 color
-	 * ratio to a reciprocal correction, apply it to the tuning-bin static WB
-	 * base, then smooth toward that absolute target.  Integrating
-	 * ratio-minus-unity directly is incorrect because these statistics are
-	 * scene measurements rather than residual controller error.
+	 * The stats-mode bit is part of the T30 APICAL hardware ABI.  Legacy mode
+	 * reports G/R and B/R; current mode reports R/G and B/G.  These metering
+	 * outputs are taken before static WB on T30, so they convert directly to
+	 * absolute Q8 gains.  Treating legacy G/R as R/G reverses the red channel,
+	 * while treating B/R as B/G overstates the blue correction.
 	 */
-	desired_red_gain = ((u32)*base_red_gain * 0x100U + red_ratio / 2) /
-			   red_ratio;
-	desired_blue_gain = ((u32)*base_blue_gain * 0x100U + blue_ratio / 2) /
-			    blue_ratio;
+	current_stats_mode = !!(APICAL_READ_32(0x868) & BIT(0));
+	if (current_stats_mode) {
+		desired_red_gain = (0x10000U + red_ratio / 2) / red_ratio;
+		desired_blue_gain = (0x10000U + blue_ratio / 2) / blue_ratio;
+	} else {
+		desired_red_gain = red_ratio;
+		desired_blue_gain = (0x100U * red_ratio +
+			blue_ratio / 2) / blue_ratio;
+	}
 	desired_red_gain = clamp_t(u32, desired_red_gain, 0x40, 0xfff);
 	desired_blue_gain = clamp_t(u32, desired_blue_gain, 0x40, 0xfff);
-	state->red_error_accum += (s32)desired_red_gain - (s32)*red_gain;
-	state->blue_error_accum += (s32)desired_blue_gain - (s32)*blue_gain;
-	red_correction = state->red_error_accum / (s32)coefficient;
-	blue_correction = state->blue_error_accum / (s32)coefficient;
-	state->red_error_accum -= red_correction * coefficient;
-	state->blue_error_accum -= blue_correction * coefficient;
-	*red_gain = clamp_t(s32, (s32)*red_gain + red_correction,
-			    0x40, 0xfff);
-	*blue_gain = clamp_t(s32, (s32)*blue_gain + blue_correction,
-			     0x40, 0xfff);
+
+	/*
+	 * Restore the OEM fifo_push() filter at 0x328dc.  Each accumulator holds
+	 * coefficient times the filtered absolute target:
+	 *
+	 *     sum = target + sum - sum / coefficient
+	 *
+	 * Its recovered pointer types are collapsed, so keep the safe typed state
+	 * here while preserving the exact tuning-controlled arithmetic.
+	 */
+	if (!state->red_target_sum && !state->blue_target_sum) {
+		state->red_target_sum = coefficient * desired_red_gain;
+		state->blue_target_sum = coefficient * desired_blue_gain;
+	} else {
+		state->red_target_sum += desired_red_gain -
+			state->red_target_sum / coefficient;
+		state->blue_target_sum += desired_blue_gain -
+			state->blue_target_sum / coefficient;
+	}
+	*red_gain = clamp_t(u32,
+		(state->red_target_sum + coefficient / 2) / coefficient,
+		0x40, 0xfff);
+	*blue_gain = clamp_t(u32,
+		(state->blue_target_sum + coefficient / 2) / coefficient,
+		0x40, 0xfff);
 
 	APICAL_WRITE_32(0x300, (APICAL_READ_32(0x300) & ~0xfffU) |
 			state->gain_00);
@@ -54224,8 +54235,8 @@ static void tx_isp_t30_simple_awb_update(void)
 			state->gain_11);
 	state->awb_updates++;
 	if (state->awb_updates <= 8 || !(state->awb_updates & 0x1f))
-		pr_info("tx-isp-t30: calibrated AWB ratio=%u/%u target=0x%x/0x%x gain=0x%x/0x%x\n",
-			red_ratio, blue_ratio, desired_red_gain,
+		pr_info("tx-isp-t30: calibrated AWB mode=%u ratio=%u/%u target=0x%x/0x%x gain=0x%x/0x%x\n",
+			current_stats_mode, red_ratio, blue_ratio, desired_red_gain,
 			desired_blue_gain, *red_gain, *blue_gain);
 }
 
@@ -55021,262 +55032,109 @@ int32_t dynamic_dpc_strength_calculate(int32_t *arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035324 origin=model_output original=stitching_error_calculate */
 uint32_t stitching_error_calculate(int32_t *arg1)
 {
-	int32_t *base = *(int32_t **)arg1;
-	uint32_t sum = (uint32_t)base[0x2cc / 4] + (uint32_t)base[0x2d0 / 4] + (uint32_t)base[0x2d4 / 4];
-	uint32_t mod_entry = _GET_MOD_ENTRY16_PTR(201);
-	uint32_t rows = _GET_ROWS(201);
-	uint32_t val = (sum >> 8) & 0xffff;
-	uint32_t result = calc_modulation_u16(val, mod_entry, rows);
-	uint32_t status = *(uint8_t *)(base + 5412);
+	struct tx_isp_t30_nr_owner_view *owner = *(void **)arg1;
+	const u16 *table = (void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(201);
+	u32 gain = owner->sensor_analog_gain + owner->sensor_digital_gain +
+		owner->isp_digital_gain;
+	u32 result = calc_modulation_u16((u16)(gain >> 8), table,
+					 _GET_ROWS(201));
 
-	if (status != 1 && status != 3)
-		return status;
+	if (owner->wdr_mode != 1 && owner->wdr_mode != 3)
+		return owner->wdr_mode;
 
-	return APICAL_WRITE_32(596, (APICAL_READ_32(596) & 0xffff0000) | result);
+	return APICAL_WRITE_32(0x254,
+		(APICAL_READ_32(0x254) & 0xffff0000) | (result & 0xffff));
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000003540c origin=fragment_seed original=sinter_strength_calculate */
-int32_t sinter_strength_calculate(uintptr_t a0)
+/* T30 APICAL spatial-denoise modulation, reconstructed against the OEM image. */
+int32_t sinter_strength_calculate(struct noise_reduction_fsm_state *state)
 {
-    uint32_t *local_10 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t local_30 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_38 = 0;
-    uint32_t local_3c = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uint32_t *a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uintptr_t *s2 = 0;
-    uint32_t *s3 = 0;
-    uint32_t s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t s6 = 0;
-    uint32_t s7 = 0;
-    uint32_t s8 = 0;
-    uint32_t t0 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	struct tx_isp_t30_nr_owner_view *owner = state->isp;
+	u16 strength;
+	u16 gain = (u16)((owner->sensor_analog_gain + owner->sensor_digital_gain +
+			owner->isp_digital_gain) >> 8);
+	u8 log_ratio = log16(owner->exposure_ratio);
 
-    /* fragment 0: CallSetup */
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)log16)(*(uint16_t *)((char *)(*(uint32_t *)((char *)(a0) + 0)) + 714)); /* jalr target resolved by relocation */
+	if (stab[10]) {
+		strength = stab[43];
+	} else {
+		int strength_idx = _GET_HDR_TABLE_INDEX(46, owner->wdr_mode);
+		int strength1_idx = _GET_HDR_TABLE_INDEX(51, owner->wdr_mode);
+		int thresh1_idx = _GET_HDR_TABLE_INDEX(56, owner->wdr_mode);
+		int thresh4_idx = _GET_HDR_TABLE_INDEX(61, owner->wdr_mode);
+		const u16 *table;
+		u32 value;
 
-    /* fragment 1: CallSetup */
-    t0 = v0;
-    s1 = *(uint8_t *)((char *)((char *)&stab + 0x2b));
-    local_20 = t0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)_GET_HDR_TABLE_INDEX)(46, *(uint8_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 5412)); /* jalr target resolved by relocation */
+		table = (void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(strength_idx);
+		value = calc_scaled_modulation_u16(gain, stab[45], stab[44],
+						   table, _GET_ROWS(strength_idx));
+		strength = min_t(u32, value, 0xff);
+		stab[43] = strength;
 
-    /* fragment 2: CallSetup */
-    s5 = v0;
-    s6 = (uintptr_t)&_GET_MOD_ENTRY16_PTR;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)_GET_HDR_TABLE_INDEX)(51, *(uint8_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 5412)); /* jalr target resolved by relocation */
+		table = (void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(strength1_idx);
+		value = calc_modulation_u16(gain, table, _GET_ROWS(strength1_idx));
+		APICAL_WRITE_32(0x2b0,
+			(APICAL_READ_32(0x2b0) & 0xffffff00) | (value & 0xff));
 
-    /* fragment 3: CallSetup */
-    s3 = v0;
-    s6 = (uintptr_t)&_GET_MOD_ENTRY16_PTR;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)_GET_HDR_TABLE_INDEX)(56, *(uint8_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 5412)); /* jalr target resolved by relocation */
+		table = (void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(thresh1_idx);
+		value = calc_modulation_u16(gain, table, _GET_ROWS(thresh1_idx));
+		APICAL_WRITE_32(0x290,
+			(APICAL_READ_32(0x290) & 0xff00ffff) |
+			((value & 0xff) << 16));
+		APICAL_WRITE_32(0x298,
+			(APICAL_READ_32(0x298) & 0xff00ffff) |
+			((value & 0xff) << 16));
 
-    /* fragment 4: CallSetup */
-    s8 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)_GET_HDR_TABLE_INDEX)(61, *(uint8_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 5412)); /* jalr target resolved by relocation */
+		table = (void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(thresh4_idx);
+		value = calc_modulation_u16(gain, table, _GET_ROWS(thresh4_idx));
+		APICAL_WRITE_32(0x294,
+			(APICAL_READ_32(0x294) & 0xff00ffff) |
+			((value & 0xff) << 16));
+		APICAL_WRITE_32(0x29c,
+			(APICAL_READ_32(0x29c) & 0xff00ffff) |
+			((value & 0xff) << 16));
+	}
 
-    /* fragment 5: CallSetup */
-    local_18 = v0;
-    s4 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 716);
-    s4 = s4 + (*(uint32_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 720));
-    s7 = *(uint8_t *)((char *)&sp_9015);
-    local_1c = *(uint8_t *)((char *)((char *)&sp_9015 + 0x1));
-    s4 = s4 + (*(uint32_t *)((char *)(*(uint32_t *)((char *)(s0) + 0)) + 724));
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)_GET_MOD_ENTRY16_PTR)(s5, *(uint8_t *)((char *)(s2) + 45)); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    s1 = v0;
-    s4 = (int32_t)s4 >> 8;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)_GET_ROWS)(s5); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    s4 = s4 & 65535;
-    local_10 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)calc_scaled_modulation_u16)(s4 & 65535, local_1c, s7, (uintptr_t)s1); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    s1 = 255;
-    *(uint8_t *)((char *)((char *)&csp_9009 + 0x7)) = s1;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)_GET_MOD_ENTRY16_PTR)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    s2 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)_GET_ROWS)(s3); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    s3 = (int32_t *)&APICAL_READ_32;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)calc_modulation_u16)(s4, s2, v0); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    s2 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)APICAL_READ_32)(688); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)APICAL_WRITE_32)(688, ((uintptr_t)s2 & 255) | ((uintptr_t)v0 & (-256))); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (int32_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)_GET_MOD_ENTRY16_PTR)(s8); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    local_1c = v0;
-    v0 = (int32_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)_GET_ROWS)(s8); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)calc_modulation_u16)(s4, local_1c, v0); /* jalr target resolved by relocation */
-
-    /* fragment 16: CallSetup */
-    s8 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)APICAL_READ_32)(656); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    s8 = 4278190080;
-    s8 = s8 | 65535;
-    local_1c = (s8 & 255) << 16;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)APICAL_WRITE_32)(656, ((s8 & 255) << 16) | ((uintptr_t)v0 & (4278190080 | 65535)), (s8 & 255) << 16); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)APICAL_READ_32)(664); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)APICAL_WRITE_32)(664, local_1c | ((uintptr_t)v0 & s8), local_1c); /* jalr target resolved by relocation */
-
-    /* fragment 20: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)_GET_MOD_ENTRY16_PTR)(local_18); /* jalr target resolved by relocation */
-
-    /* fragment 21: CallSetup */
-    s6 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)_GET_ROWS)(local_18); /* jalr target resolved by relocation */
-
-    /* fragment 22: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)calc_modulation_u16)(s4, s6, v0); /* jalr target resolved by relocation */
-
-    /* fragment 23: CallSetup */
-    s4 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)APICAL_READ_32)(660); /* jalr target resolved by relocation */
-
-    /* fragment 24: CallSetup */
-    s4 = s4 & 255;
-    s4 = s4 << 16;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)APICAL_WRITE_32)(660, ((s4 & 255) << 16) | ((uintptr_t)v0 & s8)); /* jalr target resolved by relocation */
-
-    /* fragment 25: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)APICAL_READ_32)(668); /* jalr target resolved by relocation */
-
-    /* fragment 26: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)APICAL_WRITE_32)(668, s4 | ((uintptr_t)v0 & s8)); /* jalr target resolved by relocation */
-
-    /* fragment 27: StackAccess */
-    t0 = local_20;
-    v0 = *(uint32_t *)((char *)s0 + 0);
-    *(uint16_t *)((char *)s0 + 32) = s1;
-    *(uint16_t *)((char *)s0 + 20) = s1;
-    a0 = *(uint8_t *)((char *)v0 + 5412);
-    v0 = 3;
-
-    /* fragment 28: Branch */
-    v1 = s1;
-    if (a0 == v0) { goto sinter_strength_calculate0x298; }
-
-    /* fragment 29: Arithmetic */
-    t0 = s1 - t0;
-    t0 = t0 + 96;
-
-    /* fragment 30: MemoryAccess */
-    *(uint16_t *)((char *)s0 + 20) = t0;
-
-sinter_strength_calculate0x298:
-    /* fragment 31: MemoryAccess */
-    v0 = *(uint16_t *)((char *)s0 + 20);
-
-    /* fragment 32: Unknown */
-    /* unmatched fragment 32 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 356a8:	04420001 	bltzl	v0,356b0 <sinter_strength_calculate+0x2a4> */
-
-    /* fragment 33: MemoryAccess */
-    *(uint16_t *)((char *)s0 + 20) = 0;
-    ra = local_4c;
-    s8 = local_48;
-    s7 = local_44;
-    s6 = local_40;
-    s5 = local_3c;
-    s4 = local_38;
-    s3 = local_34;
-    s2 = local_30;
-    s1 = local_2c;
-    *(uint16_t *)((char *)s0 + 22) = v1;
-    s0 = local_28;
-
-    /* fragment 34: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	state->sinter_strength_base = strength;
+	state->sinter_long = strength;
+	if (owner->wdr_mode != 3)
+		state->sinter_long = (s16)strength - (s16)log_ratio + 0x60;
+	if (state->sinter_long < 0)
+		state->sinter_long = 0;
+	state->sinter_short = strength;
+	return state->sinter_long;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000356e4 origin=model_output original=temper_strength_calculate */
-uint32_t temper_strength_calculate(int32_t *arg1)
+uint32_t temper_strength_calculate(struct noise_reduction_fsm_state *state)
 {
-    void *s1 = *(void **)arg1;
-    uint32_t log_val = log16(*(uint16_t *)((char *)s1 + 0x2ca));
-    uint32_t *s3 = log_val - 0x60;
-    uint32_t s4 = (uint32_t)(int32_t)((int16_t)s3);
-    uint32_t strength;
-    int32_t a0_3 = 0;
-    uint32_t v0_8;
-    uint32_t *v1_3;
-    uint32_t *result;
+	struct tx_isp_t30_nr_owner_view *owner = state->isp;
+	s16 log_delta = (s16)((u16)log16(owner->exposure_ratio) - 0x60);
+	u16 strength;
 
-    if (stab[11]) {
-        strength = stab[46];
-    } else {
-        void *v1 = *(void **)arg1;
-        int32_t sum = *(int32_t *)((char *)v1 + 0x2cc) +
-                      *(int32_t *)((char *)v1 + 0x2d0) +
-                      *(int32_t *)((char *)v1 + 0x2d4);
-        uint16_t mod_val = (uint16_t)((int16_t)(sum >> 8));
-        uint16_t *table = (uint16_t *)_GET_MOD_ENTRY16_PTR(0xcd);
-        int32_t rows = _GET_ROWS(0xcd);
-        uint32_t calc = calc_modulation_u16(mod_val, table, rows);
-        stab[46] = (uint8_t)calc;
-        if (calc >= 0x100)
-            strength = 0xff;
-        else
-            strength = calc;
-    }
+	if (stab[11]) {
+		strength = stab[46];
+	} else {
+		const u16 *table =
+			(void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(0xcd);
+		u16 gain = (u16)((owner->sensor_analog_gain +
+			owner->sensor_digital_gain + owner->isp_digital_gain) >> 8);
+		u32 value = calc_modulation_u16(gain, table, _GET_ROWS(0xcd));
 
-    *(uint16_t *)((char *)arg1 + 0x1e) = (uint16_t)strength;
-    if ((uint32_t)s4 < strength)
-        a0_3 = (int32_t)strength - (int32_t)s3;
+		stab[46] = value;
+		strength = min_t(u32, value, 0xff);
+	}
 
-    v0_8 = *(uint16_t *)((char *)s1 + 0x2ca);
-    *(uint16_t *)((char *)arg1 + 0x12) = (uint16_t)strength;
-    v1_3 = *(uint8_t *)((char *)arg1 + 0x1a);
-    *(uint16_t *)((char *)arg1 + 0x10) = (uint16_t)a0_3;
-    *(uint8_t *)((char *)arg1 + 0x19) = (uint8_t)(((int32_t)v1_3 * (int32_t)v0_8) >> 6);
-    result = *(uint16_t *)((char *)s1 + 0x2ca);
+	state->temper_strength = strength;
+	state->temper_short = strength;
+	state->temper_long =
+		(u32)(s32)log_delta < strength ? strength - log_delta : 0;
+	state->temper_scaled =
+		(u8)(((u32)state->temper_factor * owner->exposure_ratio) >> 6);
+	if (owner->exposure_ratio)
+		state->temper_ratio = 0x3000 / owner->exposure_ratio;
 
-    if (result != 0) {
-        *(uint8_t *)((char *)arg1 + 0x18) = (uint8_t)(12288 / (int32_t)result);
-    }
-
-    return result;
+	return owner->exposure_ratio;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035828 origin=model_output original=noise_reduction_hw_init */
@@ -55293,36 +55151,138 @@ int32_t noise_reduction_hw_init(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035890 origin=model_output original=noise_reduction_initialize */
 int32_t noise_reduction_initialize(void *arg1)
 {
-    uint8_t *base = (uint8_t *)arg1;
-    uint8_t *stab_ptr = (uint8_t *)&stab;
-    uint32_t lut_entry;
-    uint32_t rows;
-    uint32_t val;
+	struct noise_reduction_fsm_state *state = arg1;
+	const u8 *table = (void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(0xcd);
+	const u8 *temper_recursion =
+		(void *)(uintptr_t)_GET_USHORT_PTR(0x10a);
+	u32 rows = _GET_ROWS(0xcd);
+	u32 value;
 
-    ((void **)base)[0x22] = 1;
-    ((void **)base)[0x23] = 1;
-    ((void **)base)[0x1b] = 0xf;
-    ((void **)base)[0x1c] = 0xf;
-    *(uint16_t *)(base + 0x1e) = 0xf;
-    *(uint16_t *)(base + 0x20) = 0xf;
+	state->update_sinter = 1;
+	state->update_temper = 1;
+	state->sinter_log_offset = 0xf;
+	state->sinter_strength = 0xf;
+	state->temper_strength = 0xf;
+	state->sinter_strength_base = 0xf;
 
-    lut_entry = (uint32_t)_GET_MOD_ENTRY16_PTR(0xcd);
-    stab_ptr[0x30] = (uint8_t)(lut_entry >> 8);
+	/* Modulation entries are packed { u16 x, u16 y }. */
+	stab[48] = *(const u16 *)(table + 2);
+	stab[47] = *(const u16 *)(table + (rows - 1) * 4 + 2);
 
-    lut_entry = (uint32_t)_GET_MOD_ENTRY16_PTR(0xcd);
-    rows = _GET_ROWS(0xcd);
-    lut_entry += (rows - 1) << 2;
-    stab_ptr[0x2f] = (uint8_t)(lut_entry >> 8);
-
-    val = (uint32_t)_GET_USHORT_PTR(0x10a);
-    val = APICAL_READ_32(0x448) & 0xffffff00;
-    val |= (val & 0xff);
-
-    return APICAL_WRITE_32(0x448, val);
+	value = APICAL_READ_32(0x448) & 0xffffff00;
+	return APICAL_WRITE_32(0x448, value | *temper_recursion);
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_0000000000035964 origin=fragment_seed original=noise_reduction_update */
-int32_t noise_reduction_update(uintptr_t a0)
+/* OEM T30 gain-driven spatial/temporal denoise update. */
+int32_t noise_reduction_update(struct noise_reduction_fsm_state *state)
+{
+	struct tx_isp_t30_nr_owner_view *owner = state->isp;
+	u32 total_gain = owner->sensor_analog_gain + owner->sensor_digital_gain +
+		owner->isp_digital_gain;
+	int table_idx = _GET_HDR_TABLE_INDEX(81, owner->wdr_mode);
+	const u16 *table =
+		(void *)(uintptr_t)_GET_MOD_ENTRY16_PTR(table_idx);
+	u32 value;
+
+	value = calc_modulation_u16((u16)(total_gain >> 8), table,
+				    _GET_ROWS(81));
+	APICAL_WRITE_32(0x448,
+		(APICAL_READ_32(0x448) & 0xffffff00) | (value & 0xff));
+
+	if (owner->wdr_mode == 1 || owner->wdr_mode == 3)
+		stitching_error_calculate((int32_t *)state);
+
+	if (state->update_sinter == 1) {
+		s32 long_threshold;
+		s32 short_threshold;
+
+		state->sinter_strength = stab[43];
+		sinter_strength_calculate(state);
+
+		if (!owner->exposure_ratio || owner->wdr_mode != 1) {
+			APICAL_WRITE_32(0x2e0, APICAL_READ_32(0x2e0) | 0xffff);
+			APICAL_WRITE_32(0x2e4,
+				(APICAL_READ_32(0x2e4) & 0xffffff00) | 0x20);
+			APICAL_WRITE_32(0x2e8,
+				(APICAL_READ_32(0x2e8) & 0xffffff00) | 4);
+		} else {
+			const u32 *offset =
+				(void *)(uintptr_t)_GET_UINT_PTR(0x113);
+			const u16 *recursion =
+				(void *)(uintptr_t)_GET_USHORT_PTR(0x10a);
+			int32_t *general = (void *)((u8 *)owner + 0x14e8);
+			u32 ratio = owner->exposure_ratio;
+			u32 fe_long;
+			u32 fe_short;
+			u32 divisor;
+			u32 ratio_offset;
+			s32 alpha;
+
+			fe_long = calc_fe_lut_output(general,
+				(u16)((((APICAL_READ_32(0x248) & 0xfff) << 10) /
+					ratio) + *offset));
+			fe_short = calc_fe_lut_output(general,
+				(u16)((((APICAL_READ_32(0x244) & 0xfff) << 10) /
+					ratio) + *offset));
+			ratio_offset = ((u32)*recursion << 6) / ratio;
+
+			APICAL_WRITE_32(0x2e0,
+				(APICAL_READ_32(0x2e0) & 0xffff0000) |
+				(fe_short & 0xffff));
+			APICAL_WRITE_32(0x2e4,
+				(APICAL_READ_32(0x2e4) & 0xffffff00) | 3);
+			divisor = fe_long >> 4;
+			if (!divisor)
+				divisor = 1;
+			APICAL_WRITE_32(0x2e8,
+				(APICAL_READ_32(0x2e8) & 0xffffff00) |
+				(((0x3f80 / divisor) + 1) & 0xff));
+
+			alpha = (s32)*recursion + 15 + ((ratio + 32) >> 6) -
+				(s32)ratio_offset;
+			APICAL_WRITE_32(0x1d7c,
+				(APICAL_READ_32(0x1d7c) & 0x00ffffff) |
+				((alpha & 0xff) << 24));
+			state->sinter_long = state->sinter_strength_base +
+				ratio_offset;
+			state->sinter_short = state->sinter_strength_base +
+				*recursion;
+		}
+
+		long_threshold = clamp_t(s32, state->sinter_long, 0, 0xff);
+		short_threshold = clamp_t(s32, state->sinter_short, 0, 0xff);
+		APICAL_WRITE_32(0x2a8,
+			(APICAL_READ_32(0x2a8) & 0xffffff00) | long_threshold);
+		APICAL_WRITE_32(0x2a4,
+			(APICAL_READ_32(0x2a4) & 0xffffff00) | short_threshold);
+	}
+
+	if (state->update_temper == 1) {
+		temper_strength_calculate(state);
+		dynamic_dpc_strength_calculate((int32_t *)state);
+		APICAL_WRITE_32(0x2c8,
+			(APICAL_READ_32(0x2c8) & 0xffffff00) |
+			(state->temper_long & 0xff));
+		APICAL_WRITE_32(0x2c4,
+			(APICAL_READ_32(0x2c4) & 0xffffff00) |
+			(state->temper_short & 0xff));
+	}
+
+	if (tx_isp_t30_nr_trace_count++ < 6)
+		pr_err("tx-isp-t30: nr gain=%u sinter=%u/%u temper=%u/%u enable=%u/%u\n",
+		       total_gain >> 8,
+		       APICAL_READ_32(0x2a4) & 0xff,
+		       APICAL_READ_32(0x2a8) & 0xff,
+		       APICAL_READ_32(0x2c4) & 0xff,
+		       APICAL_READ_32(0x2c8) & 0xff,
+		       (APICAL_READ_32(0x280) >> 4) & 1,
+		       APICAL_READ_32(0x2c0) & 1);
+
+	return 0;
+}
+
+/* Preserve the raw recovery artifact for binary-audit provenance. */
+static int32_t noise_reduction_update_recovered(uintptr_t a0)
 {
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -55994,6 +55954,7 @@ common_tail:
 			if (s1_7 >= 0x100)
 				s1_7 = 0xff;
 			*(uint8_t *)((char *)((char *)&fsp_9008 + 0x6)) = (uint8_t)s1_7;
+			s1_4 = s1_7;
 		} else {
 			s1_4 = *(uint8_t *)((char *)((char *)&fsp_9008 + 0x6));
 		}
@@ -56013,6 +55974,7 @@ common_tail:
 			if (fp_3 >= 0x100)
 				fp_3 = 0xff;
 			*(uint8_t *)((char *)((char *)&csp_9009 + 0x1)) = (uint8_t)fp_3;
+			fp_1 = fp_3;
 		} else {
 			fp_1 = *(uint8_t *)((char *)((char *)&csp_9009 + 0x1));
 		}
@@ -57652,57 +57614,35 @@ void check_vic_error(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038d6c origin=fragment_seed original=isp_core_tunning_release */
 int32_t isp_core_tunning_release(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	struct file *file = (struct file *)a1;
+	struct miscdevice *miscdev;
+	struct tx_isp_t30_module *module;
+	struct tx_isp_t30_subdev *sd;
+	struct tx_isp_t30_core_tuning_view *core;
+	struct tx_isp_t30_tuning_open_view *tuning;
+	u32 paddr;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	(void)a0;
+	if (!file || IS_ERR(file))
+		return -EINVAL;
+	miscdev = file->private_data;
+	if (!miscdev || IS_ERR(miscdev))
+		return -EINVAL;
+	module = container_of(miscdev, struct tx_isp_t30_module, miscdev);
+	sd = container_of(module, struct tx_isp_t30_subdev, module);
+	core = sd->dev_priv;
+	if (!core || IS_ERR(core) || !core->tuning || IS_ERR(core->tuning))
+		return -EINVAL;
+	tuning = core->tuning;
+	if (tuning->state == 2)
+		return 0;
 
-    /* fragment 1: CallSetup */
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(*(uint32_t *)((char *)(a1) + 112)) + 200)) + 416);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))printk)((int32_t *)((const char *)(uintptr_t)&LC0), (uintptr_t)(0 + 1424), (uintptr_t)(3567)); /* jalr target resolved by relocation */
-
-    /* fragment 2: MemoryAccess */
-    v1 = *(uint32_t *)((char *)s0 + 16588);
-    v0 = 2;
-
-    /* fragment 3: Branch */
-    if (v1 == v0) { goto isp_core_tunning_release0x6c; }
-
-    /* fragment 4: MemoryAccess */
-    a0 = *(uint32_t *)((char *)s0 + 16564);
-
-    /* fragment 5: Branch */
-    v0 = (uintptr_t *)&isp_free_buffer;
-    if (a0 == 0) { goto isp_core_tunning_release0x60; }
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)isp_free_buffer)(a0); /* jalr target resolved by relocation */
-
-isp_core_tunning_release0x60:
-    /* fragment 7: Arithmetic */
-    v0 = 2;
-
-    /* fragment 8: MemoryAccess */
-    *(uint32_t *)((char *)s0 + 16588) = v0;
-    ra = local_14;
-
-isp_core_tunning_release0x6c:
-    /* fragment 9: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 10: Arithmetic */
-    v0 = 0;
-
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	paddr = tuning->temper_paddr;
+	tuning->temper_paddr = 0;
+	if (paddr)
+		isp_free_buffer(paddr);
+	tuning->state = 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038de8 origin=model_output original=system_reset_sensor */
