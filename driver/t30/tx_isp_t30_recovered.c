@@ -54162,7 +54162,6 @@ static void tx_isp_t30_simple_awb_update(void)
 	u32 desired_red_gain;
 	u32 desired_blue_gain;
 	u32 coefficient;
-	u32 pattern;
 
 	tx_isp_t30_awb_apply_calibrated_gains();
 	if (!state->awb_initialized)
@@ -54181,38 +54180,15 @@ static void tx_isp_t30_simple_awb_update(void)
 		return;
 
 	/*
-	 * The four WB registers follow CFA positions, while the metering outputs
-	 * are color ratios.  Select the red and blue positions from the active
-	 * Bayer order instead of assuming RGGB.  This keeps the controller
-	 * sensor-independent; the mbus code has already programmed this pattern.
+	 * APICAL names these registers by color, not by the active CFA position:
+	 * gain_00 is R, gain_01 is Gr, gain_10 is Gb, and gain_11 is B.  Bayer
+	 * order is handled by the ISP input formatter before white balance, so
+	 * remapping these gains for BGGR/GRBG would exchange red and blue.
 	 */
-	pattern = APICAL_READ_32(0x18) & 3;
-	switch (pattern) {
-	case 0: /* RGGB */
-		red_gain = &state->gain_00;
-		blue_gain = &state->gain_11;
-		base_red_gain = &base_gain[0];
-		base_blue_gain = &base_gain[3];
-		break;
-	case 1: /* GRBG */
-		red_gain = &state->gain_01;
-		blue_gain = &state->gain_10;
-		base_red_gain = &base_gain[1];
-		base_blue_gain = &base_gain[2];
-		break;
-	case 2: /* GBRG */
-		red_gain = &state->gain_10;
-		blue_gain = &state->gain_01;
-		base_red_gain = &base_gain[2];
-		base_blue_gain = &base_gain[1];
-		break;
-	default: /* BGGR */
-		red_gain = &state->gain_11;
-		blue_gain = &state->gain_00;
-		base_red_gain = &base_gain[3];
-		base_blue_gain = &base_gain[0];
-		break;
-	}
+	red_gain = &state->gain_00;
+	blue_gain = &state->gain_11;
+	base_red_gain = &base_gain[0];
+	base_blue_gain = &base_gain[3];
 
 	/*
 	 * Match the working T31/Tiziano method: convert each measured Q8 color
@@ -54248,9 +54224,9 @@ static void tx_isp_t30_simple_awb_update(void)
 			state->gain_11);
 	state->awb_updates++;
 	if (state->awb_updates <= 8 || !(state->awb_updates & 0x1f))
-		pr_info("tx-isp-t30: calibrated AWB ratio=%u/%u target=0x%x/0x%x gain=0x%x/0x%x pattern=%u\n",
+		pr_info("tx-isp-t30: calibrated AWB ratio=%u/%u target=0x%x/0x%x gain=0x%x/0x%x\n",
 			red_ratio, blue_ratio, desired_red_gain,
-			desired_blue_gain, *red_gain, *blue_gain, pattern);
+			desired_blue_gain, *red_gain, *blue_gain);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000337a8 origin=model_output original=AWB_fsm_process_interrupt */
