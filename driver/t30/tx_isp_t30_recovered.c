@@ -5794,6 +5794,17 @@ struct tx_isp_t30_ncu_device {
 	struct task_struct *process_thread;
 };
 
+/*
+ * The LDC object embeds the subdevice at offset zero.  dev_priv is runtime
+ * callback context and is not an ownership pointer, so keep the one field
+ * needed by teardown in a layout-checked owner view.
+ */
+struct tx_isp_t30_ldc_device {
+	struct tx_isp_t30_subdev sd;
+	u8 before_inbufs[0x1b8 - sizeof(struct tx_isp_t30_subdev)];
+	struct tx_isp_t30_frame_buffer *inbufs;
+};
+
 enum tx_isp_t30_ncu_register {
 	TX_ISP_T30_NCU_RESET = 0x00,
 	TX_ISP_T30_NCU_START = 0x04,
@@ -57015,16 +57026,14 @@ int32_t get_gmv_gauss_method_fast_v3(void *arg1, int32_t arg2, int32_t *arg3)
 int tx_isp_vic_remove(struct platform_device *pdev)
 {
 	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
-	void *vic;
 
 	if (IS_ERR_OR_NULL(sd))
 		return 0;
-	vic = sd->dev_priv;
 	private_platform_set_drvdata(pdev, NULL);
 	*(void **)dump_vsd = NULL;
 	tx_isp_t30_vic_sd = NULL;
 	tx_isp_subdev_deinit(sd);
-	kfree(vic);
+	kfree(sd);
 	return 0;
 }
 
@@ -57050,7 +57059,7 @@ int tx_isp_csi_remove(struct platform_device *pdev)
 
 	if (IS_ERR_OR_NULL(sd))
 		return 0;
-	csd = sd->dev_priv;
+	csd = container_of(sd, struct tx_isp_t30_csi_device, sd);
 	private_platform_set_drvdata(pdev, NULL);
 	dump_csd = NULL;
 	if (!IS_ERR_OR_NULL(sd->base)) {
@@ -57080,9 +57089,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
 
 	if (IS_ERR_OR_NULL(sd))
 		return 0;
-	core = sd->dev_priv;
-	if (IS_ERR_OR_NULL(core))
-		core = (void *)sd;
+	core = container_of(sd, struct tx_isp_t30_core_video_view, sd);
 	tuning = (void *)core;
 	private_platform_set_drvdata(pdev, NULL);
 
@@ -57110,7 +57117,7 @@ int tx_isp_ncu_remove(struct platform_device *pdev)
 
 	if (IS_ERR_OR_NULL(sd))
 		return 0;
-	ncu = sd->dev_priv;
+	ncu = container_of(sd, struct tx_isp_t30_ncu_device, sd);
 	private_platform_set_drvdata(pdev, NULL);
 	g_ncu = 0;
 	tx_isp_subdev_deinit(sd);
@@ -57126,14 +57133,17 @@ int tx_isp_ncu_remove(struct platform_device *pdev)
 int tx_isp_ldc_remove(struct platform_device *pdev)
 {
 	struct tx_isp_t30_subdev *sd = private_platform_get_drvdata(pdev);
-	void *ldc;
+	struct tx_isp_t30_ldc_device *ldc;
 
 	if (IS_ERR_OR_NULL(sd))
 		return 0;
-	ldc = sd->dev_priv;
+	ldc = container_of(sd, struct tx_isp_t30_ldc_device, sd);
+	BUILD_BUG_ON(offsetof(struct tx_isp_t30_ldc_device, inbufs) != 0x1b8);
 	private_platform_set_drvdata(pdev, NULL);
 	g_ldc = NULL;
 	tx_isp_subdev_deinit(sd);
+	kfree(ldc->inbufs);
+	ldc->inbufs = NULL;
 	kfree(ldc);
 	return 0;
 }
@@ -57196,7 +57206,7 @@ int tx_isp_mscaler_remove(struct platform_device *pdev)
 	if (IS_ERR_OR_NULL(module))
 		return 0;
 	sd = container_of(module, struct tx_isp_t30_subdev, module);
-	mscaler = sd->dev_priv;
+	mscaler = container_of(sd, struct tx_isp_t30_mscaler_device, sd);
 	private_platform_set_drvdata(pdev, NULL);
 	if (mscaler) {
 		kfree(mscaler->inputs);
@@ -57218,7 +57228,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 
 	if (IS_ERR_OR_NULL(sd))
 		return 0;
-	fs = sd->dev_priv;
+	fs = container_of(sd, struct tx_isp_t30_frame_sources, sd);
 	private_platform_set_drvdata(pdev, NULL);
 	if (!IS_ERR_OR_NULL(fs)) {
 		for (i = 0; i < fs->num_channels; i++)
