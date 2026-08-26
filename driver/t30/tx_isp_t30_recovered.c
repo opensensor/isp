@@ -76,6 +76,7 @@
 #ifdef TX_ISP_T30_SHARED_VIDEOBUF
 #include "tx_isp_t30_videobuf.h"
 #endif
+#include "tx_isp_t30_v4l2.h"
 
 #ifndef __regtrace_stringify
 #define __regtrace_stringify_1(x) #x
@@ -32706,6 +32707,110 @@ static long frame_channel_unlocked_ioctl(struct file *filp, unsigned int cmd,
 	return ret;
 }
 
+#ifdef TX_ISP_T30_V4L2
+static struct tx_isp_t30_frame_channel *
+tx_isp_t30_capture_channel(unsigned int channel)
+{
+	struct tx_isp_t30_device *ispdev = globe_ispdev;
+	struct tx_isp_t30_frame_sources *sources;
+	unsigned int index;
+
+	if (!ispdev)
+		return NULL;
+	for (index = 0; index < ARRAY_SIZE(ispdev->module.submods); index++) {
+		struct tx_isp_t30_module *module = ispdev->module.submods[index];
+		struct tx_isp_t30_subdev *subdev;
+
+		if (!module || module->desc.type != 1 || module->desc.subtype != 2)
+			continue;
+		subdev = container_of(module, struct tx_isp_t30_subdev, module);
+		sources = subdev->dev_priv;
+		if (!sources || !sources->channels || channel >= sources->num_channels)
+			return NULL;
+		return &sources->channels[channel];
+	}
+	return NULL;
+}
+
+struct device *tx_isp_t30_capture_device(void)
+{
+	struct tx_isp_t30_device *ispdev = globe_ispdev;
+
+	return ispdev ? ispdev->module.dev : NULL;
+}
+
+int tx_isp_t30_capture_open(unsigned int channel)
+{
+	struct tx_isp_t30_frame_channel *chan =
+		tx_isp_t30_capture_channel(channel);
+	struct file file;
+
+	if (!chan)
+		return -ENODEV;
+	memset(&file, 0, sizeof(file));
+	file.private_data = &chan->misc;
+	return frame_channel_open(0, &file);
+}
+
+void tx_isp_t30_capture_release(unsigned int channel)
+{
+	struct tx_isp_t30_frame_channel *chan =
+		tx_isp_t30_capture_channel(channel);
+	struct file file;
+
+	if (!chan)
+		return;
+	memset(&file, 0, sizeof(file));
+	file.private_data = &chan->misc;
+	frame_channel_release(0, &file, 0);
+}
+
+long tx_isp_t30_capture_ioctl(unsigned int channel, unsigned int command,
+			      void *argument)
+{
+	struct tx_isp_t30_frame_channel *chan =
+		tx_isp_t30_capture_channel(channel);
+	struct file file;
+	mm_segment_t old_fs;
+	long ret;
+
+	if (!chan || !argument)
+		return -EINVAL;
+	memset(&file, 0, sizeof(file));
+	file.private_data = &chan->misc;
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	ret = frame_channel_unlocked_ioctl(&file, command,
+					   (unsigned long)argument);
+	set_fs(old_fs);
+	return ret;
+}
+
+unsigned int tx_isp_t30_capture_poll(unsigned int channel, struct file *file,
+				     poll_table *wait)
+{
+	struct tx_isp_t30_frame_channel *chan =
+		tx_isp_t30_capture_channel(channel);
+	struct tx_isp_t30_fs_queue *queue;
+
+	if (!chan)
+		return POLLERR;
+	queue = &chan->queue;
+	poll_wait(file, &queue->done_wq, wait);
+	if (!queue->streaming)
+		return POLLERR;
+	if (queue->done_count)
+		return POLLIN | POLLRDNORM;
+	return 0;
+}
+
+int tx_isp_t30_capture_stream(int enable)
+{
+	return globe_ispdev ? tx_isp_video_s_stream(globe_ispdev, enable) :
+		-ENODEV;
+}
+#endif
+
 static int tx_isp_t30_frame_buffer_done(
 	struct tx_isp_t30_frame_channel *chan,
 	struct tx_isp_t30_frame_buffer *buffer)
@@ -57242,6 +57347,7 @@ int tx_isp_remove(struct platform_device *pdev)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038a40 origin=model_output original=cleanup_module */
 void cleanup_module(void)
 {
+    tx_isp_t30_v4l2_cleanup();
     tx_isp_sinfo_exit();
     private_platform_driver_unregister(&tx_isp_driver);
     private_platform_device_unregister(&tx_isp_platform_device);
@@ -57541,6 +57647,13 @@ int32_t init_module(void)
 
 	r = tx_isp_sinfo_init();
 	if (r != 0) {
+		private_platform_driver_unregister(&tx_isp_driver);
+		private_platform_device_unregister(&tx_isp_platform_device);
+		return r;
+	}
+	r = tx_isp_t30_v4l2_init();
+	if (r != 0) {
+		tx_isp_sinfo_exit();
 		private_platform_driver_unregister(&tx_isp_driver);
 		private_platform_device_unregister(&tx_isp_platform_device);
 		return r;

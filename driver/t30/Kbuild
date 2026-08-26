@@ -9,6 +9,13 @@ tx-isp-t30-objs := tx_isp_t30_recovered.o \
 	tx_isp_t30_subdev.o \
 	tx_isp_t30_exposure.o
 
+ifeq ($(CONFIG_VIDEO_V4L2),y)
+ifeq ($(CONFIG_DMA_SHARED_BUFFER),y)
+tx-isp-t30-objs += tx_isp_t30_v4l2.o
+ccflags-y += -DTX_ISP_T30_V4L2
+endif
+endif
+
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
 ccflags-y += -DTX_ISP_T30_SHARED_SINFO
 ccflags-y += -DTX_ISP_T30_SHARED_SUBDEV
