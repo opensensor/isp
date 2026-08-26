@@ -22753,14 +22753,18 @@ static int32_t t21_awb_process(void)
 			}
 			mf[1]++;
 		} else if (difference > threshold) {
+			int32_t divisor = (int32_t)step_count;
+
 			mf[0] = 1;
 			mf[1] = 1;
 			mf[2] = target_red_gain;
 			mf[3] = target_blue_gain;
-			mf[4] += ((int32_t)target_red_gain - (int32_t)mf[4]) /
-				 step_count;
-			mf[5] += ((int32_t)target_blue_gain - (int32_t)mf[5]) /
-				 step_count;
+			mf[4] = (uint32_t)((int32_t)mf[4] +
+				((int32_t)target_red_gain - (int32_t)mf[4]) /
+				divisor);
+			mf[5] = (uint32_t)((int32_t)mf[5] +
+				((int32_t)target_blue_gain - (int32_t)mf[5]) /
+				divisor);
 		} else {
 			mf[0] = 0;
 			mf[1] = 0;
