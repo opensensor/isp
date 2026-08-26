@@ -1353,6 +1353,19 @@ static unsigned char __attribute__((aligned(4))) _AwbPointPos[8] = {
 static unsigned char zone_pix_cnt[900];
 static unsigned char zone_rgbg[1800];
 static unsigned char zone_rgbg_last[1800];
+/* T21's AWB detector works on at most a 15x15 statistics grid.  Keep its
+ * scratch storage out of the event-thread stack, as the OEM module does. */
+#define T21_AWB_GRID_SIDE 15U
+#define T21_AWB_ZONE_COUNT (T21_AWB_GRID_SIDE * T21_AWB_GRID_SIDE)
+struct t21_awb_detector_scratch {
+	uint32_t zone_pix_weight[T21_AWB_ZONE_COUNT];
+	uint32_t rgbg_weight[T21_AWB_ZONE_COUNT];
+};
+/* Some still-recovered routines address legacy BSS objects relative to OEM
+ * anchors.  Keep new runtime-only storage in an appended input section so it
+ * cannot move any of those objects. */
+static struct t21_awb_detector_scratch t21_awb_scratch
+	__section(".bss.t21_awb_scratch");
 static unsigned char IspAwbCtDetectParam[60];
 static unsigned char IspAwbFpgaParam[40];
 static unsigned char __attribute__((aligned(4))) _awb_cof[8] = {
@@ -22255,77 +22268,532 @@ static uint32_t t21_awb_calibrated_ratio(uint64_t color_sum,
 	return (uint32_t)((calibrated_q + rounding) >> q);
 }
 
-/* The full recovered OEM AWB worker is not yet structurally sound.  Consume
- * the same bin-filtered statistics with a conservative controller while also
- * restoring the OEM calibrated colour-temperature path used by CCM and LSC. */
+static uint32_t t21_awb_fixdiv_u64(uint32_t q, uint64_t numerator,
+					  uint32_t denominator)
+{
+	if (!denominator || q > 16)
+		return 0;
+	return (uint32_t)div_u64(numerator << q, denominator);
+}
+
+static uint32_t t21_awb_mesh_index_q(const uint32_t *axis,
+					    uint32_t value_q,
+					    uint32_t q)
+{
+	uint32_t index;
+
+	for (index = 0; index < 14; index++) {
+		if (value_q < (axis[index + 1] << q))
+			break;
+	}
+	return index < 14 ? index : 13;
+}
+
+/* Interpolate a 15x15 tuning mesh.  Inputs and the return value are Q(q),
+ * while the axes and mesh entries are the unshifted values stored in the
+ * sensor tuning binary. */
+static uint32_t t21_awb_mesh_interp_q(uint32_t q, uint32_t rg_q,
+					     uint32_t bg_q,
+					     const uint32_t *rg_axis,
+					     const uint32_t *bg_axis,
+					     const uint32_t *mesh)
+{
+	uint32_t ri = t21_awb_mesh_index_q(rg_axis, rg_q, q);
+	uint32_t bi = t21_awb_mesh_index_q(bg_axis, bg_q, q);
+	uint32_t row0_q;
+	uint32_t row1_q;
+
+	row0_q = ISPAWBInterpolation1(q, rg_q,
+					  rg_axis[ri], rg_axis[ri + 1],
+					  mesh[bi * 15 + ri],
+					  mesh[bi * 15 + ri + 1]);
+	row1_q = ISPAWBInterpolation1(q, rg_q,
+					  rg_axis[ri], rg_axis[ri + 1],
+					  mesh[(bi + 1) * 15 + ri],
+					  mesh[(bi + 1) * 15 + ri + 1]);
+	return ISPAWBInterpolation2(q, bg_q,
+				    bg_axis[bi], bg_axis[bi + 1],
+				    row0_q, row1_q);
+}
+
+/* T21's detector predates the cluster stage used by T31.  This is the T21
+ * pipeline recovered from the stock 0x11d54 implementation: total-pixel
+ * normalization, tuning-mesh confidence, light-source proximity, weighted
+ * rg/bg averaging, optional distance rejection, and CT mesh lookup. */
+static void t21_awb_ct_detect(uint32_t *zone_rg_bg,
+			      const uint32_t *zone_pixels,
+			      const uint32_t *light_src,
+			      uint32_t light_count,
+			      const uint32_t *ct_threshold,
+			      const uint32_t *ct_parameter,
+			      const uint32_t *weight_mesh,
+			      uint32_t cols, uint32_t rows,
+			      const uint32_t *rg_axis,
+			      const uint32_t *bg_axis,
+			      const uint32_t *ct_mesh,
+			      const uint32_t *zone_weight,
+			      const uint32_t *distance_parameter,
+			      uint32_t *out_ct,
+			      const uint32_t *light_weight_lut,
+			      const uint32_t *point_position,
+			      uint32_t out_rg_bg[2],
+			      uint32_t *out_status,
+			      struct t21_awb_detector_scratch *scratch)
+{
+	uint32_t light_ref[20] = { 0 };
+	uint32_t *zone_pix_weight = scratch->zone_pix_weight;
+	uint32_t *rgbg_weight = scratch->rgbg_weight;
+	uint32_t q = point_position[0] & 0x1f;
+	uint32_t rounding = q ? 1U << (q - 1) : 0;
+	uint32_t count = cols * rows;
+	uint32_t *zone_bg = zone_rg_bg + count;
+	uint32_t ct_hi_ramp = 0;
+	uint32_t ct_lo_ramp = 0;
+	uint32_t total_pixels = 0;
+	uint64_t sum_rg = 0;
+	uint64_t sum_bg = 0;
+	uint64_t sum_weight = 0;
+	uint32_t average_rg;
+	uint32_t average_bg;
+	uint32_t i;
+
+	if (!count || count > T21_AWB_ZONE_COUNT || q > 16)
+		goto fail;
+
+	if (light_count > ARRAY_SIZE(light_ref) / 2)
+		light_count = ARRAY_SIZE(light_ref) / 2;
+	for (i = 0; i < light_count * 2; i++)
+		light_ref[i] = light_src[i] - 1;
+
+	if (ct_parameter[0] == 1 && ct_parameter[1] <= 0x100) {
+		uint32_t scale_q = (0x100 - ct_parameter[1]) << q;
+		uint32_t hi_span = ct_threshold[3] - ct_threshold[2];
+		uint32_t lo_span = ct_threshold[0] - ct_threshold[1];
+
+		if (hi_span)
+			ct_hi_ramp = fix_point_div_32(q, scale_q,
+							 hi_span << q);
+		if (lo_span)
+			ct_lo_ramp = fix_point_div_32(q, scale_q,
+							 lo_span << q);
+	}
+
+	for (i = 0; i < count; i++)
+		total_pixels += zone_pixels[i];
+	if (!total_pixels)
+		goto fail;
+
+	memset(rgbg_weight, 0, sizeof(scratch->rgbg_weight));
+	for (i = 0; i < count; i++) {
+		uint32_t mesh_weight_q;
+		uint32_t rg_q;
+		uint32_t bg_q;
+		uint32_t light;
+
+		zone_pix_weight[i] =
+			t21_awb_fixdiv_u64(q, zone_pixels[i], total_pixels);
+
+		rg_q = zone_rg_bg[i];
+		bg_q = zone_bg[i];
+		if (rg_q < (rg_axis[0] << q))
+			rg_q = rg_axis[0] << q;
+		else if (rg_q > (rg_axis[14] << q))
+			rg_q = rg_axis[14] << q;
+		if (bg_q < (bg_axis[0] << q))
+			bg_q = bg_axis[0] << q;
+		else if (bg_q > (bg_axis[14] << q))
+			bg_q = bg_axis[14] << q;
+		zone_rg_bg[i] = rg_q;
+		zone_bg[i] = bg_q;
+
+		mesh_weight_q = t21_awb_mesh_interp_q(q, rg_q, bg_q,
+							   rg_axis, bg_axis,
+							   weight_mesh);
+		if (ct_parameter[0] == 1) {
+			uint32_t reciprocal_ct_q;
+			uint32_t reciprocal_ct;
+
+			reciprocal_ct_q = t21_awb_mesh_interp_q(q, rg_q, bg_q,
+								      rg_axis, bg_axis,
+								      ct_mesh);
+			reciprocal_ct = (reciprocal_ct_q + rounding) >> q;
+			if (reciprocal_ct) {
+				uint32_t ct = 1000000U / reciprocal_ct;
+
+				mesh_weight_q = func_zone_ct_weight(ct,
+						(int32_t *)ct_threshold,
+						ct_parameter[1], q,
+						mesh_weight_q,
+						ct_hi_ramp, ct_lo_ramp);
+			}
+		}
+
+		for (light = 0; light < light_count; light++) {
+			uint32_t rg = (rg_q + rounding) >> q;
+			uint32_t bg = (bg_q + rounding) >> q;
+			uint32_t dr = rg > light_ref[light * 2] ?
+				rg - light_ref[light * 2] :
+				light_ref[light * 2] - rg;
+			uint32_t db = bg > light_ref[light * 2 + 1] ?
+				bg - light_ref[light * 2 + 1] :
+				light_ref[light * 2 + 1] - bg;
+			uint32_t distance = dr * dr + db * db;
+			uint32_t proximity = 0;
+
+			if (distance < 0x332) {
+				if (distance >= 0x2a7)
+					proximity = 1;
+				else if (distance >= 0x267)
+					proximity = 2;
+				else if (distance >= 0x23c)
+					proximity = 3;
+				else if (distance >= 0x21c)
+					proximity = 4;
+				else if (distance >= 0x202)
+					proximity = 5;
+				else
+					proximity = light_weight_lut[distance];
+			}
+			if (mesh_weight_q < (proximity << q))
+				mesh_weight_q = proximity << q;
+		}
+		rgbg_weight[i] = mesh_weight_q;
+	}
+
+	for (i = 0; i < count; i++) {
+		uint32_t combined = fix_point_mult3_32(q,
+						 rgbg_weight[i],
+						 zone_pix_weight[i],
+						 zone_weight[i] << q);
+
+		sum_rg += fix_point_mult2_32(q, zone_rg_bg[i], combined, 0);
+		sum_bg += fix_point_mult2_32(q, zone_bg[i], combined, 0);
+		sum_weight += combined;
+	}
+	if (!sum_weight)
+		goto fail;
+
+	average_rg = t21_awb_fixdiv_u64(q, sum_rg, (uint32_t)sum_weight);
+	average_bg = t21_awb_fixdiv_u64(q, sum_bg, (uint32_t)sum_weight);
+
+	if (distance_parameter[0] == 1) {
+		uint64_t distance_sum = 0;
+		uint32_t average_distance;
+
+		for (i = 0; i < count; i++) {
+			uint32_t dr = average_rg > zone_rg_bg[i] ?
+				average_rg - zone_rg_bg[i] :
+				zone_rg_bg[i] - average_rg;
+			uint32_t db = average_bg > zone_bg[i] ?
+				average_bg - zone_bg[i] :
+				zone_bg[i] - average_bg;
+			uint32_t distance = fix_point_mult2_32(q, dr, dr, 0) +
+				fix_point_mult2_32(q, db, db, 0);
+			uint32_t weighted_distance;
+
+			weighted_distance = fix_point_mult3_32(q, distance,
+							 rgbg_weight[i],
+							 zone_pix_weight[i]);
+			distance_sum += fix_point_mult2_32(q, weighted_distance,
+							      zone_weight[i] << q, 0);
+		}
+		average_distance = t21_awb_fixdiv_u64(q, distance_sum,
+							      (uint32_t)sum_weight);
+
+		if (average_distance) {
+			uint64_t refined_rg = 0;
+			uint64_t refined_bg = 0;
+			uint64_t refined_weight = 0;
+
+			for (i = 0; i < count; i++) {
+				uint32_t dr = average_rg > zone_rg_bg[i] ?
+					average_rg - zone_rg_bg[i] :
+					zone_rg_bg[i] - average_rg;
+				uint32_t db = average_bg > zone_bg[i] ?
+					average_bg - zone_bg[i] :
+					zone_bg[i] - average_bg;
+				uint32_t distance = fix_point_mult2_32(q, dr, dr, 0) +
+					fix_point_mult2_32(q, db, db, 0);
+				uint32_t relative = fix_point_div_32(q, distance,
+								   average_distance);
+				uint32_t weight;
+				uint32_t combined;
+
+				if (relative > distance_parameter[1]) {
+					weight = 0;
+				} else if (relative >= distance_parameter[2] &&
+					   distance_parameter[1] > distance_parameter[2]) {
+					uint32_t attenuation = fix_point_div_32(q,
+						relative - distance_parameter[2],
+						distance_parameter[1] - distance_parameter[2]);
+
+					weight = fix_point_mult2_32(q,
+						rgbg_weight[i],
+						(1U << q) - attenuation, 0);
+				} else {
+					weight = rgbg_weight[i];
+				}
+				combined = fix_point_mult3_32(q, weight,
+								 zone_pix_weight[i],
+								 zone_weight[i] << q);
+				refined_rg += fix_point_mult2_32(q,
+								zone_rg_bg[i], combined, 0);
+				refined_bg += fix_point_mult2_32(q,
+								zone_bg[i], combined, 0);
+				refined_weight += combined;
+			}
+			if (refined_weight) {
+				average_rg = t21_awb_fixdiv_u64(q, refined_rg,
+								      (uint32_t)refined_weight);
+				average_bg = t21_awb_fixdiv_u64(q, refined_bg,
+								      (uint32_t)refined_weight);
+			}
+		}
+	}
+
+	if (average_rg < (rg_axis[0] << q))
+		average_rg = rg_axis[0] << q;
+	else if (average_rg > (rg_axis[14] << q))
+		average_rg = rg_axis[14] << q;
+	if (average_bg < (bg_axis[0] << q))
+		average_bg = bg_axis[0] << q;
+	else if (average_bg > (bg_axis[14] << q))
+		average_bg = bg_axis[14] << q;
+
+	{
+		uint32_t reciprocal_ct_q = t21_awb_mesh_interp_q(q,
+			average_rg, average_bg, rg_axis, bg_axis, ct_mesh);
+
+		if (reciprocal_ct_q)
+			*out_ct = (t21_awb_fixdiv_u64(q,
+							  (uint64_t)1000000 << q,
+							  reciprocal_ct_q) + rounding) >> q;
+		else
+			*out_ct = 5000;
+	}
+	out_rg_bg[0] = (average_rg + rounding) >> q;
+	out_rg_bg[1] = (average_bg + rounding) >> q;
+	*out_status = 0;
+	return;
+
+fail:
+	*out_ct = 5000;
+	out_rg_bg[0] = 0x100;
+	out_rg_bg[1] = 0x100;
+	*out_status = 1;
+}
+
+/* Run T21's generic, tuning-driven AWB path.  No sensor identity or sensor
+ * register knowledge belongs here: calibration and scene classification are
+ * entirely described by the active tuning binary. */
 static int32_t t21_awb_process(void)
 {
+	/* Retain the original controller's two initialized state words.  Besides
+	 * mirroring the observable gain state, this preserves the recovered
+	 * object's data layout for the few legacy routines still using OEM
+	 * anchor-relative accesses. */
 	static uint32_t red_gain = 0x400;
 	static uint32_t blue_gain = 0x400;
 	uint32_t *red = (uint32_t *)awb_array_r;
 	uint32_t *green = (uint32_t *)awb_array_g;
 	uint32_t *blue = (uint32_t *)awb_array_b;
 	uint32_t *pixels = (uint32_t *)awb_array_p;
-	uint64_t red_sum = 0;
-	uint64_t green_sum = 0;
-	uint64_t blue_sum = 0;
-	uint32_t target_red;
-	uint32_t target_blue;
-	uint32_t calibrated_rg;
-	uint32_t calibrated_bg;
-	uint32_t old_ct;
-	uint32_t new_ct;
+	uint32_t *awb_parameter = (uint32_t *)_awb_parameter;
+	uint32_t *mf = (uint32_t *)_awb_mf_para;
+	uint32_t *zone_rg_bg = (uint32_t *)zone_rgbg;
+	uint32_t *zone_pixels = (uint32_t *)zone_pix_cnt;
+	uint32_t q = get_unaligned_le32(_AwbPointPos) & 0x1f;
+	uint32_t rounding = q ? 1U << (q - 1) : 0;
+	uint32_t cols = awb_parameter[3];
+	uint32_t rows = awb_parameter[1];
+	uint32_t awb_ev = get_unaligned_le32(tparams + 0x12ec);
+	uint32_t count;
+	uint32_t red_calibration_q;
+	uint32_t blue_calibration_q;
+	const uint32_t *ct_threshold;
+	const uint32_t *ct_parameter;
+	const uint32_t *weight_mesh;
+	uint32_t light_count;
+	uint32_t detected_rg_bg[2];
+	uint32_t detected_ct;
+	uint32_t detect_status;
+	uint32_t target_red_gain;
+	uint32_t target_blue_gain;
+	uint32_t applied_gain[2];
+	uint32_t register_gain[2];
 	uint32_t event[12] = { 0 };
+	bool first_valid_result = false;
+	struct t21_awb_detector_scratch *scratch = &t21_awb_scratch;
 	uint32_t i;
 
-	for (i = 0; i < 15 * 15; i++) {
-		if (!pixels[i])
-			continue;
-		red_sum += red[i];
-		green_sum += green[i];
-		blue_sum += blue[i];
+	/* Preserve the initialized OEM state and its section placement. */
+	(void)*(volatile uint32_t *)&red_gain;
+	(void)*(volatile uint32_t *)&blue_gain;
+
+	if (!cols || !rows || cols > T21_AWB_GRID_SIDE ||
+	    rows > T21_AWB_GRID_SIDE || q > 16)
+		return 0;
+	count = cols * rows;
+	red_calibration_q = fix_point_mult2_32(q, 0x100U << q,
+						      get_unaligned_le32(_wb_static), 0);
+	blue_calibration_q = fix_point_mult2_32(q, 0x100U << q,
+						       get_unaligned_le32(_wb_static + 4), 0);
+
+	for (i = 0; i < count; i++) {
+		uint32_t rg_q = 0;
+		uint32_t bg_q = 0;
+
+		zone_pixels[i] = pixels[i];
+		if (green[i]) {
+			rg_q = (uint32_t)div_u64((uint64_t)red[i] << q,
+						      green[i]);
+			bg_q = (uint32_t)div_u64((uint64_t)blue[i] << q,
+						      green[i]);
+			rg_q = fix_point_mult2_32(q, rg_q,
+						 red_calibration_q, 0);
+			bg_q = fix_point_mult2_32(q, bg_q,
+						 blue_calibration_q, 0);
+		}
+		if (pixels[i] <= get_unaligned_le32(_pixel_cnt_th)) {
+			rg_q = 0;
+			bg_q = 0;
+			zone_pixels[i] = 0;
+		}
+		zone_rg_bg[i] = rg_q;
+		zone_rg_bg[count + i] = bg_q;
 	}
 
-	if (!red_sum || !green_sum || !blue_sum ||
-	    red_sum > UINT_MAX || blue_sum > UINT_MAX)
+	if (!awb_moa && !get_unaligned_le32(tisp_wb_attr)) {
+		uint64_t difference = 0;
+
+		for (i = 0; i < count * 2; i++) {
+			uint32_t previous = ((uint32_t *)zone_rgbg_last)[i];
+			uint32_t current_ratio = zone_rg_bg[i];
+
+			difference += previous > current_ratio ?
+				previous - current_ratio : current_ratio - previous;
+		}
+		if (div_u64(difference >> q, count) <
+		    get_unaligned_le32(_AwbPointPos + 4))
+			return 0;
+	}
+	memcpy(zone_rgbg_last, zone_rgbg, count * 2 * sizeof(uint32_t));
+
+	if (awb_ev < (get_unaligned_le32(_awb_mode) << 10)) {
+		ct_threshold = (uint32_t *)_awb_ct_th_ot_luxhigh;
+		ct_parameter = (uint32_t *)_awb_ct_para_ot;
+		weight_mesh = (uint32_t *)_rgbg_weight_ot;
+		light_count = 0;
+	} else if (awb_ev >= (get_unaligned_le32(_awb_mode + 4) << 10)) {
+		ct_threshold = (uint32_t *)_awb_ct_th_in;
+		ct_parameter = (uint32_t *)_awb_ct_para_in;
+		weight_mesh = (uint32_t *)_rgbg_weight;
+		light_count = _light_src_num;
+	} else {
+		ct_threshold = (uint32_t *)_awb_ct_th_ot_luxlow;
+		ct_parameter = (uint32_t *)_awb_ct_para_ot;
+		weight_mesh = (uint32_t *)_rgbg_weight_ot;
+		light_count = 0;
+	}
+
+	t21_awb_ct_detect(zone_rg_bg, zone_pixels,
+			  (uint32_t *)_light_src, light_count,
+			  ct_threshold, ct_parameter, weight_mesh,
+			  cols, rows, (uint32_t *)_rg_pos,
+			  (uint32_t *)_bg_pos, (uint32_t *)_color_temp_mesh,
+			  (uint32_t *)_awb_wght, (uint32_t *)_awb_dis_tw,
+			  &detected_ct, (uint32_t *)_ls_w_lut,
+			  (uint32_t *)_AwbPointPos, detected_rg_bg,
+			  &detect_status, scratch);
+	if (detect_status)
 		return 0;
 
-	target_red = div_u64(green_sum << 10, (uint32_t)red_sum);
-	target_blue = div_u64(green_sum << 10, (uint32_t)blue_sum);
-	if (target_red < 0x100)
-		target_red = 0x100;
-	else if (target_red > 0xfff)
-		target_red = 0xfff;
-	if (target_blue < 0x100)
-		target_blue = 0x100;
-	else if (target_blue > 0xfff)
-		target_blue = 0xfff;
+	put_unaligned_le32(get_unaligned_le32(_awb_ct), _awb_ct_last);
+	put_unaligned_le32(detected_ct, _awb_ct);
+	target_red_gain = (t21_awb_fixdiv_u64(q,
+						      (uint64_t)1 << (q + 16),
+						      detected_rg_bg[0] << q) +
+			   rounding) >> q;
+	target_blue_gain = (t21_awb_fixdiv_u64(q,
+						       (uint64_t)1 << (q + 16),
+						       detected_rg_bg[1] << q) +
+			    rounding) >> q;
+	if (!target_red_gain || !target_blue_gain)
+		return 0;
 
-	red_gain = (red_gain * 7 + target_red) >> 3;
-	blue_gain = (blue_gain * 7 + target_blue) >> 3;
-	system_reg_write(0x604, (0x400 << 16) | red_gain);
-	system_reg_write(0x608, (0x400 << 16) | blue_gain);
+	{
+		uint32_t step_count = get_unaligned_le32(_awb_cof);
+		uint32_t threshold = get_unaligned_le32(_awb_cof + 4);
+		uint32_t difference = (target_red_gain > mf[2] ?
+			target_red_gain - mf[2] : mf[2] - target_red_gain) +
+			(target_blue_gain > mf[3] ?
+			target_blue_gain - mf[3] : mf[3] - target_blue_gain);
 
-	calibrated_rg = t21_awb_calibrated_ratio(red_sum,
-						 (uint32_t)green_sum,
-						 get_unaligned_le32(_wb_static));
-	calibrated_bg = t21_awb_calibrated_ratio(blue_sum,
-						 (uint32_t)green_sum,
-						 get_unaligned_le32(_wb_static + 4));
-	old_ct = get_unaligned_le32(_awb_ct);
-	new_ct = t21_awb_estimate_ct(calibrated_rg, calibrated_bg);
-	if (new_ct && new_ct != old_ct) {
-		put_unaligned_le32(old_ct, _awb_ct_last);
-		put_unaligned_le32(new_ct, _awb_ct);
-		event[2] = 8;
-		event[4] = new_ct;
-		tisp_event_push(event);
+		if (step_count > 15)
+			step_count = 15;
+		if (!step_count || first_valid_result)
+			step_count = 1;
+
+		if (mf[0]) {
+			if (step_count == mf[1] + 1 || step_count == 1) {
+				mf[0] = 0;
+				mf[4] = mf[2];
+				mf[5] = mf[3];
+			} else {
+				int32_t remaining = step_count - mf[1];
+
+				if (remaining < 1)
+					remaining = 1;
+				mf[4] = (int32_t)mf[4] +
+					((int32_t)target_red_gain - (int32_t)mf[4]) /
+					remaining;
+				mf[5] = (int32_t)mf[5] +
+					((int32_t)target_blue_gain - (int32_t)mf[5]) /
+					remaining;
+			}
+			mf[1]++;
+		} else if (difference > threshold) {
+			mf[0] = 1;
+			mf[1] = 1;
+			mf[2] = target_red_gain;
+			mf[3] = target_blue_gain;
+			mf[4] += ((int32_t)target_red_gain - (int32_t)mf[4]) /
+				 step_count;
+			mf[5] += ((int32_t)target_blue_gain - (int32_t)mf[5]) /
+				 step_count;
+		} else {
+			mf[0] = 0;
+			mf[1] = 0;
+		}
 	}
 
-	pr_debug_ratelimited("tx-isp-t21: awb sums=%llu/%llu/%llu gains=%03x/%03x ratios=%u/%u ct=%u\n",
-			    red_sum, green_sum, blue_sum,
-			    red_gain, blue_gain,
-			    calibrated_rg, calibrated_bg, new_ct);
+	applied_gain[0] = (fix_point_mult2_32(q, mf[4] << q,
+						    get_unaligned_le32(_wb_static), 0) +
+			   rounding) >> q;
+	applied_gain[1] = (fix_point_mult2_32(q, mf[5] << q,
+						    get_unaligned_le32(_wb_static + 4), 0) +
+			   rounding) >> q;
+	JZ_Isp_Awb_Awbg2reg((int32_t *)applied_gain,
+				 (int32_t *)register_gain);
+	if (!awb_frz) {
+		system_reg_write(0x604, register_gain[0]);
+		system_reg_write(0x608, register_gain[1]);
+	}
+	/* These two OEM state words are also layout anchors for later initialized
+	 * data.  WRITE_ONCE keeps the state real even when debug logging is built
+	 * out, preserving the recovered object's original data map. */
+	*(volatile uint32_t *)&red_gain = applied_gain[0];
+	*(volatile uint32_t *)&blue_gain = applied_gain[1];
+	awb_moa = 0;
+
+	event[2] = 8;
+	event[4] = detected_ct;
+	tisp_event_push(event);
+
+	pr_debug_ratelimited("tx-isp-t21: awb target=%u/%u mf=%u/%u gain=%u/%u ct=%u ev=%u\n",
+			    detected_rg_bg[0], detected_rg_bg[1],
+			    mf[4], mf[5], red_gain, blue_gain,
+			    detected_ct, awb_ev);
 	return 0;
 }
 
@@ -23742,22 +24210,11 @@ JZ_Isp_Awb0x2f8:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010ac8 origin=fragment_seed original=tisp_awb_ev_update */
 int32_t tisp_awb_ev_update(uint32_t a0)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&isp_clk;
-
-    /* fragment 1: MemoryAccess */
-    *(uint32_t *)((char *)((char *)&tparams + 0x12ec)) = a0;
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    return 0;
+	/* Stock writes the AWB-local EV word at .data+0x41d4c.  In the
+	 * reconstructed layout that object is the slot at tparams+0x12ec; the
+	 * source-level `_ev` name resolves to a different OEM-local duplicate. */
+	put_unaligned_le32(a0, tparams + 0x12ec);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010ad8 origin=fragment_seed original=tiziano_awb_params_refresh */
