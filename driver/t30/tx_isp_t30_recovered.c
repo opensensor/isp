@@ -6198,6 +6198,7 @@ int32_t ispcore_link_setup(void);
 int32_t isp_core_config_top_ctl_register(int32_t arg1, int32_t arg2);
 int32_t ispcore_core_ops_ioctl(void *file, uint32_t cmd, void *arg);
 int32_t isp_fw_process(void);
+static void tx_isp_t30_stop_fw_thread(struct task_struct **threadp);
 int32_t ispcore_frame_channel_set_scaler(void *arg1, void *arg2, int32_t arg3);
 int dump_isp_info_open(struct inode *inode, struct file *file);
 int32_t isp_info_show(struct seq_file *m);
@@ -15105,6 +15106,28 @@ int32_t isp_fw_process(void)
 	return 0;
 }
 
+/*
+ * The APICAL worker normally sleeps in apical_fw_process() on the firmware
+ * event semaphore.  Wake it before kthread_stop(): module teardown must not
+ * depend on a frame interrupt arriving after the ISP IRQs have been
+ * quiesced.  Keeping the join in one helper also makes every core shutdown
+ * path obey the same ordering.
+ */
+static void tx_isp_t30_stop_fw_thread(struct task_struct **threadp)
+{
+	struct task_struct *thread;
+
+	if (!threadp)
+		return;
+	thread = *threadp;
+	if (!thread || IS_ERR(thread))
+		return;
+
+	raise_semaphore((uintptr_t)TX_ISP_T30_FW_PTR(0xc));
+	kthread_stop(thread);
+	*threadp = NULL;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000a550 origin=model_output original=ispcore_frame_channel_set_scaler */
 int32_t ispcore_frame_channel_set_scaler(void *arg1, void *arg2, int32_t arg3)
 {
@@ -20755,11 +20778,8 @@ int32_t ispcore_core_ops_init(void *arg1, int32_t arg2)
 	if (state == 4) /* TX_ISP_MODULE_RUNNING */
 		ispcore_video_s_stream(sd, 0);
 	if (*(int *)((char *)core + 0xe8) == 3) {
-		thread = *(struct task_struct **)((char *)core + 0x198);
-		if (thread && !IS_ERR(thread)) {
-			kthread_stop(thread);
-			*(struct task_struct **)((char *)core + 0x198) = NULL;
-		}
+		tx_isp_t30_stop_fw_thread((struct task_struct **)
+					  ((char *)core + 0x198));
 		for (index = 0; index < 16; index++)
 			system_program_interrupt_event(index, 0);
 		*(int *)((char *)core + 0xe8) = 2;
@@ -33724,10 +33744,7 @@ void *tx_isp_unregister_platforms(int32_t *arg1)
 		sd = container_of(module, struct tx_isp_t30_subdev, module);
 		core = container_of(sd, struct tx_isp_t30_core_video_view, sd);
 		hardware_active = core->state > TX_ISP_T30_MODULE_SLAKE;
-		if (core->process_thread && !IS_ERR(core->process_thread)) {
-			kthread_stop(core->process_thread);
-			core->process_thread = NULL;
-		}
+		tx_isp_t30_stop_fw_thread(&core->process_thread);
 		break;
 	}
 
@@ -57325,10 +57342,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
 	 * dependencies remove the sensor first, so that walk can otherwise call
 	 * through CSI/VIN state owned by the already-unloaded sensor module.
 	 */
-	if (core->process_thread && !IS_ERR(core->process_thread)) {
-		kthread_stop(core->process_thread);
-		core->process_thread = NULL;
-	}
+	tx_isp_t30_stop_fw_thread(&core->process_thread);
 	for (index = 0; index < 16; index++)
 		system_program_interrupt_event(index, 0);
 
