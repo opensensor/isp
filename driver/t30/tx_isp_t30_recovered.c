@@ -1531,6 +1531,7 @@ struct tx_isp_t30_simple_3a_state {
 	s32 total_exposure_request_log2;
 	s32 analog_gain_request_log2;
 	s32 analog_gain_log2;
+	s32 isp_digital_gain_log2;
 	u16 analog_gain_code;
 	u16 gain_00;
 	u16 gain_01;
@@ -1551,7 +1552,8 @@ static void tx_isp_t30_ae_apply_antiflicker(
 	const struct tx_isp_t30_core_sensor_view *core,
 	const struct tx_isp_t30_sensor_attribute_view *attr,
 	s32 total_exposure_log2, u32 min_integration, u32 max_integration,
-	u32 *integration_time, s32 *analog_gain_log2);
+	s32 max_isp_digital_gain_log2, u32 *integration_time,
+	s32 *analog_gain_log2, s32 *isp_digital_gain_log2);
 static unsigned char isp_kfifo_in[4124];
 static unsigned char __attribute__((aligned(4))) isp_lock[16] = {
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -40848,104 +40850,79 @@ int32_t system_max_integration_time(int32_t arg1, int16_t arg2, char arg3, int32
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000206b8 origin=model_output original=system_sensor_analog_gain */
 int32_t system_sensor_analog_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
-
-    if (v != 1) {
-        if (v != 0) {
-            stab[28] = (uint8_t)arg2;
-            return 2;
-        }
-    } else {
-        *arg4 = 0;
-        *arg4 = (int32_t)(uint8_t)stab[28];
-    }
-
-    return 0;
+	*arg4 = 0;
+	if ((u8)arg3 == 0)
+		stab[28] = (u8)arg2;
+	else if ((u8)arg3 == 1)
+		*arg4 = (u8)stab[28];
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000206f4 origin=model_output original=system_max_sensor_analog_gain */
 int32_t system_max_sensor_analog_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
-
-    if (v != 1) {
-        if (v != 0) {
-            stab[29] = (uint8_t)arg2;
-            return 2;
-        }
-        *arg4 = 0;
-    } else {
-        *arg4 = (int32_t)stab[29];
-    }
-    return 0;
+	*arg4 = 0;
+	if ((u8)arg3 == 0)
+		stab[29] = (u8)arg2;
+	else if ((u8)arg3 == 1)
+		*arg4 = (u8)stab[29];
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020730 origin=model_output original=system_sensor_digital_gain */
 int32_t system_sensor_digital_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
-
-    if (v != 1) {
-        if (v != 0) {
-            return 2;
-        }
-        stab[30] = (uint8_t)arg2;
-    } else {
-        *arg4 = 0;
-        *arg4 = (int32_t)stab[30];
-    }
-
-    return 0;
+	*arg4 = 0;
+	if ((u8)arg3 == 0)
+		stab[30] = (u8)arg2;
+	else if ((u8)arg3 == 1)
+		*arg4 = (u8)stab[30];
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002076c origin=model_output original=system_max_sensor_digital_gain */
 int system_max_sensor_digital_gain(int arg1, char arg2, char arg3, int *arg4)
 {
-    int val = arg3 & 0xff;
-    if (val == 1) {
-        *arg4 = 0;
-        *arg4 = *(unsigned char *)((char *)&stab + 0x1f);
-        return 0;
-    }
-    if (val != 0)
-        return 2;
-    *(unsigned char *)((char *)&stab + 0x1f) = arg2;
-    return 0;
+	*arg4 = 0;
+	if ((u8)arg3 == 0)
+		stab[31] = (u8)arg2;
+	else if ((u8)arg3 == 1)
+		*arg4 = (u8)stab[31];
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000207a8 origin=model_output original=system_isp_digital_gain */
 int32_t system_isp_digital_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
-
-    *arg4 = 0;
-
-    if (v != 1) {
-        if (v != 0)
-            return 2;
-        stab[32] = (uint8_t)arg2;
-    } else {
-        *arg4 = (uint32_t)(uint8_t)stab[32];
-    }
-
-    return 0;
+	*arg4 = 0;
+	if ((u8)arg3 == 0)
+		stab[32] = (u8)arg2;
+	else if ((u8)arg3 == 1)
+		*arg4 = (u8)stab[32];
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000207e4 origin=model_output original=system_max_isp_digital_gain */
 int32_t system_max_isp_digital_gain(int32_t arg1, char arg2, char arg3, int32_t *arg4)
 {
-    uint32_t v = (uint32_t)(uint8_t)arg3;
-
-    if (v != 1) {
-        if (v != 0)
-            return 2;
-        *arg4 = 0;
-        *arg4 = (uint32_t)stab[33];
-    } else {
-        stab[33] = (unsigned char)arg2;
-    }
-
-    return 0;
+	*arg4 = 0;
+	if ((u8)arg3 == 0)
+		stab[33] = (u8)arg2;
+	else if ((u8)arg3 == 1)
+		*arg4 = (u8)stab[33];
+	else
+		return 2;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000020820 origin=model_output original=system_directional_sharpening_target */
@@ -45390,6 +45367,10 @@ uint32_t cmos_fsm_process_interrupt(int32_t *arg1, char arg2)
 		uint32_t sensor_val = (uint32_t)(uint8_t)((char *)s1)[0x1524];
 		int32_t exp_arg = *(int32_t *)((char *)arg1 + 0x58);
 		char exp_shift;
+
+		/* Compact AE owns this value instead of the CMOS history ring. */
+		if (simple_3a)
+			exp_arg = tx_isp_t30_simple_3a.isp_digital_gain_log2;
 
 		if ((sensor_val - 1) < 2)
 			exp_shift = 0x11;
@@ -52835,7 +52816,8 @@ static void tx_isp_t30_ae_partition_exposure(
 	const struct tx_isp_t30_core_sensor_view *core,
 	const struct tx_isp_t30_sensor_attribute_view *attr,
 	s32 total_exposure_log2, u32 min_integration, u32 max_integration,
-	u32 *integration_time, s32 *analog_gain_log2)
+	s32 max_isp_digital_gain_log2, u32 *integration_time,
+	s32 *analog_gain_log2, s32 *isp_digital_gain_log2)
 {
 	s32 accumulated[2] = { 0, 0 };
 	s32 remaining = total_exposure_log2;
@@ -52879,6 +52861,8 @@ static void tx_isp_t30_ae_partition_exposure(
 		min_integration, max_integration);
 	*analog_gain_log2 = clamp_t(s32, accumulated[1], 0,
 		attr->max_again);
+	*isp_digital_gain_log2 = clamp_t(s32, remaining, 0,
+		max_isp_digital_gain_log2);
 }
 
 static void tx_isp_t30_simple_ae_update(void)
@@ -52897,6 +52881,7 @@ static void tx_isp_t30_simple_ae_update(void)
 	u32 max_integration;
 	s32 min_exposure_log2;
 	s32 max_exposure_log2;
+	s32 max_isp_digital_gain_log2;
 	u32 target;
 	u32 pi_coefficient;
 	u32 gain_accuracy;
@@ -52933,8 +52918,10 @@ static void tx_isp_t30_simple_ae_update(void)
 	if (!min_integration || max_integration <= min_integration)
 		return;
 	min_exposure_log2 = log2_fixed_to_fixed(min_integration, 0, 16);
+	max_isp_digital_gain_log2 =
+		(s32)system_gain->max_isp_digital_gain << 11;
 	max_exposure_log2 = log2_fixed_to_fixed(max_integration, 0, 16) +
-		attr->max_again;
+		attr->max_again + max_isp_digital_gain_log2;
 
 	mean = tx_isp_t30_histogram_metered_mean(ae[2]);
 	if (!mean)
@@ -52951,6 +52938,7 @@ static void tx_isp_t30_simple_ae_update(void)
 			state->integration_time = max_integration;
 		state->analog_gain_log2 = 0;
 		state->analog_gain_request_log2 = 0;
+		state->isp_digital_gain_log2 = 0;
 		state->total_exposure_request_log2 =
 			log2_fixed_to_fixed(state->integration_time, 0, 16);
 		state->ae_initialized = true;
@@ -52961,7 +52949,8 @@ static void tx_isp_t30_simple_ae_update(void)
 		}
 		target = tx_isp_t30_ae_corrected_target(
 			target, state->integration_time,
-			state->analog_gain_log2, &curve_value);
+			state->analog_gain_log2 +
+			state->isp_digital_gain_log2, &curve_value);
 		error = (s32)target - (s32)mean;
 		if (error > 1 || error < -1) {
 			correction = DIV_ROUND_UP((u32)abs(error) * gain_accuracy,
@@ -52977,12 +52966,14 @@ static void tx_isp_t30_simple_ae_update(void)
 	}
 	tx_isp_t30_ae_partition_exposure(
 		core, attr, state->total_exposure_request_log2,
-		min_integration, max_integration, &state->integration_time,
-		&state->analog_gain_request_log2);
+		min_integration, max_integration, max_isp_digital_gain_log2,
+		&state->integration_time, &state->analog_gain_request_log2,
+		&state->isp_digital_gain_log2);
 	tx_isp_t30_ae_apply_antiflicker(
 		core, attr, state->total_exposure_request_log2,
-		min_integration, max_integration, &state->integration_time,
-		&state->analog_gain_request_log2);
+		min_integration, max_integration, max_isp_digital_gain_log2,
+		&state->integration_time, &state->analog_gain_request_log2,
+		&state->isp_digital_gain_log2);
 
 	if (state->analog_gain_request_log2 < 0)
 		state->analog_gain_request_log2 = 0;
@@ -52990,6 +52981,11 @@ static void tx_isp_t30_simple_ae_update(void)
 		state->analog_gain_request_log2 = attr->max_again;
 	requested_gain = sensor_alloc_analog_gain(
 		state->analog_gain_request_log2, &sensor_code);
+	/* Preserve requested exposure when the sensor quantizes analog gain. */
+	state->isp_digital_gain_log2 = clamp_t(s32,
+		state->isp_digital_gain_log2 +
+		state->analog_gain_request_log2 - requested_gain,
+		0, max_isp_digital_gain_log2);
 	state->analog_gain_log2 = requested_gain;
 	state->analog_gain_code = (u16)sensor_code;
 	sensor_set_integration_time(0, state->integration_time);
@@ -53010,18 +53006,26 @@ static void tx_isp_t30_simple_ae_update(void)
 	system_gain->sensor_analog_gain = clamp_t(s32,
 		state->analog_gain_log2 >> 11, 0, 0xff);
 	system_gain->sensor_digital_gain = 0;
-	system_gain->isp_digital_gain = 0;
+	system_gain->isp_digital_gain = clamp_t(s32,
+		state->isp_digital_gain_log2 >> 11, 0, 0xff);
 	isp->sensor_analog_gain = state->analog_gain_log2;
 	isp->sensor_digital_gain = 0;
-	isp->isp_digital_gain = 0;
+	isp->isp_digital_gain = state->isp_digital_gain_log2;
+	APICAL_WRITE_32(0x01a0,
+		(APICAL_READ_32(0x01a0) & 0xfffff000) |
+		(math_exp2(state->isp_digital_gain_log2, 16, 8) & 0xfff));
 	sensor_update_black((int32_t *)TX_ISP_T30_ISP_PTR(0x100));
 	state->ae_cooldown = max_t(u8, attr->integration_time_apply_delay,
 				   attr->again_apply_delay);
 	state->ae_updates++;
 	if (state->ae_updates <= 8 || !(state->ae_updates & 0x1f))
-		pr_info("tx-isp-t30: calibrated AE mean=%u target=%u curve=%u int=%u gain=%d code=0x%x\n",
+		pr_info("tx-isp-t30: calibrated AE mean=%u target=%u curve=%u int=%u again=%d isp=%d code=0x%x limits=%u/%u\n",
 			mean, target, curve_value, state->integration_time,
-			state->analog_gain_log2, state->analog_gain_code);
+			state->analog_gain_log2,
+			state->isp_digital_gain_log2,
+			state->analog_gain_code,
+			system_gain->max_sensor_analog_gain,
+			system_gain->max_isp_digital_gain);
 }
 
 int32_t AE_fsm_process_interrupt(int32_t *arg1, char arg2)
@@ -57715,7 +57719,8 @@ static void tx_isp_t30_ae_apply_antiflicker(
 	const struct tx_isp_t30_core_sensor_view *core,
 	const struct tx_isp_t30_sensor_attribute_view *attr,
 	s32 total_exposure_log2, u32 min_integration, u32 max_integration,
-	u32 *integration_time, s32 *analog_gain_log2)
+	s32 max_isp_digital_gain_log2, u32 *integration_time,
+	s32 *analog_gain_log2, s32 *isp_digital_gain_log2)
 {
 	u32 fps_numerator = core->fps >> 16;
 	u32 fps_denominator = core->fps & 0xffff;
@@ -57724,6 +57729,7 @@ static void tx_isp_t30_ae_apply_antiflicker(
 	u32 quantized;
 	u32 step_lines;
 	u64 line_rate;
+	s32 gain_log2;
 
 	if ((frequency != 50 && frequency != 60) ||
 	    !fps_numerator || !fps_denominator || !attr->total_height)
@@ -57746,10 +57752,12 @@ static void tx_isp_t30_ae_apply_antiflicker(
 		return;
 
 	*integration_time = quantized;
-	*analog_gain_log2 = clamp_t(s32,
-		total_exposure_log2 -
-		log2_fixed_to_fixed(quantized, 0, 16),
-		0, attr->max_again);
+	gain_log2 = max_t(s32, 0, total_exposure_log2 -
+		log2_fixed_to_fixed(quantized, 0, 16));
+	*analog_gain_log2 = min_t(s32, gain_log2, attr->max_again);
+	*isp_digital_gain_log2 = clamp_t(s32,
+		gain_log2 - *analog_gain_log2, 0,
+		max_isp_digital_gain_log2);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000038ee0 origin=model_output original=init_module */
