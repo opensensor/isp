@@ -3945,69 +3945,6 @@ void tx_isp_core_bind_event_dispatch_tables(struct tx_isp_dev *isp_dev)
     }
 }
 
-/* Platform device driver data structures for graph creation */
-struct isp_subdev_data {
-    uint32_t device_type;     /* 0x00: Device type (1=source, 2=sink) */
-    uint32_t device_id;       /* 0x04: Device ID */
-    uint32_t src_index;       /* 0x08: Source index (for type 2) */
-    uint32_t dst_index;       /* 0x0C: Destination index */
-    struct miscdevice misc;   /* 0x10: Misc device (starts at 0xC, but we pad) */
-    char device_name[16];     /* 0x20: Device name */
-    void *file_ops;           /* 0x30: File operations pointer */
-    void *proc_ops;           /* 0x34: Proc operations pointer */
-    char padding[0x100];      /* Padding to match Binary Ninja expectations */
-};
-
-static struct isp_subdev_data csi_subdev_data = {
-    .device_type = 1,    /* Source */
-    .device_id = 0,
-    .src_index = 0,
-    .dst_index = 0,
-    .device_name = "csi",
-    .file_ops = NULL,
-    .proc_ops = NULL
-};
-
-static struct isp_subdev_data vic_subdev_data = {
-    .device_type = 2,    /* Sink */
-    .device_id = 1,
-    .src_index = 0,      /* Connect to CSI (index 0) */
-    .dst_index = 1,      /* VIC is at index 1 */
-    .device_name = "vic",
-    .file_ops = NULL,
-    .proc_ops = NULL
-};
-
-static struct isp_subdev_data vin_subdev_data = {
-    .device_type = 1,    /* Source */
-    .device_id = 2,
-    .src_index = 0,
-    .dst_index = 2,
-    .device_name = "vin",
-    .file_ops = NULL,
-    .proc_ops = NULL
-};
-
-static struct isp_subdev_data fs_subdev_data = {
-    .device_type = 1,    /* Source */
-    .device_id = 3,
-    .src_index = 0,
-    .dst_index = 3,
-    .device_name = "fs",
-    .file_ops = NULL,
-    .proc_ops = NULL
-};
-
-static struct isp_subdev_data core_subdev_data = {
-    .device_type = 2,    /* Sink */
-    .device_id = 4,
-    .src_index = 1,      /* Connect to VIC */
-    .dst_index = 4,
-    .device_name = "core",
-    .file_ops = NULL,
-    .proc_ops = NULL
-};
-
 /* Frame channel device creation - implements the missing /dev/isp-fs* devices */
 static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 {
@@ -4135,12 +4072,13 @@ int tx_isp_core_probe(struct platform_device *pdev)
     extern struct platform_device tx_isp_fs_platform_device;
     extern struct platform_device tx_isp_core_platform_device;
 
-    /* Set up platform device driver data DIRECTLY on the registered devices */
-    platform_set_drvdata(&tx_isp_csi_platform_device, &csi_subdev_data);
-    platform_set_drvdata(&tx_isp_vic_platform_device, &vic_subdev_data);
-    platform_set_drvdata(&tx_isp_vin_platform_device, &vin_subdev_data);
-    platform_set_drvdata(&tx_isp_fs_platform_device, &fs_subdev_data);
-    platform_set_drvdata(&tx_isp_core_platform_device, &core_subdev_data);
+    /* The child platform drivers have already probed and installed their
+     * allocated runtime objects with platform_set_drvdata().  Do not replace
+     * those ownership pointers with the static descriptor placeholders here.
+     * Doing so makes the remove callbacks interpret module .data as a heap
+     * object; tx_isp_fs_remove() consequently kfree()s the placeholder and
+     * faults during module unload.  The core device installs isp_dev on its
+     * own pdev below, after tx_isp_subdev_init() succeeds. */
 
     /* SAFE: Set up subdev_count and subdev_list using proper struct members */
     struct platform_device *platform_devices[] = {
