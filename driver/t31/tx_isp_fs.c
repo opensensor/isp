@@ -456,10 +456,14 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 
     pr_info("*** tx_isp_fs_remove ***\n");
 
-    if (!fs_dev) {
+    if (IS_ERR_OR_NULL(fs_dev)) {
         pr_info("*** tx_isp_fs_remove: No FS device to remove (probe may have failed) ***\n");
         return 0;
     }
+
+    /* Detach ownership before releasing any child allocations.  This makes
+     * repeated/unwound platform teardown a no-op instead of a double free. */
+    platform_set_drvdata(pdev, NULL);
 
     /* SAFE: Clean up frame channels with proper array indexing */
     channels_buffer = (struct tx_isp_frame_channel *)fs_dev->channel_buffer;
