@@ -3776,10 +3776,16 @@ static unsigned char __attribute__((aligned(4))) map_kneepoint_y[880] = {
     0xc0, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
     0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00,
 };
+static uint32_t map_kneepoint_x[11] = {
+	32, 64, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048,
+};
 static unsigned char __attribute__((aligned(4))) min_kneepoint_y[44] = {
     0x20, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00,
     0x00, 0x01, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00,
     0x00, 0x04, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00,
+};
+static uint32_t min_kneepoint_x[11] = {
+	32, 64, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048,
 };
 static unsigned char __attribute__((aligned(4))) ctc_kneepoint_x[16] = {
     0x9a, 0x00, 0x00, 0x00, 0x53, 0x01, 0x00, 0x00, 0x4d, 0x02, 0x00, 0x00, 0xbe, 0x03, 0x00, 0x00,
@@ -6844,7 +6850,26 @@ static uintptr_t ev_changed;
 static unsigned char TizianoDefogStructMe[68];
 static const char LC59[] = "error: %s, %d, not support this format\n";
 static const char LC60[] = "error: %s,%d, buf = %p, chan = %p\n";
-static unsigned char TizianoAdrFpgaStructMe[64];
+struct t21_adr_fpga_args {
+	uint32_t *ctc_kneepoint_x;
+	uint32_t *ctc_kneepoint_mux;
+	uint32_t *min_kneepoint_x;
+	uint32_t *min_kneepoint_y;
+	uint32_t *map_kneepoint_x;
+	uint32_t *map_kneepoint_y;
+	uint32_t *contrast_w_distance;
+	uint32_t *adr_hist;
+	uint32_t *adr_block_y;
+	uint32_t *adr_block_hist;
+	uint32_t *adr_tm_base_lut;
+	uint32_t *adr_gam_x;
+	uint32_t *adr_gam_y;
+	uint32_t *adr_map_mode;
+	uint32_t *adr_light_end;
+	uint32_t *adr_block_light;
+};
+
+static struct t21_adr_fpga_args TizianoAdrFpgaStructMe;
 static uintptr_t adr_ratio;
 static unsigned char y_zone[900];
 static unsigned char y_zone_last[900];
@@ -26284,6 +26309,7 @@ int32_t subsection(int32_t *arg1, int32_t arg2, int32_t *arg3, int32_t *arg4, in
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013bc0 origin=fragment_seed original=Tiziano_adr_fpga */
+#if 0 /* Collapsed recovery retained for provenance; never execute it. */
 int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uintptr_t arg7, uintptr_t arg8, uintptr_t arg9, uintptr_t arg10, uintptr_t arg11, uintptr_t arg12, uintptr_t arg13, uintptr_t arg14, uintptr_t arg15)
 {
     uint32_t local_10 = 0;
@@ -29612,6 +29638,203 @@ Tiziano_adr_fpga0x24f0:
     goto Tiziano_adr_fpga0x2238;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+}
+#endif
+
+static uint32_t t21_adr_lut_interp(const uint32_t *x, const uint32_t *y,
+				  uint32_t count, uint32_t input)
+{
+	uint32_t i;
+
+	if (!count)
+		return input;
+	if (input <= x[0])
+		return y[0];
+
+	for (i = 1; i < count; i++) {
+		uint32_t span;
+		uint32_t offset;
+		int32_t delta;
+
+		if (input > x[i])
+			continue;
+		span = x[i] - x[i - 1];
+		if (!span)
+			return y[i];
+		offset = input - x[i - 1];
+		delta = (int32_t)y[i] - (int32_t)y[i - 1];
+		return (uint32_t)((int32_t)y[i - 1] +
+			(delta * (int32_t)offset) / (int32_t)span);
+	}
+
+	return y[count - 1];
+}
+
+static uint32_t t21_adr_blend_curve(uint32_t input, uint32_t gamma,
+				    uint32_t strength_q10,
+				    uint32_t floor, uint32_t ceiling)
+{
+	int32_t delta = (int32_t)gamma - (int32_t)input;
+	int32_t output = (int32_t)input +
+		(delta * (int32_t)strength_q10) / 1024;
+
+	if (output < (int32_t)floor)
+		output = floor;
+	if (output > (int32_t)ceiling)
+		output = ceiling;
+	return output;
+}
+
+/* Bounds-safe port of the common T21/T31 ADR curve construction.  The SoC
+ * supplies the mechanics; the gamma, light, map and block behavior remains
+ * entirely owned by the active tuning bin. */
+int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
+			 uintptr_t a3, uintptr_t arg4, uintptr_t arg5,
+			 uintptr_t arg6, uintptr_t arg7, uintptr_t arg8,
+			 uintptr_t arg9, uintptr_t arg10, uintptr_t arg11,
+			 uintptr_t arg12, uintptr_t arg13, uintptr_t arg14,
+			 uintptr_t arg15)
+{
+	uint32_t *min_x = (uint32_t *)a2;
+	uint32_t *min_y = (uint32_t *)a3;
+	uint32_t *map_x = (uint32_t *)arg4;
+	uint32_t *map_y = (uint32_t *)arg5;
+	uint32_t *hist = (uint32_t *)arg7;
+	uint32_t *block_y = (uint32_t *)arg8;
+	uint32_t *base = (uint32_t *)arg10;
+	uint32_t *gamma_x = (uint32_t *)arg11;
+	uint32_t *gamma_y = (uint32_t *)arg12;
+	uint32_t *map_mode = (uint32_t *)arg13;
+	uint32_t *light = (uint32_t *)arg14;
+	uint32_t *block = (uint32_t *)arg15;
+	uint32_t hist_total = 0;
+	uint32_t block_total = 0;
+	uint32_t block_average;
+	uint32_t floor;
+	uint32_t ceiling;
+	uint32_t i;
+
+	(void)a0;
+	(void)a1;
+	(void)arg6;
+	(void)arg9;
+
+	if (!min_x || !min_y || !map_x || !map_y || !hist || !block_y ||
+	    !base || !gamma_x || !gamma_y || !map_mode || !light || !block)
+		return -EINVAL;
+
+	for (i = 0; i < 512; i++)
+		hist_total += hist[i];
+	for (i = 0; i < 20; i++)
+		block_total += block_y[i];
+	block_average = block_total / 20;
+
+	floor = base[0];
+	ceiling = base[8];
+	if (ceiling <= floor || ceiling > 0xfff)
+		ceiling = 0xfff;
+
+	/* The global minimum curve uses the tuning bin's gamma and its light/map
+	 * thresholds.  It rises gently out of the shadows and rolls off again in
+	 * the highlights, matching the common T31 math without its 24-block ABI. */
+	for (i = 0; i < 11; i++) {
+		uint32_t x = min_x[i];
+		uint32_t gamma = t21_adr_lut_interp(gamma_x, gamma_y, 129, x);
+		uint32_t start = light[16];
+		uint32_t rolloff = map_mode[4];
+		uint32_t lift = light[8];
+		uint32_t strength = 0;
+
+		if (lift > 1000)
+			lift = 1000;
+		if (!rolloff)
+			rolloff = 1;
+		if (x > start) {
+			strength = lift * 1024 / 1000;
+			strength = strength * (x - start) /
+				(rolloff + x - start);
+			strength = strength * 4095 / (4095 + x);
+		}
+		min_y[i] = t21_adr_blend_curve(x, gamma, strength,
+						 floor, ceiling);
+	}
+
+	/* Each 4x5 statistics block gets its own tuning-derived map curve.  The
+	 * block statistic only changes the strength, never the curve shape, so
+	 * sensor and lens policy stays in the loaded gamma/light tables. */
+	for (i = 0; i < 20; i++) {
+		uint32_t block_scale = 1024;
+		uint32_t adapt = block[5];
+		uint32_t j;
+
+		if (adapt > 250)
+			adapt = 250;
+		adapt = adapt * 1024 / 1000;
+		if (hist_total && block_average) {
+			if (block_y[i] < block_average)
+				block_scale += (block_average - block_y[i]) * adapt /
+					block_average;
+			else {
+				uint32_t reduction = (block_y[i] - block_average) *
+					adapt / block_average;
+
+				block_scale = reduction < block_scale ?
+					block_scale - reduction : 0;
+			}
+		}
+
+		for (j = 0; j < 11; j++) {
+			uint32_t x = map_x[j];
+			uint32_t gamma = t21_adr_lut_interp(gamma_x, gamma_y,
+							   129, x);
+			uint32_t lift = block[2];
+			uint32_t rolloff = block[4];
+			uint32_t shoulder_start = light[10];
+			uint32_t shoulder_width = map_mode[3] + light[10];
+			uint32_t highlight_rolloff = block[8];
+			uint32_t shoulder_lift = light[20];
+			uint32_t strength;
+			uint32_t output;
+
+			if (lift > 1000)
+				lift = 1000;
+			if (!rolloff)
+				rolloff = 1;
+			strength = lift * 1024 / 1000;
+			strength = strength * rolloff / (rolloff + x);
+			strength = strength * block_scale / 1024;
+			if (strength > 1024)
+				strength = 1024;
+			output = t21_adr_blend_curve(x, gamma, strength,
+						     floor, ceiling);
+
+			/* Restore the broad midtone shoulder present in the OEM curve.
+			 * Its start, width, amplitude and highlight decay are all tuning
+			 * fields; the SoC code only supplies the bounded interpolation. */
+			if (!shoulder_width)
+				shoulder_width = 1;
+			if (!highlight_rolloff)
+				highlight_rolloff = 1;
+			if (shoulder_lift > 1000)
+				shoulder_lift = 1000;
+			if (x > shoulder_start) {
+				uint32_t shoulder = shoulder_lift *
+					(x - shoulder_start) /
+					(shoulder_width + x - shoulder_start);
+
+				shoulder = shoulder * highlight_rolloff /
+					(highlight_rolloff + x);
+				shoulder = shoulder * block_scale / 1024;
+				output = output + shoulder < output ? ceiling :
+					output + shoulder;
+				if (output > ceiling)
+					output = ceiling;
+			}
+			map_y[i * 11 + j] = output;
+		}
+	}
+
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000160f0 origin=fragment_seed original=cm_control */
@@ -40721,138 +40944,50 @@ int32_t tisp_adr_ev_update(uint32_t arg1, uint32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000275b8 origin=fragment_seed original=tiziano_adr_get_data */
 int64_t tiziano_adr_get_data(uintptr_t a0)
 {
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uintptr_t a3 = 0;
-    uint32_t ra = 0;
-    uint32_t t0 = 0;
-    uint32_t t1 = 0;
-    uint32_t t2 = 0;
-    uint32_t t3 = 0;
-    uint32_t t4 = 0;
-    uint32_t t5 = 0;
-    uint32_t t6 = 0;
-    uint32_t t7 = 0;
-    uintptr_t t8 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	const uint8_t *src = (const uint8_t *)a0;
+	uint32_t *block_hist = (uint32_t *)adr_block_hist;
+	uint32_t *block_y = (uint32_t *)adr_block_y;
+	uint32_t *hist = (uint32_t *)adr_hist;
+	uint32_t row;
+	uint32_t col;
+	uint32_t group;
 
-    /* fragment 0: Arithmetic */
-    t3 = (uintptr_t)&adr_block_hist;
-    t2 = (uintptr_t)&adr_block_y;
-    t5 = 16711680;
-    t0 = a0;
-    a1 = 0;
-    t4 = 5;
-    t3 = t3;
-    t2 = t2;
-    t5 = t5 | 65535;
-    t6 = 80;
+	/* The statistics DMA packs a 4x5 luminance grid and five one-byte
+	 * histogram values for each cell into the first 160 bytes. */
+	for (row = 0; row < 4; row++) {
+		for (col = 0; col < 5; col++) {
+			const uint8_t *cell = src + row * 40 + col * 8;
+			uint32_t out = col * 20 + row * 5;
 
-    /* fragment 1: Branch */
-    t7 = 4;
-    goto tiziano_adr_get_data0x88;
+			block_y[col * 4 + row] =
+				(*(const uint32_t *)(cell + 8)) & 0x00ffffff;
+			block_hist[out + 4] = cell[11];
+			block_hist[out + 3] = cell[12];
+			block_hist[out + 2] = cell[13];
+			block_hist[out + 1] = cell[14];
+			block_hist[out] = cell[15];
+		}
+	}
 
-tiziano_adr_get_data0x30:
-    /* fragment 2: MemoryAccess */
-    t9 = *(uint32_t *)((char *)a3 + 8);
-    t8 = t1 + a2;
-    t9 = t9 & t5;
-    *(uint32_t *)((char *)t8 + 0) = t9;
-    t8 = *(uint8_t *)((char *)a3 + 11);
-    a2 = a2 + 16;
-    *(uint32_t *)((char *)v0 + 0) = t8;
-    t8 = *(uint8_t *)((char *)v1 + 12);
-    a3 = a3 + 8;
-    *(uint32_t *)((char *)v0 + -4) = t8;
-    t8 = *(uint8_t *)((char *)v1 + 13);
-    v0 = v0 + 80;
-    *(uint32_t *)((char *)v0 + -88) = t8;
-    t8 = *(uint8_t *)((char *)v1 + 14);
-    v1 = v1 + 8;
-    *(uint32_t *)((char *)v0 + -92) = t8;
-    t8 = *(uint8_t *)((char *)v1 + 7);
+	/* The remainder contains 512 packed 12-bit histogram bins.  The first
+	 * 510 arrive five-at-a-time in eight bytes; the final pair share the
+	 * last word. */
+	for (group = 0; group < 102; group++) {
+		const uint8_t *packed = src + 168 + group * 8;
+		uint32_t low = *(const uint32_t *)packed;
+		uint32_t high = *(const uint32_t *)(packed + 4);
+		uint32_t out = group * 5;
 
-    /* fragment 3: Branch */
-    *(uint32_t *)((char *)v0 + -96) = t8;
-    if (a2 != t6) { goto tiziano_adr_get_data0x30; }
+		hist[out + 4] = low & 0xfff;
+		hist[out + 3] = (low >> 12) & 0xfff;
+		hist[out + 2] = ((high & 0xf) << 8) | packed[3];
+		hist[out + 1] = (high >> 4) & 0xfff;
+		hist[out] = (*(const uint16_t *)(packed + 6)) & 0xfff;
+	}
+	hist[511] = (*(const uint32_t *)(src + 988) >> 4) & 0xfff;
+	hist[510] = (*(const uint16_t *)(src + 990)) & 0xfff;
 
-    /* fragment 4: Arithmetic */
-    a1 = a1 + 1;
-
-    /* fragment 5: Branch */
-    t0 = t0 + 40;
-    if (a1 == t7) { goto tiziano_adr_get_data0xb0; }
-
-tiziano_adr_get_data0x88:
-    /* fragment 6: Arithmetic */
-    v0 = a1 * t4;
-    t1 = a1 << 2;
-    v0 = v0 + 4;
-    v0 = (uintptr_t)v0 << 2;
-    v0 = t3 + (uintptr_t)v0;
-    t1 = t2 + t1;
-    v1 = t0;
-    a3 = t0;
-
-    /* fragment 7: Branch */
-    a2 = 0;
-    goto tiziano_adr_get_data0x30;
-
-tiziano_adr_get_data0xb0:
-    /* fragment 8: Arithmetic */
-    a1 = (uintptr_t)&adr_hist;
-    v0 = (uintptr_t *)&adr_hist;
-    a2 = a1;
-    v1 = a0 + 168;
-    v0 = v0 + 16;
-    a2 = a2 + 2056;
-
-tiziano_adr_get_data0xc8:
-    /* fragment 9: MemoryAccess */
-    a3 = *(uint32_t *)((char *)v1 + 0);
-    v0 = v0 + 20;
-    a3 = a3 & 4095;
-    *(uint32_t *)((char *)v0 + -20) = a3;
-    a3 = *(uint32_t *)((char *)v1 + 0);
-    v1 = v1 + 8;
-    a3 = a3 >> 12;
-    a3 = a3 & 4095;
-    *(uint32_t *)((char *)v0 + -24) = a3;
-    a3 = *(uint32_t *)((char *)v1 + -4);
-    t0 = *(uint8_t *)((char *)v1 + -5);
-    a3 = a3 & 15;
-    a3 = a3 << 8;
-    a3 = a3 | t0;
-    *(uint32_t *)((char *)v0 + -28) = a3;
-    a3 = *(uint32_t *)((char *)v1 + -4);
-    a3 = a3 >> 4;
-    a3 = a3 & 4095;
-    *(uint32_t *)((char *)v0 + -32) = a3;
-    a3 = *(uint16_t *)((char *)v1 + -2);
-    a3 = a3 & 4095;
-
-    /* fragment 10: Branch */
-    *(uint32_t *)((char *)v0 + -36) = a3;
-    if (v0 != a2) { goto tiziano_adr_get_data0xc8; }
-
-    /* fragment 11: MemoryAccess */
-    v1 = *(uint32_t *)((char *)a0 + 988);
-    v0 = a1;
-    v1 = v1 >> 4;
-    v1 = v1 & 4095;
-    *(uint32_t *)((char *)v0 + 2044) = v1;
-    v1 = *(uint16_t *)((char *)a0 + 990);
-    v1 = v1 & 4095;
-
-    /* fragment 12: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 13: MemoryAccess */
-    *(uint32_t *)((char *)v0 + 2040) = v1;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027700 origin=model_output original=tiziano_adr_interrupt_static */
@@ -40893,6 +41028,7 @@ int32_t tiziano_adr_interrupt_static(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027874 origin=model_output original=tiziano_adr_algorithm */
+#if 0 /* Recovered pointer-typed interpolation; superseded by the typed port below. */
 int32_t tiziano_adr_algorithm(void)
 {
 	uint32_t ev_now_value = ev_now;
@@ -40910,15 +41046,12 @@ int32_t tiziano_adr_algorithm(void)
 	uint32_t prod;
 	uint32_t q;
 	uint32_t result;
-	uint32_t buf[48];
-	uint32_t *src;
-	uint32_t *dst;
-	uint32_t *fpga_struct;
+	struct t21_adr_fpga_args *args = &TizianoAdrFpgaStructMe;
 
 	if (ev_changed_value != 1)
 		goto setup_fpga;
 
-	*(uint32_t *)&ev_changed_value = 0;
+	ev_changed = 0;
 	idx = 0;
 	i = 0;
 
@@ -41063,37 +41196,159 @@ int32_t tiziano_adr_algorithm(void)
 	}
 
 setup_fpga:
-	fpga_struct = (uint32_t *)&TizianoAdrFpgaStructMe;
-	*(uint32_t *)&TizianoAdrFpgaStructMe = (uint32_t)((char *)&TizianoAdrFpgaStructMe);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x4) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x4);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x8) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x8);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0xc) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0xc);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x10) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x10);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x14) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x14);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x18) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x18);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x1c) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x1c);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x20) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x20);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x24) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x24);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x28) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x28);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x2c) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x2c);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x30) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x30);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x34) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x34);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x38) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x38);
-	*(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x3c) = (uint32_t)((char *)&TizianoAdrFpgaStructMe + 0x3c);
+	args->ctc_kneepoint_x = ctc_kneepoint_x;
+	args->ctc_kneepoint_mux = ctc_kneepoint_mux;
+	args->min_kneepoint_x = min_kneepoint_x;
+	args->min_kneepoint_y = min_kneepoint_y;
+	args->map_kneepoint_x = map_kneepoint_x;
+	args->map_kneepoint_y = map_kneepoint_y;
+	args->contrast_w_distance = contrast_w_distance;
+	args->adr_hist = adr_hist;
+	args->adr_block_y = adr_block_y;
+	args->adr_block_hist = adr_block_hist;
+	args->adr_tm_base_lut = adr_tm_base_lut;
+	args->adr_gam_x = adr_gam_x;
+	args->adr_gam_y = adr_gam_y;
+	args->adr_map_mode = adr_map_mode;
+	args->adr_light_end = adr_light_end;
+	args->adr_block_light = adr_block_light;
 
-	src = (uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x10);
-	dst = (uint32_t *)buf;
-	for (i = 0; i < 48; i++)
-		((uint32_t *)dst)[i] = src[i];
-
-	Tiziano_adr_fpga(*(uint32_t *)&TizianoAdrFpgaStructMe, *(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x4), *(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0x8), *(uint32_t *)((char *)&TizianoAdrFpgaStructMe + 0xc), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+	Tiziano_adr_fpga((uintptr_t)args->ctc_kneepoint_x,
+		(uintptr_t)args->ctc_kneepoint_mux,
+		(uintptr_t)args->min_kneepoint_x,
+		(uintptr_t)args->min_kneepoint_y,
+		(uintptr_t)args->map_kneepoint_x,
+		(uintptr_t)args->map_kneepoint_y,
+		(uintptr_t)args->contrast_w_distance,
+		(uintptr_t)args->adr_hist,
+		(uintptr_t)args->adr_block_y,
+		(uintptr_t)args->adr_block_hist,
+		(uintptr_t)args->adr_tm_base_lut,
+		(uintptr_t)args->adr_gam_x,
+		(uintptr_t)args->adr_gam_y,
+		(uintptr_t)args->adr_map_mode,
+		(uintptr_t)args->adr_light_end,
+		(uintptr_t)args->adr_block_light);
 	return 0;
+}
+#endif
+
+static uint32_t t21_adr_ev_interpolate(uint32_t ev, uint32_t ev_lo,
+				       uint32_t ev_hi, uint32_t value_lo,
+				       uint32_t value_hi)
+{
+	uint32_t distance;
+	uint32_t span;
+	uint32_t delta;
+
+	if (ev_hi == ev_lo)
+		return value_hi;
+	distance = ev >= ev_lo ? ev - ev_lo : ev_lo - ev;
+	span = ev_hi >= ev_lo ? ev_hi - ev_lo : ev_lo - ev_hi;
+	if (value_hi >= value_lo) {
+		delta = value_hi - value_lo;
+		return value_lo + distance * delta / span;
+	}
+	delta = value_lo - value_hi;
+	return value_lo - distance * delta / span;
+}
+
+int32_t tiziano_adr_algorithm(void)
+{
+	struct t21_adr_fpga_args *args = &TizianoAdrFpgaStructMe;
+	uint32_t *ev_list = (uint32_t *)adr_ev_list;
+	uint32_t *light = (uint32_t *)adr_light_end;
+	uint32_t *block = (uint32_t *)adr_block_light;
+	uint32_t *ligb = (uint32_t *)adr_ligb_list;
+	uint32_t *blp2 = (uint32_t *)adr_blp2_list;
+	uint32_t *mapb1 = (uint32_t *)adr_mapb1_list;
+	uint32_t *mapb2 = (uint32_t *)adr_mapb2_list;
+	uint32_t *mapb3 = (uint32_t *)adr_mapb3_list;
+	uint32_t *mapb4 = (uint32_t *)adr_mapb4_list;
+	uint32_t idx;
+
+	if (ev_changed == 1) {
+		ev_changed = 0;
+		for (idx = 0; idx < 9 && ev_list[idx] < ev_now; idx++)
+			;
+
+		if (idx == 0) {
+			light[28] = ligb[0];
+			block[4] = blp2[0];
+			block[10] = mapb1[0];
+			block[11] = mapb2[0];
+			block[12] = mapb3[0];
+			block[13] = mapb4[0];
+		} else if (idx == 9) {
+			light[28] = ligb[8];
+			block[4] = blp2[8];
+			block[10] = mapb1[8];
+			block[11] = mapb2[8];
+			block[12] = mapb3[8];
+			block[13] = mapb4[8];
+		} else if (ev_list[idx] == ev_list[idx - 1]) {
+			light[28] = ligb[idx];
+			block[4] = blp2[idx];
+			block[10] = mapb1[idx];
+			block[11] = mapb2[idx];
+			block[12] = mapb3[idx];
+			block[13] = mapb4[idx];
+		} else {
+			uint32_t ev_lo = ev_list[idx - 1];
+			uint32_t ev_hi = ev_list[idx];
+
+			light[28] = t21_adr_ev_interpolate(ev_now, ev_lo, ev_hi,
+							ligb[idx - 1], ligb[idx]);
+			block[4] = t21_adr_ev_interpolate(ev_now, ev_lo, ev_hi,
+							blp2[idx - 1], blp2[idx]);
+			block[10] = t21_adr_ev_interpolate(ev_now, ev_lo, ev_hi,
+							 mapb1[idx - 1], mapb1[idx]);
+			block[11] = t21_adr_ev_interpolate(ev_now, ev_lo, ev_hi,
+							 mapb2[idx - 1], mapb2[idx]);
+			block[12] = t21_adr_ev_interpolate(ev_now, ev_lo, ev_hi,
+							 mapb3[idx - 1], mapb3[idx]);
+			block[13] = t21_adr_ev_interpolate(ev_now, ev_lo, ev_hi,
+							 mapb4[idx - 1], mapb4[idx]);
+		}
+	}
+
+	args->ctc_kneepoint_x = (uint32_t *)ctc_kneepoint_x;
+	args->ctc_kneepoint_mux = (uint32_t *)ctc_kneepoint_mux;
+	args->min_kneepoint_x = min_kneepoint_x;
+	args->min_kneepoint_y = (uint32_t *)min_kneepoint_y;
+	args->map_kneepoint_x = map_kneepoint_x;
+	args->map_kneepoint_y = (uint32_t *)map_kneepoint_y;
+	args->contrast_w_distance = (uint32_t *)contrast_w_distance;
+	args->adr_hist = (uint32_t *)adr_hist;
+	args->adr_block_y = (uint32_t *)adr_block_y;
+	args->adr_block_hist = (uint32_t *)adr_block_hist;
+	args->adr_tm_base_lut = (uint32_t *)adr_tm_base_lut;
+	args->adr_gam_x = (uint32_t *)adr_gam_x;
+	args->adr_gam_y = (uint32_t *)adr_gam_y;
+	args->adr_map_mode = (uint32_t *)adr_map_mode;
+	args->adr_light_end = light;
+	args->adr_block_light = block;
+
+	return (int32_t)Tiziano_adr_fpga(
+		(uintptr_t)args->ctc_kneepoint_x,
+		(uintptr_t)args->ctc_kneepoint_mux,
+		(uintptr_t)args->min_kneepoint_x,
+		(uintptr_t)args->min_kneepoint_y,
+		(uintptr_t)args->map_kneepoint_x,
+		(uintptr_t)args->map_kneepoint_y,
+		(uintptr_t)args->contrast_w_distance,
+		(uintptr_t)args->adr_hist,
+		(uintptr_t)args->adr_block_y,
+		(uintptr_t)args->adr_block_hist,
+		(uintptr_t)args->adr_tm_base_lut,
+		(uintptr_t)args->adr_gam_x,
+		(uintptr_t)args->adr_gam_y,
+		(uintptr_t)args->adr_map_mode,
+		(uintptr_t)args->adr_light_end,
+		(uintptr_t)args->adr_block_light);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027ea8 origin=model_output original=tisp_adr_process */
-static int32_t (*volatile tisp_adr_algorithm_entry)(void) =
-	tiziano_adr_algorithm;
-
 int32_t tisp_adr_process(void)
 {
 	uint32_t *knee;
@@ -41107,11 +41362,7 @@ int32_t tisp_adr_process(void)
 	uint32_t reg;
 	uint32_t val;
 
-	/* The recovered algorithm body still contains irreducible control flow.
-	 * Indirect the call so GCC does not infer it as noreturn and discard the
-	 * OEM register-programming sequence below it.
-	 */
-	tisp_adr_algorithm_entry();
+	tiziano_adr_algorithm();
 
 	knee = (uint32_t *)&map_kneepoint_y;
 	for (i = 0; i != 20; i++) {
@@ -41465,82 +41716,95 @@ int32_t tisp_adr_param_array_set(int32_t param_id, int32_t src)
 
 	switch (param_id) {
 	case 0x16b:
-		memcpy(&param_adr_ct_par_array, (void *)src, 32);
+		memcpy(param_adr_ct_par_array, (void *)src,
+		       sizeof(param_adr_ct_par_array));
 		return 0;
 	case 0x16c:
-		memcpy(&param_adr_weight_20_lut_array, (void *)src, 128);
+		memcpy(param_adr_weight_20_lut_array, (void *)src,
+		       sizeof(param_adr_weight_20_lut_array));
 		return 0;
 	case 0x16d:
-		memcpy(&param_adr_weight_02_lut_array, (void *)src, 128);
+		memcpy(param_adr_weight_02_lut_array, (void *)src,
+		       sizeof(param_adr_weight_02_lut_array));
 		return 0;
 	case 0x16e:
-		memcpy(&param_adr_weight_12_lut_array, (void *)src, 128);
+		memcpy(param_adr_weight_12_lut_array, (void *)src,
+		       sizeof(param_adr_weight_12_lut_array));
 		return 0;
 	case 0x16f:
-		memcpy(&param_adr_weight_22_lut_array, (void *)src, 128);
+		memcpy(param_adr_weight_22_lut_array, (void *)src,
+		       sizeof(param_adr_weight_22_lut_array));
 		return 0;
 	case 0x170:
-		memcpy(&param_adr_weight_21_lut_array, (void *)src, 128);
+		memcpy(param_adr_weight_21_lut_array, (void *)src,
+		       sizeof(param_adr_weight_21_lut_array));
 		return 0;
 	case 0x171:
-		memcpy(&param_adr_ctc_kneepoint_array, (void *)src, 32);
+		memcpy(param_adr_ctc_kneepoint_array, (void *)src,
+		       sizeof(param_adr_ctc_kneepoint_array));
 		return 0;
 	case 0x172:
-		memcpy(&param_adr_min_kneepoint_array, (void *)src, 32);
+		memcpy(param_adr_min_kneepoint_array, (void *)src,
+		       sizeof(param_adr_min_kneepoint_array));
 		return 0;
 	case 0x173:
-		memcpy(&param_adr_map_kneepoint_array, (void *)src, 92);
+		memcpy(param_adr_map_kneepoint_array, (void *)src,
+		       sizeof(param_adr_map_kneepoint_array));
 		return 0;
 	case 0x174:
-		memcpy(&param_adr_coc_kneepoint_array, (void *)src, 92);
+		memcpy(param_adr_coc_kneepoint_array, (void *)src,
+		       sizeof(param_adr_coc_kneepoint_array));
 		return 0;
 	case 0x175:
-		memcpy(&param_adr_centre_w_dis_array, (void *)src, 84);
+		memcpy(param_adr_centre_w_dis_array, (void *)src,
+		       sizeof(param_adr_centre_w_dis_array));
 		return 0;
 	case 0x176:
-		memcpy(&param_adr_contrast_w_dis_array, (void *)src, 124);
+		memcpy(param_adr_contrast_w_dis_array, (void *)src,
+		       sizeof(param_adr_contrast_w_dis_array));
 		return 0;
 	case 0x177:
-		memcpy(&param_adr_stat_block_hist_diff_array, (void *)src, 16);
+		memcpy(param_adr_stat_block_hist_diff_array, (void *)src,
+		       sizeof(param_adr_stat_block_hist_diff_array));
 		return 0;
 	case 0x178:
-		memcpy(&adr_tm_base_lut, (void *)src, 16);
+		memcpy(adr_tm_base_lut, (void *)src, sizeof(adr_tm_base_lut));
 		return 0;
 	case 0x179:
-		memcpy(&adr_gam_x, (void *)src, 16);
+		memcpy(adr_gam_x, (void *)src, sizeof(adr_gam_x));
 		return 0;
 	case 0x17a:
-		memcpy(&adr_gam_y, (void *)src, 16);
+		memcpy(adr_gam_y, (void *)src, sizeof(adr_gam_y));
 		return 0;
 	case 0x17b:
-		memcpy(&adr_light_end, (void *)src, 516);
+		memcpy(adr_light_end, (void *)src, sizeof(adr_light_end));
 		return 0;
 	case 0x17c:
-		memcpy(&adr_block_light, (void *)src, 116);
+		memcpy(adr_block_light, (void *)src, sizeof(adr_block_light));
 		return 0;
 	case 0x17d:
-		memcpy(&adr_map_mode, (void *)src, 60);
+		memcpy(adr_map_mode, (void *)src, sizeof(adr_map_mode));
 		return 0;
 	case 0x17e:
-		memcpy(&adr_ev_list, (void *)src, 44);
+		memcpy(adr_ev_list, (void *)src, sizeof(adr_ev_list));
 		return 0;
 	case 0x17f:
-		memcpy(&adr_ligb_list, (void *)src, 44);
+		memcpy(adr_ligb_list, (void *)src, sizeof(adr_ligb_list));
 		return 0;
 	case 0x180:
-		memcpy(&adr_mapb1_list, (void *)src, 44);
+		memcpy(adr_mapb1_list, (void *)src, sizeof(adr_mapb1_list));
 		return 0;
 	case 0x181:
-		memcpy(&adr_mapb2_list, (void *)src, 44);
+		memcpy(adr_mapb2_list, (void *)src, sizeof(adr_mapb2_list));
 		return 0;
 	case 0x182:
-		memcpy(&adr_mapb3_list, (void *)src, 44);
+		memcpy(adr_mapb3_list, (void *)src, sizeof(adr_mapb3_list));
 		return 0;
 	case 0x183:
-		memcpy(&adr_mapb4_list, (void *)src, 44);
+		memcpy(adr_mapb4_list, (void *)src, sizeof(adr_mapb4_list));
 		return 0;
 	case 0x184:
-		memcpy(&adr_blp2_list, (void *)src, 36);
+		memcpy(adr_blp2_list, (void *)src, sizeof(adr_blp2_list));
 		tiziano_adr_params_init();
 		return 0;
 	}
@@ -41760,8 +42024,7 @@ int32_t tiziano_adr_init(uint32_t width, uint32_t height)
 	system_reg_write(0xda8, (ct_par[2] << 16) | (ct_par[1] << 8) | ct_par[0]);
 
 	tiziano_adr_params_init();
-	/* The recovered statistics unpacker is still being audited.  Static ADR
-	 * programming remains active; defer the DMA callback for now. */
+	system_irq_func_set(0x14, tiziano_adr_interrupt_static);
 	tisp_event_set_cb(2, (uint32_t)tisp_adr_process);
 
 	return 0;
