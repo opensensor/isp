@@ -4014,15 +4014,15 @@ static unsigned char ae_hist_array[1024];
 static unsigned char ae_hist_ir_array[1024];
 static unsigned char tisp_ae_hist[1068];
 static unsigned char tisp_ae_hist_last[1068];
-static uintptr_t data_95330;
-static uintptr_t data_95334;
-static uintptr_t data_95338;
-static uintptr_t data_9533c;
-static uintptr_t data_95340;
-static unsigned char data_95344[16384];
-static unsigned char data_95348[16384];
-static unsigned char data_9534c[16384];
-static unsigned char data_95350[16384];
+static volatile uintptr_t data_95330;
+static volatile uintptr_t data_95334;
+static volatile uintptr_t data_95338;
+static volatile uintptr_t data_9533c;
+static volatile uintptr_t data_95340;
+static volatile unsigned char data_95344[16384];
+static volatile unsigned char data_95348[16384];
+static volatile unsigned char data_9534c[16384];
+static volatile unsigned char data_95350[16384];
 static inline uint32_t tisp_ae_abs_diff(uint32_t a, uint32_t b)
 {
 	uint32_t d = a - b;
@@ -42128,28 +42128,33 @@ int32_t tisp_ae_get_statistics(uint32_t *arg1, uint32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a3f0 origin=fragment_seed original=ae_interrupt_static */
 int32_t ae_interrupt_static(void)
 {
+	u32 offset = (system_reg_read(0x750) << 8) & 0x3000;
+	u32 base = *(u32 *)(tispinfo + 0xc);
+
+	if (!base)
+		return IRQ_HANDLED;
+	dma_cache_sync(NULL, (void *)(uintptr_t)(base + offset), 0x1000, 0);
+	tisp_ae_get_statistics((u32 *)(uintptr_t)(base + offset), 0xf001f001);
+	return IRQ_HANDLED;
+}
+
+static int t21_ae_update_luma(void)
+{
 	u32 *params = (u32 *)_ae_parameter;
 	const u32 *scene = t21_ae_scene_cfg;
 	u32 *stat = (u32 *)_ae_stat;
-	u32 rows = params[1];
-	u32 cols = params[3];
-	u32 offset = (system_reg_read(0x750) << 8) & 0x3000;
-	u32 base = *(u32 *)(tispinfo + 0xc);
 	u32 mix_r = 1;
 	u32 mix_b = 1;
-	u32 row;
-	u32 col;
-	u64 luma_num = 0;
-	u64 luma_den = 0;
-	u32 event[12] = { 0 };
+	u32 mean = 0;
+	u32 fractions[2] = { 0 };
+	u32 zone_sum = 0;
+	u32 roi_mean = 0;
+	u32 roui_mean = 0;
+	int ret;
 
-	if (!base || !rows || !cols || rows > 15 || cols > 15)
-		return 0;
-
-	dma_cache_sync(NULL, (void *)(uintptr_t)(base + offset), 0x1000, 0);
-	if (tisp_ae_get_statistics((u32 *)(uintptr_t)(base + offset),
-				   0xf001f001) < 0)
-		return 0;
+	if (!params[1] || !params[3] ||
+	    params[1] > 15 || params[3] > 15)
+		return -EINVAL;
 
 	/* Match the OEM scene-mode selection.  These channel multipliers are
 	 * supplied by the active tuning bank; they account for the Bayer channel
@@ -42165,157 +42170,125 @@ int32_t ae_interrupt_static(void)
 		mix_b = scene[10];
 	}
 
-	for (row = 0; row < rows; row++) {
-		for (col = 0; col < cols; col++) {
-			u32 index = row * cols + col;
-			u32 area = params[4 + col] * params[19 + row];
-			u32 dark = ((u32 *)ae_array_dc)[index];
-			u32 bright = ((u32 *)ae_array_sc)[index];
-			u32 normal;
-			u32 total;
-			u32 mixed;
-			u32 weight = ((u32 *)_ae_zone_weight)[index];
-
-			if (!area || !weight)
-				continue;
-			if (dark > area)
-				dark = area;
-			if (bright > area - dark)
-				bright = area - dark;
-			normal = area - dark - bright;
-			total = dark * mix_r + bright * mix_b + normal;
-			mixed = ((u32 *)ae_array_d)[index] * mix_r;
-			mixed += ((u32 *)ae_array_m)[index];
-			mixed += ((u32 *)ae_array_s)[index] * mix_b;
-			luma_num += (u64)mixed * weight;
-			luma_den += (u64)total * weight;
-		}
-	}
-
-	if (luma_den)
-		t21_ae_measured_luma = div_u64(luma_num, luma_den);
-	pr_debug_ratelimited("tx-isp-t21: ae stats grid=%ux%u mix=%u/%u dms=%u/%u/%u luma=%u\n",
-			    rows, cols, mix_r, mix_b,
+	ret = ae_weight_mean2((u32 *)ae_array_d, (u32 *)ae_array_m,
+			      (u32 *)ae_array_s,
+			      (u32)(uintptr_t)ae_array_ir,
+			      (u32 *)ae_array_dc, (u32 *)ae_array_sc,
+			      params, (u32 *)_ae_zone_weight,
+			      (u32 *)_exp_parameter, stat,
+			      (u32 *)_scene_roui_weight,
+			      (u32 *)_scene_roi_weight,
+			      (u32)(uintptr_t)_log2_lut,
+			      (u32)(uintptr_t)_weight_lut,
+			      (u32 *)_AePointPos, mix_r, mix_b,
+			      &mean, fractions, &zone_sum,
+			      &roi_mean, &roui_mean);
+	if (ret < 0)
+		return 0;
+	t21_ae_measured_luma = mean;
+	pr_debug_ratelimited("tx-isp-t21: ae stats grid=%ux%u mix=%u/%u dms=%u/%u/%u luma=%u roi=%u/%u\n",
+			    params[1], params[3], mix_r, mix_b,
 			    ((u32 *)ae_array_d)[0], ((u32 *)ae_array_m)[0],
-			    ((u32 *)ae_array_s)[0], t21_ae_measured_luma);
+			    ((u32 *)ae_array_s)[0], t21_ae_measured_luma,
+			    roi_mean, roui_mean);
 
-	/* Event 1 is the generic AE worker.  Keep all sensor I2C out of IRQ
-	 * context; tisp_event_process dispatches this from the firmware thread. */
-	event[2] = 1;
-	tisp_event_push(event);
-	return 1;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a494 origin=model_output original=tisp_ae_get_hist */
 int32_t tisp_ae_get_hist(uint32_t *arg1, uint32_t arg2, uint32_t arg3)
 {
-	uint32_t *i = ae_hist_ir_array;
-	uint32_t *dst = ae_hist_array;
-	uint32_t mask = 0xfffff;
-	uint32_t flags;
-	uint32_t sum;
-	uint32_t idx;
-	uint32_t total;
-	uint32_t *pct;
-	uint32_t *pct_end;
-	uint32_t val;
-	uint32_t mult_hi;
-	uint32_t mult_lo;
-	uint32_t div_hi;
-	uint32_t div_lo;
-	uint32_t div_result;
-	uint32_t rem;
+	u32 *hist = (u32 *)ae_hist_array;
+	u32 *ir_hist = (u32 *)ae_hist_ir_array;
+	u32 *hist_state = (u32 *)tisp_ae_hist;
+	u32 *previous = (u32 *)tisp_ae_hist_last;
+	u32 boundary[4];
+	u32 bucket;
+	u32 index;
+	u32 start;
+	u32 end;
+	u32 total = 0;
+	u32 normalized = 0;
+	unsigned long flags;
 
-	do {
+	if (!arg1)
+		return -EINVAL;
+
+	/* The DMA buffer contains 256 20-bit bins per enabled plane.  The
+	 * first-pass recovery advanced u32 pointers by two bytes and used the
+	 * start of the IR array as its loop terminator, turning the histogram
+	 * IRQ into an effectively infinite loop. */
+	for (index = 0; index < 256; index += 2) {
 		if (arg2 == 1) {
-			*dst = *arg1 & mask;
-			((void **)(uintptr_t)dst)[1] = arg1[1] & mask;
-			if (arg3 != arg2) {
-				i = (void *)(uintptr_t)((uintptr_t)i + (2));
-			} else {
-				*i = arg1[0x100] & mask;
-				((void **)(uintptr_t)i)[1] = arg1[0x101] & mask;
-				i = (void *)(uintptr_t)((uintptr_t)i + (2));
-			}
-		} else if (arg3 != 1) {
-			i = (void *)(uintptr_t)((uintptr_t)i + (2));
-		} else {
-			*i = *arg1 & mask;
-			((void **)(uintptr_t)i)[1] = arg1[1] & mask;
-			i = (void *)(uintptr_t)((uintptr_t)i + (2));
+			hist[index] = arg1[index] & 0xfffff;
+			hist[index + 1] = arg1[index + 1] & 0xfffff;
 		}
-		arg1 += 2;
-		dst = (void *)(uintptr_t)((uintptr_t)dst + (2));
-	} while (i != ae_hist_ir_array);
+		if (arg3 == 1) {
+			const u32 *src = arg1 + (arg2 == 1 ? 256 : 0);
 
-	memcpy(tisp_ae_hist, ae_hist_array, 0x400);
-	__private_spin_lock_irqsave((spinlock_t *)0, &flags);
-	memcpy(&data_95344, (void *)((char *)&tisp_ae_hist_last + 0x414), 0x10);
-	private_spin_unlock_irqrestore((spinlock_t *)0, flags);
-
-	sum = 0;
-	idx = 0;
-	while (idx != data_95344) {
-		sum += ae_hist_array[idx];
-		idx++;
-	}
-
-	memset(&data_95330, 0, 0x14);
-	total = data_95348;
-	rem = data_95334;
-	while (idx < total) {
-		rem += ae_hist_array[idx];
-		idx++;
-	}
-	data_95334 = rem;
-	val = data_95338;
-	div_hi = data_9534c;
-	while (total < div_hi) {
-		val += ae_hist_array[total];
-		total++;
-	}
-	data_95338 = val;
-	rem = data_9533c;
-	div_lo = data_95350;
-	while (div_hi < div_lo) {
-		rem += ae_hist_array[div_hi];
-		div_hi++;
-	}
-	data_9533c = rem;
-	div_result = data_95340;
-	while (div_lo < 0x100) {
-		div_result += ae_hist_array[div_lo];
-		div_lo++;
-	}
-	data_95340 = div_result;
-	total = rem + sum + val + div_result + data_95334;
-
-	if (total != 0) {
-		pct = &data_95334;
-		pct_end = &data_95344;
-		while (pct != pct_end) {
-			val = *pct;
-			mult_hi = (uint32_t)(val >> 31);
-			mult_lo = val;
-			div_hi = total;
-			div_lo = 0;
-			div_result = fix_point_div(0, 0, mult_lo, mult_hi, div_hi, div_lo);
-			*pct = div_result;
-			pct++;
+			ir_hist[index] = src[index] & 0xfffff;
+			ir_hist[index + 1] = src[index + 1] & 0xfffff;
 		}
-		data_95330 = 0xffff - data_95334 - data_95338 - data_9533c - data_95340;
+	}
+
+	memcpy(hist_state, hist, 0x400);
+	__private_spin_lock_irqsave(&t21_ae_hist_lock, &flags);
+	memcpy(&hist_state[261], &previous[261], 4 * sizeof(u32));
+	private_spin_unlock_irqrestore(&t21_ae_hist_lock, flags);
+
+	for (index = 0; index < 4; index++) {
+		boundary[index] = hist_state[261 + index];
+		if (boundary[index] > 256)
+			boundary[index] = 256;
+		if (index && boundary[index] < boundary[index - 1])
+			boundary[index] = boundary[index - 1];
+	}
+
+	memset(&hist_state[256], 0, 5 * sizeof(u32));
+	start = 0;
+	for (bucket = 0; bucket < 5; bucket++) {
+		u64 sum = 0;
+
+		end = bucket < 4 ? boundary[bucket] : 256;
+		for (index = start; index < end; index++)
+			sum += hist[index];
+		hist_state[256 + bucket] = (u32)sum;
+		total += (u32)sum;
+		start = end;
+	}
+
+	if (total) {
+		for (bucket = 1; bucket < 5; bucket++) {
+			hist_state[256 + bucket] = div_u64(
+				(u64)hist_state[256 + bucket] * 0xffff, total);
+			normalized += hist_state[256 + bucket];
+		}
+		hist_state[256] = 0xffff - min_t(u32, normalized, 0xffff);
 	} else {
-		data_95330 = 0xffff;
-		data_95334 = 0;
-		data_95338 = 0;
-		data_9533c = 0;
-		data_95340 = 0;
+		hist_state[256] = 0xffff;
 	}
 
-	__private_spin_lock_irqsave((spinlock_t *)0, &flags);
-	memcpy(tisp_ae_hist_last, tisp_ae_hist, 0x400);
-	memcpy((void *)((char *)&tisp_ae_hist_last + 0x400), &data_95330, 0x14);
-	private_spin_unlock_irqrestore((spinlock_t *)0, flags);
+	__private_spin_lock_irqsave(&t21_ae_hist_lock, &flags);
+	memcpy(previous, hist_state, 0x400);
+	memcpy(&previous[256], &hist_state[256], 5 * sizeof(u32));
+	private_spin_unlock_irqrestore(&t21_ae_hist_lock, flags);
+
+	/* Preserve the legacy BSS layout until the remaining offset-based
+	 * recovery is removed; these wrongly-sized placeholders are otherwise
+	 * optimized away and would move later anchor objects. */
+	(void)*(volatile u32 *)&data_95330;
+	(void)*(volatile u32 *)&data_95334;
+	(void)*(volatile u32 *)&data_95338;
+	(void)*(volatile u32 *)&data_9533c;
+	(void)*(volatile u32 *)&data_95340;
+	(void)*(volatile u32 *)&data_95344[0];
+	(void)*(volatile u32 *)&data_95344[sizeof(data_95344) - sizeof(u32)];
+	(void)*(volatile u32 *)&data_95348[0];
+	(void)*(volatile u32 *)&data_95348[sizeof(data_95348) - sizeof(u32)];
+	(void)*(volatile u32 *)&data_9534c[0];
+	(void)*(volatile u32 *)&data_9534c[sizeof(data_9534c) - sizeof(u32)];
+	(void)*(volatile u32 *)&data_95350[0];
+	(void)*(volatile u32 *)&data_95350[sizeof(data_95350) - sizeof(u32)];
 	return 0;
 }
 
@@ -42427,64 +42400,18 @@ int32_t tisp_ae_set_hist_custome(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a99c origin=fragment_seed original=AePweightCalculate */
 int32_t AePweightCalculate(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t t9 = 0;
-    uintptr_t *v0 = 0;
+	uint32_t count_q;
+	uint32_t ratio_q;
+	uint32_t log_q;
+	uint32_t weighted_q;
 
-    /* fragment 0: Branch */
-    if (a1 == 0) { goto AePweightCalculate0xa0; }
-
-    /* fragment 1: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 2: CallSetup */
-    s3 = a1 << a0;
-    s1 = a2;
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)fix_point_div_32)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)((uintptr_t)v0, s0, s0 & 255); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)fix_point_mult2_32)(s0, s3, v0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Arithmetic */
-    a2 = s1 << s0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    a0 = s0;
-    t9 = s2;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 9: Arithmetic */
-    a1 = v0;
-
-    /* fragment 10: IndirectTailCall */
-    return ((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))fix_point_div_32)((uintptr_t)(a0), (uintptr_t)(a1), (uintptr_t)(a2), (uintptr_t)(a3));
-
-AePweightCalculate0xa0:
-    /* fragment 11: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 12: Arithmetic */
-    v0 = 0;
-
-    return 0;
+	if (!a1 || !a2 || a0 > 16)
+		return 0;
+	count_q = a1 << a0;
+	ratio_q = fix_point_div_32(a0, (a3 * a2) << a0, count_q);
+	log_q = tisp_log2_fixed_to_fixed(ratio_q, a0, a0);
+	weighted_q = fix_point_mult2_32(a0, count_q, log_q, 0);
+	return fix_point_div_32(a0, weighted_q, a2 << a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002aa44 origin=model_output original=ae_weight_mean2 */
@@ -42495,125 +42422,103 @@ int32_t ae_weight_mean2(uint32_t *arg1, uint32_t *arg2, uint32_t *arg3, uint32_t
                         uint32_t arg17, uint32_t *arg18, uint32_t *arg19, uint32_t *arg20,
                         uint32_t *arg21, uint32_t *arg22)
 {
-    uint32_t s2 = *arg15;
-    uint32_t *s3 = arg7;
-    uint32_t t5_1 = *(uintptr_t *)((uintptr_t)s3 + 0x8c / 4);
-    uint32_t v0_2 = *(arg10 + 1);
-    uint32_t t0 = *(uintptr_t *)((uintptr_t)s3 + 0xc / 4);
-    uint32_t t1 = *(uintptr_t *)((uintptr_t)s3 + 0x88 / 4);
-    uint32_t t4_1 = *(s3 + 1);
-    uint32_t s1 = 0;
-    uint32_t s4 = 0;
-    uint32_t s6 = 0;
-    uint32_t t2 = 0;
-    uint32_t var_b0 = 0;
-    uint32_t var_a8 = 0;
-    uint32_t var_a4 = 0;
-    uint32_t var_a0 = 0;
-    uint32_t var_9c = 0;
-    uint32_t var_98 = 0;
-    uint32_t var_ac = 0;
-    uint32_t var_b8 = 0;
-    uint32_t t6_1 = t0 << 2;
-    uint32_t v0_3 = t5_1 - 1;
-    uint32_t v0_4 = v0_3 - t1;
-    uint32_t s0_1;
-    uint32_t t3_1;
-    uint32_t v0_6;
-    uint32_t a1_2;
-    uint32_t lo_1;
-    uint32_t t4_10;
-    uint32_t t8_1;
-    uint32_t t4_13;
-    uint32_t t4_14;
-    uint32_t t5_13;
-    uint32_t t6_11;
-    uint32_t a1_7;
-    uint32_t t6_13;
-    uint32_t lo_3;
-    uint32_t s5_6;
-    uint32_t t8_3;
-    uint32_t v0_9;
-    uint32_t a0_9;
-    uint32_t a1_10;
-    uint32_t v0_10;
-    uint32_t lo_8;
-    uint32_t v0_19;
-    uint32_t s1_1;
-    uint32_t result;
-    uint32_t *y_zone_ptr;
-    uint32_t *y_zone_last_ptr;
-    uint32_t *lock_ptr;
+	uint32_t q = *arg15 & 0x1f;
+	uint32_t rows = arg7[1];
+	uint32_t cols = arg7[3];
+	uint32_t dark_edge = arg7[34];
+	uint32_t bright_edge = arg7[35];
+	uint64_t roi_num = 0;
+	uint64_t roi_den = 0;
+	uint64_t roui_num = 0;
+	uint64_t roui_den = 0;
+	uint64_t mean_num = 0;
+	uint64_t mean_den = 0;
+	uint64_t total_count = 0;
+	uint64_t dark_count_total = 0;
+	uint64_t bright_count_total = 0;
+	unsigned long flags;
+	uint32_t row;
+	uint32_t col;
 
-    y_zone_ptr = (uint32_t *)((char *)&y_zone);
-    y_zone_last_ptr = (uint32_t *)((char *)&y_zone_last);
-    lock_ptr = (uint32_t *)&t21_ae_state_lock;
+	(void)arg4;
+	(void)arg13;
+	(void)arg14;
+	if (!rows || !cols || rows > 15 || cols > 15 || q > 16)
+		return -EINVAL;
 
-    while (s4 != t4_1) {
-        y_zone_ptr = (uint32_t *)((uintptr_t)y_zone_ptr + (s4 * 0x3c));
-        s0_1 = 0;
-        t3_1 = 0;
+	for (row = 0; row < rows; row++) {
+		for (col = 0; col < cols; col++) {
+			uint32_t index = row * cols + col;
+			uint32_t area = arg7[4 + col] * arg7[19 + row];
+			uint32_t sum;
+			uint32_t dark_count;
+			uint32_t bright_count;
+			uint32_t normal_count;
+			uint32_t mixed_count;
+			uint32_t mixed_sum;
+			uint32_t pweight = 1;
+			uint32_t weight;
 
-        while (t3_1 != t0) {
-            v0_6 = *(uintptr_t *)((uintptr_t)s3 + 0x10 / 4 + s0_1) * *(uintptr_t *)((uintptr_t)s3 + (s4 << 2) + 0x4c / 4);
-            a1_2 = *(arg1 + s1 + s0_1) + *(arg2 + s1 + s0_1) + *(arg3 + s1 + s0_1);
-            lo_1 = a1_2 / v0_6;
-            *(y_zone_ptr + s0_1) = lo_1;
-            *arg20 += lo_1;
-            t4_10 = *(arg12 + s1 + s0_1);
-            t8_1 = *(arg3 + s1 + s0_1);
-            t4_13 = *(arg11 + s1 + s0_1);
-            var_b0 += a1_2 * t4_10;
-            var_a8 += v0_6 * t4_10;
-            var_a4 += a1_2 * t4_13;
-            t4_14 = *(arg6 + s1 + s0_1);
-            var_a0 += v0_6 * t4_13;
-            t5_13 = t4_14 * arg17;
-            t6_11 = *(arg5 + s1 + s0_1);
-            a1_7 = t6_11 * arg16;
-            t6_13 = v0_6 - t6_11 - t4_14;
-            lo_3 = (arg17 * t8_1) + (arg16 * *(arg1 + s1 + s0_1));
-            var_9c += t5_13;
-            s5_6 = a1_7 + t5_13 + t6_13;
-            t8_3 = lo_3 + *(arg2 + s1 + s0_1);
-            var_98 += a1_7;
-            t2 += s5_6;
-            v0_9 = 1;
+			if (!area)
+				continue;
+			sum = arg1[index] + arg2[index] + arg3[index];
+			((uint32_t *)y_zone)[index] = sum / area;
+			*arg20 += ((uint32_t *)y_zone)[index];
 
-            if (*(arg9 + 0x24 / 4) != 0 && v0_2 != 1) {
-                v0_10 = AePweightCalculate(s2, a1_7, s5_6, t1 + 1);
-                a1_10 = AePweightCalculate(s2, t6_13, s5_6, v0_4) + v0_10 +
-                        AePweightCalculate(s2, t5_13, s5_6, 0x100 - t5_1);
-                v0_9 = (fix_point_mult2_32(s2, a1_10, a1_10, arg4) >> (s2 & 0x1f) >> 2) + 1;
-            }
+			roi_num += (uint64_t)sum * arg12[index];
+			roi_den += (uint64_t)area * arg12[index];
+			roui_num += (uint64_t)sum * arg11[index];
+			roui_den += (uint64_t)area * arg11[index];
 
-            a0_9 = *(arg8 + s1 + s0_1);
-            var_ac += t8_3 * a0_9 * v0_9;
-            s6 += s5_6 * a0_9 * v0_9;
-            s0_1 += 4;
-            t3_1 += 1;
-        }
+			dark_count = min(arg5[index], area);
+			bright_count = min(arg6[index], area - dark_count);
+			normal_count = area - dark_count - bright_count;
+			mixed_count = dark_count * arg16 +
+				bright_count * arg17 + normal_count;
+			mixed_sum = arg1[index] * arg16 +
+				arg3[index] * arg17 + arg2[index];
+			dark_count_total += dark_count * arg16;
+			bright_count_total += bright_count * arg17;
+			total_count += mixed_count;
 
-        s4 += 1;
-        s1 += t6_1;
-    }
+			if (arg9[9] && arg10[1] != 1 && mixed_count) {
+				uint32_t p;
 
-    __private_spin_lock_irqsave(lock_ptr, &var_b8);
-    memcpy(y_zone_last_ptr, y_zone_ptr, 0x384);
-    private_spin_unlock_irqrestore(lock_ptr, var_b8);
+				p = AePweightCalculate(q, dark_count * arg16,
+						       mixed_count, dark_edge + 1);
+				p += AePweightCalculate(q, normal_count,
+							mixed_count,
+							bright_edge - 1 - dark_edge);
+				p += AePweightCalculate(q, bright_count * arg17,
+							mixed_count, 0x100 - bright_edge);
+				pweight = (fix_point_mult2_32(q, p, p, 0) >> q >> 2) + 1;
+			}
 
-    *arg21 = var_b0 / var_a8;
-    lo_8 = var_ac / s6;
-    *arg22 = var_a4 / var_a0;
-    v0_19 = 1;
-    if (lo_8 != 0)
-        v0_19 = lo_8;
-    *arg18 = v0_19;
-    s1_1 = t2 << (s2 & 0x1f);
-    *arg19 = fix_point_div_32(s2, var_9c << (s2 & 0x1f), s1_1);
-    result = fix_point_div_32(s2, var_98 << (s2 & 0x1f), s1_1);
-    ((void **)arg19)[1] = result;
-    return result;
+			weight = arg8[index];
+			mean_num += (uint64_t)mixed_sum * weight * pweight;
+			mean_den += (uint64_t)mixed_count * weight * pweight;
+		}
+	}
+
+	flags = arch_local_irq_save();
+	memcpy(y_zone_last, y_zone, sizeof(y_zone));
+	arch_local_irq_restore(flags);
+
+	*arg21 = roi_den ? div_u64(roi_num, (uint32_t)roi_den) : 0;
+	*arg22 = roui_den ? div_u64(roui_num, (uint32_t)roui_den) : 0;
+	*arg18 = mean_den ? div_u64(mean_num, (uint32_t)mean_den) : 1;
+	if (total_count) {
+		uint32_t count_q = (uint32_t)total_count << q;
+
+		arg19[0] = fix_point_div_32(q,
+			(uint32_t)bright_count_total << q, count_q);
+		arg19[1] = fix_point_div_32(q,
+			(uint32_t)dark_count_total << q, count_q);
+	} else {
+		arg19[0] = 0;
+		arg19[1] = 0;
+	}
+	return arg19[1];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002af20 origin=model_output original=tisp_ae_tune */
@@ -45750,7 +45655,7 @@ int32_t tisp_ae_process(void)
 	struct t21_sensor_ctrl_view *ctrl =
 		(struct t21_sensor_ctrl_view *)sensor_ctrl;
 	u32 target = ((u32 *)_at_list)[0];
-	u32 luma = t21_ae_measured_luma;
+	u32 luma;
 	u32 min_it = ctrl->min_integration_time;
 	u32 max_it = ctrl->max_integration_time;
 	u32 max_gain;
@@ -45762,6 +45667,8 @@ int32_t tisp_ae_process(void)
 	u64 desired;
 	u64 max_exposure;
 
+	t21_ae_update_luma();
+	luma = t21_ae_measured_luma;
 	system_reg_write_ae(2, 0x408, isp_dg_unity);
 	system_reg_write_ae(2, 0x40c, isp_dg_unity);
 
@@ -45834,131 +45741,52 @@ int32_t tisp_ae_process(void)
 			    t21_ae_measured_luma, target,
 			    t21_ae_current_it, t21_ae_current_gain_q10,
 			    max_it, max_gain);
+	if (!(t21_ae_frame_count % 750))
+		pr_info("tx-isp-t21: ae sample luma=%u target=%u it=%u gain_q10=%u limits=%u/%u\n",
+			t21_ae_measured_luma, target, t21_ae_current_it,
+			t21_ae_current_gain_q10, max_it, max_gain);
 	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d8bc origin=fragment_seed original=tiziano_ae_set_hardware_param */
 int32_t tiziano_ae_set_hardware_param(void)
 {
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *a0 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uint32_t s1 = 0;
-    uint32_t s2 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t v1 = 0;
+	const u32 *params = (const u32 *)_ae_parameter;
+	u32 threshold = params[35];
+	u32 value;
 
-    /* fragment 0: Arithmetic */
-    v1 = (uintptr_t)&sinfo_root;
-    v0 = (uintptr_t *)&_ae_parameter;
+	/* The first 34 words are byte-sized grid fields stored in u32 slots.
+	 * Program them directly from the active tuning image; none of this is
+	 * sensor policy. */
+	{
+		system_reg_write(0x704, (params[3] << 28) |
+			(params[2] << 16) | params[0] | (params[1] << 12));
+		system_reg_write(0x708, (params[7] << 24) |
+			(params[6] << 16) | params[4] | (params[5] << 8));
+		system_reg_write(0x70c, (params[11] << 24) |
+			(params[10] << 16) | params[8] | (params[9] << 8));
+		system_reg_write(0x710, (params[15] << 24) |
+			(params[14] << 16) | params[12] | (params[13] << 8));
+		system_reg_write(0x714, (params[18] << 16) |
+			(params[17] << 8) | params[16]);
+		system_reg_write(0x718, (params[22] << 24) |
+			(params[21] << 16) | params[19] | (params[20] << 8));
+		system_reg_write(0x71c, (params[26] << 24) |
+			(params[25] << 16) | params[23] | (params[24] << 8));
+		system_reg_write(0x720, (params[30] << 24) |
+			(params[29] << 16) | params[27] | (params[28] << 8));
+		system_reg_write(0x724, (params[33] << 16) |
+			(params[32] << 8) | params[31]);
+	}
 
-    /* fragment 1: MemoryAccess */
-    a0 = *(uint32_t *)((char *)((char *)&d_linear + 0x1018));
-    local_18 = s0;
-    s0 = v0;
-    local_20 = s2;
-    local_24 = ra;
-    local_1c = s1;
-
-    /* fragment 2: Branch */
-    s2 = *(uint32_t *)((char *)(s0) + 140);
-    if (a0 != 0) { goto tiziano_ae_set_hardware_param0x1d8; }
-
-    /* fragment 3: CallSetup */
-    *(uint32_t *)((char *)v1 + 29784) = 1;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1796, ((*(uint32_t *)((char *)(s0) + 12)) << 28) | ((*(uint32_t *)((char *)(s0) + 8)) << 16) | (*(uint32_t *)((char *)(uintptr_t)&_ae_parameter)) | ((*(uint32_t *)((char *)(s0) + 4)) << 12)); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1800, ((*(uint32_t *)((char *)(s0) + 28)) << 24) | ((*(uint32_t *)((char *)(s0) + 24)) << 16) | (*(uint32_t *)((char *)(s0) + 16)) | ((*(uint32_t *)((char *)(s0) + 20)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1804, ((*(uint32_t *)((char *)(s0) + 44)) << 24) | ((*(uint32_t *)((char *)(s0) + 40)) << 16) | (*(uint32_t *)((char *)(s0) + 32)) | ((*(uint32_t *)((char *)(s0) + 36)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1808, ((*(uint32_t *)((char *)(s0) + 60)) << 24) | ((*(uint32_t *)((char *)(s0) + 56)) << 16) | (*(uint32_t *)((char *)(s0) + 48)) | ((*(uint32_t *)((char *)(s0) + 52)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1812, ((*(uint32_t *)((char *)(s0) + 72)) << 16) | ((*(uint32_t *)((char *)(s0) + 68)) << 8) | (*(uint32_t *)((char *)(s0) + 64))); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1816, ((*(uint32_t *)((char *)(s0) + 88)) << 24) | ((*(uint32_t *)((char *)(s0) + 84)) << 16) | (*(uint32_t *)((char *)(s0) + 76)) | ((*(uint32_t *)((char *)(s0) + 80)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1820, ((*(uint32_t *)((char *)(s0) + 104)) << 24) | ((*(uint32_t *)((char *)(s0) + 100)) << 16) | (*(uint32_t *)((char *)(s0) + 92)) | ((*(uint32_t *)((char *)(s0) + 96)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1824, ((*(uint32_t *)((char *)(s0) + 120)) << 24) | ((*(uint32_t *)((char *)(s0) + 116)) << 16) | (*(uint32_t *)((char *)(s0) + 108)) | ((*(uint32_t *)((char *)(s0) + 112)) << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(1828, ((*(uint32_t *)((char *)(s0) + 132)) << 16) | ((*(uint32_t *)((char *)(s0) + 128)) << 8) | (*(uint32_t *)((char *)(s0) + 124))); /* jalr target resolved by relocation */
-
-    /* fragment 12: Arithmetic */
-    v0 = (uintptr_t *)&_ae_parameter;
-
-tiziano_ae_set_hardware_param0x1d8:
-    /* fragment 13: Arithmetic */
-    a0 = s2 < 255;
-    v0 = v0;
-
-    /* fragment 14: Branch */
-    v1 = (uintptr_t)&system_reg_write_ae;
-    if (a0 == 0) { goto tiziano_ae_set_hardware_param0x21c; }
-
-    /* fragment 15: MemoryAccess */
-    a2 = *(uint32_t *)((char *)v0 + 148);
-    a0 = *(uint32_t *)((char *)v0 + 144);
-    a2 = a2 << 20;
-    a0 = (uintptr_t)a0 << 16;
-    v0 = *(uint32_t *)((char *)v0 + 136);
-    a2 = a2 | (uintptr_t)a0;
-    s2 = s2 << 1;
-    a2 = a2 | (uintptr_t)v0;
-    v0 = 3;
-
-    /* fragment 16: Unknown */
-    /* unmatched fragment 16 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2dac8:	0242001b 	divu	zero,s2,v0 */
-
-    /* fragment 17: Arithmetic */
-    /* unmatched fragment 17 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 2dacc:	00002012 	mflo	a0 */
-
-    /* fragment 18: Branch */
-    v0 = (uintptr_t)a0 << 8;
-    goto tiziano_ae_set_hardware_param0x240;
-
-tiziano_ae_set_hardware_param0x21c:
-    /* fragment 19: CallSetup */
-    a2 = *(uint32_t *)((char *)v0 + 148);
-    a0 = *(uint32_t *)((char *)v0 + 144);
-    a2 = a2 << 20;
-    a0 = (uintptr_t)a0 << 16;
-    a2 = a2 | (uintptr_t)a0;
-    a0 = *(uint32_t *)((char *)v0 + 136);
-    v0 = *(uint32_t *)((char *)v0 + 140);
-    a2 = a2 | (uintptr_t)a0;
-    v0 = (uintptr_t)v0 << 8;
-
-tiziano_ae_set_hardware_param0x240:
-    /* fragment 20: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)system_reg_write_ae)(1, 1832, a2 | (uintptr_t)v0); /* jalr target resolved by relocation */
-
-    /* fragment 21: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 22: Arithmetic */
-    v0 = 0;
-
-    /* fragment 23: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	/* Stock scales sub-255 thresholds by 2/3 before packing them.  The
+	 * division was the unmatched instruction in the recovered function. */
+	if (threshold < 255)
+		threshold = (threshold * 2) / 3;
+	value = (params[37] << 20) | (params[36] << 16) |
+		(threshold << 8) | params[34];
+	system_reg_write_ae(1, 0x728, value);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002db2c origin=model_output original=tiziano_ae_dn_params_refresh */
