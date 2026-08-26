@@ -7488,7 +7488,7 @@ int32_t tiziano_mdns_dn_params_refresh(void);
 int32_t tiziano_mdns_init(uint32_t a0, uint32_t a1);
 int32_t tisp_mdns_refresh(uint32_t arg1);
 int32_t tisp_mdns_param_array_get(int32_t param_id, void *dst, int32_t *size_out);
-int32_t tisp_mdns_param_array_set(int32_t param_id, int32_t src);
+int32_t tisp_mdns_param_array_set(int32_t param_id, const void *src);
 int32_t tisp_ctr_md_np_cfg(void);
 int32_t tisp_rdns_uu_np_cfg(void);
 int32_t tisp_rdns_g_lum_np_cfg(void);
@@ -38954,7 +38954,7 @@ int32_t tisp_mdns_param_array_get(int32_t param_id, void *dst, int32_t *size_out
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002237c origin=model_output original=tisp_mdns_param_array_set */
-int32_t tisp_mdns_param_array_set(int32_t param_id, int32_t src)
+int32_t tisp_mdns_param_array_set(int32_t param_id, const void *src)
 {
 	if ((unsigned int)(param_id - 0xcf) >= 0x82) {
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))printk)((uintptr_t)((void *)(uintptr_t)2), (uintptr_t)("%s, %d: mdns not support param id %d\n"), (uintptr_t)("tisp_mdns_param_array_set"), (uintptr_t)(__LINE__), (uintptr_t)(param_id));
@@ -38963,7 +38963,7 @@ int32_t tisp_mdns_param_array_set(int32_t param_id, int32_t src)
 
 	switch (param_id) {
 	case 0xcf:
-		memcpy(&mdns_top_func_array, (void *)src, 0x60);
+		memcpy(&mdns_top_func_array, src, 0x60);
 		return 0;
 	case 0xd0:
 		memcpy(&mdns_sta_size_array, (void *)src, 0x24);
@@ -49173,7 +49173,11 @@ int32_t tisp_s_3dns_ratio(int32_t arg1)
 	ratio_ptr = (int32_t *)&mdns_ratio;
 	delta = arg1 - 0x80;
 
-	for (i = 0; i < 0x24; i += 4) {
+	/* mdns_ratio contains ten banks of nine 32-bit tuning values.  The OEM
+	 * loop advances its byte offset by four; in C these are element indexes.
+	 * Treating the byte offset as an int32_t index walked off every local
+	 * table and corrupted the dispatcher's return state. */
+	for (i = 0; i < ARRAY_SIZE(arr0); i++) {
 		if (arg1 >= 0x81) {
 			val = *ratio_ptr;
 			((uintptr_t *)(uintptr_t)(arr0))[i] = (((0x40 - val) * delta) >> 7) + val;
@@ -49211,17 +49215,17 @@ int32_t tisp_s_3dns_ratio(int32_t arg1)
 	}
 
 	if (day_night != 0) {
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xd3), (uintptr_t)(arr5), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xd4), (uintptr_t)(arr6), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xd5), (uintptr_t)(arr7), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xe7), (uintptr_t)(arr8), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xe6), (uintptr_t)(arr9), (uintptr_t)(0x24));
+		tisp_mdns_param_array_set(0xd3, arr5);
+		tisp_mdns_param_array_set(0xd4, arr6);
+		tisp_mdns_param_array_set(0xd5, arr7);
+		tisp_mdns_param_array_set(0xe7, arr8);
+		tisp_mdns_param_array_set(0xe6, arr9);
 	} else {
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xd3), (uintptr_t)(arr0), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xd4), (uintptr_t)(arr1), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xd5), (uintptr_t)(arr2), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xe7), (uintptr_t)(arr3), (uintptr_t)(0x24));
-		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_mdns_param_array_set)((uintptr_t)(0xe6), (uintptr_t)(arr4), (uintptr_t)(0x24));
+		tisp_mdns_param_array_set(0xd3, arr0);
+		tisp_mdns_param_array_set(0xd4, arr1);
+		tisp_mdns_param_array_set(0xd5, arr2);
+		tisp_mdns_param_array_set(0xe7, arr3);
+		tisp_mdns_param_array_set(0xe6, arr4);
 	}
 
 	memcpy((void *)&tparams_day, arr0, 0x24);
