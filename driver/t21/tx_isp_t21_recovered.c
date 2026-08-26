@@ -29956,22 +29956,11 @@ static void t21_adr_build_curve_table(const uint32_t *hist,
 			   (int32_t *)t21_adr_normalized_hist, 8, 10, 16);
 }
 
-static uint32_t t21_adr_piecewise(uint32_t x, const uint32_t *knees,
-				  const uint32_t *base)
+static uint32_t t21_adr_piecewise_values(uint32_t x, const uint32_t *knees,
+					 const uint32_t *output_y,
+					 uint32_t output_last)
 {
-	uint32_t output_y[5];
 	uint32_t i;
-
-	output_y[0] = base[0];
-	for (i = 1; i < 5; i++) {
-		uint32_t base_gap = base[i] - base[i - 1];
-		uint32_t knee_gap = knees[i] - knees[i - 1];
-
-		output_y[i] = output_y[i - 1] +
-			(base_gap >= knee_gap ? base_gap : knee_gap);
-	}
-	if (output_y[4] > 0xfff)
-		output_y[4] = 0xfff;
 
 	if (x < knees[0]) {
 		uint32_t slope;
@@ -29997,23 +29986,216 @@ static uint32_t t21_adr_piecewise(uint32_t x, const uint32_t *knees,
 		}
 	}
 	if (x >= knees[8])
-		return base[8];
-	if (base[8] >= output_y[4]) {
+		return output_last;
+	if (output_last >= output_y[4]) {
 		uint32_t slope = fix_point_div_32(10,
-			(base[8] - output_y[4]) << 10,
+			(output_last - output_y[4]) << 10,
 			(knees[8] - knees[4]) << 10);
 		uint32_t delta = fix_point_mult2_32(10, slope,
 			(knees[8] - x) << 10, 0);
 
-		return base[8] - ((delta + 0x200) >> 10);
+		return output_last - ((delta + 0x200) >> 10);
 	} else {
 		uint32_t slope = fix_point_div_32(10,
-			(output_y[4] - base[8]) << 10,
+			(output_y[4] - output_last) << 10,
 			(knees[8] - knees[4]) << 10);
 		uint32_t delta = fix_point_mult2_32(10, slope,
 			(knees[8] - x) << 10, 0);
 
-		return base[8] + ((delta + 0x200) >> 10);
+		return output_last + ((delta + 0x200) >> 10);
+	}
+}
+
+static uint32_t t21_adr_piecewise(uint32_t x, const uint32_t *knees,
+				  const uint32_t *base)
+{
+	uint32_t output_y[5];
+	uint32_t i;
+
+	output_y[0] = base[0];
+	for (i = 1; i < 5; i++) {
+		uint32_t base_gap = base[i] - base[i - 1];
+		uint32_t knee_gap = knees[i] - knees[i - 1];
+
+		output_y[i] = output_y[i - 1] +
+			(base_gap >= knee_gap ? base_gap : knee_gap);
+	}
+	if (output_y[4] > 0xfff)
+		output_y[4] = 0xfff;
+	return t21_adr_piecewise_values(x, knees, output_y, base[8]);
+}
+
+static uint32_t t21_adr_spatial_weight(int32_t mean, int32_t center,
+				       uint32_t dark_sigma,
+				       uint32_t light_sigma,
+				       uint32_t weight_base)
+{
+	uint32_t distance;
+	uint32_t distance_squared;
+	uint32_t sigma;
+	uint32_t sigma_squared;
+	uint32_t exponent;
+	uint32_t exp2;
+	uint32_t weight_base_q16;
+	int32_t scale;
+	int32_t weight;
+
+	/* log2(e) in Q16, as used by the OEM fixed-point Gaussian. */
+	scale = fix_point_div_32(16, 0x385b0000, 0x27100000);
+	weight_base_q16 = weight_base << 16;
+	if (mean <= center) {
+		distance = center - mean;
+		sigma = dark_sigma;
+	} else {
+		distance = mean - center;
+		sigma = light_sigma;
+	}
+	if (distance >= 0x800)
+		distance_squared = 0x3ffffc;
+	else
+		distance_squared = distance * distance;
+	if (!sigma)
+		sigma = 1;
+	if (sigma >= 0x5a8)
+		sigma_squared = 0xffffffff;
+	else
+		sigma_squared = (sigma * sigma) << 11;
+	exponent = fix_point_div_32(10, distance_squared << 10,
+				    sigma_squared) << 6;
+	exponent = fix_point_mult2_32(16, exponent, scale, 0);
+	if (exponent >= 0xf0000)
+		exponent = 0xeffff;
+	exp2 = tisp_math_exp2(exponent, 16, 16);
+	if (!exp2)
+		exp2 = 1;
+
+	if (mean <= center)
+		weight = weight_base +
+			((int32_t)(weight_base_q16 -
+			 fix_point_div_32(16, weight_base_q16, exp2)) >> 16);
+	else
+		weight = fix_point_div_32(16, weight_base_q16, exp2) >> 16;
+	if (weight < 0)
+		return 0;
+	if (weight > 10000)
+		return 10000;
+	return weight;
+}
+
+static void t21_adr_map_curve_normal(const uint32_t *map_x,
+				     uint32_t *map_y,
+				     const uint32_t *knees,
+				     const uint32_t *base,
+				     const uint32_t *gaps,
+				     const uint32_t *slope_limits,
+				     bool limit_slope)
+{
+	uint32_t output_y[5];
+	uint32_t i;
+
+	output_y[0] = base[0];
+	for (i = 1; i < 5; i++) {
+		uint32_t knee_gap = knees[i] - knees[i - 1];
+
+		output_y[i] = output_y[i - 1] +
+			(gaps[i - 1] >= knee_gap ? gaps[i - 1] : knee_gap);
+	}
+
+	for (i = 0; i < 11; i++)
+		map_y[i] = t21_adr_piecewise_values(map_x[i], knees,
+						      output_y, base[8]);
+
+	if (!limit_slope)
+		return;
+	for (i = 0; i < 11; i++) {
+		uint32_t x_delta = i ? map_x[i] - map_x[i - 1] : map_x[i];
+		uint32_t y_base = i ? map_y[i - 1] : 0;
+		uint32_t y_delta = map_y[i] - y_base;
+		uint32_t slope;
+
+		if (!x_delta)
+			continue;
+		slope = (y_delta << 16) / x_delta;
+		if (slope_limits[i] < slope)
+			map_y[i] = y_base +
+				(x_delta * slope_limits[i]) / 0x10000;
+	}
+}
+
+static void t21_adr_map_curve_approx(const uint32_t *map_x,
+				     uint32_t *map_y,
+				     const uint32_t *gamma_x,
+				     const uint32_t *gamma_y,
+				     const uint32_t *map_mode,
+				     const uint32_t *light,
+				     const uint32_t *block,
+				     uint32_t block_value,
+				     uint32_t block_average,
+				     uint32_t hist_total,
+				     uint32_t floor, uint32_t ceiling)
+{
+	uint32_t block_scale = 1024;
+	uint32_t adapt = block[5];
+	uint32_t j;
+
+	if (adapt > 250)
+		adapt = 250;
+	adapt = adapt * 1024 / 1000;
+	if (hist_total && block_average) {
+		if (block_value < block_average)
+			block_scale += (block_average - block_value) * adapt /
+				block_average;
+		else {
+			uint32_t reduction = (block_value - block_average) *
+				adapt / block_average;
+
+			block_scale = reduction < block_scale ?
+				block_scale - reduction : 0;
+		}
+	}
+
+	for (j = 0; j < 11; j++) {
+		uint32_t x = map_x[j];
+		uint32_t gamma = t21_adr_lut_interp(gamma_x, gamma_y, 129, x);
+		uint32_t lift = block[2];
+		uint32_t rolloff = block[4];
+		uint32_t shoulder_start = light[10];
+		uint32_t shoulder_width = map_mode[3] + light[10];
+		uint32_t highlight_rolloff = block[8];
+		uint32_t shoulder_lift = light[20];
+		uint32_t strength;
+		uint32_t output;
+
+		if (lift > 1000)
+			lift = 1000;
+		if (!rolloff)
+			rolloff = 1;
+		strength = lift * 1024 / 1000;
+		strength = strength * rolloff / (rolloff + x);
+		strength = strength * block_scale / 1024;
+		if (strength > 1024)
+			strength = 1024;
+		output = t21_adr_blend_curve(x, gamma, strength, floor, ceiling);
+
+		if (!shoulder_width)
+			shoulder_width = 1;
+		if (!highlight_rolloff)
+			highlight_rolloff = 1;
+		if (shoulder_lift > 1000)
+			shoulder_lift = 1000;
+		if (x > shoulder_start) {
+			uint32_t shoulder = shoulder_lift * (x - shoulder_start) /
+				(shoulder_width + x - shoulder_start);
+
+			shoulder = shoulder * highlight_rolloff /
+				(highlight_rolloff + x);
+			shoulder = shoulder * block_scale / 1024;
+			output = output + shoulder < output ? ceiling :
+				output + shoulder;
+			if (output > ceiling)
+				output = ceiling;
+		}
+		map_y[j] = output;
 	}
 }
 
@@ -30036,6 +30218,7 @@ int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
 	uint32_t *contrast = (uint32_t *)arg6;
 	uint32_t *hist = (uint32_t *)arg7;
 	uint32_t *block_y = (uint32_t *)arg8;
+	uint32_t *block_hist = (uint32_t *)arg9;
 	uint32_t *base = (uint32_t *)arg10;
 	uint32_t *gamma_x = (uint32_t *)arg11;
 	uint32_t *gamma_y = (uint32_t *)arg12;
@@ -30051,11 +30234,9 @@ int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
 	uint32_t ctc_curve[9];
 	uint32_t i;
 
-	(void)arg9;
-
 	if (!ctc_x || !ctc_mux || !min_x || !min_y || !map_x || !map_y ||
 	    !contrast || !hist || !block_y || !base || !gamma_x || !gamma_y ||
-	    !map_mode || !light || !block)
+	    !block_hist || !map_mode || !light || !block)
 		return -EINVAL;
 
 	for (i = 0; i < 512; i++)
@@ -30094,79 +30275,71 @@ int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
 			contrast[i] = 0xfffff - i;
 	}
 
-	/* Each 4x5 statistics block gets its own tuning-derived map curve.  The
-	 * block statistic only changes the strength, never the curve shape, so
-	 * sensor and lens policy stays in the loaded gamma/light tables. */
-	for (i = 0; i < 20; i++) {
-		uint32_t block_scale = 1024;
-		uint32_t adapt = block[5];
-		uint32_t j;
+	/* The normal T21 map mode uses the same tuning-derived light curves as the
+	 * global ADR path, but selects one independently for each of the 4x5
+	 * statistics blocks.  Keep the exact fixed-point Gaussian here: replacing
+	 * it with a linear strength approximation loses the stock spatial map. */
+	if (map_mode[0] == 0) {
+		uint32_t block_pixels = block[8] * block[9];
+		uint32_t quarter_pixels = block_pixels >> 2;
+		uint32_t block_divisor;
+		uint32_t global_mean;
+		int32_t center;
+		uint32_t gaps[4];
 
-		if (adapt > 250)
-			adapt = 250;
-		adapt = adapt * 1024 / 1000;
-		if (hist_total && block_average) {
-			if (block_y[i] < block_average)
-				block_scale += (block_average - block_y[i]) * adapt /
-					block_average;
-			else {
-				uint32_t reduction = (block_y[i] - block_average) *
-					adapt / block_average;
-
-				block_scale = reduction < block_scale ?
-					block_scale - reduction : 0;
-			}
+		if (quarter_pixels < 0x1400) {
+			quarter_pixels = 0x1400;
+			block_divisor = 0x100;
+		} else {
+			block_divisor = quarter_pixels / 20;
 		}
-
-		for (j = 0; j < 11; j++) {
-			uint32_t x = map_x[j];
-			uint32_t gamma = t21_adr_lut_interp(gamma_x, gamma_y,
-							   129, x);
-			uint32_t lift = block[2];
-			uint32_t rolloff = block[4];
-			uint32_t shoulder_start = light[10];
-			uint32_t shoulder_width = map_mode[3] + light[10];
-			uint32_t highlight_rolloff = block[8];
-			uint32_t shoulder_lift = light[20];
-			uint32_t strength;
-			uint32_t output;
-
-			if (lift > 1000)
-				lift = 1000;
-			if (!rolloff)
-				rolloff = 1;
-			strength = lift * 1024 / 1000;
-			strength = strength * rolloff / (rolloff + x);
-			strength = strength * block_scale / 1024;
-			if (strength > 1024)
-				strength = 1024;
-			output = t21_adr_blend_curve(x, gamma, strength,
-						     floor, ceiling);
-
-			/* Restore the broad midtone shoulder present in the OEM curve.
-			 * Its start, width, amplitude and highlight decay are all tuning
-			 * fields; the SoC code only supplies the bounded interpolation. */
-			if (!shoulder_width)
-				shoulder_width = 1;
-			if (!highlight_rolloff)
-				highlight_rolloff = 1;
-			if (shoulder_lift > 1000)
-				shoulder_lift = 1000;
-			if (x > shoulder_start) {
-				uint32_t shoulder = shoulder_lift *
-					(x - shoulder_start) /
-					(shoulder_width + x - shoulder_start);
-
-				shoulder = shoulder * highlight_rolloff /
-					(highlight_rolloff + x);
-				shoulder = shoulder * block_scale / 1024;
-				output = output + shoulder < output ? ceiling :
-					output + shoulder;
-				if (output > ceiling)
-					output = ceiling;
-			}
-			map_y[i * 11 + j] = output;
+		if (!block_divisor)
+			block_divisor = 1;
+		global_mean = div_u64((uint64_t)block_total << 4,
+				      quarter_pixels);
+		switch (block[0]) {
+		case 1:
+			center = global_mean;
+			break;
+		case 2:
+			center = global_mean + block[1];
+			break;
+		case 3:
+			center = global_mean - block[1];
+			break;
+		default:
+			center = block[2];
+			break;
 		}
+		if (center < 50)
+			center = 50;
+		else if (center > 4000)
+			center = 4000;
+		for (i = 0; i < 4; i++)
+			gaps[i] = block[10 + i];
+
+		for (i = 0; i < 20; i++) {
+			uint32_t curve[9];
+			uint32_t mean = (block_y[i] << 4) / block_divisor;
+			uint32_t weight;
+			uint32_t mapped_weight;
+
+			if (mean < 2)
+				mean = 1;
+			weight = t21_adr_spatial_weight(mean, center, block[3],
+							block[4], light[28]);
+			mapped_weight = (fix_point_div_32(10, weight << 10,
+							      0x19000) + 0x200) >> 10;
+			t21_adr_select_curve(base, mapped_weight, curve);
+			t21_adr_map_curve_normal(map_x, &map_y[i * 11], curve,
+						 base, gaps, light, light[25] == 1);
+		}
+	} else {
+		for (i = 0; i < 20; i++)
+			t21_adr_map_curve_approx(map_x, &map_y[i * 11],
+				gamma_x, gamma_y, map_mode, light, block,
+				block_y[i], block_average, hist_total,
+				floor, ceiling);
 	}
 
 	return 0;
