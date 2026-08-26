@@ -45425,25 +45425,26 @@ uint32_t cmos_fsm_process_interrupt(int32_t *arg1, char arg2)
 		uint32_t exp_val = math_exp2(exp_arg, exp_shift, 8);
 		APICAL_WRITE_32(0x1a0, (APICAL_READ_32(0x1a0) & 0xfffff000) | (exp_val & 0xfff));
 
-		int16_t exp_table[4];
-		int *i;
+		uint16_t exp_table[4];
+		int i;
 		for (i = 4; i != 0; i--) {
 			int32_t tbl_val = *(int32_t *)((uintptr_t)s1 + 0x748 + ((uintptr_t)i * -4) + 0x770);
 			char tbl_shift;
 			uint32_t sv = (uint32_t)(uint8_t)((char *)s1)[0x1524];
 			if ((sv - 1) < 2)
-				tbl_shift = 0x10;
-			else
 				tbl_shift = 0x11;
+			else
+				tbl_shift = 0x10;
 			uint32_t ev = math_exp2(tbl_val, tbl_shift, 8);
-			int16_t v = (int16_t)(ev & 0xffff);
+			uint16_t v = (uint16_t)(ev & 0xffff);
 			if (ev >= 0x1000)
 				v = 0xfff;
-			((uintptr_t *)(uintptr_t)(exp_table))[(uintptr_t)i - 1] = v;
+			/* OEM fills the four consecutive u16 stack slots in order. */
+			exp_table[4 - i] = v;
 		}
 
 		uint32_t sv2 = (uint32_t)(uint8_t)((char *)s1)[0x1524];
-		if (2 <= (sv2 - 1)) {
+		if ((sv2 - 1) < 3) {
 			int16_t mod_vals[4];
 			mod_vals[0] = (int16_t)APICAL_READ_32(0x310) & 0xfff;
 			mod_vals[1] = (int16_t)APICAL_READ_32(0x314) & 0xfff;
@@ -45457,7 +45458,7 @@ uint32_t cmos_fsm_process_interrupt(int32_t *arg1, char arg2)
 				if (denom == 0)
 					__builtin_trap();
 				uint32_t scaled = (0xfff00u / denom * (uint32_t)(uint16_t)exp_table[j / 2]) >> 8;
-				((uint32_t *)exp_table)[j / 2] = (int16_t)scaled;
+				exp_table[j / 2] = (uint16_t)scaled;
 			}
 		}
 
