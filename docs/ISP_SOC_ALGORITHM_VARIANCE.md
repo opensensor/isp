@@ -13,11 +13,14 @@ T31, T40, and T41 work. It deliberately separates:
 Those are not interchangeable. A missing or unsafe recovered function is not
 evidence that the hardware cannot support the feature.
 
-**T20 is deferred.** It is not included in matrices, unification decisions, or
-performance rankings until its live statistics, sensor control, output path,
-and representative image behavior have been proven to the same standard as
-the five generations above. T21 recovery also remains outside this
-device-proven algorithm comparison.
+**T20 remains outside the device-proven comparison.** Its source recovery now
+clean-builds from the tracked upstream SDK, shared sensor/math adapters, and
+the recovered Apical firmware unit; the structural binary audit has no stub or
+collapsed findings. That is source evidence only. T20 is not included in
+matrices, policy unification decisions, or performance rankings until its live
+statistics, sensor control, output path, and representative image behavior
+have been proven to the same standard as the five generations above. T21
+recovery also remains outside this device-proven algorithm comparison.
 
 ## Confidence Labels
 

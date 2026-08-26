@@ -1,0 +1,45 @@
+{
+  "isp_core_ops_g_ctrl": [
+    "isp_core_ops_g_ctrl",
+    "apical_isp_core_ops_g_ctrl"
+  ],
+  "isp_core_ops_ioctl": [
+    "isp_core_ops_ioctl",
+    "isp_core_ops_private_ioctl",
+    "isp_core_set_clk",
+    "isp_core_frame_channel_enum_fmt",
+    "isp_core_frame_channel_try_fmt",
+    "isp_core_frame_channel_set_fmt",
+    "isp_core_frame_channel_crop_capture",
+    "isp_core_frame_channel_set_crop",
+    "isp_core_frame_channel_scaler_capture",
+    "isp_core_frame_channel_set_scaler",
+    "isp_core_frame_channel_streamon",
+    "isp_core_frame_channel_streamoff",
+    "isp_core_frame_channel_queue_buffer"
+  ],
+  "video_in_core_ops_ioctl": [
+    "video_in_core_ops_ioctl",
+    "subdev_core_ops_enum_input",
+    "subdev_core_ops_get_input",
+    "subdev_core_ops_set_input",
+    "subdev_core_ops_register_sensor",
+    "subdev_core_ops_release_sensor",
+    "subdev_core_ops_release_all_sensor",
+    "subdev_core_ops_streamon",
+    "subdev_core_ops_streamoff"
+  ],
+  "isp_csi_ops_ioctl": [
+    "isp_csi_ops_ioctl",
+    "isp_csi_ops_private_ioctl"
+  ],
+  "vic_core_ops_ioctl": [
+    "vic_core_ops_ioctl",
+    "vic_core_ops_private_ioctl"
+  ],
+  "sinfo_show": "tx_isp_sinfo_show",
+  "sinfo_open": "tx_isp_sinfo_open",
+  "sinfo_count_show": "tx_isp_sinfo_count_show",
+  "sinfo_count_open": "tx_isp_sinfo_count_open",
+  "sinfo_slot_publish": "tx_isp_sinfo_slot_publish"
+}

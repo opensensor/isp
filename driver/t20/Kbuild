@@ -1,0 +1,46 @@
+obj-m += tx-isp-t20.o
+tx-isp-t20-objs := \
+	sdk/tx-isp-vic.o \
+	sdk/tx-isp-videobuf.o \
+	sdk/tx-isp-video-in.o \
+	sdk/tx-isp-frame-channel.o \
+	sdk/tx-isp-csi.o \
+	sdk/tx-isp-interrupt.o \
+	sdk/tx-isp-debug.o \
+	sdk/tx-isp-device.o \
+	sdk/tx-isp-core-tuning.o \
+	sdk/tx-isp-core.o \
+	sdk/apical-dynamic-calibrations.o \
+	sdk/apical-static-calibrations.o \
+	sdk/apical-calibrations.o \
+	sdk/apical-calibrations-init.o \
+	sdk/tx-isp-load-parameters.o \
+	sdk/apical-custom-initialization.o \
+	sdk/ApicalDefault.o \
+	sdk/system-isp-io.o \
+	sdk/log.o \
+	sdk/system-io.o \
+	sdk/system-i2c.o \
+	sdk/system-spi.o \
+	sdk/system-timer.o \
+	sdk/system-uart.o \
+	sdk/system-semaphore.o \
+	sdk/sensor-drv.o \
+	sdk/system-chardev.o \
+	tx_isp_t20_sinfo.o \
+	tx_isp_t20_math.o \
+	tx_isp_t20_firmware.o
+
+ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
+ccflags-y += -I$(src)/../include
+ccflags-y += -I$(src)/../../external/ingenic-sdk/include
+ccflags-y += -I$(src)/../../external/ingenic-sdk/3.10.14/isp/t20
+ccflags-y += -I$(src)/../../external/ingenic-sdk/3.10.14/isp/t20/include
+ccflags-y += -I$(src)/../../external/ingenic-sdk/3.10.14/sensor-src/include
+ccflags-y += -O0 -fno-tree-dce -fno-ipa-pure-const -fno-ipa-reference
+ccflags-y += -std=gnu99 -fpermissive -w
+ccflags-y += -Wno-error=strict-prototypes
+ccflags-y += -Wno-error=implicit-function-declaration
+ccflags-y += -Wno-error=implicit-int
+ccflags-y += -Wno-error=int-conversion
+ccflags-y += -Wno-error=incompatible-pointer-types

@@ -1,15 +1,15 @@
-# Open-Source TX-ISP Drivers for Ingenic T21, T23, T30, T31, T40, and T41
+# Open-Source TX-ISP Drivers for Ingenic T20, T21, T23, T30, T31, T40, and T41
 
 ![Ingenic ISP Logo](./ingenic_isp.webp)
 
 ## Overview
 
 This repository contains open-source reimplementations of the Ingenic TX-ISP
-kernel drivers for T21, T23, T30, T31, T40, and T41 cameras. The active
+kernel drivers for T20, T21, T23, T30, T31, T40, and T41 cameras. The active
 cross-SoC work includes device-tested T23, T30, T31, T40, and T41 drivers plus
-the static T21 recovery baseline. T31 is organized as a modular driver. T21, T23,
-T30, T40, and T41 retain large recovered core sources, but their modules now
-have separate adapters for shared facilities where applicable.
+the static T20 and T21 recovery baselines. T31 is organized as a modular driver.
+T20, T21, T23, T30, T40, and T41 retain large recovered core sources, but their
+modules now have separate adapters for shared facilities where applicable.
 
 The project goal is **behavioral equivalence with the OEM driver** while
 supporting both Ingenic's unmodified proprietary `libimp.so` and the fully
@@ -49,6 +49,7 @@ OEM-like daylight image quality, and persistent runtime flip control.
 
 | SoC | Current validation |
 |---|---|
+| T20 | Recovered whole-driver baseline clean-builds and links against the vendor Linux 3.10.14 tree; the structural binary audit reports no stub or collapsed findings, but device-load and streaming validation are pending. |
 | T21 | First recovered whole-driver baseline is integrated and builds against the vendor Linux 3.10.14 tree; stock T21/T23/T31 comparison backs the shared math adapter and two IRQ collapse repairs, but hardware validation is pending. |
 | T23 | Device-tested vendor-kernel path with live capture and shared registry, layout, ABI, and tuning primitives; broader sensor and image-quality validation continues. |
 | T30 | Device-tested on a T30X Wyze Video Doorbell v1 with SC4236: open ISP frames, firmware IRQ/statistics, tuning-derived AE/color, and balanced exposure allocation are live; anti-flicker/shutter allocation remains under active comparison with stock. |
@@ -59,6 +60,9 @@ OEM-like daylight image quality, and persistent runtime flip control.
 ### Working today
 
 - kernel module architecture is in place
+- the T20 recovery baseline clean-builds and links with tracked SDK sources,
+  shared sensor/math adapters, and a structural binary audit with no stub or
+  collapsed findings
 - the T21 recovery baseline builds and links with a stock-backed shared math
   adapter, current binary audit, and restored public IRQ callback paths
 - the T30 recovery builds, links, and has produced live SC4236 output through
@@ -79,7 +83,7 @@ OEM-like daylight image quality, and persistent runtime flip control.
   while preserving channel-enable bits
 - T31 builds on both the vendor 3.10 kernel and the mainline Linux 7.1
   compatibility path
-- common interpolation/fixed-point primitives are used by T21, T23, T30, T31, and T41
+- common interpolation/fixed-point primitives are used by T20, T21, T23, T30, T31, and T41
 - T30's pair/scaled/equidistant modulation and legacy Apical scalar math use
   host-tested common primitives behind an SDK-compatible adapter
 - T23, T31, and T41 share one typed sensor-registry implementation
@@ -107,7 +111,7 @@ OEM-like daylight image quality, and persistent runtime flip control.
 - T23, T30, T31, T40, and T41 share checked 32-bit pad and active-link offsets,
   including the event callback slot used for remote frame-channel dispatch
 - T31 applies evidence-backed SC2336 day/night DMSC correction profiles
-- T21, T23, T30, T40, and T41 link recovered cores with logical shared-library
+- T20, T21, T23, T30, T40, and T41 link recovered cores with logical shared-library
   adapter objects
 - reverse-engineered architecture and tuning docs now exist in-tree
 
@@ -128,7 +132,8 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 ## Key Documentation
 
 - [`docs/T31_ISP_ARCHITECTURE.md`](docs/T31_ISP_ARCHITECTURE.md) — current hardware / driver architecture notes
-- [`docs/ISP_SOC_ALGORITHM_VARIANCE.md`](docs/ISP_SOC_ALGORITHM_VARIANCE.md) — proven T23/T30/T31/T40/T41 algorithm differences, hardware boundaries, and unification hypotheses; T20 explicitly deferred
+- [`docs/ISP_SOC_ALGORITHM_VARIANCE.md`](docs/ISP_SOC_ALGORITHM_VARIANCE.md) — proven T23/T30/T31/T40/T41 algorithm differences, hardware boundaries, and unification hypotheses; T20/T21 source recoveries remain outside the device-proven matrices
+- [`driver/t20/README.md`](driver/t20/README.md) — T20 recovery provenance, source partition, binary audit, and hardware-validation boundary
 - [`driver/t21/COMPARATIVE_ANALYSIS.md`](driver/t21/COMPARATIVE_ANALYSIS.md) — stock T21/T23/T31 overlap, extraction decisions, and next repair queue
 - [`docs/DRIVER_REUSE_PLAN.md`](docs/DRIVER_REUSE_PLAN.md) — cross-SoC commonality map and staged reuse plan
 - [`docs/SHARED_DRIVER_LIBRARY.md`](docs/SHARED_DRIVER_LIBRARY.md) — landed shared interfaces, adapters, invariants, and device matrix
@@ -147,6 +152,7 @@ If you want the detailed status and finish plan, start with `docs/IMAGE_TUNING_P
 | `driver/` | Per-SoC open-source ISP kernel-driver implementations |
 | `driver/include/tx_isp/` | Reviewed cross-SoC interfaces and primitives |
 | `driver/common/` | Shared kernel implementation with explicit SoC adapters |
+| `driver/t20/` | T20 recovered whole-driver baseline, SDK partition, shared adapters, and binary audit |
 | `driver/t21/` | T21 recovered whole-driver baseline, math adapter, and binary audit |
 | `driver/t23/` | T23 recovered driver and tuning data |
 | `driver/t30/` | T30 recovered whole-driver baseline and binary audits |
@@ -186,6 +192,7 @@ Important driver files:
 - `driver/include/tx_isp/tx_isp_frame_channel.h` — shared frame-channel event IDs, generation-qualified ioctl envelopes, and ioctl decoders
 - `driver/include/tx_isp/tx_isp_frame_format.h` — compiler-independent 112/116-byte frame-image format ABI
 - `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
+- `driver/t20/tx_isp_t20_firmware.c`, `sdk/`, and adapter objects — T20 whole-driver recovery baseline with reviewed SDK replacements and shared sensor/math facilities
 - `driver/t21/tx_isp_t21_recovered.c` and `tx_isp_t21_math.c` — T21 whole-driver recovery baseline with stock-backed shared math entry points
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
 - `driver/t30/tx_isp_t30_recovered.c` and adapter objects — T30 whole-driver
@@ -200,7 +207,7 @@ Important driver files:
 
 ## Project Goals
 
-1. Replace the proprietary TX-ISP kernel drivers on supported T21/T23/T30/T31/T40/T41 devices
+1. Replace the proprietary TX-ISP kernel drivers on supported T20/T21/T23/T30/T31/T40/T41 devices
 2. Preserve compatibility with Ingenic's `libimp.so`
 3. Support a fully open kernel-and-userspace path with OpenIMP
 4. Match OEM register sequencing and control behavior closely
@@ -209,8 +216,8 @@ Important driver files:
 
 ## Requirements
 
-- **Active target SoCs:** Ingenic T21, T23, T30, T31, T40, and T41
-- **Kernel focus:** Linux 3.10.14 vendor trees (T21/T23/T30/T31), Linux 4.4.94
+- **Active target SoCs:** Ingenic T20, T21, T23, T30, T31, T40, and T41
+- **Kernel focus:** Linux 3.10.14 vendor trees (T20/T21/T23/T30/T31), Linux 4.4.94
   vendor trees (T40/T41), and the active T31 mainline compatibility path
 - **Userspace ABI targets:** Ingenic `libimp.so` and OpenIMP
 - **Sensor support model:** OEM-style sensor drivers and compatible sensor integrations from the Ingenic SDK ecosystem
@@ -220,6 +227,7 @@ Important driver files:
 The local build helper selects a per-SoC driver with `SOC`:
 
 ```bash
+SOC=t20 ./build_local.sh
 SOC=t21 ./build_local.sh
 SOC=t23 ./build_local.sh
 SOC=t30 ./build_local.sh
