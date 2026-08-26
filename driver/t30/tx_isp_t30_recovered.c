@@ -1536,10 +1536,10 @@ struct tx_isp_t30_simple_3a_state {
 	s32 analog_gain_request_log2;
 	s32 analog_gain_log2;
 	u16 analog_gain_code;
-	u16 red_gain;
-	u16 green_red_gain;
-	u16 green_blue_gain;
-	u16 blue_gain;
+	u16 gain_00;
+	u16 gain_01;
+	u16 gain_10;
+	u16 gain_11;
 	s32 red_error_accum;
 	s32 blue_error_accum;
 	u8 ae_cooldown;
@@ -54104,23 +54104,23 @@ static void tx_isp_t30_awb_apply_calibrated_gains(void)
 	    blue < 0x40 || blue > 0xfff)
 		return;
 	if (!state->awb_initialized) {
-		state->red_gain = red;
-		state->green_red_gain = green_red;
-		state->green_blue_gain = green_blue;
-		state->blue_gain = blue;
+		state->gain_00 = red;
+		state->gain_01 = green_red;
+		state->gain_10 = green_blue;
+		state->gain_11 = blue;
 		state->awb_initialized = true;
 	}
 
 	APICAL_WRITE_32(0x300, (APICAL_READ_32(0x300) & ~0xfffU) |
-			state->red_gain);
+			state->gain_00);
 	APICAL_WRITE_32(0x304,
 			(APICAL_READ_32(0x304) & ~0xfffU) |
-			state->green_red_gain);
+			state->gain_01);
 	APICAL_WRITE_32(0x308,
 			(APICAL_READ_32(0x308) & ~0xfffU) |
-			state->green_blue_gain);
+			state->gain_10);
 	APICAL_WRITE_32(0x30c, (APICAL_READ_32(0x30c) & ~0xfffU) |
-			state->blue_gain);
+			state->gain_11);
 
 	if (!reported) {
 		pr_info("tx_isp_t30_recovered: AWB calibration gains 0x%x/0x%x/0x%x/0x%x\n",
@@ -54133,18 +54133,28 @@ static void tx_isp_t30_simple_awb_update(void)
 {
 	struct tx_isp_t30_simple_3a_state *state = &tx_isp_t30_simple_3a;
 	const u8 *average_coefficient;
+	const u16 *base_gain;
+	u16 *red_gain;
+	u16 *blue_gain;
+	const u16 *base_red_gain;
+	const u16 *base_blue_gain;
 	s32 red_correction;
 	s32 blue_correction;
 	u32 red_ratio;
 	u32 blue_ratio;
+	u32 desired_red_gain;
+	u32 desired_blue_gain;
 	u32 coefficient;
+	u32 pattern;
 
 	tx_isp_t30_awb_apply_calibrated_gains();
 	if (!state->awb_initialized)
 		return;
 	average_coefficient = tx_isp_t30_calibration_data(
 		TX_ISP_T30_CAL_AWB_AVG_COEF, 1, sizeof(*average_coefficient));
-	if (!average_coefficient || !average_coefficient[0])
+	base_gain = tx_isp_t30_calibration_data(TX_ISP_T30_CAL_STATIC_WB, 4,
+					       sizeof(*base_gain));
+	if (!average_coefficient || !average_coefficient[0] || !base_gain)
 		return;
 	coefficient = average_coefficient[0];
 	red_ratio = APICAL_READ_32(0x858) & 0xfff;
@@ -54154,31 +54164,76 @@ static void tx_isp_t30_simple_awb_update(void)
 		return;
 
 	/*
-	 * Ratios use APICAL's Q8 unity.  Accumulate their error and apply the
-	 * tuning-bin averaging coefficient as the loop's smoothing divisor.
+	 * The four WB registers follow CFA positions, while the metering outputs
+	 * are color ratios.  Select the red and blue positions from the active
+	 * Bayer order instead of assuming RGGB.  This keeps the controller
+	 * sensor-independent; the mbus code has already programmed this pattern.
 	 */
-	state->red_error_accum += (s32)red_ratio - 0x100;
-	state->blue_error_accum += (s32)blue_ratio - 0x100;
+	pattern = APICAL_READ_32(0x18) & 3;
+	switch (pattern) {
+	case 0: /* RGGB */
+		red_gain = &state->gain_00;
+		blue_gain = &state->gain_11;
+		base_red_gain = &base_gain[0];
+		base_blue_gain = &base_gain[3];
+		break;
+	case 1: /* GRBG */
+		red_gain = &state->gain_01;
+		blue_gain = &state->gain_10;
+		base_red_gain = &base_gain[1];
+		base_blue_gain = &base_gain[2];
+		break;
+	case 2: /* GBRG */
+		red_gain = &state->gain_10;
+		blue_gain = &state->gain_01;
+		base_red_gain = &base_gain[2];
+		base_blue_gain = &base_gain[1];
+		break;
+	default: /* BGGR */
+		red_gain = &state->gain_11;
+		blue_gain = &state->gain_00;
+		base_red_gain = &base_gain[3];
+		base_blue_gain = &base_gain[0];
+		break;
+	}
+
+	/*
+	 * Match the working T31/Tiziano method: convert each measured Q8 color
+	 * ratio to a reciprocal correction, apply it to the tuning-bin static WB
+	 * base, then smooth toward that absolute target.  Integrating
+	 * ratio-minus-unity directly is incorrect because these statistics are
+	 * scene measurements rather than residual controller error.
+	 */
+	desired_red_gain = ((u32)*base_red_gain * 0x100U + red_ratio / 2) /
+			   red_ratio;
+	desired_blue_gain = ((u32)*base_blue_gain * 0x100U + blue_ratio / 2) /
+			    blue_ratio;
+	desired_red_gain = clamp_t(u32, desired_red_gain, 0x40, 0xfff);
+	desired_blue_gain = clamp_t(u32, desired_blue_gain, 0x40, 0xfff);
+	state->red_error_accum += (s32)desired_red_gain - (s32)*red_gain;
+	state->blue_error_accum += (s32)desired_blue_gain - (s32)*blue_gain;
 	red_correction = state->red_error_accum / (s32)coefficient;
 	blue_correction = state->blue_error_accum / (s32)coefficient;
 	state->red_error_accum -= red_correction * coefficient;
 	state->blue_error_accum -= blue_correction * coefficient;
-	state->red_gain = clamp_t(s32,
-				    (s32)state->red_gain + red_correction,
-				    0x40, 0xfff);
-	state->blue_gain = clamp_t(s32,
-				     (s32)state->blue_gain + blue_correction,
-				     0x40, 0xfff);
+	*red_gain = clamp_t(s32, (s32)*red_gain + red_correction,
+			    0x40, 0xfff);
+	*blue_gain = clamp_t(s32, (s32)*blue_gain + blue_correction,
+			     0x40, 0xfff);
 
 	APICAL_WRITE_32(0x300, (APICAL_READ_32(0x300) & ~0xfffU) |
-			state->red_gain);
+			state->gain_00);
+	APICAL_WRITE_32(0x304, (APICAL_READ_32(0x304) & ~0xfffU) |
+			state->gain_01);
+	APICAL_WRITE_32(0x308, (APICAL_READ_32(0x308) & ~0xfffU) |
+			state->gain_10);
 	APICAL_WRITE_32(0x30c, (APICAL_READ_32(0x30c) & ~0xfffU) |
-			state->blue_gain);
+			state->gain_11);
 	state->awb_updates++;
 	if (state->awb_updates <= 8 || !(state->awb_updates & 0x1f))
-		pr_info("tx-isp-t30: calibrated AWB ratio=%u/%u gain=0x%x/0x%x\n",
-			red_ratio, blue_ratio, state->red_gain,
-			state->blue_gain);
+		pr_info("tx-isp-t30: calibrated AWB ratio=%u/%u target=0x%x/0x%x gain=0x%x/0x%x pattern=%u\n",
+			red_ratio, blue_ratio, desired_red_gain,
+			desired_blue_gain, *red_gain, *blue_gain, pattern);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000337a8 origin=model_output original=AWB_fsm_process_interrupt */
