@@ -17482,13 +17482,22 @@ static int tx_isp_t30_ispcore_set_format(void *pad, void *data)
 			goto disable_crop;
 	}
 
-	fmt->pix.bytesperline = fmt->pix.width * (cfmt->depth / 8);
 	if (fmt->pix.pixelformat == V4L2_PIX_FMT_NV12 ||
-	    fmt->pix.pixelformat == V4L2_PIX_FMT_NV21)
-		fmt->pix.sizeimage = fmt->pix.bytesperline *
-				      ((fmt->pix.height + 0x0f) & ~0x0f);
-	else
+	    fmt->pix.pixelformat == V4L2_PIX_FMT_NV21) {
+		u32 aligned_height = (fmt->pix.height + 0x0f) & ~0x0f;
+
+		/*
+		 * The UV writer uses the same byte stride as Y and starts after the
+		 * macroblock-aligned luma plane.  Report the complete semiplanar
+		 * allocation to userspace; a luma-only size makes the encoder fetch
+		 * chroma from the following buffer (or beyond the DMA allocation).
+		 */
+		fmt->pix.bytesperline = fmt->pix.width;
+		fmt->pix.sizeimage = fmt->pix.bytesperline * aligned_height * 3 / 2;
+	} else {
+		fmt->pix.bytesperline = fmt->pix.width * cfmt->depth / 8;
 		fmt->pix.sizeimage = fmt->pix.bytesperline * fmt->pix.height;
+	}
 	*(u32 *)((char *)chan + 0x98) =
 		fmt->pix.width * (cfmt->depth / 8);
 	fmt->pix.priv = (u32)(uintptr_t)cfmt;
