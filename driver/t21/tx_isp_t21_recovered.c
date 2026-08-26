@@ -3979,15 +3979,15 @@ struct t21_sensor_ctrl_view {
 };
 
 struct t21_ae_ctrls_view {
-	u32 field_00;
+	u32 manual_mode;
 	u32 sensor_again;
-	u32 isp_dgain;
-	u32 integration_time;
 	u32 sensor_dgain;
-	u32 field_14;
-	u32 field_18;
-	u32 field_1c;
-	u32 field_20;
+	u32 integration_time;
+	u32 isp_dgain;
+	u32 max_sensor_again;
+	u32 max_sensor_dgain;
+	u32 max_integration_time;
+	u32 max_isp_dgain;
 	u32 total_gain;
 	u16 field_28;
 	u16 field_2a;
@@ -4370,6 +4370,8 @@ static spinlock_t t21_ae_hist_lock;
 static spinlock_t t21_ae_state_lock;
 static uint32_t t21_ae_current_it;
 static uint32_t t21_ae_current_gain_q10;
+static uint32_t t21_ae_current_sensor_dgain_q10;
+static uint32_t t21_ae_current_isp_dgain_q10;
 static uint32_t t21_ae_measured_luma;
 static uint32_t t21_ae_frame_count;
 static uint32_t t21_ae_scene_cfg[11];
@@ -42692,45 +42694,21 @@ uint32_t tisp_set_sensor_analog_gain(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029e84 origin=fragment_seed original=tisp_set_sensor_digital_gain */
 uint32_t tisp_set_sensor_digital_gain(uint32_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_12 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t s0 = 0;
-    uint32_t s1 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+	struct t21_sensor_ctrl_view *ctrl =
+		(struct t21_sensor_ctrl_view *)sensor_ctrl;
+	u32 sensor_gain = 0;
+	u32 log_gain;
+	u32 allocated_gain;
+	u32 linear_gain;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	/* Stock's bridge stores the sensor code in the upper half of the
+	 * allocator output.  Quantisation therefore remains sensor-owned. */
+	log_gain = tisp_log2_fixed_to_fixed(a0 << 6, 16, 16);
+	allocated_gain = ctrl->alloc_digital_gain(log_gain, &sensor_gain);
+	linear_gain = tisp_math_exp2(allocated_gain, 16, 16);
+	ctrl->set_digital_gain(sensor_gain >> 16);
 
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_log2_fixed_to_fixed)(a0 << 6, 16, 16); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(v0, &local_10); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(int32_t *)tisp_math_exp2)(v0, 16, 16); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    s1 = v0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(int32_t *)isp_printf)(local_12, 0); /* jalr target resolved by relocation */
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = s1 >> 6;
-
-    /* fragment 7: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return (uint32_t)v0;
+	return linear_gain >> 6;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029f08 origin=model_output original=JZ_Isp_Ae_Reg2par */
@@ -42776,14 +42754,14 @@ int32_t JZ_Isp_Ae_Reg2par(int32_t *arg1, int32_t *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a040 origin=model_output original=JZ_Isp_Ae_Dg2reg */
 int32_t JZ_Isp_Ae_Dg2reg(int32_t arg1, uint32_t *arg2, int32_t arg3, int32_t *arg4)
 {
-	int32_t v0 = fix_point_mult2_32(arg1, *arg4, 0, 0);
-	uint32_t s0_2 = (uint32_t)arg3 & 0x7fffffffu;
-	int32_t result = fix_point_mult2_32(arg1, arg4[1], arg3, 0) << 0x10;
+	u32 dgain = (u32)arg3 & 0x7fffffffU;
+	u32 first = fix_point_mult2_32(arg1, arg4[0], arg3, 0);
+	u32 second = fix_point_mult2_32(arg1, arg4[1], arg3, 0);
 
-	*arg2 = (uint32_t)((v0 & 0x7fffffff) | (int32_t)(s0_2 << 0x10));
-	((void **)arg2)[1] = result | (int32_t)s0_2;
+	arg2[0] = (dgain << 16) | (first & 0x7fffffffU);
+	arg2[1] = (second << 16) | dgain;
 
-	return result;
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002a0e0 origin=model_output original=printf_func */
@@ -46420,41 +46398,46 @@ int32_t tisp_ae_process(void)
 {
 	static u32 last_total_gain = ~0U;
 	static u32 last_again = ~0U;
-	/*
-	 * The reconstructed policy currently spends the full exposure budget in
-	 * the sensor (integration time, then analogue gain), so the ISP digital
-	 * gain remains at Q10 unity.  The OEM AE worker rewrites these two packed
-	 * channel pairs on every update; leaving that step out lets later ISP
-	 * block setup leave the input multipliers at unusable reset values.
-	 */
-	const u32 isp_dg_unity = (1024U << 16) | 1024U;
 	struct t21_sensor_ctrl_view *ctrl =
 		(struct t21_sensor_ctrl_view *)sensor_ctrl;
 	struct t21_ae_ctrls_view *ae_ctrl =
 		(struct t21_ae_ctrls_view *)tisp_ae_ctrls;
+	u32 dg_regs[2] = { 0x04000400, 0x04000400 };
+	int32_t linear_pair[2] = { 1024, 1024 };
 	u32 target;
 	u32 luma;
 	u32 min_it = ctrl->min_integration_time;
 	u32 max_it = ctrl->max_integration_time;
-	u32 max_gain;
+	u32 max_again;
+	u32 max_sensor_dgain;
+	u32 max_isp_dgain;
 	u32 new_it;
-	u32 new_gain;
+	u32 requested_again;
+	u32 requested_sensor_dgain;
+	u32 actual_again;
+	u32 actual_sensor_dgain;
+	u32 isp_dgain;
+	u32 total_gain_q10;
 	u32 total_gain;
 	u32 again;
 	u32 event[12] = { 0 };
 	u64 desired;
 	u64 max_exposure;
 	u64 current_exposure;
+	u64 actual_sensor_gain;
 	u32 current_ev;
 	u32 *reg = (u32 *)_ae_reg;
 	u32 *result = (u32 *)_ae_result;
 
 	BUILD_BUG_ON(sizeof(*ae_ctrl) != sizeof(tisp_ae_ctrls));
+	BUILD_BUG_ON(offsetof(struct t21_ae_ctrls_view, sensor_dgain) != 0x08);
+	BUILD_BUG_ON(offsetof(struct t21_ae_ctrls_view, isp_dgain) != 0x10);
+	BUILD_BUG_ON(offsetof(struct t21_ae_ctrls_view,
+			      max_integration_time) != 0x1c);
 
+	tisp_ae_ctrls_update();
 	t21_ae_update_luma();
 	luma = t21_ae_measured_luma;
-	system_reg_write_ae(2, 0x408, isp_dg_unity);
-	system_reg_write_ae(2, 0x40c, isp_dg_unity);
 
 	/* Run the sensor bus at a modest cadence while the reconstructed AE
 	 * policy is converging.  All sensor limits and operations remain supplied
@@ -46467,62 +46450,110 @@ int32_t tisp_ae_process(void)
 		min_it = 1;
 	if (max_it < min_it)
 		max_it = min_it;
-	max_gain = tisp_math_exp2(ctrl->exp2_input_a, 16, 10);
-	if (max_gain < 1024)
-		max_gain = 1024;
+	if (ae_ctrl->max_integration_time >= min_it &&
+	    ae_ctrl->max_integration_time < max_it)
+		max_it = ae_ctrl->max_integration_time;
+	max_again = tisp_math_exp2(ctrl->exp2_input_a, 16, 10);
+	if (max_again < 1024)
+		max_again = 1024;
+	if (ae_ctrl->max_sensor_again >= 1024 &&
+	    ae_ctrl->max_sensor_again < max_again)
+		max_again = ae_ctrl->max_sensor_again;
+	max_sensor_dgain = tisp_math_exp2(ctrl->exp2_input_b, 16, 10);
+	if (max_sensor_dgain < 1024)
+		max_sensor_dgain = 1024;
+	if (ae_ctrl->max_sensor_dgain >= 1024 &&
+	    ae_ctrl->max_sensor_dgain < max_sensor_dgain)
+		max_sensor_dgain = ae_ctrl->max_sensor_dgain;
+	max_isp_dgain = max_t(u32, ae_ctrl->max_isp_dgain, 1024);
 	if (t21_ae_current_it < min_it)
 		t21_ae_current_it = min_it;
 	if (t21_ae_current_gain_q10 < 1024)
 		t21_ae_current_gain_q10 = 1024;
+	if (t21_ae_current_sensor_dgain_q10 < 1024)
+		t21_ae_current_sensor_dgain_q10 = 1024;
+	if (t21_ae_current_isp_dgain_q10 < 1024)
+		t21_ae_current_isp_dgain_q10 = 1024;
 
 	current_exposure = (u64)t21_ae_current_it *
 			   t21_ae_current_gain_q10;
+	current_exposure = div_u64(current_exposure *
+				   t21_ae_current_sensor_dgain_q10, 1024);
+	current_exposure = div_u64(current_exposure *
+				   t21_ae_current_isp_dgain_q10, 1024);
 	current_ev = div_u64(current_exposure, 1024);
 	target = t21_ae_target_for_exposure(current_ev);
 	if (target < 20 || target > 160)
 		target = 64;
 	desired = current_exposure * target;
 	desired = div_u64(desired, luma);
-	max_exposure = (u64)max_it * max_gain;
+	max_exposure = (u64)max_it * max_again;
+	max_exposure = div_u64(max_exposure * max_sensor_dgain, 1024);
+	max_exposure = div_u64(max_exposure * max_isp_dgain, 1024);
 	if (desired < (u64)min_it * 1024U)
 		desired = (u64)min_it * 1024U;
 	if (desired > max_exposure)
 		desired = max_exposure;
 
-	/* The stock T21 mode-0 allocator spends integration time first, then
-	 * analogue gain.  This preserves low-noise exposure while the sensor's
-	 * generic gain allocator remains responsible for all quantization. */
+	/* Stock spends integration time first, then sensor analogue/digital gain,
+	 * and uses ISP digital gain for the remaining budget and sensor
+	 * quantisation error.  The active tuning bank and sensor descriptor own
+	 * every limit and quantisation decision. */
 	new_it = div_u64(desired + 1023, 1024);
 	new_it = clamp_t(u32, new_it, min_it, max_it);
-	new_gain = div_u64(desired + new_it - 1, new_it);
-	new_gain = clamp_t(u32, new_gain, 1024, max_gain);
+	total_gain_q10 = div_u64(desired + new_it - 1, new_it);
+	requested_again = clamp_t(u32, total_gain_q10, 1024, max_again);
+	requested_sensor_dgain = div_u64((u64)total_gain_q10 * 1024 +
+					 requested_again - 1,
+					 requested_again);
+	requested_sensor_dgain = clamp_t(u32, requested_sensor_dgain,
+					  1024, max_sensor_dgain);
 
 	if (ctrl->start_changes)
 		ctrl->start_changes();
 	ctrl->set_integration_time(new_it & 0xffff);
 	t21_ae_current_it = new_it;
-	t21_ae_current_gain_q10 = tisp_set_sensor_analog_gain(new_gain);
+	actual_again = tisp_set_sensor_analog_gain(requested_again);
+	actual_sensor_dgain =
+		tisp_set_sensor_digital_gain(requested_sensor_dgain);
 	if (ctrl->end_changes)
 		ctrl->end_changes();
+	actual_again = max_t(u32, actual_again, 1);
+	actual_sensor_dgain = max_t(u32, actual_sensor_dgain, 1);
+	actual_sensor_gain = (u64)actual_again * actual_sensor_dgain;
+	isp_dgain = div_u64((u64)total_gain_q10 * 1024 * 1024,
+				 actual_sensor_gain);
+	isp_dgain = clamp_t(u32, isp_dgain, 1024, max_isp_dgain);
+	t21_ae_current_gain_q10 = actual_again;
+	t21_ae_current_sensor_dgain_q10 = actual_sensor_dgain;
+	t21_ae_current_isp_dgain_q10 = isp_dgain;
+
+	JZ_Isp_Ae_Dg2reg(10, dg_regs, isp_dgain, linear_pair);
+	system_reg_write_ae(2, 0x408, dg_regs[0]);
+	system_reg_write_ae(2, 0x40c, dg_regs[1]);
 
 	/* Keep the OEM result/control records coherent for userspace queries and
 	 * for the downstream gain-driven tuning callbacks. */
-	reg[1] = 1024;
+	reg[1] = isp_dgain;
 	reg[2] = t21_ae_current_it;
 	reg[3] = t21_ae_current_gain_q10;
 	memcpy(result, reg, sizeof(_ae_result));
 	ae_ctrl->sensor_again = t21_ae_current_gain_q10;
-	ae_ctrl->isp_dgain = 1024;
+	ae_ctrl->sensor_dgain = t21_ae_current_sensor_dgain_q10;
 	ae_ctrl->integration_time = t21_ae_current_it;
-	ae_ctrl->sensor_dgain = 1024;
-	ae_ctrl->total_gain = t21_ae_current_gain_q10;
+	ae_ctrl->isp_dgain = t21_ae_current_isp_dgain_q10;
+	ae_ctrl->total_gain = div_u64((u64)t21_ae_current_gain_q10 *
+				      t21_ae_current_sensor_dgain_q10 *
+				      t21_ae_current_isp_dgain_q10,
+				      1024 * 1024);
 
 	/* The dynamic ISP blocks consume gain in Q16 log2 form.  Keep that
 	 * policy generic: the sensor callback supplies the quantized Q10 gain,
 	 * while every interpolation curve comes from the active tuning bank. */
-	total_gain = tisp_log2_fixed_to_fixed(t21_ae_current_gain_q10 << 6,
+	total_gain = tisp_log2_fixed_to_fixed(ae_ctrl->total_gain << 6,
 					       16, 16);
-	again = total_gain;
+	again = tisp_log2_fixed_to_fixed(t21_ae_current_gain_q10 << 6,
+					 16, 16);
 	if (total_gain != last_total_gain) {
 		event[2] = 4;
 		event[4] = total_gain;
@@ -46537,16 +46568,20 @@ int32_t tisp_ae_process(void)
 		last_again = again;
 	}
 
-	pr_debug_ratelimited("tx-isp-t21: ae luma=%u target=%u ev=%u it=%u gain_q10=%u limits=%u/%u\n",
+	pr_debug_ratelimited("tx-isp-t21: ae luma=%u target=%u ev=%u it=%u again=%u sdgain=%u ispgain=%u limits=%u/%u/%u\n",
 			    t21_ae_measured_luma, target,
 			    current_ev,
 			    t21_ae_current_it, t21_ae_current_gain_q10,
-			    max_it, max_gain);
+			    t21_ae_current_sensor_dgain_q10,
+			    t21_ae_current_isp_dgain_q10,
+			    max_it, max_again, max_isp_dgain);
 	if (!(t21_ae_frame_count % 750))
-		pr_info("tx-isp-t21: ae sample luma=%u target=%u ev=%u it=%u gain_q10=%u limits=%u/%u\n",
+		pr_info("tx-isp-t21: ae sample luma=%u target=%u ev=%u it=%u again=%u sdgain=%u ispgain=%u limits=%u/%u/%u\n",
 			t21_ae_measured_luma, target, current_ev,
 			t21_ae_current_it, t21_ae_current_gain_q10,
-			max_it, max_gain);
+			t21_ae_current_sensor_dgain_q10,
+			t21_ae_current_isp_dgain_q10,
+			max_it, max_again, max_isp_dgain);
 	return 0;
 }
 
@@ -46618,6 +46653,8 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 		(struct t21_ae_result_record *)_ae_result;
 	struct t21_sensor_ctrl_view *ctrl =
 		(struct t21_sensor_ctrl_view *)sensor_ctrl;
+	struct t21_ae_ctrls_view *ae_ctrl =
+		(struct t21_ae_ctrls_view *)tisp_ae_ctrls;
 	uint32_t i;
 	uint32_t j;
 	uint32_t val;
@@ -46684,6 +46721,8 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 
 	sensor_it = result->integration_time;
 	t21_ae_current_it = sensor_it;
+	t21_ae_current_sensor_dgain_q10 = 1024;
+	t21_ae_current_isp_dgain_q10 = max_t(u32, result->sensor_reg, 1024);
 	pr_info("tx-isp-t21: ae integration begin value=%u cb=%p\n",
 		sensor_it, ((struct t21_sensor_ctrl_view *)sensor_ctrl)->set_integration_time);
 	ret = tisp_set_sensor_integration_time(sensor_it);
@@ -46716,7 +46755,9 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	system_irq_func_set(0x10, ae_interrupt_static);
 	pr_info("tx-isp-t21: ae irq callbacks done\n");
 
-	memset((void *)tisp_ae_tune, 0, 0x40);
+	/* Stock clears the 64-byte AE control record.  The first-pass recovery
+	 * mistook that data symbol for tisp_ae_tune() and wrote into text here. */
+	memset(ae_ctrl, 0, sizeof(*ae_ctrl));
 	memset(&ae_ctrls, 0, 0x10);
 
 	ae_point_pos = *(uint32_t *)&_AePointPos;
@@ -46724,12 +46765,12 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	sensor_gain = result->analog_gain;
 	sensor_reg = result->sensor_reg;
 	val = fix_point_mult3_32(ae_point_pos, sensor_it << (ae_point_pos & 0x1f), sensor_gain, sensor_reg);
-	*(uint32_t *)(tisp_ae_tune + 0x24) = val;
+	ae_ctrl->total_gain = val;
 	pr_info("tx-isp-t21: ae initial exposure=%u point=%u\n", val,
 		ae_point_pos);
 
 	sensor_ctrl_val = ctrl->max_integration_time;
-	ctrl_val = *(uint32_t *)(tisp_ae_tune + 0x24);
+	ctrl_val = ae_ctrl->total_gain;
 	if (sensor_ctrl_val == 0) {
 		*(uint32_t *)((char *)((char *)&_exp_parameter + 0x8)) = ctrl_val;
 	} else if (ctrl_val < sensor_ctrl_val) {
@@ -46737,7 +46778,7 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	}
 
 	exp_val = *(uint32_t *)((char *)((char *)&_exp_parameter + 0x8));
-	*(uint32_t *)(tisp_ae_tune + 0x1c) = exp_val;
+	ae_ctrl->max_integration_time = exp_val;
 
 	exp_val2 = tisp_math_exp2(ctrl->exp2_input_a, 0x10, 0xa);
 	ctrl_val2 = *(uint32_t *)((char *)((char *)&_exp_parameter + 0xc));
@@ -46748,14 +46789,14 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	}
 
 	exp_val2 = tisp_math_exp2(ctrl->exp2_input_b, 0x10, 0xa);
-	*(uint32_t *)(tisp_ae_tune + 0x18) = exp_val2;
+	ae_ctrl->max_sensor_dgain = exp_val2;
 	pr_info("tx-isp-t21: ae exposure limits done\n");
 
 	ctrl_val3 = *(uint32_t *)((char *)((char *)&_exp_parameter + 0xc));
-	*(uint32_t *)(tisp_ae_tune + 0x14) = ctrl_val3;
+	ae_ctrl->max_sensor_again = ctrl_val3;
 
 	ctrl_val4 = *(uint32_t *)((char *)((char *)&_exp_parameter + 0x10));
-	*(uint32_t *)(tisp_ae_tune + 0x20) = ctrl_val4;
+	ae_ctrl->max_isp_dgain = ctrl_val4;
 
 	flicker_val = *(uint32_t *)&_flicker_t;
 	flicker_val2 = *(uint32_t *)((char *)((char *)&_flicker_t + 0x4));
@@ -48968,13 +49009,13 @@ int32_t tisp_g_ev_attr(uintptr_t a0)
 		(u32)fix_point_mult2_32(10, ctrl->sensor_again,
 					 ctrl->sensor_dgain, 0) >> 2;
 	out->field_20_log2 =
-		tisp_log2_fixed_to_fixed(ctrl->field_14 + 4, 10, 5);
+		tisp_log2_fixed_to_fixed(ctrl->max_sensor_again + 4, 10, 5);
 	out->field_24_log2 =
-		tisp_log2_fixed_to_fixed(ctrl->field_20 + 4, 10, 5);
+		tisp_log2_fixed_to_fixed(ctrl->max_isp_dgain + 4, 10, 5);
 	out->isp_dgain_log2 =
 		tisp_log2_fixed_to_fixed(ctrl->isp_dgain, 10, 5);
 	out->field_2c_log2 =
-		tisp_log2_fixed_to_fixed(ctrl->field_18, 10, 5);
+		tisp_log2_fixed_to_fixed(ctrl->max_sensor_dgain, 10, 5);
 
 	return 0;
 }
