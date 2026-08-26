@@ -3971,6 +3971,22 @@ struct t21_sensor_ctrl_view {
 	int32_t (*get_lines_per_second)(void);
 };
 
+struct t21_ae_ctrls_view {
+	u32 field_00;
+	u32 sensor_again;
+	u32 isp_dgain;
+	u32 integration_time;
+	u32 sensor_dgain;
+	u32 field_14;
+	u32 field_18;
+	u32 field_1c;
+	u32 field_20;
+	u32 total_gain;
+	u16 field_28;
+	u16 field_2a;
+	u8 reserved[0x40 - 0x2c];
+};
+
 struct t21_sensor_bridge_state {
 	u8 reserved_000[0x60];
 	u32 analog_gain;
@@ -7530,7 +7546,9 @@ int32_t tiziano_ae_compensation_set(uint32_t a0);
 uint32_t tiziano_ae_s_ev_start(uint32_t arg1);
 int32_t tiziano_ae_s_max_again(int32_t arg1);
 int32_t tiziano_ae_s_max_isp_dgain(int32_t arg1);
-int32_t tiziano_deflicker_expt(int32_t flicker, int32_t data_7de18, int32_t data_7de1c, int32_t data_7de20, int32_t arg5, uint32_t *arg6);
+int32_t tiziano_deflicker_expt(int32_t flicker, int32_t packed_fps,
+			       int32_t frame_height, int32_t frame_width,
+			       uintptr_t lut_addr, uint32_t *node_index);
 int32_t tiziano_deflicker_expt_tune(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4);
 int32_t system_reg_write_ae(int32_t arg1, int32_t arg2, int32_t arg3);
 int32_t tisp_ae_process_impl(void);
@@ -38739,7 +38757,7 @@ int32_t tisp_dpc_s_par_cfg(void)
 	uint32_t *p = dpc_s_con_par_array;
 	uint32_t *tp = &dpc_s_text_thres_intp;
 	uint32_t thres = *tp;
-	uint32_t diff = thres - p[4];
+	int32_t diff = (int32_t)thres - (int32_t)p[4];
 	uint32_t val;
 
 	val = (system_reg_read(0x204) & 0x7fffffff) | (p[0] << 0x1b);
@@ -38947,7 +38965,6 @@ int32_t tisp_rdns_par_cfg(void)
     uint32_t s5;
     uint32_t a1;
     uint32_t val;
-    uint32_t *lo;
     uint32_t s0_val;
     uint32_t s2_combined;
 
@@ -38966,10 +38983,11 @@ int32_t tisp_rdns_par_cfg(void)
         a1 = 0;
     } else {
         s2 = (uint32_t)(((int32_t)(val * 0x1f)) >> 4);
-        lo = 0x80 / s2;
+        uint32_t reciprocal = 0x80 / s2;
+
         s4 = 8;
         s3 = 0x18;
-        a1 = (uintptr_t)lo / 4;
+        a1 = reciprocal / 4;
         s5 = a1 << 1;
     }
 
@@ -39151,7 +39169,10 @@ int32_t tisp_dpc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 	static uint32_t gain_old_value = UINT_MAX;
 	uint32_t diff;
 
-	if (gain_old_value != 0xffffffff) {
+	if (gain_old_value == UINT_MAX) {
+		gain_old_value = a0;
+		tisp_dpc_all_reg_refresh(a0);
+	} else {
 		if (a0 < gain_old_value)
 			diff = gain_old_value - a0;
 		else
@@ -39160,13 +39181,7 @@ int32_t tisp_dpc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 		if (diff >= a1) {
 			gain_old_value = a0;
 			tisp_dpc_intp_reg_refresh(a0);
-		} else {
-			gain_old_value = a0;
-			tisp_dpc_all_reg_refresh(a0);
 		}
-	} else {
-		gain_old_value = a0;
-		tisp_dpc_all_reg_refresh(a0);
 	}
 
 	if (a2 == 1)
@@ -39178,40 +39193,52 @@ int32_t tisp_dpc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024600 origin=model_output original=tiziano_dpc_params_refresh */
 int32_t tiziano_dpc_params_refresh(void)
 {
-	memcpy(&ctr_md_np_array, (void *)((char *)&tparams - 0x1E4), 0x40);
-	memcpy(&rdns_uu_np_array, (void *)((char *)&tparams - 0x1A4), 0x40);
-	memcpy(&rdns_g_lum_np_array, (void *)((char *)&tparams - 0x164), 0x40);
-	memcpy(&rdns_g_std_np_array, (void *)((char *)&tparams - 0x124), 0x40);
-	memcpy(&rdns_rb_lum_np_array, (void *)((char *)&tparams - 0xE4), 0x40);
-	memcpy(&rdns_rb_std_np_array, (void *)((char *)&tparams - 0xA4), 0x40);
-	memcpy(&dpc_s_text_thres_array, (void *)((char *)&tparams - 0x64), 0x24);
-	memcpy(&dpc_s_con_par_array, (void *)((char *)&tparams - 0x40), 0x14);
-	memcpy(&dpc_d_m1_level_array, (void *)((char *)&tparams - 0x2C), 0x24);
-	memcpy(&dpc_d_m1_l0_fthres_array, (void *)((char *)&tparams - 0x8), 0x24);
-	memcpy(&dpc_d_m1_l0_dthres_array, (void *)((char *)((char *)&tparams + 0x1c)), 0x24);
-	memcpy(&dpc_d_m1_l1_hthres_array, (void *)((char *)((char *)&tparams + 0x40)), 0x24);
-	memcpy(&dpc_d_m1_l1_lthres_array, (void *)((char *)((char *)&tparams + 0x64)), 0x24);
-	memcpy(&dpc_d_m1_l1_d1_thres_array, (void *)((char *)((char *)&tparams + 0x88)), 0x24);
-	memcpy(&dpc_d_m1_l1_d2_thres_array, (void *)((char *)((char *)&tparams + 0xac)), 0x24);
-	memcpy(&dpc_d_m1_con_par_array, (void *)((char *)((char *)&tparams + 0xd0)), 0x38);
-	memcpy(&dpc_d_m2_level_array, (void *)((char *)((char *)&tparams + 0x108)), 0x24);
-	memcpy(&dpc_d_m2_l0_thres_array, (void *)((char *)((char *)&tparams + 0x12c)), 0x24);
-	memcpy(&dpc_d_m2_l1_ldthres_array, (void *)((char *)((char *)&tparams + 0x150)), 0x24);
-	memcpy(&dpc_d_m2_l1_pdthres_array, (void *)((char *)((char *)&tparams + 0x174)), 0x24);
-	memcpy(&dpc_d_m2_con_par_array, (void *)((char *)((char *)&tparams + 0x198)), 0x18);
-	memcpy(&ctr_stren_array, (void *)((char *)((char *)&tparams + 0x1b0)), 0x24);
-	memcpy(&ctr_md_thres_array, (void *)((char *)((char *)&tparams + 0x1d4)), 0x24);
-	memcpy(&ctr_el_thres_array, (void *)((char *)((char *)&tparams + 0x1f8)), 0x24);
-	memcpy(&ctr_eh_thres_array, (void *)((char *)((char *)&tparams + 0x21c)), 0x24);
-	memcpy(&ctr_con_par_array, (void *)((char *)((char *)&tparams + 0x240)), 0x14);
-	memcpy(&rdns_stren_array, (void *)((char *)((char *)&tparams + 0x254)), 0x24);
-	memcpy(&rdns_std_thres_array, (void *)((char *)((char *)&tparams + 0x278)), 0x24);
-	memcpy(&rdns_y_fthres_array, (void *)((char *)((char *)&tparams + 0x29c)), 0x24);
-	memcpy(&rdns_y_tthres_array, (void *)((char *)((char *)&tparams + 0x2c0)), 0x24);
-	memcpy(&rdns_uv_fthres_array, (void *)((char *)((char *)&tparams + 0x2e4)), 0x24);
-	memcpy(&rdns_uv_tthres_array, (void *)((char *)((char *)&tparams + 0x308)), 0x24);
-	memcpy(&rdns_con_par_array, (void *)((char *)((char *)&tparams + 0x32c)), 0x28);
-	return 0;
+	int ret = 0;
+
+	/* The stock relocations use a 0x10000 HI16 addend.  Recovery kept only
+	 * each signed LO16 immediate, shifting this entire tuning family outside
+	 * its real location in the generic parameter image. */
+#define T21_DPC_COPY(dst, offset) \
+	do { \
+		int copy_ret = t21_tparams_copy(&(dst), (offset), sizeof(dst)); \
+		if (copy_ret && !ret) \
+			ret = copy_ret; \
+	} while (0)
+	T21_DPC_COPY(ctr_md_np_array,              0xfe1c);
+	T21_DPC_COPY(rdns_uu_np_array,              0xfe5c);
+	T21_DPC_COPY(rdns_g_lum_np_array,           0xfe9c);
+	T21_DPC_COPY(rdns_g_std_np_array,           0xfedc);
+	T21_DPC_COPY(rdns_rb_lum_np_array,          0xff1c);
+	T21_DPC_COPY(rdns_rb_std_np_array,          0xff5c);
+	T21_DPC_COPY(dpc_s_text_thres_array,        0xff9c);
+	T21_DPC_COPY(dpc_s_con_par_array,           0xffc0);
+	T21_DPC_COPY(dpc_d_m1_level_array,          0xffd4);
+	T21_DPC_COPY(dpc_d_m1_l0_fthres_array,      0xfff8);
+	T21_DPC_COPY(dpc_d_m1_l0_dthres_array,     0x1001c);
+	T21_DPC_COPY(dpc_d_m1_l1_hthres_array,     0x10040);
+	T21_DPC_COPY(dpc_d_m1_l1_lthres_array,     0x10064);
+	T21_DPC_COPY(dpc_d_m1_l1_d1_thres_array,   0x10088);
+	T21_DPC_COPY(dpc_d_m1_l1_d2_thres_array,   0x100ac);
+	T21_DPC_COPY(dpc_d_m1_con_par_array,       0x100d0);
+	T21_DPC_COPY(dpc_d_m2_level_array,         0x10108);
+	T21_DPC_COPY(dpc_d_m2_l0_thres_array,      0x1012c);
+	T21_DPC_COPY(dpc_d_m2_l1_ldthres_array,    0x10150);
+	T21_DPC_COPY(dpc_d_m2_l1_pdthres_array,    0x10174);
+	T21_DPC_COPY(dpc_d_m2_con_par_array,       0x10198);
+	T21_DPC_COPY(ctr_stren_array,               0x101b0);
+	T21_DPC_COPY(ctr_md_thres_array,            0x101d4);
+	T21_DPC_COPY(ctr_el_thres_array,            0x101f8);
+	T21_DPC_COPY(ctr_eh_thres_array,            0x1021c);
+	T21_DPC_COPY(ctr_con_par_array,             0x10240);
+	T21_DPC_COPY(rdns_stren_array,              0x10254);
+	T21_DPC_COPY(rdns_std_thres_array,          0x10278);
+	T21_DPC_COPY(rdns_y_fthres_array,           0x1029c);
+	T21_DPC_COPY(rdns_y_tthres_array,           0x102c0);
+	T21_DPC_COPY(rdns_uv_fthres_array,          0x102e4);
+	T21_DPC_COPY(rdns_uv_tthres_array,          0x10308);
+	T21_DPC_COPY(rdns_con_par_array,            0x1032c);
+#undef T21_DPC_COPY
+	return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000024940 origin=fragment_seed original=tiziano_dpc_dn_params_refresh */
@@ -44990,65 +45017,57 @@ int32_t tiziano_ae_s_max_isp_dgain(int32_t arg1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002cf90 origin=model_output original=tiziano_deflicker_expt */
-int32_t tiziano_deflicker_expt(int32_t flicker, int32_t data_7de18, int32_t data_7de1c, int32_t data_7de20, int32_t arg5, uint32_t *arg6)
+int32_t tiziano_deflicker_expt(int32_t flicker, int32_t packed_fps,
+			       int32_t frame_height, int32_t frame_width,
+			       uintptr_t lut_addr, uint32_t *node_index)
 {
-	uint32_t *flicker_t = (uint32_t *)&_flicker_t;
-	uint32_t s4;
-	uint32_t s1;
-	uint32_t s2;
-	uint32_t s0;
-	uint32_t s3;
-	uint32_t s7;
-	uint32_t s8;
-	uint32_t v1;
-	uint32_t *v0;
+	uint32_t *flicker_t = (uint32_t *)_flicker_t;
+	uint32_t *lut = (uint32_t *)lut_addr;
+	uint32_t flicker_period_q16;
+	uint32_t fps_q16;
+	uint32_t height_per_period_q16;
+	uint32_t node_count;
 	uint32_t i;
-	uint32_t v1_4;
-	uint32_t val;
 
-	((void **)flicker_t)[0] = (uint32_t)flicker;
-	((void **)flicker_t)[1] = (uint32_t)data_7de18;
-	((void **)flicker_t)[2] = (uint32_t)data_7de1c;
-	((void **)flicker_t)[3] = (uint32_t)data_7de20;
-	s4 = (uint32_t)flicker;
-	s1 = (uint32_t)data_7de1c;
-	s2 = (uint32_t)arg5;
-	s0 = (uint32_t)arg6;
-	s4 = s4 << 0x11;
-	v0 = (uintptr_t *)fix_point_div_32(0x10, data_7de18 & 0xffff0000, data_7de18 << 0x10);
-	s3 = v0;
-	v0 = (uintptr_t *)fix_point_div_32(0x10, s4, s3);
-	v1 = (uintptr_t)v0 >> 0x10;
-	v0 = 0x78;
-	if (v1 < 0x79)
-		v0 = 1;
-	if (v1 >= 0x79 && v1 != 0)
-		*arg6 = v1;
-	else
-		*arg6 = v0;
-	s7 = s1 << 0x10;
-	s8 = 0x8000;
-	s1 = 1;
-	while (1) {
-		i = *arg6;
-		if (i < s1)
-			break;
-		v0 = (uintptr_t *)fix_point_div_32(0x10, s7, s4);
-		v0 = (uintptr_t *)fix_point_mult3_32(0x10, s1 << 0x10, s3, (uintptr_t)v0);
-		v0 = ((uintptr_t)v0 + s8) >> 0x10;
-		*(uint32_t *)((char *)s2 + (s1 << 2) - 4) = (uintptr_t)v0;
-		s1 += 1;
-	}
-	v1_4 = *arg6;
-	i = *arg6;
-	while (i < 0x78) {
-		*(uint32_t *)((char *)s2 + (i << 2)) = *(uint32_t *)((char *)s2 + ((v1_4 - 1) << 2));
-		i += 1;
-		v1_4 = *arg6;
-	}
-	*arg6 = v1_4 - 1;
+	if (!lut || !node_index || !flicker || !(packed_fps & 0xffff))
+		return -EINVAL;
+
+	/* Rebuilt from the stock T21 body at 0x2cf90.  The packed FPS and
+	 * frame geometry come from the tuning image; one node represents a
+	 * mains half-cycle in sensor lines. */
+	flicker_t[0] = flicker;
+	flicker_t[1] = packed_fps;
+	flicker_t[2] = frame_height;
+	flicker_t[3] = frame_width;
+
+	fps_q16 = fix_point_div_32(16, packed_fps & 0xffff0000,
+				     packed_fps << 16);
+	flicker_period_q16 = (uint32_t)flicker << 17;
+	if (!fps_q16)
+		return -EINVAL;
+
+	node_count = fix_point_div_32(16, flicker_period_q16,
+					fps_q16) >> 16;
+	if (!node_count)
+		node_count = 1;
+	if (node_count > 120)
+		node_count = 120;
+	*node_index = node_count;
+
+	height_per_period_q16 = fix_point_div_32(16,
+						 (uint32_t)frame_height << 16,
+						 flicker_period_q16);
+	for (i = 1; i <= node_count; i++)
+		lut[i - 1] = (fix_point_mult3_32(16, i << 16,
+						       fps_q16,
+						       height_per_period_q16) +
+			      0x8000) >> 16;
+
+	for (i = node_count; i < 120; i++)
+		lut[i] = lut[node_count - 1];
+	*node_index = node_count - 1;
 	*(uint32_t *)&trig_deflick = 1;
-	return ((char *)&tiziano_clm_h_lut + 0x8d4);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d118 origin=model_output original=tiziano_deflicker_expt_tune */
@@ -45624,6 +45643,35 @@ tisp_ae_process_impl0x690:
     return 0;
 }
 
+static u32 t21_ae_target_for_exposure(u32 exposure)
+{
+	const u32 *ev = (const u32 *)_ev_list;
+	const u32 *at = (const u32 *)_at_list;
+	u32 i;
+
+	if (exposure <= ev[0])
+		return at[0];
+	if (exposure >= ev[9])
+		return at[9];
+
+	for (i = 0; i < 9; i++) {
+		u32 span;
+		u32 pos;
+
+		if (exposure > ev[i + 1])
+			continue;
+		span = ev[i + 1] - ev[i];
+		if (!span)
+			return at[i];
+		pos = exposure - ev[i];
+		if (at[i + 1] >= at[i])
+			return at[i] + (at[i + 1] - at[i]) * pos / span;
+		return at[i] - (at[i] - at[i + 1]) * pos / span;
+	}
+
+	return at[9];
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002d884 origin=model_output original=tisp_ae_process */
 int32_t tisp_ae_process(void)
 {
@@ -45639,7 +45687,9 @@ int32_t tisp_ae_process(void)
 	const u32 isp_dg_unity = (1024U << 16) | 1024U;
 	struct t21_sensor_ctrl_view *ctrl =
 		(struct t21_sensor_ctrl_view *)sensor_ctrl;
-	u32 target = ((u32 *)_at_list)[0];
+	struct t21_ae_ctrls_view *ae_ctrl =
+		(struct t21_ae_ctrls_view *)tisp_ae_ctrls;
+	u32 target;
 	u32 luma;
 	u32 min_it = ctrl->min_integration_time;
 	u32 max_it = ctrl->max_integration_time;
@@ -45651,6 +45701,12 @@ int32_t tisp_ae_process(void)
 	u32 event[12] = { 0 };
 	u64 desired;
 	u64 max_exposure;
+	u64 current_exposure;
+	u32 current_ev;
+	u32 *reg = (u32 *)_ae_reg;
+	u32 *result = (u32 *)_ae_result;
+
+	BUILD_BUG_ON(sizeof(*ae_ctrl) != sizeof(tisp_ae_ctrls));
 
 	t21_ae_update_luma();
 	luma = t21_ae_measured_luma;
@@ -45662,8 +45718,6 @@ int32_t tisp_ae_process(void)
 	 * by the generic sensor descriptor loaded from the tuning blob. */
 	if (++t21_ae_frame_count % 3)
 		return 0;
-	if (target < 20 || target > 160)
-		target = 64;
 	if (!luma)
 		luma = 1;
 	if (min_it < 1)
@@ -45678,7 +45732,13 @@ int32_t tisp_ae_process(void)
 	if (t21_ae_current_gain_q10 < 1024)
 		t21_ae_current_gain_q10 = 1024;
 
-	desired = (u64)t21_ae_current_it * t21_ae_current_gain_q10 * target;
+	current_exposure = (u64)t21_ae_current_it *
+			   t21_ae_current_gain_q10;
+	current_ev = div_u64(current_exposure, 1024);
+	target = t21_ae_target_for_exposure(current_ev);
+	if (target < 20 || target > 160)
+		target = 64;
+	desired = current_exposure * target;
 	desired = div_u64(desired, luma);
 	max_exposure = (u64)max_it * max_gain;
 	if (desired < (u64)min_it * 1024U)
@@ -45686,13 +45746,13 @@ int32_t tisp_ae_process(void)
 	if (desired > max_exposure)
 		desired = max_exposure;
 
-	/* The OEM low-light path spends the tuning/sensor analogue-gain budget
-	 * before extending integration time.  The generic allocator below still
-	 * owns all gain quantization; no sensor register or gain code lives here. */
-	new_gain = div_u64(desired, min_it);
-	new_gain = clamp_t(u32, new_gain, 1024, max_gain);
-	new_it = div_u64(desired, new_gain);
+	/* The stock T21 mode-0 allocator spends integration time first, then
+	 * analogue gain.  This preserves low-noise exposure while the sensor's
+	 * generic gain allocator remains responsible for all quantization. */
+	new_it = div_u64(desired + 1023, 1024);
 	new_it = clamp_t(u32, new_it, min_it, max_it);
+	new_gain = div_u64(desired + new_it - 1, new_it);
+	new_gain = clamp_t(u32, new_gain, 1024, max_gain);
 
 	if (ctrl->start_changes)
 		ctrl->start_changes();
@@ -45701,6 +45761,18 @@ int32_t tisp_ae_process(void)
 	t21_ae_current_gain_q10 = tisp_set_sensor_analog_gain(new_gain);
 	if (ctrl->end_changes)
 		ctrl->end_changes();
+
+	/* Keep the OEM result/control records coherent for userspace queries and
+	 * for the downstream gain-driven tuning callbacks. */
+	reg[1] = 1024;
+	reg[2] = t21_ae_current_it;
+	reg[3] = t21_ae_current_gain_q10;
+	memcpy(result, reg, sizeof(_ae_result));
+	ae_ctrl->sensor_again = t21_ae_current_gain_q10;
+	ae_ctrl->isp_dgain = 1024;
+	ae_ctrl->integration_time = t21_ae_current_it;
+	ae_ctrl->sensor_dgain = 1024;
+	ae_ctrl->total_gain = t21_ae_current_gain_q10;
 
 	/* The dynamic ISP blocks consume gain in Q16 log2 form.  Keep that
 	 * policy generic: the sensor callback supplies the quantized Q10 gain,
@@ -45722,14 +45794,16 @@ int32_t tisp_ae_process(void)
 		last_again = again;
 	}
 
-	pr_debug_ratelimited("tx-isp-t21: ae luma=%u target=%u it=%u gain_q10=%u limits=%u/%u\n",
+	pr_debug_ratelimited("tx-isp-t21: ae luma=%u target=%u ev=%u it=%u gain_q10=%u limits=%u/%u\n",
 			    t21_ae_measured_luma, target,
+			    current_ev,
 			    t21_ae_current_it, t21_ae_current_gain_q10,
 			    max_it, max_gain);
 	if (!(t21_ae_frame_count % 750))
-		pr_info("tx-isp-t21: ae sample luma=%u target=%u it=%u gain_q10=%u limits=%u/%u\n",
-			t21_ae_measured_luma, target, t21_ae_current_it,
-			t21_ae_current_gain_q10, max_it, max_gain);
+		pr_info("tx-isp-t21: ae sample luma=%u target=%u ev=%u it=%u gain_q10=%u limits=%u/%u\n",
+			t21_ae_measured_luma, target, current_ev,
+			t21_ae_current_it, t21_ae_current_gain_q10,
+			max_it, max_gain);
 	return 0;
 }
 
@@ -45944,8 +46018,12 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	flicker_val2 = *(uint32_t *)((char *)((char *)&_flicker_t + 0x4));
 	flicker_val3 = *(uint32_t *)((char *)((char *)&_flicker_t + 0x8));
 	flicker_val4 = *(uint32_t *)((char *)((char *)&_flicker_t + 0xc));
-	tiziano_deflicker_expt(flicker_val, flicker_val2, flicker_val3, flicker_val4, &_deflick_lut, &nodes_num);
-	pr_info("tx-isp-t21: ae deflicker done nodes=%u\n", nodes_num);
+	tiziano_deflicker_expt(flicker_val, flicker_val2, flicker_val3,
+				 flicker_val4, (uintptr_t)_deflick_lut,
+				 (u32 *)&_nodes_num);
+	pr_info("tx-isp-t21: ae deflicker done node_index=%u first=%u last=%u\n",
+		(u32)_nodes_num, ((u32 *)_deflick_lut)[0],
+		((u32 *)_deflick_lut)[_nodes_num]);
 
 	tisp_event_set_cb(1, tisp_ae_process);
 	pr_info("tx-isp-t21: ae event callback done\n");
@@ -46197,7 +46275,8 @@ int32_t tisp_ae_param_array_set(int32_t param_id, int32_t data, int32_t *len)
 		p = (int32_t *)_flicker_t;
 		memcpy(p, (const void *)(uintptr_t)(data), 0x18);
 		tiziano_deflicker_expt(p[0], p[1], p[2], p[3],
-					 (int32_t *)_deflick_lut, &_nodes_num);
+					 (uintptr_t)_deflick_lut,
+					 (u32 *)&_nodes_num);
 		expected_size = 0x18;
 		break;
 	case 0xc:
@@ -48081,22 +48160,6 @@ tisp_g_af_weight0x5c:
 
     return 0;
 }
-
-struct t21_ae_ctrls_view {
-	u32 field_00;
-	u32 sensor_again;
-	u32 isp_dgain;
-	u32 integration_time;
-	u32 sensor_dgain;
-	u32 field_14;
-	u32 field_18;
-	u32 field_1c;
-	u32 field_20;
-	u32 total_gain;
-	u16 field_28;
-	u16 field_2a;
-	u8 reserved[0x40 - 0x2c];
-};
 
 struct t21_ev_sensor_info_view {
 	u8 reserved_00[0x2c];
