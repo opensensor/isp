@@ -3719,6 +3719,11 @@ static uint32_t tisp_adr_ev_now;
 static unsigned char adr_block_hist[400];
 static unsigned char adr_block_y[80];
 static unsigned char adr_hist[2048];
+static uint32_t t21_adr_normalized_hist[512];
+static uint32_t t21_adr_curve_table[8][9];
+static const uint32_t t21_adr_light_levels[8] = {
+	0, 30, 40, 50, 60, 70, 80, 100,
+};
 static unsigned char __attribute__((aligned(4))) map_kneepoint_y[880] = {
     0x20, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00,
     0x00, 0x01, 0x00, 0x00, 0x80, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00,
@@ -7355,8 +7360,12 @@ int32_t ISPAWBInterpolation1(int32_t arg1, int32_t arg2, int32_t arg3, int32_t a
 int32_t ISPAWBInterpolation2(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t func_zone_ct_weight(int32_t arg1, int32_t *arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6, int32_t arg7);
 uint32_t Tiziano_Awb_Ct_Detect(int32_t *arg1, int32_t *arg2, void *arg3, int32_t arg4, int32_t *arg5, int32_t *arg6, void *arg7, int32_t arg8, int32_t arg9, int32_t *arg10, int32_t *arg11, void *arg12, int32_t *arg13, int32_t *arg14, int32_t *arg15, int32_t *arg16, int32_t *arg17, int32_t *arg18, int32_t *arg19);
-int32_t subsection_map(int32_t arg1, int32_t arg2, int32_t arg3, int32_t *arg4, int32_t arg5, void *arg6, int32_t *arg7, int32_t arg8, int32_t arg9, int32_t arg10);
-int32_t subsection(int32_t *arg1, int32_t arg2, int32_t *arg3, int32_t *arg4, int32_t arg5, int32_t *arg6, int32_t arg7, int32_t arg8, int32_t arg9);
+int32_t subsection_map(int32_t target, int32_t mapped, int32_t blend,
+		       int32_t *gamma_x, int32_t *gamma_y, int32_t *lut,
+		       int32_t bins, int32_t output_q, int32_t internal_q);
+int32_t subsection(int32_t *result, int32_t blend, int32_t *gamma_x,
+		   int32_t *gamma_y, int32_t *lut, int32_t bins,
+		   int32_t curve_q, int32_t internal_q);
 int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2, uintptr_t a3, uintptr_t arg4, uintptr_t arg5, uintptr_t arg6, uintptr_t arg7, uintptr_t arg8, uintptr_t arg9, uintptr_t arg10, uintptr_t arg11, uintptr_t arg12, uintptr_t arg13, uintptr_t arg14, uintptr_t arg15);
 int32_t cm_control(uintptr_t a0, uint32_t a1, uintptr_t a2);
 int32_t Tiziano_defog_fpga(void *arg1, void *arg2, void *arg3, void *arg4, int32_t arg5, int32_t arg6, void *arg7, void *arg8, void *arg9, void *arg10, void *arg11, void *arg12, void *arg13, void *arg14, int32_t *arg15, int32_t *arg16, int32_t *arg17, int32_t *arg18, int32_t *arg19);
@@ -7364,7 +7373,8 @@ int32_t tiziano_gamma_lut_parameter(void);
 int32_t tiziano_gamma_params_refresh(void);
 int32_t tiziano_gamma_dn_params_refresh(void);
 int32_t tiziano_gamma_init(void);
-int32_t tisp_gamma_param_array_get(int32_t arg1, int32_t arg2, int32_t *arg3);
+int32_t tisp_gamma_param_array_get(int32_t arg1, uintptr_t arg2,
+				   int32_t *arg3);
 int32_t tisp_gamma_param_array_set(int32_t arg1, int32_t arg2);
 int32_t tisp_gib_gain_interpolation(uint32_t a0);
 int32_t tiziano_gib_lut_parameter(void);
@@ -26017,6 +26027,7 @@ uint32_t Tiziano_Awb_Ct_Detect(int32_t *arg1, int32_t *arg2, void *arg3, int32_t
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000133d0 origin=model_output original=subsection_map */
+#if 0 /* Superseded: recovery inserted a nonexistent argument and pointer-typed scalars. */
 int32_t subsection_map(int32_t arg1, int32_t arg2, int32_t arg3, int32_t *arg4, int32_t arg5, void *arg6, int32_t *arg7, int32_t arg8, int32_t arg9, int32_t arg10)
 {
 	int32_t diffs[512];
@@ -26306,6 +26317,179 @@ int32_t subsection(int32_t *arg1, int32_t arg2, int32_t *arg3, int32_t *arg4, in
 	}
 
 	return result;
+}
+#endif
+
+static int32_t t21_adr_inverse_gamma(const int32_t *gamma_x,
+				     const int32_t *gamma_y,
+				     int32_t mapped, int32_t q)
+{
+	int32_t half = 1 << ((q & 0x1f) - 1);
+	int32_t i;
+
+	if (mapped <= gamma_y[0])
+		return gamma_x[0];
+	for (i = 1; i < 129; i++) {
+		int32_t x_span;
+		int32_t y_span;
+		int32_t slope;
+		int32_t delta;
+
+		if (mapped >= gamma_y[i])
+			continue;
+		x_span = gamma_x[i] - gamma_x[i - 1];
+		y_span = gamma_y[i] - gamma_y[i - 1];
+		if (!y_span)
+			return gamma_x[i];
+		slope = fix_point_div_32(q, x_span << q, y_span << q);
+		delta = fix_point_mult2_32(q, slope,
+					     (gamma_y[i] - mapped) << q, 0);
+		return gamma_x[i] - ((delta + half) >> q);
+	}
+	return gamma_x[128];
+}
+
+int32_t subsection_map(int32_t target, int32_t mapped, int32_t blend,
+		       int32_t *gamma_x, int32_t *gamma_y, int32_t *lut,
+		       int32_t bins, int32_t output_q, int32_t internal_q)
+{
+	int32_t best_distance = 0x2710;
+	int32_t index_sum = 0;
+	int32_t count = 0;
+	int32_t threshold;
+	int32_t gamma_value;
+	int32_t half;
+	int32_t i;
+
+	if (!gamma_x || !gamma_y || !lut || bins <= 0)
+		return mapped;
+
+	for (i = 0; i < 512; i++) {
+		int32_t distance = lut[i] >= target ?
+			lut[i] - target : target - lut[i];
+
+		if (distance < best_distance)
+			best_distance = distance;
+	}
+	for (i = 0; i < 512; i++) {
+		int32_t distance = lut[i] >= target ?
+			lut[i] - target : target - lut[i];
+
+		if (distance == best_distance) {
+			index_sum += i;
+			count++;
+		}
+	}
+	if (!count)
+		count = 1;
+
+	half = 1 << ((internal_q & 0x1f) - 1);
+	threshold = ((fix_point_div_32(internal_q,
+			index_sum << internal_q, count << internal_q) + half) >>
+			internal_q) * bins - 1;
+
+	if (threshold <= gamma_x[0]) {
+		gamma_value = gamma_y[0];
+	} else {
+		gamma_value = gamma_y[128];
+		for (i = 1; i < 129; i++) {
+			int32_t x_span;
+			int32_t y_span;
+			int32_t slope;
+			int32_t delta;
+
+			if (threshold >= gamma_x[i])
+				continue;
+			x_span = gamma_x[i] - gamma_x[i - 1];
+			y_span = gamma_y[i] - gamma_y[i - 1];
+			if (!x_span) {
+				gamma_value = gamma_y[i];
+				break;
+			}
+			slope = fix_point_div_32(internal_q,
+				y_span << internal_q, x_span << internal_q);
+			delta = fix_point_mult2_32(internal_q, slope,
+						     (gamma_x[i] - threshold) <<
+						     internal_q, 0);
+			gamma_value = gamma_y[i] - ((delta + half) >> internal_q);
+			break;
+		}
+	}
+
+	{
+		int32_t blended = mapped * 100 +
+			(gamma_value - mapped) * blend;
+		int32_t output_half = 1 << ((output_q & 0x1f) - 1);
+
+		return (fix_point_div_32(output_q, blended << output_q,
+			100 << output_q) + output_half) >> output_q;
+	}
+}
+
+int32_t subsection(int32_t *result, int32_t blend, int32_t *gamma_x,
+		   int32_t *gamma_y, int32_t *lut, int32_t bins,
+		   int32_t curve_q, int32_t internal_q)
+{
+	int32_t half = 1 << ((curve_q & 0x1f) - 1);
+	int32_t two_q = 2 << curve_q;
+	int32_t mapped4;
+	int32_t mapped2;
+	int32_t index4;
+	int32_t index2;
+
+	if (!result || !gamma_x || !gamma_y || !lut || bins <= 0)
+		return -EINVAL;
+
+	result[0] = 0;
+	result[8] = 0xfff;
+	mapped4 = subsection_map(0x1388,
+		(fix_point_div_32(curve_q, 0xfff << curve_q, two_q) + half) >>
+		curve_q, blend, gamma_x, gamma_y, lut, bins, curve_q,
+		internal_q);
+	result[4] = t21_adr_inverse_gamma(gamma_x, gamma_y, mapped4,
+					  curve_q);
+
+	index4 = (fix_point_div_32(curve_q, result[4] << curve_q,
+		bins << curve_q) + half) >> curve_q;
+	if (index4 < 0)
+		index4 = 0;
+	if (index4 > 511)
+		index4 = 511;
+	mapped2 = subsection_map(lut[index4] / 2,
+		(fix_point_div_32(curve_q, mapped4 << curve_q, two_q) + half) >>
+		curve_q, blend, gamma_x, gamma_y, lut, bins, curve_q,
+		internal_q);
+	result[2] = t21_adr_inverse_gamma(gamma_x, gamma_y, mapped2,
+					  curve_q);
+
+	index2 = (fix_point_div_32(curve_q, result[2] << curve_q,
+		bins << curve_q) + half) >> curve_q;
+	if (index2 < 0)
+		index2 = 0;
+	if (index2 > 511)
+		index2 = 511;
+	result[1] = t21_adr_inverse_gamma(gamma_x, gamma_y,
+		subsection_map(lut[index2] / 2,
+			(fix_point_div_32(curve_q, mapped2 << curve_q, two_q) +
+			 half) >> curve_q, blend, gamma_x, gamma_y, lut, bins,
+			 curve_q, internal_q), curve_q);
+	result[3] = t21_adr_inverse_gamma(gamma_x, gamma_y,
+		subsection_map((lut[index4] + lut[index2]) / 2,
+			(fix_point_div_32(curve_q,
+			 (mapped4 + mapped2) << curve_q, two_q) + half) >>
+			 curve_q, blend, gamma_x, gamma_y, lut, bins,
+			 curve_q, internal_q), curve_q);
+
+	result[5] = result[4] + 1;
+	result[6] = result[4] + 2;
+	result[7] = result[4] + 3;
+	if (result[7] >= 0xfff) {
+		result[4] = 0xffb;
+		result[5] = 0xffc;
+		result[6] = 0xffd;
+		result[7] = 0xffe;
+	}
+	return result[7];
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000013bc0 origin=fragment_seed original=Tiziano_adr_fpga */
@@ -29685,6 +29869,154 @@ static uint32_t t21_adr_blend_curve(uint32_t input, uint32_t gamma,
 	return output;
 }
 
+static uint32_t t21_adr_curve_interpolate(uint32_t target, uint32_t x_lo,
+					  uint32_t x_hi, uint32_t y_lo,
+					  uint32_t y_hi)
+{
+	uint32_t distance;
+	uint32_t span;
+
+	if (x_hi == x_lo)
+		return y_hi;
+	distance = target - x_lo;
+	span = x_hi - x_lo;
+	if (y_hi >= y_lo)
+		return y_lo + distance * (y_hi - y_lo) / span;
+	return y_lo - distance * (y_lo - y_hi) / span;
+}
+
+static void t21_adr_select_curve(const uint32_t *base, uint32_t target,
+				 uint32_t *curve)
+{
+	uint32_t i;
+	uint32_t j;
+
+	for (j = 0; j < 9; j++)
+		curve[j] = base[j];
+	for (i = 0; i < 8; i++) {
+		if (target == t21_adr_light_levels[i]) {
+			for (j = 0; j < 9; j++)
+				curve[j] = t21_adr_curve_table[i][j];
+			break;
+		}
+		if (target < t21_adr_light_levels[i]) {
+			if (!i) {
+				for (j = 0; j < 9; j++)
+					curve[j] = t21_adr_curve_table[0][j];
+			} else {
+				for (j = 1; j <= 4; j++)
+					curve[j] = t21_adr_curve_interpolate(target,
+						t21_adr_light_levels[i - 1],
+						t21_adr_light_levels[i],
+						t21_adr_curve_table[i - 1][j],
+						t21_adr_curve_table[i][j]);
+			}
+			break;
+		}
+	}
+	if (i == 8) {
+		for (j = 0; j < 9; j++)
+			curve[j] = t21_adr_curve_table[7][j];
+	}
+
+	if (curve[0] < 2)
+		curve[0] = 1;
+	for (j = 1; j < 9; j++) {
+		if (curve[j] <= curve[j - 1])
+			curve[j] = curve[j - 1] + 1;
+	}
+}
+
+static void t21_adr_build_curve_table(const uint32_t *hist,
+				      const uint32_t *gamma_x,
+				      const uint32_t *gamma_y,
+				      const uint32_t *block)
+{
+	uint32_t pixels = block[8] * block[9];
+	uint32_t histogram_divisor = pixels >> 10;
+	uint32_t i;
+
+	if ((pixels >> 2) < 0x1400)
+		histogram_divisor = 20;
+	if (!histogram_divisor)
+		histogram_divisor = 1;
+
+	for (i = 0; i < 512; i++) {
+		int32_t normalized = fix_point_div_32(16, hist[i] << 16,
+							 histogram_divisor << 16);
+
+		normalized = fix_point_mult2_32(16, normalized,
+						  10000 << 16, 0);
+		t21_adr_normalized_hist[i] = normalized >> 16;
+	}
+	for (i = 0; i < 8; i++)
+		subsection((int32_t *)t21_adr_curve_table[i],
+			   t21_adr_light_levels[i], (int32_t *)gamma_x,
+			   (int32_t *)gamma_y,
+			   (int32_t *)t21_adr_normalized_hist, 8, 10, 16);
+}
+
+static uint32_t t21_adr_piecewise(uint32_t x, const uint32_t *knees,
+				  const uint32_t *base)
+{
+	uint32_t output_y[5];
+	uint32_t i;
+
+	output_y[0] = base[0];
+	for (i = 1; i < 5; i++) {
+		uint32_t base_gap = base[i] - base[i - 1];
+		uint32_t knee_gap = knees[i] - knees[i - 1];
+
+		output_y[i] = output_y[i - 1] +
+			(base_gap >= knee_gap ? base_gap : knee_gap);
+	}
+	if (output_y[4] > 0xfff)
+		output_y[4] = 0xfff;
+
+	if (x < knees[0]) {
+		uint32_t slope;
+		uint32_t delta;
+
+		if (!knees[0])
+			return output_y[0];
+		slope = fix_point_div_32(10, output_y[0] << 10,
+					   knees[0] << 10);
+		delta = fix_point_mult2_32(10, slope,
+					    (knees[0] - x) << 10, 0);
+		return output_y[0] - ((delta + 0x200) >> 10);
+	}
+	for (i = 1; i < 5; i++) {
+		if (x < knees[i]) {
+			uint32_t slope = fix_point_div_32(10,
+				(output_y[i] - output_y[i - 1]) << 10,
+				(knees[i] - knees[i - 1]) << 10);
+			uint32_t delta = fix_point_mult2_32(10, slope,
+				(knees[i] - x) << 10, 0);
+
+			return output_y[i] - ((delta + 0x200) >> 10);
+		}
+	}
+	if (x >= knees[8])
+		return base[8];
+	if (base[8] >= output_y[4]) {
+		uint32_t slope = fix_point_div_32(10,
+			(base[8] - output_y[4]) << 10,
+			(knees[8] - knees[4]) << 10);
+		uint32_t delta = fix_point_mult2_32(10, slope,
+			(knees[8] - x) << 10, 0);
+
+		return base[8] - ((delta + 0x200) >> 10);
+	} else {
+		uint32_t slope = fix_point_div_32(10,
+			(output_y[4] - base[8]) << 10,
+			(knees[8] - knees[4]) << 10);
+		uint32_t delta = fix_point_mult2_32(10, slope,
+			(knees[8] - x) << 10, 0);
+
+		return base[8] + ((delta + 0x200) >> 10);
+	}
+}
+
 /* Bounds-safe port of the common T21/T31 ADR curve construction.  The SoC
  * supplies the mechanics; the gamma, light, map and block behavior remains
  * entirely owned by the active tuning bin. */
@@ -29695,10 +30027,13 @@ int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
 			 uintptr_t arg12, uintptr_t arg13, uintptr_t arg14,
 			 uintptr_t arg15)
 {
+	uint32_t *ctc_x = (uint32_t *)a0;
+	uint32_t *ctc_mux = (uint32_t *)(uintptr_t)a1;
 	uint32_t *min_x = (uint32_t *)a2;
 	uint32_t *min_y = (uint32_t *)a3;
 	uint32_t *map_x = (uint32_t *)arg4;
 	uint32_t *map_y = (uint32_t *)arg5;
+	uint32_t *contrast = (uint32_t *)arg6;
 	uint32_t *hist = (uint32_t *)arg7;
 	uint32_t *block_y = (uint32_t *)arg8;
 	uint32_t *base = (uint32_t *)arg10;
@@ -29712,15 +30047,15 @@ int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
 	uint32_t block_average;
 	uint32_t floor;
 	uint32_t ceiling;
+	uint32_t global_curve[9];
+	uint32_t ctc_curve[9];
 	uint32_t i;
 
-	(void)a0;
-	(void)a1;
-	(void)arg6;
 	(void)arg9;
 
-	if (!min_x || !min_y || !map_x || !map_y || !hist || !block_y ||
-	    !base || !gamma_x || !gamma_y || !map_mode || !light || !block)
+	if (!ctc_x || !ctc_mux || !min_x || !min_y || !map_x || !map_y ||
+	    !contrast || !hist || !block_y || !base || !gamma_x || !gamma_y ||
+	    !map_mode || !light || !block)
 		return -EINVAL;
 
 	for (i = 0; i < 512; i++)
@@ -29734,29 +30069,29 @@ int64_t Tiziano_adr_fpga(uintptr_t a0, uint32_t a1, uintptr_t a2,
 	if (ceiling <= floor || ceiling > 0xfff)
 		ceiling = 0xfff;
 
-	/* The global minimum curve uses the tuning bin's gamma and its light/map
-	 * thresholds.  It rises gently out of the shadows and rolls off again in
-	 * the highlights, matching the common T31 math without its 24-block ABI. */
-	for (i = 0; i < 11; i++) {
-		uint32_t x = min_x[i];
-		uint32_t gamma = t21_adr_lut_interp(gamma_x, gamma_y, 129, x);
-		uint32_t start = light[16];
-		uint32_t rolloff = map_mode[4];
-		uint32_t lift = light[8];
-		uint32_t strength = 0;
+	/* T21 and T31 share the histogram/gamma subsection mechanics.  T21 uses
+	 * 32-bit gamma entries and 20 spatial blocks, but the light-level curve
+	 * construction itself is identical and entirely tuning driven. */
+	t21_adr_build_curve_table(hist, gamma_x, gamma_y, block);
+	t21_adr_select_curve(base, block[6], global_curve);
+	for (i = 0; i < 11; i++)
+		min_y[i] = t21_adr_piecewise(min_x[i], global_curve, base);
 
-		if (lift > 1000)
-			lift = 1000;
-		if (!rolloff)
-			rolloff = 1;
-		if (x > start) {
-			strength = lift * 1024 / 1000;
-			strength = strength * (x - start) /
-				(rolloff + x - start);
-			strength = strength * 4095 / (4095 + x);
-		}
-		min_y[i] = t21_adr_blend_curve(x, gamma, strength,
-						 floor, ceiling);
+	t21_adr_select_curve(base, block[7], ctc_curve);
+	for (i = 0; i < 4; i++) {
+		uint32_t gap;
+
+		ctc_x[i] = ctc_curve[i + 1];
+		gap = i ? ctc_x[i] - ctc_x[i - 1] : ctc_x[0];
+		ctc_mux[i] = gap ? 0xfffff / gap : 0xfffff;
+	}
+
+	/* In the normal tuning mode the OEM emits a descending unity-distance
+	 * table.  Mode 1 is the optional Gaussian table and deliberately retains
+	 * its previous values until that branch has valid tuning inputs. */
+	if (block[14] == 0) {
+		for (i = 0; i < 32; i++)
+			contrast[i] = 0xfffff - i;
 	}
 
 	/* Each 4x5 statistics block gets its own tuning-derived map curve.  The
@@ -30457,7 +30792,7 @@ int32_t tiziano_gamma_init(void)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000016fb4 origin=model_output original=tisp_gamma_param_array_get */
-int32_t tisp_gamma_param_array_get(int32_t arg1, int32_t arg2, int32_t *arg3)
+int32_t tisp_gamma_param_array_get(int32_t arg1, uintptr_t arg2, int32_t *arg3)
 {
 	if (arg1 != 0x2f) {
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(2), (uintptr_t)("%s,%d: gamma not support param id %d\n"), (uintptr_t)("tisp_gamma_param_array_get"), (uintptr_t)(arg1));
@@ -41519,63 +41854,63 @@ int32_t tiziano_adr_params_init(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000028c84 origin=model_output original=tiziano_adr_gamma_refresh */
 int32_t tiziano_adr_gamma_refresh(void)
 {
+	uint32_t *gamma_x = (uint32_t *)adr_gam_x;
+	uint32_t *gamma_y = (uint32_t *)adr_gam_y;
+	uint32_t *targets = (uint32_t *)histSub_4096;
+	uint32_t *outputs = (uint32_t *)histSub_4096_out;
+	uint32_t *differences = (uint32_t *)histSub_4096_diff;
+	uint32_t *base = (uint32_t *)adr_tm_base_lut;
 	int32_t size;
-	int32_t i;
-	int32_t j;
-	int32_t val;
-	int32_t prev_x;
-	int32_t cur_x;
-	int32_t prev_y;
-	int32_t cur_y;
-	int32_t num;
-	int32_t den;
-	int32_t diff;
-	int32_t result;
+	uint32_t i;
 
-	tisp_gamma_param_array_get(0x2f, &adr_gam_y, &size);
+	tisp_gamma_param_array_get(0x2f, (uintptr_t)gamma_y, &size);
 	if (size != 0x204) {
 		printk("get gamma error!!!");
 		return -1;
 	}
 
-	for (i = 0; i < 0x24; i += 4) {
-		val = histSub_4096[i >> 2];
-		j = 0;
-		while (1) {
-			prev_y = adr_gam_y[j >> 2];
-			if (prev_y >= val) {
-				if (j != 0) {
-					prev_x = adr_gam_x[(j - 1) >> 2];
-					cur_x = adr_gam_x[j >> 2];
-					if (cur_x >= prev_x) {
-						cur_y = adr_gam_y[(j - 1) >> 2];
-						num = (val > cur_y) ? (val - cur_y) : (cur_y - val);
-						den = (prev_y > cur_y) ? (prev_y - cur_y) : (cur_y - prev_y);
-						result = (num * (cur_x - prev_x)) / den + prev_x;
-					} else {
-						cur_y = adr_gam_y[(j - 1) >> 2];
-						num = (val > cur_y) ? (val - cur_y) : (cur_y - val);
-						den = (prev_y > cur_y) ? (prev_y - cur_y) : (cur_y - prev_y);
-						result = prev_x - (num * (prev_x - cur_x)) / den;
-					}
-					((void **)histSub_4096_out)[i >> 2] = result;
+	for (i = 0; i < 9; i++) {
+		uint32_t target = targets[i];
+		uint32_t value = gamma_x[128];
+		uint32_t j;
+
+		if (target <= gamma_y[0]) {
+			value = gamma_x[0];
+		} else {
+			for (j = 1; j < 129; j++) {
+				uint32_t y_lo = gamma_y[j - 1];
+				uint32_t y_hi = gamma_y[j];
+				uint32_t x_lo;
+				uint32_t x_hi;
+				uint32_t numerator;
+				uint32_t denominator;
+
+				if (y_hi < target)
+					continue;
+				x_lo = gamma_x[j - 1];
+				x_hi = gamma_x[j];
+				numerator = target >= y_lo ?
+					target - y_lo : y_lo - target;
+				denominator = y_hi >= y_lo ?
+					y_hi - y_lo : y_lo - y_hi;
+				if (!denominator) {
+					value = x_hi;
+				} else if (x_hi >= x_lo) {
+					value = x_lo + numerator *
+						(x_hi - x_lo) / denominator;
 				} else {
-					((void **)histSub_4096_out)[i >> 2] = adr_gam_x[0];
+					value = x_lo - numerator *
+						(x_lo - x_hi) / denominator;
 				}
 				break;
 			}
-			j++;
-			if (j == 0x81) {
-				((void **)histSub_4096_out)[i >> 2] = adr_gam_x[0x80];
-				break;
-			}
 		}
-		((void **)adr_tm_base_lut)[i >> 2] = histSub_4096_out[i >> 2];
+		outputs[i] = value;
+		base[i] = value;
 	}
 
-	for (i = 0; i < 0x20; i += 4) {
-		((void **)histSub_4096_diff)[i >> 2] = *(int32_t *)((char *)((char *)&histSub_4096_out + 0x4) + i) - histSub_4096_out[i >> 2];
-	}
+	for (i = 0; i < 8; i++)
+		differences[i] = outputs[i + 1] - outputs[i];
 
 	return 0;
 }
