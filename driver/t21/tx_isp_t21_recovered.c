@@ -59,6 +59,8 @@
 #include "../include/tx_isp/tx_isp_sinfo.h"
 #endif
 
+#include "tx_isp_t21_v4l2.h"
+
 #ifndef __regtrace_stringify
 #define __regtrace_stringify_1(x) #x
 #define __regtrace_stringify(x) __regtrace_stringify_1(x)
@@ -876,9 +878,12 @@ struct t21_frame_pad_view {
 	void *event_priv;
 };
 
+struct t21_frame_channel_slot;
+
 struct t21_frame_source_view {
 	u8 pad_channels[0xdc];
-	u8 *channels;
+	struct t21_frame_channel_slot *channels;
+	u32 num_channels;
 };
 
 struct t21_frame_event_view {
@@ -999,6 +1004,11 @@ struct t21_frame_channel_abi {
 	u32 error_count;
 };
 
+struct t21_frame_channel_slot {
+	struct t21_frame_channel_abi channel;
+	u8 pad_2bc[4];
+};
+
 struct t21_isp_output_fmt {
 	char description[32];
 	u32 fourcc;
@@ -1051,6 +1061,8 @@ struct t21_frame_channel_view {
 	u32 error_count;
 };
 
+struct t21_tuning_state_view;
+
 struct t21_ispcore_irq_view {
 	u8 pad_registers[0xb8];
 	void __iomem *registers;
@@ -1058,6 +1070,10 @@ struct t21_ispcore_irq_view {
 	struct t21_ispcore_irq_view *runtime;
 	u8 pad_channels[0x74];
 	u8 *channels;
+	u8 pad_running_mode_pending[0x174 - 0x150];
+	u32 running_mode_pending;
+	u8 pad_tuning[0x19c - 0x178];
+	struct t21_tuning_state_view *tuning;
 };
 
 struct t21_tuning_file_private_view {
@@ -1080,6 +1096,8 @@ struct t21_tuning_state_view {
 	void *buffer;
 	uint8_t pad_state[0x14];
 	uint32_t state;
+	uint8_t pad_event[0x40cc - 0x40c8];
+	int32_t (*event)(void *tuning, int32_t event, int32_t arg);
 };
 
 struct t21_isp_core_runtime_view {
@@ -3994,6 +4012,59 @@ struct t21_ae_ctrls_view {
 	u8 reserved[0x40 - 0x2c];
 };
 
+struct t21_ev_sensor_info_view {
+	u8 reserved_00[0x2c];
+	u32 fps;
+	u8 reserved_30[0x0e];
+	u16 lines_per_second;
+};
+
+struct t21_ev_attr_view {
+	u32 integration_time;
+	u32 total_gain;
+	u32 exposure_us;
+	u32 total_gain_log2;
+	u32 sensor_again_log2;
+	u32 sensor_dgain_log2;
+	u32 field_18;
+	u32 sensor_gain;
+	u32 field_20_log2;
+	u32 field_24_log2;
+	u32 isp_dgain_log2;
+	u32 field_2c_log2;
+};
+
+struct t21_ev_user_view {
+	u32 total_gain;
+	u32 exposure_us;
+	u32 total_gain_log2;
+	u32 sensor_again_log2;
+	u32 sensor_dgain_log2;
+	u32 field_18;
+};
+
+/* The tuning core keeps white balance as seven 32-bit words, while the
+ * userspace control ABI exposes only mode plus two 16-bit gains.  The last
+ * four words are scalar control results: WB_STATS returns statis_rg/bg and
+ * WB_GOL_STATS returns global_rg/bg, packed as two 16-bit values.  Keep the
+ * internal and userspace records separate so no caller can accidentally
+ * treat the eight-byte ABI object as the complete controller state. */
+struct t21_wb_internal_view {
+	u32 mode;
+	u32 manual_rgain;
+	u32 manual_bgain;
+	u32 statis_rgain;
+	u32 statis_bgain;
+	u32 global_rgain;
+	u32 global_bgain;
+};
+
+struct t21_wb_user_view {
+	u32 mode;
+	u16 rgain;
+	u16 bgain;
+};
+
 struct t21_sensor_bridge_state {
 	u8 reserved_000[0x60];
 	u32 analog_gain;
@@ -6825,7 +6896,7 @@ static unsigned char jump_table_36120[92];
 static int32_t awb_rg_global;
 static int32_t awb_bg_global;
 static unsigned char awb_pix_cnt[8];
-static unsigned char tisp_wb_attr[28];
+static struct t21_wb_internal_view tisp_wb_attr;
 static unsigned char awb_gain_original[8];
 static uintptr_t awb_frz;
 static uintptr_t ModeFlag_18824;
@@ -7352,7 +7423,7 @@ int32_t tiziano_awb_dump(void);
 int32_t tiziano_awb_set_hardware_param(void);
 int32_t tiziano_awb_dn_params_refresh(void);
 int32_t tiziano_awb_init(uint32_t arg1, uint32_t arg2);
-int32_t tisp_g_wb_mode(int32_t arg1);
+int32_t tisp_g_wb_mode(void *arg1);
 int32_t tisp_awb_set_frz(uint32_t a0);
 uint8_t tisp_awb_get_frz(uintptr_t a0);
 int32_t tisp_s_wb_mode(int32_t mode, int32_t val1, int32_t val2);
@@ -7638,7 +7709,7 @@ int32_t tisp_g_aezone_weight(uint32_t a0);
 int32_t tisp_s_af_weight(uint32_t a0);
 int32_t tisp_g_af_weight(uint32_t a0);
 int32_t tisp_g_ev_attr(uintptr_t a0);
-int32_t tisp_g_wb_attr(uint32_t a0);
+int32_t tisp_g_wb_attr(void *a0);
 int32_t tisp_s_wb_attr(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4, int32_t arg5, int32_t arg6);
 int32_t tisp_g_ae_hist(uint32_t a0);
 int32_t tisp_s_ae_hist(void);
@@ -13281,6 +13352,16 @@ int32_t apical_isp_core_ops_s_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 		return 0;
 	case 0x08000024:
 		return apical_isp_ae_s_roi(arg2);
+	case 0x08000004: {
+		struct t21_wb_user_view wb;
+
+		BUILD_BUG_ON(sizeof(struct t21_wb_user_view) != 8);
+		if (!value || private_copy_from_user(
+				&wb, (const void __user *)(uintptr_t)value,
+				sizeof(wb)))
+			return -EFAULT;
+		return tisp_s_wb_mode(wb.mode, wb.rgain, wb.bgain);
+	}
 	case 0x0800002b:
 		return apical_isp_gamma_s_attr((uintptr_t)arg2);
 	case 0x0800002c:
@@ -13457,69 +13538,36 @@ int32_t apical_isp_ev_g_attr_isra_62(uintptr_t a0) __asm__("apical_isp_ev_g_attr
 #endif
 int32_t apical_isp_ev_g_attr_isra_62(uintptr_t a0)
 {
-    uint32_t local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t local_28 = 0;
-    uint32_t local_4c = 0;
-    uint32_t local_50 = 0;
-    uint32_t local_54 = 0;
-    uint32_t local_58 = 0;
-    uint32_t local_5c = 0;
-    uint32_t local_60 = 0;
-    uint32_t local_6c = 0;
-    uint32_t local_70 = 0;
-    uint32_t local_74 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t a3 = 0;
-    uint32_t ra = 0;
-    uint32_t s0 = 0;
-    uintptr_t s1 = 0;
-    uintptr_t *v0 = 0;
+	const u32 *ctrl = (const u32 *)a0;
+	struct t21_ev_attr_view ev = { 0 };
+	struct t21_ev_user_view user;
+	int ret;
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
+	BUILD_BUG_ON(sizeof(struct t21_ev_attr_view) != 0x30);
+	BUILD_BUG_ON(sizeof(struct t21_ev_user_view) != 0x18);
+	if (!ctrl || !ctrl[1])
+		return -EINVAL;
 
-    /* fragment 1: CallSetup */
-    s1 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tisp_g_ev_attr)(&local_10); /* jalr target resolved by relocation */
+	/* tisp_g_ev_attr writes the complete twelve-word internal record.
+	 * The collapsed body supplied only seven scalar locals, overwriting its
+	 * saved return address on every userspace exposure query. */
+	ret = tisp_g_ev_attr((uintptr_t)&ev);
+	if (ret) {
+		isp_printf(1, "%s:%d get control failed!!!\n",
+			   "apical_isp_ev_g_attr", 2339);
+		return ret;
+	}
 
-    /* fragment 2: Branch */
-    s0 = v0;
-    if (v0 == 0) { goto apical_isp_ev_g_attr_isra_620x58; }
+	/* OEM userspace ABI publishes internal words 1 through 6. */
+	user.total_gain = ev.total_gain;
+	user.exposure_us = ev.exposure_us;
+	user.total_gain_log2 = ev.total_gain_log2;
+	user.sensor_again_log2 = ev.sensor_again_log2;
+	user.sensor_dgain_log2 = ev.sensor_dgain_log2;
+	user.field_18 = ev.field_18;
 
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(int32_t *)isp_printf)(1, &LC16, &__param_str_isp_clk, 2339); /* jalr target resolved by relocation */
-
-    /* fragment 4: Branch */
-    goto apical_isp_ev_g_attr_isra_620xa4;
-
-apical_isp_ev_g_attr_isra_620x58:
-    /* fragment 5: CallSetup */
-    local_4c = local_14;
-    local_58 = local_20;
-    local_5c = local_24;
-    local_60 = local_28;
-    local_50 = local_18;
-    local_54 = local_1c;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)private_copy_to_user)(*(uint32_t *)((char *)(s1) + 4), &local_4c, 24); /* jalr target resolved by relocation */
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-    return (int32_t)v0;
-
-apical_isp_ev_g_attr_isra_620xa4:
-    /* fragment 7: Arithmetic */
-    v0 = s0;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+	return private_copy_to_user((void __user *)(uintptr_t)ctrl[1], &user,
+				    sizeof(user)) ? -EFAULT : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000051e4 origin=fragment_seed original=apical_isp_gamma_g_attr.isra.63 */
@@ -13650,64 +13698,39 @@ int32_t apical_isp_wb_g_ctrl_isra_65(void *arg1) __asm__("apical_isp_wb_g_ctrl.i
 #endif
 int32_t apical_isp_wb_g_ctrl_isra_65(void *arg1)
 {
-	uint32_t mode;
-	int32_t ret = 0;
-	uint32_t val;
-	uint16_t buf[4];
+	const u32 *ctrl = arg1;
+	struct t21_wb_internal_view wb = { 0 };
+	struct t21_wb_user_view user;
+	int ret;
 
-	if (tisp_g_wb_attr(&mode) != 0) {
+	BUILD_BUG_ON(sizeof(struct t21_wb_internal_view) != 0x1c);
+	BUILD_BUG_ON(sizeof(struct t21_wb_user_view) != 8);
+	BUILD_BUG_ON(offsetof(struct t21_wb_user_view, rgain) != 4);
+	BUILD_BUG_ON(offsetof(struct t21_wb_user_view, bgain) != 6);
+	if (!ctrl || !ctrl[1])
+		return -EINVAL;
+
+	/* tisp_g_wb_attr writes all seven internal words.  The collapsed body
+	 * supplied one scalar and overwrote its saved return address, then wrote
+	 * sixteen bytes through an eight-byte array. */
+	ret = tisp_g_wb_attr(&wb);
+	if (ret != 0) {
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("%s:%d:Get Control failed!!!\n"), (uintptr_t)("apical_isp_wb_g_ctrl"), (uintptr_t)(2027));
-		return 0;
+		return ret;
 	}
 
-	if (mode >= 10) {
+	if (wb.mode >= 10) {
 		((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))isp_printf)((uintptr_t)(1), (uintptr_t)("%s:%d: Can not support this mode!!!\n"), (uintptr_t)("apical_isp_wb_g_ctrl"), (uintptr_t)(2063));
-		return -1;
+		return -EINVAL;
 	}
 
-	switch (mode) {
-	case 0:
-		val = 0;
-		break;
-	case 1:
-		val = 1;
-		break;
-	case 2:
-		val = 2;
-		break;
-	case 3:
-		val = 3;
-		break;
-	case 4:
-		val = 4;
-		break;
-	case 5:
-		val = 5;
-		break;
-	case 6:
-		val = 6;
-		break;
-	case 7:
-		val = 7;
-		break;
-	case 8:
-		val = 8;
-		break;
-	case 9:
-		val = 9;
-		break;
-	default:
-		val = 0;
-		break;
-	}
+	/* T21's OEM switch maps all ten supported modes identically. */
+	user.mode = wb.mode;
+	user.rgain = (u16)wb.manual_rgain;
+	user.bgain = (u16)wb.manual_bgain;
 
-	((void **)buf)[0] = 0;
-	((void **)buf)[1] = 0;
-	((void **)buf)[2] = (uint16_t)val;
-	((void **)buf)[3] = 0;
-
-	private_copy_to_user(*(void **)((char *)arg1 + 4), buf, 8);
-	return 0;
+	return private_copy_to_user((void __user *)(uintptr_t)ctrl[1], &user,
+				    sizeof(user)) ? -EFAULT : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000000551c origin=model_output original=apical_isp_ae_zone_g_ctrl.isra.69 */
@@ -13849,8 +13872,6 @@ int32_t apical_isp_core_ops_g_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 	uint32_t base2 = 0x980000;
 	uint32_t base3 = 0x9a0000;
 	uint32_t cmp;
-	uint32_t *lo;
-	uint32_t *hi;
 	int32_t ret;
 	void *p;
 	uint8_t luma;
@@ -14075,25 +14096,46 @@ int32_t apical_isp_core_ops_g_ctrl(int32_t *arg1, int32_t *arg2, int32_t arg3)
 							return -1;
 						return 0;
 					}
-					tisp_g_wb_attr(buf);
-					lo = *(uint16_t *)&buf[0x28];
-					hi = *(int32_t *)&buf[0x24];
-					((void **)arg2)[1] = (uintptr_t)lo + ((uintptr_t)hi << 0x10);
+					struct t21_wb_internal_view wb;
+
+					BUILD_BUG_ON(offsetof(struct t21_wb_internal_view,
+							      global_rgain) != 0x14);
+					BUILD_BUG_ON(offsetof(struct t21_wb_internal_view,
+							      global_bgain) != 0x18);
+					tisp_g_wb_attr(&wb);
+					arg2[1] = ((wb.global_rgain & 0xffff) << 16) |
+						  (wb.global_bgain & 0xffff);
 					return 0;
 				} else {
 					if (cmd >= base + 0x6) {
 						return 0;
 					}
-					tisp_g_wb_attr(buf);
-					lo = *(uint16_t *)&buf[0x20];
-					hi = *(int32_t *)&buf[0x1c];
-					((void **)arg2)[1] = (uintptr_t)lo + ((uintptr_t)hi << 0x10);
+					struct t21_wb_internal_view wb;
+
+					BUILD_BUG_ON(offsetof(struct t21_wb_internal_view,
+							      statis_rgain) != 0x0c);
+					BUILD_BUG_ON(offsetof(struct t21_wb_internal_view,
+							      statis_bgain) != 0x10);
+					tisp_g_wb_attr(&wb);
+					arg2[1] = ((wb.statis_rgain & 0xffff) << 16) |
+						  (wb.statis_bgain & 0xffff);
 					return 0;
 				}
 			}
 			if (cmd == base + 0x27) {
-				tisp_g_ev_attr(buf);
-				((void **)arg2)[1] = *(int32_t *)&buf[0];
+				const struct t21_ae_ctrls_view *ae =
+					(const void *)tisp_ae_ctrls;
+
+				/* TOTAL_GAIN is a scalar control.  The collapsed body
+				 * rebuilt the complete EV attribute record and then
+				 * accidentally returned its first word (integration time).
+				 * Besides being the wrong ABI value, that needlessly entered
+				 * the recovered fixed-point/log2 helpers once per second.
+				 * Read the canonical AE state directly, as the OEM update
+				 * worker does internally. */
+				BUILD_BUG_ON(offsetof(struct t21_ae_ctrls_view,
+						      total_gain) != 0x24);
+				arg2[1] = ae->total_gain >> 10;
 				return 0;
 			}
 			if (cmd < base + 0x28) {
@@ -14172,8 +14214,8 @@ static long isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd,
 			ret = -14;
 			goto out;
 		}
-		pr_debug("tx-isp-t21: tuning ioctl generic dir=%d cid=%#x value=%#x\n",
-			buf[0], buf[1], buf[2]);
+		pr_debug("tx-isp-t21: tuning ioctl generic dir=%d cid=%#x value=%#x pid=%d\n",
+			buf[0], buf[1], buf[2], current->pid);
 		/* The first word selects get/set.  The actual two-word control
 		 * record starts at buf[1], exactly as in the OEM T21 body. */
 		if (buf[0] && buf[1] == 0x08000030) {
@@ -16311,6 +16353,8 @@ int32_t frame_chan_event(uint32_t *arg1, int32_t arg2, void *arg3)
 	u32 done;
 
 	BUILD_BUG_ON(offsetof(struct t21_frame_source_view, channels) != 0xdc);
+	BUILD_BUG_ON(offsetof(struct t21_frame_source_view, num_channels) != 0xe0);
+	BUILD_BUG_ON(sizeof(struct t21_frame_channel_slot) != 0x2c0);
 	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, dma_addr) != 0x34);
 	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, state) != 0x48);
 	BUILD_BUG_ON(offsetof(struct t21_frame_buffer_view, queued) != 0x58);
@@ -16334,7 +16378,7 @@ int32_t frame_chan_event(uint32_t *arg1, int32_t arg2, void *arg3)
 	source = pad->owner;
 	if (!t21_isp_valid_ptr(source) || !t21_isp_valid_ptr(source->channels))
 		return -EINVAL;
-	channel = (void *)(source->channels + pad->index * 0x2c0);
+	channel = (void *)&source->channels[pad->index].channel;
 	pr_debug_ratelimited("tx-isp-t21: frame done enter pad=%p idx=%u channel=%p dma=%08x seq=%u queued=%u\n",
 			    pad, pad->index, channel, event->dma_addr,
 			    event->sequence, channel->queued_count);
@@ -16704,7 +16748,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		if (private_copy_from_user(&rb, argp, sizeof(rb)))
 			return -EFAULT;
-		pr_info("tx-isp-t21: frame reqbufs ch=%p count=%u type=%u memory=%u queue_type=%u queue_memory=%u num=%u\n",
+		pr_debug("tx-isp-t21: frame reqbufs ch=%p count=%u type=%u memory=%u queue_type=%u queue_memory=%u num=%u\n",
 			ch, rb.count, rb.type, rb.memory, ch->type, ch->memory,
 			ch->num_buffers);
 		if (ch->streaming & 1) {
@@ -16878,7 +16922,7 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd,
 			return ret;
 		}
 		ch->state = 4;
-		pr_info("tx-isp-t21: frame streamon ch=%p queued=%u buffers=%u remote=%p\n",
+		pr_debug("tx-isp-t21: frame streamon ch=%p queued=%u buffers=%u remote=%p\n",
 			ch, ch->queued_count, ch->num_buffers, ch->remote_pad);
 		isp_printf(0, "Streamon successful\n");
 		return 0;
@@ -16934,6 +16978,98 @@ static long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd,
 		return -ENOIOCTLCMD;
 	}
 }
+
+#ifdef TX_ISP_T21_V4L2
+static struct t21_frame_channel_abi *
+tx_isp_t21_capture_channel(unsigned int channel)
+{
+	struct t21_frame_source_view *source;
+
+	source = private_platform_get_drvdata(&tx_isp_fs_platform_device);
+	if (!t21_isp_valid_ptr(source) ||
+	    !t21_isp_valid_ptr(source->channels) ||
+	    channel >= source->num_channels)
+		return NULL;
+
+	BUILD_BUG_ON(sizeof(struct t21_frame_channel_slot) != 0x2c0);
+	return &source->channels[channel].channel;
+}
+
+struct device *tx_isp_t21_capture_device(void)
+{
+	return globe_ispdev ? &tx_isp_platform_device.dev : NULL;
+}
+
+int tx_isp_t21_capture_open(unsigned int channel)
+{
+	struct t21_frame_channel_abi *ch =
+		tx_isp_t21_capture_channel(channel);
+	struct file file;
+
+	if (!ch)
+		return -ENODEV;
+	memset(&file, 0, sizeof(file));
+	file.private_data = ch;
+	return frame_channel_open(0, &file);
+}
+
+void tx_isp_t21_capture_release(unsigned int channel)
+{
+	struct t21_frame_channel_abi *ch =
+		tx_isp_t21_capture_channel(channel);
+	struct file file;
+
+	if (!ch)
+		return;
+	memset(&file, 0, sizeof(file));
+	file.private_data = ch;
+	frame_channel_release(0, (uintptr_t)&file, 0);
+}
+
+long tx_isp_t21_capture_ioctl(unsigned int channel, unsigned int command,
+			      void *argument)
+{
+	struct t21_frame_channel_abi *ch =
+		tx_isp_t21_capture_channel(channel);
+	struct file file;
+	mm_segment_t old_fs;
+	long ret;
+
+	if (!ch || !argument)
+		return -EINVAL;
+	memset(&file, 0, sizeof(file));
+	file.private_data = ch;
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	ret = frame_channel_unlocked_ioctl(&file, command,
+					   (unsigned long)argument);
+	set_fs(old_fs);
+	return ret;
+}
+
+unsigned int tx_isp_t21_capture_poll(unsigned int channel, struct file *file,
+				     poll_table *wait)
+{
+	struct t21_frame_channel_abi *ch =
+		tx_isp_t21_capture_channel(channel);
+
+	if (!ch)
+		return POLLERR;
+	poll_wait(file, (wait_queue_head_t *)ch->wait_queue, wait);
+	if (!(ch->streaming & 1))
+		return POLLERR;
+	if (ch->done_count)
+		return POLLIN | POLLRDNORM;
+	return 0;
+}
+
+int tx_isp_t21_capture_stream(int enable)
+{
+	return globe_ispdev ?
+		tx_isp_video_s_stream((void *)(uintptr_t)globe_ispdev, enable) :
+		-ENODEV;
+}
+#endif
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000009740 origin=model_output original=sensor_hw_reset_enable */
 void sensor_hw_reset_enable(void)
@@ -17527,10 +17663,10 @@ int32_t tx_isp_notify(void *module, uint32_t event, void *data)
 			continue;
 		}
 
-		pr_info("tx-isp-t21: notify event=0x%x child=%d obj=%p fn=%p begin\n",
+		pr_debug("tx-isp-t21: notify event=0x%x child=%d obj=%p fn=%p begin\n",
 			event, offset / (int)sizeof(void *), obj, handler);
 		result = handler(obj, event, data);
-		pr_info("tx-isp-t21: notify event=0x%x child=%d ret=%d\n",
+		pr_debug("tx-isp-t21: notify event=0x%x child=%d ret=%d\n",
 			event, offset / (int)sizeof(void *), result);
 		if (result && result != -ENOIOCTLCMD)
 			return result;
@@ -19172,15 +19308,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 	uint32_t link_val914;
 	uint32_t link_val915;
 
-	pr_info("tx-isp-t21: ioctl enter cmd=%#x arg=%#lx pid=%d\n",
+	pr_debug("tx-isp-t21: ioctl enter cmd=%#x arg=%#lx pid=%d\n",
 		cmd, arg, current->pid);
 
 	switch (cmd) {
 	case 0x80045612:
-		pr_info("tx-isp-t21: ioctl stream on\n");
+		pr_debug("tx-isp-t21: ioctl stream on\n");
 		return tx_isp_video_s_stream(base, 1);
 	case 0x80045613:
-		pr_info("tx-isp-t21: ioctl stream off\n");
+		pr_debug("tx-isp-t21: ioctl stream off\n");
 		return tx_isp_video_s_stream(base, 0);
 	case 0x800456d0:
 		if (private_copy_from_user(&val, (void __user *)arg, sizeof(val))) {
@@ -19188,19 +19324,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 				   "tx_isp_video_link_setup", 178);
 			return -EFAULT;
 		}
-		pr_info("tx-isp-t21: ioctl link setup index=%d\n", val);
+		pr_debug("tx-isp-t21: ioctl link setup index=%d\n", val);
 		ret = t21_tx_isp_video_link_setup(base, val);
-		pr_info("tx-isp-t21: ioctl link setup ret=%d\n", ret);
+		pr_debug("tx-isp-t21: ioctl link setup ret=%d\n", ret);
 		return ret;
 	case 0x800456d1:
-		pr_info("tx-isp-t21: ioctl link destroy\n");
+		pr_debug("tx-isp-t21: ioctl link destroy\n");
 		tx_isp_video_link_destroy_isra_1(base);
 		return 0;
 	case 0x800456d2:
-		pr_info("tx-isp-t21: ioctl link stream on\n");
+		pr_debug("tx-isp-t21: ioctl link stream on\n");
 		return tx_isp_video_link_stream(base, 1);
 	case 0x800456d3:
-		pr_info("tx-isp-t21: ioctl link stream off\n");
+		pr_debug("tx-isp-t21: ioctl link stream off\n");
 		return tx_isp_video_link_stream(base, 0);
 	case 0x805056c1:
 	case 0x805056c2:
@@ -19252,7 +19388,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd,
 		h16 = ((height + 15) >> 4) + 1;
 		buf[0] = 0;
 		buf[1] = size1 + (size1 >> 1) + w16 * h16 * 0x28;
-		pr_info("tx-isp-t21: GET_BUF vic=%p width=%u height=%u size=%u (0x%x)\n",
+		pr_debug("tx-isp-t21: GET_BUF vic=%p width=%u height=%u size=%u (0x%x)\n",
 			vic, width, height, buf[1], buf[1]);
 		return private_copy_to_user((void __user *)arg, buf, 8) ?
 			-EFAULT : 0;
@@ -21570,7 +21706,7 @@ int32_t tiziano_load_parameters(void)
 	u32 i;
 	int ret = -1;
 
-	pr_info("tx-isp-t21: parameter load entry irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: parameter load entry irq_disabled=%d pid=%d\n",
 		irqs_disabled(), current->pid);
 	/* sensor_info[12] is the 32-byte name copied by tisp_init(). */
 	snprintf(path, sizeof(path), "/etc/sensor/%s-t21.bin",
@@ -21582,7 +21718,7 @@ int32_t tiziano_load_parameters(void)
 			   path);
 		return -1;
 	}
-	pr_info("tx-isp-t21: parameter file opened irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: parameter file opened irq_disabled=%d pid=%d\n",
 		irqs_disabled(), current->pid);
 
 	size64 = i_size_read(fp->f_path.dentry->d_inode);
@@ -21598,14 +21734,14 @@ int32_t tiziano_load_parameters(void)
 			   (long long)(size64 >> 10));
 		goto out_close;
 	}
-	pr_info("tx-isp-t21: parameter buffer=%p size=%lld irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: parameter buffer=%p size=%lld irq_disabled=%d pid=%d\n",
 		data, (long long)size64, irqs_disabled(), current->pid);
 
 	old_fs = private_get_fs();
 	private_set_fs(KERNEL_DS);
 	nr = vfs_read(fp, data, (size_t)size64, &pos);
 	private_set_fs(old_fs);
-	pr_info("tx-isp-t21: parameter read=%ld irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: parameter read=%ld irq_disabled=%d pid=%d\n",
 		(long)nr, irqs_disabled(), current->pid);
 	if (nr != size64) {
 		isp_printf(2, "%s[%d]: short parameter read: %ld/%lld\n",
@@ -21642,7 +21778,7 @@ int32_t tiziano_load_parameters(void)
 			   "tiziano_load_parameters", 736);
 		goto out_free;
 	}
-	pr_info("tx-isp-t21: parameter crc=%08x valid irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: parameter crc=%08x valid irq_disabled=%d pid=%d\n",
 		crc, irqs_disabled(), current->pid);
 
 	if (crc_len < 2 * 0xed40) {
@@ -21682,7 +21818,7 @@ int32_t tisp_init(int32_t *arg1)
 	memcpy(sensor_info, arg1, 0x4c);
 
 	ret = tiziano_load_parameters();
-	pr_info("tx-isp-t21: tisp parameter load ret=%u irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp parameter load ret=%u irq_disabled=%d pid=%d\n",
 		ret, irqs_disabled(), current->pid);
 	if (ret != 0)
 		isp_printf(2, "no bin file on the system!!!\n", ret);
@@ -21714,7 +21850,7 @@ int32_t tisp_init(int32_t *arg1)
 	memcpy(mdns_ratio + 0xfc, tparams_night + 0x90c, 0x24);
 	memcpy(mdns_ratio + 0x120, tparams_night + 0xc38, 0x24);
 	memcpy(mdns_ratio + 0x144, tparams_night + 0xc14, 0x24);
-	pr_info("tx-isp-t21: tisp tables prepared irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp tables prepared irq_disabled=%d pid=%d\n",
 		irqs_disabled(), current->pid);
 
 	system_reg_write(4, (sensor_w << 0x10) | sensor_h);
@@ -21816,7 +21952,7 @@ int32_t tisp_init(int32_t *arg1)
 
 	system_reg_write(0x10, topreg_val);
 	sensor_init(sensor_ctrl);
-	pr_info("tx-isp-t21: tisp sensor control initialized irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp sensor control initialized irq_disabled=%d pid=%d\n",
 		irqs_disabled(), current->pid);
 	system_reg_write(0x1700, 0x1f);
 	system_reg_write(0x1704, 0);
@@ -21838,7 +21974,7 @@ int32_t tisp_init(int32_t *arg1)
 	system_reg_write(0x1c, 0x200000);
 
 	buf1 = private_kmalloc(0x6000, 0xd0);
-	pr_info("tx-isp-t21: tisp buf1=%p irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp buf1=%p irq_disabled=%d pid=%d\n",
 		buf1, irqs_disabled(), current->pid);
 	if (!buf1)
 		return -1;
@@ -21861,7 +21997,7 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x1c) = (uint32_t)buf1 - 0x7fffc000;
 
 	buf2 = private_kmalloc(0x4000, 0xd0);
-	pr_info("tx-isp-t21: tisp buf2=%p irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp buf2=%p irq_disabled=%d pid=%d\n",
 		buf2, irqs_disabled(), current->pid);
 	if (!buf2)
 		return -1;
@@ -21876,7 +22012,7 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x28) = (uint32_t)buf2 - 0x80000000;
 
 	buf3 = private_kmalloc(0x2000, 0xd0);
-	pr_info("tx-isp-t21: tisp buf3=%p irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp buf3=%p irq_disabled=%d pid=%d\n",
 		buf3, irqs_disabled(), current->pid);
 	if (!buf3)
 		return -1;
@@ -21891,7 +22027,7 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x34) = (uint32_t)buf3 - 0x80000000;
 
 	buf4 = private_kmalloc(0x4000, 0xd0);
-	pr_info("tx-isp-t21: tisp buf4=%p irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp buf4=%p irq_disabled=%d pid=%d\n",
 		buf4, irqs_disabled(), current->pid);
 	if (!buf4)
 		return -1;
@@ -21906,7 +22042,7 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x40) = (uint32_t)buf4 - 0x80000000;
 
 	buf5 = private_kmalloc(0x4000, 0xd0);
-	pr_info("tx-isp-t21: tisp buf5=%p irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp buf5=%p irq_disabled=%d pid=%d\n",
 		buf5, irqs_disabled(), current->pid);
 	if (!buf5)
 		return -1;
@@ -21919,7 +22055,7 @@ int32_t tisp_init(int32_t *arg1)
 	*(uint32_t *)(tispinfo + 0x44) = 4;
 	*(uint32_t *)(tispinfo + 0x48) = (uint32_t)buf5;
 	*(uint32_t *)(tispinfo + 0x4c) = (uint32_t)buf5 - 0x80000000;
-	pr_info("tx-isp-t21: tisp tuning init begin irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: tisp tuning init begin irq_disabled=%d pid=%d\n",
 		irqs_disabled(), current->pid);
 	tiziano_ae_init(sensor_h, sensor_w,
 			*(uint16_t *)((char *)arg1 + 0x30));
@@ -22205,6 +22341,7 @@ int32_t awb_interrupt_static(void)
 	uint32_t page = system_reg_read(0x850) << 12;
 	uint32_t base = *(uint32_t *)(tispinfo + 0x24);
 	uint32_t event[12] = { 0 };
+	static uint32_t irq_debug_count;
 
 	if (!base)
 		return 0;
@@ -22212,6 +22349,17 @@ int32_t awb_interrupt_static(void)
 	dma_cache_sync(NULL, (void *)(uintptr_t)(base + page), 0x1000, 0);
 	JZ_Isp_Get_Awb_Statistics((int32_t *)(uintptr_t)(base + page),
 				  0xf001f001);
+	if (++irq_debug_count <= 6) {
+		pr_debug("tx-isp-t21: awb irq=%u base=%08x page=%08x raw=%08x/%08x/%08x zone0=%u/%u/%u/%u\n",
+			irq_debug_count, base, page,
+			*(uint32_t *)(uintptr_t)(base + page),
+			*(uint32_t *)(uintptr_t)(base + page + 4),
+			*(uint32_t *)(uintptr_t)(base + page + 8),
+			((uint32_t *)awb_array_r)[0],
+			((uint32_t *)awb_array_g)[0],
+			((uint32_t *)awb_array_b)[0],
+			((uint32_t *)awb_array_p)[0]);
+	}
 	event[2] = 9;
 	tisp_event_push(event);
 	return 1;
@@ -22676,6 +22824,16 @@ static int32_t t21_awb_process(void)
 	bool first_valid_result = false;
 	struct t21_awb_detector_scratch *scratch = &t21_awb_scratch;
 	uint32_t i;
+	uint64_t red_sum = 0;
+	uint64_t green_sum = 0;
+	uint64_t blue_sum = 0;
+	uint64_t pixel_sum = 0;
+	uint64_t statis_rg_sum = 0;
+	uint64_t statis_bg_sum = 0;
+	uint32_t statis_rg_count = 0;
+	uint32_t statis_bg_count = 0;
+	static uint32_t process_debug_count;
+	uint32_t debug_index = ++process_debug_count;
 
 	/* Preserve the initialized OEM state and its section placement. */
 	(void)*(volatile uint32_t *)&red_gain;
@@ -22693,6 +22851,11 @@ static int32_t t21_awb_process(void)
 	for (i = 0; i < count; i++) {
 		uint32_t rg_q = 0;
 		uint32_t bg_q = 0;
+
+		red_sum += red[i];
+		green_sum += green[i];
+		blue_sum += blue[i];
+		pixel_sum += pixels[i];
 
 		zone_pixels[i] = pixels[i];
 		if (green[i]) {
@@ -22712,9 +22875,25 @@ static int32_t t21_awb_process(void)
 		}
 		zone_rg_bg[i] = rg_q;
 		zone_rg_bg[count + i] = bg_q;
+		if (rg_q) {
+			statis_rg_sum += rg_q;
+			statis_rg_count++;
+		}
+		if (bg_q) {
+			statis_bg_sum += bg_q;
+			statis_bg_count++;
+		}
 	}
 
-	if (!awb_moa && !get_unaligned_le32(tisp_wb_attr)) {
+	/* The scalar WB statistics controls expose the calibrated per-zone R/G
+	 * and B/G means in Q8.  OEM updates these before its unchanged-scene
+	 * early return, so RIC always observes the latest hardware statistics. */
+	ACCESS_ONCE(tisp_wb_attr.statis_rgain) = statis_rg_count ?
+		(u32)div_u64(statis_rg_sum, statis_rg_count) >> q : 0x100;
+	ACCESS_ONCE(tisp_wb_attr.statis_bgain) = statis_bg_count ?
+		(u32)div_u64(statis_bg_sum, statis_bg_count) >> q : 0x100;
+
+	if (!awb_moa && !ACCESS_ONCE(tisp_wb_attr.mode)) {
 		uint64_t difference = 0;
 
 		for (i = 0; i < count * 2; i++) {
@@ -22756,6 +22935,17 @@ static int32_t t21_awb_process(void)
 			  &detected_ct, (uint32_t *)_ls_w_lut,
 			  (uint32_t *)_AwbPointPos, detected_rg_bg,
 			  &detect_status, scratch);
+	if (debug_index <= 16)
+		pr_debug("tx-isp-t21: awb process=%u grid=%ux%u q=%u ev=%u sums=%llu/%llu/%llu pix=%llu static=%u/%u detect=%u rg/bg=%u/%u ct=%u mf=%u/%u/%u/%u/%u/%u\n",
+			debug_index, cols, rows, q, awb_ev,
+			(unsigned long long)red_sum,
+			(unsigned long long)green_sum,
+			(unsigned long long)blue_sum,
+			(unsigned long long)pixel_sum,
+			get_unaligned_le32(_wb_static),
+			get_unaligned_le32(_wb_static + 4),
+			detect_status, detected_rg_bg[0], detected_rg_bg[1],
+			detected_ct, mf[0], mf[1], mf[2], mf[3], mf[4], mf[5]);
 	if (detect_status)
 		return 0;
 
@@ -22828,14 +23018,42 @@ static int32_t t21_awb_process(void)
 	applied_gain[1] = (fix_point_mult2_32(q, mf[5] << q,
 						    get_unaligned_le32(_wb_static + 4), 0) +
 			   rounding) >> q;
+
+	/* WB_GOL_STATS is the reciprocal of the auto controller's calibrated
+	 * gain in Q16, even when a manual preset subsequently overrides the
+	 * hardware value.  This ordering is taken directly from the T21 OEM
+	 * routine and is part of the OpenIMP scalar-control ABI. */
+	ACCESS_ONCE(tisp_wb_attr.global_rgain) =
+		applied_gain[0] ? 0x10000U / applied_gain[0] : 0x100;
+	ACCESS_ONCE(tisp_wb_attr.global_bgain) =
+		applied_gain[1] ? 0x10000U / applied_gain[1] : 0x100;
+
+	/* Modes 1..8 are fixed/manual gains from the tuning API.  Mode 9 applies
+	 * the caller's Q6 multipliers to the live automatic result.  Sensor and
+	 * illuminant knowledge remains in the tuning data, never in this path. */
+	if (ACCESS_ONCE(tisp_wb_attr.mode) >= 1 &&
+	    ACCESS_ONCE(tisp_wb_attr.mode) <= 8) {
+		applied_gain[0] = ACCESS_ONCE(tisp_wb_attr.manual_rgain);
+		applied_gain[1] = ACCESS_ONCE(tisp_wb_attr.manual_bgain);
+	} else if (ACCESS_ONCE(tisp_wb_attr.mode) == 9) {
+		applied_gain[0] = applied_gain[0] *
+			(ACCESS_ONCE(tisp_wb_attr.manual_rgain) + 0x40) >> 6;
+		applied_gain[1] = applied_gain[1] *
+			(ACCESS_ONCE(tisp_wb_attr.manual_bgain) + 0x40) >> 6;
+	}
 	JZ_Isp_Awb_Awbg2reg((int32_t *)applied_gain,
 				 (int32_t *)register_gain);
+	if (debug_index <= 16)
+		pr_debug("tx-isp-t21: awb apply=%u target=%u/%u applied=%u/%u reg=%08x/%08x freeze=%lu\n",
+			debug_index, target_red_gain, target_blue_gain,
+			applied_gain[0], applied_gain[1], register_gain[0],
+			register_gain[1], (unsigned long)awb_frz);
 	if (!awb_frz) {
 		system_reg_write(0x604, register_gain[0]);
 		system_reg_write(0x608, register_gain[1]);
 	}
 	/* These two OEM state words are also layout anchors for later initialized
-	 * data.  WRITE_ONCE keeps the state real even when debug logging is built
+	 * data.  The volatile access keeps the state real when debug is built
 	 * out, preserving the recovered object's original data map. */
 	*(volatile uint32_t *)&red_gain = applied_gain[0];
 	*(volatile uint32_t *)&blue_gain = applied_gain[1];
@@ -23933,6 +24151,12 @@ Tiziano_awb_fpga0x998:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010790 origin=fragment_seed original=JZ_Isp_Awb */
 int32_t JZ_Isp_Awb(void)
 {
+    /* The model-recovered body below collapsed the T21 AWB controller's
+     * alias-heavy stack objects and silently mixed pointer-sized and scalar
+     * fields.  Run the audited, tuning-driven reconstruction instead. */
+    return t21_awb_process();
+
+#if 0
     uint32_t local_10 = 0;
     uint32_t local_28 = 0;
     uint32_t local_68 = 0;
@@ -24260,6 +24484,7 @@ JZ_Isp_Awb0x2f8:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000010ac8 origin=fragment_seed original=tisp_awb_ev_update */
@@ -24667,7 +24892,7 @@ int32_t tiziano_awb_init(uint32_t arg1, uint32_t arg2)
 	uint32_t val2;
 
 	awb_first = 0;
-	memset(tisp_wb_attr, 0, sizeof(tisp_wb_attr));
+	memset(&tisp_wb_attr, 0, sizeof(tisp_wb_attr));
 	tiziano_awb_params_refresh();
 
 	val1 = arg2 >> 1;
@@ -24692,10 +24917,13 @@ int32_t tiziano_awb_init(uint32_t arg1, uint32_t arg2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011438 origin=model_output original=tisp_g_wb_mode */
-int32_t tisp_g_wb_mode(int32_t arg1)
+int32_t tisp_g_wb_mode(void *arg1)
 {
-    memcpy(arg1, &tisp_wb_attr, 0x1c);
-    return 0;
+	if (!arg1)
+		return -EINVAL;
+
+	memcpy(arg1, &tisp_wb_attr, sizeof(tisp_wb_attr));
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011468 origin=model_output original=tisp_awb_set_frz */
@@ -24730,60 +24958,29 @@ uint8_t tisp_awb_get_frz(uintptr_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000011488 origin=model_output original=tisp_s_wb_mode */
 int32_t tisp_s_wb_mode(int32_t mode, int32_t val1, int32_t val2)
 {
-    int32_t *wb_attr = (int32_t *)((char *)&tisp_wb_attr);
-    if (mode >= 10) {
-        isp_printf(2, "tisp_s_wb_mode", "%s:%d::Can not support this mode!!!\n");
-        goto out;
+    static const u16 preset_gain[7][2] = {
+	{ 0x180, 0x180 },
+	{ 0x1b6, 0x12f },
+	{ 0x0db, 0x2b2 },
+	{ 0x0f0, 0x234 },
+	{ 0x13b, 0x1cb },
+	{ 0x1d4, 0x117 },
+	{ 0x0f0, 0x178 },
+    };
+
+    BUILD_BUG_ON(sizeof(struct t21_wb_internal_view) != 0x1c);
+    if ((u32)mode >= 10) {
+	isp_printf(2, "tisp_s_wb_mode", "%s:%d::Can not support this mode!!!\n");
+	return -EINVAL;
     }
-    switch (mode) {
-    case 0:
-        *wb_attr = 0;
-        goto out;
-    case 1:
-        *wb_attr = 1;
-        data_837cc = (uintptr_t (*)())(uintptr_t)val1;
-        data_837d0 = (uintptr_t (*)())(uintptr_t)val2;
-        goto out;
-    case 2:
-        *wb_attr = 2;
-        data_837cc = 0x180;
-        data_837d0 = 0x180;
-        goto out;
-    case 3:
-        *wb_attr = 3;
-        data_837cc = 0x1b6;
-        data_837d0 = 0x12f;
-        goto out;
-    case 4:
-        *wb_attr = 4;
-        data_837cc = 0xdb;
-        data_837d0 = 0x2b2;
-        goto out;
-    case 5:
-        *wb_attr = 5;
-        data_837cc = 0xf0;
-        data_837d0 = 0x234;
-        goto out;
-    case 6:
-        *wb_attr = 6;
-        data_837cc = 0x13b;
-        data_837d0 = 0x1cb;
-        goto out;
-    case 7:
-        *wb_attr = 7;
-        data_837cc = 0x1d4;
-        data_837d0 = 0x117;
-        goto out;
-    case 8:
-        *wb_attr = 8;
-        data_837cc = 0xf0;
-        data_837d0 = 0x178;
-        goto out;
-    case 9:
-        *wb_attr = 9;
-        data_837cc = (uintptr_t (*)())(uintptr_t)val1;
-        data_837d0 = (uintptr_t (*)())(uintptr_t)val2;
-        goto out;
+
+    ACCESS_ONCE(tisp_wb_attr.mode) = mode;
+    if (mode == 1 || mode == 9) {
+	ACCESS_ONCE(tisp_wb_attr.manual_rgain) = val1;
+	ACCESS_ONCE(tisp_wb_attr.manual_bgain) = val2;
+    } else if (mode >= 2) {
+	ACCESS_ONCE(tisp_wb_attr.manual_rgain) = preset_gain[mode - 2][0];
+	ACCESS_ONCE(tisp_wb_attr.manual_bgain) = preset_gain[mode - 2][1];
     }
 out:
     awb_moa = 1;
@@ -46547,6 +46744,22 @@ int32_t tisp_ae_process(void)
 				      t21_ae_current_isp_dgain_q10,
 				      1024 * 1024);
 
+	/* OEM event 6 carries the effective exposure to every tuning block which
+	 * selects curves by EV (AWB, CCM, ADR and defog).  The first-pass AE body
+	 * retained gain-change events 4/5 but dropped this unconditional event,
+	 * pinning those generic, tuning-driven consumers at EV zero. */
+	current_exposure = (u64)t21_ae_current_it *
+			   t21_ae_current_gain_q10;
+	current_exposure = div_u64(current_exposure *
+				   t21_ae_current_sensor_dgain_q10, 1024);
+	current_exposure = div_u64(current_exposure *
+				   t21_ae_current_isp_dgain_q10, 1024);
+	current_ev = div_u64(current_exposure, 1024);
+	event[2] = 6;
+	event[4] = current_ev;
+	tisp_event_push(event);
+	memset(event, 0, sizeof(event));
+
 	/* The dynamic ISP blocks consume gain in Q16 log2 form.  Keep that
 	 * policy generic: the sensor callback supplies the quantized Q10 gain,
 	 * while every interpolation curve comes from the active tuning bank. */
@@ -46576,7 +46789,7 @@ int32_t tisp_ae_process(void)
 			    t21_ae_current_isp_dgain_q10,
 			    max_it, max_again, max_isp_dgain);
 	if (!(t21_ae_frame_count % 750))
-		pr_info("tx-isp-t21: ae sample luma=%u target=%u ev=%u it=%u again=%u sdgain=%u ispgain=%u limits=%u/%u/%u\n",
+		pr_debug("tx-isp-t21: ae sample luma=%u target=%u ev=%u it=%u again=%u sdgain=%u ispgain=%u limits=%u/%u/%u\n",
 			t21_ae_measured_luma, target, current_ev,
 			t21_ae_current_it, t21_ae_current_gain_q10,
 			t21_ae_current_sensor_dgain_q10,
@@ -46679,7 +46892,7 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	BUILD_BUG_ON(sizeof(*result) != 0x10);
 	BUILD_BUG_ON(offsetof(struct t21_sensor_ctrl_view,
 			      max_integration_time) != 0x24);
-	pr_info("tx-isp-t21: ae init entry h=%u w=%u min_it=%u\n",
+	pr_debug("tx-isp-t21: ae init entry h=%u w=%u min_it=%u\n",
 		arg1, arg2, arg3);
 
 	/* These are distinct OEM globals; the model had aliased them into AWB,
@@ -46700,7 +46913,7 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	memcpy(tisp_ae_hist_last, tisp_ae_hist, sizeof(tisp_ae_hist));
 
 	tiziano_ae_params_refresh();
-	pr_info("tx-isp-t21: ae params refreshed rows=%u cols=%u\n",
+	pr_debug("tx-isp-t21: ae params refreshed rows=%u cols=%u\n",
 		*(u32 *)((u8 *)&_ae_parameter + 0x4),
 		*(u32 *)((u8 *)&_ae_parameter + 0xc));
 
@@ -46714,19 +46927,19 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 		*(uint32_t *)((char *)&_ae_parameter + j * 4 + 0x4c) = val;
 	}
 
-	pr_info("tx-isp-t21: ae hardware setup begin\n");
+	pr_debug("tx-isp-t21: ae hardware setup begin\n");
 	tiziano_ae_set_hardware_param();
-	pr_info("tx-isp-t21: ae hardware setup done result=%u/%u/%u\n",
+	pr_debug("tx-isp-t21: ae hardware setup done result=%u/%u/%u\n",
 		result->sensor_reg, result->integration_time, result->analog_gain);
 
 	sensor_it = result->integration_time;
 	t21_ae_current_it = sensor_it;
 	t21_ae_current_sensor_dgain_q10 = 1024;
 	t21_ae_current_isp_dgain_q10 = max_t(u32, result->sensor_reg, 1024);
-	pr_info("tx-isp-t21: ae integration begin value=%u cb=%p\n",
+	pr_debug("tx-isp-t21: ae integration begin value=%u cb=%p\n",
 		sensor_it, ((struct t21_sensor_ctrl_view *)sensor_ctrl)->set_integration_time);
 	ret = tisp_set_sensor_integration_time(sensor_it);
-	pr_info("tx-isp-t21: ae integration done ret=%u\n", ret);
+	pr_debug("tx-isp-t21: ae integration done ret=%u\n", ret);
 	if (ret != 0) {
 		isp_printf(2, "sorry,set integration time failed!\n", ret);
 		return -1;
@@ -46734,26 +46947,26 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 
 	sensor_gain = result->analog_gain;
 	t21_ae_current_gain_q10 = sensor_gain;
-	pr_info("tx-isp-t21: ae gain begin value=%u\n", sensor_gain);
+	pr_debug("tx-isp-t21: ae gain begin value=%u\n", sensor_gain);
 	tisp_set_sensor_analog_gain(sensor_gain);
-	pr_info("tx-isp-t21: ae gain done\n");
+	pr_debug("tx-isp-t21: ae gain done\n");
 
 	sensor_reg = result->sensor_reg;
 	reg_val = (sensor_reg << 0x10) | sensor_reg;
-	pr_info("tx-isp-t21: ae reg 408 begin value=%08x\n", reg_val);
+	pr_debug("tx-isp-t21: ae reg 408 begin value=%08x\n", reg_val);
 	system_reg_write_ae(2, 0x408, reg_val);
-	pr_info("tx-isp-t21: ae reg 408 done\n");
+	pr_debug("tx-isp-t21: ae reg 408 done\n");
 
 	sensor_reg = result->sensor_reg;
 	reg_val = (sensor_reg << 0x10) | sensor_reg;
-	pr_info("tx-isp-t21: ae reg 40c begin value=%08x\n", reg_val);
+	pr_debug("tx-isp-t21: ae reg 40c begin value=%08x\n", reg_val);
 	system_reg_write_ae(2, 0x40c, reg_val);
-	pr_info("tx-isp-t21: ae reg 40c done\n");
+	pr_debug("tx-isp-t21: ae reg 40c done\n");
 
-	pr_info("tx-isp-t21: ae irq callbacks begin\n");
+	pr_debug("tx-isp-t21: ae irq callbacks begin\n");
 	system_irq_func_set(0x11, ae_interrupt_hist);
 	system_irq_func_set(0x10, ae_interrupt_static);
-	pr_info("tx-isp-t21: ae irq callbacks done\n");
+	pr_debug("tx-isp-t21: ae irq callbacks done\n");
 
 	/* Stock clears the 64-byte AE control record.  The first-pass recovery
 	 * mistook that data symbol for tisp_ae_tune() and wrote into text here. */
@@ -46766,7 +46979,7 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	sensor_reg = result->sensor_reg;
 	val = fix_point_mult3_32(ae_point_pos, sensor_it << (ae_point_pos & 0x1f), sensor_gain, sensor_reg);
 	ae_ctrl->total_gain = val;
-	pr_info("tx-isp-t21: ae initial exposure=%u point=%u\n", val,
+	pr_debug("tx-isp-t21: ae initial exposure=%u point=%u\n", val,
 		ae_point_pos);
 
 	sensor_ctrl_val = ctrl->max_integration_time;
@@ -46790,7 +47003,7 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 
 	exp_val2 = tisp_math_exp2(ctrl->exp2_input_b, 0x10, 0xa);
 	ae_ctrl->max_sensor_dgain = exp_val2;
-	pr_info("tx-isp-t21: ae exposure limits done\n");
+	pr_debug("tx-isp-t21: ae exposure limits done\n");
 
 	ctrl_val3 = *(uint32_t *)((char *)((char *)&_exp_parameter + 0xc));
 	ae_ctrl->max_sensor_again = ctrl_val3;
@@ -46805,16 +47018,16 @@ int32_t tiziano_ae_init(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 	tiziano_deflicker_expt(flicker_val, flicker_val2, flicker_val3,
 				 flicker_val4, (uintptr_t)_deflick_lut,
 				 (u32 *)&_nodes_num);
-	pr_info("tx-isp-t21: ae deflicker done node_index=%u first=%u last=%u\n",
+	pr_debug("tx-isp-t21: ae deflicker done node_index=%u first=%u last=%u\n",
 		(u32)_nodes_num, ((u32 *)_deflick_lut)[0],
 		((u32 *)_deflick_lut)[_nodes_num]);
 
 	tisp_event_set_cb(1, tisp_ae_process);
-	pr_info("tx-isp-t21: ae event callback done\n");
+	pr_debug("tx-isp-t21: ae event callback done\n");
 
 	private_spin_lock_init(&t21_ae_hist_lock);
 	private_spin_lock_init(&t21_ae_state_lock);
-	pr_info("tx-isp-t21: ae init done\n");
+	pr_debug("tx-isp-t21: ae init done\n");
 
 	return 0;
 }
@@ -48256,21 +48469,27 @@ int32_t tisp_day_or_night_s_ctrl(uint32_t mode)
     }
 
     system_reg_write(0xc, reg_val);
-    tiziano_dpc_dn_params_refresh();
-    tiziano_gib_dn_params_refresh();
-    tiziano_lsc_dn_params_refresh();
-    tiziano_ae_dn_params_refresh();
-    tiziano_awb_dn_params_refresh();
-    tiziano_adr_dn_params_refresh();
-    tiziano_dmsc_dn_params_refresh();
-    tiziano_gamma_dn_params_refresh();
-    tiziano_ccm_dn_params_refresh();
-    tiziano_defog_dn_params_refresh();
-    tiziano_clm_dn_params_refresh();
-    tiziano_sharpen_dn_params_refresh();
-    tiziano_mdns_dn_params_refresh();
-    tiziano_sdns_dn_params_refresh();
-    tiziano_af_dn_params_refresh();
+#define T21_DN_REFRESH(fn) do { \
+	pr_debug("tx-isp-t21: day/night refresh enter %s\n", #fn); \
+	fn(); \
+	pr_debug("tx-isp-t21: day/night refresh leave %s\n", #fn); \
+} while (0)
+    T21_DN_REFRESH(tiziano_dpc_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_gib_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_lsc_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_ae_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_awb_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_adr_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_dmsc_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_gamma_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_ccm_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_defog_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_clm_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_sharpen_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_mdns_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_sdns_dn_params_refresh);
+    T21_DN_REFRESH(tiziano_af_dn_params_refresh);
+#undef T21_DN_REFRESH
 
     return 0;
 }
@@ -48945,28 +49164,6 @@ tisp_g_af_weight0x5c:
     return 0;
 }
 
-struct t21_ev_sensor_info_view {
-	u8 reserved_00[0x2c];
-	u32 fps;
-	u8 reserved_30[0x0e];
-	u16 lines_per_second;
-};
-
-struct t21_ev_attr_view {
-	u32 integration_time;
-	u32 total_gain;
-	u32 exposure_us;
-	u32 total_gain_log2;
-	u32 sensor_again_log2;
-	u32 sensor_dgain_log2;
-	u32 field_18;
-	u32 sensor_gain;
-	u32 field_20_log2;
-	u32 field_24_log2;
-	u32 isp_dgain_log2;
-	u32 field_2c_log2;
-};
-
 /* Rebuilt from the stock T21 body at 0x30fc4. */
 int32_t tisp_g_ev_attr(uintptr_t a0)
 {
@@ -49021,28 +49218,9 @@ int32_t tisp_g_ev_attr(uintptr_t a0)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003111c origin=fragment_seed original=tisp_g_wb_attr */
-int32_t tisp_g_wb_attr(uint32_t a0)
+int32_t tisp_g_wb_attr(void *a0)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(int32_t *))(uintptr_t)tisp_g_wb_mode)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return;
+	return tisp_g_wb_mode(a0);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031144 origin=model_output original=tisp_s_wb_attr */
@@ -49735,18 +49913,18 @@ int32_t ispcore_core_ops_ioctl(void *arg1, int32_t cmd, void *arg)
 			int32_t (*init)(void *, int32_t) =
 				*(int32_t (**)(void *, int32_t))((char *)group + 4);
 
-			pr_info("tx-isp-t21: ispcore ioctl=0x%x slot=%d entry=%p init=%p begin\n",
+			pr_debug("tx-isp-t21: ispcore ioctl=0x%x slot=%d entry=%p init=%p begin\n",
 				cmd, i, entry, init);
 			ret = init ? init(entry, *(int32_t *)arg) : -ENOIOCTLCMD;
 		} else {
 			int32_t (*sync)(void *, void *) =
 				*(int32_t (**)(void *, void *))((char *)group + 4);
 
-			pr_info("tx-isp-t21: ispcore ioctl=0x%x slot=%d entry=%p sync=%p begin\n",
+			pr_debug("tx-isp-t21: ispcore ioctl=0x%x slot=%d entry=%p sync=%p begin\n",
 				cmd, i, entry, sync);
 			ret = sync ? sync(entry, arg) : -ENOIOCTLCMD;
 		}
-		pr_info("tx-isp-t21: ispcore ioctl=0x%x slot=%d ret=%d\n",
+		pr_debug("tx-isp-t21: ispcore ioctl=0x%x slot=%d ret=%d\n",
 			cmd, i, ret);
 
 		if (ret && ret != -ENOIOCTLCMD) {
@@ -51047,7 +51225,7 @@ int32_t ispcore_pad_event_handle(int32_t *arg1, int32_t arg2, void *arg3)
 	case 0x3000003: {
 		struct t21_ispcore_channel_abi *channel = pad->event_priv;
 		var_20 = 0;
-		pr_info("tx-isp-t21: core streamon pad=%p index=%u state=%u flags=%08x channel=%p channel_state=%u\n",
+		pr_debug("tx-isp-t21: core streamon pad=%p index=%u state=%u flags=%08x channel=%p channel_state=%u\n",
 			pad, pad->index, pad->state, pad->flags, channel,
 			t21_isp_valid_ptr(channel) ? channel->state : ~0U);
 
@@ -51058,7 +51236,7 @@ int32_t ispcore_pad_event_handle(int32_t *arg1, int32_t arg2, void *arg3)
 					    (unsigned long *)&var_20);
 		if (channel->state != 4) {
 			tisp_channel_start(pad->index);
-			pr_info("tx-isp-t21: core streamon started index=%u enable=%08x writer=%08x\n",
+			pr_debug("tx-isp-t21: core streamon started index=%u enable=%08x writer=%08x\n",
 				pad->index, system_reg_read(0x2304),
 				system_reg_read(0x2318));
 			channel->state = 4;
@@ -51225,6 +51403,10 @@ int32_t ispcore_interrupt_service_routine(uintptr_t a0)
 	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, registers) != 0xb8);
 	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, runtime) != 0xd4);
 	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, channels) != 0x14c);
+	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view,
+			      running_mode_pending) != 0x174);
+	BUILD_BUG_ON(offsetof(struct t21_ispcore_irq_view, tuning) != 0x19c);
+	BUILD_BUG_ON(offsetof(struct t21_tuning_state_view, event) != 0x40cc);
 
 	if (!t21_isp_valid_ptr(core) ||
 	    !t21_isp_valid_ptr(core->registers) ||
@@ -51300,6 +51482,18 @@ int32_t ispcore_interrupt_service_routine(uintptr_t a0)
 					    channel, fifo, event.dma_addr,
 					    event.sequence, pad, event_ret);
 		}
+	}
+
+	/* Stock applies a requested day/night table swap at the next ISP IRQ,
+	 * after the current frame has reached a stable boundary.  The first-pass
+	 * ISR omitted this pending-control block, leaving Raptor's mode command
+	 * acknowledged but unapplied. */
+	if (runtime->running_mode_pending == 1) {
+		struct t21_tuning_state_view *tuning = runtime->tuning;
+
+		if (t21_isp_valid_ptr(tuning) && tuning->event)
+			tuning->event(tuning, 0x4000003, 0);
+		runtime->running_mode_pending = 0;
 	}
 
 	/* Match the OEM interrupt fan-out: every asserted slot gets its callback,
@@ -51584,7 +51778,7 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 	core = *(u8 **)(isp + 0xd4);
 	if (!t21_isp_valid_ptr(core))
 		return -EINVAL;
-	pr_info("tx-isp-t21: core init entry enable=%u irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: core init entry enable=%u irq_disabled=%d pid=%d\n",
 		enable, irqs_disabled(), current->pid);
 
 	state = *(u32 *)(core + 0xe8);
@@ -51608,7 +51802,7 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 
 	memset(&info, 0, sizeof(info));
 	ret = private_reset_tx_isp_module(0);
-	pr_info("tx-isp-t21: core init reset ret=%d irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: core init reset ret=%d irq_disabled=%d pid=%d\n",
 		ret, irqs_disabled(), current->pid);
 	if (ret) {
 		isp_printf(2, "Failed to reset %s\n",
@@ -51617,7 +51811,7 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 	}
 
 	__private_spin_lock_irqsave((spinlock_t *)(core + 0xdc), &flags);
-	pr_info("tx-isp-t21: core init locked flags=%lx irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: core init locked flags=%lx irq_disabled=%d pid=%d\n",
 		flags, irqs_disabled(), current->pid);
 	state = *(u32 *)(core + 0xe8);
 	if (state != 2) {
@@ -51628,7 +51822,7 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 		return -1;
 	}
 	private_spin_unlock_irqrestore((spinlock_t *)(core + 0xdc), flags);
-	pr_info("tx-isp-t21: core init unlocked flags=%lx irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: core init unlocked flags=%lx irq_disabled=%d pid=%d\n",
 		flags, irqs_disabled(), current->pid);
 
 	width = *(u32 *)(core + 0xec);
@@ -51711,7 +51905,7 @@ int32_t ispcore_core_ops_init(uintptr_t a0, uint32_t enable)
 	info.attr_7e = *(u16 *)(attr + 0x7e);
 	info.attr_80 = *(u16 *)(attr + 0x80);
 
-	pr_info("tx-isp-t21: core init tisp name=%s %ux%u bayer=%d irq_disabled=%d pid=%d\n",
+	pr_debug("tx-isp-t21: core init tisp name=%s %ux%u bayer=%d irq_disabled=%d pid=%d\n",
 		info.name, info.width, info.height, info.bayer,
 		irqs_disabled(), current->pid);
 	ret = tisp_init((int32_t *)&info);
@@ -53121,18 +53315,31 @@ int32_t system_irq_func_set(unsigned int index, t21_irq_callback_t callback)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034540 origin=model_output original=init_module */
 int32_t init_module(void)
 {
-    regtrace_patch_relocated_data();
 	int32_t result;
 
+	regtrace_patch_relocated_data();
 	result = tx_isp_init();
-	if (result == 0)
-		tx_isp_sinfo_init();
+	if (result)
+		return result;
+	result = tx_isp_sinfo_init();
+	if (result)
+		goto fail_isp;
+	result = tx_isp_t21_v4l2_init();
+	if (result)
+		goto fail_sinfo;
+	return 0;
+
+fail_sinfo:
+	tx_isp_sinfo_exit();
+fail_isp:
+	tx_isp_exit();
 	return result;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034590 origin=model_output original=cleanup_module */
 void cleanup_module(void)
 {
+	tx_isp_t21_v4l2_cleanup();
 	tx_isp_sinfo_exit();
 	tx_isp_exit();
 }
