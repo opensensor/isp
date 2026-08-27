@@ -5537,15 +5537,20 @@ static int ae0_tune2(uint32_t wmean, uint32_t q, uint32_t fifo_target,
     uint32_t var_c8 = _ae_stat.data[3]; /* scene mode */
     uint32_t v0_38 = _ae_stat.data[4];  /* convergence counter */
 
-    /* Stock forms the base EV from _ae_result, the last applied exposure
-     * tuple.  _ae_reg is the output/hardware tuple and is not the solver's
-     * current-value input. */
-    uint32_t cur_it = _ae_result.data[0];
-    uint32_t cur_ag = _ae_result.data[1];
-    uint32_t cur_dg = _ae_result.data[2];
+    /* Continue from the requested tuple.  _ae_result is the delayed applied
+     * tuple and feeding it back into the solver throttles cold-start
+     * convergence once per sensor-effect frame. */
+    uint32_t cur_it = _ae_reg.data[0];
+    uint32_t cur_ag = ae0_req_ag;
+    uint32_t cur_dg = ae0_req_dg;
 
     if (IspAeFlag && cur_it == 0) {
-        cur_it = 600;
+        /* Seed from the sensor-clamped tuning limit.  Starting at that
+         * calibrated, flicker-safe ceiling lets a cold dark scene converge
+         * downward instead of crawling up from a sensor-specific placeholder. */
+        cur_it = tisp_ae_effective_max_it();
+        if (cur_it == 0)
+            cur_it = 1;
         cur_ag = 0x400;
         cur_dg = 0x400;
     }
