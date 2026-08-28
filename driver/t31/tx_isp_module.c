@@ -876,17 +876,23 @@ struct queued_node {
 
 static void frame_channel_clear_tracked_buffers(struct frame_channel_device *fcd)
 {
+    struct frame_buffer *stale[ARRAY_SIZE(fcd->buffer_array)];
+    unsigned long flags;
     int i;
 
     if (!fcd)
         return;
 
+    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
     for (i = 0; i < ARRAY_SIZE(fcd->buffer_array); i++) {
-        kfree(fcd->buffer_array[i]);
+        stale[i] = fcd->buffer_array[i];
         fcd->buffer_array[i] = NULL;
     }
-
     memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
+    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+
+    for (i = 0; i < ARRAY_SIZE(stale); i++)
+        kfree(stale[i]);
 }
 
 static void frame_channel_drain_deliverability_queues(struct tx_isp_channel_state *state)
@@ -921,46 +927,80 @@ static void frame_channel_drain_deliverability_queues(struct tx_isp_channel_stat
     wake_up_interruptible(&state->frame_wait);
 }
 
-static struct frame_buffer *frame_channel_get_tracked_buffer(struct frame_channel_device *fcd,
-                                                             u32 index)
+static bool frame_channel_copy_tracked_buffer(struct frame_channel_device *fcd,
+                                              u32 index,
+                                              struct frame_buffer *snapshot)
 {
-    if (!fcd || index >= ARRAY_SIZE(fcd->buffer_array))
-        return NULL;
+    struct frame_buffer *tracked;
+    unsigned long flags;
+    bool found = false;
 
-    return (struct frame_buffer *)fcd->buffer_array[index];
+    if (!fcd || !snapshot || index >= ARRAY_SIZE(fcd->buffer_array))
+        return false;
+
+    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
+    tracked = fcd->buffer_array[index];
+    if (tracked) {
+        *snapshot = *tracked;
+        found = true;
+    }
+    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+    return found;
 }
 
 static int frame_channel_track_buffer(struct frame_channel_device *fcd,
                                       const struct v4l2_buffer *buffer)
 {
+    struct frame_buffer snapshot;
     struct frame_buffer *tracked;
+    unsigned long flags;
 
     if (!fcd || !buffer || buffer->index >= ARRAY_SIZE(fcd->buffer_array))
         return -EINVAL;
 
+    memset(&snapshot, 0, sizeof(snapshot));
+    snapshot.index = buffer->index;
+    snapshot.type = buffer->type;
+    snapshot.bytesused = buffer->bytesused;
+    snapshot.flags = buffer->flags;
+    snapshot.field = buffer->field;
+    snapshot.timestamp.tv_sec = buffer->timestamp.tv_sec;
+    snapshot.timestamp.tv_usec = buffer->timestamp.tv_usec;
+    snapshot.sequence = buffer->sequence;
+    snapshot.memory = buffer->memory;
+    snapshot.length = buffer->length;
+
+    if (buffer->memory == V4L2_MEMORY_USERPTR)
+        snapshot.m.userptr = buffer->m.userptr;
+    else
+        snapshot.m.offset = buffer->m.offset;
+
+    /* Requeues update the existing slot in place.  The reader copies while
+     * holding the same lock, so no pointer can escape past a concurrent
+     * REQBUFS or close. */
+    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
+    tracked = fcd->buffer_array[buffer->index];
+    if (tracked) {
+        *tracked = snapshot;
+        spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+        return 0;
+    }
+    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+
     tracked = kmalloc(sizeof(*tracked), GFP_KERNEL);
     if (!tracked)
         return -ENOMEM;
+    *tracked = snapshot;
 
-    memset(tracked, 0, sizeof(*tracked));
-    tracked->index = buffer->index;
-    tracked->type = buffer->type;
-    tracked->bytesused = buffer->bytesused;
-    tracked->flags = buffer->flags;
-    tracked->field = buffer->field;
-    tracked->timestamp.tv_sec = buffer->timestamp.tv_sec;
-    tracked->timestamp.tv_usec = buffer->timestamp.tv_usec;
-    tracked->sequence = buffer->sequence;
-    tracked->memory = buffer->memory;
-    tracked->length = buffer->length;
-
-    if (buffer->memory == V4L2_MEMORY_USERPTR)
-        tracked->m.userptr = buffer->m.userptr;
-    else
-        tracked->m.offset = buffer->m.offset;
-
-    kfree(fcd->buffer_array[buffer->index]);
-    fcd->buffer_array[buffer->index] = tracked;
+    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
+    if (fcd->buffer_array[buffer->index]) {
+        *(struct frame_buffer *)fcd->buffer_array[buffer->index] = snapshot;
+        spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+        kfree(tracked);
+    } else {
+        fcd->buffer_array[buffer->index] = tracked;
+        spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+    }
     return 0;
 }
 
@@ -3843,9 +3883,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Reset OEM buffer rotation state for new allocation */
             memset(fcd->oem_bufs, 0, sizeof(fcd->oem_bufs));
             fcd->oem_buf_count = reqbuf.count;
-            state->current_buffer.type = reqbuf.type;
-            state->current_buffer.memory = reqbuf.memory;
-            state->current_buffer.length = buffer_size;
+            {
+                unsigned long buffer_flags;
+
+                spin_lock_irqsave(&state->buffer_lock, buffer_flags);
+                state->current_buffer.type = reqbuf.type;
+                state->current_buffer.memory = reqbuf.memory;
+                state->current_buffer.length = buffer_size;
+                spin_unlock_irqrestore(&state->buffer_lock, buffer_flags);
+            }
 
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
@@ -4016,6 +4062,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 channel, buffer.index, buffer_phys_addr, buffer_size, buffer.memory, buffer.m.userptr);
 
         if (frame_channel_track_buffer(fcd, &buffer) == 0) {
+            unsigned long buffer_flags;
+
+            spin_lock_irqsave(&state->buffer_lock, buffer_flags);
             state->current_buffer.index = buffer.index;
             state->current_buffer.type = buffer.type;
             state->current_buffer.bytesused = buffer.bytesused;
@@ -4030,6 +4079,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 state->current_buffer.m.userptr = buffer.m.userptr;
             else
                 state->current_buffer.m.offset = buffer.m.offset;
+            spin_unlock_irqrestore(&state->buffer_lock, buffer_flags);
         } else {
             pr_warn("*** QBUF: Failed to track buffer metadata for idx=%d ***\n", buffer.index);
         }
@@ -4215,7 +4265,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         atomic_dec_if_positive(&state->frame_ready_count);
 
         {
-            struct frame_buffer *tracked = NULL;
+            struct frame_buffer tracked;
+            bool tracked_valid = false;
             u32 delivered_seq = 0;
             struct timeval delivered_ts;
             u32 delivered_idx = 0;
@@ -4250,8 +4301,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (!match_found && done_phys) {
                 int bc = state->buffer_count ? state->buffer_count : 3;
                 for (bi = 0; bi < bc; bi++) {
-                    struct frame_buffer *tb = frame_channel_get_tracked_buffer(fcd, bi);
-                    if (tb && (tb->m.userptr & ~0xfff) == (done_phys & ~0xfff)) {
+                    struct frame_buffer candidate;
+
+                    if (frame_channel_copy_tracked_buffer(fcd, bi, &candidate) &&
+                        (candidate.m.userptr & ~0xfff) == (done_phys & ~0xfff)) {
                         delivered_idx = bi;
                         delivered_seq = state->sequence;
                         fill_timeval_mono(&delivered_ts);
@@ -4269,7 +4322,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
 
             /* Look up the tracked buffer from QBUF to get correct userptr */
-            tracked = frame_channel_get_tracked_buffer(fcd, delivered_idx);
+            tracked_valid = frame_channel_copy_tracked_buffer(
+                fcd, delivered_idx, &tracked);
 
             spin_lock_irqsave(&state->buffer_lock, flags);
             buffer.index = delivered_idx;
@@ -4280,14 +4334,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     frame_channel_export_pixfmt(channel, state->format),
                     state->width, state->height);
             buffer.bytesused = state->sizeimage;
-            if (tracked && tracked->length && buffer.bytesused > tracked->length)
-                buffer.bytesused = tracked->length;
-            buffer.field = tracked ? tracked->field : V4L2_FIELD_NONE;
+            if (tracked_valid && tracked.length && buffer.bytesused > tracked.length)
+                buffer.bytesused = tracked.length;
+            buffer.field = tracked_valid ? tracked.field : V4L2_FIELD_NONE;
             buffer.timestamp = delivered_ts;
             buffer.sequence = delivered_seq;
-            buffer.memory = tracked ? tracked->memory :
+            buffer.memory = tracked_valid ? tracked.memory :
                            (state->current_buffer.memory ? state->current_buffer.memory : V4L2_MEMORY_MMAP);
-            buffer.length = tracked && tracked->length ? tracked->length : state->sizeimage;
+            buffer.length = tracked_valid && tracked.length ? tracked.length : state->sizeimage;
 
             /* OEM-style flags */
             buffer.flags = V4L2_BUF_FLAG_DONE;
@@ -4299,10 +4353,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* Return REAL physical address from tracked buffer (set during QBUF) */
             if (buffer.memory == V4L2_MEMORY_USERPTR)
-                buffer.m.userptr = tracked ? tracked->m.userptr : state->current_buffer.m.userptr;
+                buffer.m.userptr = tracked_valid ? tracked.m.userptr : state->current_buffer.m.userptr;
             else
-                buffer.m.offset = (tracked && tracked->memory == V4L2_MEMORY_MMAP && tracked->m.offset) ?
-                                  tracked->m.offset : (delivered_idx * state->sizeimage);
+                buffer.m.offset = (tracked_valid && tracked.memory == V4L2_MEMORY_MMAP && tracked.m.offset) ?
+                                  tracked.m.offset : (delivered_idx * state->sizeimage);
             spin_unlock_irqrestore(&state->buffer_lock, flags);
 
             /* DMA sync barrier */
