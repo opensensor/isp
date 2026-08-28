@@ -2067,8 +2067,9 @@ static int sensor_set_wdr_mode(int mode) {
     return 0;
 }
 
-int sensor_fps_control(int fps) {
-    int packed_fps;
+int sensor_fps_control_packed(u32 packed_fps) {
+    u32 fps_num = packed_fps >> 16;
+    u32 fps_den = packed_fps & 0xffff;
     int ret;
 
     if (!ourISPdev || !ourISPdev->sensor) {
@@ -2076,8 +2077,9 @@ int sensor_fps_control(int fps) {
         return -ENODEV;
     }
 
-    if (fps <= 0 || fps > 120) {
-        pr_warn("sensor_fps_control: invalid rate %d/1 FPS\n", fps);
+    if (!fps_num || !fps_den || fps_num > 120 * fps_den) {
+        pr_warn("sensor_fps_control: invalid packed rate %u/%u FPS\n",
+                fps_num, fps_den);
         return -EINVAL;
     }
 
@@ -2089,28 +2091,34 @@ int sensor_fps_control(int fps) {
         return -ENODEV;
     }
 
-    /* The tuning API supplies an integer rate, while sensor drivers consume
-     * the usual 16.16 numerator/denominator value.  Program the physical
-     * sensor before advertising the new cadence to userspace; merely changing
-     * ISP bookkeeping leaves a 25 Hz sensor feeding a nominal 20 Hz encoder. */
-    packed_fps = (fps << 16) | 1;
+    /* Sensor drivers consume the usual numerator/denominator pair packed into
+     * 16 bits each.  Preserve that pair: rounding it to an integer changes the
+     * physical frame period and defeats phase-sensitive anti-flicker control. */
     ret = stored_sensor_ops.original_ops->sensor->ioctl(
         stored_sensor_ops.sensor_sd, TX_ISP_EVENT_SENSOR_FPS, &packed_fps);
     if (ret) {
-        pr_warn("sensor_fps_control: sensor rejected %d/1 FPS: %d\n",
-                fps, ret);
+        pr_warn("sensor_fps_control: sensor rejected %u/%u FPS: %d\n",
+                fps_num, fps_den, ret);
         return ret;
     }
 
     ourISPdev->sensor->video.fps = packed_fps;
     if (ourISPdev->tuning_data) {
-        ourISPdev->tuning_data->fps_num = fps;
-        ourISPdev->tuning_data->fps_den = 1;
+        ourISPdev->tuning_data->fps_num = fps_num;
+        ourISPdev->tuning_data->fps_den = fps_den;
     }
 
-    pr_info("sensor_fps_control: programmed physical sensor at %d/1 FPS\n",
-            fps);
+    pr_info("sensor_fps_control: programmed physical sensor at %u/%u FPS\n",
+            fps_num, fps_den);
     return 0;
+}
+EXPORT_SYMBOL(sensor_fps_control_packed);
+
+int sensor_fps_control(int fps) {
+    if (fps <= 0 || fps > 120)
+        return -EINVAL;
+
+    return sensor_fps_control_packed(((u32)fps << 16) | 1);
 }
 EXPORT_SYMBOL(sensor_fps_control);
 

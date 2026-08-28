@@ -354,5 +354,6 @@ extern struct platform_device tx_isp_core_platform_device;
 
 /* Sensor control functions - defined in tx_isp_module.c */
 int sensor_fps_control(int fps);
+int sensor_fps_control_packed(u32 packed_fps);
 
 #endif /* __TX_ISP_H__ */

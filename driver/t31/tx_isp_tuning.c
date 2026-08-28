@@ -9025,21 +9025,18 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         case 0x80000e0: { // SET FPS - PROPER CLIENT-SIDE FPS CONTROL
             /* CRITICAL: This is the real FPS control mechanism used by IMP_ISP_Tuning_SetSensorFPS */
             /* Binary Ninja shows: var_20_1 = arg1 << 0x10 | arg2 (fps_num in high 16, fps_den in low 16) */
-            extern int sensor_fps_control(int fps);
+            extern int sensor_fps_control_packed(uint32_t fps_packed);
             uint32_t fps_packed = ctrl->value;  /* FPS comes packed as (fps_num << 16) | fps_den */
             uint32_t fps_num = (fps_packed >> 16) & 0xFFFF;
             uint32_t fps_den = fps_packed & 0xFFFF;
             int fps_ret;
-            int effective_fps;
 
             pr_info("*** SET FPS: Received packed FPS 0x%x -> %d/%d FPS ***\n", fps_packed, fps_num, fps_den);
-
-            effective_fps = fps_den > 0 ? fps_num / fps_den : 25;
 
             /* Program the sensor first, then publish the new cadence only
              * after the sensor driver accepts it. */
             if (ourISPdev && ourISPdev->tuning_data) {
-                fps_ret = sensor_fps_control(effective_fps);
+                fps_ret = sensor_fps_control_packed(fps_packed);
                 if (fps_ret == 0) {
                     ourISPdev->tuning_data->fps_num = fps_num;
                     ourISPdev->tuning_data->fps_den = fps_den;
