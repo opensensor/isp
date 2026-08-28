@@ -236,11 +236,10 @@ static const struct dma_buf_ops tx_isp_v4l2_dmabuf_ops = {
 	.release = tx_isp_v4l2_dmabuf_release,
 };
 
-static void tx_isp_v4l2_release_buffers(struct tx_isp_v4l2_device *video,
-					bool notify_legacy)
+static void tx_isp_v4l2_deactivate_buffers(struct tx_isp_v4l2_device *video,
+					   bool notify_legacy)
 {
 	struct tx_isp_frame_request_wire request;
-	u32 index;
 
 	if (notify_legacy && video->buffer_count) {
 		memset(&request, 0, sizeof(request));
@@ -249,11 +248,17 @@ static void tx_isp_v4l2_release_buffers(struct tx_isp_v4l2_device *video,
 		tx_isp_v4l2_legacy_ioctl(TX_ISP_FRAME_IOCTL_LEGACY_REQBUFS,
 					  &request);
 	}
+	video->buffer_count = 0;
+}
+
+static void tx_isp_v4l2_free_buffers(struct tx_isp_v4l2_device *video)
+{
+	u32 index;
+
 	for (index = 0; index < TX_ISP_V4L2_MAX_BUFFERS; index++) {
 		tx_isp_v4l2_buffer_put(video->buffers[index]);
 		video->buffers[index] = NULL;
 	}
-	video->buffer_count = 0;
 }
 
 static void tx_isp_v4l2_try_format(struct v4l2_format *format)
@@ -416,7 +421,7 @@ static int tx_isp_v4l2_request_buffers(struct file *file, void *private,
 		return -EINVAL;
 	if (video->streaming)
 		return -EBUSY;
-	tx_isp_v4l2_release_buffers(video, true);
+	tx_isp_v4l2_deactivate_buffers(video, true);
 	if (!request->count) {
 		request->count = 0;
 		return 0;
@@ -424,10 +429,24 @@ static int tx_isp_v4l2_request_buffers(struct file *file, void *private,
 	count = clamp_t(u32, request->count, TX_ISP_V4L2_MIN_BUFFERS,
 			TX_ISP_V4L2_MAX_BUFFERS);
 	for (index = 0; index < count; index++) {
-		video->buffers[index] = tx_isp_v4l2_buffer_alloc(
-			video->dma_device, video->format.sizeimage);
+		struct tx_isp_v4l2_buffer *buffer = video->buffers[index];
+		u32 size = PAGE_ALIGN(video->format.sizeimage);
+
+		/* Keep the physically contiguous capture pool across userspace
+		 * restarts.  Reallocating two order-10 1080p buffers after boot is
+		 * unreliable on 64 MiB parts once the 42 MiB kernel heap has
+		 * fragmented.  The pool owns one reference; exported DMA-BUFs own
+		 * additional references and must be gone before a slot is reused. */
+		if (buffer && atomic_read(&buffer->references) != 1)
+			return -EBUSY;
+		if (buffer && buffer->size != size) {
+			tx_isp_v4l2_buffer_put(buffer);
+			video->buffers[index] = NULL;
+		}
+		if (!video->buffers[index])
+			video->buffers[index] = tx_isp_v4l2_buffer_alloc(
+				video->dma_device, video->format.sizeimage);
 		if (!video->buffers[index]) {
-			tx_isp_v4l2_release_buffers(video, false);
 			return -ENOMEM;
 		}
 	}
@@ -439,11 +458,11 @@ static int tx_isp_v4l2_request_buffers(struct file *file, void *private,
 	ret = tx_isp_v4l2_legacy_ioctl(TX_ISP_FRAME_IOCTL_LEGACY_REQBUFS,
 					       &legacy_request);
 	if (ret) {
-		tx_isp_v4l2_release_buffers(video, false);
+		tx_isp_v4l2_deactivate_buffers(video, false);
 		return ret;
 	}
 	if (legacy_request.count < count) {
-		tx_isp_v4l2_release_buffers(video, true);
+		tx_isp_v4l2_deactivate_buffers(video, true);
 		return -ENOMEM;
 	}
 	request->count = count;
@@ -667,7 +686,7 @@ static int tx_isp_v4l2_release(struct file *file)
 	mutex_lock(&video->lock);
 	if (video->streaming || video->upstream_streaming)
 		tx_isp_v4l2_stop_streaming(video, type);
-	tx_isp_v4l2_release_buffers(video, true);
+	tx_isp_v4l2_deactivate_buffers(video, true);
 	video->opened = false;
 	mutex_unlock(&video->lock);
 	return 0;
@@ -777,7 +796,8 @@ void tx_isp_v4l2_cleanup(void)
 		tx_isp_v4l2_stop_streaming(video, type);
 	video->streaming = false;
 	video->upstream_streaming = false;
-	tx_isp_v4l2_release_buffers(video, true);
+	tx_isp_v4l2_deactivate_buffers(video, true);
+	tx_isp_v4l2_free_buffers(video);
 	video_unregister_device(video->video_device);
 	video->video_device = NULL;
 	video->registered = false;
