@@ -136,6 +136,47 @@ tx_isp_modulate_pairs_scaled_u16(unsigned short x,
 	return (scale * weighted_y) >> 16;
 }
 
+/*
+ * Remap a pair table onto caller-supplied endpoints while retaining the
+ * table's shape.  This is the APICAL calc_adjust_modulation_u16 ABI used by
+ * T20 for user/IQ-controlled sinter and temper limits.
+ */
+static inline unsigned int
+tx_isp_modulate_pairs_adjusted_u16(unsigned short x,
+				   unsigned short target_min,
+				   unsigned short target_max,
+				   const unsigned short *pairs,
+				   int pair_count)
+{
+	unsigned int first_x;
+	unsigned int last_x;
+	unsigned int first_y;
+	unsigned int last_y;
+	unsigned int value;
+	unsigned int numerator;
+
+	if (!pairs || pair_count <= 0)
+		return 0;
+	first_x = pairs[0];
+	last_x = pairs[(pair_count - 1) * 2];
+	if (x <= first_x)
+		return target_min;
+	if (x >= last_x)
+		return target_max;
+
+	first_y = pairs[1];
+	last_y = pairs[(pair_count - 1) * 2 + 1];
+	if (!first_y || !last_y || first_x == last_x || first_y == last_y)
+		return 0;
+
+	value = tx_isp_modulate_pairs_u16(x, pairs, pair_count);
+	/* Match the OEM's Q8 operation ordering. */
+	numerator = ((unsigned int)(target_max - target_min) << 8) *
+		(value - first_y);
+	return (target_min + ((numerator / (last_y - first_y)) >> 8)) &
+		0xffffU;
+}
+
 static inline unsigned int
 tx_isp_modulate_equidistant_u16(unsigned short x,
 				const unsigned short *table,
