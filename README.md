@@ -43,13 +43,13 @@ is deliberately scoped to this camera, sensor, mode, and lighting condition.
 
 ## Current Status
 
-The project has moved beyond basic probe and stream bring-up. T31/SC301IOT is
-the strongest validated path and now has a working fully open capture stack,
-OEM-like daylight image quality, and persistent runtime flip control.
+The project has moved beyond basic probe and stream bring-up. T20 and T31 now
+have working proprietary- and open-userspace capture paths; T31/SC301IOT has
+the broadest sensor coverage and the strongest OEM image-quality comparison.
 
 | SoC | Current validation |
 |---|---|
-| T20 | Recovered whole-driver baseline clean-builds and links against the vendor Linux 3.10.14 tree; the structural binary audit reports no stub or collapsed findings, but device-load and streaming validation are pending. |
+| T20 | Device-tested on T20X with the stock sensor module: the reconstructed driver streams through both stock `libimp.so` and OpenIMP, and also exposes working direct V4L2 capture to Raptor. AE, AWB, denoise, lens shading, and Iridix consume the active IQ calibration rather than sensor-name policy. |
 | T21 | First recovered whole-driver baseline is integrated and builds against the vendor Linux 3.10.14 tree; stock T21/T23/T31 comparison backs the shared math adapter and two IRQ collapse repairs, but hardware validation is pending. |
 | T23 | Device-tested vendor-kernel path with live capture and shared registry, layout, ABI, and tuning primitives; broader sensor and image-quality validation continues. |
 | T30 | Device-tested on a T30X Wyze Video Doorbell v1 with SC4236: open ISP frames, firmware IRQ/statistics, tuning-derived AE/color, and balanced exposure allocation are live; anti-flicker/shutter allocation remains under active comparison with stock. |
@@ -60,9 +60,14 @@ OEM-like daylight image quality, and persistent runtime flip control.
 ### Working today
 
 - kernel module architecture is in place
-- the T20 recovery baseline clean-builds and links with tracked SDK sources,
-  shared sensor/math adapters, and a structural binary audit with no stub or
+- the T20 recovery clean-builds and streams with tracked SDK sources, shared
+  sensor/math adapters, and a structural binary audit with no stub or
   collapsed findings
+- T20 has passed three non-persistent device gates on the same current driver:
+  stock `libimp.so`, OpenIMP, and direct Raptor V4L2 capture; the open paths
+  deliver clean 640x360 H.264 at 25 fps in the tested daylight scene
+- T20 image control is calibration-driven: the driver contains no camera- or
+  sensor-name branch for AE, AWB, denoise, lens shading, or Iridix policy
 - the T21 recovery baseline builds and links with a stock-backed shared math
   adapter, current binary audit, and restored public IRQ callback paths
 - the T30 recovery builds, links, and has produced live SC4236 output through
@@ -118,6 +123,9 @@ OEM-like daylight image quality, and persistent runtime flip control.
 ### Still incomplete
 
 - the T31/SC301IOT daylight result is not a claim of universal OEM parity
+- the current T20 result covers one T20X camera, its stock sensor module,
+  linear daylight mode, and bounded smoke cycles; night/IR, WDR, additional
+  sensors, and long-duration stability remain to be validated
 - night/IR, WDR, extreme exposure, and additional sensor combinations still
   need comparable OEM-versus-open validation
 - some tuning tables on other sensors and SoCs remain synthetic or only

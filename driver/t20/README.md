@@ -16,8 +16,9 @@ and T30 recoveries.
   relocation-normalized exact matches.
 
 The generated whole-driver source initially failed its aggregate compile.
-The integrated source now clean-builds and links, but no device-load or stream
-claim is made until the non-persistent hardware smoke cycle is complete.
+The integrated source now clean-builds, links, loads non-persistently on a
+T20X device, and streams through stock `libimp.so`, OpenIMP, and direct V4L2
+capture.
 
 ## Source partition
 
@@ -55,10 +56,9 @@ make -C "$KDIR" M="$(pwd)/driver/t20" \
 
 Expected artifact: `driver/t20/tx-isp-t20.ko`.
 
-The August 26, 2026 clean-build checkpoint is an ELF32 little-endian MIPS32 R1
-module with the expected Linux 3.10.14 vermagic. Its unstripped artifact is
-781,068 bytes with SHA-256
-`abd9fdd4447df6dc20999cb83ac7213b3cd870075b35e93f4d4afecbd38d2c79`.
+The August 29, 2026 device-tested checkpoint is an ELF32 little-endian MIPS32
+R1 module with the expected Linux 3.10.14 vermagic. Rebuild locally before
+comparing an artifact hash; the module is intentionally not checked in.
 
 ## Binary audit
 
@@ -78,7 +78,7 @@ dispatcher/helper boundaries; they do not hide missing symbols. The only real
 first-pass collapse, `cmos_fsm_process_interrupt`, was restored from 13 to 640
 instructions against the common Apical state/interrupt contract.
 
-## Validation boundary
+## Device validation
 
 The Ingenic T20 and T30 OEM modules share 618 named functions; 133 of those
 have identical relocation-normalized instruction streams in the current
@@ -86,6 +86,26 @@ reference set. Shared code is accepted only where SDK source, normalized
 object code, or both prove the ABI and behavior. T20-only V4L2 topology,
 register programming, calibration, and firmware policy remain local.
 
-The next gate is a one-boot device cycle: preserve the stock module, load this
-module non-persistently, bind the JXF23 sensor, stream a bounded capture, record
-`dmesg`/`logread` plus frame hashes, then reboot to restore the stock state.
+The same reconstructed driver passed three surgical, RAM-only device gates on
+August 29, 2026:
+
+1. stock `libimp.so` produced a clean processed frame;
+2. OpenIMP produced clean 640x360 H.264 at 25 fps; and
+3. Raptor captured the ISP V4L2 nodes directly and produced clean 640x360
+   H.264 at 25 fps.
+
+The direct-V4L2 and OpenIMP reference frames measured SSIM 0.985870 in the
+tested scene. Every cycle preserved the stock module and sensor module, staged
+the open components under `/tmp`, captured bounded logs and frames, and
+rebooted to restore the stock stack.
+
+This is evidence for the T20X linear-daylight path, not a universal sensor or
+mode claim. Night/IR, WDR, additional sensors, and long-duration streaming
+remain open validation work. Runtime image policy is sensor-neutral: active IQ
+calibration tables own AE targets, AWB/denoise response, lens shading, and
+Iridix behavior; sensor-specific tuning does not belong in this driver.
+
+Several early-initialization trace messages remain intentionally present. A
+build differing from the three-gate artifact only by removal of those messages
+rebooted before the userspace-ready marker, so their timing effect must be
+isolated with IRQ/state instrumentation before they can be removed safely.
