@@ -1,0 +1,345 @@
+# Binary Assembly Audit
+
+- schema: `regtrace-binary-audit-v1`
+- OEM: `/home/matteius/re-framework/tx-isp-t10.ko`
+- recovered: `driver/t10/tx-isp-t10.ko`
+- objdump counts exclude relocation records
+- thresholds: min_oem_insns=24 stub_insns=8 collapse=0.50 similar=0.80..1.25 expansion=2.00
+
+## Summary
+
+| Metric | OEM | Recovered |
+|---|---:|---:|
+| Function symbols | 742 | 894 |
+| Functions with disassembly | 742 | 894 |
+| Executable section bytes | 203536 | 486408 |
+| Initialized writable bytes | 43624 | 91096 |
+| Uninitialized writable bytes | 34116 | 39024 |
+
+- direct matches: 708
+- replacement matches: 34 (missing=0)
+- unmatched: OEM-only=0 recovered-only=132
+- matched instructions: OEM=50802 recovered=105986 ratio=2.086
+- classes: stub=0 collapsed=0 shorter=0 same_count=2 similar=29 larger=290 expanded=421
+
+## Allocated Section Delta
+
+| Section | OEM bytes | Recovered bytes | Delta |
+|---|---:|---:|---:|
+| `.MIPS.abiflags` | 24 | 24 | +0 |
+| `.bss` | 34016 | 39024 | +5008 |
+| `.data` | 43312 | 90784 | +47472 |
+| `.exit.text` | 236 | 324 | +88 |
+| `.gnu.linkonce.this_module` | 288 | 288 | +0 |
+| `.init.text` | 76 | 244 | +168 |
+| `.modinfo` | 176 | 2972 | +2796 |
+| `.note.gnu.build-id` | 36 | 36 | +0 |
+| `.reginfo` | 24 | 24 | +0 |
+| `.rodata` | 10432 | 28368 | +17936 |
+| `.rodata.cst16` | 16 | 0 | -16 |
+| `.rodata.cst4` | 12 | 0 | -12 |
+| `.rodata.cst8` | 8 | 0 | -8 |
+| `.rodata.str1.4` | 12064 | 0 | -12064 |
+| `.sbss` | 100 | 0 | -100 |
+| `.text` | 201760 | 485840 | +284080 |
+| `.text.unlikely` | 1464 | 0 | -1464 |
+| `__ksymtab` | 48 | 48 | +0 |
+| `__ksymtab_strings` | 130 | 130 | +0 |
+| `__param` | 16 | 752 | +736 |
+| `__verbose` | 24 | 24 | +0 |
+
+## Function Outliers
+
+Showing 250 of 843 outliers. JSON and CSV contain every comparison row.
+
+| Class | Match | OEM symbol | Recovered symbol(s) | OEM insns | Recovered insns | Ratio | Delta | Calls | Branches |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|
+| expanded | exact_name | `apical_isp_day_or_night_s_ctrl_internal` | `apical_isp_day_or_night_s_ctrl_internal` | 1759 | 4723 | 2.685 | +2964 | 228->231 | 18->18 |
+| expanded | exact_name | `awb_calc_avg_weighted_gr_gb_mesh` | `awb_calc_avg_weighted_gr_gb_mesh` | 1353 | 3207 | 2.370 | +1854 | 104->99 | 140->138 |
+| expanded | exact_name | `apical_command` | `apical_command` | 1300 | 3119 | 2.399 | +1819 | 1->131 | 152->409 |
+| expanded | replacement | `isp_core_ops_ioctl` | `isp_core_frame_channel_crop_capture`<br>`isp_core_frame_channel_enum_fmt`<br>`isp_core_frame_channel_queue_buffer`<br>`isp_core_frame_channel_scaler_capture`<br>`isp_core_frame_channel_set_crop`<br>`isp_core_frame_channel_set_fmt`<br>`isp_core_frame_channel_set_scaler`<br>`isp_core_frame_channel_streamoff`<br>`isp_core_frame_channel_streamon`<br>`isp_core_frame_channel_try_fmt`<br>`isp_core_ops_ioctl`<br>`isp_core_ops_private_ioctl`<br>`isp_core_set_clk` | 930 | 2458 | 2.643 | +1528 | 64->85 | 128->181 |
+| expanded | exact_name | `isp_info_show` | `isp_info_show` | 791 | 1762 | 2.228 | +971 | 142->142 | 10->24 |
+| expanded | exact_name | `apical_custom_initialization` | `apical_custom_initialization` | 592 | 1533 | 2.590 | +941 | 125->128 | 9->9 |
+| expanded | exact_name | `isp_core_interrupt_service_routine` | `isp_core_interrupt_service_routine` | 512 | 1225 | 2.393 | +713 | 47->48 | 54->108 |
+| expanded | exact_name | `matrix_yuv_coefft_write_to_hardware` | `matrix_yuv_coefft_write_to_hardware` | 466 | 1215 | 2.607 | +749 | 119->132 | 16->12 |
+| expanded | replacement | `video_in_core_ops_ioctl` | `subdev_core_ops_enum_input`<br>`subdev_core_ops_get_input`<br>`subdev_core_ops_register_sensor`<br>`subdev_core_ops_release_all_sensor`<br>`subdev_core_ops_release_sensor`<br>`subdev_core_ops_set_input`<br>`subdev_core_ops_streamoff`<br>`subdev_core_ops_streamon`<br>`video_in_core_ops_ioctl` | 423 | 1868 | 4.416 | +1445 | 22->68 | 73->178 |
+| expanded | exact_name | `sharpening_update` | `sharpening_update` | 404 | 846 | 2.094 | +442 | 35->36 | 35->54 |
+| expanded | exact_name | `cmos_fsm_process_interrupt` | `cmos_fsm_process_interrupt` | 366 | 769 | 2.101 | +403 | 41->43 | 20->49 |
+| expanded | exact_name | `sensor_load_binary_sequence` | `sensor_load_binary_sequence` | 304 | 644 | 2.118 | +340 | 8->10 | 34->34 |
+| expanded | exact_name | `ae_calculate_target` | `ae_calculate_target` | 297 | 634 | 2.135 | +337 | 18->11 | 19->12 |
+| expanded | exact_name | `apical_isp_init` | `apical_isp_init` | 281 | 568 | 2.021 | +287 | 42->63 | 1->1 |
+| expanded | exact_name | `scene_mode` | `scene_mode` | 257 | 564 | 2.195 | +307 | 21->14 | 20->64 |
+| expanded | exact_name | `apical_cmd_process` | `apical_cmd_process` | 255 | 653 | 2.561 | +398 | 31->58 | 17->41 |
+| expanded | replacement | `isp_core_frame_channel_streamoff.isra.0` | `isp_core_frame_channel_streamoff` | 232 | 540 | 2.328 | +308 | 16->20 | 26->36 |
+| expanded | exact_name | `subdev_core_ops_set_input` | `subdev_core_ops_set_input` | 209 | 549 | 2.627 | +340 | 12->22 | 41->58 |
+| expanded | exact_name | `cmos_inttime_update` | `cmos_inttime_update` | 204 | 471 | 2.309 | +267 | 11->13 | 20->48 |
+| expanded | exact_name | `tx_isp_frame_channel_device_register` | `tx_isp_frame_channel_device_register` | 193 | 416 | 2.155 | +223 | 14->14 | 15->20 |
+| expanded | exact_name | `color_matrix_write` | `color_matrix_write` | 188 | 456 | 2.426 | +268 | 45->46 | 3->2 |
+| expanded | exact_name | `apical_isp_process_events` | `apical_isp_process_events` | 177 | 486 | 2.746 | +309 | 17->32 | 6->44 |
+| expanded | exact_name | `register_tx_isp_csi_device` | `register_tx_isp_csi_device` | 174 | 358 | 2.057 | +184 | 17->20 | 13->20 |
+| expanded | exact_name | `frame_channel_vidioc_default` | `frame_channel_vidioc_default` | 165 | 349 | 2.115 | +184 | 8->8 | 30->39 |
+| expanded | replacement | `awb_roi.part.2` | `awb_roi_part_2` | 164 | 342 | 2.085 | +178 | 5->8 | 14->17 |
+| expanded | exact_name | `awb_init` | `awb_init` | 162 | 386 | 2.383 | +224 | 22->22 | 7->14 |
+| expanded | exact_name | `dump_vic_reg` | `dump_vic_reg` | 160 | 432 | 2.700 | +272 | 24->25 | 1->0 |
+| expanded | exact_name | `tx_isp_vic_start` | `tx_isp_vic_start` | 156 | 420 | 2.692 | +264 | 1->2 | 22->45 |
+| expanded | exact_name | `system_program_interrupt_event` | `system_program_interrupt_event` | 155 | 492 | 3.174 | +337 | 16->32 | 18->46 |
+| expanded | replacement | `apical_isp_af_hist_s_attr.isra.0` | `apical_isp_af_hist_s_attr` | 155 | 332 | 2.142 | +177 | 28->28 | 1->1 |
+| expanded | exact_name | `apical_sbus_write_data` | `apical_sbus_write_data` | 153 | 423 | 2.765 | +270 | 6->8 | 22->30 |
+| expanded | exact_name | `color_matrix_change_CCMs` | `color_matrix_change_CCMs` | 146 | 293 | 2.007 | +147 | 7->8 | 10->16 |
+| expanded | exact_name | `ae_calculate_exposure` | `ae_calculate_exposure` | 145 | 341 | 2.352 | +196 | 8->9 | 10->17 |
+| expanded | replacement | `apical_program_interrupt_event.part.0` | `apical_program_interrupt_event_part_0` | 145 | 328 | 2.262 | +183 | 16->2 | 18->50 |
+| expanded | exact_name | `apical_api_calibration` | `apical_api_calibration` | 143 | 327 | 2.287 | +184 | 6->14 | 28->42 |
+| expanded | exact_name | `image_tuning_v4l2_open` | `image_tuning_v4l2_open` | 143 | 290 | 2.028 | +147 | 16->16 | 10->11 |
+| expanded | exact_name | `general_set_wdr_mode` | `general_set_wdr_mode` | 133 | 285 | 2.143 | +152 | 15->23 | 9->8 |
+| expanded | exact_name | `apical_isp_process_interrupt` | `apical_isp_process_interrupt` | 129 | 440 | 3.411 | +311 | 7->11 | 9->24 |
+| expanded | exact_name | `matrix_compute_hue_saturation` | `matrix_compute_hue_saturation` | 128 | 289 | 2.258 | +161 | 3->3 | 17->18 |
+| expanded | exact_name | `image_resize_enable` | `image_resize_enable` | 127 | 386 | 3.039 | +259 | 1->10 | 37->60 |
+| expanded | exact_name | `get_gmv_gauss_method_fast_v3` | `get_gmv_gauss_method_fast_v3` | 126 | 261 | 2.071 | +135 | 2->3 | 13->19 |
+| expanded | replacement | `sinfo_show` | `tx_isp_sinfo_show` | 124 | 859 | 6.927 | +735 | 3->48 | 28->121 |
+| expanded | exact_name | `antifog_set_preset` | `antifog_set_preset` | 122 | 245 | 2.008 | +123 | 12->12 | 14->12 |
+| expanded | exact_name | `spi_io_write_sample` | `spi_io_write_sample` | 117 | 292 | 2.496 | +175 | 4->5 | 18->29 |
+| expanded | exact_name | `cmos_move_exposure_history` | `cmos_move_exposure_history` | 112 | 249 | 2.223 | +137 | 6->6 | 10->14 |
+| expanded | exact_name | `tx_isp_sinfo_sensor_bind` | `tx_isp_sinfo_sensor_bind` | 110 | 265 | 2.409 | +155 | 3->8 | 14->25 |
+| expanded | exact_name | `apply_dvi_sync_param` | `apply_dvi_sync_param` | 110 | 255 | 2.318 | +145 | 19->20 | 1->0 |
+| expanded | exact_name | `frame_channel_v4l2_open` | `frame_channel_v4l2_open` | 110 | 241 | 2.191 | +131 | 10->11 | 11->13 |
+| expanded | exact_name | `apply_dvi_fpga_sync_param` | `apply_dvi_fpga_sync_param` | 109 | 240 | 2.202 | +131 | 19->20 | 1->0 |
+| expanded | exact_name | `apical_sbus_read_u32` | `apical_sbus_read_u32` | 107 | 232 | 2.168 | +125 | 3->4 | 17->22 |
+| expanded | exact_name | `sensor_write_data` | `sensor_write_data` | 106 | 212 | 2.000 | +106 | 4->4 | 9->12 |
+| expanded | exact_name | `flash_initialize` | `flash_initialize` | 101 | 321 | 3.178 | +220 | 31->32 | 1->0 |
+| expanded | exact_name | `dump_csi_reg` | `dump_csi_reg` | 100 | 266 | 2.660 | +166 | 14->15 | 1->0 |
+| expanded | exact_name | `_update_fr` | `_update_fr` | 99 | 226 | 2.283 | +127 | 10->10 | 5->9 |
+| expanded | exact_name | `dis_update_bg_map` | `dis_update_bg_map` | 99 | 226 | 2.283 | +127 | 1->1 | 8->16 |
+| expanded | exact_name | `apical_sbus_write_u16` | `apical_sbus_write_u16` | 98 | 202 | 2.061 | +104 | 1->4 | 14->17 |
+| expanded | exact_name | `iir_filter_v4` | `iir_filter_v4` | 95 | 209 | 2.200 | +114 | 4->4 | 0->4 |
+| expanded | exact_name | `get_gmv_gauss_method_fast_v2` | `get_gmv_gauss_method_fast_v2` | 91 | 191 | 2.099 | +100 | 0->0 | 11->13 |
+| expanded | exact_name | `isp_system_state` | `isp_system_state` | 89 | 254 | 2.854 | +165 | 6->12 | 16->23 |
+| expanded | exact_name | `frame_channel_video_irq_notify` | `frame_channel_video_irq_notify` | 88 | 192 | 2.182 | +104 | 6->7 | 8->10 |
+| expanded | exact_name | `frame_channel_vb2_buffer_prepare` | `frame_channel_vb2_buffer_prepare` | 87 | 260 | 2.989 | +173 | 5->7 | 11->24 |
+| expanded | exact_name | `awb_process_light_source` | `awb_process_light_source` | 87 | 241 | 2.770 | +154 | 1->1 | 12->19 |
+| expanded | exact_name | `calc_scaled_modulation_u16` | `calc_scaled_modulation_u16` | 87 | 209 | 2.402 | +122 | 0->0 | 13->17 |
+| expanded | exact_name | `ae_exposure` | `ae_exposure` | 86 | 295 | 3.430 | +209 | 4->4 | 11->19 |
+| expanded | exact_name | `register_value` | `register_value` | 86 | 195 | 2.267 | +109 | 2->6 | 22->24 |
+| expanded | exact_name | `ae_calculate_exposure_ratio` | `ae_calculate_exposure_ratio` | 83 | 199 | 2.398 | +116 | 2->2 | 7->9 |
+| expanded | exact_name | `AWB_fsm_switch_state` | `AWB_fsm_switch_state` | 82 | 178 | 2.171 | +96 | 2->12 | 21->31 |
+| expanded | exact_name | `frame_channel_vb2_alloc` | `frame_channel_vb2_alloc` | 81 | 165 | 2.037 | +84 | 6->7 | 6->7 |
+| expanded | exact_name | `frame_channel_vidioc_s_fmt_vid_cap` | `frame_channel_vidioc_s_fmt_vid_cap` | 80 | 248 | 3.100 | +168 | 6->7 | 8->25 |
+| expanded | exact_name | `tx_isp_media_pipeline_init` | `tx_isp_media_pipeline_init` | 79 | 200 | 2.532 | +121 | 3->7 | 14->24 |
+| expanded | exact_name | `tx_isp_media_pipeline_set_clk` | `tx_isp_media_pipeline_set_clk` | 77 | 182 | 2.364 | +105 | 2->5 | 12->22 |
+| expanded | exact_name | `calc_adjust_modulation_u16` | `calc_adjust_modulation_u16` | 75 | 241 | 3.213 | +166 | 0->0 | 12->25 |
+| expanded | exact_name | `general_frame_start` | `general_frame_start` | 75 | 189 | 2.520 | +114 | 0->2 | 11->18 |
+| expanded | exact_name | `isp_sen_reg_read` | `isp_sen_reg_read` | 75 | 155 | 2.067 | +80 | 3->3 | 10->16 |
+| expanded | exact_name | `calc_inv_equidistant_modulation_u16` | `calc_inv_equidistant_modulation_u16` | 73 | 239 | 3.274 | +166 | 0->0 | 10->19 |
+| expanded | exact_name | `frame_channel_vb2_stop_streaming` | `frame_channel_vb2_stop_streaming` | 73 | 162 | 2.219 | +89 | 5->6 | 8->13 |
+| expanded | exact_name | `matrix_yuv_initialize` | `matrix_yuv_initialize` | 72 | 149 | 2.069 | +77 | 8->8 | 1->2 |
+| expanded | exact_name | `frame_channel_vb2_start_streaming` | `frame_channel_vb2_start_streaming` | 71 | 153 | 2.155 | +82 | 5->6 | 7->11 |
+| expanded | exact_name | `apical_sbus_read_data_u32` | `apical_sbus_read_data_u32` | 70 | 190 | 2.714 | +120 | 3->3 | 7->11 |
+| expanded | exact_name | `tx_isp_sinfo_driver_add` | `tx_isp_sinfo_driver_add` | 69 | 259 | 3.754 | +190 | 4->8 | 6->29 |
+| expanded | exact_name | `image_resize_height` | `image_resize_height` | 69 | 220 | 3.188 | +151 | 0->0 | 17->38 |
+| expanded | exact_name | `cmos_fsm_process_event` | `cmos_fsm_process_event` | 69 | 213 | 3.087 | +144 | 3->10 | 12->34 |
+| expanded | exact_name | `image_resize_width` | `image_resize_width` | 69 | 202 | 2.928 | +133 | 0->0 | 17->35 |
+| expanded | exact_name | `ae_mode` | `ae_mode` | 69 | 138 | 2.000 | +69 | 2->2 | 17->20 |
+| expanded | exact_name | `isp_io_write_sample` | `isp_io_write_sample` | 67 | 254 | 3.791 | +187 | 2->13 | 12->14 |
+| expanded | exact_name | `i2c_io_write_sample` | `i2c_io_write_sample` | 67 | 198 | 2.955 | +131 | 3->3 | 9->16 |
+| expanded | exact_name | `apical_frame_buffer_configure_all` | `apical_frame_buffer_configure_all` | 67 | 173 | 2.582 | +106 | 9->10 | 1->0 |
+| expanded | exact_name | `crop_fsm_process_event` | `crop_fsm_process_event` | 65 | 132 | 2.031 | +67 | 3->6 | 16->19 |
+| expanded | exact_name | `frame_channel_v4l2_close` | `frame_channel_v4l2_close` | 64 | 130 | 2.031 | +66 | 7->8 | 4->6 |
+| expanded | exact_name | `dis_analyze_stats` | `dis_analyze_stats` | 63 | 132 | 2.095 | +69 | 3->3 | 8->11 |
+| expanded | exact_name | `tx_isp_media_pipeline_set_power` | `tx_isp_media_pipeline_set_power` | 62 | 162 | 2.613 | +100 | 2->5 | 11->20 |
+| expanded | exact_name | `AWB_fsm_clear` | `AWB_fsm_clear` | 61 | 245 | 4.016 | +184 | 4->4 | 0->0 |
+| expanded | exact_name | `ae_read_full_histogram_data` | `ae_read_full_histogram_data` | 61 | 160 | 2.623 | +99 | 2->2 | 4->8 |
+| expanded | exact_name | `ds1_output_mode` | `ds1_output_mode` | 61 | 132 | 2.164 | +71 | 1->1 | 20->24 |
+| expanded | exact_name | `fr_output_mode` | `fr_output_mode` | 61 | 128 | 2.098 | +67 | 1->1 | 20->22 |
+| expanded | exact_name | `ds2_output_mode` | `ds2_output_mode` | 61 | 126 | 2.066 | +65 | 1->1 | 20->22 |
+| expanded | exact_name | `sensor_read_black_pedestal` | `sensor_read_black_pedestal` | 60 | 129 | 2.150 | +69 | 5->12 | 9->11 |
+| expanded | exact_name | `calc_inv_equidistant_modulation_u32` | `calc_inv_equidistant_modulation_u32` | 59 | 176 | 2.983 | +117 | 0->0 | 8->11 |
+| expanded | exact_name | `cmos_long_exposure_update` | `cmos_long_exposure_update` | 59 | 128 | 2.169 | +69 | 2->3 | 4->6 |
+| expanded | exact_name | `frame_channel_vb2_buffer_queue` | `frame_channel_vb2_buffer_queue` | 58 | 158 | 2.724 | +100 | 4->5 | 4->8 |
+| expanded | exact_name | `dis_initialize` | `dis_initialize` | 58 | 126 | 2.172 | +68 | 5->9 | 3->2 |
+| expanded | exact_name | `image_tuning_s_ctrl` | `image_tuning_s_ctrl` | 57 | 280 | 4.912 | +223 | 1->4 | 13->38 |
+| expanded | exact_name | `math_exp2` | `math_exp2` | 57 | 170 | 2.982 | +113 | 1->0 | 2->7 |
+| expanded | exact_name | `AWB_fsm_process_event` | `AWB_fsm_process_event` | 57 | 131 | 2.298 | +74 | 2->7 | 15->18 |
+| expanded | exact_name | `image_tuning_vidioc_default` | `image_tuning_vidioc_default` | 56 | 148 | 2.643 | +92 | 2->4 | 12->19 |
+| expanded | exact_name | `compute_weight` | `compute_weight` | 56 | 124 | 2.214 | +68 | 0->0 | 7->13 |
+| expanded | exact_name | `calc_modulation_u16` | `calc_modulation_u16` | 53 | 142 | 2.679 | +89 | 0->0 | 7->13 |
+| expanded | exact_name | `calc_modulation_u32` | `calc_modulation_u32` | 53 | 126 | 2.377 | +73 | 0->0 | 7->11 |
+| expanded | exact_name | `isp_irq_handle` | `isp_irq_handle` | 52 | 168 | 3.231 | +116 | 1->2 | 5->11 |
+| expanded | exact_name | `isp_irq_thread_handle` | `isp_irq_thread_handle` | 51 | 186 | 3.647 | +135 | 1->3 | 7->21 |
+| expanded | exact_name | `tx_isp_enable_irq` | `tx_isp_enable_irq` | 51 | 125 | 2.451 | +74 | 3->5 | 3->4 |
+| expanded | exact_name | `image_crop_xoffset` | `image_crop_xoffset` | 51 | 124 | 2.431 | +73 | 0->0 | 15->16 |
+| expanded | exact_name | `image_crop_yoffset` | `image_crop_yoffset` | 51 | 112 | 2.196 | +61 | 0->0 | 15->16 |
+| expanded | exact_name | `cmos_set_exposure_target` | `cmos_set_exposure_target` | 50 | 112 | 2.240 | +62 | 2->2 | 5->7 |
+| expanded | exact_name | `selftest_isp_interface` | `selftest_isp_interface` | 50 | 109 | 2.180 | +59 | 6->6 | 1->3 |
+| expanded | exact_name | `sensor_fsm_process_state` | `sensor_fsm_process_state` | 49 | 121 | 2.469 | +72 | 1->1 | 10->26 |
+| expanded | exact_name | `apical_sbus_read_u8` | `apical_sbus_read_u8` | 49 | 114 | 2.327 | +65 | 1->1 | 9->10 |
+| expanded | exact_name | `cmos_alloc_integration_time` | `cmos_alloc_integration_time` | 48 | 114 | 2.375 | +66 | 1->2 | 4->8 |
+| expanded | exact_name | `cmos_fsm_process_state` | `cmos_fsm_process_state` | 48 | 98 | 2.042 | +50 | 2->2 | 7->21 |
+| expanded | exact_name | `math_log2` | `math_log2` | 48 | 98 | 2.042 | +50 | 1->1 | 7->8 |
+| expanded | exact_name | `log2_int_to_fixed` | `log2_int_to_fixed` | 48 | 96 | 2.000 | +48 | 1->1 | 7->8 |
+| expanded | exact_name | `isp_core_config_top_ctl_register` | `isp_core_config_top_ctl_register` | 47 | 842 | 17.915 | +795 | 3->4 | 5->119 |
+| expanded | replacement | `isp_csi_ops_ioctl` | `isp_csi_ops_ioctl`<br>`isp_csi_ops_private_ioctl` | 47 | 145 | 3.085 | +98 | 1->6 | 10->22 |
+| expanded | exact_name | `AWB_fsm_process_state` | `AWB_fsm_process_state` | 47 | 116 | 2.468 | +69 | 1->1 | 10->26 |
+| expanded | exact_name | `tx_isp_sinfo_driver_del` | `tx_isp_sinfo_driver_del` | 46 | 125 | 2.717 | +79 | 2->8 | 5->9 |
+| expanded | exact_name | `noise_reduction_fsm_process_event` | `noise_reduction_fsm_process_event` | 46 | 102 | 2.217 | +56 | 3->3 | 10->6 |
+| expanded | exact_name | `apical_sbus_write_u8` | `apical_sbus_write_u8` | 45 | 134 | 2.978 | +89 | 0->2 | 10->13 |
+| expanded | exact_name | `init_stab` | `init_stab` | 45 | 120 | 2.667 | +75 | 0->0 | 0->0 |
+| expanded | exact_name | `color_matrix_fsm_process_event` | `color_matrix_fsm_process_event` | 45 | 95 | 2.111 | +50 | 2->5 | 10->12 |
+| expanded | exact_name | `flash_fsm_process_event` | `flash_fsm_process_event` | 44 | 89 | 2.023 | +45 | 2->4 | 10->12 |
+| expanded | exact_name | `matrix_yuv_fsm_process_event` | `matrix_yuv_fsm_process_event` | 44 | 89 | 2.023 | +45 | 2->4 | 10->12 |
+| expanded | exact_name | `iridix_fsm_process_event` | `iridix_fsm_process_event` | 43 | 87 | 2.023 | +44 | 2->4 | 9->11 |
+| expanded | exact_name | `calc_equidistant_modulation_u32` | `calc_equidistant_modulation_u32` | 42 | 96 | 2.286 | +54 | 0->0 | 4->8 |
+| expanded | replacement | `isp_enable_dma_transfer.isra.0` | `isp_enable_dma_transfer` | 41 | 89 | 2.171 | +48 | 2->4 | 7->6 |
+| expanded | replacement | `frame_buffer_manager_cleanup` | `frame_buffer_manager_cleanup`<br>`frame_buffer_mmap_deinit` | 39 | 100 | 2.564 | +61 | 2->3 | 7->9 |
+| expanded | exact_name | `matrix_matrix_multiply` | `matrix_matrix_multiply` | 39 | 85 | 2.179 | +46 | 0->0 | 5->6 |
+| expanded | exact_name | `apical_isp_raise_event` | `apical_isp_raise_event` | 38 | 141 | 3.711 | +103 | 3->7 | 4->11 |
+| expanded | exact_name | `cmos_fsm_clear` | `cmos_fsm_clear` | 38 | 121 | 3.184 | +83 | 1->1 | 0->0 |
+| expanded | exact_name | `get_gmv_gauss_init` | `get_gmv_gauss_init` | 38 | 104 | 2.737 | +66 | 0->0 | 11->12 |
+| expanded | exact_name | `image_tuning_g_volatile_ctrl` | `image_tuning_g_volatile_ctrl` | 38 | 84 | 2.211 | +46 | 1->1 | 8->11 |
+| expanded | exact_name | `tx_isp_media_pipeline_reset` | `tx_isp_media_pipeline_reset` | 38 | 80 | 2.105 | +42 | 1->1 | 8->12 |
+| expanded | exact_name | `histogram_lum` | `histogram_lum` | 37 | 87 | 2.351 | +50 | 2->2 | 3->4 |
+| expanded | replacement | `mipi_csih_dphy_write.part.0.constprop.0` | `mipi_csih_dphy_write` | 36 | 86 | 2.389 | +50 | 3->9 | 1->3 |
+| expanded | exact_name | `cmos_store_frame_exposure_set` | `cmos_store_frame_exposure_set` | 35 | 84 | 2.400 | +49 | 1->1 | 0->0 |
+| expanded | exact_name | `isp_vic_interrupt_service_routine` | `isp_vic_interrupt_service_routine` | 35 | 78 | 2.229 | +43 | 1->1 | 2->2 |
+| expanded | exact_name | `get_quantised_integration_time` | `get_quantised_integration_time` | 35 | 72 | 2.057 | +37 | 1->1 | 3->7 |
+| expanded | exact_name | `tx_isp_sinfo_sensor_unbind` | `tx_isp_sinfo_sensor_unbind` | 34 | 127 | 3.735 | +93 | 1->6 | 5->9 |
+| expanded | exact_name | `wdr_mode` | `wdr_mode` | 34 | 95 | 2.794 | +61 | 0->0 | 10->12 |
+| expanded | exact_name | `isp_fops_read` | `isp_fops_read` | 33 | 72 | 2.182 | +39 | 3->4 | 1->6 |
+| expanded | exact_name | `isp_fops_write` | `isp_fops_write` | 33 | 72 | 2.182 | +39 | 3->4 | 1->6 |
+| expanded | exact_name | `tx_isp_sinfo_exit` | `tx_isp_sinfo_exit` | 33 | 71 | 2.152 | +38 | 4->7 | 1->2 |
+| expanded | exact_name | `tx_isp_sinfo_init` | `tx_isp_sinfo_init` | 32 | 408 | 12.750 | +376 | 3->8 | 2->48 |
+| expanded | exact_name | `_GET_HDR_TABLE_INDEX` | `_GET_HDR_TABLE_INDEX` | 32 | 145 | 4.531 | +113 | 0->0 | 9->33 |
+| expanded | exact_name | `tx_isp_media_pipeline_prepare` | `tx_isp_media_pipeline_prepare` | 32 | 67 | 2.094 | +35 | 3->5 | 4->7 |
+| expanded | exact_name | `ae_exposure_correction` | `ae_exposure_correction` | 31 | 79 | 2.548 | +48 | 2->2 | 0->0 |
+| expanded | exact_name | `frame_buffer_manager_create` | `frame_buffer_manager_create` | 30 | 76 | 2.533 | +46 | 2->4 | 2->4 |
+| expanded | exact_name | `get_common_estimations` | `get_common_estimations` | 30 | 76 | 2.533 | +46 | 0->0 | 5->9 |
+| expanded | exact_name | `general_initialize` | `general_initialize` | 30 | 61 | 2.033 | +31 | 2->5 | 1->0 |
+| expanded | exact_name | `dis_mode` | `dis_mode` | 29 | 75 | 2.586 | +46 | 0->0 | 7->9 |
+| expanded | exact_name | `init_isp_set` | `init_isp_set` | 29 | 59 | 2.034 | +30 | 2->3 | 4->4 |
+| expanded | exact_name | `APICAL_WRITE_32` | `APICAL_WRITE_32` | 28 | 73 | 2.607 | +45 | 0->2 | 4->7 |
+| expanded | exact_name | `awb_blue_gain` | `awb_blue_gain` | 28 | 66 | 2.357 | +38 | 0->0 | 7->8 |
+| expanded | exact_name | `awb_red_gain` | `awb_red_gain` | 28 | 63 | 2.250 | +35 | 0->0 | 7->9 |
+| expanded | exact_name | `_process_fps_cnt` | `_process_fps_cnt` | 27 | 77 | 2.852 | +50 | 1->1 | 2->4 |
+| expanded | exact_name | `matrix_vector_multiply` | `matrix_vector_multiply` | 27 | 66 | 2.444 | +39 | 0->0 | 4->4 |
+| expanded | exact_name | `isp_fw_process` | `isp_fw_process` | 27 | 60 | 2.222 | +33 | 3->6 | 2->7 |
+| expanded | exact_name | `tx_isp_video_in_subdev_open` | `tx_isp_video_in_subdev_open` | 26 | 90 | 3.462 | +64 | 1->4 | 2->5 |
+| expanded | exact_name | `brightness_strength` | `brightness_strength` | 26 | 56 | 2.154 | +30 | 1->1 | 4->6 |
+| expanded | exact_name | `saturation_strength` | `saturation_strength` | 26 | 56 | 2.154 | +30 | 1->1 | 4->6 |
+| expanded | exact_name | `APICAL_WRITE_16` | `APICAL_WRITE_16` | 26 | 55 | 2.115 | +29 | 0->1 | 3->3 |
+| expanded | exact_name | `contrast_strength` | `contrast_strength` | 26 | 53 | 2.038 | +27 | 1->1 | 4->5 |
+| expanded | exact_name | `ae_split_preset` | `ae_split_preset` | 26 | 52 | 2.000 | +26 | 1->1 | 5->6 |
+| expanded | exact_name | `sharpening_fsm_clear` | `sharpening_fsm_clear` | 25 | 105 | 4.200 | +80 | 0->0 | 0->0 |
+| expanded | exact_name | `af_roi` | `af_roi` | 25 | 97 | 3.880 | +72 | 0->0 | 3->7 |
+| expanded | exact_name | `apical_fw_process` | `apical_fw_process` | 25 | 82 | 3.280 | +57 | 1->3 | 3->5 |
+| expanded | exact_name | `dis_clip_gmv_vector` | `dis_clip_gmv_vector` | 25 | 67 | 2.680 | +42 | 0->0 | 5->5 |
+| expanded | exact_name | `load_isp_sequence` | `load_isp_sequence` | 25 | 64 | 2.560 | +39 | 3->5 | 1->2 |
+| expanded | exact_name | `register_size` | `register_size` | 25 | 58 | 2.320 | +33 | 0->0 | 5->7 |
+| expanded | exact_name | `sharpening_strength` | `sharpening_strength` | 24 | 74 | 3.083 | +50 | 0->0 | 4->8 |
+| expanded | exact_name | `mem_read_u32` | `mem_read_u32` | 24 | 67 | 2.792 | +43 | 0->0 | 5->6 |
+| expanded | exact_name | `au_read_histogram` | `au_read_histogram` | 24 | 61 | 2.542 | +37 | 0->0 | 1->2 |
+| expanded | exact_name | `system_timer_timestamp` | `system_timer_timestamp` | 24 | 61 | 2.542 | +37 | 2->2 | 2->2 |
+| expanded | exact_name | `div_fixed` | `div_fixed` | 24 | 54 | 2.250 | +30 | 2->1 | 1->2 |
+| expanded | exact_name | `flash_mode` | `flash_mode` | 24 | 52 | 2.167 | +28 | 1->1 | 3->4 |
+| expanded | exact_name | `log16` | `log16` | 23 | 54 | 2.348 | +31 | 0->0 | 2->2 |
+| expanded | exact_name | `luts_fetch` | `luts_fetch` | 23 | 52 | 2.261 | +29 | 0->0 | 5->4 |
+| expanded | exact_name | `cmos_get_fps` | `cmos_get_fps` | 22 | 54 | 2.455 | +32 | 2->2 | 1->2 |
+| expanded | exact_name | `color_matrix_fsm_switch_state` | `color_matrix_fsm_switch_state` | 22 | 54 | 2.455 | +32 | 0->3 | 7->8 |
+| expanded | exact_name | `cmos_alloc_sensor_digital_gain` | `cmos_alloc_sensor_digital_gain` | 22 | 50 | 2.273 | +28 | 1->1 | 2->5 |
+| expanded | exact_name | `frame_channel_vb2_get_userptr` | `frame_channel_vb2_get_userptr` | 22 | 45 | 2.045 | +23 | 1->1 | 2->2 |
+| expanded | exact_name | `isp_core_ops_s_ctrl` | `isp_core_ops_s_ctrl` | 22 | 45 | 2.045 | +23 | 1->2 | 2->2 |
+| expanded | exact_name | `AE_fsm_process_interrupt` | `AE_fsm_process_interrupt` | 21 | 712 | 33.905 | +691 | 1->26 | 2->52 |
+| expanded | exact_name | `AWB_fsm_process_interrupt` | `AWB_fsm_process_interrupt` | 21 | 49 | 2.333 | +28 | 1->4 | 2->4 |
+| expanded | exact_name | `mem_write_u32` | `mem_write_u32` | 20 | 89 | 4.450 | +69 | 0->0 | 3->6 |
+| expanded | exact_name | `APICAL_WRITE_8` | `APICAL_WRITE_8` | 20 | 43 | 2.150 | +23 | 0->1 | 3->3 |
+| expanded | exact_name | `tx_isp_video_in_g_register` | `tx_isp_video_in_g_register` | 20 | 42 | 2.100 | +22 | 1->1 | 3->4 |
+| expanded | exact_name | `tx_isp_video_in_s_register` | `tx_isp_video_in_s_register` | 20 | 42 | 2.100 | +22 | 1->1 | 3->4 |
+| expanded | exact_name | `APICAL_READ_8` | `APICAL_READ_8` | 20 | 40 | 2.000 | +20 | 0->1 | 3->4 |
+| expanded | exact_name | `init_module` | `init_module` | 19 | 49 | 2.579 | +30 | 2->6 | 1->5 |
+| expanded | replacement | `tx_isp_init` | `init_module` | 19 | 49 | 2.579 | +30 | 2->6 | 1->5 |
+| expanded | exact_name | `validate_borders` | `validate_borders` | 19 | 47 | 2.474 | +28 | 0->0 | 4->7 |
+| expanded | exact_name | `flash_time` | `flash_time` | 19 | 39 | 2.053 | +20 | 1->1 | 2->4 |
+| expanded | exact_name | `log2_fixed_to_fixed` | `log2_fixed_to_fixed` | 18 | 154 | 8.556 | +136 | 1->0 | 0->14 |
+| expanded | exact_name | `gain_log2` | `gain_log2` | 18 | 64 | 3.556 | +46 | 0->0 | 2->4 |
+| expanded | exact_name | `ae_compensation` | `ae_compensation` | 18 | 46 | 2.556 | +28 | 0->0 | 4->6 |
+| expanded | exact_name | `antiflicker_mode` | `antiflicker_mode` | 18 | 46 | 2.556 | +28 | 0->0 | 4->5 |
+| expanded | exact_name | `sensor_alloc_integration_time` | `sensor_alloc_integration_time` | 18 | 41 | 2.278 | +23 | 0->0 | 2->2 |
+| expanded | exact_name | `dis_get_default_settings` | `dis_get_default_settings` | 18 | 40 | 2.222 | +22 | 0->0 | 1->1 |
+| expanded | exact_name | `sensor_fps_control` | `sensor_fps_control` | 17 | 45 | 2.647 | +28 | 0->0 | 0->0 |
+| expanded | exact_name | `is_yuv_format` | `is_yuv_format` | 17 | 41 | 2.412 | +24 | 0->0 | 4->6 |
+| expanded | exact_name | `selftest_calibration_revision` | `selftest_calibration_revision` | 16 | 56 | 3.500 | +40 | 0->0 | 1->2 |
+| expanded | exact_name | `apical_loop_buffer_write_u8` | `apical_loop_buffer_write_u8` | 16 | 51 | 3.188 | +35 | 0->0 | 0->4 |
+| expanded | exact_name | `sensor_init_output` | `sensor_init_output` | 16 | 47 | 2.938 | +31 | 0->0 | 4->5 |
+| expanded | exact_name | `defect_pixel_fsm_switch_state` | `defect_pixel_fsm_switch_state` | 16 | 43 | 2.688 | +27 | 0->2 | 5->6 |
+| expanded | exact_name | `dis_update_output` | `dis_update_output` | 16 | 43 | 2.688 | +27 | 0->0 | 0->0 |
+| expanded | exact_name | `iridix_fsm_switch_state` | `iridix_fsm_switch_state` | 16 | 43 | 2.688 | +27 | 0->1 | 5->6 |
+| expanded | exact_name | `noise_reduction_fsm_switch_state` | `noise_reduction_fsm_switch_state` | 16 | 43 | 2.688 | +27 | 0->2 | 5->6 |
+| expanded | exact_name | `dis_fsm_switch_state` | `dis_fsm_switch_state` | 16 | 41 | 2.562 | +25 | 0->2 | 5->5 |
+| expanded | exact_name | `flash_fsm_switch_state` | `flash_fsm_switch_state` | 16 | 39 | 2.438 | +23 | 0->0 | 5->5 |
+| expanded | exact_name | `csi_s_stream` | `csi_s_stream` | 16 | 38 | 2.375 | +22 | 0->2 | 4->3 |
+| expanded | exact_name | `AE_fsm_clear` | `AE_fsm_clear` | 16 | 36 | 2.250 | +20 | 0->1 | 0->0 |
+| expanded | exact_name | `ae_roi` | `ae_roi` | 15 | 42 | 2.800 | +27 | 0->1 | 3->4 |
+| expanded | exact_name | `awb_roi` | `awb_roi` | 15 | 42 | 2.800 | +27 | 0->1 | 3->4 |
+| expanded | exact_name | `system_manual_sinter` | `system_manual_sinter` | 15 | 42 | 2.800 | +27 | 0->0 | 3->4 |
+| expanded | exact_name | `system_manual_temper` | `system_manual_temper` | 15 | 42 | 2.800 | +27 | 0->0 | 3->4 |
+| expanded | exact_name | `system_dis_y` | `system_dis_y` | 15 | 41 | 2.733 | +26 | 0->0 | 3->4 |
+| expanded | exact_name | `system_exposure_ratio` | `system_exposure_ratio` | 15 | 41 | 2.733 | +26 | 0->0 | 3->4 |
+| expanded | exact_name | `system_awb_blue_gain` | `system_awb_blue_gain` | 15 | 40 | 2.667 | +25 | 0->0 | 3->4 |
+| expanded | exact_name | `system_maximum_iridix_strength` | `system_maximum_iridix_strength` | 15 | 40 | 2.667 | +25 | 0->0 | 3->4 |
+| expanded | exact_name | `system_maximum_temper_strength` | `system_maximum_temper_strength` | 15 | 40 | 2.667 | +25 | 0->0 | 3->4 |
+| expanded | exact_name | `system_exposure_bright_target` | `system_exposure_bright_target` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_exposure_dark_target` | `system_exposure_dark_target` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_manual_exposure` | `system_manual_exposure` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_manual_exposure_ratio` | `system_manual_exposure_ratio` | 15 | 39 | 2.600 | +24 | 0->0 | 3->3 |
+| expanded | exact_name | `system_manual_integration_time` | `system_manual_integration_time` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_manual_saturation` | `system_manual_saturation` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_manual_un_directional_sharpening` | `system_manual_un_directional_sharpening` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_max_exposure_ratio` | `system_max_exposure_ratio` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_max_sensor_analog_gain` | `system_max_sensor_analog_gain` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_maximum_directional_sharpening` | `system_maximum_directional_sharpening` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_minimum_directional_sharpening` | `system_minimum_directional_sharpening` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_minimum_un_directional_sharpening` | `system_minimum_un_directional_sharpening` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_slow_frame_rate_enable` | `system_slow_frame_rate_enable` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_temper_threshold_target` | `system_temper_threshold_target` | 15 | 39 | 2.600 | +24 | 0->0 | 3->4 |
+| expanded | exact_name | `system_anti_flicker_frequency` | `system_anti_flicker_frequency` | 15 | 38 | 2.533 | +23 | 0->0 | 3->4 |
+| expanded | exact_name | `system_awb_red_gain` | `system_awb_red_gain` | 15 | 38 | 2.533 | +23 | 0->0 | 3->4 |
+| expanded | exact_name | `system_calibrate_bad_pixels` | `system_calibrate_bad_pixels` | 15 | 38 | 2.533 | +23 | 0->0 | 3->4 |
+| expanded | exact_name | `system_directional_sharpening_target` | `system_directional_sharpening_target` | 15 | 38 | 2.533 | +23 | 0->0 | 3->4 |
+| expanded | exact_name | `system_dis_x` | `system_dis_x` | 15 | 38 | 2.533 | +23 | 0->0 | 3->4 |
+| expanded | exact_name | `system_iridix_strength_target` | `system_iridix_strength_target` | 15 | 38 | 2.533 | +23 | 0->0 | 3->4 |
+
+## Replacement Map
+
+| OEM symbol | Recovered symbol(s) |
+|---|---|
+| `AWB_mesh.isra.1` | `AWB_mesh_isra_1` |
+| `ae_roi.part.1` | `ae_roi_part_1` |
+| `apical_isp_ae_weight_g_attr.isra.0` | `apical_isp_ae_weight_g_attr` |
+| `apical_isp_ae_weight_s_attr.isra.0` | `apical_isp_ae_weight_s_attr` |
+| `apical_isp_af_hist_s_attr.isra.0` | `apical_isp_af_hist_s_attr` |
+| `apical_isp_awb_weight_g_attr.isra.0` | `apical_isp_awb_weight_g_attr` |
+| `apical_isp_awb_weight_s_attr.isra.0` | `apical_isp_awb_weight_s_attr` |
+| `apical_isp_gamma_g_attr.isra.0` | `apical_isp_gamma_g_attr` |
+| `apical_isp_gamma_s_attr.isra.0` | `apical_isp_gamma_s_attr` |
+| `apical_isp_stab_g_attr.isra.0` | `apical_isp_stab_g_attr` |
+| `apical_isp_stab_s_attr.isra.0` | `apical_isp_stab_s_attr` |
+| `apical_program_interrupt_event.part.0` | `apical_program_interrupt_event_part_0` |
+| `awb_roi.part.2` | `awb_roi_part_2` |
+| `frame_buffer_manager_cleanup` | `frame_buffer_manager_cleanup`<br>`frame_buffer_mmap_deinit` |
+| `isp_configure_base_addr.isra.0` | `isp_configure_base_addr` |
+| `isp_core_frame_channel_streamoff.isra.0` | `isp_core_frame_channel_streamoff` |
+| `isp_core_ops_g_ctrl` | `apical_isp_core_ops_g_ctrl`<br>`isp_core_ops_g_ctrl` |
+| `isp_core_ops_ioctl` | `isp_core_frame_channel_crop_capture`<br>`isp_core_frame_channel_enum_fmt`<br>`isp_core_frame_channel_queue_buffer`<br>`isp_core_frame_channel_scaler_capture`<br>`isp_core_frame_channel_set_crop`<br>`isp_core_frame_channel_set_fmt`<br>`isp_core_frame_channel_set_scaler`<br>`isp_core_frame_channel_streamoff`<br>`isp_core_frame_channel_streamon`<br>`isp_core_frame_channel_try_fmt`<br>`isp_core_ops_ioctl`<br>`isp_core_ops_private_ioctl`<br>`isp_core_set_clk` |
+| `isp_core_release_clk.isra.0` | `isp_core_release_clk` |
+| `isp_csi_ops_ioctl` | `isp_csi_ops_ioctl`<br>`isp_csi_ops_private_ioctl` |
+| `isp_enable_dma_transfer.isra.0` | `isp_enable_dma_transfer` |
+| `isp_modify_dma_direction.isra.0` | `isp_modify_dma_direction` |
+| `mipi_csih_dphy_test_clock.isra.0` | `mipi_csih_dphy_test_clock` |
+| `mipi_csih_dphy_write.part.0.constprop.0` | `mipi_csih_dphy_write` |
+| `sinfo_count_open` | `tx_isp_sinfo_count_open` |
+| `sinfo_count_show` | `tx_isp_sinfo_count_show` |
+| `sinfo_open` | `tx_isp_sinfo_open` |
+| `sinfo_show` | `tx_isp_sinfo_show` |
+| `sinfo_slot_publish` | `tx_isp_sinfo_slot_publish` |
+| `subdev_core_ops_streamoff.constprop.0` | `subdev_core_ops_streamoff` |
+| `tx_isp_init` | `init_module` |
+| `tx_isp_video_in_subdev_close` | `subdev_core_ops_release_all_sensor`<br>`tx_isp_video_in_subdev_close` |
+| `vic_core_ops_ioctl` | `vic_core_ops_ioctl`<br>`vic_core_ops_private_ioctl` |
+| `video_in_core_ops_ioctl` | `subdev_core_ops_enum_input`<br>`subdev_core_ops_get_input`<br>`subdev_core_ops_register_sensor`<br>`subdev_core_ops_release_all_sensor`<br>`subdev_core_ops_release_sensor`<br>`subdev_core_ops_set_input`<br>`subdev_core_ops_streamoff`<br>`subdev_core_ops_streamon`<br>`video_in_core_ops_ioctl` |

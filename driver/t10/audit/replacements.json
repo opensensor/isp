@@ -1,0 +1,75 @@
+{
+  "isp_core_ops_g_ctrl": [
+    "isp_core_ops_g_ctrl",
+    "apical_isp_core_ops_g_ctrl"
+  ],
+  "isp_core_ops_ioctl": [
+    "isp_core_ops_ioctl",
+    "isp_core_ops_private_ioctl",
+    "isp_core_set_clk",
+    "isp_core_frame_channel_enum_fmt",
+    "isp_core_frame_channel_try_fmt",
+    "isp_core_frame_channel_set_fmt",
+    "isp_core_frame_channel_crop_capture",
+    "isp_core_frame_channel_set_crop",
+    "isp_core_frame_channel_scaler_capture",
+    "isp_core_frame_channel_set_scaler",
+    "isp_core_frame_channel_streamon",
+    "isp_core_frame_channel_streamoff",
+    "isp_core_frame_channel_queue_buffer"
+  ],
+  "video_in_core_ops_ioctl": [
+    "video_in_core_ops_ioctl",
+    "subdev_core_ops_enum_input",
+    "subdev_core_ops_get_input",
+    "subdev_core_ops_set_input",
+    "subdev_core_ops_register_sensor",
+    "subdev_core_ops_release_sensor",
+    "subdev_core_ops_release_all_sensor",
+    "subdev_core_ops_streamon",
+    "subdev_core_ops_streamoff"
+  ],
+  "isp_csi_ops_ioctl": [
+    "isp_csi_ops_ioctl",
+    "isp_csi_ops_private_ioctl"
+  ],
+  "vic_core_ops_ioctl": [
+    "vic_core_ops_ioctl",
+    "vic_core_ops_private_ioctl"
+  ],
+  "sinfo_show": "tx_isp_sinfo_show",
+  "sinfo_open": "tx_isp_sinfo_open",
+  "sinfo_count_show": "tx_isp_sinfo_count_show",
+  "sinfo_count_open": "tx_isp_sinfo_count_open",
+  "sinfo_slot_publish": "tx_isp_sinfo_slot_publish",
+  "tx_isp_video_in_subdev_close": [
+    "tx_isp_video_in_subdev_close",
+    "subdev_core_ops_release_all_sensor"
+  ],
+  "frame_buffer_manager_cleanup": [
+    "frame_buffer_manager_cleanup",
+    "frame_buffer_mmap_deinit"
+  ],
+  "tx_isp_init": "init_module",
+  "apical_isp_stab_s_attr.isra.0": "apical_isp_stab_s_attr",
+  "isp_core_frame_channel_streamoff.isra.0": "isp_core_frame_channel_streamoff",
+  "ae_roi.part.1": "ae_roi_part_1",
+  "awb_roi.part.2": "awb_roi_part_2",
+  "AWB_mesh.isra.1": "AWB_mesh_isra_1",
+  "isp_configure_base_addr.isra.0": "isp_configure_base_addr",
+  "apical_isp_af_hist_s_attr.isra.0": "apical_isp_af_hist_s_attr",
+  "apical_program_interrupt_event.part.0": "apical_program_interrupt_event_part_0",
+  "apical_isp_ae_weight_s_attr.isra.0": "apical_isp_ae_weight_s_attr",
+  "apical_isp_awb_weight_s_attr.isra.0": "apical_isp_awb_weight_s_attr",
+  "isp_modify_dma_direction.isra.0": "isp_modify_dma_direction",
+  "apical_isp_ae_weight_g_attr.isra.0": "apical_isp_ae_weight_g_attr",
+  "apical_isp_awb_weight_g_attr.isra.0": "apical_isp_awb_weight_g_attr",
+  "subdev_core_ops_streamoff.constprop.0": "subdev_core_ops_streamoff",
+  "apical_isp_gamma_s_attr.isra.0": "apical_isp_gamma_s_attr",
+  "apical_isp_gamma_g_attr.isra.0": "apical_isp_gamma_g_attr",
+  "apical_isp_stab_g_attr.isra.0": "apical_isp_stab_g_attr",
+  "isp_enable_dma_transfer.isra.0": "isp_enable_dma_transfer",
+  "isp_core_release_clk.isra.0": "isp_core_release_clk",
+  "mipi_csih_dphy_write.part.0.constprop.0": "mipi_csih_dphy_write",
+  "mipi_csih_dphy_test_clock.isra.0": "mipi_csih_dphy_test_clock"
+}
