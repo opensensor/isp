@@ -90,6 +90,12 @@ dispatcher/helper boundaries; they do not hide missing symbols. The only real
 first-pass collapse, `cmos_fsm_process_interrupt`, was restored from 13 to 640
 instructions against the common Apical state/interrupt contract.
 
+The shared T10 integration also made three audit-sensitive paths explicit:
+the complete 140-entry API-to-firmware map, the per-FSM interrupt critical
+sections, and all 16 interrupt-event register routes. Both T10 and T20
+clean-build with those common repairs, and the refreshed T20 audit retains
+zero stub and zero collapsed findings.
+
 ## Device validation
 
 The Ingenic T20 and T30 OEM modules share 618 named functions; 133 of those

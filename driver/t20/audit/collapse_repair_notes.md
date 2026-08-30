@@ -54,7 +54,7 @@ The checked-in replacement map groups SDK dispatcher wrappers with helpers
 that the OEM compiler inlined. After that accounting:
 
 - OEM functions: 742
-- recovered functions: 860
+- recovered functions: 894
 - matched functions: 721
 - direct matches: 711
 - documented replacement matches: 10

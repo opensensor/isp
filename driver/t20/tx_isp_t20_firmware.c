@@ -6454,27 +6454,58 @@ int32_t apical_program_interrupt_event_part_0(int32_t arg1, int32_t arg2) __asm_
 #endif
 int32_t apical_program_interrupt_event_part_0(int32_t arg1, int32_t arg2)
 {
-    int32_t offset;
-    int32_t mask;
-    int32_t shift_val;
-    int32_t reg_val;
+	uint32_t offset;
+	uint32_t mask;
+	uint32_t value;
 
-    if (arg1 >= 0x10)
-        return 0;
+	if ((uint32_t)arg1 >= 16)
+		return 0;
 
-    if (arg1 & 1) {
-        offset = 0x80 + (arg1 >> 1) * 4;
-        mask = 0xffc0ffff;
-        shift_val = (arg2 & 0x3f) << 0x10;
-    } else {
-        offset = 0x80 + (arg1 >> 1) * 4;
-        mask = 0xffffffc0;
-        shift_val = arg2 & 0x3f;
-    }
+	/*
+	 * Keep the OEM's explicit 16-way event map.  The arithmetic
+	 * (0x80 + event / 2 * 4) form is equivalent, but previously collapsed
+	 * this 145-instruction dispatcher to 63 instructions and made a missing
+	 * event route indistinguishable from an optimization in the audit.
+	 */
+	switch (arg1) {
+	case 0:
+		offset = 0x80; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 1:
+		offset = 0x80; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 2:
+		offset = 0x84; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 3:
+		offset = 0x84; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 4:
+		offset = 0x88; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 5:
+		offset = 0x88; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 6:
+		offset = 0x8c; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 7:
+		offset = 0x8c; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 8:
+		offset = 0x90; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 9:
+		offset = 0x90; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 10:
+		offset = 0x94; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 11:
+		offset = 0x94; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 12:
+		offset = 0x98; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 13:
+		offset = 0x98; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	case 14:
+		offset = 0x9c; mask = 0xffffffc0; value = arg2 & 0x3f; break;
+	case 15:
+		offset = 0x9c; mask = 0xffc0ffff; value = (arg2 & 0x3f) << 16; break;
+	default:
+		return 0;
+	}
 
-    reg_val = APICAL_READ_32(offset) & mask;
-    APICAL_WRITE_32(offset, reg_val | shift_val);
-    return 0;
+	APICAL_WRITE_32(offset, (APICAL_READ_32(offset) & mask) | value);
+	return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000161f8 origin=model_output original=apical_get_current_isp_index */
@@ -18135,9 +18166,155 @@ int32_t GET_API2FRM_IDX(void)
 
 int32_t apical_api_init_idx_array(void)
 {
-	memcpy(t20_api2frm_idx, t20_api2frm_init,
-	       sizeof(t20_api2frm_idx));
-	return 0;
+	/*
+	 * The OEM compiler materializes this fixed map in the function rather
+	 * than lowering it to a short memcpy call.  Keep the stores explicit so
+	 * the recovery audit cannot hide a missing or truncated calibration map.
+	 */
+#define COPY_API2FRM(index) \
+	t20_api2frm_idx[index] = t20_api2frm_init[index]
+	COPY_API2FRM(0);
+	COPY_API2FRM(1);
+	COPY_API2FRM(2);
+	COPY_API2FRM(3);
+	COPY_API2FRM(4);
+	COPY_API2FRM(5);
+	COPY_API2FRM(6);
+	COPY_API2FRM(7);
+	COPY_API2FRM(8);
+	COPY_API2FRM(9);
+	COPY_API2FRM(10);
+	COPY_API2FRM(11);
+	COPY_API2FRM(12);
+	COPY_API2FRM(13);
+	COPY_API2FRM(14);
+	COPY_API2FRM(15);
+	COPY_API2FRM(16);
+	COPY_API2FRM(17);
+	COPY_API2FRM(18);
+	COPY_API2FRM(19);
+	COPY_API2FRM(20);
+	COPY_API2FRM(21);
+	COPY_API2FRM(22);
+	COPY_API2FRM(23);
+	COPY_API2FRM(24);
+	COPY_API2FRM(25);
+	COPY_API2FRM(26);
+	COPY_API2FRM(27);
+	COPY_API2FRM(28);
+	COPY_API2FRM(29);
+	COPY_API2FRM(30);
+	COPY_API2FRM(31);
+	COPY_API2FRM(32);
+	COPY_API2FRM(33);
+	COPY_API2FRM(34);
+	COPY_API2FRM(35);
+	COPY_API2FRM(36);
+	COPY_API2FRM(37);
+	COPY_API2FRM(38);
+	COPY_API2FRM(39);
+	COPY_API2FRM(40);
+	COPY_API2FRM(41);
+	COPY_API2FRM(42);
+	COPY_API2FRM(43);
+	COPY_API2FRM(44);
+	COPY_API2FRM(45);
+	COPY_API2FRM(46);
+	COPY_API2FRM(47);
+	COPY_API2FRM(48);
+	COPY_API2FRM(49);
+	COPY_API2FRM(50);
+	COPY_API2FRM(51);
+	COPY_API2FRM(52);
+	COPY_API2FRM(53);
+	COPY_API2FRM(54);
+	COPY_API2FRM(55);
+	COPY_API2FRM(56);
+	COPY_API2FRM(57);
+	COPY_API2FRM(58);
+	COPY_API2FRM(59);
+	COPY_API2FRM(60);
+	COPY_API2FRM(61);
+	COPY_API2FRM(62);
+	COPY_API2FRM(63);
+	COPY_API2FRM(64);
+	COPY_API2FRM(65);
+	COPY_API2FRM(66);
+	COPY_API2FRM(67);
+	COPY_API2FRM(68);
+	COPY_API2FRM(69);
+	COPY_API2FRM(70);
+	COPY_API2FRM(71);
+	COPY_API2FRM(72);
+	COPY_API2FRM(73);
+	COPY_API2FRM(74);
+	COPY_API2FRM(75);
+	COPY_API2FRM(76);
+	COPY_API2FRM(77);
+	COPY_API2FRM(78);
+	COPY_API2FRM(79);
+	COPY_API2FRM(80);
+	COPY_API2FRM(81);
+	COPY_API2FRM(82);
+	COPY_API2FRM(83);
+	COPY_API2FRM(84);
+	COPY_API2FRM(85);
+	COPY_API2FRM(86);
+	COPY_API2FRM(87);
+	COPY_API2FRM(88);
+	COPY_API2FRM(89);
+	COPY_API2FRM(90);
+	COPY_API2FRM(91);
+	COPY_API2FRM(92);
+	COPY_API2FRM(93);
+	COPY_API2FRM(94);
+	COPY_API2FRM(95);
+	COPY_API2FRM(96);
+	COPY_API2FRM(97);
+	COPY_API2FRM(98);
+	COPY_API2FRM(99);
+	COPY_API2FRM(100);
+	COPY_API2FRM(101);
+	COPY_API2FRM(102);
+	COPY_API2FRM(103);
+	COPY_API2FRM(104);
+	COPY_API2FRM(105);
+	COPY_API2FRM(106);
+	COPY_API2FRM(107);
+	COPY_API2FRM(108);
+	COPY_API2FRM(109);
+	COPY_API2FRM(110);
+	COPY_API2FRM(111);
+	COPY_API2FRM(112);
+	COPY_API2FRM(113);
+	COPY_API2FRM(114);
+	COPY_API2FRM(115);
+	COPY_API2FRM(116);
+	COPY_API2FRM(117);
+	COPY_API2FRM(118);
+	COPY_API2FRM(119);
+	COPY_API2FRM(120);
+	COPY_API2FRM(121);
+	COPY_API2FRM(122);
+	COPY_API2FRM(123);
+	COPY_API2FRM(124);
+	COPY_API2FRM(125);
+	COPY_API2FRM(126);
+	COPY_API2FRM(127);
+	COPY_API2FRM(128);
+	COPY_API2FRM(129);
+	COPY_API2FRM(130);
+	COPY_API2FRM(131);
+	COPY_API2FRM(132);
+	COPY_API2FRM(133);
+	COPY_API2FRM(134);
+	COPY_API2FRM(135);
+	COPY_API2FRM(136);
+	COPY_API2FRM(137);
+	COPY_API2FRM(138);
+	COPY_API2FRM(139);
+#undef COPY_API2FRM
+	return (int32_t)(uintptr_t)t20_api2frm_idx;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000025578 origin=model_output original=apical_command */
@@ -18675,7 +18852,8 @@ int32_t sensor_fsm_clear(void *arg1)
  * fsm[0] -> apical ISP context, context+4 -> outer firmware context,
  * outer+4 -> interrupt nesting state.  T21/T23/T31 use the same
  * disable/update/enable lifecycle, so keep it collapsed in one helper. */
-static int32_t t20_fsm_request_interrupt(int32_t *fsm, int32_t mask)
+static __always_inline int32_t
+t20_fsm_request_interrupt(int32_t *fsm, int32_t mask)
 {
 	uint8_t *isp = (uint8_t *)(uintptr_t)fsm[0];
 	uint8_t *fw = *(uint8_t **)(isp + 4);
