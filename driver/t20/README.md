@@ -24,7 +24,12 @@ capture.
 
 The module deliberately does not rebuild all 740 generated functions:
 
-- 27 translation units come directly from the tracked Ingenic T20 SDK;
+- 19 unmodified translation units come directly from the tracked Ingenic T20
+  SDK;
+- eight repaired SDK-derived translation units and their two modified private
+  headers are versioned under `sdk/source/`, so the open T20 implementation is
+  owned and reviewable in this repository rather than hidden in SDK submodule
+  changes;
 - the sensor registry uses `driver/common/tx_isp_sinfo.c` through a T20 layout
   adapter;
 - five relocation-normalized T20/T30 fixed-point matches use the shared math
@@ -99,11 +104,20 @@ tested scene. Every cycle preserved the stock module and sensor module, staged
 the open components under `/tmp`, captured bounded logs and frames, and
 rebooted to restore the stock stack.
 
-This is evidence for the T20X linear-daylight path, not a universal sensor or
-mode claim. Night/IR, WDR, additional sensors, and long-duration streaming
-remain open validation work. Runtime image policy is sensor-neutral: active IQ
-calibration tables own AE targets, AWB/denoise response, lens shading, and
-Iridix behavior; sensor-specific tuning does not belong in this driver.
+The subsequent full-resolution Raptor gate used the repository-owned T20
+driver and the generic two-buffer V4L2 handoff. It captured 120/120 H.264 High
+frames at 1920x1080 and 25.2 fps over IPv6 RTSP/TCP, passed strict decode with
+zero source or publish drops and zero ISP IRQ errors, and sustained 3.06 Mbps
+against a 3 Mbps request. The driver reserves an 8 MiB sensor-neutral MMAP
+pool so two page-aligned 1080p NV12 buffers can overlap capture and encoding;
+the vendor 4 MiB default fits only one such frame.
+
+This is evidence from one Wyze Cam V2 for the T20X/JXF23 linear-daylight path,
+not a universal sensor or mode claim. Night/IR, WDR, additional sensors, and
+long-duration streaming remain open validation work. Runtime image policy is
+sensor-neutral: active IQ calibration tables own AE targets, AWB/denoise
+response, lens shading, and Iridix behavior; sensor-specific tuning does not
+belong in this driver.
 
 Several early-initialization trace messages remain intentionally present. A
 build differing from the three-gate artifact only by removal of those messages

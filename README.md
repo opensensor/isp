@@ -200,7 +200,7 @@ Important driver files:
 - `driver/include/tx_isp/tx_isp_frame_channel.h` — shared frame-channel event IDs, generation-qualified ioctl envelopes, and ioctl decoders
 - `driver/include/tx_isp/tx_isp_frame_format.h` — compiler-independent 112/116-byte frame-image format ABI
 - `driver/include/tx_isp/tx_isp_frame_layout.h` — alignment-parametric NV12 and MDNS layout interface
-- `driver/t20/tx_isp_t20_firmware.c`, `sdk/`, and adapter objects — T20 whole-driver recovery baseline with reviewed SDK replacements and shared sensor/math facilities
+- `driver/t20/tx_isp_t20_firmware.c`, `sdk/`, and adapter objects — T20 whole-driver recovery baseline with reviewed, locally owned SDK-derived replacements and shared sensor/math facilities
 - `driver/t21/tx_isp_t21_recovered.c` and `tx_isp_t21_math.c` — T21 whole-driver recovery baseline with stock-backed shared math entry points
 - `driver/t23/tx_isp_t23_core.c` and adapter objects — T23 recovered core with shared math, registry, and register-profile facilities
 - `driver/t30/tx_isp_t30_recovered.c` and adapter objects — T30 whole-driver
