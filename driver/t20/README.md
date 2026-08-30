@@ -36,6 +36,13 @@ The module deliberately does not rebuild all 740 generated functions:
   core; and
 - 477 archive-backed firmware functions remain in the recovered T20 unit.
 
+`sdk/tx-isp-core-local.h` is an ABI invariant, not a convenience include. It
+ensures every mixed local/unchanged SDK translation unit sees the same repaired
+`tx_isp_core_device` layout before the legacy SDK header can claim its include
+guard. Mixing those definitions moves the day/night work item and later fields
+by 16 bytes; device testing showed that split as DMA capture stopping after 25
+frames.
+
 The OEM `stab` object and the 12,240-byte `__fw` object are the canonical
 firmware storage. Generated absolute-address aliases were collapsed into
 those objects. This reduced module BSS from 529,696 bytes to 38,128 bytes;
