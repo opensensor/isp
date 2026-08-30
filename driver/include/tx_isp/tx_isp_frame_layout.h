@@ -72,6 +72,13 @@ int tx_isp_nv12_buffer_build(u32 width, u32 height, u32 width_align,
 			     struct tx_isp_nv12_buffer *buffer);
 
 /*
+ * Validate one complete DMA allocation against an exclusive physical-memory
+ * ceiling.  This is deliberately separate from the 32-bit ABI check above:
+ * a numerically valid address can still target an unmapped SoC bus window.
+ */
+int tx_isp_dma_range_validate(u32 dma, u32 size, u32 limit);
+
+/*
  * Build the T23/T31 MDNS auxiliary allocation.  memopt == 0 returns the full
  * four-reference/two-UV/tiny-plane layout; any non-zero value returns the
  * single-reference layout used by the memory-optimized firmware mode.

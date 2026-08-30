@@ -81,6 +81,20 @@ int tx_isp_nv12_buffer_build(u32 width, u32 height, u32 width_align,
 	return 0;
 }
 
+int tx_isp_dma_range_validate(u32 dma, u32 size, u32 limit)
+{
+	u64 end;
+
+	if (!dma || !size || !limit)
+		return -EINVAL;
+
+	end = (u64)dma + size;
+	if (end > limit)
+		return -ERANGE;
+
+	return 0;
+}
+
 int tx_isp_mdns_layout_build(u32 width, u32 height, u32 memopt,
 			     struct tx_isp_mdns_layout *layout)
 {

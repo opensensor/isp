@@ -162,12 +162,32 @@ static void test_validation_and_overflow(void)
 	assert(mdns.used_size == 22);
 }
 
+static void test_dma_aperture_validation(void)
+{
+	const uint32_t t31_limit = 0x08000000U;
+
+	assert(tx_isp_dma_range_validate(0x02cf9000U, 3133440U,
+					 t31_limit) == 0);
+	assert(tx_isp_dma_range_validate(0x07d03000U, 3133440U,
+					 t31_limit) == 0);
+	assert(tx_isp_dma_range_validate(0x07d04000U, 3133440U,
+					 t31_limit) == -ERANGE);
+	assert(tx_isp_dma_range_validate(0x10023000U, 4096U,
+					 t31_limit) == -ERANGE);
+	assert(tx_isp_dma_range_validate(0, 4096U, t31_limit) == -EINVAL);
+	assert(tx_isp_dma_range_validate(0x02cf9000U, 0, t31_limit) ==
+		       -EINVAL);
+	assert(tx_isp_dma_range_validate(0x02cf9000U, 4096U, 0) ==
+		       -EINVAL);
+}
+
 int main(void)
 {
 	test_device_geometries();
 	test_mdns_device_geometries();
 	test_nv12_dma_binding();
 	test_validation_and_overflow();
+	test_dma_aperture_validation();
 	puts("tx_isp_frame_layout tests passed");
 	return 0;
 }

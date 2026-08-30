@@ -56,6 +56,11 @@
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
 
+/* T31/T31L expose at most 128 MiB of low physical DDR.  The MSCA address
+ * FIFOs have no IOMMU or fault containment, so accepting a higher USERPTR can
+ * lock the AHB fabric before the kernel has a chance to report the mistake. */
+#define TX_ISP_T31_PHYS_DRAM_LIMIT 0x08000000U
+
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
 #define CSI_STATE_IDLE      1
@@ -4066,6 +4071,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return dma_ret;
         }
 
+        dma_ret = tx_isp_dma_range_validate(
+            dma_buffer.y_dma, dma_buffer.layout.sizeimage,
+            TX_ISP_T31_PHYS_DRAM_LIMIT);
+        if (dma_ret) {
+            pr_err_ratelimited("QBUF ch%d idx=%u rejected: DMA [0x%08x..0x%08llx) exceeds T31 DDR aperture ret=%d\n",
+                               channel, buffer.index, dma_buffer.y_dma,
+                               (unsigned long long)dma_buffer.y_dma +
+                                   dma_buffer.layout.sizeimage,
+                               dma_ret);
+            return dma_ret;
+        }
+
         pr_debug("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, sizeimage=%u, memory=%d, userptr=0x%lx ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size, buffer.memory, buffer.m.userptr);
 
@@ -7061,7 +7078,9 @@ static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *bu
 static int __submit_buffer_to_msca(int channel, u32 phys_addr)
 {
     struct tx_isp_channel_state *state;
-    u32 width, height, aligned_height, uv_addr;
+    struct tx_isp_nv12_buffer dma_buffer;
+    u32 width, height, buffer_size;
+    int ret;
 
     if (!ourISPdev || !ourISPdev->core_regs || !phys_addr ||
         channel < 0 || channel >= 3)
@@ -7072,11 +7091,28 @@ static int __submit_buffer_to_msca(int channel, u32 phys_addr)
             (channel == 0 ? TX_ISP_MAX_WIDTH : 640U);
     height = state->height ? state->height :
              (channel == 0 ? TX_ISP_MAX_HEIGHT : 360U);
-    aligned_height = (height + 0xf) & ~0xfU;
-    uv_addr = phys_addr + width * aligned_height;
+    buffer_size = state->sizeimage ? state->sizeimage : 0xffffffffU;
 
-    writel(phys_addr, ourISPdev->core_regs + (channel << 8) + 0x996c);
-    writel(uv_addr, ourISPdev->core_regs + (channel << 8) + 0x9984);
+    ret = tx_isp_nv12_buffer_build(width, height, 1, 16, phys_addr,
+                                   buffer_size, &dma_buffer);
+    if (ret)
+        return ret;
+    ret = tx_isp_dma_range_validate(dma_buffer.y_dma,
+                                    dma_buffer.layout.sizeimage,
+                                    TX_ISP_T31_PHYS_DRAM_LIMIT);
+    if (ret) {
+        pr_err_ratelimited("MSCA ch%d rejected DMA [0x%08x..0x%08llx) ret=%d\n",
+                           channel, dma_buffer.y_dma,
+                           (unsigned long long)dma_buffer.y_dma +
+                               dma_buffer.layout.sizeimage,
+                           ret);
+        return ret;
+    }
+
+    writel(dma_buffer.y_dma,
+           ourISPdev->core_regs + (channel << 8) + 0x996c);
+    writel(dma_buffer.uv_dma,
+           ourISPdev->core_regs + (channel << 8) + 0x9984);
 
     return 0;
 }
