@@ -1,7 +1,7 @@
 #include <linux/module.h>
 
 #include <tx_isp/tx_isp_sinfo.h>
-#include "../../../external/ingenic-sdk/3.10.14/isp/t20/tx-isp-videobuf.h"
+#include "source/tx-isp-videobuf.h"
 
 /*
  * The vendor T20 source only registers the platform driver.  The recovered
@@ -14,7 +14,7 @@
 #define module_init(fn)
 #define module_exit(fn)
 
-#include "../../../external/ingenic-sdk/3.10.14/isp/t20/tx-isp-device.c"
+#include "source/tx-isp-device.c"
 
 int __init init_module(void)
 {
