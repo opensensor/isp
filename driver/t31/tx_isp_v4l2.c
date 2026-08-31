@@ -22,6 +22,10 @@
 #include "include/tx_isp_device.h"
 #include "../include/tx_isp/tx_isp_frame_channel.h"
 
+#ifndef CONFIG_DMA_SHARED_BUFFER
+#error "CONFIG_TX_ISP_T31_V4L2 requires CONFIG_DMA_SHARED_BUFFER"
+#endif
+
 #define TX_ISP_V4L2_CHANNEL 0
 #define TX_ISP_V4L2_MIN_WIDTH 16U
 #define TX_ISP_V4L2_MIN_HEIGHT 16U

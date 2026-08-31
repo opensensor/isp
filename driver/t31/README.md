@@ -49,6 +49,16 @@ just cosmetic:
 Register addresses, recovered object layouts, IRQ acknowledgement, tuning
 tables, and sensor-specific profiles remain T31-local.
 
+## Public V4L2 adapter
+
+Build the optional `/dev/video0` capture adapter with
+`CONFIG_TX_ISP_T31_V4L2=y`. The target kernel must provide
+`CONFIG_VIDEO_DEV=y`, `CONFIG_VIDEO_V4L2=y`, and
+`CONFIG_DMA_SHARED_BUFFER=y`; the adapter intentionally stops at compile time
+when DMA-BUF support is absent instead of producing a module with unresolved
+symbols. The T31 module routes CIM MCLK to PA15 during initialization, so the
+adapter does not require the in-tree TX-ISP driver to own sensor pinmux.
+
 ## Current SC301IOT Runtime
 
 The August 13-25, 2026 Wyze Video Doorbell v2 work added a third live T31
