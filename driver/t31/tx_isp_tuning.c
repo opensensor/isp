@@ -812,6 +812,11 @@ static int bcsh_wdr_enabled;        /* 0=normal, 1=WDR */
 static int BCSH_real;                /* trigger immediate update on next EV/CT change */
 static uint32_t cust_mode;           /* OEM: custom tuning mode (0=normal, 1=custom) */
 
+/* Defined below with the recovered OEM custom-bank switching implementation.
+ * The V4L2 control dispatcher appears earlier in this translation unit. */
+int tisp_cust_mode_g_ctrl(void);
+int tisp_cust_mode_s_ctrl(uint32_t mode);
+
 /* OEM globals for CCM chain — signed versions of D/T/A CCM matrices */
 static int32_t tisp_BCSH_as32CCMMatrix[9];     /* active signed CCM (output of ct_bcsh_interpolation) */
 static int32_t tisp_BCSH_as32CCMMatrix_d[9];   /* signed D CCM (output of Comp2Orig) */
@@ -8555,7 +8560,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
         }
         case 0x80000e7:  // ISP Custom Mode
-            ctrl->value = tuning->custom_mode;
+            ctrl->value = tisp_cust_mode_g_ctrl();
             break;
 
         /* ---- OEM g_ctrl commands added for parity ---- */
@@ -9117,8 +9122,12 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x80000e7:  // ISP Custom Mode
-            tuning->custom_mode = ctrl->value;
-            //set_framesource_changewait_cnt();
+            /* OEM calls tisp_cust_mode_s_ctrl here.  Merely caching the
+             * requested value reports success without swapping tparams_active,
+             * so a valid *-cust-t31.bin never reaches the ISP pipeline. */
+            ret = tisp_cust_mode_s_ctrl(ctrl->value);
+            if (!ret)
+                tuning->custom_mode = ctrl->value;
             break;
         /* ---- OEM no-op controls (return 0 without action) ---- */
         case 0x8000003:  /* WB mode (subset) */
