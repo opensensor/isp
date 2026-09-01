@@ -1508,13 +1508,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             .isp = isp_dev,
         };
         struct tx_isp_daynight_runtime runtime;
+        u32 staged_state = 0;
         u32 staged_mode = 0;
         int notify_ret = 0;
         int dn_ret;
 
         if (isp_dev && isp_dev->tuning_data)
-            staged_mode = isp_tuning_oem_read_u32(isp_dev->tuning_data,
+            staged_state = isp_tuning_oem_read_u32(isp_dev->tuning_data,
                               ISP_TUNING_OEM_RUNNING_MODE_OFFSET);
+        staged_mode = staged_state & ~TX_ISP_DAYNIGHT_CUSTOM_FLAG;
 
         memset(&runtime, 0, sizeof(runtime));
         runtime.running_mode = &staged_mode;
@@ -5004,7 +5006,8 @@ static int isp_info_show(struct seq_file *m, void *v)
 
 	/* Running mode */
 	seq_printf(m, "ISP Runing Mode : %s\n",
-		   isp->day_night == 1 ? "Night" : "Day");
+		   (isp->day_night & ~TX_ISP_DAYNIGHT_CUSTOM_FLAG) ==
+		   TX_ISP_NIGHT_MODE ? "Night" : "Day");
 
 	/* Sensor exposure info */
 	seq_printf(m, "SENSOR Integration Time : %d lines\n",

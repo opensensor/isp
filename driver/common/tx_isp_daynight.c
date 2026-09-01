@@ -7,8 +7,13 @@
  * ordering and validation.
  */
 
+#ifdef __KERNEL__
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#else
+#include <errno.h>
+#define wmb() __sync_synchronize()
+#endif
 
 #include "../include/tx_isp/tx_isp_daynight.h"
 
@@ -48,6 +53,34 @@ int tx_isp_daynight_stage(u32 *running_mode, u32 *pending,
 	/* Publish the mode before the frame ISR observes the pending flag. */
 	wmb();
 	*pending = TX_ISP_DAYNIGHT_SWITCH;
+	return 1;
+}
+
+int tx_isp_daynight_stage_custom(u32 *running_state, u32 *pending,
+				 u32 enabled)
+{
+	u32 base_mode;
+
+	if (!running_state || !pending)
+		return -EINVAL;
+	if (enabled > 1U || *running_state > TX_ISP_CUSTOM_NIGHT_STATE)
+		return -ERANGE;
+
+	base_mode = *running_state & ~TX_ISP_DAYNIGHT_CUSTOM_FLAG;
+	if (base_mode > TX_ISP_NIGHT_MODE)
+		return -ERANGE;
+
+	if (enabled) {
+		*running_state = base_mode | TX_ISP_DAYNIGHT_CUSTOM_FLAG;
+		/* OEM T31 dispatcher 0x6cec/0x6cfc: custom always restores UV. */
+		wmb();
+		*pending = TX_ISP_DAYNIGHT_FILL_DAY;
+	} else {
+		wmb();
+		*pending = base_mode == TX_ISP_NIGHT_MODE ?
+			TX_ISP_DAYNIGHT_FILL_NIGHT : TX_ISP_DAYNIGHT_FILL_DAY;
+	}
+
 	return 1;
 }
 

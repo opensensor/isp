@@ -7610,8 +7610,12 @@ static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
 
 static uint32_t tisp_day_or_night_g_ctrl(void)
 {
-	if (ourISPdev)
-		return !!ourISPdev->day_night;
+	if (ourISPdev) {
+		u32 mode = ourISPdev->day_night &
+			~TX_ISP_DAYNIGHT_CUSTOM_FLAG;
+
+		return mode <= TX_ISP_NIGHT_MODE ? mode : (uint32_t)-1;
+	}
 
 	return 0;
 }
@@ -9121,14 +9125,35 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             tisp_s_ev_start(ctrl->value);
             break;
 
-        case 0x80000e7:  // ISP Custom Mode
+        case 0x80000e7: { // ISP Custom Mode
+		int stage_ret;
+
             /* OEM calls tisp_cust_mode_s_ctrl here.  Merely caching the
              * requested value reports success without swapping tparams_active,
              * so a valid *-cust-t31.bin never reaches the ISP pipeline. */
+		if (ctrl->value != 0 && ctrl->value != 1) {
+			ret = -EINVAL;
+			break;
+		}
+		if (!ourISPdev) {
+			ret = -ENODEV;
+			break;
+		}
             ret = tisp_cust_mode_s_ctrl(ctrl->value);
-            if (!ret)
-                tuning->custom_mode = ctrl->value;
+		if (ret)
+			break;
+
+		stage_ret = tx_isp_daynight_stage_custom(
+			&tuning->running_mode, &ourISPdev->dn_pending,
+				ctrl->value);
+		if (stage_ret < 0) {
+			ret = stage_ret;
+			break;
+		}
+		ourISPdev->day_night = tuning->running_mode;
+		tuning->custom_mode = ctrl->value;
             break;
+	}
         /* ---- OEM no-op controls (return 0 without action) ---- */
         case 0x8000003:  /* WB mode (subset) */
         case 0x8000006:  /* WB (no-op range) */
@@ -15589,7 +15614,6 @@ int tisp_cust_mode_s_ctrl(uint32_t mode)
         if (ourISPdev) {
             uint32_t dn = ourISPdev->day_night;
             ourISPdev->day_night = ((dn & ~2) == 0) ? 2 : 3;
-            ourISPdev->dn_pending = 3;  /* custom mode transition */
         }
     } else if (mode == 0) {
         /* OEM: restore day or night params based on current day_night state */
@@ -20633,7 +20657,8 @@ int tiziano_gib_dn_params_refresh(void)
     /* OEM updates config_line[3], shared by the DEIR gate and ae0_tune2. */
     if (deir_en != 1)
         GIB_CFG_DEIR_EN = 0;
-    else if (ourISPdev->day_night != 0)
+    else if ((ourISPdev->day_night & ~TX_ISP_DAYNIGHT_CUSTOM_FLAG) !=
+	     TX_ISP_DAY_MODE)
         GIB_CFG_DEIR_EN = 0;
     else
         GIB_CFG_DEIR_EN = deir_en;
@@ -20660,7 +20685,8 @@ int tiziano_gib_init(void)
      * and the hardware DEIR gate clear. */
     if (deir_en != 1)
         GIB_CFG_DEIR_EN = 0;
-    else if (ourISPdev->day_night != 0)
+    else if ((ourISPdev->day_night & ~TX_ISP_DAYNIGHT_CUSTOM_FLAG) !=
+	     TX_ISP_DAY_MODE)
         GIB_CFG_DEIR_EN = 0;
     else
         GIB_CFG_DEIR_EN = deir_en;
