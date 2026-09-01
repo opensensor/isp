@@ -2389,8 +2389,7 @@ static void vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel,
 	vic_mdma_ch0_set_buff_index = 4;
 	vic_mdma_ch1_set_buff_index = 4;
 	vic_mdma_ch0_sub_get_num    = num_frames;
-	if (dual_ch)
-		vic_mdma_ch1_sub_get_num = num_frames;
+	vic_mdma_ch1_sub_get_num    = dual_ch ? num_frames : 0;
 
 	/* Program MDMA config registers */
 	writel(1, regs + 0x308);                           /* MDMA enable */
@@ -2507,8 +2506,10 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		u32 height = vic_dev->height;
 		struct tx_isp_sensor_attribute *sattr = vic_raw_sensor_attr_get(vic_dev);
 		int is_nv12 = vic_sensor_is_yuv422(ourISPdev ? ourISPdev->sensor : NULL);
+		int dual = 0;
 		u32 stride_line, frame_size, savenum, total_size;
 		u32 saved_7810, saved_7814, saved_7804, saved_7820;
+		struct device *capture_dma_dev = NULL;
 		bool was_processing;
 		long ret;
 		int i;
@@ -2526,16 +2527,28 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			goto out;
 		}
 
+		/* OEM tests sensor_attribute::data_type at +0x90.  A dual-channel
+		 * raw capture writes two frame-sized planes for every requested
+		 * frame; account for both before allocating the DMA buffer. */
+		if (!is_nv12 && sattr &&
+		    sattr->data_type != TX_SENSOR_DATA_TYPE_LINEAR)
+			dual = 1;
+
 		/* Calculate frame size: raw=width*2*height, NV12=width*1.5*height */
 		stride_line = width << 1;
 		if (is_nv12)
 			stride_line = (stride_line + width) >> 1; /* width*3/2 */
 		frame_size = stride_line * height;
-		total_size = savenum * frame_size;
+		if (!frame_size || savenum > (~0U / frame_size) / (dual ? 2 : 1)) {
+			pr_err("snapraw: capture size overflow (frame=%u num=%u dual=%d)\n",
+			       frame_size, savenum, dual);
+			goto out;
+		}
+		total_size = savenum * frame_size * (dual ? 2 : 1);
 
-		pr_info("snapraw: %ux%u fmt=%s stride=%u frame=%u num=%u total=%u\n",
+		pr_info("snapraw: %ux%u fmt=%s stride=%u frame=%u num=%u dual=%d total=%u\n",
 			width, height, is_nv12 ? "nv12" : "raw",
-			stride_line, frame_size, savenum, total_size);
+			stride_line, frame_size, savenum, dual, total_size);
 
 		if (width >= 0xa81) {
 			pr_err("snapraw: width %u too large (max 0xa80)\n", width);
@@ -2584,16 +2597,19 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 			if (!alloc_dev && ourISPdev && ourISPdev->dev)
 				alloc_dev = ourISPdev->dev;
 
-			if (alloc_dev)
+			if (alloc_dev) {
 				virt = dma_alloc_coherent(alloc_dev, total_size,
 							  &phys, GFP_KERNEL);
+				if (virt)
+					capture_dma_dev = alloc_dev;
+			}
 
 			/* Fallback: kmalloc + virt_to_phys for MIPS KSEG0 */
 			if (!virt) {
 				virt = kmalloc(total_size, GFP_KERNEL);
 				if (virt) {
 					phys = (dma_addr_t)virt_to_phys(virt);
-					alloc_dev = NULL; /* flag: use kfree, not dma_free */
+					alloc_dev = NULL;
 				}
 			}
 
@@ -2613,15 +2629,9 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 
 		/* Determine dual-channel and format for vic_mdma_enable */
 		{
-			int dual = 0;
 			int fmt_arg = 0;
 			was_processing = vic_dev->processing;
 
-			/* OEM tests sensor_attribute::data_type at +0x90 here.  Timing
-			 * geometry must not be used as a proxy for dual-channel capture. */
-			if (!is_nv12 && sattr &&
-			    sattr->data_type != TX_SENSOR_DATA_TYPE_LINEAR)
-				dual = 1;
 			if (is_nv12)
 				fmt_arg = 7;
 
@@ -2687,17 +2697,13 @@ ssize_t isp_vic_cmd_set(struct file *file, const char __user *buf,
 		if (was_processing && vic_dev->stream_state)
 			ispvic_frame_channel_s_stream(vic_dev, 1);
 
-		/* Free buffer — try dma_free_coherent first, fall back to kfree.
-		 * The allocation path may have used kmalloc as fallback. */
+		/* Free with the allocator that produced the buffer.  Re-deriving a
+		 * device here is wrong when dma_alloc_coherent() failed and the
+		 * allocation fell back to kmalloc(). */
 		if (vic_dev->capture_buf_virt) {
-			struct device *free_dev = NULL;
-			if (sd && sd->module.dev)
-				free_dev = sd->module.dev;
-			if (!free_dev && ourISPdev && ourISPdev->dev)
-				free_dev = ourISPdev->dev;
-
-			if (free_dev && vic_dev->capture_buf_phys)
-				dma_free_coherent(free_dev, vic_dev->capture_buf_size,
+			if (capture_dma_dev)
+				dma_free_coherent(capture_dma_dev,
+						  vic_dev->capture_buf_size,
 						  vic_dev->capture_buf_virt,
 						  (dma_addr_t)vic_dev->capture_buf_phys);
 			else
