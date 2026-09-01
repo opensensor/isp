@@ -786,12 +786,14 @@ module_param(t41_ae_update_frames, uint, 0644);
 MODULE_PARM_DESC(t41_ae_update_frames,
 		 "histogram frames between safe AE sensor updates");
 /*
- * A short exposure cannot reject mains-powered LED PWM.  The OS04D10 runs
- * exactly 44,225 lines/second, making 369 lines its nearest 1/120 second
- * shutter.  Pair that default with the image-side attenuation profile below
- * so bright scenes retain highlight headroom.
+ * Start in the SDK's AUTO anti-flicker policy: below the first mains period,
+ * let AE use the sensor's short integrations; at and above it, the generated
+ * flicker nodes still quantize exposure.  NORMAL mode installs the 369-line
+ * (60 Hz) or 442-line (50 Hz) floor when userspace explicitly requests it.
+ * Applying that floor before policy selection clips bright scenes at unity
+ * gain because integration cannot fall far enough.
  */
-static unsigned int t41_ae_flicker_floor_lines = 369U;
+static unsigned int t41_ae_flicker_floor_lines;
 module_param(t41_ae_flicker_floor_lines, uint, 0644);
 MODULE_PARM_DESC(t41_ae_flicker_floor_lines,
 		 "minimum anti-flicker integration lines (0 disables the floor)");
