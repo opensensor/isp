@@ -24,6 +24,15 @@
 #include "../include/tx_isp/tx_isp_video_queue.h"
 #include "tx_isp_t40_v4l2.h"
 
+#ifndef CONFIG_DMA_SHARED_BUFFER
+#error "CONFIG_TX_ISP_T40_V4L2 requires CONFIG_DMA_SHARED_BUFFER"
+#endif
+
+#if !defined(CONFIG_VIDEOBUF2_DMA_CONTIG) && \
+	!defined(CONFIG_VIDEOBUF2_DMA_CONTIG_MODULE)
+#error "CONFIG_TX_ISP_T40_V4L2 requires CONFIG_VIDEOBUF2_DMA_CONTIG"
+#endif
+
 #define TX_ISP_T40_V4L2_WIDTH_ALIGN	32U
 #define TX_ISP_T40_V4L2_HEIGHT_ALIGN	16U
 #define TX_ISP_T40_V4L2_FALLBACK_WIDTH	1920U
