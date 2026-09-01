@@ -8753,7 +8753,10 @@ static uint32_t regtrace_awb_grayworld_last_bgain = 0x666;
  */
 static bool regtrace_enable_ae_soft;
 static uint regtrace_ae_soft_target = 140;
-static uint regtrace_ae_soft_hyst = 16;
+/* Keep completed-frame AE close to its luma target.  A 16-level deadband
+ * accepted the full 94..126 swing around target 110 and left daylight scenes
+ * visibly pumping between under- and overexposure. */
+static uint regtrace_ae_soft_hyst = 4;
 static uint regtrace_ae_soft_min_it = 64;
 static uint regtrace_ae_soft_max_it = 1919;
 /*
@@ -8881,7 +8884,10 @@ static uint regtrace_frame_3a_target = 110;
 static uint regtrace_frame_awb_target = 128;
 static uint regtrace_frame_awb_hyst = 2;
 static uint regtrace_frame_3a_highlight_level = 245;
-static uint regtrace_frame_3a_highlight_limit_permille = 100;
+/* Lamps and windows covered 3..5 percent of the live GC4653 scene.  Arm the
+ * existing mean-gated guard at 3 percent; its target check prevents a local
+ * highlight from underexposing an otherwise dark frame. */
+static uint regtrace_frame_3a_highlight_limit_permille = 30;
 static uint32_t regtrace_frame_3a_samples;
 static uint32_t regtrace_frame_3a_last_luma;
 static uint32_t regtrace_frame_3a_last_u;
