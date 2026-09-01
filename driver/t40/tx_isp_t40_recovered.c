@@ -6,7 +6,9 @@
 /* Module vermagic: 4.4.94 SMP preempt mod_unload MIPS32_R2 32BIT  */
 
 #include "../include/tx_isp/tx_isp_math.h"
+#include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
+#include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "tx_isp_t40_subdev.h"
 #include "tx_isp_t40_v4l2.h"
 
@@ -1414,6 +1416,7 @@ static int16_t mscaler_s1[REGTRACE_MSCA_STATE_BYTES / sizeof(int16_t)];
 static unsigned char tispSecdInfo[REGTRACE_TISP_INFO_SIZE] __attribute__((aligned(4)));
 static unsigned char tispinfo[REGTRACE_TISP_INFO_SIZE] __attribute__((aligned(4)));
 static uint32_t tiziano_enable;
+#define REGTRACE_T40_TUNING_BANK_BYTES 0x18ff4U
 static uintptr_t tparamsN[0x4000];
 static uint32_t tparams_day;
 static uint32_t tparams_night;
@@ -8823,9 +8826,16 @@ static uint regtrace_ccm_ct = 5000;
 static uint32_t regtrace_ccm_ct_now;
 static uint regtrace_ccm_ev = 400;
 static uint32_t regtrace_ccm_ev_now;
-static bool regtrace_enable_mdns;
+/* The OEM/OpenIMP buffer handshake now supplies an exclusive, range-checked
+ * rmem slice before block init.  Keep MDNS on by default; setup fails closed
+ * before any DMA register write when that contract is absent or invalid. */
+static bool regtrace_enable_mdns = true;
 /* userspace 3A: gain EV (log2(total_gain) in 16.16) drives DNS strength */
 static uint regtrace_dns_gain_ev;
+/* Invalid sentinels force the first completed frame, and the first frame after
+ * every bank refresh, to replace block-init's bootstrap EV with live gain. */
+static uint32_t regtrace_dns_ev_applied = 0xffffffffU;
+static uint32_t regtrace_ysp_ev_applied = 0xffffffffU;
 /*
  * The recovered userspace loop may deliberately bias DNS above the sensor's
  * real gain to match stock noise.  YSP must still interpolate at the real
@@ -8840,17 +8850,26 @@ static uint regtrace_gib_blc_offset = 0x100;
 /* userspace 3A: gains written here (0644) are applied on change from frame-done */
 static uint regtrace_awb_manual_rgain;
 static uint regtrace_awb_manual_bgain;
-/*
- * BCSH saturation override (0644), applied on change from frame-done like the
- * manual WB gains. 0 = unset (leave the lit BCSH chain's own value untouched);
- * otherwise a scale where 128 = unity and 255 ~= 2x. The recovered BCSH unit
- * lands desaturated vs stock, so this is the live dial to restore chroma
- * without a reload. Implemented as a direct write to the BCSH saturation
- * matrix (0x11018-0x11020) via the crash-safe system_reg_write path, because
- * the OEM tisp_set_saturation struct (pstMainBcshOri) is never initialized in
- * this reconstruction.
- */
-static uint regtrace_bcsh_saturation;
+/* T40 IMPISPWBAttr mode: 0=auto, 1=manual.  Keep this state outside the
+ * unrecovered OEM AWB object graph so valid control-plane reads never chase
+ * its uninitialised pointer table. */
+static uint regtrace_awb_control_mode;
+static bool regtrace_awb_control_frozen;
+static uint regtrace_running_mode;
+static uint regtrace_sensor_fps_packed = (25U << 16) | 1U;
+static uint32_t regtrace_day_awb_rgain = 0x5a0;
+static uint32_t regtrace_day_awb_bgain = 0x666;
+static DEFINE_MUTEX(regtrace_t40_running_mode_lock);
+/* DMSC user sharpness (0..255, 128 = calibrated tuning-bank curves). */
+static uint regtrace_dmsc_sharpness = 128U;
+/* BCSH user controls (0..255, 128 = neutral), applied through the literal
+ * parameter/update chain.  Directly scaling 0x11018..0x11020 is incorrect:
+ * those packed words are a color/luma transform, not three independent
+ * chroma gains, and setting them to zero produces a constant green frame. */
+static uint regtrace_bcsh_brightness = 128U;
+static uint regtrace_bcsh_contrast = 128U;
+static uint regtrace_bcsh_saturation = 128U;
+static uint regtrace_bcsh_hue = 128U;
 static uint regtrace_frame_3a_interval = 15;
 static uint regtrace_frame_3a_target = 110;
 /*
@@ -9177,7 +9196,9 @@ module_param_named(ccm_ev, regtrace_ccm_ev, uint, 0644);
 module_param_named(ccm_ev_now, regtrace_ccm_ev_now, uint, 0444);
 module_param_named(enable_mdns, regtrace_enable_mdns, bool, 0644);
 module_param_named(dns_gain_ev, regtrace_dns_gain_ev, uint, 0644);
+module_param_named(dns_ev_applied, regtrace_dns_ev_applied, uint, 0444);
 module_param_named(ysp_gain_ev, regtrace_ysp_gain_ev, uint, 0644);
+module_param_named(ysp_ev_applied, regtrace_ysp_ev_applied, uint, 0444);
 module_param_named(ysp_gain_ev_now, regtrace_ysp_gain_ev_now, uint, 0444);
 module_param_array_named(mdns_wr_bitmap, regtrace_mdns_wr_bitmap, uint, NULL, 0444);
 module_param_named(gib_blc_offset, regtrace_gib_blc_offset, uint, 0644);
@@ -9201,7 +9222,17 @@ module_param_named(ae_soft_last_mean, regtrace_ae_soft_last_mean, uint, 0444);
 module_param_named(enable_frame_3a, regtrace_enable_frame_3a, bool, 0644);
 module_param_named(awb_manual_rgain, regtrace_awb_manual_rgain, uint, 0644);
 module_param_named(awb_manual_bgain, regtrace_awb_manual_bgain, uint, 0644);
+module_param_named(awb_control_mode, regtrace_awb_control_mode, uint, 0444);
+module_param_named(awb_control_frozen, regtrace_awb_control_frozen, bool, 0444);
+module_param_named(running_mode, regtrace_running_mode, uint, 0444);
+module_param_named(sensor_fps_packed, regtrace_sensor_fps_packed, uint, 0444);
+module_param_named(day_awb_rgain, regtrace_day_awb_rgain, uint, 0444);
+module_param_named(day_awb_bgain, regtrace_day_awb_bgain, uint, 0444);
+module_param_named(dmsc_sharpness, regtrace_dmsc_sharpness, uint, 0444);
+module_param_named(bcsh_brightness, regtrace_bcsh_brightness, uint, 0444);
+module_param_named(bcsh_contrast, regtrace_bcsh_contrast, uint, 0444);
 module_param_named(bcsh_saturation, regtrace_bcsh_saturation, uint, 0644);
+module_param_named(bcsh_hue, regtrace_bcsh_hue, uint, 0444);
 module_param_named(frame_3a_interval, regtrace_frame_3a_interval, uint, 0644);
 module_param_named(frame_3a_target, regtrace_frame_3a_target, uint, 0644);
 module_param_named(frame_awb_target, regtrace_frame_awb_target, uint, 0644);
@@ -9762,6 +9793,8 @@ static void regtrace_soft_gamma_write(void)
 
 #include "tx_isp_t40_bcsh_lit.inc"
 #include "tx_isp_t40_dmsc_lit.inc"
+
+static int regtrace_t40_apply_dmsc_sharpness(uint8_t sharpness);
 #include "tx_isp_t40_clm_lit.inc"
 #include "tx_isp_t40_lsc_lit.inc"
 #include "tx_isp_t40_sdns_lit.inc"
@@ -11292,12 +11325,63 @@ static void regtrace_t40_apply_raw_tuning_gates(uint32_t nbuf)
         regtrace_t40_quality_top40_final &= ~BIT(15);
     }
 
+    /*
+     * The first T40 recovery profile hard-coded these enable bits once
+     * at module load.  Day/night banks carry their own bypass policy, just
+     * like T31, and the GC4653 night bank intentionally bypasses YDNS/YSP.
+     * Re-evaluate every source-derived block when the active bank changes;
+     * do not leave a day block running on night parameters (or vice versa).
+     */
+    regtrace_enable_soft_gamma =
+        regtrace_t40_quality_profile >= 1U && !flags[10];
+    regtrace_enable_ccm =
+        regtrace_t40_quality_profile >= 1U && !flags[9];
+    regtrace_enable_ydns =
+        regtrace_t40_quality_profile >= 1U && !flags[14];
+    regtrace_enable_ysp =
+        regtrace_t40_quality_profile >= 1U && !flags[17];
+    regtrace_enable_sdns =
+        regtrace_t40_quality_profile >= 1U && !flags[18];
+    regtrace_enable_dmsc_lit =
+        regtrace_t40_quality_profile >= 2U && !flags[13];
+
+    if (regtrace_enable_soft_gamma)
+        regtrace_t40_quality_top40_final &= ~BIT(10);
+    else
+        regtrace_t40_quality_top40_final |= BIT(10);
+    if (regtrace_enable_ccm)
+        regtrace_t40_quality_top40_final &= ~BIT(9);
+    else
+        regtrace_t40_quality_top40_final |= BIT(9);
+    if (regtrace_enable_ydns)
+        regtrace_t40_quality_top40_final &= ~BIT(14);
+    else
+        regtrace_t40_quality_top40_final |= BIT(14);
+    if (regtrace_enable_ysp)
+        regtrace_t40_quality_top40_final &= ~BIT(17);
+    else
+        regtrace_t40_quality_top40_final |= BIT(17);
+    if (regtrace_enable_sdns)
+        regtrace_t40_quality_top40_final &= ~BIT(18);
+    else
+        regtrace_t40_quality_top40_final |= BIT(18);
+    if (regtrace_enable_dmsc_lit)
+        regtrace_t40_quality_top40_final &= ~BIT(13);
+    else
+        regtrace_t40_quality_top40_final |= BIT(13);
+
     printk(KERN_WARNING
-           "tx_isp_t40_recovered: tuning gates flags=0x%08x BLC=%s LSC=%s GIB=%s BCSH=%s top40=0x%08x\n",
+           "tx_isp_t40_recovered: tuning gates flags=0x%08x BLC=%s LSC=%s GIB=%s BCSH=%s gamma=%u CCM=%u DMSC=%u YDNS=%u YSP=%u SDNS=%u top40=0x%08x\n",
            packed, flags[0] ? "bypass" : "active",
            flags[1] ? "bypass" : "active",
            flags[5] ? "bypass" : "active",
            flags[15] ? "bypass" : "active",
+           regtrace_enable_soft_gamma ? 1U : 0U,
+           regtrace_enable_ccm ? 1U : 0U,
+           regtrace_enable_dmsc_lit ? 1U : 0U,
+           regtrace_enable_ydns ? 1U : 0U,
+           regtrace_enable_ysp ? 1U : 0U,
+           regtrace_enable_sdns ? 1U : 0U,
            regtrace_t40_quality_top40_final);
 }
 
@@ -11395,7 +11479,7 @@ static int regtrace_gib_main_gain_update_lit(uint32_t gain, bool init)
     uint16_t max_blc, self_gain, map;
     uint8_t dgain_shift;
     uint32_t bayer, config0, config1;
-    bool ir_mode = false;
+    bool ir_mode = READ_ONCE(regtrace_running_mode) != 0;
 
     if (!nbuf)
         return -ENOENT;
@@ -11499,87 +11583,218 @@ static uint32_t regtrace_mdns_gain_old = 0xffffffffU;
 static uint32_t regtrace_mdns_wdr_flags[2];
 
 /*
- * MDNS temporal reference buffers. In the OEM stack these are programmed
- * by a tx_isp_unlocked_ioctl set-buffer branch (OEM 0x131bc): userspace
- * libimp passes an rmem {paddr,size} and the kernel splits it into five
- * planes written to (ch+30)<<11 + 0x40..0x64 (addr/stride pairs) with the
- * Y/UV plane byte sizes at +0x70/+0x74. Our probe path never issues that
- * ioctl, so the unit would DMA from address 0 — the suspected cause of
- * the top40-bit3 hard freeze. We carve a static chunk from rmem
- * (96M@0x6000000 on this cam; stream buffers live below 0x7000000) and
- * program the same layout for isp_memopt=0 (full five planes).
+ * MDNS temporal-reference planes must come from a userspace-owned rmem slice.
+ * OpenIMP follows the OEM contract: GET_MDNS_BUF_INFO obtains the exact size,
+ * its shared bump allocator reserves that many bytes, then SET_MDNS_BUF_INFO
+ * returns the physical allocation.  A historical fixed address here could
+ * overlap either encoder rmem or nmem; never invent ownership in the driver.
  */
-/*
- * MDNS temporal-reference planes need ~5MB of physically contiguous DDR the
- * ISP DMA owns exclusively. 0x8000000 (the old default) is 32MB into rmem,
- * which rvd maps in full and carves its encoder working buffers from, so the
- * ISP would scribble over whatever rvd allocates there. Default into nmem
- * (64M@0xc000000 on the Wyze T40 cmdline), which is idle unless the NNA runs.
- */
-static uint32_t regtrace_mdns_buf_phys = 0x0c000000U;
-static uint32_t regtrace_mdns_buf_size = 0x00800000U;
+static uint32_t regtrace_mdns_buf_phys;
+static uint32_t regtrace_mdns_buf_size;
+static uint32_t regtrace_rmem_base_now;
+static uint32_t regtrace_rmem_size_now;
 module_param_named(mdns_buf_phys, regtrace_mdns_buf_phys, uint, 0644);
 module_param_named(mdns_buf_size, regtrace_mdns_buf_size, uint, 0644);
+module_param_named(rmem_base_now, regtrace_rmem_base_now, uint, 0444);
+module_param_named(rmem_size_now, regtrace_rmem_size_now, uint, 0444);
 static uint32_t regtrace_mdns_dbg_reg68;
 static uint32_t regtrace_mdns_dbg_init_ret = 0xdeadbeefU;
 module_param_named(mdns_dbg_reg68, regtrace_mdns_dbg_reg68, uint, 0444);
 module_param_named(mdns_dbg_init_ret, regtrace_mdns_dbg_init_ret, uint, 0444);
 
+struct regtrace_t40_mdns_layout {
+    uint32_t y_stride;
+    uint32_t y_size;
+    uint32_t uv_stride;
+    uint32_t uv_size;
+    uint32_t motion_stride;
+    uint32_t motion_size;
+    uint32_t half_stride;
+    uint32_t half_size;
+    uint32_t quarter_stride;
+    uint32_t quarter_size;
+    uint32_t used_size;
+};
+
+static int regtrace_t40_mdns_layout_build(uint32_t width, uint32_t height,
+                                           struct regtrace_t40_mdns_layout *layout)
+{
+    struct regtrace_t40_mdns_layout result = { 0 };
+    uint64_t pixels;
+    uint64_t size;
+    uint64_t used = 0;
+
+    if (!width || !height || !layout)
+        return -EINVAL;
+
+    result.y_stride = (width + 15U) & ~15U;
+    pixels = (uint64_t)result.y_stride * height;
+    size = ALIGN(pixels + (pixels >> 5), 1024U);
+    if (size > 0xffffffffULL)
+        return -EOVERFLOW;
+    result.y_size = (uint32_t)size;
+    used += size;
+
+    result.uv_stride = (width + 31U) & ~31U;
+    pixels = (uint64_t)result.uv_stride * height;
+    size = ALIGN((pixels >> 1) + (pixels >> 7), 1024U);
+    if (size > 0xffffffffULL)
+        return -EOVERFLOW;
+    result.uv_size = (uint32_t)size;
+    used += size;
+
+    result.motion_stride = (((((width + 7U) >> 3) + 1U) >> 1) + 7U) & ~7U;
+    size = ALIGN(((uint64_t)result.motion_stride * height) >> 3, 1024U);
+    if (size > 0xffffffffULL)
+        return -EOVERFLOW;
+    result.motion_size = (uint32_t)size;
+    used += size;
+
+    result.half_stride = (width + 31U) & ~31U;
+    size = ALIGN(((uint64_t)result.half_stride * height) >> 1, 1024U);
+    if (size > 0xffffffffULL)
+        return -EOVERFLOW;
+    result.half_size = (uint32_t)size;
+    used += size;
+
+    result.quarter_stride = ((width + 31U) >> 5) << 4;
+    size = ALIGN(((uint64_t)result.quarter_stride * height) >> 2, 1024U);
+    if (size > 0xffffffffULL)
+        return -EOVERFLOW;
+    result.quarter_size = (uint32_t)size;
+    used += size;
+
+    if (!used || used > 0xffffffffULL)
+        return -EOVERFLOW;
+    result.used_size = (uint32_t)used;
+    *layout = result;
+    return 0;
+}
+
+static int regtrace_t40_boot_rmem(uint32_t *base, uint32_t *size)
+{
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    struct file *file;
+    mm_segment_t oldfs;
+    loff_t pos = 0;
+    char buf[512];
+    char *field;
+    char *end;
+    uint64_t bytes;
+    uint64_t address;
+    ssize_t len;
+
+    if (!base || !size)
+        return -EINVAL;
+    file = filp_open("/proc/cmdline", O_RDONLY, 0);
+    if (IS_ERR(file))
+        return PTR_ERR(file);
+    oldfs = get_fs();
+    set_fs(KERNEL_DS);
+    len = vfs_read(file, buf, sizeof(buf) - 1, &pos);
+    set_fs(oldfs);
+    filp_close(file, NULL);
+    if (len <= 0)
+        return len ? (int)len : -EIO;
+    buf[len] = '\0';
+
+    field = strstr(buf, "rmem=");
+    if (!field)
+        return -ENOENT;
+    bytes = memparse(field + 5, &end);
+    if (!bytes || *end != '@')
+        return -EINVAL;
+    address = simple_strtoull(end + 1, &end, 0);
+    if ((*end && *end != ' ' && *end != '\t' && *end != '\r' &&
+         *end != '\n') || address > 0xffffffffULL ||
+        bytes > 0xffffffffULL || address + bytes > 0x100000000ULL)
+        return -ERANGE;
+
+    *base = (uint32_t)address;
+    *size = (uint32_t)bytes;
+    WRITE_ONCE(regtrace_rmem_base_now, *base);
+    WRITE_ONCE(regtrace_rmem_size_now, *size);
+    return 0;
+#else
+    (void)base;
+    (void)size;
+    return -ENOSYS;
+#endif
+}
+
+static int regtrace_t40_rmem_range_validate(uint32_t phys, uint32_t size)
+{
+    uint32_t rmem_base;
+    uint32_t rmem_size;
+    uint64_t end;
+    uint64_t rmem_end;
+    int ret;
+
+    if (!phys || !size || (phys & (PAGE_SIZE - 1U)))
+        return -EINVAL;
+    ret = regtrace_t40_boot_rmem(&rmem_base, &rmem_size);
+    if (ret)
+        return ret;
+    end = (uint64_t)phys + size;
+    rmem_end = (uint64_t)rmem_base + rmem_size;
+    if (phys < rmem_base || end > rmem_end)
+        return -ERANGE;
+    return 0;
+}
+
 static int regtrace_mdns_buf_setup(uint32_t ch, uint32_t width, uint32_t height)
 {
+    struct regtrace_t40_mdns_layout layout;
     uint32_t base = (ch + 30U) << 11;
-    uint32_t phys = regtrace_mdns_buf_phys;
+    uint32_t phys = READ_ONCE(regtrace_mdns_buf_phys);
+    uint32_t available = READ_ONCE(regtrace_mdns_buf_size);
     uint32_t off = 0;
-    uint32_t w;
-    uint32_t sz;
+    int ret;
 
-    if (!phys || !width || !height)
+    if (!phys || !available)
         return -ENOENT;
+    ret = regtrace_t40_mdns_layout_build(width, height, &layout);
+    if (ret)
+        return ret;
+    if (available < layout.used_size)
+        return -ENOMEM;
+    ret = regtrace_t40_rmem_range_validate(phys, layout.used_size);
+    if (ret) {
+        printk(KERN_ERR
+               "tx_isp_t40_recovered: reject MDNS DMA phys=0x%x size=0x%x ret=%d\n",
+               phys, layout.used_size, ret);
+        return ret;
+    }
 
     /* plane 1: Y reference (+1/32 metadata), 1K-aligned */
-    w = (width + 15U) & ~15U;
-    sz = ((w * height) + ((w * height) >> 5) + 1023U) & ~1023U;
-    system_reg_write(base + 0x70, sz >> 8);
+    system_reg_write(base + 0x70, layout.y_size >> 8);
     system_reg_write(base + 0x40, phys);
-    system_reg_write(base + 0x44, w);
-    off += sz;
+    system_reg_write(base + 0x44, layout.y_stride);
+    off += layout.y_size;
 
     /* plane 2: UV reference (+1/128 metadata) */
-    w = (width + 31U) & ~31U;
-    sz = (((w * height) >> 1) + ((w * height) >> 7) + 1023U) & ~1023U;
-    system_reg_write(base + 0x74, sz >> 8);
+    system_reg_write(base + 0x74, layout.uv_size >> 8);
     system_reg_write(base + 0x48, phys + off);
-    system_reg_write(base + 0x4c, w);
-    off += sz;
+    system_reg_write(base + 0x4c, layout.uv_stride);
+    off += layout.uv_size;
 
     /* plane 3: motion metadata (~4 bits per 8-px block) */
-    w = (((((width + 7U) >> 3) + 1U) >> 1) + 7U) & ~7U;
-    sz = (((w * height) >> 3) + 1023U) & ~1023U;
     system_reg_write(base + 0x50, phys + off);
-    system_reg_write(base + 0x54, w);
-    off += sz;
+    system_reg_write(base + 0x54, layout.motion_stride);
+    off += layout.motion_size;
 
     /* plane 4: full-width half-size plane (isp_memopt==0 layout) */
-    w = (width + 31U) & ~31U;
-    sz = (((w * height) >> 1) + 1023U) & ~1023U;
     system_reg_write(base + 0x58, phys + off);
-    system_reg_write(base + 0x5c, w);
-    off += sz;
+    system_reg_write(base + 0x5c, layout.half_stride);
+    off += layout.half_size;
 
     /* plane 5: quarter-size plane, width/2 rounded to 16 */
-    w = ((width + 31U) >> 5) << 4;
-    sz = (((w * height) >> 2) + 1023U) & ~1023U;
     system_reg_write(base + 0x60, phys + off);
-    system_reg_write(base + 0x64, w);
-    off += sz;
+    system_reg_write(base + 0x64, layout.quarter_stride);
+    off += layout.quarter_size;
 
-    if (off > regtrace_mdns_buf_size) {
-        printk(KERN_ERR "tx_isp_t40_recovered: mdns-buf ch=%u needs 0x%x > 0x%x\n",
-               ch, off, regtrace_mdns_buf_size);
-        return -ENOMEM;
-    }
     printk(KERN_WARNING "tx_isp_t40_recovered: mdns-buf ch=%u phys=0x%x used=0x%x of 0x%x %ux%u\n",
-           ch, phys, off, regtrace_mdns_buf_size, width, height);
+           ch, phys, off, available, width, height);
     return 0;
 }
 
@@ -14782,12 +14997,13 @@ static int regtrace_isp_block_init_once(const char *where)
                                              lsc_width, lsc_height);
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init lsc-lit ret=%d\n",
                lsc_ret);
-        /* seed CT tracking from the current WB gains; the frame-done hook
-         * only fires on gain changes, which never come once 3A converged */
-        if (!lsc_ret && regtrace_awb_grayworld_last_rgain &&
-            regtrace_awb_grayworld_last_bgain)
-            regtrace_lsc_lit_track_wb_gains(regtrace_awb_grayworld_last_rgain,
-                                            regtrace_awb_grayworld_last_bgain);
+        /*
+         * WBG gains are not a calibrated colour-temperature measurement.
+         * Keep the sensor IQ's 5000 K LSC reference until the repaired AWB
+         * path can provide its actual CT result.  Inferring CT from the
+         * gain ratio sent this GC4653 profile to the 2300 K endpoint and
+         * produced the visible yellow/green cast.
+         */
     }
 
     if (regtrace_enable_bcsh) {
@@ -14806,6 +15022,9 @@ static int regtrace_isp_block_init_once(const char *where)
     if (regtrace_enable_dmsc_lit) {
         int dmsc_ret = (int)regtrace_dmsc_main_init_lit();
 
+        if (!dmsc_ret && regtrace_dmsc_sharpness != 128U)
+            dmsc_ret = regtrace_t40_apply_dmsc_sharpness(
+                min_t(uint32_t, regtrace_dmsc_sharpness, 255U));
         printk(KERN_WARNING "tx_isp_t40_recovered: isp-block-init dmsc-lit ret=%d\n",
                dmsc_ret);
     }
@@ -15002,6 +15221,7 @@ static void regtrace_isp_block_init_retry(const char *where)
 #define REGTRACE_TX_ISP_VIDEO_VIC_ID_OFFSET 0x4c
 #define REGTRACE_TX_ISP_EVENT_SENSOR_REGISTER 0x02000000U
 #define REGTRACE_TX_ISP_EVENT_SENSOR_SET_INPUT 0x02000004U
+#define REGTRACE_TX_ISP_EVENT_SENSOR_FPS 0x0200000aU
 /*
  * GC4653 sensor ioctl jump table (sensor_sensor_ops_ioctl, cmds
  * 0x2000006..0x2000016): 0x2000006 writes integration-time regs 0x200/0x201
@@ -15393,6 +15613,8 @@ static uint32_t regtrace_core_irq_last_index;
 static long regtrace_core_irq_last_ret;
 static uint32_t regtrace_core_irq_oem_enable_count;
 static uint32_t regtrace_core_irq_oem_skip_count;
+static uint32_t regtrace_core_irq_oem_disable_count;
+static uint32_t regtrace_core_irq_oem_disable_skip_count;
 static uint32_t regtrace_core_irq_oem_last_index;
 static uint32_t regtrace_core_irq_oem_last_state_before;
 static uint32_t regtrace_core_irq_oem_last_state_after;
@@ -16752,12 +16974,20 @@ static long regtrace_tx_isp_set_input_ioctl(unsigned long arg)
     return 0;
 }
 
+static void regtrace_sensor_dimensions(uint32_t channel, uint32_t *width,
+                                       uint32_t *height);
+
 static long regtrace_tx_isp_buf_info_ioctl(unsigned int cmd, unsigned long arg)
 {
     struct regtrace_isp_buf_info info;
     struct regtrace_isp_buf_info *slots;
+    struct regtrace_t40_mdns_layout mdns_layout;
+    uint32_t width = 0;
+    uint32_t height = 0;
     const char *name;
     int is_get;
+    bool is_mdns;
+    int ret;
 
     if (copy_from_user(&info, (const void __user *)(uintptr_t)arg, sizeof(info))) {
         printk(KERN_ERR "tx_isp_t40_recovered: buf info copy_from_user failed cmd=0x%x arg=0x%lx\n",
@@ -16769,24 +16999,51 @@ static long regtrace_tx_isp_buf_info_ioctl(unsigned int cmd, unsigned long arg)
         cmd == REGTRACE_TISP_VIDIOC_GET_MDNS_BUF_INFO) {
         slots = regtrace_mdns_buf_info;
         name = "mdns";
+        is_mdns = true;
         is_get = (cmd == REGTRACE_TISP_VIDIOC_GET_MDNS_BUF_INFO);
     } else {
         slots = regtrace_wdr_buf_info;
         name = "wdr";
+        is_mdns = false;
         is_get = (cmd == REGTRACE_TISP_VIDIOC_GET_WDR_BUF_INFO);
     }
 
-    if (info.vinum < ARRAY_SIZE(regtrace_mdns_buf_info)) {
-        if (is_get) {
-            uint32_t vinum = info.vinum;
-            info = slots[vinum];
-            info.vinum = vinum;
-        } else {
-            slots[info.vinum] = info;
+    if (info.vinum >= ARRAY_SIZE(regtrace_mdns_buf_info))
+        return -EINVAL;
+
+    if (is_mdns) {
+        regtrace_sensor_dimensions(info.vinum, &width, &height);
+        ret = regtrace_t40_mdns_layout_build(width, height, &mdns_layout);
+        if (ret)
+            return ret;
+    }
+
+    if (is_get) {
+        uint32_t vinum = info.vinum;
+
+        info = slots[vinum];
+        info.vinum = vinum;
+        if (is_mdns && !info.size)
+            info.size = mdns_layout.used_size;
+    } else {
+        if (is_mdns && (info.paddr || info.size)) {
+            if (!info.paddr || info.size < mdns_layout.used_size)
+                return -ENOSPC;
+            ret = regtrace_t40_rmem_range_validate(info.paddr, info.size);
+            if (ret) {
+                printk(KERN_ERR
+                       "tx_isp_t40_recovered: reject mdns allocation vinum=%u paddr=0x%x size=0x%x rmem=0x%x+0x%x ret=%d\n",
+                       info.vinum, info.paddr, info.size,
+                       READ_ONCE(regtrace_rmem_base_now),
+                       READ_ONCE(regtrace_rmem_size_now), ret);
+                return ret;
+            }
         }
-    } else if (is_get) {
-        info.paddr = 0;
-        info.size = 0;
+        slots[info.vinum] = info;
+        if (is_mdns && info.vinum == 0) {
+            WRITE_ONCE(regtrace_mdns_buf_phys, info.paddr);
+            WRITE_ONCE(regtrace_mdns_buf_size, info.size);
+        }
     }
 
     if (copy_to_user((void __user *)(uintptr_t)arg, &info, sizeof(info))) {
@@ -17381,8 +17638,6 @@ static void regtrace_tisp_dma_free(void)
     }
 }
 
-static void regtrace_sensor_dimensions(uint32_t channel, uint32_t *width,
-                                       uint32_t *height);
 static void regtrace_vic_mdma_kick370(volatile void __iomem *base,
                                       uint32_t channel, uint32_t idx,
                                       uint32_t source,
@@ -17901,19 +18156,25 @@ static int regtrace_core_irq_oem_enable(uintptr_t core_sd, uint32_t irq_index)
         return -EINVAL;
 
     irq_base = core_sd + REGTRACE_IRQ_TABLE_SUBDEV_OFF;
-    statep = (uint32_t *)(core_sd + 0x9c);
+    statep = (uint32_t *)(irq_base + REGTRACE_IRQ_SLOT_STATE_OFF +
+                          irq_index * sizeof(uint32_t));
     if (!regtrace_is_kernel_ptr((void *)irq_base) ||
         !regtrace_is_kernel_ptr((void *)statep))
         return -EINVAL;
 
-    __private_spin_lock_irqsave((uint32_t)irq_base, (uintptr_t)&flags);
+    __private_spin_lock_irqsave(
+        (uint32_t)(irq_base + irq_index * sizeof(uint32_t)),
+        (uintptr_t)&flags);
 
-    enable_cb = *(uintptr_t *)(core_sd + 0xac);
+    enable_cb = *(uintptr_t *)(irq_base + REGTRACE_IRQ_ENABLE_OFF);
     before = *statep;
     if (regtrace_is_kernel_ptr((void *)enable_cb) && before == 0) {
-        ret = ((int32_t (*)(uintptr_t, int32_t))enable_cb)(irq_base, 0);
-        *statep = 1;
-        regtrace_core_irq_oem_enable_count++;
+        ret = ((int32_t (*)(uintptr_t, int32_t))enable_cb)(irq_base,
+                                                           irq_index);
+        if (!ret) {
+            *statep = 1;
+            regtrace_core_irq_oem_enable_count++;
+        }
     } else {
         regtrace_core_irq_oem_skip_count++;
     }
@@ -17932,6 +18193,63 @@ static int regtrace_core_irq_oem_enable(uintptr_t core_sd, uint32_t irq_index)
     printk(KERN_WARNING "tx_isp_t40_recovered: core IRQ OEM enable sd=%p lock=%p idx=%u cb=%p state=%u->%u ret=%d\n",
            (void *)core_sd, (void *)irq_base, irq_index,
            (void *)enable_cb, before, after, ret);
+    return ret;
+}
+
+static int regtrace_core_irq_oem_disable(uintptr_t core_sd,
+                                         uint32_t irq_index)
+{
+    uintptr_t irq_base;
+    uintptr_t disable_cb;
+    uint32_t *statep;
+    uint32_t before;
+    uint32_t after;
+    int flags = 0;
+    int ret = 0;
+
+    if (!regtrace_is_kernel_ptr((void *)core_sd))
+        return -ENODEV;
+    if (irq_index >= REGTRACE_MAX_IRQS_PER_DEVICE)
+        return -EINVAL;
+
+    irq_base = core_sd + REGTRACE_IRQ_TABLE_SUBDEV_OFF;
+    statep = (uint32_t *)(irq_base + REGTRACE_IRQ_SLOT_STATE_OFF +
+                          irq_index * sizeof(uint32_t));
+    if (!regtrace_is_kernel_ptr((void *)irq_base) ||
+        !regtrace_is_kernel_ptr((void *)statep))
+        return -EINVAL;
+
+    __private_spin_lock_irqsave(
+        (uint32_t)(irq_base + irq_index * sizeof(uint32_t)),
+        (uintptr_t)&flags);
+
+    disable_cb = *(uintptr_t *)(irq_base + REGTRACE_IRQ_DISABLE_OFF);
+    before = *statep;
+    if (regtrace_is_kernel_ptr((void *)disable_cb) && before != 0) {
+        ret = ((int32_t (*)(uintptr_t, int32_t))disable_cb)(irq_base,
+                                                            irq_index);
+        if (!ret) {
+            *statep = 0;
+            regtrace_core_irq_oem_disable_count++;
+        }
+    } else {
+        regtrace_core_irq_oem_disable_skip_count++;
+    }
+    after = *statep;
+
+    private_spin_unlock_irqrestore();
+
+    regtrace_core_irq_oem_last_index = irq_index;
+    regtrace_core_irq_oem_last_state_before = before;
+    regtrace_core_irq_oem_last_state_after = after;
+    regtrace_core_irq_oem_last_ret = ret;
+    regtrace_core_irq_oem_last_sd = (void *)core_sd;
+    regtrace_core_irq_oem_last_lock = (void *)irq_base;
+    regtrace_core_irq_oem_last_cb = (void *)disable_cb;
+
+    printk(KERN_WARNING "tx_isp_t40_recovered: core IRQ OEM disable sd=%p lock=%p idx=%u cb=%p state=%u->%u ret=%d\n",
+           (void *)core_sd, (void *)irq_base, irq_index,
+           (void *)disable_cb, before, after, ret);
     return ret;
 }
 
@@ -17990,7 +18308,10 @@ static int regtrace_core_irq_stream(int channel, int enable)
         writel(0U, regs + primary_mask_reg);
         writel(0U, regs + error_mask_reg);
         wmb();
-        ret = tx_isp_disable_irq(core_sd, irq_index);
+        if (regtrace_enable_core_irq_oem_enable_path)
+            ret = regtrace_core_irq_oem_disable(core_sd, irq_index);
+        else
+            ret = tx_isp_disable_irq(core_sd, irq_index);
         regtrace_core_irq_disable_count++;
     }
 
@@ -18827,8 +19148,13 @@ static bool regtrace_proc_jz_sensor_dimensions(uint32_t *width,
         return false;
     }
 
-    wret = regtrace_read_proc_u32("/proc/jz/sensor/width", &w);
-    hret = regtrace_read_proc_u32("/proc/jz/sensor/height", &h);
+    wret = regtrace_read_proc_u32("/proc/jz/sensor/sensor0/width", &w);
+    hret = regtrace_read_proc_u32("/proc/jz/sensor/sensor0/height", &h);
+    /* Retain compatibility with the older flat registry layout. */
+    if (wret)
+        wret = regtrace_read_proc_u32("/proc/jz/sensor/width", &w);
+    if (hret)
+        hret = regtrace_read_proc_u32("/proc/jz/sensor/height", &h);
 
     regtrace_proc_jz_sensor_read_count++;
     regtrace_proc_jz_sensor_width_ret = wret;
@@ -18847,6 +19173,66 @@ static bool regtrace_proc_jz_sensor_dimensions(uint32_t *width,
 
     regtrace_proc_jz_sensor_last_ret = wret ? wret : hret;
     return false;
+}
+
+static int regtrace_t40_sensor_fps_get(uint32_t *packed_fps)
+{
+    uint32_t value;
+    uint32_t numerator;
+    uint32_t denominator;
+    int ret;
+
+    if (!packed_fps)
+        return -EINVAL;
+
+    ret = regtrace_read_proc_u32("/proc/jz/sensor/sensor0/fps", &value);
+    if (ret)
+        ret = regtrace_read_proc_u32("/proc/jz/sensor/fps", &value);
+    if (!ret && value && value <= 120U) {
+        value = (value << 16) | 1U;
+    } else if (!ret) {
+        numerator = value >> 16;
+        denominator = value & 0xffffU;
+        if (!numerator || !denominator || numerator > 120U * denominator)
+            ret = -ERANGE;
+    }
+
+    if (ret)
+        value = READ_ONCE(regtrace_sensor_fps_packed);
+    numerator = value >> 16;
+    denominator = value & 0xffffU;
+    if (!numerator || !denominator || numerator > 120U * denominator)
+        return ret ? ret : -ERANGE;
+
+    WRITE_ONCE(regtrace_sensor_fps_packed, value);
+    *packed_fps = value;
+    return 0;
+}
+
+static int regtrace_t40_sensor_fps_set(uint32_t packed_fps)
+{
+    uint32_t payload[2];
+    uint32_t numerator = packed_fps >> 16;
+    uint32_t denominator = packed_fps & 0xffffU;
+    int ret;
+
+    if (!numerator || !denominator || numerator > 120U * denominator)
+        return -EINVAL;
+
+    /*
+     * T40 sensor modules consume struct tx_isp_sensor_value, not the bare
+     * packed u32 used by T31.  GC4653 reads sensor_val->value at arg + 4;
+     * handing it &packed_fps therefore made it consume an unrelated stack
+     * word and reject an otherwise valid rate.
+     */
+    payload[0] = 0;
+    payload[1] = packed_fps;
+    ret = regtrace_sensor_call_sensor_ioctl(
+        REGTRACE_TX_ISP_EVENT_SENSOR_FPS, payload);
+    if (ret)
+        return ret;
+    WRITE_ONCE(regtrace_sensor_fps_packed, packed_fps);
+    return 0;
 }
 
 static void regtrace_record_sensor_full_dimensions(uint32_t channel,
@@ -20402,9 +20788,9 @@ static void regtrace_framechan_record_qbuf(int channel, uint32_t index,
 static int regtrace_core_program_qbuf(int channel, uint32_t phys,
                                       const struct regtrace_frame_image_format *format)
 {
+    struct tx_isp_nv12_buffer dma_buffer;
     uint32_t width;
     uint32_t height;
-    uint32_t aligned_height;
     uint32_t uv_phys;
     uint32_t bank;
     uint32_t index;
@@ -20418,14 +20804,29 @@ static int regtrace_core_program_qbuf(int channel, uint32_t phys,
         regtrace_framechan_default_width(channel);
     height = format->pix.height ? format->pix.height :
         regtrace_framechan_default_height(channel);
-    aligned_height = ALIGN(height, 16);
-    uv_phys = phys + (width * aligned_height);
     bank = (uint32_t)channel * REGTRACE_T40_MSCA_CH_BANK_STRIDE;
     index = regtrace_framechan_index_for_phys(channel, phys);
     sync_len = (index < REGTRACE_FRAMECHAN_QBUF_SHADOW_MAX &&
                 regtrace_framechan_qbuf_len[channel][index]) ?
         regtrace_framechan_qbuf_len[channel][index] :
-        (width * aligned_height * 3U / 2U);
+        (width * ALIGN(height, 16) * 3U / 2U);
+
+    ret = tx_isp_nv12_buffer_build(width, height, 1, 16, phys, sync_len,
+                                   &dma_buffer);
+    if (ret)
+        return ret;
+    ret = tx_isp_dma_range_validate(dma_buffer.y_dma,
+                                    dma_buffer.layout.sizeimage,
+                                    REGTRACE_PHYS_DRAM_TOP);
+    if (ret) {
+        pr_err_ratelimited("tx_isp_t40_recovered: MSCA ch%d rejected DMA [0x%08x..0x%08llx) ret=%d\n",
+                           channel, dma_buffer.y_dma,
+                           (unsigned long long)dma_buffer.y_dma +
+                               dma_buffer.layout.sizeimage,
+                           ret);
+        return ret;
+    }
+    uv_phys = dma_buffer.uv_dma;
 
     if (regtrace_framechan_dma_sync_qbuf)
         regtrace_framechan_dma_sync_phys(
@@ -20999,28 +21400,541 @@ static long regtrace_isp_m0_ctrl_ioctl(unsigned int cmd, unsigned long arg)
     return 0;
 }
 
+static int regtrace_isp_m0_apply_bcsh_ev(unsigned int pointer_slot,
+                                         uint8_t value)
+{
+    uint8_t *control;
+
+    if (!stMainBcshOuter_lit ||
+        pointer_slot >= ARRAY_SIZE(pstMainBcshOri_lit) ||
+        !pstMainBcshOri_lit[pointer_slot])
+        return -ENODEV;
+
+    control = (uint8_t *)(uintptr_t)pstMainBcshOri_lit[pointer_slot];
+    *control = value;
+    return tisp_bcsh_ev_update_lit(
+        (uint32_t)(uintptr_t)pstMainBcshOri_lit, 0);
+}
+
+static int regtrace_isp_m0_apply_brightness(uint8_t brightness)
+{
+    /* OEM tisp_bcsh_brightness stores through pstBcsh + 184. */
+    return regtrace_isp_m0_apply_bcsh_ev(46U, brightness);
+}
+
+static int regtrace_isp_m0_apply_contrast(uint8_t contrast)
+{
+    /* OEM tisp_bcsh_contrast stores through pstBcsh + 188. */
+    return regtrace_isp_m0_apply_bcsh_ev(47U, contrast);
+}
+
+static int regtrace_isp_m0_apply_saturation(uint8_t saturation)
+{
+    /* OEM tisp_bcsh_saturation stores through pstBcsh + 192. */
+    return regtrace_isp_m0_apply_bcsh_ev(48U, saturation);
+}
+
+static int regtrace_isp_m0_apply_hue(uint8_t hue)
+{
+    uint8_t *dirty;
+    uint8_t *angle;
+    uint8_t *raw;
+    uint32_t degrees;
+    int ret;
+
+    if (!stMainBcshOuter_lit || !pstMainBcshOri_lit[6] ||
+        !pstMainBcshOri_lit[25] || !pstMainBcshOri_lit[26])
+        return -ENODEV;
+
+    /* Match OEM tisp_bcsh_s_hue: map 0..255 onto 0..120 degrees, mark
+     * the CT transform dirty, update it, retain the unscaled user value. */
+    degrees = ((uint32_t)hue * 120U + 255U) >> 8;
+    degrees = min_t(uint32_t, degrees, 120U);
+    dirty = (uint8_t *)(uintptr_t)pstMainBcshOri_lit[6];
+    angle = (uint8_t *)(uintptr_t)pstMainBcshOri_lit[25];
+    raw = (uint8_t *)(uintptr_t)pstMainBcshOri_lit[26];
+    *dirty = 1U;
+    *angle = (uint8_t)degrees;
+    ret = tisp_bcsh_ct_update_lit(
+        (uint32_t)(uintptr_t)pstMainBcshOri_lit, 0);
+    *raw = hue;
+    *dirty = 0U;
+    return ret;
+}
+
+static int regtrace_isp_m0_set_brightness(uint8_t brightness)
+{
+    int ret = 0;
+
+    mutex_lock(&regtrace_t40_running_mode_lock);
+    regtrace_bcsh_brightness = brightness;
+    if (stMainBcshOuter_lit && pstMainBcshOri_lit[46])
+        ret = regtrace_isp_m0_apply_brightness(brightness);
+    mutex_unlock(&regtrace_t40_running_mode_lock);
+    return ret;
+}
+
+static int regtrace_isp_m0_set_contrast(uint8_t contrast)
+{
+    int ret = 0;
+
+    mutex_lock(&regtrace_t40_running_mode_lock);
+    regtrace_bcsh_contrast = contrast;
+    if (stMainBcshOuter_lit && pstMainBcshOri_lit[47])
+        ret = regtrace_isp_m0_apply_contrast(contrast);
+    mutex_unlock(&regtrace_t40_running_mode_lock);
+    return ret;
+}
+
 static int regtrace_isp_m0_set_saturation(uint8_t saturation)
 {
-    static const uint32_t regs[3] = { 0x11018, 0x1101c, 0x11020 };
-    static const uint32_t identity[3] = {
-        0x03fe0400, 0x04000400, 0x03fc0400
-    };
-    unsigned int i;
+    int ret = 0;
 
+    mutex_lock(&regtrace_t40_running_mode_lock);
     regtrace_bcsh_saturation = saturation;
-    for (i = 0; i < ARRAY_SIZE(regs); i++) {
-        uint32_t hi = ((identity[i] >> 16) & 0xffffU) * saturation / 128U;
-        uint32_t lo = (identity[i] & 0xffffU) * saturation / 128U;
-        int ret;
+    if (stMainBcshOuter_lit && pstMainBcshOri_lit[48])
+        ret = regtrace_isp_m0_apply_saturation(
+            READ_ONCE(regtrace_running_mode) ? 0U : saturation);
+    mutex_unlock(&regtrace_t40_running_mode_lock);
+    return ret;
+}
 
-        if (hi > 0x0fffU)
-            hi = 0x0fffU;
-        if (lo > 0x0fffU)
-            lo = 0x0fffU;
-        ret = system_reg_write(regs[i], (hi << 16) | lo);
-        if (ret)
-            return ret;
+static int regtrace_isp_m0_set_hue(uint8_t hue)
+{
+    int ret = 0;
+
+    mutex_lock(&regtrace_t40_running_mode_lock);
+    regtrace_bcsh_hue = hue;
+    if (stMainBcshOuter_lit && pstMainBcshOri_lit[25])
+        ret = regtrace_isp_m0_apply_hue(hue);
+    mutex_unlock(&regtrace_t40_running_mode_lock);
+    return ret;
+}
+
+static int regtrace_t40_apply_dmsc_sharpness(uint8_t sharpness)
+{
+    static const uint16_t curve_offsets[] = {
+        346U, 368U, 532U, 554U, 0U,
+        2172U, 2194U, 2354U, 2376U, 1882U,
+    };
+    const uint8_t *source;
+    uint8_t *active;
+    unsigned int curve;
+    unsigned int node;
+
+    if (!tparamsN[0] || !regtrace_main_dmsc_lit)
+        return -ENODEV;
+
+    /*
+     * OEM T40 tisp_dmsc_sharpness_set reads every one of the 11 gain nodes
+     * from the active tuning bank at +60956, but writes the scaled curves to
+     * the runtime DMSC copy at +176.  Keeping those two locations distinct is
+     * important: deriving a new setting from the previous runtime result
+     * compounds the scale each time a streamer reapplies its controls.
+     */
+    source = (const uint8_t *)(uintptr_t)tparamsN[0] + 60956U;
+    active = (uint8_t *)(uintptr_t)regtrace_main_dmsc_lit + 176U;
+    for (curve = 0; curve < ARRAY_SIZE(curve_offsets); curve++) {
+        uint32_t target = curve < 4U ? 600U : 800U;
+
+        for (node = 0; node < 11U; node++) {
+            const uint16_t *src = (const uint16_t *)(const void *)(
+                source + curve_offsets[curve] + node * sizeof(uint16_t));
+            uint16_t *dst = (uint16_t *)(void *)(
+                active + curve_offsets[curve] + node * sizeof(uint16_t));
+            uint32_t value = *src;
+
+            if (sharpness <= 128U) {
+                value = (value * sharpness) >> 7;
+            } else {
+                value += ((target - value) * (sharpness - 128U)) >> 7;
+            }
+            *dst = (uint16_t)value;
+        }
     }
+
+    return tisp_dmsc_all_reg_refresh_lit(0, regtrace_dmsc_lit_gain);
+}
+
+static int regtrace_isp_m0_set_sharpness(uint8_t sharpness)
+{
+    int ret;
+
+    mutex_lock(&regtrace_t40_running_mode_lock);
+    regtrace_dmsc_sharpness = sharpness;
+    if (!tparamsN[0] || !regtrace_main_dmsc_lit)
+        ret = 0;
+    else
+        ret = regtrace_t40_apply_dmsc_sharpness(sharpness);
+    mutex_unlock(&regtrace_t40_running_mode_lock);
+    return ret;
+}
+
+static bool regtrace_t40_lsc_bank_matches(uint32_t nbuf, uint32_t width,
+                                          uint32_t height)
+{
+    const uint8_t *tool = (const uint8_t *)(uintptr_t)
+        (nbuf + LSC_LIT_TOOL_OFFSET);
+    uint16_t count = *(const uint16_t *)(tool + LSC_LIT_T_COUNT);
+    uint16_t cell_w = *(const uint16_t *)(tool + LSC_LIT_T_CELL_W);
+    uint16_t cell_h = *(const uint16_t *)(tool + LSC_LIT_T_CELL_H);
+    uint32_t rows, cols;
+
+    if (!cell_w || !cell_h)
+        return false;
+    rows = (height / cell_h) + ((height % cell_h) ? 2U : 1U);
+    cols = (width / cell_w) + ((width % cell_w) ? 2U : 1U);
+    if (cols & 1U)
+        cols++;
+    if (cols != (uint32_t)count * 2U || rows * count >= 1153U) {
+        printk(KERN_WARNING
+               "tx_isp_t40_recovered: day/night keep prior LSC: bank mesh is %ux%u cells=%ux%u count=%u, active=%ux%u\n",
+               cols, rows, cell_w, cell_h, count, width, height);
+        return false;
+    }
+    return true;
+}
+
+static int regtrace_t40_refresh_daynight_pipeline(void)
+{
+    uint32_t nbuf = *(uint32_t *)((char *)&tparamsN);
+    uint32_t gain = regtrace_gc4653_again_log2_gain(
+        READ_ONCE(regtrace_ae_soft_cur_again));
+    uint32_t width = regtrace_sensor_full_width_override;
+    uint32_t height = regtrace_sensor_full_height_override;
+    int ret = 0;
+    int subret;
+
+#define REGTRACE_T40_DN_STEP(call) do {             \
+        subret = (int)(call);                        \
+        if (subret && !ret)                          \
+            ret = subret;                            \
+    } while (0)
+
+    if (!nbuf)
+        return -ENODEV;
+    if (!width || width > 0xffffU)
+        width = *(uint32_t *)tisp_par_info;
+    if (!height || height > 0xffffU)
+        height = *(uint32_t *)(tisp_par_info + 4);
+    if (!width || width > 0xffffU)
+        width = 2560U;
+    if (!height || height > 0xffffU)
+        height = 1440U;
+
+    regtrace_t40_apply_raw_tuning_gates(nbuf);
+
+    /* T40 OEM order, restricted to source-derived blocks that are safe in
+     * this reconstruction. AE is deliberately not reinitialized: T31 proved
+     * that a bank switch must preserve the live exposure tuple. */
+    if (regtrace_enable_blc_lit)
+        REGTRACE_T40_DN_STEP(regtrace_blc_main_gain_update_lit(gain, true));
+    if (regtrace_enable_gib_lit)
+        REGTRACE_T40_DN_STEP(regtrace_gib_main_gain_update_lit(gain, true));
+    if (regtrace_enable_lsc_lit &&
+        regtrace_t40_lsc_bank_matches(nbuf, width, height))
+        REGTRACE_T40_DN_STEP(regtrace_lsc_main_init_lit(
+            0, (const uint8_t *)(uintptr_t)nbuf, width, height));
+    if (regtrace_enable_dmsc_lit) {
+        REGTRACE_T40_DN_STEP(regtrace_dmsc_main_init_lit());
+        if (!subret && regtrace_dmsc_sharpness != 128U)
+            REGTRACE_T40_DN_STEP(regtrace_t40_apply_dmsc_sharpness(
+                min_t(uint32_t, regtrace_dmsc_sharpness, 255U)));
+    }
+    if (regtrace_enable_soft_gamma)
+        regtrace_soft_gamma_write();
+    if (regtrace_enable_ccm) {
+        REGTRACE_T40_DN_STEP(regtrace_ccm_main_init_lit());
+        if (!subret)
+            regtrace_ccm_main_ct_update_lit(regtrace_ccm_ct, true);
+    }
+    if (regtrace_enable_bcsh) {
+        REGTRACE_T40_DN_STEP(
+            regtrace_bcsh_main_init_lit(regtrace_bcsh_mode));
+        if (!subret) {
+            REGTRACE_T40_DN_STEP(regtrace_isp_m0_apply_brightness(
+                min_t(uint32_t, regtrace_bcsh_brightness, 255U)));
+            REGTRACE_T40_DN_STEP(regtrace_isp_m0_apply_contrast(
+                min_t(uint32_t, regtrace_bcsh_contrast, 255U)));
+            REGTRACE_T40_DN_STEP(regtrace_isp_m0_apply_hue(
+                min_t(uint32_t, regtrace_bcsh_hue, 255U)));
+            REGTRACE_T40_DN_STEP(regtrace_isp_m0_apply_saturation(
+                READ_ONCE(regtrace_running_mode) ? 0U :
+                min_t(uint32_t, regtrace_bcsh_saturation, 255U)));
+        }
+    }
+    if (regtrace_enable_ysp)
+        REGTRACE_T40_DN_STEP(tisp_ysp_main_init());
+    if (regtrace_enable_sdns)
+        REGTRACE_T40_DN_STEP(regtrace_sdns_main_init_lit());
+    if (regtrace_enable_mdns)
+        REGTRACE_T40_DN_STEP(
+            regtrace_mdns_main_init_lit(width, height));
+    if (regtrace_enable_ydns)
+        REGTRACE_T40_DN_STEP(tisp_ydns_main_init());
+
+    /* Every DNS/YSP initializer installs its bootstrap interpolation state.
+     * The next completed frame must replay the live gain even when that gain
+     * numerically equals the value applied before this bank switch. */
+    WRITE_ONCE(regtrace_dns_ev_applied, 0xffffffffU);
+    WRITE_ONCE(regtrace_ysp_ev_applied, 0xffffffffU);
+
+    /* The scalar-register watchdog compares writes against this shadow. Set
+     * it first, otherwise it immediately restores the previous mode's mask. */
+    regtrace_tisp_main_init_top40_value =
+        regtrace_t40_quality_top40_final;
+    subret = system_reg_write(0x40U, regtrace_t40_quality_top40_final);
+    if (subret && !ret)
+        ret = subret;
+
+    printk(KERN_INFO
+           "tx_isp_t40_recovered: day/night refresh mode=%s gain=%u size=%ux%u top40=0x%08x ret=%d\n",
+           READ_ONCE(regtrace_running_mode) ? "night" : "day",
+           gain, width, height, regtrace_t40_quality_top40_final, ret);
+#undef REGTRACE_T40_DN_STEP
+    return ret;
+}
+
+static int regtrace_t40_tuning_set_running_mode(uint32_t mode)
+{
+    uint32_t previous;
+    void *active;
+    void *selected;
+    int ret;
+
+    if (mode > 1U)
+        return -EINVAL;
+
+    mutex_lock(&regtrace_t40_running_mode_lock);
+    previous = READ_ONCE(regtrace_running_mode);
+    if (mode == previous) {
+        mutex_unlock(&regtrace_t40_running_mode_lock);
+        return 0;
+    }
+    active = (void *)(uintptr_t)tparamsN[0];
+    selected = (void *)(uintptr_t)(mode ? tparams_night : tparams_day);
+    if (!selected || !active) {
+        mutex_unlock(&regtrace_t40_running_mode_lock);
+        return -ENODEV;
+    }
+    if (mode && !previous) {
+        regtrace_day_awb_rgain =
+            READ_ONCE(regtrace_awb_grayworld_last_rgain);
+        regtrace_day_awb_bgain =
+            READ_ONCE(regtrace_awb_grayworld_last_bgain);
+    }
+
+    /* T31/T21 both switch the complete calibrated bank before refreshing any
+     * ISP block. T40 carries the same two 0x18ff4-byte banks. */
+    memcpy(active, selected, REGTRACE_T40_TUNING_BANK_BYTES);
+    WRITE_ONCE(regtrace_running_mode, mode);
+    WRITE_ONCE(day_night, mode);
+    ret = regtrace_t40_refresh_daynight_pipeline();
+
+    if (!mode) {
+        uint32_t rgain = regtrace_day_awb_rgain;
+        uint32_t bgain = regtrace_day_awb_bgain;
+
+        if (READ_ONCE(regtrace_awb_control_mode) == 1U &&
+            READ_ONCE(regtrace_awb_manual_rgain) &&
+            READ_ONCE(regtrace_awb_manual_bgain)) {
+            rgain = READ_ONCE(regtrace_awb_manual_rgain);
+            bgain = READ_ONCE(regtrace_awb_manual_bgain);
+        }
+        regtrace_awb_grayworld_last_rgain = rgain;
+        regtrace_awb_grayworld_last_bgain = bgain;
+        regtrace_awb_grayworld_apply(rgain, bgain);
+    }
+
+    printk(KERN_INFO
+           "tx_isp_t40_recovered: running mode %s->%s day-wb=0x%x/0x%x ret=%d\n",
+           previous ? "night" : "day", mode ? "night" : "day",
+           regtrace_day_awb_rgain, regtrace_day_awb_bgain, ret);
+    mutex_unlock(&regtrace_t40_running_mode_lock);
+    return ret;
+}
+
+static int regtrace_t40_tuning_copy_ae_expr(uintptr_t user_ptr)
+{
+    struct tx_isp_tuning_t41_ae_expr_values values;
+    uint8_t response[TX_ISP_TUNING_T41_AE_EXPR_BYTES];
+    uint32_t again_index;
+    uint32_t again_log2;
+    uint32_t again_x1024;
+    uint64_t exposure;
+    int ret;
+
+    if (!user_ptr)
+        return -EINVAL;
+
+    again_index = min_t(uint32_t, READ_ONCE(regtrace_ae_soft_cur_again),
+                        READ_ONCE(regtrace_ae_sensor_apply_max_again_index));
+    again_log2 = regtrace_gc4653_again_log2_gain(again_index);
+    again_x1024 = tx_isp_exp2_u32(again_log2, 16, 10);
+    if (!again_x1024)
+        again_x1024 = 1024U;
+    exposure = (uint64_t)READ_ONCE(regtrace_ae_soft_cur_it) * again_x1024;
+    exposure = div64_u64(exposure, 1024U);
+
+    memset(&values, 0, sizeof(values));
+    values.integration_time = READ_ONCE(regtrace_ae_soft_cur_it);
+    values.analog_gain_x1024 = again_x1024;
+    values.min_integration_time = READ_ONCE(regtrace_ae_soft_min_it);
+    values.max_integration_time = READ_ONCE(regtrace_ae_soft_max_it);
+    values.max_analog_gain_x1024 = tx_isp_exp2_u32(
+        regtrace_gc4653_again_log2_gain(
+            READ_ONCE(regtrace_ae_sensor_apply_max_again_index)), 16, 10);
+    values.total_gain_db = again_log2;
+    values.exposure_value = exposure;
+    values.ev_log2 = exposure ?
+        tx_isp_log2_int_u64(exposure, 16, 0) : 0;
+
+    ret = tx_isp_tuning_t41_ae_expr_pack(response, sizeof(response),
+                                          &values);
+    if (ret)
+        return ret;
+    return copy_to_user((void __user *)user_ptr, response,
+                        sizeof(response)) ? -EFAULT : 0;
+}
+
+static int regtrace_t40_tuning_copy_ae_stats(uintptr_t user_ptr)
+{
+    const unsigned int response_bytes = TX_ISP_TUNING_T41_AE_STATS_BYTES;
+    const unsigned int histogram_offset = ALIGN(response_bytes, sizeof(uint32_t));
+    const unsigned int allocation_bytes = histogram_offset +
+        TX_ISP_TUNING_T41_AE_HIST_BINS * sizeof(uint32_t);
+    uint8_t *allocation;
+    uint32_t *histogram;
+    uint32_t luma;
+    int ret;
+
+    if (!user_ptr)
+        return -EINVAL;
+    allocation = kzalloc(allocation_bytes, GFP_KERNEL);
+    if (!allocation)
+        return -ENOMEM;
+
+    histogram = (uint32_t *)(void *)(allocation + histogram_offset);
+    luma = min_t(uint32_t, READ_ONCE(regtrace_frame_3a_last_luma), 255U);
+    histogram[luma] = 1U;
+    ret = tx_isp_tuning_t41_ae_stats_pack(
+        allocation, response_bytes, histogram,
+        TX_ISP_TUNING_T41_AE_HIST_BINS, NULL);
+    if (!ret && copy_to_user((void __user *)user_ptr, allocation,
+                             response_bytes))
+        ret = -EFAULT;
+    kfree(allocation);
+    return ret;
+}
+
+static void regtrace_t40_awb_global_snapshot(uint32_t response[4])
+{
+    response[0] = READ_ONCE(regtrace_awb_grayworld_last_rgain);
+    response[1] = READ_ONCE(regtrace_awb_grayworld_last_bgain);
+    response[2] = response[0];
+    response[3] = response[1];
+}
+
+static int regtrace_t40_tuning_copy_awb_global_stats(uintptr_t user_ptr)
+{
+    uint32_t response[4];
+
+    if (!user_ptr)
+        return -EINVAL;
+    regtrace_t40_awb_global_snapshot(response);
+    return copy_to_user((void __user *)user_ptr, response,
+                        sizeof(response)) ? -EFAULT : 0;
+}
+
+/* Exact 76-byte T40 IMPISPWBAttr wire layout.  The recovered OEM getter
+ * dereferences pstMainAwbOri fields that are intentionally absent while the
+ * safe frame-sampled AWB loop owns WBG, so expose that live state directly. */
+struct regtrace_t40_awb_gain_wire {
+    uint32_t rgain;
+    uint32_t bgain;
+};
+
+struct regtrace_t40_awb_custom_wire {
+    uint32_t enabled;
+    struct regtrace_t40_awb_gain_wire high;
+    struct regtrace_t40_awb_gain_wire medium;
+    struct regtrace_t40_awb_gain_wire low;
+    uint32_t ct_node[4];
+};
+
+struct regtrace_t40_awb_attr_wire {
+    uint32_t mode;
+    struct regtrace_t40_awb_gain_wire gain;
+    uint32_t frozen;
+    uint32_t ct;
+    struct regtrace_t40_awb_custom_wire custom;
+    uint32_t start_enabled;
+    struct regtrace_t40_awb_gain_wire start;
+};
+
+static void regtrace_t40_awb_attr_snapshot(
+    struct regtrace_t40_awb_attr_wire *attr)
+{
+    memset(attr, 0, sizeof(*attr));
+    attr->mode = READ_ONCE(regtrace_awb_control_mode);
+    attr->gain.rgain = READ_ONCE(regtrace_awb_grayworld_last_rgain);
+    attr->gain.bgain = READ_ONCE(regtrace_awb_grayworld_last_bgain);
+    attr->frozen = READ_ONCE(regtrace_awb_control_frozen) ? 1U : 0U;
+    attr->start = attr->gain;
+}
+
+static int regtrace_t40_tuning_get_awb_attr(uintptr_t user_ptr)
+{
+    struct regtrace_t40_awb_attr_wire attr;
+
+    BUILD_BUG_ON(sizeof(attr) != 76U);
+    if (!user_ptr)
+        return -EINVAL;
+
+    regtrace_t40_awb_attr_snapshot(&attr);
+
+    return copy_to_user((void __user *)user_ptr, &attr, sizeof(attr)) ?
+        -EFAULT : 0;
+}
+
+static int regtrace_t40_tuning_set_awb_attr(uintptr_t user_ptr)
+{
+    struct regtrace_t40_awb_attr_wire attr;
+    uint32_t rgain;
+    uint32_t bgain;
+
+    BUILD_BUG_ON(sizeof(attr) != 76U);
+    if (!user_ptr)
+        return -EINVAL;
+    if (copy_from_user(&attr, (const void __user *)user_ptr, sizeof(attr)))
+        return -EFAULT;
+
+    /* Raptor and OpenIMP currently expose auto and manual.  Scene presets
+     * require calibrated T40 policy tables and must not be guessed here. */
+    if (attr.mode > 1U)
+        return -EOPNOTSUPP;
+
+    rgain = attr.gain.rgain;
+    bgain = attr.gain.bgain;
+    if (attr.mode == 1U &&
+        (!rgain || !bgain || rgain > 0x3fffU || bgain > 0x3fffU))
+        return -ERANGE;
+
+    mutex_lock(&regtrace_t40_running_mode_lock);
+    WRITE_ONCE(regtrace_awb_control_mode, attr.mode);
+    WRITE_ONCE(regtrace_awb_control_frozen, attr.frozen != 0U);
+    if (attr.mode == 1U) {
+        WRITE_ONCE(regtrace_awb_manual_rgain, rgain);
+        WRITE_ONCE(regtrace_awb_manual_bgain, bgain);
+        WRITE_ONCE(regtrace_awb_grayworld_last_rgain, rgain);
+        WRITE_ONCE(regtrace_awb_grayworld_last_bgain, bgain);
+        if (!READ_ONCE(regtrace_running_mode))
+            regtrace_awb_grayworld_apply(rgain, bgain);
+    } else {
+        WRITE_ONCE(regtrace_awb_manual_rgain, 0U);
+        WRITE_ONCE(regtrace_awb_manual_bgain, 0U);
+    }
+    mutex_unlock(&regtrace_t40_running_mode_lock);
     return 0;
 }
 
@@ -21054,19 +21968,40 @@ static long regtrace_isp_m0_default_tuning_ioctl(unsigned int cmd, unsigned long
     wire[0] = (int32_t)ctrl.id;
     wire[1] = ctrl.value;
     if (ctrl.dir == 0) {
-        if (ctrl.id == 0x08000094U) {
-            uint8_t saturation;
+        if (ctrl.id == TX_ISP_TUNING_CMD_T41_SENSOR_FPS) {
+            ret = regtrace_t40_sensor_fps_set((uint32_t)ctrl.value);
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_RUNNING_MODE) {
+            uint32_t mode;
 
-            /*
-             * The native recovered wrapper dereferences an uninitialized
-             * pstMainBcshOri. Program the same BCSH matrix through the
-             * validated register path used by the literal T40 pipeline.
-             */
-            if (copy_from_user(&saturation,
+            if (copy_from_user(&mode,
                     (const void __user *)(uintptr_t)(uint32_t)ctrl.value,
-                    sizeof(saturation)))
+                    sizeof(mode)))
                 return -EFAULT;
-            ret = regtrace_isp_m0_set_saturation(saturation);
+            ret = regtrace_t40_tuning_set_running_mode(mode);
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_AWB_ATTR) {
+            ret = regtrace_t40_tuning_set_awb_attr(
+                (uintptr_t)(uint32_t)ctrl.value);
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_BCSH_HUE ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_BRIGHTNESS ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_SHARPNESS ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_SATURATION ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_CONTRAST) {
+            uint8_t control;
+
+            if (copy_from_user(&control,
+                    (const void __user *)(uintptr_t)(uint32_t)ctrl.value,
+                    sizeof(control)))
+                return -EFAULT;
+            if (ctrl.id == TX_ISP_TUNING_CMD_T41_BCSH_HUE)
+                ret = regtrace_isp_m0_set_hue(control);
+            else if (ctrl.id == TX_ISP_TUNING_CMD_T41_BRIGHTNESS)
+                ret = regtrace_isp_m0_set_brightness(control);
+            else if (ctrl.id == TX_ISP_TUNING_CMD_T41_SHARPNESS)
+                ret = regtrace_isp_m0_set_sharpness(control);
+            else if (ctrl.id == TX_ISP_TUNING_CMD_T41_SATURATION)
+                ret = regtrace_isp_m0_set_saturation(control);
+            else
+                ret = regtrace_isp_m0_set_contrast(control);
         } else {
             ret = tx_isp_core_ops_s_ctrl((void *)(uintptr_t)ctrl.vinum,
                                          (void **)tuning, wire, 0);
@@ -21086,6 +22021,60 @@ static long regtrace_isp_m0_default_tuning_ioctl(unsigned int cmd, unsigned long
                              &value, sizeof(value)))
                 return -EFAULT;
             ret = 0;
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_SENSOR_FPS) {
+            uint32_t packed_fps;
+
+            ret = regtrace_t40_sensor_fps_get(&packed_fps);
+            if (!ret)
+                ctrl.value = (int32_t)packed_fps;
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_RUNNING_MODE) {
+            uint32_t mode = READ_ONCE(regtrace_running_mode);
+
+            if (copy_to_user(
+                    (void __user *)(uintptr_t)(uint32_t)ctrl.value,
+                    &mode, sizeof(mode)))
+                return -EFAULT;
+            ret = 0;
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_AWB_ATTR) {
+            ret = regtrace_t40_tuning_get_awb_attr(
+                (uintptr_t)(uint32_t)ctrl.value);
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_BCSH_HUE ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_BRIGHTNESS ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_SHARPNESS ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_SATURATION ||
+                   ctrl.id == TX_ISP_TUNING_CMD_T41_CONTRAST) {
+            uint8_t control;
+
+            if (ctrl.id == TX_ISP_TUNING_CMD_T41_BCSH_HUE)
+                control = (uint8_t)min_t(uint32_t,
+                    regtrace_bcsh_hue, 255U);
+            else if (ctrl.id == TX_ISP_TUNING_CMD_T41_BRIGHTNESS)
+                control = (uint8_t)min_t(uint32_t,
+                    regtrace_bcsh_brightness, 255U);
+            else if (ctrl.id == TX_ISP_TUNING_CMD_T41_SHARPNESS)
+                control = (uint8_t)min_t(uint32_t,
+                    regtrace_dmsc_sharpness, 255U);
+            else if (ctrl.id == TX_ISP_TUNING_CMD_T41_SATURATION)
+                control = (uint8_t)min_t(uint32_t,
+                    regtrace_bcsh_saturation, 255U);
+            else
+                control = (uint8_t)min_t(uint32_t,
+                    regtrace_bcsh_contrast, 255U);
+
+            if (copy_to_user(
+                    (void __user *)(uintptr_t)(uint32_t)ctrl.value,
+                    &control, sizeof(control)))
+                return -EFAULT;
+            ret = 0;
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_AE_EXPR_INFO) {
+            ret = regtrace_t40_tuning_copy_ae_expr(
+                (uintptr_t)(uint32_t)ctrl.value);
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_AE_STATS) {
+            ret = regtrace_t40_tuning_copy_ae_stats(
+                (uintptr_t)(uint32_t)ctrl.value);
+        } else if (ctrl.id == TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS) {
+            ret = regtrace_t40_tuning_copy_awb_global_stats(
+                (uintptr_t)(uint32_t)ctrl.value);
         } else {
             ret = tx_isp_core_ops_g_ctrl(ctrl.vinum, (int32_t *)tuning,
                                          wire);
@@ -23193,7 +24182,7 @@ static void regtrace_tisp_desc_oem_fill(uint32_t *desc, uint32_t channel,
     uint32_t height = desc[1] ? desc[1] : 1440;
     uint32_t mbus_code = REGTRACE_TISP_VI_FMT_SGRBG10_1X10;
     uint32_t bayer_word;
-    uint32_t fps = 0x1e0001U;
+    uint32_t fps;
     uint16_t total_width;
     uint16_t total_height;
     uint16_t max_it_native;
@@ -23218,6 +24207,12 @@ static void regtrace_tisp_desc_oem_fill(uint32_t *desc, uint32_t channel,
                                         total_height > 1 ? total_height - 1 : 1);
     integration_limit = regtrace_attr_u16_or(attr, 0xae, max_it_native);
     one_line = regtrace_attr_u16_or(attr, 0xc0, 21);
+    /* Keep the ISP's exposure solver on the sensor-owned frame period.
+     * This descriptor is copied into tisp_par_info and its packed rational
+     * rate drives tisp_ae_max_exp_calc_fps(); the old fixed 30/1 value made
+     * AE use a shorter frame than the live GC4653 25/1 mode. */
+    if (regtrace_t40_sensor_fps_get(&fps))
+        fps = (25U << 16) | 1U;
 
     memset(raw, 0, 152);
     regtrace_put_u32((uintptr_t)raw, 0x00, width);
@@ -25549,7 +26544,7 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_core_activate_state_after[1],
                regtrace_core_activate_state_after[2]);
     seq_printf(m,
-               "core_irq_param=%u after_video=%u oem_enable_param=%u enable=%u disable=%u last_ch=%u last_idx=%u last_ret=%ld oem_count=%u oem_skip=%u oem_idx=%u oem_state=%u->%u oem_ret=%ld oem_sd=%p oem_lock=%p oem_cb=%p\n",
+               "core_irq_param=%u after_video=%u oem_enable_param=%u enable=%u disable=%u last_ch=%u last_idx=%u last_ret=%ld oem_count=%u oem_skip=%u oem_disable=%u oem_disable_skip=%u oem_idx=%u oem_state=%u->%u oem_ret=%ld oem_sd=%p oem_lock=%p oem_cb=%p\n",
                regtrace_enable_core_irq_on_stream ? 1U : 0U,
                regtrace_enable_core_irq_after_video ? 1U : 0U,
                regtrace_enable_core_irq_oem_enable_path ? 1U : 0U,
@@ -25560,6 +26555,8 @@ static int regtrace_debug_proc_show(struct seq_file *m, void *v)
                regtrace_core_irq_last_ret,
                regtrace_core_irq_oem_enable_count,
                regtrace_core_irq_oem_skip_count,
+               regtrace_core_irq_oem_disable_count,
+               regtrace_core_irq_oem_disable_skip_count,
                regtrace_core_irq_oem_last_index,
                regtrace_core_irq_oem_last_state_before,
                regtrace_core_irq_oem_last_state_after,
@@ -46865,26 +47862,30 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
         /* userspace 3A: retune DNS and independently retune YSP sharpening. */
         if (regtrace_enable_ydns || regtrace_enable_ysp || regtrace_enable_mdns ||
             regtrace_enable_sdns) {
-            static uint32_t dns_ev_applied;
-            static uint32_t ysp_ev_applied;
             uint32_t ysp_ev = regtrace_ysp_gain_ev ?
                               regtrace_ysp_gain_ev : regtrace_dns_gain_ev;
 
-            if (regtrace_dns_gain_ev != dns_ev_applied) {
-                dns_ev_applied = regtrace_dns_gain_ev;
+            if (regtrace_dns_gain_ev !=
+                READ_ONCE(regtrace_dns_ev_applied)) {
+                WRITE_ONCE(regtrace_dns_ev_applied,
+                           regtrace_dns_gain_ev);
                 if (regtrace_enable_ydns)
-                    (void)tisp_ydns_par_refresh(0, dns_ev_applied, 256);
+                    (void)tisp_ydns_par_refresh(
+                        0, regtrace_dns_gain_ev, 256);
                 if (regtrace_enable_mdns && main_mdns &&
                     !regtrace_mdns_dbg_init_ret)
-                    (void)tisp_mdns_par_refresh_lit(0, dns_ev_applied, 256);
+                    (void)tisp_mdns_par_refresh_lit(
+                        0, regtrace_dns_gain_ev, 256);
                 if (regtrace_enable_sdns && main_sdns &&
                     !regtrace_sdns_dbg_init_ret)
-                    (void)tisp_sdns_par_refresh_lit(0, dns_ev_applied, 256);
+                    (void)tisp_sdns_par_refresh_lit(
+                        0, regtrace_dns_gain_ev, 256);
             }
-            if (regtrace_enable_ysp && ysp_ev != ysp_ev_applied) {
-                ysp_ev_applied = ysp_ev;
-                (void)tisp_ysp_par_refresh(0, ysp_ev_applied, 256);
-                regtrace_ysp_gain_ev_now = ysp_ev_applied;
+            if (regtrace_enable_ysp &&
+                ysp_ev != READ_ONCE(regtrace_ysp_ev_applied)) {
+                WRITE_ONCE(regtrace_ysp_ev_applied, ysp_ev);
+                (void)tisp_ysp_par_refresh(0, ysp_ev, 256);
+                regtrace_ysp_gain_ev_now = ysp_ev;
             }
         }
 
@@ -46924,7 +47925,8 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
         }
 
         /* userspace 3A: apply manual WBG gains when they change */
-        if (regtrace_awb_manual_rgain && regtrace_awb_manual_bgain) {
+        if (!READ_ONCE(regtrace_running_mode) &&
+            regtrace_awb_manual_rgain && regtrace_awb_manual_bgain) {
             static uint32_t manual_applied_r, manual_applied_b;
 
             if (regtrace_awb_manual_rgain != manual_applied_r ||
@@ -46935,13 +47937,6 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
                 regtrace_awb_grayworld_last_bgain = manual_applied_b;
                 regtrace_awb_grayworld_apply(manual_applied_r,
                                              manual_applied_b);
-                regtrace_lsc_lit_track_wb_gains(manual_applied_r,
-                                                manual_applied_b);
-                if (regtrace_enable_ccm && regtrace_ccm_ct_track)
-                    regtrace_ccm_main_ct_update_lit(
-                        regtrace_lsc_lit_ct_from_gains(manual_applied_r,
-                                                       manual_applied_b),
-                        false);
             }
         }
 
@@ -46953,54 +47948,25 @@ static void regtrace_irq_frame_done_workfn(struct work_struct *work)
             regtrace_ccm_main_ct_update_lit(regtrace_ccm_ct, false);
         else if (regtrace_enable_ccm && regtrace_ccm_ct_track &&
                  regtrace_ccm_ev != regtrace_ccm_ev_now)
-            regtrace_ccm_main_ct_update_lit(
-                regtrace_lsc_lit_ct_from_gains(
-                    regtrace_awb_grayworld_last_rgain,
-                    regtrace_awb_grayworld_last_bgain),
-                false);
+            regtrace_ccm_main_ct_update_lit(regtrace_ccm_ct, false);
 
-        /*
-         * userspace 3A: apply BCSH saturation override when it changes.
-         *
-         * NOTE: the OEM tisp_set_saturation path is unusable in this build --
-         * its backing struct pstMainBcshOri is never initialized (only the
-         * faithful tisp_bcsh chain sets it; we run the "lit" reconstruction),
-         * so calling it NULL-derefs and oopses the kernel. Drive the BCSH
-         * saturation matrix directly via system_reg_write instead -- the same
-         * crash-safe mechanism regtrace_bcsh_static_write uses (it validates
-         * ispcore_sd and cannot fault on an uninit struct). 0x11018-0x11020 is
-         * the saturation matrix in .10 fixed point (0x400 = 1.0); scale every
-         * packed field by sat/128 (128 = unity, the snapshot identity) so the
-         * matrix's hue structure is preserved while its magnitude (chroma
-         * saturation) grows. 0 = leave the lit chain's own value untouched.
-         */
-        if (regtrace_enable_bcsh && regtrace_bcsh_saturation) {
-            static const uint32_t sat_regs[3] = { 0x11018, 0x1101c, 0x11020 };
-            static const uint32_t sat_base[3] = {
-                0x03fe0400, 0x04000400, 0x03fc0400
-            };
+        /* Apply module-parameter changes through the same translated BCSH
+         * state/update path used by the tuning ioctl. */
+        if (regtrace_enable_bcsh) {
             static uint32_t sat_applied;
             uint32_t sat = regtrace_bcsh_saturation;
-            unsigned int k;
 
             if (sat > 255)
                 sat = 255;
             if (sat != sat_applied) {
-                sat_applied = sat;
-                for (k = 0; k < 3; k++) {
-                    uint32_t hi = (sat_base[k] >> 16) & 0xffff;
-                    uint32_t lo = sat_base[k] & 0xffff;
+                int sat_ret;
 
-                    hi = (hi * sat) / 128u;
-                    lo = (lo * sat) / 128u;
-                    if (hi > 0x0fffu)
-                        hi = 0x0fffu;
-                    if (lo > 0x0fffu)
-                        lo = 0x0fffu;
-                    (void)system_reg_write(sat_regs[k], (hi << 16) | lo);
-                }
-                printk(KERN_INFO "tx_isp_t40_recovered: bcsh saturation matrix scaled to %u/128\n",
-                       sat);
+                sat_applied = sat;
+                sat_ret = regtrace_isp_m0_apply_saturation(
+                    READ_ONCE(regtrace_running_mode) ? 0U : (uint8_t)sat);
+                printk(KERN_INFO
+                       "tx_isp_t40_recovered: bcsh saturation updated to %u/128 ret=%d\n",
+                       sat, sat_ret);
             }
         }
 
@@ -72000,7 +72966,7 @@ static uintptr_t regtrace_tisp_main_init_seed_core_sensor_attr(uint32_t channel)
     return attr;
 }
 
-#define REGTRACE_TISP_PARAM_BYTES (0x10000U | 0x8ff4U)
+#define REGTRACE_TISP_PARAM_BYTES REGTRACE_T40_TUNING_BANK_BYTES
 #define REGTRACE_TISP_TSBIN_BYTES 80U
 #define REGTRACE_TISP_STATUS_BYTES 8U
 #define REGTRACE_TISP_BIN_HEADER_BYTES 0x18U
@@ -99255,18 +100221,18 @@ static void regtrace_frame_3a_sample(uint32_t y_phys, uint32_t uv_phys)
      * AE: proportional, slew-limited integration trim before analog gain.
      * The old +/-25% ladder and asymmetric deadband made daylight alternate
      * between 193 and 257 lines.  A sampled highlight guard can request a
-     * downward trim, but only while the mean remains above the low edge of
-     * the exposure deadband, so a window cannot drive the room black.
+     * downward trim, but only while the scene mean is already at target, so
+     * a local lamp or window cannot drive the rest of the frame underexposed.
      */
     if (regtrace_enable_ae_sensor_apply) {
         uint32_t it = regtrace_ae_soft_cur_it;
         uint32_t again = regtrace_ae_soft_cur_again;
         uint32_t max_again = regtrace_ae_sensor_apply_max_again_index;
-        uint32_t deadband = max_t(uint32_t, regtrace_ae_soft_hyst / 2U, 2U);
+        uint32_t deadband = max_t(uint32_t, regtrace_ae_soft_hyst, 2U);
         bool protect_highlights =
             regtrace_frame_3a_highlight_limit_permille &&
             highlight_permille > regtrace_frame_3a_highlight_limit_permille &&
-            luma + deadband >= regtrace_frame_3a_target;
+            luma >= regtrace_frame_3a_target;
         bool changed = false;
 
         if (!protect_highlights &&
@@ -99318,7 +100284,10 @@ static void regtrace_frame_3a_sample(uint32_t y_phys, uint32_t uv_phys)
     }
 
     /* AWB is a distinct tuning loop; never alter WBG merely because AE runs. */
-    if (regtrace_enable_awb_grayworld) {
+    if (regtrace_enable_awb_grayworld &&
+        !READ_ONCE(regtrace_running_mode) &&
+        !READ_ONCE(regtrace_awb_control_frozen) &&
+        READ_ONCE(regtrace_awb_control_mode) == 0U) {
         uint32_t rgain = regtrace_awb_grayworld_last_rgain;
         uint32_t bgain = regtrace_awb_grayworld_last_bgain;
         uint32_t target = min_t(uint32_t, regtrace_frame_awb_target, 255U);
@@ -99345,10 +100314,6 @@ static void regtrace_frame_3a_sample(uint32_t y_phys, uint32_t uv_phys)
             regtrace_awb_grayworld_last_rgain = rgain;
             regtrace_awb_grayworld_last_bgain = bgain;
             regtrace_awb_grayworld_apply(rgain, bgain);
-            regtrace_lsc_lit_track_wb_gains(rgain, bgain);
-            if (regtrace_enable_ccm && regtrace_ccm_ct_track)
-                regtrace_ccm_main_ct_update_lit(
-                    regtrace_lsc_lit_ct_from_gains(rgain, bgain), false);
         }
     }
 
@@ -99396,6 +100361,9 @@ static void regtrace_awb_grayworld_update(void)
     uint64_t pixels = 0;
     uint32_t zones = 0;
     uint32_t rgain, bgain;
+
+    if (READ_ONCE(regtrace_running_mode))
+        return;
 
     /*
      * Parse only the most recently completed bank ((idx+3)&3; the idx
@@ -99542,9 +100510,10 @@ int32_t tisp_awb_main_interrupt_static(void)
 
     if (regtrace_enable_awb_grayworld) {
         regtrace_awb_grayworld_irqs++;
-        if (regtrace_awb_grayworld_interval == 0 ||
-            (regtrace_awb_grayworld_irqs %
-             (regtrace_awb_grayworld_interval + 1)) == 0)
+        if (!READ_ONCE(regtrace_running_mode) &&
+            (regtrace_awb_grayworld_interval == 0 ||
+             (regtrace_awb_grayworld_irqs %
+              (regtrace_awb_grayworld_interval + 1)) == 0))
             regtrace_awb_grayworld_update();
         /* re-arm the stats engine for the next frame */
         (void)system_reg_set_awb_trig(1, 0);
@@ -103179,128 +104148,26 @@ tisp_awb_tgain_update0x60:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034174 origin=fragment_seed original=tisp_awb_get_global_statis */
 int32_t tisp_awb_get_global_statis(uint32_t a0, uintptr_t a1)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
-
-    /* fragment 0: Branch */
-    if (a0 != 0) { goto tisp_awb_get_global_statis0x48; }
-
-    /* fragment 1: ConstantLoad */
-    v0 = ((char *)&pstMainAwbOri);
-
-tisp_awb_get_global_statis0x10:
-    /* fragment 2: MemoryAccess */
-    v1 = *(uint32_t *)((char *)v0 + 496);
-    v1 = *(uint16_t *)((char *)v1 + 0);
-    *(uint32_t *)((char *)a1 + 0) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 496);
-    v1 = *(uint16_t *)((char *)v1 + 2);
-    *(uint32_t *)((char *)a1 + 4) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 492);
-    v1 = *(uint16_t *)((char *)v1 + 0);
-    *(uint32_t *)((char *)a1 + 8) = v1;
-    v0 = *(uint32_t *)((char *)v0 + 492);
-    v0 = *(uint16_t *)((char *)v0 + 2);
-    *(uint32_t *)((char *)a1 + 12) = v0;
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Arithmetic */
-    v0 = 0;
-
-tisp_awb_get_global_statis0x48:
-    /* fragment 5: Arithmetic */
-    v0 = (uintptr_t *)&isp_memopt;
-
-    /* fragment 6: Branch */
-    v0 = (uintptr_t *)((char *)&pstSecAwbOri);
-    goto tisp_awb_get_global_statis0x10;
-
+    if (a0 >= 2U || !a1)
+        return -EINVAL;
+    regtrace_t40_awb_global_snapshot(
+        (uint32_t *)(uintptr_t)a1);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000341c8 origin=fragment_seed original=tisp_awb_get_attr */
 int64_t tisp_awb_get_attr(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    BUILD_BUG_ON(sizeof(struct regtrace_t40_awb_attr_wire) != 76U);
+    if (a0 >= 2U || !a1)
+        return -EINVAL;
 
-    /* fragment 0: Branch */
-    v0 = (uintptr_t *)&isp_memopt;
-    if (a0 != 0) { goto tisp_awb_get_attr0x9c; }
-
-    /* fragment 1: ConstantLoad */
-    v0 = ((char *)&pstMainAwbOri);
-
-tisp_awb_get_attr0x10:
-    /* fragment 2: MemoryAccess */
-    *(uint32_t *)((char *)a1 + 12) = 0;
-    v1 = *(uint32_t *)((char *)v0 + 28);
-    a0 = 1;
-    a2 = 9;
-    v1 = *(uint32_t *)((char *)v1 + 0);
-    *(uint32_t *)((char *)a1 + 16) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 480);
-    v1 = *(uint8_t *)((char *)v1 + 0);
-    *(uint32_t *)((char *)a1 + 20) = 0;
-    *(uint32_t *)((char *)a1 + 24) = 0;
-    *(uint32_t *)((char *)a1 + 0) = v1;
-    *(uint32_t *)((char *)a1 + 28) = 0;
-    *(uint32_t *)((char *)a1 + 32) = 0;
-    *(uint32_t *)((char *)a1 + 36) = 0;
-    *(uint32_t *)((char *)a1 + 40) = 0;
-    *(uint32_t *)((char *)a1 + 44) = 0;
-    *(uint32_t *)((char *)a1 + 48) = 0;
-    *(uint32_t *)((char *)a1 + 52) = 0;
-    *(uint32_t *)((char *)a1 + 56) = 0;
-    *(uint32_t *)((char *)a1 + 60) = 0;
-    *(uint32_t *)((char *)a1 + 64) = a0;
-    v1 = *(uint32_t *)((char *)v0 + 20);
-    v1 = *(uint32_t *)((char *)v1 + 16);
-    *(uint32_t *)((char *)a1 + 68) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 20);
-    v1 = *(uint32_t *)((char *)v1 + 20);
-    *(uint32_t *)((char *)a1 + 72) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 480);
-    v1 = *(uint8_t *)((char *)v1 + 0);
-
-    /* fragment 3: Branch */
-    if (v1 != a2) { goto tisp_awb_get_attr0xa4; }
-
-    /* fragment 4: MemoryAccess */
-    *(uint32_t *)((char *)a1 + 0) = 0;
-    *(uint32_t *)((char *)a1 + 20) = a0;
-
-tisp_awb_get_attr0x94:
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 6: Arithmetic */
-    v0 = 0;
-
-tisp_awb_get_attr0x9c:
-    /* fragment 7: Branch */
-    v0 = (uintptr_t *)((char *)&pstSecAwbOri);
-    goto tisp_awb_get_attr0x10;
-
-tisp_awb_get_attr0xa4:
-    /* fragment 8: MemoryAccess */
-    *(uint32_t *)((char *)a1 + 0) = v1;
-    v1 = *(uint32_t *)((char *)v0 + 488);
-    v1 = *(uint16_t *)((char *)v1 + 0);
-    *(uint32_t *)((char *)a1 + 4) = v1;
-    v0 = *(uint32_t *)((char *)v0 + 488);
-    v0 = *(uint16_t *)((char *)v0 + 2);
-
-    /* fragment 9: Branch */
-    *(uint32_t *)((char *)a1 + 8) = v0;
-    goto tisp_awb_get_attr0x94;
-
-    return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+    /* The OEM body walks an AWB context pointer table.  The safe T40 path
+     * deliberately does not initialise that half-recovered object, so answer
+     * from the live controller state instead of dereferencing NULL fields. */
+    regtrace_t40_awb_attr_snapshot(
+        (struct regtrace_t40_awb_attr_wire *)(uintptr_t)a1);
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003428c origin=model_output original=tisp_awb_get_mode */
@@ -181960,50 +182827,7 @@ tisp_s_awb_attr0xa0:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000007437c origin=fragment_seed original=tisp_g_awb_attr */
 int32_t tisp_g_awb_attr(uint32_t a0, uintptr_t a1)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uintptr_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s2 = *(uint32_t *)((char *)((char *)&tisp_tattr));
-    s1 = a1;
-    s0 = a0;
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_awb_get_attr)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)memcpy((void *)(uintptr_t)((uintptr_t)s1 + 20), (void *)(uintptr_t)((((uintptr_t)s0 * 44) + (uintptr_t)s2) + 3072), 44); /* jalr target resolved by relocation */
-
-    /* fragment 3: Arithmetic */
-    v0 = 76;
-    v1 = (uintptr_t)s0 * (uintptr_t)v0;
-    s0 = (uintptr_t)v1 + (uintptr_t)s2;
-
-    /* fragment 4: MemoryAccess */
-    v0 = *(uint32_t *)((char *)s0 + 1528);
-    *(uint32_t *)((char *)s1 + 64) = v0;
-    v0 = *(uint32_t *)((char *)s0 + 1476);
-    *(uint32_t *)((char *)s1 + 12) = v0;
-    ra = local_1c;
-    s2 = local_18;
-    s1 = local_14;
-    s0 = local_10;
-    v0 = 0;
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return (int32_t)tisp_awb_get_attr(a0, a1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074408 origin=fragment_seed original=tisp_g_awb_statis_attr */
@@ -182035,26 +182859,7 @@ int32_t tisp_g_awb_statis_attr(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074430 origin=fragment_seed original=tisp_g_awb_global_statis_attr */
 int32_t tisp_g_awb_global_statis_attr(uint32_t a0, uintptr_t a1)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_awb_get_global_statis)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return tisp_awb_get_global_statis(a0, a1);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000074458 origin=fragment_seed original=tisp_s_ae_scence_attr */
@@ -195791,6 +196596,28 @@ int tx_isp_t40_v4l2_sensor_dimensions(unsigned int *width,
 #else
     (void)width;
     (void)height;
+    return -ENODEV;
+#endif
+}
+
+int tx_isp_t40_v4l2_sensor_fps(unsigned int *numerator,
+                               unsigned int *denominator)
+{
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint32_t packed_fps;
+    int ret;
+
+    if (!numerator || !denominator)
+        return -EINVAL;
+    ret = regtrace_t40_sensor_fps_get(&packed_fps);
+    if (ret)
+        return ret;
+    *numerator = packed_fps >> 16;
+    *denominator = packed_fps & 0xffffU;
+    return 0;
+#else
+    (void)numerator;
+    (void)denominator;
     return -ENODEV;
 #endif
 }

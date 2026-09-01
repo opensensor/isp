@@ -26,5 +26,7 @@ long tx_isp_t40_v4l2_private_ioctl(struct file *file,
 int tx_isp_t40_v4l2_private_release(struct file *file);
 int tx_isp_t40_v4l2_sensor_dimensions(unsigned int *width,
 				       unsigned int *height);
+int tx_isp_t40_v4l2_sensor_fps(unsigned int *numerator,
+			       unsigned int *denominator);
 
 #endif /* TX_ISP_T40_V4L2_H */

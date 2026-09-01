@@ -33,12 +33,13 @@ The T40 adapter retains generation-local pointer validation and the recovered
 queue/state offsets (`0x1fc` and `0x218`). Remote-event filtering, diagnostics,
 and the local frame-done fallback also remain in the recovered driver.
 
-The first shared-subdevice device cycle ran on the T40XP/GC4653 camera at
-`.144` on 2026-07-31. The open module registered one sensor, accepted forced
-day mode, kept IRQ 38/39 active, and supplied a valid 1920x1080 H.264 RTSP
-stream; FFmpeg decoded eight frames without an error and saved a fresh JPEG.
-The module stayed resident with all 326 recovery parameters exposed and no
-kernel-fatal signature during the sustained check.
+The first shared-subdevice device cycle ran on a T40XP/GC4653 camera on
+2026-07-31.  A later 2026-08-31 cycle restored sensor-owned geometry and
+rational frame rate reporting, producing the GC4653's native 2560x1440 stream
+through both OpenIMP and direct V4L2 without a Raptor resolution override.
+The open module registered one sensor, accepted forced day/night transitions,
+kept IRQ 38/39 active, and supplied valid H.264 frames without a kernel-fatal
+signature during the sustained checks.
 
 Do not use an unbounded full read of `/proc/tx_isp_t40_recovered` as a health
 probe. That legacy diagnostic path remains unsafe and caused the one-shot
@@ -91,12 +92,23 @@ closest match for the primary stock DMSC register groups, but it was not
 promoted to the default because it did not receive a separate full consumer
 cycle.  The sweep was discarded with a clean reboot.
 
-Exact source-derived BLC/GIB paths are also retained behind
-`enable_blc_lit`/`enable_gib_lit`, but are deliberately disabled in the visual
-profile.  The OEM absolute GIB calibration values applied to the recovered raw
-domain produced a nearly black frame, showing that the missing prerequisite is
-an upstream raw-domain calibration rather than another approximation of those
-two functions.
+The exact source-derived BLC/GIB paths now follow the active sensor IQ bank's
+bypass flags on every day/night transition.  The GC4653 day and night banks
+enable BLC and supply its gain curves, so BLC is initialized and updated from
+the sensor's live analog gain.  Both banks explicitly bypass GIB; the driver
+honors that calibration instead of force-enabling the block.  Force-enabling
+GIB against those banks produced a nearly black/green frame and is retained
+only as a forensic override.
+
+The 2026-09-01 image-quality cycle also removed an uncalibrated coupling
+between white-balance gains and colour temperature.  WBG gains alone are not a
+portable CT measurement, and the old placeholder ratio mapped a neutral
+GC4653 scene to the 2300 K endpoint, causing a yellow/green cast.  LSC and CCM
+remain active on the tuning bank's calibrated 5000 K reference until the AWB
+path supplies a real CT result.  The same cycle widened the frame-sampled AE
+deadband to its configured value and limited highlight trimming to a scene
+whose mean has actually reached target, eliminating the observed gain-index
+ping-pong.
 
 The date/time OSD in the upper-left corner is outside the ISP comparison.  It
 is rendered by the userspace overlay using the camera's system clock, so any

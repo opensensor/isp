@@ -28,7 +28,7 @@
 #define TX_ISP_T40_V4L2_HEIGHT_ALIGN	16U
 #define TX_ISP_T40_V4L2_FALLBACK_WIDTH	1920U
 #define TX_ISP_T40_V4L2_FALLBACK_HEIGHT	1080U
-#define TX_ISP_T40_V4L2_FPS		25U
+#define TX_ISP_T40_V4L2_FALLBACK_FPS	25U
 #define TX_ISP_T40_V4L2_MIN_BUFFERS	2U
 #define TX_ISP_T40_V4L2_MAX_BUFFERS	8U
 #define TX_ISP_T40_DRAM_LIMIT		0x10000000U
@@ -565,6 +565,8 @@ static int tx_isp_t40_v4l2_enum_frameintervals(
 	struct file *file, void *priv, struct v4l2_frmivalenum *interval)
 {
 	struct tx_isp_t40_v4l2 *video = video_drvdata(file);
+	unsigned int numerator = TX_ISP_T40_V4L2_FALLBACK_FPS;
+	unsigned int denominator = 1U;
 
 	(void)priv;
 	tx_isp_t40_v4l2_refresh_format(video);
@@ -573,21 +575,32 @@ static int tx_isp_t40_v4l2_enum_frameintervals(
 	    interval->height != video->format.height)
 		return -EINVAL;
 	interval->type = V4L2_FRMIVAL_TYPE_DISCRETE;
-	interval->discrete.numerator = 1;
-	interval->discrete.denominator = TX_ISP_T40_V4L2_FPS;
+	if (tx_isp_t40_v4l2_sensor_fps(&numerator, &denominator)) {
+		numerator = TX_ISP_T40_V4L2_FALLBACK_FPS;
+		denominator = 1U;
+	}
+	interval->discrete.numerator = denominator;
+	interval->discrete.denominator = numerator;
 	return 0;
 }
 
 static int tx_isp_t40_v4l2_get_parm(struct file *file, void *priv,
 				    struct v4l2_streamparm *parm)
 {
+	unsigned int numerator = TX_ISP_T40_V4L2_FALLBACK_FPS;
+	unsigned int denominator = 1U;
+
 	(void)file;
 	(void)priv;
 	if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 	memset(&parm->parm.capture, 0, sizeof(parm->parm.capture));
-	parm->parm.capture.timeperframe.numerator = 1;
-	parm->parm.capture.timeperframe.denominator = TX_ISP_T40_V4L2_FPS;
+	if (tx_isp_t40_v4l2_sensor_fps(&numerator, &denominator)) {
+		numerator = TX_ISP_T40_V4L2_FALLBACK_FPS;
+		denominator = 1U;
+	}
+	parm->parm.capture.timeperframe.numerator = denominator;
+	parm->parm.capture.timeperframe.denominator = numerator;
 	return 0;
 }
 

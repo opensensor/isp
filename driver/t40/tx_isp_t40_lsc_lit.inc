@@ -30,13 +30,12 @@ module_param_named(lsc_lit_ct, regtrace_lsc_lit_ct, uint, 0644);
 static uint regtrace_lsc_lit_gain; /* 16.16 log-gain for the static init interp */
 module_param_named(lsc_lit_gain, regtrace_lsc_lit_gain, uint, 0644);
 /*
- * Scene CT tracking from the userspace-3A WB gains. The OEM AWB derives CT
- * from its zone-statistics grid; our bring-up runs WB in userspace, so we
- * estimate CT as piecewise-linear in x = bgain*1024/rgain between two
- * anchors. Warm anchor measured on .242 (rgain=1915 bgain=2009 -> ~3300K,
- * frame visually matches the stock day reference); cool anchor is a
- * placeholder slope until a daylight measurement refines it. Zone precision
- * is all that matters: LSC CT breakpoints are 2986/3615/3815/5058.
+ * Forensic CT estimator from the userspace-3A WB gains.  The OEM AWB derives
+ * CT independently from its calibrated zone-statistics mesh; WBG ratios are
+ * not portable between sensors, illuminants, or gain calibrations.  Keep this
+ * helper for explicit lab sweeps, but never feed it into LSC/CCM automatically.
+ * The active image path retains the tuning bank's calibrated 5000 K reference
+ * until the repaired AWB path exposes a valid CT result.
  */
 static bool regtrace_lsc_lit_ct_track = true;
 module_param_named(lsc_lit_ct_track, regtrace_lsc_lit_ct_track, bool, 0644);
