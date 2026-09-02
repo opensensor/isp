@@ -16,11 +16,14 @@ static int failures;
 } while (0)
 
 static const struct tx_isp_sinfo_config t23_config = {
-	.flags = TX_ISP_SINFO_STATIC_METADATA,
-	.static_chip_id = 0x2336,
-	.static_width = 1920,
-	.static_height = 1080,
-	.static_fps = 25,
+	.client_offset = 0x0d4,
+	.attr_offset = 0x270,
+	.width_offset = 0x23c,
+	.height_offset = 0x240,
+	.fps_offset = 0x27c,
+	.adapter_nr_offset = 0x190,
+	.attr_name_offset = 0,
+	.attr_chip_id_offset = 4,
 };
 
 static const struct tx_isp_sinfo_config t30_config = {
@@ -110,11 +113,11 @@ static void test_invalid_configs(void)
 	EXPECT_STATUS("unknown flag", TX_ISP_SINFO_CONFIG_BAD_FLAGS,
 		      &t31_config, 1U << 31);
 
-	config = t23_config;
+	config = t41_config;
 	config.static_width = 0;
 	EXPECT_STATUS("static geometry",
 		      TX_ISP_SINFO_CONFIG_BAD_STATIC_METADATA,
-		      &config, config.flags);
+		      &config, config.flags | TX_ISP_SINFO_STATIC_METADATA);
 
 	config = t31_config;
 	config.client_offset++;

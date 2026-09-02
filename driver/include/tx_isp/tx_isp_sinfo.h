@@ -151,6 +151,9 @@ tx_isp_sinfo_config_check(const struct tx_isp_sinfo_config *config,
 int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 			    struct module *owner);
 void tx_isp_sinfo_driver_del(struct i2c_driver *drv);
+int tx_isp_sinfo_get_driver(unsigned int index, char *name,
+			    unsigned int name_size,
+			    unsigned short *default_i2c_addr);
 int tx_isp_sinfo_sensor_bind(void *subdev, struct module *owner);
 void tx_isp_sinfo_sensor_unbind(void *subdev, struct module *owner);
 

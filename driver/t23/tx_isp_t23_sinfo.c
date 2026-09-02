@@ -25,12 +25,15 @@ void tx_isp_t23_sinfo_sensor_bound(void *subdev, struct module *owner);
 void tx_isp_t23_sinfo_sensor_unbound(void *subdev, struct module *owner);
 
 static const struct tx_isp_sinfo_config tx_isp_sinfo_config = {
-	.flags = TX_ISP_SINFO_STATIC_METADATA,
-	.static_chip_id = 0x2336,
-	.static_i2c_adapter = 0,
-	.static_width = 1920,
-	.static_height = 1080,
-	.static_fps = 25,
+	/* T23 SDK object offsets; report the sensor that actually bound. */
+	.client_offset = 0xd4,
+	.attr_offset = 0x270,
+	.width_offset = 0x23c,
+	.height_offset = 0x240,
+	.fps_offset = 0x27c,
+	.adapter_nr_offset = 0x190,
+	.attr_name_offset = 0,
+	.attr_chip_id_offset = 4,
 	.driver_added = tx_isp_t23_sinfo_driver_added,
 	.driver_removing = tx_isp_t23_sinfo_driver_removing,
 	.sensor_bound = tx_isp_t23_sinfo_sensor_bound,
