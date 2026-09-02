@@ -9,6 +9,7 @@ all: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test \
 	tx_isp_remote_event_test \
 	tx_isp_state_test \
 	tx_isp_sinfo_abi_test \
+	tx_isp_sensor_format_test \
 	tx_isp_reg_profile_test \
 	tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 	tx_isp_frame_abi_test tx_isp_frame_channel_test \
@@ -73,6 +74,10 @@ tx_isp_state_test: tx_isp_state_test.c \
 
 tx_isp_sinfo_abi_test: tx_isp_sinfo_abi_test.c \
 		../driver/include/tx_isp/tx_isp_sinfo.h
+	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
+
+tx_isp_sensor_format_test: tx_isp_sensor_format_test.c \
+		../driver/include/tx_isp/tx_isp_sensor_format.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
 
 tx_isp_reg_profile_test: tx_isp_reg_profile_test.c \
@@ -162,6 +167,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test \
 		tx_isp_remote_event_test \
 		tx_isp_state_test \
 		tx_isp_sinfo_abi_test \
+		tx_isp_sensor_format_test \
 		tx_isp_reg_profile_test \
 		tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 		tx_isp_frame_abi_test tx_isp_frame_channel_test \
@@ -179,6 +185,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test \
 	./tx_isp_remote_event_test
 	./tx_isp_state_test
 	./tx_isp_sinfo_abi_test
+	./tx_isp_sensor_format_test
 	./tx_isp_reg_profile_test
 	./tx_isp_callback_plan_test
 	./tx_isp_tuning_abi_test
@@ -205,6 +212,7 @@ clean:
 		tx_isp_remote_event_test \
 		tx_isp_state_test \
 		tx_isp_sinfo_abi_test \
+		tx_isp_sensor_format_test \
 		tx_isp_reg_profile_test \
 		tx_isp_callback_plan_test tx_isp_tuning_abi_test \
 		tx_isp_frame_abi_test tx_isp_frame_channel_test \

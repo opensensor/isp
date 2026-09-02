@@ -1,8 +1,4 @@
-/*
- * Bounded T23 AE path reconstructed from verified SC2336 exposure events.
- * IRQ context only captures luma; sensor I2C and gain-dependent ISP updates
- * run on the system workqueue.
- */
+/* IRQ context captures luma; sensor I/O runs on the system workqueue. */
 
 struct regtrace_t23_ae_hlil_rung {
     uint32_t packed;
@@ -10,39 +6,114 @@ struct regtrace_t23_ae_hlil_rung {
     uint32_t ev_q10;
 };
 
-static const struct regtrace_t23_ae_hlil_rung regtrace_t23_ae_hlil_rungs[] = {
-    { 0x00800020U, 0x10000U,   32U << 10 },
-    { 0x00800030U, 0x10000U,   48U << 10 },
-    { 0x00800040U, 0x10000U,   64U << 10 },
-    { 0x00800060U, 0x10000U,   96U << 10 },
-    { 0x00800080U, 0x10000U,  128U << 10 },
-    { 0x008000a0U, 0x10000U,  160U << 10 },
-    { 0x008000c0U, 0x10000U,  192U << 10 },
-    { 0x008000e0U, 0x10000U,  224U << 10 },
-    { 0x00800100U, 0x10000U,  256U << 10 },
-    { 0x00800140U, 0x10000U,  320U << 10 },
-    { 0x00800190U, 0x10000U,  400U << 10 },
-    { 0x008001f4U, 0x10000U,  500U << 10 },
-    { 0x00800258U, 0x10000U,  600U << 10 },
-    { 0x008002eeU, 0x10000U,  750U << 10 },
-    { 0x00800384U, 0x10000U,  900U << 10 },
-    { 0x0080041aU, 0x10000U, 1050U << 10 },
-    /* SC2336 init registers 0x3e01/0x3e02 encode 0x4ab lines. */
-    { 0x008004abU, 0x10000U, 1195U << 10 },
-    { 0x00800514U, 0x10000U, 1300U << 10 },
-    { 0x0080059cU, 0x10000U, 1436U << 10 },
-    { 0x0090059cU, 0x12b80U, 1616U << 10 },
-    { 0x00a0059cU, 0x15269U, 1795U << 10 },
-    { 0x00b0059cU, 0x1759dU, 1975U << 10 },
-    { 0x00c0059cU, 0x195c0U, 2154U << 10 },
-    { 0x00d0059cU, 0x1b350U, 2334U << 10 },
-    { 0x00e0059cU, 0x1ceaeU, 2513U << 10 },
-    { 0x00f0059cU, 0x1e829U, 2693U << 10 },
-    { 0x0880059cU, 0x20000U, 2872U << 10 },
-};
+#define REGTRACE_T23_AE_HLIL_MAX_STATES 64U
+#define REGTRACE_T23_AE_HLIL_GAIN_STEPS 16U
 
-#define REGTRACE_T23_AE_HLIL_STATE_COUNT \
-    ARRAY_SIZE(regtrace_t23_ae_hlil_rungs)
+static struct regtrace_t23_ae_hlil_rung
+    regtrace_t23_ae_hlil_rungs[REGTRACE_T23_AE_HLIL_MAX_STATES];
+static uint32_t regtrace_t23_ae_hlil_state_count;
+
+#define REGTRACE_T23_AE_HLIL_STATE_COUNT regtrace_t23_ae_hlil_state_count
+
+static int regtrace_t23_ae_hlil_append(uint32_t integration,
+                                       uint32_t gain_log2_q16)
+{
+    struct regtrace_t23_ae_hlil_rung *rung;
+    uint64_t ev_q10;
+    uint32_t packed;
+    uint32_t actual_it;
+    uint32_t actual_gain_log2;
+    uint32_t gain_q16;
+    int ret;
+
+    ret = regtrace_t23_sensor_allocate_exposure(
+        integration, gain_log2_q16, &packed, &actual_it,
+        &actual_gain_log2, &gain_q16);
+    if (ret)
+        return ret;
+    if (regtrace_t23_ae_hlil_state_count &&
+        regtrace_t23_ae_hlil_rungs[
+            regtrace_t23_ae_hlil_state_count - 1U].packed == packed)
+        return 0;
+    if (regtrace_t23_ae_hlil_state_count >=
+        REGTRACE_T23_AE_HLIL_MAX_STATES)
+        return -ENOSPC;
+
+    rung = &regtrace_t23_ae_hlil_rungs[
+        regtrace_t23_ae_hlil_state_count++];
+    rung->packed = packed;
+    rung->gain_q16 = gain_q16;
+    ev_q10 = (uint64_t)actual_it * gain_q16;
+    ev_q10 >>= 6;
+    rung->ev_q10 = ev_q10 > 0xffffffffULL ?
+        0xffffffffU : (uint32_t)ev_q10;
+    return 0;
+}
+
+static int regtrace_t23_ae_hlil_build_ladder(void)
+{
+    uint32_t integration;
+    uint32_t next;
+    uint32_t gain_step;
+    uint32_t gain;
+    uint32_t unity_states;
+    int ret;
+
+    if (!regtrace_t23_source_sensor_min_it ||
+        regtrace_t23_source_sensor_min_it >
+        regtrace_t23_source_sensor_max_it)
+        return -EINVAL;
+
+    regtrace_t23_ae_hlil_state_count = 0;
+    integration = regtrace_t23_source_sensor_min_it;
+    for (;;) {
+        ret = regtrace_t23_ae_hlil_append(integration, 0U);
+        if (ret)
+            return ret;
+        if (integration == regtrace_t23_source_sensor_max_it)
+            break;
+        next = integration + max(integration >> 1, 1U);
+        if (next < integration ||
+            next > regtrace_t23_source_sensor_max_it)
+            next = regtrace_t23_source_sensor_max_it;
+        integration = next;
+    }
+
+    unity_states = regtrace_t23_ae_hlil_state_count;
+    if (!unity_states)
+        return -EINVAL;
+    regtrace_t23_source_ae_initial_packed =
+        regtrace_t23_ae_hlil_rungs[unity_states - 1U].packed;
+
+    gain_step = DIV_ROUND_UP(regtrace_t23_source_sensor_max_again,
+                             REGTRACE_T23_AE_HLIL_GAIN_STEPS);
+    if (gain_step) {
+        for (gain = gain_step;
+             gain < regtrace_t23_source_sensor_max_again;
+             gain += gain_step) {
+            ret = regtrace_t23_ae_hlil_append(
+                regtrace_t23_source_sensor_max_it, gain);
+            if (ret)
+                return ret;
+            if (gain > 0xffffffffU - gain_step)
+                break;
+        }
+        ret = regtrace_t23_ae_hlil_append(
+            regtrace_t23_source_sensor_max_it,
+            regtrace_t23_source_sensor_max_again);
+        if (ret)
+            return ret;
+    }
+
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: generic AE ladder states=%u it=%u..%u max_again_log2=0x%x initial=0x%08x\n",
+           regtrace_t23_ae_hlil_state_count,
+           regtrace_t23_source_sensor_min_it,
+           regtrace_t23_source_sensor_max_it,
+           regtrace_t23_source_sensor_max_again,
+           regtrace_t23_source_ae_initial_packed);
+    return 0;
+}
 
 static uint32_t regtrace_t23_ae_hlil_nearest_state(uint32_t ev)
 {
@@ -73,6 +144,8 @@ static DECLARE_WORK(regtrace_t23_source_ae_hlil_work_item,
 
 static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
 {
+    const struct regtrace_t23_ae_hlil_rung *rungs =
+        regtrace_t23_ae_hlil_rungs;
     const struct regtrace_t23_ae_hlil_rung *rung;
     unsigned long flags;
     uint32_t luma;
@@ -89,6 +162,11 @@ static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
     spin_lock_irqsave(&regtrace_t23_ae_hlil_lock, flags);
     luma = regtrace_t23_ae_hlil_pending_luma;
     snapshot = regtrace_t23_ae_hlil_pending_snapshot;
+    if (!REGTRACE_T23_AE_HLIL_STATE_COUNT) {
+        regtrace_t23_ae_hlil_pending = false;
+        spin_unlock_irqrestore(&regtrace_t23_ae_hlil_lock, flags);
+        return;
+    }
     state = min(regtrace_t23_source_ae_hlil_state,
                 REGTRACE_T23_AE_HLIL_STATE_COUNT - 1U);
     spin_unlock_irqrestore(&regtrace_t23_ae_hlil_lock, flags);
@@ -105,16 +183,19 @@ static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
 
     if (!regtrace_t23_sensor_streaming || !regtrace_t23_core_started) {
         ret = -EAGAIN;
-    } else if (luma && (luma < lower || luma > upper)) {
+    } else if (!luma) {
+        next_state = min(state + 4U,
+                         REGTRACE_T23_AE_HLIL_STATE_COUNT - 1U);
+    } else if (luma < lower || luma > upper) {
         uint32_t current_ev =
-            regtrace_t23_ae_hlil_rungs[state].ev_q10 >> 10;
+            rungs[state].ev_q10 >> 10;
 
         desired_ev = (uint32_t)div64_u64(
             (uint64_t)current_ev * regtrace_t23_source_ae_hlil_target +
             luma / 2U, luma);
         desired_ev = clamp(desired_ev,
-            regtrace_t23_ae_hlil_rungs[0].ev_q10 >> 10,
-            regtrace_t23_ae_hlil_rungs[
+            rungs[0].ev_q10 >> 10,
+            rungs[
                 REGTRACE_T23_AE_HLIL_STATE_COUNT - 1U].ev_q10 >> 10);
         desired_state = regtrace_t23_ae_hlil_nearest_state(desired_ev);
         if (desired_state > state + 4U)
@@ -126,11 +207,10 @@ static void regtrace_t23_source_ae_hlil_work(struct work_struct *work)
     }
 
     if (!ret && next_state != state) {
-        rung = &regtrace_t23_ae_hlil_rungs[next_state];
+        rung = &rungs[next_state];
         ret = regtrace_t23_call_sensor_exposure(rung->packed,
                                                 "source-ae-hlil");
-        if (!ret && rung->gain_q16 !=
-            regtrace_t23_ae_hlil_rungs[state].gain_q16)
+        if (!ret && rung->gain_q16 != rungs[state].gain_q16)
             ret = regtrace_t23_source_apply_total_gain_value(
                 rung->gain_q16, rung->packed >> 16, false, true);
         if (!ret) {
@@ -223,9 +303,12 @@ static void regtrace_t23_source_ae_hlil_trigger(void)
 
 static void regtrace_t23_source_ae_hlil_reset(void)
 {
+    const struct regtrace_t23_ae_hlil_rung *rungs =
+        regtrace_t23_ae_hlil_rungs;
     unsigned long flags;
     uint32_t initial_packed = regtrace_t23_source_ae_force_packed ?
-        regtrace_t23_source_ae_force_packed : 0x008004abU;
+        regtrace_t23_source_ae_force_packed :
+        regtrace_t23_source_ae_initial_packed;
     uint32_t state;
 
     cancel_work_sync(&regtrace_t23_source_ae_hlil_work_item);
@@ -236,8 +319,12 @@ static void regtrace_t23_source_ae_hlil_reset(void)
     spin_unlock_irqrestore(&regtrace_t23_ae_hlil_lock, flags);
 
     regtrace_t23_source_ae_hlil_state = 0U;
+    if (!REGTRACE_T23_AE_HLIL_STATE_COUNT) {
+        regtrace_t23_source_ae_hlil_status = ENODEV;
+        return;
+    }
     for (state = 0; state < REGTRACE_T23_AE_HLIL_STATE_COUNT; ++state) {
-        if (regtrace_t23_ae_hlil_rungs[state].packed == initial_packed) {
+        if (rungs[state].packed == initial_packed) {
             regtrace_t23_source_ae_hlil_state = state;
             break;
         }
@@ -246,7 +333,7 @@ static void regtrace_t23_source_ae_hlil_reset(void)
         regtrace_t23_source_ae_hlil_state =
             regtrace_t23_ae_hlil_nearest_state(initial_packed & 0xffffU);
     regtrace_t23_source_ae_hlil_ev =
-        regtrace_t23_ae_hlil_rungs[regtrace_t23_source_ae_hlil_state].ev_q10;
+        rungs[regtrace_t23_source_ae_hlil_state].ev_q10;
     regtrace_t23_source_ae_hlil_runs = 0;
     regtrace_t23_source_ae_hlil_updates = 0;
     regtrace_t23_source_ae_hlil_drops = 0;

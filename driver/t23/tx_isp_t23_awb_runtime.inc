@@ -1,10 +1,4 @@
-/*
- * Active T23 Tiziano AWB path reconstructed from tx-isp-t23-hlil.txt.
- *
- * The SC2336 tuning disables cluster selection and CT edge weighting. The live
- * EV selects outdoor or indoor CT weights; indoor mode also applies the OEM
- * light-source distance LUT before the final distance refinement.
- */
+/* Active T23 Tiziano AWB path reconstructed from tx-isp-t23-hlil.txt. */
 
 #define REGTRACE_T23_AWB_HLIL_COLS 15U
 #define REGTRACE_T23_AWB_HLIL_ROWS 15U
@@ -533,7 +527,9 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
                     result.ct, regtrace_t23_source_ae_hlil_ev);
         }
         if (regtrace_t23_source_lsc_events &&
-            result.ct >= regtrace_t23_lsc_sc2336_ct_points[0] &&
+            regtrace_t23_source_lsc_tuning_init &&
+            regtrace_t23_source_lsc_tables_initialized &&
+            result.ct >= ((uint32_t *)(void *)lsc_ct_points)[0] &&
             result.ct <= 10000U) {
             uint32_t delta = regtrace_t23_source_lsc_last_ct >= result.ct ?
                 regtrace_t23_source_lsc_last_ct - result.ct :

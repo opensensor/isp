@@ -1,4 +1,4 @@
-/* T23 defog payload within the SC2336 tuning file. */
+/* T23 defog payload within the selected IQ profile. */
 #define REGTRACE_T23_DEFOG_TUNING_OFFSET 0x13728U
 #define REGTRACE_T23_DEFOG_TUNING_SIZE   0x854U
 #define REGTRACE_T23_DEFOG_TUNING_FIELDS(X) \

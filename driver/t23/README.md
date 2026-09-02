@@ -3,6 +3,36 @@
 This directory is the T23 bring-up workspace for matching the OEM
 `tx-isp-t23.ko` behavior on Linux 3.10.14 targets.
 
+## Sensor-generic contract
+
+The T23 ISP module contains SoC and ISP-block behavior, not sensor tuning.
+Sensor identity, I2C address, native geometry, media-bus format, exposure
+limits, gain allocation, integration-time allocation, and FPS changes come
+from the sensor module that actually binds. Sensor-specific image parameters
+come from `/etc/sensor/<bound-driver>-t23.bin` (or the explicit
+`source_core_tuning_path` override). A missing, short, or invalid profile
+fails closed with tunable blocks bypassed; it does not select a compiled
+fallback image.
+
+The source startup path derives Bayer order and MIPI packing from the bound
+media-bus/attribute data, builds the AE ladder through the sensor callbacks,
+and loads Gamma, LSC, AWB, CCM, DPC, GIB, YDNS, DMSC, ADR, HLDC, BCSH, CLM,
+MDNS, and SDNS data from the selected IQ file. No executable T23 source names
+a sensor model and no generated sensor-profile tables are linked into the
+module. Sharpening remains bypassed until its complete profile loader is
+recovered. The current direct input path accepts the T23 MIPI RAW8, RAW10,
+RAW12, and YUV422 format identifiers; unsupported formats and buses are
+rejected rather than guessed.
+
+The 2026-09-01 MIS20C1 smoke test proved the generic contract on hardware:
+procfs reported the bound sensor's `0x20c1` chip ID, 1920x1080 mode, 30 fps,
+and registered `0x30` address; the selected `mis20c1-t23.bin` loaded; AE
+settled at luma 64; AWB continued updating; and both scaler channels produced
+frames. The MIS20C1 saturation curve decreases with exposure, which also
+verified that CCM interpolation handles either curve direction without the
+old unsigned-underflow assumption. The tested module SHA-256 is
+`09a237b32bfecf1c78191aeb5bee7f38aab64bbf2baf7faed69c036289dbdd74`.
+
 The recovered whole-driver seed from `tx-isp-t23-v1` now lives in
 `tx_isp_t23_core.c`, with separate math, sensor-registry, mode-profile,
 subdevice, callback-plan, register-profile, frame-layout, scaler, and
@@ -39,7 +69,11 @@ The subdevice adapter supplies T23's graph table and legacy pad-slot offsets
 to the shared name/type/index resolver. Its recovered graph descriptor reads
 also use the common 8-byte endpoint wire positions.
 
-Current smoke-test status:
+## Historical recovery log
+
+The entries below are chronological bring-up evidence. Earlier SC2336
+observations describe the fixture used at that point and are superseded by
+the sensor-generic contract above; they are retained as recovery history.
 
 - `sensor_sc2336_t23.ko` loads against the recovered module.
 - `/dev/tx-isp`, `/dev/isp-m0`, `/dev/misc-ivdc`, and `/dev/framechan0..3`

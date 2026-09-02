@@ -8,6 +8,7 @@
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
+#include "../include/tx_isp/tx_isp_sensor_format.h"
 #include "../include/tx_isp/tx_isp_sinfo.h"
 #include "include/tx_isp_t23_mode.h"
 #include "tx_isp_t23_scaler.h"
@@ -9236,6 +9237,9 @@ static void regtrace_t23_release_sensor_client(struct i2c_driver *drv,
 #define REGTRACE_TX_ISP_TYPE_SUBDEV 1
 #define REGTRACE_TX_ISP_TYPE_WIDGET 2
 #define REGTRACE_TX_ISP_SUBDEV_SENSOR_OPS_OFFSET 0x0c
+#define REGTRACE_TX_ISP_EVENT_SENSOR_INT_TIME 0x02000005U
+#define REGTRACE_TX_ISP_EVENT_SENSOR_AGAIN 0x02000007U
+#define REGTRACE_TX_ISP_EVENT_SENSOR_FPS 0x0200000aU
 #define REGTRACE_TX_ISP_EVENT_SENSOR_EXPO 0x02000016U
 
 static int regtrace_t23_ops_has_sensor_table(uintptr_t ops)
@@ -9483,17 +9487,18 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TX_ISP_GET_BUF 0x800c56d5U
 #define REGTRACE_TX_ISP_SET_BUF 0x800c56d4U
 #define REGTRACE_V4L2_INPUT_TYPE_CAMERA 2U
-#define REGTRACE_SC2336_WIDTH 1920U
-#define REGTRACE_SC2336_HEIGHT 1080U
-#define REGTRACE_SC2336_TOTAL_WIDTH 0x8caU
-#define REGTRACE_SC2336_TOTAL_HEIGHT 0x5a0U
-#define REGTRACE_SC2336_CHIP_ID 0xcb3aU
-#define REGTRACE_SC2336_MIPI_CLK 405U
 #define REGTRACE_T23_SENSOR_IOCTL_561B 0xc008561bU
 #define REGTRACE_T23_SENSOR_IOCTL_561C 0xc008561cU
 #define REGTRACE_ISP_M0_GET_CONTROL REGTRACE_T23_SENSOR_IOCTL_561B
 #define REGTRACE_ISP_M0_SET_CONTROL REGTRACE_T23_SENSOR_IOCTL_561C
 #define REGTRACE_T23_SENSOR_ATTR_SIZE 0x100U
+#define REGTRACE_T23_SENSOR_VIDEO_MBUS_OFFSET 0x23cU
+#define REGTRACE_T23_SENSOR_VIDEO_WIDTH_OFFSET \
+    (REGTRACE_T23_SENSOR_VIDEO_MBUS_OFFSET + 0x00U)
+#define REGTRACE_T23_SENSOR_VIDEO_HEIGHT_OFFSET \
+    (REGTRACE_T23_SENSOR_VIDEO_MBUS_OFFSET + 0x04U)
+#define REGTRACE_T23_SENSOR_VIDEO_CODE_OFFSET \
+    (REGTRACE_T23_SENSOR_VIDEO_MBUS_OFFSET + 0x08U)
 #define REGTRACE_T23_SENSOR_VIDEO_ATTR_OFFSET 0x270U
 #define REGTRACE_T23_CSI_PHY_PHYS 0x10022000U
 #define REGTRACE_T23_CSI_PHY_SIZE 0x1000U
@@ -9518,20 +9523,44 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_T23_ATTR_MIPI_CSI_FMT 0x80U
 #define REGTRACE_T23_ATTR_DATA_TYPE 0x94U
 #define REGTRACE_T23_ATTR_MAX_AGAIN 0x98U
+#define REGTRACE_T23_ATTR_MAX_DGAIN 0x9cU
+#define REGTRACE_T23_ATTR_AGAIN 0xa0U
+#define REGTRACE_T23_ATTR_DGAIN 0xa4U
 #define REGTRACE_T23_ATTR_MIN_IT 0xa8U
 #define REGTRACE_T23_ATTR_MIN_IT_NATIVE 0xaaU
 #define REGTRACE_T23_ATTR_MAX_IT_NATIVE 0xacU
 #define REGTRACE_T23_ATTR_IT_LIMIT 0xaeU
+#define REGTRACE_T23_ATTR_INTEGRATION_TIME 0xb0U
 #define REGTRACE_T23_ATTR_TOTAL_WIDTH 0xb4U
 #define REGTRACE_T23_ATTR_TOTAL_HEIGHT 0xb6U
 #define REGTRACE_T23_ATTR_MAX_IT 0xb8U
 #define REGTRACE_T23_ATTR_IT_DELAY 0xbaU
 #define REGTRACE_T23_ATTR_AGAIN_DELAY 0xbcU
 #define REGTRACE_T23_ATTR_ONE_LINE_US 0xc0U
+#define REGTRACE_T23_ATTR_ALLOC_AGAIN 0xc4U
+#define REGTRACE_T23_ATTR_ALLOC_INTEGRATION_TIME 0xd4U
+#define REGTRACE_V4L2_MBUS_FMT_SBGGR8_1X8 0x3001U
+#define REGTRACE_V4L2_MBUS_FMT_SGRBG8_1X8 0x3002U
+#define REGTRACE_V4L2_MBUS_FMT_SBGGR10_1X10 0x3007U
+#define REGTRACE_V4L2_MBUS_FMT_SBGGR12_1X12 0x3008U
+#define REGTRACE_V4L2_MBUS_FMT_SGRBG10_DPCM8_1X8 0x3009U
+#define REGTRACE_V4L2_MBUS_FMT_SGRBG10_1X10 0x300aU
+#define REGTRACE_V4L2_MBUS_FMT_SBGGR10_DPCM8_1X8 0x300bU
+#define REGTRACE_V4L2_MBUS_FMT_SGBRG10_DPCM8_1X8 0x300cU
+#define REGTRACE_V4L2_MBUS_FMT_SRGGB10_DPCM8_1X8 0x300dU
+#define REGTRACE_V4L2_MBUS_FMT_SGBRG10_1X10 0x300eU
+#define REGTRACE_V4L2_MBUS_FMT_SRGGB10_1X10 0x300fU
+#define REGTRACE_V4L2_MBUS_FMT_SGBRG12_1X12 0x3010U
+#define REGTRACE_V4L2_MBUS_FMT_SGRBG12_1X12 0x3011U
+#define REGTRACE_V4L2_MBUS_FMT_SRGGB12_1X12 0x3012U
+#define REGTRACE_V4L2_MBUS_FMT_SGBRG8_1X8 0x3013U
+#define REGTRACE_V4L2_MBUS_FMT_SRGGB8_1X8 0x3014U
+#define REGTRACE_V4L2_MBUS_FMT_SBGGR10_ALAW8_1X8 0x3015U
+#define REGTRACE_V4L2_MBUS_FMT_SGBRG10_ALAW8_1X8 0x3016U
+#define REGTRACE_V4L2_MBUS_FMT_SGRBG10_ALAW8_1X8 0x3017U
+#define REGTRACE_V4L2_MBUS_FMT_SRGGB10_ALAW8_1X8 0x3018U
 #define REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI 1U
 #define REGTRACE_TX_SENSOR_CONTROL_INTERFACE_I2C 1U
-#define REGTRACE_TX_SENSOR_RAW10 1U
-#define REGTRACE_RAW10_DT 0x2bU
 #define REGTRACE_ISP_M0_EXT_CONTROL 0xc01056c6U
 #define REGTRACE_TISP_CTRL_BRIGHTNESS 0x00980900U
 #define REGTRACE_TISP_CTRL_CONTRAST 0x00980901U
@@ -9564,7 +9593,11 @@ int tiziano_sdns_init(void);
 int32_t tiziano_adr_init(uint32_t arg0, uint32_t width, uint32_t height);
 int32_t tisp_gib_gain_interpolation(uint32_t gain_q16);
 int32_t tisp_ydns_refresh(uint32_t gain_q16);
+uint32_t tisp_math_exp2(uint32_t value, uint32_t input_precision,
+                        uint32_t output_precision);
 int32_t tiziano_ydns_init(void);
+int32_t tiziano_gamma_init(void);
+int32_t tiziano_lsc_init(uint32_t width, uint32_t height);
 int32_t tiziano_defog_set_reg_params(void);
 int32_t tiziano_defog_params_init(void);
 int32_t defog_3x3_5x5_params_init(uint32_t width, uint32_t height);
@@ -9589,8 +9622,8 @@ static bool regtrace_t23_source_core_start = true;
 static bool regtrace_t23_source_frame_done = true;
 static bool regtrace_t23_source_msca_curves = true;
 static bool regtrace_t23_source_msca_init;
-/* SC2336 non-WDR mask derived by the OEM T23 tisp_init path. */
-static uint regtrace_t23_source_core_bypass = 0xb5742209U;
+/* A missing IQ profile must leave every tunable block bypassed. */
+static uint regtrace_t23_source_core_bypass = 0xffffffffU;
 static bool regtrace_t23_source_core_bypass_from_tuning = true;
 static bool regtrace_t23_source_park_uninitialized_mdns;
 static bool regtrace_t23_source_mdns_tuning_init = true;
@@ -9621,11 +9654,18 @@ static uint regtrace_t23_source_adr_width;
 static uint regtrace_t23_source_adr_height;
 static bool regtrace_t23_source_gib_tuning_init = true;
 static uint regtrace_t23_source_gib_ir_value;
+/* These blocks are enabled only through selected-profile loaders. */
 static bool regtrace_t23_source_gamma_tuning_init = true;
 static bool regtrace_t23_source_lsc_tuning_init = true;
 static bool regtrace_t23_source_lsc_events = true;
 static bool regtrace_t23_source_lsc_update_pending;
 static bool regtrace_t23_source_lsc_tables_initialized;
+static uint32_t regtrace_t23_source_lsc_lut_num;
+static uint32_t regtrace_t23_source_lsc_mesh_scale;
+static uint32_t regtrace_t23_source_lsc_lut_stride;
+static uint32_t regtrace_t23_source_lsc_mesh_width;
+static uint32_t regtrace_t23_source_lsc_mesh_height;
+static uint32_t regtrace_t23_source_lsc_mean_enable;
 static bool regtrace_t23_source_lsc_initial_flip;
 static bool regtrace_t23_source_lsc_initial_mirror;
 static bool regtrace_t23_source_dpc_tuning_init = true;
@@ -9646,6 +9686,14 @@ static uint regtrace_t23_source_ae_stats_irqs;
 static uint regtrace_t23_source_ae_stats_snapshots;
 static uint regtrace_t23_source_ae_force_packed;
 static uint regtrace_t23_source_total_gain_q16;
+static uint regtrace_t23_source_sensor_width;
+static uint regtrace_t23_source_sensor_height;
+static uint regtrace_t23_source_sensor_mbus_code;
+static uint regtrace_t23_source_sensor_min_it;
+static uint regtrace_t23_source_sensor_max_it;
+static uint regtrace_t23_source_sensor_max_again;
+static uint regtrace_t23_source_ae_initial_packed;
+static bool regtrace_t23_source_sensor_configured;
 static bool regtrace_t23_source_ae_hlil = true;
 static uint regtrace_t23_source_ae_hlil_interval = 32;
 static uint regtrace_t23_source_ae_hlil_target = 60;
@@ -9665,15 +9713,16 @@ static bool regtrace_t23_source_awb_stats_init = true;
 static bool regtrace_t23_source_awb_stats_processed_tap = true;
 static bool regtrace_t23_source_awb_stats_wide_thresholds;
 static bool regtrace_t23_source_awb_grayworld;
+/* Runtime AWB is enabled only after the selected profile has been validated. */
 static bool regtrace_t23_source_awb_hlil = true;
+static bool regtrace_t23_source_awb_hlil_tuning_loaded;
 static uint regtrace_t23_source_awb_grayworld_interval = 2;
 static uint regtrace_t23_source_awb_grayworld_rbias = 1024;
 static uint regtrace_t23_source_awb_grayworld_bbias = 1024;
 static uint regtrace_t23_source_awb_hlil_interval = 4;
 static uint regtrace_t23_source_awb_hlil_min_pixels = 1;
-/* Stable SC2336 gains captured from the OEM T23 driver in this scene. */
-static uint regtrace_t23_source_awb_bootstrap_rgain = 0x4d4;
-static uint regtrace_t23_source_awb_bootstrap_bgain = 0xbe8;
+static uint regtrace_t23_source_awb_bootstrap_rgain = 0x400;
+static uint regtrace_t23_source_awb_bootstrap_bgain = 0x400;
 static uint regtrace_t23_source_awb_stats_irqs;
 static uint regtrace_t23_source_awb_stats_snapshots;
 static uint regtrace_t23_source_awb_grayworld_updates;
@@ -9695,19 +9744,21 @@ static bool regtrace_t23_source_bcsh_events = true;
 static uint regtrace_t23_source_bcsh_ev_events;
 static uint regtrace_t23_source_bcsh_ct_events;
 static uint regtrace_t23_source_bcsh_last_ct = 3187U;
-static bool regtrace_t23_source_ccm_tuning_init;
+static bool regtrace_t23_source_ccm_tuning_init = true;
 static bool regtrace_t23_source_ccm_events = true;
 static uint regtrace_t23_source_ccm_runtime_ct = 5084U;
 static uint regtrace_t23_source_ccm_last_ct = 5084U;
 static uint regtrace_t23_source_ccm_event_count;
 static uint regtrace_t23_source_ccm_last_saturation = 150U;
 static bool regtrace_t23_source_dmsc_tuning_init = true;
-static bool regtrace_t23_source_sharpen_tuning_init = true;
-static uint regtrace_t23_source_dmsc_sharpness = 0x50U;
+/* Sharpen stays bypassed until its complete IQ-bin loader is recovered. */
+static bool regtrace_t23_source_sharpen_tuning_init;
+static uint regtrace_t23_source_dmsc_sharpness = 0x80U;
 static uint32_t regtrace_t23_dmsc_gain_q16 = 0x10000U;
 static bool regtrace_t23_source_bcsh_tuning_init = true;
 static bool regtrace_t23_source_bcsh_runtime = true;
 static bool regtrace_t23_source_bcsh_trace;
+static int regtrace_t23_source_bcsh_tuning_status = -ENODATA;
 static bool regtrace_t23_source_clm_tuning_init = true;
 static bool regtrace_t23_source_clm_events = true;
 static uint regtrace_t23_source_clm_startup_ct = 5000U;
@@ -9717,9 +9768,48 @@ static uint regtrace_t23_source_clm_region = 4U;
 static bool regtrace_t23_source_bcsh_neutral;
 static bool regtrace_t23_source_csccr_init = true;
 static uint32_t regtrace_t23_dpc_gain_old = 0xffffffffU;
-static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin";
+/* The IQ filename is policy; all sensor behavior comes from the bound ABI. */
+static char *regtrace_t23_source_core_tuning_path;
+static char regtrace_t23_source_core_tuning_auto_path[64];
 #define REGTRACE_T23_DPC_TUNING_OFFSET 0xbad0U
 #define REGTRACE_T23_DPC_TUNING_SIZE   0x448U
+#define REGTRACE_T23_GAMMA_TUNING_OFFSET 0x28b0U
+#define REGTRACE_T23_GAMMA_TUNING_SIZE   0x102U
+#define REGTRACE_T23_LSC_LUT_NUM_OFFSET       0x314cU
+#define REGTRACE_T23_LSC_MESH_SCALE_OFFSET    0x3150U
+#define REGTRACE_T23_LSC_LUT_STRIDE_OFFSET    0x3154U
+#define REGTRACE_T23_LSC_MESH_SIZE_OFFSET     0x3158U
+#define REGTRACE_T23_LSC_CT_POINTS_OFFSET     0x3160U
+#define REGTRACE_T23_LSC_A_LUT_OFFSET         0x3170U
+#define REGTRACE_T23_LSC_T_LUT_OFFSET         0x516cU
+#define REGTRACE_T23_LSC_D_LUT_OFFSET         0x7168U
+#define REGTRACE_T23_LSC_MESH_STRENGTH_OFFSET 0x9164U
+#define REGTRACE_T23_LSC_MEAN_ENABLE_OFFSET   0x91acU
+#define REGTRACE_T23_CCM_DP_OFFSET  0xb248U
+#define REGTRACE_T23_CCM_A_OFFSET   0xb25cU
+#define REGTRACE_T23_CCM_T_OFFSET   0xb280U
+#define REGTRACE_T23_CCM_D_OFFSET   0xb2a4U
+#define REGTRACE_T23_CCM_D2_OFFSET  0xb2c8U
+#define REGTRACE_T23_CCM_EV_OFFSET  0xb2ecU
+#define REGTRACE_T23_CCM_SAT_OFFSET 0xb310U
+#define REGTRACE_T23_CCM_CT_OFFSET  0xb3e8U
+#define REGTRACE_T23_AWB_PIXEL_THRESHOLD_OFFSET 0x10dcU
+#define REGTRACE_T23_AWB_POINT_POSITION_OFFSET  0x10e8U
+#define REGTRACE_T23_AWB_HISTORY_OFFSET         0x10f0U
+#define REGTRACE_T23_AWB_MF_OFFSET              0x10f8U
+#define REGTRACE_T23_AWB_MODE_OFFSET            0x1110U
+#define REGTRACE_T23_AWB_CT_OFFSET              0x111cU
+#define REGTRACE_T23_AWB_WB_STATIC_OFFSET       0x1124U
+#define REGTRACE_T23_AWB_LIGHT_SOURCES_OFFSET   0x112cU
+#define REGTRACE_T23_AWB_LIGHT_COUNT_OFFSET     0x117cU
+#define REGTRACE_T23_AWB_RG_POSITIONS_OFFSET    0x1180U
+#define REGTRACE_T23_AWB_BG_POSITIONS_OFFSET    0x11bcU
+#define REGTRACE_T23_AWB_DISTANCE_OFFSET        0x1238U
+#define REGTRACE_T23_AWB_INDOOR_MESH_OFFSET     0x1244U
+#define REGTRACE_T23_AWB_CT_MESH_OFFSET         0x15c8U
+#define REGTRACE_T23_AWB_ZONE_MESH_OFFSET       0x194cU
+#define REGTRACE_T23_AWB_OUTDOOR_MESH_OFFSET    0x1cd0U
+#define REGTRACE_T23_AWB_LIGHT_LUT_OFFSET       0x2054U
 #define REGTRACE_T23_GIB_TUNING_OFFSET 0x2ab4U
 #define REGTRACE_T23_GIB_TUNING_SIZE   0x698U
 #define REGTRACE_T23_DMSC_TUNING_OFFSET 0x91b0U
@@ -9731,11 +9821,10 @@ static char *regtrace_t23_source_core_tuning_path = "/etc/sensor/sc2336-t23.bin"
 #define REGTRACE_T23_CLM_TUNING_OFFSET  0x1122cU
 #define REGTRACE_T23_CLM_TUNING_SIZE    0x24fcU
 #define REGTRACE_T23_HLDC_TUNING_OFFSET 0x14b44U
-static uint regtrace_t23_source_core_bayer = 1U;
+static uint regtrace_t23_source_core_bayer = UINT_MAX;
 static uint regtrace_t23_source_core_mode = 0x1cU;
 static bool regtrace_t23_direct_csi_start;
 static bool regtrace_t23_direct_vic_start;
-static bool regtrace_t23_direct_vic_force_run;
 static bool regtrace_t23_vic_irq_unmask_all;
 static bool regtrace_t23_direct_sensor_stream;
 static bool regtrace_t23_source_csi_stream = true;
@@ -9979,11 +10068,14 @@ module_param_named(source_csccr_init,
                    regtrace_t23_source_csccr_init, bool, 0644);
 module_param_named(source_core_tuning_path,
                    regtrace_t23_source_core_tuning_path, charp, 0644);
+MODULE_PARM_DESC(source_core_tuning_path,
+                 "IQ file override; unset selects /etc/sensor/<sensor>-t23.bin");
 module_param_named(source_core_bayer, regtrace_t23_source_core_bayer, uint, 0644);
+MODULE_PARM_DESC(source_core_bayer,
+                 "T23 Bayer index override; 0xffffffff uses the media-bus code");
 module_param_named(source_core_mode, regtrace_t23_source_core_mode, uint, 0644);
 module_param_named(direct_csi_start, regtrace_t23_direct_csi_start, bool, 0644);
 module_param_named(direct_vic_start, regtrace_t23_direct_vic_start, bool, 0644);
-module_param_named(direct_vic_force_run, regtrace_t23_direct_vic_force_run, bool, 0644);
 module_param_named(vic_irq_unmask_all, regtrace_t23_vic_irq_unmask_all, bool, 0644);
 module_param_named(direct_sensor_stream, regtrace_t23_direct_sensor_stream, bool, 0644);
 module_param_named(source_csi_stream, regtrace_t23_source_csi_stream, bool, 0644);
@@ -10016,9 +10108,6 @@ static void *regtrace_t23_snapraw_buffer;
 static dma_addr_t regtrace_t23_snapraw_dma;
 static size_t regtrace_t23_snapraw_buffer_size;
 static bool regtrace_t23_snapraw_buffer_is_iomem;
-static unsigned char regtrace_t23_sc2336_attr[REGTRACE_T23_SENSOR_ATTR_SIZE] __attribute__((aligned(4)));
-static const char regtrace_t23_sc2336_name[] = "sc2336";
-static bool regtrace_t23_sensor_attr_ready;
 static bool regtrace_t23_vic_streaming;
 static bool regtrace_t23_core_irq_enabled;
 static bool regtrace_t23_vic_irq_enabled;
@@ -10295,12 +10384,15 @@ static int regtrace_t23_snapraw_one(unsigned int index)
     writel(stride, base + 0x310);
     writel(stride, base + 0x314);
 
-    /* Channel 0 RAW buffers are consecutive in the original T23 driver. */
+    /*
+     * This is a one-frame transaction backed by one frame-sized reservation.
+     * Point every hardware bank at that reservation so a bank advance cannot
+     * DMA past it while the one-shot is being stopped.
+     */
     for (i = 0; i < ARRAY_SIZE(saved.y_bank); i++) {
-        frame_dma = (uint32_t)dma + i * frame_size;
+        frame_dma = (uint32_t)dma;
         writel(frame_dma, base + 0x318 + i * 4);
-        writel((uint32_t)dma + (2U * i + 1U) * frame_size,
-               base + 0x340 + i * 4);
+        writel(frame_dma, base + 0x340 + i * 4);
     }
     wmb();
     writel(0x80010020U, base + 0x300);
@@ -10531,6 +10623,11 @@ static uint32_t regtrace_t23_get_le32(const unsigned char *p)
            ((uint32_t)p[3] << 24);
 }
 
+static uint16_t regtrace_t23_get_le16(const unsigned char *p)
+{
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
 static void regtrace_t23_put_le32(unsigned char *p, uint32_t value)
 {
     p[0] = value & 0xffU;
@@ -10563,12 +10660,18 @@ static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
     name = drv->driver.name ? drv->driver.name : "";
     if (!name[0])
         return -EINVAL;
+    if (!addr || addr > 0x7fU) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: sensor %s registered invalid i2c address 0x%x reason=%s\n",
+               name, addr, reason ? reason : "?");
+        return -EINVAL;
+    }
     if (regtrace_t23_sensor_client)
         return regtrace_t23_call_sensor_chip_ident(reason);
 
     memset(&info, 0, sizeof(info));
     snprintf(info.type, sizeof(info.type), "%s", name);
-    info.addr = addr ? addr : 0x30;
+    info.addr = addr;
 
     adapter = i2c_get_adapter(regtrace_t23_sensor_i2c_adapter);
     if (!adapter) {
@@ -10613,74 +10716,11 @@ static void regtrace_t23_release_sensor_client(struct i2c_driver *drv,
     regtrace_t23_sensor_streaming = false;
 }
 
-static void regtrace_t23_seed_sc2336_attr(void)
-{
-    unsigned int max_it = REGTRACE_SC2336_TOTAL_HEIGHT - 4U;
-
-    memset(regtrace_t23_sc2336_attr, 0, sizeof(regtrace_t23_sc2336_attr));
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_NAME,
-                          (uint32_t)(uintptr_t)regtrace_t23_sc2336_name);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_CHIP_ID,
-                          REGTRACE_SC2336_CHIP_ID);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_CBUS_TYPE,
-                          REGTRACE_TX_SENSOR_CONTROL_INTERFACE_I2C);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_CBUS_DEVICE,
-                          0x30U);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_DBUS_TYPE,
-                          REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_MODE,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_CLK,
-                          REGTRACE_SC2336_MIPI_CLK);
-    regtrace_t23_sc2336_attr[REGTRACE_T23_ATTR_MIPI_LANS] = 2;
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_IMAGE_WIDTH,
-                          REGTRACE_SC2336_WIDTH);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_IMAGE_HEIGHT,
-                          REGTRACE_SC2336_HEIGHT);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_SETTLE_ADAPT,
-                          1);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_HCROP_DIFF,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_VCOMP,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_HCOMP,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_DATA_TYPE_EN,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_DATA_TYPE_VALUE,
-                          REGTRACE_RAW10_DT);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_FRAME_MODE,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_SENSOR_MODE,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_CSI_FMT,
-                          REGTRACE_TX_SENSOR_RAW10);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_DATA_TYPE,
-                          0);
-    regtrace_t23_put_le32(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MAX_AGAIN,
-                          327680U);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIN_IT, 2);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIN_IT_NATIVE, 2);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MAX_IT_NATIVE, max_it);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_IT_LIMIT, max_it);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_TOTAL_WIDTH,
-                          REGTRACE_SC2336_TOTAL_WIDTH);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_TOTAL_HEIGHT,
-                          REGTRACE_SC2336_TOTAL_HEIGHT);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MAX_IT, max_it);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_IT_DELAY, 2);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_AGAIN_DELAY, 2);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_ONE_LINE_US, 28);
-    regtrace_t23_sensor_attr_ready = true;
-}
-
 static unsigned char *regtrace_t23_sensor_owned_attr(void)
 {
     uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
     uintptr_t attr;
     uint32_t chip_id;
-    uint32_t width;
-    uint32_t height;
 
     if (!regtrace_t23_valid_ptr(sd))
         return NULL;
@@ -10690,26 +10730,52 @@ static unsigned char *regtrace_t23_sensor_owned_attr(void)
         return NULL;
     chip_id = regtrace_t23_get_le32((unsigned char *)attr +
                                     REGTRACE_T23_ATTR_CHIP_ID);
-    width = regtrace_t23_get_le32((unsigned char *)attr +
-                                  REGTRACE_T23_ATTR_MIPI_IMAGE_WIDTH);
-    height = regtrace_t23_get_le32((unsigned char *)attr +
-                                   REGTRACE_T23_ATTR_MIPI_IMAGE_HEIGHT);
-    if (!chip_id || width < 64U || width > 2688U ||
-        height < 64U || height > 4320U)
+    if (!chip_id)
         return NULL;
 
     return (unsigned char *)attr;
 }
 
+static int regtrace_t23_sensor_mbus(uint32_t *width, uint32_t *height,
+                                    uint32_t *code)
+{
+    uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
+    uint32_t w;
+    uint32_t h;
+
+    if (!regtrace_t23_valid_ptr(sd))
+        return -ENODEV;
+    w = *(uint32_t *)(sd + REGTRACE_T23_SENSOR_VIDEO_WIDTH_OFFSET);
+    h = *(uint32_t *)(sd + REGTRACE_T23_SENSOR_VIDEO_HEIGHT_OFFSET);
+    if (w < 64U || w > 8192U || h < 64U || h > 8192U)
+        return -EINVAL;
+    if (width)
+        *width = w;
+    if (height)
+        *height = h;
+    if (code)
+        *code = *(uint32_t *)(sd + REGTRACE_T23_SENSOR_VIDEO_CODE_OFFSET);
+    return 0;
+}
+
 static void regtrace_t23_seed_sensor_caches(const char *reason)
 {
     unsigned char *attr;
+    uint32_t width;
+    uint32_t height;
+    uint32_t code;
 
-    if (!regtrace_t23_sensor_attr_ready)
-        regtrace_t23_seed_sc2336_attr();
     attr = regtrace_t23_sensor_owned_attr();
-    if (!attr)
-        attr = regtrace_t23_sc2336_attr;
+    if (!attr || regtrace_t23_sensor_mbus(&width, &height, &code)) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: bound sensor metadata unavailable reason=%s\n",
+               reason ? reason : "?");
+        return;
+    }
+
+    regtrace_t23_source_sensor_width = width;
+    regtrace_t23_source_sensor_height = height;
+    regtrace_t23_source_sensor_mbus_code = code;
 
     if (regtrace_t23_csi_sd) {
         memcpy(regtrace_t23_csi_sd + 0xdc, attr, 0x34);
@@ -10724,8 +10790,8 @@ static void regtrace_t23_seed_sensor_caches(const char *reason)
     if (regtrace_t23_vic_sd) {
         *(uint32_t *)(regtrace_t23_vic_sd + 0x110) =
             (uint32_t)(uintptr_t)attr;
-        *(uint32_t *)(regtrace_t23_vic_sd + 0xdc) = REGTRACE_SC2336_WIDTH;
-        *(uint32_t *)(regtrace_t23_vic_sd + 0xe0) = REGTRACE_SC2336_HEIGHT;
+        *(uint32_t *)(regtrace_t23_vic_sd + 0xdc) = width;
+        *(uint32_t *)(regtrace_t23_vic_sd + 0xe0) = height;
         if (*(uint32_t *)(regtrace_t23_vic_sd + 0x12c) < 3)
             *(uint32_t *)(regtrace_t23_vic_sd + 0x12c) = 3;
     }
@@ -10734,12 +10800,12 @@ static void regtrace_t23_seed_sensor_caches(const char *reason)
         memcpy(regtrace_t23_core_sd + 0xec, attr, 0x50);
         *(uint32_t *)(regtrace_t23_core_sd + 0x120) =
             (uint32_t)(uintptr_t)attr;
-        *(uint32_t *)(regtrace_t23_core_sd + 0x124) = REGTRACE_SC2336_WIDTH;
-        *(uint32_t *)(regtrace_t23_core_sd + 0x128) = REGTRACE_SC2336_HEIGHT;
+        *(uint32_t *)(regtrace_t23_core_sd + 0x124) = width;
+        *(uint32_t *)(regtrace_t23_core_sd + 0x128) = height;
     }
 
-    printk(KERN_INFO "tx_isp_t23_recovered: seeded sensor attrs attr=%p source=%s csi=%p vic=%p core=%p sensor=%p reason=%s\n",
-           attr, attr == regtrace_t23_sc2336_attr ? "fallback" : "sensor",
+    printk(KERN_INFO "tx_isp_t23_recovered: seeded bound sensor attrs attr=%p mbus=0x%x %ux%u csi=%p vic=%p core=%p sensor=%p reason=%s\n",
+           attr, code, width, height,
            regtrace_t23_csi_sd, regtrace_t23_vic_sd, regtrace_t23_core_sd,
 	   regtrace_t23_sensor_sd, reason ? reason : "?");
 }
@@ -10857,8 +10923,7 @@ static int regtrace_t23_call_sensor_core_init(const char *reason)
     return ret;
 }
 
-static int regtrace_t23_call_sensor_exposure(uint32_t packed,
-                                             const char *reason)
+static int regtrace_t23_call_sensor_ioctl(uint32_t event, uint32_t *value)
 {
     uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
     uintptr_t ops;
@@ -10866,7 +10931,7 @@ static int regtrace_t23_call_sensor_exposure(uint32_t packed,
     uintptr_t ioctl_fn;
     int ret;
 
-    if (!packed || !regtrace_t23_valid_ptr(sd))
+    if (!value || !regtrace_t23_valid_ptr(sd))
         return -EINVAL;
     ops = *(uint32_t *)(sd + REGTRACE_TX_ISP_SUBDEV_OPS_OFFSET);
     if (!regtrace_t23_valid_ptr(ops))
@@ -10879,12 +10944,78 @@ static int regtrace_t23_call_sensor_exposure(uint32_t packed,
         return -ENOIOCTLCMD;
 
     ret = ((int (*)(void *, unsigned int, void *))(uintptr_t)ioctl_fn)(
-        (void *)sd, REGTRACE_TX_ISP_EVENT_SENSOR_EXPO, &packed);
+        (void *)sd, event, value);
+    return ret;
+}
+
+static int regtrace_t23_call_sensor_exposure(uint32_t packed,
+                                             const char *reason)
+{
+    uint32_t integration = packed & 0xffffU;
+    uint32_t again = packed >> 16;
+    int ret;
+
+    if (!integration)
+        return -EINVAL;
+    ret = regtrace_t23_call_sensor_ioctl(REGTRACE_TX_ISP_EVENT_SENSOR_EXPO,
+                                         &packed);
+    if (ret == -ENOIOCTLCMD) {
+        ret = regtrace_t23_call_sensor_ioctl(
+            REGTRACE_TX_ISP_EVENT_SENSOR_INT_TIME, &integration);
+        if (!ret)
+            ret = regtrace_t23_call_sensor_ioctl(
+                REGTRACE_TX_ISP_EVENT_SENSOR_AGAIN, &again);
+    }
     printk(KERN_WARNING
            "tx_isp_t23_recovered: sensor exposure packed=0x%08x again=0x%x int=%u ret=%d reason=%s\n",
            packed, packed >> 16, packed & 0xffffU, ret,
            reason ? reason : "?");
     return ret;
+}
+
+static int regtrace_t23_sensor_allocate_exposure(uint32_t integration,
+                                                  uint32_t gain_log2_q16,
+                                                  uint32_t *packed,
+                                                  uint32_t *actual_it,
+                                                  uint32_t *actual_gain_log2,
+                                                  uint32_t *gain_q16)
+{
+    unsigned char *attr = regtrace_t23_sensor_owned_attr();
+    uintptr_t alloc_again;
+    uintptr_t alloc_it;
+    uint32_t sensor_again;
+    uint32_t sensor_it;
+    uint32_t allocated_gain;
+    uint32_t allocated_it;
+
+    if (!attr || !packed || !actual_it || !actual_gain_log2 || !gain_q16)
+        return -EINVAL;
+    alloc_again = regtrace_t23_get_le32(attr +
+                                        REGTRACE_T23_ATTR_ALLOC_AGAIN);
+    if (!regtrace_t23_valid_ptr(alloc_again))
+        return -EOPNOTSUPP;
+
+    sensor_again = 0;
+    allocated_gain = ((uint32_t (*)(uint32_t, uint8_t, uint32_t *))
+        (uintptr_t)alloc_again)(gain_log2_q16, 16U, &sensor_again);
+    if (sensor_again > 0xffffU)
+        return -ERANGE;
+
+    sensor_it = integration;
+    allocated_it = integration;
+    alloc_it = regtrace_t23_get_le32(
+        attr + REGTRACE_T23_ATTR_ALLOC_INTEGRATION_TIME);
+    if (regtrace_t23_valid_ptr(alloc_it))
+        allocated_it = ((uint32_t (*)(uint32_t, uint8_t, uint32_t *))
+            (uintptr_t)alloc_it)(integration, 0U, &sensor_it);
+    if (!allocated_it || !sensor_it || sensor_it > 0xffffU)
+        return -ERANGE;
+
+    *packed = (sensor_again << 16) | sensor_it;
+    *actual_it = allocated_it;
+    *actual_gain_log2 = allocated_gain;
+    *gain_q16 = tisp_math_exp2(allocated_gain, 16U, 16U);
+    return *gain_q16 ? 0 : -ERANGE;
 }
 
 static int regtrace_t23_sensor_read_u8(uint16_t reg, uint8_t *value)
@@ -10931,6 +11062,8 @@ static int regtrace_t23_sensor_write_u8(uint16_t reg, uint8_t value)
     return ret == 1 ? 0 : (ret < 0 ? ret : -EIO);
 }
 
+static int regtrace_t23_source_resolve_sensor_config(void);
+
 static int regtrace_t23_call_sensor_stream(int enable, const char *reason)
 {
     uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
@@ -10959,13 +11092,21 @@ static int regtrace_t23_call_sensor_stream(int enable, const char *reason)
 
     ret = ((int (*)(void *, int))(uintptr_t)stream_fn)((void *)sd, enable);
     if (!ret) {
+        uint32_t packed;
+
         regtrace_t23_sensor_streaming = enable ? true : false;
         if (enable && regtrace_t23_source_sensor_fps)
             ret = (int)tisp_set_fps(0, regtrace_t23_source_sensor_fps);
-        if (enable && regtrace_t23_source_ae_force_packed)
-            ret = regtrace_t23_call_sensor_exposure(
-                regtrace_t23_source_ae_force_packed,
-                "source-ae-force-after-stream");
+        if (enable && !ret)
+            ret = regtrace_t23_source_resolve_sensor_config();
+        packed = regtrace_t23_source_ae_force_packed ?
+            regtrace_t23_source_ae_force_packed :
+            regtrace_t23_source_ae_initial_packed;
+        if (enable && !ret && packed)
+            ret = regtrace_t23_call_sensor_exposure(packed,
+                regtrace_t23_source_ae_force_packed ?
+                "source-ae-force-after-stream" :
+                "source-ae-bootstrap-after-stream");
     }
     printk(KERN_WARNING "tx_isp_t23_recovered: sensor stream %s ret=%d reason=%s\n",
            enable ? "on" : "off", ret, reason ? reason : "?");
@@ -11019,6 +11160,7 @@ static uint32_t regtrace_t23_csi_rate_sel(uint32_t clk)
 
 static int regtrace_t23_direct_csi_stream(int enable, const char *reason)
 {
+    unsigned char *attr;
     void __iomem *base;
     void __iomem *wrap;
     uint32_t lanes;
@@ -11037,9 +11179,6 @@ static int regtrace_t23_direct_csi_stream(int enable, const char *reason)
     if (!base || !wrap)
         return -ENODEV;
 
-    if (!regtrace_t23_sensor_attr_ready)
-        regtrace_t23_seed_sc2336_attr();
-
     if (!enable) {
         writel(readl(base + 0x08) & ~1U, base + 0x08);
         writel(readl(base + 0x0c) & ~1U, base + 0x0c);
@@ -11053,11 +11192,12 @@ static int regtrace_t23_direct_csi_stream(int enable, const char *reason)
     }
 
     regtrace_t23_seed_sensor_caches(reason);
-    lanes = regtrace_t23_sc2336_attr[REGTRACE_T23_ATTR_MIPI_LANS];
-    if (!lanes)
-        lanes = 2;
-    if (lanes > 4)
-        lanes = 4;
+    attr = regtrace_t23_sensor_owned_attr();
+    if (!attr)
+        return -ENODEV;
+    lanes = attr[REGTRACE_T23_ATTR_MIPI_LANS];
+    if (!lanes || lanes > 4U)
+        return -EINVAL;
 
     writel((lanes - 1U) & 0x3U, base + 0x04);
     writel(readl(base + 0x08) & ~1U, base + 0x08);
@@ -11072,12 +11212,12 @@ static int regtrace_t23_direct_csi_stream(int enable, const char *reason)
     private_msleep(1);
     writel(3, base + 0x100);
 
-    if (!regtrace_t23_get_le32(regtrace_t23_sc2336_attr +
+    if (!regtrace_t23_get_le32(attr +
                                REGTRACE_T23_ATTR_MIPI_SETTLE_ADAPT)) {
         rate = regtrace_t23_csi_rate_override ?
             regtrace_t23_csi_rate_override :
             regtrace_t23_csi_rate_sel(regtrace_t23_get_le32(
-                regtrace_t23_sc2336_attr + REGTRACE_T23_ATTR_MIPI_CLK));
+                attr + REGTRACE_T23_ATTR_MIPI_CLK));
         rate &= 0xfU;
         rate_reg = (readl(wrap + 0x160) & 0xfffffff0U) | rate;
         writel(rate_reg, wrap + 0x160);
@@ -11145,8 +11285,6 @@ static unsigned char *regtrace_t23_resolve_sensor_attr(unsigned char *dev,
     unsigned char *owned;
     uintptr_t attr;
 
-    if (!regtrace_t23_sensor_attr_ready)
-        regtrace_t23_seed_sc2336_attr();
     owned = regtrace_t23_sensor_owned_attr();
     if (owned) {
         attr = (uintptr_t)owned;
@@ -11158,7 +11296,7 @@ static unsigned char *regtrace_t23_resolve_sensor_attr(unsigned char *dev,
     if (!regtrace_t23_valid_ptr(attr) ||
         !regtrace_t23_get_le32((unsigned char *)attr +
                                REGTRACE_T23_ATTR_CHIP_ID))
-        attr = (uintptr_t)regtrace_t23_sc2336_attr;
+        return NULL;
     regtrace_t23_seed_sensor_caches(reason);
     return (unsigned char *)attr;
 }
@@ -11206,6 +11344,8 @@ static int regtrace_t23_csi_core_ops_init_repaired(struct tx_isp_subdev *sd,
         return 0;
 
     attr = regtrace_t23_resolve_sensor_attr(csi, reason);
+    if (!attr)
+        return -ENODEV;
     dbus = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_DBUS_TYPE);
     *(uint32_t *)(csi + 0x14) = dbus;
     *(uint32_t *)(csi + 0x110) = (uint32_t)(uintptr_t)attr;
@@ -11285,6 +11425,8 @@ static int regtrace_t23_csi_video_s_stream_repaired(void *sd,
         return -EINVAL;
 
     attr = regtrace_t23_resolve_sensor_attr(csi, reason);
+    if (!attr)
+        return -ENODEV;
     dbus = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_DBUS_TYPE);
     *(uint32_t *)(csi + 0x14) = dbus;
     if (dbus != REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI)
@@ -11309,6 +11451,8 @@ static int regtrace_t23_csi_sensor_ioctl_repaired(void *sd,
         return 0;
 
     attr = regtrace_t23_resolve_sensor_attr(csi, reason);
+    if (!attr)
+        return -ENODEV;
     dbus = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_DBUS_TYPE);
     *(uint32_t *)(csi + 0x14) = dbus;
 
@@ -11329,22 +11473,6 @@ static int regtrace_t23_csi_sensor_ioctl_repaired(void *sd,
         break;
     }
     return 0;
-}
-
-static uint32_t regtrace_t23_mipi_bits_per_pixel(uint32_t csi_fmt)
-{
-    switch (csi_fmt) {
-    case REGTRACE_TX_SENSOR_RAW10:
-        return 10;
-    case 0:
-        return 10;
-    case 2:
-        return 12;
-    case 7:
-        return 16;
-    default:
-        return 10;
-    }
 }
 
 static int regtrace_t23_vic_start_repaired(unsigned char *vic,
@@ -11377,6 +11505,8 @@ static int regtrace_t23_vic_start_repaired(unsigned char *vic,
 
     regtrace_t23_seed_sensor_caches(reason);
     attr = regtrace_t23_resolve_sensor_attr(vic, reason);
+    if (!attr)
+        return -ENODEV;
     dbus = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_DBUS_TYPE);
     if (dbus != REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI) {
         printk(KERN_WARNING "tx_isp_t23_recovered: VIC start unsupported dbus=%u reason=%s\n",
@@ -11394,18 +11524,20 @@ static int regtrace_t23_vic_start_repaired(unsigned char *vic,
         width = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_MIPI_IMAGE_WIDTH);
     if (!height)
         height = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_MIPI_IMAGE_HEIGHT);
-    if (!width)
-        width = REGTRACE_SC2336_WIDTH;
-    if (!height)
-        height = REGTRACE_SC2336_HEIGHT;
+    if (!width || !height)
+        return -EINVAL;
     image_width = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_MIPI_IMAGE_WIDTH);
     if (!image_width)
         image_width = width;
 
     csi_fmt = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_MIPI_CSI_FMT);
-    if (!csi_fmt)
-        csi_fmt = REGTRACE_TX_SENSOR_RAW10;
-    bits_per_pixel = regtrace_t23_mipi_bits_per_pixel(csi_fmt);
+    bits_per_pixel = tx_isp_sensor_csi_bits_per_pixel(csi_fmt);
+    if (!bits_per_pixel) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: VIC start unsupported CSI format=%u reason=%s\n",
+               csi_fmt, reason ? reason : "?");
+        return -EINVAL;
+    }
 
     if (regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_MIPI_MODE) == 1) {
         writel(0x20000, base + 0x10);
@@ -11572,86 +11704,14 @@ static int regtrace_t23_source_input_stream(int enable, const char *reason)
 
 static int regtrace_t23_direct_vic_input_stream(int enable, const char *reason)
 {
-    void __iomem *base;
-    uint32_t reg10c;
-    int ret = 0;
-
     if (!regtrace_t23_direct_vic_start)
         return 0;
     if (!regtrace_t23_vic_sd)
         return -ENODEV;
 
-    base = (void __iomem *)(uintptr_t)*(uint32_t *)(regtrace_t23_vic_sd + 184);
-    if (!base)
-        return -ENODEV;
-
-    regtrace_t23_seed_sensor_caches(reason);
-
-    if (!enable) {
-        writel(0, base + 0x300);
-        writel(0, base + 0x0);
-        wmb();
-        *(uint32_t *)(regtrace_t23_vic_sd + 0x12c) = 3;
-        regtrace_t23_vic_streaming = false;
-        regtrace_t23_call_sensor_stream(0, reason);
-        regtrace_t23_direct_csi_stream(0, reason);
-        printk(KERN_WARNING "tx_isp_t23_recovered: direct VIC input off reg0=0x%x mdma=0x%x reason=%s\n",
-               readl(base + 0x0), readl(base + 0x300), reason ? reason : "?");
-        return 0;
-    }
-
-    if (regtrace_t23_direct_csi_stream(1, reason))
-        printk(KERN_WARNING "tx_isp_t23_recovered: direct VIC continuing after CSI stream failure reason=%s\n",
-               reason ? reason : "?");
-
-    if (regtrace_t23_call_sensor_stream(1, reason))
-        printk(KERN_WARNING "tx_isp_t23_recovered: direct VIC continuing after sensor stream failure reason=%s\n",
-               reason ? reason : "?");
-
-    regtrace_t23_program_vic_irq_regs(base, reason);
-    reg10c = (REGTRACE_RAW10_DT << 12);
-
-    writel(0x000a000aU, base + 0x1a4);
-    writel(((10U * REGTRACE_SC2336_WIDTH) + 0x1fU) >> 5, base + 0x100);
-    writel(2, base + 0x0c);
-    writel(REGTRACE_TX_SENSOR_RAW10, base + 0x14);
-    writel((REGTRACE_SC2336_WIDTH << 16) | REGTRACE_SC2336_HEIGHT, base + 0x04);
-    writel(reg10c, base + 0x10c);
-    writel(REGTRACE_SC2336_WIDTH << 16, base + 0x110);
-    writel(0, base + 0x114);
-    writel(0, base + 0x118);
-    writel(0, base + 0x11c);
-    writel(0x4440, base + 0x1ac);
-    writel(0x4440, base + 0x1a8);
-    writel(0x10, base + 0x1b0);
-    wmb();
-
-    writel(2, base + 0x0);
-    writel(4, base + 0x0);
-    writel(0, base + 0x1a0);
-    wmb();
-    ret = regtrace_t23_wait_vic_idle(base, reason);
-    if (ret && regtrace_t23_direct_vic_force_run) {
-        writel(0, base + 0x0);
-        wmb();
-        udelay(50);
-        printk(KERN_WARNING "tx_isp_t23_recovered: direct VIC force-cleared stalled unlock reg0=0x%x reason=%s\n",
-               readl(base + 0x0), reason ? reason : "?");
-    }
-    writel(0, base + 0x104);
-    writel(0, base + 0x108);
-    writel(1, base + 0x10);
-    writel(1, base + 0x0);
-    wmb();
-
-    *(uint32_t *)(regtrace_t23_vic_sd + 0x12c) = 4;
-    vic_start_ok = 1;
-    regtrace_t23_vic_streaming = true;
-    printk(KERN_WARNING "tx_isp_t23_recovered: direct VIC input on ret=%d reg0=0x%x size=0x%x fmt=0x%x reg100=0x%x reg10c=0x%x reg110=0x%x reg1a4=0x%x reason=%s\n",
-           ret, readl(base + 0x0), readl(base + 0x04), readl(base + 0x14),
-           readl(base + 0x100), readl(base + 0x10c), readl(base + 0x110),
-           readl(base + 0x1a4), reason ? reason : "?");
-    return ret;
+    /* The opt-in direct path must use the same bound-sensor metadata. */
+    return regtrace_t23_vic_core_s_stream_repaired(
+        regtrace_t23_vic_sd, enable, reason);
 }
 
 static void regtrace_t23_direct_vic_mdma_stream(int channel,
@@ -11682,8 +11742,8 @@ static void regtrace_t23_direct_vic_mdma_stream(int channel,
         return;
     }
 
-    width = channel == 1 ? 640U : REGTRACE_SC2336_WIDTH;
-    height = channel == 1 ? 360U : REGTRACE_SC2336_HEIGHT;
+    width = channel == 1 ? 640U : regtrace_t23_source_sensor_width;
+    height = channel == 1 ? 360U : regtrace_t23_source_sensor_height;
     stride = width;
     count = 2;
     ctrl = (count << 16) | 0x80000020U;
@@ -11809,7 +11869,7 @@ static int regtrace_t23_program_core_dma(void)
     return 0;
 }
 
-static uint32_t regtrace_t23_source_core_bypass_value(void)
+static int regtrace_t23_source_core_bypass_value(uint32_t *value)
 {
     struct file *file;
     mm_segment_t old_fs;
@@ -11820,17 +11880,21 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
     ssize_t got;
     unsigned int i;
 
-    if (!regtrace_t23_source_core_bypass_from_tuning ||
-        !regtrace_t23_source_core_tuning_path)
-        return regtrace_t23_source_core_bypass;
+    if (!value)
+        return -EINVAL;
+    if (!regtrace_t23_source_core_bypass_from_tuning) {
+        *value = regtrace_t23_source_core_bypass;
+        return 0;
+    }
+    if (!regtrace_t23_source_core_tuning_path)
+        return -ENOENT;
 
     file = private_filp_open(regtrace_t23_source_core_tuning_path, O_RDONLY, 0);
     if (IS_ERR(file)) {
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: tuning bypass open failed path=%s ret=%ld; fallback=0x%x\n",
-               regtrace_t23_source_core_tuning_path, PTR_ERR(file),
-               regtrace_t23_source_core_bypass);
-        return regtrace_t23_source_core_bypass;
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: tuning bypass open failed path=%s ret=%ld\n",
+               regtrace_t23_source_core_tuning_path, PTR_ERR(file));
+        return PTR_ERR(file);
     }
 
     old_fs = private_get_fs();
@@ -11840,11 +11904,10 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
     private_filp_close(file, NULL);
 
     if (got != sizeof(params)) {
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: tuning bypass read failed path=%s got=%ld; fallback=0x%x\n",
-               regtrace_t23_source_core_tuning_path, (long)got,
-               regtrace_t23_source_core_bypass);
-        return regtrace_t23_source_core_bypass;
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: tuning bypass read failed path=%s got=%ld\n",
+               regtrace_t23_source_core_tuning_path, (long)got);
+        return got < 0 ? (int)got : -EIO;
     }
 
     for (i = 0; i < ARRAY_SIZE(params); i++)
@@ -11856,7 +11919,8 @@ static uint32_t regtrace_t23_source_core_bypass_value(void)
     printk(KERN_WARNING
            "tx_isp_t23_recovered: tuning bypass path=%s param_mask=0x%x bypass=0x%x\n",
            regtrace_t23_source_core_tuning_path, mask, bypass);
-    return bypass;
+    *value = bypass;
+    return 0;
 }
 
 static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
@@ -11880,20 +11944,7 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
     return got == size ? 0 : (got < 0 ? (int)got : -EIO);
 }
 
-#include "tx_isp_t23_gib_tuning.inc"
-#include "tx_isp_t23_gamma_tuning.inc"
-#include "tx_isp_t23_lsc_tuning.inc"
-#include "tx_isp_t23_lsc_ct3300.inc"
-#include "tx_isp_t23_lsc_runtime.inc"
-#include "tx_isp_t23_ae_stats_tuning.inc"
-#include "tx_isp_t23_awb_static_tuning.inc"
-#include "tx_isp_t23_awb_stats_tuning.inc"
 #include "tx_isp_t23_awb_runtime_tuning.inc"
-#include "tx_isp_t23_ccm_tuning.inc"
-#include "tx_isp_t23_ccm_runtime.inc"
-#include "tx_isp_t23_dmsc_tuning.inc"
-#include "tx_isp_t23_dmsc_gain1p5x.inc"
-#include "tx_isp_t23_dmsc_gain2x.inc"
 #include "tx_isp_t23_dmsc_layout.inc"
 #include "tx_isp_t23_dmsc_interp.inc"
 #include "tx_isp_t23_dmsc_noref_writes.inc"
@@ -11905,12 +11956,92 @@ static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 #include "tx_isp_t23_defog_layout.inc"
 #include "tx_isp_t23_mdns_interp.inc"
 #include "tx_isp_t23_mdns_writers.inc"
-#include "tx_isp_t23_sharpen_tuning.inc"
-#include "tx_isp_t23_sharpen_gain1p5x.inc"
-#include "tx_isp_t23_sharpen_gain2x.inc"
-#include "tx_isp_t23_bcsh_tuning.inc"
-#include "tx_isp_t23_clm_tuning.inc"
 #include "tx_isp_t23_ydns_tuning.inc"
+
+static int regtrace_t23_source_awb_hlil_load_tuning(void)
+{
+    uint32_t point_position[2];
+    uint32_t history[2];
+    uint32_t mode[3];
+    uint32_t ct;
+    uint32_t light_count;
+    uint32_t pixel_threshold;
+    unsigned int i;
+    int ret;
+
+    if (regtrace_t23_source_awb_hlil_tuning_loaded)
+        return 0;
+
+#define REGTRACE_T23_AWB_READ(offset, target) do { \
+    ret = regtrace_t23_read_tuning_data((offset), &(target), sizeof(target)); \
+    if (ret) \
+        return ret; \
+} while (0)
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_PIXEL_THRESHOLD_OFFSET,
+                         pixel_threshold);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_POINT_POSITION_OFFSET,
+                         point_position);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_HISTORY_OFFSET, history);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_MF_OFFSET,
+                         regtrace_t23_awb_hlil_mf_parameters);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_MODE_OFFSET, mode);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_CT_OFFSET, ct);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_WB_STATIC_OFFSET,
+                         regtrace_t23_awb_hlil_wb_static);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_LIGHT_SOURCES_OFFSET,
+                         regtrace_t23_awb_hlil_light_sources);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_LIGHT_COUNT_OFFSET, light_count);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_RG_POSITIONS_OFFSET,
+                         regtrace_t23_awb_hlil_rg_positions);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_BG_POSITIONS_OFFSET,
+                         regtrace_t23_awb_hlil_bg_positions);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_DISTANCE_OFFSET,
+                         regtrace_t23_awb_hlil_distance_parameters);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_INDOOR_MESH_OFFSET,
+                         regtrace_t23_awb_hlil_indoor_ct_weight_mesh);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_CT_MESH_OFFSET,
+                         regtrace_t23_awb_hlil_color_temperature_mesh);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_ZONE_MESH_OFFSET,
+                         regtrace_t23_awb_hlil_zone_weight_mesh);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_OUTDOOR_MESH_OFFSET,
+                         regtrace_t23_awb_hlil_outdoor_ct_weight_mesh);
+    REGTRACE_T23_AWB_READ(REGTRACE_T23_AWB_LIGHT_LUT_OFFSET,
+                         regtrace_t23_awb_hlil_light_source_weight_lut);
+#undef REGTRACE_T23_AWB_READ
+
+    if (!pixel_threshold || point_position[0] != 10U ||
+        !history[0] || history[0] > REGTRACE_T23_AWB_HLIL_MAX_HISTORY ||
+        !mode[0] || mode[0] >= mode[1] || mode[1] >= mode[2] ||
+        ct < 1000U || ct > 10000U ||
+        !light_count ||
+        light_count > REGTRACE_T23_AWB_HLIL_MAX_LIGHT_SOURCES ||
+        !regtrace_t23_awb_hlil_wb_static[0] ||
+        !regtrace_t23_awb_hlil_wb_static[1])
+        return -EINVAL;
+    for (i = 1; i < 15U; ++i) {
+        if (regtrace_t23_awb_hlil_rg_positions[i] <=
+                regtrace_t23_awb_hlil_rg_positions[i - 1U] ||
+            regtrace_t23_awb_hlil_bg_positions[i] <=
+                regtrace_t23_awb_hlil_bg_positions[i - 1U])
+            return -EINVAL;
+    }
+
+    regtrace_t23_awb_hlil_pixel_threshold = pixel_threshold;
+    regtrace_t23_awb_hlil_point_position = point_position[0];
+    regtrace_t23_awb_hlil_history_window = history[0];
+    regtrace_t23_awb_hlil_outdoor_ev = mode[0];
+    regtrace_t23_awb_hlil_indoor_ev = mode[1];
+    regtrace_t23_awb_hlil_startup_ev = mode[2] << point_position[0];
+    regtrace_t23_awb_hlil_startup_ct = ct;
+    regtrace_t23_awb_hlil_light_source_count = light_count;
+    regtrace_t23_source_awb_hlil_tuning_loaded = true;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: AWB profile loaded q=%u history=%u mode=%u/%u/%u ct=%u lights=%u wb=%u/%u\n",
+           point_position[0], history[0], mode[0], mode[1], mode[2], ct,
+           light_count, regtrace_t23_awb_hlil_wb_static[0],
+           regtrace_t23_awb_hlil_wb_static[1]);
+    return 0;
+}
 
 #define REGTRACE_T23_GIB_COPY_PARAMS(params) do { \
     memcpy(tiziano_gib_config_line, (params) + 0x000U, 48U); \
@@ -11962,34 +12093,84 @@ static int regtrace_t23_source_gib_load_tuning(void)
     return 0;
 }
 
-static void regtrace_t23_source_lsc_initialize_tables(void)
+static int regtrace_t23_source_lsc_initialize_tables(void)
 {
-    uint32_t value;
+    uint32_t ct_points[4];
+    uint32_t mesh_strength[9];
     uint32_t mesh_size[2];
+    uint32_t lut_num;
+    uint32_t mesh_scale;
+    uint32_t lut_stride;
+    uint32_t mean_enable;
+    size_t lut_size;
+    int ret;
 
     if (regtrace_t23_source_lsc_tables_initialized)
-        return;
+        return 0;
 
-    memcpy(data_c6d1c, regtrace_t23_lsc_sc2336_a_lut,
-           sizeof(regtrace_t23_lsc_sc2336_a_lut));
-    memcpy(data_c4d20, regtrace_t23_lsc_sc2336_t_lut,
-           sizeof(regtrace_t23_lsc_sc2336_t_lut));
-    memcpy(data_c2d24, regtrace_t23_lsc_sc2336_d_lut,
-           sizeof(regtrace_t23_lsc_sc2336_d_lut));
+#define REGTRACE_T23_LSC_READ(offset, target) do { \
+    ret = regtrace_t23_read_tuning_data((offset), &(target), sizeof(target)); \
+    if (ret) \
+        return ret; \
+} while (0)
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_LUT_NUM_OFFSET, lut_num);
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_MESH_SCALE_OFFSET, mesh_scale);
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_LUT_STRIDE_OFFSET, lut_stride);
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_MESH_SIZE_OFFSET, mesh_size);
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_CT_POINTS_OFFSET, ct_points);
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_MESH_STRENGTH_OFFSET,
+                         mesh_strength);
+    REGTRACE_T23_LSC_READ(REGTRACE_T23_LSC_MEAN_ENABLE_OFFSET, mean_enable);
+#undef REGTRACE_T23_LSC_READ
 
-    value = REGTRACE_T23_LSC_SC2336_MESH_SCALE;
-    memcpy(lsc_mesh_scale, &value, sizeof(value));
-    value = REGTRACE_T23_LSC_SC2336_LUT_STRIDE;
-    memcpy(lsc_lut_stride, &value, sizeof(value));
-    mesh_size[0] = REGTRACE_T23_LSC_SC2336_MESH_WIDTH;
-    mesh_size[1] = REGTRACE_T23_LSC_SC2336_MESH_HEIGHT;
+    if (!lut_num || lut_num % 3U ||
+        lut_num > sizeof(data_c6d1c) / sizeof(uint32_t) ||
+        mesh_scale > 3U || !lut_stride || !mesh_size[0] || !mesh_size[1] ||
+        !ct_points[0] || ct_points[0] >= ct_points[1] ||
+        ct_points[1] > ct_points[2] || ct_points[2] >= ct_points[3] ||
+        mean_enable > 1U) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: invalid LSC profile lut=%u scale=%u stride=%u mesh=%ux%u ct=%u/%u/%u/%u mean=%u\n",
+               lut_num, mesh_scale, lut_stride, mesh_size[0], mesh_size[1],
+               ct_points[0], ct_points[1], ct_points[2], ct_points[3],
+               mean_enable);
+        return -EINVAL;
+    }
+
+    lut_size = lut_num * sizeof(uint32_t);
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_LSC_A_LUT_OFFSET,
+                                        data_c6d1c, lut_size);
+    if (!ret)
+        ret = regtrace_t23_read_tuning_data(REGTRACE_T23_LSC_T_LUT_OFFSET,
+                                            data_c4d20, lut_size);
+    if (!ret)
+        ret = regtrace_t23_read_tuning_data(REGTRACE_T23_LSC_D_LUT_OFFSET,
+                                            data_c2d24, lut_size);
+    if (ret)
+        return ret;
+
+    memcpy(lsc_lut_num, &lut_num, sizeof(lut_num));
+    memcpy(lsc_mesh_scale, &mesh_scale, sizeof(mesh_scale));
+    memcpy(lsc_lut_stride, &lut_stride, sizeof(lut_stride));
     memcpy(lsc_mesh_size, mesh_size, sizeof(mesh_size));
-    memcpy(lsc_ct_points, regtrace_t23_lsc_sc2336_ct_points,
-           sizeof(regtrace_t23_lsc_sc2336_ct_points));
+    memcpy(lsc_ct_points, ct_points, sizeof(ct_points));
+    memcpy(lsc_mesh_str, mesh_strength, sizeof(mesh_strength));
+    regtrace_t23_source_lsc_lut_num = lut_num;
+    regtrace_t23_source_lsc_mesh_scale = mesh_scale;
+    regtrace_t23_source_lsc_lut_stride = lut_stride;
+    regtrace_t23_source_lsc_mesh_width = mesh_size[0];
+    regtrace_t23_source_lsc_mesh_height = mesh_size[1];
+    regtrace_t23_source_lsc_mean_enable = mean_enable;
 
     last_status_flip_en = 0;
     last_status_mirror_en = 0;
     regtrace_t23_source_lsc_tables_initialized = true;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: LSC profile loaded lut=%u scale=%u stride=%u mesh=%ux%u ct=%u/%u/%u/%u mean=%u\n",
+           lut_num, mesh_scale, lut_stride, mesh_size[0], mesh_size[1],
+           ct_points[0], ct_points[1], ct_points[2], ct_points[3],
+           mean_enable);
+    return 0;
 }
 
 static int regtrace_t23_source_mdns_load_tuning(void)
@@ -12185,23 +12366,6 @@ static __always_inline int regtrace_t23_source_clm_load_tuning(void)
     return 0;
 }
 
-/* OEM SC2336 DMSC curves used by tisp_dmsc_sharpness_set. */
-static const uint32_t regtrace_t23_dmsc_sp_d_w_curve[9] = {
-    0x5aU, 0x5aU, 0x50U, 0x50U, 0x46U, 0x32U, 0x32U, 0x32U, 0x32U,
-};
-static const uint32_t regtrace_t23_dmsc_sp_d_b_curve[9] = {
-    0x64U, 0x5aU, 0x5aU, 0x50U, 0x46U, 0x32U, 0x32U, 0x32U, 0x32U,
-};
-static const uint32_t regtrace_t23_dmsc_sp_ud_w_curve[9] = {
-    0x5aU, 0x5aU, 0x50U, 0x46U, 0x3cU, 0x28U, 0x28U, 0x28U, 0x28U,
-};
-static const uint32_t regtrace_t23_dmsc_sp_ud_b_curve[9] = {
-    0x64U, 0x5aU, 0x50U, 0x46U, 0x3cU, 0x28U, 0x28U, 0x28U, 0x28U,
-};
-static const uint32_t regtrace_t23_dmsc_uu_stren_curve[9] = {
-    0x64U, 0x64U, 0x64U, 0x64U, 0x64U, 0x3cU, 0x32U, 0x3cU, 0x3cU,
-};
-
 static void regtrace_t23_source_ae_hlil_capture(uint32_t luma,
                                                uint32_t snapshot);
 static void regtrace_t23_source_ae_hlil_reset(void);
@@ -12219,21 +12383,26 @@ int32_t tisp_lsc_mirror_flip(uint32_t unused, uint32_t width,
 static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10);
 int32_t cm_control(int32_t *arg1, int32_t arg2, int32_t *arg3);
 int32_t tiziano_gib_params_refresh(void);
+int32_t tiziano_gib_lut_parameter(void);
 int32_t tisp_gib_deir_ir_update(uint32_t ir_value);
+int32_t tisp_dmsc_par_refresh(uint32_t gain, uint32_t threshold,
+                              uint32_t force);
+int32_t tisp_sharpen_refresh(uint32_t gain);
+int32_t tiziano_dmsc_init(void);
 
-static void regtrace_t23_source_gib_write_tuning_startup(void)
+static int regtrace_t23_source_gib_write_tuning_startup(void)
 {
     int tuning_ret;
-    size_t i;
 
     tuning_ret = regtrace_t23_source_gib_load_tuning();
-    if (tuning_ret)
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: GIB tuning load failed ret=%d; using embedded startup only\n",
+    if (tuning_ret) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: GIB tuning load failed ret=%d\n",
                tuning_ret);
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gib_sc2336_startup); ++i)
-        system_reg_write(regtrace_t23_gib_sc2336_startup[i][0],
-                         regtrace_t23_gib_sc2336_startup[i][1]);
+        return tuning_ret;
+    }
+    tisp_gib_blc_ag = 0x10000U;
+    tuning_ret = tiziano_gib_lut_parameter();
 
     if (!tuning_ret && regtrace_t23_source_gib_ir_value) {
         tiziano_gib_config_line[3] = 1;
@@ -12244,69 +12413,50 @@ static void regtrace_t23_source_gib_write_tuning_startup(void)
                (unsigned int)deir_flag_35749);
     }
 
-    printk(KERN_WARNING
-           "tx_isp_t23_recovered: source GIB SC2336 tuning startup committed (%u writes)\n",
-           (unsigned int)ARRAY_SIZE(regtrace_t23_gib_sc2336_startup));
+    if (tuning_ret)
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: source GIB loaded-tuning startup ret=%d\n",
+               tuning_ret);
+    else
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source GIB loaded-tuning startup committed\n");
+    return tuning_ret;
 }
 
-static void regtrace_t23_source_gamma_write_tuning_startup(void)
+static int regtrace_t23_source_gamma_write_tuning_startup(void)
 {
-    size_t i;
+    int ret = tiziano_gamma_init();
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gamma_sc2336_linear); ++i) {
-        uint32_t value = regtrace_t23_gamma_sc2336_linear[i];
-        uint32_t offset = (uint32_t)i * 4U;
-
-        tiziano_gamma_lut[i] = value & 0xfffU;
-        tiziano_gamma_lut[i + 1U] = (value >> 12) & 0xfffU;
-        system_reg_write(0x40000U + offset, value);
-        system_reg_write(0x48000U + offset, value);
-        system_reg_write(0x50000U + offset, value);
-    }
-    memcpy(tiziano_gamma_lut_wdr, tiziano_gamma_lut,
-           sizeof(tiziano_gamma_lut_wdr));
-    tiziano_gamma_lut_now = gamma_wdr_en
-        ? tiziano_gamma_lut_wdr : tiziano_gamma_lut;
-
-    printk(KERN_WARNING
-           "tx_isp_t23_recovered: source Gamma SC2336 linear tuning committed (%u writes)\n",
-           (unsigned int)(ARRAY_SIZE(regtrace_t23_gamma_sc2336_linear) * 3U));
+    if (ret)
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: source Gamma profile startup failed ret=%d\n",
+               ret);
+    else
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source Gamma profile startup committed\n");
+    return ret;
 }
 
-static void regtrace_t23_source_lsc_write_tuning_startup(void)
+static int regtrace_t23_source_lsc_write_tuning_startup(void)
 {
-    const uint32_t (*image)[2] = regtrace_t23_lsc_sc2336_startup;
-    size_t count = ARRAY_SIZE(regtrace_t23_lsc_sc2336_startup);
-    size_t i;
     int ret;
 
-    regtrace_t23_source_lsc_initialize_tables();
-
-    if (regtrace_t23_source_lsc_ct == 3300U) {
-        image = regtrace_t23_lsc_sc2336_ct3300;
-        count = ARRAY_SIZE(regtrace_t23_lsc_sc2336_ct3300);
-    } else if (regtrace_t23_source_lsc_ct != 5000U) {
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: source LSC CT %u unsupported; using 5000\n",
-               regtrace_t23_source_lsc_ct);
+    ret = tiziano_lsc_init(regtrace_t23_source_sensor_width,
+                           regtrace_t23_source_sensor_height);
+    if (ret) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: source LSC profile startup failed ret=%d\n",
+               ret);
+        return ret;
     }
-
-    for (i = 0; i < count; ++i)
-        system_reg_write(image[i][0], image[i][1]);
-
-    printk(KERN_WARNING
-           "tx_isp_t23_recovered: source LSC SC2336 CT%u tuning committed (%u writes)\n",
-           regtrace_t23_source_lsc_ct == 3300U ? 3300U : 5000U,
-           (unsigned int)count);
-    regtrace_t23_source_lsc_runtime_ct =
-        regtrace_t23_source_lsc_ct == 3300U ? 3300U : 5000U;
+    regtrace_t23_source_lsc_runtime_ct = regtrace_t23_source_lsc_ct;
     regtrace_t23_source_lsc_last_ct = regtrace_t23_source_lsc_runtime_ct;
     regtrace_t23_source_lsc_update_pending = false;
     regtrace_t23_source_lsc_event_count = 0;
     if (regtrace_t23_source_lsc_initial_flip ||
         regtrace_t23_source_lsc_initial_mirror) {
         ret = tisp_lsc_mirror_flip(
-            0, REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT,
+            0, regtrace_t23_source_sensor_width, regtrace_t23_source_sensor_height,
             regtrace_t23_source_lsc_initial_flip,
             regtrace_t23_source_lsc_initial_mirror);
         if (ret)
@@ -12314,28 +12464,76 @@ static void regtrace_t23_source_lsc_write_tuning_startup(void)
                    "tx_isp_t23_recovered: initial LSC transform failed ret=%d\n",
                    ret);
     }
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: source LSC profile CT%u startup committed\n",
+           regtrace_t23_source_lsc_runtime_ct);
+    return ret;
+}
+
+static int regtrace_t23_source_write_stats_grid(uint32_t base,
+                                                uint32_t width,
+                                                uint32_t height)
+{
+    uint32_t dimensions[2];
+    uint32_t offsets[2] = { 0x08U, 0x18U };
+    unsigned int axis;
+
+    dimensions[0] = width >> 1;
+    dimensions[1] = height >> 1;
+    for (axis = 0; axis < ARRAY_SIZE(dimensions); ++axis) {
+        uint32_t cell = dimensions[axis] / 15U;
+        uint32_t remainder = dimensions[axis] % 15U;
+        unsigned int word_index;
+
+        if (!cell || cell + !!remainder > 0xffU)
+            return -ERANGE;
+        for (word_index = 0; word_index < 4U; ++word_index) {
+            uint32_t word = 0;
+            unsigned int byte_index;
+
+            for (byte_index = 0; byte_index < 4U; ++byte_index) {
+                uint32_t zone = word_index * 4U + byte_index;
+                uint32_t size;
+
+                if (zone >= 15U)
+                    break;
+                size = cell + (zone < remainder);
+                word |= size << (byte_index * 8U);
+            }
+            system_reg_write(base + offsets[axis] + word_index * 4U,
+                             word);
+        }
+    }
+    return 0;
 }
 
 static void regtrace_t23_source_ae_write_stats_startup(void)
 {
-    size_t i;
+    int ret;
 
-    for (i = 0; i + 1 < ARRAY_SIZE(regtrace_t23_ae0_sc2336_stats_startup);
-         ++i)
-        system_reg_write(regtrace_t23_ae0_sc2336_stats_startup[i][0],
-                         regtrace_t23_ae0_sc2336_stats_startup[i][1]);
+    system_reg_write(0xa004U, 0xf001f001U);
+    ret = regtrace_t23_source_write_stats_grid(
+        0xa000U, regtrace_t23_source_sensor_width,
+        regtrace_t23_source_sensor_height);
+    if (ret) {
+        regtrace_t23_source_ae_hlil_status = -ret;
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: AE statistics grid unsupported %ux%u ret=%d\n",
+               regtrace_t23_source_sensor_width,
+               regtrace_t23_source_sensor_height, ret);
+        return;
+    }
 
     /* OEM system_reg_write_ae(1, 0xa028, value) latches the final write. */
     system_reg_write(0xa000U, 1U);
-    system_reg_write(regtrace_t23_ae0_sc2336_stats_startup[i][0],
-                     regtrace_t23_ae0_sc2336_stats_startup[i][1]);
+    system_reg_write(0xa028U, 0x0011991eU);
     regtrace_t23_source_ae_stats_irqs = 0;
     regtrace_t23_source_ae_stats_snapshots = 0;
     regtrace_t23_source_ae_hlil_reset();
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source AE0 SC2336 statistics startup committed (%u writes)\n",
-           (unsigned int)(ARRAY_SIZE(regtrace_t23_ae0_sc2336_stats_startup) +
-                          1U));
+           "tx_isp_t23_recovered: source AE0 statistics grid committed for %ux%u\n",
+           regtrace_t23_source_sensor_width,
+           regtrace_t23_source_sensor_height);
 }
 
 static void regtrace_t23_source_awb_write_static_startup(void)
@@ -12356,41 +12554,42 @@ static void regtrace_t23_source_awb_write_static_startup(void)
     system_reg_write(0x1810U, bvalue);
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source AWB SC2336 static startup requested (point=%u mf=%u/%u base=%u/%u tuning=0x%x/0x%x bootstrap=0x%x/0x%x)\n",
-           REGTRACE_T23_AWB_SC2336_POINT_POS,
-           REGTRACE_T23_AWB_SC2336_MF_GR,
-           REGTRACE_T23_AWB_SC2336_MF_GB,
-           REGTRACE_T23_AWB_SC2336_BASE_GR,
-           REGTRACE_T23_AWB_SC2336_BASE_GB,
-           REGTRACE_T23_AWB_SC2336_REG_GR,
-           REGTRACE_T23_AWB_SC2336_REG_GB, rvalue, bvalue);
+           "tx_isp_t23_recovered: source AWB neutral startup requested gains=0x%x/0x%x\n",
+           rvalue, bvalue);
 }
 
 static void regtrace_t23_source_awb_write_stats_startup(void)
 {
-    size_t i;
     uint32_t input_cfg;
     bool processed_tap;
+    int ret;
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_awb_sc2336_stats_startup); ++i)
-        system_reg_write(regtrace_t23_awb_sc2336_stats_startup[i][0],
-                         regtrace_t23_awb_sc2336_stats_startup[i][1]);
-
-    input_cfg = regtrace_t23_awb_sc2336_stats_startup[0][1] & ~BIT(16);
+    input_cfg = 0xf001f001U & ~BIT(16);
     if (regtrace_t23_source_awb_stats_processed_tap)
         input_cfg |= BIT(16);
     system_reg_write(0xb004U, input_cfg);
-    processed_tap = !!(input_cfg & BIT(16));
-    if (regtrace_t23_source_awb_stats_wide_thresholds) {
-        system_reg_write(0xb000U, 1U);
-        system_reg_write(0xb028U, 0x0fff0001U);
-        system_reg_write(0xb000U, 1U);
-        system_reg_write(0xb02cU, 0x0fff0001U);
-        system_reg_write(0xb000U, 1U);
-        system_reg_write(0xb030U, 0x00000100U);
-        system_reg_write(0xb000U, 1U);
-        system_reg_write(0xb034U, 0xffff0100U);
+    ret = regtrace_t23_source_write_stats_grid(
+        0xb000U, regtrace_t23_source_sensor_width,
+        regtrace_t23_source_sensor_height);
+    if (ret) {
+        regtrace_t23_source_awb_hlil_status = -ret;
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: AWB statistics grid unsupported %ux%u ret=%d\n",
+               regtrace_t23_source_sensor_width,
+               regtrace_t23_source_sensor_height, ret);
+        return;
     }
+    processed_tap = !!(input_cfg & BIT(16));
+    system_reg_write(0xb000U, 1U);
+    system_reg_write(0xb028U, 0x0fff0001U);
+    system_reg_write(0xb000U, 1U);
+    system_reg_write(0xb02cU, 0x0fff0001U);
+    system_reg_write(0xb000U, 1U);
+    system_reg_write(0xb030U, 0x00000100U);
+    system_reg_write(0xb000U, 1U);
+    system_reg_write(0xb034U, 0xffff0100U);
+    system_reg_write(0xb000U, 1U);
+    system_reg_write(0xb038U, 0x0001f005U);
 
     regtrace_t23_source_awb_stats_irqs = 0;
     regtrace_t23_source_awb_stats_snapshots = 0;
@@ -12401,10 +12600,10 @@ static void regtrace_t23_source_awb_write_stats_startup(void)
         regtrace_t23_source_awb_bootstrap_bgain, 0x3fffU);
     regtrace_t23_source_awb_hlil_reset();
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source AWB SC2336 statistics startup committed (%u writes) tap=%s thresholds=%s\n",
-           (unsigned int)ARRAY_SIZE(regtrace_t23_awb_sc2336_stats_startup),
-           processed_tap ? "t23-selector-1" : "selector-0",
-           regtrace_t23_source_awb_stats_wide_thresholds ? "wide" : "tuning");
+           "tx_isp_t23_recovered: source AWB statistics grid committed for %ux%u tap=%s thresholds=wide\n",
+           regtrace_t23_source_sensor_width,
+           regtrace_t23_source_sensor_height,
+           processed_tap ? "t23-selector-1" : "selector-0");
 }
 
 static void regtrace_t23_source_awb_apply_gains(uint32_t rgain,
@@ -12474,9 +12673,9 @@ static void regtrace_t23_source_ae_stats_snapshot(uint32_t status)
         blue += (w1 & 0x7ffffc00U) >> 10;
         dark_pixels += dark;
         bright_pixels += bright;
-        /* Exact SC2336 AE layout: 15x15 zones, each 64x36 pixels. */
-        zone_pixels += 64U * 36U;
     }
+    zone_pixels = (regtrace_t23_source_sensor_width >> 1) *
+                  (regtrace_t23_source_sensor_height >> 1);
 
     regtrace_t23_source_ae_stats_snapshots++;
     /* OEM ae0_weight_mean2 normalizes R+G+B by each programmed zone area. */
@@ -12633,6 +12832,71 @@ static void regtrace_t23_source_awb_stats_irq(uint32_t status,
     system_reg_write(0xb000U, 1U);
 }
 
+static uint32_t regtrace_t23_ccm_profile_dp[5];
+static uint32_t regtrace_t23_ccm_profile_a[9];
+static uint32_t regtrace_t23_ccm_profile_t[9];
+static uint32_t regtrace_t23_ccm_profile_d[9];
+static uint32_t regtrace_t23_ccm_profile_d2[9];
+static uint32_t regtrace_t23_ccm_profile_ev[9];
+static uint32_t regtrace_t23_ccm_profile_sat[9];
+static uint32_t regtrace_t23_ccm_profile_ct[4];
+static bool regtrace_t23_ccm_profile_loaded;
+
+static int regtrace_t23_source_ccm_load_tuning(void)
+{
+    unsigned int i;
+    int ret;
+
+    if (regtrace_t23_ccm_profile_loaded)
+        return 0;
+
+#define REGTRACE_T23_CCM_READ(offset, target) do { \
+    ret = regtrace_t23_read_tuning_data((offset), (target), sizeof(target)); \
+    if (ret) \
+        return ret; \
+} while (0)
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_DP_OFFSET,
+                         regtrace_t23_ccm_profile_dp);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_A_OFFSET,
+                         regtrace_t23_ccm_profile_a);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_T_OFFSET,
+                         regtrace_t23_ccm_profile_t);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_D_OFFSET,
+                         regtrace_t23_ccm_profile_d);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_D2_OFFSET,
+                         regtrace_t23_ccm_profile_d2);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_EV_OFFSET,
+                         regtrace_t23_ccm_profile_ev);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_SAT_OFFSET,
+                         regtrace_t23_ccm_profile_sat);
+    REGTRACE_T23_CCM_READ(REGTRACE_T23_CCM_CT_OFFSET,
+                         regtrace_t23_ccm_profile_ct);
+#undef REGTRACE_T23_CCM_READ
+
+    for (i = 0; i < 9U; ++i) {
+        if (regtrace_t23_ccm_profile_a[i] > 0x3fffU ||
+            regtrace_t23_ccm_profile_t[i] > 0x3fffU ||
+            regtrace_t23_ccm_profile_d[i] > 0x3fffU ||
+            regtrace_t23_ccm_profile_d2[i] > 0x3fffU ||
+            (i && regtrace_t23_ccm_profile_ev[i] <
+                  regtrace_t23_ccm_profile_ev[i - 1U]))
+            return -EINVAL;
+    }
+    for (i = 1; i < 4U; ++i) {
+        if (regtrace_t23_ccm_profile_ct[i] <=
+            regtrace_t23_ccm_profile_ct[i - 1U] + 400U)
+            return -EINVAL;
+    }
+    regtrace_t23_ccm_profile_loaded = true;
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: CCM profile loaded anchors=%u/%u/%u/%u\n",
+           regtrace_t23_ccm_profile_ct[0],
+           regtrace_t23_ccm_profile_ct[1],
+           regtrace_t23_ccm_profile_ct[2],
+           regtrace_t23_ccm_profile_ct[3]);
+    return 0;
+}
+
 static int32_t regtrace_t23_ccm_signed14(uint32_t value)
 {
     value &= 0x3fffU;
@@ -12648,7 +12912,7 @@ static int32_t regtrace_t23_ccm_blend(int32_t low, int32_t high,
 static __always_inline uint32_t
 regtrace_t23_ccm_interpolate(uint32_t ct, int32_t *out)
 {
-    const uint32_t *points = regtrace_t23_ccm_sc2336_ct;
+    const uint32_t *points = regtrace_t23_ccm_profile_ct;
     const uint32_t *low;
     const uint32_t *high;
     uint32_t weight = 0;
@@ -12656,34 +12920,34 @@ regtrace_t23_ccm_interpolate(uint32_t ct, int32_t *out)
     unsigned int i;
 
     if (ct <= points[0] + 200U) {
-        low = high = regtrace_t23_ccm_sc2336_a;
+        low = high = regtrace_t23_ccm_profile_a;
         region = 0;
     } else if (ct < points[1] - 200U) {
-        low = regtrace_t23_ccm_sc2336_a;
-        high = regtrace_t23_ccm_sc2336_t;
+        low = regtrace_t23_ccm_profile_a;
+        high = regtrace_t23_ccm_profile_t;
         weight = ((ct - points[0] - 200U) << 12) /
                  (points[1] - points[0] - 400U);
         region = 1;
     } else if (ct <= points[1] + 200U) {
-        low = high = regtrace_t23_ccm_sc2336_t;
+        low = high = regtrace_t23_ccm_profile_t;
         region = 2;
     } else if (ct < points[2] - 200U) {
-        low = regtrace_t23_ccm_sc2336_t;
-        high = regtrace_t23_ccm_sc2336_d;
+        low = regtrace_t23_ccm_profile_t;
+        high = regtrace_t23_ccm_profile_d;
         weight = ((ct - points[1] - 200U) << 12) /
                  (points[2] - points[1] - 400U);
         region = 3;
     } else if (ct <= points[2] + 200U) {
-        low = high = regtrace_t23_ccm_sc2336_d;
+        low = high = regtrace_t23_ccm_profile_d;
         region = 4;
     } else if (ct < points[3] - 200U) {
-        low = regtrace_t23_ccm_sc2336_d;
-        high = regtrace_t23_ccm_sc2336_d2;
+        low = regtrace_t23_ccm_profile_d;
+        high = regtrace_t23_ccm_profile_d2;
         weight = ((ct - points[2] - 200U) << 12) /
                  (points[3] - points[2] - 400U);
         region = 5;
     } else {
-        low = high = regtrace_t23_ccm_sc2336_d2;
+        low = high = regtrace_t23_ccm_profile_d2;
         region = 6;
     }
 
@@ -12702,23 +12966,34 @@ static uint32_t regtrace_t23_ccm_saturation(uint32_t ev_q10)
     uint32_t ev = ev_q10 >> 10;
     unsigned int i;
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_ccm_sc2336_ev); ++i) {
-        uint32_t high_ev = regtrace_t23_ccm_sc2336_ev[i];
+    for (i = 0; i < ARRAY_SIZE(regtrace_t23_ccm_profile_ev); ++i) {
+        uint32_t high_ev = regtrace_t23_ccm_profile_ev[i];
 
         if (ev > high_ev)
             continue;
         if (!i)
-            return regtrace_t23_ccm_sc2336_sat[0];
-        if (high_ev == regtrace_t23_ccm_sc2336_ev[i - 1])
-            return regtrace_t23_ccm_sc2336_sat[i];
-        return regtrace_t23_ccm_sc2336_sat[i - 1] +
-            (ev - regtrace_t23_ccm_sc2336_ev[i - 1]) *
-            (regtrace_t23_ccm_sc2336_sat[i] -
-             regtrace_t23_ccm_sc2336_sat[i - 1]) /
-            (high_ev - regtrace_t23_ccm_sc2336_ev[i - 1]);
+            return regtrace_t23_ccm_profile_sat[0];
+        if (high_ev == regtrace_t23_ccm_profile_ev[i - 1])
+            return regtrace_t23_ccm_profile_sat[i];
+        {
+            uint32_t low_ev = regtrace_t23_ccm_profile_ev[i - 1];
+            uint32_t low_sat = regtrace_t23_ccm_profile_sat[i - 1];
+            uint32_t high_sat = regtrace_t23_ccm_profile_sat[i];
+            uint64_t scaled;
+
+            /* A sensor profile may raise or lower saturation with EV. */
+            if (high_sat >= low_sat) {
+                scaled = (uint64_t)(ev - low_ev) *
+                    (high_sat - low_sat);
+                return low_sat + div_u64(scaled, high_ev - low_ev);
+            }
+            scaled = (uint64_t)(ev - low_ev) *
+                (low_sat - high_sat);
+            return low_sat - div_u64(scaled, high_ev - low_ev);
+        }
     }
-    return regtrace_t23_ccm_sc2336_sat[
-        ARRAY_SIZE(regtrace_t23_ccm_sc2336_sat) - 1U];
+    return regtrace_t23_ccm_profile_sat[
+        ARRAY_SIZE(regtrace_t23_ccm_profile_sat) - 1U];
 }
 
 static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10)
@@ -12756,108 +13031,55 @@ static int regtrace_t23_source_ccm_commit(uint32_t ct, uint32_t ev_q10)
     return 0;
 }
 
-static void regtrace_t23_source_ccm_write_tuning_startup(void)
+static int regtrace_t23_source_ccm_write_tuning_startup(void)
 {
-    size_t i;
+    uint32_t dp_step;
+    uint32_t dp_difference;
+    int ret;
 
-    for (i = 0; i < 5; ++i) {
-        system_reg_write(0x5000U, 1U);
-        system_reg_write(regtrace_t23_ccm_sc2336_daylight[i][0],
-                         regtrace_t23_ccm_sc2336_daylight[i][1]);
-    }
-    for (; i < ARRAY_SIZE(regtrace_t23_ccm_sc2336_daylight); ++i)
-        system_reg_write(regtrace_t23_ccm_sc2336_daylight[i][0],
-                         regtrace_t23_ccm_sc2336_daylight[i][1]);
+    ret = regtrace_t23_source_ccm_load_tuning();
+    if (ret)
+        return ret;
+    ret = regtrace_t23_source_ccm_commit(
+        regtrace_t23_source_ccm_runtime_ct,
+        regtrace_t23_source_ae_hlil_ev);
+    if (ret)
+        return ret;
+
+    dp_difference = regtrace_t23_ccm_profile_dp[1] >=
+                    regtrace_t23_ccm_profile_dp[2] ?
+        regtrace_t23_ccm_profile_dp[1] - regtrace_t23_ccm_profile_dp[2] :
+        regtrace_t23_ccm_profile_dp[2] - regtrace_t23_ccm_profile_dp[1];
+    dp_step = dp_difference ? 0x20U / dp_difference : 1U;
+    system_reg_write(0x5018U,
+        (regtrace_t23_ccm_profile_dp[1] << 16) |
+        (regtrace_t23_ccm_profile_dp[0] << 12) |
+        regtrace_t23_ccm_profile_dp[2]);
+    system_reg_write(0x501cU, dp_step);
+    system_reg_write(0x5020U,
+        (regtrace_t23_ccm_profile_dp[4] << 16) |
+        regtrace_t23_ccm_profile_dp[3]);
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source CCM SC2336 daylight tuning committed (%u writes)\n",
-           (unsigned int)ARRAY_SIZE(regtrace_t23_ccm_sc2336_daylight));
-    regtrace_t23_source_ccm_runtime_ct = 5084U;
-    regtrace_t23_source_ccm_last_ct = 5084U;
-    regtrace_t23_source_ccm_last_saturation = 150U;
+           "tx_isp_t23_recovered: source CCM profile CT%u startup committed\n",
+           regtrace_t23_source_ccm_runtime_ct);
     regtrace_t23_source_ccm_event_count = 0;
+    return 0;
 }
 
-static void regtrace_t23_source_dmsc_write_tuning_startup(void)
+static int regtrace_t23_source_dmsc_write_tuning_startup(void)
 {
-    size_t i;
+    int ret;
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup); ++i)
-        system_reg_write(regtrace_t23_dmsc_sc2336_startup[i][0],
-                         regtrace_t23_dmsc_sc2336_startup[i][1]);
-
-    printk(KERN_WARNING
-           "tx_isp_t23_recovered: source DMSC SC2336 tuning startup committed (%u writes)\n",
-           (unsigned int)ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup));
-}
-
-static void regtrace_t23_source_dmsc_restore_tuning_image(void)
-{
-    size_t i;
-
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup); ++i)
-        system_reg_write(regtrace_t23_dmsc_sc2336_startup[i][0],
-                         regtrace_t23_dmsc_sc2336_startup[i][1]);
-}
-
-static unsigned int regtrace_t23_source_sharpen_write_tuning(
-    const uint32_t image[][2], size_t count)
-{
-    size_t i;
-
-    for (i = 0; i < count; ++i)
-        system_reg_write(image[i][0], image[i][1]);
-    return (unsigned int)count;
-}
-
-struct regtrace_t23_gain_calibration {
-    uint32_t gain_q16;
-    uint32_t dmsc[7];
-    uint32_t sharpen_700c;
-};
-
-/* Exact SC2336 tuning images generated from /etc/sensor/sc2336-t23.bin. */
-static const struct regtrace_t23_gain_calibration
-regtrace_t23_gain_calibrations[] = {
-    { 0x10000U, { 0x00000064U, 0x00000000U, 0x00000000U,
-                  0x00000000U, 0x00000000U, 0x005a005aU,
-                  0x005a005aU }, 0x05ff0000U },
-    { 0x12b80U, { 0x00000064U, 0x00000004U, 0x00000006U,
-                  0x00000006U, 0x00000006U, 0x0058005aU,
-                  0x00580058U }, 0x05ff0100U },
-    { 0x15269U, { 0x00020064U, 0x00000008U, 0x0000000aU,
-                  0x0000000aU, 0x0000000aU, 0x0057005aU,
-                  0x00570057U }, 0x05ff0200U },
-    { 0x1759dU, { 0x00020064U, 0x0000000cU, 0x0000000eU,
-                  0x0000000eU, 0x0000000eU, 0x0055005aU,
-                  0x00550055U }, 0x05ff0200U },
-    { 0x195c0U, { 0x00020064U, 0x00000010U, 0x00000012U,
-                  0x00000012U, 0x00000012U, 0x0054005aU,
-                  0x00540054U }, 0x05ff0300U },
-    { 0x1b350U, { 0x00020064U, 0x00000012U, 0x00000016U,
-                  0x00000016U, 0x00000016U, 0x0053005aU,
-                  0x00530053U }, 0x05ff0400U },
-    { 0x1ceaeU, { 0x00040064U, 0x00000014U, 0x00000018U,
-                  0x00000018U, 0x00000018U, 0x0052005aU,
-                  0x00520052U }, 0x05ff0400U },
-    { 0x1e829U, { 0x00040064U, 0x00000018U, 0x0000001cU,
-                  0x0000001cU, 0x0000001cU, 0x0051005aU,
-                  0x00510051U }, 0x05ff0500U },
-    { 0x20000U, { 0x00040064U, 0x0000001aU, 0x0000001eU,
-                  0x0000001eU, 0x0000001eU, 0x0050005aU,
-                  0x00500050U }, 0x05ff0500U },
-};
-
-static const struct regtrace_t23_gain_calibration *
-regtrace_t23_gain_calibration(uint32_t gain_q16)
-{
-    size_t i;
-
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gain_calibrations); ++i) {
-        if (regtrace_t23_gain_calibrations[i].gain_q16 == gain_q16)
-            return &regtrace_t23_gain_calibrations[i];
-    }
-    return NULL;
+    ret = tiziano_dmsc_init();
+    if (ret)
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: source DMSC loaded-tuning startup ret=%d\n",
+               ret);
+    else
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source DMSC loaded-tuning startup committed\n");
+    return ret;
 }
 
 int32_t tisp_gib_gain_interpolation(uint32_t gain_q16)
@@ -12865,15 +13087,15 @@ int32_t tisp_gib_gain_interpolation(uint32_t gain_q16)
     uint32_t hi = gain_q16 >> 16;
     uint32_t lo = gain_q16 & 0xffffU;
     uint32_t blc_r = tisp_simple_intp(
-        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_r);
+        hi, lo, (void *)tiziano_gib_deirm_blc_r_linear);
     uint32_t blc_gr = tisp_simple_intp(
-        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_gr);
+        hi, lo, (void *)tiziano_gib_deirm_blc_gr_linear);
     uint32_t blc_gb = tisp_simple_intp(
-        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_gb);
+        hi, lo, (void *)tiziano_gib_deirm_blc_gb_linear);
     uint32_t blc_b = tisp_simple_intp(
-        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_b);
+        hi, lo, (void *)tiziano_gib_deirm_blc_b_linear);
     uint32_t blc_ir = tisp_simple_intp(
-        hi, lo, (void *)regtrace_t23_gib_sc2336_blc_ir);
+        hi, lo, (void *)tiziano_gib_deirm_blc_ir_linear);
     uint32_t bayer = system_reg_read(8U) & 0x1fU;
     uint32_t ch0;
     uint32_t ch1;
@@ -12924,51 +13146,16 @@ static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
                                                        bool explicit,
                                                        bool restore_dmsc)
 {
-    static const uint32_t dmsc_registers[] = {
-        0x4808U, 0x4810U, 0x4814U, 0x4824U,
-        0x482cU, 0x4848U, 0x4860U,
-    };
-    const struct regtrace_t23_gain_calibration *calibration;
-    size_t i;
-    unsigned int dmsc_writes = 0;
-    unsigned int sharpen_writes = 0;
+    int ret = 0;
 
-    if (!gain_q16) {
-        if (sensor_again == 0x00c0U)
-            gain_q16 = 0x195c0U;
-        else if (sensor_again == 0x0880U)
-            gain_q16 = 0x20000U;
-        else
-            gain_q16 = 0x10000U;
-
-        if (sensor_again && sensor_again != 0x0080U &&
-            sensor_again != 0x00c0U &&
-            sensor_again != 0x0880U)
-            printk(KERN_WARNING
-                   "tx_isp_t23_recovered: no automatic ISP calibration for SC2336 again code 0x%x; using unity\n",
-                   sensor_again);
-    }
-
-    calibration = regtrace_t23_gain_calibration(gain_q16);
-    if (!calibration) {
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: source total-gain 0x%x unsupported\n",
-               gain_q16);
+    if (!gain_q16)
         return -EINVAL;
-    }
 
     if (regtrace_t23_source_gib_tuning_init)
-        tisp_gib_gain_interpolation(gain_q16);
-    if (regtrace_t23_source_dmsc_tuning_init) {
-        if (restore_dmsc) {
-            regtrace_t23_source_dmsc_restore_tuning_image();
-            dmsc_writes = ARRAY_SIZE(regtrace_t23_dmsc_sc2336_startup);
-        }
-        for (i = 0; i < ARRAY_SIZE(dmsc_registers); ++i)
-            system_reg_write(dmsc_registers[i], calibration->dmsc[i]);
-        system_reg_write(0x499cU, 1U);
-        dmsc_writes += ARRAY_SIZE(dmsc_registers) + 1U;
-    }
+        ret = tisp_gib_gain_interpolation(gain_q16);
+    if (!ret && regtrace_t23_source_dmsc_tuning_init)
+        ret = tisp_dmsc_par_refresh(gain_q16, 0x100U,
+                                    restore_dmsc ? 1U : 0U);
     if (regtrace_t23_source_dpc_tuning_init)
         tisp_dpc_refresh(gain_q16);
     if (regtrace_t23_source_ydns_tuning_init)
@@ -12978,14 +13165,7 @@ static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
     if (regtrace_t23_source_sdns_initialized)
         tisp_sdns_refresh(gain_q16);
     if (regtrace_t23_source_sharpen_tuning_init)
-        sharpen_writes = regtrace_t23_source_sharpen_write_tuning(
-            regtrace_t23_sharpen_sc2336_startup,
-            ARRAY_SIZE(regtrace_t23_sharpen_sc2336_startup));
-    if (regtrace_t23_source_sharpen_tuning_init) {
-        system_reg_write(0x700cU, calibration->sharpen_700c);
-        system_reg_write(0x7090U, 1U);
-        sharpen_writes += 2U;
-    }
+        tisp_sharpen_refresh(gain_q16);
 
     regtrace_t23_dmsc_gain_q16 = gain_q16;
     tparams[0x3934] = regtrace_t23_source_dmsc_sharpness & 0xffU;
@@ -12994,43 +13174,29 @@ static int regtrace_t23_source_apply_total_gain_value(uint32_t gain_q16,
         tisp_dmsc_sharpness_set(regtrace_t23_source_dmsc_sharpness, 0);
 
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: source total-gain 0x%x calibration committed (sensor again=0x%x GIB=%u DMSC writes=%u sharpen writes=%u sharpness=0x%x explicit=%u restore=%u)\n",
+           "tx_isp_t23_recovered: source total-gain 0x%x sensor_again=0x%x applied from loaded tuning sharpness=0x%x explicit=%u restore=%u ret=%d\n",
            gain_q16, sensor_again,
-           regtrace_t23_source_gib_tuning_init ? 1U : 0U, dmsc_writes,
-           sharpen_writes, regtrace_t23_source_dmsc_sharpness & 0xffU,
-           explicit ? 1U : 0U, restore_dmsc ? 1U : 0U);
-    return 0;
+           regtrace_t23_source_dmsc_sharpness & 0xffU,
+           explicit ? 1U : 0U, restore_dmsc ? 1U : 0U, ret);
+    return ret;
 }
 
-static void regtrace_t23_source_apply_total_gain(void)
+static int regtrace_t23_source_apply_total_gain(void)
 {
     uint32_t sensor_again = regtrace_t23_source_ae_force_packed >> 16;
     uint32_t gain_q16 = regtrace_t23_source_total_gain_q16;
 
-    if (!gain_q16) {
-        if (sensor_again == 0x00c0U)
-            gain_q16 = 0x195c0U;
-        else if (sensor_again == 0x0880U)
-            gain_q16 = 0x20000U;
-        else
-            gain_q16 = 0x10000U;
+    if (!gain_q16)
+        gain_q16 = 0x10000U;
 
-        if (sensor_again && sensor_again != 0x0080U &&
-            sensor_again != 0x00c0U && sensor_again != 0x0880U)
-            printk(KERN_WARNING
-                   "tx_isp_t23_recovered: no automatic ISP calibration for SC2336 again code 0x%x; using unity\n",
-                   sensor_again);
-    }
-
-    regtrace_t23_source_apply_total_gain_value(
+    return regtrace_t23_source_apply_total_gain_value(
         gain_q16, sensor_again, regtrace_t23_source_total_gain_q16 != 0, false);
 }
 
 #include "tx_isp_t23_ae_runtime.inc"
 
-static void regtrace_t23_source_bcsh_write_tuning_startup(void)
+static int regtrace_t23_source_bcsh_write_tuning_startup(void)
 {
-    size_t i;
     int ret;
 
     ret = tiziano_bcsh_init();
@@ -13039,26 +13205,22 @@ static void regtrace_t23_source_bcsh_write_tuning_startup(void)
                "tx_isp_t23_recovered: source BCSH runtime initialization failed ret=%d\n",
                ret);
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_bcsh_sc2336_startup); ++i)
-        system_reg_write(regtrace_t23_bcsh_sc2336_startup[i][0],
-                         regtrace_t23_bcsh_sc2336_startup[i][1]);
-
-    printk(KERN_WARNING
-           "tx_isp_t23_recovered: source BCSH SC2336 tuning startup committed (%u writes)\n",
-           (unsigned int)ARRAY_SIZE(regtrace_t23_bcsh_sc2336_startup));
+    else
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: source BCSH loaded-tuning startup committed\n");
+    return ret;
 }
 
-static void regtrace_t23_source_clm_write_tuning_startup(void)
+static int regtrace_t23_source_clm_write_tuning_startup(void)
 {
     uint32_t startup_ct = regtrace_t23_source_clm_startup_ct;
-    size_t i;
     int ret;
 
     if (startup_ct < 1000U || startup_ct > 10000U) {
         printk(KERN_WARNING
-               "tx_isp_t23_recovered: invalid source_clm_startup_ct=%u; using 5000\n",
+               "tx_isp_t23_recovered: invalid source_clm_startup_ct=%u\n",
                startup_ct);
-        startup_ct = 5000U;
+        return -EINVAL;
     }
 
     ret = regtrace_t23_source_clm_load_tuning();
@@ -13075,31 +13237,13 @@ static void regtrace_t23_source_clm_write_tuning_startup(void)
             printk(KERN_WARNING
                    "tx_isp_t23_recovered: source CLM CT%u initialized region=%u\n",
                    startup_ct, regtrace_t23_source_clm_region);
-            return;
+            return 0;
         }
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: source CLM functional startup failed ret=%d; using static image\n",
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: source CLM functional startup failed ret=%d\n",
                ret);
     }
-
-    system_reg_write(0x6800U, 1U);
-    system_reg_write(0x6804U, REGTRACE_T23_CLM_SC2336_LUT_SHIFT);
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_clm_sc2336_h); ++i) {
-        uint32_t offset = (uint32_t)i * 4U;
-
-        system_reg_write(0x60000U + offset,
-                         regtrace_t23_clm_sc2336_h[i]);
-        system_reg_write(0x68000U + offset,
-                         regtrace_t23_clm_sc2336_h[i]);
-        system_reg_write(0x70000U + offset,
-                         regtrace_t23_clm_sc2336_s[i]);
-        system_reg_write(0x78000U + offset,
-                         regtrace_t23_clm_sc2336_s[i]);
-    }
-
-    printk(KERN_WARNING
-           "tx_isp_t23_recovered: source CLM SC2336 CT5000 tuning committed (%u writes)\n",
-           (unsigned int)(ARRAY_SIZE(regtrace_t23_clm_sc2336_h) * 4U + 2U));
+    return ret;
 }
 
 static void regtrace_t23_source_defog_write_geometry(uint32_t width,
@@ -13251,7 +13395,7 @@ static void regtrace_t23_source_csccr_write_init(void)
            "tx_isp_t23_recovered: source CSCCR mode-0 parameters committed\n");
 }
 
-static void regtrace_t23_source_hldc_write_tuning_startup(void)
+static int regtrace_t23_source_hldc_write_tuning_startup(void)
 {
     int ret;
 
@@ -13259,9 +13403,10 @@ static void regtrace_t23_source_hldc_write_tuning_startup(void)
                                         hldc_con_par_array,
                                         sizeof(hldc_con_par_array));
     if (ret) {
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: HLDC tuning load failed ret=%d; using embedded parameters\n",
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: HLDC tuning load failed ret=%d\n",
                ret);
+        return ret;
     }
     tisp_hldc_con_par_cfg();
     tisp_hldc_par_refresh_part_1();
@@ -13272,6 +13417,148 @@ static void regtrace_t23_source_hldc_write_tuning_startup(void)
            hldc_con_par_array[2] | (hldc_con_par_array[3] << 16),
            hldc_con_par_array[4] | (hldc_con_par_array[5] << 16),
            hldc_con_par_array[15]);
+    return 0;
+}
+
+static int regtrace_t23_bayer_from_mbus(uint32_t code, uint32_t *bayer)
+{
+    if (!bayer)
+        return -EINVAL;
+
+    switch (code) {
+    case REGTRACE_V4L2_MBUS_FMT_SRGGB8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SRGGB10_DPCM8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SRGGB10_1X10:
+    case REGTRACE_V4L2_MBUS_FMT_SRGGB12_1X12:
+    case REGTRACE_V4L2_MBUS_FMT_SRGGB10_ALAW8_1X8:
+        *bayer = 0U;
+        return 0;
+    case REGTRACE_V4L2_MBUS_FMT_SBGGR8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SBGGR10_DPCM8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SBGGR10_1X10:
+    case REGTRACE_V4L2_MBUS_FMT_SBGGR12_1X12:
+    case REGTRACE_V4L2_MBUS_FMT_SBGGR10_ALAW8_1X8:
+        *bayer = 1U;
+        return 0;
+    case REGTRACE_V4L2_MBUS_FMT_SGRBG8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SGRBG10_DPCM8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SGRBG10_1X10:
+    case REGTRACE_V4L2_MBUS_FMT_SGRBG12_1X12:
+    case REGTRACE_V4L2_MBUS_FMT_SGRBG10_ALAW8_1X8:
+        *bayer = 2U;
+        return 0;
+    case REGTRACE_V4L2_MBUS_FMT_SGBRG8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SGBRG10_DPCM8_1X8:
+    case REGTRACE_V4L2_MBUS_FMT_SGBRG10_1X10:
+    case REGTRACE_V4L2_MBUS_FMT_SGBRG12_1X12:
+    case REGTRACE_V4L2_MBUS_FMT_SGBRG10_ALAW8_1X8:
+        *bayer = 3U;
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
+static int regtrace_t23_source_resolve_sensor_config(void)
+{
+    unsigned char *attr;
+    char sensor_name[32];
+    unsigned int i;
+    uint32_t bayer;
+    uint32_t min_it;
+    uint32_t max_it;
+    uint32_t max_again;
+    uintptr_t alloc_again;
+    int length;
+    int ret;
+
+    if (regtrace_t23_source_sensor_configured)
+        return 0;
+
+    attr = regtrace_t23_sensor_owned_attr();
+    ret = regtrace_t23_sensor_mbus(&regtrace_t23_source_sensor_width,
+                                   &regtrace_t23_source_sensor_height,
+                                   &regtrace_t23_source_sensor_mbus_code);
+    if (!attr || ret)
+        return ret ? ret : -ENODEV;
+
+    min_it = regtrace_t23_get_le16(attr + REGTRACE_T23_ATTR_MIN_IT);
+    max_it = regtrace_t23_get_le16(attr + REGTRACE_T23_ATTR_MAX_IT);
+    if (!max_it)
+        max_it = regtrace_t23_get_le16(
+            attr + REGTRACE_T23_ATTR_MAX_IT_NATIVE);
+    max_again = regtrace_t23_get_le32(attr + REGTRACE_T23_ATTR_MAX_AGAIN);
+    alloc_again = regtrace_t23_get_le32(attr +
+                                        REGTRACE_T23_ATTR_ALLOC_AGAIN);
+    if (!min_it || min_it > max_it ||
+        !regtrace_t23_valid_ptr(alloc_again)) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: incomplete sensor AE metadata min_it=%u max_it=%u max_again=0x%x alloc_again=%p\n",
+               min_it, max_it, max_again, (void *)alloc_again);
+        return -EINVAL;
+    }
+    regtrace_t23_source_sensor_min_it = min_it;
+    regtrace_t23_source_sensor_max_it = max_it;
+    regtrace_t23_source_sensor_max_again = max_again;
+
+    if (regtrace_t23_source_core_bayer == UINT_MAX) {
+        ret = regtrace_t23_bayer_from_mbus(
+            regtrace_t23_source_sensor_mbus_code, &bayer);
+        if (ret) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: unsupported sensor media-bus code 0x%x\n",
+                   regtrace_t23_source_sensor_mbus_code);
+            return ret;
+        }
+        regtrace_t23_source_core_bayer = bayer;
+    } else if (regtrace_t23_source_core_bayer > 3U) {
+        return -EINVAL;
+    }
+
+    ret = tx_isp_sinfo_get_driver(0, sensor_name, sizeof(sensor_name), NULL);
+    if (ret) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: cannot resolve sensor profile: registry ret=%d\n",
+               ret);
+        return ret;
+    }
+
+    for (i = 0; sensor_name[i]; i++) {
+        if (!isalnum(sensor_name[i]) && sensor_name[i] != '_' &&
+            sensor_name[i] != '-') {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: unsafe sensor name %s\n",
+                   sensor_name);
+            return -EINVAL;
+        }
+    }
+
+    if (!regtrace_t23_source_core_tuning_path ||
+        !regtrace_t23_source_core_tuning_path[0]) {
+        length = snprintf(regtrace_t23_source_core_tuning_auto_path,
+                          sizeof(regtrace_t23_source_core_tuning_auto_path),
+                          "/etc/sensor/%s-t23.bin", sensor_name);
+        if (length < 0 || (size_t)length >=
+            sizeof(regtrace_t23_source_core_tuning_auto_path))
+            return -ENAMETOOLONG;
+        regtrace_t23_source_core_tuning_path =
+            regtrace_t23_source_core_tuning_auto_path;
+    }
+
+    ret = regtrace_t23_ae_hlil_build_ladder();
+    if (ret)
+        return ret;
+    regtrace_t23_source_sensor_configured = true;
+
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: sensor config name=%s mbus=0x%x %ux%u tuning=%s bayer=%u it=%u..%u max_again_log2=0x%x initial=0x%08x\n",
+           sensor_name, regtrace_t23_source_sensor_mbus_code,
+           regtrace_t23_source_sensor_width,
+           regtrace_t23_source_sensor_height,
+           regtrace_t23_source_core_tuning_path,
+           regtrace_t23_source_core_bayer, min_it, max_it, max_again,
+           regtrace_t23_source_ae_initial_packed);
+    return 0;
 }
 
 static int regtrace_t23_source_core_set_stream(int enable,
@@ -13300,6 +13587,10 @@ static int regtrace_t23_source_core_set_stream(int enable,
     if (regtrace_t23_core_started)
         return 0;
 
+    ret = regtrace_t23_source_resolve_sensor_config();
+    if (ret)
+        return ret;
+
     ret = regtrace_t23_program_core_dma();
     if (ret) {
         printk(KERN_ERR "tx_isp_t23_recovered: source core DMA setup failed ret=%d reason=%s\n",
@@ -13307,7 +13598,22 @@ static int regtrace_t23_source_core_set_stream(int enable,
         return ret;
     }
 
-    bypass = regtrace_t23_source_core_bypass_value();
+    ret = regtrace_t23_source_core_bypass_value(&bypass);
+    if (ret) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: no usable tuning profile ret=%d reason=%s\n",
+               ret, reason ? reason : "?");
+        return ret;
+    }
+    if (regtrace_t23_source_awb_hlil) {
+        ret = regtrace_t23_source_awb_hlil_load_tuning();
+        if (ret) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: AWB profile load failed ret=%d\n",
+                   ret);
+            return ret;
+        }
+    }
     if (regtrace_t23_source_park_uninitialized_mdns ||
         !regtrace_t23_source_mdns_tuning_init)
         bypass |= 1U << 16;
@@ -13341,7 +13647,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
     /* Recovered T23 tisp_init order and parameter-derived top bypass. */
     system_reg_write(0x800U, 0);
     system_reg_write(0x4U,
-                     (REGTRACE_SC2336_WIDTH << 16) | REGTRACE_SC2336_HEIGHT);
+                     (regtrace_t23_source_sensor_width << 16) | regtrace_t23_source_sensor_height);
     system_reg_write(0x8U, regtrace_t23_source_core_bayer);
     system_reg_write(0x1cU, 0);
     system_reg_write(0x2cU, 0x400040U);
@@ -13350,19 +13656,34 @@ static int regtrace_t23_source_core_set_stream(int enable,
     system_reg_write(0x30U, 0xffffffffU);
     if (regtrace_t23_source_ae_stats_init)
         regtrace_t23_source_ae_write_stats_startup();
-    if (regtrace_t23_source_gib_tuning_init)
-        regtrace_t23_source_gib_write_tuning_startup();
-    if (regtrace_t23_source_gamma_tuning_init)
-        regtrace_t23_source_gamma_write_tuning_startup();
-    if (regtrace_t23_source_lsc_tuning_init)
-        regtrace_t23_source_lsc_write_tuning_startup();
-    if (regtrace_t23_source_dpc_tuning_init)
-        tiziano_dpc_init();
-    if (regtrace_t23_source_ydns_tuning_init)
-        tiziano_ydns_init();
+    if (regtrace_t23_source_gib_tuning_init) {
+        ret = regtrace_t23_source_gib_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
+    if (regtrace_t23_source_gamma_tuning_init) {
+        ret = regtrace_t23_source_gamma_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
+    if (regtrace_t23_source_lsc_tuning_init) {
+        ret = regtrace_t23_source_lsc_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
+    if (regtrace_t23_source_dpc_tuning_init) {
+        ret = tiziano_dpc_init();
+        if (ret)
+            return ret;
+    }
+    if (regtrace_t23_source_ydns_tuning_init) {
+        ret = tiziano_ydns_init();
+        if (ret)
+            return ret;
+    }
     if (regtrace_t23_source_defog_tuning_init) {
-        ret = regtrace_t23_source_defog_prepare(REGTRACE_SC2336_WIDTH,
-                                                REGTRACE_SC2336_HEIGHT);
+        ret = regtrace_t23_source_defog_prepare(regtrace_t23_source_sensor_width,
+                                                regtrace_t23_source_sensor_height);
         if (ret) {
             printk(KERN_ERR
                    "tx_isp_t23_recovered: defog source init failed ret=%d\n",
@@ -13370,13 +13691,19 @@ static int regtrace_t23_source_core_set_stream(int enable,
             return ret;
         }
     }
-    if (regtrace_t23_source_ccm_tuning_init)
-        regtrace_t23_source_ccm_write_tuning_startup();
-    if (regtrace_t23_source_dmsc_tuning_init)
-        regtrace_t23_source_dmsc_write_tuning_startup();
+    if (regtrace_t23_source_ccm_tuning_init) {
+        ret = regtrace_t23_source_ccm_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
+    if (regtrace_t23_source_dmsc_tuning_init) {
+        ret = regtrace_t23_source_dmsc_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
     if (regtrace_t23_source_adr_tuning_init) {
-        ret = tiziano_adr_init(0, REGTRACE_SC2336_WIDTH,
-                               REGTRACE_SC2336_HEIGHT);
+        ret = tiziano_adr_init(0, regtrace_t23_source_sensor_width,
+                               regtrace_t23_source_sensor_height);
         if (ret) {
             printk(KERN_ERR
                    "tx_isp_t23_recovered: ADR source init failed ret=%d\n",
@@ -13384,20 +13711,34 @@ static int regtrace_t23_source_core_set_stream(int enable,
             return ret;
         }
     }
-    regtrace_t23_source_apply_total_gain();
-    regtrace_t23_source_hldc_write_tuning_startup();
-    if (regtrace_t23_source_bcsh_tuning_init)
-        regtrace_t23_source_bcsh_write_tuning_startup();
-    if (regtrace_t23_source_clm_tuning_init)
-        regtrace_t23_source_clm_write_tuning_startup();
+    ret = regtrace_t23_source_apply_total_gain();
+    if (ret)
+        return ret;
+    ret = regtrace_t23_source_hldc_write_tuning_startup();
+    if (ret)
+        return ret;
+    if (regtrace_t23_source_bcsh_tuning_init) {
+        ret = regtrace_t23_source_bcsh_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
+    if (regtrace_t23_source_clm_tuning_init) {
+        ret = regtrace_t23_source_clm_write_tuning_startup();
+        if (ret)
+            return ret;
+    }
     if (regtrace_t23_source_bcsh_neutral)
         regtrace_t23_source_bcsh_write_neutral();
     if (regtrace_t23_source_csccr_init)
         regtrace_t23_source_csccr_write_init();
     if (regtrace_t23_source_awb_stats_init)
         regtrace_t23_source_awb_write_stats_startup();
-    if (regtrace_t23_source_mdns_tuning_init)
-        tiziano_mdns_init(REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT);
+    if (regtrace_t23_source_mdns_tuning_init) {
+        ret = tiziano_mdns_init(regtrace_t23_source_sensor_width,
+                                regtrace_t23_source_sensor_height);
+        if (ret)
+            return ret;
+    }
     if (regtrace_t23_source_sdns_tuning_init) {
         ret = tiziano_sdns_init();
         if (ret) {
@@ -13410,7 +13751,7 @@ static int regtrace_t23_source_core_set_stream(int enable,
     if (regtrace_t23_source_mdns_paddr) {
         uint32_t used = tisp_mdns_set_malloc_cfg(
             regtrace_t23_source_mdns_mode,
-            REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT,
+            regtrace_t23_source_sensor_width, regtrace_t23_source_sensor_height,
             regtrace_t23_source_mdns_paddr);
 
         if (used > regtrace_t23_source_mdns_size) {
@@ -13452,6 +13793,7 @@ static void regtrace_t23_tisp_stream_regs(int enable,
                                           int channel,
                                           const char *reason)
 {
+    int ret;
     uint32_t r1008;
     uint32_t r1060;
 
@@ -13459,7 +13801,13 @@ static void regtrace_t23_tisp_stream_regs(int enable,
         return;
 
     if (enable) {
-        regtrace_t23_source_core_set_stream(1, reason);
+        ret = regtrace_t23_source_core_set_stream(1, reason);
+        if (ret) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: refusing TISP stream start ret=%d reason=%s\n",
+                   ret, reason ? reason : "?");
+            return;
+        }
         system_reg_write(0x1010U, 0);
         system_reg_write(0x1014U, 0);
         system_reg_write(0x1008U, 286U);
@@ -13583,8 +13931,8 @@ static long regtrace_tx_isp_getbuf(unsigned long arg)
 
     info.paddr = 0;
     info.size = regtrace_mdns_malloc_size(info.mode & 0xffU,
-                                          REGTRACE_SC2336_WIDTH,
-                                          REGTRACE_SC2336_HEIGHT);
+                                          regtrace_t23_source_sensor_width,
+                                          regtrace_t23_source_sensor_height);
 
     if (copy_to_user((void __user *)arg, &info, sizeof(info)))
         return -EFAULT;
@@ -13604,8 +13952,8 @@ static long regtrace_tx_isp_setbuf(unsigned long arg)
         return -EINVAL;
 
     used = tisp_mdns_set_malloc_cfg(info.mode & 0xffU,
-                                    REGTRACE_SC2336_WIDTH,
-                                    REGTRACE_SC2336_HEIGHT,
+                                    regtrace_t23_source_sensor_width,
+                                    regtrace_t23_source_sensor_height,
                                     info.paddr);
     if (used > info.size) {
         tisp_mdns_malloc_reflash();
@@ -13645,7 +13993,7 @@ static long regtrace_tx_isp_get_sensor_input(unsigned long arg)
 
 static long regtrace_tx_isp_sensor_geometry(unsigned long arg)
 {
-    u32 words[2] = { REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT };
+    u32 words[2] = { regtrace_t23_source_sensor_width, regtrace_t23_source_sensor_height };
 
     if (!arg)
         return -EINVAL;
@@ -13856,7 +14204,7 @@ static long regtrace_tx_isp_ioctl(struct file *file, unsigned int cmd, unsigned 
         cmd == REGTRACE_T23_SENSOR_IOCTL_561C) {
         ret = regtrace_tx_isp_sensor_geometry(arg);
         printk(KERN_INFO "tx_isp_t23_recovered: tx-isp sensor geometry cmd=0x%x arg=0x%lx ret=%ld %ux%u pid=%d comm=%s\n",
-               cmd, arg, ret, REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT,
+               cmd, arg, ret, regtrace_t23_source_sensor_width, regtrace_t23_source_sensor_height,
                current->pid, current->comm);
         return ret;
     }
@@ -14183,7 +14531,7 @@ static uint32_t regtrace_t23_frame_width(int channel)
         regtrace_t23_framechan_format_ready[channel] &&
         regtrace_t23_framechan_formats[channel].pix.width)
         return regtrace_t23_framechan_formats[channel].pix.width;
-    return channel == 1 ? 640U : 1920U;
+    return channel == 1 ? 640U : regtrace_t23_source_sensor_width;
 }
 
 static uint32_t regtrace_t23_frame_height(int channel)
@@ -14192,15 +14540,15 @@ static uint32_t regtrace_t23_frame_height(int channel)
         regtrace_t23_framechan_format_ready[channel] &&
         regtrace_t23_framechan_formats[channel].pix.height)
         return regtrace_t23_framechan_formats[channel].pix.height;
-    return channel == 1 ? 360U : 1080U;
+    return channel == 1 ? 360U : regtrace_t23_source_sensor_height;
 }
 
 static int regtrace_t23_program_msca_format(
     int channel, struct regtrace_t23_frame_image_format *format)
 {
     uint32_t attr[13];
-    uint32_t full_width = REGTRACE_SC2336_WIDTH;
-    uint32_t full_height = REGTRACE_SC2336_HEIGHT;
+    uint32_t full_width = regtrace_t23_source_sensor_width;
+    uint32_t full_height = regtrace_t23_source_sensor_height;
     uint32_t target_width;
     uint32_t target_height;
     struct tx_isp_nv12_layout layout;
@@ -15957,8 +16305,15 @@ static int regtrace_t23_probe_core_safe(struct platform_device *pdev)
             *(uint32_t *)(ch + 116) = 1;
             *(uint32_t *)(ch + 120) = pad;
             *(uint32_t *)(ch + 124) = (uint32_t)(uintptr_t)core;
-            *(uint32_t *)(ch + 128) = (i == 1) ? 2048 : 1920;
-            *(uint32_t *)(ch + 132) = (i == 1) ? 1080 : 1080;
+            if (!i) {
+                /* Recovered T23 channel-0 hardware limits. */
+                *(uint32_t *)(ch + 128) = 2624;
+                *(uint32_t *)(ch + 132) = 2048;
+            } else if (i == 1) {
+                /* Recovered T23 channel-1 hardware limits. */
+                *(uint32_t *)(ch + 128) = 2048;
+                *(uint32_t *)(ch + 132) = 1080;
+            }
             *(uint32_t *)(ch + 136) = 128;
             *(uint32_t *)(ch + 140) = 128;
             private_spin_lock_init((spinlock_t *)(ch + 156));
@@ -18562,17 +18917,18 @@ int vic_sensor_ops_sync_sensor_attr(void *arg1, void *arg2, void *arg3)
 		return -22;
 	}
 
-	if (!regtrace_t23_sensor_attr_ready)
-		regtrace_t23_seed_sc2336_attr();
-	if (!arg2)
-		arg2 = regtrace_t23_sc2336_attr;
+	if (!arg2 || regtrace_t23_sensor_mbus(
+		&regtrace_t23_source_sensor_width,
+		&regtrace_t23_source_sensor_height,
+		&regtrace_t23_source_sensor_mbus_code))
+		return -ENODEV;
 
 	*(uint32_t *)(vic + 0x110) = (uint32_t)(uintptr_t)arg2;
-	*(uint32_t *)(vic + 0xdc) = REGTRACE_SC2336_WIDTH;
-	*(uint32_t *)(vic + 0xe0) = REGTRACE_SC2336_HEIGHT;
+	*(uint32_t *)(vic + 0xdc) = regtrace_t23_source_sensor_width;
+	*(uint32_t *)(vic + 0xe0) = regtrace_t23_source_sensor_height;
 	regtrace_t23_seed_sensor_caches("vic-sync");
 	printk(KERN_INFO "tx_isp_t23_recovered: VIC sensor attr sync attr=%p vic=%p %ux%u\n",
-	       arg2, vic, REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT);
+	       arg2, vic, regtrace_t23_source_sensor_width, regtrace_t23_source_sensor_height);
 	return 0;
 }
 
@@ -22634,19 +22990,18 @@ int64_t csi_sensor_ops_sync_sensor_attr(uint32_t a0, uint32_t a1)
 		return -22;
 	}
 
-	if (!regtrace_t23_sensor_attr_ready)
-		regtrace_t23_seed_sc2336_attr();
 	if (!attr)
-		attr = regtrace_t23_sc2336_attr;
+		return -ENODEV;
 
 	memcpy(csi + 0xdc, attr, 0x34);
-	*(uint32_t *)(csi + 0x14) = REGTRACE_TX_SENSOR_DATA_INTERFACE_MIPI;
+	*(uint32_t *)(csi + 0x14) = regtrace_t23_get_le32(
+		(unsigned char *)attr + REGTRACE_T23_ATTR_DBUS_TYPE);
 	*(uint32_t *)(csi + 0x110) = (uint32_t)(uintptr_t)attr;
 	if (*(uint32_t *)(csi + 0x12c) < 3)
 		*(uint32_t *)(csi + 0x12c) = 3;
 	regtrace_t23_seed_sensor_caches("csi-sync");
 	printk(KERN_INFO "tx_isp_t23_recovered: CSI sensor attr sync attr=%p csi=%p %ux%u\n",
-	       attr, csi, REGTRACE_SC2336_WIDTH, REGTRACE_SC2336_HEIGHT);
+	       attr, csi, regtrace_t23_source_sensor_width, regtrace_t23_source_sensor_height);
 	return 0;
 }
 
@@ -29501,13 +29856,12 @@ void private_i2c_set_clientdata(struct i2c_client *dev, void *data)
 
 int private_i2c_add_driver(struct i2c_driver *driver)
 {
-    int ret;
-
-    ret = i2c_add_driver(driver);
-    if (!ret)
-        regtrace_t23_ensure_sensor_client(driver, 0x30,
-                                          "private-i2c-add-driver");
-    return ret;
+    /*
+     * The sensor module follows this with tx_isp_sinfo_driver_add(), which
+     * supplies its real bus address.  Guessing here made the ISP work only
+     * for sensors at the address used by the recovery fixture.
+     */
+    return i2c_add_driver(driver);
 }
 
 
@@ -39251,9 +39605,9 @@ int64_t tisp_channel_main_attr_set(uint32_t channel, uintptr_t attr_ptr)
             source_width = regtrace_t23_get_le32(tisp_par_info + 0);
             source_height = regtrace_t23_get_le32(tisp_par_info + 4);
             if (!source_width)
-                source_width = REGTRACE_SC2336_WIDTH;
+                source_width = regtrace_t23_source_sensor_width;
             if (!source_height)
-                source_height = REGTRACE_SC2336_HEIGHT;
+                source_height = regtrace_t23_source_sensor_height;
             regtrace_t23_put_le32(cfg + 0x10, 0);
             regtrace_t23_put_le32(cfg + 0x14, 0);
             regtrace_t23_put_le32(cfg + 0x18, source_width);
@@ -42212,8 +42566,8 @@ int32_t tisp_msca_write_reg(void)
         source_height = regtrace_t23_get_le32(tisp_par_info + 4);
         min_left = 0;
         min_top = 0;
-        max_right = source_width ? source_width : REGTRACE_SC2336_WIDTH;
-        max_bottom = source_height ? source_height : REGTRACE_SC2336_HEIGHT;
+        max_right = source_width ? source_width : regtrace_t23_source_sensor_width;
+        max_bottom = source_height ? source_height : regtrace_t23_source_sensor_height;
     }
 
     system_reg_write(0xd090U,
@@ -42459,8 +42813,8 @@ static void regtrace_t23_msca_commit_global_window(void)
     if (!active) {
         min_left = 0;
         min_top = 0;
-        max_right = REGTRACE_SC2336_WIDTH;
-        max_bottom = REGTRACE_SC2336_HEIGHT;
+        max_right = regtrace_t23_source_sensor_width;
+        max_bottom = regtrace_t23_source_sensor_height;
     }
     system_reg_write(0xd090U,
                      ((min_left & 0x1fffU) << 16) |
@@ -43769,14 +44123,24 @@ int32_t tiziano_gamma_lut_parameter(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001ba8c origin=model_output original=tiziano_gamma_params_refresh */
 int32_t tiziano_gamma_params_refresh(void)
 {
+    uint16_t profile[ARRAY_SIZE(tiziano_gamma_lut)];
+    int ret;
     unsigned int i;
 
-    for (i = 0; i < ARRAY_SIZE(regtrace_t23_gamma_sc2336_linear); ++i) {
-        uint32_t value = regtrace_t23_gamma_sc2336_linear[i];
-
-        tiziano_gamma_lut[i] = value & 0xfffU;
-        tiziano_gamma_lut[i + 1U] = (value >> 12) & 0xfffU;
+    BUILD_BUG_ON(sizeof(profile) != REGTRACE_T23_GAMMA_TUNING_SIZE);
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_GAMMA_TUNING_OFFSET,
+                                        profile, sizeof(profile));
+    if (ret)
+        return ret;
+    for (i = 0; i < ARRAY_SIZE(profile); ++i) {
+        if (profile[i] > 0xfffU || (i && profile[i] < profile[i - 1U])) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: invalid Gamma profile point=%u value=%u previous=%u\n",
+                   i, profile[i], i ? profile[i - 1U] : 0U);
+            return -EINVAL;
+        }
     }
+    memcpy(tiziano_gamma_lut, profile, sizeof(profile));
     memcpy(tiziano_gamma_lut_wdr, tiziano_gamma_lut,
            sizeof(tiziano_gamma_lut_wdr));
     return 0;
@@ -43794,18 +44158,20 @@ int tisp_gamma_wdr_en(int enable)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bb14 origin=model_output original=tiziano_gamma_dn_params_refresh */
 int32_t tiziano_gamma_dn_params_refresh(void)
 {
-    tiziano_gamma_params_refresh();
-    tiziano_gamma_lut_parameter();
-    return 0;
+    int ret = tiziano_gamma_params_refresh();
+
+    return ret ? ret : tiziano_gamma_lut_parameter();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bb4c origin=fragment_seed original=tiziano_gamma_init */
 int32_t tiziano_gamma_init(void)
 {
+    int ret;
+
     tiziano_gamma_lut_now = gamma_wdr_en
         ? tiziano_gamma_lut_wdr : tiziano_gamma_lut;
-    tiziano_gamma_params_refresh();
-    return tiziano_gamma_lut_parameter();
+    ret = tiziano_gamma_params_refresh();
+    return ret ? ret : tiziano_gamma_lut_parameter();
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001bbac origin=model_output original=tisp_gamma_param_array_get */
@@ -45399,7 +45765,7 @@ int32_t system_reg_write_gib(int32_t arg1, int32_t arg2, int32_t arg3) {
     return system_reg_write(arg2, arg3);
 }
 
-#if 0 /* Replaced above by the T23-HLIL channel mapping over SC2336 tables. */
+#if 0 /* Replaced above by the T23-HLIL channel mapping. */
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001cfdc origin=fragment_seed original=tisp_gib_gain_interpolation */
 int32_t tisp_gib_gain_interpolation(uint32_t a0)
 {
@@ -50542,7 +50908,10 @@ int tisp_lsc_wdr_en(int arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021400 origin=fragment_seed original=tisp_lsc_ct_update */
 int32_t tisp_lsc_ct_update(uint32_t a0)
 {
-    if (a0 < regtrace_t23_lsc_sc2336_ct_points[0] || a0 > 10000U)
+    const uint32_t *points = (const uint32_t *)(const void *)lsc_ct_points;
+
+    if (!regtrace_t23_source_lsc_tables_initialized ||
+        a0 < points[0] || a0 > 10000U)
         return -EINVAL;
     if (a0 != regtrace_t23_source_lsc_runtime_ct) {
         regtrace_t23_source_lsc_runtime_ct = a0;
@@ -50593,7 +50962,8 @@ void tiziano_lsc_params_refresh(void)
 int32_t tiziano_lsc_dn_params_refresh(void)
 {
     regtrace_t23_source_lsc_tables_initialized = false;
-    regtrace_t23_source_lsc_initialize_tables();
+    if (regtrace_t23_source_lsc_initialize_tables())
+        return -EIO;
     last_status_mirror_en = 0;
     last_status_flip_en = 0;
     regtrace_t23_source_lsc_update_pending = true;
@@ -50844,7 +51214,7 @@ uint32_t regtrace_t23_lsc_blend_word(uint32_t low,
 static inline __attribute__((__always_inline__))
 uint32_t regtrace_t23_lsc_word_for_ct(uint32_t index, uint32_t ct)
 {
-    const uint32_t *points = regtrace_t23_lsc_sc2336_ct_points;
+    const uint32_t *points = (const uint32_t *)(const void *)lsc_ct_points;
     const uint32_t *a_lut = (const uint32_t *)(const void *)data_c6d1c;
     const uint32_t *t_lut = (const uint32_t *)(const void *)data_c4d20;
     const uint32_t *d_lut = (const uint32_t *)(const void *)data_c2d24;
@@ -50891,8 +51261,11 @@ int32_t tisp_lsc_write_lut_datas(void)
     uint32_t base;
     uint32_t ct;
     uint32_t i;
+    int ret;
 
-    regtrace_t23_source_lsc_initialize_tables();
+    ret = regtrace_t23_source_lsc_initialize_tables();
+    if (ret)
+        return ret;
     lsc_count++;
     if (!regtrace_t23_source_lsc_update_pending)
         return 0;
@@ -50901,18 +51274,18 @@ int32_t tisp_lsc_write_lut_datas(void)
         gain_q16 = 0x10000U;
     strength = tisp_simple_intp(
         gain_q16 >> 16, gain_q16 & 0xffffU,
-        (void *)regtrace_t23_lsc_sc2336_mesh_strength);
-    if (REGTRACE_T23_LSC_SC2336_MESH_SCALE == 0U)
+        (void *)lsc_mesh_str);
+    if (regtrace_t23_source_lsc_mesh_scale == 0U)
         base = 0x800U;
-    else if (REGTRACE_T23_LSC_SC2336_MESH_SCALE == 1U)
+    else if (regtrace_t23_source_lsc_mesh_scale == 1U)
         base = 0x400U;
-    else if (REGTRACE_T23_LSC_SC2336_MESH_SCALE == 2U)
+    else if (regtrace_t23_source_lsc_mesh_scale == 2U)
         base = 0x200U;
     else
         base = 0x100U;
 
     ct = regtrace_t23_source_lsc_runtime_ct;
-    for (i = 0; i + 2U < REGTRACE_T23_LSC_SC2336_LUT_NUM; i += 3U) {
+    for (i = 0; i + 2U < regtrace_t23_source_lsc_lut_num; i += 3U) {
         uint32_t offset = (i / 3U) << 4;
 
         system_reg_write(0x28000U + offset,
@@ -50930,26 +51303,29 @@ int32_t tisp_lsc_write_lut_datas(void)
     printk(KERN_INFO
            "tx_isp_t23_recovered: source LSC runtime CT%u gain=0x%x strength=%u committed (%u nodes)\n",
            ct, gain_q16, strength,
-           REGTRACE_T23_LSC_SC2336_LUT_NUM / 3U);
+           regtrace_t23_source_lsc_lut_num / 3U);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000021d44 origin=model_output original=tiziano_lsc_init */
 int32_t tiziano_lsc_init(uint32_t arg1, uint32_t arg2)
 {
-    regtrace_t23_source_lsc_initialize_tables();
+    int ret = regtrace_t23_source_lsc_initialize_tables();
+
+    if (ret)
+        return ret;
     if (!tmp_space) {
         tmp_space = (uintptr_t)private_vmalloc(0x190U);
         if (!tmp_space)
             return -ENOMEM;
     }
     system_reg_write(0x3800U,
-        (REGTRACE_T23_LSC_SC2336_MESH_HEIGHT << 16) |
-        REGTRACE_T23_LSC_SC2336_MESH_WIDTH);
+        (regtrace_t23_source_lsc_mesh_height << 16) |
+        regtrace_t23_source_lsc_mesh_width);
     system_reg_write(0x3804U,
-        (REGTRACE_T23_LSC_SC2336_LUT_STRIDE << 16) |
-        (REGTRACE_T23_LSC_SC2336_MEAN_ENABLE << 15) |
-        REGTRACE_T23_LSC_SC2336_MESH_SCALE);
+        (regtrace_t23_source_lsc_lut_stride << 16) |
+        (regtrace_t23_source_lsc_mean_enable << 15) |
+        regtrace_t23_source_lsc_mesh_scale);
     regtrace_t23_source_lsc_runtime_ct = regtrace_t23_source_lsc_ct;
     regtrace_t23_source_lsc_update_pending = true;
     lsc_last_str = 0;
@@ -51120,25 +51496,27 @@ int32_t tisp_lsc_mirror_flip(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3,
     (void)a0;
     if (!a1 || !a2 || a3 > 1U || arg4 > 1U)
         return -EINVAL;
+    ret = regtrace_t23_source_lsc_initialize_tables();
+    if (ret)
+        return ret;
 
-    rows = a2 / REGTRACE_T23_LSC_SC2336_MESH_HEIGHT + 1U;
-    if (a2 % REGTRACE_T23_LSC_SC2336_MESH_HEIGHT)
+    rows = a2 / regtrace_t23_source_lsc_mesh_height + 1U;
+    if (a2 % regtrace_t23_source_lsc_mesh_height)
         rows++;
-    cols = a1 / REGTRACE_T23_LSC_SC2336_MESH_WIDTH + 1U;
-    if (a1 % REGTRACE_T23_LSC_SC2336_MESH_WIDTH)
+    cols = a1 / regtrace_t23_source_lsc_mesh_width + 1U;
+    if (a1 % regtrace_t23_source_lsc_mesh_width)
         cols++;
     cols_padded = cols + (cols & 1U);
 
     ret = tisp_lsc_lut_valid_judge(
-        a2, a1, REGTRACE_T23_LSC_SC2336_MESH_HEIGHT,
-        REGTRACE_T23_LSC_SC2336_MESH_WIDTH,
-        REGTRACE_T23_LSC_SC2336_LUT_STRIDE);
+        a2, a1, regtrace_t23_source_lsc_mesh_height,
+        regtrace_t23_source_lsc_mesh_width,
+        regtrace_t23_source_lsc_lut_stride);
     if (ret < 0)
         return ret;
     if (system_reg_read(0xcU) & BIT(6))
         return 0;
 
-    regtrace_t23_source_lsc_initialize_tables();
     if ((uint32_t)last_status_flip_en != a3) {
         ret = tisp_lsc_upside_down_lut(a_lut, rows, cols_padded);
         if (ret)
@@ -55269,15 +55647,18 @@ void tiziano_bcsh_params_refresh(void)
     int ret;
 
     params = private_vmalloc(REGTRACE_T23_BCSH_TUNING_SIZE);
-    if (!params)
+    if (!params) {
+        regtrace_t23_source_bcsh_tuning_status = -ENOMEM;
         return;
+    }
     ret = regtrace_t23_read_tuning_data(REGTRACE_T23_BCSH_TUNING_OFFSET,
                                         params,
                                         REGTRACE_T23_BCSH_TUNING_SIZE);
     if (ret) {
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: BCSH tuning refresh failed path=%s ret=%d; keeping embedded defaults\n",
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: BCSH tuning refresh failed path=%s ret=%d\n",
                regtrace_t23_source_core_tuning_path, ret);
+        regtrace_t23_source_bcsh_tuning_status = ret;
         private_vfree(params);
         return;
     }
@@ -55328,6 +55709,7 @@ void tiziano_bcsh_params_refresh(void)
     memcpy(MinvMatrix, params + 0x3e4, 0x24);
     memcpy(tisp_BCSH_au32clip2, params + 0x408, 0x10);
     private_vfree(params);
+    regtrace_t23_source_bcsh_tuning_status = 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000027094 origin=model_output original=tiziano_bcsh_dn_params_refresh */
@@ -55377,6 +55759,8 @@ int32_t tiziano_bcsh_init(void)
     regtrace_t23_bcsh_ct = 3187U;
     BCSH_real = 1;
     tiziano_bcsh_params_refresh();
+    if (regtrace_t23_source_bcsh_tuning_status)
+        return regtrace_t23_source_bcsh_tuning_status;
     tiziano_bcsh_Tccm_Comp2Orig();
     return tiziano_bcsh_update();
 }
@@ -56596,8 +56980,7 @@ tisp_s_dpc_str_internal0x11c:
 int32_t tiziano_dpc_params_refresh(void)
 {
     unsigned char file_params[REGTRACE_T23_DPC_TUNING_SIZE];
-    const unsigned char *params =
-        (const unsigned char *)&tparams + 0x1ebb8U;
+    const unsigned char *params = file_params;
     uint32_t *local_10 = 0;
     uint32_t *local_14 = 0;
     uint32_t *a0 = 0;
@@ -56606,10 +56989,12 @@ int32_t tiziano_dpc_params_refresh(void)
     uint32_t ra = 0;
     uint32_t *s0 = 0;
     uintptr_t *v0 = 0;
+    int ret;
 
-    if (!regtrace_t23_read_tuning_data(REGTRACE_T23_DPC_TUNING_OFFSET,
-                                       file_params, sizeof(file_params)))
-        params = file_params;
+    ret = regtrace_t23_read_tuning_data(REGTRACE_T23_DPC_TUNING_OFFSET,
+                                        file_params, sizeof(file_params));
+    if (ret)
+        return ret;
 
     /* fragment 0: Prologue */
     /* function prologue: stack frame and callee-saved register setup */
@@ -56722,9 +57107,13 @@ int32_t tiziano_dpc_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000298f4 origin=fragment_seed original=tiziano_dpc_init */
 int tiziano_dpc_init(void)
 {
+    int ret;
+
 	tisp_dpc_wdr_en(0);
 	regtrace_t23_dpc_gain_old = 0xffffffffU;
-	tiziano_dpc_params_refresh();
+	ret = tiziano_dpc_params_refresh();
+	if (ret)
+		return ret;
 	if (regtrace_t23_source_dpc_tuning_init) {
 		tisp_dpc_par_refresh(0x10000U, 0x10000U, 1);
 		printk(KERN_WARNING
@@ -56849,17 +57238,18 @@ int32_t tisp_ydns_gain_update(uint32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000029da8 origin=model_output original=tiziano_ydns_params_refresh */
 int32_t tiziano_ydns_params_refresh(void)
 {
-    struct regtrace_t23_ydns_tuning_image tuning =
-        regtrace_t23_ydns_sc2336;
+    struct regtrace_t23_ydns_tuning_image tuning;
     int ret;
 
     BUILD_BUG_ON(sizeof(tuning) != 0x1fcU);
     ret = regtrace_t23_read_tuning_data(
         REGTRACE_T23_YDNS_TUNING_FILE_OFFSET, &tuning, sizeof(tuning));
-    if (ret)
-        printk(KERN_WARNING
-               "tx_isp_t23_recovered: source YDNS tuning read failed ret=%d; using embedded SC2336 image\n",
+    if (ret) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: source YDNS tuning read failed ret=%d\n",
                ret);
+        return ret;
+    }
 
     ydns_edge_out_array = tuning.edge_out;
     memcpy(ydns_mv_thres0_array, tuning.mv_thres0,
@@ -56907,7 +57297,9 @@ int32_t tiziano_ydns_init(void)
     int ret;
 
     ydns_gain_old = 0xffffffffU;
-    tiziano_ydns_params_refresh();
+    ret = tiziano_ydns_params_refresh();
+    if (ret)
+        return ret;
     ret = tisp_ydns_par_refresh(0x10000U);
     printk(KERN_WARNING
            "tx_isp_t23_recovered: source YDNS initialized ret=%d regs=%08x/%08x/%08x/%08x\n",
@@ -77735,16 +78127,23 @@ tiziano_ae_para_addr0x238:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000499bc origin=fragment_seed original=tiziano_ae_init_exp_th */
 int32_t tiziano_ae_init_exp_th(void)
 {
+    const struct regtrace_t23_ae_hlil_rung *rungs =
+        regtrace_t23_ae_hlil_rungs;
     uint32_t i;
 
-    for (i = 0; i < REGTRACE_T23_AE_HLIL_STATE_COUNT; ++i) {
-        uint32_t integration = regtrace_t23_ae_hlil_rungs[i].packed & 0xffffU;
+    if (!REGTRACE_T23_AE_HLIL_STATE_COUNT)
+        return -ENODEV;
 
-        if (integration < 2U || integration > 0x59cU) {
+    for (i = 0; i < REGTRACE_T23_AE_HLIL_STATE_COUNT; ++i) {
+        uint32_t integration = rungs[i].packed & 0xffffU;
+
+        if (integration < regtrace_t23_source_sensor_min_it ||
+            integration > regtrace_t23_source_sensor_max_it) {
             regtrace_t23_source_ae_hlil_status = ERANGE;
             printk(KERN_ERR
-                   "tx_isp_t23_recovered: source AE rung %u integration %u outside SC2336 limits\n",
-                   i, integration);
+                   "tx_isp_t23_recovered: source AE rung %u integration %u outside sensor limits %u..%u\n",
+                   i, integration, regtrace_t23_source_sensor_min_it,
+                   regtrace_t23_source_sensor_max_it);
             return -ERANGE;
         }
     }
@@ -83922,15 +84321,15 @@ int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1)
 
     (void)a1;
     sp_d_w = tisp_simple_intp(gain_index, gain_fraction,
-                              (void *)regtrace_t23_dmsc_sp_d_w_curve);
+                              (void *)dmsc_sp_d_w_sp_stren_array);
     sp_d_b = tisp_simple_intp(gain_index, gain_fraction,
-                              (void *)regtrace_t23_dmsc_sp_d_b_curve);
+                              (void *)dmsc_sp_d_b_sp_stren_array);
     sp_ud_w = tisp_simple_intp(gain_index, gain_fraction,
-                               (void *)regtrace_t23_dmsc_sp_ud_w_curve);
+                               (void *)dmsc_sp_ud_w_sp_stren_array);
     sp_ud_b = tisp_simple_intp(gain_index, gain_fraction,
-                               (void *)regtrace_t23_dmsc_sp_ud_b_curve);
+                               (void *)dmsc_sp_ud_b_sp_stren_array);
     uu_stren = tisp_simple_intp(gain_index, gain_fraction,
-                                (void *)regtrace_t23_dmsc_uu_stren_curve);
+                                (void *)dmsc_uu_stren_array);
 
     if (sharpness >= 0x81U) {
         uint32_t scale = sharpness - 0x80U;
@@ -84000,34 +84399,12 @@ int32_t tiziano_dmsc_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000564e4 origin=fragment_seed original=tiziano_dmsc_init */
 int32_t tiziano_dmsc_init(void)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a0 = 0;
-    uint32_t *a1 = 0;
-    uint32_t *a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-    uint32_t v1 = 0;
+    int ret = tiziano_dmsc_params_refresh();
 
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tiziano_dmsc_params_refresh)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    *(uint32_t *)((char *)((char *)&tparams + 0x3930)) = (-1);
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uint32_t *)tisp_dmsc_par_refresh)(65536, 65536, 1); /* jalr target resolved by relocation */
-
-    /* fragment 3: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 4: Arithmetic */
-    v0 = 0;
-
-    /* fragment 5: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    if (ret)
+        return ret;
+    *(uint32_t *)((char *)&tparams + 0x3930) = 0xffffffffU;
+    return tisp_dmsc_par_refresh(0x10000U, 0x10000U, 1U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056530 origin=fragment_seed original=tisp_dmsc_sharpness_get */
@@ -90149,6 +90526,8 @@ void tiziano_mdns_dn_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000644e4 origin=fragment_seed original=tiziano_mdns_init */
 int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2)
 {
+    int ret;
+
     regtrace_t23_mdns_frame_width = arg1;
     regtrace_t23_mdns_frame_height = arg2;
     *(uint32_t *)((char *)((char *)&mdns_y_sad_ave_thres_array_now)) = (uint32_t)&mdns_y_sad_ave_thres_array;
@@ -90229,7 +90608,9 @@ int32_t tiziano_mdns_init(uint32_t arg1, uint32_t arg2)
     regtrace_t23_source_mdns_gain_old = 0xffffffffU;
     *(uint32_t *)((char *)&get_clk_name + 19064) = arg1;
     *(uint32_t *)((char *)&get_clk_name + 19060) = arg2;
-    tiziano_mdns_params_refresh();
+    ret = tiziano_mdns_params_refresh();
+    if (ret)
+        return ret;
     regtrace_t23_source_mdns_initialized = true;
     tisp_mdns_par_refresh(regtrace_t23_dmsc_gain_q16, 0x10000U);
     tisp_mdns_bypass(!regtrace_t23_source_park_uninitialized_mdns &&
@@ -90632,15 +91013,9 @@ int32_t tisp_flip_enable(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000655f8 origin=fragment_seed original=tisp_set_fps */
 uint32_t tisp_set_fps(uint32_t a0, uint32_t a1)
 {
-    unsigned char *attr;
     uint32_t numerator = a1 >> 16;
     uint32_t denominator = a1 & 0xffffU;
     uint32_t fps_q8;
-    uint32_t hts;
-    uint32_t vts;
-    uint32_t total_height;
-    uint32_t max_integration;
-    uint8_t value;
     int ret;
 
     (void)a0;
@@ -90651,55 +91026,15 @@ uint32_t tisp_set_fps(uint32_t a0, uint32_t a1)
     if (fps_q8 < (5U << 8) || fps_q8 > (30U << 8))
         return (uint32_t)-ERANGE;
 
-    ret = regtrace_t23_sensor_read_u8(0x320cU, &value);
+    ret = regtrace_t23_call_sensor_ioctl(REGTRACE_TX_ISP_EVENT_SENSOR_FPS,
+                                         &a1);
     if (ret)
         return (uint32_t)ret;
-    hts = (uint32_t)value << 8;
-    ret = regtrace_t23_sensor_read_u8(0x320dU, &value);
-    if (ret)
-        return (uint32_t)ret;
-    hts |= value;
-    if (!hts)
-        return (uint32_t)-EIO;
-
-    vts = (81000000U / hts) * denominator / numerator;
-    if (vts < 5U || vts > 0xffffU)
-        return (uint32_t)-ERANGE;
-    ret = regtrace_t23_sensor_write_u8(0x320fU, vts & 0xffU);
-    if (!ret)
-        ret = regtrace_t23_sensor_write_u8(0x320eU, vts >> 8);
-    if (ret)
-        return (uint32_t)ret;
-
-    max_integration = vts - 4U;
-    attr = regtrace_t23_sensor_owned_attr();
-    if (attr) {
-        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_MAX_IT_NATIVE,
-                              max_integration);
-        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_IT_LIMIT,
-                              max_integration);
-        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_TOTAL_HEIGHT, vts);
-        regtrace_t23_put_le16(attr + REGTRACE_T23_ATTR_MAX_IT,
-                              max_integration);
-    }
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
-                          REGTRACE_T23_ATTR_MAX_IT_NATIVE, max_integration);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
-                          REGTRACE_T23_ATTR_IT_LIMIT, max_integration);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
-                          REGTRACE_T23_ATTR_TOTAL_HEIGHT, vts);
-    regtrace_t23_put_le16(regtrace_t23_sc2336_attr +
-                          REGTRACE_T23_ATTR_MAX_IT, max_integration);
 
     regtrace_t23_seed_sensor_caches("tisp-set-fps");
-    attr = regtrace_t23_sensor_owned_attr();
-    if (!attr)
-        attr = regtrace_t23_sc2336_attr;
-    total_height = *(uint16_t *)(attr + REGTRACE_T23_ATTR_TOTAL_HEIGHT);
-    max_integration = *(uint16_t *)(attr + REGTRACE_T23_ATTR_MAX_IT);
     printk(KERN_INFO
-           "tx_isp_t23_recovered: sensor fps=%u/%u hts=%u vts=%u total_height=%u max_it=%u\n",
-           numerator, denominator, hts, vts, total_height, max_integration);
+           "tx_isp_t23_recovered: sensor fps=%u/%u applied through sensor event\n",
+           numerator, denominator);
     return 0;
 }
 
