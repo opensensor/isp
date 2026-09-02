@@ -2078,6 +2078,24 @@ static unsigned char __attribute__((aligned(4))) msca_ch_work[4] = {
 };
 static uintptr_t fcrop_en;
 static uintptr_t csc_version_now;
+static const int32_t regtrace_t23_csc_presets[4][15] = {
+    { 0x132, 0x259, 0x075, -0x0ad, -0x153, 0x200, 0x200, -0x1ad,
+      -0x053, 0x00, 0x80, 0x00, 0xff, 0x00, 0xff },
+    { 0x106, 0x203, 0x064, -0x097, -0x129, 0x1c0, 0x1c0, -0x178,
+      -0x049, 0x10, 0x80, 0x10, 0xeb, 0x10, 0xf0 },
+    { 0x0da, 0x2dc, 0x04a, -0x075, -0x18b, 0x200, 0x200, -0x1d1,
+      -0x02f, 0x00, 0x80, 0x00, 0xff, 0x00, 0xff },
+    { 0x0ba, 0x273, 0x03f, -0x067, -0x15a, 0x1c0, 0x1c0, -0x197,
+      -0x029, 0x10, 0x80, 0x10, 0xeb, 0x10, 0xf0 },
+};
+static int32_t regtrace_t23_csc_manual[15] = {
+    0x132, 0x259, 0x075, -0x0ad, -0x153, 0x200, 0x200, -0x1ad,
+    -0x053, 0x00, 0x80, 0x00, 0xff, 0x00, 0xff,
+};
+static int32_t regtrace_t23_csc_current[15] = {
+    0x132, 0x259, 0x075, -0x0ad, -0x153, 0x200, 0x200, -0x1ad,
+    -0x053, 0x00, 0x80, 0x00, 0xff, 0x00, 0xff,
+};
 static uint16_t *tiziano_gamma_lut_now;
 static uint16_t tiziano_gamma_lut[129] __attribute__((aligned(4)));
 static uint16_t tiziano_gamma_lut_wdr[129] __attribute__((aligned(4)));
@@ -6395,7 +6413,8 @@ static unsigned char dmsc_uu_stren_array[36];
 static unsigned char dmsc_uu_thres_array[36];
 static unsigned char dmsc_win5_hv_edge_thres_1_array[36];
 static unsigned char dmsc_win5_hv_edge_thres_2_array[36];
-static uintptr_t (*data_98930)();
+/* OEM .data state: last DMSC total gain, not part of the tuning object. */
+static uint32_t regtrace_t23_dmsc_gain_old = 0xffffffffU;
 static uintptr_t mdns_y_sf_cur_en_array;
 static uintptr_t mdns_y_sf_ref_en_array;
 static uintptr_t mdns_y_filter_en_array;
@@ -13652,6 +13671,43 @@ static void regtrace_t23_source_csccr_write_init(void)
            "tx_isp_t23_recovered: source CSCCR mode-0 parameters committed\n");
 }
 
+static uint32_t regtrace_t23_csc_abs10(int32_t value)
+{
+    return (uint32_t)(value < 0 ? -value : value) & 0x3ffU;
+}
+
+static uint32_t regtrace_t23_csc_pack_triplet(int32_t c0, int32_t c1,
+                                              int32_t c2)
+{
+    return regtrace_t23_csc_abs10(c0) |
+           (regtrace_t23_csc_abs10(c1) << 10) |
+           (regtrace_t23_csc_abs10(c2) << 20);
+}
+
+static void regtrace_t23_csc_write_current(void)
+{
+    const int32_t *preset = regtrace_t23_csc_current;
+
+    /* OEM T23 mode 0: BT.601 full-range RGB-to-YUV conversion. */
+    system_reg_write(0x6000U, 0x1fU);
+    system_reg_write(0x6004U, 0);
+    system_reg_write(0x6010U,
+                     regtrace_t23_csc_pack_triplet(preset[0], preset[1],
+                                                    preset[2]));
+    system_reg_write(0x6014U,
+                     regtrace_t23_csc_pack_triplet(preset[3], preset[4],
+                                                    preset[5]));
+    system_reg_write(0x6018U,
+                     regtrace_t23_csc_pack_triplet(preset[6], preset[7],
+                                                    preset[8]));
+    system_reg_write(0x6020U, ((uint32_t)preset[9] & 0xffU) |
+                              (((uint32_t)preset[10] & 0xffU) << 8));
+    system_reg_write(0x6030U, ((uint32_t)preset[11] & 0xffU) |
+                              (((uint32_t)preset[12] & 0xffU) << 8) |
+                              (((uint32_t)preset[13] & 0xffU) << 16) |
+                              (((uint32_t)preset[14] & 0xffU) << 24));
+}
+
 static int regtrace_t23_source_hldc_write_tuning_startup(void)
 {
     int ret;
@@ -13995,6 +14051,10 @@ static int regtrace_t23_source_core_set_stream(int enable,
     }
     if (regtrace_t23_source_bcsh_neutral)
         regtrace_t23_source_bcsh_write_neutral();
+    memcpy(regtrace_t23_csc_current, regtrace_t23_csc_presets[0],
+           sizeof(regtrace_t23_csc_current));
+    csc_version_now = 0;
+    regtrace_t23_csc_write_current();
     if (regtrace_t23_source_csccr_init)
         regtrace_t23_source_csccr_write_init();
     if (regtrace_t23_source_awb_stats_init)
@@ -15605,7 +15665,8 @@ int32_t tisp_msca_api_set_fcrop(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t 
 int32_t tisp_msca_api_set_scaler_level_control(uint32_t a0, uintptr_t a1, uint32_t a2);
 int tisp_set_csc_version(uint32_t a0, uint32_t a1);
 int32_t tisp_set_user_csc(uint32_t a0, uint32_t a1);
-int32_t tisp_get_current_csc(int32_t arg1, uint32_t *arg2);
+int32_t tisp_get_current_csc(int32_t arg1, uint32_t *version,
+                             int32_t *params);
 int32_t tiziano_gamma_lut_parameter(void);
 int32_t tiziano_gamma_params_refresh(void);
 int tisp_gamma_wdr_en(int enable);
@@ -44245,119 +44306,19 @@ int32_t tisp_msca_api_set_scaler_level_control(uint32_t a0, uintptr_t a1, uint32
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b6a0 origin=fragment_seed original=tisp_set_csc_version */
 int tisp_set_csc_version(uint32_t a0, uint32_t a1)
 {
-    uint32_t *a2 = a1 & 0xff;
-    uint32_t *jump_table = (uint32_t *)((char *)((char *)&tparams + 0xf0));
-    uint32_t *dest = (uint32_t *)((char *)&ivdc_threshold_line);
-    uint32_t *s0 = dest;
-    uint32_t *s2 = dest;
-    void (*memcpy_fn)(void *, const void *, uint32_t) = memcpy;
-    void (*system_reg_write_fn)(uint32_t, uint32_t) = system_reg_write;
-    int (*isp_printf_fn)(uint32_t, const char *, ...) = isp_printf;
+    uint32_t version = a1 & 0xffU;
+    const int32_t *preset;
 
-    if (a2 >= 5) {
-        isp_printf_fn(2, " [CSC] Input csc-version is error !!!", a2);
-        return -1;
-    }
+    (void)a0;
 
-    // Build jump table entry address
-    uint32_t table_addr = (uint32_t)((char *)&tparams + 0xf0) + ((uintptr_t)a2 << 2);
-    uint32_t handler = *(uint32_t *)table_addr;
-
-    // Save return address and set up stack frame
-    uint32_t ra = __builtin_return_address(0);
-
-    // Indirect jump to case handler
-    // We need to simulate the indirect jump with a computed goto or switch
-    // Since we can't do indirect jumps in C, we'll use a switch on the handler offset
-    
-    // Case 0: handler at 0x1b6e8
-    // Case 1: handler at 0x1b700
-    // Case 2: handler at 0x1b718
-    // Case 3: handler at 0x1b730
-    // Case 4: handler at 0x1b748
-    
-    // Instead of indirect jump, replicate the logic inline
-    switch ((uintptr_t)a2) {
-    case 0:
-        memcpy_fn(&ivdc_threshold_line, &sclk_name, 60);
-        csc_version_now = 0;
-        goto after_switch;
-    case 1:
-        csc_version_now = 0;
-        memcpy_fn(&ivdc_threshold_line, (void *)((char *)&sclk_name - 25868 + 4336), 60);
-        goto set_version;
-    case 2:
-        csc_version_now = 1;
-        memcpy_fn(&ivdc_threshold_line, (void *)((char *)&sclk_name - 25928 + 4336), 60);
-        goto set_version;
-    case 3:
-        csc_version_now = 2;
-        memcpy_fn(&ivdc_threshold_line, (void *)((char *)&sclk_name - 25988 + 4336), 60);
-        goto set_version;
-    case 4:
-        csc_version_now = 3;
-        memcpy_fn(&ivdc_threshold_line, (void *)((char *)&sclk_name - 26048 + 4336), 60);
-        csc_version_now = 4;
-        goto set_version;
-    }
-
-set_version:
-    *(uint32_t *)((char *)s0 + 20028) = csc_version_now;
-
-after_switch:
-    system_reg_write_fn(24576, 31);
-    system_reg_write_fn(24580, 0);
-
-    // Compute first system_reg_write argument
-    uint32_t v0_3 = *(uint32_t *)((char *)s0 + 4);
-    uint32_t a0_val = *(uint32_t *)((char *)s0 + 8);
-    int32_t v1_2 = (int32_t)v0_3 >> 31;
-    int32_t v0_7 = (int32_t)a0_val >> 31;
-    uint32_t csc_param_current_1 = *(uint32_t *)((char *)s0 + 19968);
-    int32_t a1_val = (int32_t)csc_param_current_1 >> 31;
-    
-    uint32_t part1 = (((v1_2 ^ v0_3) - v1_2) & 0x3ff) << 10;
-    uint32_t part2 = (((v0_7 ^ a0_val) - v0_7) & 0x3ff) << 20;
-    uint32_t part3 = (((a1_val ^ csc_param_current_1) - a1_val) & 0x3ff);
-    system_reg_write_fn(24592, part1 | part2 | part3);
-
-    // Second system_reg_write
-    uint32_t v0_12 = *(uint32_t *)((char *)s0 + 16);
-    uint32_t a0_2 = *(uint32_t *)((char *)s0 + 20);
-    int32_t v1_5 = (int32_t)v0_12 >> 31;
-    int32_t v0_16 = (int32_t)a0_2 >> 31;
-    uint32_t v1_7 = *(uint32_t *)((char *)s0 + 12);
-    int32_t a1_4 = (int32_t)v1_7 >> 31;
-    
-    uint32_t part1b = (((v1_5 ^ v0_12) - v1_5) & 0x3ff) << 10;
-    uint32_t part2b = (((v0_16 ^ a0_2) - v0_16) & 0x3ff) << 20;
-    uint32_t part3b = (((a1_4 ^ v1_7) - a1_4) & 0x3ff);
-    system_reg_write_fn(24596, part1b | part2b | part3b);
-
-    // Third system_reg_write
-    uint32_t v0_21 = *(uint32_t *)((char *)s0 + 28);
-    uint32_t a0_4 = *(uint32_t *)((char *)s0 + 32);
-    int32_t v1_9 = (int32_t)v0_21 >> 31;
-    int32_t v0_25 = (int32_t)a0_4 >> 31;
-    uint32_t v1_11 = *(uint32_t *)((char *)s0 + 24);
-    int32_t a1_8 = (int32_t)v1_11 >> 31;
-    
-    uint32_t part1c = (((v1_9 ^ v0_21) - v1_9) & 0x3ff) << 10;
-    uint32_t part2c = (((v0_25 ^ a0_4) - v0_25) & 0x3ff) << 20;
-    uint32_t part3c = (((a1_8 ^ v1_11) - a1_8) & 0x3ff);
-    system_reg_write_fn(24600, part1c | part2c | part3c);
-
-    // Fourth system_reg_write
-    uint32_t val_40 = *(uint32_t *)((char *)s0 + 40);
-    uint8_t val_36 = *(uint8_t *)((char *)s0 + 36);
-    system_reg_write_fn(24608, ((val_40 << 8) & 0xffff) | val_36);
-
-    // Fifth system_reg_write
-    uint8_t val_52 = *(uint8_t *)((char *)s0 + 52);
-    uint32_t val_48 = *(uint32_t *)((char *)s0 + 48);
-    uint32_t val_56 = *(uint32_t *)((char *)s0 + 56);
-    uint8_t val_44 = *(uint8_t *)((char *)s0 + 44);
-    system_reg_write_fn(24624, val_52 | (val_48 << 24) | ((val_56 << 8) & 0xffff) | (val_44 << 16));
+    if (version >= 5U)
+        return -EINVAL;
+    preset = version == 4U ? regtrace_t23_csc_manual :
+                             regtrace_t23_csc_presets[version];
+    memcpy(regtrace_t23_csc_current, preset,
+           sizeof(regtrace_t23_csc_current));
+    csc_version_now = version;
+    regtrace_t23_csc_write_current();
 
     return 1;
 }
@@ -44365,15 +44326,22 @@ after_switch:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b914 origin=fragment_seed original=tisp_set_user_csc */
 int32_t tisp_set_user_csc(uint32_t a0, uint32_t a1)
 {
-    /* one-off compile triage stub for malformed recovered body */
-    return 0;
+    if (!a1)
+        return -EINVAL;
+    memcpy(regtrace_t23_csc_manual, (const void *)(uintptr_t)a1,
+           sizeof(regtrace_t23_csc_manual));
+    return tisp_set_csc_version(a0, 4U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b95c origin=model_output original=tisp_get_current_csc */
-int32_t tisp_get_current_csc(int32_t arg1, uint32_t *arg2) {
-    int32_t val = csc_version_now;
-    *arg2 = val;
-    return memcpy(arg2, (void *)arg1, 60);
+int32_t tisp_get_current_csc(int32_t arg1, uint32_t *version,
+                             int32_t *params)
+{
+    (void)arg1;
+    *version = (uint32_t)csc_version_now;
+    memcpy(params, regtrace_t23_csc_current,
+           sizeof(regtrace_t23_csc_current));
+    return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001b990 origin=fragment_seed original=tiziano_gamma_lut_parameter */
@@ -82725,7 +82693,7 @@ int32_t tisp_dmsc_ref_reg_cfg(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005005c origin=fragment_seed original=tisp_dmsc_intp */
 int32_t tisp_dmsc_intp(uint32_t a0)
 {
-    uint32_t gain_q16 = a0 ? a0 : 0x10000U;
+    uint32_t gain_q16 = a0;
     uint32_t gain_index = gain_q16 >> 16;
     uint32_t gain_fraction = gain_q16 & 0xffffU;
 
@@ -82750,64 +82718,32 @@ int32_t tisp_dmsc_all_reg_refresh(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000051948 origin=fragment_seed original=tisp_dmsc_intp_reg_refresh */
 int32_t tisp_dmsc_intp_reg_refresh(uint32_t a0)
 {
-    uint32_t *local_14 = 0;
-    uint32_t *a1 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dmsc_intp)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_dmsc_ref_reg_cfg)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    v0 = (uintptr_t *)((uintptr_t (*)(uintptr_t, uintptr_t))(uint32_t *)system_reg_write)(18844, 1); /* jalr target resolved by relocation */
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    v0 = 0;
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    tisp_dmsc_intp(a0);
+    tisp_dmsc_ref_reg_cfg();
+    system_reg_write(0x499cU, 1U);
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000051994 origin=fragment_seed original=tisp_dmsc_par_refresh */
 int32_t tisp_dmsc_par_refresh(uint32_t arg1, uint32_t arg2, uint32_t arg3)
 {
-    uint32_t *v0;
-    uint32_t *s0;
     uint32_t diff;
-    uint32_t cmp;
 
-    v0 = data_98930;
-    s0 = arg3;
-
-    if (v0 != 0xffffffff) {
-        diff = arg1 - (uintptr_t)v0;
-        cmp = arg1 < v0;
-        if (cmp) {
-            diff = v0 - arg1;
-        }
-        if (diff < arg2) {
-            data_98930 = (uintptr_t (*)())(uintptr_t)arg1;
-            ((uintptr_t (*)(uintptr_t, uintptr_t))tisp_dmsc_intp_reg_refresh)((uintptr_t)(arg1), (uintptr_t)(arg2));
-        }
+    if (regtrace_t23_dmsc_gain_old == 0xffffffffU) {
+        regtrace_t23_dmsc_gain_old = arg1;
+        tisp_dmsc_all_reg_refresh(arg1);
     } else {
-        data_98930 = (uintptr_t (*)())(uintptr_t)arg1;
-        tisp_dmsc_all_reg_refresh(0);
+        diff = arg1 >= regtrace_t23_dmsc_gain_old ?
+            arg1 - regtrace_t23_dmsc_gain_old :
+            regtrace_t23_dmsc_gain_old - arg1;
+        if (diff >= arg2) {
+            regtrace_t23_dmsc_gain_old = arg1;
+            tisp_dmsc_intp_reg_refresh(arg1);
+        }
     }
 
-    if (s0 == 1) {
-        system_reg_write(0x499c, 1);
-    }
+    if (arg3 == 1U)
+        system_reg_write(0x499cU, 1U);
 
     return 0;
 }
@@ -84630,7 +84566,7 @@ int tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1)
     system_reg_write(0x4808U, (value & ~0x1ffffU) | (uu_stren & 0x1ffffU));
     system_reg_write(0x4848U, (sp_d_w << 16) | (sp_d_b & 0xffffU));
     system_reg_write(0x4860U, (sp_ud_w << 16) | (sp_ud_b & 0xffffU));
-    tparams[0x3934] = sharpness;
+    regtrace_t23_source_dmsc_sharpness = sharpness;
     return system_reg_write(0x499cU, 1U);
 }
 
@@ -84662,7 +84598,7 @@ int32_t tiziano_dmsc_params_refresh(void)
 #undef REGTRACE_T23_DMSC_COPY_FIELD
 
     private_vfree(params);
-    sharpness = tparams[0x3934];
+    sharpness = regtrace_t23_source_dmsc_sharpness;
     if (sharpness != 0x80U)
         tisp_dmsc_sharpness_set(sharpness, 0);
     return 0;
@@ -84670,9 +84606,11 @@ int32_t tiziano_dmsc_params_refresh(void)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000564a4 origin=fragment_seed original=tiziano_dmsc_dn_params_refresh */
 int32_t tiziano_dmsc_dn_params_refresh(void)
 {
-	tiziano_dmsc_params_refresh();
-	tisp_dmsc_all_reg_refresh(*(int32_t *)((char *)&tparams + 0x23930));
-	return 0;
+	int ret = tiziano_dmsc_params_refresh();
+
+	if (ret)
+		return ret;
+	return tisp_dmsc_all_reg_refresh(regtrace_t23_dmsc_gain_old);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000564e4 origin=fragment_seed original=tiziano_dmsc_init */
@@ -84682,26 +84620,14 @@ int32_t tiziano_dmsc_init(void)
 
     if (ret)
         return ret;
-    *(uint32_t *)((char *)&tparams + 0x3930) = 0xffffffffU;
+    regtrace_t23_dmsc_gain_old = 0xffffffffU;
     return tisp_dmsc_par_refresh(0x10000U, 0x10000U, 1U);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056530 origin=fragment_seed original=tisp_dmsc_sharpness_get */
 uint32_t tisp_dmsc_sharpness_get(void)
 {
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (uintptr_t *)&sclk_name;
-
-    /* fragment 1: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 2: MemoryAccess */
-    v0 = *(uint8_t *)((char *)((char *)&tparams + 0x3934));
-
-    return (uint32_t)v0;
+    return regtrace_t23_source_dmsc_sharpness & 0xffU;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056540 origin=model_output original=tisp_mdns_top_func_cfg */
@@ -93432,7 +93358,7 @@ int32_t tisp_set_csc_attr(int32_t arg1, int32_t *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000067614 origin=model_output original=tisp_get_csc_attr */
 int32_t tisp_get_csc_attr(int32_t arg1, uint32_t *arg2)
 {
-	((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))tisp_get_current_csc)((uintptr_t)(arg1), (uintptr_t)(arg2), (uintptr_t)(&arg2[1]));
+	tisp_get_current_csc(arg1, arg2, (int32_t *)&arg2[1]);
 	return 0;
 }
 
