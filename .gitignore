@@ -3,6 +3,8 @@
 .roo/
 
 # Build artifacts
+__pycache__/
+*.py[cod]
 *.o
 *.ko
 *.cmd
