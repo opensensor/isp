@@ -746,6 +746,43 @@ int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int default_i2c_addr,
 }
 EXPORT_SYMBOL(tx_isp_sinfo_driver_add);
 
+int tx_isp_sinfo_get_driver(unsigned int index, char *name,
+			    unsigned int name_size,
+			    unsigned short *default_i2c_addr)
+{
+	unsigned int found = 0;
+	int i;
+	int ret = -ENOENT;
+
+	if (!name || !name_size || !tx_isp_sinfo_slots)
+		return -EINVAL;
+
+	mutex_lock(&tx_isp_sinfo_lock);
+	for (i = 0; i < TX_ISP_SINFO_MAX_SENSORS; ++i) {
+		struct tx_isp_sinfo_slot *slot = &tx_isp_sinfo_slots[i];
+		const char *driver_name;
+
+		if (!slot->used || !slot->drv)
+			continue;
+		if (found++ != index)
+			continue;
+
+		driver_name = slot->drv->driver.name;
+		if (!driver_name || !driver_name[0]) {
+			ret = -ENODEV;
+			break;
+		}
+		strlcpy(name, driver_name, name_size);
+		if (default_i2c_addr)
+			*default_i2c_addr = slot->default_i2c_addr;
+		ret = 0;
+		break;
+	}
+	mutex_unlock(&tx_isp_sinfo_lock);
+	return ret;
+}
+EXPORT_SYMBOL(tx_isp_sinfo_get_driver);
+
 void tx_isp_sinfo_driver_del(struct i2c_driver *drv)
 {
 	int i;

@@ -8,6 +8,7 @@
 #include "../include/tx_isp/tx_isp_subdev_abi.h"
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
+#include "../include/tx_isp/tx_isp_sinfo.h"
 #include "include/tx_isp_t23_mode.h"
 #include "tx_isp_t23_scaler.h"
 #include "tx_isp_t23_subdev.h"
@@ -850,6 +851,12 @@ static uintptr_t data_a8f60;
 static uintptr_t data_a8f64;
 static uintptr_t data_a8f68;
 static struct file_operations video_input_cmd_fops;
+static struct file_operations isp_vic_frd_fops;
+static int regtrace_t23_vic_proc_open(struct inode *inode, struct file *file);
+static int regtrace_t23_vic_proc_show(struct seq_file *seq, void *unused);
+static ssize_t regtrace_t23_vic_proc_write(struct file *file,
+                                           const char __user *buffer,
+                                           size_t count, loff_t *ppos);
 static unsigned char video_input_cmd_buf[128] = "null";
 static struct proc_dir_entry *regtrace_t23_isp_proc_root;
 static const char LC5[] = "The parameter is invalid!\n";
@@ -7687,7 +7694,6 @@ static unsigned char __attribute__((aligned(4))) ispcore_subdev_core_ops[40] = {
 /* WHOLE_DRIVER_RECOVERED_GLOBALS */
 static struct file_operations isp_csi_fops;
 static struct file_operations isp_framesource_fops;
-static struct file_operations isp_vic_frd_fops;
 static uintptr_t tisp_par_ioctl;
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static struct platform_driver tx_isp_vin_driver = {
@@ -9036,15 +9042,6 @@ int32_t tx_isp_module_init(uintptr_t a0, uintptr_t a1);
 int32_t tx_isp_module_deinit(uint32_t a0);
 int32_t tx_isp_subdev_init(uintptr_t a0, uintptr_t a1, uint32_t a2);
 int32_t tx_isp_subdev_deinit(uintptr_t arg1);
-struct i2c_driver;
-struct module;
-int tx_isp_sinfo_driver_add(struct i2c_driver *drv, int def_i2c_addr, struct module *owner);
-void tx_isp_sinfo_driver_del(struct i2c_driver *drv);
-int tx_isp_sinfo_sensor_bind(struct tx_isp_subdev *sd, struct module *owner);
-void tx_isp_sinfo_sensor_unbind(struct tx_isp_subdev *sd, struct module *owner);
-int tx_isp_sinfo_init(void);
-void tx_isp_sinfo_exit(void);
-
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 char __bss_start[4096];
 
@@ -9160,7 +9157,37 @@ long private_copy_from_user(void *to, const void __user *from, long size) { retu
 uintptr_t __divdi3(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3) { (void)a0; (void)a1; (void)a2; (void)a3; return 0; }
 uintptr_t __moddi3(uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t a3) { (void)a0; (void)a1; (void)a2; (void)a3; return 0; }
 void call_text_func(void) {}
-void get_isp_priv_mem(unsigned int *phyaddr, unsigned int *size) { if (phyaddr) *phyaddr = 0; if (size) *size = 0; }
+#define REGTRACE_T23_COMMON_IFACE_ISPMEM_OFFSET 476U
+#define REGTRACE_T23_COMMON_IFACE_FLAGS1_OFFSET 480U
+
+void get_isp_priv_mem(unsigned int *phyaddr, unsigned int *size)
+{
+    unsigned char *interfaces;
+    void (*getter)(unsigned int *, unsigned int *);
+
+    if (phyaddr)
+        *phyaddr = 0;
+    if (size)
+        *size = 0;
+    if (!phyaddr || !size)
+        return;
+
+    interfaces = get_driver_common_interfaces();
+    if (!interfaces)
+        return;
+    if (*(uint32_t *)(interfaces + 0) != (uint32_t)(uintptr_t)&printk ||
+        *(uint32_t *)(interfaces + REGTRACE_T23_COMMON_IFACE_FLAGS1_OFFSET) !=
+            (uint32_t)(uintptr_t)&printk) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: incompatible T23 common interface; ispmem unavailable\n");
+        return;
+    }
+
+    getter = *(void (**)(unsigned int *, unsigned int *))(
+        interfaces + REGTRACE_T23_COMMON_IFACE_ISPMEM_OFFSET);
+    if (getter)
+        getter(phyaddr, size);
+}
 static bool regtrace_t23_valid_ptr(uintptr_t ptr);
 static int regtrace_t23_remote_event_pointer_valid(unsigned long address)
 {
@@ -9426,6 +9453,12 @@ static int regtrace_t23_vin_proc_init(void)
 
     if (!proc_create("vin", 0644, regtrace_t23_isp_proc_root,
                      &video_input_cmd_fops)) {
+        remove_proc_subtree("jz/isp", NULL);
+        regtrace_t23_isp_proc_root = NULL;
+        return -ENOMEM;
+    }
+    if (!proc_create("isp-w02", 0644, regtrace_t23_isp_proc_root,
+                     &isp_vic_frd_fops)) {
         remove_proc_subtree("jz/isp", NULL);
         regtrace_t23_isp_proc_root = NULL;
         return -ENOMEM;
@@ -9712,6 +9745,8 @@ static bool regtrace_t23_direct_enable_clks = true;
 static uint regtrace_t23_source_sensor_fps;
 static uint regtrace_t23_csi_rate_override;
 static int regtrace_t23_sensor_i2c_adapter = 0;
+static uint regtrace_t23_snapraw_buffer_bytes = 4U * 1024U * 1024U;
+static uint regtrace_t23_snapraw_phys_addr;
 module_param_named(enable_irqs_on_streamon, regtrace_t23_enable_irqs_on_streamon, bool, 0644);
 module_param_named(log_framechan_payloads, regtrace_t23_log_framechan_payloads, bool, 0644);
 module_param_named(direct_msca_qbuf, regtrace_t23_direct_msca_qbuf, bool, 0644);
@@ -9958,6 +9993,14 @@ module_param_named(direct_enable_clks, regtrace_t23_direct_enable_clks, bool, 06
 module_param_named(source_sensor_fps, regtrace_t23_source_sensor_fps, uint, 0644);
 module_param_named(csi_rate_override, regtrace_t23_csi_rate_override, uint, 0644);
 module_param_named(sensor_i2c_adapter, regtrace_t23_sensor_i2c_adapter, int, 0644);
+module_param_named(snapraw_buffer_bytes,
+                   regtrace_t23_snapraw_buffer_bytes, uint, 0444);
+MODULE_PARM_DESC(snapraw_buffer_bytes,
+                 "bytes of DMA memory reserved at module load for snapraw");
+module_param_named(snapraw_phys_addr,
+                   regtrace_t23_snapraw_phys_addr, uint, 0444);
+MODULE_PARM_DESC(snapraw_phys_addr,
+                 "physical base of a caller-reserved snapraw DMA region");
 
 static unsigned char *regtrace_t23_vin_sd;
 static unsigned char *regtrace_t23_csi_sd;
@@ -9965,6 +10008,14 @@ static unsigned char *regtrace_t23_vic_sd;
 static unsigned char *regtrace_t23_core_sd;
 static unsigned char *regtrace_t23_fs_sd;
 static unsigned char *regtrace_t23_ivdc_sd;
+static struct device *regtrace_t23_vic_dma_device;
+static DEFINE_MUTEX(regtrace_t23_snapraw_lock);
+static DECLARE_COMPLETION(regtrace_t23_snapraw_done);
+static bool regtrace_t23_snapraw_active;
+static void *regtrace_t23_snapraw_buffer;
+static dma_addr_t regtrace_t23_snapraw_dma;
+static size_t regtrace_t23_snapraw_buffer_size;
+static bool regtrace_t23_snapraw_buffer_is_iomem;
 static unsigned char regtrace_t23_sc2336_attr[REGTRACE_T23_SENSOR_ATTR_SIZE] __attribute__((aligned(4)));
 static const char regtrace_t23_sc2336_name[] = "sc2336";
 static bool regtrace_t23_sensor_attr_ready;
@@ -9989,6 +10040,383 @@ struct regtrace_t23_core_dma_buf {
 
 static struct regtrace_t23_core_dma_buf
     regtrace_t23_core_dma_bufs[REGTRACE_T23_CORE_DMA_BUFS];
+
+struct regtrace_t23_snapraw_registers {
+    uint32_t control;
+    uint32_t size;
+    uint32_t enable;
+    uint32_t stride_y;
+    uint32_t stride_uv;
+    uint32_t irq_mask;
+    uint32_t y_bank[5];
+    uint32_t uv_bank[5];
+    uint32_t ch1_bank[5];
+};
+
+static int regtrace_t23_snapraw_buffer_alloc(void)
+{
+    struct device *device = regtrace_t23_vic_dma_device;
+    unsigned int private_phys = 0;
+    unsigned int private_size = 0;
+    unsigned int phys;
+    size_t size;
+
+    if (!regtrace_t23_snapraw_buffer_bytes)
+        return 0;
+    if (!device)
+        return -ENODEV;
+    if (regtrace_t23_snapraw_buffer)
+        return 0;
+
+    size = PAGE_ALIGN((size_t)regtrace_t23_snapraw_buffer_bytes);
+    phys = regtrace_t23_snapraw_phys_addr;
+    if (!phys) {
+        get_isp_priv_mem(&private_phys, &private_size);
+        if (private_phys && private_size) {
+            phys = private_phys;
+            if (size > private_size) {
+                printk(KERN_ERR
+                       "tx_isp_t23_recovered: snapraw buffer needs %u bytes but ispmem has %u\n",
+                       (unsigned int)size, private_size);
+                return -ENOSPC;
+            }
+        }
+    }
+
+    if (phys) {
+        if (!IS_ALIGNED(phys, PAGE_SIZE) ||
+            phys + size < (size_t)phys || phys + size > UINT_MAX) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: invalid snapraw physical region 0x%x+%u\n",
+                   phys, (unsigned int)size);
+            return -EINVAL;
+        }
+        regtrace_t23_snapraw_buffer = ioremap(phys, size);
+        if (!regtrace_t23_snapraw_buffer) {
+            printk(KERN_ERR
+                   "tx_isp_t23_recovered: cannot map snapraw physical region 0x%x+%u\n",
+                   phys, (unsigned int)size);
+            return -ENOMEM;
+        }
+        regtrace_t23_snapraw_dma = (dma_addr_t)phys;
+        regtrace_t23_snapraw_buffer_size = size;
+        regtrace_t23_snapraw_buffer_is_iomem = true;
+        printk(KERN_INFO
+               "tx_isp_t23_recovered: mapped reserved snapraw buffer bytes=%u dma=0x%x source=%s\n",
+               (unsigned int)size, phys,
+               regtrace_t23_snapraw_phys_addr ? "module-param" : "ispmem");
+        return 0;
+    }
+
+    regtrace_t23_snapraw_buffer = dma_alloc_coherent(
+        device, size, &regtrace_t23_snapraw_dma, GFP_KERNEL | GFP_DMA);
+    if (!regtrace_t23_snapraw_buffer) {
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: no %u-byte snapraw DMA buffer; reserve ispmem or set snapraw_phys_addr\n",
+               regtrace_t23_snapraw_buffer_bytes);
+        return 0;
+    }
+    if ((uint64_t)regtrace_t23_snapraw_dma > UINT_MAX) {
+        dma_free_coherent(device, size, regtrace_t23_snapraw_buffer,
+                          regtrace_t23_snapraw_dma);
+        regtrace_t23_snapraw_buffer = NULL;
+        regtrace_t23_snapraw_dma = 0;
+        return -ERANGE;
+    }
+
+    regtrace_t23_snapraw_buffer_size = size;
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: reserved snapraw DMA buffer bytes=%u dma=0x%x\n",
+           (unsigned int)size, (uint32_t)regtrace_t23_snapraw_dma);
+    return 0;
+}
+
+static void regtrace_t23_snapraw_buffer_free(void)
+{
+    struct device *device = regtrace_t23_vic_dma_device;
+
+    if (!regtrace_t23_snapraw_buffer)
+        return;
+    if (regtrace_t23_snapraw_buffer_is_iomem)
+        iounmap(regtrace_t23_snapraw_buffer);
+    else if (device)
+        dma_free_coherent(device, regtrace_t23_snapraw_buffer_size,
+                          regtrace_t23_snapraw_buffer,
+                          regtrace_t23_snapraw_dma);
+    regtrace_t23_snapraw_buffer = NULL;
+    regtrace_t23_snapraw_dma = 0;
+    regtrace_t23_snapraw_buffer_size = 0;
+    regtrace_t23_snapraw_buffer_is_iomem = false;
+}
+
+static void regtrace_t23_snapraw_save_registers(
+    void __iomem *base, struct regtrace_t23_snapraw_registers *saved)
+{
+    unsigned int i;
+
+    saved->control = readl(base + 0x300);
+    saved->size = readl(base + 0x304);
+    saved->enable = readl(base + 0x308);
+    saved->stride_y = readl(base + 0x310);
+    saved->stride_uv = readl(base + 0x314);
+    saved->irq_mask = readl(base + 0x1ec);
+    for (i = 0; i < ARRAY_SIZE(saved->y_bank); i++) {
+        saved->y_bank[i] = readl(base + 0x318 + i * 4);
+        saved->uv_bank[i] = readl(base + 0x32c + i * 4);
+        saved->ch1_bank[i] = readl(base + 0x340 + i * 4);
+    }
+}
+
+static void regtrace_t23_snapraw_restore_registers(
+    void __iomem *base, const struct regtrace_t23_snapraw_registers *saved)
+{
+    unsigned int i;
+    uint32_t pending;
+
+    writel(0, base + 0x300);
+    wmb();
+    for (i = 0; i < ARRAY_SIZE(saved->y_bank); i++) {
+        writel(saved->y_bank[i], base + 0x318 + i * 4);
+        writel(saved->uv_bank[i], base + 0x32c + i * 4);
+        writel(saved->ch1_bank[i], base + 0x340 + i * 4);
+    }
+    writel(saved->size, base + 0x304);
+    writel(saved->stride_y, base + 0x310);
+    writel(saved->stride_uv, base + 0x314);
+    writel(saved->enable, base + 0x308);
+    pending = readl(base + 0x1e4);
+    if (pending)
+        writel(pending, base + 0x1f4);
+    writel(saved->irq_mask, base + 0x1ec);
+    wmb();
+    writel(saved->control, base + 0x300);
+    wmb();
+}
+
+static int regtrace_t23_snapraw_write_file(const void *buffer,
+                                            size_t size,
+                                            unsigned int index)
+{
+    char path[32];
+    struct file *output;
+    mm_segment_t old_fs;
+    loff_t position = 0;
+    ssize_t written;
+
+    snprintf(path, sizeof(path), "/tmp/snap%u.raw", index);
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    output = filp_open(path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (IS_ERR(output)) {
+        int ret = PTR_ERR(output);
+
+        set_fs(old_fs);
+        return ret;
+    }
+    written = vfs_write(output, buffer, size, &position);
+    filp_close(output, NULL);
+    set_fs(old_fs);
+    if (written < 0)
+        return written;
+    return written == size ? 0 : -EIO;
+}
+
+static int regtrace_t23_snapraw_one(unsigned int index)
+{
+    struct regtrace_t23_snapraw_registers saved;
+    unsigned char *vic = regtrace_t23_vic_sd;
+    void __iomem *base;
+    void *buffer = regtrace_t23_snapraw_buffer;
+    dma_addr_t dma = regtrace_t23_snapraw_dma;
+    uint32_t geometry;
+    uint32_t width;
+    uint32_t height;
+    uint32_t stride;
+    uint32_t frame_size;
+    uint32_t pending;
+    uint32_t capture_status0;
+    uint32_t capture_status1;
+    uint32_t capture_control;
+    uint32_t capture_enable;
+    uint32_t capture_bank0;
+    uint32_t capture_bank1;
+    uint32_t capture_ch1_bank0;
+    uint32_t frame_dma;
+    unsigned long completed;
+    unsigned int i;
+    unsigned int changed = 0;
+    unsigned int first_changed = UINT_MAX;
+    unsigned int last_changed = 0;
+    int ret;
+
+    if (!vic || !regtrace_t23_vic_dma_device)
+        return -ENODEV;
+    base = (void __iomem *)(uintptr_t)*(uint32_t *)(vic + 184);
+    if (!base)
+        return -ENODEV;
+
+    geometry = readl(base + 0x04);
+    width = *(uint32_t *)(vic + 220);
+    height = *(uint32_t *)(vic + 224);
+    if (!width)
+        width = geometry >> 16;
+    if (!height)
+        height = geometry & 0xffffU;
+    if (width < 64U || width > 2688U || height < 64U || height > 4320U)
+        return -EINVAL;
+
+    stride = width * 2U;
+    frame_size = stride * height;
+    if (!buffer)
+        return -ENOMEM;
+    if (frame_size > regtrace_t23_snapraw_buffer_size)
+        return -ENOSPC;
+    if (regtrace_t23_snapraw_buffer_is_iomem)
+        memset_io((void __iomem *)buffer, 0xa5, frame_size);
+    else
+        memset(buffer, 0xa5, frame_size);
+
+    regtrace_t23_snapraw_save_registers(base, &saved);
+    writel(0, base + 0x300);
+    pending = readl(base + 0x1e4);
+    if (pending)
+        writel(pending, base + 0x1f4);
+    writel(saved.irq_mask & ~3U, base + 0x1ec);
+    INIT_COMPLETION(regtrace_t23_snapraw_done);
+    ACCESS_ONCE(regtrace_t23_snapraw_active) = true;
+
+    /*
+     * Keep the vendor vic_mdma_enable() programming order.  DMA enable is
+     * armed before the geometry and bank registers; writing DMA_CONTROL is
+     * the final operation which starts the one-shot capture.
+     */
+    writel(1, base + 0x308);
+    writel((width << 16) | height, base + 0x304);
+    writel(stride, base + 0x310);
+    writel(stride, base + 0x314);
+
+    /* Channel 0 RAW buffers are consecutive in the original T23 driver. */
+    for (i = 0; i < ARRAY_SIZE(saved.y_bank); i++) {
+        frame_dma = (uint32_t)dma + i * frame_size;
+        writel(frame_dma, base + 0x318 + i * 4);
+        writel((uint32_t)dma + (2U * i + 1U) * frame_size,
+               base + 0x340 + i * 4);
+    }
+    wmb();
+    writel(0x80010020U, base + 0x300);
+    wmb();
+
+    completed = wait_for_completion_timeout(
+        &regtrace_t23_snapraw_done, msecs_to_jiffies(2000));
+    ACCESS_ONCE(regtrace_t23_snapraw_active) = false;
+    capture_status0 = readl(base + 0x1e0);
+    capture_status1 = readl(base + 0x1e4);
+    capture_control = readl(base + 0x300);
+    capture_enable = readl(base + 0x308);
+    capture_bank0 = readl(base + 0x318);
+    capture_bank1 = readl(base + 0x31c);
+    capture_ch1_bank0 = readl(base + 0x340);
+    regtrace_t23_snapraw_restore_registers(base, &saved);
+
+    for (i = 0; i < frame_size; i++) {
+        unsigned int value = regtrace_t23_snapraw_buffer_is_iomem ?
+            readb((void __iomem *)buffer + i) :
+            ((unsigned char *)buffer)[i];
+
+        if (value == 0xa5U)
+            continue;
+        if (first_changed == UINT_MAX)
+            first_changed = i;
+        last_changed = i;
+        changed++;
+    }
+    if (!completed)
+        printk(KERN_WARNING
+               "tx_isp_t23_recovered: snapraw completion timeout status=0x%x/0x%x control=0x%x enable=0x%x banks=0x%x/0x%x ch1=0x%x changed=%u first=%u last=%u\n",
+               capture_status0, capture_status1, capture_control,
+               capture_enable, capture_bank0, capture_bank1,
+               capture_ch1_bank0, changed, first_changed, last_changed);
+    if (!changed) {
+        ret = completed ? -EIO : -ETIMEDOUT;
+        goto out;
+    }
+
+    ret = regtrace_t23_snapraw_write_file(buffer, frame_size, index);
+    printk(KERN_INFO
+           "tx_isp_t23_recovered: snapraw index=%u %ux%u stride=%u bytes=%u dma=0x%x changed=%u first=%u last=%u ret=%d\n",
+           index, width, height, stride, frame_size, (uint32_t)dma,
+           changed, first_changed, last_changed, ret);
+
+out:
+    return ret;
+}
+
+static int regtrace_t23_vic_proc_show(struct seq_file *seq, void *unused)
+{
+    (void)unused;
+    seq_printf(seq, "%u, 0\n", regtrace_t23_vic_sd ? 1U : 0U);
+    seq_printf(seq, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
+    return 0;
+}
+
+static int regtrace_t23_vic_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open_size(file, regtrace_t23_vic_proc_show,
+                            PDE_DATA(inode), 0x400U);
+}
+
+static ssize_t regtrace_t23_vic_proc_write(struct file *file,
+                                           const char __user *buffer,
+                                           size_t count, loff_t *ppos)
+{
+    char command[32];
+    char *argument;
+    size_t input_count = count;
+    unsigned long frames = 1;
+    unsigned int i;
+    int ret = 0;
+
+    (void)file;
+    (void)ppos;
+    if (!count)
+        return 0;
+    if (count >= sizeof(command))
+        return -E2BIG;
+    if (copy_from_user(command, buffer, count))
+        return -EFAULT;
+    command[count] = '\0';
+    while (count && isspace(command[count - 1]))
+        command[--count] = '\0';
+
+    if (!strcmp(command, "help")) {
+        printk(KERN_INFO
+               "tx_isp_t23_recovered: isp-w02 command: snapraw [1]\n");
+        return input_count;
+    }
+    if (strncmp(command, "snapraw", 7) ||
+        (command[7] && !isspace(command[7])))
+        return -EINVAL;
+
+    argument = command + 7;
+    while (isspace(*argument))
+        argument++;
+    if (*argument)
+        frames = simple_strtoul(argument, NULL, 0);
+    if (!frames)
+        frames = 1;
+    /* T23 calibration intentionally captures one frame per transaction. */
+    if (frames != 1)
+        return -ERANGE;
+
+    mutex_lock(&regtrace_t23_snapraw_lock);
+    for (i = 0; i < frames; i++) {
+        ret = regtrace_t23_snapraw_one(i);
+        if (ret)
+            break;
+    }
+    mutex_unlock(&regtrace_t23_snapraw_lock);
+    return ret ? ret : (ssize_t)input_count;
+}
 
 static void regtrace_t23_enable_subdev_clks(const char *name,
                                             unsigned char *sd,
@@ -10133,8 +10561,8 @@ static int regtrace_t23_ensure_sensor_client(struct i2c_driver *drv,
     if (!drv)
         return -EINVAL;
     name = drv->driver.name ? drv->driver.name : "";
-    if (strcmp(name, "sc2336"))
-        return 0;
+    if (!name[0])
+        return -EINVAL;
     if (regtrace_t23_sensor_client)
         return regtrace_t23_call_sensor_chip_ident(reason);
 
@@ -10250,6 +10678,9 @@ static unsigned char *regtrace_t23_sensor_owned_attr(void)
 {
     uintptr_t sd = (uintptr_t)regtrace_t23_sensor_sd;
     uintptr_t attr;
+    uint32_t chip_id;
+    uint32_t width;
+    uint32_t height;
 
     if (!regtrace_t23_valid_ptr(sd))
         return NULL;
@@ -10257,8 +10688,14 @@ static unsigned char *regtrace_t23_sensor_owned_attr(void)
     attr = *(uint32_t *)(sd + REGTRACE_T23_SENSOR_VIDEO_ATTR_OFFSET);
     if (!regtrace_t23_valid_ptr(attr))
         return NULL;
-    if (regtrace_t23_get_le32((unsigned char *)attr + REGTRACE_T23_ATTR_CHIP_ID) !=
-        REGTRACE_SC2336_CHIP_ID)
+    chip_id = regtrace_t23_get_le32((unsigned char *)attr +
+                                    REGTRACE_T23_ATTR_CHIP_ID);
+    width = regtrace_t23_get_le32((unsigned char *)attr +
+                                  REGTRACE_T23_ATTR_MIPI_IMAGE_WIDTH);
+    height = regtrace_t23_get_le32((unsigned char *)attr +
+                                   REGTRACE_T23_ATTR_MIPI_IMAGE_HEIGHT);
+    if (!chip_id || width < 64U || width > 2688U ||
+        height < 64U || height > 4320U)
         return NULL;
 
     return (unsigned char *)attr;
@@ -10301,7 +10738,7 @@ static void regtrace_t23_seed_sensor_caches(const char *reason)
         *(uint32_t *)(regtrace_t23_core_sd + 0x128) = REGTRACE_SC2336_HEIGHT;
     }
 
-    printk(KERN_INFO "tx_isp_t23_recovered: seeded SC2336 attrs attr=%p source=%s csi=%p vic=%p core=%p sensor=%p reason=%s\n",
+    printk(KERN_INFO "tx_isp_t23_recovered: seeded sensor attrs attr=%p source=%s csi=%p vic=%p core=%p sensor=%p reason=%s\n",
            attr, attr == regtrace_t23_sc2336_attr ? "fallback" : "sensor",
            regtrace_t23_csi_sd, regtrace_t23_vic_sd, regtrace_t23_core_sd,
 	   regtrace_t23_sensor_sd, reason ? reason : "?");
@@ -10403,6 +10840,15 @@ static int regtrace_t23_call_sensor_core_init(const char *reason)
     printk(KERN_WARNING "tx_isp_t23_recovered: sensor init start sd=%p fn=%p reason=%s\n",
            (void *)sd, (void *)init_fn, reason ? reason : "?");
     ret = ((int (*)(void *, int))(uintptr_t)init_fn)((void *)sd, 1);
+    /*
+     * Current T23 sensor modules return the notify result after their sensor
+     * register table has already been programmed.  The recovered graph does
+     * not install module.notify yet, so that callback returns
+     * -ENOIOCTLCMD.  We perform the required attribute propagation below;
+     * do not turn a missing advisory callback into a failed sensor init.
+     */
+    if (ret == -ENOIOCTLCMD)
+        ret = 0;
     if (!ret)
         regtrace_t23_sensor_initialized = true;
     regtrace_t23_seed_sensor_caches("sensor-core-init");
@@ -10710,8 +11156,8 @@ static unsigned char *regtrace_t23_resolve_sensor_attr(unsigned char *dev,
         attr = 0;
     }
     if (!regtrace_t23_valid_ptr(attr) ||
-        regtrace_t23_get_le32((unsigned char *)attr + REGTRACE_T23_ATTR_CHIP_ID) !=
-            REGTRACE_SC2336_CHIP_ID)
+        !regtrace_t23_get_le32((unsigned char *)attr +
+                               REGTRACE_T23_ATTR_CHIP_ID))
         attr = (uintptr_t)regtrace_t23_sc2336_attr;
     regtrace_t23_seed_sensor_caches(reason);
     return (unsigned char *)attr;
@@ -13101,7 +13547,9 @@ static u32 regtrace_mdns_malloc_size(u32 mode, u32 width, u32 height)
 static long regtrace_tx_isp_enuminput(unsigned long arg)
 {
     struct regtrace_v4l2_input input;
+    char sensor_name[sizeof(input.name)];
     u32 index;
+    int ret;
 
     if (!arg)
         return -EINVAL;
@@ -13109,13 +13557,15 @@ static long regtrace_tx_isp_enuminput(unsigned long arg)
         return -EFAULT;
 
     index = input.index;
-    if (index != 0)
-        return -EINVAL;
+    ret = tx_isp_sinfo_get_driver(index, sensor_name,
+                                  sizeof(sensor_name), NULL);
+    if (ret)
+        return ret;
 
     memset(&input, 0, sizeof(input));
     input.index = index;
     input.type = REGTRACE_V4L2_INPUT_TYPE_CAMERA;
-    memcpy(input.name, "sc2336", sizeof("sc2336"));
+    strlcpy((char *)input.name, sensor_name, sizeof(input.name));
 
     if (copy_to_user((void __user *)arg, &input, sizeof(input)))
         return -EFAULT;
@@ -15456,6 +15906,7 @@ static int regtrace_t23_probe_vic_safe(struct platform_device *pdev)
     dump_vsd = (uintptr_t)vic;
     test_addr = (uintptr_t)(vic + 128);
     regtrace_t23_vic_sd = vic;
+    regtrace_t23_vic_dma_device = &pdev->dev;
     printk(KERN_INFO "tx_isp_t23_recovered: safe probe vic sd=%p base=%p\n",
            vic, (void *)(uintptr_t)*(uint32_t *)(vic + 184));
     return 0;
@@ -15731,6 +16182,7 @@ static int regtrace_t23_remove_vic_safe(struct platform_device *pdev)
         pdev, vic, true, true, &regtrace_t23_vic_clks_enabled);
     private_kfree(vic);
     regtrace_t23_vic_sd = NULL;
+    regtrace_t23_vic_dma_device = NULL;
     regtrace_t23_vic_irq_enabled = false;
     dump_vsd = 0;
     test_addr = 0;
@@ -16680,6 +17132,14 @@ static struct file_operations video_input_cmd_fops = {
     .open = video_input_cmd_open,
     .read = seq_read,
     .write = video_input_cmd_set,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+static struct file_operations isp_vic_frd_fops = {
+    .owner = THIS_MODULE,
+    .open = regtrace_t23_vic_proc_open,
+    .read = seq_read,
+    .write = regtrace_t23_vic_proc_write,
     .llseek = seq_lseek,
     .release = single_release,
 };
@@ -18508,6 +18968,10 @@ vic_mdma_enable0x184:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000001c78 origin=fragment_seed original=isp_vic_cmd_set */
 int32_t isp_vic_cmd_set(uintptr_t a0, uint32_t a1, uint32_t a2)
 {
+    return (int32_t)regtrace_t23_vic_proc_write(
+        (struct file *)a0, (const char __user *)(uintptr_t)a1,
+        (size_t)a2, NULL);
+
     uint32_t *local_10 = 0;
     uint32_t *local_14 = 0;
     uint32_t *local_18 = 0;
@@ -30894,6 +31358,8 @@ int32_t isp_irq_handle(int32_t irq, void *dev_id)
             writel(pending1, base + 0x1f4);
         if (pending0 || pending1)
             wmb();
+        if (pending1 && ACCESS_ONCE(regtrace_t23_snapraw_active))
+            complete(&regtrace_t23_snapraw_done);
 
         regtrace_t23_vic_irq_count++;
         if (regtrace_t23_log_irq_count(regtrace_t23_vic_irq_count))
@@ -98959,6 +99425,17 @@ int32_t init_module(void)
         regtrace_unregister_tx_isp_miscdev();
         regtrace_t23_vin_proc_exit();
         tx_isp_sinfo_exit();
+        return ret;
+    }
+    ret = regtrace_t23_snapraw_buffer_alloc();
+    if (ret != 0) {
+        regtrace_unregister_real_platforms();
+        regtrace_unregister_framechans();
+        regtrace_unregister_misc_ivdc();
+        regtrace_unregister_isp_m0_miscdev();
+        regtrace_unregister_tx_isp_miscdev();
+        regtrace_t23_vin_proc_exit();
+        tx_isp_sinfo_exit();
     }
     return ret;
 #endif
@@ -98977,6 +99454,7 @@ void cleanup_module(void)
     cancel_work_sync(&regtrace_t23_source_ae_hlil_work_item);
     cancel_work_sync(&regtrace_t23_source_awb_hlil_work_item);
     regtrace_t23_core_dma_free();
+    regtrace_t23_snapraw_buffer_free();
     regtrace_unregister_real_platforms();
     regtrace_unregister_framechans();
     regtrace_unregister_misc_ivdc();
