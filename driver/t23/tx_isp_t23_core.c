@@ -970,6 +970,9 @@ static uintptr_t (*tispinfo)();
 #define T23_TPARAMS_ACTIVE_OFFSET 0x13100U
 #define T23_TPARAMS_BANK_SIZE 0x15844U
 #define T23_TPARAMS_OBJECT_SIZE 0x28944U
+#define T23_IQ_HEADER_SIZE 0x18U
+#define T23_IQ_STANDARD_SIZE (T23_IQ_HEADER_SIZE + 2U * T23_TPARAMS_BANK_SIZE)
+#define T23_IQ_CUSTOM_SIZE (T23_IQ_HEADER_SIZE + T23_TPARAMS_BANK_SIZE)
 #define T23_TPARAMS_HLDC_OFFSET 0x14b2cU
 /* The OEM object includes metadata followed by one full active tuning bank. */
 static unsigned char __attribute__((aligned(4))) tparams[T23_TPARAMS_OBJECT_SIZE] = {
@@ -9574,12 +9577,15 @@ static int regtrace_tx_isp_misc_registered;
 #define REGTRACE_TISP_CTRL_GET_EV_ATTR TX_ISP_TUNING_CMD_EV_ATTR
 #define REGTRACE_TISP_CTRL_TOTAL_GAIN TX_ISP_TUNING_CMD_TOTAL_GAIN
 #define REGTRACE_TISP_CTRL_AE_LUMA TX_ISP_TUNING_CMD_AE_LUMA
+#define REGTRACE_TISP_CTRL_CUSTOM_MODE 0x080000e7U
 #define REGTRACE_TISP_TOTAL_GAIN_1X (1U << 8)
 #define REGTRACE_TISP_AE_LUMA_DAY 80U
 #define REGTRACE_TISP_WB_GAIN_NEUTRAL 256U
 #define REGTRACE_T23_VIDIOC_STREAMON TX_ISP_FRAME_IOCTL_LEGACY_STREAM_ON
 #define REGTRACE_T23_VIDIOC_STREAMOFF TX_ISP_FRAME_IOCTL_LEGACY_STREAM_OFF
 
+int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2);
+uint32_t tisp_cust_mode_g_ctrl(void);
 int32_t system_reg_write(uint32_t a0, uint32_t a1);
 int32_t system_reg_read(uint32_t a0);
 int32_t tisp_simple_intp(int32_t arg1, int32_t arg2, void *arg3);
@@ -9719,6 +9725,8 @@ static bool regtrace_t23_source_awb_hlil_tuning_loaded;
 static uint regtrace_t23_source_awb_grayworld_interval = 2;
 static uint regtrace_t23_source_awb_grayworld_rbias = 1024;
 static uint regtrace_t23_source_awb_grayworld_bbias = 1024;
+static uint regtrace_t23_source_awb_profile_rbias = 1024;
+static uint regtrace_t23_source_awb_profile_bbias = 1024;
 static uint regtrace_t23_source_awb_hlil_interval = 4;
 static uint regtrace_t23_source_awb_hlil_min_pixels = 1;
 static uint regtrace_t23_source_awb_bootstrap_rgain = 0x400;
@@ -9771,6 +9779,8 @@ static uint32_t regtrace_t23_dpc_gain_old = 0xffffffffU;
 /* The IQ filename is policy; all sensor behavior comes from the bound ABI. */
 static char *regtrace_t23_source_core_tuning_path;
 static char regtrace_t23_source_core_tuning_auto_path[64];
+static char regtrace_t23_source_core_custom_path[64];
+static const unsigned char *regtrace_t23_source_active_bank;
 #define REGTRACE_T23_DPC_TUNING_OFFSET 0xbad0U
 #define REGTRACE_T23_DPC_TUNING_SIZE   0x448U
 #define REGTRACE_T23_GAMMA_TUNING_OFFSET 0x28b0U
@@ -9984,6 +9994,10 @@ module_param_named(source_awb_grayworld_rbias,
                    regtrace_t23_source_awb_grayworld_rbias, uint, 0644);
 module_param_named(source_awb_grayworld_bbias,
                    regtrace_t23_source_awb_grayworld_bbias, uint, 0644);
+module_param_named(source_awb_profile_rbias,
+                   regtrace_t23_source_awb_profile_rbias, uint, 0444);
+module_param_named(source_awb_profile_bbias,
+                   regtrace_t23_source_awb_profile_bbias, uint, 0444);
 module_param_named(source_awb_hlil_interval,
                    regtrace_t23_source_awb_hlil_interval, uint, 0644);
 module_param_named(source_awb_hlil_min_pixels,
@@ -11923,12 +11937,208 @@ static int regtrace_t23_source_core_bypass_value(uint32_t *value)
     return 0;
 }
 
+static uint32_t regtrace_t23_iq_le32(const unsigned char *data)
+{
+    return (uint32_t)data[0] |
+           (uint32_t)data[1] << 8 |
+           (uint32_t)data[2] << 16 |
+           (uint32_t)data[3] << 24;
+}
+
+static uint32_t regtrace_t23_iq_crc(const unsigned char *data, size_t size)
+{
+    static const uint32_t table[8] = {
+        0x00000000U, 0x77073096U, 0xee0e612cU, 0x990951baU,
+        0x076dc419U, 0x706af48fU, 0xe963a535U, 0x9e6495a3U,
+    };
+    uint32_t value = 0;
+    size_t offset;
+
+    for (offset = 0; offset + 4U <= size; offset += 4U) {
+        value ^= regtrace_t23_iq_le32(data + offset);
+        value ^= table[value & 7U];
+    }
+    return value;
+}
+
+static int regtrace_t23_read_file_exact(const char *path, void *data,
+                                        size_t size)
+{
+    struct file *file;
+    mm_segment_t old_fs;
+    loff_t pos = 0;
+    unsigned char extra;
+    ssize_t got;
+    ssize_t tail;
+
+    file = private_filp_open(path, O_RDONLY, 0);
+    if (IS_ERR(file))
+        return PTR_ERR(file);
+
+    old_fs = private_get_fs();
+    private_set_fs(KERNEL_DS);
+    got = private_vfs_read(file, (char __user *)data, size, &pos);
+    tail = got == size ?
+        private_vfs_read(file, (char __user *)&extra, 1U, &pos) : 0;
+    private_set_fs(old_fs);
+    private_filp_close(file, NULL);
+
+    if (got != size)
+        return got < 0 ? (int)got : -EIO;
+    if (tail != 0)
+        return tail < 0 ? (int)tail : -EFBIG;
+    return 0;
+}
+
+static int regtrace_t23_validate_iq(const unsigned char *data, size_t size,
+                                    size_t payload_size)
+{
+    uint32_t recorded_size;
+    uint32_t recorded_crc;
+
+    if (size != T23_IQ_HEADER_SIZE + payload_size || payload_size & 3U)
+        return -EINVAL;
+    if (memcmp(data, "2.20\0\0\0\0", 8U) ||
+        memcmp(data + 8U, "header0\0", 8U))
+        return -EINVAL;
+
+    recorded_size = regtrace_t23_iq_le32(data + 16U);
+    recorded_crc = regtrace_t23_iq_le32(data + 20U);
+    if (recorded_size != payload_size ||
+        recorded_crc != regtrace_t23_iq_crc(data + T23_IQ_HEADER_SIZE,
+                                            payload_size))
+        return -EBADMSG;
+    return 0;
+}
+
+static void regtrace_t23_source_parameter_banks_free(void)
+{
+    regtrace_t23_source_active_bank = NULL;
+    if (tparams_cust) {
+        private_vfree((void *)tparams_cust);
+        tparams_cust = 0;
+    }
+    if (tparams_night) {
+        private_vfree((void *)tparams_night);
+        tparams_night = 0;
+    }
+    if (tparams_day) {
+        private_vfree((void *)tparams_day);
+        tparams_day = 0;
+    }
+}
+
+static int regtrace_t23_source_parameter_banks_load(const char *sensor_name)
+{
+    unsigned char *blob;
+    unsigned char *day;
+    unsigned char *night;
+    unsigned char *custom = NULL;
+    int length;
+    int ret;
+
+    blob = private_vmalloc(T23_IQ_STANDARD_SIZE);
+    if (!blob)
+        return -ENOMEM;
+    ret = regtrace_t23_read_file_exact(regtrace_t23_source_core_tuning_path,
+                                       blob, T23_IQ_STANDARD_SIZE);
+    if (!ret)
+        ret = regtrace_t23_validate_iq(blob, T23_IQ_STANDARD_SIZE,
+                                      2U * T23_TPARAMS_BANK_SIZE);
+    if (ret)
+        goto free_blob;
+
+    day = private_vmalloc(T23_TPARAMS_BANK_SIZE);
+    night = private_vmalloc(T23_TPARAMS_BANK_SIZE);
+    if (!day || !night) {
+        if (night)
+            private_vfree(night);
+        if (day)
+            private_vfree(day);
+        ret = -ENOMEM;
+        goto free_blob;
+    }
+    memcpy(day, blob + T23_IQ_HEADER_SIZE, T23_TPARAMS_BANK_SIZE);
+    memcpy(night, blob + T23_IQ_HEADER_SIZE + T23_TPARAMS_BANK_SIZE,
+           T23_TPARAMS_BANK_SIZE);
+    private_vfree(blob);
+
+    length = snprintf(regtrace_t23_source_core_custom_path,
+                      sizeof(regtrace_t23_source_core_custom_path),
+                      "/etc/sensor/%s-cust-t23.bin", sensor_name);
+    if (length < 0 || (size_t)length >=
+        sizeof(regtrace_t23_source_core_custom_path)) {
+        ret = -ENAMETOOLONG;
+        goto free_banks;
+    }
+
+    blob = private_vmalloc(T23_IQ_CUSTOM_SIZE);
+    if (!blob) {
+        ret = -ENOMEM;
+        goto free_banks;
+    }
+    ret = regtrace_t23_read_file_exact(regtrace_t23_source_core_custom_path,
+                                       blob, T23_IQ_CUSTOM_SIZE);
+    if (ret == -ENOENT) {
+        ret = 0;
+    } else if (!ret) {
+        ret = regtrace_t23_validate_iq(blob, T23_IQ_CUSTOM_SIZE,
+                                      T23_TPARAMS_BANK_SIZE);
+        if (!ret) {
+            custom = private_vmalloc(T23_TPARAMS_BANK_SIZE);
+            if (!custom)
+                ret = -ENOMEM;
+            else
+                memcpy(custom, blob + T23_IQ_HEADER_SIZE,
+                       T23_TPARAMS_BANK_SIZE);
+        }
+    }
+    private_vfree(blob);
+    if (ret)
+        goto free_banks;
+
+    regtrace_t23_source_parameter_banks_free();
+    tparams_day = (uintptr_t)day;
+    tparams_night = (uintptr_t)night;
+    tparams_cust = (uintptr_t)custom;
+    regtrace_t23_source_active_bank = day;
+    memcpy(tparams + T23_TPARAMS_ACTIVE_OFFSET, day,
+           T23_TPARAMS_BANK_SIZE);
+    printk(KERN_WARNING
+           "tx_isp_t23_recovered: IQ banks loaded stock=%s custom=%s\n",
+           regtrace_t23_source_core_tuning_path,
+           custom ? regtrace_t23_source_core_custom_path : "none");
+    return 0;
+
+free_blob:
+    private_vfree(blob);
+    return ret;
+free_banks:
+    if (custom)
+        private_vfree(custom);
+    private_vfree(night);
+    private_vfree(day);
+    return ret;
+}
+
 static int regtrace_t23_read_tuning_data(loff_t offset, void *data, size_t size)
 {
     struct file *file;
     mm_segment_t old_fs;
     ssize_t got;
 
+    if (regtrace_t23_source_active_bank) {
+        size_t bank_offset;
+
+        if (offset < T23_IQ_HEADER_SIZE)
+            return -EINVAL;
+        bank_offset = (size_t)offset - T23_IQ_HEADER_SIZE;
+        if (bank_offset > T23_TPARAMS_BANK_SIZE ||
+            size > T23_TPARAMS_BANK_SIZE - bank_offset)
+            return -EINVAL;
+        memcpy(data, regtrace_t23_source_active_bank + bank_offset, size);
+        return 0;
+    }
     if (!regtrace_t23_source_core_tuning_path)
         return -ENOENT;
     file = private_filp_open(regtrace_t23_source_core_tuning_path,
@@ -12009,6 +12219,11 @@ static int regtrace_t23_source_awb_hlil_load_tuning(void)
                          regtrace_t23_awb_hlil_light_source_weight_lut);
 #undef REGTRACE_T23_AWB_READ
 
+    ret = regtrace_t23_awb_profile_bias_decode(
+        regtrace_t23_awb_hlil_mf_parameters);
+    if (ret)
+        return ret;
+
     if (!pixel_threshold || point_position[0] != 10U ||
         !history[0] || history[0] > REGTRACE_T23_AWB_HLIL_MAX_HISTORY ||
         !mode[0] || mode[0] >= mode[1] || mode[1] >= mode[2] ||
@@ -12036,10 +12251,12 @@ static int regtrace_t23_source_awb_hlil_load_tuning(void)
     regtrace_t23_awb_hlil_light_source_count = light_count;
     regtrace_t23_source_awb_hlil_tuning_loaded = true;
     printk(KERN_WARNING
-           "tx_isp_t23_recovered: AWB profile loaded q=%u history=%u mode=%u/%u/%u ct=%u lights=%u wb=%u/%u\n",
+           "tx_isp_t23_recovered: AWB profile loaded q=%u history=%u mode=%u/%u/%u ct=%u lights=%u wb=%u/%u bias=%u/%u\n",
            point_position[0], history[0], mode[0], mode[1], mode[2], ct,
            light_count, regtrace_t23_awb_hlil_wb_static[0],
-           regtrace_t23_awb_hlil_wb_static[1]);
+           regtrace_t23_awb_hlil_wb_static[1],
+           regtrace_t23_source_awb_profile_rbias,
+           regtrace_t23_source_awb_profile_bbias);
     return 0;
 }
 
@@ -13067,6 +13284,46 @@ static int regtrace_t23_source_ccm_write_tuning_startup(void)
     return 0;
 }
 
+static int regtrace_t23_source_ccm_select_bank(const void *bank)
+{
+    const unsigned char *previous = regtrace_t23_source_active_bank;
+    int ret;
+
+    if (!bank)
+        return -ENODEV;
+    regtrace_t23_source_active_bank = bank;
+    ret = regtrace_t23_source_awb_profile_bias_load();
+    if (ret)
+        goto restore;
+    regtrace_t23_ccm_profile_loaded = false;
+    ret = regtrace_t23_source_ccm_load_tuning();
+    if (!ret && regtrace_t23_source_ccm_tuning_init)
+        ret = regtrace_t23_source_ccm_commit(
+            regtrace_t23_source_ccm_runtime_ct,
+            regtrace_t23_source_ae_hlil_ev);
+    if (!ret)
+        return 0;
+
+restore:
+    regtrace_t23_source_active_bank = previous;
+    (void)regtrace_t23_source_awb_profile_bias_load();
+    regtrace_t23_ccm_profile_loaded = false;
+    if (previous)
+        (void)regtrace_t23_source_ccm_load_tuning();
+    return ret;
+}
+
+static void regtrace_t23_source_mode_flags_apply(const uint32_t *flags)
+{
+    uint32_t bypass = 0;
+    unsigned int i;
+
+    for (i = 0; i < 32U; ++i)
+        if (flags[i])
+            bypass |= 1U << i;
+    system_reg_write(12U, (bypass & 0xb577fffdU) | 0x34000009U);
+}
+
 static int regtrace_t23_source_dmsc_write_tuning_startup(void)
 {
     int ret;
@@ -13543,6 +13800,15 @@ static int regtrace_t23_source_resolve_sensor_config(void)
             return -ENAMETOOLONG;
         regtrace_t23_source_core_tuning_path =
             regtrace_t23_source_core_tuning_auto_path;
+    }
+
+    ret = regtrace_t23_source_parameter_banks_load(sensor_name);
+    if (ret) {
+        printk(KERN_ERR
+               "tx_isp_t23_recovered: cannot load sensor IQ banks stock=%s custom=%s ret=%d\n",
+               regtrace_t23_source_core_tuning_path,
+               regtrace_t23_source_core_custom_path, ret);
+        return ret;
     }
 
     ret = regtrace_t23_ae_hlil_build_ladder();
@@ -14027,6 +14293,19 @@ static long regtrace_isp_m0_control(unsigned int cmd, unsigned long arg)
         return -EINVAL;
     if (copy_from_user(&ctrl, (const void __user *)arg, sizeof(ctrl)))
         return -EFAULT;
+    if (ctrl.id == REGTRACE_TISP_CTRL_CUSTOM_MODE) {
+        if (cmd == REGTRACE_ISP_M0_SET_CONTROL) {
+            if (ctrl.value_or_ptr != 0 && ctrl.value_or_ptr != 1)
+                return -EINVAL;
+            ret = tisp_cust_mode_s_ctrl(0, ctrl.value_or_ptr);
+        } else {
+            ctrl.value_or_ptr = tisp_cust_mode_g_ctrl();
+            ret = 0;
+        }
+        if (!ret && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl)))
+            return -EFAULT;
+        return ret;
+    }
     if (!regtrace_isp_m0_is_image_control(ctrl.id))
         return 0;
 
@@ -90824,6 +91103,7 @@ int64_t tisp_day_or_night_s_ctrl(uintptr_t a0, uint32_t a1)
 {
     uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
     const void *selected;
+    int ret;
 
     if (a0 >= sizeof(day_night) / sizeof(uint32_t))
         return -EINVAL;
@@ -90836,11 +91116,18 @@ int64_t tisp_day_or_night_s_ctrl(uintptr_t a0, uint32_t a1)
     if (!selected)
         return -ENODEV;
 
+    ret = regtrace_t23_source_ccm_select_bank(selected);
+    if (ret)
+        return ret;
+
     memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
     *(uint32_t *)(void *)(tisp_par_info + a0 * 156U + 124U) = a1;
     *(uint32_t *)(void *)(day_night + a0 * sizeof(uint32_t)) = 0;
 
-    tx_isp_t23_mode_profile_apply(active);
+    if (regtrace_t23_source_core_start)
+        regtrace_t23_source_mode_flags_apply(active);
+    else
+        tx_isp_t23_mode_profile_apply(active);
 
     cust_mode = 0;
     *(uint8_t *)(void *)&tispPollValue = 1;
@@ -90857,13 +91144,13 @@ int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2)
     uint32_t *active = (uint32_t *)(void *)(tparams + T23_TPARAMS_ACTIVE_OFFSET);
     const void *selected = NULL;
     uint32_t dn;
+    int ret;
 
     if (!tparams_cust)
         return -1;
 
     if (arg2 == 1) {
         selected = (const void *)tparams_cust;
-        cust_mode = 1;
     } else if (arg2 == 0) {
         if (arg1 >= sizeof(day_night) / sizeof(uint32_t))
             return -EINVAL;
@@ -90872,15 +91159,23 @@ int32_t tisp_cust_mode_s_ctrl(uint32_t arg1, uint32_t arg2)
             selected = (const void *)tparams_day;
         else if (dn == 1)
             selected = (const void *)tparams_night;
-        cust_mode = 0;
     }
 
     if ((arg2 == 0 || arg2 == 1) && !selected)
         return -ENODEV;
-    if (selected)
-        memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
+    if (!selected)
+        return 0;
 
-    tx_isp_t23_mode_profile_apply(active);
+    ret = regtrace_t23_source_ccm_select_bank(selected);
+    if (ret)
+        return ret;
+    memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
+    cust_mode = arg2 == 1;
+
+    if (regtrace_t23_source_core_start)
+        regtrace_t23_source_mode_flags_apply(active);
+    else
+        tx_isp_t23_mode_profile_apply(active);
     return 0;
 }
 
@@ -90913,11 +91208,17 @@ uint32_t tisp_switch_bin(uint32_t a0)
     else if (mode == 1)
         selected = (const void *)tparams_night;
     if (selected) {
+        result = regtrace_t23_source_ccm_select_bank(selected);
+        if (result)
+            return (uint32_t)result;
         memcpy(active, selected, T23_TPARAMS_BANK_SIZE);
         *(uint32_t *)(void *)(tisp_par_info + 124U) = mode;
     }
 
-    tx_isp_t23_mode_profile_apply(active);
+    if (regtrace_t23_source_core_start)
+        regtrace_t23_source_mode_flags_apply(active);
+    else
+        tx_isp_t23_mode_profile_apply(active);
 
     *(uint8_t *)(void *)&tispPollValue = 1;
     *((uint8_t *)(void *)&tispPollValue + 3) = 1;
@@ -99788,6 +100089,7 @@ void cleanup_module(void)
     regtrace_t23_source_core_set_stream(0, "module-exit");
     cancel_work_sync(&regtrace_t23_source_ae_hlil_work_item);
     cancel_work_sync(&regtrace_t23_source_awb_hlil_work_item);
+    regtrace_t23_source_parameter_banks_free();
     regtrace_t23_core_dma_free();
     regtrace_t23_snapraw_buffer_free();
     regtrace_unregister_real_platforms();

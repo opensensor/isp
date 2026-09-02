@@ -511,6 +511,14 @@ static void regtrace_t23_source_awb_hlil_work(struct work_struct *work)
                   REGTRACE_T23_AWB_HLIL_POINT_POSITION;
         gain_rg = min(gain_rg << 2, 0x3fffU);
         gain_bg = min(gain_bg << 2, 0x3fffU);
+        gain_rg = min((gain_rg *
+                       ACCESS_ONCE(regtrace_t23_source_awb_profile_rbias) +
+                       (REGTRACE_T23_AWB_PROFILE_BIAS_UNITY >> 1)) >> 10,
+                      0x3fffU);
+        gain_bg = min((gain_bg *
+                       ACCESS_ONCE(regtrace_t23_source_awb_profile_bbias) +
+                       (REGTRACE_T23_AWB_PROFILE_BIAS_UNITY >> 1)) >> 10,
+                      0x3fffU);
 
         regtrace_t23_source_awb_hlil_rg = result.rg;
         regtrace_t23_source_awb_hlil_bg = result.bg;
