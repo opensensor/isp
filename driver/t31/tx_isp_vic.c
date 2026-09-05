@@ -712,32 +712,10 @@ static void vic_free_buffer_list(struct list_head *head)
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
-/* OEM global raw_pipe — persists between tx_isp_subdev_pipo and vic_mdma_irq_function.
- * Populated during pipo init; the IRQ handler reads raw_pipe[1] (dqbuf callback)
- * and raw_pipe[4] (sd argument).
+/* OEM global raw_pipe — populated during pipo init for the recovered callback
+ * table.  Frame-channel completion is owned by the core MSCA FIFO drain.
  */
 static void *raw_pipe_global[6];
-
-/* vic_raw_pipe_dqbuf — raw_pipe[1] callback matching OEM priv_dqbuf signature.
- * Called from vic_mdma_irq_function when processing != 0 (streaming path).
- * Delivers frame completion to all streaming frame channels.
- */
-static int vic_raw_pipe_dqbuf(void *handle, void *buffer)
-{
-	extern void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *, int);
-	extern struct frame_channel_device frame_channels[];
-	extern int num_channels;
-	int i;
-
-	if (!ourISPdev)
-		return -ENODEV;
-
-	for (i = 0; i < num_channels; i++) {
-		if (frame_channels[i].state.streaming)
-			tx_isp_hardware_frame_done_handler(ourISPdev, i);
-	}
-	return 0;
-}
 
 /* OEM global DMA buffer index / sub-get counters for non-streaming MDMA cycling */
 static u32 vic_mdma_ch0_set_buff_index;
@@ -755,7 +733,7 @@ static struct {
 
 /* OEM EXACT: vic_framedone_irq_function
  * Only updates bank count in 0x300. NO frame delivery. NO buffer recycling.
- * Frame delivery is handled by vic_mdma_irq_function (MDMA completion IRQ).
+ * Frame delivery is handled by the core MSCA completion FIFO.
  */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
@@ -878,8 +856,6 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 		{
 			u32 current_dma_addr = vic_base ? readl(vic_base + 0x380) : 0;
 			struct vic_buffer_entry *done_buf;
-			int (*dqbuf_fn)(void *, void *);
-			void *dqbuf_arg;
 			int i;
 
 			/* OEM: pop from done_head */
@@ -894,11 +870,9 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 			list_del(&done_buf->list);
 			vic_dev->active_buffer_count--;
 
-			/* OEM: deliver via raw_pipe[1](raw_pipe[5], buffer) */
-			dqbuf_fn = (int (*)(void *, void *))raw_pipe_global[1];
-			dqbuf_arg = raw_pipe_global[5];
-			if (dqbuf_fn)
-				dqbuf_fn(dqbuf_arg, done_buf);
+			/* This is VIC input-ring completion, not MSCA output
+			 * completion.  The core ISR owns frame-channel delivery and
+			 * supplies the completed MSCA Y address from its FIFO. */
 
 			/* OEM: move to free_head */
 			list_add_tail(&done_buf->list, &vic_dev->free_head);
@@ -920,9 +894,6 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 								 struct vic_buffer_entry, list);
 					list_del(&extra->list);
 					vic_dev->active_buffer_count--;
-
-					if (dqbuf_fn)
-						dqbuf_fn(dqbuf_arg, extra);
 
 					list_add_tail(&extra->list, &vic_dev->free_head);
 
@@ -3650,20 +3621,16 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
         pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
 
-        /* OEM: Set function pointers in raw_pipe.
-         * raw_pipe[1] = DQBUF callback — OEM sets this from downstream consumer.
-         * In our driver, we set it to vic_raw_pipe_dqbuf which signals frame
-         * completion to all streaming frame channels.
-         * raw_pipe[5] = context pointer passed as first arg to raw_pipe[1].
+        /* OEM: Set the VIC-owned function pointers in raw_pipe.  Preserve
+         * raw_pipe[1], the DQBUF callback supplied by the downstream consumer,
+         * and its context in raw_pipe[5].
          */
         raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;      /* offset 0x00 */
-        raw_pipe[1] = (void *)vic_raw_pipe_dqbuf;              /* offset 0x04 — frame delivery */
         raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;   /* offset 0x08 */
         raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;   /* offset 0x0c */
         raw_pipe[4] = (void *)sd;                              /* offset 0x10 */
-        raw_pipe[5] = (void *)ourISPdev;                       /* offset 0x14 — context for dqbuf */
 
-        /* Persist into the global so vic_mdma_irq_function can deliver frames */
+        /* Retain the recovered callback table for diagnostics and teardown. */
         memcpy(raw_pipe_global, raw_pipe, sizeof(raw_pipe_global));
 
         pr_info("tx_isp_subdev_pipo: set function pointers - qbuf=%p, dqbuf=%p, clearbuf=%p, s_stream=%p, sd=%p\n",

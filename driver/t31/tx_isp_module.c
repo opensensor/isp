@@ -20,6 +20,7 @@
 #include <media/v4l2-fh.h>
 #include <media/v4l2-ctrls.h>
 #include <linux/dma-mapping.h>
+#include <linux/poll.h>
 #include <linux/slab.h>
 
 #include <linux/ktime.h>
@@ -1616,6 +1617,8 @@ int frame_chan_event(void *priv, int event, void *data)
     case TX_ISP_EVENT_FRAME_DQBUF: { /* 0x3000006 */
         struct tx_isp_channel_state *state = &fcd->state;
         u32 enable = 0, period = 0, mask = 0;
+        u32 y_done;
+        bool matched = false;
         bool drop = false;
         int ch = fcd->channel_num;
 
@@ -1638,14 +1641,15 @@ int frame_chan_event(void *priv, int event, void *data)
         if (drop)
             return 0;
 
-        /* Store the Y buffer address from the FIFO pop so DQBUF can
-         * return the correct buffer instead of a rotating index.
-         * The ISR passes data=NULL (legacy) or a struct with Y addr at +8. */
-        if (data) {
-            u32 y_addr = ((u32 *)data)[2]; /* offset +8 = Y phys addr */
-            if (y_addr)
-                state->last_done_phys = y_addr;
-        }
+        /* A real completion carries the MSCA Y FIFO value at +8.  A wake
+         * without an address is not a completion and must not reuse the
+         * previous frame's address. */
+        if (!data)
+            return -EAGAIN;
+        y_done = ((u32 *)data)[2];
+        if (!y_done)
+            return -EAGAIN;
+        state->last_done_phys = y_done;
 
         /*
          * Finish all ownership and metadata transitions before waking DQBUF.
@@ -1655,7 +1659,6 @@ int frame_chan_event(void *priv, int event, void *data)
         {
             unsigned long oem_flags;
             int bi;
-            u32 y_done = state->last_done_phys;
             u32 completed_sequence = state->sequence + 1;
             struct timeval completed_timestamp;
 
@@ -1670,13 +1673,21 @@ int frame_chan_event(void *priv, int event, void *data)
                         fcd->oem_bufs[bi].state = TX_ISP_FRAME_SLOT_DONE;
                         fcd->oem_bufs[bi].done_sequence = completed_sequence;
                         fcd->oem_bufs[bi].done_timestamp = completed_timestamp;
+                        matched = true;
                         break;
                     }
                 }
             }
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
 
-            state->sequence = completed_sequence;
+            if (matched)
+                state->sequence = completed_sequence;
+        }
+
+        if (!matched) {
+            pr_warn_ratelimited("MSCA ch%d completion 0x%08x has no ACTIVE QBUF slot\n",
+                                ch, y_done);
+            return -ENOENT;
         }
 
         atomic_inc(&state->frame_ready_count);
@@ -2420,6 +2431,23 @@ int frame_channel_release(struct inode *inode, struct file *file)
     return 0;
 }
 
+static unsigned int frame_channel_poll(struct file *file, poll_table *wait)
+{
+    struct frame_channel_device *fcd = file->private_data;
+    struct tx_isp_channel_state *state;
+
+    if (!fcd)
+        return POLLERR;
+
+    state = &fcd->state;
+    poll_wait(file, &state->frame_wait, wait);
+    if (!state->streaming)
+        return POLLERR;
+    if (atomic_read(&state->frame_ready_count) > 0)
+        return POLLIN | POLLRDNORM;
+    return 0;
+}
+
 /* Frame channel device file operations - moved up for early use */
 static const struct file_operations frame_channel_fops = {
     .owner = THIS_MODULE,
@@ -2427,6 +2455,7 @@ static const struct file_operations frame_channel_fops = {
     .release = frame_channel_release,
     .unlocked_ioctl = frame_channel_unlocked_ioctl,
     .compat_ioctl = frame_channel_unlocked_ioctl,
+    .poll = frame_channel_poll,
 };
 
 /* OEM-matching: find a pad by entity name, pad type and index.
@@ -3672,14 +3701,17 @@ void __iomem *tx_isp_get_vic_primary_regs(void)
 }
 EXPORT_SYMBOL(tx_isp_get_vic_primary_regs);
 
-/* Real hardware frame completion detection - SDK compatible */
+/* Real hardware frame completion detection - SDK compatible.
+ *
+ * Completion ownership comes from the MSCA address FIFO in the core ISR.
+ * This hook may wake control-path waiters, but it must not manufacture a
+ * completed slot without the FIFO's physical address. */
 void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
 {
     if (!isp_dev || channel < 0 || channel >= num_channels)
         return;
 
-    /* Wake up frame waiters with real hardware completion */
-    frame_channel_wakeup_waiters(&frame_channels[channel]);
+    wake_up_interruptible(&frame_channels[channel].state.frame_wait);
 }
 EXPORT_SYMBOL(tx_isp_hardware_frame_done_handler);
 
@@ -4253,6 +4285,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         struct tx_isp_sensor *active_sensor = NULL;
         unsigned long flags;
         int ret = 0;
+        int match_found = 0;
         bool sensor_active = false;
         uint32_t buf_index;
 
@@ -4286,17 +4319,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (!state->streaming)
             return -EINVAL;
 
-        /* Consume one frame-ready signal */
-        atomic_dec_if_positive(&state->frame_ready_count);
-
         {
             struct frame_buffer tracked;
             bool tracked_valid = false;
             u32 delivered_seq = 0;
             struct timeval delivered_ts;
             u32 delivered_idx = 0;
-            u32 done_phys = state->last_done_phys;
-            int match_found = 0;
             unsigned long oem_flags;
             int bi;
 
@@ -4314,37 +4342,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     delivered_idx = bi;
                     delivered_seq = fcd->oem_bufs[bi].done_sequence;
                     delivered_ts = fcd->oem_bufs[bi].done_timestamp;
-                    done_phys = fcd->oem_bufs[bi].phys_addr;
                     match_found = 1;
                 }
             }
             spin_unlock_irqrestore(&fcd->oem_buf_lock, oem_flags);
 
-            /* Match completed buffer by Y physical address from FIFO pop.
-             * The OEM matches buffers this way — the rotating index was
-             * returning wrong buffers causing corrupted/stale frame data. */
-            if (!match_found && done_phys) {
-                int bc = state->buffer_count ? state->buffer_count : 3;
-                for (bi = 0; bi < bc; bi++) {
-                    struct frame_buffer candidate;
+            /* No address or rotating-index fallback: only the MSCA FIFO
+             * completion path may move an ACTIVE QBUF slot to DONE. */
+            if (!match_found)
+                return -EAGAIN;
 
-                    if (frame_channel_copy_tracked_buffer(fcd, bi, &candidate) &&
-                        (candidate.m.userptr & ~0xfff) == (done_phys & ~0xfff)) {
-                        delivered_idx = bi;
-                        delivered_seq = state->sequence;
-                        fill_timeval_mono(&delivered_ts);
-                        match_found = 1;
-                        break;
-                    }
-                }
-            }
-            if (!match_found) {
-                delivered_seq = state->sequence;
-                delivered_idx = delivered_seq %
-                    (state->buffer_count ? state->buffer_count : 3);
-                fill_timeval_mono(&delivered_ts);
-            }
-
+            atomic_dec_if_positive(&state->frame_ready_count);
 
             /* Look up the tracked buffer from QBUF to get correct userptr */
             tracked_valid = frame_channel_copy_tracked_buffer(
@@ -4393,8 +4401,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 (unsigned long)((buffer.memory == V4L2_MEMORY_USERPTR) ? buffer.m.userptr : 0),
                 buffer.length);
 
-        /* Reset OEM buffer state to FREE for re-use */
-        if (buffer.index < 64 && fcd) {
+        /* Reset only the slot selected from the DONE queue above. */
+        if (match_found && buffer.index < 64 && fcd) {
             unsigned long oem_flags;
             spin_lock_irqsave(&fcd->oem_buf_lock, oem_flags);
             fcd->oem_bufs[buffer.index].state = TX_ISP_FRAME_SLOT_FREE;
