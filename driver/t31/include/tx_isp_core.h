@@ -157,6 +157,8 @@ u32 tx_isp_check_reset_status(void);
 struct tx_isp_dev *tx_isp_get_device(void);
 void tx_isp_set_device(struct tx_isp_dev *isp);
 int tx_isp_core_prepare_prestream(struct tx_isp_dev *isp, const char *origin);
+int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp,
+                            struct tx_isp_sensor_attribute *sensor_attr);
 
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp);
 void tx_isp_core_bind_event_dispatch_tables(struct tx_isp_dev *isp_dev);

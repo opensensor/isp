@@ -1871,9 +1871,20 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     /* Get the CSI clock */
     csi_clk = clk_get(isp->dev, "csi");
     if (IS_ERR(csi_clk)) {
-        pr_err("[CLK] Failed to get CSI clock: %ld\n", PTR_ERR(csi_clk));
-        ret = PTR_ERR(csi_clk);
-        goto err_put_isp_clk;
+        long csi_err = PTR_ERR(csi_clk);
+
+        /* Some vendor T31 clock tables expose the camera-interface gate only
+         * under the legacy cgu_cim name.  Keep csi as the canonical lookup
+         * and use the observed vendor alias only when it is absent. */
+        pr_warn("[CLK] CSI clock lookup failed (%ld), trying cgu_cim compatibility alias\n",
+                csi_err);
+        csi_clk = clk_get(isp->dev, "cgu_cim");
+        if (IS_ERR(csi_clk)) {
+            pr_err("[CLK] Failed to get CSI clock or cgu_cim alias: %ld\n",
+                   PTR_ERR(csi_clk));
+            ret = PTR_ERR(csi_clk);
+            goto err_put_isp_clk;
+        }
     }
 
     pr_info("[CLK] Setting ISP clock rate to %lu Hz (current=%lu Hz)\n",

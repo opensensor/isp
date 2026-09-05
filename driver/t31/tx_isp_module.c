@@ -228,6 +228,11 @@ static int tx_isp_sensor_has_usable_attachment(struct tx_isp_sensor *sensor)
     return 1;
 }
 
+static int tx_isp_sensor_has_registered_attachment(struct tx_isp_sensor *sensor)
+{
+    return sensor && sensor->video.attr && sensor->info.name[0] != '\0';
+}
+
 static struct tx_isp_sensor *tx_isp_recover_sensor_from_subdev(struct tx_isp_subdev *sd,
                                                                const char *reason)
 {
@@ -320,6 +325,8 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd,
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
+static DEFINE_MUTEX(sensor_prepare_mutex);
+static bool sensor_input_prepared;
 
 static struct tx_isp_subdev *tx_isp_resolve_registered_sensor_subdev(struct tx_isp_dev *isp_dev)
 {
@@ -375,6 +382,81 @@ static struct tx_isp_sensor *tx_isp_wait_for_sensor_attachment(struct tx_isp_sub
     }
 
     return sensor;
+}
+
+/*
+ * Match the OEM SET_INPUT lifecycle: select the concrete sensor owned by VIN,
+ * initialize it, and publish its resulting geometry to VIC and CSI.  The
+ * recovered driver previously waited for geometry before attaching the
+ * sensor, which made deferred sensor initialization impossible.
+ */
+static int tx_isp_prepare_registered_sensor(struct tx_isp_dev *isp_dev,
+                                            const char *reason,
+                                            u32 *packed_dimensions)
+{
+    struct tx_isp_subdev *sensor_sd;
+    struct tx_isp_sensor *sensor;
+    u32 width;
+    u32 height;
+    int mode = TX_ISP_SENSOR_FULL_RES_MAX_FPS;
+    int ret = 0;
+
+    if (!isp_dev)
+        return -ENODEV;
+
+    mutex_lock(&sensor_prepare_mutex);
+
+    sensor_sd = tx_isp_resolve_registered_sensor_subdev(isp_dev);
+    sensor = tx_isp_recover_sensor_from_subdev(sensor_sd, reason);
+    if (!tx_isp_sensor_has_registered_attachment(sensor)) {
+        ret = -ENODEV;
+        goto out_unlock;
+    }
+
+    tx_isp_refresh_sensor_attachment(isp_dev, sensor_sd, sensor, reason);
+
+    /* Older sensors populate mbus geometry from RESIZE rather than probe. */
+    if (!tx_isp_sensor_has_usable_attachment(sensor) &&
+        stored_sensor_ops.sensor_sd == sensor_sd &&
+        stored_sensor_ops.original_ops &&
+        stored_sensor_ops.original_ops->sensor &&
+        stored_sensor_ops.original_ops->sensor->ioctl) {
+        ret = stored_sensor_ops.original_ops->sensor->ioctl(
+            sensor_sd, TX_ISP_EVENT_SENSOR_RESIZE, &mode);
+        if (ret == -ENOIOCTLCMD)
+            ret = 0;
+        if (ret)
+            goto out_unlock;
+    }
+
+    if (!sensor_input_prepared) {
+        if (!isp_dev->vin_dev) {
+            ret = -ENODEV;
+            goto out_unlock;
+        }
+
+        ret = tx_isp_vin_init(isp_dev->vin_dev, 1);
+        if (ret)
+            goto out_unlock;
+        sensor_input_prepared = true;
+    }
+
+    if (!tx_isp_sensor_has_usable_attachment(sensor)) {
+        ret = -EINVAL;
+        goto out_unlock;
+    }
+
+    ret = tx_isp_sync_sensor_attr(isp_dev, sensor->video.attr);
+    if (ret)
+        goto out_unlock;
+
+    ret = tx_isp_sensor_active_dimensions(sensor, &width, &height);
+    if (!ret && packed_dimensions)
+        *packed_dimensions = (width << 16) | height;
+
+out_unlock:
+    mutex_unlock(&sensor_prepare_mutex);
+    return ret;
 }
 
 static struct tx_isp_subdev *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
@@ -557,9 +639,8 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
         return 0;
 
     case TX_ISP_EVENT_SENSOR_SET_INPUT: {
-        struct tx_isp_subdev *sensor_sd;
-        struct tx_isp_sensor *sensor;
         u32 input_index;
+        int ret;
 
         if (!arg || !isp_dev)
             return -EINVAL;
@@ -570,14 +651,12 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
         if (input_index != 0)
             return -EINVAL;
 
-        sensor_sd = tx_isp_resolve_registered_sensor_subdev(isp_dev);
-        sensor = tx_isp_wait_for_sensor_attachment(sensor_sd,
-                                                   "subdev_sensor_ops_set_input");
-        if (!tx_isp_sensor_has_usable_attachment(sensor))
-            return -ENODEV;
+        ret = tx_isp_prepare_registered_sensor(isp_dev,
+                                               "subdev_sensor_ops_set_input",
+                                               (u32 *)arg);
+        if (ret)
+            return ret;
 
-        tx_isp_refresh_sensor_attachment(isp_dev, sensor_sd, sensor,
-                                         "subdev_sensor_ops_set_input");
         current_sensor_index = 0;
         return 0;
     }
@@ -2533,7 +2612,8 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
+int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev,
+                            struct tx_isp_sensor_attribute *sensor_attr)
 {
     struct tx_isp_sensor *sensor;
     struct tx_isp_csi_device *csi_dev;
@@ -2647,6 +2727,7 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
 
     return ret;
 }
+EXPORT_SYMBOL_GPL(tx_isp_sync_sensor_attr);
 
 // Simplified VIC registration - removed complex platform device array
 static int vic_registered = 0;
@@ -3562,6 +3643,14 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     int result;
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
+
+    if (enable) {
+        result = tx_isp_prepare_registered_sensor(dev,
+                                                  "tx_isp_video_s_stream",
+                                                  NULL);
+        if (result)
+            return result;
+    }
 
     /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
     s4 = dev->subdevs;
@@ -7469,6 +7558,7 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
 
     mutex_lock(&sensor_register_mutex);
     registered_sensor_subdev = sd;
+    sensor_input_prepared = false;
 
     pr_info("=== KERNEL SENSOR REGISTRATION ===\n");
     pr_info("Sensor: %s (subdev=%p)\n",
@@ -7525,15 +7615,14 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
 	        pr_info("*** KERNEL SENSOR REGISTRATION: published sensor subdev '%s' at slot %d ***\n",
 	                sensor->info.name[0] ? sensor->info.name : "(unnamed)", subdev_slot);
 
-        if (tx_isp_sensor_has_usable_attachment(sensor)) {
+        if (tx_isp_sensor_has_registered_attachment(sensor)) {
             int sync_ret;
 
-            /* Only use the recovered sensor object as the ISP attachment when it
-             * actually provides usable attr/name metadata for CSI/VIC setup.
-             */
+            /* VIN owns the concrete sensor before geometry is available.  Some
+             * sensor drivers only fill mbus during RESIZE or core init. */
             tx_isp_refresh_sensor_attachment(ourISPdev, sd, sensor,
                                              "KERNEL SENSOR REGISTRATION");
-            if (sensor->video.attr) {
+            if (tx_isp_sensor_has_usable_attachment(sensor)) {
                 sync_ret = tx_isp_sync_sensor_attr(ourISPdev, sensor->video.attr);
                 if (sync_ret) {
                     pr_warn("*** KERNEL SENSOR REGISTRATION: initial attr sync failed: %d ***\n",
@@ -7544,7 +7633,7 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
                     sensor->info.name[0] ? sensor->info.name : "(unnamed)");
 	            current_sensor_index = 0;
         } else {
-            pr_warn("*** KERNEL SENSOR REGISTRATION: recovered sensor metadata unusable; keeping ISP-owned sensor attachment (sensor=%p attr=%p name=%s dbus=%u lanes=%u) ***\n",
+            pr_warn("*** KERNEL SENSOR REGISTRATION: sensor identity is incomplete; deferring VIN attachment (sensor=%p attr=%p name=%s dbus=%u lanes=%u) ***\n",
                     sensor,
                     sensor ? sensor->video.attr : NULL,
                     (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)",
@@ -7657,6 +7746,7 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 
     mutex_lock(&sensor_register_mutex);
     registered_sensor_subdev = NULL;
+    sensor_input_prepared = false;
     mutex_unlock(&sensor_register_mutex);
 	current_sensor_index = -1;
 

@@ -670,13 +670,11 @@ int tx_isp_notify(struct tx_isp_module *module, unsigned int notification, void 
 
 	if (notification == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
 		struct tx_isp_video_in *video = (struct tx_isp_video_in *)data;
-		extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd,
-							       struct tx_isp_sensor_attribute *attr);
 
 		if (!video || !video->attr)
 			return -EINVAL;
 
-		return tx_isp_handle_sync_sensor_attr_event(&ourISPdev->sd, video->attr);
+		return tx_isp_sync_sensor_attr(ourISPdev, video->attr);
 	}
 
 	for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
@@ -828,17 +826,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     /* module.dev is already set by tx_isp_module_init above */
     pr_info("*** tx_isp_subdev_init: sd->module.dev=%p ***\n", sd->module.dev);
-
-	if (ops && ops->sensor && pdev->name &&
-	    strcmp(pdev->name, "isp-w00") != 0 &&
-	    strcmp(pdev->name, "isp-w01") != 0 &&
-	    strcmp(pdev->name, "isp-w02") != 0 &&
-	    strcmp(pdev->name, "isp-m0") != 0 &&
-	    strcmp(pdev->name, "isp-fs") != 0) {
-		sd->module.notify = tx_isp_module_notify_handler;
-		pr_info("*** tx_isp_subdev_init: sensor notify handler installed for '%s' ***\n",
-			pdev->name);
-	}
 
 	if (ourISPdev && pdev->name &&
 	    (strcmp(pdev->name, "isp-w02") == 0 ||
@@ -1305,36 +1292,12 @@ EXPORT_SYMBOL(tx_isp_reg_set);
 /* tx_isp_module_notify_handler - Handle module notification events */
 int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg)
 {
-    struct tx_isp_subdev *sd;
-
     if (!module) {
         pr_err("tx_isp_module_notify_handler: Invalid module\n");
         return -EINVAL;
     }
 
-    /* Get the subdev that contains this module */
-    sd = container_of(module, struct tx_isp_subdev, module);
-
-    pr_info("*** tx_isp_module_notify_handler: cmd=0x%x, arg=%p ***\n", cmd, arg);
-
-    switch (cmd) {
-        case TX_ISP_EVENT_SYNC_SENSOR_ATTR:
-            pr_info("*** tx_isp_module_notify_handler: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
-            /* The sensor calls with &sensor->video, so arg is struct tx_isp_video_in * */
-            struct tx_isp_video_in *video = (struct tx_isp_video_in *)arg;
-            if (video && video->attr) {
-                pr_info("*** tx_isp_module_notify_handler: Found video attributes, calling sync handler ***\n");
-                extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-                return tx_isp_handle_sync_sensor_attr_event(sd, video->attr);
-            } else {
-                pr_err("*** tx_isp_module_notify_handler: No video attributes available ***\n");
-                return -EINVAL;
-            }
-
-        default:
-            pr_info("*** tx_isp_module_notify_handler: Unsupported event 0x%x ***\n", cmd);
-            return -ENOIOCTLCMD;
-    }
+    return tx_isp_notify(module, cmd, arg);
 }
 
 /* Forward declarations for probe functions */
