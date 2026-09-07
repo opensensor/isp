@@ -28,6 +28,7 @@
 #include "tx_isp_t41_dpc.h"
 #include "tx_isp_t41_dmsc.h"
 #include "tx_isp_t41_sdns.h"
+#include "tx_isp_t41_ydns.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -878,7 +879,7 @@ MODULE_PARM_DESC(t41_ae_flicker_profile,
 /* Keep module controls out of the recovered image's overlapping BSS.  Only
  * the low six bits are functional; the initialized high bit is a storage
  * sentinel and deliberately selects no block. */
-static unsigned int t41_safe_gain_fanout_mask = 0x80000022U;
+static unsigned int t41_safe_gain_fanout_mask = 0x80000032U;
 module_param(t41_safe_gain_fanout_mask, uint, 0644);
 MODULE_PARM_DESC(t41_safe_gain_fanout_mask,
 		 "safe total-gain fanout mask: GIB=1 DMSC=2 LSC=4 TMO=8 YDNS=16 SDNS=32");
@@ -1255,7 +1256,7 @@ MODULE_PARM_DESC(t41_stock_ysp_unbypass,
 static int t41_stock_spatial_profile = -1;
 module_param(t41_stock_spatial_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_spatial_profile,
-		 "Apply captured YDNS/YSP/LCE banks (nonpositive=enabled, diagnostic); SDNS is calibrated");
+		 "Apply captured YSP/LCE banks (nonpositive=enabled, diagnostic); YDNS/SDNS are calibrated");
 static int t41_stock_lce_ram_profile = -1;
 module_param(t41_stock_lce_ram_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_lce_ram_profile,
@@ -1310,6 +1311,10 @@ static uint32_t t41_bcsh_last[T41_BCSH_WORDS] = { UINT_MAX };
 module_param(t41_bcsh_error, int, 0444);
 static int t41_bcsh_update(uint32_t ct, uint32_t ev, int force);
 static int t41_gamma_error = -ENODEV;
+static int t41_ydns_error = -ENODEV;
+static unsigned int t41_ydns_gain = ~0U;
+module_param(t41_ydns_error, int, 0444);
+module_param(t41_ydns_gain, uint, 0444);
 static int t41_sdns_error = -ENODEV;
 static unsigned int t41_sdns_gain = ~0U;
 module_param(t41_sdns_error, int, 0444);
@@ -32835,12 +32840,6 @@ static void t41_apply_stock_spatial_profile(void)
      * These blocks own no frame-buffer DMA.  MDNS is intentionally excluded
      * here because its reference buffers are rebuilt separately.
      */
-    static const uint32_t ydns_delta[][2] = {
-        { 0x10010, 0x00000011 }, { 0x10020, 0x00003103 },
-        { 0x10024, 0x1e27314f }, { 0x10028, 0x00000a14 },
-        { 0x10040, 0x0000dc0f }, { 0x10044, 0x00000000 },
-        { 0x10048, 0x00000000 },
-    };
     static const uint32_t ysp_delta[][2] = {
         { 0x13004, 0x00040000 }, { 0x13018, 0x00206800 },
         { 0x1301c, 0x0003c050 }, { 0x13020, 0x0020801f },
@@ -32872,10 +32871,10 @@ static void t41_apply_stock_spatial_profile(void)
         { 0x1d094, 0x00080000 }, { 0x1d098, 0x00010008 },
     };
     const uint32_t (*ranges[])[2] = {
-        ydns_delta, ysp_delta, lce_delta,
+        ysp_delta, lce_delta,
     };
     const unsigned int counts[] = {
-        ARRAY_SIZE(ydns_delta), ARRAY_SIZE(ysp_delta),
+        ARRAY_SIZE(ysp_delta),
         ARRAY_SIZE(lce_delta),
     };
     uint32_t *bypass;
@@ -32887,6 +32886,9 @@ static void t41_apply_stock_spatial_profile(void)
         t41_sdns_error = tisp_sdns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
         if (!t41_sdns_error)
             t41_top_restore_bypass(BIT(18));
+        t41_ydns_error = tisp_ydns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
+        if (!t41_ydns_error)
+            t41_top_restore_bypass(BIT(14));
     }
     if (t41_stock_spatial_profile > 0)
         return;
@@ -32895,7 +32897,6 @@ static void t41_apply_stock_spatial_profile(void)
             system_reg_write(ranges[range][i][0], ranges[range][i][1]);
 
     /* Exact per-block trigger addresses from the T41 HLIL. */
-    system_reg_write(0x10004, 1);
     system_reg_write(0x13080, 1);
     system_reg_write(0x1d09c, 1);
 
@@ -32906,12 +32907,12 @@ static void t41_apply_stock_spatial_profile(void)
      * diagonal frame corruption on a true cold boot.  T40 uses the same safe
      * boundary, so leave LCE bypassed until its complete init is recovered. */
     *bypass |= BIT(21);
-    t41_top_restore_bypass(BIT(14) | BIT(17));
+    t41_top_restore_bypass(BIT(17));
     t41_apply_stock_lce_ram_profile();
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock spatial profile applied "
-           "ydns=%u ysp=%u lce=%u top-want=%#x top-read=%#x\n",
-           counts[0], counts[1], counts[2], *bypass,
+           "ysp=%u lce=%u top-want=%#x top-read=%#x\n",
+           counts[0], counts[1], *bypass,
            system_reg_read(0x40));
 }
 
@@ -126795,8 +126796,65 @@ tisp_ydns_pm_suspend0x30:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000057288 origin=fragment_seed original=tisp_ydns_reg_cfg */
+static uint32_t *t41_ydns_info_checked(uint32_t channel)
+{
+    uint32_t *info;
+    if (channel != 0)
+        return NULL;
+    info = (uint32_t *)(uintptr_t)ydns_info;
+    if (!t41_kernel_data_ptr(info) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[0]) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[1]))
+        return NULL;
+    return info;
+}
+
+static int t41_ydns_interpolate_checked(uint32_t channel, uint32_t gain)
+{
+    uint32_t *info = t41_ydns_info_checked(channel);
+    if (!info)
+        return -ENODEV;
+    return t41_ydns_interpolate((uint8_t *)(uintptr_t)info[0], T41_YDNS_PARAM_BYTES,
+        (uint8_t *)(uintptr_t)info[1], T41_YDNS_STATE_BYTES, gain) ? -EINVAL : 0;
+}
+
+static int t41_ydns_write_checked(uint32_t channel)
+{
+    uint32_t *info = t41_ydns_info_checked(channel);
+    struct t41_dpc_word words[T41_YDNS_WRITES];
+    int count, i;
+    if (!info)
+        return -ENODEV;
+    count = t41_ydns_pack((uint8_t *)(uintptr_t)info[0], T41_YDNS_PARAM_BYTES,
+        (uint8_t *)(uintptr_t)info[1], T41_YDNS_STATE_BYTES,
+        channel, words, ARRAY_SIZE(words));
+    if (count < 0)
+        return -EINVAL;
+    for (i=0;i<count;++i)
+        system_reg_write(words[i].address, words[i].value);
+    return 0;
+}
+
+static int t41_ydns_refresh_checked(uint32_t channel, uint32_t gain)
+{
+    int ret = t41_ydns_interpolate_checked(channel, gain);
+    if (!ret)
+        ret = t41_ydns_write_checked(channel);
+    if (!ret) {
+        system_reg_write(((channel + 0x100) << 8) + 4, 1);
+        WRITE_ONCE(t41_ydns_gain, gain);
+    }
+    WRITE_ONCE(t41_ydns_error, ret);
+    return ret;
+}
+
 int32_t tisp_ydns_reg_cfg(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_ydns_write_checked(a0);
+    }
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -126921,6 +126979,11 @@ int32_t tisp_ydns_pm_resume(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000573e8 origin=fragment_seed original=tisp_ydns_intp */
 int32_t tisp_ydns_intp(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_ydns_interpolate_checked(a0, a1);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -127051,6 +127114,11 @@ int32_t tisp_ydns_intp(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000057608 origin=fragment_seed original=tisp_ydns_all_reg_refresh */
 int32_t tisp_ydns_all_reg_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_ydns_refresh_checked(a0, a1);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -127094,6 +127162,11 @@ int32_t tisp_ydns_all_reg_refresh(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000057650 origin=fragment_seed original=tisp_ydns_intp_reg_refresh */
 int32_t tisp_ydns_intp_reg_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_ydns_refresh_checked(a0, a1);
+    }
+#endif
     uint32_t *t9 = 0;
 
     /* fragment 0: ConstantLoad */
@@ -127113,6 +127186,25 @@ int32_t tisp_ydns_intp_reg_refresh(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000057660 origin=fragment_seed original=tisp_ydns_par_refresh */
 int32_t tisp_ydns_par_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_ydns_info_checked(a0);
+    uint32_t previous, delta;
+    int ret;
+    if (!info)
+        return -ENODEV;
+    if (a1 > (16U << 16))
+        return -EINVAL;
+    previous = info[2];
+    delta = previous > a1 ? previous - a1 : a1 - previous;
+    if (previous != ~0U && delta < info[3])
+        return 0;
+    ret = t41_ydns_refresh_checked(a0, a1);
+    if (!ret)
+        info[2] = a1;
+    return ret;
+    }
+#endif
     uint32_t a2 = 0;
     uint32_t *a3 = 0;
     uint32_t ra = 0;
@@ -127190,82 +127282,12 @@ tisp_ydns_par_refresh0x68:
 #ifdef REGTRACE_KERNEL_TREE_BUILD
 static int t41_ydns_runtime_refresh(uint32_t channel, uint32_t gain_q16)
 {
-    uint8_t *info;
-    const uint8_t *params;
-    uint8_t *runtime;
-    uint32_t cached;
-    uint32_t delta;
-    uint32_t effective_gain;
-    uint32_t base;
-    int32_t segment;
-    int32_t fraction;
-    unsigned int i;
-
-    if (channel != 0 || !ydns_info)
-        return -ENODEV;
-    info = (uint8_t *)(uintptr_t)ydns_info;
-    params = (const uint8_t *)(uintptr_t)
-        *(uint32_t *)(void *)info;
-    runtime = (uint8_t *)(uintptr_t)
-        *(uint32_t *)(void *)(info + 4);
-    if (!t41_kernel_data_ptr(info) || !t41_kernel_data_ptr(params) ||
-        !t41_kernel_data_ptr(runtime))
-        return -EFAULT;
-
-    /* Exact T41 tisp_ydns_par_refresh() cache semantics: retain the prior
-     * interpolation point for gain movements below the 0x100-Q16 threshold,
-     * but still re-emit that coherent working image on every refresh call. */
-    cached = *(uint32_t *)(void *)(info + 8);
-    effective_gain = gain_q16;
-    if (cached != 0xffffffffU) {
-        delta = gain_q16 >= cached ? gain_q16 - cached : cached - gain_q16;
-        if (delta < *(uint32_t *)(void *)(info + 12))
-            effective_gain = cached;
-        else
-            *(uint32_t *)(void *)(info + 8) = gain_q16;
-    } else {
-        *(uint32_t *)(void *)(info + 8) = gain_q16;
-    }
-
-    segment = (int32_t)(effective_gain >> 16);
-    fraction = (int32_t)(effective_gain & 0xffffU);
-    runtime[12] = (uint8_t)tisp_simple_intp_int8(
-        segment, fraction, (void *)(params + 3));
-    runtime[13] = (uint8_t)tisp_simple_intp_int8(
-        segment, fraction, (void *)(params + 14));
-    for (i = 0; i < 12; ++i)
-        runtime[i] = (uint8_t)tisp_simple_intp_int8(
-            segment, fraction, (void *)(params + 25 + 11 * i));
-    for (i = 0; i < 8; ++i)
-        runtime[14 + i] = (uint8_t)tisp_simple_intp_int8(
-            segment, fraction, (void *)(params + 157 + 11 * i));
-
-    /* Exact T41 tisp_ydns_reg_cfg()/tisp_ydns_reg_trig() packing, also
-     * shared by the repaired T40 driver. */
-    base = (channel + 0x100U) << 8;
-    system_reg_write(base + 0x08, params[0]);
-    system_reg_write(base + 0x10,
-        ((uint32_t)params[2] << 4 & 0x10U) | (params[1] & 1U));
-    system_reg_write(base + 0x20,
-        ((uint32_t)runtime[2] << 12 & 0x3000U) |
-        ((uint32_t)runtime[1] << 8 & 0x0300U) | runtime[0]);
-    system_reg_write(base + 0x24,
-        runtime[3] | ((uint32_t)runtime[4] << 8) |
-        ((uint32_t)runtime[5] << 16) | ((uint32_t)runtime[6] << 24));
-    system_reg_write(base + 0x28,
-        runtime[7] | ((uint32_t)runtime[8] << 8) |
-        ((uint32_t)runtime[9] << 16) | ((uint32_t)runtime[10] << 24));
-    system_reg_write(base + 0x40,
-        runtime[11] | ((uint32_t)runtime[12] << 8) |
-        ((uint32_t)runtime[13] << 16));
-    system_reg_write(base + 0x44,
-        runtime[14] | ((uint32_t)runtime[15] << 8) |
-        ((uint32_t)runtime[16] << 16) | ((uint32_t)runtime[17] << 24));
-    system_reg_write(base + 0x48,
-        runtime[18] | ((uint32_t)runtime[19] << 8) |
-        ((uint32_t)runtime[20] << 16) | ((uint32_t)runtime[21] << 24));
-    system_reg_write(base + 0x04, 1);
-    return 0;
+    uint32_t *info;
+    int ret = tisp_ydns_par_refresh(channel, gain_q16);
+    if (ret)
+        return ret;
+    info = t41_ydns_info_checked(channel);
+    return info ? t41_ydns_refresh_checked(channel, info[2]) : -ENODEV;
 }
 #endif
 
@@ -127316,7 +127338,6 @@ int32_t tisp_ydns_init(uint32_t a0)
     uint8_t *info;
     uint8_t *runtime;
     uint8_t *params;
-    uint32_t *bypass;
 
     /* Preserve the recovered scalar BSS slot; this target uses channel 0. */
     if (a0 != 0)
@@ -127350,11 +127371,8 @@ int32_t tisp_ydns_init(uint32_t a0)
         goto fail;
     system_reg_write(0x350, 0x20220702U);
 
-    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
-    *bypass |= BIT(14);
-    system_reg_write((a0 + 16) << 2, *bypass);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: ydns-init safe bypass channel=%u\n", a0);
+    if (t41_top_restore_bypass(BIT(14)))
+        goto fail;
     return 0;
 
 fail:
@@ -127583,8 +127601,10 @@ tisp_ydns_deinit0xa4:
 int32_t tisp_ydns_dn_params_refresh(uint32_t a0)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    (void)a0;
-    return 0;
+    uint32_t *info = t41_ydns_info_checked(a0);
+    if (!info)
+        return -ENODEV;
+    return t41_ydns_refresh_checked(a0, info[2] <= (16U << 16) ? info[2] : 0);
 #else
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
@@ -127611,6 +127631,17 @@ int32_t tisp_ydns_dn_params_refresh(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000579c8 origin=fragment_seed original=tisp_ydns_param_array_get */
 int32_t tisp_ydns_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_ydns_info_checked(a0);
+    if (!info || !t41_kernel_data_ptr((void *)(uintptr_t)a1) ||
+        !t41_kernel_data_ptr((void *)a2))
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)a1, (void *)(uintptr_t)info[0], T41_YDNS_PARAM_BYTES);
+    *(uint32_t *)a2 = T41_YDNS_PARAM_BYTES;
+    return 0;
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -127640,6 +127671,15 @@ int32_t tisp_ydns_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000057a24 origin=fragment_seed original=tisp_ydns_param_array_set */
 int32_t tisp_ydns_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_ydns_info_checked(a0);
+    if (!info || !t41_kernel_data_ptr((void *)(uintptr_t)a1))
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)info[0], (void *)(uintptr_t)a1, T41_YDNS_PARAM_BYTES);
+    return t41_ydns_refresh_checked(a0, info[2] <= (16U << 16) ? info[2] : 0);
+    }
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
