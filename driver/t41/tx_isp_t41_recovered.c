@@ -25,6 +25,7 @@
 #include "tx_isp_t41_awb_gain.h"
 #include "tx_isp_t41_sensor_gain.h"
 #include "tx_isp_t41_gamma.h"
+#include "tx_isp_t41_dpc.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -1241,7 +1242,7 @@ MODULE_PARM_DESC(t41_stock_dmsc_profile,
 static int t41_stock_dpc_profile = -1;
 module_param(t41_stock_dpc_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_dpc_profile,
-		 "Apply stock OS04D10 DPC threshold/mask delta (negative=enabled, positive=disabled)");
+		 "nonpositive reapplies calibration-driven DPC after stream reset (legacy name)");
 static int t41_stock_ysp_profile = 1;
 module_param(t41_stock_ysp_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_ysp_profile,
@@ -1308,6 +1309,10 @@ static uint32_t t41_bcsh_last[T41_BCSH_WORDS] = { UINT_MAX };
 module_param(t41_bcsh_error, int, 0444);
 static int t41_bcsh_update(uint32_t ct, uint32_t ev, int force);
 static int t41_gamma_error = -ENODEV;
+static int t41_dpc_error = -ENODEV;
+static unsigned int t41_dpc_gain = ~0U;
+module_param(t41_dpc_error, int, 0444);
+module_param(t41_dpc_gain, uint, 0444);
 static unsigned int t41_gamma_ev = ~0U;
 static unsigned int t41_gamma_strength_value = ~0U;
 static unsigned int t41_gamma_updates __attribute__((section(".data"))) = 0;
@@ -32613,38 +32618,11 @@ static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
 
 static void t41_apply_stock_dpc_profile(void)
 {
-    /*
-     * Exact writable DPC differences from the current stock/open full-bank
-     * comparison.  T41 HLIL tisp_dpc_write_reg_long() proves that the seven
-     * pairs and four masks below are configuration, not status.  Deliberately
-     * exclude 0x7088/0x708c/0x7090: those are live result counters and their
-     * disagreement is evidence about the input, not state to replay.
-     */
-    static const uint32_t stock_delta[][2] = {
-        { 0x0701c, 0x002401f4 }, { 0x07020, 0x01f401f4 },
-        { 0x07024, 0x00640064 }, { 0x07028, 0x00640064 },
-        { 0x0702c, 0x00320032 }, { 0x07030, 0x00320032 },
-        { 0x07034, 0x00c800c8 }, { 0x07038, 0x002401f4 },
-        { 0x0703c, 0x01f401f4 }, { 0x07040, 0x00640064 },
-        { 0x07044, 0x00640064 }, { 0x07048, 0x00320032 },
-        { 0x0704c, 0x00320032 }, { 0x07050, 0x00c800c8 },
-        { 0x07098, 0x00010008 }, { 0x071a0, 0xffffffff },
-        { 0x07234, 0xffffffff }, { 0x07238, 0xffffffff },
-        { 0x0723c, 0xffffffff },
-    };
-    unsigned int i;
-
+    /* Compatibility selector now refreshes calibrated writer-owned fields.
+     * 0x7098 was in the captured delta but is not owned by the OEM writers. */
     if (t41_stock_dpc_profile > 0)
         return;
-    for (i = 0; i < ARRAY_SIZE(stock_delta); ++i)
-        system_reg_write(stock_delta[i][0], stock_delta[i][1]);
-    /* Exact DPC long-bank commit target. */
-    system_reg_write(0x0709c, 1);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock DPC profile applied words=%u "
-           "thresholds=%#x/%#x masks=%#x/%#x\n",
-           i, system_reg_read(0x0701c), system_reg_read(0x07050),
-           system_reg_read(0x071a0), system_reg_read(0x0723c));
+    t41_dpc_error = tisp_dpc_write_reg_part_0(0);
 }
 
 static int t41_apply_calibrated_bcsh(uint32_t color_model)
@@ -95399,8 +95377,37 @@ tisp_dpc_pm_suspend0xa4:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003d17c origin=fragment_seed original=tisp_dpc_write_reg_long */
+static int t41_dpc_write_checked(uint32_t channel, unsigned int part)
+{
+    uint32_t *info;
+    uint8_t *params, *state;
+    struct t41_dpc_word words[T41_DPC_OTHER_WRITES];
+    int count, i;
+    if (channel >= ARRAY_SIZE(dpc_info))
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)dpc_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    params = (uint8_t *)(uintptr_t)info[0];
+    state = (uint8_t *)(uintptr_t)info[1];
+    if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(state))
+        return -ENODEV;
+    count = part == 2 ? t41_dpc_pack_other(params, T41_DPC_PARAM_BYTES,
+        ((uint8_t *)info)[9], words, ARRAY_SIZE(words)) :
+        t41_dpc_pack_bank(params, T41_DPC_PARAM_BYTES, state,
+            T41_DPC_STATE_BYTES, part, words, ARRAY_SIZE(words));
+    if (count < 0)
+        return -EINVAL;
+    for (i = 0; i < count; ++i)
+        system_reg_write(words[i].address, words[i].value);
+    return 0;
+}
+
 int64_t tisp_dpc_write_reg_long(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_dpc_write_checked(a0, 0);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -95618,6 +95625,9 @@ tisp_dpc_write_reg_long0x3f0:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003d578 origin=fragment_seed original=tisp_dpc_write_reg_short */
 int64_t tisp_dpc_write_reg_short(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_dpc_write_checked(a0, 1);
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -95812,6 +95822,9 @@ tisp_dpc_write_reg_short0x32c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003d8b0 origin=fragment_seed original=tisp_dpc_write_reg_other */
 int32_t tisp_dpc_write_reg_other(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_dpc_write_checked(a0, 2);
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -96157,9 +96170,11 @@ int32_t tisp_dpc_write_reg_part_0(uint32_t a0)
     /* function prologue: stack frame and callee-saved register setup */
 
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    tisp_dpc_write_reg_long(a0);
-    tisp_dpc_write_reg_short(a0);
-    return tisp_dpc_write_reg_other(a0);
+    {
+        int ret = (int)tisp_dpc_write_reg_long(a0);
+        if (!ret) ret = (int)tisp_dpc_write_reg_short(a0);
+        return ret ? ret : tisp_dpc_write_reg_other(a0);
+    }
 #endif
 
     /* fragment 1: CallSetup */
@@ -96317,6 +96332,23 @@ int32_t tisp_dpc_write_reg(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003e240 origin=fragment_seed original=tisp_dpc_gain_interp */
 int32_t tisp_dpc_gain_interp(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        uint32_t *info;
+        uint8_t *params, *state;
+        if (a0 >= ARRAY_SIZE(dpc_info) || a1 > 1)
+            return -EINVAL;
+        info = (uint32_t *)(uintptr_t)dpc_info[a0];
+        if (!t41_kernel_data_ptr(info))
+            return -ENODEV;
+        params = (uint8_t *)(uintptr_t)info[0];
+        state = (uint8_t *)(uintptr_t)info[1];
+        if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(state))
+            return -ENODEV;
+        return t41_dpc_interpolate_bank(params, T41_DPC_PARAM_BYTES, state,
+            T41_DPC_STATE_BYTES, info[3 + a1], a1) ? -EINVAL : 0;
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t local_1c = 0;
@@ -96661,6 +96693,17 @@ tisp_dpc_gain_interp0x42c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003e808 origin=fragment_seed original=tisp_dpc_l_gain_update */
 int32_t tisp_dpc_l_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        int ret;
+        if (a0 >= ARRAY_SIZE(dpc_info) ||
+            !t41_kernel_data_ptr((void *)(uintptr_t)dpc_info[a0]))
+            return -ENODEV;
+        ((uint32_t *)(uintptr_t)dpc_info[a0])[3] = a2;
+        ret = tisp_dpc_gain_interp(a0, 0);
+        return ret ? ret : (int)tisp_dpc_write_reg_long(a0);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -96693,6 +96736,17 @@ int32_t tisp_dpc_l_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003e864 origin=fragment_seed original=tisp_dpc_s_gain_update */
 int32_t tisp_dpc_s_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        int ret;
+        if (a0 >= ARRAY_SIZE(dpc_info) ||
+            !t41_kernel_data_ptr((void *)(uintptr_t)dpc_info[a0]))
+            return -ENODEV;
+        ((uint32_t *)(uintptr_t)dpc_info[a0])[4] = a2;
+        ret = tisp_dpc_gain_interp(a0, 1);
+        return ret ? ret : (int)tisp_dpc_write_reg_short(a0);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -96725,6 +96779,22 @@ int32_t tisp_dpc_s_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003e8c0 origin=fragment_seed original=tisp_dpc_wdr_en */
 int32_t tisp_dpc_wdr_en(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+        int ret;
+        if (a0 >= ARRAY_SIZE(dpc_info) || a1 > 1 ||
+            !t41_kernel_data_ptr((void *)(uintptr_t)dpc_info[a0]))
+            return -EINVAL;
+        ((uint8_t *)(uintptr_t)dpc_info[a0])[8] = a1;
+        ret = tisp_dpc_gain_interp(a0, 0);
+        if (!ret) ret = (int)tisp_dpc_write_reg_long(a0);
+        if (!ret && a1) {
+            ret = tisp_dpc_gain_interp(a0, 1);
+            if (!ret) ret = (int)tisp_dpc_write_reg_short(a0);
+        }
+        return ret ? ret : tisp_dpc_write_reg_other(a0);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -96839,6 +96909,7 @@ int32_t tisp_dpc_init(uint32_t a0)
         *(uint32_t *)(void *)(info + 4) =
             (uint32_t)(uintptr_t)runtime;
 
+        if (!a0) t41_dpc_gain = ~0U;
         tisp_dpc_gain_interp(a0, 0);
         tisp_dpc_gain_interp(a0, 1);
         tisp_dpc_write_reg_part_0(a0);
@@ -150211,6 +150282,11 @@ static void t41_tmo_workfn(struct work_struct *work)
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_gamma_error = t41_gamma_update(ev);
+    if (t41_stock_dpc_profile <= 0 && gain != t41_dpc_gain) {
+        t41_dpc_error = tisp_dpc_l_gain_update(0, 0, gain);
+        if (!t41_dpc_error)
+            t41_dpc_gain = gain;
+    }
     ret = t41_tmo_frame(ev, gain, sequence);
     t41_tmo_error = ret;
     if (ret) {

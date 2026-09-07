@@ -24,6 +24,7 @@ with open(sys.argv[1], 'rb') as source:
     gib = len(sys.argv) > 2 and sys.argv[2] == 'gib'
     awb_gain = len(sys.argv) > 2 and sys.argv[2] == 'awb_gain'
     gamma = len(sys.argv) > 2 and sys.argv[2] == 'gamma'
+    dpc = len(sys.argv) > 2 and sys.argv[2] == 'dpc'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -52,6 +53,11 @@ with open(sys.argv[1], 'rb') as source:
         functions = dict(zip(['tisp_gamma_interp_by_ev', 'tisp_gamma_strength_transform',
             'tisp_gamma_write_lut_rgb', 'tisp_round_int64'],
             ['oracle_select', 'oracle_curve', 'oracle_pack', 'oracle_round']))
+    if dpc:
+        functions = dict(zip(['tisp_dpc_gain_interp', 'tisp_dpc_write_reg_long',
+            'tisp_dpc_write_reg_short', 'tisp_simple_intp_int16', 'tisp_simple_intp_int8',
+            'tisp_dpc_write_reg_other'],
+            ['oracle_interpolate', 'oracle_long', 'oracle_short', 'oracle_lerp16', 'oracle_lerp8', 'oracle_other']))
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
