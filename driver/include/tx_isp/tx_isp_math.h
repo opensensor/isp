@@ -12,6 +12,17 @@
  * variant also preserves T23's arithmetic post-multiply shift.
  */
 
+/* Byte-valued tuning control: 128 preserves calibration, 0 removes the
+ * effect, 255 approaches maximum. Keep the OEM unsigned Q7 product. */
+static inline unsigned int
+tx_isp_tuning_ratio_u32(unsigned char strength, unsigned int value,
+			unsigned int maximum)
+{
+	if (strength == 128) return value;
+	if (strength > 128) return (((strength - 128U) * (maximum - value)) >> 7) + value;
+	return (strength * value) >> 7;
+}
+
 static inline unsigned int
 tx_isp_lerp_pair_u32(unsigned int base_value, unsigned int next,
 		     unsigned int fraction)

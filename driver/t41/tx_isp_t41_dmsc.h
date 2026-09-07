@@ -11,9 +11,7 @@
  * even for synthetic values above the nominal sharpness maximum. */
 static inline unsigned int t41_dmsc_ratio(unsigned int sharp, unsigned int value)
 {
-	if (sharp == 128) return value;
-	if (sharp > 128) return (((sharp - 128) * (600U - value)) >> 7) + value;
-	return (sharp * value) >> 7;
+	return tx_isp_tuning_ratio_u32(sharp, value, 600);
 }
 
 static inline int t41_dmsc_interpolate(const unsigned char *p, unsigned int bytes,

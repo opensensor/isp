@@ -1,6 +1,29 @@
 # T41 calibrated AWB comparison, 2026-09-07
 
-## Current follow-up: calibrated AE/GIB/WB conversion and stream metadata
+## Current scope: calibration-driven scalar boundaries, not whole-ISP parity
+
+The persistent test stack now includes sensor-callback gain allocation,
+AE/WB readiness gating, exposure-driven gamma, complete DPC writers and
+demosaic interpolation/packing. See [sensor/AE/GIB/WB](T41_AE_GIB_AWB_GAIN.md),
+[gamma](T41_GAMMA_ALGORITHM.md), [DPC](T41_DPC_ALGORITHM.md), and
+[demosaic](T41_DMSC_ALGORITHM.md). The DPC and demosaic captured profiles have
+been removed. Their replacement algorithms match randomized OEM userspace
+oracles and follow unity-to-maximum sensor gain on the T41. Routine WB
+warning/MMIO-read traffic and unchanged-gain fanout have also been removed.
+
+The latest nearby stock/open daylight pair uses the corrected full-range
+BT.601 metadata on both paths. Open/stock paper luma is 163.24/147.51 and
+bark luma is 40.06/42.43; paper R/G is 0.8283/0.8534 and B/G is
+1.1961/1.2394. This uncontrolled scene is not a color chart, and these numbers
+are not calibration targets. Exposure and white balance still differ.
+
+Full OEM AWB clustering/history, AE convergence and the remaining spatial/
+temporal blocks are not established by these tests. WDR and day/night
+transitions remain outside the forced-day validation. The sections below
+record earlier stages; their statements about then-unimplemented features
+must not be read as current status.
+
+## Earlier follow-up: calibrated AE/GIB/WB conversion and stream metadata
 
 See [AE, GIB and WB gain recovery](T41_AE_GIB_AWB_GAIN.md). Calibrated zone
 metering and EV targets replace the fixed daylight target on the new security
@@ -16,7 +39,7 @@ They remain historical observations, not a basis for extra tuning offsets.
 Remaining AWB estimation, spatial replays and sensor allocation limitations
 are explicitly listed in the linked document. This is not whole-ISP parity.
 
-## Current: frame-driven TMO, calibrated CCM/BCSH, and corrected routing
+## Earlier follow-up: frame-driven TMO, calibrated CCM/BCSH, and corrected routing
 
 TMO modes 0/1 now run from completed-frame statistics, with stream-stop
 draining and no per-frame allocation. The captured CCM bank has been removed
@@ -30,7 +53,7 @@ replays, full OEM AWB history, day/night/WDR, and the AE raw-gain adapter are
 not solved by these changes. These results are not whole-ISP OEM parity.
 The diagnostic-only descriptions below are historical, not current status.
 
-## Latest: scalar local TMO
+## Historical: scalar local TMO before frame integration
 
 The [local TMO filter](T41_TMO_ALGORITHM.md) is now a checked scalar algorithm
 for kernel-selection modes 0/1. It matches 2,475,000 independent vendor-oracle
