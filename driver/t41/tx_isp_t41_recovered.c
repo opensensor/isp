@@ -167134,6 +167134,11 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
                        (uint32_t)callback, (long long)callback_ret);
         }
 
+        /* Bit 9 was previously acknowledged without dispatch while ADR
+         * was disabled. Only the native, owned-page reader is now armed. */
+        if ((status0 & BIT(9)) && t41_stock_adr_profile <= 0)
+            t41_native_adr_interrupt();
+
         if (t41_runtime_trace && (trace_count < 32 || (status0 & 0x1)))
             printk(KERN_WARNING
                    "tx_isp_t41_recovered: ISP safe irq epoch=%#x status=%#x error=%#x aux=%#x/%#x\n",
