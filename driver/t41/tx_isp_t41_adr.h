@@ -9,6 +9,24 @@
 #define T41_ADR_STATS_BYTES 0x2748U
 #define T41_ADR_WORK_BYTES 0x474U
 
+static inline void t41_adr_put16(unsigned char *p,unsigned int v);
+
+/* Global dark-range metering: round(255*exp(-i*i/(2*50*50))). */
+static inline unsigned int t41_adr_dark_weight(unsigned int i)
+{
+	unsigned int x,term=1U<<30,value=term,n;
+	if(i>=128) return 0;
+	/* Taylor at x/16, then four squarings. Unlike the exposure LUT's
+	 * piecewise-linear exponent, this preserves half-integer rounding. */
+	x=t41_tmo_div(((unsigned long long)i*i<<30)+40000,80000);
+	for(n=1;n<=8;++n) {
+		term=t41_tmo_div((unsigned long long)term*x,(unsigned long long)n<<30);
+		if(n&1) value-=term; else value+=term;
+	}
+	for(n=0;n<4;++n) value=((unsigned long long)value*value+(1ULL<<29))>>30;
+	return ((unsigned long long)value*255+(1ULL<<29))>>30;
+}
+
 /* Higher-precision logarithm for generating geometric thresholds. This is
  * not a replacement for the deliberately quantized ISP exposure log ABI. */
 static inline unsigned int t41_adr_log2_q24(unsigned int value)
@@ -34,6 +52,63 @@ static inline unsigned int t41_adr_radial_threshold(unsigned int i)
 	if(i>=31) return 0;
 	log=t41_adr_log2_q24(62)-t41_adr_log2_q24(2*i+1);
 	return ((unsigned long long)log*744261118U+(1ULL<<40))>>41;
+}
+
+/* 256*(x/8)^(power/10), rounded. Hardware's twelve abscissae are
+ * 0..8,16,32,64. Generate its power-law banks, not per-sensor LUTs. */
+static inline unsigned int t41_adr_power_knot(unsigned int x,unsigned int power)
+{
+	int log,whole; unsigned int fraction,term=1U<<30,value=term,n,shift;
+	if(!x || power>18) return 0;
+	log=(int)t41_adr_log2_q24(x)-(3<<24);
+	log=(int)((long long)log*power/10);
+	whole=log/(1<<24); if(log<0 && (log&0xffffff)) --whole;
+	fraction=((unsigned long long)(log-whole*(1<<24))*744261118U)>>24;
+	for(n=1;n<=12;++n) {
+		term=t41_tmo_div((unsigned long long)term*fraction,(unsigned long long)n<<30);
+		value+=term;
+	}
+	shift=22-whole;
+	return ((unsigned long long)value+(1ULL<<(shift-1)))>>shift;
+}
+
+static inline int t41_adr_hardware_parameters(unsigned char *p,unsigned int bytes)
+{
+	unsigned int i,j; int mode,step;
+	if(!p || bytes<T41_ADR_PARAM_BYTES) return -1;
+	mode=(short)t41_tmo_le16(p+0xa36); step=mode==2 ? 4 : mode==1 ? 3 : 2;
+	t41_adr_put16(p+0x128,640/step);
+	for(i=1;i<6;++i) t41_adr_put16(p+0x128+i*2,(1024*(10+((int)i-3)*step)+5)/10);
+	for(j=0;j<5;++j) for(i=0;i<12;++i)
+		t41_adr_put16(p+0x19e + j*24+i*2,t41_adr_power_knot(i<=8 ? i : 8U<<(i-8),10+((int)j-2)*step));
+	for(i=0;i<2;++i) {
+		int value=(short)t41_tmo_le16(p+0xa2e + i*2);
+		if(value<0) value=0; else if(value>128) value=128;
+		t41_adr_put16(p+0xa2e + i*2,value); t41_adr_put16(p+0x134+i*2,value);
+	}
+	t41_adr_put16(p+0x138,t41_tmo_le16(p+0xa32)); t41_adr_put16(p+0x13a,t41_tmo_le16(p+0xa34));
+	for(i=0;i<18;++i) {
+		int value=1024;
+		if((short)t41_tmo_le16(p+0xa38)==1) {
+			int first=(short)t41_tmo_le16(p+0xa3a);
+			if((int)i<=first) value=(short)t41_tmo_le16(p+0xa42);
+			else {
+				int slope=0,dx=0,dy=0,distance=1;
+				/* A negative first knot would read before the output array. */
+				if(!i) return -1;
+				for(j=1;j<4;++j) if((int)i<=(short)t41_tmo_le16(p+0xa3a+j*2)) {
+					int previous=(short)t41_tmo_le16(p+0xa38+j*2);
+					dx=(short)(t41_tmo_le16(p+0xa3a+j*2)-previous);
+					dy=(short)(t41_tmo_le16(p+0xa42+j*2)-t41_tmo_le16(p+0xa40+j*2));
+					distance=(short)(i-previous); if(dx) slope=(short)(dy/dx);
+					break;
+				}
+				value=t41_tmo_le16(p+0x214+i*2)+slope+((short)(dy-slope*dx)>=distance);
+			}
+		}
+		t41_adr_put16(p+0x216+i*2,value);
+	}
+	return 0;
 }
 
 static inline unsigned int t41_adr_pair(const unsigned char *p,unsigned int mask)
@@ -493,11 +568,11 @@ static inline int t41_adr_subsections(int *out,unsigned int capacity,int strengt
 			int a=i==1 ? 0 : i==2 ? 1 : i==3 ? 0 : i==4 ? 2 : 1;
 			int b=i==3 ? 1 : i==5 ? 2 : -1;
 			index=(int)(t41_ae_fixed_div(precision,(unsigned int)x[a]<<precision,scale<<precision)+512)>>precision;
-			if(index>=512) return -1;
+			if(index>=512) return -2;
 			target=cdf[index]; base=y[a];
 			if(b>=0) {
 				other=(int)(t41_ae_fixed_div(precision,(unsigned int)x[b]<<precision,scale<<precision)+512)>>precision;
-				if(other>=512) return -1;
+				if(other>=512) return -2;
 				target+=cdf[other]; base+=y[b];
 			}
 			target/=2;
@@ -607,6 +682,272 @@ static inline int t41_adr_filter(unsigned char knots[32],int curve[14],int itera
 	for(i=0;i<33;++i) t41_adr_put16(output+i*2,values[i]);
 	if(t41_adr_resample16(grid,output,knots,input,33,16)) return -1;
 	for(i=0;i<14;++i) curve[i]=(short)t41_tmo_le16(input+(i+1)*2);
+	return 0;
+}
+
+struct t41_adr_context {
+	unsigned char knees[32],gamma_x[258],face_flags[24],face_curve[672];
+	unsigned char ctc_axis[46],ctc_grid[26],ctc_sample[3][26];
+	unsigned int ctc_changed;
+	unsigned int stage,tile;
+	unsigned int dark_weights[128],dark_weight_sum,face_count,face_enabled;
+	short gaussian_previous[4];
+	int gaussian[24],cut[11];
+	/* Reused frame scratch; the worker owns this context exclusively. */
+	int strengths[24],a[14],b[14],c[14],rational[14],selected[14];
+	unsigned char x[34],y[34],sample[32],queries[14];
+};
+
+static inline void t41_adr_context_init(struct t41_adr_context *ctx,unsigned char *state,unsigned char *work)
+{
+	static const unsigned short knees[16]={0,8,16,32,64,128,192,256,384,512,768,1024,1536,2048,3072,4096};
+	static const unsigned short ctc_axis[23]={0,8,16,32,64,96,128,256,384,512,640,768,896,1024,1280,1536,1792,2048,2304,2560,3072,3584,4096};
+	static const unsigned short ctc_grid[13]={0,32,64,128,256,512,1024,1536,2048,2560,3072,3584,4095};
+	unsigned int i,j;
+	ctx->dark_weight_sum=0; ctx->face_count=0; ctx->face_enabled=0; ctx->ctc_changed=1;
+	for(i=0;i<23;++i) t41_adr_put16(ctx->ctc_axis+i*2,ctc_axis[i]);
+	for(i=0;i<13;++i) t41_adr_put16(ctx->ctc_grid+i*2,ctc_grid[i]);
+	for(i=0;i<4;++i) ctx->gaussian_previous[i]=-1;
+	for(i=0;i<128;++i) { ctx->dark_weights[i]=t41_adr_dark_weight(i); ctx->dark_weight_sum+=ctx->dark_weights[i]; }
+	for(i=0;i<129;++i) t41_adr_put16(ctx->gamma_x+i*2,i==128 ? 4095 : i*32);
+	for(i=0;i<16;++i) { t41_adr_put16(ctx->knees+i*2,knees[i]); t41_adr_put16(state+0x44+i*2,0); }
+	for(i=0;i<14;++i) t41_adr_put16(state+0x64+i*2,knees[i+1]);
+	for(j=0;j<24;++j) {
+		ctx->face_flags[j]=0;
+		for(i=0;i<14;++i) {
+			t41_adr_put16(state+0x80+j*28+i*2,knees[i+1]);
+			t41_adr_put16(work+0xc8+j*28+i*2,knees[i+1]);
+			t41_adr_put16(ctx->face_curve+j*28+i*2,knees[i+1]);
+		}
+	}
+}
+
+/* Cold initialization and the geometry cache used by day/night refresh.
+ * The calibration carries its own dimensions; regenerate only on mismatch. */
+static inline int t41_adr_initialize(struct t41_adr_context *ctx,unsigned char *p,
+		unsigned int bytes,unsigned char *state,unsigned char *work,
+		unsigned int width,unsigned int height,const unsigned char gamma[258],unsigned int scratch[8][32])
+{
+	unsigned int i;
+	if(!ctx || !p || !state || !work || !gamma || !scratch || bytes<T41_ADR_PARAM_BYTES ||
+	   !width || !height || width>8192 || height>8192) return -1;
+	for(i=0;i<T41_ADR_STATE_BYTES;++i) state[i]=0;
+	for(i=0;i<T41_ADR_WORK_BYTES;++i) work[i]=0;
+	t41_adr_context_init(ctx,state,work);
+	for(i=0;i<258;++i) p[0x766+i]=gamma[i];
+	if((short)t41_tmo_le16(p+0x74)!=(int)width || (short)t41_tmo_le16(p+0x76)!=(int)height) {
+		t41_adr_put16(p+0x74,width); t41_adr_put16(p+0x76,height);
+		if(t41_adr_geometry(p,bytes,width,height,scratch)) return -1;
+	}
+	for(i=0;i<160;++i) work[0x3d4+i]=p[0x27f+i];
+	for(i=0;i<24;++i) work[i]=p[0x13c+i];
+	for(i=0;i<62;++i) work[0x396+i]=p[0x23a+i];
+	return 0;
+}
+
+/* Both day/night replacement and linear/WDR switching retain temporal
+ * history, reset the visible tile curves and restore cached geometry only
+ * when the replacement calibration has different dimensions. */
+static inline int t41_adr_refresh(struct t41_adr_context *ctx,unsigned char *p,
+		unsigned int bytes,unsigned char *state,const unsigned char *work,
+		unsigned int width,unsigned int height,const unsigned char gamma[258])
+{
+	unsigned int i,j;
+	if(!ctx || !p || !state || !work || !gamma || bytes<T41_ADR_PARAM_BYTES ||
+	   !width || !height || width>8192 || height>8192) return -1;
+	for(i=0;i<258;++i) p[0x766+i]=gamma[i];
+	for(i=0;i<14;++i) {
+		unsigned int identity=t41_tmo_le16(ctx->knees+2+i*2);
+		t41_adr_put16(state+0x64+i*2,identity);
+		for(j=0;j<24;++j) t41_adr_put16(state+0x80+j*28+i*2,identity);
+	}
+	if((short)t41_tmo_le16(p+0x74)!=(int)width || (short)t41_tmo_le16(p+0x76)!=(int)height) {
+		t41_adr_put16(p+0x74,width); t41_adr_put16(p+0x76,height);
+		for(i=0;i<160;++i) p[0x27f+i]=work[0x3d4+i];
+		for(i=0;i<24;++i) p[0x13c+i]=work[i];
+		for(i=0;i<62;++i) p[0x23a+i]=work[0x396+i];
+	}
+	return 0;
+}
+
+/* Complete frame arithmetic. The caller snapshots statistics and runs this
+ * on private candidate state before committing a successful RAM transaction. */
+static inline int t41_adr_frame(struct t41_adr_context *ctx,unsigned char *p,unsigned int bytes,
+		unsigned char *state,unsigned int state_bytes,unsigned char *work,unsigned int work_bytes,
+		const unsigned char *stats,unsigned int stats_bytes,const unsigned char *coordinate_lut)
+{
+	static const unsigned short local_x[17]={16,64,128,192,256,384,512,640,768,1024,1280,1536,2048,2560,3072,3584,4095};
+	static const unsigned short ctc_x[9]={8,16,32,64,128,256,512,1024,2048};
+	unsigned int i,j,sum=0; int low=4095,high=0,mode;
+	const int *cdf;
+	if(!ctx || !p || !state || !work || !stats || !coordinate_lut || bytes<T41_ADR_PARAM_BYTES ||
+	   state_bytes<T41_ADR_STATE_BYTES || work_bytes<T41_ADR_WORK_BYTES || stats_bytes<T41_ADR_STATS_BYTES ||
+	   ((unsigned long)stats&3) || !ctx->dark_weight_sum) return -1;
+	cdf=(const int *)(const void *)(stats+0x1640);
+	ctx->stage=1; ctx->tile=0;
+#define ADR_P(off) ((short)t41_tmo_le16(p+(off)))
+	/* Gamma-derived segment widths are refreshed each frame, exactly before
+	 * the adaptive curve. The uniform 129-entry abscissa is generated once. */
+	for(i=0;i<7;++i) t41_adr_put16(ctx->queries+i*2,i<5 ? i*256 : i==5 ? 1536 : 2048);
+	if(t41_adr_resample16(p+0x766,ctx->gamma_x,ctx->queries,ctx->sample,129,7)) return -1;
+	for(i=0;i<6;++i) t41_adr_put16(p+0x560+i*2,t41_tmo_le16(ctx->sample+(i+1)*2)-t41_tmo_le16(ctx->sample+i*2));
+	t41_adr_put16(p+0x56e,ADR_P(0x560)+ADR_P(0x562));
+	t41_adr_put16(p+0x570,ADR_P(0x564)+ADR_P(0x566));
+	t41_adr_put16(p+0x572,ADR_P(0x568)); t41_adr_put16(p+0x574,ADR_P(0x56a));
+	for(i=0;i<128;++i) {
+		sum+=(unsigned int)(cdf[i]-(i ? cdf[i-1] : 0))*ctx->dark_weights[i];
+		if(i==16 || i==32 || i==64 || i==96) {
+			unsigned int slot=i==16 ? 0x32 : i==32 ? 0x34 : i==64 ? 0x36 : 0x38;
+			t41_adr_put16(state+slot,(int)sum/(int)ctx->dark_weight_sum);
+		}
+	}
+	t41_adr_put16(state+0x30,(int)sum/(int)ctx->dark_weight_sum);
+	mode=ADR_P(0x894);
+	ctx->stage=2;
+	for(i=0;i<24;++i) {
+		ctx->tile=i;
+		int mean=(int)t41_tmo_le32(stats+0x25c0+i*4),second=(int)t41_tmo_le32(stats+0x2620+i*4),strength,debug;
+		if(mean<low) low=mean;
+		if(mean>high) high=mean;
+		if(mode==3) strength=(int)((unsigned int)ADR_P(0x89e + ((i%4)*6+i/4)*2)*(unsigned int)ADR_P(0x3a8))/51200;
+		else if(mode==2) {
+			for(j=0;j<17;++j) {
+				int value=j<3 ? ADR_P(0x3aa+j*2) : j<11 ? ADR_P(0x5a8+(j-3)*2) : 0;
+				if(value<0) value=0; else if(value>1024) value=1024;
+				t41_adr_put16(ctx->x+j*2,local_x[j]); t41_adr_put16(ctx->y+j*2,value);
+			}
+			strength=(int)((unsigned int)t41_adr_interpolate16((short)mean,ctx->x,ctx->y,17)*(unsigned int)ADR_P(0x3a8))/51200;
+		} else if(t41_adr_local_strength(ADR_P(0x3a8),ADR_P(0x3aa),ADR_P(0x3ac),ADR_P(0x3ae),mean,&strength)) return -1;
+		ctx->strengths[i]=ADR_P(0x764)==1 ? (int)((unsigned int)strength*(unsigned int)ctx->gaussian[i])/10000 : strength;
+		debug=ADR_P(0x60)==2 ? strength : ADR_P(0x60)==3 ? mean : ADR_P(0x60)==4 ? second : ADR_P(0x60)==5 ? ctx->gaussian[i] : 0;
+		t41_adr_put16(state+i*2,debug);
+	}
+	if(ADR_P(0x60)==0) { t41_adr_put16(state,t41_tmo_le32(stats+0x2740)); t41_adr_put16(state+2,t41_tmo_le32(stats+0x2744)); }
+	if(ADR_P(0x60)==1) { t41_adr_put16(state,low); t41_adr_put16(state+2,high); }
+	if(ADR_P(0x9e0)==1) {
+		int knee=ADR_P(0x9e4)+155,strength=ADR_P(0x9e2);
+		if(knee<155) knee=155; else if(knee>255) knee=255;
+		if(strength<0) strength=0; else if(strength>100) strength=100;
+		if(t41_adr_map_curve(ctx->rational,30,knee,coordinate_lut)) return -1;
+		for(i=0;i<14;++i) { int identity=t41_tmo_le16(ctx->knees+(i+1)*2); t41_adr_put16(state+0x64+i*2,(identity*100+(ctx->rational[i]-identity)*strength+50)/100); }
+	} else for(i=0;i<14;++i) t41_adr_put16(state+0x64+i*2,t41_tmo_le16(ctx->knees+(i+1)*2));
+	if(ADR_P(0x9a2)==1) {
+		for(i=0;i<9;++i) {
+			int value=ADR_P(0x98e + i*2); if(value<0) value=0; else if(value>800) value=800;
+			t41_adr_put16(ctx->x+i*2,ctc_x[i]); t41_adr_put16(ctx->y+i*2,value*1024/100);
+		}
+		for(i=0;i<16;++i) t41_adr_put16(state+0x44+i*2,t41_adr_interpolate16((short)t41_tmo_le16(ctx->knees+i*2),ctx->x,ctx->y,9));
+	} else for(i=0;i<16;++i) t41_adr_put16(state+0x44+i*2,1024);
+	if(ctx->ctc_changed) {
+		ctx->stage=3;
+		if(ADR_P(0x98c)==1) {
+			t41_adr_put16(ctx->y,0); t41_adr_put16(ctx->y+24,4095);
+			for(i=0;i<11;++i) t41_adr_put16(ctx->y+2+i*2,ADR_P(0x966+i*2));
+			if(t41_adr_resample16(ctx->gamma_x,p+0x766,ctx->ctc_grid,ctx->ctc_sample[0],129,13) ||
+			   t41_adr_resample16(ctx->ctc_grid,ctx->y,ctx->ctc_sample[0],ctx->ctc_sample[1],13,13) ||
+			   t41_adr_resample16(p+0x766,ctx->gamma_x,ctx->ctc_sample[1],ctx->ctc_sample[2],129,13) ||
+			   t41_adr_resample16(ctx->ctc_grid,ctx->ctc_sample[2],ctx->ctc_axis,work+0x368,13,23)) return -1;
+			for(i=0;i<21;++i) t41_adr_put16(p+0x174+i*2,t41_tmo_le16(work+0x36a+i*2));
+		} else for(i=0;i<21;++i) t41_adr_put16(p+0x174+i*2,t41_tmo_le16(ctx->ctc_axis+2+i*2));
+		ctx->ctc_changed=0;
+	}
+	/* This base curve is invariant across tiles; only its strength blend is
+	 * local. OEM recalculates the same 33 rational samples 24 times. */
+	if(t41_adr_map_curve(ctx->rational,ADR_P(0x3b0),ADR_P(0x3b2),coordinate_lut)) return -1;
+	for(i=0;i<24;++i) {
+		int strength=ctx->strengths[i],last=0,mixture=ADR_P(0x9ec)+ADR_P(0x9ee)+ADR_P(0x9f0),result;
+		ctx->stage=4; ctx->tile=i;
+		result=t41_adr_subsections(ctx->cut,11,strength,ctx->gamma_x,p+0x766,cdf,8,10,16,1,1);
+		if(result) return result;
+		if(ctx->cut[0]<1) ctx->cut[0]=1;
+		for(j=0;j<10;++j) if(ctx->cut[j+1]<=ctx->cut[j]) ctx->cut[j+1]=ctx->cut[j]+1;
+		for(j=0;j<7;++j) t41_adr_put16(ctx->x+j*2,ctx->cut[j]);
+		t41_adr_put16(ctx->x+14,ctx->cut[10]); t41_adr_put16(ctx->y,0); t41_adr_put16(ctx->y+14,4095);
+		for(j=0;j<6;++j) {
+			int scale=ADR_P(0x3be + j*2),width,difference=(short)(ctx->cut[j+1]-ctx->cut[j]);
+			if(scale>250) scale=250;
+			t41_adr_put16(p+0x3be + j*2,scale);
+			width=(short)((ADR_P(0x560+j*2)*scale+50)/100);
+			t41_adr_put16(p+0x54a+j*2,width);
+			t41_adr_put16(ctx->y+(j+1)*2,t41_tmo_le16(ctx->y+j*2)+(width<difference ? difference : width));
+		}
+		t41_adr_put16(p+0x558,ADR_P(0x54a)+ADR_P(0x54c)); t41_adr_put16(p+0x55a,ADR_P(0x54e)+ADR_P(0x550));
+		t41_adr_put16(p+0x55c,ADR_P(0x552)); t41_adr_put16(p+0x55e,ADR_P(0x554));
+		if(t41_adr_resample16(ctx->x,ctx->y,ctx->knees,ctx->sample,8,16)) return -1;
+		for(j=0;j<14;++j) {
+			int identity=t41_tmo_le16(ctx->knees+(j+1)*2),x=t41_tmo_le16(ctx->knees+j*2),dx=identity-x;
+			int mass=(int)(t41_tmo_le32(stats+0xf80+i*56+j*4)*4095U+5000U)/10000;
+			int value=(ADR_P(0x58c+j*2)*dx+32)/64;
+			ctx->a[j]=(short)t41_tmo_le16(ctx->sample+(j+1)*2);
+			if(value>=mass) { value=mass; if(mass<dx) value=(4095-last)*dx/(4095-x); }
+			last+=value; if(last>=4096) last=4095;
+			value=last<identity ? identity : last;
+			ctx->b[j]=(int)((unsigned int)(identity*100)+(unsigned int)(value-identity)*(unsigned int)strength+50U)/100;
+			value=ctx->rational[j]<identity ? identity : ctx->rational[j];
+			ctx->c[j]=(int)((unsigned int)(identity*100)+(unsigned int)(value-identity)*(unsigned int)strength+50U)/100;
+			mode=ADR_P(0x9ea);
+			ctx->selected[j]=mode==0 ? ctx->a[j] : mode==1 ? ctx->b[j] : mode==2 ? ctx->c[j] : mode==3 ?
+				(int)((unsigned int)ADR_P(0x9ec)*(unsigned int)ctx->a[j]+(unsigned int)ADR_P(0x9ee)*(unsigned int)ctx->b[j]+
+				(unsigned int)ADR_P(0x9f0)*(unsigned int)ctx->c[j])/(mixture>0 ? mixture : 1) : identity;
+		}
+		mode=ADR_P(0x9b6);
+		ctx->stage=5;
+		if(mode>=1 && mode<=3 && t41_adr_filter(ctx->knees,ctx->selected,mode==1 ? 3 : ADR_P(0x9b4),ADR_P(0x9b2),mode!=3)) return -1;
+		for(j=0;j<14;++j) t41_adr_put16(state+0x80+i*28+j*2,ctx->selected[j]);
+	}
+	for(i=0;i<24;++i) {
+		int step=ADR_P(0x9f6),distance=0;
+		ctx->stage=6; ctx->tile=i;
+		if(step>512) step=512;
+		if(ADR_P(0x9f8)!=9 && step<1) step=1;
+		for(j=0;j<14;++j) {
+			int old=(short)t41_tmo_le16(work+0xc8+i*28+j*2),value=(short)t41_tmo_le16(state+0x80+i*28+j*2);
+			int delta=old>value ? old-value : value-old;
+			if(delta>distance) distance=delta;
+		}
+		for(j=0;j<14;++j) {
+			int value=(short)t41_tmo_le16(state+0x80+i*28+j*2);
+			if(ADR_P(0x9f4)==1) {
+				if(step<distance) {
+					int old=(short)t41_tmo_le16(work+0xc8+i*28+j*2),ratio=(int)((unsigned int)step<<21)/distance;
+					int delta=old>=value ? old-value : value-old;
+					int change=(int)((unsigned int)delta*(unsigned int)ratio+0x100000)>>21;
+					value=(short)(old>=value ? old-change : old+change);
+				}
+				if(value>4082+(int)j) value=4082+j;
+				t41_adr_put16(state+0x80+i*28+j*2,value);
+			}
+			t41_adr_put16(work+0xc8+i*28+j*2,value);
+		}
+	}
+	if(ADR_P(0x8d4)==1) for(i=0;i<24;++i) {
+		int last=0;
+		for(j=0;j<14;++j) {
+			int dx=t41_tmo_le16(ctx->knees+(j+1)*2)-t41_tmo_le16(ctx->knees+j*2),value=(short)t41_tmo_le16(state+0x80+i*28+j*2);
+			int limit=(ADR_P(0x8d6+j*2)*(dx ? dx : 1)+50)/100+last;
+			last=(short)(value<limit ? value : limit); t41_adr_put16(state+0x80+i*28+j*2,last);
+		}
+	}
+	if(ADR_P(0x9fc)==1) {
+		int index=ADR_P(0xa02),value,lower=ADR_P(0x9fe),upper=ADR_P(0xa00);
+		if(index<0) index=0; else if(index>511) index=511;
+		value=(short)cdf[index];
+		if(value>=lower) for(i=0;i<24;++i) for(j=0;j<14;++j) {
+			int current=(short)t41_tmo_le16(state+0x80+i*28+j*2),identity=t41_tmo_le16(ctx->knees+(j+1)*2);
+			if(value<=upper) { if(upper==lower) return -1; current-=(int)((unsigned int)(current-identity)*(unsigned int)(value-lower))/(upper-lower); }
+			else current=identity;
+			t41_adr_put16(state+0x80+i*28+j*2,current);
+		}
+	}
+	if(ctx->face_enabled==1) {
+		if(++ctx->face_count>100000) ctx->face_count=0;
+		for(i=0;i<24;++i) if(ctx->face_flags[i]==1) for(j=0;j<14;++j) {
+			int value=(short)t41_tmo_le16(state+0x80+i*28+j*2),face=(short)t41_tmo_le16(ctx->face_curve+i*28+j*2);
+			t41_adr_put16(state+0x80+i*28+j*2,value>face ? value : face);
+		}
+	}
+#undef ADR_P
+	ctx->stage=0;
 	return 0;
 }
 #endif

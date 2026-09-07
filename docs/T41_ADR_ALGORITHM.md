@@ -2,8 +2,9 @@
 
 This checkpoint is **offline, not a replacement for the live ADR profile**.
 `tx_isp_t41_adr.h` contains portable algorithms and checked buffer interfaces;
-the complete frame composition, lifecycle and DMA ownership integration remain
-to be completed. The camera still runs ISP `e6f3128b` (native LCE/MDNS).
+the complete frame composition and calibration lifecycle now have independent
+OEM tests, but kernel DMA/IRQ/worker integration remains to be completed.
+The camera still runs ISP `e6f3128b` (native LCE/MDNS).
 
 Recovered and compared with H20250310a:
 
@@ -30,6 +31,25 @@ Recovered and compared with H20250310a:
   strength, recursive shadow quantiles, rational fourth-order curves and
   both in-place slope filters. The two interpolators have distinct narrowing
   and right-ordinate clamps; they are not interchangeable.
+- Full frame composition: global dark metering, local strength, three curve
+  methods and weighted combinations, both filters, bounded temporal steps,
+  gradient limits, bright-scene bypass and optional face-curve maxima.
+  History is saved before gradient/bypass/face processing, not after it.
+- The parameter-update-only CTC remap: gamma, calibrated piecewise mapping,
+  inverse gamma, then hardware-knot resampling. The decompiler omitted this
+  branch; direct instruction execution exposed it. Gamma's final abscissa
+  is 4095, not 4096.
+- Cold initialization, cached-geometry reuse, and day/night or linear/WDR
+  parameter replacement. Mode replacement resets visible curves but retains
+  temporal history. This is an arithmetic/lifecycle test, not physical WDR
+  sensor validation.
+
+The 128 dark-meter weights are generated as
+`round(255 * exp(-i*i / (2*50*50)))`. Hardware coefficient banks are
+`round(256 * (x/8)^power)` at `x = 0..8,16,32,64`, with powers selected by
+the calibrated mode. Neither table is copied from a sensor or live output.
+The tile-invariant rational curve is computed once per frame instead of
+24 times as in OEM; tile strength blending remains independent.
 
 The rational curve consumes the driver's existing universal 256-entry
 curvature-coordinate LUT. This is OEM algorithm data, not a sensor bin or a
@@ -60,11 +80,22 @@ production. QEMU and physical T41 each pass 10,000 randomized combined cases
 and 105 integrated spatial grids (including 720p, 1080p, 1440p and 2160p),
 with zero valid-input mismatches. One extreme local-strength case is rejected
 because its wrapped exponential becomes a zero divisor; 1,429 deliberate
-busy-curve diagnostics are expected. The host suite and 2,000-case
-ASan/UBSan bounds/canary test pass.
+busy-curve diagnostics are expected.
 
-Still required before deployment: complete ADR frame composition and history,
-hardware-parameter synthesis, gamma refresh, buffer/IRQ/worker integration,
-calibration and mode transitions, full-pipeline oracle sequences, then live
-stock/open comparisons and stream testing. Scalar parity alone is not OEM
+An additional 10,000 full-frame/history attempts yield 9,942 valid cases
+with no mismatches across all parameter bytes, output bytes, history, knots
+and quantiles. Forty generated cases reach an OEM zero divisor; the test
+shim records this and excludes their outputs from parity comparison. Native
+code rejects them. Eighteen other cases would index outside the 512-bin CDF;
+native code rejects these before calling the OEM path. Invalid cases are
+counted separately, never reported as matches. The suites also cover twenty
+cold starts, each followed by ten calibration/mode replacements.
+
+The standalone host test covers 2,000 primitive cases, initialization and
+refresh, and 10,000 frame/history cases under ASan/UBSan with canaries.
+Rejected frame candidates must not be committed by the eventual kernel
+worker; the last successfully written map must remain active.
+
+Still required before deployment: buffer/IRQ/worker integration and live
+stock/open comparisons and stream testing. Arithmetic parity alone is not OEM
 image-quality parity. Full OEM AE/AWB also remain separate work.

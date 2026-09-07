@@ -111,7 +111,9 @@ with open(sys.argv[1], 'rb') as source:
             'ispint_adr_64', 'tiziano_adr_ev_func', 'fix_point_div',
             'ispint_adr_16', 'func_interp1_short', 'func_gam_x2y', 'func_local_info',
             'subsection_map', 'subsection', 'subsection_up', 'func_adr_map_curve1',
-            'func_map_y_filter', 'func_map_y_filter_sp']}
+            'func_map_y_filter', 'func_map_y_filter_sp', 'Tiziano_adr_fpga',
+            'tiziano_adr_algorithm', 'tisp_adr_faceae_curve_adjust', 'tiziano_adr_hardpars_ctl',
+            'tisp_adr_init', 'tiziano_adr_gamma_refresh', 'tisp_adr_dn_params_refresh', 'tisp_adr_linear_switch']}
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
@@ -122,11 +124,24 @@ with open(sys.argv[1], 'rb') as source:
         names.update({'system_reg_read': 'oracle_read', '.data': 'oracle_data',
             'adr_5x5_in2': 'oracle_radial_reference',
             'ai_curve1_y': 'oracle_data+0x42e4',
+            'adr_imgDR_w': 'oracle_data+0x40e0', 'sumImgDR_w': 'oracle_data+0x42e0',
+            'adr_kneepoint_x': 'oracle_data+0x4894', 'adr_kneepoint_diff': 'oracle_data+0x48b4',
+            'adr_local_light_b_in': 'oracle_data+0x48d4', 'adr_top_gam_x': 'oracle_data+0x4760',
+            'adr_ctc1_x': 'oracle_data+0x4864',
+            'adr_gauss_local': 'oracle_bss+0x42b0', 'adr_cut_base_up': 'oracle_bss+0x4260',
+            'adr_cut_base': 'oracle_bss+0x428c', 'adr_count': 'oracle_bss+0x4344',
+            'adr_faceae_en': 'oracle_bss+0x4600', 'adr_faceae_blockflag': 'oracle_bss+0x45e8',
+            'adr_faceae_map_curve': 'oracle_bss+0x4348',
             'adr_gauss_old': 'oracle_gauss_old',
             '__lshrdi3': 'oracle_shift',
             '__ashldi3': 'oracle_left_shift',
             'div64_u64': 'oracle_div64_u64',
             'private_vmalloc': 'oracle_alloc', 'private_vfree': 'oracle_free'})
+        names.update({'tparamsP': 'oracle_params', 'tpm_cb': 'oracle_callbacks', '.sbss': 'oracle_mutex_key',
+            'private_kmalloc': 'oracle_kmalloc',
+            **{name: 'oracle_noop' for name in ['private_raw_mutex_init', 'system_irq_func_set',
+                'tisp_event_set_cb', 'tiziano_adr_interrupt_static', 'tisp_adr_process_func',
+                'tisp_adr_pm_get_regsize', 'tisp_adr_pm_suspend', 'tisp_adr_pm_resume']}})
     if ysp:
         names.update({'ysp_paramsP': 'oracle_original', '.data': 'oracle_data',
             'tisp_ysp_all_reg_refresh': 'oracle_noop'})
