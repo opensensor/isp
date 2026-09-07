@@ -7,13 +7,16 @@ tx-isp-t41-objs := tx_isp_t41_recovered.o \
 		   tx_isp_t41_exposure.o \
 		   tx_isp_t41_scaler.o \
 		   tx_isp_t41_tuning_abi.o
-tx-isp-t41-$(CONFIG_TX_ISP_T41_V4L2) += tx_isp_t41_video_queue.o \
-					       tx_isp_t41_v4l2.o
+ifneq ($(filter y m,$(CONFIG_VIDEOBUF2_DMA_CONTIG)),)
+tx-isp-t41-$(CONFIG_TX_ISP_T41_V4L2) += \
+					tx_isp_t41_video_queue.o \
+					tx_isp_t41_v4l2.o
+ccflags-$(CONFIG_TX_ISP_T41_V4L2) += -DCONFIG_TX_ISP_T41_V4L2
+endif
 obj-m += tx-isp-t41.o
 
 ccflags-y += -I$(src)/../include
 ccflags-y += -DREGTRACE_KERNEL_TREE_BUILD
-ccflags-$(CONFIG_TX_ISP_T41_V4L2) += -DCONFIG_TX_ISP_T41_V4L2
 ccflags-y += -std=gnu99
 ccflags-y += -fpermissive
 ccflags-y += -w

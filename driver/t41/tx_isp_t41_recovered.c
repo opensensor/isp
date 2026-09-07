@@ -2032,6 +2032,8 @@ struct t41_isp_buf_info {
 };
 
 static struct t41_isp_buf_info t41_mdns_buf_info[3];
+static uint32_t t41_mdns_input_width[3];
+static uint32_t t41_mdns_input_height[3];
 static struct t41_isp_buf_info t41_wdr_buf_info[3];
 #endif
 static unsigned char st_top_cfg[66] __attribute__((aligned(4)));
@@ -13363,6 +13365,14 @@ int32_t subdev_sensor_ops_set_input(void* arg1, int32_t* arg2, int32_t arg3)
 	       "tx_isp_t41_recovered: set-input sync-attr exit ret=%d\n", ret);
     if (ret)
         return ret;
+    WRITE_ONCE(t41_mdns_input_width[vinum],
+               *(uint32_t *)(sensor + 784));
+    WRITE_ONCE(t41_mdns_input_height[vinum],
+               *(uint32_t *)(sensor + 788));
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: set-input MDNS layout vinum=%u %ux%u\n",
+           vinum, READ_ONCE(t41_mdns_input_width[vinum]),
+           READ_ONCE(t41_mdns_input_height[vinum]));
 
 	printk(KERN_WARNING
 	       "tx_isp_t41_recovered: set-input init enter sensor=%p enable=%u vinum=%u\n",
@@ -33165,11 +33175,21 @@ static int t41_mdns_build_layout(uint32_t vinum,
     uint32_t height;
     uint32_t memopt;
 
-    if (!layout || vinum != 0 || !mdns_info)
+    if (!layout || vinum != 0)
         return -ENODEV;
-    info = (uint8_t *)(uintptr_t)mdns_info;
-    width = *(uint32_t *)(void *)(info + 20);
-    height = *(uint32_t *)(void *)(info + 24);
+    if (mdns_info) {
+        info = (uint8_t *)(uintptr_t)mdns_info;
+        width = *(uint32_t *)(void *)(info + 20);
+        height = *(uint32_t *)(void *)(info + 24);
+    } else {
+        width = READ_ONCE(t41_mdns_input_width[vinum]);
+        height = READ_ONCE(t41_mdns_input_height[vinum]);
+        if (!width || !height)
+            return -ENODEV;
+        printk(KERN_WARNING
+               "tx_isp_t41_recovered: pre-init MDNS layout vinum=%u %ux%u\n",
+               vinum, width, height);
+    }
     if (!width || !height)
         return -EINVAL;
 
@@ -152997,33 +153017,22 @@ int32_t tisp_set_saturation(uint32_t a0, uint32_t a1)
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     uint8_t *attrs = (uint8_t *)(uintptr_t)tisp_tattr;
     uint32_t saturation = a1 & 0xffU;
-    uint32_t high;
-    uint32_t low;
 
     if (a0 != 0 || !t41_kernel_data_ptr(attrs))
         return -EINVAL;
-    attrs[a0] = saturation;
 
     /*
-     * Scale the proven stock BCSH matrix directly, as in the crash-safe T40
-     * recovery.  128 is exact unity and preserves the accepted T41 bank.
+     * The three recovered words are part of the complete RGB-to-YUV
+     * transform, not independent chroma gains.  Scaling every coefficient
+     * toward zero destroys the luminance-preserving row and produces a
+     * nearly solid-green frame.  T31 rebuilds the full signed matrix for a
+     * saturation change; T41 does not have an equivalent recovered writer
+     * yet, so fail closed for anything except exact unity.
      */
-#define T41_WRITE_SCALED_BCSH(_register, _word) do { \
-        high = (((_word) >> 16) & 0xffffU) * saturation / 128U; \
-        low = ((_word) & 0xffffU) * saturation / 128U; \
-        if (high > 0x0fffU) \
-            high = 0x0fffU; \
-        if (low > 0x0fffU) \
-            low = 0x0fffU; \
-        system_reg_write((_register), (high << 16) | low); \
-    } while (0)
-    T41_WRITE_SCALED_BCSH(0x11018U, 0x03fd0400U);
-    T41_WRITE_SCALED_BCSH(0x1101cU, 0x04020400U);
-    T41_WRITE_SCALED_BCSH(0x11020U, 0x04020400U);
-#undef T41_WRITE_SCALED_BCSH
-    printk(KERN_INFO
-           "tx_isp_t41_recovered: safe BCSH saturation scaled to %u/128\n",
-           saturation);
+    if (saturation != 128U)
+        return -EOPNOTSUPP;
+
+    attrs[a0] = saturation;
     return 0;
 #else
     uint32_t local_14 = 0;
@@ -159193,6 +159202,8 @@ int64_t ispcore_sync_sensor_attr(uintptr_t a0, uint32_t a1)
 
     if (!a1) {
         memset((void *)(core + 308), 0, 96);
+        memset(t41_mdns_input_width, 0, sizeof(t41_mdns_input_width));
+        memset(t41_mdns_input_height, 0, sizeof(t41_mdns_input_height));
         return 0;
     }
 
@@ -159208,6 +159219,17 @@ int64_t ispcore_sync_sensor_attr(uintptr_t a0, uint32_t a1)
     if (sensor_id >= 3)
         return -EINVAL;
     memcpy((void *)(core + 308 + sensor_id * 96), video, 96);
+    t41_mdns_input_width[sensor_id] = *(uint32_t *)(video + 60);
+    t41_mdns_input_height[sensor_id] = *(uint32_t *)(video + 64);
+    if (!t41_mdns_input_width[sensor_id] ||
+        !t41_mdns_input_height[sensor_id]) {
+        t41_mdns_input_width[sensor_id] = *(uint32_t *)(video + 0);
+        t41_mdns_input_height[sensor_id] = *(uint32_t *)(video + 4);
+    }
+    printk(KERN_WARNING
+           "tx_isp_t41_recovered: sensor-sync MDNS layout vinum=%u %ux%u\n",
+           sensor_id, t41_mdns_input_width[sensor_id],
+           t41_mdns_input_height[sensor_id]);
 
     /* Rebuild the compact sensor description consumed by
      * tiziano_sync_sensor_attr.  These field mappings follow the T41 OEM
