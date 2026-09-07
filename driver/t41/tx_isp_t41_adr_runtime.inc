@@ -27,6 +27,11 @@ static int t41_adr_error = -ENODEV;
 static unsigned int t41_adr_frames = ~0U, t41_adr_dropped = ~0U;
 static unsigned int t41_adr_irqs = ~0U, t41_adr_bad_dma = ~0U;
 static unsigned int t41_adr_stage = ~0U, t41_adr_tile = ~0U;
+/* Boot-only diagnostic; the installed sensor calibration remains untouched. */
+static int t41_adr_bypass = -1;
+module_param(t41_adr_bypass, int, 0444);
+MODULE_PARM_DESC(t41_adr_bypass,
+    "ADR bypass policy: -1 follows calibration (default), 0 enables, 1 bypasses; boot-only diagnostic");
 module_param(t41_adr_error, int, 0444);
 module_param(t41_adr_frames, uint, 0444);
 module_param(t41_adr_dropped, uint, 0444);
@@ -38,6 +43,16 @@ module_param(t41_adr_tile, uint, 0444);
 static struct t41_adr_runtime *t41_adr_object(void)
 {
     return t41_kernel_data_ptr(t41_adr_runtime) ? t41_adr_runtime : NULL;
+}
+
+static int t41_adr_restore_locked(void)
+{
+    uint32_t *top = (uint32_t *)(void *)top_bypass_global;
+    if (t41_adr_bypass < 0) return t41_top_restore_bypass(BIT(7));
+    if (t41_adr_bypass > 1) return -EINVAL;
+    *top = (*top & ~BIT(7)) | (t41_adr_bypass ? BIT(7) : 0);
+    system_reg_write(0x40, *top);
+    return 0;
 }
 
 static void t41_adr_hold_locked(struct t41_adr_runtime *s)
@@ -100,7 +115,7 @@ static void t41_apply_stock_adr_profile(void)
      * from the oracle-verified cold/last-good map, only after all addresses
      * and controls are valid, then accept the first histogram frame. */
     if (!ret) {
-        ret = t41_top_restore_bypass(BIT(7));
+        ret = t41_adr_restore_locked();
         if (!ret) s->restore_top = 0;
     }
     t41_adr_error = ret;
@@ -142,7 +157,7 @@ static int t41_native_adr_frame(uint64_t exposure)
     if (s->restore_top && s->armed) {
         count = t41_adr_pack_curve(s->saved.params, T41_ADR_PARAM_BYTES, s->saved.output,
             T41_ADR_STATE_BYTES, system_reg_read(0x5040c), s->words, ARRAY_SIZE(s->words));
-        if (count > 0 && !t41_adr_emit_locked(s, count) && !t41_top_restore_bypass(BIT(7)))
+        if (count > 0 && !t41_adr_emit_locked(s, count) && !t41_adr_restore_locked())
             s->restore_top = 0;
     }
     spin_lock_irqsave(&t41_adr_irq_lock, flags);
@@ -170,7 +185,7 @@ static int t41_native_adr_frame(uint64_t exposure)
     memcpy(&s->saved, c, sizeof(*c));
     s->exposure = exposure; s->ev_changed = 0;
     if (s->restore_top) {
-        ret = t41_top_restore_bypass(BIT(7));
+        ret = t41_adr_restore_locked();
         if (!ret) s->restore_top = 0;
     }
     ++t41_adr_frames;
@@ -190,7 +205,7 @@ static int t41_native_adr_init(unsigned int channel, uintptr_t config)
     uint8_t *params;
     unsigned long physical, flags;
     int ret = -EINVAL;
-    if (channel || !config) return -EINVAL;
+    if (channel || !config || t41_adr_bypass < -1 || t41_adr_bypass > 1) return -EINVAL;
     mutex_lock(&t41_adr_lock);
     if (t41_adr_object()) { ret = -EBUSY; goto done; }
     params = (uint8_t *)(uintptr_t)((uint32_t *)(void *)tparamsP_storage)[0];

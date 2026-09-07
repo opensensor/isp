@@ -114,5 +114,12 @@ The universal curvature LUT already in the driver is byte-identical to the
 OEM reference (SHA256 `2e32e4a6f910d8f76efe5bee53ede7641b60254c104f3548ca60ca93caa5200b`).
 
 Still required: live stock/open comparisons, lifecycle and stream testing.
+The installed OS04D10 calibration has TOP byte 7 set to one; saved OEM
+captures also show bit 7 set in `0x03990ac9`. Native boot `505965b7` correctly
+preserves that bypass and has zero ADR completions. This is not evidence of
+an enabled-path failure or success. For an explicit enabled-path smoke test,
+boot-only `t41_adr_bypass=0` overrides that bit after the checked initial map
+is ready. The default `-1` follows calibration; `1` forces bypass. No sensor
+calibration or other TOP bits are changed by this diagnostic.
 Arithmetic parity alone is not OEM
 image-quality parity. Full OEM AE/AWB also remain separate work.
