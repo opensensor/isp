@@ -4,7 +4,8 @@
 #include <stdio.h>
 #include "../driver/t41/tx_isp_t41_exposure.h"
 #include "../driver/include/tx_isp/tx_isp_top.h"
-static unsigned int count, ccm_calls, last_address, last_value;
+static unsigned int count, ccm_calls, gib_calls, last_address, last_value;
+static int gib_error;
 int32_t system_reg_write(uint32_t address, uint32_t value)
 {
 	assert(address == 0x8000 || address == 0x8004 ||
@@ -13,6 +14,7 @@ int32_t system_reg_write(uint32_t address, uint32_t value)
 	return 0;
 }
 void tx_isp_t41_calibrated_ccm_apply(void) { ++ccm_calls; }
+int tx_isp_t41_calibrated_gib_apply(void) { ++gib_calls; return gib_error; }
 int main(void)
 {
 	unsigned int bit, initial;
@@ -36,11 +38,15 @@ int main(void)
 			assert(top == (0xa5a50005 | (bit << 9)));
 			assert(last_address == 0x40 && last_value == top);
 		}
-	assert(count == 16 && ccm_calls == 4);
+	assert(count == 4 && ccm_calls == 4 && gib_calls == 4);
 	initial = 0x12345678;
 	assert(tx_isp_t41_flicker_profile_apply(0, false,
 		1024, 0, 0, 2, &initial) == -EINVAL);
-	assert(initial == 0x12345678 && count == 16 && ccm_calls == 4);
+	assert(initial == 0x12345678 && count == 4 && ccm_calls == 4 && gib_calls == 4);
+	gib_error = -ENODEV;
+	assert(tx_isp_t41_flicker_profile_apply(0, false,
+		1024, 0, 0, 0, &initial) == -ENODEV);
+	assert(initial == 0x12345678 && count == 4 && ccm_calls == 4 && gib_calls == 5);
 	puts("T41 calibrated CCM routing, other-bit preservation and atomic rejection: passed");
 	return 0;
 }

@@ -1,5 +1,21 @@
 # T41 calibrated AWB comparison, 2026-09-07
 
+## Current follow-up: calibrated AE/GIB/WB conversion and stream metadata
+
+See [AE, GIB and WB gain recovery](T41_AE_GIB_AWB_GAIN.md). Calibrated zone
+metering and EV targets replace the fixed daylight target on the new security
+path. GIB now retains the black-level range compensation, and WB startup
+uses calibration instead of a captured daylight pair. Each new arithmetic
+boundary matches 10,000 synthetic OEM-oracle cases on QEMU and physical T41.
+
+The V4L2 HAL also hid SPS inside one aggregate IDR descriptor, so Raptor's
+existing VUI correction did not run. The fixed HAL exposes individual NALs:
+both stock/open now declare the ISP's full-range BT.601. Earlier measurements
+decoded as limited BT.709 exaggerated the open shadow deficit and hue error.
+They remain historical observations, not a basis for extra tuning offsets.
+Remaining AWB estimation, spatial replays and sensor allocation limitations
+are explicitly listed in the linked document. This is not whole-ISP parity.
+
 ## Current: frame-driven TMO, calibrated CCM/BCSH, and corrected routing
 
 TMO modes 0/1 now run from completed-frame statistics, with stream-stop

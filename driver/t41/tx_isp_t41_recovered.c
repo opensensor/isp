@@ -18,8 +18,11 @@
 #include "tx_isp_t41_tmo_map.h"
 #include "tx_isp_t41_ccm.h"
 #include "tx_isp_t41_bcsh.h"
+#include "tx_isp_t41_ae.h"
+#include "tx_isp_t41_gib.h"
 #include "../include/tx_isp/tx_isp_top.h"
 #include "tx_isp_t41_awb.h"
+#include "tx_isp_t41_awb_gain.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -776,16 +779,13 @@ MODULE_PARM_DESC(t41_safe_tuning_events,
 
 /* The recovered vendor AE algorithm still contains unresolved legacy-BSS
  * arithmetic.  Keep event 1 live with a small controller whose inputs and
- * target come from the exact T41 histogram path.  A controlled stock/open
- * mixed-light sweep selected 14500 Q8 with the OEM CCM and unity GIB.  It
- * converges at the same flicker-safe 737-line shutter as stock, matches stock
- * output luma, and reduces flat-field variation relative to the earlier
- * over-bright 17600 target. */
+ * target come from checked completed-frame statistics and calibration.
+ * The bounded sensor allocator is still separate from OEM convergence. */
 static int t41_safe_ae_controller = 1;
 module_param(t41_safe_ae_controller, int, 0644);
 MODULE_PARM_DESC(t41_safe_ae_controller,
 		 "use the bounded histogram AE controller instead of recovered vendor AE");
-static unsigned int t41_ae_target_q8 = 14500;
+static unsigned int t41_ae_target_q8 = 128U << 8;
 module_param(t41_ae_target_q8, uint, 0644);
 MODULE_PARM_DESC(t41_ae_target_q8,
 		 "safe AE target histogram mean in Q8 units");
@@ -793,6 +793,24 @@ static unsigned int t41_ae_update_frames = 3;
 module_param(t41_ae_update_frames, uint, 0644);
 MODULE_PARM_DESC(t41_ae_update_frames,
 		 "histogram frames between safe AE sensor updates");
+/* Nonzero OPEN_AE_TARGET explicitly selects the manual histogram target;
+ * zero returns to calibration-driven metering. No scene-derived defaults. */
+static int t41_ae_calibrated_metering = 1;
+module_param(t41_ae_calibrated_metering, int, 0644);
+MODULE_PARM_DESC(t41_ae_calibrated_metering,
+		 "use calibrated zone mean and EV target instead of histogram target");
+static unsigned int t41_ae_zone_mean = 0x80000000U;
+static unsigned int t41_ae_calibrated_target = 0x80000000U;
+static int t41_ae_meter_error = -EAGAIN;
+module_param(t41_ae_zone_mean, uint, 0444);
+module_param(t41_ae_calibrated_target, uint, 0444);
+module_param(t41_ae_meter_error, int, 0444);
+/* Explicit owned data: legacy reconstructed BSS aliases must not overlap
+ * the DMA snapshot or completion sequence. Only the AE event thread copies. */
+static struct {
+    uint32_t sequence, consumed;
+    unsigned char dma[4096];
+} t41_ae_zones[2] = { { .consumed = ~0U }, { .consumed = ~0U } };
 /*
  * Start in the SDK's AUTO anti-flicker policy: below the first mains period,
  * let AE use the sensor's short integrations; at and above it, the generated
@@ -1099,22 +1117,16 @@ static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
 static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene);
 static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target);
 
-/* The crash-safe event gate intentionally suppresses the unrecovered AWB
- * process callback.  Keep a hardware-tested OS04D10 daylight fallback until
- * the statistics controller below reproduces the OEM model across illuminant
- * changes.  The older mixed tungsten/daylight stock snapshot (1240/4624)
- * produced U/V=186.05/79.28 on the neutral ceiling when full daylight reached
- * the scene.  A live two-axis sweep selected 1800/3000, which measured
- * U/V=126.97/129.33 on the same region with the exact OEM CCM.  Keep the
- * controls writable because this fallback remains intentionally static. */
-static unsigned int t41_stock_awb_gain_a = 1800U;
+/* Compatibility manual overrides. Zero/zero preserves the calibrated gain
+ * writer; normal startup no longer injects a captured daylight pair. */
+static unsigned int t41_stock_awb_gain_a __attribute__((section(".data"))) = 0;
 module_param(t41_stock_awb_gain_a, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_a,
-		 "OS04D10 stock day-mode AWB gain A (10-bit unity is 0x400)");
-static unsigned int t41_stock_awb_gain_b = 3000U;
+		 "manual AWB gain A Q10 override (zero pair uses calibration)");
+static unsigned int t41_stock_awb_gain_b __attribute__((section(".data"))) = 0;
 module_param(t41_stock_awb_gain_b, uint, 0644);
 MODULE_PARM_DESC(t41_stock_awb_gain_b,
-		 "OS04D10 stock day-mode AWB gain B (10-bit unity is 0x400)");
+		 "manual AWB gain B Q10 override (zero pair uses calibration)");
 static unsigned int t41_awb_gain_trigger = 0x80000000U;
 static int t41_awb_gain_trigger_set(const char *value,
 				    const struct kernel_param *kp)
@@ -1167,8 +1179,8 @@ static unsigned int t41_awb_min_pixels = 15000U;
 module_param(t41_awb_min_pixels, uint, 0644);
 MODULE_PARM_DESC(t41_awb_min_pixels,
 		 "minimum AWB statistic pixels accepted by the safe controller");
-static uint32_t t41_awb_last_rgain = 1800U;
-static uint32_t t41_awb_last_bgain = 3000U;
+static uint32_t t41_awb_last_rgain = 1024U;
+static uint32_t t41_awb_last_bgain = 1024U;
 static uint32_t t41_awb_last_raw_r_q10 = 0x400U;
 static uint32_t t41_awb_last_raw_b_q10 = 0x400U;
 /* Keep diagnostic state in .data.  Unrepaired functions still address a few
@@ -20673,7 +20685,8 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             if (request.channel != 0 || !request.value_or_ptr)
                 return -EINVAL;
             if (request.is_get) {
-                target = READ_ONCE(t41_ae_target_q8);
+                target = READ_ONCE(t41_ae_calibrated_metering) ?
+                    0 : READ_ONCE(t41_ae_target_q8);
                 return private_copy_to_user(
                     (void __user *)(uintptr_t)request.value_or_ptr,
                     &target, sizeof(target)) ? -EFAULT : 0;
@@ -20683,11 +20696,13 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                     (void __user *)(uintptr_t)request.value_or_ptr,
                     sizeof(target)))
                 return -EFAULT;
-            if (target < 0x400U || target > 0xffffU)
+            if (target && (target < 0x400U || target > 0xffffU))
                 return -ERANGE;
-            WRITE_ONCE(t41_ae_target_q8, target);
+            if (target)
+                WRITE_ONCE(t41_ae_target_q8, target);
+            WRITE_ONCE(t41_ae_calibrated_metering, target == 0);
             printk(KERN_WARNING
-                   "tx_isp_t41_recovered: live AE target=%u Q8\n",
+                   "tx_isp_t41_recovered: live AE target=%u Q8 (0=calibrated)\n",
                    target);
             return 0;
         }
@@ -31983,11 +31998,21 @@ int32_t tx_isp_sensor_release_sensor(uintptr_t a0, uint32_t a1)
 
 static void t41_apply_stock_awb_gains(void)
 {
-    uint32_t gain_a = 0x04000000U | (t41_stock_awb_gain_a & 0x3fffU);
-    uint32_t gain_b = 0x04000000U | (t41_stock_awb_gain_b & 0x3fffU);
+    uint32_t gains[2] = { t41_stock_awb_gain_a, t41_stock_awb_gain_b };
+    uint32_t words[2], gain_a, gain_b;
 
-    /* Exact active register image from the stock OS04D10 day profile.  T23
-     * and T40 use the same two-bank ownership sequence: populate bank two,
+    if (!gains[0] && !gains[1]) {
+        int ret = (int)tisp_awb_set_gain(0);
+        if (ret < 0)
+            printk(KERN_WARNING "tx_isp_t41_recovered: calibrated WB seed unavailable: %d\n", ret);
+        return;
+    }
+    if (!gains[0] || !gains[1])
+        return;
+    t41_awb_gain_pack(gains, words);
+    gain_a = words[0]; gain_b = words[1];
+
+    /* T23 and T40 use the same two-bank ownership sequence: populate bank two,
      * commit it, then populate and commit bank three.  Committing only bank
      * three works during cold init but leaves bank two stale when gains are
      * calibrated at runtime. */
@@ -56628,6 +56653,12 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	struct tx_isp_exposure_plan exposure;
 	unsigned int i;
 	int ret;
+	int meter_ret;
+	struct t41_ae_meter meter;
+	unsigned long long target_knots[15];
+	unsigned short target_values[15];
+	unsigned int calibrated_target = 0;
+	unsigned char *ae_params;
 
 	if (channel >= ARRAY_SIZE(ae_info) || t41_safe_ae_controller <= 0)
 		return 0;
@@ -56667,6 +56698,39 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	if (!samples)
 		return -EAGAIN;
 	mean_q8 = (uint32_t)div64_u64(weighted << 8, samples);
+	/* Copy the completed zone bank in process context, never in hard IRQ.
+	 * The histogram and zone state share one short lock while metering. */
+	meter_ret = tisp_ae_interrupt_static(channel);
+	ae_params = (unsigned char *)(uintptr_t)info[0];
+	if (!t41_kernel_data_ptr(ae_params))
+		meter_ret = -ENODEV;
+	if (meter_ret >= 0) {
+		spin_lock_irqsave(lock, flags);
+		meter_ret = t41_ae_weight_mean(ae_params, T41_AE_PARAM_BYTES,
+			(unsigned char *)hist, T41_AE_STATE_BYTES, &meter);
+		spin_unlock_irqrestore(lock, flags);
+		if (!meter_ret)
+			meter_ret = t41_ae_target_tables(ae_params, T41_AE_PARAM_BYTES,
+				target_knots, target_values);
+		if (!meter_ret) {
+			unsigned int shift = t41_tmo_le16(ae_params + 0x6c0);
+			meter_ret = t41_ae_long_target((u64)control->integration *
+				tisp_math_exp2(gain_q16, 16, shift), target_knots,
+				target_values, shift, &calibrated_target);
+			if (!meter_ret && (!calibrated_target || calibrated_target > 255))
+				meter_ret = -ERANGE;
+		}
+	}
+	t41_ae_meter_error = meter_ret;
+	if (!meter_ret) {
+		t41_ae_zone_mean = meter.mean;
+		t41_ae_calibrated_target = calibrated_target;
+	}
+	if (t41_ae_calibrated_metering) {
+		if (meter_ret)
+			return meter_ret;
+		mean_q8 = meter.mean << 8;
+	}
 	control->last_mean_q8 = mean_q8;
 	t41_safe_ae_last_mean_q8 = mean_q8;
 	control->frames++;
@@ -56686,11 +56750,12 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	if (max_integration < control->min_integration ||
 	    (flicker_floor && flicker_floor > max_integration))
 		return -ERANGE;
-	target_q8 = t41_ae_target_q8;
+	target_q8 = t41_ae_calibrated_metering ?
+		calibrated_target << 8 : t41_ae_target_q8;
 	if (flicker_frequency && flicker_floor &&
 	    t41_ae_flicker_profile < 0) {
 		ret = tx_isp_exposure_target_scale(
-			t41_ae_target_q8, t41_ae_flicker_gib_gain_q10,
+			target_q8, t41_ae_flicker_gib_gain_q10,
 			0x400U, &target_q8);
 		if (ret)
 			return ret;
@@ -56786,6 +56851,7 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002263c origin=fragment_seed original=tisp_ae_get_statistics */
+#if 0 /* Replaced below: lost masks and pointer-scaled byte offsets. */
 int64_t tisp_ae_get_statistics(uint32_t a0, uintptr_t a1)
 {
     uint32_t local_4 = 0;
@@ -56966,6 +57032,61 @@ int32_t tisp_ae_interrupt_static(uint32_t a0)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000022830 origin=fragment_seed original=tisp_set_ae_sensor_fps */
+#endif
+int64_t tisp_ae_get_statistics(uint32_t channel, uintptr_t source)
+{
+    uint32_t *info;
+    unsigned char *params, *state;
+    spinlock_t *lock;
+    unsigned long flags;
+    int ret;
+    if (channel >= ARRAY_SIZE(ae_info) || !source)
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)ae_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    params = (unsigned char *)(uintptr_t)info[0];
+    state = (unsigned char *)(uintptr_t)info[1];
+    if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(state))
+        return -ENODEV;
+    lock = (spinlock_t *)(void *)(slock_hist_storage + channel * sizeof(uint32_t));
+    spin_lock_irqsave(lock, flags);
+    ret = t41_ae_statistics((unsigned char *)source, 4096,
+        t41_tmo_le16(params + 0x70a), t41_tmo_le16(params + 0x70e),
+        state, T41_AE_STATE_BYTES);
+    spin_unlock_irqrestore(lock, flags);
+    return ret ? -EINVAL : 0;
+}
+
+/* Called by the safe AE event consumer, not the safe IRQ dispatcher. */
+int32_t tisp_ae_interrupt_static(uint32_t channel)
+{
+    uint32_t *info, sequence, bank;
+    unsigned char *source;
+    int ret;
+    if (channel >= ARRAY_SIZE(ae_buf_info))
+        return -EINVAL;
+    sequence = READ_ONCE(t41_ae_zones[channel].sequence);
+    if (!sequence || sequence == t41_ae_zones[channel].consumed)
+        return -EAGAIN;
+    info = (uint32_t *)(uintptr_t)ae_buf_info[channel];
+    if (!t41_kernel_data_ptr(info) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[1]))
+        return -ENODEV;
+    bank = (system_reg_read(0x19050) >> 4) & 3;
+    source = (unsigned char *)(uintptr_t)(info[1] + bank * 4096);
+    dma_cache_sync(NULL, source, 4096, DMA_FROM_DEVICE);
+    memcpy(t41_ae_zones[channel].dma, source, 4096);
+    if (sequence != READ_ONCE(t41_ae_zones[channel].sequence) ||
+        bank != ((system_reg_read(0x19050) >> 4) & 3))
+        return -EAGAIN;
+    ret = tisp_ae_get_statistics(channel,
+        (uintptr_t)t41_ae_zones[channel].dma);
+    if (!ret)
+        t41_ae_zones[channel].consumed = sequence;
+    return ret;
+}
+
 int64_t tisp_set_ae_sensor_fps(uint32_t a0)
 {
     uint32_t *local_10 = 0;
@@ -67876,6 +67997,9 @@ int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
     *(uint32_t *)(state + 8688) = *(uint16_t *)(par + 76);
 
     memset(&t41_safe_ae[channel], 0, sizeof(t41_safe_ae[channel]));
+    t41_ae_zones[channel].sequence = 0;
+    t41_ae_zones[channel].consumed = ~0U;
+    t41_ae_meter_error = -EAGAIN;
     t41_safe_ae[channel].integration = *(uint32_t *)(par + 68);
     t41_safe_ae[channel].again = *(uint32_t *)(par + 40);
     t41_safe_ae[channel].min_integration = *(uint16_t *)(par + 60);
@@ -76152,6 +76276,11 @@ int32_t tisp_awb_set_hardware_param(uint32_t channel)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f2f4 origin=fragment_seed original=tisp_awb_gain_reg */
 int32_t tisp_awb_gain_reg(uintptr_t a0, uintptr_t a1)
 {
+    if (!a0 || !a1)
+        return -EINVAL;
+    t41_awb_gain_pack((const unsigned int *)a0, (unsigned int *)a1);
+    return *(unsigned int *)(a1 + 4);
+#if 0 /* broken generated clamp selected maximum blue gain unconditionally */
     uint32_t a2 = 0;
     uint32_t *a3 = 0;
     uint32_t ra = 0;
@@ -76176,11 +76305,47 @@ int32_t tisp_awb_gain_reg(uintptr_t a0, uintptr_t a1)
     *(uint32_t *)((char *)a1 + 4) = v0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f328 origin=fragment_seed original=tisp_awb_set_gain */
 int64_t tisp_awb_set_gain(uint32_t a0)
 {
+    uint32_t *info, words[2], write_enable, bank;
+    unsigned char *p, *s, *report;
+    if (a0 >= ARRAY_SIZE(awb_info))
+        return -EINVAL;
+    info = (uint32_t *)(uintptr_t)awb_info[a0];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    p = (unsigned char *)(uintptr_t)info[0];
+    s = (unsigned char *)(uintptr_t)info[1];
+    report = (unsigned char *)(uintptr_t)info[3];
+    if (!t41_kernel_data_ptr(p) || !t41_kernel_data_ptr(s) ||
+        !t41_kernel_data_ptr(report))
+        return -ENODEV;
+    if (t41_awb_gain_prepare(p, T41_AWB_HW_PARAM_BYTES, s, 0xf54c,
+                            report, 0x41a, words, &write_enable))
+        return -EINVAL;
+    if (write_enable) {
+        bank = (a0 + 512) << 5;
+        system_reg_write(bank + 4, words[0]);
+        system_reg_write(bank + 8, words[1]);
+        system_reg_write(bank + 12, words[0]);
+        system_reg_write(bank + 16, words[1]);
+        system_reg_write(bank, 1);
+        system_reg_write(bank + 0x1004, words[0]);
+        system_reg_write(bank + 0x1008, words[1]);
+        system_reg_write(bank + 0x100c, words[0]);
+        system_reg_write(bank + 0x1010, words[1]);
+        system_reg_set_awb_trig(3, a0);
+        if (!a0) {
+            t41_awb_last_rgain = words[0] & 0x3fff;
+            t41_awb_last_bgain = words[1] & 0x3fff;
+        }
+    }
+    return 0x10000;
+#if 0 /* lost divisors, typed byte offsets and collapsed control flow */
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -76508,6 +76673,7 @@ tisp_awb_set_gain0x36c:
     goto tisp_awb_set_gain0x1f8;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f6a0 origin=fragment_seed original=tisp_awb_init */
@@ -81746,6 +81912,19 @@ tisp_gib_pm_suspend0x30:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032ca8 origin=fragment_seed original=tisp_gib_calc_self_gain */
 int32_t tisp_gib_calc_self_gain(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5)
 {
+    uint8_t *info;
+    unsigned short black[5] = { a1, a2, a3, arg4, arg5 };
+    unsigned int result;
+    if (a0 >= ARRAY_SIZE(gib_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)gib_info[a0];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    if (a1 > 65535 || a2 > 65535 || a3 > 65535 || arg4 > 65535 || arg5 > 65535 ||
+        t41_gib_self_gain(black, info[41], &result))
+        return -EINVAL;
+    return result;
+#if 0 /* Lost stack arguments and division in the original fragment seed. */
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -81812,6 +81991,8 @@ tisp_gib_calc_self_gain0x78:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032d28 origin=model_output original=tisp_gib_rgb2channel */
+#endif
+}
 void *tisp_gib_rgb2channel(int32_t arg1) {
     static const uint16_t channel_map[12] = {
         0x4688, 0x4053, 0x44c1, 0x421a,
@@ -82147,8 +82328,10 @@ int32_t tisp_gib_interp_by_again(uint32_t a0, uint32_t a1, uint32_t a2)
                                                      (uintptr_t)(table + i * 22));
         *(uint16_t *)(void *)(info + 20 + i * 2) = values[i];
     }
-    params[4] = tisp_gib_calc_self_gain(a0, values[0], values[1], values[2],
-                                        values[3], values[4]);
+    /* This is gib_info.self_gain, NOT word four of global tparams. The
+     * misplaced store also corrupted unrelated TOP calibration bytes. */
+    *(uint32_t *)(void *)(info + 16) = tisp_gib_calc_self_gain(a0,
+        values[0], values[1], values[2], values[3], values[4]);
     return 0;
 }
 
@@ -82267,7 +82450,10 @@ uint32_t tisp_gib_a_gain_update(uint32_t channel, uint32_t gain,
 	if (ret > 0)
 		return 0;
 	tisp_gib_rgb2channel(channel);
-	return (uint32_t)tisp_gib_write_reg(channel, 2);
+	ret = tisp_gib_write_reg(channel, 2);
+	if (!ret && channel == 0 && t41_ae_flicker_profile < 0)
+		ret = tx_isp_t41_calibrated_gib_apply();
+	return (uint32_t)ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003352c origin=fragment_seed original=tisp_gib_ir_hist_update */
@@ -82494,6 +82680,21 @@ int32_t tisp_gib_param_array_set(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033940 origin=fragment_seed original=tisp_gib_ae_write_dgain */
 int32_t tisp_gib_ae_write_dgain(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4)
 {
+    uint8_t *info;
+    unsigned int gains[4] = { a1, a2, a3, arg4 }, words[3];
+    if (a0 >= ARRAY_SIZE(gib_info))
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)gib_info[a0];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    if (t41_gib_dgain(*(uint32_t *)(void *)(info + 16), info[41], gains, words))
+        return -EINVAL;
+    system_reg_write(0x803c, words[0]);
+    system_reg_write(0x8000, words[1]);
+    system_reg_write(0x8004, words[2]);
+    system_reg_write(0x8040, 1);
+    return 0;
+#if 0 /* Lost fifth argument and value of the exponent-register write. */
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -82718,6 +82919,16 @@ tisp_gib_ae_write_dgain0x338:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033c90 origin=fragment_seed original=tisp_gib_api_set_blc */
+#endif
+}
+
+int tx_isp_t41_calibrated_gib_apply(void)
+{
+    /* The bounded sensor allocator currently uses sensor gain only. ISP
+     * digital gain is unity, but GIB still must compensate black subtraction. */
+    return tisp_gib_ae_write_dgain(0, 1024, 1024, 1024, 1024);
+}
+
 int32_t tisp_gib_api_set_blc(uint32_t a0, uintptr_t a1)
 {
     uint32_t *local_10 = 0;
@@ -166429,6 +166640,10 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
              * is one-shot, so the worker rearms capture after it finishes. */
             schedule_work(&t41_safe_awb_work);
         }
+
+        if (status0 & BIT(4))
+            WRITE_ONCE(t41_ae_zones[0].sequence,
+                READ_ONCE(t41_ae_zones[0].sequence) + 1);
 
         if ((status0 & BIT(5)) && t41_safe_ae_controller > 0) {
             int32_t callback = READ_ONCE(irq_func_cb[5]);

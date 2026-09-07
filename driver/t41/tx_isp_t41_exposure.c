@@ -69,11 +69,9 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 		return ret;
 
 	if (!enable) {
-		packed_gib = T41_GIB_GAIN_UNITY_Q10 << 16 |
-			     T41_GIB_GAIN_UNITY_Q10;
-		system_reg_write(0x08000, packed_gib);
-		system_reg_write(0x08004, packed_gib);
-		system_reg_write(0x08040, 1);
+		ret = tx_isp_t41_calibrated_gib_apply();
+		if (ret)
+			return ret;
 		tx_isp_t41_calibrated_ccm_apply();
 		/* Restore the calibration's CCM routing. BCSH can
 		 * already carry the RGB correction in YUV space; enabling CCM

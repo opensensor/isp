@@ -23,4 +23,7 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 /* Rebuild CCM from current calibration, neutral CT and exposure. */
 void tx_isp_t41_calibrated_ccm_apply(void);
 
+/* Restore black-range-normalized GIB gains after a diagnostic override. */
+int tx_isp_t41_calibrated_gib_apply(void);
+
 #endif /* TX_ISP_T41_EXPOSURE_H */

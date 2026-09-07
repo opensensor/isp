@@ -20,6 +20,9 @@ with open(sys.argv[1], 'rb') as source:
         'tisp_ccm_write_reg': 'oracle_pack',
     }
     bcsh = len(sys.argv) > 2 and sys.argv[2] == 'bcsh'
+    ae = len(sys.argv) > 2 and sys.argv[2] == 'ae'
+    gib = len(sys.argv) > 2 and sys.argv[2] == 'gib'
+    awb_gain = len(sys.argv) > 2 and sys.argv[2] == 'awb_gain'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -29,10 +32,33 @@ with open(sys.argv[1], 'rb') as source:
         ], ['oracle_round', 'oracle_min', 'oracle_max', 'oracle_itp',
             'oracle_multiply', 'oracle_ct', 'oracle_ev', 'oracle_bcs',
             'oracle_hue', 'oracle_hard', 'oracle_pack']))
+    if ae:
+        functions = dict(zip([
+            'tisp_ae_long_target', 'tisp_ae_lib_bilinear_intp',
+            'tisp_ae_lib_div_64', 'tisp_ae_get_statistics',
+            'tisp_ae_weight_mean', 'fix_point_div_32', 'fix_point_mult2_32',
+        ], ['oracle_target', 'oracle_interpolate', 'oracle_divide',
+            'oracle_statistics', 'oracle_mean', 'oracle_fixed_div',
+            'oracle_fixed_mul']))
+    if gib:
+        functions = dict(zip(['tisp_gib_calc_self_gain', 'tisp_gib_ae_write_dgain',
+            'tisp_round_int64', 'tisp_max'],
+            ['oracle_self_gain', 'oracle_dgain', 'oracle_round', 'oracle_max']))
+    if awb_gain:
+        functions = dict(zip(['tisp_awb_gain_reg', 'tisp_awb_set_gain', 'fix_point_mult2_32'],
+            ['oracle_pack', 'oracle_gain', 'oracle_fixed_mul']))
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
         'isp_printf': 'oracle_unexpected'})
+    if awb_gain:
+        names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if ae:
+        names.update({'__ashldi3': 'oracle_left_shift',
+            '__lshrdi3': 'oracle_shift', '__div64_32': 'oracle_div64',
+            'y_arr': 'oracle_y',
+            'tisp_ae_fliker_detect': 'oracle_noop',
+            'tisp_ae_get_bv': 'oracle_noop'})
     rels = {r['r_offset']: r for r in elf.get_section_by_name('.rel.text').iter_relocations()}
     print('.set noreorder\n.set noat\n.option pic0\n.text\n.balign 4')
     for original, name in functions.items():
@@ -63,6 +89,28 @@ with open(sys.argv[1], 'rb') as source:
             else:
                 raise ValueError((hex(pc), kind))
         print(f'.size {name}, .-{name}')
+    if ae:
+        # The target-table adjustment is inlined in tisp_ae_tune. This exact
+        # bounded, call-free loop gets private caller-owned arrays, a private
+        # calibration copy and a normal o32 stack; no surrounding AE routine.
+        print('''\n.globl oracle_adjust
+.type oracle_adjust, @function
+oracle_adjust:
+addiu $sp, $sp, -256
+sw $s6, 240($sp)
+move $s6, $a0
+move $v1, $a1
+move $a1, $a2
+addiu $a0, $s6, 0x78
+addiu $t1, $s6, 0x208''')
+        for pc in range(0x272f4, 0x273d8, 4):
+            assert pc not in rels
+            word, = struct.unpack_from('<I', code, pc)
+            print(f'.word 0x{word:08x} # {pc:05x}')
+        print('''lw $s6, 240($sp)
+jr $ra
+addiu $sp, $sp, 256
+.size oracle_adjust, .-oracle_adjust''')
     if bcsh:
         print('.section .rodata\n.balign 65536\n.globl oracle_rodata\noracle_rodata:')
         data = elf.get_section_by_name('.rodata').data()

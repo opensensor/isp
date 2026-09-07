@@ -5,10 +5,18 @@ CFLAGS += -std=c99 -Wall -Wextra -Werror
 
 .PHONY: all check clean t30_storage_audit
 
+all check: tx_isp_t41_gib_test tx_isp_t41_awb_gain_test
+
+tx_isp_t41_awb_gain_test: tx_isp_t41_awb_gain_test.c ../driver/t41/tx_isp_t41_awb_gain.h ../driver/t41/tx_isp_t41_ae.h
+	$(CC) $(CFLAGS) -o $@ $<
+
+tx_isp_t41_gib_test: tx_isp_t41_gib_test.c ../driver/t41/tx_isp_t41_gib.h
+	$(CC) $(CFLAGS) -o $@ $<
+
 tx_isp_t41_color_route_test: tx_isp_t41_color_route_test.c ../driver/t41/tx_isp_t41_exposure.c ../driver/t41/tx_isp_t41_exposure.h ../driver/include/tx_isp/tx_isp_top.h
 	$(CC) $(CFLAGS) -o $@ $< ../driver/t41/tx_isp_t41_exposure.c
 
-all: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test tx_isp_t41_tmo_map_test tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_color_route_test \
+all: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test tx_isp_t41_tmo_map_test tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_ae_test tx_isp_t41_color_route_test \
 	tx_isp_subdev_abi_test tx_isp_subdev_test \
 	tx_isp_remote_event_test \
 	tx_isp_state_test \
@@ -48,6 +56,9 @@ tx_isp_t41_ccm_test: tx_isp_t41_ccm_test.c ../driver/t41/tx_isp_t41_ccm.h ../dri
 	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_bcsh_test: tx_isp_t41_bcsh_test.c ../driver/t41/tx_isp_t41_bcsh.h ../driver/t41/tx_isp_t41_ccm.h ../driver/t41/tx_isp_t41_tmo.h
+	$(CC) $(CFLAGS) -o $@ $<
+
+tx_isp_t41_ae_test: tx_isp_t41_ae_test.c ../driver/t41/tx_isp_t41_ae.h ../driver/t41/tx_isp_t41_tmo.h
 	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_tmo_map_test: tx_isp_t41_tmo_map_test.c ../driver/t41/tx_isp_t41_tmo_map.h \
@@ -187,7 +198,7 @@ tx_isp_scaler_test: tx_isp_scaler_test.c \
 		../driver/t23/tx_isp_t23_scaler.c \
 		../driver/t41/tx_isp_t41_scaler.c
 
-check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test tx_isp_t41_tmo_map_test tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_color_route_test \
+check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test tx_isp_t41_tmo_map_test tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_ae_test tx_isp_t41_color_route_test \
 		tx_isp_subdev_abi_test tx_isp_subdev_test \
 		tx_isp_remote_event_test \
 		tx_isp_state_test \
@@ -208,6 +219,9 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 	./tx_isp_t41_tmo_map_test
 	./tx_isp_t41_ccm_test
 	./tx_isp_t41_bcsh_test
+	./tx_isp_t41_ae_test
+	./tx_isp_t41_gib_test
+	./tx_isp_t41_awb_gain_test
 	./tx_isp_t41_color_route_test
 	./tx_isp_t41_awb_test
 	./tx_isp_modulation_test
@@ -243,7 +257,7 @@ clean:
 		tx_isp_t41_tmo_test \
 		tx_isp_t41_tmo_map_test \
 		tx_isp_t41_awb_test \
-		tx_isp_t41_ccm_test tx_isp_t41_bcsh_test \
+		tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_ae_test tx_isp_t41_gib_test tx_isp_t41_awb_gain_test \
 		tx_isp_t41_color_route_test \
 		tx_isp_daynight_test \
 		tx_isp_subdev_abi_test tx_isp_subdev_test \
