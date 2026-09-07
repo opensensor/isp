@@ -32098,8 +32098,7 @@ static void t41_apply_stock_awb_gains(void)
     system_reg_set_awb_trig(3, 0);
     t41_awb_last_rgain = t41_stock_awb_gain_a;
     t41_awb_last_bgain = t41_stock_awb_gain_b;
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock AWB gains applied a=%#x b=%#x read=%#x/%#x/%#x/%#x\n",
+    pr_debug("tx_isp_t41_recovered: calibrated AWB gains a=%#x b=%#x read=%#x/%#x/%#x/%#x\n",
            t41_stock_awb_gain_a, t41_stock_awb_gain_b,
            system_reg_read(0x04004), system_reg_read(0x04008),
            system_reg_read(0x05004), system_reg_read(0x05008));
@@ -32613,8 +32612,7 @@ static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
         t41_apply_stock_awb_stats_profile();
     }
 
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: live AWB profile mode=%s gains=%#x/%#x\n",
+    pr_debug("tx_isp_t41_recovered: live AWB profile mode=%s gains=%#x/%#x\n",
            mode == TX_ISP_TUNING_AWB_AUTO ? "auto" : "manual",
            rgain, bgain);
     return 0;
@@ -56809,7 +56807,8 @@ allocate_sensor:
 		gain_q16 = allocated_gain.log2_q16;
 		t41_safe_ae_gain_q16 = gain_q16;
 		t41_tmo_exposure(actual_integration, gain_q16);
-		if (t41_safe_gain_fanout_mask & 0x3fU)
+		if ((t41_safe_gain_fanout_mask & 0x3fU) &&
+		    gain_q16 != t41_safe_gain_last_q16)
 			t41_apply_safe_gain_fanout(
 				channel, gain_q16,
 				t41_safe_gain_fanout_mask & 0x3fU);
