@@ -27,6 +27,10 @@ ABI_ASSERT(awb_control_size,
 	sizeof(struct tx_isp_tuning_awb_control) == 8);
 ABI_ASSERT(awb_control_r_gain,
 	offsetof(struct tx_isp_tuning_awb_control, r_gain) == 4);
+ABI_ASSERT(awb_target_size,
+	sizeof(struct tx_isp_tuning_awb_target) == 8);
+ABI_ASSERT(awb_target_b_gain,
+	offsetof(struct tx_isp_tuning_awb_target, b_gain_q10) == 4);
 ABI_ASSERT(expr_size, sizeof(struct tx_isp_tuning_expr) == 12);
 ABI_ASSERT(expr_min,
 	offsetof(struct tx_isp_tuning_expr, integration_time_min) == 6);
@@ -54,6 +58,9 @@ static void test_descriptors(void)
 		  TX_ISP_TUNING_PAYLOAD_USER_PTR },
 		{ TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL, sizeof(uint32_t),
 		  TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+		  TX_ISP_TUNING_PAYLOAD_USER_PTR },
+		{ TX_ISP_TUNING_CMD_OPEN_AWB_TARGET,
+		  sizeof(struct tx_isp_tuning_awb_target), TX_ISP_TUNING_DIR_GET,
 		  TX_ISP_TUNING_PAYLOAD_USER_PTR },
 		{ TX_ISP_TUNING_CMD_BCSH_HUE, 4,
 		  TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,

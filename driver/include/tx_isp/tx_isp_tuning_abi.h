@@ -65,6 +65,7 @@ typedef uint64_t u64;
 #define TX_ISP_TUNING_CMD_OPEN_AE_TARGET	0x08ff0002U
 #define TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL	0x08ff0003U
 #define TX_ISP_TUNING_CMD_OPEN_AWB_SCENE	0x08ff0004U
+#define TX_ISP_TUNING_CMD_OPEN_AWB_TARGET	0x08ff0005U
 
 #define TX_ISP_TUNING_AWB_MANUAL		0U
 #define TX_ISP_TUNING_AWB_AUTO		1U
@@ -76,6 +77,14 @@ typedef uint64_t u64;
 struct tx_isp_tuning_awb_scene {
 	u32 raw_r_q10;
 	u32 raw_b_q10;
+};
+
+/* Calibrated neutral-mesh estimate, already including sensor RGB bias.
+ * ENODATA means hold the previous gains, never revert to whole-scene gray
+ * world. Separate from AWB_SCENE, whose raw-ratio ABI remains unchanged. */
+struct tx_isp_tuning_awb_target {
+	u32 r_gain_q10;
+	u32 b_gain_q10;
 };
 
 #define TX_ISP_TUNING_DIR_GET			0x01U

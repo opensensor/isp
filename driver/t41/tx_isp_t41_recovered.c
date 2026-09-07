@@ -10,6 +10,7 @@
 #include "../include/tx_isp/tx_isp_tuning_abi.h"
 #include "../include/tx_isp/tx_isp_frame_layout.h"
 #include "../include/tx_isp/tx_isp_exposure.h"
+#include "../include/tx_isp/tx_isp_awb_mesh.h"
 #include "../include/tx_isp/tx_isp_math.h"
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
@@ -1094,6 +1095,7 @@ static void t41_apply_stock_awb_gains(void);
 static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
                                   uint16_t bgain);
 static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene);
+static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target);
 
 /* The crash-safe event gate intentionally suppresses the unrecovered AWB
  * process callback.  Keep a hardware-tested OS04D10 daylight fallback until
@@ -20489,6 +20491,9 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             { TX_ISP_TUNING_CMD_OPEN_AWB_SCENE,
               sizeof(struct tx_isp_tuning_awb_scene),
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_OPEN_AWB_TARGET,
+              sizeof(struct tx_isp_tuning_awb_target),
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
         static unsigned int trace_count;
         struct tx_isp_tuning_t41_control request;
@@ -20514,6 +20519,10 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             startup_routes, ARRAY_SIZE(startup_routes), request.id,
             request.is_get ? TX_ISP_TUNING_DIR_GET :
                              TX_ISP_TUNING_DIR_SET);
+        /* Open extensions must support capability detection and reject
+         * writes to GET-only commands, not acknowledge unchanged payloads. */
+        if (!route && (request.id & 0xffff0000U) == 0x08ff0000U)
+            return -EOPNOTSUPP;
 
         /*
          * Restore the first stateful control required by Raptor.  This T41
@@ -20646,6 +20655,18 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                 return -EINVAL;
             t41_apply_stock_bcsh_profile(color_model);
             return 0;
+        }
+        if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AWB_TARGET) {
+            struct tx_isp_tuning_awb_target target;
+
+            if (request.channel != 0 || !request.value_or_ptr)
+                return -EINVAL;
+            ret = t41_safe_awb_measure_target(&target);
+            if (ret)
+                return ret;
+            return private_copy_to_user(
+                (void __user *)(uintptr_t)request.value_or_ptr,
+                &target, sizeof(target)) ? -EFAULT : 0;
         }
         if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AWB_SCENE) {
             struct tx_isp_tuning_awb_scene scene;
@@ -31983,10 +32004,9 @@ static void t41_safe_awb_apply(uint32_t rgain, uint32_t bgain)
     system_reg_set_awb_trig(3, 0);
 }
 
-/* Return a stable scene-color signal without enabling the experimental AWB
- * writer.  Each hardware bank covers a different spatial phase, so aggregate
- * all four banks; treating any one bank as a complete frame caused the old
- * auto controller's large blue/green excursions. */
+/* Return the legacy whole-scene color signal without enabling the experimental
+ * AWB writer. Aggregate the four temporal DMA banks to smooth their updates;
+ * calibrated neutral selection is exposed separately by AWB_TARGET. */
 static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene)
 {
     uint8_t *info;
@@ -32068,6 +32088,105 @@ static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene)
     scene->raw_r_q10 = (uint32_t)div64_u64(green << 10, red);
     scene->raw_b_q10 = (uint32_t)div64_u64(green << 10, blue);
     return 0;
+}
+
+/* Bounded neutral-mesh estimator, not the unsafe recovered OEM AWB process.
+ * H20250310a tisp_awb_long_par_update (0x30b70), long_alogrithm (0x31288)
+ * and ct_detect (0x1b260) identify the calibration, ratio axes, selection
+ * mesh and spatial weights below. File AWB +3352 maps to runtime +2424.
+ * This uses those sensor-owned data but intentionally omits OEM clustering,
+ * CT/history and EV-dependent weighting. No OS04D10 gain constants here. */
+static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
+{
+    struct tx_isp_awb_mesh mesh;
+    struct tx_isp_awb_accumulator sum = { 0 };
+    uint8_t *info, *params, *dma;
+    uint32_t rows, columns, bank, group, bin, phase, weight_sum = 0;
+    uint32_t bin_weights[4];
+    uint64_t pixels = 0;
+    int ret;
+
+    if (!target || !awb_info[0])
+        return -ENODEV;
+    info = (uint8_t *)(uintptr_t)awb_info[0];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    dma = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(dma) ||
+        !t41_kernel_data_ptr(dma + 131071))
+        return -ENODEV;
+    rows = *(uint16_t *)(void *)(params + 3182);
+    columns = *(uint16_t *)(void *)(params + 3186);
+    if (!rows || !columns || rows > 15 || columns > 15 || params[3274])
+        return -EINVAL;
+    mesh.red_axis = (uint32_t *)(void *)(params + 0x38);
+    mesh.blue_axis = (uint32_t *)(void *)(params + 0x74);
+    mesh.weights = (uint32_t *)(void *)(params + 0x4ec);
+    mesh.red_calibration_q10 = *(uint32_t *)(void *)(params + 0x30);
+    mesh.blue_calibration_q10 = *(uint32_t *)(void *)(params + 0x34);
+    /* Do not infer gain bias from the adjacent, unreferenced +0xcde/+0xce0
+     * tuning words. The OEM gain writer's CT-dependent additive offsets
+     * (+0xbf4..+0xc08) require a recovered CT estimate, which this bounded
+     * estimator does not yet provide. Keep the raw neutral ratio unbiased. */
+    mesh.red_bias_q10 = 1024U;
+    mesh.blue_bias_q10 = 1024U;
+    ret = tx_isp_awb_mesh_validate(&mesh);
+    if (ret)
+        return ret;
+    for (bin = 0; bin < 4; ++bin) {
+        bin_weights[bin] = *(uint16_t *)(void *)(params + 0xd46 + bin * 2);
+        if (bin_weights[bin] > 16)
+            return -EINVAL;
+        weight_sum += bin_weights[bin] * 2;
+    }
+    if (!weight_sum)
+        return -ENODATA;
+
+    /* Four temporal DMA banks; eight records per zone are two phases of
+     * four luminance classes, not eight independent neutral candidates. */
+    for (bank = 0; bank < 4; ++bank) {
+        uint8_t *source = dma + bank * 32768U;
+
+        dma_cache_sync(NULL, source, 32768U, DMA_FROM_DEVICE);
+        for (group = 0; group < rows * columns; ++group) {
+            uint32_t r = 0, g = 0, b = 0, count = 0;
+            uint32_t spatial = params[0x1200 + group];
+
+            if (!spatial)
+                continue;
+            for (bin = 0; bin < 4; ++bin) {
+                uint32_t weight = bin_weights[bin];
+                if (!weight)
+                    continue;
+                for (phase = 0; phase < 2; ++phase) {
+                    uint32_t *v = (uint32_t *)(void *)(source +
+                        group * 128U + (bin * 2 + phase) * 16U);
+                    uint32_t w0 = READ_ONCE(v[0]), w1 = READ_ONCE(v[1]);
+                    uint32_t w2 = READ_ONCE(v[2]), w3 = READ_ONCE(v[3]);
+                    uint32_t n = ((w3 & 63U) << 8) | (w2 >> 24);
+
+                    if (!n)
+                        continue;
+                    r += (w0 & 0x3fffffU) * weight;
+                    g += (((w1 & 0xfffU) << 10) | (w0 >> 22)) * weight;
+                    b += (((w2 & 3U) << 20) | (w1 >> 12)) * weight;
+                    count += n;
+                }
+            }
+            if (count < max_t(uint32_t, 1U, *(uint32_t *)(void *)params))
+                continue;
+            if (tx_isp_awb_mesh_add(&mesh, &sum, r / weight_sum,
+                                    g / weight_sum, b / weight_sum, spatial))
+                pixels += count;
+        }
+    }
+    system_reg_set_awb_trig(1, 0);
+    if (pixels < (uint64_t)t41_awb_min_pixels * 4U)
+        return -ENODATA;
+    return tx_isp_awb_mesh_result(&mesh, &sum,
+        max_t(uint32_t, 1U, t41_awb_min_zones) * 4U,
+        &target->r_gain_q10, &target->b_gain_q10);
 }
 
 static bool t41_safe_awb_ratio_close(uint32_t value, uint32_t reference)

@@ -5,6 +5,7 @@ tx-isp-t41-objs := tx_isp_t41_recovered.o \
 		   tx_isp_t41_subdev.o \
 		   tx_isp_t41_frame_layout.o \
 		   tx_isp_t41_exposure.o \
+		   tx_isp_t41_awb_mesh.o \
 		   tx_isp_t41_scaler.o \
 		   tx_isp_t41_tuning_abi.o
 ifneq ($(filter y m,$(CONFIG_VIDEOBUF2_DMA_CONTIG)),)
