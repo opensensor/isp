@@ -24,6 +24,7 @@
 #include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_awb_gain.h"
 #include "tx_isp_t41_sensor_gain.h"
+#include "tx_isp_t41_gamma.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -1306,6 +1307,14 @@ static int t41_bcsh_error = -ENODEV;
 static uint32_t t41_bcsh_last[T41_BCSH_WORDS] = { UINT_MAX };
 module_param(t41_bcsh_error, int, 0444);
 static int t41_bcsh_update(uint32_t ct, uint32_t ev, int force);
+static int t41_gamma_error = -ENODEV;
+static unsigned int t41_gamma_ev = ~0U;
+static unsigned int t41_gamma_strength_value = ~0U;
+static unsigned int t41_gamma_updates __attribute__((section(".data"))) = 0;
+module_param(t41_gamma_error, int, 0444);
+module_param(t41_gamma_ev, uint, 0444);
+module_param(t41_gamma_strength_value, uint, 0444);
+module_param(t41_gamma_updates, uint, 0444);
 static int t41_tmo_map_trigger = -1;
 static int t41_tmo_map_set(const char *value, const struct kernel_param *kp);
 module_param_call(t41_tmo_map_trigger, t41_tmo_map_set, param_get_int,
@@ -100516,13 +100525,8 @@ int32_t tisp_gamma_strength_transform(uint32_t a0)
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     uint8_t *info;
     uint8_t *params;
-    uint16_t *source;
     uint16_t *output;
     uint32_t strength;
-    uint32_t scale;
-    int32_t accumulator = 0;
-    int32_t accumulator_step;
-    unsigned int i;
 
     if (a0 >= ARRAY_SIZE(gamma_info) || !gamma_info[a0])
         return -EINVAL;
@@ -100534,18 +100538,9 @@ int32_t tisp_gamma_strength_transform(uint32_t a0)
         return -EINVAL;
 
     strength = *(uint32_t *)(void *)(info + 0x218);
-    scale = strength + (strength >> 7);
-    accumulator_step = 0x2000 - (int32_t)(scale << 5);
-    source = (uint16_t *)(void *)(params + 0x12c);
     output = (uint16_t *)(void *)(info + 0x21c);
-    for (i = 0; i < 128; ++i) {
-        output[i] = (uint16_t)tisp_round_int64(
-            (int32_t)((uint32_t)source[i] * scale + accumulator),
-            0, 8);
-        accumulator += accumulator_step;
-    }
-    output[128] = 0x0fff;
-    return 0;
+    return t41_gamma_curve(params, T41_GAMMA_PARAM_BYTES, strength, output) ?
+        -EINVAL : 0;
 #else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -100640,10 +100635,7 @@ int64_t tisp_gamma_interp_by_ev(uint32_t arg1, uint32_t arg2, uint32_t arg3, uin
 {
 	uint8_t *info;
 	uint8_t *params;
-	uint32_t *thresholds;
-	uint8_t *strengths;
 	uint32_t strength;
-	unsigned int index;
 
 	(void)arg2;
 	if (arg1 >= ARRAY_SIZE(gamma_info) || !gamma_info[arg1])
@@ -100653,41 +100645,39 @@ int64_t tisp_gamma_interp_by_ev(uint32_t arg1, uint32_t arg2, uint32_t arg3, uin
 	if (!t41_kernel_data_ptr(info) || !t41_kernel_data_ptr(params))
 		return -EINVAL;
 
-	/* T41 HLIL 0x43490: ten EV knots at +0x104 and ten byte-sized
-	 * strengths at +0x22e.  The generated recovery failed to increment
-	 * the knot index after index nine and looped forever for high EVs. */
+	if (t41_gamma_strength(params, T41_GAMMA_PARAM_BYTES, arg3, arg4, &strength))
+		return -EINVAL;
 	*(uint32_t *)(void *)(info + 532) = arg3;
-	thresholds = (uint32_t *)(void *)(params + 0x104);
-	strengths = params + 0x22e;
-	for (index = 0; index < 10; ++index) {
-		uint32_t low;
-		uint32_t high;
-		uint32_t offset;
-
-		if (arg4 || arg3 >= thresholds[index])
-			continue;
-		if (!index) {
-			strength = strengths[0];
-			goto selected;
-		}
-		low = thresholds[index - 1];
-		high = thresholds[index];
-		if (high == low)
-			return 2;
-		offset = arg3 - low;
-		strength = ((uint32_t)strengths[index - 1] *
-			    (high - low - offset) +
-			    (uint32_t)strengths[index] * offset +
-			    ((high - low) >> 1)) / (high - low);
-		goto selected;
-	}
-	strength = strengths[9];
-
-selected:
 	if (*(uint32_t *)(void *)(info + 536) == strength && !arg5)
 		return 1;
 	*(uint32_t *)(void *)(info + 536) = strength;
 	return 0;
+}
+
+/* Called under the tone worker's stream-lifetime lock. OEM gamma EV is
+ * integration times linear total gain, after removing the Q10 fraction. */
+static int t41_gamma_update(uint32_t ev)
+{
+    uint8_t *info = (uint8_t *)(uintptr_t)gamma_info[0];
+    int ret;
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
+    if (info[0x420])
+        return 0;
+    ret = (int)tisp_gamma_interp_by_ev(0, 0, ev, 0, 0);
+    if (ret < 0)
+        return ret;
+    t41_gamma_ev = ev;
+    t41_gamma_strength_value = *(uint32_t *)(void *)(info + 0x218);
+    if (ret == 1)
+        return 0;
+    ret = tisp_gamma_strength_transform(0);
+    if (!ret) {
+        ret = tisp_gamma_write_lut_rgb(0);
+        if (!ret)
+            ++t41_gamma_updates;
+    }
+    return ret;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042b4c origin=fragment_seed original=tisp_gamma_ev_update */
@@ -150220,6 +150210,7 @@ static void t41_tmo_workfn(struct work_struct *work)
     ev = min_t(uint64_t, exposure, UINT_MAX);
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
+    t41_gamma_error = t41_gamma_update(ev);
     ret = t41_tmo_frame(ev, gain, sequence);
     t41_tmo_error = ret;
     if (ret) {
