@@ -9,6 +9,78 @@
 #define awb_div(n, d) ((n) / (d))
 #endif
 
+static int awb_ct_knots_valid(const u32 *k)
+{
+	return k[1] && k[1] < k[0] && k[0] <= k[2] &&
+		k[2] < k[3] && k[3] <= 100000;
+}
+
+static u32 awb_lerp(u32 a, u32 b, u32 n, u32 d)
+{
+	return (u32)awb_div((u64)a * (d - n) + (u64)b * n, d);
+}
+
+int tx_isp_awb_ct_prior_build(const struct tx_isp_awb_ct_config *c,
+			    u32 ev, struct tx_isp_awb_ct_prior *p)
+{
+	u32 i, span, step, n = 0, floor;
+	const u32 *left, *right;
+	if (!c || !p || c->ev_high <= c->ev_low ||
+	    c->ev_high > 0x3fffffff || c->day_enabled > 1 ||
+	    c->night_enabled > 1 || c->day_floor_q8 > 256 ||
+	    c->night_floor_q8 > 256 || !awb_ct_knots_valid(c->day) ||
+	    !awb_ct_knots_valid(c->transition) || !awb_ct_knots_valid(c->night))
+		return -EINVAL;
+	span = c->ev_high - c->ev_low;
+	step = span / 3;
+	if (!step)
+		return -EINVAL;
+	left = right = c->night;
+	floor = 256;
+	/* H20250310a long_par_update: interpolate the calibrated daylight
+	 * prior across the first third, then relax it above ev_high. */
+	if (c->day_enabled) {
+		left = right = c->transition;
+		floor = c->day_floor_q8;
+		if (ev < c->ev_low) {
+			left = right = c->day;
+		} else if (ev < c->ev_low + step) {
+			left = c->day;
+			n = ev - c->ev_low;
+		} else if (ev >= c->ev_high) {
+			n = ev - c->ev_high;
+			if (n > step) n = step;
+			if (c->night_enabled)
+				right = c->night;
+			floor = awb_lerp(floor, c->night_enabled ?
+				c->night_floor_q8 : 256, n, step);
+		}
+	} else if (c->night_enabled && ev >= c->ev_high) {
+		n = ev - c->ev_high;
+		if (n > step) n = step;
+		floor = awb_lerp(256, c->night_floor_q8, n, step);
+	}
+	for (i = 0; i < 4; ++i)
+		p->knots[i] = awb_lerp(left[i], right[i], n, step);
+	p->floor_q8 = floor;
+	return 0;
+}
+
+u32 tx_isp_awb_ct_weight(const struct tx_isp_awb_ct_prior *p, u32 ct)
+{
+	const u32 *k = p->knots;
+	u32 floor = p->floor_q8;
+	/* H20250310a func_zone_ct_weight 0x1a71c, represented in Q8. */
+	if (ct <= k[1] || ct >= k[3]) return floor;
+	if (ct < k[0])
+		return floor + ((ct - k[1]) * (256 - floor) +
+			(k[0] - k[1]) / 2) / (k[0] - k[1]);
+	if (ct > k[2])
+		return floor + ((k[3] - ct) * (256 - floor) +
+			(k[3] - k[2]) / 2) / (k[3] - k[2]);
+	return 256;
+}
+
 int tx_isp_awb_mesh_validate(const struct tx_isp_awb_mesh *m)
 {
 	u32 i;
@@ -26,8 +98,11 @@ int tx_isp_awb_mesh_validate(const struct tx_isp_awb_mesh *m)
 			return -EINVAL;
 	}
 	for (i = 0; i < TX_ISP_AWB_MESH_SIZE * TX_ISP_AWB_MESH_SIZE; ++i)
-		if (m->weights[i] > 256)
+		if (m->weights[i] > 256 || (m->ct_mired && m->ct_mired[i] > 65535))
 			return -EINVAL;
+	if (m->ct_mired && (!awb_ct_knots_valid(m->ct_prior.knots) ||
+			    m->ct_prior.floor_q8 > 256))
+		return -EINVAL;
 	return 0;
 }
 
@@ -67,6 +142,16 @@ int tx_isp_awb_mesh_add(const struct tx_isp_awb_mesh *m,
 	a = row[0] * (256 - dx) + row[1] * dx;
 	c = row[15] * (256 - dx) + row[16] * dx;
 	w = ((a * (256 - dy) + c * dy + 32768) >> 16) * spatial;
+	if (m->ct_mired && w) {
+		u32 mired;
+		row = m->ct_mired + iy * TX_ISP_AWB_MESH_SIZE + ix;
+		a = row[0] * (256 - dx) + row[1] * dx;
+		c = row[15] * (256 - dx) + row[16] * dx;
+		mired = (a * (256 - dy) + c * dy + 32768) >> 16;
+		if (!mired) return 0;
+		w = (w * tx_isp_awb_ct_weight(&m->ct_prior,
+			(1000000U + mired / 2) / mired) + 128) >> 8;
+	}
 	if (!w)
 		return 0;
 	/* At most 65536 samples, 26-bit sums, 16-bit weights: < 2^58. */

@@ -12,6 +12,23 @@ typedef uint64_t u64;
 
 #define TX_ISP_AWB_MESH_SIZE 15U
 
+/* OEM knot order: full-low, outer-low, full-high, outer-high. */
+struct tx_isp_awb_ct_prior {
+	u32 knots[4];
+	u32 floor_q8;
+};
+
+struct tx_isp_awb_ct_config {
+	u32 ev_low, ev_high;
+	u32 day[4], transition[4], night[4];
+	u32 day_enabled, night_enabled;
+	u32 day_floor_q8, night_floor_q8;
+};
+
+int tx_isp_awb_ct_prior_build(const struct tx_isp_awb_ct_config *config,
+			    u32 ev, struct tx_isp_awb_ct_prior *prior);
+u32 tx_isp_awb_ct_weight(const struct tx_isp_awb_ct_prior *prior, u32 kelvin);
+
 /* Sensor calibration, not a scene-specific gain preset. Axes are calibrated
  * R/G and B/G in Q8; mesh weights are Q8. Hardware/statistics layout stays in
  * the SoC adapter. Validate once before feeding any samples. */
@@ -23,6 +40,10 @@ struct tx_isp_awb_mesh {
 	u32 blue_calibration_q10;
 	u32 red_bias_q10;
 	u32 blue_bias_q10;
+	/* Optional sensor-owned reciprocal-temperature mesh (mired), on the
+	 * same ratio axes. A NULL pointer leaves existing estimators unchanged. */
+	const u32 *ct_mired;
+	struct tx_isp_awb_ct_prior ct_prior;
 };
 
 struct tx_isp_awb_accumulator {

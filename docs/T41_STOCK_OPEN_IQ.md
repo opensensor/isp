@@ -1,5 +1,86 @@
 # T41 calibrated AWB comparison, 2026-09-07
 
+## Follow-up: algorithm recovery, not register replay
+
+The original stack is **not a generic completed T41 tuning implementation**.
+It contains OS04D10/scene-specific bring-up register replays. A register bank
+matching stock on one scene does not establish that its generating algorithm
+has been recovered. Reading the active sensor calibration as algorithm input
+is different from embedding a captured output bank in the driver.
+
+This follow-up replaces the AWB setup replay with checked register packing
+and gain interpolation. The old generated writers lost the second argument
+to `system_reg_write(0x18004, value)`, scaled several byte offsets as pointer
+offsets, discarded packed LWL/LWR threshold loads, and lost the integer part
+of gain in the first threshold interpolation. Sources: H20250310a
+`tisp_awb_set_hardware_param` 0x2f9c4, `set_regional_threshold` 0x2f744,
+`set_lum_th_freq` 0x2f8d0. The legacy `t41_stock_awb_stats_profile` selector
+now controls a calibration-driven refresh, not a captured six-word array.
+The DMA ring is not reset during that post-stream refresh.
+
+The portable AWB writer helper takes calibration bytes and log2 gain as
+inputs. Tests use asymmetric synthetic geometry and ascending/descending
+gain tables, including unaligned input, malformed fields and high-gain
+clamping. Independently feeding the captured stock parameter block and
+gain=1555 Q16 reproduces all eleven stock runtime thresholds; those captured
+values are not compiled into the implementation.
+
+The bounded AWB estimator now keeps odd/neutral records separate from the
+even/global estimator records and applies Q3 luminance-class weights to both
+RGB and pixel counts. It interpolates the calibration's reciprocal-temperature
+mesh and EV-dependent CT selection prior. This remains a bounded estimator,
+not a recovered OEM clustering/history implementation. The CT tests include
+two different illuminant/EV calibrations; there is no OS04D10 gain correction
+in the new shared math. The current adapter still requires full-statistics
+mode; unsupported compressed layouts fail validation.
+
+TMO initialization had a separate base-pointer bug: three late accesses were
+relative to the whole parameter object rather than its TMO block at +9272.
+This mis-seeded runtime controls and clamped an unrelated parameter at +480.
+The corrected base follows `tisp_tmo_init` 0x6b170/0x6b290/0x6b2ac/0x6b2c4.
+Mode-0 EV curve interpolation now validates all calibration knots and uses
+the final curve above the highest knot, instead of the penultimate curve.
+Mode 1 is explicitly unsupported, not silently treated as mode 0.
+
+The base correction alone does **not** repair adaptive local TMO. Stock's
+3750-word local map is scene-dependent; open's cold map is zero because its
+unsafe FPGA/statistics worker is suppressed. A diagnostic uniform-coordinate
+map avoided washout, but it was a substitute for that missing algorithm.
+The proposed automatic fallback and its helper were removed from this patch.
+The captured TMO replay is disabled by default. TMO stays bypassed after
+stream reset, so shadow/highlight recovery remains unfinished.
+
+Remaining sensor-specific scaffolding includes the captured CCM path,
+BCSH day/low-light banks, DMSC static gain profiles, DPC/CDNS/MDNS/spatial/LCE/
+ADR profiles, fixed initial AWB seeds, and OS04D10 raw-gain interpretation in
+the safe AE adapter. These are not covered by the new generic-math tests and
+must not be advertised as multi-sensor tuning support. Replace each at its
+calibration/statistics-to-register boundary; do not add more scene captures
+as production profiles.
+
+The one-shot candidate booted in forced day mode, with R/B settling at
+2116/2278 Q10 in this changing daylight scene. Full host tests and AWB/TMO
+helper ASan/UBSan tests pass. Three TCP and three UDP H.264/AAC reconnects
+pass. A 60-second TCP decode observed 1498 video packets, no non-increasing
+PTS and no decoder/timestamp warning. This is not a color-chart or long-run
+stability certification. Device validation remains T41NQ/OS04D10 only.
+
+A fresh nearby stock capture gave paper R/G=0.963 and B/G=1.133, versus
+open's 0.878 and 1.178. This is closer than the preceding open comparison,
+but residual cyan remains and illumination was not controlled. The bark ROI
+luma was 52.66 stock versus 11.63 open: the tone deficit is still substantial.
+Do not present the AWB correction as an image-quality-parity result.
+
+The reproduced intermittent FFmpeg null-sink timestamp warning was output
+time-base quantization: monotonic 90 kHz input timestamps rounded into the
+same tick at the inferred 12/301 output time base. With
+`-fps_mode:v passthrough -enc_time_base:v demux`, both the 30-second repeat
+and the 60-second candidate run had no warning. Do not rewrite capture/RTP
+timestamps to conceal this harness artifact. Gaps up to 10807/90000 seconds
+were still observed in the candidate; their cause remains unresolved.
+
+The sections below describe the preceding comparison, before this follow-up.
+
 Hardware: T41NQ, OS04D10, 2560x1440/25, Linux 4.4.94. Genuine H20250310a
 stock ISP and stock IMP were compared with the open V4L2 stack. Both used
 the installed sensor module and identical sensor IQ binary, forced optical

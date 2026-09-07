@@ -14,6 +14,8 @@
 #include "../include/tx_isp/tx_isp_math.h"
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
+#include "tx_isp_t41_tmo.h"
+#include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -1213,7 +1215,7 @@ static uint32_t t41_safe_gain_last_q16 = ~0U;
 static int t41_stock_awb_stats_profile = -1;
 module_param(t41_stock_awb_stats_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_awb_stats_profile,
-		 "negative replays the exact OS04D10 AWB statistics setup");
+		 "nonpositive reapplies calibration-driven AWB setup after stream reset (legacy name)");
 static int t41_stock_dmsc_profile = -1;
 module_param(t41_stock_dmsc_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_dmsc_profile,
@@ -1250,7 +1252,7 @@ static int t41_stock_adr_profile = -1;
 module_param(t41_stock_adr_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_adr_profile,
 		 "Program stock ADR geometry/statistics (negative=enabled; -2 skips shadow-RAM upload)");
-static int t41_stock_tmo_profile = -1;
+static int t41_stock_tmo_profile = 1;
 module_param(t41_stock_tmo_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_tmo_profile,
 		 "Replay a matched stock T41 TMO runtime curve (negative=enabled, diagnostic)");
@@ -31957,34 +31959,29 @@ static void t41_apply_stock_awb_gains(void)
 
 static void t41_apply_stock_awb_stats_profile(void)
 {
-    /* Exact writer-owned OS04D10 values.  0x18004 comes from
-     * tisp_awb_set_hardware_param(); 0x18028..0x18038 come from its two
-     * threshold helpers.  Matched traces show these six values are stable.
-     * DMA addresses (0x1803c..0x18048), bank state, and result counters are
-     * deliberately excluded. */
-    static const uint32_t stock_setup[][2] = {
-        { 0x18004U, 0xf001f001U },
-        { 0x18028U, 0x0118004dU },
-        { 0x1802cU, 0x00d2001eU },
-        { 0x18030U, 0x00b40100U },
-        { 0x18034U, 0x01540100U },
-        { 0x18038U, 0x01e6800aU },
-    };
-    unsigned int i;
+    uint8_t *info, *params;
+    uint32_t words[10];
 
-    if (t41_stock_awb_stats_profile > 0)
+    /* Compatibility selector, no captured register image. Reapply only
+     * writer-owned setup/thresholds; do not reset the running DMA ring. */
+    if (t41_stock_awb_stats_profile > 0 || !awb_info[0])
         return;
-    for (i = 0; i < ARRAY_SIZE(stock_setup); ++i)
-        system_reg_write(stock_setup[i][0], stock_setup[i][1]);
+    info = (uint8_t *)(uintptr_t)awb_info[0];
+    if (!t41_kernel_data_ptr(info))
+        return;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    if (!t41_kernel_data_ptr(params) ||
+        t41_awb_geometry(params, T41_AWB_HW_PARAM_BYTES, words))
+        return;
+    system_reg_write(0x18004, words[0]);
+    tisp_awb_set_regional_threshold(0);
+    tisp_awb_set_lum_th_freq(0);
     system_reg_set_awb_trig(1, 0);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock AWB stats profile applied setup=%#x/%#x/%#x/%#x/%#x/%#x dma=%#x/%#x/%#x/%#x ring=%#x\n",
-           system_reg_read(0x18004U), system_reg_read(0x18028U),
-           system_reg_read(0x1802cU), system_reg_read(0x18030U),
-           system_reg_read(0x18034U), system_reg_read(0x18038U),
-           system_reg_read(0x1803cU), system_reg_read(0x18040U),
-           system_reg_read(0x18044U), system_reg_read(0x18048U),
-           system_reg_read(0x1804cU));
+    printk(KERN_INFO
+           "tx_isp_t41_recovered: calibration-driven AWB setup=%#x thresholds=%#x/%#x/%#x/%#x/%#x\n",
+           words[0], system_reg_read(0x18028), system_reg_read(0x1802c),
+           system_reg_read(0x18030), system_reg_read(0x18034),
+           system_reg_read(0x18038));
 }
 
 static void t41_safe_awb_apply(uint32_t rgain, uint32_t bgain)
@@ -32095,13 +32092,16 @@ static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene)
  * and ct_detect (0x1b260) identify the calibration, ratio axes, selection
  * mesh and spatial weights below. File AWB +3352 maps to runtime +2424.
  * This uses those sensor-owned data but intentionally omits OEM clustering,
- * CT/history and EV-dependent weighting. No OS04D10 gain constants here. */
+ * clustering/history and CT-dependent additive gain corrections.
+ * CT priors and neutral-selection weights are calibration-driven. */
 static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
 {
-    struct tx_isp_awb_mesh mesh;
+    struct tx_isp_awb_mesh mesh = { 0 };
+    struct tx_isp_awb_ct_config ct_config;
     struct tx_isp_awb_accumulator sum = { 0 };
     uint8_t *info, *params, *dma;
-    uint32_t rows, columns, bank, group, bin, phase, weight_sum = 0;
+    uint32_t rows, columns, bank, group, bin, weight_sum = 0;
+    uint32_t integration, gain_q16, gain_q10, ev;
     uint32_t bin_weights[4];
     uint64_t pixels = 0;
     int ret;
@@ -32131,6 +32131,29 @@ static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
      * estimator does not yet provide. Keep the raw neutral ratio unbiased. */
     mesh.red_bias_q10 = 1024U;
     mesh.blue_bias_q10 = 1024U;
+    /* The neutral estimator uses the sensor's reciprocal-temperature
+     * mesh and EV-dependent CT prior. These are selection weights, not
+     * post-gain biases. See long_par_update 0x30b70 and ct_detect 0x1b260. */
+    integration = READ_ONCE(t41_safe_ae_integration);
+    gain_q16 = READ_ONCE(t41_safe_ae_gain_q16);
+    if (integration == ~0U || gain_q16 == ~0U || gain_q16 > (10U << 16))
+        return -EAGAIN;
+    gain_q10 = tx_isp_exp2_u32(gain_q16, 16, 10);
+    ev = (uint32_t)min_t(uint64_t, 0x3fffffffU,
+        ((uint64_t)integration * gain_q10) >> 10);
+    ct_config.ev_low = *(uint32_t *)(void *)(params + 0x1c);
+    ct_config.ev_high = *(uint32_t *)(void *)(params + 0x20);
+    memcpy(ct_config.day, params + 0xb0, sizeof(ct_config.day));
+    memcpy(ct_config.transition, params + 0xc0, sizeof(ct_config.transition));
+    memcpy(ct_config.night, params + 0xd0, sizeof(ct_config.night));
+    ct_config.day_enabled = *(uint32_t *)(void *)(params + 0xe0);
+    ct_config.day_floor_q8 = *(uint32_t *)(void *)(params + 0xe4);
+    ct_config.night_enabled = *(uint32_t *)(void *)(params + 0xe8);
+    ct_config.night_floor_q8 = *(uint32_t *)(void *)(params + 0xec);
+    ret = tx_isp_awb_ct_prior_build(&ct_config, ev, &mesh.ct_prior);
+    if (ret)
+        return ret;
+    mesh.ct_mired = (uint32_t *)(void *)(params + 0x870);
     ret = tx_isp_awb_mesh_validate(&mesh);
     if (ret)
         return ret;
@@ -32138,13 +32161,16 @@ static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
         bin_weights[bin] = *(uint16_t *)(void *)(params + 0xd46 + bin * 2);
         if (bin_weights[bin] > 16)
             return -EINVAL;
-        weight_sum += bin_weights[bin] * 2;
+        weight_sum += bin_weights[bin];
     }
     if (!weight_sum)
         return -ENODATA;
 
-    /* Four temporal DMA banks; eight records per zone are two phases of
-     * four luminance classes, not eight independent neutral candidates. */
+    /* Four temporal banks, four luminance classes. Odd records feed the
+     * OEM neutral estimator (runtime +0x1c20); even records feed its
+     * separate global estimator (+0x2328). Do not mix their selections.
+     * get_statistics 0x30590 -> long_alogrithm 0x31288 -> long_par_update
+     * 0x30d2c establishes this mapping, rather than a spatial-phase model. */
     for (bank = 0; bank < 4; ++bank) {
         uint8_t *source = dma + bank * 32768U;
 
@@ -32159,9 +32185,9 @@ static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
                 uint32_t weight = bin_weights[bin];
                 if (!weight)
                     continue;
-                for (phase = 0; phase < 2; ++phase) {
+                {
                     uint32_t *v = (uint32_t *)(void *)(source +
-                        group * 128U + (bin * 2 + phase) * 16U);
+                        group * 128U + (bin * 2 + 1) * 16U);
                     uint32_t w0 = READ_ONCE(v[0]), w1 = READ_ONCE(v[1]);
                     uint32_t w2 = READ_ONCE(v[2]), w3 = READ_ONCE(v[3]);
                     uint32_t n = ((w3 & 63U) << 8) | (w2 >> 24);
@@ -32171,13 +32197,15 @@ static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
                     r += (w0 & 0x3fffffU) * weight;
                     g += (((w1 & 0xfffU) << 10) | (w0 >> 22)) * weight;
                     b += (((w2 & 3U) << 20) | (w1 >> 12)) * weight;
-                    count += n;
+                    count += n * weight;
                 }
             }
-            if (count < max_t(uint32_t, 1U, *(uint32_t *)(void *)params))
+            /* OEM class weights are Q3, including the pixel-count plane. */
+            count >>= 3;
+            if (count <= *(uint32_t *)(void *)params)
                 continue;
-            if (tx_isp_awb_mesh_add(&mesh, &sum, r / weight_sum,
-                                    g / weight_sum, b / weight_sum, spatial))
+            if (tx_isp_awb_mesh_add(&mesh, &sum, r >> 3,
+                                    g >> 3, b >> 3, spatial))
                 pixels += count;
         }
     }
@@ -56429,6 +56457,11 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 
 	if (channel >= 2)
 		return -EINVAL;
+	/* AWB selection thresholds track allocated gain even while the unsafe
+	 * OEM AWB event consumer is suppressed. No captured threshold bank. */
+	ret = tisp_awb_set_regional_threshold(channel);
+	if (!ret)
+		ret = tisp_awb_set_lum_th_freq(channel);
 	if (mask & T41_GAIN_FANOUT_GIB) {
 		/* The recovered public wrappers retain their locally safe
 		 * (gain, force) ABI because damaged init callers pass fewer than the
@@ -56566,6 +56599,7 @@ static int t41_apply_safe_ev_fanout(uint32_t channel, uint32_t ev,
 	       *(uint32_t *)(uintptr_t)(tmo_info[channel] + 40U) : 0U);
 	return ret;
 }
+
 
 int32_t t41_safe_ae_calc_process(uint32_t channel)
 {
@@ -76037,433 +76071,82 @@ system_reg_set_awb_trig0x40:
 #endif
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000002ed14 origin=fragment_seed original=tisp_awb_set_regional_threshold */
-int32_t tisp_awb_set_regional_threshold(uint32_t a0)
+/* H20250310a AWB writer reconstruction: byte-based calibration pointers,
+ * complete two-argument MMIO calls, and scalar packing for the OEM LWL/LWR
+ * pairs. The previous generated code lost all three of those semantics. */
+static int t41_awb_writer_state(uint32_t channel, uint8_t **params,
+                                uint8_t **runtime)
 {
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uintptr_t s5 = 0;
-    uintptr_t *v0 = 0;
+    uint8_t *info;
+    if (channel >= 2 || !awb_info[channel])
+        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)awb_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        return -EINVAL;
+    *params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    *runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 4);
+    return t41_kernel_data_ptr(*params) && t41_kernel_data_ptr(*runtime) ?
+        0 : -EINVAL;
+}
 
-    /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&awb_info;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
+static int t41_awb_refresh_thresholds(uint32_t channel, bool regional)
+{
+    uint8_t *params, *runtime;
+    uint16_t values[11];
+    uint32_t words[5], gain, i;
+    int ret = t41_awb_writer_state(channel, &params, &runtime);
 
-    /* fragment 1: CallSetup */
-    s4 = 65536;
-    s5 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(a0) + 0)) + 4);
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(a0) + 0)) + 0);
-    s5 = s5 + (uintptr_t)s4;
-    s1 = *(uint32_t *)((char *)(s5) + -5476);
-    s3 = (uintptr_t)s1 >> 16;
-    s1 = (uintptr_t)s1 & 65535;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)((uintptr_t)s1 >> 16, (uintptr_t)s1 & 65535, (uintptr_t)s0 + 3476); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    *(uint16_t *)((char *)s0 + 3248) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3498); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    *(uint16_t *)((char *)s0 + 3250) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3520); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    *(uint16_t *)((char *)s0 + 3252) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3542); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    *(uint16_t *)((char *)s0 + 3254) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3564); /* jalr target resolved by relocation */
-
-    /* fragment 6: CallSetup */
-    *(uint16_t *)((char *)s0 + 3256) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3586); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    *(uint16_t *)((char *)s0 + 3258) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3608); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    *(uint16_t *)((char *)s0 + 3260) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s3, s1, s0 + 3630); /* jalr target resolved by relocation */
-
-    /* fragment 9: MemoryAccess */
-    *(uint16_t *)((char *)s0 + 3262) = v0;
-    s1 = v0;
-
-    /* fragment 10: Unknown */
-    /* unmatched fragment 10 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2ee10:	8a050cb3 	lwl	a1,3251(s0) */
-
-    /* fragment 11: Unknown */
-    /* unmatched fragment 11 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2ee14:	8a130cb7 	lwl	s3,3255(s0) */
-
-    /* fragment 12: Unknown */
-    /* unmatched fragment 12 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2ee18:	8a120cbb 	lwl	s2,3259(s0) */
-
-    /* fragment 13: MemoryAccess */
-    v0 = *(uint8_t *)((char *)s5 + -5471);
-
-    /* fragment 14: Unknown */
-    /* unmatched fragment 14 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2ee20:	9a050cb0 	lwr	a1,3248(s0) */
-
-    /* fragment 15: Unknown */
-    /* unmatched fragment 15 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 2ee24:	9a130cb4 	lwr	s3,3252(s0) */
-
-    /* fragment 16: Branch */
-    if (v0 != 0) { goto tisp_awb_set_regional_threshold0x164; }
-
-    /* fragment 17: CallSetup */
-    s5 = *(uint16_t *)((char *)(s0) + 3260);
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s4 | 32808); /* jalr target resolved by relocation */
-
-    /* fragment 18: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s4 | 32812, s3); /* jalr target resolved by relocation */
-
-    /* fragment 19: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s4 | 32816, (uintptr_t)s2); /* jalr target resolved by relocation */
-
-    /* fragment 20: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s4 | 32820, ((uintptr_t)s1 << 16) | s5); /* jalr target resolved by relocation */
-
-    /* fragment 21: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s4 | 32768, 1); /* jalr target resolved by relocation */
-
-tisp_awb_set_regional_threshold0x164:
-    /* fragment 22: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 23: Arithmetic */
-    v0 = 0;
-
-    /* fragment 24: Epilogue */
-    /* function epilogue: restore registers and return */
-
+    if (ret)
+        return ret;
+    gain = *(uint32_t *)(void *)(runtime + 0xea9c);
+    /* With the OEM AWB event consumer suppressed, take allocated gain
+     * from the open exposure controller instead of its stale runtime. */
+    if (channel == 0 && t41_safe_tuning_events &&
+        READ_ONCE(t41_safe_ae_gain_q16) != ~0U)
+        gain = READ_ONCE(t41_safe_ae_gain_q16);
+    if (t41_awb_thresholds(params, T41_AWB_HW_PARAM_BYTES, gain, values, words))
+        return -EINVAL;
+    if (regional) {
+        memcpy(params + 0xcb0, values, 8 * sizeof(*values));
+        if (runtime[0xeaa1]) /* OEM manual regional-threshold ownership */
+            return 0;
+        for (i = 0; i < 4; ++i)
+            system_reg_write(0x18028 + i * 4, words[i]);
+    } else {
+        memcpy(params + 0xcc0, values + 8, 3 * sizeof(*values));
+        system_reg_write(0x18038, words[4]);
+    }
+    system_reg_set_awb_trig(1, 0);
     return 0;
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000002eea0 origin=fragment_seed original=tisp_awb_set_lum_th_freq */
-int32_t tisp_awb_set_lum_th_freq(uint32_t a0)
+int32_t tisp_awb_set_regional_threshold(uint32_t channel)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t ra = 0;
-    uintptr_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uintptr_t *v0 = 0;
-    uint32_t *v1 = 0;
-
-    /* fragment 0: Arithmetic */
-    v0 = (unsigned int *)&awb_info;
-    a0 = a0 << 2;
-    a0 = a0 + (uintptr_t)v0;
-
-    /* fragment 1: CallSetup */
-    s3 = 65536;
-    s0 = *(uint32_t *)((char *)(*(uint32_t *)((char *)(a0) + 0)) + 0);
-    s1 = *(uint32_t *)((char *)((*(uint32_t *)((char *)(*(uint32_t *)((char *)(a0) + 0)) + 4)) + s3) + -5476);
-    s4 = (uintptr_t)s1 >> 16;
-    s1 = (uintptr_t)s1 & 65535;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)((uintptr_t)s1 >> 16, (uintptr_t)s1 & 65535, (uintptr_t)s0 + 3652); /* jalr target resolved by relocation */
-
-    /* fragment 2: CallSetup */
-    *(uint16_t *)((char *)s0 + 3264) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s4, s1, s0 + 3674); /* jalr target resolved by relocation */
-
-    /* fragment 3: CallSetup */
-    *(uint16_t *)((char *)s0 + 3266) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t))(uintptr_t)tisp_simple_intp_int16)(s4, s1, s0 + 3696); /* jalr target resolved by relocation */
-
-    /* fragment 4: CallSetup */
-    *(uint16_t *)((char *)s0 + 3268) = v0;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s3 | 32824, ((*(uint16_t *)((char *)((uintptr_t)s0) + 3270)) << 24) | ((*(uint16_t *)((char *)((uintptr_t)s0) + 3266)) << 8) | ((uintptr_t)v0 << 16) | (*(uint16_t *)((char *)((uintptr_t)s0) + 3264))); /* jalr target resolved by relocation */
-
-    /* fragment 5: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)(s3 | 32768, 1); /* jalr target resolved by relocation */
-
-    /* fragment 6: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 7: Arithmetic */
-    v0 = 0;
-
-    /* fragment 8: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return t41_awb_refresh_thresholds(channel, true);
 }
 
-/* WHOLE_DRIVER_CANDIDATE fn_000000000002ef94 origin=fragment_seed original=tisp_awb_set_hardware_param */
-int32_t tisp_awb_set_hardware_param(uint32_t a0)
+int32_t tisp_awb_set_lum_th_freq(uint32_t channel)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t *local_18 = 0;
-    uint32_t local_1c = 0;
-    uint32_t *local_20 = 0;
-    uint32_t local_24 = 0;
-    uint32_t *local_28 = 0;
-    uint32_t local_2c = 0;
-    uint32_t local_30 = 0;
-    uint32_t local_34 = 0;
-    uint32_t local_38 = 0;
-    uint32_t *local_3c = 0;
-    uint32_t local_40 = 0;
-    uint32_t local_44 = 0;
-    uint32_t local_48 = 0;
-    uint32_t local_4c = 0;
-    uint32_t local_50 = 0;
-    uint32_t local_54 = 0;
-    uint32_t local_58 = 0;
-    uint32_t local_5c = 0;
-    uint32_t local_60 = 0;
-    uint32_t local_64 = 0;
-    uint32_t *local_68 = 0;
-    uint32_t local_6c = 0;
-    uint32_t *local_70 = 0;
-    uint32_t local_74 = 0;
-    uint32_t local_78 = 0;
-    uint32_t *local_80 = 0;
-    uint32_t local_84 = 0;
-    uint32_t local_88 = 0;
-    uint32_t local_8c = 0;
-    uint32_t *local_90 = 0;
-    uint32_t *local_94 = 0;
-    uint32_t *local_98 = 0;
-    uint32_t local_9c = 0;
-    uint32_t local_a0 = 0;
-    uint32_t local_a4 = 0;
-    uint32_t a1 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *s1 = 0;
-    uint32_t *s2 = 0;
-    uint32_t s3 = 0;
-    uint32_t *s4 = 0;
-    uint32_t s5 = 0;
-    uint32_t *s6 = 0;
-    uint32_t s7 = 0;
-    uint32_t s8 = 0;
-    uint32_t t0 = 0;
-    uint32_t *t1 = 0;
-    uint32_t *t2 = 0;
-    uint32_t *t3 = 0;
-    uint32_t *t4 = 0;
-    uint32_t *t5 = 0;
-    uint32_t t6 = 0;
-    uint32_t *t7 = 0;
-    uint32_t *t8 = 0;
-    uint32_t *t9 = 0;
-    uintptr_t *v0 = 0;
-    uintptr_t *v1 = 0;
+    return t41_awb_refresh_thresholds(channel, false);
+}
 
-    /* fragment 0: Arithmetic */
-    v1 = (unsigned int *)&awb_info;
-    v0 = a0 << 2;
-    v0 = (uintptr_t)v0 + (uintptr_t)v1;
+int32_t tisp_awb_set_hardware_param(uint32_t channel)
+{
+    uint8_t *params, *runtime;
+    uint32_t words[10], i;
+    int ret = t41_awb_writer_state(channel, &params, &runtime);
 
-    /* fragment 1: StackAccess */
-    local_9c = s7;
-    local_84 = s1;
-    local_a4 = ra;
-    local_a0 = s8;
-    local_98 = s6;
-    local_94 = s5;
-    local_90 = s4;
-    local_8c = s3;
-    local_88 = s2;
-    local_80 = s0;
-    v1 = *(uint32_t *)((char *)v0 + 0);
-    s1 = 65536;
-    v0 = *(uint32_t *)((char *)v1 + 4);
-    v0 = (uintptr_t)v0 + (uintptr_t)s1;
-    v0 = *(uint8_t *)((char *)v0 + -14856);
-
-    /* fragment 2: Branch */
-    s7 = a0;
-    if (v0 != 0) { goto tisp_awb_set_hardware_param0x30c; }
-
-    /* fragment 3: MemoryAccess */
-    v0 = *(uint32_t *)((char *)v1 + 0);
-    s0 = (unsigned int *)&system_reg_write;
-    s0 = s0;
-    v1 = *(uint16_t *)((char *)v0 + 3214);
-    t6 = *(uint16_t *)((char *)v0 + 3212);
-    t5 = *(uint16_t *)((char *)v0 + 3218);
-    a3 = *(uint16_t *)((char *)v0 + 3208);
-    a2 = *(uint16_t *)((char *)v0 + 3206);
-    t7 = *(uint16_t *)((char *)v0 + 3204);
-    t1 = *(uint16_t *)((char *)v0 + 3200);
-    t0 = *(uint16_t *)((char *)v0 + 3198);
-    t8 = *(uint16_t *)((char *)v0 + 3196);
-    t3 = *(uint16_t *)((char *)v0 + 3192);
-    t2 = *(uint16_t *)((char *)v0 + 3190);
-    t9 = *(uint16_t *)((char *)v0 + 3188);
-    local_54 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3220);
-    local_50 = t6;
-    local_60 = a3;
-    local_5c = a2;
-    local_58 = t7;
-    local_6c = t1;
-    local_68 = t0;
-    local_64 = t8;
-    s5 = *(uint16_t *)((char *)v0 + 3194);
-    local_78 = t3;
-    local_74 = t2;
-    local_70 = t9;
-    s4 = *(uint16_t *)((char *)v0 + 3202);
-    s3 = *(uint16_t *)((char *)v0 + 3210);
-
-    /* fragment 4: MemoryAccess */
-    s6 = *(uint16_t *)((char *)v0 + 3216);
-    s2 = *(uint16_t *)((char *)v0 + 3224);
-    s8 = *(uint16_t *)((char *)v0 + 3222);
-    local_10 = v1;
-    local_4c = t5;
-    v1 = *(uint16_t *)((char *)v0 + 3232);
-    a0 = *(uint16_t *)((char *)v0 + 3186);
-    a1 = *(uint16_t *)((char *)v0 + 3184);
-    local_14 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3230);
-    a1 = a1 << 16;
-    a0 = a0 << 28;
-    local_18 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3228);
-    a0 = a0 | a1;
-    a1 = *(uint16_t *)((char *)v0 + 3180);
-    local_1c = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3226);
-    a0 = a0 | a1;
-    a1 = *(uint16_t *)((char *)v0 + 3182);
-    local_20 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3240);
-    t4 = *(uint16_t *)((char *)v0 + 3242);
-    a1 = a1 << 12;
-    local_24 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3238);
-    a1 = a0 | a1;
-    a0 = (uintptr_t)s1 | 32772;
-    local_28 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3236);
-
-    /* fragment 5: StackAccess */
-    local_48 = t4;
-    s5 = s5 << 24;
-    local_2c = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3234);
-    s4 = (uintptr_t)s4 << 24;
-    s3 = s3 << 24;
-    local_30 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3246);
-    s6 = (uintptr_t)s6 << 16;
-    s2 = (uintptr_t)s2 << 24;
-    local_34 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3244);
-    s8 = s8 << 16;
-    s2 = (uintptr_t)s2 | s8;
-    local_38 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3272);
-    local_3c = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3276);
-    local_40 = v1;
-    v1 = *(uint16_t *)((char *)v0 + 3274);
-
-    /* fragment 6: CallSetup */
-    local_44 = v1;
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 7: CallSetup */
-    t3 = local_78;
-    t2 = local_74;
-    t9 = local_70;
-    t3 = (uintptr_t)t3 << 16;
-    t3 = s5 | (uintptr_t)t3;
-    t9 = (uintptr_t)t3 | (uintptr_t)t9;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32776, ((s5 | (local_78 << 16)) | (uintptr_t)local_70) | (local_74 << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 8: CallSetup */
-    t1 = local_6c;
-    t0 = local_68;
-    t8 = local_64;
-    t1 = (uintptr_t)t1 << 16;
-    t1 = (uintptr_t)s4 | (uintptr_t)t1;
-    t8 = (uintptr_t)t1 | (uintptr_t)t8;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32780, (((uintptr_t)s4 | (local_6c << 16)) | local_64) | ((uintptr_t)local_68 << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 9: CallSetup */
-    t7 = local_58;
-    t7 = (s3 | (local_60 << 16)) | (uintptr_t)t7;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32784, ((s3 | (local_60 << 16)) | local_58) | (local_5c << 8), local_5c, s3 | (local_60 << 16)); /* jalr target resolved by relocation */
-
-    /* fragment 10: CallSetup */
-    t6 = local_50;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32788, ((uintptr_t)s6 | (local_54 << 8)) | local_50); /* jalr target resolved by relocation */
-
-    /* fragment 11: CallSetup */
-    t5 = local_4c;
-    t5 = (uintptr_t)s2 | (uintptr_t)t5;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32792, ((uintptr_t)s2 | local_4c) | ((uintptr_t)local_10 << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 12: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32796, ((local_14 << 24) | ((uintptr_t)local_18 << 16) | (uintptr_t)local_20) | (local_1c << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 13: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32800, ((local_24 << 24) | ((uintptr_t)local_28 << 16) | local_30) | (local_2c << 8)); /* jalr target resolved by relocation */
-
-    /* fragment 14: CallSetup */
-    t4 = local_48;
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32804, (local_34 << 16) | (local_38 << 8) | local_48); /* jalr target resolved by relocation */
-
-    /* fragment 15: CallSetup */
-    v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s1 | 32844, (local_44 << 28) | (local_40 << 25) | (16842752 + 259) | (((uintptr_t)local_3c & 255) << 12)); /* jalr target resolved by relocation */
-
-tisp_awb_set_hardware_param0x30c:
-    /* fragment 16: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_awb_set_regional_threshold)(s7); /* jalr target resolved by relocation */
-
-    /* fragment 17: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_awb_set_lum_th_freq)(s7); /* jalr target resolved by relocation */
-
-    /* fragment 18: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 19: Arithmetic */
-    v0 = 0;
-
-    /* fragment 20: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    if (ret)
+        return ret;
+    if (!runtime[0xc5f8]) {
+        if (t41_awb_geometry(params, T41_AWB_HW_PARAM_BYTES, words))
+            return -EINVAL;
+        for (i = 0; i < 9; ++i)
+            system_reg_write(0x18004 + i * 4, words[i]);
+        system_reg_write(0x1804c, words[9]);
+    }
+    ret = tisp_awb_set_regional_threshold(channel);
+    return ret ? ret : tisp_awb_set_lum_th_freq(channel);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f2f4 origin=fragment_seed original=tisp_awb_gain_reg */
@@ -148454,60 +148137,29 @@ int32_t tisp_tmo_detailen_ev_interp(int32_t arg1)
     return 0;
 }
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000068260 origin=fragment_seed original=tisp_tmo_ev_interp */
-int64_t tisp_tmo_ev_interp(uint32_t a0)
+int64_t tisp_tmo_ev_interp(uint32_t channel)
 {
-    static const uint16_t left_curve[10] = {
-        4950, 5416, 1416, 1818, 2220, 2622, 3024, 3426, 3828, 3828,
-    };
-    static const uint16_t right_curve[10] = {
-        5416, 1416, 1818, 2220, 2622, 3024, 3426, 3828, 4230, 4230,
-    };
-    uint8_t *info;
-    uint8_t *params;
+    uint8_t *info, *params;
     uint16_t *output;
     uint32_t ev;
-    uint32_t force_last;
-    uint32_t weight = 256;
-    unsigned int index = 0;
-    unsigned int i;
 
-    if (a0 >= 2)
+    if (channel >= 2 || !tmo_info[channel])
         return -EINVAL;
-    info = (uint8_t *)(uintptr_t)tmo_info[a0];
-    if (!info)
-        return -EINVAL;
+    info = (uint8_t *)(uintptr_t)tmo_info[channel];
     params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
     output = (uint16_t *)(uintptr_t)*(uint32_t *)(void *)(info + 4);
-    ev = *(uint32_t *)(void *)(info + 32);
-    force_last = *(uint32_t *)(void *)(info + 36);
     if (!params || !output)
         return -EINVAL;
-
-    if (force_last || ev >= *(uint32_t *)(void *)(params + 1348)) {
-        index = 9;
-    } else if (ev < *(uint32_t *)(void *)(params + 1312)) {
-        index = 0;
-    } else {
-        for (index = 0; index < 9; ++index) {
-            uint32_t low = *(uint32_t *)(void *)(params + 1312 + index * 4);
-            uint32_t high = *(uint32_t *)(void *)(params + 1316 + index * 4);
-
-            if (ev < high) {
-                weight = high == low ? 256 : ((high - ev) << 8) / (high - low);
-                break;
-            }
-        }
-    }
-
-    for (i = 0; i < 201; ++i) {
-        uint32_t left = *(uint16_t *)(void *)(params + left_curve[index] + i * 2);
-        uint32_t right = *(uint16_t *)(void *)(params + right_curve[index] + i * 2);
-
-        output[i] = (uint16_t)((left * weight + right * (256 - weight)) >> 8);
-    }
-
-    if (*(uint16_t *)(void *)(params + 480) == 1)
-        tisp_tmo_detailen_ev_interp(a0);
+    /* Mode 1 blends with an OEM driver curve; it is not mode-0 EV
+     * interpolation. Reject it until that algorithm is implemented. */
+    if (t41_tmo_le16(params + 0x55c))
+        return -EOPNOTSUPP;
+    ev = *(uint32_t *)(void *)(info + 36) ? ~0U :
+         *(uint32_t *)(void *)(info + 32);
+    if (t41_tmo_curve(params, T41_TMO_PARAM_BYTES, ev, output))
+        return -EINVAL;
+    if (t41_tmo_le16(params + 480) == 1)
+        return tisp_tmo_detailen_ev_interp(channel);
     return 0;
 }
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000685ac origin=fragment_seed original=tisp_tmo_ev_update */
@@ -150594,6 +150246,13 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     if (!params)
         return -EINVAL;
 
+    /* All offsets below are relative to the TMO block, not tparamsP.
+     * H20250310a tisp_tmo_init 0x6b170 selects +0x2438; 0x6b290,
+     * 0x6b2ac and 0x6b2c4 then access that selected block. Using the
+     * whole sensor blob here corrupts the geometry/normalization seed
+     * and even clamps an unrelated tuning word at sensor offset 480. */
+    params += 9272;
+
     info = private_kmalloc(48, 0x024000c0);
     if (!info) {
         isp_printf(2, "[%s %d] Kmalloc error!!!\n", "tisp_tmo_init", 2212);
@@ -150642,7 +150301,7 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
            "tx_isp_t41_recovered: tmo-init shadow=%p\n",
            (void *)(uintptr_t)*(uint32_t *)(void *)(info + 4));
 
-    *(uint32_t *)(void *)info = (uint32_t)(uintptr_t)(params + 9272);
+    *(uint32_t *)(void *)info = (uint32_t)(uintptr_t)params;
     *(uint32_t *)(void *)(info + 12) =
         (uint32_t)(uintptr_t)private_kmalloc(24, 0x024000c0);
     if (!*(uint32_t *)(void *)(info + 12)) {
@@ -159595,11 +159254,8 @@ int32_t ispcore_frame_channel_streamon(void *arg1)
             t41_apply_stock_cdns_profile();
         if (!ret)
             t41_apply_stock_adr_profile();
-        /* The ISP stream transition resets TMO's write-only state.  Keep the
-         * incomplete recovered block bypassed after that transition; enabling
-         * it here turns an otherwise correct cold-boot frame almost entirely
-         * white.  Explicit diagnostics can still replay the matched profile
-         * through t41_tmo_replay_trigger. */
+        /* Adaptive local TMO processing is not recovered. Do not substitute
+         * a captured or uniform map for that algorithm after stream reset. */
         if (!ret) {
             t41_hold_tmo_bypass();
             atomic_set(&t41_tmo_frame_replay_pending, -1);

@@ -58,7 +58,7 @@ the broadest sensor coverage and the strongest OEM image-quality comparison.
 | T30 | Device-tested on a T30X Wyze Video Doorbell v1 with SC4236: open ISP frames, firmware IRQ/statistics, tuning-derived AE/color, and balanced exposure allocation are live; anti-flicker/shutter allocation remains under active comparison with stock. |
 | T31 | Device-tested with SC2336, GC2053, and SC301IOT on vendor Linux 3.10 and compatibility-tested on mainline Linux 7.1; OEM `libimp.so` and OpenIMP both stream, with near-OEM daylight parity demonstrated on SC301IOT. |
 | T40 | Device-tested on T40XP/GC4653 with processed streaming, userspace AE/AWB, denoise/tuning recovery, and stock/open register comparisons; statistics restart stability remains a known limitation. |
-| T41 | Device-tested 2.5K open-stack baseline plus V4L2 MMAP and DMA-BUF capture; image-quality and delivered-FPS work remain active. |
+| T41 | Device-tested 2.5K OS04D10 baseline plus V4L2 MMAP and DMA-BUF capture. AWB register writers/selection consume calibration, but other tuning blocks still contain sensor/scene-specific bring-up replays; adaptive TMO and delivered-FPS recovery remain incomplete. See [the IQ audit](docs/T41_STOCK_OPEN_IQ.md). |
 
 ### Working today
 
