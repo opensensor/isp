@@ -84,8 +84,11 @@ A subsequent persistent-stage reconnect also reproduced an **audio** warning
 15360 -> 15350. This is distinct from video output-time-base quantization.
 Raw RTP was monotonic in a separate capture; independently rebased audio and
 video origins disagree when their RTCP reports synchronize the tracks.
-Raptor's per-client timeline is being corrected separately. Do not describe
-the video harness change alone as resolving all intermittent warnings.
+Raptor's [per-client timeline fix](https://github.com/matteius/raptor/commit/227a5bf)
+corrects this separately using a shared capture origin. Six TCP debug runs
+and three TCP plus three UDP reconnects passed without backward PTS or
+timestamp warnings; an RTP-Info/RTCP probe found both origins within 3 ms.
+Do not describe the video harness change alone as fixing the audio defect.
 
 The sections below describe the preceding comparison, before this follow-up.
 
