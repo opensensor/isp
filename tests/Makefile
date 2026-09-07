@@ -5,7 +5,10 @@ CFLAGS += -std=c99 -Wall -Wextra -Werror
 
 .PHONY: all check clean t30_storage_audit
 
-all check: tx_isp_t41_gib_test tx_isp_t41_awb_gain_test
+all check: tx_isp_t41_gib_test tx_isp_t41_awb_gain_test tx_isp_t41_sensor_gain_test
+
+tx_isp_t41_sensor_gain_test: tx_isp_t41_sensor_gain_test.c ../driver/t41/tx_isp_t41_sensor_gain.h ../driver/include/tx_isp/tx_isp_math.h
+	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_awb_gain_test: tx_isp_t41_awb_gain_test.c ../driver/t41/tx_isp_t41_awb_gain.h ../driver/t41/tx_isp_t41_ae.h
 	$(CC) $(CFLAGS) -o $@ $<
@@ -222,6 +225,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 	./tx_isp_t41_ae_test
 	./tx_isp_t41_gib_test
 	./tx_isp_t41_awb_gain_test
+	./tx_isp_t41_sensor_gain_test
 	./tx_isp_t41_color_route_test
 	./tx_isp_t41_awb_test
 	./tx_isp_modulation_test
@@ -257,7 +261,7 @@ clean:
 		tx_isp_t41_tmo_test \
 		tx_isp_t41_tmo_map_test \
 		tx_isp_t41_awb_test \
-		tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_ae_test tx_isp_t41_gib_test tx_isp_t41_awb_gain_test \
+		tx_isp_t41_ccm_test tx_isp_t41_bcsh_test tx_isp_t41_ae_test tx_isp_t41_gib_test tx_isp_t41_awb_gain_test tx_isp_t41_sensor_gain_test \
 		tx_isp_t41_color_route_test \
 		tx_isp_daynight_test \
 		tx_isp_subdev_abi_test tx_isp_subdev_test \

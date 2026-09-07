@@ -23,6 +23,7 @@
 #include "../include/tx_isp/tx_isp_top.h"
 #include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_awb_gain.h"
+#include "tx_isp_t41_sensor_gain.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -802,6 +803,10 @@ MODULE_PARM_DESC(t41_ae_calibrated_metering,
 static unsigned int t41_ae_zone_mean = 0x80000000U;
 static unsigned int t41_ae_calibrated_target = 0x80000000U;
 static int t41_ae_meter_error = -EAGAIN;
+static int t41_sensor_limits_error = -EAGAIN;
+static int t41_ae_ready[2] __attribute__((section(".data"))) = { 0, 0 };
+static int t41_awb_ready[2] __attribute__((section(".data"))) = { 0, 0 };
+module_param(t41_sensor_limits_error, int, 0444);
 module_param(t41_ae_zone_mean, uint, 0444);
 module_param(t41_ae_calibrated_target, uint, 0444);
 module_param(t41_ae_meter_error, int, 0444);
@@ -880,7 +885,7 @@ MODULE_PARM_DESC(t41_safe_ae_integration,
 static unsigned int t41_safe_ae_again = ~0U;
 module_param(t41_safe_ae_again, uint, 0444);
 MODULE_PARM_DESC(t41_safe_ae_again,
-		 "current safe-AE OS04D10 analog gain code");
+		 "current safe-AE opaque sensor analog gain code");
 static unsigned int t41_safe_ae_gain_q16 = ~0U;
 module_param(t41_safe_ae_gain_q16, uint, 0444);
 MODULE_PARM_DESC(t41_safe_ae_gain_q16,
@@ -1887,7 +1892,7 @@ static uint32_t ae_buf_info[2];
 static unsigned char slock_hist_storage[8] __attribute__((aligned(4)));
 struct t41_safe_ae_state {
     uint32_t integration;
-    uint32_t again;
+    uint32_t again; /* linear Q10, never a sensor register code */
     uint32_t min_integration;
     uint32_t max_integration;
     uint32_t frames;
@@ -1895,6 +1900,10 @@ struct t41_safe_ae_state {
     uint32_t last_mean_q8;
 };
 static struct t41_safe_ae_state t41_safe_ae[2];
+static struct {
+    uint32_t code, log2_q16, max_log2_q16, warmup;
+    int applied;
+} t41_safe_ae_sensor[2] = { { .code = ~0U }, { .code = ~0U } };
 static uint32_t af_buf_info[2], af_info[2];
 static uint32_t pst_awb_ct_detect[2], awb_info[2];
 static uint32_t bcsh_info;
@@ -2885,6 +2894,44 @@ static bool t41_kernel_data_ptr(const void *ptr)
 	unsigned long address = (unsigned long)ptr;
 
 	return address >= PAGE_OFFSET && address < (unsigned long)-4095;
+}
+
+struct t41_safe_sensor_limits {
+    t41_sensor_allocator gain, integration;
+    uint32_t minimum, maximum, max_gain_q16, height, fps, delay;
+};
+
+/* The T41 sensor ABI, not a sensor-specific LUT. H20250310a's allocator
+ * follows core->video[channel].attr->sensor_ctrl.alloc_again at +0xc4. */
+static int t41_safe_sensor_limits_get(uint32_t channel,
+                                     struct t41_safe_sensor_limits *out)
+{
+    unsigned char *video, *attr;
+    uintptr_t core = *(uint32_t *)(void *)g_ispcore;
+    struct t41_safe_sensor_limits limits;
+    if (!out || channel >= 2 || !t41_kernel_data_ptr((void *)core))
+        return -ENODEV;
+    video = (unsigned char *)core + 308 + channel * 96;
+    attr = (unsigned char *)(uintptr_t)*(uint32_t *)(void *)(video + 52);
+    if (!t41_kernel_data_ptr(attr))
+        return -ENODEV;
+    limits.gain = *(t41_sensor_allocator *)(void *)(attr + 196);
+    limits.integration = *(t41_sensor_allocator *)(void *)(attr + 212);
+    if (!t41_kernel_data_ptr((void *)limits.gain) || ((uintptr_t)limits.gain & 3) ||
+        (limits.integration && (!t41_kernel_data_ptr((void *)limits.integration) ||
+                                 ((uintptr_t)limits.integration & 3))))
+        return -EOPNOTSUPP;
+    limits.minimum = t41_tmo_le16(attr + 168);
+    limits.maximum = t41_tmo_le16(attr + 184);
+    limits.max_gain_q16 = t41_tmo_le32(attr + 152);
+    limits.height = t41_tmo_le16(attr + 182);
+    limits.fps = t41_tmo_le32(video + 68);
+    limits.delay = max(t41_tmo_le16(attr + 186), t41_tmo_le16(attr + 188));
+    if (!limits.minimum || limits.minimum > limits.maximum ||
+        limits.max_gain_q16 > (16U << 16) || limits.delay > 32)
+        return -ERANGE;
+    *out = limits;
+    return 0;
 }
 
 static int t41_remote_event_pointer_valid(unsigned long address) { return t41_kernel_data_ptr((const void *)address); }
@@ -20396,14 +20443,15 @@ static int t41_tuning_copy_ae_expr(unsigned int channel, uintptr_t user_ptr)
     if (!control->integration || !control->again)
         return -EAGAIN;
 
-    exposure = (u64)control->integration * control->again / 0x10U;
+    exposure = (u64)control->integration * control->again / 1024U;
     memset(&values, 0, sizeof(values));
     values.integration_time = control->integration;
-    values.analog_gain_x1024 = control->again << 6;
+    values.analog_gain_x1024 = control->again;
     values.min_integration_time = control->min_integration;
     values.max_integration_time = control->max_integration;
-    values.max_analog_gain_x1024 = 0xf8U << 6;
-    values.total_gain_db = tisp_log2_fixed_to_fixed(control->again, 4, 16);
+    values.max_analog_gain_x1024 = tx_isp_exp2_u32(
+        t41_safe_ae_sensor[channel].max_log2_q16, 16, 10);
+    values.total_gain_db = t41_safe_ae_sensor[channel].log2_q16;
     values.exposure_value = exposure;
     values.ev_log2 = exposure ?
         tisp_log2_int_to_fixed((u32)exposure, 16, 0) : 0;
@@ -20662,6 +20710,8 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
 
             if (request.channel != 0 || !request.value_or_ptr)
                 return -EINVAL;
+            if (!smp_load_acquire(&t41_awb_ready[0]))
+                return -EAGAIN;
             if (request.is_get) {
                 control.mode = READ_ONCE(t41_safe_awb_controller) < 0 ?
                     TX_ISP_TUNING_AWB_AUTO : TX_ISP_TUNING_AWB_MANUAL;
@@ -20684,6 +20734,8 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
 
             if (request.channel != 0 || !request.value_or_ptr)
                 return -EINVAL;
+            if (!smp_load_acquire(&t41_ae_ready[0]))
+                return -EAGAIN;
             if (request.is_get) {
                 target = READ_ONCE(t41_ae_calibrated_metering) ?
                     0 : READ_ONCE(t41_ae_target_q8);
@@ -56636,8 +56688,8 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	u64 weighted = 0;
 	u64 scaled;
 	uint32_t mean_q8;
-	uint32_t current_total;
-	uint32_t desired_total;
+	u64 current_total;
+	u64 desired_total;
 	uint32_t integration;
 	uint32_t again;
 	uint32_t old_integration;
@@ -56650,6 +56702,9 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	uint32_t target_q8;
 	uint32_t gain_q16;
 	uint32_t sensor_value[2];
+	uint32_t sensor_integration, actual_integration;
+	struct t41_safe_sensor_limits sensor;
+	struct t41_sensor_gain allocated_gain;
 	struct tx_isp_exposure_plan exposure;
 	unsigned int i;
 	int ret;
@@ -56671,13 +56726,27 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	control = &t41_safe_ae[channel];
 	if (!control->integration || !control->again)
 		return -EAGAIN;
+	ret = t41_safe_sensor_limits_get(channel, &sensor);
+	if (ret)
+		return ret;
+	control->min_integration = sensor.minimum;
+	control->max_integration = sensor.maximum;
+	t41_safe_ae_sensor[channel].max_log2_q16 = sensor.max_gain_q16;
+	if (!t41_safe_ae_sensor[channel].applied) {
+		/* Establish a known initial gain through the sensor allocator.
+		 * attr.again is an opaque code on some modules, not log2 or Q4. */
+		integration = clamp(control->integration, sensor.minimum, sensor.maximum);
+		again = 1024;
+		goto allocate_sensor;
+	}
+	if (t41_safe_ae_sensor[channel].warmup) {
+		--t41_safe_ae_sensor[channel].warmup;
+		return 0;
+	}
 	t41_safe_ae_integration = control->integration;
-	t41_safe_ae_again = control->again;
-	/* Ingenic event 4 carries log2 gain in Q16.  The OS04D10 sensor code
-	 * is a linear gain with four fractional bits (0x10 is unity); shifting
-	 * it by 12 produced a linear Q16 value and drove every gain-interpolated
-	 * tuning block several stops past the stock state. */
-	gain_q16 = tisp_log2_fixed_to_fixed(control->again, 4, 16);
+	t41_safe_ae_again = t41_safe_ae_sensor[channel].code;
+	/* Report exactly the realized gain returned by the sensor's allocator. */
+	gain_q16 = t41_safe_ae_sensor[channel].log2_q16;
 	t41_safe_ae_gain_q16 = gain_q16;
 	t41_tmo_exposure(control->integration, gain_q16);
 	if ((t41_safe_gain_fanout_mask & 0x3fU) &&
@@ -56766,13 +56835,13 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		if (flicker_frequency != 50U &&
 		    flicker_frequency != 60U)
 			return -EINVAL;
-		/*
-		 * The OS04D10 profile clocks exactly 44,225 lines/second:
-		 * total_height 1769 * 25 fps.  Generate each rounded multiple
-		 * independently so fractional line periods do not accumulate.
-		 */
+		/* Mode timing is rational: total_height * fps_num / fps_den.
+		 * Never reuse another sensor/mode's measured line frequency. */
+		if (!sensor.height || !(sensor.fps >> 16) || !(sensor.fps & 65535))
+			return -ERANGE;
 		ret = tx_isp_flicker_nodes_build(
-			44225U, 2U * flicker_frequency,
+			sensor.height * (sensor.fps >> 16),
+			(sensor.fps & 65535) * 2U * flicker_frequency,
 			max_integration,
 			flicker_lines, ARRAY_SIZE(flicker_lines),
 			&flicker_line_count);
@@ -56794,45 +56863,64 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 
 	old_integration = control->integration;
 	old_again = control->again;
-	current_total = old_integration * old_again;
+	current_total = (u64)old_integration * old_again;
 	scaled = (u64)current_total * target_q8;
-	desired_total = (uint32_t)div64_u64(scaled + mean_q8 / 2,
-						  mean_q8);
+	/* A valid all-black frame has zero mean. Grow by the bounded step
+	 * instead of dividing by zero or treating it as missing statistics. */
+	desired_total = mean_q8 ? div64_u64(scaled + mean_q8 / 2, mean_q8) :
+		current_total + current_total / 4;
 	/* Bound each update to 25 percent.  Stock changes every frame, whereas
 	 * this conservative step absorbs the sensor's two-frame apply delay. */
 	if (desired_total > current_total + current_total / 4)
 		desired_total = current_total + current_total / 4;
-	if (desired_total < current_total - current_total / 5)
-		desired_total = current_total - current_total / 5;
-	desired_total = clamp(desired_total,
-			      control->min_integration * 0x10U,
-			      max_integration * 0xf8U);
-
+	if (desired_total < current_total - div64_u64(current_total, 5))
+		desired_total = current_total - div64_u64(current_total, 5);
 	ret = tx_isp_exposure_plan_build(
 		desired_total, control->min_integration,
-		max_integration, 0x10U, 0xf8U,
+		max_integration, 1024U, tx_isp_exp2_u32(sensor.max_gain_q16, 16, 10),
 		flicker_lines, flicker_line_count,
 		flicker_floor, &exposure);
 	if (ret)
 		return ret;
 	integration = exposure.integration;
 	again = exposure.again;
-	if (integration == control->integration && again == control->again)
+allocate_sensor:
+	ret = t41_sensor_gain_allocate(again, sensor.max_gain_q16, sensor.gain, &allocated_gain);
+	if (ret)
+		return -ERANGE;
+	sensor_integration = integration;
+	actual_integration = integration;
+	if (sensor.integration) {
+		sensor_integration = ~0U;
+		actual_integration = sensor.integration(integration, 0, &sensor_integration);
+	}
+	if (sensor_integration > 65535 || actual_integration < sensor.minimum ||
+	    actual_integration > sensor.maximum)
+		return -ERANGE;
+	if (t41_safe_ae_sensor[channel].applied &&
+	    actual_integration == control->integration &&
+	    allocated_gain.code == t41_safe_ae_sensor[channel].code)
 		return 0;
-
+	old_integration = control->integration;
+	old_again = control->again;
 	sensor_value[0] = channel;
-	sensor_value[1] = (again << 16) | integration;
+	sensor_value[1] = (allocated_gain.code << 16) | sensor_integration;
 	ret = ispcore_sensor_ops_ioctl((uintptr_t)ispcore_sd, 0x02000016,
 				       (uintptr_t)sensor_value);
 	if (!ret) {
-		control->integration = integration;
-		control->again = again;
+		control->integration = actual_integration;
+		control->again = allocated_gain.linear_q10;
+		t41_safe_ae_sensor[channel].code = allocated_gain.code;
+		t41_safe_ae_sensor[channel].log2_q16 = allocated_gain.log2_q16;
+		if (!t41_safe_ae_sensor[channel].applied)
+			t41_safe_ae_sensor[channel].warmup = sensor.delay + 1;
+		t41_safe_ae_sensor[channel].applied = 1;
 		control->updates++;
-		t41_safe_ae_integration = integration;
-		t41_safe_ae_again = again;
-		gain_q16 = tisp_log2_fixed_to_fixed(again, 4, 16);
+		t41_safe_ae_integration = actual_integration;
+		t41_safe_ae_again = allocated_gain.code;
+		gain_q16 = allocated_gain.log2_q16;
 		t41_safe_ae_gain_q16 = gain_q16;
-		t41_tmo_exposure(integration, gain_q16);
+		t41_tmo_exposure(actual_integration, gain_q16);
 		if (t41_safe_gain_fanout_mask & 0x3fU)
 			t41_apply_safe_gain_fanout(
 				channel, gain_q16,
@@ -56840,13 +56928,10 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	}
 	if (control->updates < 24 || ret)
 		printk(KERN_WARNING
-		       "tx_isp_t41_recovered: safe AE hist=%u.%02u target=%u.%02u samples=%llu exposure=%u/0x%x -> %u/0x%x ret=%d\n",
-		       mean_q8 >> 8, ((mean_q8 & 0xff) * 100) >> 8,
-		       target_q8 >> 8,
-		       ((target_q8 & 0xff) * 100) >> 8,
-		       (unsigned long long)samples,
+		       "tx_isp_t41_recovered: safe AE exposure=%u/%u Q10 -> %u/%u Q10 code=%#x log2=%u ret=%d\n",
 		       old_integration, old_again,
-		       integration, again, ret);
+		       actual_integration, allocated_gain.linear_q10,
+		       allocated_gain.code, allocated_gain.log2_q16, ret);
 	return ret;
 }
 
@@ -67930,6 +68015,7 @@ tisp_ae_init0x4f4:
 int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
 {
     uint32_t *info;
+    struct t41_safe_sensor_limits sensor;
     unsigned char *state;
     uintptr_t params;
     uintptr_t cache;
@@ -67946,6 +68032,8 @@ int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
         return -EINVAL;
     if (ae_info[channel])
         return -EBUSY;
+
+    smp_store_release(&t41_ae_ready[channel], 0);
 
     if (!fliker_info) {
         fliker_info = (uint32_t)(uintptr_t)private_kmalloc(10864,
@@ -67996,27 +68084,30 @@ int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
     *(uint16_t *)(state + 8552) = *(uint8_t *)(par + 12);
     *(uint32_t *)(state + 8688) = *(uint16_t *)(par + 76);
 
+    ret = t41_safe_sensor_limits_get(channel, &sensor);
+    t41_sensor_limits_error = ret;
+    if (ret) {
+        printk(KERN_WARNING "tx_isp_t41_recovered: AE sensor limits unavailable=%d core=%p\n",
+               ret, (void *)(uintptr_t)*(uint32_t *)(void *)g_ispcore);
+        goto free_ae_info;
+    }
     memset(&t41_safe_ae[channel], 0, sizeof(t41_safe_ae[channel]));
+    memset(&t41_safe_ae_sensor[channel], 0, sizeof(t41_safe_ae_sensor[channel]));
+    t41_safe_ae_sensor[channel].code = ~0U;
+    t41_safe_ae_sensor[channel].max_log2_q16 = sensor.max_gain_q16;
     t41_ae_zones[channel].sequence = 0;
     t41_ae_zones[channel].consumed = ~0U;
     t41_ae_meter_error = -EAGAIN;
     t41_safe_ae[channel].integration = *(uint32_t *)(par + 68);
-    t41_safe_ae[channel].again = *(uint32_t *)(par + 40);
-    t41_safe_ae[channel].min_integration = *(uint16_t *)(par + 60);
-    t41_safe_ae[channel].max_integration = *(uint16_t *)(par + 76);
-    if (!t41_safe_ae[channel].min_integration)
-        t41_safe_ae[channel].min_integration = 1;
-    if (t41_safe_ae[channel].max_integration <
-        t41_safe_ae[channel].min_integration)
-        t41_safe_ae[channel].max_integration = 1760;
+    t41_safe_ae[channel].again = 1024;
+    t41_safe_ae[channel].min_integration = sensor.minimum;
+    t41_safe_ae[channel].max_integration = sensor.maximum;
     t41_safe_ae[channel].integration = clamp(
         t41_safe_ae[channel].integration,
         t41_safe_ae[channel].min_integration,
         t41_safe_ae[channel].max_integration);
-    t41_safe_ae[channel].again = clamp(t41_safe_ae[channel].again,
-                                       0x10U, 0xf8U);
     printk(KERN_WARNING
-           "tx_isp_t41_recovered: safe AE init exposure=%u/0x%x range=%u-%u target-q8=%u\n",
+           "tx_isp_t41_recovered: safe AE init exposure=%u/%u Q10 range=%u-%u target-q8=%u\n",
            t41_safe_ae[channel].integration, t41_safe_ae[channel].again,
            t41_safe_ae[channel].min_integration,
            t41_safe_ae[channel].max_integration, t41_ae_target_q8);
@@ -68074,6 +68165,7 @@ int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
     callbacks[0] = (uint32_t)(uintptr_t)tisp_ae_pm_get_regsize;
     callbacks[1] = (uint32_t)(uintptr_t)tisp_ae_pm_suspend;
     callbacks[2] = (uint32_t)(uintptr_t)tisp_ae_pm_resume;
+    smp_store_release(&t41_ae_ready[channel], 1);
     return 0;
 
 free_ae_info:
@@ -68094,6 +68186,7 @@ int32_t tisp_ae_deinit(uint32_t a0)
     if (a0 >= ARRAY_SIZE(ae_info))
         return -EINVAL;
 
+    smp_store_release(&t41_ae_ready[a0], 0);
     memset(&t41_safe_ae[a0], 0, sizeof(t41_safe_ae[a0]));
 
     tisp_event_set_cb(a0, 1, 0);
@@ -76038,6 +76131,7 @@ int tisp_awb_deinit(int arg1) {
 
     if (arg1 < 0 || arg1 >= 2)
         return -EINVAL;
+    smp_store_release(&t41_awb_ready[arg1], 0);
     if (pst_awb_ct_detect[arg1]) {
         private_kfree((void *)(uintptr_t)pst_awb_ct_detect[arg1]);
         pst_awb_ct_detect[arg1] = 0;
@@ -76689,6 +76783,7 @@ int32_t tisp_awb_init(uint32_t a0, uintptr_t a1)
 
     if (a0 >= 2 || !a1)
         return -EINVAL;
+    smp_store_release(&t41_awb_ready[a0], 0);
     params = (uint8_t *)(uintptr_t)((uint32_t *)(void *)tparamsP_storage)[a0];
     if (!params)
         return -EINVAL;
@@ -76791,6 +76886,7 @@ int32_t tisp_awb_init(uint32_t a0, uintptr_t a1)
     callbacks[12 / 4] = (uint32_t)(uintptr_t)tisp_awb_pm_get_regsize;
     callbacks[16 / 4] = (uint32_t)(uintptr_t)tisp_awb_pm_suspend;
     callbacks[20 / 4] = (uint32_t)(uintptr_t)tisp_awb_pm_resume;
+    smp_store_release(&t41_awb_ready[a0], 1);
     return 0;
 }
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002fb60 origin=fragment_seed original=tisp_awb_get_statistics */
@@ -154265,6 +154361,7 @@ int32_t tisp_g_antiflick(uint32_t a0, uintptr_t a1)
 int32_t tisp_s_antiflick(uint32_t a0, uintptr_t a1)
 {
     uint32_t mode;
+    uint32_t floor = 0;
     uint8_t frequency;
 
     if (!a1)
@@ -154275,6 +154372,20 @@ int32_t tisp_s_antiflick(uint32_t a0, uintptr_t a1)
     if (mode >= 3U ||
         (mode != 0U && frequency != 50U && frequency != 60U))
         return -EINVAL;
+    if (mode == 1U && t41_safe_ae_controller > 0) {
+        struct t41_safe_sensor_limits sensor;
+        uint32_t denominator;
+        int ret = t41_safe_sensor_limits_get(a0, &sensor);
+        if (ret)
+            return ret;
+        if (!sensor.height || !(sensor.fps >> 16) || !(sensor.fps & 65535))
+            return -ERANGE;
+        denominator = (sensor.fps & 65535) * 2U * frequency;
+        floor = div64_u64((u64)sensor.height * (sensor.fps >> 16) + denominator / 2,
+                          denominator);
+        if (!floor || floor > sensor.maximum)
+            return -ERANGE;
+    }
 
     /*
      * Gen3 NORMAL mode promises that exposure will not fall below the
@@ -154289,9 +154400,7 @@ int32_t tisp_s_antiflick(uint32_t a0, uintptr_t a1)
             t41_ae_flicker_floor_lines = 0;
         } else {
             t41_ae_flicker_frequency_hz = frequency;
-            t41_ae_flicker_floor_lines =
-                mode == 1U ?
-                DIV_ROUND_CLOSEST(44225U, 2U * frequency) : 0;
+            t41_ae_flicker_floor_lines = floor;
         }
     }
     if (mode == 1U && t41_ae_flicker_profile < 0)

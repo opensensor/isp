@@ -37,8 +37,29 @@ selects the explicit histogram target. The default is calibrated. Diagnostics
 `t41_safe_ae_effective_target_q8` expose calculation and effective target.
 
 The bounded exposure controller still has separate limitations: conservative
-step/deadband policy, no full OEM sensor/digital-gain allocation, and a legacy
-OS04D10 raw-gain/timing adapter. Calibrated metering is not full OEM AE parity.
+step/deadband policy and no full OEM digital-gain allocation or convergence.
+Calibrated metering is not full OEM AE parity.
+
+The sensor adapter now calls the registered module's `alloc_again` callback
+with log2-Q16 and uses the returned realized gain and opaque register code.
+It does not assume OS04D10 Q4 encoding. Integration allocation, limits,
+apply delay and rational line timing likewise come from the T41 sensor ABI.
+A known unity-gain write establishes initial state because `attr.again` can
+be an opaque initialization code. Combined EXPO transport remains the
+existing T41 path; this is not proof that every sensor implements that event.
+
+Synthetic nonlinear allocator tests prove two different register encodings
+produce identical realized exposure; invalid callbacks leave outputs intact.
+On OS04D10 the live test moved from unity to code 0xd0, realized log2 gain
+242512, under a temporary 16-line ceiling, then returned to calibrated AE.
+Six TCP/UDP H.264/AAC reconnects passed. Sensor limits and metering reported
+zero errors. The first candidate used the `g_ispcore` pointer-storage address
+instead of its stored pointer; that failed initialization and was not promoted.
+
+AE/WB controls now return EAGAIN until initialization completes, rather than
+acknowledging a policy handoff with uninitialized seed gains. Readiness is
+cleared on teardown. A valid zero-brightness frame grows exposure by the
+bounded step without division by zero.
 
 ## Black-level normalization
 
