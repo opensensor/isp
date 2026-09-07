@@ -8,6 +8,10 @@ CFLAGS += -std=c99 -Wall -Wextra -Werror
 all check: tx_isp_t41_ysp_test
 all check: tx_isp_t41_cdns_test
 all check: tx_isp_t41_mdns_test
+all check: tx_isp_t41_lce_test
+
+tx_isp_t41_lce_test: tx_isp_t41_lce_test.c ../driver/t41/tx_isp_t41_lce.h ../driver/t41/tx_isp_t41_dpc.h ../driver/t41/tx_isp_t41_tmo.h ../driver/include/tx_isp/tx_isp_math.h
+	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_mdns_test: tx_isp_t41_mdns_test.c ../driver/t41/tx_isp_t41_mdns.h ../driver/t41/tx_isp_t41_dpc.h ../driver/t41/tx_isp_t41_tmo.h ../driver/include/tx_isp/tx_isp_math.h
 	$(CC) $(CFLAGS) -o $@ $<
@@ -262,6 +266,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 	./tx_isp_t41_ysp_test
 	./tx_isp_t41_cdns_test
 	./tx_isp_t41_mdns_test
+	./tx_isp_t41_lce_test
 	./tx_isp_t41_color_route_test
 	./tx_isp_t41_awb_test
 	./tx_isp_modulation_test

@@ -32,6 +32,7 @@
 #include "tx_isp_t41_ysp.h"
 #include "tx_isp_t41_cdns.h"
 #include "tx_isp_t41_mdns.h"
+#include "tx_isp_t41_lce.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -1259,11 +1260,22 @@ MODULE_PARM_DESC(t41_stock_ysp_unbypass,
 static int t41_stock_spatial_profile = -1;
 module_param(t41_stock_spatial_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_spatial_profile,
-		 "Apply captured LCE bank (nonpositive=enabled, diagnostic); spatial denoise and YSP are calibrated");
+		 "nonpositive restores calibrated spatial blocks after stream reset (legacy name)");
 static int t41_stock_lce_ram_profile = -1;
 module_param(t41_stock_lce_ram_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_lce_ram_profile,
-		 "Replay exact stock T41 LCE geometry and RAM image (negative=enabled, diagnostic)");
+		 "nonpositive enables calibrated histogram-driven LCE (legacy name)");
+static DEFINE_MUTEX(t41_lce_lock);
+static spinlock_t t41_lce_stats_lock __section(".data") =
+    __SPIN_LOCK_UNLOCKED(t41_lce_stats_lock);
+static int t41_lce_ready = -1;
+static int t41_lce_error = -ENODEV;
+static unsigned int t41_lce_frames = ~0U;
+static unsigned int t41_lce_gain = ~0U;
+module_param(t41_lce_error, int, 0444);
+module_param(t41_lce_frames, uint, 0444);
+module_param(t41_lce_gain, uint, 0444);
+static int t41_lce_frame(uint32_t gain);
 static int t41_stock_cdns_profile = -1;
 module_param(t41_stock_cdns_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_cdns_profile,
@@ -32688,6 +32700,106 @@ static void t41_apply_stock_ysp_profile(void)
         t41_top_restore_bypass(BIT(17));
 }
 
+/* Lock order: frame-work mutex, LCE mutex, short statistics spinlock.
+ * Only the IRQ owns histogram RAM reads; the worker owns all curve math. */
+static uint8_t *t41_lce_object(void)
+{
+    uint8_t *s = (uint8_t *)(uintptr_t)lce_info;
+    if (!t41_kernel_data_ptr(s) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)t41_tmo_le32(s)))
+        return NULL;
+    return s;
+}
+
+static int t41_lce_calibrate_locked(uint8_t *s)
+{
+    return t41_lce_calibrate((uint8_t *)(uintptr_t)t41_tmo_le32(s),
+        T41_LCE_PARAM_BYTES, s, T41_LCE_STATE_BYTES, t41_tmo_le32(s + 0x5900)) ? -EINVAL : 0;
+}
+
+static int t41_lce_write_locked(uint8_t *s)
+{
+    struct t41_dpc_word words[132];
+    int count = t41_lce_pack_curve(s, T41_LCE_STATE_BYTES, words, ARRAY_SIZE(words)), i;
+    if (count < 0)
+        return -EINVAL;
+    for (i = 0; i < count; ++i)
+        system_reg_write(words[i].address, words[i].value);
+    return 0;
+}
+
+static int t41_lce_frame(uint32_t gain)
+{
+    unsigned long flags;
+    uint8_t *s;
+    uint32_t old, ev;
+    int ret = -ENODEV;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (!s || t41_stock_lce_ram_profile > 0)
+        goto done;
+    old = t41_tmo_le32(s + 0x5900);
+    if ((gain > old ? gain - old : old - gain) >= 128) {
+        t41_lce_put32(s + 0x5900, gain);
+        ret = t41_lce_calibrate_locked(s);
+        if (ret)
+            goto done;
+    }
+    t41_lce_gain = gain;
+    spin_lock_irqsave(&t41_lce_stats_lock, flags);
+    if (t41_lce_ready != 1) {
+        spin_unlock_irqrestore(&t41_lce_stats_lock, flags);
+        ret = -EAGAIN;
+        goto done;
+    }
+    memcpy(s + 0x1898, s + 0x164, 0x1680);
+    memcpy(s + 0x2f18, s + 0x17e4, 0xb4);
+    t41_lce_ready = -1;
+    spin_unlock_irqrestore(&t41_lce_stats_lock, flags);
+    ev = t41_tmo_le32(s + 0x58f4) >> 7;
+    if (ev != t41_tmo_le32(s + 0x58f8)) {
+        t41_lce_put32(s + 0x58f8, ev);
+        if (t41_tmo_le32(s + 0x57f0) == 1) {
+            t41_dpc_put16(s + 0x57f4, ev);
+            t41_lce_put32(s + 0x58fc, 4);
+        }
+    }
+    ret = t41_lce_process(s, T41_LCE_STATE_BYTES, s[0x58fc]) ? -ERANGE : 0;
+    if (!ret) {
+        t41_lce_put32(s + 0x58fc, 0);
+        ret = t41_lce_write_locked(s);
+        if (!ret) {
+            old = t41_tmo_le32(s + 0x5904) + 1;
+            t41_lce_put32(s + 0x5904, old >= 0x20000000 ? 15 : old);
+            ++t41_lce_frames;
+        }
+    }
+done:
+    t41_lce_error = ret;
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+}
+
+static int t41_lce_read_bank_locked(unsigned int bank)
+{
+    uint8_t *s = (uint8_t *)(uintptr_t)lce_info;
+    uint32_t control = bank ? 0x501d0 : 0x501c0;
+    uint32_t sum_control = bank ? 0x50210 : 0x50200;
+    uint32_t *hist, *sums;
+    unsigned int i;
+    if (bank > 1 || !t41_kernel_data_ptr(s))
+        return -EINVAL;
+    hist = (uint32_t *)(void *)(s + 0x164);
+    sums = (uint32_t *)(void *)(s + 0x17e4);
+    system_reg_write(control, 0x201);
+    for (i = 0; i < 1440; ++i) hist[i] = system_reg_read(control + 8);
+    system_reg_write(control, 0x59f0202);
+    system_reg_write(sum_control, 0x201);
+    for (i = 0; i < 45; ++i) sums[i] = system_reg_read(sum_control + 8);
+    system_reg_write(sum_control, 0x2c0202);
+    return 0;
+}
+
 static void t41_clear_lce_hist_ram(unsigned int bank)
 {
     uint32_t control = bank ? 0x501d0U : 0x501c0U;
@@ -32697,148 +32809,54 @@ static void t41_clear_lce_hist_ram(unsigned int bank)
     system_reg_write(control, 0x00000101U);
     for (i = 0; i < 1440U; ++i)
         system_reg_write(data, 0);
-    if (bank)
-        system_reg_write(control, 0x059f0102U);
-    else
-        system_reg_write(0x50000U, 0x059f0102U);
+    system_reg_write(control, 0x059f0102U);
 }
 
 static void t41_apply_stock_lce_ram_profile(void)
 {
-    /* Exact settled H20250310a LCE curve captured from state+21772 with the
-     * pristine Ingenic OS04D10 module at 2560x1440.  tisp_lce_write_all_reg
-     * streams these 32 tiles x 16 bytes through the write-only 0x501e0 RAM
-     * port.  The old spatial replay targeted 0x1d000 (the LCE/defog block),
-     * but native LCE geometry and control are at 0x0e000. */
-    static const uint32_t stock_curve[128] = {
-        0x25190d00, 0x715a4534, 0xc0b19f8a, 0xf2e7dbce,
-        0x25190d00, 0x71594534, 0xc0b19f89, 0xf2e7dbcd,
-        0x24180d00, 0x725a4533, 0xc1b3a08a, 0xf3e7dbce,
-        0x22170d00, 0x6c564231, 0xc2b19b84, 0xf3e8dcd0,
-        0x23170d00, 0x69544131, 0xc0ae9780, 0xf3e7dccf,
-        0x23180d00, 0x6a544232, 0xc1af9981, 0xf3e8dccf,
-        0x23180d00, 0x6b554231, 0xc2b19b83, 0xf3e8dccf,
-        0x23180d00, 0x6f584332, 0xc2b39e87, 0xf3e8dccf,
-        0x25190d00, 0x735b4534, 0xc1b2a08b, 0xf3e7dbce,
-        0x25190d00, 0x725b4534, 0xc0b1a08a, 0xf2e7dbce,
-        0x25180d00, 0x745c4634, 0xc1b3a18c, 0xf3e7dbce,
-        0x23180d00, 0x725b4533, 0xc3b4a08a, 0xf3e8dcd0,
-        0x23180d00, 0x6f584332, 0xc2b39e87, 0xf3e8dccf,
-        0x23180d00, 0x70584332, 0xc2b39f88, 0xf3e7dccf,
-        0x24180d00, 0x71594433, 0xc1b3a089, 0xf3e7dbcf,
-        0x25180d00, 0x765f4936, 0xc4b5a38d, 0xf3e8ddd0,
-        0x24180d00, 0x745c4533, 0xc0b1a08b, 0xf3e7dbce,
-        0x25190d00, 0x745c4634, 0xc1b2a08b, 0xf3e7dbce,
-        0x25180d00, 0x775f4835, 0xc2b3a28e, 0xf3e7dccf,
-        0x24180d00, 0x775f4834, 0xc3b5a38e, 0xf3e8dcd0,
-        0x24180d00, 0x755d4633, 0xc2b4a28d, 0xf3e7dccf,
-        0x25190d00, 0x765e4734, 0xc1b2a18d, 0xf3e7dbce,
-        0x25190d00, 0x765e4734, 0xc1b3a28d, 0xf3e7dbce,
-        0x26180d00, 0x7b644d38, 0xc6b7a692, 0xf3e9ded2,
-        0x21160c00, 0x6c56402f, 0xb7a79682, 0xf3e6d7c7,
-        0x22170d00, 0x6f584230, 0xb9aa9985, 0xf3e6d7c7,
-        0x27190d00, 0x7c644d38, 0xc4b6a692, 0xf3e8ddd1,
-        0x26180d00, 0x78624c37, 0xc3b5a38e, 0xf4e9ddcf,
-        0x27190d00, 0x7a644e39, 0xc4b6a590, 0xf4eaddd0,
-        0x2b1b0e00, 0x8069533e, 0xc7baa996, 0xf4e9dfd3,
-        0x291b0e00, 0x7e67503b, 0xc5b8a794, 0xf3e9ded2,
-        0x25180d00, 0x7d664e38, 0xc4b6a592, 0xf3e8ddd1,
-    };
-    static const uint32_t visible[][2] = {
-        { 0x0e000, 0x0120011c }, { 0x0e004, 0x00110002 },
-        { 0x0e008, 0x198d195f }, { 0x0e00c, 0x19a41976 },
-        { 0x0e010, 0x00000000 }, { 0x0e014, 0x00010000 },
-        { 0x0e018, 0x005e0000 }, { 0x0e01c, 0x0019a439 },
-        { 0x0e020, 0xddd10068 }, { 0x0e024, 0x7d666b49 },
-        { 0x0e028, 0x7d666459 }, { 0x0e02c, 0x7d666459 },
-        { 0x0e030, 0xc2b09c06 }, { 0x0e034, 0x064f6909 },
-        { 0x0e038, 0x04995519 }, { 0x0e03c, 0x05e06d18 },
-        { 0x0e040, 0x09ac8729 }, { 0x0e044, 0x0008307b },
-        { 0x0e048, 0x00080000 }, { 0x0e04c, 0x00000010 },
-    };
-    uint8_t *state = (uint8_t *)(uintptr_t)lce_info;
-    uint32_t *bypass;
+    struct t41_dpc_word words[4];
+    uint8_t *s;
+    unsigned long flags;
     unsigned int i;
-
-    if (t41_stock_lce_ram_profile > 0 || !t41_kernel_data_ptr(state))
-        return;
-
-    memcpy(state + 21772, stock_curve, sizeof(stock_curve));
-    for (i = 0; i < ARRAY_SIZE(visible); ++i)
-        system_reg_write(visible[i][0], visible[i][1]);
-
-    /* Exact tisp_lce_clr_ram.part.0 and tisp_lce_clr_ram(1) sequences.
-     * Both 45x32 histogram banks must be initialized before the curve bank
-     * is made visible; skipping them was the source of diagonal corruption. */
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (!s || t41_stock_lce_ram_profile > 0)
+        goto done;
+    t41_lce_error = t41_lce_geometry(s, T41_LCE_STATE_BYTES,
+        t41_tmo_le16(s + 0x592a) + 1, t41_tmo_le16(s + 0x5916) + 1, words);
+    if (t41_lce_error)
+        goto done;
+    t41_lce_error = t41_lce_calibrate_locked(s);
+    if (t41_lce_error)
+        goto done;
+    for (i = 0; i < ARRAY_SIZE(words); ++i)
+        system_reg_write(words[i].address, words[i].value);
+    spin_lock_irqsave(&t41_lce_stats_lock, flags);
+    t41_lce_ready = -1;
+    memset(s + 0x164, 0, 0x5770 - 0x164);
     t41_clear_lce_hist_ram(0);
     t41_clear_lce_hist_ram(1);
-
-    system_reg_write(0x0e080, 1);
-    system_reg_write(0x501e0, 0x00000101);
-    for (i = 0; i < ARRAY_SIZE(stock_curve); ++i)
-        system_reg_write(0x501e4, stock_curve[i]);
-    system_reg_write(0x501e0, 0x007f0102);
-    system_reg_write(0x0e084, 1);
-
-    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    t41_top_restore_bypass(BIT(21));
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: exact stock LCE RAM profile applied visible=%u curve=%u top=%#x\n",
-           (unsigned int)ARRAY_SIZE(visible),
-           (unsigned int)ARRAY_SIZE(stock_curve), system_reg_read(0x40));
+    spin_unlock_irqrestore(&t41_lce_stats_lock, flags);
+    t41_lce_identity(s);
+    t41_lce_put32(s + 0x58fc, 4);
+    t41_lce_error = t41_lce_write_locked(s);
+    if (!t41_lce_error)
+        t41_top_restore_bypass(BIT(21));
+done:
+    mutex_unlock(&t41_lce_lock);
 }
 
 static void t41_apply_stock_spatial_profile(void)
 {
-    /* LCE remains the only captured block in this compatibility group. */
-    static const uint32_t lce_delta[][2] = {
-        { 0x1d028, 0x00000000 }, { 0x1d02c, 0x00000000 },
-        { 0x1d030, 0x00000000 }, { 0x1d034, 0x00000000 },
-        { 0x1d058, 0x00000000 }, { 0x1d088, 0xf1000000 },
-        { 0x1d08c, 0x059e0000 }, { 0x1d090, 0x059c0000 },
-        { 0x1d094, 0x00080000 }, { 0x1d098, 0x00010008 },
-    };
-    const uint32_t (*ranges[])[2] = {
-        lce_delta,
-    };
-    const unsigned int counts[] = {
-        ARRAY_SIZE(lce_delta),
-    };
-    uint32_t *bypass;
-    unsigned int range;
-    unsigned int i;
-
-    {
-        uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
-        t41_sdns_error = tisp_sdns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
-        if (!t41_sdns_error)
-            t41_top_restore_bypass(BIT(18));
-        t41_ydns_error = tisp_ydns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
-        if (!t41_ydns_error)
-            t41_top_restore_bypass(BIT(14));
-    }
-    if (t41_stock_spatial_profile > 0)
-        return;
-    for (range = 0; range < ARRAY_SIZE(ranges); ++range)
-        for (i = 0; i < counts[range]; ++i)
-            system_reg_write(ranges[range][i][0], ranges[range][i][1]);
-
-    /* Exact per-block trigger addresses from the T41 HLIL. */
-    system_reg_write(0x1d09c, 1);
-
-    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    /* tisp_lce_init() currently retains only the object's ownership state;
-     * it deliberately does not recreate the stock geometry and 1440-word
-     * statistics-RAM initialization.  Enabling that partial object produces
-     * diagonal frame corruption on a true cold boot.  T40 uses the same safe
-     * boundary, so leave LCE bypassed until its complete init is recovered. */
-    *bypass |= BIT(21);
-    t41_apply_stock_lce_ram_profile();
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock spatial profile applied "
-           "lce=%u top-want=%#x top-read=%#x\n",
-           counts[0], *bypass,
-           system_reg_read(0x40));
+    uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
+    t41_sdns_error = tisp_sdns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
+    if (!t41_sdns_error)
+        t41_top_restore_bypass(BIT(18));
+    t41_ydns_error = tisp_ydns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
+    if (!t41_ydns_error)
+        t41_top_restore_bypass(BIT(14));
+    if (t41_stock_spatial_profile <= 0)
+        t41_apply_stock_lce_ram_profile();
 }
 
 static int t41_program_stock_adr_shadow(void)
@@ -103746,6 +103764,16 @@ int32_t lce_std_hist_transform(int32_t arg1, int32_t arg2, int32_t arg3, int32_t
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000044800 origin=fragment_seed original=Tisp_lce_soft */
 int64_t Tisp_lce_soft(uint32_t a0, uintptr_t a1, uintptr_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s && a1 == (uintptr_t)s + 0x5770 && a2 == (uintptr_t)s + 0x1898)
+        ret = t41_lce_process(s, T41_LCE_STATE_BYTES, a3);
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -105122,11 +105150,21 @@ Tisp_lce_soft0xe44:
     goto Tisp_lce_soft0xc00;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004564c origin=fragment_seed original=tisp_lce_write_all_reg */
 int32_t tisp_lce_write_all_reg(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) ret = t41_lce_write_locked(s);
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -105206,11 +105244,16 @@ tisp_lce_write_all_reg0x78:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045768 origin=fragment_seed original=tisp_lce_process */
 int32_t tisp_lce_process(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (a0) return -EINVAL;
+    return t41_lce_frame(READ_ONCE(t41_safe_ae_gain_q16));
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -105302,6 +105345,7 @@ tisp_lce_process0x5c:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045898 origin=fragment_seed original=tisp_lce_pm_resume */
@@ -105332,6 +105376,15 @@ int32_t tisp_lce_pm_resume(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000458c0 origin=fragment_seed original=tisp_lce_curve_init_default */
 int32_t tisp_lce_curve_init_default(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) { t41_lce_identity(s); ret = t41_lce_write_locked(s); }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -105454,11 +105507,26 @@ tisp_lce_curve_init_default0xe0:
     a0 = a0 + 18636;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045a48 origin=fragment_seed original=tisp_lce_top_change_state */
 int64_t tisp_lce_top_change_state(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s, *p; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) {
+        p = (uint8_t *)(uintptr_t)t41_tmo_le32(s);
+        t41_lce_put32(s + 0x58fc, t41_tmo_le32(p + 0x48) == 1 ? 3 : 4);
+        if (t41_tmo_le32(p + 0x48) == 1) { t41_lce_identity(s); ret = t41_lce_write_locked(s); }
+        else ret = 0;
+    }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t a1 = 0;
     uint32_t ra = 0;
     uint32_t *t9 = 0;
@@ -105499,11 +105567,28 @@ tisp_lce_top_change_state0x3c:
     *(uint32_t *)((char *)v0 + 22780) = v1;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045a8c origin=fragment_seed original=tisp_lce_tgain_interp_strength */
 int32_t tisp_lce_tgain_interp_strength(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s, *p; unsigned int i, gain; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) {
+        p = (uint8_t *)(uintptr_t)t41_tmo_le32(s); gain = t41_tmo_le32(s + 0x5900);
+        for (i = 0; i < 5; ++i) {
+            s[0x5845 + i] = t41_dpc_interpolate(p + 0x59 + 11 * i, gain, 1);
+            s[0x5897 + i] = t41_dpc_interpolate(p + 0xdd + 11 * i, gain, 1);
+        }
+        ret = 0;
+    }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -105583,11 +105668,21 @@ int32_t tisp_lce_tgain_interp_strength(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045bbc origin=fragment_seed original=tisp_lce_awdr_to_used */
 int64_t tisp_lce_awdr_to_used(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) ret = t41_lce_calibrate_locked(s);
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -105714,15 +105809,20 @@ tisp_lce_awdr_to_used0x170:
     goto tisp_lce_awdr_to_used0x144;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000045d54 origin=fragment_seed original=tisp_lce_wdr_en */
 int32_t tisp_lce_wdr_en(uint32_t a0, uint32_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    (void)a0;
-    (void)a1;
-    return 0;
+    uint8_t *s; int ret = -ENODEV;
+    if (a0 || a1 > 1) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) { s[0x592c] = a1; t41_lce_put32(s + 0x58fc, 1); ret = t41_lce_calibrate_locked(s); }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
 #else
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -105751,8 +105851,17 @@ int32_t tisp_lce_wdr_en(uint32_t a0, uint32_t a1)
 int32_t tisp_lce_dn_params_refresh(uint32_t a0)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    (void)a0;
-    return 0;
+    uint8_t *s; int ret = -ENODEV;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) {
+        t41_lce_put32(s + 0x58fc, 3);
+        ret = t41_lce_calibrate_locked(s);
+        if (!ret) { t41_lce_identity(s); ret = t41_lce_write_locked(s); }
+    }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -105857,47 +105966,12 @@ tisp_lce_clr_ram0x54:
 int32_t tisp_lce_get_data(uint32_t a0, uint32_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    uint8_t *state;
-    uint32_t control;
-    uint32_t data;
-    uint32_t aux_control;
-    uint32_t aux_data;
-    uint32_t *hist;
-    uint32_t *tail;
-    unsigned int i;
-
-    if (a0 != 0 || !lce_info)
-        return -EINVAL;
-    state = (uint8_t *)(uintptr_t)lce_info;
-    if (!t41_kernel_data_ptr(state))
-        return -EINVAL;
-
-    if (a1) {
-        control = 0x501d0U;
-        data = 0x501d8U;
-        aux_control = 0x50210U;
-        aux_data = 0x50218U;
-    } else {
-        control = 0x501c0U;
-        data = 0x501c8U;
-        aux_control = 0x50200U;
-        aux_data = 0x50208U;
-    }
-
-    /* Exact stock 45 x 32 histogram drain.  The OEM stores this bank at
-     * state+356, followed by 45 row-tail words at state+6116. */
-    system_reg_write(control, 0x00000201U);
-    hist = (uint32_t *)(void *)(state + 356);
-    for (i = 0; i < 1440U; ++i)
-        hist[i] = system_reg_read(data);
-    system_reg_write(control, 0x059f0202U);
-
-    system_reg_write(aux_control, 0x00000201U);
-    tail = (uint32_t *)(void *)(state + 6116);
-    for (i = 0; i < 45U; ++i)
-        tail[i] = system_reg_read(aux_data);
-    system_reg_write(aux_control, 0x002c0202U);
-    return 0;
+    unsigned long flags; int ret;
+    if (a0) return -EINVAL;
+    spin_lock_irqsave(&t41_lce_stats_lock, flags);
+    ret = t41_lce_read_bank_locked(a1);
+    spin_unlock_irqrestore(&t41_lce_stats_lock, flags);
+    return ret;
 #else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
@@ -106069,46 +106143,29 @@ tisp_lce_get_data0x1ac:
 int64_t tisp_lce_interrupt_static(uint32_t a0)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    static unsigned int trace_count;
-    uint8_t *state;
+    unsigned long flags;
+    uint8_t *s;
     uint32_t status;
-    int ret = 0;
-
-    if (a0 != 0 || !lce_info)
-        return -EINVAL;
-    state = (uint8_t *)(uintptr_t)lce_info;
-    if (!t41_kernel_data_ptr(state))
-        return -EINVAL;
-
-    status = system_reg_read(0x0e014U);
-    ++*(uint32_t *)(void *)(state + 22792);
-    if (status & BIT(0)) {
-        if (status & BIT(8)) {
-            if (status & BIT(16)) {
-                t41_clear_lce_hist_ram(0);
-                system_reg_write(0x0e010U, 1);
-                ret = tisp_lce_get_data(a0, 1);
-                system_reg_write(0x0e010U, 0x00010000U);
-            } else {
-                t41_clear_lce_hist_ram(1);
-                system_reg_write(0x0e010U, 0x00010000U);
-                ret = tisp_lce_get_data(a0, 0);
-                system_reg_write(0x0e010U, 1);
-            }
-        } else {
-            ret = tisp_lce_get_data(a0, 0);
-            system_reg_write(0x0e010U, 1);
-        }
-    } else if (status & BIT(8)) {
-        ret = tisp_lce_get_data(a0, 1);
-        system_reg_write(0x0e010U, 0x00010000U);
+    int ret = 0, bank = -1;
+    if (a0) return -EINVAL;
+    spin_lock_irqsave(&t41_lce_stats_lock, flags);
+    s = (uint8_t *)(uintptr_t)lce_info;
+    if (!t41_kernel_data_ptr(s)) { spin_unlock_irqrestore(&t41_lce_stats_lock, flags); return -ENODEV; }
+    status = system_reg_read(0xe014);
+    if ((status & 0x101) == 0x101) {
+        t41_lce_put32(s + 0x5908, t41_tmo_le32(s + 0x5908) + 1);
+        bank = (status & BIT(16)) ? 1 : 0;
+        t41_clear_lce_hist_ram(!bank);
+        system_reg_write(0xe010, bank ? 1 : 0x10000);
+    } else if (status & 1) bank = 0;
+    else if (status & 0x100) bank = 1;
+    else t41_lce_put32(s + 0x5908, t41_tmo_le32(s + 0x5908) + 1);
+    if (bank >= 0) {
+        ret = t41_lce_read_bank_locked(bank);
+        system_reg_write(0xe010, bank ? 0x10000 : 1);
+        if (!ret) t41_lce_ready = 1;
     }
-
-    if (trace_count < 12U)
-        printk(KERN_WARNING
-               "tx_isp_t41_recovered: LCE IRQ drain status=%#x ret=%d count=%u\n",
-               status, ret, trace_count + 1U);
-    trace_count++;
+    spin_unlock_irqrestore(&t41_lce_stats_lock, flags);
     return ret ? ret : 1;
 #else
     uint32_t *local_10 = 0;
@@ -106929,11 +106986,20 @@ tisp_lce_get_show_data0x5d8:
 int32_t tisp_lce_tgain_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    (void)a0;
-    (void)a1;
-    (void)a2;
-    (void)a3;
-    return 0;
+    uint8_t *s; unsigned int old; int ret = -ENODEV;
+    (void)a1; (void)a3;
+    if (a0 || a2 > (16U << 16)) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) {
+        old = t41_tmo_le32(s + 0x5900); ret = 0;
+        if ((a2 > old ? a2 - old : old - a2) >= 128) {
+            t41_lce_put32(s + 0x5900, a2); ret = t41_lce_calibrate_locked(s);
+        }
+        if (!ret) t41_lce_gain = a2;
+    }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
 #else
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -107001,49 +107067,35 @@ tisp_lce_tgain_update0x60:
 int64_t tisp_lce_init(uint32_t a0, uintptr_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    uint8_t *state;
-    uint8_t *params;
-    uint32_t *bypass;
-    uint32_t width;
-    uint32_t height;
-
-    /* Preserve the recovered BSS layout; this T41 ISP exposes channel 0. */
-    if (a0 != 0 || !a1)
-        return -EINVAL;
-    if (lce_info)
-        return -EBUSY;
-
-    params = (uint8_t *)(uintptr_t)
-        ((uint32_t *)(void *)tparamsP_storage)[a0];
-    if (!params)
-        return -EINVAL;
-    width = *(uint32_t *)(uintptr_t)a1;
-    height = *(uint32_t *)(uintptr_t)(a1 + 4);
-    if (!width || !height)
-        return -EINVAL;
-
-    /*
-     * The working T40 kernel path bypasses LCE entirely.  Retain T41's OEM
-     * state ownership so parameter/debug interfaces have a valid anchor,
-     * but do not expose the divergent soft-processing helpers to events.
-     */
-    state = private_vmalloc(22836);
-    if (!state)
-        return -ENOMEM;
-    memset(state, 0, 22836);
+    uint8_t *state, *params;
+    struct t41_dpc_word words[4];
+    unsigned int i;
+    int ret;
+    if (a0 || !a1) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    if (lce_info) { mutex_unlock(&t41_lce_lock); return -EBUSY; }
+    params = (uint8_t *)(uintptr_t)((uint32_t *)(void *)tparamsP_storage)[0];
+    if (!t41_kernel_data_ptr(params)) { mutex_unlock(&t41_lce_lock); return -EINVAL; }
+    state = private_vmalloc(T41_LCE_STATE_BYTES);
+    if (!state) { mutex_unlock(&t41_lce_lock); return -ENOMEM; }
+    memset(state, 0, T41_LCE_STATE_BYTES);
+    t41_lce_put32(state, (uint32_t)(uintptr_t)(params + 0x13da4));
+    ret = t41_lce_geometry(state, T41_LCE_STATE_BYTES,
+        *(uint32_t *)a1, *(uint32_t *)(a1 + 4), words);
+    if (!ret) ret = t41_lce_calibrate_locked(state);
+    if (ret) { private_vfree(state); mutex_unlock(&t41_lce_lock); return -EINVAL; }
+    ((uint32_t *)(void *)top_bypass_global)[0] |= BIT(21);
+    system_reg_write(0x40, ((uint32_t *)(void *)top_bypass_global)[0]);
+    for (i = 0; i < ARRAY_SIZE(words); ++i) system_reg_write(words[i].address, words[i].value);
+    t41_lce_identity(state);
+    t41_lce_write_locked(state);
+    t41_clear_lce_hist_ram(0); t41_clear_lce_hist_ram(1);
+    t41_lce_put32(state + 0x58fc, 4);
     lce_info = (uint32_t)(uintptr_t)state;
-    *(uint32_t *)(void *)state =
-        (uint32_t)(uintptr_t)(params + 65536 + 15780);
-
-    if (t41_stock_lce_ram_profile <= 0)
-        system_irq_func_set(a0, a0 * 42 + 8, tisp_lce_interrupt_static);
-
-    bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
-    *bypass |= BIT(21);
-    system_reg_write((a0 + 16) << 2, *bypass);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: lce-init safe bypass channel=%u %ux%u\n",
-           a0, width, height);
+    t41_lce_ready = -1; t41_lce_frames = 0; t41_lce_gain = 0; t41_lce_error = 0;
+    system_irq_func_set(0, 8, tisp_lce_interrupt_static);
+    system_reg_write(0x330, 0x20220801);
+    mutex_unlock(&t41_lce_lock);
     return 0;
 #else
     uint32_t *local_10 = 0;
@@ -107694,17 +107746,18 @@ tisp_lce_init0x63c:
 int32_t tisp_lce_deinit(uint32_t a0)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s;
+    unsigned long flags;
     uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
-
-    if (a0 != 0)
-        return -EINVAL;
-    if (lce_info) {
-        private_vfree((void *)(uintptr_t)lce_info);
-        lce_info = 0;
-    }
-    callbacks[132 / 4] = 0;
-    callbacks[136 / 4] = 0;
-    callbacks[140 / 4] = 0;
+    if (a0) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    spin_lock_irqsave(&t41_lce_stats_lock, flags);
+    s = (uint8_t *)(uintptr_t)lce_info; lce_info = 0; t41_lce_ready = -1;
+    spin_unlock_irqrestore(&t41_lce_stats_lock, flags);
+    if (s) private_vfree(s);
+    callbacks[132 / 4] = callbacks[136 / 4] = callbacks[140 / 4] = 0;
+    t41_lce_error = -ENODEV;
+    mutex_unlock(&t41_lce_lock);
     return 0;
 #else
     uint32_t *local_10 = 0;
@@ -107788,6 +107841,21 @@ tisp_lce_deinit0x74:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000471a4 origin=fragment_seed original=tisp_lce_param_array_get */
 int32_t tisp_lce_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s, *out = (uint8_t *)(uintptr_t)a1; int ret = -ENODEV;
+    if (a0 || !a1 || !a2) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) {
+        memcpy(out, (void *)(uintptr_t)t41_tmo_le32(s), T41_LCE_PARAM_BYTES);
+        memcpy(out + 0x15c, s + 4, 0x160);
+        memcpy(out + 0x2bc, s + 0x572c, 0x20);
+        memcpy(out + 0x2dc, s + 0x576c, 3);
+        *(uint32_t *)a2 = 0x2df; ret = 0;
+    }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -107839,11 +107907,25 @@ int32_t tisp_lce_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000047264 origin=fragment_seed original=tisp_lce_param_array_set */
 int32_t tisp_lce_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *s; int ret = -ENODEV;
+    if (a0 || !a1) return -EINVAL;
+    mutex_lock(&t41_lce_lock);
+    s = t41_lce_object();
+    if (s) {
+        memcpy((void *)(uintptr_t)t41_tmo_le32(s), (void *)(uintptr_t)a1, T41_LCE_PARAM_BYTES);
+        ret = t41_lce_calibrate_locked(s);
+        if (!ret) t41_lce_put32(s + 0x58fc, t41_tmo_le32(s + 0x57e0) ? 2 : 4);
+    }
+    mutex_unlock(&t41_lce_lock);
+    return ret;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -107880,6 +107962,7 @@ int32_t tisp_lce_param_array_set(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000472f0 origin=fragment_seed original=tisp_lce_get_debug */
@@ -150564,6 +150647,7 @@ static void t41_tmo_workfn(struct work_struct *work)
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_gamma_error = t41_gamma_update(ev);
+    t41_lce_frame(gain);
     if (gain != t41_ysp_gain)
         t41_ysp_error = tisp_ysp_refresh(0, gain);
     if (gain != t41_cdns_gain)

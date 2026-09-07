@@ -31,6 +31,7 @@ with open(sys.argv[1], 'rb') as source:
     ysp = len(sys.argv) > 2 and sys.argv[2] == 'ysp'
     cdns = len(sys.argv) > 2 and sys.argv[2] == 'cdns'
     mdns = len(sys.argv) > 2 and sys.argv[2] == 'mdns'
+    lce = len(sys.argv) > 2 and sys.argv[2] == 'lce'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -91,6 +92,14 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_s_mdns_ratio'],
             ['oracle_interpolate', 'oracle_pack', 'oracle_lerp8', 'oracle_smp', 'oracle_dif', 'oracle_enable',
              'oracle_strength']))
+    if lce:
+        functions = {name: 'oracle_' + name for name in [
+            'tisp_lce_init', 'tisp_lce_awdr_to_used', 'tisp_lce_tgain_interp_strength',
+            'tisp_simple_intp_int8', 'tisp_lce_curve_init_default', 'tisp_lce_write_all_reg',
+            'get_distance_1dim', 'lce_hist_filter_and_judge', 'lce_head_tail_search',
+            'lce_hist_method', 'lce_pdf_to_cdf', 'lce_self_light_correct',
+            'lce_16bit_data_converge', 'lce_wdr_light_lock', 'lce_light_lock_adjust_hist',
+            'lce_std_hist_transform', 'Tisp_lce_soft']}
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
@@ -104,6 +113,14 @@ with open(sys.argv[1], 'rb') as source:
         names.update({'get_isp_memopt': 'oracle_memopt', 'tparamsP': 'oracle_params',
             'tparams_day': 'oracle_day', 'tparams_night': 'oracle_night',
             'tisp_get_tuning': 'oracle_tuning', 'tisp_mdns_refresh': 'oracle_noop'})
+    if lce:
+        names.update({'private_vmalloc': 'oracle_alloc', 'tparamsP': 'oracle_params',
+            'tpm_cb': 'oracle_callbacks',
+            '__lshrdi3': 'oracle_shift', 'private_spin_lock_init': 'oracle_noop',
+            '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop',
+            **{name: 'oracle_noop' for name in ['tisp_lce_clr_ram.part.0', 'tisp_lce_clr_ram',
+                'system_irq_func_set', 'tisp_event_set_cb', 'tisp_lce_interrupt_static',
+                'tisp_lce_process', 'tisp_lce_pm_get_regsize', 'tisp_lce_pm_suspend', 'tisp_lce_pm_resume']}})
     if ae:
         names.update({'__ashldi3': 'oracle_left_shift',
             '__lshrdi3': 'oracle_shift', '__div64_32': 'oracle_div64',
@@ -111,6 +128,27 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_ae_fliker_detect': 'oracle_noop',
             'tisp_ae_get_bv': 'oracle_noop'})
     rels = {r['r_offset']: r for r in elf.get_section_by_name('.rel.text').iter_relocations()}
+    local_relocs = {}
+    if lce:
+        for pc, rel in rels.items():
+            entry = symbols.get_symbol(rel['r_info_sym'])
+            section_name = entry.name or elf.get_section(entry['st_shndx']).name
+            if section_name != '.text' or rel['r_info_type'] != 5:
+                continue
+            high, = struct.unpack_from('<I', code, pc)
+            for lo_pc in range(pc + 4, pc + 128, 4):
+                lo_rel = rels.get(lo_pc)
+                if not lo_rel or lo_rel['r_info_sym'] != rel['r_info_sym'] or lo_rel['r_info_type'] != 6:
+                    continue
+                low, = struct.unpack_from('<I', code, lo_pc)
+                if (low >> 21 & 31) != (high >> 16 & 31):
+                    continue
+                address = ((high & 65535) << 16) + ((low & 32767) - (low & 32768))
+                matches = [s.name for s in symbols.iter_symbols() if s['st_value'] == address
+                           and s['st_info']['type'] == 'STT_FUNC' and s.name in names]
+                if matches:
+                    local_relocs[pc] = local_relocs[lo_pc] = names[matches[0]]
+                break
     print('.set noreorder\n.set noat\n.option pic0\n.text\n.balign 4')
     for original, name in functions.items():
         symbol, = symbols.get_symbol_by_name(original)
@@ -123,6 +161,12 @@ with open(sys.argv[1], 'rb') as source:
                 continue
             rel = rels[pc]
             entry = symbols.get_symbol(rel['r_info_sym'])
+            if pc in local_relocs:
+                rt, rs = word >> 16 & 31, word >> 21 & 31
+                target = local_relocs[pc]
+                print(f'lui ${rt}, %hi({target})' if rel['r_info_type'] == 5 else
+                      f'addiu ${rt}, ${rs}, %lo({target})')
+                continue
             target = 'oracle_message' if entry.name.startswith('$LC') else \
                 names[entry.name or elf.get_section(entry['st_shndx']).name]
             kind = rel['r_info_type']
@@ -162,10 +206,10 @@ addiu $t1, $s6, 0x208''')
 jr $ra
 addiu $sp, $sp, 256
 .size oracle_adjust, .-oracle_adjust''')
-    if bcsh:
+    if bcsh or lce:
         print('.section .rodata\n.balign 65536\n.globl oracle_rodata\noracle_rodata:')
         data = elf.get_section_by_name('.rodata').data()
-        for pos in range(0, 0x2a70, 16):
+        for pos in range(0, len(data) if lce else 0x2a70, 16):
             print('.byte ' + ','.join(str(v) for v in data[pos:pos+16]))
         print('oracle_message:\n.asciz "unexpected reference diagnostic"')
     print('.section .note.GNU-stack,"",@progbits')

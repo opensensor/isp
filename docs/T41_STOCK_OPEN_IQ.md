@@ -23,8 +23,13 @@ was `f10f9c30`). MDNS is a newer one-shot candidate: its interpolation,
 enable/geometry writer, two ramp generators and day/night/WDR strength math
 match the OEM oracle. The captured MDNS delta is removed, activation waits
 for validated reserved buffers, and reconnect/gain/120-second decode tests
-pass. See [MDNS](T41_MDNS_ALGORITHM.md). Remaining captured tuning includes
-ADR and LCE; full AE/AWB convergence remains unproven.
+pass. See [MDNS](T41_MDNS_ALGORITHM.md). The next one-shot candidate replaces
+the captured LCE scene curve with the complete calibration/histogram-driven
+pipeline, checked against 10,000 synthetic OEM frames as well as its scalar
+helpers and register transactions. The bank-0 clear address and stray writes
+into the short-DPC aperture are corrected. See [LCE](T41_LCE_ALGORITHM.md).
+Remaining captured tuning includes ADR; full AE/AWB convergence remains
+unproven.
 
 The latest nearby stock/open daylight pair uses the corrected full-range
 BT.601 metadata on both paths. Open/stock paper luma is 163.24/147.51 and
