@@ -5150,7 +5150,7 @@ int32_t ispcore_frame_channel1_debug_qbuf(uintptr_t a0, uintptr_t a1);
 int32_t isp_fw_process(void);
 int32_t ispcore_frame_channel_streamoff(void *arg1);
 int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1);
-int32_t dump_isp_info_open(uint32_t a0, uint32_t a1);
+int dump_isp_info_open(struct inode *inode, struct file *file);
 int64_t ae_process_kthread(void);
 int64_t isp_save_cmd_set(uintptr_t a0, uint32_t a1, uint32_t a2);
 int64_t ispcore_sync_sensor_attr(uintptr_t a0, uint32_t a1);
@@ -5521,8 +5521,16 @@ static struct platform_driver regtrace_recovered_platform_driver;
 #endif
 #define REGTRACE_PLATFORM_DRIVER_PTR (&regtrace_recovered_platform_driver)
 
+static int t41_unrecovered_proc_open(struct inode *inode, struct file *file)
+{
+    (void)inode;
+    (void)file;
+    return -EOPNOTSUPP;
+}
+
 static struct file_operations aisp_info_proc_fops = {
     .owner = THIS_MODULE,
+    .open = t41_unrecovered_proc_open,
     .llseek = (loff_t (*)(struct file *, loff_t, int))seq_lseek,
     .read = (ssize_t (*)(struct file *, char __user *, size_t, loff_t *))seq_read,
     .release = (int (*)(struct inode *, struct file *))single_release,
@@ -5537,7 +5545,7 @@ static struct file_operations isp_info_proc_fops = {
     .owner = THIS_MODULE,
     .llseek = (loff_t (*)(struct file *, loff_t, int))seq_lseek,
     .read = (ssize_t (*)(struct file *, char __user *, size_t, loff_t *))seq_read,
-    .open = (int (*)(struct inode *, struct file *))dump_isp_info_open,
+    .open = dump_isp_info_open,
     .release = (int (*)(struct inode *, struct file *))single_release,
 };
 static struct file_operations ivdc_misc_fops = {
@@ -5549,6 +5557,7 @@ static struct file_operations ivdc_misc_fops = {
 };
 static struct file_operations ivdc_proc_fops = {
     .owner = THIS_MODULE,
+    .open = t41_unrecovered_proc_open,
     .llseek = (loff_t (*)(struct file *, loff_t, int))seq_lseek,
     .read = (ssize_t (*)(struct file *, char __user *, size_t, loff_t *))seq_read,
     .release = (int (*)(struct inode *, struct file *))single_release,
@@ -158447,50 +158456,21 @@ int32_t ispcore_frame_channel_qbuf(uintptr_t a0, uintptr_t a1)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006fa88 origin=fragment_seed original=dump_isp_info_open */
-int32_t dump_isp_info_open(uint32_t a0, uint32_t a1)
+static int t41_isp_status_show(struct seq_file *m, void *unused)
 {
-    uint32_t *local_10 = 0;
-    uint32_t local_14 = 0;
-    uint32_t a2 = 0;
-    uint32_t *a3 = 0;
-    uint32_t ra = 0;
-    uint32_t *s0 = 0;
-    uint32_t *t9 = 0;
-    uint32_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    s0 = a1;
-    v0 = (unsigned int *)PDE_DATA((void *)(uintptr_t)a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    a0 = s0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 5: Arithmetic */
-    a1 = 458752;
-    t9 = (uint32_t *)&private_single_open_size;
-    a3 = 8192;
-    a2 = v0;
-    a1 = a1 + 9108;
-    t9 = t9;
-
-    /* fragment 6: Unknown */
-    /* unmatched fragment 6 (Unknown): no deterministic matcher for Unknown */
-    /* asm: 6fac8:	03200408 	jr.hb	t9 */
-
-    /* fragment 7: Arithmetic */
-    /* unmatched fragment 7 (Arithmetic): arithmetic fragment did not contain supported register operations */
-    /* asm: 6facc:	27bd0018 	addiu	sp,sp,24 */
-
+    (void)unused;
+    seq_printf(m, "open-tx-isp t41\n"
+               "ae_integration=%u ae_gain_q16=%u ae_mean_q8=%u\n",
+               READ_ONCE(t41_safe_ae_integration),
+               READ_ONCE(t41_safe_ae_gain_q16),
+               READ_ONCE(t41_safe_ae_last_mean_q8));
     return 0;
+}
+
+int dump_isp_info_open(struct inode *inode, struct file *file)
+{
+    /* seq_read and single_release require single_open's private state. */
+    return single_open(file, t41_isp_status_show, PDE_DATA(inode));
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006fad0 origin=fragment_seed original=ae_process_kthread */
