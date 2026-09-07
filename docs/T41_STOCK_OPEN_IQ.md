@@ -79,6 +79,14 @@ and the 60-second candidate run had no warning. Do not rewrite capture/RTP
 timestamps to conceal this harness artifact. Gaps up to 10807/90000 seconds
 were still observed in the candidate; their cause remains unresolved.
 
+A subsequent persistent-stage reconnect also reproduced an **audio** warning
+(`stream 1`, PTS 15360 -> 15269 at 16 kHz), and a debug repeat showed
+15360 -> 15350. This is distinct from video output-time-base quantization.
+Raw RTP was monotonic in a separate capture; independently rebased audio and
+video origins disagree when their RTCP reports synchronize the tracks.
+Raptor's per-client timeline is being corrected separately. Do not describe
+the video harness change alone as resolving all intermittent warnings.
+
 The sections below describe the preceding comparison, before this follow-up.
 
 Hardware: T41NQ, OS04D10, 2560x1440/25, Linux 4.4.94. Genuine H20250310a
