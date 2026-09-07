@@ -96,6 +96,13 @@ static void t41_apply_stock_adr_profile(void)
     wmb();
     system_reg_write(0x9510, 3);
     spin_unlock_irqrestore(&t41_adr_irq_lock, flags);
+    /* Unlike TMO, bypassing ADR also stops its statistics DMA. Bootstrap
+     * from the oracle-verified cold/last-good map, only after all addresses
+     * and controls are valid, then accept the first histogram frame. */
+    if (!ret) {
+        ret = t41_top_restore_bypass(BIT(7));
+        if (!ret) s->restore_top = 0;
+    }
     t41_adr_error = ret;
 done:
     mutex_unlock(&t41_adr_lock);
@@ -132,6 +139,12 @@ static int t41_native_adr_frame(uint64_t exposure)
     mutex_lock(&t41_adr_lock);
     s = t41_adr_object();
     if (!s || t41_stock_adr_profile > 0) goto done;
+    if (s->restore_top && s->armed) {
+        count = t41_adr_pack_curve(s->saved.params, T41_ADR_PARAM_BYTES, s->saved.output,
+            T41_ADR_STATE_BYTES, system_reg_read(0x5040c), s->words, ARRAY_SIZE(s->words));
+        if (count > 0 && !t41_adr_emit_locked(s, count) && !t41_top_restore_bypass(BIT(7)))
+            s->restore_top = 0;
+    }
     spin_lock_irqsave(&t41_adr_irq_lock, flags);
     if (!s->ready || !s->armed) { spin_unlock_irqrestore(&t41_adr_irq_lock, flags); goto done; }
     memcpy(s->working_dma, s->pending_dma, sizeof(s->working_dma)); s->ready = 0;

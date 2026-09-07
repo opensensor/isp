@@ -101,7 +101,11 @@ handler accepts only their exact completion addresses and copies the bounded
 stream-drained worker. Initialization scratch, pending data, candidate state
 and register words are preallocated, with no per-frame allocation.
 
-TOP bit 7 stays bypassed until a valid frame has been written. Stream reset
+TOP bit 7 stays bypassed until the checked cold/last-good map and all owned
+DMA addresses are programmed. ADR's statistics also stop under bypass, so
+waiting for statistics before enabling that initial map would deadlock.
+The safe ISR dispatches bit 9 to the native bounded reader; registering a
+legacy callback alone is insufficient in that interrupt path. Stream reset
 rearms only owned addresses and restores calibrated controls. Shutdown drains
 the worker, disables DMA, detaches the IRQ-visible object under its lock,
 then frees it. Public gamma/parameter/mode and face-update routes use the
