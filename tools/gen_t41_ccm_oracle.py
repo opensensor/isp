@@ -32,6 +32,7 @@ with open(sys.argv[1], 'rb') as source:
     cdns = len(sys.argv) > 2 and sys.argv[2] == 'cdns'
     mdns = len(sys.argv) > 2 and sys.argv[2] == 'mdns'
     lce = len(sys.argv) > 2 and sys.argv[2] == 'lce'
+    adr = len(sys.argv) > 2 and sys.argv[2] == 'adr'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -100,12 +101,32 @@ with open(sys.argv[1], 'rb') as source:
             'lce_hist_method', 'lce_pdf_to_cdf', 'lce_self_light_correct',
             'lce_16bit_data_converge', 'lce_wdr_light_lock', 'lce_light_lock_adjust_hist',
             'lce_std_hist_transform', 'Tisp_lce_soft']}
+    if adr:
+        functions = {name: 'oracle_' + name for name in [
+            'func_adr_reg_write_one', 'func_adr_reg_write_5x5',
+            'func_adr_reg_write_sometimes', 'func_adr_reg_write_every',
+            'tiziano_adr_read_data', 'tiziano_adr_stat_calc',
+            'tiziano_adr_5x5_out', 'tiziano_adr_5x5_init', 'tiziano_adr_base_pars',
+            'func_gauss_local', 'fix_point_div_32', 'fix_point_mult2_32', 'tisp_math_exp2',
+            'ispint_adr_64', 'tiziano_adr_ev_func', 'fix_point_div',
+            'ispint_adr_16', 'func_interp1_short', 'func_gam_x2y', 'func_local_info',
+            'subsection_map', 'subsection', 'subsection_up', 'func_adr_map_curve1',
+            'func_map_y_filter', 'func_map_y_filter_sp']}
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
         'isp_printf': 'oracle_unexpected'})
     if awb_gain:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if adr:
+        names.update({'system_reg_read': 'oracle_read', '.data': 'oracle_data',
+            'adr_5x5_in2': 'oracle_radial_reference',
+            'ai_curve1_y': 'oracle_data+0x42e4',
+            'adr_gauss_old': 'oracle_gauss_old',
+            '__lshrdi3': 'oracle_shift',
+            '__ashldi3': 'oracle_left_shift',
+            'div64_u64': 'oracle_div64_u64',
+            'private_vmalloc': 'oracle_alloc', 'private_vfree': 'oracle_free'})
     if ysp:
         names.update({'ysp_paramsP': 'oracle_original', '.data': 'oracle_data',
             'tisp_ysp_all_reg_refresh': 'oracle_noop'})
@@ -179,7 +200,7 @@ with open(sys.argv[1], 'rb') as source:
                 if word >> 26 == 9:
                     print(f'addiu ${rt}, ${rs}, %lo({target}+{imm})')
                 else:
-                    op = {35: 'lw', 36: 'lbu', 43: 'sw'}[word >> 26]
+                    op = {33: 'lh', 35: 'lw', 36: 'lbu', 37: 'lhu', 41: 'sh', 43: 'sw'}[word >> 26]
                     print(f'{op} ${rt}, %lo({target}+{imm})(${rs})')
             else:
                 raise ValueError((hex(pc), kind))
@@ -206,10 +227,21 @@ addiu $t1, $s6, 0x208''')
 jr $ra
 addiu $sp, $sp, 256
 .size oracle_adjust, .-oracle_adjust''')
-    if bcsh or lce:
+    if bcsh or lce or adr:
         print('.section .rodata\n.balign 65536\n.globl oracle_rodata\noracle_rodata:')
         data = elf.get_section_by_name('.rodata').data()
-        for pos in range(0, len(data) if lce else 0x2a70, 16):
+        for pos in range(0, len(data) if lce or adr else 0x2a70, 16):
             print('.byte ' + ','.join(str(v) for v in data[pos:pos+16]))
         print('oracle_message:\n.asciz "unexpected reference diagnostic"')
+    if adr:
+        print('.data\n.balign 65536\n.globl oracle_data\noracle_data:')
+        data = elf.get_section_by_name('.data').data()
+        for pos in range(0, len(data), 16):
+            print('.byte ' + ','.join(str(v) for v in data[pos:pos+16]))
+        radial, = symbols.get_symbol_by_name('adr_5x5_in2')
+        data = elf.get_section(radial['st_shndx']).data()
+        print('.balign 4\n.globl oracle_radial_reference\noracle_radial_reference:')
+        for i in range(31):
+            value, = struct.unpack_from('<I', data, radial['st_value'] + 4*i)
+            print(f'.word {value}')
     print('.section .note.GNU-stack,"",@progbits')
