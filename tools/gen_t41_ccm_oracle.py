@@ -28,6 +28,8 @@ with open(sys.argv[1], 'rb') as source:
     dmsc = len(sys.argv) > 2 and sys.argv[2] == 'dmsc'
     sdns = len(sys.argv) > 2 and sys.argv[2] == 'sdns'
     ydns = len(sys.argv) > 2 and sys.argv[2] == 'ydns'
+    ysp = len(sys.argv) > 2 and sys.argv[2] == 'ysp'
+    cdns = len(sys.argv) > 2 and sys.argv[2] == 'cdns'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -74,12 +76,23 @@ with open(sys.argv[1], 'rb') as source:
     if ydns:
         functions = dict(zip(['tisp_ydns_intp', 'tisp_ydns_reg_cfg', 'tisp_simple_intp_int8'],
             ['oracle_interpolate', 'oracle_pack', 'oracle_lerp8']))
+    if ysp:
+        functions = dict(zip(['tisp_ysp_intp', 'tisp_ysp_noref_reg_cfg',
+            'tisp_ysp_ref_reg_cfg', 'tisp_simple_intp_int16', 'tisp_simple_intp_int8',
+            'tisp_ysp_sharpness_set'],
+            ['oracle_interpolate', 'oracle_static', 'oracle_dynamic', 'oracle_lerp16', 'oracle_lerp8', 'oracle_strength']))
+    if cdns:
+        functions = dict(zip(['tisp_cdns_intp', 'tisp_cdns_reg_cfg', 'tisp_simple_intp_int8'],
+            ['oracle_interpolate', 'oracle_pack', 'oracle_lerp8']))
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
         'isp_printf': 'oracle_unexpected'})
     if awb_gain:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if ysp:
+        names.update({'ysp_paramsP': 'oracle_original', '.data': 'oracle_data',
+            'tisp_ysp_all_reg_refresh': 'oracle_noop'})
     if ae:
         names.update({'__ashldi3': 'oracle_left_shift',
             '__lshrdi3': 'oracle_shift', '__div64_32': 'oracle_div64',

@@ -11,6 +11,17 @@ been removed. Their replacement algorithms match randomized OEM userspace
 oracles and follow unity-to-maximum sensor gain on the T41. Routine WB
 warning/MMIO-read traffic and unchanged-gain fanout have also been removed.
 
+The newer one-shot candidates also replace captured spatial denoise,
+luminance denoise, sharpening and chroma denoise with calibration-driven
+algorithms. See [SDNS](T41_SDNS_ALGORITHM.md), [YDNS](T41_YDNS_ALGORITHM.md),
+[YSP](T41_YSP_ALGORITHM.md) and [CDNS](T41_CDNS_ALGORITHM.md). Each has passed
+10,000 synthetic OEM cases on QEMU and physical T41; CDNS additionally
+checks all 65,536 signed threshold pairs. Camera gain sweeps reach the
+sensor's maximum and return to unity without block errors. These candidates
+are not yet the persistent boot checkpoint described above. Remaining
+captured tuning includes MDNS, ADR and LCE; full AE/AWB convergence remains
+unproven.
+
 The latest nearby stock/open daylight pair uses the corrected full-range
 BT.601 metadata on both paths. Open/stock paper luma is 163.24/147.51 and
 bark luma is 40.06/42.43; paper R/G is 0.8283/0.8534 and B/G is
