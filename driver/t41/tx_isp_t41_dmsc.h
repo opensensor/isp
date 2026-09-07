@@ -1,0 +1,237 @@
+/* SPDX-License-Identifier: MIT */
+#ifndef TX_ISP_T41_DMSC_H
+#define TX_ISP_T41_DMSC_H
+#include "tx_isp_t41_dpc.h"
+
+#define T41_DMSC_PARAM_BYTES 0x1076U
+#define T41_DMSC_STATE_BYTES 0x17aU
+#define T41_DMSC_WRITES 128U
+
+/* H20250310a tisp_ratio: retain the unsigned product before the Q7 shift,
+ * even for synthetic values above the nominal sharpness maximum. */
+static inline unsigned int t41_dmsc_ratio(unsigned int sharp, unsigned int value)
+{
+	if (sharp == 128) return value;
+	if (sharp > 128) return (((sharp - 128) * (600U - value)) >> 7) + value;
+	return (sharp * value) >> 7;
+}
+
+static inline int t41_dmsc_interpolate(const unsigned char *p, unsigned int bytes,
+		unsigned char *state, unsigned int state_bytes, unsigned int gain,
+		unsigned int sharpness)
+{
+	/* Runs of runtime offset, calibration offset, field width, field count.
+	 * Each field has eleven gain knots. Gaps are padding, not zeroed fields. */
+	static const struct { unsigned short target, source; unsigned char width, count; } bindings[] = {
+		{0x000, 0x008b, 1, 2},
+		{0x002, 0x0608, 1, 9},
+		{0x00b, 0x066d, 1, 2},
+		{0x00e, 0x00f0, 2, 1},
+		{0x010, 0x0683, 1, 1},
+		{0x012, 0x0106, 2, 2},
+		{0x016, 0x068e, 1, 3},
+		{0x01a, 0x0006, 2, 2},
+		{0x01e, 0x06af, 1, 1},
+		{0x020, 0x0132, 2, 1},
+		{0x022, 0x06ba, 1, 3},
+		{0x026, 0x0148, 2, 1},
+		{0x028, 0x06dd, 1, 2},
+		{0x02a, 0x015e, 2, 1},
+		{0x02c, 0x06f3, 1, 2},
+		{0x02e, 0x0174, 2, 3},
+		{0x034, 0x0709, 1, 5},
+		{0x03a, 0x01b6, 2, 2},
+		{0x03e, 0x0751, 1, 2},
+		{0x040, 0x01e2, 2, 3},
+		{0x046, 0x0767, 1, 6},
+		{0x04c, 0x07ab, 1, 2},
+		{0x04e, 0x07ca, 1, 3},
+		{0x052, 0x0224, 2, 6},
+		{0x05e, 0x07eb, 1, 2},
+		{0x060, 0x02a8, 2, 1},
+		{0x062, 0x0801, 1, 2},
+		{0x064, 0x02be, 2, 6},
+		{0x070, 0x0817, 1, 2},
+		{0x072, 0x0342, 2, 1},
+		{0x074, 0x082d, 1, 8},
+		{0x07c, 0x0358, 2, 1},
+		{0x07e, 0x0885, 1, 1},
+		{0x07f, 0x00ad, 1, 4},
+		{0x084, 0x003a, 2, 1},
+		{0x086, 0x00d9, 1, 1},
+		{0x087, 0x0890, 1, 3},
+		{0x08a, 0x037c, 2, 1},
+		{0x08c, 0x08b1, 1, 2},
+		{0x08e, 0x0392, 2, 1},
+		{0x090, 0x08c7, 1, 2},
+		{0x092, 0x08df, 1, 1},
+		{0x094, 0x03a8, 2, 2},
+		{0x098, 0x08fa, 1, 2},
+		{0x09a, 0x03d4, 2, 3},
+		{0x0a0, 0x0910, 1, 6},
+		{0x0a6, 0x0954, 1, 2},
+		{0x0a8, 0x0ba6, 1, 112},
+		{0x118, 0x096a, 1, 33},
+		{0x13a, 0x0416, 2, 2},
+		{0x13e, 0x0ad5, 1, 1},
+		{0x140, 0x0442, 2, 2},
+		{0x144, 0x0ae0, 1, 18},
+		{0x156, 0x046e, 2, 18},
+	};
+	static const unsigned short sharp_fields[] = {0x30, 0x32, 0x40, 0x42, 0x0e};
+	unsigned int i, j;
+	if (!p || !state || bytes < T41_DMSC_PARAM_BYTES ||
+	    state_bytes < T41_DMSC_STATE_BYTES || gain > (16U << 16) || sharpness > 255)
+		return -1;
+	for (i = 0; i < sizeof(bindings)/sizeof(bindings[0]); ++i)
+		for (j = 0; j < bindings[i].count; ++j) {
+			unsigned int width = bindings[i].width;
+			unsigned int value = t41_dpc_interpolate(p + bindings[i].source + j*width*11, gain, width);
+			unsigned char *dest = state + bindings[i].target + j*width;
+			if (width == 2) t41_dpc_put16(dest, value); else *dest = value;
+		}
+	for (i = 0; i < sizeof(sharp_fields)/sizeof(sharp_fields[0]); ++i) {
+		unsigned char *dest = state + sharp_fields[i];
+		t41_dpc_put16(dest, t41_dmsc_ratio(sharpness, t41_tmo_le16(dest)));
+	}
+	return 0;
+}
+
+/* The static writer intentionally normalizes disabled calibration fields. */
+static inline int t41_dmsc_pack_static(unsigned char *p, unsigned int bytes,
+		struct t41_dpc_word *out, unsigned int capacity)
+{
+	unsigned int n = 0, i;
+	if (!p || !out || bytes < T41_DMSC_PARAM_BYTES || capacity < T41_DMSC_WRITES) return -1;
+	if (!p[0x5fa]) { t41_dpc_put16(p + 0x32, 0); t41_dpc_put16(p + 0x34, 0); }
+	if (!p[0x5fb]) { t41_dpc_put16(p + 0x36, 0); t41_dpc_put16(p + 0x38, 0); }
+	if (!p[0x5fc]) { t41_dpc_put16(p + 0x80, 0); t41_dpc_put16(p + 0x82, 0); }
+#define E(a,v) do { out[n].address = (a); out[n++].value = (v); } while (0)
+#define P(o) ((unsigned int)p[o])
+#define H(o) t41_tmo_le16(p + (o))
+	E(0xa000,P(0x84)); E(0xa054,H(0x32)); E(0xa058,H(0x34));
+	E(0xa06c,H(0x36)); E(0xa070,H(0x38));
+	E(0xa090,P(0x7c3)<<6 | P(0x7c4)<<16 | P(0x7c6));
+	E(0xa0b0,P(0x74b)<<8 | P(0x74a)<<15 | P(0x74c) | P(0x749)<<27);
+	E(0xa0b4,P(0x744)<<4 | P(0x743)<<8 | P(0x745) | P(0x742)<<16 | P(0x741)<<24 | P(0x740)<<27);
+	E(0xa144,P(0xaa)<<8 | P(0xab));
+	for (i=0;i<12;++i) E(0xa150+i*4,t41_tmo_le32(p+0x50+i*4));
+	E(0xa184,H(0)<<16 | H(4)<<28 | H(2)); E(0xa1a8,P(0x66c)<<24);
+	for (i=0;i<3;++i) E(0xa1c4+i*12,t41_tmo_le32(p+0x36e + i*4));
+	E(0xa1e0,H(0x37a));
+	E(0xa1e4,P(0x8ec)<<4 | P(0x8ed)<<8 | P(0x8eb) | P(0x8ea)<<12);
+	E(0xa1ec,P(0x8dd)<<8 | P(0x8de));
+	E(0xa1f0,P(0x8ef)<<4 | P(0x8f0)<<8 | P(0x8ee) | P(0x8f1)<<12);
+	E(0xa1f4,P(0x8f2)); E(0xa1f8,P(0x8f4)<<8 | P(0x8f5)<<12 | P(0x8f3));
+	E(0xa200,H(0x80)); E(0xa21c,P(0x5ff)<<4 | P(0x600)<<8 | P(0x8f9));
+	E(0xa23c,P(0x7c1)<<8 | P(0x7c7)<<12 | P(0x7c5) | P(0x7c2)<<20);
+	E(0xa2b0,(P(0xe8)<<4 & 0x30) | (P(0xe9)<<8 & 0x100) | (P(0xe7)&1) | (P(0xea)<<12 & 0x7000));
+#undef H
+#undef P
+#undef E
+	return n;
+}
+
+static inline int t41_dmsc_pack_dynamic(const unsigned char *p, unsigned int bytes,
+		unsigned char *s, unsigned int state_bytes, struct t41_dpc_word *out,
+		unsigned int capacity)
+{
+	unsigned int n = 0, i, j, value;
+	if (!p || !s || !out || bytes < T41_DMSC_PARAM_BYTES ||
+	    state_bytes < T41_DMSC_STATE_BYTES || capacity < T41_DMSC_WRITES) return -1;
+	for (i=0;i<2;++i) if (!p[0x5fa+i]) {
+		t41_dpc_put16(s+0x30+i*16,0); t41_dpc_put16(s+0x32+i*16,0);
+		for (j=0;j<6;++j) t41_dpc_put16(s+0x156+i*12+j*2,0);
+	}
+	if (!p[0x5fd]) { s[0x4e]=0; s[0x50]=0; s[0x63]=0; s[0x77]=0; s[0x7e]=0; }
+	if (!p[0x5fe]) { s[0x89]=8; s[0x8d]=8; s[0x91]=8; }
+	if (!p[0x601]) t41_dpc_put16(s+0x26,0);
+	if (!p[0x602]) t41_dpc_put16(s+0x3a,0);
+	if (!p[0x603]) t41_dpc_put16(s+0x96,0);
+	if (!p[0x604]) { s[0x34]=0; s[0x36]=255; }
+	if (!p[0x605]) { s[0x47]=0; s[0x49]=255; }
+	if (!p[0x606]) { s[0xa1]=0; s[0xa3]=255; }
+	if (!p[0x607]) { s[0x10]=0; s[0x17]=0; s[0x1e]=0; s[0x4e]=0; }
+#define E(a,v) do { out[n].address = (a); out[n++].value = (v); } while (0)
+#define P(o) ((unsigned int)p[o])
+#define H(o) t41_tmo_le16(p + (o))
+#define S(o) ((unsigned int)s[o])
+#define T(o) t41_tmo_le16(s + (o))
+#define W(o) t41_tmo_le32(s + (o))
+	E(0xa004,P(0xa1)<<8 | S(0xb)<<10 | P(0xa2) | P(0x66b)<<31);
+	E(0xa008,S(0xc)<<17 | T(0xe)); E(0xa00c,T(0x1a)<<16 | T(0x1c));
+	E(0xa010,S(1)<<17 | S(0)<<1); E(0xa014,S(3)<<17 | S(2)<<1);
+	E(0xa020,S(4)<<2 | P(0x86)<<16 | P(0x85)<<24);
+	E(0xa024,S(6)<<17 | S(5)<<1); E(0xa028,S(7)<<2 | P(0x88)<<16 | P(0x87)<<24);
+	E(0xa02c,S(9)<<17 | S(8)<<1); E(0xa030,S(0xa)<<2 | P(0x8a)<<16 | P(0x89)<<24);
+	E(0xa034,P(0xa5)<<6 | P(0xa3)<<10 | P(0xa4) | S(0x10)<<20);
+	E(0xa038,W(0x12)); E(0xa03c,S(0x17)<<17 | S(0x16)<<1);
+	E(0xa040,S(0x18)<<8 | P(0xa6)<<16 | S(0x152));
+	E(0xa044,P(0x6db)<<2 | S(0x2d)<<7 | S(0x2c)<<17);
+	E(0xa048,T(0x30)<<16 | T(0x32)); E(0xa04c,S(0x37)<<18 | S(0x35)<<2);
+	E(0xa050,((S(0x36)<<4)+15)<<16 | S(0x34)<<4);
+	E(0xa05c,P(0x74d)<<2 | P(0x746)<<4 | P(0x747)<<8 | P(0x748)<<12 | S(0x3f)<<16);
+	E(0xa060,T(0x40)<<16 | T(0x42)); E(0xa064,S(0x4a)<<20 | S(0x48)<<4);
+	E(0xa068,((S(0x49)<<4)+15)<<16 | S(0x47)<<4);
+	E(0xa074,S(0x24)<<17 | P(0xa9)); E(0xa078,S(0x22)<<17 | T(0x20));
+	E(0xa07c,S(0x23)<<5 | S(0x1e)<<16 | P(0xa7));
+	E(0xa080,S(0x63)<<7 | S(0x50)<<14 | S(0x77) | S(0x4e)<<21);
+	E(0xa084,S(0x4f)<<17 | T(0x52)); E(0xa088,S(0x5e)<<4 | T(0x5c)<<16);
+	E(0xa08c,S(0x76)<<12 | T(0x64)<<19 | ((S(0x75)<<4)+15));
+	E(0xa09c,T(0x66)<<16 | T(0x54)); E(0xa0a4,T(0x2a)<<16 | P(0xa8));
+	E(0xa0ac,S(0x38)<<2 | P(0x6dc)<<16); E(0xa0b8,P(0x74e)<<8 | T(0x44)<<16 | S(0x46));
+	E(0xa0c4,P(0x74f)<<27 | P(0x750) | S(0x4b)<<12);
+	E(0xa148,((S(0x7f)<<4)+15)<<16 | S(0x80)<<4);
+	E(0xa14c,((S(0x81)<<4)+15)<<16 | S(0x82)<<4);
+	E(0xa180,T(0x7c)<<16 | S(0x7e)); E(0xa188,S(0x86)<<8 | T(0x84)<<16 | P(0xac));
+	E(0xa1ac,T(0x3a)<<16 | T(0x26)); E(0xa1b0,S(0x3e)<<18 | S(0x29)<<1);
+	E(0xa1b4,S(0x28)<<1 | T(0x3c)<<16); E(0xa1b8,T(0x2e)); E(0xa1bc,S(0x87));
+	for (i=0;i<3;++i) {
+		E(0xa1c0+i*12,S(0x89+i*4)<<16 | S(0x88+i*4));
+		if (i<2) E(0xa1c8+i*12,T(0x8a+i*4));
+	}
+	E(0xa1e8,S(0x92)<<1 | T(0x94)<<16); E(0xa1fc,T(0x9a)<<4 | P(0x8f6));
+	E(0xa204,H(0x82)<<16 | T(0x9c));
+	E(0xa208,S(0xa0)<<16 | P(0x8f7)<<24 | T(0x9e)); E(0xa20c,S(0xa2)<<18 | S(0xa1)<<4);
+	E(0xa210,((S(0xa3)<<4)+15) | S(0xa4)<<18); E(0xa214,S(0x98)<<17 | T(0x96));
+	E(0xa218,S(0xa5)<<6 | P(0x8f8)); E(0xa220,((S(0x5f)<<4)+15)<<16 | T(0x5a));
+	E(0xa224,W(0x56)); E(0xa228,S(0x62)<<16 | T(0x60)); E(0xa22c,T(0x6c)<<16 | T(0x6e));
+	E(0xa230,((S(0x71)<<4)+15)<<16 | S(0x70)<<4); E(0xa234,W(0x68));
+	E(0xa238,S(0x74)<<16 | T(0x72)); E(0xa240,S(0x99)<<1);
+	E(0xa244,((S(0x7b)<<4)+15)<<16 | S(0x7a)<<4);
+	value=S(0x79)+(S(0x78)<<1); if (value>360) value=360;
+	E(0xa248,value<<16 | S(0x78)<<1); E(0xa26c,S(0xa6)<<12 | P(0x953));
+	E(0xa270,S(0xa7)<<8 | P(0x952)); E(0xa274,S(0x4c)<<12 | P(0x7aa));
+	E(0xa278,S(0x4d)<<8 | P(0x7a9));
+	for (i=0;i<8;++i) E(0xa0c8+i*4,S(0xa9+i*2)<<20 | S(0xa8+i*2)<<4);
+	for (i=0;i<2;++i) {
+		for (j=0;j<6;++j) {
+			unsigned int offset=0xb8+i*32+j*5;
+			E(0xa0f4+i*40+j*4,S(offset+1)<<6 | S(offset+2)<<12 | S(offset) | S(offset+3)<<18 | S(offset+4)<<24);
+		}
+		E(0xa10c+i*40,S(0xd7+i*32)<<6 | S(0xd6+i*32));
+	}
+	for (i=0;i<8;++i) E(0xa24c+i*4,W(0xf8+i*4));
+	for (i=0;i<8;++i) E(0xa28c+i*4,W(0x118+i*4)&0x7f7f7f7f);
+	E(0xa2ac,(P(0xe4)<<8 & 0x300) | (P(0xe5)<<16 & 0x10000) | S(0x138) | (P(0xe6)<<24 & 0x1000000));
+	E(0xa2b4,(T(0x13c)<<12 & 0xfff000) | (S(0x13e)<<24 & 0x7f000000) | (T(0x13a)&0xfff));
+	E(0xa2b8,(P(0x7c8)&0x3f) | T(0x140)<<20 | (T(0x142)<<8 & 0xfff00));
+	E(0xa2bc,(P(0x7c9)<<8 & 0x3f00) | (P(0xeb)<<16 & 0x10000) | (S(0x144)&0x7f) | (P(0xec)<<24 & 0x1000000));
+	E(0xa2c0,(S(0x145)<<12 & 0x7f000) | (S(0x146)<<24 & 0x7f000000) | (P(0xed)&3));
+	E(0xa2c4,(S(0x148)<<12 & 0x7f000) | (S(0x149)<<24 & 0x7f000000) | (S(0x147)&0x7f));
+	E(0xa2c8,(S(0x14b)<<8 & 0xf00) | (S(0x14c)<<16 & 0xf0000) | (S(0x14a)&0x7f) | (S(0x14d)<<24 & 0xf000000));
+	E(0xa2cc,(P(0xee)<<24 & 0x3000000) | S(0x14e)<<4);
+	E(0xa2d0,(P(0xef)&15) | S(0x14f)<<8 | S(0x150)<<16 | S(0x151)<<24);
+	E(0xa2d4,S(0x154)<<8 | S(0x155)<<16 | S(0x153));
+	for (i=0;i<2;++i) E(0xa2d8+i*4,(T(0x158+i*6)<<10 & 0xffc00) | (T(0x15a+i*6)<<20 & 0x3ff00000) | (T(0x156+i*6)&1023));
+	for (i=0;i<3;++i) E(0xa2e0+i*4,(T(0x164+i*4)<<12 & 0xfff000) | (T(0x162+i*4)&4095));
+	for (i=0;i<2;++i) E(0xa2ec+i*4,(T(0x170+i*6)<<10 & 0xffc00) | (T(0x172+i*6)<<20 & 0x3ff00000) | (T(0x16e + i*6)&1023));
+#undef W
+#undef T
+#undef S
+#undef H
+#undef P
+#undef E
+	return n;
+}
+#endif

@@ -25,6 +25,7 @@ with open(sys.argv[1], 'rb') as source:
     awb_gain = len(sys.argv) > 2 and sys.argv[2] == 'awb_gain'
     gamma = len(sys.argv) > 2 and sys.argv[2] == 'gamma'
     dpc = len(sys.argv) > 2 and sys.argv[2] == 'dpc'
+    dmsc = len(sys.argv) > 2 and sys.argv[2] == 'dmsc'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -58,6 +59,11 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_dpc_write_reg_short', 'tisp_simple_intp_int16', 'tisp_simple_intp_int8',
             'tisp_dpc_write_reg_other'],
             ['oracle_interpolate', 'oracle_long', 'oracle_short', 'oracle_lerp16', 'oracle_lerp8', 'oracle_other']))
+    if dmsc:
+        functions = dict(zip(['tisp_dmsc_intp', 'tisp_dmsc_noref_reg_cfg',
+            'tisp_dmsc_ref_reg_cfg', 'tisp_simple_intp_int16', 'tisp_simple_intp_int8',
+            'tisp_ratio'],
+            ['oracle_interpolate', 'oracle_static', 'oracle_dynamic', 'oracle_lerp16', 'oracle_lerp8', 'oracle_ratio']))
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',

@@ -26,6 +26,7 @@
 #include "tx_isp_t41_sensor_gain.h"
 #include "tx_isp_t41_gamma.h"
 #include "tx_isp_t41_dpc.h"
+#include "tx_isp_t41_dmsc.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -902,7 +903,6 @@ MODULE_PARM_DESC(t41_safe_ae_effective_target_q8,
 		 "current attenuation-adjusted safe-AE target in Q8 units");
 static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 				      uint32_t mask);
-static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16);
 static int t41_apply_calibrated_bcsh(uint32_t color_model);
 static unsigned int t41_gain_fanout_trigger = ~0U;
 static int t41_gain_fanout_set(const char *value,
@@ -1238,7 +1238,7 @@ MODULE_PARM_DESC(t41_stock_awb_stats_profile,
 static int t41_stock_dmsc_profile = -1;
 module_param(t41_stock_dmsc_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_dmsc_profile,
-		 "Apply stock OS04D10 day DMSC delta (negative=enabled, positive=disabled)");
+		 "nonpositive reapplies calibration-driven DMSC after stream reset (legacy name)");
 static int t41_stock_dpc_profile = -1;
 module_param(t41_stock_dpc_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_dpc_profile,
@@ -1309,6 +1309,10 @@ static uint32_t t41_bcsh_last[T41_BCSH_WORDS] = { UINT_MAX };
 module_param(t41_bcsh_error, int, 0444);
 static int t41_bcsh_update(uint32_t ct, uint32_t ev, int force);
 static int t41_gamma_error = -ENODEV;
+static int t41_dmsc_error = -ENODEV;
+static unsigned int t41_dmsc_gain = ~0U;
+module_param(t41_dmsc_error, int, 0444);
+module_param(t41_dmsc_gain, uint, 0444);
 static int t41_dpc_error = -ENODEV;
 static unsigned int t41_dpc_gain = ~0U;
 module_param(t41_dpc_error, int, 0444);
@@ -32643,108 +32647,12 @@ static int t41_apply_calibrated_bcsh(uint32_t color_model)
 
 static void t41_apply_stock_dmsc_profile(void)
 {
-    /* Exact differing words from the converged stock-T41 + working-timing
-     * OS04D10 oracle at integration=1474, again=0x6c (ISP gain=0x2cc9c).
-     * The rest of the
-     * recovered DMSC bank already matched stock, so keeping this as a delta
-     * avoids replacing correct tuning state.  This follows the proven T40
-     * stock-DMSC replay pattern, but uses T41 evidence only. */
-    static const uint32_t stock_delta[][2] = {
-        { 0x0a008, 0x00000064 }, { 0x0a038, 0x007800f0 },
-        { 0x0a048, 0x000e0015 }, { 0x0a05c, 0x00080088 },
-        { 0x0a060, 0x00000000 }, { 0x0a080, 0x01500000 },
-        { 0x0a0b0, 0x080e0100 }, { 0x0a0b4, 0x08030211 },
-        { 0x0a18c, 0x01000000 }, { 0x0a190, 0x00000000 },
-        { 0x0a194, 0x00080000 }, { 0x0a198, 0x00010001 },
-        { 0x0a1c4, 0x0fff00c8 }, { 0x0a1d0, 0x0fff00c8 },
-        { 0x0a1dc, 0x0fff00c8 }, { 0x0a1ec, 0x000001ff },
-        { 0x0a1fc, 0x000000a0 }, { 0x0a204, 0x00000000 },
-        { 0x0a208, 0x011803c0 }, { 0x0a224, 0x0fff0064 },
-        { 0x0a248, 0x00000000 }, { 0x0a24c, 0x20202020 },
-        { 0x0a250, 0x20202020 }, { 0x0a254, 0x20202020 },
-        { 0x0a258, 0x20202020 }, { 0x0a25c, 0x20202020 },
-        { 0x0a260, 0x20202020 }, { 0x0a264, 0x20202020 },
-        { 0x0a268, 0x20202020 }, { 0x0a278, 0x00000730 },
-        { 0x0a2b0, 0x00004030 }, { 0x0a2d4, 0x00201004 },
-        { 0x0a2d8, 0x00e0380e }, { 0x0a2dc, 0x01505415 },
-        { 0x0a2e0, 0x00000000 }, { 0x0a2e4, 0x00000000 },
-        { 0x0a2e8, 0x00000000 },
-    };
-    unsigned int i;
-
+    uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
     if (t41_stock_dmsc_profile > 0)
         return;
-    for (i = 0; i < ARRAY_SIZE(stock_delta); ++i)
-        system_reg_write(stock_delta[i][0], stock_delta[i][1]);
-    /* Exact tisp_dmsc_reg_trig target (decimal 41372 in stock HLIL). */
-    system_reg_write(0x0a19c, 1);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock DMSC delta applied words=%u check=%#x/%#x/%#x/%#x\n",
-           i, system_reg_read(0x0a008), system_reg_read(0x0a080),
-           system_reg_read(0x0a1c4), system_reg_read(0x0a24c));
-}
-
-/*
- * tisp_dmsc_refresh() correctly interpolates the gain-varying DMSC words,
- * but five writer-owned static words sit outside that refresh.  The old
- * driver left their 0x2cc9c high-gain oracle active even after AE reached
- * daylight gain.  Select the matching static side before every recovered
- * DMSC interpolation.  The threshold is halfway between the measured
- * daylight (about 0xe829 Q16) and high-gain (0x2cc9c Q16) oracles.
- */
-static unsigned int t41_dmsc_high_gain_q16 = 0x18000U;
-module_param(t41_dmsc_high_gain_q16, uint, 0644);
-MODULE_PARM_DESC(t41_dmsc_high_gain_q16,
-		 "Q16 log2 gain threshold selecting the stock high-gain DMSC static profile");
-
-static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16)
-{
-    static const uint32_t low_gain[][2] = {
-        { 0x0a038U, 0x007800f0U },
-        { 0x0a048U, 0x00140019U },
-        { 0x0a080U, 0x040f0000U },
-        { 0x0a18cU, 0x0155b000U },
-        { 0x0a190U, 0x00557000U },
-        { 0x0a194U, 0x00080000U },
-        { 0x0a198U, 0x00010008U },
-        { 0x0a208U, 0x01180320U },
-        { 0x0a224U, 0x0fff0064U },
-        { 0x0a248U, 0x00000000U },
-        { 0x0a24cU, 0x20202020U },
-        { 0x0a250U, 0x20202020U },
-        { 0x0a254U, 0x20202020U },
-        { 0x0a258U, 0x20202020U },
-        { 0x0a25cU, 0x20202020U },
-        { 0x0a260U, 0x20202020U },
-        { 0x0a264U, 0x20202020U },
-        { 0x0a268U, 0x20202020U },
-        { 0x0a278U, 0x00001030U },
-        { 0x0a2d8U, 0x01405014U },
-        { 0x0a2dcU, 0x01906419U },
-    };
-    static const uint32_t high_gain[][2] = {
-        { 0x0a048U, 0x000e0015U },
-        { 0x0a198U, 0x00010001U },
-        { 0x0a208U, 0x011803c0U },
-        { 0x0a2d8U, 0x00e0380eU },
-        { 0x0a2dcU, 0x01505415U },
-    };
-    const uint32_t (*profile)[2];
-    unsigned int count;
-    unsigned int i;
-
-    if (t41_stock_dmsc_profile > 0)
-        return;
-    if (gain_q16 >= t41_dmsc_high_gain_q16) {
-        profile = high_gain;
-        count = ARRAY_SIZE(high_gain);
-    } else {
-        profile = low_gain;
-        count = ARRAY_SIZE(low_gain);
-    }
-    for (i = 0; i < count; ++i)
-        system_reg_write(profile[i][0], profile[i][1]);
-    system_reg_write(0x0a19cU, 1U);
+    if (gain > (16U << 16))
+        gain = 0;
+    t41_dmsc_error = tisp_dmsc_all_reg_refresh(0, gain);
 }
 
 static void t41_apply_stock_ysp_profile(void)
@@ -56532,14 +56440,7 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 	}
 	if (mask & T41_GAIN_FANOUT_DMSC) {
 		dmsc_ret = tisp_dmsc_refresh(channel, gain_q16);
-		/*
-		 * The recovered interpolator owns the gain-varying words but its
-		 * workspace still has holes in the daylight detail tables.  Apply
-		 * the measured stock completion after interpolation; doing this in
-		 * the opposite order lets every AE gain notification erase the
-		 * profile we just installed.
-		 */
-		t41_apply_stock_dmsc_gain_profile(gain_q16);
+
 		if (dmsc_ret < 0 && !ret)
 			ret = dmsc_ret;
 	}
@@ -97632,8 +97533,71 @@ tisp_dmsc_pm_suspend0x68:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003f10c origin=fragment_seed original=tisp_dmsc_noref_reg_cfg */
+static uint32_t *t41_dmsc_info_checked(uint32_t channel)
+{
+    uint32_t *info;
+    if (channel >= ARRAY_SIZE(dmsc_info))
+        return NULL;
+    info = (uint32_t *)(uintptr_t)dmsc_info[channel];
+    if (!t41_kernel_data_ptr(info) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[0]) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[1]))
+        return NULL;
+    return info;
+}
+
+static int t41_dmsc_interpolate_checked(uint32_t channel, uint32_t gain)
+{
+    uint32_t *info = t41_dmsc_info_checked(channel);
+    if (!info)
+        return -ENODEV;
+    return t41_dmsc_interpolate((uint8_t *)(uintptr_t)info[0],
+        T41_DMSC_PARAM_BYTES, (uint8_t *)(uintptr_t)info[1],
+        T41_DMSC_STATE_BYTES, gain, ((uint8_t *)info)[16]) ? -EINVAL : 0;
+}
+
+static int t41_dmsc_write_checked(uint32_t channel, unsigned int dynamic)
+{
+    uint32_t *info = t41_dmsc_info_checked(channel);
+    struct t41_dpc_word words[T41_DMSC_WRITES];
+    int count, i;
+    if (!info)
+        return -ENODEV;
+    count = dynamic ? t41_dmsc_pack_dynamic((uint8_t *)(uintptr_t)info[0],
+        T41_DMSC_PARAM_BYTES, (uint8_t *)(uintptr_t)info[1],
+        T41_DMSC_STATE_BYTES, words, ARRAY_SIZE(words)) :
+        t41_dmsc_pack_static((uint8_t *)(uintptr_t)info[0],
+            T41_DMSC_PARAM_BYTES, words, ARRAY_SIZE(words));
+    if (count < 0)
+        return -EINVAL;
+    for (i = 0; i < count; ++i)
+        system_reg_write(words[i].address, words[i].value);
+    return 0;
+}
+
+static int t41_dmsc_refresh_checked(uint32_t channel, uint32_t gain,
+                                     unsigned int all)
+{
+    int ret = t41_dmsc_interpolate_checked(channel, gain);
+    if (!ret && all)
+        ret = t41_dmsc_write_checked(channel, 0);
+    if (!ret)
+        ret = t41_dmsc_write_checked(channel, 1);
+    if (!ret) {
+        system_reg_write(0xa19c, 1);
+        WRITE_ONCE(t41_dmsc_gain, gain);
+    }
+    WRITE_ONCE(t41_dmsc_error, ret);
+    return ret;
+}
+
 int32_t tisp_dmsc_noref_reg_cfg(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_dmsc_write_checked(a0, 0);
+    }
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -97827,6 +97791,11 @@ tisp_dmsc_noref_reg_cfg0x64:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003f4f8 origin=fragment_seed original=tisp_dmsc_ref_reg_cfg */
 int32_t tisp_dmsc_ref_reg_cfg(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_dmsc_write_checked(a0, 1);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -98461,6 +98430,11 @@ int32_t tisp_dmsc_reg_trig(void)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000040834 origin=fragment_seed original=tisp_dmsc_intp */
 int32_t tisp_dmsc_intp(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_dmsc_interpolate_checked(a0, a1);
+    }
+#endif
     uint32_t channel = a0;
     uint8_t *dmsc_state;
     uint32_t *local_10 = 0;
@@ -99765,6 +99739,11 @@ int32_t tisp_dmsc_intp(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042140 origin=fragment_seed original=tisp_dmsc_all_reg_refresh */
 int32_t tisp_dmsc_all_reg_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_dmsc_refresh_checked(a0, a1, 1);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -99803,6 +99782,11 @@ int32_t tisp_dmsc_all_reg_refresh(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000421a0 origin=fragment_seed original=tisp_dmsc_intp_reg_refresh */
 int32_t tisp_dmsc_intp_reg_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return t41_dmsc_refresh_checked(a0, a1, 0);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -99847,6 +99831,25 @@ int32_t tisp_dmsc_intp_reg_refresh(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000421e8 origin=fragment_seed original=tisp_dmsc_par_refresh */
 int64_t tisp_dmsc_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_dmsc_info_checked(a0);
+    uint32_t previous, delta;
+    int ret;
+    if (!info)
+        return -ENODEV;
+    if (a1 > (16U << 16))
+        return -EINVAL;
+    previous = info[2];
+    delta = previous > a1 ? previous - a1 : a1 - previous;
+    if (previous != ~0U && delta < a2)
+        return 0;
+    ret = t41_dmsc_refresh_checked(a0, a1, previous == ~0U);
+    if (!ret)
+        info[2] = a1;
+    return ret;
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -99939,6 +99942,11 @@ tisp_dmsc_par_refresh0xa4:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000042294 origin=fragment_seed original=tisp_dmsc_refresh */
 int32_t tisp_dmsc_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    return (int)tisp_dmsc_par_refresh(a0, a1, 256);
+    }
+#endif
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
     uint32_t ra = 0;
@@ -100332,12 +100340,7 @@ int32_t tisp_dmsc_sharpness_set(uint32_t a0, uint32_t a1)
     *(uint32_t *)(void *)(info + 16) = a1 & 0xffU;
     gain_q16 = *(uint32_t *)(void *)(info + 8);
     ret = tisp_dmsc_all_reg_refresh(a0, gain_q16);
-    /*
-     * The recovered refresh still has holes in its day workspace.  Reapply
-     * the measured low-gain oracle so a Raptor sharpness write cannot zero
-     * the eight detail-table words or replace the daylight thresholds.
-     */
-    t41_apply_stock_dmsc_gain_profile(gain_q16);
+
     return ret;
 }
 
