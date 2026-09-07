@@ -1,5 +1,17 @@
 # T41 calibrated AWB comparison, 2026-09-07
 
+## Latest: scalar local TMO
+
+The [local TMO filter](T41_TMO_ALGORITHM.md) is now a checked scalar algorithm
+for kernel-selection modes 0/1. It matches 2,475,000 independent vendor-oracle
+coefficients on synthetic inputs, with no sensor bin or captured map in the
+test. Gaussian kernels are generated mathematically. Repeated guarded live
+updates recover substantial shadow detail (bark luma 20.61 to 65.63, nearby
+stock 64.24). The final writer-corrected test measured bark 69.16 and paper
+R/G 0.928 versus stock 0.938, but bark remains oversaturated and illumination
+varied. Automatic frame/lifecycle integration is not yet enabled;
+the default remains bypass. The older measurements below are historical.
+
 ## Follow-up: algorithm recovery, not register replay
 
 The original stack is **not a generic completed T41 tuning implementation**.

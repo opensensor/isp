@@ -4,7 +4,7 @@ CFLAGS += -std=c99 -Wall -Wextra -Werror
 
 .PHONY: all check clean t30_storage_audit
 
-all: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test \
+all: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test tx_isp_t41_tmo_map_test \
 	tx_isp_subdev_abi_test tx_isp_subdev_test \
 	tx_isp_remote_event_test \
 	tx_isp_state_test \
@@ -38,6 +38,10 @@ tx_isp_math_test: tx_isp_math_test.c ../driver/include/tx_isp/tx_isp_math.h
 	$(CC) $(CFLAGS) -I../driver/include -o $@ $<
 
 tx_isp_t41_tmo_test: tx_isp_t41_tmo_test.c ../driver/t41/tx_isp_t41_tmo.h
+	$(CC) $(CFLAGS) -o $@ $<
+
+tx_isp_t41_tmo_map_test: tx_isp_t41_tmo_map_test.c ../driver/t41/tx_isp_t41_tmo_map.h \
+		../driver/t41/tx_isp_t41_tmo.h ../driver/t41/tx_isp_t41_tmo_kernels.h
 	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_awb_test: tx_isp_t41_awb_test.c ../driver/t41/tx_isp_t41_awb.h ../driver/include/tx_isp/tx_isp_math.h
@@ -173,7 +177,7 @@ tx_isp_scaler_test: tx_isp_scaler_test.c \
 		../driver/t23/tx_isp_t23_scaler.c \
 		../driver/t41/tx_isp_t41_scaler.c
 
-check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test \
+check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mesh_test tx_isp_t41_tmo_test tx_isp_t41_awb_test tx_isp_t41_tmo_map_test \
 		tx_isp_subdev_abi_test tx_isp_subdev_test \
 		tx_isp_remote_event_test \
 		tx_isp_state_test \
@@ -191,6 +195,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 	./tx_isp_math_test
 	./tx_isp_awb_mesh_test
 	./tx_isp_t41_tmo_test
+	./tx_isp_t41_tmo_map_test
 	./tx_isp_t41_awb_test
 	./tx_isp_modulation_test
 	./tx_isp_daynight_test
@@ -223,6 +228,7 @@ clean:
 	$(RM) tx_isp_math_test tx_isp_modulation_test \
 		tx_isp_awb_mesh_test \
 		tx_isp_t41_tmo_test \
+		tx_isp_t41_tmo_map_test \
 		tx_isp_t41_awb_test \
 		tx_isp_daynight_test \
 		tx_isp_subdev_abi_test tx_isp_subdev_test \

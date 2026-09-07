@@ -15,6 +15,7 @@
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
 #include "tx_isp_t41_tmo.h"
+#include "tx_isp_t41_tmo_map.h"
 #include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
@@ -55,6 +56,7 @@
 #include <linux/completion.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
+#include <linux/mutex.h>
 #include <linux/wait.h>
 #include <linux/kthread.h>
 #include <linux/timekeeping.h>
@@ -1258,6 +1260,13 @@ MODULE_PARM_DESC(t41_stock_tmo_profile,
 		 "Replay a matched stock T41 TMO runtime curve (negative=enabled, diagnostic)");
 static void t41_apply_stock_tmo_profile(void);
 static void t41_hold_tmo_bypass(void);
+static DEFINE_MUTEX(t41_tmo_map_lock);
+static int t41_tmo_map_trigger = -1;
+static int t41_tmo_map_set(const char *value, const struct kernel_param *kp);
+module_param_call(t41_tmo_map_trigger, t41_tmo_map_set, param_get_int,
+                  &t41_tmo_map_trigger, 0644);
+MODULE_PARM_DESC(t41_tmo_map_trigger,
+                "Diagnostic scalar TMO: positive EV processes current DMA, zero bypasses");
 /* Keep TMO bypassed across the stream reset.  Its recovered cold-boot state
  * still clips the frame even after the known curve is installed, so the
  * normal lifecycle must remain fail-safe while explicit diagnostics may
@@ -149556,6 +149565,107 @@ tisp_tmo_ram_reg_refresh0x168:
 #endif
 }
 
+/* Process-context, explicit diagnostic entry while the IRQ/event lifecycle
+ * is being validated. No automatic enable and no vendor compute code. */
+static int t41_tmo_map_set(const char *value, const struct kernel_param *kp)
+{
+    uint8_t *info, *params, *geometry, *runtime, *dma;
+    uint32_t *snapshot = NULL, *sums, *counts, *out, *previous;
+    uint16_t curve[T41_TMO_CURVE_ENTRIES];
+    uint32_t bank, samples = 0, shift, i;
+    uint32_t *bypass;
+    int requested, ret;
+
+    (void)kp;
+    ret = kstrtoint(value, 0, &requested);
+    if (ret || requested < 0)
+        return ret ? ret : -EINVAL;
+    /* This control must not race the unrecovered event-based algorithm. */
+    if (!t41_safe_tuning_events)
+        return -EBUSY;
+    mutex_lock(&t41_tmo_map_lock);
+    info = (uint8_t *)(uintptr_t)tmo_info[0];
+    if (!t41_kernel_data_ptr(info)) {
+        ret = -ENODEV;
+        goto done;
+    }
+    if (!requested) {
+        t41_hold_tmo_bypass();
+        t41_tmo_map_trigger = 0;
+        ret = 0;
+        goto done;
+    }
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 0);
+    geometry = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
+    runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 8);
+    dma = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
+    out = (uint32_t *)(uintptr_t)statYOut;
+    previous = (uint32_t *)(uintptr_t)statYNumLast;
+    if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(geometry) ||
+        !t41_kernel_data_ptr(runtime) || !t41_kernel_data_ptr(dma) ||
+        !t41_kernel_data_ptr(out) || !t41_kernel_data_ptr(previous)) {
+        ret = -ENODEV;
+        goto done;
+    }
+    /* Fixed hardware layout, not a sensor/resolution whitelist. */
+    if (t41_tmo_le16(geometry) != T41_TMO_TILES ||
+        geometry[12] != T41_TMO_ROWS || geometry[13] != T41_TMO_COLS ||
+        geometry[15] != 4 || geometry[20] != T41_TMO_ROWS + 4 ||
+        geometry[21] != T41_TMO_COLS + 4 || geometry[22] > 9) {
+        ret = -ERANGE;
+        goto done;
+    }
+    shift = geometry[22];
+    ret = t41_tmo_curve(params, T41_TMO_PARAM_BYTES, requested, curve);
+    if (ret) {
+        ret = -EOPNOTSUPP;
+        goto done;
+    }
+    snapshot = kmalloc(2 * T41_TMO_SAMPLES * sizeof(*snapshot), GFP_KERNEL);
+    if (!snapshot) {
+        ret = -ENOMEM;
+        goto done;
+    }
+    sums = snapshot;
+    counts = snapshot + T41_TMO_SAMPLES;
+    bank = system_reg_read(0x1e028U) & 1U;
+    dma += bank << 14;
+    dma_cache_sync(NULL, dma, 0x4000U, DMA_FROM_DEVICE);
+    for (i = 0; i < T41_TMO_SAMPLES; ++i) {
+        sums[i] = t41_tmo_le16(dma + 4 * i);
+        counts[i] = t41_tmo_le16(dma + 4 * i + 2);
+        samples += counts[i];
+    }
+    if (!samples || bank != (system_reg_read(0x1e028U) & 1U)) {
+        ret = -EAGAIN;
+        goto done;
+    }
+    ret = t41_tmo_map(params, T41_TMO_PARAM_BYTES, shift, sums, counts,
+                      previous, t41_tmo_map_trigger <= 0, out);
+    if (ret) {
+        ret = -EOPNOTSUPP;
+        goto done;
+    }
+    memcpy(previous, out, T41_TMO_SAMPLES * sizeof(*out));
+    memcpy(runtime + 318, curve, sizeof(curve));
+    ret = tisp_tmo_ram_reg_refresh(0);
+    if (ret)
+        goto done;
+    ret = tisp_tmo_default_reg_refresh(0);
+    if (ret)
+        goto done;
+    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+    *bypass &= ~BIT(22);
+    system_reg_write(0x40, *bypass);
+    t41_tmo_map_trigger = requested;
+    printk(KERN_INFO "tx_isp_t41_recovered: scalar TMO ev=%d bank=%u shift=%u samples=%u map=%u/%u/%u\n",
+           requested, bank, shift, samples, out[0], out[1875], out[3749]);
+done:
+    kfree(snapshot);
+    mutex_unlock(&t41_tmo_map_lock);
+    return ret;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000697e4 origin=fragment_seed original=tisp_tmo_process */
 int32_t tisp_tmo_process(uint32_t a0)
 {
@@ -149785,7 +149895,9 @@ int32_t tisp_tmo_default_reg_refresh(uint32_t a0)
     a1 = a1 & 4095;
 
     /* fragment 2: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)system_reg_write)(a0); /* jalr target resolved by relocation */
+    /* H20250310a 0x6a5f8: both packed halves belong in the value argument.
+     * The generated one-argument call instead supplied an undefined a1. */
+    v0 = system_reg_write(a0, (uintptr_t)v0 | a1);
 
     /* fragment 3: CallSetup */
     v0 = (uintptr_t)((uintptr_t (*)(uintptr_t, uintptr_t))(uintptr_t)system_reg_write)((uintptr_t)s2 | 57412, (((*(uint16_t *)((char *)((uintptr_t)s0) + 6)) << 16) & (uintptr_t)s4) | (*(uint16_t *)((char *)((uintptr_t)s0) + 4) & 4095)); /* jalr target resolved by relocation */
@@ -150382,6 +150494,8 @@ int32_t tisp_tmo_deinit(uint32_t a0)
     if (a0 >= 2)
         return -EINVAL;
 
+    mutex_lock(&t41_tmo_map_lock);
+    t41_tmo_map_trigger = -1;
     for (i = 0; i < ARRAY_SIZE(global_objects); ++i) {
         if (*global_objects[i]) {
             private_kfree((void *)(uintptr_t)*global_objects[i]);
@@ -150408,6 +150522,7 @@ int32_t tisp_tmo_deinit(uint32_t a0)
     callbacks[60 / 4] = 0;
     callbacks[64 / 4] = 0;
     callbacks[68 / 4] = 0;
+    mutex_unlock(&t41_tmo_map_lock);
     return 0;
 }
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006ab90 origin=fragment_seed original=tisp_tmo_wdr_en */
