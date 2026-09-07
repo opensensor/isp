@@ -33,6 +33,7 @@
 #include "tx_isp_t41_cdns.h"
 #include "tx_isp_t41_mdns.h"
 #include "tx_isp_t41_lce.h"
+#include "tx_isp_t41_adr.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -1287,7 +1288,7 @@ MODULE_PARM_DESC(t41_stock_mdns_profile,
 static int t41_stock_adr_profile = -1;
 module_param(t41_stock_adr_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_adr_profile,
-		 "Program stock ADR geometry/statistics (negative=enabled; -2 skips shadow-RAM upload)");
+		 "Nonpositive enables calibrated histogram-driven ADR (legacy name)");
 static int t41_stock_tmo_profile = 1;
 module_param(t41_stock_tmo_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_tmo_profile,
@@ -1419,10 +1420,6 @@ static unsigned int t41_stock_lsc_gain = 0x0002cc9cU;
 module_param(t41_stock_lsc_gain, uint, 0644);
 MODULE_PARM_DESC(t41_stock_lsc_gain,
 		 "Initial OS04D10 LSC log2 total gain in Q16 measured from stock");
-/* Keep the unallocated sentinel in initialized data.  Several recovered T41
- * objects still have overlapping BSS aliases, so a zero-initialized pointer
- * is not a reliable ownership marker during early tuning setup. */
-static uintptr_t t41_adr_stat_buffer = 1U;
 MODULE_PARM_DESC(t41_checkpoint_start, "first zero-based TISP init checkpoint to delay");
 
 #define T41_MAX_IRQS_PER_DEVICE 4
@@ -4872,7 +4869,7 @@ int32_t tiziano_adr_interrupt_static(void);
 int32_t tiziano_adr_stat_calc(uint32_t a0);
 int32_t tiziano_adr_tgain_func(int32_t arg1);
 int32_t tisp_adr_faceae_curve_adjust(uint32_t a0);
-int32_t tisp_adr_faceae_refresh(uint32_t a0, uint32_t a1, uint32_t a2);
+int32_t tisp_adr_faceae_refresh(uint32_t a0, uint32_t a1, uint32_t a2, uintptr_t curve);
 int32_t tiziano_adr_5x5_out(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uintptr_t arg4);
 int64_t tiziano_adr_5x5_init(uint32_t a0, uint32_t a1, uintptr_t a2, uint32_t a3);
 void* tiziano_adr_base_pars(uint32_t a0, uint32_t a1, uint32_t a2);
@@ -32859,159 +32856,8 @@ static void t41_apply_stock_spatial_profile(void)
         t41_apply_stock_lce_ram_profile();
 }
 
-static int t41_program_stock_adr_shadow(void)
-{
-    /* Exact channel-0 ADR workspace captured from H20250310a after its
-     * native event worker settled.  Keeping both source curves literal
-     * avoids depending on the recovered tparamsP pointer layout while the
-     * rest of ADR ownership is still being reconstructed. */
-    static const uint16_t stock_param_curve[21] = {
-        0x0008, 0x0010, 0x0020, 0x0040, 0x0060, 0x0080, 0x0100,
-        0x0180, 0x0200, 0x0280, 0x0300, 0x0380, 0x0400, 0x0500,
-        0x0600, 0x0700, 0x0800, 0x0900, 0x0a00, 0x0c00, 0x0e00,
-    };
-    static const uint16_t stock_knee_curve[14] = {
-        0x0008, 0x0010, 0x0020, 0x0040, 0x0080, 0x00c0, 0x0100,
-        0x0180, 0x0200, 0x0300, 0x0400, 0x0600, 0x0800, 0x0c00,
-    };
-    uint32_t value;
-    unsigned int row;
-    unsigned int pair;
-    unsigned int writes = 0;
+#include "tx_isp_t41_adr_runtime.inc"
 
-    /* Exact func_adr_reg_write_every() handshake from T41 HLIL/objdump.
-     * 0x50304 is a write-only shadow-RAM port, so it cannot be recovered
-     * from a steady-state MMIO snapshot. */
-    if (system_reg_read(0x5040c))
-        return -EBUSY;
-    system_reg_write(0x50400, 0x000000ec);
-    system_reg_write(0x50404, 0x00c20000);
-    system_reg_write(0x50300, 0x00000101);
-
-    /* The first eight pairs are zero in the freshly memset 0x320-byte ADR
-     * workspace.  Stock writes them explicitly before the tuned curve. */
-    for (pair = 0; pair < 8; ++pair) {
-        system_reg_write(0x50304, 0);
-        ++writes;
-    }
-
-    /* Eleven words are the exact stock params+0x174..0x19c image. */
-    for (pair = 0; pair < 10; ++pair) {
-        value = ((uint32_t)(stock_param_curve[pair * 2U + 1U] & 0x0fffU) << 16) |
-                (stock_param_curve[pair * 2U] & 0x0fffU);
-        system_reg_write(0x50304, value);
-        ++writes;
-    }
-    value = stock_param_curve[20] & 0x0fffU;
-    system_reg_write(0x50304, value);
-    ++writes;
-
-    /* tisp_adr_init copies adr_kneepoint_x+2 into workspace+0x64 and into
-     * each of the following 24 rows; replay that same initialized image. */
-    for (pair = 0; pair < 7; ++pair) {
-        value = ((uint32_t)(stock_knee_curve[pair * 2U + 1U] & 0x0fffU) << 16) |
-                (stock_knee_curve[pair * 2U] & 0x0fffU);
-        system_reg_write(0x50304, value);
-        ++writes;
-    }
-    for (row = 0; row < 24; ++row) {
-        for (pair = 0; pair < 7; ++pair) {
-            value = ((uint32_t)(stock_knee_curve[pair * 2U + 1U] & 0x0fffU) << 16) |
-                    (stock_knee_curve[pair * 2U] & 0x0fffU);
-            system_reg_write(0x50304, value);
-            ++writes;
-        }
-    }
-
-    system_reg_write(0x50300, 0x00000102);
-    system_reg_write(0x50408, 1);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock ADR shadow programmed "
-           "words=%u source=stock-oracle last=%#x busy=%#x\n",
-           writes, value, system_reg_read(0x5040c));
-    return 0;
-}
-
-static void t41_apply_stock_adr_profile(void)
-{
-    /*
-     * Exact writable-word delta from the stock/open T41 ISPCORE snapshots
-     * with the pristine, unmodified Ingenic OS04D10 sensor driver.  The open image is visibly soft
-     * and its ADR geometry is the 1920x1080 default (0x9048=0x780,
-     * 0x9038=0x438), while stock programs the sensor's native 2560x1440.
-     *
-     * The writable set is taken from the exact T41 HLIL functions
-     * func_adr_reg_write_{one,5x5,sometimes}; 0x90ec-0x93f0 is live
-     * statistics output and is deliberately excluded.  T40's working
-     * driver uses the same ownership pattern: configure ADR after the
-     * tuning blob exists and retain four contiguous statistics pages.
-     */
-    static const uint32_t stock_delta[][2] = {
-        { 0x09008, 0x00011111 }, { 0x09018, 0x00000080 }, { 0x09020, 0x00000000 },
-        { 0x09024, 0x0fff0000 }, { 0x09028, 0x00000001 }, { 0x09030, 0x01680000 },
-        { 0x09034, 0x043802d0 }, { 0x09038, 0x000005a0 }, { 0x0903c, 0x01aa0000 },
-        { 0x09040, 0x04fe0354 }, { 0x09044, 0x085206a8 }, { 0x09048, 0x00000a00 },
-        { 0x09054, 0x01010000 }, { 0x09058, 0x01010101 }, { 0x0905c, 0x02020202 },
-        { 0x09060, 0x04030303 }, { 0x09064, 0x04040404 }, { 0x09068, 0x04040404 },
-        { 0x09078, 0x01010000 }, { 0x0907c, 0x01010101 }, { 0x09080, 0x02020201 },
-        { 0x0909c, 0x02010101 }, { 0x090a0, 0x02020202 }, { 0x090a4, 0x02020202 },
-        { 0x090a8, 0x02020202 }, { 0x090c0, 0x00000000 }, { 0x090c4, 0x00000000 },
-        { 0x090c8, 0x00000000 }, { 0x090d0, 0x01000000 }, { 0x090d4, 0x01010101 },
-        { 0x090d8, 0x02020201 }, { 0x090dc, 0x03030302 }, { 0x090e0, 0x03030303 },
-        { 0x090e4, 0x03030303 }, { 0x090e8, 0x03030303 }, { 0x0949c, 0x1af324ba },
-        { 0x094a0, 0x13691668 }, { 0x094a4, 0x0f63112d }, { 0x094a8, 0x0ca10de7 },
-        { 0x094ac, 0x0a860b84 }, { 0x094b0, 0x08d309a2 }, { 0x094b4, 0x07660815 },
-        { 0x094b8, 0x062b06c3 }, { 0x094bc, 0x0517059d }, { 0x094c0, 0x04200498 },
-        { 0x094c4, 0x034203ae }, { 0x094c8, 0x027702da }, { 0x094cc, 0x01bd0218 },
-        { 0x094d0, 0x01110165 }, { 0x094d4, 0x007100c0 }, { 0x094d8, 0x00000025 },
-        { 0x09550, 0x01000000 },
-    };
-    uint32_t paddr;
-    unsigned int i;
-    void *buffer;
-
-    if (t41_stock_adr_profile > 0)
-        return;
-
-    if (t41_adr_stat_buffer == 1U) {
-        buffer = private_kmalloc(0x4000, 0x024000c0);
-        if (!buffer) {
-            printk(KERN_ERR
-                   "tx_isp_t41_recovered: stock ADR statistics allocation failed\n");
-            return;
-        }
-        memset(buffer, 0, 0x4000);
-        t41_adr_stat_buffer = (uintptr_t)buffer;
-    }
-    if (!t41_kernel_data_ptr((void *)t41_adr_stat_buffer))
-        return;
-
-    /* Exact T41 tisp_adr_init allocation and four-page register layout. */
-    paddr = (uint32_t)t41_adr_stat_buffer + 0x80000000U;
-    system_reg_write(0x09514, paddr);
-    system_reg_write(0x09518, paddr + 0x1000U);
-    system_reg_write(0x0951c, paddr + 0x2000U);
-    system_reg_write(0x09520, paddr + 0x3000U);
-    system_reg_write(0x09510, 3);
-
-    for (i = 0; i < ARRAY_SIZE(stock_delta); ++i)
-        system_reg_write(stock_delta[i][0], stock_delta[i][1]);
-    /* Diagnostic -2 isolates the native geometry/statistics programming
-     * from the write-only ADR curve RAM.  Stock refreshes that RAM from its
-     * per-frame ADR event worker; the recovered safe build does not yet own
-     * that lifecycle, so a static upload must be tested independently. */
-    if (t41_stock_adr_profile != -2)
-        (void)t41_program_stock_adr_shadow();
-
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock ADR profile applied words=%u "
-           "stats=%#x geometry=%#x/%#x/%#x dma=%#x/%#x/%#x/%#x shadow=%s\n",
-           i, system_reg_read(0x09510), system_reg_read(0x09038),
-           system_reg_read(0x09048), system_reg_read(0x09034),
-           system_reg_read(0x09514), system_reg_read(0x09518),
-           system_reg_read(0x0951c), system_reg_read(0x09520),
-           t41_stock_adr_profile == -2 ? "skipped" : "uploaded");
-}
 
 static void t41_apply_stock_tmo_profile(void)
 {
@@ -113117,6 +112963,9 @@ tisp_adr_pm_suspend0x30:
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c738 origin=model_output original=tiziano_adr_gamma_refresh */
 int32_t tiziano_adr_gamma_refresh(int32_t arg1) {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_gamma(arg1, NULL);
+#else
     int32_t offset = arg1 << 2;
     int32_t *tptr = (int32_t *)((uintptr_t)tparamsP + offset);
     int32_t a1 = *tptr;
@@ -113124,11 +112973,15 @@ int32_t tiziano_adr_gamma_refresh(int32_t arg1) {
     int32_t *v0 = *bptr;
     a1 += (uintptr_t)v0;
     return (int32_t)memcpy((void *)((uintptr_t)bptr + 1894), (const void *)bptr, 258);
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c780 origin=fragment_seed original=tiziano_adr_params_refresh */
 int32_t tiziano_adr_params_refresh(void)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_gamma(0, NULL);
+#else
     uint32_t *t9 = 0;
 
     /* fragment 0: ConstantLoad */
@@ -113143,11 +112996,16 @@ int32_t tiziano_adr_params_refresh(void)
     /* asm: 4c78c:	00000000 	nop */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c790 origin=fragment_seed original=tisp_adr_ev_update */
 int32_t tisp_adr_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a1;
+    return t41_native_adr_ev(a0, (((uint64_t)a3 << 32) | a2) >> 10);
+#else
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
@@ -113179,11 +113037,17 @@ int32_t tisp_adr_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
     v0 = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c7d8 origin=fragment_seed original=tisp_adr_tgain_update */
 int32_t tisp_adr_tgain_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* ADR's OEM total-gain callback only clears an unused flag. */
+    (void)a1; (void)a2; (void)a3;
+    return a0 ? -EINVAL : 0;
+#else
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
@@ -113217,11 +113081,16 @@ int32_t tisp_adr_tgain_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3
     *(uint32_t *)((char *)a0 + 0) = a2;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c828 origin=fragment_seed original=tisp_adr_gamma_array_get */
 int32_t tisp_adr_gamma_array_get(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (!a0) return -EINVAL;
+    return t41_native_adr_gamma(a1, (void *)(uintptr_t)a0);
+#else
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
     uint32_t ra = 0;
@@ -113240,10 +113109,14 @@ int32_t tisp_adr_gamma_array_get(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004c870 origin=model_output original=tiziano_adr_hardpars_ctl */
 int tiziano_adr_hardpars_ctl(int arg1) {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_set(arg1, NULL);
+#else
     int *i_2 = 0;
     // s0 = **((arg1 << 2) + "ensor\n")
     void **sensor_ptr = *(void ***)((arg1 << 2) + 0x43c8);
@@ -113514,28 +113387,14 @@ int tiziano_adr_hardpars_ctl(int arg1) {
     }
 
     return result;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004cd74 origin=fragment_seed original=tisp_adr_deinit */
 int32_t tisp_adr_deinit(uint32_t a0)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
-
-    if (a0 >= ARRAY_SIZE(adr_info))
-        return -EINVAL;
-    if (a0 == 0 && t41_kernel_data_ptr((void *)t41_adr_stat_buffer)) {
-        /* Stop ADR statistics DMA before releasing its four-page target. */
-        system_reg_write(0x09510, 0);
-        private_kfree((void *)t41_adr_stat_buffer);
-        t41_adr_stat_buffer = 1U;
-    }
-    /* The safe-disabled initializer owns no other heap or DMA state. */
-    adr_info[a0] = 0;
-    callbacks[84 / sizeof(uint32_t)] = 0;
-    callbacks[88 / sizeof(uint32_t)] = 0;
-    callbacks[92 / sizeof(uint32_t)] = 0;
-    return 0;
+    return t41_native_adr_deinit(a0);
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -113705,6 +113564,9 @@ tisp_adr_deinit0x144:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004ced8 origin=fragment_seed original=func_adr_reg_write_one */
 int32_t func_adr_reg_write_one(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_writer(a0, 0);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -113766,11 +113628,15 @@ int32_t func_adr_reg_write_one(uint32_t a0)
     /* asm: 4cff4:	27bd0028 	addiu	sp,sp,40 */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004cff8 origin=fragment_seed original=func_adr_reg_write_5x5 */
 int32_t func_adr_reg_write_5x5(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_writer(a0, 1);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -113927,11 +113793,15 @@ func_adr_reg_write_5x50x240:
     /* asm: 4d290:	27bd0038 	addiu	sp,sp,56 */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004d294 origin=fragment_seed original=func_adr_reg_write_sometimes */
 int32_t func_adr_reg_write_sometimes(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_writer(a0, 2);
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -114170,11 +114040,15 @@ func_adr_reg_write_sometimes0x3e0:
     /* asm: 4d704:	27bd0030 	addiu	sp,sp,48 */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004d708 origin=fragment_seed original=func_adr_reg_write_every */
 int64_t func_adr_reg_write_every(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_writer(a0, 3);
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -114332,6 +114206,7 @@ func_adr_reg_write_every0x1b8:
     goto func_adr_reg_write_every0x78;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004d914 origin=fragment_seed original=tisp_adr_pm_resume */
@@ -114601,6 +114476,9 @@ tiziano_adr_read_data0x268:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004dc2c origin=fragment_seed original=tiziano_adr_interrupt_static */
 int32_t tiziano_adr_interrupt_static(void)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_interrupt();
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_44 = 0;
@@ -114714,6 +114592,7 @@ tiziano_adr_interrupt_static0x158:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004ddb4 origin=fragment_seed original=tiziano_adr_stat_calc */
@@ -115189,8 +115068,11 @@ tisp_adr_faceae_curve_adjust0xac:
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004e11c origin=fragment_seed original=tisp_adr_faceae_refresh */
-int32_t tisp_adr_faceae_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
+int32_t tisp_adr_faceae_refresh(uint32_t a0, uint32_t a1, uint32_t a2, uintptr_t curve)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_face(a0, a1, (void *)(uintptr_t)a2, (void *)curve);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -115234,6 +115116,7 @@ int32_t tisp_adr_faceae_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
     /* asm: 4e17c:	27bd0020 	addiu	sp,sp,32 */
 
     return 0;
+#endif /* REGTRACE_KERNEL_TREE_BUILD: tisp_adr_faceae_refresh */
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004e180 origin=fragment_seed original=tiziano_adr_5x5_out */
@@ -116963,6 +116846,10 @@ gauss_loop:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004f638 origin=fragment_seed original=tisp_adr_linear_switch */
 int32_t tisp_adr_linear_switch(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a1;
+    return t41_native_adr_refresh(a0);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -117114,28 +117001,14 @@ tisp_adr_linear_switch0x168:
     /* asm: 4f7fc:	27bd0038 	addiu	sp,sp,56 */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004f800 origin=fragment_seed original=tisp_adr_init */
 int32_t tisp_adr_init(uint32_t a0, uintptr_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    if (a0 >= ARRAY_SIZE(adr_info) || !a1)
-        return -EINVAL;
-    if (adr_info[a0])
-        return -EBUSY;
-
-    /*
-     * The recovered body still mixes ADR objects with offsets based at the
-     * unrelated ivdc_threshold_line module parameter.  Until those packed
-     * objects are split out, leave ADR unarmed; no IRQ or event callback is
-     * registered and deinit consequently owns no allocation.
-     */
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: adr-init safe disabled channel=%u %ux%u\n",
-           a0, *(uint32_t *)(void *)a1,
-           *(uint32_t *)(void *)(a1 + 4));
-    return 0;
+    return t41_native_adr_init(a0, a1);
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -117489,6 +117362,10 @@ tisp_adr_init0x58c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004fdbc origin=fragment_seed original=tisp_adr_dn_params_refresh */
 int32_t tisp_adr_dn_params_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)a1;
+    return t41_native_adr_refresh(a0);
+#else
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -117632,6 +117509,7 @@ tisp_adr_dn_params_refresh0x16c:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000004ffc0 origin=fragment_seed original=func_interp1_short */
@@ -121847,6 +121725,10 @@ tiziano_adr_algorithm0x84:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000053510 origin=fragment_seed original=tisp_adr_process_func */
 int32_t tisp_adr_process_func(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* The drained tone worker is the sole frame/history owner. */
+    return a0 ? -EINVAL : 0;
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -121893,11 +121775,15 @@ int32_t tisp_adr_process_func(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000535bc origin=fragment_seed original=tisp_adr_param_array_get */
 int32_t tisp_adr_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_adr_get(a0, (void *)(uintptr_t)a1, (uint32_t *)a2);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -121939,11 +121825,16 @@ int32_t tisp_adr_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000053644 origin=fragment_seed original=tisp_adr_param_array_set */
 int32_t tisp_adr_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (!a1) return -EINVAL;
+    return t41_native_adr_set(a0, (void *)(uintptr_t)a1);
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
@@ -121982,11 +121873,16 @@ int32_t tisp_adr_param_array_set(uint32_t a0, uint32_t a1)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000536f0 origin=fragment_seed original=adr_remove */
 int adr_remove(struct platform_device *pdev)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    (void)pdev;
+    return t41_native_adr_deinit(0);
+#else
     uint32_t *a0 = 0;
     uint32_t a1 = 0;
     uint32_t ra = 0;
@@ -122044,6 +121940,7 @@ int adr_remove(struct platform_device *pdev)
     *(uint32_t *)((char *)((char *)&adr_ctc1_y_change)) = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000053794 origin=fragment_seed original=tisp_s_drc_ratio */
@@ -150647,6 +150544,7 @@ static void t41_tmo_workfn(struct work_struct *work)
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_gamma_error = t41_gamma_update(ev);
+    t41_native_adr_frame(exposure);
     t41_lce_frame(gain);
     if (gain != t41_ysp_gain)
         t41_ysp_error = tisp_ysp_refresh(0, gain);

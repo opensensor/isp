@@ -1,10 +1,10 @@
 # T41 ADR recovery checkpoint
 
-This checkpoint is **offline, not a replacement for the live ADR profile**.
-`tx_isp_t41_adr.h` contains portable algorithms and checked buffer interfaces;
-the complete frame composition and calibration lifecycle now have independent
-OEM tests, but kernel DMA/IRQ/worker integration remains to be completed.
-The camera still runs ISP `e6f3128b` (native LCE/MDNS).
+The algorithms and kernel integration are implemented; **live validation is
+still required**. `tx_isp_t41_adr.h` contains portable algorithms and checked
+buffer interfaces. `tx_isp_t41_adr_runtime.inc` replaces the captured ADR
+register/curve profiles with a separately owned frame/history object.
+The camera still runs ISP `e6f3128b` until the candidate passes a one-shot test.
 
 Recovered and compared with H20250310a:
 
@@ -93,9 +93,22 @@ cold starts, each followed by ten calibration/mode replacements.
 
 The standalone host test covers 2,000 primitive cases, initialization and
 refresh, and 10,000 frame/history cases under ASan/UBSan with canaries.
-Rejected frame candidates must not be committed by the eventual kernel
-worker; the last successfully written map must remain active.
+The kernel worker copies candidate state and commits it only after a complete
+successful RAM write. Busy or invalid candidates do not advance history.
+Four checked, contiguous 4-KiB DMA pages are owned by ADR. The interrupt
+handler accepts only their exact completion addresses and copies the bounded
+0xaa0-byte footprint; unpacking and curve arithmetic run in the existing
+stream-drained worker. Initialization scratch, pending data, candidate state
+and register words are preallocated, with no per-frame allocation.
 
-Still required before deployment: buffer/IRQ/worker integration and live
-stock/open comparisons and stream testing. Arithmetic parity alone is not OEM
+TOP bit 7 stays bypassed until a valid frame has been written. Stream reset
+rearms only owned addresses and restores calibrated controls. Shutdown drains
+the worker, disables DMA, detaches the IRQ-visible object under its lock,
+then frees it. Public gamma/parameter/mode and face-update routes use the
+native state; the face API's lost fourth pointer argument is restored.
+The universal curvature LUT already in the driver is byte-identical to the
+OEM reference (SHA256 `2e32e4a6f910d8f76efe5bee53ede7641b60254c104f3548ca60ca93caa5200b`).
+
+Still required: live stock/open comparisons, lifecycle and stream testing.
+Arithmetic parity alone is not OEM
 image-quality parity. Full OEM AE/AWB also remain separate work.
