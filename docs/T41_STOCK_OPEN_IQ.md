@@ -18,9 +18,13 @@ algorithms. See [SDNS](T41_SDNS_ALGORITHM.md), [YDNS](T41_YDNS_ALGORITHM.md),
 10,000 synthetic OEM cases on QEMU and physical T41; CDNS additionally
 checks all 65,536 signed threshold pairs. Camera gain sweeps reach the
 sensor's maximum and return to unity without block errors. These candidates
-are not yet the persistent boot checkpoint described above. Remaining
-captured tuning includes MDNS, ADR and LCE; full AE/AWB convergence remains
-unproven.
+are now promoted in persistent ISP `27d9977a` (the earlier checkpoint above
+was `f10f9c30`). MDNS is a newer one-shot candidate: its interpolation,
+enable/geometry writer, two ramp generators and day/night/WDR strength math
+match the OEM oracle. The captured MDNS delta is removed, activation waits
+for validated reserved buffers, and reconnect/gain/120-second decode tests
+pass. See [MDNS](T41_MDNS_ALGORITHM.md). Remaining captured tuning includes
+ADR and LCE; full AE/AWB convergence remains unproven.
 
 The latest nearby stock/open daylight pair uses the corrected full-range
 BT.601 metadata on both paths. Open/stock paper luma is 163.24/147.51 and

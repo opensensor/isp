@@ -31,6 +31,7 @@
 #include "tx_isp_t41_ydns.h"
 #include "tx_isp_t41_ysp.h"
 #include "tx_isp_t41_cdns.h"
+#include "tx_isp_t41_mdns.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
 #ifdef REGTRACE_KERNEL_TREE_BUILD
@@ -1270,7 +1271,7 @@ MODULE_PARM_DESC(t41_stock_cdns_profile,
 static int t41_stock_mdns_profile = -1;
 module_param(t41_stock_mdns_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_mdns_profile,
-		 "Advertise/program the stock T41 MDNS rmem layout and tuning bank (negative=enabled, diagnostic)");
+		 "Enable checked MDNS rmem layout and calibrated tuning (nonpositive=enabled, legacy name)");
 static int t41_stock_adr_profile = -1;
 module_param(t41_stock_adr_profile, int, 0644);
 MODULE_PARM_DESC(t41_stock_adr_profile,
@@ -1325,6 +1326,10 @@ static int t41_cdns_error = -ENODEV;
 static unsigned int t41_cdns_gain = ~0U;
 module_param(t41_cdns_error, int, 0444);
 module_param(t41_cdns_gain, uint, 0444);
+static int t41_mdns_error = -ENODEV;
+static unsigned int t41_mdns_gain = ~0U;
+module_param(t41_mdns_error, int, 0444);
+module_param(t41_mdns_gain, uint, 0444);
 static int t41_sdns_error = -ENODEV;
 static unsigned int t41_sdns_gain = ~0U;
 module_param(t41_sdns_error, int, 0444);
@@ -33321,71 +33326,25 @@ static int t41_mdns_program_buffer(uint32_t vinum, uint32_t paddr,
     return 0;
 }
 
-static void t41_apply_stock_mdns_profile(void)
+static int t41_apply_stock_mdns_profile(void)
 {
-    /* Diff of exact stock vs open at integration=369/gain=0x12.  The full
-     * T41 MDNS trace aperture is 0x400 bytes, but the HLIL writer owns only
-     * through +0x2b0; +0x300 onward is live runtime state and is deliberately
-     * not replayed.  Buffer address/stride words are supplied by userspace's
-     * reserved-memory allocation through tx_isp_set_mdns_buf. */
-    static const uint32_t stock_delta[][2] = {
-        { 0x0f024, 0x11221111 },
-        { 0x0f068, 0x00038400 }, { 0x0f06c, 0x0000e100 },
-        { 0x0f100, 0x00000014 }, { 0x0f104, 0x00000a0a },
-        { 0x0f108, 0x058c09ec }, { 0x0f10c, 0x0047007f },
-        { 0x0f110, 0x00000033 }, { 0x0f114, 0x0f896404 },
-        { 0x0f118, 0x0fb96404 }, { 0x0f11c, 0x0fc96404 },
-        { 0x0f120, 0x00020002 }, { 0x0f128, 0x80808080 },
-        { 0x0f12c, 0x80808080 }, { 0x0f134, 0x80808080 },
-        { 0x0f138, 0x80808080 }, { 0x0f13c, 0x002fffff },
-        { 0x0f150, 0xa000e133 }, { 0x0f154, 0xc8b4a000 },
-        { 0x0f158, 0xfaf5e6dc }, { 0x0f15c, 0xc8b4a000 },
-        { 0x0f160, 0xfaf5e6dc }, { 0x0f164, 0xc8b4a000 },
-        { 0x0f168, 0xfaf5e6dc }, { 0x0f16c, 0xf0c8a000 },
-        { 0x0f174, 0x85582c00 }, { 0x0f178, 0xdcdcdcb1 },
-        { 0x0f17c, 0x24010000 }, { 0x0f180, 0x78787878 },
-        { 0x0f184, 0x78787878 }, { 0x0f18c, 0xffffffff },
-        { 0x0f190, 0xffffffff }, { 0x0f194, 0xffffffff },
-        { 0x0f198, 0x120404ff }, { 0x0f1b0, 0x00000000 },
-        { 0x0f1bc, 0xd2beaa14 }, { 0x0f1c0, 0x00f7ede1 },
-        { 0x0f1c4, 0x00000101 }, { 0x0f1c8, 0x6c482400 },
-        { 0x0f1cc, 0xffd8b490 }, { 0x0f1d0, 0x6c482400 },
-        { 0x0f1d4, 0xffd8b490 }, { 0x0f1d8, 0x00001400 },
-        { 0x0f1dc, 0xe99b4d00 }, { 0x0f1e0, 0xffffffff },
-        { 0x0f1e4, 0x00001400 }, { 0x0f1e8, 0xe99b4d00 },
-        { 0x0f1ec, 0xffffffff }, { 0x0f1f0, 0x001e001e },
-        { 0x0f1fc, 0x50637689 }, { 0x0f200, 0x00172a3d },
-        { 0x0f204, 0x50637689 }, { 0x0f208, 0x00172a3d },
-        { 0x0f210, 0x0000dc18 }, { 0x0f230, 0x0039ff03 },
-        { 0x0f234, 0xa0007f01 }, { 0x0f238, 0x00000000 },
-        { 0x0f250, 0xffffffff }, { 0x0f254, 0xffffffff },
-        { 0x0f25c, 0xffffffff }, { 0x0f260, 0xffffffff },
-        { 0x0f264, 0xffffffff }, { 0x0f268, 0xffffffff },
-        { 0x0f26c, 0xffffffff }, { 0x0f270, 0xffffffff },
-        { 0x0f278, 0x0000dc1c }, { 0x0f2a0, 0x00ffffc8 },
-        { 0x0f2a4, 0x80808080 }, { 0x0f2a8, 0x00660a00 },
-        { 0x0f2ac, 0x00660a00 },
-    };
-    uint32_t *bypass;
-    unsigned int i;
-
-    if (t41_stock_mdns_profile > 0 || !t41_mdns_buf_info[0].paddr)
-        return;
-    for (i = 0; i < ARRAY_SIZE(stock_delta); ++i)
-        system_reg_write(stock_delta[i][0], stock_delta[i][1]);
-
-    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    t41_top_restore_bypass(BIT(13));
-    /* Exact tisp_mdns_start()/tisp_mdns_reg_trig() order. */
-    system_reg_write(0x0f008, 1);
-    system_reg_write(0x0f004, 1);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: stock MDNS profile applied words=%u "
-           "top=%#x buffers=%#x/%#x/%#x/%#x check=%#x/%#x/%#x\n",
-           i, system_reg_read(0x40), system_reg_read(0x0f040),
-           system_reg_read(0x0f048), system_reg_read(0x0f050),
-           system_reg_read(0x0f058), system_reg_read(0x0f024),
-           system_reg_read(0x0f100), system_reg_read(0x0f2ac));
+    uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
+    int ret;
+    if (t41_stock_mdns_profile > 0)
+        return 0;
+    if (!t41_mdns_buf_info[0].paddr)
+        return -EAGAIN;
+    ret = tisp_mdns_all_reg_refresh(0, gain <= (16U << 16) ? gain : 0);
+    if (!ret)
+        ret = tisp_mdns_func_en(0);
+    if (!ret)
+        ret = tisp_mdns_start(0);
+    if (!ret)
+        ret = tisp_mdns_reg_trig(0);
+    if (!ret)
+        ret = t41_top_restore_bypass(BIT(13));
+    WRITE_ONCE(t41_mdns_error, ret);
+    return ret;
 }
 
 static int t41_video_s_stream_late(void)
@@ -34832,8 +34791,11 @@ static int t41_ioctl_buf_info(uint32_t command, uint32_t user_arg)
                     return ret;
             }
             slots[info.vinum] = info;
-            if (mdns)
-                t41_apply_stock_mdns_profile();
+            if (mdns) {
+                ret = t41_apply_stock_mdns_profile();
+                if (ret)
+                    return ret;
+            }
         }
     } else if (get) {
         info.paddr = 0;
@@ -123488,8 +123450,64 @@ int32_t tisp_mdns_reg_cfg_equation_dif(int32_t arg1, int32_t arg2, int32_t arg3,
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005436c origin=fragment_seed original=tisp_mdns_reg_cfg */
+static uint32_t *t41_mdns_info_checked(uint32_t channel)
+{
+    uint32_t *info;
+    if (channel != 0)
+        return NULL;
+    info = (uint32_t *)(uintptr_t)mdns_info;
+    if (!t41_kernel_data_ptr(info) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[0]) ||
+        !t41_kernel_data_ptr((void *)(uintptr_t)info[1]))
+        return NULL;
+    return info;
+}
+
+static int t41_mdns_interpolate_checked(uint32_t channel, uint32_t gain)
+{
+    uint32_t *info = t41_mdns_info_checked(channel);
+    if (!info || gain > (16U << 16))
+        return -EINVAL;
+    return t41_mdns_interpolate((uint8_t *)(uintptr_t)info[0], T41_MDNS_PARAM_BYTES,
+        (uint8_t *)(uintptr_t)info[1], T41_MDNS_STATE_BYTES, gain) ? -EINVAL : 0;
+}
+
+static int t41_mdns_write_checked(uint32_t channel, int enable)
+{
+    struct t41_dpc_word words[T41_MDNS_WRITES];
+    uint32_t *info = t41_mdns_info_checked(channel);
+    int count, i;
+    if (!info)
+        return -ENODEV;
+    count = enable ? t41_mdns_pack_enable((uint8_t *)(uintptr_t)info[0], T41_MDNS_PARAM_BYTES,
+        channel, (get_isp_memopt() >> (channel * 4)) & 15, words, ARRAY_SIZE(words)) :
+        t41_mdns_pack((uint8_t *)(uintptr_t)info[0], T41_MDNS_PARAM_BYTES,
+        (uint8_t *)(uintptr_t)info[1], T41_MDNS_STATE_BYTES, channel, info[5], info[6], words, ARRAY_SIZE(words));
+    if (count < 0)
+        return -EINVAL;
+    for (i = 0; i < count; ++i)
+        system_reg_write(words[i].address, words[i].value);
+    return 0;
+}
+
+static int t41_mdns_refresh_checked(uint32_t channel, uint32_t gain)
+{
+    int ret = t41_mdns_interpolate_checked(channel, gain);
+    if (!ret)
+        ret = t41_mdns_write_checked(channel, 0);
+    if (!ret) {
+        t41_mdns_info_checked(channel)[2] = gain;
+        WRITE_ONCE(t41_mdns_gain, gain);
+    }
+    WRITE_ONCE(t41_mdns_error, ret);
+    return ret;
+}
+
 int32_t tisp_mdns_reg_cfg(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_mdns_write_checked(a0, 0);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -124598,6 +124616,12 @@ tisp_mdns_reg_cfg0x1380:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000557dc origin=fragment_seed original=tisp_mdns_start */
 int32_t tisp_mdns_start(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (!t41_mdns_info_checked(a0) || !t41_mdns_buf_info[a0].paddr)
+        return -EAGAIN;
+    system_reg_write(((a0 + 30) << 11) + 8, 1);
+    return 0;
+#endif
     uint32_t a1 = 0;
     uint32_t *t9 = 0;
 
@@ -124646,6 +124670,12 @@ int32_t tisp_mdns_pm_resume(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000055820 origin=fragment_seed original=tisp_mdns_reg_trig */
 int32_t tisp_mdns_reg_trig(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (!t41_mdns_info_checked(a0) || !t41_mdns_buf_info[a0].paddr)
+        return -EAGAIN;
+    system_reg_write(((a0 + 30) << 11) + 4, 1);
+    return 0;
+#endif
     uint32_t a1 = 0;
     uint32_t *t9 = 0;
 
@@ -124669,6 +124699,9 @@ int32_t tisp_mdns_reg_trig(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005583c origin=fragment_seed original=tisp_mdns_intp */
 int32_t tisp_mdns_intp(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_mdns_interpolate_checked(a0, a1);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -125272,9 +125305,10 @@ int32_t tisp_mdns_intp(uint32_t a0, uint32_t a1)
 int32_t tisp_mdns_wdr_en(int32_t arg1, int32_t arg2)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    /* MDNS remains bypassed until its recovered register path is complete. */
-    (void)arg1;
-    (void)arg2;
+    uint32_t *info = t41_mdns_info_checked(arg1);
+    if (!info || arg2 < 0 || arg2 > 1)
+        return -EINVAL;
+    info[4] = arg2;
     return 0;
 #else
     int32_t *base = tisp_mdns_wdr_en_table;
@@ -125287,6 +125321,9 @@ int32_t tisp_mdns_wdr_en(int32_t arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000563b4 origin=fragment_seed original=tisp_mdns_func_en */
 int32_t tisp_mdns_func_en(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_mdns_write_checked(a0, 1);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -125409,6 +125446,9 @@ tisp_mdns_func_en0x140:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000564fc origin=fragment_seed original=tisp_mdns_all_reg_refresh */
 int32_t tisp_mdns_all_reg_refresh(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_mdns_refresh_checked(a0, a1);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -125449,6 +125489,22 @@ int32_t tisp_mdns_all_reg_refresh(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056534 origin=fragment_seed original=tisp_mdns_par_refresh */
 int32_t tisp_mdns_par_refresh(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_mdns_info_checked(a0);
+    uint32_t delta;
+    int ret;
+    if (!info || a1 > (16U << 16))
+        return -EINVAL;
+    delta = a1 >= info[2] ? a1 - info[2] : info[2] - a1;
+    if (info[2] != ~0U && delta < a2)
+        return 0;
+    ret = t41_mdns_refresh_checked(a0, a1);
+    if (!ret && t41_mdns_buf_info[a0].paddr)
+        ret = tisp_mdns_reg_trig(a0);
+    return ret;
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -125547,10 +125603,16 @@ tisp_mdns_par_refresh0xb8:
 int32_t tisp_mdns_refresh(uint32_t a0, uint32_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    /* Safe-bypass mode deliberately suppresses MDNS interpolation/writes. */
-    (void)a0;
-    (void)a1;
-    return 0;
+    uint32_t *info = t41_mdns_info_checked(a0);
+    int ret;
+    if (!info)
+        return -ENODEV;
+    ret = tisp_mdns_par_refresh(a0, a1, 0x100);
+    if (!ret)
+        ret = t41_mdns_refresh_checked(a0, info[2]);
+    if (!ret && t41_mdns_buf_info[a0].paddr)
+        ret = tisp_mdns_reg_trig(a0);
+    return ret;
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -125593,6 +125655,7 @@ int32_t tisp_mdns_init(uint32_t a0, uintptr_t a1)
     uint32_t *bypass;
     uint32_t width;
     uint32_t height;
+    int ret = -ENOMEM;
 
     /* Preserve the recovered BSS layout; this T41 ISP exposes channel 0. */
     if (a0 != 0 || !a1)
@@ -125609,11 +125672,8 @@ int32_t tisp_mdns_init(uint32_t a0, uintptr_t a1)
     if (!width || !height)
         return -EINVAL;
 
-    /*
-     * Recreate the OEM T41 ownership layout, but hold MDNS in top bypass.
-     * Its recovered all-register refresh loses the final register-programming
-     * call, so publishing the object without enabling that path is safest.
-     */
+    /* Program calibration while stopped; DMA remains bypassed until the
+     * existing reserved-memory setter has validated and installed buffers. */
     info = private_kmalloc(48, 0x024000c0);
     if (!info)
         return -ENOMEM;
@@ -125640,14 +125700,18 @@ int32_t tisp_mdns_init(uint32_t a0, uintptr_t a1)
     bypass = &((uint32_t *)(void *)top_bypass_global)[a0];
     *bypass |= BIT(13);
     system_reg_write((a0 + 16) << 2, *bypass);
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: mdns-init safe bypass channel=%u %ux%u\n",
-           a0, width, height);
+    ret = t41_mdns_refresh_checked(a0, 0x10000U);
+    if (ret)
+        goto fail;
+    ret = tisp_mdns_func_en(a0);
+    if (ret)
+        goto fail;
+    system_reg_write(0x34c, 0x20220702U);
     return 0;
 
 fail:
     tisp_mdns_deinit(a0);
-    return -ENOMEM;
+    return ret;
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -125825,9 +125889,21 @@ int32_t tisp_mdns_deinit(int32_t arg1)
 int32_t tisp_mdns_dn_params_refresh(uint32_t a0, uint32_t a1)
 {
 #ifdef REGTRACE_KERNEL_TREE_BUILD
-    (void)a0;
-    (void)a1;
-    return 0;
+    uint32_t *info = t41_mdns_info_checked(a0);
+    int ret;
+    if (!info || a1 > 1)
+        return -EINVAL;
+    ret = tisp_mdns_func_en(a0);
+    if (!ret)
+        ret = t41_mdns_refresh_checked(a0, info[2] <= (16U << 16) ? info[2] : 0);
+    if (!ret && t41_mdns_buf_info[a0].paddr) {
+        ret = tisp_mdns_start(a0);
+        if (!ret)
+            ret = tisp_mdns_reg_trig(a0);
+    }
+    if (!ret)
+        info[7] = a1;
+    return ret;
 #else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
@@ -125877,6 +125953,16 @@ int32_t tisp_mdns_dn_params_refresh(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005696c origin=fragment_seed original=tisp_mdns_param_array_get */
 int32_t tisp_mdns_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_mdns_info_checked(a0);
+    if (!info || !t41_kernel_data_ptr((void *)(uintptr_t)a1) || !t41_kernel_data_ptr((void *)a2))
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)a1, (void *)(uintptr_t)info[0], T41_MDNS_PARAM_BYTES);
+    *(uint32_t *)a2 = T41_MDNS_PARAM_BYTES;
+    return 0;
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -125906,6 +125992,15 @@ int32_t tisp_mdns_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000569c8 origin=fragment_seed original=tisp_mdns_param_array_set */
 int32_t tisp_mdns_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_mdns_info_checked(a0);
+    if (!info || !t41_kernel_data_ptr((void *)(uintptr_t)a1))
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)info[0], (void *)(uintptr_t)a1, T41_MDNS_PARAM_BYTES);
+    return tisp_mdns_dn_params_refresh(a0, info[7]);
+    }
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -125951,6 +126046,37 @@ int32_t tisp_mdns_param_array_set(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000056a64 origin=fragment_seed original=tisp_s_mdns_ratio */
 int32_t tisp_s_mdns_ratio(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    {
+    uint32_t *info = t41_mdns_info_checked(a0);
+    uint8_t *original, *tuning, *manager, *payload;
+    uintptr_t start, end;
+    uint32_t strength = 128, bytes;
+    if (!info)
+        return -ENODEV;
+    original = (uint8_t *)(uintptr_t)(info[7] ? tparams_night : tparams_day);
+    manager = (uint8_t *)(uintptr_t)m_bin;
+    if (!t41_kernel_data_ptr(original) || !t41_kernel_data_ptr(manager))
+        return -EINVAL;
+    payload = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(manager + 64);
+    bytes = *(uint32_t *)(void *)(manager + 68);
+    start = (uintptr_t)payload;
+    end = start + bytes;
+    if (!t41_kernel_data_ptr(payload) || end < start ||
+        (uintptr_t)original < start || (uintptr_t)original > end ||
+        end - (uintptr_t)original < 0x17406U + 0x48eU)
+        return -EINVAL;
+    tuning = (uint8_t *)(uintptr_t)tisp_get_tuning();
+    if (!t41_kernel_data_ptr(tuning))
+        return -ENODEV;
+    if (*(uint32_t *)(void *)(tuning + 192))
+        strength = tuning[196];
+    if (t41_mdns_strength(original + 0x17406, 0x48e,
+        (uint8_t *)(uintptr_t)info[0], T41_MDNS_PARAM_BYTES, strength, !!info[4]))
+        return -EINVAL;
+    return tisp_mdns_refresh(a0, info[2] <= (16U << 16) ? info[2] : 0);
+    }
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -150442,6 +150568,8 @@ static void t41_tmo_workfn(struct work_struct *work)
         t41_ysp_error = tisp_ysp_refresh(0, gain);
     if (gain != t41_cdns_gain)
         t41_cdns_error = tisp_cdns_refresh(0, gain);
+    if (t41_mdns_buf_info[0].paddr && gain != t41_mdns_gain)
+        t41_mdns_error = tisp_mdns_refresh(0, gain);
     if (t41_stock_dpc_profile <= 0 && gain != t41_dpc_gain) {
         t41_dpc_error = tisp_dpc_l_gain_update(0, 0, gain);
         if (!t41_dpc_error)
