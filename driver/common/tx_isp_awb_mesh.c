@@ -114,6 +114,32 @@ static u32 awb_axis_cell(const u32 *axis, u32 value)
 	return i;
 }
 
+int tx_isp_awb_mesh_temperature(const struct tx_isp_awb_mesh *m,
+			      u32 red, u32 blue, u32 *kelvin)
+{
+	u32 x, y, ix, iy, dx, dy, a, b, mired;
+	const u32 *p;
+	if (!kelvin || !red || !blue || tx_isp_awb_mesh_validate(m) || !m->ct_mired)
+		return -EINVAL;
+	x = (m->red_calibration_q10 * 256U) / red;
+	y = (m->blue_calibration_q10 * 256U) / blue;
+	if (x < m->red_axis[0] || x > m->red_axis[14] ||
+	    y < m->blue_axis[0] || y > m->blue_axis[14])
+		return -ERANGE;
+	ix = awb_axis_cell(m->red_axis, x);
+	iy = awb_axis_cell(m->blue_axis, y);
+	dx = ((x - m->red_axis[ix]) << 8) / (m->red_axis[ix+1] - m->red_axis[ix]);
+	dy = ((y - m->blue_axis[iy]) << 8) / (m->blue_axis[iy+1] - m->blue_axis[iy]);
+	p = m->ct_mired + iy * TX_ISP_AWB_MESH_SIZE + ix;
+	a = p[0] * (256-dx) + p[1] * dx;
+	b = p[15] * (256-dx) + p[16] * dx;
+	mired = (a * (256-dy) + b * dy + 32768U) >> 16;
+	if (!mired)
+		return -ENODATA;
+	*kelvin = (1000000U + mired/2) / mired;
+	return 0;
+}
+
 int tx_isp_awb_mesh_add(const struct tx_isp_awb_mesh *m,
 		      struct tx_isp_awb_accumulator *s,
 		      u32 r, u32 g, u32 b, u32 spatial)

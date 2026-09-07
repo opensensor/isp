@@ -107,6 +107,19 @@ int main(void)
 	m.ct_prior = (struct tx_isp_awb_ct_prior){{5000, 4500, 6500, 7000}, 20};
 	for (i = 0; i < 225; ++i) mired[i] = 200;
 	assert(!tx_isp_awb_mesh_validate(&m));
+	{
+		u32 ct = 99;
+		assert(!tx_isp_awb_mesh_temperature(&m, 2048, 2048, &ct));
+		assert(ct == 5000);
+		assert(tx_isp_awb_mesh_temperature(&m, 1, 2048, &ct) == -ERANGE);
+		assert(ct == 5000);
+		assert(tx_isp_awb_mesh_temperature(&m, 0, 2048, &ct) == -EINVAL);
+		/* Halfway between four reciprocal-temperature knots. */
+		for (i = 0; i < 225; ++i) mired[i] = 100 + (i%15)*10 + (i/15)*20;
+		assert(!tx_isp_awb_mesh_temperature(&m, 1927, 1927, &ct));
+		assert(ct == 3390); /* Q8 interpolation at x=y=272 -> mired=295. */
+		for (i = 0; i < 225; ++i) mired[i] = 200;
+	}
 	memset(&s, 0, sizeof(s));
 	assert(tx_isp_awb_mesh_add(&m, &s, 100, 200, 100, 1));
 	assert(s.weight == 256);

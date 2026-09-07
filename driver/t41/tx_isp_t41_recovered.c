@@ -16,6 +16,7 @@
 #include "tx_isp_t41_scaler.h"
 #include "tx_isp_t41_tmo.h"
 #include "tx_isp_t41_tmo_map.h"
+#include "tx_isp_t41_ccm.h"
 #include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
@@ -931,11 +932,6 @@ MODULE_PARM_DESC(t41_safe_tmo_irq_stats,
  * allocator and removed once the parameter-driven interpolation path is
  * safe.
  */
-static int t41_stock_ccm_baseline = 1;
-module_param(t41_stock_ccm_baseline, int, 0);
-MODULE_PARM_DESC(t41_stock_ccm_baseline,
-		 "seed CCM from the stock T41 OS04D10 boot profile");
-
 /*
  * The ownership-aware deinitializers now match the safe TISP constructors, so
  * normal close and module removal can release their state without a reboot.
@@ -1261,6 +1257,31 @@ MODULE_PARM_DESC(t41_stock_tmo_profile,
 static void t41_apply_stock_tmo_profile(void);
 static void t41_hold_tmo_bypass(void);
 static DEFINE_MUTEX(t41_tmo_map_lock);
+static spinlock_t t41_tmo_state_lock __section(".data") =
+    __SPIN_LOCK_UNLOCKED(t41_tmo_state_lock);
+/* Nonzero initializer keeps this out of the generated legacy BSS aliases. */
+static struct {
+    int live, ready, first;
+    uint32_t sequence, integration, gain;
+} t41_tmo_state = { .live = -1, .ready = -1, .first = 1 };
+static unsigned int t41_tmo_frames = ~0U;
+static unsigned int t41_tmo_dropped = ~0U;
+static int t41_tmo_error = -ENODEV;
+module_param(t41_tmo_frames, uint, 0444);
+module_param(t41_tmo_dropped, uint, 0444);
+module_param(t41_tmo_error, int, 0444);
+static void t41_tmo_workfn(struct work_struct *work);
+static DECLARE_WORK(t41_tmo_work, t41_tmo_workfn);
+static void t41_tmo_stream_start(void);
+static void t41_tmo_stream_stop(void);
+static void t41_tmo_exposure(uint32_t integration, uint32_t gain);
+static int t41_tmo_refresh(uint32_t channel, const uint8_t *replacement);
+static DEFINE_MUTEX(t41_ccm_lock);
+static unsigned int t41_ccm_ct = 5000;
+static int t41_ccm_error = -ENODEV;
+module_param(t41_ccm_ct, uint, 0444);
+module_param(t41_ccm_error, int, 0444);
+static int t41_ccm_update(uint32_t ct, uint32_t ev, int force);
 static int t41_tmo_map_trigger = -1;
 static int t41_tmo_map_set(const char *value, const struct kernel_param *kp);
 module_param_call(t41_tmo_map_trigger, t41_tmo_map_set, param_get_int,
@@ -1279,7 +1300,11 @@ static int t41_tmo_replay_trigger = -1;
 static int t41_tmo_replay_set(const char *value,
                               const struct kernel_param *kp)
 {
-    int ret = param_set_int(value, kp);
+    int ret;
+
+    if (READ_ONCE(t41_tmo_state.live) == 1)
+        return -EBUSY;
+    ret = param_set_int(value, kp);
 
     if (!ret && t41_tmo_replay_trigger == 0) {
         atomic_set(&t41_tmo_frame_replay_pending, -1);
@@ -32221,9 +32246,17 @@ static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
     system_reg_set_awb_trig(1, 0);
     if (pixels < (uint64_t)t41_awb_min_pixels * 4U)
         return -ENODATA;
-    return tx_isp_awb_mesh_result(&mesh, &sum,
+    ret = tx_isp_awb_mesh_result(&mesh, &sum,
         max_t(uint32_t, 1U, t41_awb_min_zones) * 4U,
         &target->r_gain_q10, &target->b_gain_q10);
+    if (!ret) {
+        uint32_t ct;
+        if (!tx_isp_awb_mesh_temperature(&mesh,
+            target->r_gain_q10 * 1024U / mesh.red_bias_q10,
+            target->b_gain_q10 * 1024U / mesh.blue_bias_q10, &ct))
+            WRITE_ONCE(t41_ccm_ct, ct);
+    }
+    return ret;
 }
 
 static bool t41_safe_awb_ratio_close(uint32_t value, uint32_t reference)
@@ -33699,6 +33732,8 @@ int32_t tx_isp_video_s_stream(uintptr_t a0, uint32_t a1)
     if (copy_from_user(stream, (const void __user *)(uintptr_t)a1,
                        sizeof(stream)))
         return -EFAULT;
+    if (!stream[0])
+        t41_tmo_stream_stop();
     if (stream[0]) {
         t41_video_stream_owner = a0;
         t41_video_stream_vinum = stream[1];
@@ -52344,6 +52379,8 @@ int tisp_deinit(int channel)
         return -EINVAL;
     slot = (unsigned int)channel * sizeof(uint32_t);
 
+    t41_tmo_stream_stop();
+
     printk(KERN_WARNING
            "tx_isp_t41_recovered: tisp-deinit enter channel=%d\n",
            channel);
@@ -56538,6 +56575,8 @@ static int t41_apply_safe_ev_fanout(uint32_t channel, uint32_t ev,
 
 	if (channel >= 2)
 		return -EINVAL;
+	if ((mask & BIT(1)) && READ_ONCE(t41_tmo_state.live) == 1)
+		return -EBUSY;
 	if (mask & BIT(0)) {
 		gamma = gamma_info[channel] ?
 			(uint8_t *)(uintptr_t)gamma_info[channel] : NULL;
@@ -56659,6 +56698,7 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	 * tuning block several stops past the stock state. */
 	gain_q16 = tisp_log2_fixed_to_fixed(control->again, 4, 16);
 	t41_safe_ae_gain_q16 = gain_q16;
+	t41_tmo_exposure(control->integration, gain_q16);
 	if ((t41_safe_gain_fanout_mask & 0x3fU) &&
 	    gain_q16 != t41_safe_gain_last_q16)
 		t41_apply_safe_gain_fanout(channel, gain_q16,
@@ -56777,6 +56817,7 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		t41_safe_ae_again = again;
 		gain_q16 = tisp_log2_fixed_to_fixed(again, 4, 16);
 		t41_safe_ae_gain_q16 = gain_q16;
+		t41_tmo_exposure(integration, gain_q16);
 		if (t41_safe_gain_fanout_mask & 0x3fU)
 			t41_apply_safe_gain_fanout(
 				channel, gain_q16,
@@ -144537,6 +144578,58 @@ tisp_ccm_pm_suspend0x30:
     return 0;
 }
 
+static int t41_ccm_update(uint32_t ct, uint32_t ev, int force)
+{
+    uint8_t *info, *params;
+    short selected[9], transformed[9];
+    uint32_t words[8], saturation, i;
+    int ret = -ENODEV;
+
+    mutex_lock(&t41_ccm_lock);
+    info = (uint8_t *)(uintptr_t)ccm_info;
+    if (!t41_kernel_data_ptr(info))
+        goto done;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    if (!t41_kernel_data_ptr(params))
+        goto done;
+    ret = tisp_csc_api_get(0, (uint32_t)(uintptr_t)(info + 4));
+    if (ret)
+        goto done;
+    ret = t41_ccm_select(params, T41_CCM_PARAM_BYTES, ct, ev,
+                         selected, &saturation);
+    if (!ret)
+        ret = t41_ccm_saturate(selected, saturation,
+            *(uint32_t *)(void *)(info + 4), (int *)(void *)(info + 8), transformed);
+    if (!ret)
+        ret = t41_ccm_pack(params, T41_CCM_PARAM_BYTES, transformed, words);
+    if (ret)
+        goto done;
+    if (force || memcmp(info + 174, transformed, sizeof(transformed))) {
+        for (i = 0; i < ARRAY_SIZE(words); ++i)
+            system_reg_write(0xb004 + i * 4, words[i]);
+        system_reg_write(0xb000, 1);
+    }
+    memcpy(info + 156, selected, sizeof(selected));
+    memcpy(info + 174, transformed, sizeof(transformed));
+    *(uint32_t *)(void *)(info + 136) = ev;
+    *(uint32_t *)(void *)(info + 140) = saturation;
+    *(uint32_t *)(void *)(info + 144) = ct;
+done:
+    t41_ccm_error = ret;
+    mutex_unlock(&t41_ccm_lock);
+    return ret;
+}
+
+void tx_isp_t41_calibrated_ccm_apply(void)
+{
+    uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
+    uint32_t integration = READ_ONCE(t41_safe_ae_integration);
+    uint64_t ev = 0;
+    if (gain <= (16U << 16) && integration != UINT_MAX)
+        ev = (uint64_t)integration * tisp_math_exp2(gain, 16, 10) >> 10;
+    t41_ccm_update(READ_ONCE(t41_ccm_ct), min_t(uint64_t, ev, UINT_MAX), 1);
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000653c4 origin=fragment_seed original=tisp_ccm_matrix_trans_by_sat */
 int64_t tisp_ccm_matrix_trans_by_sat(uint32_t a0)
 {
@@ -145817,13 +145910,10 @@ int32_t tisp_ccm_init(uint32_t a0)
     *(uint32_t *)(void *)(info + 152) = 16;
     *(uint16_t *)(void *)(info + 192) = 0xff00U;
 
-    if (t41_stock_ccm_baseline > 0)
-        tx_isp_t41_stock_ccm_apply();
+    t41_ccm_update(5000, 0, 1);
 
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: ccm-init safe neutral channel=%u "
-           "stock-baseline=%d\n", a0, t41_stock_ccm_baseline > 0);
-    return 0;
+    printk(KERN_INFO "tx_isp_t41_recovered: calibration CCM init ret=%d\n", t41_ccm_error);
+    return t41_ccm_error;
 #else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
@@ -145927,6 +146017,7 @@ int32_t tisp_ccm_deinit(uint32_t a0)
     if (a0 != 0)
         return -EINVAL;
 
+    mutex_lock(&t41_ccm_lock);
     info = (uint8_t *)(uintptr_t)ccm_info;
     if (info) {
         private_kfree(info);
@@ -145935,6 +146026,7 @@ int32_t tisp_ccm_deinit(uint32_t a0)
     ((uint32_t *)(void *)tpm_cb_storage)[240 / sizeof(uint32_t)] = 0;
     ((uint32_t *)(void *)tpm_cb_storage)[244 / sizeof(uint32_t)] = 0;
     ((uint32_t *)(void *)tpm_cb_storage)[248 / sizeof(uint32_t)] = 0;
+    mutex_unlock(&t41_ccm_lock);
     return 0;
 #else
     uint32_t *local_10 = 0;
@@ -146018,6 +146110,23 @@ tisp_ccm_deinit0x74:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066238 origin=fragment_seed original=tisp_ccm_param_array_get */
 int32_t tisp_ccm_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    int ret = -ENODEV;
+    if (a0 != 0 || !t41_kernel_data_ptr((void *)(uintptr_t)a1) ||
+        !t41_kernel_data_ptr((void *)a2))
+        return -EINVAL;
+    mutex_lock(&t41_ccm_lock);
+    info = (uint8_t *)(uintptr_t)ccm_info;
+    if (t41_kernel_data_ptr(info)) {
+        memcpy((void *)(uintptr_t)a1, (void *)(uintptr_t)*(uint32_t *)(void *)info,
+               T41_CCM_PARAM_BYTES);
+        *(uint32_t *)(void *)a2 = T41_CCM_PARAM_BYTES;
+        ret = 0;
+    }
+    mutex_unlock(&t41_ccm_lock);
+    return ret;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -146047,6 +146156,26 @@ int32_t tisp_ccm_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066294 origin=fragment_seed original=tisp_ccm_param_array_set */
 int32_t tisp_ccm_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    short matrix[9];
+    uint32_t sat;
+    int ret = -ENODEV;
+    if (a0 != 0 || !t41_kernel_data_ptr((void *)(uintptr_t)a1) ||
+        t41_ccm_select((void *)(uintptr_t)a1, T41_CCM_PARAM_BYTES, 5000, 0, matrix, &sat))
+        return -EINVAL;
+    mutex_lock(&t41_ccm_lock);
+    info = (uint8_t *)(uintptr_t)ccm_info;
+    if (t41_kernel_data_ptr(info)) {
+        memcpy((void *)(uintptr_t)*(uint32_t *)(void *)info,
+               (void *)(uintptr_t)a1, T41_CCM_PARAM_BYTES);
+        ret = 0;
+    }
+    mutex_unlock(&t41_ccm_lock);
+    if (!ret)
+        tx_isp_t41_calibrated_ccm_apply();
+    return ret ? ret : t41_ccm_error;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
     uint32_t *local_20 = 0;
@@ -146095,6 +146224,10 @@ int32_t tisp_ccm_param_array_set(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066348 origin=fragment_seed original=tisp_ccm_api_set */
 int32_t tisp_ccm_api_set(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* Manual matrix overrides require separate checked ABI support. */
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -146172,6 +146305,12 @@ int32_t tisp_ccm_api_get(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000066460 origin=fragment_seed original=tisp_ccm_refresh_by_csc */
 int32_t tisp_ccm_refresh_by_csc(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (a0 != 0)
+        return -EINVAL;
+    tx_isp_t41_calibrated_ccm_apply();
+    return t41_ccm_error;
+#endif
 #ifdef REGTRACE_KERNEL_TREE_BUILD
     (void)a0;
     return 0;
@@ -147438,6 +147577,17 @@ tisp_csc_api_set0x60:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000673e4 origin=fragment_seed original=tisp_csc_api_get */
 int32_t tisp_csc_api_get(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    const uint8_t *tables[] = { CSC_BT601_FULL, CSC_BT601_LIMITED,
+        CSC_BT709_FULL, CSC_BT709_LIMITED, CSC_BT2020_FULL,
+        CSC_BT2020_LIMITED, CSC_USER };
+    uint32_t version = READ_ONCE(csc_version_now);
+    if (a0 != 0 || !t41_kernel_data_ptr((void *)(uintptr_t)a1) ||
+        version >= ARRAY_SIZE(tables))
+        return -EINVAL;
+    memcpy((void *)(uintptr_t)a1, tables[version], 92);
+    return 0;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
@@ -148068,6 +148218,20 @@ tisp_tmo_gain_interp0x4c:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000067f50 origin=fragment_seed original=tisp_tmo_gain_update */
 int32_t tisp_tmo_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    int ret = -ENODEV;
+    if (a0 != 0)
+        return -EINVAL;
+    mutex_lock(&t41_tmo_map_lock);
+    info = (uint8_t *)(uintptr_t)tmo_info[a0];
+    if (t41_kernel_data_ptr(info)) {
+        *(uint32_t *)(void *)(info + 40) = a2;
+        ret = tisp_tmo_gain_interp(a0);
+    }
+    mutex_unlock(&t41_tmo_map_lock);
+    return ret;
+#else
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
@@ -148087,6 +148251,7 @@ int32_t tisp_tmo_gain_update(uint32_t a0, uint32_t a1, uint32_t a2)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000067f90 origin=model_output original=tisp_tmo_detailen_ev_interp */
@@ -148174,6 +148339,11 @@ int64_t tisp_tmo_ev_interp(uint32_t channel)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000685ac origin=fragment_seed original=tisp_tmo_ev_update */
 int32_t tisp_tmo_ev_update(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* The safe worker snapshots EV and gain together from the AE producer. */
+    if (t41_safe_tuning_events)
+        return 0;
+#endif
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
@@ -149565,69 +149735,44 @@ tisp_tmo_ram_reg_refresh0x168:
 #endif
 }
 
-/* Process-context, explicit diagnostic entry while the IRQ/event lifecycle
- * is being validated. No automatic enable and no vendor compute code. */
-static int t41_tmo_map_set(const char *value, const struct kernel_param *kp)
+/* map_lock owns the algorithm workspaces and the entire RAM transaction. */
+static int t41_tmo_frame(uint32_t ev, uint32_t gain, uint32_t sequence)
 {
     uint8_t *info, *params, *geometry, *runtime, *dma;
-    uint32_t *snapshot = NULL, *sums, *counts, *out, *previous;
+    uint32_t *sums, *counts, *out, *previous;
+    uint16_t *shadow;
     uint16_t curve[T41_TMO_CURVE_ENTRIES];
     uint32_t bank, samples = 0, shift, i;
     uint32_t *bypass;
-    int requested, ret;
+    int ret;
 
-    (void)kp;
-    ret = kstrtoint(value, 0, &requested);
-    if (ret || requested < 0)
-        return ret ? ret : -EINVAL;
-    /* This control must not race the unrecovered event-based algorithm. */
-    if (!t41_safe_tuning_events)
-        return -EBUSY;
-    mutex_lock(&t41_tmo_map_lock);
     info = (uint8_t *)(uintptr_t)tmo_info[0];
-    if (!t41_kernel_data_ptr(info)) {
-        ret = -ENODEV;
-        goto done;
-    }
-    if (!requested) {
-        t41_hold_tmo_bypass();
-        t41_tmo_map_trigger = 0;
-        ret = 0;
-        goto done;
-    }
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
     params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 0);
+    shadow = (uint16_t *)(uintptr_t)*(uint32_t *)(void *)(info + 4);
     geometry = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 12);
     runtime = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 8);
     dma = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)(info + 20);
     out = (uint32_t *)(uintptr_t)statYOut;
     previous = (uint32_t *)(uintptr_t)statYNumLast;
+    sums = (uint32_t *)(uintptr_t)statYSum;
+    counts = (uint32_t *)(uintptr_t)statYNum;
     if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(geometry) ||
         !t41_kernel_data_ptr(runtime) || !t41_kernel_data_ptr(dma) ||
-        !t41_kernel_data_ptr(out) || !t41_kernel_data_ptr(previous)) {
-        ret = -ENODEV;
-        goto done;
-    }
+        !t41_kernel_data_ptr(out) || !t41_kernel_data_ptr(previous) ||
+        !t41_kernel_data_ptr(sums) || !t41_kernel_data_ptr(counts) ||
+        !t41_kernel_data_ptr(shadow))
+        return -ENODEV;
     /* Fixed hardware layout, not a sensor/resolution whitelist. */
     if (t41_tmo_le16(geometry) != T41_TMO_TILES ||
         geometry[12] != T41_TMO_ROWS || geometry[13] != T41_TMO_COLS ||
         geometry[15] != 4 || geometry[20] != T41_TMO_ROWS + 4 ||
-        geometry[21] != T41_TMO_COLS + 4 || geometry[22] > 9) {
-        ret = -ERANGE;
-        goto done;
-    }
+        geometry[21] != T41_TMO_COLS + 4 || geometry[22] > 9)
+        return -ERANGE;
     shift = geometry[22];
-    ret = t41_tmo_curve(params, T41_TMO_PARAM_BYTES, requested, curve);
-    if (ret) {
-        ret = -EOPNOTSUPP;
-        goto done;
-    }
-    snapshot = kmalloc(2 * T41_TMO_SAMPLES * sizeof(*snapshot), GFP_KERNEL);
-    if (!snapshot) {
-        ret = -ENOMEM;
-        goto done;
-    }
-    sums = snapshot;
-    counts = snapshot + T41_TMO_SAMPLES;
+    if (t41_tmo_curve(params, T41_TMO_PARAM_BYTES, ev, curve))
+        return -EOPNOTSUPP;
     bank = system_reg_read(0x1e028U) & 1U;
     dma += bank << 14;
     dma_cache_sync(NULL, dma, 0x4000U, DMA_FROM_DEVICE);
@@ -149636,32 +149781,159 @@ static int t41_tmo_map_set(const char *value, const struct kernel_param *kp)
         counts[i] = t41_tmo_le16(dma + 4 * i + 2);
         samples += counts[i];
     }
-    if (!samples || bank != (system_reg_read(0x1e028U) & 1U)) {
-        ret = -EAGAIN;
-        goto done;
-    }
+    /* Sequence also catches a double bank wrap during preemption. Once
+     * copied, later DMA frames cannot modify these worker-owned inputs. */
+    if (!samples || bank != (system_reg_read(0x1e028U) & 1U) ||
+        sequence != READ_ONCE(t41_tmo_state.sequence))
+        return -EAGAIN;
     ret = t41_tmo_map(params, T41_TMO_PARAM_BYTES, shift, sums, counts,
-                      previous, t41_tmo_map_trigger <= 0, out);
-    if (ret) {
-        ret = -EOPNOTSUPP;
-        goto done;
-    }
-    memcpy(previous, out, T41_TMO_SAMPLES * sizeof(*out));
+                      previous, t41_tmo_state.first, out);
+    if (ret)
+        return -EOPNOTSUPP;
+    *(uint32_t *)(void *)(info + 32) = ev;
+    *(uint32_t *)(void *)(info + 36) = 0;
+    *(uint32_t *)(void *)(info + 40) = gain;
+    memcpy(shadow, curve, sizeof(curve));
     memcpy(runtime + 318, curve, sizeof(curve));
+    ret = tisp_tmo_gain_interp(0);
+    if (!ret && t41_tmo_le16(params + 480) == 1)
+        ret = tisp_tmo_detailen_ev_interp(0);
+    if (ret)
+        return ret;
     ret = tisp_tmo_ram_reg_refresh(0);
     if (ret)
-        goto done;
+        return ret;
     ret = tisp_tmo_default_reg_refresh(0);
     if (ret)
-        goto done;
+        return ret;
+    memcpy(previous, out, T41_TMO_SAMPLES * sizeof(*out));
+    t41_tmo_state.first = 0;
     bypass = &((uint32_t *)(void *)top_bypass_global)[0];
     *bypass &= ~BIT(22);
     system_reg_write(0x40, *bypass);
-    t41_tmo_map_trigger = requested;
-    printk(KERN_INFO "tx_isp_t41_recovered: scalar TMO ev=%d bank=%u shift=%u samples=%u map=%u/%u/%u\n",
-           requested, bank, shift, samples, out[0], out[1875], out[3749]);
+    return 0;
+}
+
+static void t41_tmo_exposure(uint32_t integration, uint32_t gain)
+{
+    unsigned long flags;
+    spin_lock_irqsave(&t41_tmo_state_lock, flags);
+    t41_tmo_state.integration = integration;
+    t41_tmo_state.gain = gain;
+    spin_unlock_irqrestore(&t41_tmo_state_lock, flags);
+}
+
+static int t41_tmo_refresh(uint32_t channel, const uint8_t *replacement)
+{
+    uint8_t *info, *params;
+    int ret = -ENODEV;
+    if (channel != 0)
+        return -EINVAL;
+    mutex_lock(&t41_tmo_map_lock);
+    info = (uint8_t *)(uintptr_t)tmo_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        goto done;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    if (!t41_kernel_data_ptr(params))
+        goto done;
+    t41_hold_tmo_bypass();
+    t41_tmo_state.first = 1;
+    if (replacement)
+        memcpy(params, replacement, T41_TMO_PARAM_BYTES);
+    ret = tisp_tmo_params_hard_refresh(channel);
+    /* A completed frame, not this parameter event, commits the new map. */
 done:
-    kfree(snapshot);
+    mutex_unlock(&t41_tmo_map_lock);
+    return ret;
+}
+
+static void t41_tmo_workfn(struct work_struct *work)
+{
+    uint32_t integration, gain, sequence, linear, ev;
+    unsigned long flags;
+    uint64_t exposure;
+    int ret;
+    (void)work;
+    mutex_lock(&t41_tmo_map_lock);
+    if (READ_ONCE(t41_tmo_state.live) != 1 ||
+        t41_tmo_state.ready != 1 || !t41_safe_tuning_events)
+        goto done;
+    spin_lock_irqsave(&t41_tmo_state_lock, flags);
+    integration = t41_tmo_state.integration;
+    gain = t41_tmo_state.gain;
+    sequence = t41_tmo_state.sequence;
+    spin_unlock_irqrestore(&t41_tmo_state_lock, flags);
+    if (!integration || gain > (16U << 16)) {
+        t41_tmo_error = -EAGAIN;
+        goto done;
+    }
+    linear = tisp_math_exp2(gain, 16, 10);
+    exposure = (uint64_t)integration * linear >> 10;
+    ev = min_t(uint64_t, exposure, UINT_MAX);
+    t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
+    ret = t41_tmo_frame(ev, gain, sequence);
+    t41_tmo_error = ret;
+    if (ret) {
+        ++t41_tmo_dropped;
+        if (ret != -EAGAIN) {
+            t41_hold_tmo_bypass();
+            t41_tmo_state.first = 1;
+        }
+    } else {
+        if (!t41_tmo_frames)
+            printk(KERN_INFO "tx_isp_t41_recovered: frame TMO enabled ev=%u gain=%u\n", ev, gain);
+        ++t41_tmo_frames;
+    }
+done:
+    mutex_unlock(&t41_tmo_map_lock);
+}
+
+static void t41_tmo_stream_stop(void)
+{
+    unsigned long flags;
+    /* Pair scheduling and the gate under one lock, before draining work. */
+    spin_lock_irqsave(&t41_tmo_state_lock, flags);
+    t41_tmo_state.live = -1;
+    spin_unlock_irqrestore(&t41_tmo_state_lock, flags);
+    cancel_work_sync(&t41_tmo_work);
+}
+
+static void t41_tmo_stream_start(void)
+{
+    unsigned long flags;
+    t41_tmo_stream_stop();
+    mutex_lock(&t41_tmo_map_lock);
+    t41_hold_tmo_bypass();
+    t41_tmo_state.first = 1;
+    t41_tmo_frames = 0;
+    t41_tmo_dropped = 0;
+    t41_tmo_error = -EAGAIN;
+    spin_lock_irqsave(&t41_tmo_state_lock, flags);
+    if (t41_tmo_state.ready == 1 && t41_safe_tuning_events)
+        t41_tmo_state.live = 1;
+    spin_unlock_irqrestore(&t41_tmo_state_lock, flags);
+    mutex_unlock(&t41_tmo_map_lock);
+}
+
+static int t41_tmo_map_set(const char *value, const struct kernel_param *kp)
+{
+    int requested, ret = kstrtoint(value, 0, &requested);
+    (void)kp;
+    if (ret || requested < 0)
+        return ret ? ret : -EINVAL;
+    mutex_lock(&t41_tmo_map_lock);
+    if (READ_ONCE(t41_tmo_state.live) == 1 || !t41_safe_tuning_events) {
+        ret = -EBUSY;
+    } else if (!requested) {
+        t41_hold_tmo_bypass();
+        t41_tmo_state.first = 1;
+        t41_tmo_map_trigger = 0;
+    } else {
+        ret = t41_tmo_frame(requested, t41_tmo_state.gain,
+                            READ_ONCE(t41_tmo_state.sequence));
+        if (!ret)
+            t41_tmo_map_trigger = requested;
+    }
     mutex_unlock(&t41_tmo_map_lock);
     return ret;
 }
@@ -150136,6 +150408,16 @@ int32_t tisp_tmo_interrupt_static(uint32_t a0)
     uint32_t bank;
     unsigned int i;
 
+    if (t41_safe_tuning_events) {
+        unsigned long flags;
+        spin_lock_irqsave(&t41_tmo_state_lock, flags);
+        ++t41_tmo_state.sequence;
+        if (a0 == 0 && t41_tmo_state.live == 1)
+            schedule_work(&t41_tmo_work);
+        spin_unlock_irqrestore(&t41_tmo_state_lock, flags);
+        return 1;
+    }
+
     if (a0 >= 2 || !tmo_info[a0] || !statYSum || !statYNum)
         return -EINVAL;
     info = (uint8_t *)(uintptr_t)tmo_info[a0];
@@ -150246,6 +150528,10 @@ tisp_tmo_interrupt_static0xe8:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006a4b4 origin=fragment_seed original=tisp_tmo_faceae_refresh */
 int32_t tisp_tmo_faceae_refresh(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t arg4, uint32_t arg5, uint32_t arg6)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* No concurrent legacy face writer may mutate the worker's runtime. */
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -150349,8 +150635,11 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     uint32_t dma_addr;
     uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
 
-    if (a0 >= 2 || !a1)
+    /* These hardware statistics workspaces are global, not per VIN. */
+    if (a0 != 0 || !a1)
         return -EINVAL;
+    t41_tmo_stream_stop();
+    t41_tmo_state.ready = -1;
     printk(KERN_WARNING
            "tx_isp_t41_recovered: tmo-init begin channel=%u par=%p\n",
            a0, (void *)a1);
@@ -150479,6 +150768,7 @@ int32_t tisp_tmo_init(uint32_t a0, uintptr_t a1)
     callbacks[60 / 4] = (uint32_t)(uintptr_t)tisp_tmo_pm_get_regsize;
     callbacks[64 / 4] = (uint32_t)(uintptr_t)tisp_tmo_pm_suspend;
     callbacks[68 / 4] = (uint32_t)(uintptr_t)tisp_tmo_pm_resume;
+    WRITE_ONCE(t41_tmo_state.ready, 1);
     return 0;
 }
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006a9c8 origin=fragment_seed original=tisp_tmo_deinit */
@@ -150494,7 +150784,9 @@ int32_t tisp_tmo_deinit(uint32_t a0)
     if (a0 >= 2)
         return -EINVAL;
 
+    t41_tmo_stream_stop();
     mutex_lock(&t41_tmo_map_lock);
+    t41_tmo_state.ready = -1;
     t41_tmo_map_trigger = -1;
     for (i = 0; i < ARRAY_SIZE(global_objects); ++i) {
         if (*global_objects[i]) {
@@ -150528,6 +150820,9 @@ int32_t tisp_tmo_deinit(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006ab90 origin=fragment_seed original=tisp_tmo_wdr_en */
 int32_t tisp_tmo_wdr_en(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_tmo_refresh(a0, NULL);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
@@ -150574,6 +150869,9 @@ int32_t tisp_tmo_wdr_en(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006ac30 origin=fragment_seed original=tisp_tmo_dn_params_refresh */
 int32_t tisp_tmo_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_tmo_refresh(a0, NULL);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -150656,6 +150954,11 @@ int32_t tisp_tmo_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006ad28 origin=fragment_seed original=tisp_tmo_param_array_set */
 int32_t tisp_tmo_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (!t41_kernel_data_ptr((void *)(uintptr_t)a1))
+        return -EINVAL;
+    return t41_tmo_refresh(a0, (const uint8_t *)(uintptr_t)a1);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t a2 = 0;
@@ -150757,6 +151060,9 @@ int32_t sub_6ae0c(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006ae90 origin=fragment_seed original=tisp_tmo_api_set_curve */
 int32_t tisp_tmo_api_set_curve(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -159369,10 +159675,10 @@ int32_t ispcore_frame_channel_streamon(void *arg1)
             t41_apply_stock_cdns_profile();
         if (!ret)
             t41_apply_stock_adr_profile();
-        /* Adaptive local TMO processing is not recovered. Do not substitute
-         * a captured or uniform map for that algorithm after stream reset. */
+        /* The first completed statistics bank seeds temporal history while
+         * bypassed. No cold zero map is ever made visible. */
         if (!ret) {
-            t41_hold_tmo_bypass();
+            t41_tmo_stream_start();
             atomic_set(&t41_tmo_frame_replay_pending, -1);
         }
         if (!ret && (t41_late_start_mask & 0x20))
@@ -163423,6 +163729,8 @@ int ispcore_video_s_stream(void *arg1, int32_t *arg2)
 
     if (!arg1 || !arg2 || arg2[1] < 0 || arg2[1] >= 3)
         return -EINVAL;
+    if (!arg2[0])
+        t41_tmo_stream_stop();
 
     core = t41_load_ptr((uintptr_t)arg1, 0x10c);
     if (!core)

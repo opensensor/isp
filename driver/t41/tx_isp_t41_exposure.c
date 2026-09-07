@@ -2,8 +2,8 @@
  * T41 exposure policy adapter.
  *
  * The checked exposure arithmetic is shared with the other SoCs.  Hardware
- * register ownership stays here.  The recovered driver normally uses the
- * exact active OEM OS04D10 CCM.  A separately switchable legacy experiment
+ * register ownership stays here. CCM is rebuilt from current calibration.
+ * A separately switchable legacy experiment
  * combines pre-tone-map attenuation with a neutral-preserving correction.
  */
 #include <linux/bitops.h>
@@ -38,22 +38,6 @@ static int tx_isp_t41_correction_validate(u32 correction_q10)
 	return 0;
 }
 
-void tx_isp_t41_stock_ccm_apply(void)
-{
-	/* Exact active day matrix and control words from OEM H20250310a. */
-	system_reg_write(0x0b004, 0x3e060650);
-	system_reg_write(0x0b008, 0x3f723fab);
-	system_reg_write(0x0b00c, 0x3f2f055e);
-	system_reg_write(0x0b010, 0x3daf007c);
-	system_reg_write(0x0b014, 0x000005d4);
-	system_reg_write(0x0b018, 0x00041008);
-	system_reg_write(0x0b01c, 0x00000008);
-	system_reg_write(0x0b020, 0x0fff00ff);
-	system_reg_write(0x0b024, 0x00070001);
-	system_reg_write(0x0b028, 0x00010008);
-	system_reg_write(0x0b000, 1);
-}
-
 int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 				     u32 gib_gain_q10,
 				     u32 green_correction_q10,
@@ -82,7 +66,7 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 		system_reg_write(0x08000, packed_gib);
 		system_reg_write(0x08004, packed_gib);
 		system_reg_write(0x08040, 1);
-		tx_isp_t41_stock_ccm_apply();
+		tx_isp_t41_calibrated_ccm_apply();
 		*top_bypass &= ~T41_TOP_CCM_BYPASS;
 		system_reg_write((channel + 16U) << 2, *top_bypass);
 		return 0;

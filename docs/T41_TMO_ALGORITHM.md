@@ -1,5 +1,33 @@
 # T41 local TMO algorithm recovery
 
+## Current frame integration
+
+The safe IRQ path now schedules a process-context worker for completed TMO
+statistics. The worker owns the existing sum/count/map/history allocations;
+there is no per-frame heap allocation or hard-IRQ histogram scan. Sequence
+and bank checks reject a snapshot if DMA completion advances during the
+copy. AE publishes integration and log gain as a pair. Curve shadow, runtime,
+detail strength, map and temporal history are updated under one mutex, and
+TMO bypass is cleared only after the first nonempty map has been uploaded.
+
+Stream stop closes the scheduling gate under the same IRQ lock before
+draining work; destruction then frees the objects. Parameter refresh resets
+history and waits for another completed frame. Live diagnostic replays are
+rejected while the worker owns TMO. Unrecovered manual face/curve writers
+are rejected. The IRQ lock is explicitly placed in `.data`, outside the
+generated driver's aliased legacy BSS. An initial one-shot candidate with
+the lock in BSS failed to return on the network; no boot log established
+the cause. The storage-corrected candidate booted normally.
+
+The corrected one-shot camera run processed more than 8,600 frames with no
+rejected snapshots and passed three TCP and three UDP reconnects. A short
+CPU sample showed 85.7% total idle; this is not a long-run performance gate.
+The camera was then rebooted back to the unchanged persistent baseline.
+CCM integration is documented in [T41_CCM_ALGORITHM.md](T41_CCM_ALGORITHM.md).
+The earlier diagnostic-only results below are retained as recovery history.
+Full day/night, WDR, kernel-selector mode 2 and EV-curve mode 1 remain separate
+work; they are not certified by the daytime frame test.
+
 The local map is computed from **current statistics**, not a sensor-name
 profile, captured register bank, or saved `statYOut`. The scalar implementation
 is `driver/t41/tx_isp_t41_tmo_map.h`. It implements kernel-selection modes 0
@@ -66,7 +94,7 @@ indices and history: **2,475,000 output coefficients, zero mismatches**.
 Combined reference + scalar test cost was 2.910 CPU seconds. That is a test
 measurement, not a live ISP CPU-utilization claim.
 
-## Guarded camera path
+## Earlier guarded diagnostic path
 
 The production driver includes only the scalar algorithm and generated
 Gaussian kernels. `t41_tmo_map_trigger` is an explicit process-context

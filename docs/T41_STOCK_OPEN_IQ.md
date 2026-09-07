@@ -1,5 +1,15 @@
 # T41 calibrated AWB comparison, 2026-09-07
 
+## Current: frame-driven TMO and calibration-driven CCM
+
+TMO modes 0/1 now run from completed-frame statistics, with stream-stop
+draining and no per-frame allocation. The captured CCM bank has been removed
+from the normal exposure path and replaced by independently tested CT/EV/CSC
+math. See [TMO](T41_TMO_ALGORITHM.md) and [CCM](T41_CCM_ALGORITHM.md) for the
+tests and remaining limitations. BCSH/spatial replays, full OEM AWB history,
+day/night/WDR, and the AE raw-gain adapter are not solved by these changes.
+The diagnostic-only descriptions below are historical, not current status.
+
 ## Latest: scalar local TMO
 
 The [local TMO filter](T41_TMO_ALGORITHM.md) is now a checked scalar algorithm

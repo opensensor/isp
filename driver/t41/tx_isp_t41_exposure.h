@@ -14,7 +14,7 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 				     u32 blue_correction_q10,
 				     u32 *top_bypass);
 
-/* Restore the exact active day matrix captured from the OEM OS04D10 path. */
-void tx_isp_t41_stock_ccm_apply(void);
+/* Rebuild CCM from current calibration, neutral CT and exposure. */
+void tx_isp_t41_calibrated_ccm_apply(void);
 
 #endif /* TX_ISP_T41_EXPOSURE_H */

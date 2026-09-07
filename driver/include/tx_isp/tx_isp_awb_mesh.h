@@ -61,4 +61,8 @@ int tx_isp_awb_mesh_add(const struct tx_isp_awb_mesh *mesh,
 int tx_isp_awb_mesh_result(const struct tx_isp_awb_mesh *mesh,
 			 const struct tx_isp_awb_accumulator *sum,
 			 u32 minimum_samples, u32 *red_q10, u32 *blue_q10);
+/* Temperature of a neutral gain estimate on the sensor's reciprocal-CT mesh.
+ * Gains here are before optional post-estimator bias. No extrapolation. */
+int tx_isp_awb_mesh_temperature(const struct tx_isp_awb_mesh *mesh,
+			      u32 red_q10, u32 blue_q10, u32 *kelvin);
 #endif
