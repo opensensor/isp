@@ -38,7 +38,7 @@ Generated vendor instructions are neither committed nor linked into the
 open driver. The link warnings for the isolated non-PIC leaf support are
 expected. CCM has no MXU instructions and can also run under MIPS emulation.
 
-10,000 synthetic CT/EV/CSC cases: zero differences in selected matrices,
+10,000 synthetic CT/EV/CSC cases, including wide EV intervals: zero differences in selected matrices,
 saturation, transformed matrices and packed words; zero unexpected register
 destinations. Strict host tests cover unaligned calibration, plateau and
 transition boundaries, high-EV clamping and atomic rejection. They also
@@ -58,5 +58,8 @@ On the T41NQ/OS04D10 one-shot build, automatic TMO plus CCM passed three TCP
 and three UDP H.264/AAC reconnects. Relative to the preceding automatic-TMO
 build, paper R/G was 0.876 vs 0.845, B/G 1.124 vs 1.158; bark luma was 61.55
 vs 60.55. These are changing-daylight observations, not color-chart parity.
-BCSH captured banks and other spatial profiles are still present. Full
+The [BCSH follow-up](T41_BCSH_ALGORITHM.md) removes its captured banks and
+repairs the exposure adapter's unconditional CCM enable: calibration can
+apply color correction in BCSH while bypassing pre-tone-map CCM. Other
+spatial profiles are still present. Full
 day/night and WDR lifecycle parity is not established by this daytime test.

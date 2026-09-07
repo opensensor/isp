@@ -6,9 +6,16 @@
  * A separately switchable legacy experiment
  * combines pre-tone-map attenuation with a neutral-preserving correction.
  */
+#ifdef __KERNEL__
 #include <linux/bitops.h>
 #include <linux/errno.h>
 #include <linux/types.h>
+#else
+#include <errno.h>
+#include <stdint.h>
+typedef int32_t s32;
+#define BIT(n) (1U << (n))
+#endif
 
 #include "tx_isp_t41_exposure.h"
 
@@ -42,6 +49,7 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 				     u32 gib_gain_q10,
 				     u32 green_correction_q10,
 				     u32 blue_correction_q10,
+				     u32 calibrated_ccm_bypass,
 				     u32 *top_bypass)
 {
 	s32 green;
@@ -49,7 +57,7 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 	u32 packed_gib;
 	int ret;
 
-	if (channel || !top_bypass)
+	if (channel || !top_bypass || calibrated_ccm_bypass > 1)
 		return -EINVAL;
 	if (gib_gain_q10 > T41_COLOR_MATRIX_MASK)
 		return -ERANGE;
@@ -67,7 +75,11 @@ int tx_isp_t41_flicker_profile_apply(u32 channel, bool enable,
 		system_reg_write(0x08004, packed_gib);
 		system_reg_write(0x08040, 1);
 		tx_isp_t41_calibrated_ccm_apply();
-		*top_bypass &= ~T41_TOP_CCM_BYPASS;
+		/* Restore the calibration's CCM routing. BCSH can
+		 * already carry the RGB correction in YUV space; enabling CCM
+		 * unconditionally applies that correction twice. */
+		*top_bypass = (*top_bypass & ~T41_TOP_CCM_BYPASS) |
+			(calibrated_ccm_bypass << 9);
 		system_reg_write((channel + 16U) << 2, *top_bypass);
 		return 0;
 	}

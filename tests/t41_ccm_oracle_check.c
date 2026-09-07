@@ -35,9 +35,11 @@ int main(void)
 	*(uint32_t *)(void *)info = (uintptr_t)params;
 	for (frame = 0; frame < 10000; ++frame) {
 		unsigned int ct = frame % 10000, ev = frame % 1000;
+		unsigned int span = frame & 1 ? 5000000 : 100;
+		if (frame & 1) ev = random_u32() % 50000000;
 		for (i = 0; i < 6; ++i) put16(i*2, 1800 + i*1000);
 		for (i = 0; i < 9; ++i) {
-			put32(20+i*4, 10+i*100);
+			put32(20+i*4, 10+i*span);
 			put16(56+i*2, random_u32() % 1025);
 		}
 		for (i = 0; i < 36; ++i) put16(74+i*2, (random_u32() & 16383) - 8192);

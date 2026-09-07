@@ -71,8 +71,10 @@ static inline int t41_ccm_select(const unsigned char *p, unsigned int bytes,
 				unsigned int low = t41_tmo_le32(p + 16 + i * 4);
 				unsigned int a = t41_tmo_le16(p + 54 + i * 2);
 				unsigned int b = t41_tmo_le16(p + 56 + i * 2);
-				saturation = (unsigned int)t41_tmo_div((unsigned long long)a * (high - ev) +
-					(unsigned long long)b * (ev - low) + (high - low) / 2, high - low);
+				/* The OEM interpolation numerator is an unsigned
+				 * 32-bit accumulator, including wide EV intervals. */
+				saturation = (a * (high - ev) + b * (ev - low) +
+					(high - low) / 2) / (high - low);
 			}
 			break;
 		}

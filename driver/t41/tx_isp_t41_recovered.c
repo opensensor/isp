@@ -17,6 +17,8 @@
 #include "tx_isp_t41_tmo.h"
 #include "tx_isp_t41_tmo_map.h"
 #include "tx_isp_t41_ccm.h"
+#include "tx_isp_t41_bcsh.h"
+#include "../include/tx_isp/tx_isp_top.h"
 #include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_subdev.h"
 #include "tx_isp_t41_v4l2.h"
@@ -876,7 +878,7 @@ MODULE_PARM_DESC(t41_safe_ae_effective_target_q8,
 static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 				      uint32_t mask);
 static void t41_apply_stock_dmsc_gain_profile(uint32_t gain_q16);
-static void t41_apply_stock_bcsh_profile(uint32_t color_model);
+static int t41_apply_calibrated_bcsh(uint32_t color_model);
 static unsigned int t41_gain_fanout_trigger = ~0U;
 static int t41_gain_fanout_set(const char *value,
 			       const struct kernel_param *kp)
@@ -1282,6 +1284,11 @@ static int t41_ccm_error = -ENODEV;
 module_param(t41_ccm_ct, uint, 0444);
 module_param(t41_ccm_error, int, 0444);
 static int t41_ccm_update(uint32_t ct, uint32_t ev, int force);
+static DEFINE_MUTEX(t41_bcsh_lock);
+static int t41_bcsh_error = -ENODEV;
+static uint32_t t41_bcsh_last[T41_BCSH_WORDS] = { UINT_MAX };
+module_param(t41_bcsh_error, int, 0444);
+static int t41_bcsh_update(uint32_t ct, uint32_t ev, int force);
 static int t41_tmo_map_trigger = -1;
 static int t41_tmo_map_set(const char *value, const struct kernel_param *kp);
 module_param_call(t41_tmo_map_trigger, t41_tmo_map_set, param_get_int,
@@ -1325,10 +1332,6 @@ module_param_call(t41_tmo_replay_trigger, t41_tmo_replay_set,
                   param_get_int, &t41_tmo_replay_trigger, 0644);
 MODULE_PARM_DESC(t41_tmo_replay_trigger,
 		 "TMO lifecycle control: zero bypasses; positive reinstalls the stock profile");
-static int t41_stock_bcsh_profile = -1;
-module_param(t41_stock_bcsh_profile, int, 0644);
-MODULE_PARM_DESC(t41_stock_bcsh_profile,
-		 "Program the exact stock OS04D10 BCSH writer bank (negative=enabled)");
 static unsigned int t41_bcsh_color_model = ~0U;
 module_param(t41_bcsh_color_model, uint, 0444);
 MODULE_PARM_DESC(t41_bcsh_color_model,
@@ -1931,15 +1934,32 @@ static uint32_t pos_en;
 static uint32_t pos_value;
 static unsigned char top_bypass_global[8];
 
+static int t41_top_restore_bypass(uint32_t mask)
+{
+	uint32_t *bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+	const uint8_t *params = (const uint8_t *)(uintptr_t)
+		((uint32_t *)(void *)tparamsP_storage)[0];
+	if (!params || tx_isp_top_restore(params + 4, 32, mask, bypass))
+		return -EINVAL;
+	system_reg_write(0x40, *bypass);
+	return 0;
+}
+
 static int t41_apply_flicker_profile(bool enable)
 {
 	uint32_t *bypass = &((uint32_t *)(void *)top_bypass_global)[0];
+	const uint8_t *params = (const uint8_t *)(uintptr_t)
+		((uint32_t *)(void *)tparamsP_storage)[0];
 	int ret;
 
+	/* tisp_top_write_bypass owns one calibration byte per TOP bit.
+	 * Restore bit 9, not a stock scene's entire captured TOP word. */
+	if (!params || params[4 + 9] > 1)
+		return -EINVAL;
 	ret = tx_isp_t41_flicker_profile_apply(
 		0, enable, t41_ae_flicker_gib_gain_q10,
 		t41_color_green_correction_q10,
-		t41_color_blue_correction_q10, bypass);
+		t41_color_blue_correction_q10, params[4 + 9], bypass);
 	printk(KERN_WARNING
 	       "tx_isp_t41_recovered: flicker image profile %s "
 	       "gib=%#x correction=%#x/%#x bypass=%#x ret=%d\n",
@@ -20689,8 +20709,7 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                 return -EFAULT;
             if (color_model > TX_ISP_TUNING_COLOR_MODEL_BRIGHT_DAY)
                 return -EINVAL;
-            t41_apply_stock_bcsh_profile(color_model);
-            return 0;
+            return t41_apply_calibrated_bcsh(color_model);
         }
         if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AWB_TARGET) {
             struct tx_isp_tuning_awb_target target;
@@ -32542,76 +32561,20 @@ static void t41_apply_stock_dpc_profile(void)
            system_reg_read(0x071a0), system_reg_read(0x0723c));
 }
 
-static void t41_apply_stock_bcsh_profile(uint32_t color_model)
+static int t41_apply_calibrated_bcsh(uint32_t color_model)
 {
-    /*
-     * Exact converged outputs of stock T41 tisp_bcsh_write_reg().
-     * The stock HLIL proves that BCSH owns exactly 29 words at
-     * 0x11000..0x11070.  Do not copy 0x11074 and above: those registers are
-     * outside the writer/PM range and include live or separately-owned state.
-     *
-     * This is the same evidence boundary used by the working T40 recovery:
-     * restore only a block's proven writable bank and leave observations out
-     * of the replay.  T41 needs its own values because its BCSH layout and
-     * interpolation chain differ from T40.
-     */
-    static const uint32_t day_words[] = {
-        0x000003ff, 0x000003fc, 0x000003ff, 0x000003ff,
-        0x000003fc, 0x000003ff, 0x03fd0400, 0x04020400,
-        0x04020400, 0x3ef70400, 0x00000006, 0x06a53fff,
-        0x000000fc, 0x00803fff, 0x000006e5, 0x00080000,
-        0x00c80050, 0x00100000, 0x03600320, 0x00660001,
-        0x00100006, 0x00000001, 0x04000400, 0x03840000,
-        0x03840000, 0x00010009, 0x0030000c, 0x054e0573,
-        0x054e0573,
-    };
-    static const uint32_t low_light_words[] = {
-        0x000003ff, 0x000003fc, 0x000003ff, 0x000003ff,
-        0x000003fc, 0x000003ff, 0x03fd0400, 0x04020400,
-        0x04020400, 0x00b90400, 0x00000007, 0x05a83fff,
-        0x0000007c, 0x3ff73ffc, 0x000008c0, 0x00080000,
-        0x00c80050, 0x00100000, 0x03600320, 0x00660001,
-        0x00120008, 0x04000001, 0x04000400, 0x03840001,
-        0x03840001, 0x00000001, 0x0030000c, 0x0518052d,
-        0x0518052d,
-    };
-    /* Converged OEM OS04D10 bank captured under strong indirect daylight on
-     * 2026-08-07.  The original day bank above was captured under mixed
-     * late-day daylight and warm interior lighting. */
-    static const uint32_t bright_day_words[] = {
-        0x000003ff, 0x000003fc, 0x000003ff, 0x000003ff,
-        0x000003fc, 0x000003ff, 0x03fd0400, 0x04020400,
-        0x04020400, 0x3f8d0401, 0x00003ff7, 0x09bc0000,
-        0x000001db, 0x00080000, 0x000006c7, 0x00080000,
-        0x00c80050, 0x00100000, 0x03600320, 0x00660001,
-        0x00100006, 0x00000001, 0x04000400, 0x03840000,
-        0x03840000, 0x00010009, 0x0030000c, 0x05660593,
-        0x05660593,
-    };
-    const uint32_t *stock_words;
-    unsigned int i;
+    uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
+    uint32_t integration = READ_ONCE(t41_safe_ae_integration);
+    uint64_t ev = 0;
+    int ret;
 
-    if (t41_stock_bcsh_profile > 0)
-        return;
-    if (color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT)
-        stock_words = low_light_words;
-    else if (color_model == TX_ISP_TUNING_COLOR_MODEL_BRIGHT_DAY)
-        stock_words = bright_day_words;
-    else
-        stock_words = day_words;
-    for (i = 0; i < ARRAY_SIZE(day_words); ++i)
-        system_reg_write(0x11000 + i * sizeof(uint32_t), stock_words[i]);
-    WRITE_ONCE(t41_bcsh_color_model, color_model);
-
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: exact stock BCSH bank applied model=%s words=%u "
-           "check=%#x/%#x/%#x/%#x\n",
-           color_model == TX_ISP_TUNING_COLOR_MODEL_LOW_LIGHT ?
-               "low-light" :
-               (color_model == TX_ISP_TUNING_COLOR_MODEL_BRIGHT_DAY ?
-                    "bright-day" : "day"),
-           i, system_reg_read(0x11000), system_reg_read(0x11024),
-           system_reg_read(0x11054), system_reg_read(0x11070));
+    if (gain <= (16U << 16) && integration != UINT_MAX)
+        ev = (uint64_t)integration * tisp_math_exp2(gain, 16, 10) >> 10;
+    ret = t41_bcsh_update(READ_ONCE(t41_ccm_ct),
+                         min_t(uint64_t, ev, UINT_MAX), 1);
+    if (!ret)
+        WRITE_ONCE(t41_bcsh_color_model, color_model);
+    return ret;
 }
 
 static void t41_apply_stock_dmsc_profile(void)
@@ -32775,8 +32738,7 @@ static void t41_apply_stock_ysp_profile(void)
      */
     if (t41_stock_ysp_unbypass <= 0) {
         bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-        *bypass &= ~BIT(17);
-        system_reg_write(0x40, *bypass);
+        t41_top_restore_bypass(BIT(17));
     }
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock YSP delta applied words=%u "
@@ -32879,8 +32841,7 @@ static void t41_apply_stock_lce_ram_profile(void)
     system_reg_write(0x0e084, 1);
 
     bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    *bypass &= ~BIT(21);
-    system_reg_write(0x40, *bypass);
+    t41_top_restore_bypass(BIT(21));
     printk(KERN_WARNING
            "tx_isp_t41_recovered: exact stock LCE RAM profile applied visible=%u curve=%u top=%#x\n",
            (unsigned int)ARRAY_SIZE(visible),
@@ -32994,9 +32955,8 @@ static void t41_apply_stock_spatial_profile(void)
      * statistics-RAM initialization.  Enabling that partial object produces
      * diagonal frame corruption on a true cold boot.  T40 uses the same safe
      * boundary, so leave LCE bypassed until its complete init is recovered. */
-    *bypass &= ~(BIT(14) | BIT(17) | BIT(18));
     *bypass |= BIT(21);
-    system_reg_write(0x40, *bypass);
+    t41_top_restore_bypass(BIT(14) | BIT(17) | BIT(18));
     t41_apply_stock_lce_ram_profile();
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock spatial profile applied "
@@ -33309,8 +33269,6 @@ static void t41_hold_tmo_bypass(void)
 
 static void t41_apply_stock_cdns_profile(void)
 {
-    uint32_t *bypass;
-
     if (t41_stock_cdns_profile > 0)
         return;
 
@@ -33322,16 +33280,9 @@ static void t41_apply_stock_cdns_profile(void)
     system_reg_write(0x1c050U, 0x0000ffffU);
     system_reg_write(0x1c004U, 0x00000001U);
 
-    /*
-     * tisp_cdns_init() keeps TOP bit 19 asserted while the recovered runtime
-     * writer is incomplete.  The literal profile above is the complete
-     * writer-owned stock CDNS image and the block has no external DMA state,
-     * so it is coherent at this point.  Leaving the safety bit set discarded
-     * the restored profile and left visible chroma noise in low-light areas.
-     */
-    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    *bypass &= ~BIT(19);
-    system_reg_write(0x40U, *bypass);
+    /* Programming a bank does not authorize enabling the block. The
+     * sensor calibration can bypass CDNS, including with a nonzero bank. */
+    t41_top_restore_bypass(BIT(19));
     printk(KERN_WARNING
            "tx_isp_t41_recovered: stock CDNS profile applied "
            "check=%#x/%#x/%#x/%#x top=%#x\n",
@@ -33567,8 +33518,7 @@ static void t41_apply_stock_mdns_profile(void)
         system_reg_write(stock_delta[i][0], stock_delta[i][1]);
 
     bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    *bypass &= ~BIT(13);
-    system_reg_write(0x40, *bypass);
+    t41_top_restore_bypass(BIT(13));
     /* Exact tisp_mdns_start()/tisp_mdns_reg_trig() order. */
     system_reg_write(0x0f008, 1);
     system_reg_write(0x0f004, 1);
@@ -54172,7 +54122,7 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
     if (channel == 0)
         t41_apply_stock_tmo_profile();
     if (channel == 0)
-        t41_apply_stock_bcsh_profile(TX_ISP_TUNING_COLOR_MODEL_DAY);
+        t41_apply_calibrated_bcsh(TX_ISP_TUNING_COLOR_MODEL_DAY);
     if (channel == 0) {
         bool legacy_profile = t41_ae_flicker_profile < 0 &&
             t41_ae_flicker_frequency_hz && t41_ae_flicker_floor_lines;
@@ -135258,6 +135208,37 @@ int32_t tisp_bcsh_dn_params_refresh(uint32_t a0, uint32_t a1)
 #endif
 }
 
+static int t41_bcsh_update(uint32_t ct, uint32_t ev, int force)
+{
+    uint8_t *info, *params;
+    uint32_t words[T41_BCSH_WORDS], i;
+    int ret = -ENODEV;
+    mutex_lock(&t41_bcsh_lock);
+    info = (uint8_t *)(uintptr_t)bcsh_info;
+    if (!t41_kernel_data_ptr(info))
+        goto done;
+    params = (uint8_t *)(uintptr_t)*(uint32_t *)(void *)info;
+    if (!t41_kernel_data_ptr(params))
+        goto done;
+    ret = tisp_csc_api_get(0, (uint32_t)(uintptr_t)(info + 212));
+    if (!ret)
+        ret = t41_bcsh_compute(params, T41_BCSH_PARAM_BYTES, ct, ev,
+                               info + 212, 92, words);
+    if (ret)
+        goto done;
+    if (force || memcmp(words, t41_bcsh_last, sizeof(words))) {
+        for (i = 0; i < ARRAY_SIZE(words); ++i)
+            system_reg_write(0x11000 + i * 4, words[i]);
+        memcpy(t41_bcsh_last, words, sizeof(words));
+    }
+    *(uint32_t *)(void *)(info + 312) = ct;
+    *(uint32_t *)(void *)(info + 320) = ev;
+done:
+    t41_bcsh_error = ret;
+    mutex_unlock(&t41_bcsh_lock);
+    return ret;
+}
+
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e0fc origin=fragment_seed original=tisp_bcsh_init */
 int32_t tisp_bcsh_init(uint32_t a0)
 {
@@ -135300,9 +135281,9 @@ int32_t tisp_bcsh_init(uint32_t a0)
     *(uint32_t *)(void *)(info + 328) = 0x808080ff;
     *(uint32_t *)(void *)(info + 332) = 128;
 
-    printk(KERN_WARNING
-           "tx_isp_t41_recovered: bcsh-init safe neutral channel=%u\n", a0);
-    return 0;
+    t41_bcsh_update(5000, 0, 1);
+    printk(KERN_INFO "tx_isp_t41_recovered: calibration BCSH init ret=%d\n", t41_bcsh_error);
+    return t41_bcsh_error;
 #else
     uint32_t *local_10 = 0;
     uint32_t local_1c = 0;
@@ -135434,6 +135415,7 @@ int32_t tisp_bcsh_deinit(uint32_t a0)
     if (a0 != 0)
         return -EINVAL;
 
+    mutex_lock(&t41_bcsh_lock);
     if (bcsh_info) {
         private_kfree((void *)(uintptr_t)bcsh_info);
         bcsh_info = 0;
@@ -135441,6 +135423,7 @@ int32_t tisp_bcsh_deinit(uint32_t a0)
     callbacks[216 / 4] = 0;
     callbacks[220 / 4] = 0;
     callbacks[224 / 4] = 0;
+    mutex_unlock(&t41_bcsh_lock);
     return 0;
 #else
     uintptr_t *s0;
@@ -135478,6 +135461,24 @@ int32_t tisp_bcsh_deinit(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e374 origin=fragment_seed original=tisp_bcsh_param_array_get */
 int32_t tisp_bcsh_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    int ret = -ENODEV;
+    if (a0 != 0 || !t41_kernel_data_ptr((void *)(uintptr_t)a1) ||
+        !t41_kernel_data_ptr((void *)a2))
+        return -EINVAL;
+    mutex_lock(&t41_bcsh_lock);
+    info = (uint8_t *)(uintptr_t)bcsh_info;
+    if (t41_kernel_data_ptr(info) &&
+        t41_kernel_data_ptr((void *)(uintptr_t)*(uint32_t *)(void *)info)) {
+        memcpy((void *)(uintptr_t)a1,
+               (void *)(uintptr_t)*(uint32_t *)(void *)info, T41_BCSH_PARAM_BYTES);
+        *(uint32_t *)a2 = T41_BCSH_PARAM_BYTES;
+        ret = 0;
+    }
+    mutex_unlock(&t41_bcsh_lock);
+    return ret;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -135502,11 +135503,32 @@ int32_t tisp_bcsh_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e3d0 origin=fragment_seed original=tisp_bcsh_param_array_set */
 int32_t tisp_bcsh_param_array_set(uint32_t a0, uint32_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint8_t *info;
+    uint32_t words[T41_BCSH_WORDS];
+    int ret = -ENODEV;
+    if (a0 != 0 || !t41_kernel_data_ptr((void *)(uintptr_t)a1))
+        return -EINVAL;
+    mutex_lock(&t41_bcsh_lock);
+    info = (uint8_t *)(uintptr_t)bcsh_info;
+    if (t41_kernel_data_ptr(info)) {
+        ret = t41_bcsh_compute((void *)(uintptr_t)a1, T41_BCSH_PARAM_BYTES,
+            READ_ONCE(t41_ccm_ct), *(uint32_t *)(void *)(info + 320), info + 212, 92, words);
+        if (!ret)
+            memcpy((void *)(uintptr_t)*(uint32_t *)(void *)info,
+                   (void *)(uintptr_t)a1, T41_BCSH_PARAM_BYTES);
+    }
+    mutex_unlock(&t41_bcsh_lock);
+    if (!ret)
+        ret = t41_apply_calibrated_bcsh(READ_ONCE(t41_bcsh_color_model));
+    return ret;
+#endif
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -135560,6 +135582,9 @@ int32_t tisp_bcsh_param_array_set(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e484 origin=fragment_seed original=tisp_bcsh_api_set_brightness */
 int32_t tisp_bcsh_api_set_brightness(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -135616,6 +135641,9 @@ int32_t tisp_bcsh_api_get_brightness(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e500 origin=fragment_seed original=tisp_bcsh_api_set_contrast */
 int32_t tisp_bcsh_api_set_contrast(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -135672,6 +135700,9 @@ int32_t tisp_bcsh_api_get_contrast(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e57c origin=fragment_seed original=tisp_bcsh_api_set_saturation */
 int32_t tisp_bcsh_api_set_saturation(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -135728,6 +135759,9 @@ int32_t tisp_bcsh_api_get_saturation(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e5f8 origin=fragment_seed original=tisp_bcsh_api_set_hue */
 int32_t tisp_bcsh_api_set_hue(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -135784,6 +135818,11 @@ int32_t tisp_bcsh_api_get_hue(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e674 origin=fragment_seed original=tisp_bcsh_refresh_by_csc */
 int32_t tisp_bcsh_refresh_by_csc(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (a0 != 0)
+        return -EINVAL;
+    return t41_apply_calibrated_bcsh(READ_ONCE(t41_bcsh_color_model));
+#endif
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -135838,6 +135877,9 @@ int32_t tisp_bcsh_refresh_by_csc(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e724 origin=fragment_seed original=tisp_bcsh_api_set_ccm */
 int32_t tisp_bcsh_api_set_ccm(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -135907,6 +135949,9 @@ int32_t tisp_bcsh_api_get_ccm(int32_t arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000005e834 origin=fragment_seed original=tisp_bcsh_api_set_offset_rgb */
 int32_t tisp_bcsh_api_set_offset_rgb(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return -EOPNOTSUPP;
+#endif
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -149743,7 +149788,6 @@ static int t41_tmo_frame(uint32_t ev, uint32_t gain, uint32_t sequence)
     uint16_t *shadow;
     uint16_t curve[T41_TMO_CURVE_ENTRIES];
     uint32_t bank, samples = 0, shift, i;
-    uint32_t *bypass;
     int ret;
 
     info = (uint8_t *)(uintptr_t)tmo_info[0];
@@ -149808,10 +149852,7 @@ static int t41_tmo_frame(uint32_t ev, uint32_t gain, uint32_t sequence)
         return ret;
     memcpy(previous, out, T41_TMO_SAMPLES * sizeof(*out));
     t41_tmo_state.first = 0;
-    bypass = &((uint32_t *)(void *)top_bypass_global)[0];
-    *bypass &= ~BIT(22);
-    system_reg_write(0x40, *bypass);
-    return 0;
+    return t41_top_restore_bypass(BIT(22));
 }
 
 static void t41_tmo_exposure(uint32_t integration, uint32_t gain)
@@ -149871,6 +149912,7 @@ static void t41_tmo_workfn(struct work_struct *work)
     exposure = (uint64_t)integration * linear >> 10;
     ev = min_t(uint64_t, exposure, UINT_MAX);
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
+    t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
     ret = t41_tmo_frame(ev, gain, sequence);
     t41_tmo_error = ret;
     if (ret) {

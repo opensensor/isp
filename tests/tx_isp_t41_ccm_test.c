@@ -41,6 +41,14 @@ int main(void)
 	assert(t41_ccm_select(NULL, 148, 0, 0, m, &sat));
 	assert(t41_ccm_saturate(m, 1025, 0, NULL, transformed));
 	assert(t41_ccm_saturate(m, 256, 6, NULL, transformed));
+	put16(p+74, 1024);
+	for (i = 0; i < 9; ++i) {
+		put32(p+20+i*4, 10+i*5000000U);
+		put16(p+56+i*2, 1024);
+	}
+	assert(!t41_ccm_select(p, 148, 5000, 2500010, m, &sat));
+	/* 5,120,000,000 + 2,500,000 wraps before division. */
+	assert(sat == 165);
 	puts("T41 CCM calibration selection, rounding, packing and atomic rejection: passed");
 	return 0;
 }

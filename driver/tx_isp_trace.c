@@ -132,8 +132,13 @@ static const struct trace_range core_trace_ranges[] = {
 static const struct trace_range quality_trace_ranges[] = {
 	/* T41 HLIL live bases/triggers, not the older-family bank map. */
 	{ BASE_ISP, 0x00040, 0x00040, "TOP_BYPASS" },
+	{ BASE_ISP, 0x04000, 0x04010, "AWB_GAIN" },
 	{ BASE_ISP, 0x08000, 0x08050, "GIB" },
 	{ BASE_ISP, 0x0a000, 0x0a3ff, "DMSC" },
+	/* Readable color configuration only; no indirect table/FIFO ports. */
+	{ BASE_ISP, 0x0b000, 0x0b020, "CCM" },
+	{ BASE_ISP, 0x0d000, 0x0d030, "CSC" },
+	{ BASE_ISP, 0x11000, 0x11070, "BCSH" },
 	/* T41 tisp_mdns_reg_cfg writes through base+0x2b0.  The earlier
 	 * 0x200-byte window silently omitted the final tables, so cover the full
 	 * 0x400-byte unit aperture before deriving a replay profile. */
