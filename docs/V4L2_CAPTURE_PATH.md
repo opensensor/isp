@@ -30,10 +30,13 @@ wakeups.
 
 ## Adapter phases
 
-1. T41 registers `/dev/video0` on frame-source channel 0 by default (selectable
-   with the read-only `v4l2_channel` module parameter). It exposes the native
-   2560x1440 NV12 format from the shared checked layout helper. The public and
-   private paths remain mutually exclusive owners of the selected channel.
+1. T41 registers three capture nodes, normally `/dev/video0` through
+   `/dev/video2`. `v4l2_channel` selects the first registered channel; identify
+   channels by QUERYCAP bus `platform:tx-isp-t41:chN`, not node numbering.
+   Each node has independent NV12 geometry and buffers. S_FMT negotiates
+   32-pixel width/two-line height steps up to the active sensor geometry,
+   and returns EBUSY while buffers are allocated. The public and private
+   paths remain mutually exclusive owners of each channel.
 2. T41 connects `REQBUFS`/`QUERYBUF`/`QBUF`/`DQBUF`/`STREAMON`/`STREAMOFF` to
    the common queue core through Linux 4.4 vb2 MMAP and contiguous DMA. The
    private queue metadata receives those physical buffers and the existing
@@ -51,6 +54,8 @@ wakeups.
    `REQBUFS` performs the complete sensor registration, graph activation,
    MDNS coherent allocation, and sensor prepare/start/enable sequence. The
    last V4L2 owner performs the inverse sequence and releases the sensor.
+   Intermediate output closes retain the shared sensor and MDNS allocation.
+   Closing a discovery-only descriptor never stops the queue owner's stream.
    If a private client already owns the sensor lifecycle, the adapter may
    attach only when the selected frame-source channel is unclaimed; otherwise
    the strict ownership gate returns `EBUSY`.
@@ -86,6 +91,10 @@ longer exists.
 - DQBUF order follows hardware completion order, not QBUF order.
 - STREAMOFF returns queued, active, and completed slots to the caller without
   retaining stale completion records.
+- MSCA channel disable gates future frames, not the in-flight DMA. Wait for
+  that channel's active bit at `0xf00e0` before resetting completion FIFOs or
+  returning/freeing buffers. A stuck engine retains its buffers and reports
+  the failure while waiting; it must never time out into freeing live DMA.
 - Buffer errors are visible through the standard error flag and benchmark
   counters; they are never silently converted to successful frames.
 - Adding `/dev/video*` must not change ISP tuning, exposure, image quality,

@@ -45,6 +45,7 @@ int t41_frame_channel_streamon_clean(void *channel, void __user *user_type);
  * lifecycle.  The adapter owns policy, sensor metadata, and DMA allocation;
  * the recovered unit only supplies access to its private aggregate object. */
 int tx_isp_t41_legacy_sensor_present(void);
+int tx_isp_t41_legacy_geometry(unsigned int *width, unsigned int *height);
 int tx_isp_t41_legacy_open(struct file *file);
 long tx_isp_t41_legacy_ioctl(struct file *file, unsigned int command,
 			     void *argument);

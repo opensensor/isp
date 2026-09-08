@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/* Linux-4.4 V4L2 MMAP adapter for one recovered T41 scaler channel. */
+/* Linux-4.4 V4L2 MMAP adapter for the three T41 scaler outputs. */
 
 #include <linux/kernel.h>
 #include <linux/dma-mapping.h>
@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/slab.h>
 #include <linux/timekeeping.h>
 #include <linux/version.h>
 #include <linux/videodev2.h>
@@ -102,7 +103,7 @@ MODULE_PARM_DESC(v4l2_autostart,
 static unsigned int v4l2_channel __attribute__((section(".data")));
 module_param(v4l2_channel, uint, 0444);
 MODULE_PARM_DESC(v4l2_channel,
-	"frame-source channel exported through V4L2 (0 is the native main path)");
+	"first frame-source channel registered through V4L2 (all three exported)");
 static char *v4l2_sensor_name = "os04d10";
 module_param(v4l2_sensor_name, charp, 0644);
 MODULE_PARM_DESC(v4l2_sensor_name, "sensor driver name used by V4L2 autostart");
@@ -168,6 +169,17 @@ struct tx_isp_t41_v4l2 {
 
 static struct tx_isp_t41_v4l2 tx_isp_t41_video;
 
+/* Keep the original static object/layout for the shared lifecycle only.
+ * Capture queues live separately: no output owns another output's sensor,
+ * MDNS allocation, VB2 queue, format, or completion worker. */
+struct tx_isp_t41_v4l2_state {
+	struct mutex pipeline_lock;
+	unsigned int users;
+	struct tx_isp_t41_v4l2 outputs[3];
+};
+static struct tx_isp_t41_v4l2_state *v4l2_state
+	__attribute__((section(".data")));
+
 static int tx_isp_t41_v4l2_legacy_ioctl(struct tx_isp_t41_v4l2 *video,
 					unsigned int command, void *argument)
 {
@@ -199,7 +211,7 @@ static void tx_isp_t41_v4l2_fill_sensor(
 	sensor->default_boot = v4l2_sensor_default_boot;
 }
 
-static void tx_isp_t41_v4l2_pipeline_put(struct tx_isp_t41_v4l2 *video)
+static void tx_isp_t41_v4l2_lifecycle_put(struct tx_isp_t41_v4l2 *video)
 {
 	struct tx_isp_t41_initarg input = { 0, 0 };
 
@@ -229,7 +241,7 @@ static void tx_isp_t41_v4l2_pipeline_put(struct tx_isp_t41_v4l2 *video)
 	video->lifecycle_acquired = false;
 }
 
-static int tx_isp_t41_v4l2_pipeline_get(struct tx_isp_t41_v4l2 *video)
+static int tx_isp_t41_v4l2_lifecycle_get(struct tx_isp_t41_v4l2 *video)
 {
 	struct tx_isp_t41_initarg input = { 1, 0 };
 	struct tx_isp_t41_buf_info mdns = { 0, 0, 0 };
@@ -334,6 +346,34 @@ fail_sensor:
 fail_open:
 	tx_isp_t41_legacy_release(&video->legacy_file);
 	return ret;
+}
+
+static int tx_isp_t41_v4l2_pipeline_get(struct tx_isp_t41_v4l2 *video)
+{
+	int ret = 0;
+
+	mutex_lock(&v4l2_state->pipeline_lock);
+	if (!video->lifecycle_acquired) {
+		if (!v4l2_state->users)
+			ret = tx_isp_t41_v4l2_lifecycle_get(&tx_isp_t41_video);
+		if (!ret) {
+			v4l2_state->users++;
+			video->lifecycle_acquired = true;
+		}
+	}
+	mutex_unlock(&v4l2_state->pipeline_lock);
+	return ret;
+}
+
+static void tx_isp_t41_v4l2_pipeline_put(struct tx_isp_t41_v4l2 *video)
+{
+	mutex_lock(&v4l2_state->pipeline_lock);
+	if (video->lifecycle_acquired) {
+		video->lifecycle_acquired = false;
+		if (!--v4l2_state->users)
+			tx_isp_t41_v4l2_lifecycle_put(&tx_isp_t41_video);
+	}
+	mutex_unlock(&v4l2_state->pipeline_lock);
 }
 
 /* The private ABI is a userspace ABI. Linux 4.4 still permits a narrow,
@@ -449,6 +489,9 @@ static int tx_isp_t41_v4l2_acquire_channel(struct tx_isp_t41_v4l2 *video,
 	wire.base.pix.bytesperline = video->format.bytesperline;
 	wire.base.pix.sizeimage = video->format.sizeimage;
 	wire.base.pix.colorspace = 8;
+	wire.base.scaler_enable = 1;
+	wire.base.scaler_out_width = video->format.width;
+	wire.base.scaler_out_height = video->format.height;
 	ret = tx_isp_t41_v4l2_set_format(channel, &wire);
 	if (ret)
 		goto fail;
@@ -761,22 +804,18 @@ static const struct vb2_ops tx_isp_t41_v4l2_vb2_ops = {
 	.wait_finish = vb2_ops_wait_finish,
 };
 
-static void tx_isp_t41_v4l2_active_format(struct v4l2_pix_format *format)
-{
-	*format = tx_isp_t41_video.format;
-}
-
 static int tx_isp_t41_v4l2_querycap(struct file *file, void *priv,
 				    struct v4l2_capability *capability)
 {
-	(void)file;
+	struct tx_isp_t41_v4l2 *video = video_drvdata(file);
 	(void)priv;
 	strlcpy((char *)capability->driver, "tx-isp-t41",
 		sizeof(capability->driver));
 	strlcpy((char *)capability->card, "Ingenic T41 ISP capture",
 		sizeof(capability->card));
-	strlcpy((char *)capability->bus_info, "platform:tx-isp-t41",
-		sizeof(capability->bus_info));
+	snprintf((char *)capability->bus_info, sizeof(capability->bus_info),
+		"platform:tx-isp-t41:ch%u",
+		(unsigned int)(video - v4l2_state->outputs));
 	capability->version = KERNEL_VERSION(0, 2, 0);
 	capability->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
 	capability->capabilities = capability->device_caps |
@@ -800,18 +839,54 @@ static int tx_isp_t41_v4l2_enum_fmt(struct file *file, void *priv,
 static int tx_isp_t41_v4l2_get_fmt(struct file *file, void *priv,
 				   struct v4l2_format *format)
 {
-	(void)file;
+	struct tx_isp_t41_v4l2 *video = video_drvdata(file);
 	(void)priv;
 	if (format->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-	tx_isp_t41_v4l2_active_format(&format->fmt.pix);
+	format->fmt.pix = video->format;
 	return 0;
 }
 
 static int tx_isp_t41_v4l2_try_fmt(struct file *file, void *priv,
 				   struct v4l2_format *format)
 {
-	return tx_isp_t41_v4l2_get_fmt(file, priv, format);
+	struct tx_isp_nv12_layout layout;
+	u32 width = TX_ISP_T41_V4L2_NATIVE_WIDTH;
+	u32 height = TX_ISP_T41_V4L2_NATIVE_HEIGHT;
+	int ret;
+
+	if (format->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+	(void)tx_isp_t41_legacy_geometry(&width, &height);
+	format->fmt.pix.width = clamp_t(u32, format->fmt.pix.width,
+		32, width) & ~31U;
+	format->fmt.pix.height = clamp_t(u32, format->fmt.pix.height,
+		16, height) & ~1U;
+	ret = tx_isp_nv12_layout_build(format->fmt.pix.width,
+		format->fmt.pix.height, TX_ISP_T41_V4L2_WIDTH_ALIGN,
+		TX_ISP_T41_V4L2_HEIGHT_ALIGN, &layout);
+	if (ret)
+		return ret;
+	format->fmt.pix.pixelformat = V4L2_PIX_FMT_NV12;
+	format->fmt.pix.field = V4L2_FIELD_NONE;
+	format->fmt.pix.bytesperline = layout.stride;
+	format->fmt.pix.sizeimage = layout.sizeimage;
+	format->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+	return 0;
+}
+
+static int tx_isp_t41_v4l2_set_fmt(struct file *file, void *priv,
+				struct v4l2_format *format)
+{
+	struct tx_isp_t41_v4l2 *video = video_drvdata(file);
+	int ret;
+
+	if (vb2_is_busy(&video->vb2_queue))
+		return -EBUSY;
+	ret = tx_isp_t41_v4l2_try_fmt(file, priv, format);
+	if (!ret)
+		video->format = format->fmt.pix;
+	return ret;
 }
 
 static int tx_isp_t41_v4l2_enum_framesizes(struct file *file, void *priv,
@@ -821,20 +896,26 @@ static int tx_isp_t41_v4l2_enum_framesizes(struct file *file, void *priv,
 	(void)priv;
 	if (size->index || size->pixel_format != V4L2_PIX_FMT_NV12)
 		return -EINVAL;
-	size->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	size->discrete.width = tx_isp_t41_video.format.width;
-	size->discrete.height = tx_isp_t41_video.format.height;
+	size->type = V4L2_FRMSIZE_TYPE_STEPWISE;
+	size->stepwise.min_width = 32;
+	size->stepwise.step_width = 32;
+	size->stepwise.min_height = 16;
+	size->stepwise.step_height = 2;
+	size->stepwise.max_width = TX_ISP_T41_V4L2_NATIVE_WIDTH;
+	size->stepwise.max_height = TX_ISP_T41_V4L2_NATIVE_HEIGHT;
+	(void)tx_isp_t41_legacy_geometry(&size->stepwise.max_width,
+		&size->stepwise.max_height);
 	return 0;
 }
 
 static int tx_isp_t41_v4l2_enum_frameintervals(
 	struct file *file, void *priv, struct v4l2_frmivalenum *interval)
 {
-	(void)file;
+	struct tx_isp_t41_v4l2 *video = video_drvdata(file);
 	(void)priv;
 	if (interval->index || interval->pixel_format != V4L2_PIX_FMT_NV12 ||
-	    interval->width != tx_isp_t41_video.format.width ||
-	    interval->height != tx_isp_t41_video.format.height)
+	    interval->width != video->format.width ||
+	    interval->height != video->format.height)
 		return -EINVAL;
 	interval->type = V4L2_FRMIVAL_TYPE_DISCRETE;
 	interval->discrete.numerator = 1;
@@ -882,7 +963,7 @@ static int tx_isp_t41_v4l2_request_buffers(
 	struct tx_isp_t41_v4l2 *video = video_drvdata(file);
 	int ret = vb2_ioctl_reqbufs(file, priv, request);
 
-	if (!ret && !request->count)
+	if ((!ret && !request->count) || (ret && !vb2_is_busy(&video->vb2_queue)))
 		tx_isp_t41_v4l2_release_channel(video);
 	return ret;
 }
@@ -892,7 +973,7 @@ static const struct v4l2_ioctl_ops tx_isp_t41_v4l2_ioctl_ops = {
 	.vidioc_enum_fmt_vid_cap = tx_isp_t41_v4l2_enum_fmt,
 	.vidioc_g_fmt_vid_cap = tx_isp_t41_v4l2_get_fmt,
 	.vidioc_try_fmt_vid_cap = tx_isp_t41_v4l2_try_fmt,
-	.vidioc_s_fmt_vid_cap = tx_isp_t41_v4l2_try_fmt,
+	.vidioc_s_fmt_vid_cap = tx_isp_t41_v4l2_set_fmt,
 	.vidioc_enum_framesizes = tx_isp_t41_v4l2_enum_framesizes,
 	.vidioc_enum_frameintervals = tx_isp_t41_v4l2_enum_frameintervals,
 	.vidioc_g_parm = tx_isp_t41_v4l2_get_parm,
@@ -910,9 +991,16 @@ static const struct v4l2_ioctl_ops tx_isp_t41_v4l2_ioctl_ops = {
 static int tx_isp_t41_v4l2_release(struct file *file)
 {
 	struct tx_isp_t41_v4l2 *video = video_drvdata(file);
-	int ret = vb2_fop_release(file);
+	bool owner;
+	int ret;
 
-	tx_isp_t41_v4l2_release_channel(video);
+	/* Closing a discovery-only fd must not stop another fd's capture. */
+	mutex_lock(&video->ioctl_lock);
+	owner = video->vb2_queue.owner == file->private_data;
+	ret = _vb2_fop_release(file, NULL);
+	if (owner)
+		tx_isp_t41_v4l2_release_channel(video);
+	mutex_unlock(&video->ioctl_lock);
 	return ret;
 }
 
@@ -925,14 +1013,12 @@ static const struct v4l2_file_operations tx_isp_t41_v4l2_fops = {
 	.poll = vb2_fop_poll,
 };
 
-int tx_isp_t41_v4l2_init(struct device *parent)
+static int tx_isp_t41_v4l2_register(struct device *parent, unsigned int channel)
 {
-	struct tx_isp_t41_v4l2 *video = &tx_isp_t41_video;
+	struct tx_isp_t41_v4l2 *video = &v4l2_state->outputs[channel];
 	struct tx_isp_nv12_layout layout;
 	int ret;
 
-	if (!parent || v4l2_channel > 2U)
-		return -EINVAL;
 	memset(video, 0, sizeof(*video));
 	BUILD_BUG_ON(sizeof(struct tx_isp_t41_sensor_info) != 100);
 	video->parent = parent;
@@ -974,8 +1060,8 @@ int tx_isp_t41_v4l2_init(struct device *parent)
 	ret = v4l2_device_register(parent, &video->v4l2_dev);
 	if (ret)
 		goto fail_queue;
-	strlcpy(video->video_dev.name, "tx-isp-t41-capture",
-		sizeof(video->video_dev.name));
+	snprintf(video->video_dev.name, sizeof(video->video_dev.name),
+		"tx-isp-t41-capture%u", channel);
 	video->video_dev.v4l2_dev = &video->v4l2_dev;
 	video->video_dev.fops = &tx_isp_t41_v4l2_fops;
 	video->video_dev.ioctl_ops = &tx_isp_t41_v4l2_ioctl_ops;
@@ -989,7 +1075,7 @@ int tx_isp_t41_v4l2_init(struct device *parent)
 		goto fail_v4l2;
 	video->registered = true;
 	pr_info("tx_isp_t41: V4L2 MMAP node registered as /dev/video%d (channel %u)\n",
-		video->video_dev.num, v4l2_channel);
+		video->video_dev.num, channel);
 	return 0;
 
 fail_v4l2:
@@ -1001,35 +1087,69 @@ fail_allocator:
 	return ret;
 }
 
-void tx_isp_t41_v4l2_exit(void)
+static void tx_isp_t41_v4l2_unregister(struct tx_isp_t41_v4l2 *video)
 {
-	struct tx_isp_t41_v4l2 *video = &tx_isp_t41_video;
-
 	if (!video->registered)
 		return;
-	tx_isp_t41_v4l2_release_channel(video);
 	video_unregister_device(&video->video_dev);
+	vb2_queue_release(&video->vb2_queue);
+	tx_isp_t41_v4l2_release_channel(video);
 	video->registered = false;
 	v4l2_device_unregister(&video->v4l2_dev);
-	vb2_queue_release(&video->vb2_queue);
 	vb2_dma_contig_cleanup_ctx(video->alloc_ctx);
+}
+
+int tx_isp_t41_v4l2_init(struct device *parent)
+{
+	unsigned int i;
+	int ret;
+
+	if (!parent || v4l2_channel > 2U)
+		return -EINVAL;
+	v4l2_state = kzalloc(sizeof(*v4l2_state), GFP_KERNEL);
+	if (!v4l2_state)
+		return -ENOMEM;
+	memset(&tx_isp_t41_video, 0, sizeof(tx_isp_t41_video));
+	tx_isp_t41_video.parent = parent;
+	mutex_init(&v4l2_state->pipeline_lock);
+	for (i = 0; i < 3; ++i) {
+		ret = tx_isp_t41_v4l2_register(parent, (v4l2_channel + i) % 3);
+		if (ret) {
+			tx_isp_t41_v4l2_exit();
+			return ret;
+		}
+	}
+	return 0;
+}
+
+void tx_isp_t41_v4l2_exit(void)
+{
+	unsigned int i;
+
+	if (!v4l2_state)
+		return;
+	for (i = 0; i < 3; ++i)
+		tx_isp_t41_v4l2_unregister(&v4l2_state->outputs[i]);
+	kfree(v4l2_state);
+	v4l2_state = NULL;
 }
 
 void tx_isp_t41_v4l2_bind_channel(void *channel, unsigned int index)
 {
-	struct tx_isp_t41_v4l2 *video = &tx_isp_t41_video;
+	struct tx_isp_t41_v4l2 *video;
 
-	if (!video->registered || index != v4l2_channel)
+	if (!v4l2_state || index >= 3)
+		return;
+	video = &v4l2_state->outputs[index];
+	if (!video->registered)
 		return;
 	mutex_lock(&video->channel_lock);
 	video->channel = channel;
 	mutex_unlock(&video->channel_lock);
 }
 
-void tx_isp_t41_v4l2_unbind_channel(void *channel)
+static void tx_isp_t41_v4l2_unbind(struct tx_isp_t41_v4l2 *video, void *channel)
 {
-	struct tx_isp_t41_v4l2 *video = &tx_isp_t41_video;
-
 	if (!video->registered)
 		return;
 	mutex_lock(&video->channel_lock);
@@ -1041,4 +1161,14 @@ void tx_isp_t41_v4l2_unbind_channel(void *channel)
 		vb2_queue_error(&video->vb2_queue);
 	}
 	mutex_unlock(&video->channel_lock);
+}
+
+void tx_isp_t41_v4l2_unbind_channel(void *channel)
+{
+	unsigned int i;
+
+	if (!v4l2_state)
+		return;
+	for (i = 0; i < 3; ++i)
+		tx_isp_t41_v4l2_unbind(&v4l2_state->outputs[i], channel);
 }

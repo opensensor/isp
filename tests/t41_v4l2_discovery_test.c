@@ -30,6 +30,8 @@ int main(int argc, char **argv)
 	struct v4l2_format format;
 	struct v4l2_frmsizeenum size;
 	struct v4l2_frmivalenum interval;
+	const char bus_prefix[] = "platform:tx-isp-t41:ch";
+	size_t channel_offset = sizeof(bus_prefix) - 1;
 	int fd;
 
 	fd = open(path, O_RDWR | O_NONBLOCK);
@@ -43,6 +45,13 @@ int main(int argc, char **argv)
 		goto fail;
 	if (!(capability.device_caps & V4L2_CAP_VIDEO_CAPTURE)) {
 		fprintf(stderr, "node does not advertise VIDEO_CAPTURE\n");
+		goto fail;
+	}
+	if (strncmp((char *)capability.bus_info, bus_prefix, channel_offset) ||
+	    capability.bus_info[channel_offset] < '0' ||
+	    capability.bus_info[channel_offset] > '2' ||
+	    capability.bus_info[channel_offset + 1]) {
+		fprintf(stderr, "missing stable scaler-channel identity\n");
 		goto fail;
 	}
 
@@ -71,6 +80,14 @@ int main(int argc, char **argv)
 	if (checked_ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &size,
 			  "VIDIOC_ENUM_FRAMESIZES"))
 		goto fail;
+	if (size.type != V4L2_FRMSIZE_TYPE_STEPWISE ||
+	    size.stepwise.min_width != 32 || size.stepwise.step_width != 32 ||
+	    size.stepwise.min_height != 16 || size.stepwise.step_height != 2 ||
+	    size.stepwise.max_width < format.fmt.pix.width ||
+	    size.stepwise.max_height < format.fmt.pix.height) {
+		fprintf(stderr, "invalid per-channel scaler size range\n");
+		goto fail;
+	}
 
 	memset(&interval, 0, sizeof(interval));
 	interval.index = 0;

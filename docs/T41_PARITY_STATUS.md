@@ -39,8 +39,8 @@ staged; no Raptor configuration or Neo audio library was changed.
 ## Required before calling the normal daytime path finished
 
 1. **Concurrent main/substream/JPEG output.** This is a hard exit requirement,
-   not optional follow-up work. The active V4L2 backend currently exposes
-   only the main stream and disables substream, JPEG, OSD and IVS. Exercise
+   not optional follow-up work. The V4L2 checkpoint now exposes main and
+   substream; JPEG, OSD and IVS remain disabled on that backend. Exercise
    the shared IMP FrameSource/encoder graph first, then repair the actual
    queue, scaler, encoder and lifetime boundaries it exposes. Main and
    scaled substream must decode concurrently with audio; taking JPEGs and
@@ -51,9 +51,10 @@ staged; no Raptor configuration or Neo audio library was changed.
    The shared IMP checkpoint now has correct generated substream pixels,
    ten non-disruptive substream restarts, mixed 25/15 fps and live substream
    resizing. Reverse-direction restart and software-JPEG stress still expose
-   occasional missing source frames. Standalone V4L2 remains single-node:
-   it needs shared input ownership across per-output queues, HAL channel
-   plumbing and shared AVPU submission/completion arbitration. Keep this
+   occasional missing source frames. Standalone V4L2 now has three capture
+   nodes, shared input ownership, HAL channel plumbing and shared AVPU
+   submission/completion arbitration. Its resize crash is repaired, but
+   occasional peer source-frame gaps during live resizing remain. Keep this
    requirement open until the selected production backend is validated.
 2. **Complete live AE ownership.** The automatic allocator and convergence
    ramp are checked helpers, but `t41_safe_ae_calc_process` still uses the

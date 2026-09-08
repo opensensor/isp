@@ -33951,6 +33951,18 @@ int tx_isp_t41_legacy_sensor_present(void)
 		t41_kernel_data_ptr(*(void **)(vin + 0x11c));
 }
 
+int tx_isp_t41_legacy_geometry(unsigned int *width, unsigned int *height)
+{
+	u32 w = READ_ONCE(t41_mdns_input_width[0]);
+	u32 h = READ_ONCE(t41_mdns_input_height[0]);
+
+	if (!w || !h || !tx_isp_t41_legacy_sensor_present())
+		return -ENODEV;
+	*width = w;
+	*height = h;
+	return 0;
+}
+
 int tx_isp_t41_legacy_open(struct file *file)
 {
 	char *ispdev = (char *)(uintptr_t)globe_ispdev;
@@ -52209,6 +52221,40 @@ int32_t tisp_channel_main_start(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001fc14 origin=fragment_seed original=tisp_channel_main_stop */
 int32_t tisp_channel_main_stop(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    unsigned long flags = 0;
+    unsigned long deadline = jiffies + HZ;
+    uint32_t mask;
+    uint32_t active;
+
+    if (a0 >= 3)
+        return -EINVAL;
+    mask = 1U << a0;
+    /* MSCA enable (0xf0008) gates new frames; active (0xf00e0) includes
+     * the frame already writing DMA. T41 live STREAMOFF traces show active
+     * retaining the disabled channel for the remainder of that frame.
+     * Do not reload curves/geometry here: that can fail with shadow-port
+     * EBUSY before disabling the output, and shutdown needs neither. */
+    __private_spin_lock_irqsave((uint32_t)(uintptr_t)&msca_slock,
+                                (uintptr_t)&flags);
+    *(uint8_t *)((char *)&mscaler + a0 * 612 + 4) = 0;
+    *(uint8_t *)((char *)&msca + a0 * 26) = 0;
+    system_reg_write(0x0f0008U, system_reg_read(0x0f0008U) & ~mask);
+    private_spin_unlock_irqrestore((void *)(uintptr_t)&msca_slock, flags);
+
+    /* FIFO reset and VB2 buffer return/free must follow DMA quiescence.
+     * This process-context path holds no spinlock. A stuck engine must
+     * retain its buffers, not time out into freeing live DMA destinations. */
+    while ((active = system_reg_read(0x0f00e0U)) & mask) {
+        if (time_after_eq(jiffies, deadline)) {
+            printk(KERN_ERR "tx_isp_t41_recovered: MSCA channel %u still active=%#x; retaining capture buffers\n",
+                   a0, active);
+            deadline = jiffies + HZ;
+        }
+        usleep_range(1000, 2000);
+    }
+    return 0;
+#else
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
     uintptr_t a2 = 0;
@@ -52231,6 +52277,7 @@ int32_t tisp_channel_main_stop(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000001fc70 origin=fragment_seed original=tisp_channel_main_fifo_clear */
@@ -141829,6 +141876,7 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
     uint32_t stride;
     uint32_t align;
     uint32_t packed_size;
+    unsigned long enable_flags = 0;
     unsigned int i;
 
     if (a0 != 0 || a1 >= 3 || !t41_kernel_data_ptr(desc))
@@ -141943,6 +141991,10 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
     stride = (crop_width + align - 1) & ~(align - 1);
     system_reg_write(base + 0x80, stride);
     system_reg_write(base + 0x98, stride);
+    /* Pair enable updates with channel shutdown; another output may stop
+     * while this channel's scaler curves are being generated. */
+    __private_spin_lock_irqsave((uint32_t)(uintptr_t)&msca_slock,
+                                (uintptr_t)&enable_flags);
     active_mask = 0;
     for (i = 0; i < 3; ++i) {
         uint8_t *channel_desc =
@@ -141959,6 +142011,8 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
            system_reg_read(0x0f0030), system_reg_read(0x0f0084),
            system_reg_read(0x0f00e0));
     system_reg_write(0x0f0008, active_mask);
+    private_spin_unlock_irqrestore((void *)(uintptr_t)&msca_slock,
+                                   enable_flags);
     printk(KERN_WARNING
            "tx_isp_t41_recovered: MSCA post-enable readback channel=%u enable=%#x ctrl=%#x/%#x stride=%#x/%#x\n",
            a1, system_reg_read(0x0f0008),
