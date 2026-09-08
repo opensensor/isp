@@ -48,6 +48,13 @@ staged; no Raptor configuration or Neo audio library was changed.
    Check independent output geometry/rates, timestamp continuity, memory
    ownership and queue loss. A second advertised RTSP endpoint is not proof
    that the second media pipeline works.
+   The shared IMP checkpoint now has correct generated substream pixels,
+   ten non-disruptive substream restarts, mixed 25/15 fps and live substream
+   resizing. Reverse-direction restart and software-JPEG stress still expose
+   occasional missing source frames. Standalone V4L2 remains single-node:
+   it needs shared input ownership across per-output queues, HAL channel
+   plumbing and shared AVPU submission/completion arbitration. Keep this
+   requirement open until the selected production backend is validated.
 2. **Complete live AE ownership.** The automatic allocator and convergence
    ramp are checked helpers, but `t41_safe_ae_calc_process` still uses the
    conservative three-frame, +25%/-20% controller. Recover and test the

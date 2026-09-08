@@ -81,4 +81,18 @@ input and retains that ownership across individual output stops. Only the
 input-level stop releases it. State lives in a separate object, leaving the
 recovered object's BSS aliases untouched. Host tests exercise failed-start
 retry, independent inputs, full-stop restart and simultaneous output starts.
-Physical restart validation remains required before promoting this change.
+With OpenIMP's matching shared capture/encoder allocation owner, ten
+substream stop/start cycles preserved the main stream at 24.9865 capture fps
+without source-timestamp or RTP sequence gaps. RVD RSS/data stayed at
+4620/2932 KiB. Different output rates (25/15 fps) and resizing the substream
+to 960x544 also preserved the main stream, and the resized pixels decoded
+correctly. Main stop/start no longer stalls the graph, but a reverse-direction
+probe caught one missing substream frame; it is not a zero-gap pass.
+
+Real QHD JPEG fanout now coexists with both video outputs in the shared IMP
+graph, but the first software-JPEG load test caught occasional missing source
+frames. These are visible because OpenIMP now preserves the actual capture
+timestamp rather than manufacturing a nominal timeline. Standalone V4L2
+still exports one selected scaler channel; the shared-graph repairs do not
+automatically provide multiple V4L2 queues or encoder arbitration. Neither
+JPEG stress nor standalone V4L2 multi-output is declared complete here.
