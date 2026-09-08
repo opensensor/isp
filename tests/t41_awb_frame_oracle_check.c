@@ -6,6 +6,7 @@
 #include "../driver/t41/tx_isp_t41_awb_long.h"
 #include "../driver/t41/tx_isp_t41_awb_prior.h"
 #include "../driver/t41/tx_isp_t41_awb_special.h"
+#include "../driver/t41/tx_isp_t41_awb_frame.h"
 unsigned char oracle_bss[0x5000] __attribute__((aligned(65536)));
 unsigned short oracle_cluster_red[6],oracle_cluster_blue[6];
 #ifndef T41_AWB_FRAME_HOST
@@ -26,11 +27,6 @@ static unsigned int info[7];
 #endif
 static uint32_t seed=612795;
 static unsigned int rng(void) { seed^=seed<<13; seed^=seed>>17; seed^=seed<<5; return seed; }
-static int detector(void *context,void **view,unsigned int *out,unsigned int *failed)
-{
-	(void)context;
-	return t41_awb_detect(p,sizeof(p),s,sizeof(s),view[22],view[23],out,failed);
-}
 #ifndef T41_AWB_FRAME_HOST
 static void difference(const char *kind,unsigned int sequence,unsigned int frame,const unsigned char *a,const unsigned char *b,unsigned int n)
 {
@@ -43,7 +39,7 @@ static void difference(const char *kind,unsigned int sequence,unsigned int frame
 int main(void)
 {
 	unsigned int sequence,f,i,fail=0,frames=0;
-	void *view[45];
+	struct t41_awb_frame_buffers buffers={p,s,report,sizeof(p),sizeof(s),sizeof(report)};
 #ifndef T41_AWB_FRAME_HOST
 	void *oview[45];
 	*(uint32_t *)(void *)(oracle_bss+0x4114)=(uintptr_t)info;
@@ -100,7 +96,7 @@ int main(void)
 			p[0x1200+i]=1+rng()%4;
 		}
 		for(f=0;f<100;++f) {
-			struct t41_awb_register words[28]; unsigned int n,record,db,wb[2],enable;
+			struct t41_awb_register words[28]; unsigned int n,record,db;
 			p[0xcca]=f%4==3; p[0xccc]=(f/4)%4; db=count*(p[0xcca] ? 32 : 128);
 			for(record=0;record<db/16;++record) {
 				unsigned int pixels=128+rng()%1000,g=pixels*(64+rng()%256),r=pixels*(64+rng()%256),b=pixels*(64+rng()%256),lum=(r+g+b)/3;
@@ -111,19 +107,8 @@ int main(void)
 			s[0xeaa1]=f%19==18;
 			for(i=0;i<3;++i) oracle_rgb[i]=1000+rng()%10000;
 			memcpy(q,p,sizeof(p)); memcpy(t,s,sizeof(s)); memcpy(oreport,report,sizeof(report));
-			if(t41_awb_statistics(p,sizeof(p),dma,db,s,sizeof(s)) ||
-			   t41_awb_prior_prepare(p,sizeof(p),s,sizeof(s),view,red,blue) ||
-			   t41_awb_special_prepare(p,sizeof(p),s,sizeof(s),oracle_rgb,words,&n) ||
-			   t41_awb_long(p,sizeof(p),s,sizeof(s),report,sizeof(report),view,detector,NULL) ||
-			   t41_awb_gain_prepare(p,sizeof(p),s,sizeof(s),report,sizeof(report),wb,&enable)) {
+			if(t41_awb_frame(&buffers,red,blue,dma,db,oracle_rgb,words,&n)) {
 				printf("native rejected sequence=%u frame=%u\n",sequence,f); return 3;
-			}
-			if(enable) {
-				static const unsigned int addresses[10]={0x4004,0x4008,0x400c,0x4010,0x4000,0x5004,0x5008,0x500c,0x5010,0x5000};
-				for(i=0;i<10;++i) {
-					words[n].address=addresses[i];
-					words[n++].value=i==4 || i==9 ? 1 : wb[i==1 || i==3 || i==6 || i==8];
-				}
 			}
 			++frames;
 #ifndef T41_AWB_FRAME_HOST

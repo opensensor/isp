@@ -267,8 +267,37 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 
 ## Still required
 
-Owned frame-safe runtime with lifecycle and calibration replacement tests,
-userspace/kernel ownership negotiation, and the start-gain API's separate
-day-calibration write policy. Existing gain packing and CT-offset
+The adapter in `tx_isp_t41_awb_runtime.inc` is prepared but **not wired into
+the live kernel yet**. Its actual C runs in a host harness with mocked IRQ,
+workqueue, allocation and register access. ASan/UBSan tests cover private
+calibration, 100 complete frames, freeze/manual controls, calibration refresh,
+failed-candidate rollback, allocation unwinding, duplicate/late IRQs,
+stop-before-free and all 55 power-management register pairs. No sensor
+calibration bytes are modified. Layout changes are rejected with `EBUSY`
+while streaming; the parent must stop hardware before releasing DMA memory.
+
+The shared `t41_awb_frame` helper used by the adapter passes the complete
+10,000-frame OEM oracle again on QEMU and the T41, plus native ASan/UBSan.
+The new `t41_awb_hardware` helper separately matches 10,000 complete OEM
+geometry/threshold transactions, including ordered triggers, freeze and ready
+flags, randomized gain tables and all parameter/state bytes on both targets.
+Unlike the control-policy oracle, that test executes the actual OEM hardware
+writer and interpolation; only MMIO itself is redirected into checked memory.
+
+```sh
+sh tools/build_t41_awb_hardware_oracle.sh CROSS_PREFIX STOCK_OBJECT OUTPUT_DIR
+qemu-mipsel OUTPUT_DIR/awb-hardware-oracle-check
+cc -std=c99 -O1 -g -no-pie -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -fno-sanitize-recover=all tests/tx_isp_t41_awb_runtime_test.c -o /tmp/awb-runtime-test
+/tmp/awb-runtime-test
+```
+
+Still needed: kernel entry-point integration, userspace/kernel ownership
+negotiation, physical lifecycle/streaming/IQ comparisons and the start-gain
+API's separate day-calibration write policy. `tisp_params_copy` copies AWB
+from day-bank `0xd18` to active `0x978`; thus the OEM start setter's day-bank
+`0xd24..0xd30` addresses correspond to active AWB targets/current gains. This
+is a packed-bank mapping, not a different auto-WB algorithm or sensor hack.
+Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not
 establish correctness of the estimator feeding them.

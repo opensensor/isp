@@ -28,6 +28,7 @@ with open(sys.argv[1], 'rb') as source:
     awb_detect = len(sys.argv) > 2 and sys.argv[2] == 'awb_detect'
     awb_frame = len(sys.argv) > 2 and sys.argv[2] == 'awb_frame'
     awb_control = len(sys.argv) > 2 and sys.argv[2] == 'awb_control'
+    awb_hardware = len(sys.argv) > 2 and sys.argv[2] == 'awb_hardware'
     gamma = len(sys.argv) > 2 and sys.argv[2] == 'gamma'
     dpc = len(sys.argv) > 2 and sys.argv[2] == 'dpc'
     dmsc = len(sys.argv) > 2 and sys.argv[2] == 'dmsc'
@@ -91,6 +92,10 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_awb_set_statis_localtion', 'tisp_awb_api_set_ct_trend_offset',
             'tisp_awb_api_get_ct_trend_offset', 'tisp_awb_set_converge_step',
             'tisp_awb_get_converge_step']}
+    if awb_hardware:
+        functions = {name: 'oracle_' + name for name in [
+            'tisp_awb_set_hardware_param', 'tisp_awb_set_regional_threshold',
+            'tisp_awb_set_lum_th_freq', 'tisp_simple_intp_int16']}
     if gamma:
         functions = dict(zip(['tisp_gamma_interp_by_ev', 'tisp_gamma_strength_transform',
             'tisp_gamma_write_lut_rgb', 'tisp_round_int64'],
