@@ -65,6 +65,26 @@ int main(void)
 		assert(last == 19 && !memcmp(previous, nodes, sizeof(nodes)));
 	}
 	{
+		unsigned char cache[0x688] = {0};
+		memset(s, 0xa5, sizeof(s));
+		put16(p + 0x6c0, 10); t41_ae_put32(p + 0x674, 50);
+		put16(s + 0x216a, 1800);
+		t41_ae_put32(cache + 0x4ec, 25 << 10);
+		t41_ae_put32(cache + 0x4f0, 5 << 10);
+		memcpy(saved, s, sizeof(s));
+		for (i = 0; i < 120; ++i) put16(saved + 0x2438 + i * 2, (i < 20 ? i + 1 : 20) * 450);
+		saved[0x2612] = 19;
+		assert(!t41_ae_deflicker_refresh(p,sizeof(p),s,sizeof(s),cache,sizeof(cache)));
+		assert(!memcmp(saved,s,sizeof(s)));
+		t41_ae_put32(cache + 0x4f0, 0);
+		assert(t41_ae_deflicker_refresh(p,sizeof(p),s,sizeof(s),cache,sizeof(cache)));
+		assert(t41_ae_deflicker_refresh(p,sizeof(p)-1,s,sizeof(s),cache,sizeof(cache)));
+		assert(t41_ae_deflicker_refresh(p,sizeof(p),s,sizeof(s)-1,cache,sizeof(cache)));
+		assert(t41_ae_deflicker_refresh(p,sizeof(p),s,sizeof(s),cache,sizeof(cache)-1));
+		assert(!memcmp(saved,s,sizeof(s)));
+		memset(p, 0, sizeof(p)); memset(s, 0, sizeof(s));
+	}
+	{
 		unsigned int delta[2] = {1024, 2048}, sum = 999;
 		unsigned short down = 64, up = 128;
 		assert(!t41_ae_convergence_speed(delta, 128, 10, 65535, &down, &up, &sum));

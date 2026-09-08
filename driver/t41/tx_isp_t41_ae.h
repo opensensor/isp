@@ -147,6 +147,28 @@ static inline int t41_ae_deflicker(unsigned int frequency,
 	return 0;
 }
 
+/* Checked byte-layout adapter used by the live TISP lifecycle. Commit only
+ * the generated table and last index; invalid timing leaves state intact. */
+static inline int t41_ae_deflicker_refresh(const unsigned char *p, unsigned int pbytes,
+		unsigned char *s, unsigned int sbytes, const unsigned char *cache,
+		unsigned int cbytes)
+{
+	unsigned short nodes[120];
+	unsigned int last, i;
+	if (!p || !s || !cache || pbytes != T41_AE_PARAM_BYTES ||
+	    sbytes != T41_AE_STATE_BYTES || cbytes != 0x688 ||
+	    t41_ae_deflicker(t41_tmo_le32(p + 0x674), t41_tmo_le16(p + 0x6c0),
+		    t41_tmo_le32(cache + 0x4ec), t41_tmo_le32(cache + 0x4f0),
+		    t41_tmo_le16(s + 0x216a), nodes, &last))
+		return -1;
+	for (i = 0; i < 120; ++i) {
+		s[0x2438 + i * 2] = nodes[i];
+		s[0x2439 + i * 2] = nodes[i] >> 8;
+	}
+	s[0x2612] = last;
+	return 0;
+}
+
 struct t41_ae_meter {
 	unsigned int mean, foreground, background, bright_q, dark_q;
 };

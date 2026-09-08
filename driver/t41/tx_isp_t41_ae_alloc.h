@@ -17,7 +17,7 @@ struct t41_ae_allocation {
 static inline int t41_ae_auto_allocate(const unsigned char *p, unsigned int pbytes,
 		const unsigned char *s, unsigned int sbytes,
 		const unsigned char *cache, unsigned int cbytes,
-		unsigned long long ev, unsigned int fps,
+		unsigned long long ev, unsigned int target,
 		struct t41_ae_allocation *out)
 {
 	unsigned int q, unity, min_e, max_e, min_a, max_a, min_d, max_d;
@@ -39,7 +39,7 @@ static inline int t41_ae_auto_allocate(const unsigned char *p, unsigned int pbyt
 	last = s[0x2612];
 	if (!q || q > 16 || anti > 1 || policy > 2 || !min_e || min_e > max_e ||
 	    max_e > (~0U >> q) || !min_a || min_a > max_a || !min_d || min_d > max_d ||
-	    (anti && last >= 120) || (anti && policy == 2 && (!fps || fps > (~0U >> q))))
+	    (anti && last >= 120) || (anti && policy == 2 && (!target || target > (~0U >> q))))
 		return -1;
 	if (anti) for (i = 0; i <= (last ? last : 1); ++i) {
 		unsigned int node = t41_tmo_le16(s + 0x2438 + i * 2);
@@ -79,8 +79,10 @@ static inline int t41_ae_auto_allocate(const unsigned char *p, unsigned int pbyt
 				if (first < e) e = first;
 				a = unity; d = unity;
 				if (policy != 1) {
+					/* The caller supplies its luma target, not FPS:
+					 * tisp_ae_tune ELF 0x27a20 stores s6 at sp+28. */
 					unsigned int short_e = t41_ae_fixed_mul(q, first,
-						t41_ae_fixed_div(q, short_scale << q, fps << q)) >> q << q;
+						t41_ae_fixed_div(q, short_scale << q, target << q)) >> q << q;
 					if (short_e < e) e = short_e;
 					if (!e) return -1;
 					if (normalized >= e) {

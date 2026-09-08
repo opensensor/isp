@@ -46,9 +46,9 @@ int main(void)
 			unsigned int min_e = 1 + rng() % 10, max_e = min_e + rng() % 3000;
 			unsigned int min_a = unity + rng() % unity, min_d = unity + rng() % unity;
 			unsigned int max_a = min_a * (1 + rng() % 32), max_d = min_d * (1 + rng() % 16);
-			unsigned int oe, oa, od, fps = 1 + rng() % 120, last = rng() % 120;
+			unsigned int oe, oa, od, target = 1 + rng() % 120, last = rng() % 120;
 			unsigned int step = 1 + rng() % 400;
-			unsigned int short_scale = precision >= 8 && step >= 120 ? 1 + rng() % 240 : fps;
+			unsigned int short_scale = precision >= 8 && step >= 120 ? 1 + rng() % 240 : target;
 			unsigned long long ev = ((unsigned long long)rng() << 32) | rng();
 			unsigned char old_p[sizeof(p)], old_cache[sizeof(cache)];
 			if (f % 4) ev %= ((unsigned long long)max_e * max_a * max_d >> precision) + 1;
@@ -66,7 +66,7 @@ int main(void)
 			memcpy(old_p, p, sizeof(p)); memcpy(old_cache, cache, sizeof(cache));
 			memcpy(scalar, state, sizeof(state));
 			if (t41_ae_auto_allocate(p, sizeof(p), state, sizeof(state), cache,
-					sizeof(cache), ev, fps, &result)) {
+					sizeof(cache), ev, target, &result)) {
 				/* OEM decrements an unsigned 16-bit zero to 65535 and
 				 * reads beyond its node table. Never execute that path. */
 				if (!t41_tmo_le16(p + 0x7a0) || last ||
@@ -76,7 +76,7 @@ int main(void)
 				}
 				++unsafe_lattices;
 			} else {
-				oracle_allocate(0, ev, &oe, &oa, &od, fps);
+				oracle_allocate(0, ev, &oe, &oa, &od, target);
 				put16(scalar + 0x2178, result.settled);
 				t41_ae_put32(old_cache + 0x4a0, result.saturated_frames);
 				if (result.integration != oe || result.again != oa || result.dgain != od ||
@@ -112,11 +112,15 @@ int main(void)
 			t41_ae_put32(cache + 0x4ec, fps); t41_ae_put32(cache + 0x4f0, min_fps);
 			put16(state + 0x216a, height); memset(scalar, 0xa5, sizeof(scalar));
 			memcpy(state + 0x2438, scalar + 0x2438, 240);
+			memcpy(scalar, state, sizeof(state));
 			reference = oracle_deflicker(0);
 			if (t41_ae_deflicker(frequency, precision, fps, min_fps, height,
 					nodes, &last)) return 2;
+			if (t41_ae_deflicker_refresh(p, sizeof(p), scalar, sizeof(scalar),
+					cache, sizeof(cache))) return 2;
 			if (last != reference || state[0x2612] != last ||
-					memcmp(nodes, state + 0x2438, sizeof(nodes))) {
+					memcmp(nodes, state + 0x2438, sizeof(nodes)) ||
+					memcmp(scalar, state, sizeof(state))) {
 				if (fail++ < 20) printf("deflicker case %u mismatch last=%u OEM=%u\n",
 					f, last, reference);
 			}

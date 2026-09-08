@@ -830,8 +830,8 @@ static struct {
 /*
  * Start in the SDK's AUTO anti-flicker policy: below the first mains period,
  * let AE use the sensor's short integrations; at and above it, the generated
- * flicker nodes still quantize exposure.  NORMAL mode installs the 369-line
- * (60 Hz) or 442-line (50 Hz) floor when userspace explicitly requests it.
+ * flicker nodes still quantize exposure. NORMAL mode derives its floor from
+ * the active sensor's rational line timing and requested mains frequency.
  * Applying that floor before policy selection clips bright scenes at unity
  * gain because integration cannot fall far enough.
  */
@@ -839,7 +839,9 @@ static unsigned int t41_ae_flicker_floor_lines;
 module_param(t41_ae_flicker_floor_lines, uint, 0644);
 MODULE_PARM_DESC(t41_ae_flicker_floor_lines,
 		 "minimum anti-flicker integration lines (0 disables the floor)");
-static unsigned int t41_ae_flicker_ceiling_lines = 369U;
+/* Keep the zero default in owned data, outside legacy recovered BSS aliases.
+ * A measured mains period is not a sensor exposure maximum. */
+static unsigned int t41_ae_flicker_ceiling_lines __attribute__((section(".data")));
 module_param(t41_ae_flicker_ceiling_lines, uint, 0644);
 MODULE_PARM_DESC(t41_ae_flicker_ceiling_lines,
 		 "maximum anti-flicker integration lines (0 uses the sensor maximum)");
@@ -66389,54 +66391,23 @@ int64_t tisp_ae_clac_deflicker_cfg(uint32_t channel)
     unsigned char *params;
     unsigned char *state;
     unsigned char *cache;
-    uint16_t *table;
-    uint32_t precision;
-    uint32_t denominator;
-    uint32_t count;
-    uint32_t factor;
-    uint32_t half;
-    unsigned int i;
 
     if (channel >= ARRAY_SIZE(ae_info) || !ae_info[channel])
         return -EINVAL;
     info = (uint32_t *)(uintptr_t)ae_info[channel];
+    if (!t41_kernel_data_ptr(info))
+        return -ENODEV;
     params = (unsigned char *)(uintptr_t)info[0];
     state = (unsigned char *)(uintptr_t)info[1];
     cache = *(unsigned char **)(void *)(ae_cache +
                                         channel * sizeof(uint32_t));
     if (!cache)
         cache = ae_cache_init + channel * 0x688;
-
-    precision = *(uint16_t *)(params + 1728);
-    if (precision > 31U)
-        return -EINVAL;
-    denominator = (*(uint32_t *)(params + 1652) << 1) << precision;
-    count = (uint32_t)fix_point_div_32(
-        precision, denominator, *(uint32_t *)(cache + 1264));
-    count = (count >> precision) & 0xff;
-    if (!count)
-        count = 1;
-    if (count > 120)
-        count = 120;
-    state[9746] = count;
-
-    table = (uint16_t *)(void *)(state + 9272);
-    half = (1U << precision) / 2U;
-    factor = fix_point_div_32(
-        precision,
-        *(uint16_t *)(state + 8554) << precision,
-        denominator);
-    for (i = 1; i <= count; ++i) {
-        uint32_t value = fix_point_mult3_32(
-            precision, i << precision,
-            *(uint32_t *)(cache + 1260), factor);
-
-        table[i - 1] = (value + half) >> precision;
-    }
-    for (i = count; i < 120; ++i)
-        table[i] = table[count - 1];
-    state[9746] = count - 1;
-    return 0;
+    if (!t41_kernel_data_ptr(params) || !t41_kernel_data_ptr(state) ||
+        !t41_kernel_data_ptr(cache))
+        return -ENODEV;
+    return t41_ae_deflicker_refresh(params, T41_AE_PARAM_BYTES,
+        state, T41_AE_STATE_BYTES, cache, 0x688) ? -EINVAL : 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000284c4 origin=fragment_seed original=tisp_ae_par_sensor_trig */
@@ -67822,7 +67793,9 @@ int64_t tisp_ae_init(uint32_t channel, uintptr_t par)
 
     state[1664] = *(uint32_t *)(info[0] + 1648) + 1;
     state[1665] = *(uint32_t *)(info[0] + 1648) + 1;
-    tisp_ae_clac_deflicker_cfg(channel);
+    ret = tisp_ae_clac_deflicker_cfg(channel);
+    if (ret)
+        goto free_ae_info;
     *(uint16_t *)(state + 8566) = 0;
     *(uint16_t *)(state + 8568) = 0;
 

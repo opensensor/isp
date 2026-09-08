@@ -51,15 +51,23 @@ The multiply helper also preserves the OEM MIPS precision-zero mask behavior.
 Both routines match 10,000 synthetic cases under QEMU and on the physical
 T41 in private userspace, including fractional
 minimum FPS, table saturation, overflow and precision boundaries; host and
-ASan/UBSan checks pass. They are not yet substituted into the live controller:
-the surrounding convergence policy and exposure/gain allocator remain work
-in progress, including removal of its hard-coded 369-line ceiling.
+ASan/UBSan checks pass. The convergence helper is not yet substituted into
+the live controller; its surrounding policy and exposure/gain allocation
+remain work in progress.
+
+The live AE lifecycle now builds its flicker state through the checked
+`t41_ae_deflicker_refresh` byte-layout adapter. All state bytes match the OEM
+across the synthetic lattice cases; invalid timing changes nothing and AE
+initialization propagates the error rather than claiming readiness. The
+default integration ceiling is zero (sensor-reported maximum), not a
+captured 369-line period. An explicit diagnostic ceiling remains available.
+The zero default stays in `.data` so it does not disturb legacy BSS aliases.
 
 `tx_isp_t41_ae_alloc.h` adds the automatic branch of `tisp_ae_ev_alloc_calc`:
 integration-first allocation, calibrated analog/ISP-digital gain limits,
 anti-flicker node selection and its three short-exposure policies, saturation
 counting and the settled flag. Inputs are the parameter/state/cache blocks,
-requested exposure and FPS; no sensor register encoding or captured tuning
+requested exposure and luma target; no sensor register encoding or captured tuning
 values are embedded. The wide arithmetic helpers preserve the OEM's staged
 64-bit products and remainder-doubling truncation. This is still a pure helper,
 not the live exposure controller. Manual component masks are rejected;
@@ -76,6 +84,14 @@ A zero-node-index underflow in the OEM's lattice search is explicitly
 rejected before its out-of-bounds read; the host boundary test covers it and
 the reference harness never executes it. No newly recovered allocator code
 is enabled on the camera by this checkpoint.
+
+Call-chain audit: the allocator's last argument is the selected luma target,
+not FPS. In the OEM ELF, `tisp_ae_tune` stores its target register `s6` at
+stack offset 28 at 0x27a20, shared by the automatic and list-allocator calls.
+Short-exposure policy 2 scales the first flicker period by calibration
+`p+0x7a4` divided by that target. The first helper revision named this input
+`fps`; the arithmetic was correct but that interpretation was not. Correct
+the call semantics before runtime integration, not from a live sensor value.
 
 The sensor adapter now calls the registered module's `alloc_again` callback
 with log2-Q16 and uses the returned realized gain and opaque register code.
