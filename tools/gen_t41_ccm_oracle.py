@@ -40,6 +40,10 @@ with open(sys.argv[1], 'rb') as source:
     lce = len(sys.argv) > 2 and sys.argv[2] == 'lce'
     adr = len(sys.argv) > 2 and sys.argv[2] == 'adr'
     lsc = len(sys.argv) > 2 and sys.argv[2] == 'lsc'
+    scaler = len(sys.argv) > 2 and sys.argv[2] == 'scaler'
+    if scaler:
+        functions = {name: 'oracle_' + name for name in [
+            'tisp_sin', 'tisp_msca_normalized', 'tisp_msca_ch_curve_write']}
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -175,6 +179,8 @@ with open(sys.argv[1], 'rb') as source:
         'isp_printf': 'oracle_unexpected'})
     if awb_gain:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if scaler:
+        names.update({'private_vmalloc': 'oracle_alloc', 'private_vfree': 'oracle_free'})
     if awb_stats or awb_long or awb_detect or awb_frame:
         names.update({'awb_list_cluster_rg': 'oracle_cluster_red',
                       'awb_list_cluster_bg': 'oracle_cluster_blue', 'system_reg_read': 'oracle_read',
@@ -298,7 +304,7 @@ with open(sys.argv[1], 'rb') as source:
                 if word >> 26 == 9:
                     print(f'addiu ${rt}, ${rs}, %lo({target}+{imm})')
                 else:
-                    op = {33: 'lh', 35: 'lw', 36: 'lbu', 37: 'lhu', 41: 'sh', 43: 'sw'}[word >> 26]
+                    op = {33: 'lh', 35: 'lw', 36: 'lbu', 37: 'lhu', 40: 'sb', 41: 'sh', 43: 'sw'}[word >> 26]
                     print(f'{op} ${rt}, %lo({target}+{imm})(${rs})')
             else:
                 raise ValueError((hex(pc), kind))
@@ -354,10 +360,10 @@ addiu $t1, $s6, 0x208''')
 jr $ra
 addiu $sp, $sp, 256
 .size oracle_adjust, .-oracle_adjust''')
-    if bcsh or lce or adr:
+    if bcsh or lce or adr or scaler:
         print('.section .rodata\n.balign 65536\n.globl oracle_rodata\noracle_rodata:')
         data = elf.get_section_by_name('.rodata').data()
-        for pos in range(0, len(data) if lce or adr else 0x2a70, 16):
+        for pos in range(0, len(data) if lce or adr or scaler else 0x2a70, 16):
             print('.byte ' + ','.join(str(v) for v in data[pos:pos+16]))
         print('oracle_message:\n.asciz "unexpected reference diagnostic"')
     if adr:

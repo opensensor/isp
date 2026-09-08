@@ -38,24 +38,34 @@ staged; no Raptor configuration or Neo audio library was changed.
 
 ## Required before calling the normal daytime path finished
 
-1. **Complete live AE ownership.** The automatic allocator and convergence
+1. **Concurrent main/substream/JPEG output.** This is a hard exit requirement,
+   not optional follow-up work. The active V4L2 backend currently exposes
+   only the main stream and disables substream, JPEG, OSD and IVS. Exercise
+   the shared IMP FrameSource/encoder graph first, then repair the actual
+   queue, scaler, encoder and lifetime boundaries it exposes. Main and
+   scaled substream must decode concurrently with audio; taking JPEGs and
+   stopping/restarting either output must not starve or corrupt the other.
+   Check independent output geometry/rates, timestamp continuity, memory
+   ownership and queue loss. A second advertised RTSP endpoint is not proof
+   that the second media pipeline works.
+2. **Complete live AE ownership.** The automatic allocator and convergence
    ramp are checked helpers, but `t41_safe_ae_calc_process` still uses the
    conservative three-frame, +25%/-20% controller. Recover and test the
    surrounding target/deadband/history policy, then wire sensor allocation,
    realized analog-gain compensation, ISP digital gain and total-EV/gain
    fanout as one coherent transaction. Respect the sensor's apply delay.
    Do not treat the removed default ceiling as complete AE parity.
-2. **AE controls and transitions.** Test automatic/manual handoff, min/max
+3. **AE controls and transitions.** Test automatic/manual handoff, min/max
    limits, compensation, 50/60 Hz, off/AUTO/NORMAL and any supported FPS
    changes. Unsupported manual masks or variable-FPS policies must report
    that fact, not silently succeed. Check recovery after rejected controls.
-3. **Matched IQ and production-configuration regression.** Compare stock
+4. **Matched IQ and production-configuration regression.** Compare stock
    and open with exposure and WB held equal, using the same calibration and
    correct full-range BT.601 decode. Examine neutral color, shadows,
    highlights, temporal noise and motion in available illumination. Test
    main/substream/JPEG combinations that the selected configuration actually
    uses; algorithm oracles do not establish multi-output hardware coverage.
-4. **Final endurance and handoff.** Repeat cold boots and longer concurrent
+5. **Final endurance and handoff.** Repeat cold boots and longer concurrent
    TCP/UDP sessions with audio, including slow/disconnecting peers. Check
    source cadence and server queue loss as well as decoder logs, and record
    CPU/memory with a matched client/configuration load. Keep exact package
@@ -63,8 +73,9 @@ staged; no Raptor configuration or Neo audio library was changed.
 
 ## Explicitly separate validation work
 
-WDR, IR/ring-LSC paths, other sensor modules and optional AI/region/scaler
-paths are not covered merely because the daytime stream works. Hardware
+WDR, IR/ring-LSC paths, other sensor modules and optional AI/region paths
+are not covered merely because the daytime stream works. The scaler path
+needed by the production substream is required above, not deferred. Hardware
 unavailable for those tests need not block the next SoC, provided these
 limits remain explicit. Remove remaining experimental sensor-derived
 profiles rather than turning captured scene coefficients into defaults.

@@ -64,9 +64,9 @@ static const u8 tx_isp_t41_scaler_subtract_order[8] = {
 	7, 0, 6, 1, 5, 2, 4, 3,
 };
 
-int tx_isp_t41_scaler_curve_generate(u32 target, u32 source,
-				     s16 *coefficients,
-				     u32 coefficient_capacity)
+int tx_isp_t41_scaler_channel_curve_generate(u32 channel, u32 target,
+					   u32 source, s16 *coefficients,
+					   u32 coefficient_capacity)
 {
 	const struct tx_isp_scaler_kernel kernel = {
 		.sinc_lut = tx_isp_t41_scaler_sinc_lut,
@@ -74,17 +74,116 @@ int tx_isp_t41_scaler_curve_generate(u32 target, u32 source,
 				  sizeof(tx_isp_t41_scaler_sinc_lut[0]),
 		.add_order = tx_isp_t41_scaler_add_order,
 		.subtract_order = tx_isp_t41_scaler_subtract_order,
-		.phase_count = 32,
-		.phase_stride = 8,
+		.phase_count = channel == 1 ? 256 : 32,
+		.phase_stride = channel == 1 ? 64 : 8,
 		.tap_count = 8,
 	};
 	u32 ratio_q14;
 
-	if (!target || !source)
+	/* Geometry enters the ISP in unsigned 16-bit fields. Bound the Q14 math. */
+	if (channel > 2 || !target || !source || target > 65535 || source > 65535)
 		return -EINVAL;
 	ratio_q14 = ((target << 14) + (source >> 1)) / source;
 	if (ratio_q14 >= 27307U)
 		ratio_q14 = 27306U;
 	return tx_isp_scaler_curve_generate(&kernel, ratio_q14, coefficients,
 					    coefficient_capacity);
+}
+
+int tx_isp_t41_scaler_curve_generate(u32 target, u32 source,
+				     s16 *coefficients,
+				     u32 coefficient_capacity)
+{
+	return tx_isp_t41_scaler_channel_curve_generate(
+		0, target, source, coefficients, coefficient_capacity);
+}
+
+static u32 tx_isp_t41_scaler_fixed_coefficient(const u8 *p, u32 tap)
+{
+	return ((u32)p[2 * tap] | ((u32)p[2 * tap + 1] << 8)) & 0x1fffU;
+}
+
+static int tx_isp_t41_scaler_pair(tx_isp_t41_scaler_write_fn write,
+				void *context, u32 address, u32 value)
+{
+	int ret = write(context, 0xf8004U, value);
+
+	return ret ? ret : write(context, 0xf8004U, address);
+}
+
+int tx_isp_t41_scaler_curve_write(u32 channel, const u8 *params,
+				u32 params_bytes, const s16 *vertical,
+				const s16 *horizontal, u32 curve_capacity,
+				tx_isp_t41_scaler_write_fn write, void *context)
+{
+	u32 count = channel == 1 ? 257U : 33U;
+	u32 axis;
+	int ret;
+
+	if (channel > 2 || !params || params_bytes < TX_ISP_T41_SCALER_PARAMS_BYTES ||
+	    !vertical || !horizontal || curve_capacity < count || !write)
+		return -EINVAL;
+
+	/* H20250310a tisp_msca_ch_curve_write: channel 1 uses two FIFO
+	 * coefficient RAMs. Channels 0/2 use linear packed coefficient registers.
+	 * Both transports store signed 13-bit taps, two per 32-bit value.
+	 */
+	for (axis = 0; axis < 2; ++axis) {
+		const s16 *curve = axis ? horizontal : vertical;
+		const u8 *fixed = params + 0x70 + channel * 0x20 + axis * 0x10;
+		u32 fixed_phase = params[0xdf + 2 * channel + axis] == 1;
+		u32 i;
+
+		if (channel == 1) {
+			u32 phase;
+
+			ret = tx_isp_t41_scaler_pair(write, context,
+						    0xf1100U + axis * 8, 1);
+			if (ret)
+				return ret;
+			for (phase = 0; phase <= 32; ++phase) {
+				for (i = 0; i < 8; i += 2) {
+					u32 value = 0;
+					u32 half;
+
+					for (half = 0; half < 2; ++half) {
+						u32 tap = i + half;
+						u32 index = tap < 4 ?
+							256 - tap * 64 - phase :
+							(tap - 4) * 64 + phase;
+						u32 coefficient = fixed_phase && !phase ?
+							tx_isp_t41_scaler_fixed_coefficient(fixed, tap) :
+							((u32)curve[index] & 0x1fffU);
+
+						value |= coefficient << (16 * half);
+					}
+					ret = tx_isp_t41_scaler_pair(write, context,
+								    0xf1104U + axis * 8, value);
+					if (ret)
+						return ret;
+				}
+			}
+		} else {
+			u32 base = 0xf0740U + channel * 0x80 + axis * 0x50;
+
+			for (i = 0; i < count; i += 2) {
+				u32 value = 0;
+				u32 half;
+
+				for (half = 0; half < 2 && i + half < count; ++half) {
+					u32 tap = i + half;
+					u32 coefficient = fixed_phase && tap < 8 ?
+						tx_isp_t41_scaler_fixed_coefficient(fixed, tap) :
+						((u32)curve[tap] & 0x1fffU);
+
+					value |= coefficient << (16 * half);
+				}
+				ret = tx_isp_t41_scaler_pair(write, context,
+							    base + (i / 2) * 4, value);
+				if (ret)
+					return ret;
+			}
+		}
+	}
+	return channel == 1 ? 266 : 34;
 }

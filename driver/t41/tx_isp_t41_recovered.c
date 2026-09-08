@@ -141724,71 +141724,80 @@ label_62e98:
     return 0;
 }
 
-static int t41_msca_commit_stock_curve(void *workspace,
+static int t41_msca_curve_port_write(void *context, u32 reg, u32 value)
+{
+	(void)context;
+	return system_reg_write(reg, value);
+}
+
+static int t41_msca_commit_stock_curve(void *workspace, u32 channel,
 				       u32 target_width, u32 source_width,
 				       u32 target_height, u32 source_height)
 {
-	static const uint32_t curve_base[2] = { 0x0f0740U, 0x0f0790U };
-	s16 curves[2][TX_ISP_T41_SCALER_COEFFICIENTS];
-	unsigned int curve;
-	unsigned int i;
+	static const u32 curve_offset[3] = { 0x008, 0x08c, 0x490 };
+	u32 count = channel == 1 ? TX_ISP_T41_SCALER_SUB_COEFFICIENTS :
+				   TX_ISP_T41_SCALER_COEFFICIENTS;
+	unsigned long flags = 0;
+	u8 *params;
+	s16 *curves;
+	int pairs = 0;
 	int ret;
 
 	if (t41_stock_msca_unity_curve > 0)
 		return 0;
-	if (!t41_kernel_data_ptr(workspace))
+	if (channel > 2 || !t41_kernel_data_ptr(workspace))
 		return -EINVAL;
+	params = *(u8 **)workspace;
+	if (!t41_kernel_data_ptr(params))
+		return -EINVAL;
+	/* Stream setup can hold the frame-channel spinlock. Keep the 1028-byte
+	 * substream curve pair off its kernel stack and do not sleep here. */
+	curves = kmalloc(2 * count * sizeof(*curves), GFP_ATOMIC);
+	if (!curves)
+		return -ENOMEM;
+
+	ret = tx_isp_t41_scaler_channel_curve_generate(
+		channel, target_height, source_height, curves, count);
+	if (ret)
+		goto out;
+	ret = tx_isp_t41_scaler_channel_curve_generate(
+		channel, target_width, source_width, curves + count, count);
+	if (ret)
+		goto out;
+
+	/* The per-frame shadow worker shares this port. Check DMA ownership
+	 * inside the same lock, before selecting or resetting the shadow RAM. */
+	__private_spin_lock_irqsave((uint32_t)(uintptr_t)&msca_slock,
+				    (uintptr_t)&flags);
 	if (system_reg_read(0x0f8100U) & 2U) {
-		printk(KERN_WARNING
-		       "tx_isp_t41_recovered: MSCA curve shadow DMA busy\n");
-		return -EBUSY;
+		ret = -EBUSY;
+		goto unlock;
 	}
-
-	ret = tx_isp_t41_scaler_curve_generate(
-		target_height, source_height, curves[0],
-		TX_ISP_T41_SCALER_COEFFICIENTS);
-	if (ret)
-		return ret;
-	ret = tx_isp_t41_scaler_curve_generate(
-		target_width, source_width, curves[1],
-		TX_ISP_T41_SCALER_COEFFICIENTS);
-	if (ret)
-		return ret;
-
-	/* Preserve the same software-state image exposed by the stock module. */
-	memcpy((uint8_t *)workspace + 0x008, curves[0], sizeof(curves[0]));
-	memcpy((uint8_t *)workspace + 0x04a, curves[1], sizeof(curves[1]));
-
 	ret = system_reg_write(0x0f8000U, 0x00000101U);
-	for (curve = 0; !ret && curve < 2; ++curve) {
-		for (i = 0;
-		     !ret && i < TX_ISP_T41_SCALER_COEFFICIENTS;
-		     i += 2) {
-			uint32_t packed = (u16)curves[curve][i] & 0x1fffU;
-
-			if (i + 1 < TX_ISP_T41_SCALER_COEFFICIENTS)
-				packed |=
-					((u32)(u16)curves[curve][i + 1] &
-					 0x1fffU) << 16;
-			ret = system_reg_write(0x0f8004U, packed);
-			if (!ret)
-				ret = system_reg_write(0x0f8004U,
-						       curve_base[curve] + (i / 2U) * 4U);
-		}
+	if (!ret) {
+		pairs = tx_isp_t41_scaler_curve_write(channel, params,
+			TX_ISP_T41_SCALER_PARAMS_BYTES, curves, curves + count,
+			count, t41_msca_curve_port_write, NULL);
+		if (pairs < 0)
+			ret = pairs;
 	}
 	if (!ret)
 		ret = system_reg_write(0x0f8000U, 0x01010102U);
 	if (!ret)
-		/*
-		 * The stock routine emits 34 value/address pairs for both channel-0
-		 * curves, then advances var_1c once by 0x22.  The DMA length counts
-		 * pairs, not individual 32-bit port writes: (0x22 - 1) << 4 | 1.
-		 */
-		ret = system_reg_write(0x0f8100U, 0x00000211U);
+		/* DMA length counts pairs, not individual 32-bit port writes. */
+		ret = system_reg_write(0x0f8100U, ((pairs - 1) << 4) | 1U);
+	if (!ret)
+		memcpy((u8 *)workspace + curve_offset[channel], curves,
+		       2 * count * sizeof(*curves));
+unlock:
+	private_spin_unlock_irqrestore((void *)(uintptr_t)&msca_slock, flags);
 
 	printk(KERN_WARNING
-	       "tx_isp_t41_recovered: MSCA exact-stock curves %ux%u->%ux%u ret=%d\n",
-	       source_width, source_height, target_width, target_height, ret);
+	       "tx_isp_t41_recovered: MSCA generated curves ch=%u %ux%u->%ux%u pairs=%d ret=%d\n",
+	       channel, source_width, source_height, target_width, target_height,
+	       pairs, ret);
+out:
+	kfree(curves);
 	return ret;
 }
 
@@ -141866,9 +141875,9 @@ int32_t tisp_msca_chx_cfg_load(uint32_t a0, uint32_t a1, uintptr_t a2)
     *(uint32_t *)(channel_params + 0x18) = horizontal_ratio;
     *(uint32_t *)(channel_params + 0x1c) = vertical_ratio;
 
-	if (a1 == 0) {
+	{
 		int curve_ret = t41_msca_commit_stock_curve(
-			workspace, channel_width, source_width,
+			workspace, a1, channel_width, source_width,
 			channel_height, source_height);
 
 		if (curve_ret)
@@ -159058,12 +159067,13 @@ static int t41_msca_commit_frame_shadow(void)
 	int ret;
 	int subret;
 
-	status = system_reg_read(0x0f8100U);
-	if (status & 2U)
-		return -EBUSY;
-
 	__private_spin_lock_irqsave((uint32_t)(uintptr_t)&msca_slock,
 				    (uintptr_t)&flags);
+	status = system_reg_read(0x0f8100U);
+	if (status & 2U) {
+		private_spin_unlock_irqrestore((void *)(uintptr_t)&msca_slock, flags);
+		return -EBUSY;
+	}
 	ret = system_reg_write(0x0f8000U, 0x00000101U);
 	subret = system_reg_write(0x0f8000U, 0x01010102U);
 	if (!ret)

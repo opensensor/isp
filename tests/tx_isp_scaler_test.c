@@ -103,12 +103,91 @@ static void test_failure_does_not_publish(void)
 	EXPECT_TRUE(memcmp(actual, before, sizeof(actual)) == 0);
 }
 
+static unsigned int writes;
+static int port_error;
+
+static int count_write(void *context, u32 reg, u32 value)
+{
+	(void)context;
+	(void)value;
+	EXPECT_TRUE(reg == 0xf8004);
+	++writes;
+	return port_error;
+}
+
+static void test_channel_curves_and_writer(void)
+{
+	s16 curves[258], before[258];
+	u8 params[TX_ISP_T41_SCALER_PARAMS_BYTES] = {0};
+	u32 channel, phase, tap;
+
+	for (channel = 0; channel < 3; ++channel) {
+		u32 stride = channel == 1 ? 64 : 8;
+		u32 count = stride * 4 + 1;
+		int pairs;
+
+		memset(curves, 0x5a, sizeof(curves));
+		EXPECT_TRUE(tx_isp_t41_scaler_channel_curve_generate(
+			channel, 640, 2560, curves, count) == 0);
+		EXPECT_TRUE(curves[count] == 0x5a5a);
+		for (phase = 0; phase < stride; ++phase) {
+			int sum = 0;
+
+			for (tap = 0; tap < 8; ++tap) {
+				int index = ((int)tap - 3) * (int)stride - (int)phase;
+
+				sum += curves[index < 0 ? -index : index];
+			}
+			/* Phase zero aliases symmetric taps; the OEM allows +/-1. */
+			EXPECT_TRUE(phase ? sum == 2048 : sum >= 2047 && sum <= 2049);
+		}
+		writes = 0;
+		pairs = tx_isp_t41_scaler_curve_write(channel, params, sizeof(params),
+			curves, curves, count, count_write, NULL);
+		EXPECT_TRUE(pairs == (channel == 1 ? 266 : 34));
+		EXPECT_TRUE(writes == (u32)pairs * 2);
+	}
+
+	memcpy(before, curves, sizeof(before));
+	EXPECT_TRUE(tx_isp_t41_scaler_channel_curve_generate(1, 640, 2560,
+		curves, 256) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_channel_curve_generate(3, 640, 2560,
+		curves, 257) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_channel_curve_generate(1, 65536, 2560,
+		curves, 257) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_channel_curve_generate(1, 640, 0,
+		curves, 257) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_channel_curve_generate(1, 640, 2560,
+		NULL, 257) == -EINVAL);
+	EXPECT_TRUE(memcmp(before, curves, sizeof(curves)) == 0);
+	writes = 0;
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(1, params, sizeof(params) - 1,
+		curves, curves, 257, count_write, NULL) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(1, params, sizeof(params),
+		curves, curves, 256, count_write, NULL) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(3, params, sizeof(params),
+		curves, curves, 257, count_write, NULL) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(1, NULL, sizeof(params),
+		curves, curves, 257, count_write, NULL) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(1, params, sizeof(params),
+		NULL, curves, 257, count_write, NULL) == -EINVAL);
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(1, params, sizeof(params),
+		curves, curves, 257, NULL, NULL) == -EINVAL);
+	EXPECT_TRUE(writes == 0);
+	port_error = -EIO;
+	EXPECT_TRUE(tx_isp_t41_scaler_curve_write(1, params, sizeof(params),
+		curves, curves, 257, count_write, NULL) == -EIO);
+	EXPECT_TRUE(writes == 1);
+	port_error = 0;
+}
+
 int main(void)
 {
 	test_exact_stock_unity_curve();
 	test_t41_main_downscale_curve();
 	test_exact_t23_curves();
 	test_failure_does_not_publish();
+	test_channel_curves_and_writer();
 	if (failures)
 		return 1;
 	puts("tx_isp_scaler_test: ok");
