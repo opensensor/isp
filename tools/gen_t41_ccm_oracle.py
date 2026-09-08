@@ -56,10 +56,13 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_ae_weight_mean', 'fix_point_div_32', 'fix_point_mult2_32',
             'fix_point_mult3_32', 'tisp_ae_calc_convergence_speed',
             'tisp_ae_clac_deflicker_cfg',
+            'fix_point_mult2_64', 'fix_point_mult3_64', 'fix_point_div_64', 'fix_point_div',
+            'tisp_ae_ev_alloc_calc',
         ], ['oracle_target', 'oracle_interpolate', 'oracle_divide',
             'oracle_statistics', 'oracle_mean', 'oracle_fixed_div',
             'oracle_fixed_mul', 'oracle_fixed_mul3', 'oracle_convergence',
-            'oracle_deflicker']))
+            'oracle_deflicker', 'oracle_mul64', 'oracle_mul3_64', 'oracle_div64_fixed',
+            'oracle_div64_impl', 'oracle_allocate']))
     if gib:
         functions = dict(zip(['tisp_gib_calc_self_gain', 'tisp_gib_ae_write_dgain',
             'tisp_round_int64', 'tisp_max'],
@@ -239,6 +242,7 @@ with open(sys.argv[1], 'rb') as source:
     if ae:
         names.update({'__ashldi3': 'oracle_left_shift',
             '__lshrdi3': 'oracle_shift', '__div64_32': 'oracle_div64',
+            'div64_u64': 'oracle_div64_u64',
             'y_arr': 'oracle_y',
             'tisp_ae_fliker_detect': 'oracle_noop',
             'tisp_ae_get_bv': 'oracle_noop'})

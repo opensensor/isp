@@ -131,7 +131,7 @@ tx_isp_t41_ccm_test: tx_isp_t41_ccm_test.c ../driver/t41/tx_isp_t41_ccm.h ../dri
 tx_isp_t41_bcsh_test: tx_isp_t41_bcsh_test.c ../driver/t41/tx_isp_t41_bcsh.h ../driver/t41/tx_isp_t41_ccm.h ../driver/t41/tx_isp_t41_tmo.h
 	$(CC) $(CFLAGS) -o $@ $<
 
-tx_isp_t41_ae_test: tx_isp_t41_ae_test.c ../driver/t41/tx_isp_t41_ae.h ../driver/t41/tx_isp_t41_tmo.h
+tx_isp_t41_ae_test: tx_isp_t41_ae_test.c ../driver/t41/tx_isp_t41_ae.h ../driver/t41/tx_isp_t41_ae_alloc.h ../driver/t41/tx_isp_t41_tmo.h
 	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_tmo_map_test: tx_isp_t41_tmo_map_test.c ../driver/t41/tx_isp_t41_tmo_map.h \

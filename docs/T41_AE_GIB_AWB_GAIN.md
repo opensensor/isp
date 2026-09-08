@@ -55,6 +55,28 @@ ASan/UBSan checks pass. They are not yet substituted into the live controller:
 the surrounding convergence policy and exposure/gain allocator remain work
 in progress, including removal of its hard-coded 369-line ceiling.
 
+`tx_isp_t41_ae_alloc.h` adds the automatic branch of `tisp_ae_ev_alloc_calc`:
+integration-first allocation, calibrated analog/ISP-digital gain limits,
+anti-flicker node selection and its three short-exposure policies, saturation
+counting and the settled flag. Inputs are the parameter/state/cache blocks,
+requested exposure and FPS; no sensor register encoding or captured tuning
+values are embedded. The wide arithmetic helpers preserve the OEM's staged
+64-bit products and remainder-doubling truncation. This is still a pure helper,
+not the live exposure controller. Manual component masks are rejected;
+variable-FPS allocation, convergence orchestration and sensor/ISP application
+remain separate, unfinished integration work.
+
+The automatic allocator and wide arithmetic each pass 10,000 synthetic cases
+against the OEM instructions in QEMU and physical T41 userspace. Allocator
+checks compare outputs and every parameter/state/cache byte, including
+non-unity minimum gains, all short-exposure policies, fractional exposures,
+full-width EVs and saturation-counter wrap. Host tests and ASan/UBSan cover
+gain handoff, limits, invalid sizes/masks and unchanged outputs on rejection.
+A zero-node-index underflow in the OEM's lattice search is explicitly
+rejected before its out-of-bounds read; the host boundary test covers it and
+the reference harness never executes it. No newly recovered allocator code
+is enabled on the camera by this checkpoint.
+
 The sensor adapter now calls the registered module's `alloc_again` callback
 with log2-Q16 and uses the returned realized gain and opaque register code.
 It does not assume OS04D10 Q4 encoding. Integration allocation, limits,

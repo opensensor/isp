@@ -10,3 +10,7 @@ unsigned int oracle_div64(unsigned long long *value, unsigned int divisor)
 	return remainder;
 }
 void oracle_noop(void) { }
+unsigned long long oracle_div64_u64(unsigned long long a, unsigned long long b)
+{
+	return a / b;
+}

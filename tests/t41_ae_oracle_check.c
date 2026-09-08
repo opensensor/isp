@@ -2,7 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "../driver/t41/tx_isp_t41_ae.h"
+#include "../driver/t41/tx_isp_t41_ae_alloc.h"
 unsigned char oracle_bss[0x5000] __attribute__((aligned(65536)));
 unsigned char oracle_rodata[0x3000] __attribute__((aligned(65536)));
 unsigned int oracle_y[225];
@@ -15,6 +15,11 @@ extern int oracle_mean(unsigned int, unsigned int *, unsigned int *,
 extern unsigned int oracle_convergence(const unsigned int *, unsigned short *,
 	unsigned short *, unsigned int, unsigned short, unsigned int);
 extern unsigned int oracle_deflicker(unsigned int);
+extern unsigned long long oracle_mul64(unsigned int, unsigned long long, unsigned long long);
+extern unsigned long long oracle_div64_fixed(unsigned int, unsigned long long, unsigned long long);
+extern unsigned int oracle_fixed_div(unsigned int, unsigned int, unsigned int);
+extern void *oracle_allocate(unsigned int, unsigned long long,
+	unsigned int *, unsigned int *, unsigned int *, unsigned int);
 static unsigned char p[T41_AE_PARAM_BYTES], state[T41_AE_STATE_BYTES],
 	scalar[T41_AE_STATE_BYTES], cache[0x688], dma[4096];
 static uint32_t info[4], seed = 7894;
@@ -22,7 +27,7 @@ static unsigned int rng(void) { seed ^= seed<<13; seed ^= seed>>17; seed ^= seed
 static void put16(unsigned char *at, unsigned int v) { at[0] = v; at[1] = v>>8; }
 int main(void)
 {
-	unsigned int f, i, fail = 0;
+	unsigned int f, i, fail = 0, unsafe_lattices = 0;
 	*(uint32_t *)(void *)(oracle_bss+0x40b0) = (uintptr_t)info;
 	*(uint32_t *)(void *)(oracle_rodata+0x1dc4) = (uintptr_t)cache;
 	info[0] = (uintptr_t)p; info[1] = (uintptr_t)state;
@@ -35,6 +40,68 @@ int main(void)
 		unsigned int shift = rng()%24, target, expected, rows = 1+rng()%15, cols = 1+rng()%15;
 		unsigned int weights[2], fg[2], mean;
 		struct t41_ae_meter meter;
+		{
+			struct t41_ae_allocation result;
+			unsigned int precision = 1 + rng() % 16, unity = 1U << precision;
+			unsigned int min_e = 1 + rng() % 10, max_e = min_e + rng() % 3000;
+			unsigned int min_a = unity + rng() % unity, min_d = unity + rng() % unity;
+			unsigned int max_a = min_a * (1 + rng() % 32), max_d = min_d * (1 + rng() % 16);
+			unsigned int oe, oa, od, fps = 1 + rng() % 120, last = rng() % 120;
+			unsigned int step = 1 + rng() % 400;
+			unsigned int short_scale = precision >= 8 && step >= 120 ? 1 + rng() % 240 : fps;
+			unsigned long long ev = ((unsigned long long)rng() << 32) | rng();
+			unsigned char old_p[sizeof(p)], old_cache[sizeof(cache)];
+			if (f % 4) ev %= ((unsigned long long)max_e * max_a * max_d >> precision) + 1;
+			if (f % 11 == 0) ev = rng() % ((min_e + 1) * unity);
+			memset(p, 0, sizeof(p)); memset(state, 0, sizeof(state)); memset(cache, 0, sizeof(cache));
+			put16(p + 0x6c0, precision); put16(p + 0x7a0, rng() % 2);
+			put16(p + 0x7a2, rng() % 3); put16(p + 0x7a4, short_scale);
+			t41_ae_put32(p + 0x64c, rng() % 20);
+			t41_ae_put32(cache + 0x260, min_e); t41_ae_put32(cache + 0x270, max_e);
+			t41_ae_put32(cache + 0x264, min_a); t41_ae_put32(cache + 0x274, max_a);
+			t41_ae_put32(cache + 0x26c, min_d); t41_ae_put32(cache + 0x27c, max_d);
+			t41_ae_put32(cache + 0x4a0, f % 13 == 0 ? ~0U : rng() % 25);
+			put16(state + 0x2178, rng() % 2); state[0x2612] = last;
+			for (i = 0; i < 120; ++i) put16(state + 0x2438 + i * 2, (i + 1) * step);
+			memcpy(old_p, p, sizeof(p)); memcpy(old_cache, cache, sizeof(cache));
+			memcpy(scalar, state, sizeof(state));
+			if (t41_ae_auto_allocate(p, sizeof(p), state, sizeof(state), cache,
+					sizeof(cache), ev, fps, &result)) {
+				/* OEM decrements an unsigned 16-bit zero to 65535 and
+				 * reads beyond its node table. Never execute that path. */
+				if (!t41_tmo_le16(p + 0x7a0) || last ||
+						((20U + max_e) << precision) >=
+						oracle_fixed_div(precision, step << precision, min_e << precision)) {
+					printf("unexpected allocation rejection %u\n", f); return 2;
+				}
+				++unsafe_lattices;
+			} else {
+				oracle_allocate(0, ev, &oe, &oa, &od, fps);
+				put16(scalar + 0x2178, result.settled);
+				t41_ae_put32(old_cache + 0x4a0, result.saturated_frames);
+				if (result.integration != oe || result.again != oa || result.dgain != od ||
+						memcmp(old_p, p, sizeof(p)) || memcmp(scalar, state, sizeof(state)) ||
+						memcmp(old_cache, cache, sizeof(cache))) {
+					if (fail++ < 20) printf("allocation %u q=%u ev=%llu min/maxE=%u/%u "
+						"gain=%u/%u/%u/%u scalar=%u/%u/%u/%u/%u OEM=%u/%u/%u/%u/%u\n",
+						f, precision, ev, min_e, max_e, min_a, max_a, min_d, max_d,
+						result.integration, result.again, result.dgain, result.saturated_frames, result.settled,
+						oe, oa, od, t41_tmo_le32(cache + 0x4a0), t41_tmo_le16(state + 0x2178));
+				}
+			}
+			t41_ae_put32(cache + 0x504, 1);
+		}
+		{
+			unsigned int precision = 1 + f % 31;
+			unsigned long long a = ((unsigned long long)rng() << 32) | rng();
+			unsigned long long b = (((unsigned long long)rng() << 32) | rng()) | 1;
+			unsigned long long product = oracle_mul64(precision, a, b);
+			unsigned long long quotient = oracle_div64_fixed(precision, a, b);
+			if (product != t41_ae_fixed_mul64(precision, a, b) ||
+					quotient != t41_ae_fixed_div64(precision, a, b)) {
+				if (fail++ < 20) printf("wide arithmetic case %u mismatch\n", f);
+			}
+		}
 		{
 			unsigned short nodes[120];
 			unsigned int precision = 1 + f % 16, frequency = (f & 1) ? 50 : 60;
@@ -128,6 +195,7 @@ int main(void)
 				mean,fg[0],fg[1],weights[0],weights[1]);
 		}
 	}
-	printf("10000 synthetic AE deflicker lattices, convergence ramps, targets, DMA pages and weighted means: %u mismatches\n",fail);
+	printf("10000 synthetic AE automatic allocations, wide arithmetic, deflicker lattices, convergence ramps, targets, DMA pages and weighted means: %u mismatches\n",fail);
+	printf("Rejected %u unsafe OEM lattice-index underflows without executing them\n", unsafe_lattices);
 	return fail ? 1 : 0;
 }

@@ -151,6 +151,32 @@ struct t41_ae_meter {
 	unsigned int mean, foreground, background, bright_q, dark_q;
 };
 
+/* Wide AE exposure arithmetic. Preconditions: 1 <= precision <= 31 and a
+ * nonzero divisor. The decomposed product is deliberately modulo 64 bits;
+ * do not replace it with a wrapped full product followed by one shift.
+ * The fractional divider likewise doubles its remainder at u64 width. */
+static inline unsigned long long t41_ae_fixed_mul64(unsigned int precision,
+		unsigned long long a, unsigned long long b)
+{
+	unsigned long long mask = (1ULL << precision) - 1;
+	return (a & mask) * (b >> precision) + (a >> precision) * (b & mask) +
+		((a >> precision) * (b >> precision) << precision) +
+		(((a & mask) * (b & mask)) >> precision);
+}
+
+static inline unsigned long long t41_ae_fixed_div64(unsigned int precision,
+		unsigned long long a, unsigned long long b)
+{
+	unsigned long long integer = t41_tmo_div(a, b);
+	unsigned long long remainder = a - integer * b, fraction = 0;
+	unsigned int i;
+	for (i = 0; i < precision; ++i) {
+		remainder <<= 1; fraction <<= 1;
+		if (remainder >= b) { remainder -= b; fraction |= 1; }
+	}
+	return (integer << precision) | fraction;
+}
+
 /* Optional calibration target compensation, not a scene-specific preset.
  * The three target factors multiply as u32 before a signed /16384 and a
  * u16 store. The EV product wraps at 64 bits before its seven-bit shift. */

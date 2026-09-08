@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "../driver/t41/tx_isp_t41_ae.h"
+#include "../driver/t41/tx_isp_t41_ae_alloc.h"
 static unsigned char p[T41_AE_PARAM_BYTES], s[T41_AE_STATE_BYTES], saved[T41_AE_STATE_BYTES];
 static void put16(unsigned char *at, unsigned int v) { at[0] = v; at[1] = v>>8; }
 int main(void)
@@ -14,6 +14,44 @@ int main(void)
 	unsigned short targets[15], values[15];
 	struct t41_ae_meter meter, before;
 	assert(t41_ae_fixed_mul(0, 3, 7) == 84);
+	assert(t41_ae_fixed_mul64(10, 3ULL << 40, 1ULL << 10) == 3ULL << 40);
+	assert(t41_ae_fixed_div64(10, 3, 2) == 1536);
+	assert(t41_ae_fixed_div64(10, ~0ULL, 1ULL << 63) == 2047);
+	assert(t41_ae_fixed_div64(10, ~0ULL - 1, ~0ULL) == 0);
+	{
+		unsigned char cache[0x688] = {0};
+		struct t41_ae_allocation allocation = {0}, original;
+		unsigned int masks[] = {0x4f8, 0x4f9, 0x4fb, 0x500};
+		put16(p + 0x6c0, 10);
+		t41_ae_put32(cache + 0x260, 2); t41_ae_put32(cache + 0x270, 1000);
+		t41_ae_put32(cache + 0x264, 1024); t41_ae_put32(cache + 0x274, 8192);
+		t41_ae_put32(cache + 0x26c, 1024); t41_ae_put32(cache + 0x27c, 4096);
+		assert(!t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),0,25,&allocation));
+		assert(allocation.integration == 2 && allocation.again == 1024 && allocation.dgain == 1024);
+		assert(!t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),1500ULL<<10,25,&allocation));
+		assert(allocation.integration == 1000 && allocation.again == 1536 && allocation.dgain == 1024);
+		assert(!t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),16000ULL<<10,25,&allocation));
+		assert(allocation.integration == 1000 && allocation.again == 8192 && allocation.dgain == 2048);
+		assert(!t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),33000ULL<<10,25,&allocation));
+		assert(allocation.integration == 1000 && allocation.again == 8192 && allocation.dgain == 4096);
+		assert(allocation.saturated_frames == 1 && allocation.settled == 1);
+		original = allocation;
+		for (i = 0; i < sizeof(masks)/sizeof(masks[0]); ++i) {
+			cache[masks[i]] = 1;
+			assert(t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),0,25,&allocation));
+			assert(!memcmp(&original,&allocation,sizeof(allocation)));
+			cache[masks[i]] = 0;
+		}
+		put16(p + 0x7a0, 1); s[0x2612] = 0;
+		put16(s + 0x2438, 3000); put16(s + 0x243a, 3000);
+		assert(t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),4000ULL<<10,25,&allocation));
+		assert(!memcmp(&original,&allocation,sizeof(allocation)));
+		s[0x2612] = 120;
+		assert(t41_ae_auto_allocate(p,sizeof(p),s,sizeof(s),cache,sizeof(cache),0,25,&allocation));
+		assert(t41_ae_auto_allocate(p,sizeof(p)-1,s,sizeof(s),cache,sizeof(cache),0,25,&allocation));
+		assert(!memcmp(&original,&allocation,sizeof(allocation)));
+		memset(p, 0, sizeof(p)); memset(s, 0, sizeof(s));
+	}
 	{
 		unsigned short nodes[120], previous[120];
 		unsigned int last = 999;
