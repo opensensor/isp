@@ -14,6 +14,12 @@ void *oracle_copy(void *dest, const void *src, unsigned int n)
 	while(n--) *d++=*s++;
 	return dest;
 }
+void *oracle_fill(void *dest,int value,unsigned int n)
+{
+	unsigned char *d=dest;
+	while(n--) *d++=value;
+	return dest;
+}
 unsigned int oracle_read(unsigned int address)
 {
 	++oracle_reads;

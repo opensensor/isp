@@ -21,6 +21,7 @@ into them. Calibration and statistics are explicit caller inputs.
 | `tisp_awb_long_par_update` | `0x30b20` | `t41_awb_prior_prepare` |
 | `tisp_awb_spec_calculate` | `0x31fb4` | `t41_awb_special_prepare` |
 | `ISPAWBInterpolation1/2`, `Tiziano_Awb_Ct_Cal` | `0x1a570`, `0x1a624`, `0x1a774` | `t41_awb_ct_lerp`, `t41_awb_ct_calculate` |
+| `Tiziano_Awb_Ct_Detect_GrayWorld_mode` | `0x1aaac` | `t41_awb_grayworld_mode` |
 
 AWB parameters start at active calibration +`0x978`; runtime state is `0xf54c`
 bytes. This is a format boundary shared by T41 sensor calibrations, not a
@@ -71,6 +72,17 @@ surface accesses in the OEM while preserving their valid-input result.
 Malformed axes and zero interpolation divisors are rejected. This is the
 ratio-to-temperature calculation, not the cluster selection producing ratios.
 
+Gray-world fallback tries the neutral selection, then the global selection
+only if the first remains failed. Spatial calibration weights are multiplied
+by four for ratios inside both calibrated axes. An optional second pass
+weights squared distance from the first mean using the caller-owned generic
+distance LUT and its quantized tail. Its input is four dense zone planes;
+distance scratch retains the hardware row stride of 15. Empty first-pass
+support returns unity and 5000 K. Empty refinement marks failure but retains
+the first mean and its calculated temperature, matching the OEM's final
+publication rather than its overwritten intermediate assignment. This is
+fallback behavior, not the main cluster detector.
+
 ## Validation and reproduction
 
 10,000 randomized combined cases match all changed parameter/state bytes,
@@ -78,6 +90,8 @@ all 45 normalized pointers, every ordered register write and the conditional
 RGB reads on QEMU and the physical T41: zero mismatches or unexpected accesses.
 The extended run also checks 10,000 temperature calculations, including
 clipping, exact upper endpoints, zero surfaces and changing precision.
+It also checks both gray-world selection passes, optional distance refinement,
+zero support, arbitrary distance LUT entries and unchanged-output skip paths.
 Inputs cover both
 DMA modes, all four selected classes, changing dimensions, saturation modes,
 all day/night-enable combinations, prior interpolation and special-region
@@ -104,7 +118,7 @@ It has no ISP access; its register interface is checked in memory.
 
 ## Still required
 
-Full CT clustering/gray-world fallback, class aggregation and ratio history,
+Full CT clustering, class aggregation and ratio history,
 convergence/freeze/manual policy, and owned frame-safe runtime with lifecycle
 and calibration replacement tests. Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not

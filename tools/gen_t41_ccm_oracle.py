@@ -63,7 +63,9 @@ with open(sys.argv[1], 'rb') as source:
         functions = {name: 'oracle_' + name for name in [
             'tisp_awb_get_statistics', 'tisp_awb_sat_weight', 'tisp_awb_long_par_update',
             'tisp_awb_spec_calculate', 'fix_point_mult2_32', 'fix_point_div_32',
-            'ISPAWBInterpolation1', 'ISPAWBInterpolation2', 'Tiziano_Awb_Ct_Cal']}
+            'ISPAWBInterpolation1', 'ISPAWBInterpolation2', 'Tiziano_Awb_Ct_Cal',
+            'fix_point_mult3_32', 'Tiziano_Awb_Ct_Detect_GrayWorld_mode',
+            'Tiziano_Awb_Ct_Detect_GrayWorld']}
     if gamma:
         functions = dict(zip(['tisp_gamma_interp_by_ev', 'tisp_gamma_strength_transform',
             'tisp_gamma_write_lut_rgb', 'tisp_round_int64'],

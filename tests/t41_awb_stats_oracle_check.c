@@ -4,12 +4,14 @@
 #include "../driver/t41/tx_isp_t41_awb_prior.h"
 #include "../driver/t41/tx_isp_t41_awb_special.h"
 #include "../driver/t41/tx_isp_t41_awb_ct.h"
+#include "../driver/t41/tx_isp_t41_awb_gray.h"
 unsigned char oracle_bss[0x5000] __attribute__((aligned(65536)));
 extern int oracle_tisp_awb_get_statistics(void *, unsigned int);
 extern int oracle_tisp_awb_sat_weight(unsigned int, void *, void *, void *, void *, void *, void *);
 extern int oracle_tisp_awb_long_par_update(unsigned int, void **);
 extern int oracle_tisp_awb_spec_calculate(unsigned int);
 extern unsigned int oracle_Tiziano_Awb_Ct_Cal(void **, unsigned int, unsigned int);
+extern int oracle_Tiziano_Awb_Ct_Detect_GrayWorld(void *,unsigned int,void **,unsigned int *,unsigned int *);
 extern unsigned int oracle_rgb[3], oracle_words[18][2], oracle_writes, oracle_reads, oracle_bad;
 unsigned short oracle_cluster_red[6], oracle_cluster_blue[6];
 static unsigned char p[0x1400], q[sizeof(p)], dma[32768], s[T41_AWB_STATE_BYTES], t[sizeof(s)];
@@ -115,7 +117,27 @@ int main(void)
 				if(fail++<10) printf("CT case=%u frac=%u input=%u/%u: %u/%u\n",f,fraction,red,blue,ct,oct);
 			}
 		}
+		{
+			void *slots[45], *oslots[45]; unsigned int result[2], ores[2], bad=f%5 ? 1:0, obad=bad;
+			unsigned int count=t41_tmo_le16(p+0xc6e)*t41_tmo_le16(p+0xc72), fraction=t41_tmo_le16(p+0xcd4);
+			put16(0xd60,f&1); put16(0xd62,(f/2)&1); put16(0xd64,(f/4)&1);
+			for(i=0;i<4*count;++i) t41_ae_put32(s+0x1c20+i*4,(f%23 ? 40+rng()%500 : 0)<<fraction);
+			for(i=0;i<514;++i) t41_awb_gain_put16(s+0x3520+i*2,rng()%257);
+			for(i=0;i<count;++i) p[0x1200+i]=f%29 ? rng()%10:0;
+			result[0]=ores[0]=rng(); result[1]=ores[1]=rng();
+			if(t41_awb_prior_prepare(p,sizeof(p),s,sizeof(s),slots,oracle_cluster_red,oracle_cluster_blue)) return 7;
+			memcpy(q,p,sizeof(p)); memcpy(t,s,sizeof(s));
+			oracle_tisp_awb_long_par_update(0,oslots);
+			for(i=0;i<2;++i) if(t41_awb_grayworld_mode(p,sizeof(p),s,sizeof(s),(const unsigned int *)(const void *)(s+0x1c20),4*count,i,result,&bad)) return 8;
+			oracle_Tiziano_Awb_Ct_Detect_GrayWorld(t+0x1c20,0,oslots,ores,&obad);
+			if(memcmp(p,q,sizeof(p)) || memcmp(s,t,sizeof(s)) || memcmp(result,ores,sizeof(result)) || bad!=obad) {
+				if(fail++<10) {
+					printf("gray case=%u result=%u/%u OEM=%u/%u bad=%u/%u\n",f,result[0],result[1],ores[0],ores[1],bad,obad);
+					for(i=0;i<sizeof(s);++i) if(s[i]!=t[i]) { printf("gray state+%x: %x/%x\n",i,s[i],t[i]); break; }
+				}
+			}
+		}
 	}
-	printf("10000 synthetic AWB DMA/selection/saturation/prior/special/CT cases: %u mismatches, %u unexpected accesses\n",fail,oracle_bad);
+	printf("10000 synthetic AWB DMA/selection/saturation/prior/special/CT/gray cases: %u mismatches, %u unexpected accesses\n",fail,oracle_bad);
 	return fail || oracle_bad ? 1 : 0;
 }
