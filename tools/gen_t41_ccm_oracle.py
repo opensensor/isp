@@ -23,6 +23,7 @@ with open(sys.argv[1], 'rb') as source:
     ae = len(sys.argv) > 2 and sys.argv[2] == 'ae'
     gib = len(sys.argv) > 2 and sys.argv[2] == 'gib'
     awb_gain = len(sys.argv) > 2 and sys.argv[2] == 'awb_gain'
+    awb_stats = len(sys.argv) > 2 and sys.argv[2] == 'awb_stats'
     gamma = len(sys.argv) > 2 and sys.argv[2] == 'gamma'
     dpc = len(sys.argv) > 2 and sys.argv[2] == 'dpc'
     dmsc = len(sys.argv) > 2 and sys.argv[2] == 'dmsc'
@@ -58,6 +59,10 @@ with open(sys.argv[1], 'rb') as source:
     if awb_gain:
         functions = dict(zip(['tisp_awb_gain_reg', 'tisp_awb_set_gain', 'fix_point_mult2_32'],
             ['oracle_pack', 'oracle_gain', 'oracle_fixed_mul']))
+    if awb_stats:
+        functions = {name: 'oracle_' + name for name in [
+            'tisp_awb_get_statistics', 'tisp_awb_sat_weight', 'tisp_awb_long_par_update',
+            'tisp_awb_spec_calculate', 'fix_point_mult2_32']}
     if gamma:
         functions = dict(zip(['tisp_gamma_interp_by_ev', 'tisp_gamma_strength_transform',
             'tisp_gamma_write_lut_rgb', 'tisp_round_int64'],
@@ -129,6 +134,9 @@ with open(sys.argv[1], 'rb') as source:
         'isp_printf': 'oracle_unexpected'})
     if awb_gain:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if awb_stats:
+        names.update({'awb_list_cluster_rg': 'oracle_cluster_red',
+                      'awb_list_cluster_bg': 'oracle_cluster_blue', 'system_reg_read': 'oracle_read'})
     if lsc:
         names.update({'lsc_slock': 'oracle_bss+0x4130',
             '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop',
