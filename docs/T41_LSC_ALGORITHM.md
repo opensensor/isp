@@ -48,6 +48,20 @@ state and a register recorder; it does not access ISP hardware or import a
 sensor bin. OEM instructions are confined to this test executable and are
 never linked into the driver.
 
-Still required: geometry validation, cold/mode/flip lifecycle proof, native
-kernel ownership/fanout, and stock/open device comparisons. Calibration tables
+The expanded oracle also covers 2,000 mesh flips (including odd dimensions,
+padded columns, ring mode and IR), 10,000 geometry diagnostics, forty cold
+starts, and 320 linear/WDR, flip and day/night replacements. No compatible
+input mismatches were found in QEMU and on the physical T41. Nineteen oversized geometry products
+are rejected before the OEM's 16-bit narrowing can wrap; they are reported
+separately rather than counted as parity matches. Host sanitizers cover cold
+starts, flipped calibration refreshes and double-flip restoration as well.
+
+Cold initialization uses the OEM's universal 5000 K / unity-gain state,
+not this sensor's measured running state. Mirroring transforms each of nine
+calibrated mesh planes and the optical-center coordinates, retaining the
+padding column. Day/night refresh starts from replacement calibration and
+reapplies the saved orientation. These are algorithm/lifecycle tests, not
+physical sensor WDR validation.
+
+Still required: native kernel ownership/fanout and stock/open device comparisons. Calibration tables
 remain legitimate sensor inputs; a measured scene's CT/gain is not a default.

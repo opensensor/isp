@@ -112,4 +112,92 @@ static inline int t41_lsc_registers(const unsigned char *p, unsigned int bytes,
 #undef LSC_EMIT
     return n;
 }
+/* Geometry is shared by mesh and ring controls. The OEM accepts a recognized
+ * step on either axis; zero divisors are rejected even if the other is valid. */
+static inline int t41_lsc_geometry(unsigned char *s,unsigned int state_bytes,
+        unsigned int height,unsigned int width,unsigned int sy,unsigned int sx,unsigned int pairs)
+{
+    unsigned int valid=0,i,rows,columns,mask;
+    if(!s || state_bytes<T41_LSC_STATE_BYTES || !sx || !sy || width>8192 || height>8192) return -2;
+    for(i=0;i<10;++i) {
+        unsigned int step=i<7?16+i*4:i==7?48:i==8?64:80;
+        if(sx==step || sy==step) valid=1;
+    }
+    if(!valid) mask=1;
+    else {
+        rows=(height+sy-1)/sy+1;
+        columns=((width+sx-1)/sx+2)&~1U;
+        if(columns!=pairs*2) mask=2;
+        else if(rows*pairs>65535) return -2; /* OEM narrows this product and can accept an oversized grid. */
+        else if(rows*pairs>1152) mask=4;
+        else return 1;
+    }
+    s[0x6c35]&=mask;
+    return -1;
+}
+/* arg3 flips rows and arg4 columns in the OEM four-argument ABI. The padded
+ * last column is not part of the visible grid and must not be mirrored. */
+static inline int t41_lsc_flip(unsigned char *p,unsigned int bytes,unsigned char *s,
+        unsigned int state_bytes,unsigned int width,unsigned int height,
+        unsigned int vertical,unsigned int horizontal,unsigned int bypass)
+{
+    unsigned int rows,columns,stride,v,h,i,j,k,cy,cx;
+    int ret;
+    if(!p || !s || bytes<T41_LSC_PARAM_BYTES || state_bytes<T41_LSC_STATE_BYTES ||
+        vertical>1 || horizontal>1) return -2;
+    ret=t41_lsc_geometry(s,state_bytes,height,width,p[78],p[79],p[80]);
+    if(ret<0) { if(ret==-1) s[0x6c35]&=bypass?32:64; return ret; }
+    rows=(height+p[78]-1)/p[78]+1; columns=(width+p[79]-1)/p[79]+1;
+    stride=(columns+1)&~1U;
+    if(rows*stride>2304) return -2;
+    v=s[0x6c34]!=vertical; h=s[0x6c33]!=horizontal;
+    if(v || h) {
+        cy=t41_tmo_le32(p+4); cx=t41_tmo_le32(p+8);
+        if(v) cy=0U-cy-height;
+        if(h) cx=0U-cx-width;
+        t41_lsc_put32(p+4,cy); t41_lsc_put32(p+8,cx);
+        t41_lsc_put32(p,cy*cy+cx*cx);
+        for(i=0;i<rows;++i) for(j=0;j<columns;++j) {
+            unsigned int a=i*stride+j,b=(v?rows-1-i:i)*stride+(h?columns-1-j:j);
+            if(a>=b) continue;
+            for(k=0;k<9;++k) {
+                unsigned char *plane=p+0x3680+k*0x1200;
+                unsigned int av=t41_tmo_le16(plane+a*2),bv=t41_tmo_le16(plane+b*2);
+                t41_dpc_put16(plane+a*2,bv); t41_dpc_put16(plane+b*2,av);
+            }
+        }
+    }
+    t41_lsc_put32(s+16,5);
+    ret=t41_lsc_ct(p,bytes,s,state_bytes,t41_tmo_le32(s+12),1);
+    if(ret<0) return ret;
+    s[0x6c33]=horizontal; s[0x6c34]=vertical;
+    return 0;
+}
+static inline int t41_lsc_initialize(const unsigned char *p,unsigned int bytes,unsigned char *s,
+        unsigned int state_bytes,unsigned int width,unsigned int height,unsigned int bayer,unsigned int wdr)
+{
+    unsigned int i;
+    if(!p || !s || bytes<T41_LSC_PARAM_BYTES || state_bytes<T41_LSC_STATE_BYTES ||
+        !width || !height || width>8192 || height>8192 || wdr>1 ||
+        (!p[26] && (!t41_tmo_le16(p+24) || t41_tmo_le16(p+24)>1152))) return -1;
+    for(i=0;i<T41_LSC_STATE_BYTES;++i) s[i]=0;
+    t41_lsc_put32(s+4,height); t41_lsc_put32(s+8,width);
+    t41_lsc_put32(s+12,5000); t41_lsc_put32(s+16,5); t41_lsc_put32(s+20,16);
+    t41_lsc_put32(s+28,256); s[0x6c28]=(bayer&31)>=4;
+    s[0x6c29]=255; s[0x6c2a]=255;
+    if(t41_lsc_geometry(s,state_bytes,height,width,p[78],p[79],p[80])<0) return -1;
+    if(t41_lsc_gain(p,bytes,s,state_bytes,0,1,wdr)<0 || t41_lsc_ct(p,bytes,s,state_bytes,5000,1)<0) return -1;
+    return 0;
+}
+static inline int t41_lsc_refresh(unsigned char *p,unsigned int bytes,unsigned char *s,
+        unsigned int state_bytes,unsigned int wdr,unsigned int bypass)
+{
+    unsigned int v,h;
+    if(!p || !s || bytes<T41_LSC_PARAM_BYTES || state_bytes<T41_LSC_STATE_BYTES || wdr>1) return -1;
+    v=s[0x6c34]; h=s[0x6c33]; s[0x6c34]=0; s[0x6c33]=0;
+    if(t41_lsc_flip(p,bytes,s,state_bytes,t41_tmo_le32(s+8),t41_tmo_le32(s+4),v,h,bypass)<0) return -1;
+    if(t41_lsc_gain(p,bytes,s,state_bytes,t41_tmo_le32(s+24),1,wdr)<0 ||
+       t41_lsc_ct(p,bytes,s,state_bytes,t41_tmo_le32(s+12),1)<0) return -1;
+    return 0;
+}
 #endif

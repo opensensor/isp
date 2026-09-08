@@ -119,7 +119,9 @@ with open(sys.argv[1], 'rb') as source:
         functions = {name: 'oracle_' + name for name in [
             'tisp_lsc_ct_interp', 'tisp_lsc_gain_interp', 'tisp_lsc_mesh_itp',
             'tisp_lsc_ring_itp', 'tisp_lsc_itp', 'tisp_simple_intp_int8',
-            'tisp_max', 'tisp_lsc_write_reg']}
+            'tisp_max', 'tisp_lsc_write_reg', 'tisp_lsc_lut_valid_judge',
+            'tisp_lsc_mirror_flip', 'lsc_exchange_data.constprop.1', 'tisp_lsc_real_write_lut',
+            'tisp_lsc_init', 'tisp_lsc_wdr_en', 'tisp_lsc_dn_params_refresh']}
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
@@ -128,7 +130,11 @@ with open(sys.argv[1], 'rb') as source:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
     if lsc:
         names.update({'lsc_slock': 'oracle_bss+0x4130',
-            '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop'})
+            '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop',
+            'system_reg_read': 'oracle_read', '__div64_32': 'oracle_div64',
+            'tparamsP': 'oracle_params', 'tpm_cb': 'oracle_callbacks', 'private_kmalloc': 'oracle_kmalloc',
+            **{name:'oracle_noop' for name in ['private_spin_lock_init','system_irq_func_set',
+                'tisp_lsc_fra_down_interrupt','tisp_lsc_pm_get_regsize','tisp_lsc_pm_suspend','tisp_lsc_pm_resume']}})
     if adr:
         names.update({'system_reg_read': 'oracle_read', '.data': 'oracle_data',
             'adr_5x5_in2': 'oracle_radial_reference',
@@ -174,7 +180,7 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_ae_get_bv': 'oracle_noop'})
     rels = {r['r_offset']: r for r in elf.get_section_by_name('.rel.text').iter_relocations()}
     local_relocs = {}
-    if lce:
+    if lce or lsc:
         for pc, rel in rels.items():
             entry = symbols.get_symbol(rel['r_info_sym'])
             section_name = entry.name or elf.get_section(entry['st_shndx']).name
