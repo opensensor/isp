@@ -1,9 +1,8 @@
 # T41 AWB algorithm recovery
 
-The recovered automatic estimator and frame owner have passed a one-shot live
-test. The persistent camera stack still uses its bounded neutral-mesh estimator
-until promotion. Public-control recovery is being validated separately below;
-this is not a claim of full image-quality, WDR or every-sensor parity.
+The recovered automatic estimator, frame owner and public controls are now
+persistent on the test camera (kernel `fe620b59`, OpenIMP `851486f`). This is
+not a claim of full image-quality, WDR or every-sensor parity.
 
 The reference is H20250310a `tx-isp-t41.ko`, SHA256
 `572ff4553c1a033290ec67d2d9fc384701fbc235c2e335c7e5604100966fb2ee`.
@@ -319,7 +318,10 @@ match another 10,000 transitions in the control oracle on QEMU and physical
 T41, including complete getter and day-start readbacks. Gain arithmetic is
 the independently verified shared writer; the control oracle mocks that seam.
 Host adapter tests cover late failure without MMIO/state/day-override changes.
-Live public-ioctl validation remains pending this revision's build.
+`tests/t41_awb_device_check.c` passes on the live candidate: public manual
+mode/gains, freeze, weights, zone reports, invalid modes/directions/pointers
+and restoration of the original attributes/weights. The kernel and library
+cross-builds, complete host suite and adapter/control sanitizers pass.
 
 The preceding `f15bee01` kernel with OpenIMP `851486f` passed a one-shot boot
 on T41NQ/OS04D10, followed by forced `ric mode day`, six TCP/UDP H.264/AAC
@@ -336,6 +338,22 @@ In the stationary indoor comparison, native/stock hardware red gains were
 uncontrolled scene observations, not chart-based correction coefficients.
 Short CPU samples still favor stock, and delivered cadence is below the
 configured 25 fps. Neither efficiency nor whole-ISP parity is claimed.
+
+Revision `fe620b59` passed the public ioctl smoke, six TCP/UDP reconnects,
+an exposure sweep to realized log2-Q16 gain 259142 and a clean 120-second
+H.264/AAC decode (2998 frames). AWB rejected no frames; all checked scalar
+errors were zero. Security policy was restored. Promotion changed only the
+ISP module, libimp and tuning daemon, before S10 bind mounts. All 20 persistent
+hashes and the four-entry previous-stack rollback manifest verified on reboot,
+followed by forced day and another six passing reconnects. The module SHA256
+is `802943b7a138a64078838d6694dce9082997df061ad086f498d122272a6001a2`.
+
+A 60-second RTP probe before the exposure sweep measured 24.723 media fps,
+15 roughly two-frame timestamp intervals, continuous packet sequences and no
+backward timestamps. A separate 20-second probe after the sweep measured
+24.986 media fps and no long intervals. This exposure-dependent difference
+is under investigation, not a fixed-cadence claim. A 900-second promoted
+stream test is running; its result is not yet established here.
 
 `tisp_params_copy` copies AWB
 from day-bank `0xd18` to active `0x978`; thus the OEM start setter's day-bank
