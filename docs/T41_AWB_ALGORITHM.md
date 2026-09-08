@@ -209,10 +209,30 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 /tmp/awb-detect-test
 ```
 
+The combined algorithm oracle then connects DMA parsing, prior/special-region
+preparation, the real detector, long history/convergence and gain publication.
+It compares 10,000 frames across 100 independent 100-frame sequences, with
+selected/normal DMA modes, retained state, all estimator modes, gain modes
+0..9, freeze/unfreeze, EV changes and face-region warmup. QEMU and the physical
+T41 both report zero mismatches in complete parameter/state/report buffers,
+cluster reports and ordered special-region/WB writes (including both WB
+banks and their triggers). The native-only connected pipeline also passes
+10,000 frames under ASan/UBSan and calibration-write checks. This includes
+gain conversion and manual/freeze behavior, not just the earlier detector
+callback seam. It does not exercise the live IRQ/worker ownership adapter,
+the mode-setting API, cold allocation or calibration replacement.
+
+```sh
+bash tools/build_t41_awb_frame_oracle.sh CROSS_PREFIX STOCK_OBJECT OUTPUT_DIR
+qemu-mipsel OUTPUT_DIR/awb-frame-oracle-check
+cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -fno-sanitize-recover=all tests/tx_isp_t41_awb_frame_test.c -o /tmp/awb-frame-test
+/tmp/awb-frame-test
+```
+
 ## Still required
 
-Combined full-frame pipeline validation,
-freeze/manual/day-night policy, and owned frame-safe runtime with lifecycle
+Control API/day-night transitions, and owned frame-safe runtime with lifecycle
 and calibration replacement tests. Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not
 establish correctness of the estimator feeding them.

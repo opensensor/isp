@@ -26,6 +26,7 @@ with open(sys.argv[1], 'rb') as source:
     awb_stats = len(sys.argv) > 2 and sys.argv[2] == 'awb_stats'
     awb_long = len(sys.argv) > 2 and sys.argv[2] == 'awb_long'
     awb_detect = len(sys.argv) > 2 and sys.argv[2] == 'awb_detect'
+    awb_frame = len(sys.argv) > 2 and sys.argv[2] == 'awb_frame'
     gamma = len(sys.argv) > 2 and sys.argv[2] == 'gamma'
     dpc = len(sys.argv) > 2 and sys.argv[2] == 'dpc'
     dmsc = len(sys.argv) > 2 and sys.argv[2] == 'dmsc'
@@ -61,16 +62,19 @@ with open(sys.argv[1], 'rb') as source:
     if awb_gain:
         functions = dict(zip(['tisp_awb_gain_reg', 'tisp_awb_set_gain', 'fix_point_mult2_32'],
             ['oracle_pack', 'oracle_gain', 'oracle_fixed_mul']))
-    if awb_stats or awb_detect:
+    if awb_stats or awb_detect or awb_frame:
         functions = {name: 'oracle_' + name for name in [
             'tisp_awb_get_statistics', 'tisp_awb_sat_weight', 'tisp_awb_long_par_update',
             'tisp_awb_spec_calculate', 'fix_point_mult2_32', 'fix_point_div_32',
             'ISPAWBInterpolation1', 'ISPAWBInterpolation2', 'Tiziano_Awb_Ct_Cal',
             'fix_point_mult3_32', 'Tiziano_Awb_Ct_Detect_GrayWorld_mode',
             'Tiziano_Awb_Ct_Detect_GrayWorld']}
-        if awb_detect:
+        if awb_detect or awb_frame:
             functions.update({name: 'oracle_' + name for name in [
                 'tisp_awb_ct_detect', 'func_zone_ct_weight']})
+        if awb_frame:
+            functions.update({name: 'oracle_' + name for name in [
+                'tisp_awb_long_alogrithm', 'fix_point_div', 'tisp_awb_set_gain', 'tisp_awb_gain_reg']})
     if awb_long:
         functions = {name: 'oracle_' + name for name in [
             'tisp_awb_long_alogrithm', 'tisp_awb_long_par_update',
@@ -146,7 +150,7 @@ with open(sys.argv[1], 'rb') as source:
         'isp_printf': 'oracle_unexpected'})
     if awb_gain:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
-    if awb_stats or awb_long or awb_detect:
+    if awb_stats or awb_long or awb_detect or awb_frame:
         names.update({'awb_list_cluster_rg': 'oracle_cluster_red',
                       'awb_list_cluster_bg': 'oracle_cluster_blue', 'system_reg_read': 'oracle_read',
                       '__ashldi3': 'oracle_left_shift', '__lshrdi3': 'oracle_shift',
@@ -154,6 +158,9 @@ with open(sys.argv[1], 'rb') as source:
     if awb_long:
         names.update({'tisp_awb_ct_detect': 'oracle_detector',
                       'div64_u64': 'oracle_div64_u64'})
+    if awb_frame:
+        names['div64_u64'] = 'oracle_div64_u64'
+        names['system_reg_set_awb_trig'] = 'oracle_trigger'
     if lsc:
         names.update({'lsc_slock': 'oracle_bss+0x4130',
             '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop',

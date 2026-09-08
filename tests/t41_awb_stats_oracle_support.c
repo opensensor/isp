@@ -1,4 +1,5 @@
 #include <stddef.h>
+unsigned long long oracle_div64_u64(unsigned long long a,unsigned long long b) { return a/b; }
 unsigned long long oracle_left_shift(unsigned long long value,unsigned int shift) { return value<<shift; }
 unsigned long long oracle_shift(unsigned long long value,unsigned int shift) { return value>>shift; }
 unsigned int oracle_div64(unsigned long long *value,unsigned int divisor)
@@ -7,7 +8,10 @@ unsigned int oracle_div64(unsigned long long *value,unsigned int divisor)
 	*value/=divisor;
 	return remainder;
 }
-unsigned int oracle_rgb[3], oracle_words[18][2], oracle_writes, oracle_reads, oracle_bad;
+#ifndef ORACLE_WRITE_LIMIT
+#define ORACLE_WRITE_LIMIT 18
+#endif
+unsigned int oracle_rgb[3], oracle_words[ORACLE_WRITE_LIMIT][2], oracle_writes, oracle_reads, oracle_bad;
 void *oracle_copy(void *dest, const void *src, unsigned int n)
 {
 	unsigned char *d=dest; const unsigned char *s=src;
@@ -28,7 +32,7 @@ unsigned int oracle_read(unsigned int address)
 }
 void oracle_write(unsigned int address,unsigned int value)
 {
-	if(oracle_writes>=18) { ++oracle_bad; return; }
+	if(oracle_writes>=ORACLE_WRITE_LIMIT) { ++oracle_bad; return; }
 	oracle_words[oracle_writes][0]=address;
 	oracle_words[oracle_writes++][1]=value;
 }
