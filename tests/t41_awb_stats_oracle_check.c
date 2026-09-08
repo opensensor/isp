@@ -3,11 +3,13 @@
 #include <string.h>
 #include "../driver/t41/tx_isp_t41_awb_prior.h"
 #include "../driver/t41/tx_isp_t41_awb_special.h"
+#include "../driver/t41/tx_isp_t41_awb_ct.h"
 unsigned char oracle_bss[0x5000] __attribute__((aligned(65536)));
 extern int oracle_tisp_awb_get_statistics(void *, unsigned int);
 extern int oracle_tisp_awb_sat_weight(unsigned int, void *, void *, void *, void *, void *, void *);
 extern int oracle_tisp_awb_long_par_update(unsigned int, void **);
 extern int oracle_tisp_awb_spec_calculate(unsigned int);
+extern unsigned int oracle_Tiziano_Awb_Ct_Cal(void **, unsigned int, unsigned int);
 extern unsigned int oracle_rgb[3], oracle_words[18][2], oracle_writes, oracle_reads, oracle_bad;
 unsigned short oracle_cluster_red[6], oracle_cluster_blue[6];
 static unsigned char p[0x1400], q[sizeof(p)], dma[32768], s[T41_AWB_STATE_BYTES], t[sizeof(s)];
@@ -93,7 +95,27 @@ int main(void)
 				if(fail++<10) printf("special case=%u writes=%u/%u reads=%u/%u\n",f,n,oracle_writes,reads,oracle_reads);
 			}
 		}
+		{
+			void *oslots[45]; unsigned int red, blue, ct, oct, fraction=1+rng()%10;
+			unsigned int ax=32, ay=32;
+			put16(0xcd2,10+rng()%7); put16(0xcd4,fraction);
+			for(i=0;i<15;++i) {
+				ax+=1+rng()%50; ay+=1+rng()%50;
+				t41_ae_put32(p+0x38+i*4,ax); t41_ae_put32(p+0x74+i*4,ay);
+			}
+			for(i=0;i<225;++i) t41_ae_put32(p+0x870+i*4,f%17 ? 100+rng()%800 : 0);
+			red=rng()%((ax+50)<<fraction); blue=rng()%((ay+50)<<fraction);
+			if(f%7==0) red=ax<<fraction;
+			if(f%9==0) blue=ay<<fraction;
+			memcpy(q,p,sizeof(p)); memcpy(t,s,sizeof(s));
+			oracle_tisp_awb_long_par_update(0,oslots);
+			if(t41_awb_ct_calculate(p,sizeof(p),red,blue,&ct)) return 6;
+			oct=oracle_Tiziano_Awb_Ct_Cal(oslots,red,blue);
+			if(ct!=oct || oct!=t41_tmo_le32(q+0x28)) {
+				if(fail++<10) printf("CT case=%u frac=%u input=%u/%u: %u/%u\n",f,fraction,red,blue,ct,oct);
+			}
+		}
 	}
-	printf("10000 synthetic AWB DMA/selection/saturation/prior/special cases: %u mismatches, %u unexpected accesses\n",fail,oracle_bad);
+	printf("10000 synthetic AWB DMA/selection/saturation/prior/special/CT cases: %u mismatches, %u unexpected accesses\n",fail,oracle_bad);
 	return fail || oracle_bad ? 1 : 0;
 }

@@ -20,6 +20,7 @@ into them. Calibration and statistics are explicit caller inputs.
 | `tisp_awb_sat_weight` | `0x3106c` | `t41_awb_saturation_weights` |
 | `tisp_awb_long_par_update` | `0x30b20` | `t41_awb_prior_prepare` |
 | `tisp_awb_spec_calculate` | `0x31fb4` | `t41_awb_special_prepare` |
+| `ISPAWBInterpolation1/2`, `Tiziano_Awb_Ct_Cal` | `0x1a570`, `0x1a624`, `0x1a774` | `t41_awb_ct_lerp`, `t41_awb_ct_calculate` |
 
 AWB parameters start at active calibration +`0x978`; runtime state is `0xf54c`
 bytes. This is a format boundary shared by T41 sensor calibrations, not a
@@ -60,11 +61,24 @@ modes prepare calibrated software ratios. Register writes are returned as
 address/value pairs: the helper itself performs no MMIO. Neighbouring regions
 share packed words, so whole-word writes and order are significant.
 
+Temperature calculation clips calibrated R/G and B/G to their 15-knot axes,
+then interpolates the reciprocal-temperature surface at `0x870`. The first
+pass shifts table values into the fractional domain; the second does not
+shift them again. Both preserve the OEM intermediate fixed-point multiply/
+divide truncations. A zero interpolated reciprocal returns 5000 K. The last
+axis endpoints are evaluated directly, avoiding unnecessary one-past-axis/
+surface accesses in the OEM while preserving their valid-input result.
+Malformed axes and zero interpolation divisors are rejected. This is the
+ratio-to-temperature calculation, not the cluster selection producing ratios.
+
 ## Validation and reproduction
 
 10,000 randomized combined cases match all changed parameter/state bytes,
 all 45 normalized pointers, every ordered register write and the conditional
-RGB reads on QEMU: zero mismatches or unexpected accesses. Inputs cover both
+RGB reads on QEMU and the physical T41: zero mismatches or unexpected accesses.
+The extended run also checks 10,000 temperature calculations, including
+clipping, exact upper endpoints, zero surfaces and changing precision.
+Inputs cover both
 DMA modes, all four selected classes, changing dimensions, saturation modes,
 all day/night-enable combinations, prior interpolation and special-region
 warmup/software/hardware modes. No sensor bin is an oracle input.
@@ -72,7 +86,8 @@ warmup/software/hardware modes. No sensor bin is an oracle input.
 The host suite tests 2,000 randomized frames with ASan/UBSan, padding and
 canaries, explicit malformed lengths/dimensions, and rejection of a wrapped
 zero saturation divisor without partial output. Full `make -C tests check`
-also passes. Physical T41 oracle execution is pending.
+also passes. The sanitizer suite includes constant/zero temperature surfaces,
+upper endpoints and malformed-axis rejection without changing the output.
 
 ```sh
 bash tools/build_t41_awb_stats_oracle.sh CROSS_PREFIX STOCK_OBJECT OUTPUT_DIR

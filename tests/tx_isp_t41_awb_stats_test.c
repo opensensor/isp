@@ -4,6 +4,7 @@
 #include <string.h>
 #include "../driver/t41/tx_isp_t41_awb_prior.h"
 #include "../driver/t41/tx_isp_t41_awb_special.h"
+#include "../driver/t41/tx_isp_t41_awb_ct.h"
 
 static struct { unsigned char head[16], p[0x1400], tail[16]; } cal;
 static struct { unsigned char head[16], s[T41_AWB_STATE_BYTES], tail[16]; } state;
@@ -76,12 +77,27 @@ int main(void)
 		assert(!t41_awb_special_prepare(p,sizeof(cal.p),s,sizeof(state.s),rgb,reg,&nr));
 		assert(nr>=6 && nr<=18);
 		for(i=0;i<nr;++i) assert(reg[i].address>=0x18054 && reg[i].address<=0x180a0);
+		{
+			unsigned int ct, fraction=1+f%10;
+			put16(0xcd4,fraction);
+			for(i=0;i<15;++i) {
+				t41_ae_put32(p+0x38+i*4,20+i*20);
+				t41_ae_put32(p+0x74+i*4,30+i*20);
+			}
+			for(i=0;i<225;++i) t41_ae_put32(p+0x870+i*4,f%7 ? 250 : 0);
+			assert(!t41_awb_ct_calculate(p,sizeof(cal.p),rng()%(340U<<fraction),rng()%(340U<<fraction),&ct));
+			assert(ct==(f%7 ? 4000U : 5000U));
+			assert(!t41_awb_ct_calculate(p,sizeof(cal.p),~0U,~0U,&ct));
+			assert(ct==(f%7 ? 4000U : 5000U));
+			t41_ae_put32(p+0x38,40); ct=123;
+			assert(t41_awb_ct_calculate(p,sizeof(cal.p),0,0,&ct)<0 && ct==123);
+		}
 		for(i=0;i<16;++i) assert(cal.head[i]==0xa5 && cal.tail[i]==0xa5 && state.head[i]==0xa5 && state.tail[i]==0xa5);
 	}
 	memcpy(saved,s,sizeof(saved)); memcpy(saved_p,p,sizeof(saved_p));
 	assert(t41_awb_prior_prepare(p,0x1200,s,sizeof(state.s),slots,cr,cb)<0);
 	assert(t41_awb_special_prepare(p,sizeof(cal.p),s,sizeof(state.s)-1,rgb,reg,&nr)<0);
 	assert(!memcmp(saved,s,sizeof(saved)) && !memcmp(saved_p,p,sizeof(saved_p)));
-	puts("AWB statistics/prior/special: 2000 randomized frames, bounds, padding, rejected divisors and canaries passed");
+	puts("AWB statistics/prior/special/CT: 2000 randomized frames, bounds, padding, rejected divisors and canaries passed");
 	return 0;
 }

@@ -62,7 +62,8 @@ with open(sys.argv[1], 'rb') as source:
     if awb_stats:
         functions = {name: 'oracle_' + name for name in [
             'tisp_awb_get_statistics', 'tisp_awb_sat_weight', 'tisp_awb_long_par_update',
-            'tisp_awb_spec_calculate', 'fix_point_mult2_32']}
+            'tisp_awb_spec_calculate', 'fix_point_mult2_32', 'fix_point_div_32',
+            'ISPAWBInterpolation1', 'ISPAWBInterpolation2', 'Tiziano_Awb_Ct_Cal']}
     if gamma:
         functions = dict(zip(['tisp_gamma_interp_by_ev', 'tisp_gamma_strength_transform',
             'tisp_gamma_write_lut_rgb', 'tisp_round_int64'],
@@ -136,7 +137,9 @@ with open(sys.argv[1], 'rb') as source:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
     if awb_stats:
         names.update({'awb_list_cluster_rg': 'oracle_cluster_red',
-                      'awb_list_cluster_bg': 'oracle_cluster_blue', 'system_reg_read': 'oracle_read'})
+                      'awb_list_cluster_bg': 'oracle_cluster_blue', 'system_reg_read': 'oracle_read',
+                      '__ashldi3': 'oracle_left_shift', '__lshrdi3': 'oracle_shift',
+                      '__div64_32': 'oracle_div64'})
     if lsc:
         names.update({'lsc_slock': 'oracle_bss+0x4130',
             '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop',

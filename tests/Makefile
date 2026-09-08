@@ -14,7 +14,7 @@ all check: tx_isp_t41_lsc_test
 all check: tx_isp_t41_lsc_runtime_test
 all check: tx_isp_t41_awb_stats_test
 
-tx_isp_t41_awb_stats_test: tx_isp_t41_awb_stats_test.c ../driver/t41/tx_isp_t41_awb_stats.h ../driver/t41/tx_isp_t41_awb_prior.h ../driver/t41/tx_isp_t41_awb_special.h ../driver/t41/tx_isp_t41_awb_gain.h ../driver/t41/tx_isp_t41_ae.h ../driver/t41/tx_isp_t41_tmo.h
+tx_isp_t41_awb_stats_test: tx_isp_t41_awb_stats_test.c ../driver/t41/tx_isp_t41_awb_stats.h ../driver/t41/tx_isp_t41_awb_prior.h ../driver/t41/tx_isp_t41_awb_special.h ../driver/t41/tx_isp_t41_awb_ct.h ../driver/t41/tx_isp_t41_awb_gain.h ../driver/t41/tx_isp_t41_ae.h ../driver/t41/tx_isp_t41_tmo.h
 	$(CC) $(CFLAGS) -o $@ $<
 
 tx_isp_t41_lsc_runtime_test: tx_isp_t41_lsc_runtime_test.c ../driver/t41/tx_isp_t41_lsc_runtime.inc ../driver/t41/tx_isp_t41_lsc.h ../driver/t41/tx_isp_t41_dpc.h ../driver/t41/tx_isp_t41_tmo.h ../driver/include/tx_isp/tx_isp_math.h

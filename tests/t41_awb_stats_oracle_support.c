@@ -1,4 +1,12 @@
 #include <stddef.h>
+unsigned long long oracle_left_shift(unsigned long long value,unsigned int shift) { return value<<shift; }
+unsigned long long oracle_shift(unsigned long long value,unsigned int shift) { return value>>shift; }
+unsigned int oracle_div64(unsigned long long *value,unsigned int divisor)
+{
+	unsigned int remainder=*value%divisor;
+	*value/=divisor;
+	return remainder;
+}
 unsigned int oracle_rgb[3], oracle_words[18][2], oracle_writes, oracle_reads, oracle_bad;
 void *oracle_copy(void *dest, const void *src, unsigned int n)
 {
