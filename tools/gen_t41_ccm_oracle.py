@@ -27,6 +27,7 @@ with open(sys.argv[1], 'rb') as source:
     awb_long = len(sys.argv) > 2 and sys.argv[2] == 'awb_long'
     awb_detect = len(sys.argv) > 2 and sys.argv[2] == 'awb_detect'
     awb_frame = len(sys.argv) > 2 and sys.argv[2] == 'awb_frame'
+    awb_control = len(sys.argv) > 2 and sys.argv[2] == 'awb_control'
     gamma = len(sys.argv) > 2 and sys.argv[2] == 'gamma'
     dpc = len(sys.argv) > 2 and sys.argv[2] == 'dpc'
     dmsc = len(sys.argv) > 2 and sys.argv[2] == 'dmsc'
@@ -79,6 +80,17 @@ with open(sys.argv[1], 'rb') as source:
         functions = {name: 'oracle_' + name for name in [
             'tisp_awb_long_alogrithm', 'tisp_awb_long_par_update',
             'tisp_awb_sat_weight', 'fix_point_mult2_32', 'fix_point_div']}
+    if awb_control:
+        functions = {name: 'oracle_' + name for name in [
+            'tisp_awb_init', 'tisp_awb_params_refresh', 'tisp_awb_show_para_update',
+            'tisp_awb_ev_update_Ywgt', 'tisp_awb_ev_update', 'tisp_awb_dn_params_refresh',
+            'tisp_awb_param_array_get', 'tisp_awb_param_array_set', 'tisp_awb_get_attr',
+            'tisp_awb_get_global_statis', 'tisp_awb_set_weight', 'tisp_awb_get_weight',
+            'tisp_awb_get_zone', 'tisp_awb_set_mode', 'tisp_awb_get_mode',
+            'tisp_awb_set_frz', 'tisp_awb_get_frz', 'tisp_awb_set_ct',
+            'tisp_awb_set_statis_localtion', 'tisp_awb_api_set_ct_trend_offset',
+            'tisp_awb_api_get_ct_trend_offset', 'tisp_awb_set_converge_step',
+            'tisp_awb_get_converge_step']}
     if gamma:
         functions = dict(zip(['tisp_gamma_interp_by_ev', 'tisp_gamma_strength_transform',
             'tisp_gamma_write_lut_rgb', 'tisp_round_int64'],
@@ -161,6 +173,14 @@ with open(sys.argv[1], 'rb') as source:
     if awb_frame:
         names['div64_u64'] = 'oracle_div64_u64'
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if awb_control:
+        names.update({'tparamsP': 'oracle_params', 'tpm_cb': 'oracle_callbacks',
+            'awb_ls_wgt_lut_inter': 'oracle_distance_reference',
+            'private_kmalloc': 'oracle_kmalloc', 'private_kfree': 'oracle_kfree',
+            'tisp_awb_set_hardware_param': 'oracle_hardware', 'tisp_awb_set_gain': 'oracle_gain',
+            **{name: 'oracle_noop' for name in ['system_irq_func_set', 'tisp_event_set_cb',
+                'tisp_awb_main_interrupt_static', 'tisp_awb_process',
+                'tisp_awb_pm_get_regsize', 'tisp_awb_pm_suspend', 'tisp_awb_pm_resume']}})
     if lsc:
         names.update({'lsc_slock': 'oracle_bss+0x4130',
             '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop',
@@ -213,7 +233,7 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_ae_get_bv': 'oracle_noop'})
     rels = {r['r_offset']: r for r in elf.get_section_by_name('.rel.text').iter_relocations()}
     local_relocs = {}
-    if lce or lsc:
+    if lce or lsc or awb_control:
         for pc, rel in rels.items():
             entry = symbols.get_symbol(rel['r_info_sym'])
             section_name = entry.name or elf.get_section(entry['st_shndx']).name
@@ -268,7 +288,7 @@ with open(sys.argv[1], 'rb') as source:
             else:
                 raise ValueError((hex(pc), kind))
         print(f'.size {name}, .-{name}')
-    if awb_stats or awb_detect:
+    if awb_stats or awb_detect or awb_control:
         table, = symbols.get_symbol_by_name('awb_ls_wgt_lut_inter')
         values = struct.unpack_from('<514H', elf.get_section(table['st_shndx']).data(), table['st_value'])
         print('.section .rodata\n.balign 4\n.globl oracle_distance_reference\noracle_distance_reference:')
@@ -283,6 +303,20 @@ with open(sys.argv[1], 'rb') as source:
             offset = target - symbol['st_value']
             assert 0 <= offset < symbol['st_size']
             print(f'.word oracle_tisp_lsc_param_array_set+{offset}')
+    if awb_control:
+        # Preserve the real setter switch branches with relocated code pointers.
+        symbol, = symbols.get_symbol_by_name('tisp_awb_set_mode')
+        data = elf.get_section_by_name('.rodata').data()
+        print('.section .rodata\n.balign 65536\n.globl oracle_rodata\noracle_rodata:')
+        for pos in range(0, len(data), 4):
+            if 0x1e10 <= pos < 0x1e38:
+                target, = struct.unpack_from('<I', data, pos)
+                offset = target-symbol['st_value']
+                assert 0 <= offset < symbol['st_size']
+                print(f'.word oracle_tisp_awb_set_mode+{offset}')
+            else:
+                print('.byte '+','.join(str(v) for v in data[pos:pos+4]))
+        print('oracle_message:\n.asciz "unexpected reference diagnostic"')
     if ae:
         # The target-table adjustment is inlined in tisp_ae_tune. This exact
         # bounded, call-free loop gets private caller-owned arrays, a private

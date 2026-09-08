@@ -230,9 +230,45 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 /tmp/awb-frame-test
 ```
 
+## Initialization and controls
+
+`tx_isp_t41_awb_control.h` provides privately owned parameter/state/report
+storage, mathematical distance-kernel initialization, exact cold defaults,
+geometry refresh, EV-weight interpolation and control transitions. The
+parameter block is **0x12e4 bytes**, not the complete 0x1700-byte tuning
+readback: the latter includes a 0x41a-byte report and two padding bytes.
+Native readback zeros the padding that OEM leaves uninitialized.
+
+The real OEM initialization and control instructions match 100 cold starts
+and 10,000 control transitions on QEMU and the physical T41, comparing every
+parameter, state, report and control byte plus getter outputs. The external
+allocator, hardware writer, gain writer and callback registration are mocked
+in this **control-policy oracle**; it is not a live lifecycle test. The actual
+gain writer and algorithm connections are covered by the preceding frame
+oracle. Native control tests pass ASan/UBSan, short-buffer/mode/geometry
+rejection and padding checks. Full host suite passes.
+
+Covered transitions include all ten gain modes, freeze, manual CT, spatial
+weights, statistics location, CT offsets, convergence settings, EV changes,
+parameter replacement, both refresh flags and day/night refresh. Mode zero
+retains manual control gains; day/night refresh preserves the distinct
+reset-inhibit flag. Manual-mode preset constants are the OEM public API
+defaults, not sensor-specific auto-WB coefficients. Invalid hardware geometry
+and nonmonotonic EV knots are rejected. Setters run against an owned candidate;
+late validation failure requires discarding it before any MMIO/publication.
+
+```sh
+sh tools/build_t41_awb_control_oracle.sh CROSS_PREFIX STOCK_OBJECT OUTPUT_DIR
+qemu-mipsel OUTPUT_DIR/awb-control-oracle-check
+cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -fno-sanitize-recover=all tests/tx_isp_t41_awb_control_test.c -o /tmp/awb-control-test
+/tmp/awb-control-test
+```
+
 ## Still required
 
-Control API/day-night transitions, and owned frame-safe runtime with lifecycle
-and calibration replacement tests. Existing gain packing and CT-offset
+Owned frame-safe runtime with lifecycle and calibration replacement tests,
+userspace/kernel ownership negotiation, and the start-gain API's separate
+day-calibration write policy. Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not
 establish correctness of the estimator feeding them.
