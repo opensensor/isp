@@ -33,6 +33,7 @@ with open(sys.argv[1], 'rb') as source:
     mdns = len(sys.argv) > 2 and sys.argv[2] == 'mdns'
     lce = len(sys.argv) > 2 and sys.argv[2] == 'lce'
     adr = len(sys.argv) > 2 and sys.argv[2] == 'adr'
+    lsc = len(sys.argv) > 2 and sys.argv[2] == 'lsc'
     if bcsh:
         functions = dict(zip([
             'tisp_round_int64', 'tisp_min', 'tisp_max', 'tisp_bcsh_itp',
@@ -114,12 +115,20 @@ with open(sys.argv[1], 'rb') as source:
             'func_map_y_filter', 'func_map_y_filter_sp', 'Tiziano_adr_fpga',
             'tiziano_adr_algorithm', 'tisp_adr_faceae_curve_adjust', 'tiziano_adr_hardpars_ctl',
             'tisp_adr_init', 'tiziano_adr_gamma_refresh', 'tisp_adr_dn_params_refresh', 'tisp_adr_linear_switch']}
+    if lsc:
+        functions = {name: 'oracle_' + name for name in [
+            'tisp_lsc_ct_interp', 'tisp_lsc_gain_interp', 'tisp_lsc_mesh_itp',
+            'tisp_lsc_ring_itp', 'tisp_lsc_itp', 'tisp_simple_intp_int8',
+            'tisp_max', 'tisp_lsc_write_reg']}
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
         'isp_printf': 'oracle_unexpected'})
     if awb_gain:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
+    if lsc:
+        names.update({'lsc_slock': 'oracle_bss+0x4130',
+            '__private_spin_lock_irqsave': 'oracle_noop', 'private_spin_unlock_irqrestore': 'oracle_noop'})
     if adr:
         names.update({'system_reg_read': 'oracle_read', '.data': 'oracle_data',
             'adr_5x5_in2': 'oracle_radial_reference',
