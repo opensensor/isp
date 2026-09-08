@@ -850,6 +850,9 @@ static unsigned int t41_ae_flicker_frequency_hz = 60U;
 module_param(t41_ae_flicker_frequency_hz, uint, 0644);
 MODULE_PARM_DESC(t41_ae_flicker_frequency_hz,
 		 "anti-flicker mains frequency in Hz (0 disables snapping)");
+/* One atomic public request, outside the recovered BSS. Until a caller
+ * selects a policy, retain the existing diagnostic module parameters. */
+static unsigned int t41_ae_antiflicker_request = ~0U;
 static unsigned int t41_ae_flicker_gib_gain_q10 = 0x200U;
 module_param(t41_ae_flicker_gib_gain_q10, uint, 0644);
 MODULE_PARM_DESC(t41_ae_flicker_gib_gain_q10,
@@ -2065,6 +2068,7 @@ static int t41_flicker_profile_set(const char *value,
 	bypass = ((uint32_t *)(void *)top_bypass_global)[0];
 	if (bypass & 0xfc000000U)
 		ret = t41_apply_flicker_profile(
+			t41_ae_antiflicker_request == ~0U &&
 			t41_ae_flicker_profile < 0 &&
 			t41_ae_flicker_frequency_hz &&
 			t41_ae_flicker_floor_lines);
@@ -20628,6 +20632,10 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
      */
     if (a1 == 0xc0105435U) {
         static const struct tx_isp_tuning_cmd_desc startup_routes[] = {
+            { TX_ISP_TUNING_CMD_T41_ANTIFLICKER,
+              sizeof(struct tx_isp_tuning_t41_antiflicker),
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_T41_RUNNING_MODE, 4,
               TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
               TX_ISP_TUNING_PAYLOAD_USER_PTR },
@@ -20711,6 +20719,26 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
          * writes to GET-only commands, not acknowledge unchanged payloads. */
         if (!route && (request.id & 0xffff0000U) == 0x08ff0000U)
             return -EOPNOTSUPP;
+
+        if (request.id == TX_ISP_TUNING_CMD_T41_ANTIFLICKER) {
+            struct tx_isp_tuning_t41_antiflicker attr = { 0 };
+
+            if (request.is_get > 1 || request.channel != 0)
+                return -EINVAL;
+            if (request.is_get) {
+                ret = tisp_g_antiflick(request.channel, (uintptr_t)&attr);
+                if (ret)
+                    return ret;
+                return private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    &attr, sizeof(attr)) ? -EFAULT : 0;
+            }
+            if (private_copy_from_user(&attr,
+                    (void __user *)(uintptr_t)request.value_or_ptr,
+                    sizeof(attr)))
+                return -EFAULT;
+            return tisp_s_antiflick(request.channel, (uintptr_t)&attr);
+        }
 
         if (request.id == TX_ISP_TUNING_CMD_T41_AWB_ATTR ||
             request.id == TX_ISP_TUNING_CMD_T41_AWB_WEIGHT ||
@@ -53928,7 +53956,8 @@ int64_t tisp_init(uint32_t channel, uintptr_t config, uintptr_t param_path)
     if (channel == 0)
         t41_apply_calibrated_bcsh(TX_ISP_TUNING_COLOR_MODEL_DAY);
     if (channel == 0) {
-        bool legacy_profile = t41_ae_flicker_profile < 0 &&
+        bool legacy_profile = t41_ae_antiflicker_request == ~0U &&
+            t41_ae_flicker_profile < 0 &&
             t41_ae_flicker_frequency_hz && t41_ae_flicker_floor_lines;
         int profile_ret = t41_apply_flicker_profile(legacy_profile);
 
@@ -56420,6 +56449,7 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 	uint32_t flicker_floor;
 	uint32_t flicker_ceiling;
 	uint32_t flicker_frequency;
+	uint32_t flicker_request;
 	uint32_t flicker_line_count;
 	uint32_t max_integration;
 	uint32_t target_q8;
@@ -56535,6 +56565,19 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		0 : t41_ae_flicker_ceiling_lines;
 	flicker_frequency = t41_ae_flicker_frequency_hz & BIT(31) ?
 		0 : t41_ae_flicker_frequency_hz;
+	flicker_request = READ_ONCE(t41_ae_antiflicker_request);
+	if (flicker_request != ~0U) {
+		/* Recompute from the active mode so FPS/timing changes cannot
+		 * leave a previous sensor mode's line floor behind. */
+		flicker_frequency = flicker_request >> 8;
+		ret = tx_isp_flicker_policy_floor(flicker_request & 0xffU,
+			flicker_frequency, sensor.height, sensor.fps >> 16,
+			sensor.fps & 65535, sensor.maximum, &flicker_floor);
+		if (ret)
+			return ret;
+		flicker_ceiling = 0;
+		WRITE_ONCE(t41_ae_flicker_floor_lines, flicker_floor);
+	}
 	max_integration = control->max_integration;
 	if (flicker_frequency && t41_ae_flicker_profile < 0 &&
 	    flicker_ceiling)
@@ -56544,7 +56587,7 @@ int32_t t41_safe_ae_calc_process(uint32_t channel)
 		return -ERANGE;
 	target_q8 = t41_ae_calibrated_metering ?
 		calibrated_target << 8 : t41_ae_target_q8;
-	if (flicker_frequency && flicker_floor &&
+	if (flicker_request == ~0U && flicker_frequency && flicker_floor &&
 	    t41_ae_flicker_profile < 0) {
 		ret = tx_isp_exposure_target_scale(
 			target_q8, t41_ae_flicker_gib_gain_q10,
@@ -154932,65 +154975,59 @@ int32_t tisp_g_wdr_en(uintptr_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006cd30 origin=fragment_seed original=tisp_g_antiflick */
 int32_t tisp_g_antiflick(uint32_t a0, uintptr_t a1)
 {
-    if (!a1)
-        return -EINVAL;
+    struct tx_isp_tuning_t41_antiflicker attr = { 0 };
+    uint32_t request;
 
-    tisp_ae_api_get_antiflick(a0, a1);
+    if (!a1 || a0 != 0)
+        return -EINVAL;
+    if (t41_safe_ae_controller <= 0)
+        return -EOPNOTSUPP;
+    request = READ_ONCE(t41_ae_antiflicker_request);
+    if (request != ~0U) {
+        attr.mode = request & 0xffU;
+        attr.frequency = request >> 8;
+    } else if (t41_ae_flicker_frequency_hz) {
+        attr.mode = t41_ae_flicker_floor_lines ? 1 : 2;
+        attr.frequency = t41_ae_flicker_frequency_hz;
+    }
+    memcpy((void *)a1, &attr, sizeof(attr));
     return 0;
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006cd58 origin=fragment_seed original=tisp_s_antiflick */
 int32_t tisp_s_antiflick(uint32_t a0, uintptr_t a1)
 {
-    uint32_t mode;
-    uint32_t floor = 0;
-    uint8_t frequency;
+    struct tx_isp_tuning_t41_antiflicker *attr = (void *)a1;
+    struct t41_safe_sensor_limits sensor = { 0 };
+    uint32_t floor;
+    int ret;
 
-    if (!a1)
+    if (!attr || a0 != 0)
         return -EINVAL;
-
-    mode = *(uint32_t *)(uintptr_t)a1;
-    frequency = *(uint8_t *)(uintptr_t)(a1 + 4);
-    if (mode >= 3U ||
-        (mode != 0U && frequency != 50U && frequency != 60U))
+    if (t41_safe_ae_controller <= 0)
+        return -EOPNOTSUPP;
+    if (attr->mode > 2 ||
+        (attr->mode && attr->frequency != 50 && attr->frequency != 60))
         return -EINVAL;
-    if (mode == 1U && t41_safe_ae_controller > 0) {
-        struct t41_safe_sensor_limits sensor;
-        uint32_t denominator;
-        int ret = t41_safe_sensor_limits_get(a0, &sensor);
+    if (attr->mode == 1) {
+        ret = t41_safe_sensor_limits_get(a0, &sensor);
         if (ret)
             return ret;
-        if (!sensor.height || !(sensor.fps >> 16) || !(sensor.fps & 65535))
-            return -ERANGE;
-        denominator = (sensor.fps & 65535) * 2U * frequency;
-        floor = div64_u64((u64)sensor.height * (sensor.fps >> 16) + denominator / 2,
-                          denominator);
-        if (!floor || floor > sensor.maximum)
-            return -ERANGE;
     }
+    ret = tx_isp_flicker_policy_floor(attr->mode, attr->frequency,
+        sensor.height, sensor.fps >> 16, sensor.fps & 65535,
+        sensor.maximum, &floor);
+    if (ret)
+        return ret;
 
-    /*
-     * Gen3 NORMAL mode promises that exposure will not fall below the
-     * first mains-synchronous integration.  The recovered wrapper had lost
-     * its second argument, so Raptor's 60 Hz request never reached AE.
-     * AUTO mode deliberately retains short integration, matching the SDK
-     * ABI's documented distinction.
-     */
-    if (t41_safe_ae_controller > 0) {
-        if (mode == 0U) {
-            t41_ae_flicker_frequency_hz = 0;
-            t41_ae_flicker_floor_lines = 0;
-        } else {
-            t41_ae_flicker_frequency_hz = frequency;
-            t41_ae_flicker_floor_lines = floor;
-        }
-    }
-    if (mode == 1U && t41_ae_flicker_profile < 0)
-        t41_apply_flicker_profile(true);
-    else
-        t41_apply_flicker_profile(false);
-
-    tisp_ae_api_set_antiflick(a0, a1);
+    /* Native AE owns this request. Do not call the recovered workspace
+     * setter or couple mains policy to experimental GIB/CCM corrections.
+     * Publish the complete mode/frequency atomically for the frame worker. */
+    WRITE_ONCE(t41_ae_flicker_floor_lines, floor);
+    WRITE_ONCE(t41_ae_flicker_frequency_hz,
+               attr->mode ? attr->frequency : 0);
+    WRITE_ONCE(t41_ae_antiflicker_request,
+               attr->mode | (attr->mode ? (uint32_t)attr->frequency << 8 : 0));
     return 0;
 }
 

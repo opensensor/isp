@@ -23,6 +23,10 @@ ABI_ASSERT(t41_control_size,
 	sizeof(struct tx_isp_tuning_t41_control) == 16);
 ABI_ASSERT(t41_control_id,
 	offsetof(struct tx_isp_tuning_t41_control, id) == 8);
+ABI_ASSERT(t41_antiflicker_size,
+	sizeof(struct tx_isp_tuning_t41_antiflicker) == 8);
+ABI_ASSERT(t41_antiflicker_frequency,
+	offsetof(struct tx_isp_tuning_t41_antiflicker, frequency) == 4);
 ABI_ASSERT(awb_control_size,
 	sizeof(struct tx_isp_tuning_awb_control) == 8);
 ABI_ASSERT(awb_control_r_gain,

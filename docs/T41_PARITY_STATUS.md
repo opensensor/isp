@@ -38,6 +38,12 @@ staged; no Raptor configuration or Neo audio library was changed.
 
 ## Required before calling the normal daytime path finished
 
+The rapid visual-flicker investigation now has a confirmed public anti-flicker
+dispatcher defect and a checked repair. NORMAL stops the measured raw 5 Hz
+pulse but overexposes the bright scene; AUTO preserves short exposure but
+brings the pulse back. The user confirmed both effects. This is **not** a
+completed visual-IQ gate; see [the control and measurement details](T41_ANTIFLICKER.md).
+
 1. **Concurrent main/substream/JPEG output.** This is a hard exit requirement,
    not optional follow-up work. The V4L2 checkpoint now exposes main and
    substream; JPEG, OSD and IVS remain disabled on that backend. Exercise

@@ -15,6 +15,13 @@ struct tx_isp_exposure_plan {
 	u32 again;
 };
 
+/* Gen3 DISABLE=0, NORMAL=1, AUTO=2. NORMAL requires the first mains
+ * half-period; AUTO retains short exposure. Timing is the sensor mode's
+ * total (including blanking) line count and rational frame rate. */
+int tx_isp_flicker_policy_floor(u32 mode, u32 frequency_hz,
+			      u32 total_height, u32 fps_num, u32 fps_den,
+			      u32 max_integration, u32 *floor_lines);
+
 /*
  * Scale a histogram target by a linear ISP gain.  This keeps AE from
  * compensating away an intentional pre-tone-map attenuation used to create

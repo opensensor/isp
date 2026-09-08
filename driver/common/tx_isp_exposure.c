@@ -16,6 +16,29 @@ static u64 tx_isp_exposure_div_round(u64 numerator, u32 denominator)
 #endif
 }
 
+int tx_isp_flicker_policy_floor(u32 mode, u32 frequency_hz,
+			      u32 total_height, u32 fps_num, u32 fps_den,
+			      u32 max_integration, u32 *floor_lines)
+{
+	u64 denominator, floor = 0;
+
+	if (!floor_lines || mode > 2 ||
+	    (mode && frequency_hz != 50 && frequency_hz != 60))
+		return -EINVAL;
+	if (mode == 1) {
+		denominator = (u64)fps_den * 2 * frequency_hz;
+		if (!total_height || !fps_num || !denominator ||
+		    denominator > (u32)~0U)
+			return -ERANGE;
+		floor = tx_isp_exposure_div_round((u64)total_height * fps_num,
+						(u32)denominator);
+		if (!floor || floor > max_integration)
+			return -ERANGE;
+	}
+	*floor_lines = (u32)floor;
+	return 0;
+}
+
 int tx_isp_exposure_target_scale(u32 target, u32 gain, u32 gain_unity,
 				 u32 *scaled_target)
 {

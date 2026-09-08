@@ -8,6 +8,35 @@
 
 static const u16 nodes_60hz[] = { 369, 737, 1106, 1474 };
 
+static void test_flicker_policy(void)
+{
+	u32 floor = 99;
+
+	assert(tx_isp_flicker_policy_floor(1, 60, 1769, 25, 1, 1760, &floor) == 0);
+	assert(floor == 369);
+	assert(tx_isp_flicker_policy_floor(1, 50, 1769, 25, 1, 1760, &floor) == 0);
+	assert(floor == 442);
+	/* Different mode and rational FPS; no captured sensor step table. */
+	assert(tx_isp_flicker_policy_floor(1, 60, 1125, 30000, 1001, 1120, &floor) == 0);
+	assert(floor == 281);
+	assert(tx_isp_flicker_policy_floor(1, 50, 2250, 30, 1, 2240, &floor) == 0);
+	assert(floor == 675);
+	assert(tx_isp_flicker_policy_floor(2, 60, 0, 0, 0, 0, &floor) == 0);
+	assert(floor == 0);
+	assert(tx_isp_flicker_policy_floor(0, 0, 0, 0, 0, 0, &floor) == 0);
+	assert(floor == 0);
+	floor = 99;
+	assert(tx_isp_flicker_policy_floor(3, 60, 1769, 25, 1, 1760, &floor) == -EINVAL);
+	assert(tx_isp_flicker_policy_floor(1, 59, 1769, 25, 1, 1760, &floor) == -EINVAL);
+	assert(tx_isp_flicker_policy_floor(2, 0, 1769, 25, 1, 1760, &floor) == -EINVAL);
+	assert(tx_isp_flicker_policy_floor(1, 60, 1769, 25, 0, 1760, &floor) == -ERANGE);
+	assert(tx_isp_flicker_policy_floor(1, 60, 1769, 25, 1, 368, &floor) == -ERANGE);
+	assert(tx_isp_flicker_policy_floor(1, 60, 1, 1, 1, 1, &floor) == -ERANGE);
+	assert(tx_isp_flicker_policy_floor(1, 60, UINT32_MAX, UINT32_MAX,
+		UINT32_MAX, UINT32_MAX, &floor) == -ERANGE);
+	assert(floor == 99);
+}
+
 static void test_target_scaling(void)
 {
 	u32 scaled = 99;
@@ -201,6 +230,7 @@ static void test_bounds_and_validation(void)
 
 int main(void)
 {
+	test_flicker_policy();
 	test_target_scaling();
 	test_flicker_node_generation();
 	test_flicker_integration_floor();

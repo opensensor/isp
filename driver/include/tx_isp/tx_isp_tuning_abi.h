@@ -52,6 +52,7 @@ typedef uint64_t u64;
 #define TX_ISP_TUNING_CMD_T41_AE_WEIGHT		0x08000021U
 #define TX_ISP_TUNING_CMD_T41_AE_STATS		0x08000022U
 #define TX_ISP_TUNING_CMD_T41_AE_EXPR_INFO	0x08000023U
+#define TX_ISP_TUNING_CMD_T41_ANTIFLICKER	0x08000026U
 #define TX_ISP_TUNING_CMD_T41_BCSH_HUE		0x08000081U
 #define TX_ISP_TUNING_CMD_T41_BRIGHTNESS	0x08000092U
 #define TX_ISP_TUNING_CMD_T41_SHARPNESS		0x08000093U
@@ -136,6 +137,13 @@ struct tx_isp_tuning_t41_control {
 	u32 is_get;
 	u32 id;
 	u32 value_or_ptr;
+};
+
+/* Gen3 IMPISPAntiflickerAttr: enum followed by uint8_t frequency. */
+struct tx_isp_tuning_t41_antiflicker {
+	u32 mode;
+	u8 frequency;
+	u8 reserved[3];
 };
 
 /* Eight-byte payload for TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL.  Manual gains
