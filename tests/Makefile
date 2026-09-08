@@ -104,7 +104,12 @@ all: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_mes
 		tx_isp_region_allocator_test \
 	tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_t31_mdns_test \
 	tx_isp_t31_sensor_policy_test \
-	tx_isp_scaler_test
+	tx_isp_scaler_test tx_isp_t41_capture_gate_test
+
+tx_isp_t41_capture_gate_test: tx_isp_t41_capture_gate_test.c \
+		../driver/t41/tx_isp_t41_capture_gate.c \
+		../driver/t41/tx_isp_t41_capture_gate.h
+	$(CC) $(CFLAGS) -pthread -o $@ $< ../driver/t41/tx_isp_t41_capture_gate.c
 
 tx_isp_t31_mdns_test: tx_isp_t31_mdns_test.c \
 		../driver/t31/tx_isp_t31_mdns.c \
@@ -285,7 +290,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 		tx_isp_video_queue_test \
 		tx_isp_region_allocator_test \
 		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
-		tx_isp_t31_mdns_test tx_isp_t31_sensor_policy_test
+		tx_isp_t31_mdns_test tx_isp_t31_sensor_policy_test tx_isp_t41_capture_gate_test
 	./tx_isp_math_test
 	./tx_isp_awb_mesh_test
 	./tx_isp_t41_tmo_test
@@ -338,6 +343,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 	./tx_isp_t31_mdns_test
 	./tx_isp_t31_sensor_policy_test
 	./tx_isp_scaler_test
+	./tx_isp_t41_capture_gate_test
 	$(MAKE) t30_storage_audit
 
 t30_storage_audit:
@@ -371,4 +377,4 @@ clean:
 		tx_isp_video_queue_test \
 		tx_isp_region_allocator_test \
 		tx_isp_exposure_test tx_isp_t31_adr_test tx_isp_scaler_test \
-		tx_isp_t31_mdns_test tx_isp_t31_sensor_policy_test
+		tx_isp_t31_mdns_test tx_isp_t31_sensor_policy_test tx_isp_t41_capture_gate_test

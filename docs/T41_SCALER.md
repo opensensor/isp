@@ -62,3 +62,23 @@ The physical test must still check decoded pixels, source and RTSP cadence,
 independent output lifetimes and JPEG coexistence. An earlier dual-output
 trial had clean decoder logs despite visibly corrupted pixels, and local
 25 fps rings despite RTSP send-queue drops. Neither log alone is an exit gate.
+
+## Physical checkpoint and input/output lifetime separation
+
+The generated all-channel writer fixed the black/green 640x360 output on
+T41NQ/OS04D10 while preserving the native main image. Main and substream each
+decoded 1499 frames in a concurrent 60-second H.264/AAC check with empty
+warning logs. A second concurrent RTP check saw no sequence gaps or long
+media intervals. The old OpenIMP path still manufactured exactly 25 fps
+timestamps, however, so those media intervals did not prove capture timing.
+
+Restarting only the substream then stalled both outputs. The driver log
+showed `ispcore_frame_channel_streamon` resetting CSI through the full late
+input-start fanout even though the main output was already running. This
+also reseeded input-wide tuning history. Output enable state is not input
+ownership. The new capture gate serializes the first deferred start for each
+input and retains that ownership across individual output stops. Only the
+input-level stop releases it. State lives in a separate object, leaving the
+recovered object's BSS aliases untouched. Host tests exercise failed-start
+retry, independent inputs, full-stop restart and simultaneous output starts.
+Physical restart validation remains required before promoting this change.

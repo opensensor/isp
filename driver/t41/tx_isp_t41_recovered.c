@@ -14,6 +14,7 @@
 #include "../include/tx_isp/tx_isp_math.h"
 #include "tx_isp_t41_exposure.h"
 #include "tx_isp_t41_scaler.h"
+#include "tx_isp_t41_capture_gate.h"
 #include "tx_isp_t41_tmo.h"
 #include "tx_isp_t41_tmo_map.h"
 #include "tx_isp_t41_ccm.h"
@@ -160494,6 +160495,13 @@ int32_t ispcore_frame_channel_streamon(void *arg1)
 
     private_spin_unlock_irqrestore(channel + 0xa8, flags);
     if (start_late) {
+        /* Starting an output must not reset a live shared CSI receiver or
+         * reseed the input's tuning history. The first output owns deferred
+         * input startup; later outputs only program their own MSCA channel.
+         * This process-context gate also serializes simultaneous starts. */
+        ret = tx_isp_t41_capture_start_begin(t41_video_stream_vinum);
+        if (ret <= 0)
+            return ret;
         if (t41_late_start_mask & 0x01)
             t41_defer_csi_start = 0;
         if (t41_late_start_mask & 0x02)
@@ -160574,6 +160582,8 @@ int32_t ispcore_frame_channel_streamon(void *arg1)
                !t41_defer_csi_start, !t41_defer_vic_start,
                !t41_defer_vic_irq, !t41_defer_isp_start,
                !t41_defer_sensor_start);
+        tx_isp_t41_capture_start_end(t41_video_stream_vinum,
+                                    ret == -ENOIOCTLCMD ? 0 : ret);
         if (ret && ret != -ENOIOCTLCMD)
             return ret;
     }
@@ -164792,6 +164802,9 @@ int ispcore_video_s_stream(void *arg1, int32_t *arg2)
                            "tx_isp_t41_recovered: ispcore stop idle timeout\n");
                 t41_isp_stream_started = -1;
             }
+            /* Per-output STREAMOFF leaves the input running. Only this
+             * input-level stop releases deferred-start ownership. */
+            tx_isp_t41_capture_stopped(arg2[1]);
         }
         ret = 0;
     }
