@@ -22,6 +22,7 @@ into them. Calibration and statistics are explicit caller inputs.
 | `tisp_awb_spec_calculate` | `0x31fb4` | `t41_awb_special_prepare` |
 | `ISPAWBInterpolation1/2`, `Tiziano_Awb_Ct_Cal` | `0x1a570`, `0x1a624`, `0x1a774` | `t41_awb_ct_lerp`, `t41_awb_ct_calculate` |
 | `Tiziano_Awb_Ct_Detect_GrayWorld_mode` | `0x1aaac` | `t41_awb_grayworld_mode` |
+| `tisp_awb_long_alogrithm` | `0x31238` | `t41_awb_long` (explicit detector callback) |
 
 AWB parameters start at active calibration +`0x978`; runtime state is `0xf54c`
 bytes. This is a format boundary shared by T41 sensor calibrations, not a
@@ -83,6 +84,24 @@ the first mean and its calculated temperature, matching the OEM's final
 publication rather than its overwritten intermediate assignment. This is
 fallback behavior, not the main cluster detector.
 
+The long-frame pipeline combines four luminance classes with calibrated Q3
+weights, optionally overriding one class from runtime special-region state.
+It prepares calibrated R/G and B/G ratios, raw report ratios and global RGB
+means. The global ratio mean is accumulated **before** count gating; this
+ordering matters to the settled-state change detector. Saturation weights,
+the 16-bit wrapped change comparison and event-flag mask retain OEM behavior.
+
+An explicit detector callback supplies ratios and temperature. Cold history
+fills all 15 entries and applies one-frame convergence. Subsequent frames
+average the last 1..15 entries with their absolute history-position weights,
+then apply the calibrated start/restart thresholds and signed gain slew.
+Stable adjacent ratios and completed gains allow the detector to be skipped
+on following unchanged frames. Malformed dimensions, zero calibration factors,
+zero inverse-gain divisors and an invalid transition counter are rejected.
+The entry point takes aligned, privately owned working state; callers must
+discard that working state on error, not publish partial changes. This is
+not yet the live ownership adapter or freeze/manual/day-night policy.
+
 ## Validation and reproduction
 
 10,000 randomized combined cases match all changed parameter/state bytes,
@@ -116,10 +135,28 @@ The oracle generator relocates selected OEM functions into a private
 userspace fixture. Only the test executable contains reference instructions.
 It has no ISP access; its register interface is checked in memory.
 
+The separate long-pipeline oracle compares 20,000 frames in 200 independent
+100-frame sequences, including 9,500 settled detector skips: all parameter,
+state and report bytes and callback counts match on QEMU and the physical
+T41, with zero unexpected accesses. It deliberately replaces the OEM cluster
+detector with a synthetic callback and supplies identical callback outputs
+to native C. This proves the surrounding pipeline, **not cluster detection**.
+Calibration, counts, RGB sums, dimensions, precision, history lengths, class
+overrides, saturation modes, failed detections and event flags vary. No sensor
+bin or scene data is used. A separate 2,000-frame ASan/UBSan suite verifies
+history/slew examples, padding, canaries and malformed-input rejection.
+
+```sh
+bash tools/build_t41_awb_long_oracle.sh CROSS_PREFIX STOCK_OBJECT OUTPUT_DIR
+qemu-mipsel OUTPUT_DIR/awb-long-oracle-check
+cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -fno-sanitize-recover=all tests/tx_isp_t41_awb_long_test.c -o /tmp/awb-long-test
+/tmp/awb-long-test
+```
+
 ## Still required
 
-Full CT clustering, class aggregation and ratio history,
-convergence/freeze/manual policy, and owned frame-safe runtime with lifecycle
+Full CT clustering, freeze/manual/day-night policy, and owned frame-safe runtime with lifecycle
 and calibration replacement tests. Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not
 establish correctness of the estimator feeding them.
