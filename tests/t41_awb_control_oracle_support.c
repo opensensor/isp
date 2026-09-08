@@ -6,6 +6,7 @@
 static unsigned char heap[210000] __attribute__((aligned(32)));
 unsigned int oracle_allocated,oracle_hw_calls,oracle_gain_calls;
 unsigned int oracle_params[2],oracle_callbacks[64];
+unsigned int oracle_day[2],oracle_tattr;
 void *oracle_kmalloc(unsigned int n)
 {
 	unsigned int at=oracle_allocated;

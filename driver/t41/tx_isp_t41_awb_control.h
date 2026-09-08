@@ -17,6 +17,10 @@ struct t41_awb_owned {
 	unsigned int control[7];
 	unsigned short red[6], blue[6];
 	unsigned char report[T41_AWB_REPORT_BYTES];
+	/* Public attribute policy: OEM tisp_tattr +0x910, +0x2d4, +0x308.
+	 * Keep this API bookkeeping with the algorithm owner, not a second lock. */
+	unsigned char public_policy[44];
+	unsigned int public_freeze, public_start;
 };
 
 /* H20250310a params_refresh, ELF .text+0x2f5b8. Bayer zone dimensions
@@ -106,7 +110,8 @@ static inline int t41_awb_yweight_owned(struct t41_awb_owned *o)
 enum t41_awb_control_op {
 	T41_AWB_MODE, T41_AWB_FREEZE, T41_AWB_CT, T41_AWB_WEIGHT,
 	T41_AWB_LOCATION, T41_AWB_TREND, T41_AWB_CONVERGE,
-	T41_AWB_EV, T41_AWB_PARAMS, T41_AWB_ATTR, T41_AWB_GLOBAL, T41_AWB_ZONE
+	T41_AWB_EV, T41_AWB_PARAMS, T41_AWB_ATTR, T41_AWB_GLOBAL, T41_AWB_ZONE,
+	T41_AWB_PUBLIC
 };
 
 static inline unsigned int t41_awb_control_bytes(enum t41_awb_control_op op, int get)
@@ -120,7 +125,7 @@ static inline unsigned int t41_awb_control_bytes(enum t41_awb_control_op op, int
 	case T41_AWB_TREND: return 28;
 	case T41_AWB_CONVERGE: return 20;
 	case T41_AWB_PARAMS: return get ? T41_AWB_ARRAY_BYTES : T41_AWB_PARAM_BYTES;
-	case T41_AWB_ATTR: return 76;
+	case T41_AWB_ATTR: case T41_AWB_PUBLIC: return 76;
 	case T41_AWB_GLOBAL: return 16;
 	case T41_AWB_ZONE: return 2700;
 	default: return 0;
@@ -238,5 +243,37 @@ static inline int t41_awb_daynight_owned(struct t41_awb_owned *o)
 	if (!o) return -1;
 	o->s[0xc5f8]=0; o->s[0xc5f9]=1;
 	return t41_awb_params_refresh_owned(o);
+}
+
+/* OEM tisp_s_awb_attr (ELF 0x6d798): mode, optional start-gain publication,
+ * then freeze/CT and opaque policy bookkeeping. The caller runs gain_prepare
+ * BETWEEN begin and finish when start=1. It must discard the whole candidate
+ * if gain validation fails; no half-applied control becomes visible. */
+static inline int t41_awb_public_begin(struct t41_awb_owned *o,
+		const unsigned char *in, unsigned int bytes)
+{
+	unsigned int i;
+	if (!o || !in || bytes<76 || t41_tmo_le32(in+12)>1 ||
+	    t41_tmo_le32(in+64)>1) return -1;
+	if (t41_awb_control_set(o,T41_AWB_MODE,in,12)) return -1;
+	if (t41_tmo_le32(in+64))
+		for (i=0;i<4;++i) t41_ae_put32(o->p+0xc+i*4,t41_tmo_le32(in+68+(i&1)*4));
+	return 0;
+}
+static inline void t41_awb_public_finish(struct t41_awb_owned *o,const unsigned char in[76])
+{
+	unsigned int i;
+	o->public_freeze=t41_tmo_le32(in+12); o->public_start=t41_tmo_le32(in+64);
+	o->s[0xeaa1]=o->public_freeze;
+	if (o->public_freeze) t41_ae_put32(o->s+0xeaa4,t41_tmo_le32(in+16));
+	for (i=0;i<44;++i) o->public_policy[i]=in[20+i];
+}
+static inline int t41_awb_public_get(struct t41_awb_owned *o,unsigned char *out,unsigned int bytes)
+{
+	unsigned int i;
+	if (t41_awb_control_get(o,T41_AWB_ATTR,out,bytes)) return -1;
+	for (i=0;i<44;++i) out[20+i]=o->public_policy[i];
+	t41_ae_put32(out+12,o->public_freeze); t41_ae_put32(out+64,o->public_start);
+	return 0;
 }
 #endif

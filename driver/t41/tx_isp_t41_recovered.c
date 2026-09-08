@@ -20653,6 +20653,14 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
               TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_T41_AWB_GLOBAL_STATS, 16,
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_AWB_ATTR, 76,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_AWB_WEIGHT, 225,
+              TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
+              TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_T41_AWB_STATS, 2700,
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_OPEN_AWB_CONTROL,
               sizeof(struct tx_isp_tuning_awb_control),
               TX_ISP_TUNING_DIR_GET | TX_ISP_TUNING_DIR_SET,
@@ -20700,6 +20708,29 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
          * writes to GET-only commands, not acknowledge unchanged payloads. */
         if (!route && (request.id & 0xffff0000U) == 0x08ff0000U)
             return -EOPNOTSUPP;
+
+        if (request.id == TX_ISP_TUNING_CMD_T41_AWB_ATTR ||
+            request.id == TX_ISP_TUNING_CMD_T41_AWB_WEIGHT ||
+            request.id == TX_ISP_TUNING_CMD_T41_AWB_STATS) {
+            unsigned char *payload;
+            enum t41_awb_control_op op;
+            if (!route || !t41_native_awb) return -EOPNOTSUPP;
+            if (request.channel || request.is_get > 1 || !request.value_or_ptr) return -EINVAL;
+            if (!smp_load_acquire(&t41_awb_ready[0])) return -EAGAIN;
+            op=request.id == TX_ISP_TUNING_CMD_T41_AWB_ATTR ? T41_AWB_PUBLIC :
+                request.id == TX_ISP_TUNING_CMD_T41_AWB_WEIGHT ? T41_AWB_WEIGHT : T41_AWB_ZONE;
+            /* The zone report is 2700 bytes: never put it on a kernel stack. */
+            payload=private_kmalloc(route->payload_size,GFP_KERNEL);
+            if (!payload) return -ENOMEM;
+            ret=0;
+            if (!request.is_get && private_copy_from_user(payload,
+                    (void __user *)(uintptr_t)request.value_or_ptr,route->payload_size)) ret=-EFAULT;
+            if (!ret) ret=t41_native_awb_control(0,op,payload,route->payload_size,request.is_get);
+            if (!ret && request.is_get && private_copy_to_user(
+                    (void __user *)(uintptr_t)request.value_or_ptr,payload,route->payload_size)) ret=-EFAULT;
+            private_kfree(payload);
+            return ret;
+        }
 
         /*
          * Restore the first stateful control required by Raptor.  This T41
@@ -155908,6 +155939,9 @@ int32_t tisp_g_af_weight_attr(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006d748 origin=fragment_seed original=tisp_s_awb_weight_attr */
 int32_t tisp_s_awb_weight_attr(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (t41_native_awb) return t41_native_awb_control(a0,T41_AWB_WEIGHT,(void *)a1,225,0);
+#endif
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
@@ -155933,6 +155967,9 @@ int32_t tisp_s_awb_weight_attr(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006d770 origin=fragment_seed original=tisp_g_awb_weight_attr */
 int32_t tisp_g_awb_weight_attr(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (t41_native_awb) return t41_native_awb_control(a0,T41_AWB_WEIGHT,(void *)a1,225,1);
+#endif
     uint32_t local_14 = 0;
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
@@ -155958,6 +155995,9 @@ int32_t tisp_g_awb_weight_attr(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006d798 origin=fragment_seed original=tisp_s_awb_attr */
 int32_t tisp_s_awb_attr(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (t41_native_awb) return t41_native_awb_control(a0,T41_AWB_PUBLIC,(void *)a1,76,0);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -156042,6 +156082,9 @@ tisp_s_awb_attr0xa0:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006d894 origin=fragment_seed original=tisp_g_awb_attr */
 int32_t tisp_g_awb_attr(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (t41_native_awb) return t41_native_awb_control(a0,T41_AWB_PUBLIC,(void *)a1,76,1);
+#endif
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;

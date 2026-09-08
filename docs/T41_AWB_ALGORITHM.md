@@ -1,9 +1,9 @@
 # T41 AWB algorithm recovery
 
-This is a partial algorithm boundary, **not full AWB parity**. The persistent
-camera still uses its bounded neutral-mesh estimator. The candidate driver
-now connects the portable primitives to privately owned frame state; physical
-lifecycle and image-quality validation is still required before promotion.
+The recovered automatic estimator and frame owner have passed a one-shot live
+test. The persistent camera stack still uses its bounded neutral-mesh estimator
+until promotion. Public-control recovery is being validated separately below;
+this is not a claim of full image-quality, WDR or every-sensor parity.
 
 The reference is H20250310a `tx-isp-t41.ko`, SHA256
 `572ff4553c1a033290ec67d2d9fc384701fbc235c2e335c7e5604100966fb2ee`.
@@ -113,7 +113,7 @@ on following unchanged frames. Malformed dimensions, zero calibration factors,
 zero inverse-gain divisors and an invalid transition counter are rejected.
 The entry point takes aligned, privately owned working state; callers must
 discard that working state on error, not publish partial changes. This is
-not yet the live ownership adapter or freeze/manual/day-night policy.
+the arithmetic boundary; the live owner and control policy are described below.
 
 The full detector has three calibrated modes: base zone weighting, cluster
 reweighting, and ranked-illuminant selection. It consumes the supplied ratio
@@ -268,7 +268,7 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 ## Still required
 
 The adapter in `tx_isp_t41_awb_runtime.inc` is connected in the candidate
-kernel, but **not deployed yet**. Its actual C runs in a host harness with mocked IRQ,
+kernel. Its actual C also runs in a host harness with mocked IRQ,
 workqueue, allocation and register access. ASan/UBSan tests cover private
 calibration, 100 complete frames, freeze/manual controls, calibration refresh,
 failed-candidate rollback, allocation unwinding, duplicate/late IRQs,
@@ -308,11 +308,38 @@ owned day-bank override, restored only on day refresh, never written into the
 installed calibration. Host tests cover manual/auto handoff, read-only
 observation, day/night start override and legacy writer dispatch.
 
-Still needed: physical lifecycle/streaming/IQ comparisons and final audit of
-the outer public attribute/control dispatcher. `tisp_params_copy` copies AWB
+The outer public attribute/control dispatcher now routes the 76-byte AWB
+attribute, 225-byte weights and 2700-byte zone report to the same owner.
+The old generated dispatcher silently acknowledged these requests. Mode,
+optional start-gain publication, freeze/CT and API bookkeeping retain OEM
+ordering; the whole candidate commits only after validation. Statistics use
+a checked heap buffer, not a large kernel-stack object. Unsupported directions,
+invalid pointers/modes and premature access return errors. Public wrappers
+match another 10,000 transitions in the control oracle on QEMU and physical
+T41, including complete getter and day-start readbacks. Gain arithmetic is
+the independently verified shared writer; the control oracle mocks that seam.
+Host adapter tests cover late failure without MMIO/state/day-override changes.
+Live public-ioctl validation remains pending this revision's build.
+
+The preceding `f15bee01` kernel with OpenIMP `851486f` passed a one-shot boot
+on T41NQ/OS04D10, followed by forced `ric mode day`, six TCP/UDP H.264/AAC
+reconnects and a 120-second decode (2968 video frames, no decoder/timestamp/
+timeout warnings). Native AWB rejected no frames, and all scalar-block error
+counters remained zero. Exact-Q10 manual gains held while estimation continued;
+auto resumed and the security profile was restored. Sensor calibration, Neo
+audio and saved Raptor configuration remained unchanged. The unarmed next
+boot returned to the persistent stack before the stock one-shot was applied.
+
+In the stationary indoor comparison, native/stock hardware red gains were
+1484/1484 and blue gains 3344/3336. Paper ROI R/G was 0.9612/0.9702, B/G
+1.0688/1.0874 and luma 217.03/215.02; bark luma 67.29/66.47. These are
+uncontrolled scene observations, not chart-based correction coefficients.
+Short CPU samples still favor stock, and delivered cadence is below the
+configured 25 fps. Neither efficiency nor whole-ISP parity is claimed.
+
+`tisp_params_copy` copies AWB
 from day-bank `0xd18` to active `0x978`; thus the OEM start setter's day-bank
 `0xd24..0xd30` addresses correspond to active AWB targets/current gains. This
 is a packed-bank mapping, not a different auto-WB algorithm or sensor hack.
-Existing gain packing and CT-offset
-history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not
-establish correctness of the estimator feeding them.
+Existing gain packing and CT-offset history are separately validated in
+`T41_AE_GIB_AWB_GAIN.md`; estimator coverage is the connected oracle above.

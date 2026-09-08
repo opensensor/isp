@@ -91,7 +91,9 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_awb_set_frz', 'tisp_awb_get_frz', 'tisp_awb_set_ct',
             'tisp_awb_set_statis_localtion', 'tisp_awb_api_set_ct_trend_offset',
             'tisp_awb_api_get_ct_trend_offset', 'tisp_awb_set_converge_step',
-            'tisp_awb_get_converge_step']}
+            'tisp_awb_get_converge_step', 'tisp_awb_set_start',
+            'tisp_s_awb_attr', 'tisp_g_awb_attr',
+            'tisp_s_awb_weight_attr', 'tisp_g_awb_weight_attr']}
     if awb_hardware:
         functions = {name: 'oracle_' + name for name in [
             'tisp_awb_set_hardware_param', 'tisp_awb_set_regional_threshold',
@@ -180,6 +182,7 @@ with open(sys.argv[1], 'rb') as source:
         names['system_reg_set_awb_trig'] = 'oracle_trigger'
     if awb_control:
         names.update({'tparamsP': 'oracle_params', 'tpm_cb': 'oracle_callbacks',
+            'tparams_day': 'oracle_day', 'tisp_tattr': 'oracle_tattr',
             'awb_ls_wgt_lut_inter': 'oracle_distance_reference',
             'private_kmalloc': 'oracle_kmalloc', 'private_kfree': 'oracle_kfree',
             'tisp_awb_set_hardware_param': 'oracle_hardware', 'tisp_awb_set_gain': 'oracle_gain',

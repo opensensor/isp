@@ -7,10 +7,14 @@ static struct t41_awb_owned native,saved;
 static unsigned char calibration[0x978+T41_AWB_PARAM_BYTES];
 static unsigned char input[T41_AWB_ARRAY_BYTES],out[T41_AWB_ARRAY_BYTES],expected[sizeof(out)];
 static uint32_t seed=927331;
+static unsigned char day[0xd34],attributes[0x93c];
 static unsigned int rng(void) { seed^=seed<<13; seed^=seed>>17; seed^=seed<<5; return seed; }
 #ifndef T41_AWB_CONTROL_HOST
 unsigned char oracle_bss[0x5000] __attribute__((aligned(65536)));
 extern unsigned int oracle_params[2],oracle_allocated,oracle_bad,oracle_writes,oracle_hw_calls,oracle_gain_calls;
+extern unsigned int oracle_day[2],oracle_tattr;
+extern int oracle_tisp_s_awb_attr(unsigned int,void *);
+extern int oracle_tisp_g_awb_attr(unsigned int,void *);
 extern int oracle_tisp_awb_init(unsigned int,void *);
 extern int oracle_tisp_awb_params_refresh(unsigned int);
 extern int oracle_tisp_awb_dn_params_refresh(unsigned int);
@@ -90,9 +94,11 @@ int main(void)
 		t41_awb_gain_put16(p+0xc6e,rows); t41_awb_gain_put16(p+0xc72,cols);
 		for (i=0;i<9;++i) t41_ae_put32(p+0xfc+i*4,100+i*1000);
 		assert(!t41_awb_cold(&native,p,T41_AWB_PARAM_BYTES,dimensions[0],dimensions[1]));
+		memset(day,0,sizeof(day)); memset(attributes,0,sizeof(attributes));
 #ifndef T41_AWB_CONTROL_HOST
 		oracle_allocated=oracle_writes=oracle_hw_calls=oracle_gain_calls=0;
 		memset(oracle_bss,0,sizeof(oracle_bss)); oracle_params[0]=(uintptr_t)calibration;
+		oracle_day[0]=(uintptr_t)day; oracle_tattr=(uintptr_t)attributes;
 		assert(!oracle_tisp_awb_init(0,dimensions));
 		info=(void *)(uintptr_t)t41_tmo_le32(oracle_bss+0x4114);
 		assert(oracle_hw_calls==1 && oracle_gain_calls==1 && oracle_writes==6);
@@ -142,6 +148,24 @@ int main(void)
 #endif
 				if (i==T41_AWB_PARAMS) assert(!out[sizeof(out)-1] && !out[sizeof(out)-2]);
 			}
+			/* Public wrapper order, complete round-trip and optional start
+			 * gains. The gain writer is the same mocked external seam as init;
+			 * its actual arithmetic is covered by the connected-frame oracle. */
+			for (i=0;i<76;++i) input[i]=rng();
+			t41_ae_put32(input,(seq+event)%10);
+			t41_ae_put32(input+12,event&1); t41_ae_put32(input+64,(event>>1)&1);
+			assert(!t41_awb_public_begin(&native,input,76));
+			t41_awb_public_finish(&native,input);
+#ifndef T41_AWB_CONTROL_HOST
+			oracle_tisp_s_awb_attr(0,input); compare_state(seq,event);
+			compare(seq,event,"public policy",native.public_policy,attributes+0x910,44);
+			if (t41_tmo_le32(input+64)) for (i=0;i<4;++i)
+				compare(seq,event,"day start",native.p+0xc+i*4,day+0xd24+i*4,4);
+#endif
+			assert(!t41_awb_public_get(&native,out,sizeof(out)));
+#ifndef T41_AWB_CONTROL_HOST
+			oracle_tisp_g_awb_attr(0,expected); compare(seq,event,"public getter",out,expected,76);
+#endif
 		}
 	}
 	/* Reject malformed requests before output/control mutation; EV/PARAMS

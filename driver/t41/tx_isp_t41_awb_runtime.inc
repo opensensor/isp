@@ -196,8 +196,24 @@ static int t41_native_awb_control(unsigned int channel,enum t41_awb_control_op o
     mutex_lock(&t41_native_awb_lock);
     s=t41_native_awb_object(channel);
     if (!s) goto done;
-    if (get) { ret=t41_awb_control_get(&s->saved,op,data,bytes) ? -EINVAL : 0; goto done; }
+    if (get) {
+        ret=(op==T41_AWB_PUBLIC ? t41_awb_public_get(&s->saved,data,bytes) :
+            t41_awb_control_get(&s->saved,op,data,bytes)) ? -EINVAL : 0;
+        goto done;
+    }
     memcpy(&s->candidate,&s->saved,sizeof(s->candidate));
+    if (op==T41_AWB_PUBLIC) {
+        struct t41_awb_frame_buffers b=t41_awb_buffers(&s->candidate);
+        const uint8_t *in=data;
+        if (t41_awb_public_begin(&s->candidate,in,bytes)) { ret=-EINVAL; goto done; }
+        if (t41_tmo_le32(in+64) && t41_awb_gain_words(&b,words,&n)) { ret=-EINVAL; goto done; }
+        t41_awb_public_finish(&s->candidate,in);
+        if (t41_tmo_le32(in+64)) {
+            s->day_start[0]=t41_tmo_le32(in+68); s->day_start[1]=t41_tmo_le32(in+72);
+            s->has_day_start=1;
+        }
+        t41_native_awb_emit(words,n); t41_native_awb_save(s); ret=0; goto done;
+    }
     ret=t41_awb_control_set(&s->candidate,op,data,bytes) ? -EINVAL : 0;
     if (ret) goto done;
     if (READ_ONCE(t41_native_awb_live) && t41_native_awb_geometry_changed(&s->saved,&s->candidate)) {
@@ -342,6 +358,7 @@ static int t41_native_awb_compat(unsigned int mode,unsigned int red,unsigned int
     ret=t41_awb_control_set(&s->candidate,T41_AWB_MODE,(void *)request,sizeof(request));
     if (ret) { ret=-EINVAL; goto done; }
     s->candidate.s[0xeaa1]=!mode;
+    s->candidate.public_freeze=!mode;
     t41_ae_put32(s->candidate.s+0xeaa4,t41_tmo_le32(s->candidate.p+0x28));
     if (!mode) {
         request[0]=red; request[1]=blue; t41_awb_gain_pack(request,wb);

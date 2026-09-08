@@ -160,6 +160,32 @@ int main(void)
     t41_native_awb_queue(); pump(); assert(t41_native_awb_error==-ERANGE && writes==n+1);
     before.p[0xcd2]=0; assert(!memcmp(&before,&s->saved,sizeof(before)));
     s->saved.p[0xcd2]=16;
+    {
+        unsigned char attr[76]={0},got[76];
+        unsigned int old_start=s->day_start[0];
+        /* Invalid start-gain arithmetic must roll back the mode, freeze,
+         * API bookkeeping AND the future day-bank override without MMIO. */
+        t41_ae_put32(attr+12,1); t41_ae_put32(attr+16,4200);
+        t41_ae_put32(attr+64,1); t41_ae_put32(attr+68,1100); t41_ae_put32(attr+72,1300);
+        s->saved.p[0xcd2]=0; before=s->saved; n=writes;
+        assert(t41_native_awb_control(0,T41_AWB_PUBLIC,attr,76,0)==-EINVAL);
+        assert(writes==n && !memcmp(&before,&s->saved,sizeof(before)) && s->day_start[0]==old_start);
+        s->saved.p[0xcd2]=16;
+        assert(!t41_native_awb_control(0,T41_AWB_PUBLIC,attr,76,0));
+        assert(writes==n+10 && s->saved.s[0xeaa1] && s->day_start[0]==1100);
+        assert(!t41_native_awb_control(0,T41_AWB_PUBLIC,got,76,1));
+        assert(t41_tmo_le32(got+12)==1 && t41_tmo_le32(got+64)==1);
+        assert(t41_tmo_le32(s->saved.s+0xeaa4)==4200);
+        n=writes; t41_native_awb_queue(); pump(); assert(writes==n+7);
+        t41_ae_put32(attr+12,0); t41_ae_put32(attr+64,0);
+        assert(!t41_native_awb_control(0,T41_AWB_PUBLIC,attr,76,0));
+        t41_native_awb_queue(); pump(); assert(!t41_native_awb_error && !s->saved.s[0xeaa1]);
+        before=s->saved; n=writes; t41_ae_put32(attr,10);
+        assert(t41_native_awb_control(0,T41_AWB_PUBLIC,attr,76,0)==-EINVAL);
+        assert(!memcmp(&before,&s->saved,sizeof(before)) && writes==n);
+        assert(t41_native_awb_control(0,T41_AWB_PUBLIC,attr,75,0)==-EINVAL);
+        assert(!memcmp(saved_calibration,calibration,sizeof(calibration)));
+    }
     t41_native_awb_queue(); t41_native_awb_stop(); assert(!t41_native_awb_work.queued && !t41_native_awb_pending);
     n=writes; t41_native_awb_queue(); assert(!t41_native_awb_work.queued && writes==n);
     assert(!t41_native_awb_suspend(0,&cursor) && cursor==pm+110);
