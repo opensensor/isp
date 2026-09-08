@@ -85,6 +85,18 @@ the first mean and its calculated temperature, matching the OEM's final
 publication rather than its overwritten intermediate assignment. This is
 fallback behavior, not the main cluster detector.
 
+Distance-LUT initialization is a compact mathematical equivalent of the
+**universal algorithm table**, not a sensor calibration extraction:
+`min(256, round(319 * exp(-16*d/2025)))` for distances 0..513. The production
+initializer uses a Q24 recurrence, with no floating point, allocation or
+stored 514-entry coefficient array. The exponential representation is
+inferred from the universal reference table and verified exhaustively against
+all 514 independent entries on QEMU and the T41. Its Q24 decay multiplier
+is `round(2^24 * exp(-16/2025)) = 16645178`. The explicit quantized tail is
+retained separately: distance 614, for example, has weight 3 rather than
+the exponential's rounded value 2. Host sanitizer checks cover short buffers,
+canaries and tail boundaries; the full earlier 10,000-case oracle still passes.
+
 The long-frame pipeline combines four luminance classes with calibrated Q3
 weights, optionally overriding one class from runtime special-region state.
 It prepares calibrated R/G and B/G ratios, raw report ratios and global RGB
@@ -199,7 +211,7 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 
 ## Still required
 
-Combined full-frame pipeline validation, universal distance-LUT initialization,
+Combined full-frame pipeline validation,
 freeze/manual/day-night policy, and owned frame-safe runtime with lifecycle
 and calibration replacement tests. Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not

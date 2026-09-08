@@ -261,6 +261,12 @@ with open(sys.argv[1], 'rb') as source:
             else:
                 raise ValueError((hex(pc), kind))
         print(f'.size {name}, .-{name}')
+    if awb_stats or awb_detect:
+        table, = symbols.get_symbol_by_name('awb_ls_wgt_lut_inter')
+        values = struct.unpack_from('<514H', elf.get_section(table['st_shndx']).data(), table['st_value'])
+        print('.section .rodata\n.balign 4\n.globl oracle_distance_reference\noracle_distance_reference:')
+        for offset in range(0, len(values), 16):
+            print('.hword ' + ','.join(map(str, values[offset:offset+16])))
     if lsc:
         # Relocate the setter's five-entry switch table, not its branch logic.
         symbol, = symbols.get_symbol_by_name('tisp_lsc_param_array_set')

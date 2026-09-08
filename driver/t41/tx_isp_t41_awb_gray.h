@@ -3,6 +3,26 @@
 #define TX_ISP_T41_AWB_GRAY_H
 #include "tx_isp_t41_awb_ct.h"
 
+/* Compact equivalent of the universal OEM distance table, not sensor data:
+ * min(256, round(319 * exp(-16*d/2025))) for d=0..513. A Q24 recurrence
+ * uses round(2^24 * exp(-16/2025)) = 16645178; all 514 quantized entries
+ * match the independent reference table. The explicit tail below retains
+ * its separate thresholds (notably distance 614), not exponential rounding.
+ * Maximum intermediate is 319*2^24*16645178 < 2^57. No FPU or allocation. */
+static inline int t41_awb_distance_lut_init(unsigned char *lut,unsigned int bytes)
+{
+	unsigned int i;
+	unsigned long long weight=319ULL<<24;
+	if (!lut || bytes<1028) return -1;
+	for (i=0;i<514;++i) {
+		unsigned int value=(unsigned int)((weight+(1U<<23))>>24);
+		if (value>256) value=256;
+		lut[i*2]=value; lut[i*2+1]=value>>8;
+		weight=(weight*16645178U+(1U<<23))>>24;
+	}
+	return 0;
+}
+
 /* The caller owns the generic distance LUT, initialized independently of
  * sensor calibration. The tail is the OEM's quantized distance support. */
 static inline unsigned int t41_awb_distance_weight(const unsigned char *lut,

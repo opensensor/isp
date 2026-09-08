@@ -122,6 +122,14 @@ int main(void)
 #ifdef T41_AWB_DETECT_HOST
 	{
 		unsigned int out[2]={123,456},failed[2]={789,1011},value;
+		unsigned char lut[1030];
+		memset(lut,0xb7,sizeof(lut));
+		assert(t41_awb_distance_lut_init(lut,1027)==-1 && lut[0]==0xb7);
+		assert(!t41_awb_distance_lut_init(lut,1028) && lut[1028]==0xb7 && lut[1029]==0xb7);
+		assert(t41_tmo_le16(lut)==256 && t41_tmo_le16(lut+28*2)==256);
+		assert(t41_tmo_le16(lut+29*2)==254 && t41_tmo_le16(lut+513*2)==6);
+		assert(t41_awb_distance_weight(lut,514)==5 && t41_awb_distance_weight(lut,614)==3);
+		assert(t41_awb_distance_weight(lut,615)==2 && !t41_awb_distance_weight(lut,818));
 		memcpy(q,p,sizeof(p)); memcpy(t,s,sizeof(s));
 		assert(t41_awb_detect(p,0x12e0,s,sizeof(s),red,blue,out,failed)==-1);
 		assert(t41_awb_detect(p,sizeof(p),s,sizeof(s)-1,red,blue,out,failed)==-1);

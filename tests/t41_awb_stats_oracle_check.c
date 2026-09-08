@@ -14,6 +14,7 @@ extern unsigned int oracle_Tiziano_Awb_Ct_Cal(void **, unsigned int, unsigned in
 extern int oracle_Tiziano_Awb_Ct_Detect_GrayWorld(void *,unsigned int,void **,unsigned int *,unsigned int *);
 extern unsigned int oracle_rgb[3], oracle_words[18][2], oracle_writes, oracle_reads, oracle_bad;
 unsigned short oracle_cluster_red[6], oracle_cluster_blue[6];
+extern const unsigned char oracle_distance_reference[1028];
 static unsigned char p[0x1400], q[sizeof(p)], dma[32768], s[T41_AWB_STATE_BYTES], t[sizeof(s)];
 static unsigned int info[7], input[4][225], gains[2], weights[225], expected[225];
 static uint32_t seed=144831;
@@ -22,6 +23,10 @@ static void put16(unsigned int off,unsigned int v) { p[off]=v; p[off+1]=v>>8; }
 int main(void)
 {
 	unsigned int f,i,fail=0;
+	if(t41_awb_distance_lut_init(s,sizeof(s)) || memcmp(s,oracle_distance_reference,1028)) {
+		puts("universal distance LUT mismatch"); return 9;
+	}
+	puts("514 universal distance LUT entries match");
 	*(uint32_t *)(void *)(oracle_bss+0x4114)=(uintptr_t)info;
 	info[0]=(uintptr_t)p; info[1]=(uintptr_t)t;
 	for(f=0;f<10000;++f) {
