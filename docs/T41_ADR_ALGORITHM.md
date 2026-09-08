@@ -1,10 +1,10 @@
 # T41 ADR recovery checkpoint
 
-The algorithms and kernel integration are implemented; **live validation is
-still required**. `tx_isp_t41_adr.h` contains portable algorithms and checked
+The algorithms and kernel integration have passed the tests below; complete
+OEM image-quality parity is not claimed. `tx_isp_t41_adr.h` contains portable algorithms and checked
 buffer interfaces. `tx_isp_t41_adr_runtime.inc` replaces the captured ADR
 register/curve profiles with a separately owned frame/history object.
-The camera still runs ISP `e6f3128b` until the candidate passes a one-shot test.
+The camera runs ISP `8d9c96cf` with the installed calibration's ADR bypass.
 
 Recovered and compared with H20250310a:
 
@@ -113,7 +113,16 @@ native state; the face API's lost fourth pointer argument is restored.
 The universal curvature LUT already in the driver is byte-identical to the
 OEM reference (SHA256 `2e32e4a6f910d8f76efe5bee53ede7641b60254c104f3548ca60ca93caa5200b`).
 
-Still required: live stock/open comparisons, lifecycle and stream testing.
+Live `8d9c96cf` enabled-path smoke: 7,014 processed frames / 7,016 interrupts,
+zero DMA/arithmetic/dropped-frame errors, three TCP and three UDP reconnects,
+and a clean 120-second H.264/AAC decode. Temporary exposure controls were
+restored. This dark-scene test is not a complete gain sweep. The promoted
+default profile verifies all 20 staged hashes, the preserved sensor/config,
+and another three TCP/three UDP reconnects. No partition was flashed.
+
+Still required: a matched OEM-enabled comparison and physical mode/WDR
+validation. An OEM comparison helper was rejected on device open with EPERM
+(Raptor owns the tuning device); it made no tuning changes.
 The installed OS04D10 calibration has TOP byte 7 set to one; saved OEM
 captures also show bit 7 set in `0x03990ac9`. Native boot `505965b7` correctly
 preserves that bypass and has zero ADR completions. This is not evidence of
