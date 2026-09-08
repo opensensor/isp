@@ -56169,7 +56169,10 @@ static int t41_apply_safe_gain_fanout(uint32_t channel, uint32_t gain_q16,
 	}
 	if (!ret)
 		t41_safe_gain_last_q16 = gain_q16;
-	printk(KERN_WARNING
+	/* Normal gain tracking must not flood dmesg or read diagnostic MMIO.
+	 * Keep explicit tracing and rate-limited failures observable. */
+	if (t41_runtime_trace || (ret && printk_ratelimit()))
+	    printk(KERN_WARNING
 	       "tx_isp_t41_recovered: safe gain fanout gain=%#x mask=%#x ret=%d/%d/%d/%d/%d/%d regs=%#x/%#x dmsc-last=%#x\n",
 	       gain_q16, mask, gib_ret, dmsc_ret, lsc_ret, tmo_ret,
 	       ydns_ret, sdns_ret,
