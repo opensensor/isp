@@ -66,6 +66,9 @@ typedef uint64_t u64;
 #define TX_ISP_TUNING_CMD_OPEN_COLOR_MODEL	0x08ff0003U
 #define TX_ISP_TUNING_CMD_OPEN_AWB_SCENE	0x08ff0004U
 #define TX_ISP_TUNING_CMD_OPEN_AWB_TARGET	0x08ff0005U
+#define TX_ISP_TUNING_CMD_OPEN_AWB_OWNER	0x08ff0006U
+/* Explicit GET handshake; legacy kernels may silently acknowledge unknown IDs. */
+#define TX_ISP_TUNING_AWB_OWNER_NATIVE	0x41574201U
 
 #define TX_ISP_TUNING_AWB_MANUAL		0U
 #define TX_ISP_TUNING_AWB_AUTO		1U

@@ -1,9 +1,9 @@
 # T41 AWB algorithm recovery
 
-This is a partial algorithm boundary, **not full AWB parity**. The live driver
-still uses its bounded neutral-mesh estimator. The portable primitives below
-are not connected to its frame lifecycle until ownership, policy and
-calibration replacement are recovered and checked together.
+This is a partial algorithm boundary, **not full AWB parity**. The persistent
+camera still uses its bounded neutral-mesh estimator. The candidate driver
+now connects the portable primitives to privately owned frame state; physical
+lifecycle and image-quality validation is still required before promotion.
 
 The reference is H20250310a `tx-isp-t41.ko`, SHA256
 `572ff4553c1a033290ec67d2d9fc384701fbc235c2e335c7e5604100966fb2ee`.
@@ -267,8 +267,8 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 
 ## Still required
 
-The adapter in `tx_isp_t41_awb_runtime.inc` is prepared but **not wired into
-the live kernel yet**. Its actual C runs in a host harness with mocked IRQ,
+The adapter in `tx_isp_t41_awb_runtime.inc` is connected in the candidate
+kernel, but **not deployed yet**. Its actual C runs in a host harness with mocked IRQ,
 workqueue, allocation and register access. ASan/UBSan tests cover private
 calibration, 100 complete frames, freeze/manual controls, calibration refresh,
 failed-candidate rollback, allocation unwinding, duplicate/late IRQs,
@@ -292,9 +292,24 @@ cc -std=c99 -O1 -g -no-pie -Wall -Wextra -Werror -fsanitize=address,undefined \
 /tmp/awb-runtime-test
 ```
 
-Still needed: kernel entry-point integration, userspace/kernel ownership
-negotiation, physical lifecycle/streaming/IQ comparisons and the start-gain
-API's separate day-calibration write policy. `tisp_params_copy` copies AWB
+The candidate exposes the read-only `OPEN_AWB_OWNER` handshake (`0x08ff0006`,
+token `0x41574201`). OpenIMP enables kernel auto-WB only on that exact response;
+legacy unknown-control acknowledgements cannot accidentally select it. With
+the native owner, the security daemon no longer scans statistics or publishes
+manual gains and its default status-only feedback interval is 1000 ms instead
+of 40 ms. Explicit nondefault intervals and old-kernel fallback are retained.
+OpenIMP policy tests cover readiness failures, fallback and zero competing
+statistics/gain calls; the T41 test suite passes ASan/UBSan.
+
+The adapter serializes legacy writer/control entry points too. The eight-byte
+Open manual extension retains exact Q10 hardware gains by freezing only WB
+publication while estimation continues. Start-gain updates are stored as an
+owned day-bank override, restored only on day refresh, never written into the
+installed calibration. Host tests cover manual/auto handoff, read-only
+observation, day/night start override and legacy writer dispatch.
+
+Still needed: physical lifecycle/streaming/IQ comparisons and final audit of
+the outer public attribute/control dispatcher. `tisp_params_copy` copies AWB
 from day-bank `0xd18` to active `0x978`; thus the OEM start setter's day-bank
 `0xd24..0xd30` addresses correspond to active AWB targets/current gains. This
 is a packed-bank mapping, not a different auto-WB algorithm or sensor hack.

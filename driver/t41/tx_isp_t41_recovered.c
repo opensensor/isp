@@ -23,6 +23,7 @@
 #include "../include/tx_isp/tx_isp_top.h"
 #include "tx_isp_t41_awb.h"
 #include "tx_isp_t41_awb_gain.h"
+#include "tx_isp_t41_awb_frame.h"
 #include "tx_isp_t41_sensor_gain.h"
 #include "tx_isp_t41_gamma.h"
 #include "tx_isp_t41_dpc.h"
@@ -1165,6 +1166,18 @@ MODULE_PARM_DESC(t41_awb_gain_trigger,
 static int t41_safe_awb_controller_set(const char *value,
 				       const struct kernel_param *kp);
 static int t41_safe_awb_controller = 1;
+static int t41_native_awb = 1;
+module_param(t41_native_awb, int, 0444);
+MODULE_PARM_DESC(t41_native_awb, "Use privately owned, frame-driven calibrated AWB");
+static void t41_native_awb_stop(void);
+static void t41_native_awb_start(void);
+static void t41_native_awb_queue(void);
+static int t41_native_awb_writer(unsigned int channel, unsigned int kind);
+static int t41_native_awb_compat(unsigned int mode, unsigned int red,
+    unsigned int blue, int get, unsigned int result[3]);
+static int t41_native_awb_control(unsigned int channel, enum t41_awb_control_op op,
+    void *data, unsigned int bytes, int get);
+static int t41_native_awb_observe(int target, unsigned int result[2]);
 module_param_call(t41_safe_awb_controller, t41_safe_awb_controller_set,
 		  param_get_int, &t41_safe_awb_controller, 0644);
 MODULE_PARM_DESC(t41_safe_awb_controller,
@@ -20562,6 +20575,11 @@ static int t41_tuning_copy_awb_global_stats(unsigned int channel,
 
     if (channel >= ARRAY_SIZE(awb_info) || !user_ptr)
         return -EINVAL;
+    if (t41_native_awb) {
+        int ret = t41_native_awb_control(channel, T41_AWB_GLOBAL, response, sizeof(response), 1);
+        if (ret) return ret;
+        return private_copy_to_user((void __user *)user_ptr, response, sizeof(response)) ? -EFAULT : 0;
+    }
     info = (u32 *)(uintptr_t)awb_info[channel];
     if (!t41_kernel_data_ptr(info))
         return -ENODEV;
@@ -20650,6 +20668,8 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
             { TX_ISP_TUNING_CMD_OPEN_AWB_TARGET,
               sizeof(struct tx_isp_tuning_awb_target),
+              TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
+            { TX_ISP_TUNING_CMD_OPEN_AWB_OWNER, sizeof(uint32_t),
               TX_ISP_TUNING_DIR_GET, TX_ISP_TUNING_PAYLOAD_USER_PTR },
         };
         static unsigned int trace_count;
@@ -20754,6 +20774,14 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
             if (!smp_load_acquire(&t41_awb_ready[0]))
                 return -EAGAIN;
             if (request.is_get) {
+                if (t41_native_awb) {
+                    unsigned int values[3];
+                    ret = t41_native_awb_compat(0, 0, 0, 1, values);
+                    if (ret) return ret;
+                    control.mode = values[0]; control.r_gain = values[1]; control.b_gain = values[2];
+                    return private_copy_to_user((void __user *)(uintptr_t)request.value_or_ptr,
+                        &control, sizeof(control)) ? -EFAULT : 0;
+                }
                 control.mode = READ_ONCE(t41_safe_awb_controller) < 0 ?
                     TX_ISP_TUNING_AWB_AUTO : TX_ISP_TUNING_AWB_MANUAL;
                 control.r_gain = (uint16_t)READ_ONCE(t41_awb_last_rgain);
@@ -20769,6 +20797,13 @@ int64_t isp_core_tunning_unlocked_ioctl(uintptr_t a0, uint32_t a1, uint32_t a2)
                 return -EFAULT;
             return t41_safe_awb_configure(control.mode, control.r_gain,
                                           control.b_gain);
+        }
+        if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AWB_OWNER) {
+            uint32_t owner = t41_native_awb ? TX_ISP_TUNING_AWB_OWNER_NATIVE : 0;
+            if (request.channel || !request.value_or_ptr) return -EINVAL;
+            if (!smp_load_acquire(&t41_awb_ready[0])) return -EAGAIN;
+            return private_copy_to_user((void __user *)(uintptr_t)request.value_or_ptr,
+                &owner, sizeof(owner)) ? -EFAULT : 0;
         }
         if (route && route->id == TX_ISP_TUNING_CMD_OPEN_AE_TARGET) {
             uint32_t target;
@@ -32094,6 +32129,8 @@ static void t41_apply_stock_awb_gains(void)
     uint32_t gains[2] = { t41_stock_awb_gain_a, t41_stock_awb_gain_b };
     uint32_t words[2], gain_a, gain_b;
 
+    if (t41_native_awb) { t41_native_awb_writer(0, 0); return; }
+
     if (!gains[0] && !gains[1]) {
         int ret = (int)tisp_awb_set_gain(0);
         if (ret < 0)
@@ -32131,6 +32168,11 @@ static void t41_apply_stock_awb_stats_profile(void)
 {
     uint8_t *info, *params;
     uint32_t words[10];
+
+    if (t41_native_awb) {
+        t41_native_awb_writer(0, 1);
+        return;
+    }
 
     /* Compatibility selector, no captured register image. Reapply only
      * writer-owned setup/thresholds; do not reset the running DMA ring. */
@@ -32176,6 +32218,7 @@ static void t41_safe_awb_apply(uint32_t rgain, uint32_t bgain)
  * calibrated neutral selection is exposed separately by AWB_TARGET. */
 static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene)
 {
+    if (t41_native_awb) return t41_native_awb_observe(0, (unsigned int *)scene);
     uint8_t *info;
     uint8_t *params;
     uint8_t *dma;
@@ -32266,6 +32309,7 @@ static int t41_safe_awb_measure_scene(struct tx_isp_tuning_awb_scene *scene)
  * CT priors and neutral-selection weights are calibration-driven. */
 static int t41_safe_awb_measure_target(struct tx_isp_tuning_awb_target *target)
 {
+    if (t41_native_awb) return t41_native_awb_observe(1, (unsigned int *)target);
     struct tx_isp_awb_mesh mesh = { 0 };
     struct tx_isp_awb_ct_config ct_config;
     struct tx_isp_awb_accumulator sum = { 0 };
@@ -32596,6 +32640,9 @@ static int t41_safe_awb_configure(uint32_t mode, uint16_t rgain,
 {
     int was_enabled = READ_ONCE(t41_safe_awb_controller) < 0;
 
+    if (t41_native_awb)
+        return t41_native_awb_compat(mode, rgain, bgain, 0, NULL);
+
     if (mode > TX_ISP_TUNING_AWB_AUTO || rgain < 0x200U ||
         rgain > 0x1800U || bgain < 0x200U || bgain > 0x1800U)
         return -EINVAL;
@@ -32833,6 +32880,7 @@ done:
 }
 
 #include "tx_isp_t41_lsc_runtime.inc"
+#include "tx_isp_t41_awb_runtime.inc"
 
 static void t41_apply_stock_spatial_profile(void)
 {
@@ -75550,6 +75598,11 @@ int32_t tisp_af_api_get_statis_info(uint32_t a0)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002e880 origin=fragment_seed original=tisp_awb_pm_get_regsize */
 int32_t tisp_awb_pm_get_regsize(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) {
+        if (a0 || !t41_kernel_data_ptr((void *)a1)) return -EINVAL;
+        *(uint32_t *)a1 += 55;
+        return 0;
+    }
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
 
@@ -75570,6 +75623,7 @@ int32_t tisp_awb_pm_get_regsize(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002e894 origin=fragment_seed original=tisp_awb_pm_resume */
 int32_t tisp_awb_pm_resume(void)
 {
+    if (t41_native_awb) { t41_native_awb_start(); return 0; }
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *a0 = 0;
@@ -75605,6 +75659,7 @@ int32_t tisp_awb_pm_resume(void)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002e8e4 origin=fragment_seed original=tisp_awb_pm_suspend */
 int32_t tisp_awb_pm_suspend(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_suspend(a0, (uint32_t **)a1);
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -75721,6 +75776,7 @@ int32_t tisp_awb_show_para_update(uint32_t a0)
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002ea8c origin=model_output original=tisp_awb_deinit */
 int tisp_awb_deinit(int arg1) {
+    if (t41_native_awb) return t41_native_awb_deinit(arg1);
     uint8_t *info;
     uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
 
@@ -75759,6 +75815,7 @@ int tisp_awb_deinit(int arg1) {
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002ebd8 origin=fragment_seed original=tisp_awb_params_refresh */
 int64_t tisp_awb_params_refresh(uint32_t a0)
 {
+    if (t41_native_awb) return t41_native_awb_refresh(a0, 0);
     uint8_t *info;
     uint8_t *algo;
     uint8_t *params;
@@ -75935,16 +75992,19 @@ static int t41_awb_refresh_thresholds(uint32_t channel, bool regional)
 
 int32_t tisp_awb_set_regional_threshold(uint32_t channel)
 {
+    if (t41_native_awb) return t41_native_awb_writer(channel, 2);
     return t41_awb_refresh_thresholds(channel, true);
 }
 
 int32_t tisp_awb_set_lum_th_freq(uint32_t channel)
 {
+    if (t41_native_awb) return t41_native_awb_writer(channel, 3);
     return t41_awb_refresh_thresholds(channel, false);
 }
 
 int32_t tisp_awb_set_hardware_param(uint32_t channel)
 {
+    if (t41_native_awb) return t41_native_awb_writer(channel, 1);
     uint8_t *params, *runtime;
     uint32_t words[10], i;
     int ret = t41_awb_writer_state(channel, &params, &runtime);
@@ -76000,6 +76060,10 @@ int32_t tisp_awb_gain_reg(uintptr_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f328 origin=fragment_seed original=tisp_awb_set_gain */
 int64_t tisp_awb_set_gain(uint32_t a0)
 {
+    if (t41_native_awb) {
+        int ret = t41_native_awb_writer(a0, 0);
+        return ret ? ret : 0x10000;
+    }
     uint32_t *info, words[2], write_enable, bank;
     unsigned char *p, *s, *report;
     if (a0 >= ARRAY_SIZE(awb_info))
@@ -76368,6 +76432,7 @@ tisp_awb_set_gain0x36c:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000002f6a0 origin=fragment_seed original=tisp_awb_init */
 int32_t tisp_awb_init(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_init(a0, (const uint32_t *)a1);
     uint8_t *info;
     uint8_t *algo;
     uint8_t *params;
@@ -79671,6 +79736,11 @@ tisp_awb_spec_calculate0x4b8:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000031ad4 origin=fragment_seed original=tisp_awb_process */
 int64_t tisp_awb_process(uint32_t a0)
 {
+    if (t41_native_awb) {
+        if (a0) return -EINVAL;
+        t41_native_awb_queue();
+        return 0;
+    }
     uint32_t *local_10 = 0;
     uint32_t *local_18 = 0;
     uint32_t *local_20 = 0;
@@ -80485,6 +80555,7 @@ tisp_awb_ev_update_Ywgt0x2d4:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003212c origin=fragment_seed original=tisp_awb_tgain_update */
 int32_t tisp_awb_tgain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+    if (t41_native_awb) return a0 ? -EINVAL : t41_native_awb_exposure_update(a2, 0, 1);
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t ra = 0;
@@ -80524,6 +80595,7 @@ int32_t tisp_awb_tgain_update(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032188 origin=fragment_seed original=tisp_awb_ev_update */
 int32_t tisp_awb_ev_update(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+    if (t41_native_awb) return a0 ? -EINVAL : t41_native_awb_exposure_update(0, a2 >> 10, 2);
     uint32_t *base;
     uint32_t *ptr;
     uint32_t target;
@@ -80580,6 +80652,7 @@ int32_t tisp_awb_ev_update(uint32_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000321d8 origin=fragment_seed original=tisp_awb_dn_params_refresh */
 int32_t tisp_awb_dn_params_refresh(uint32_t a0)
 {
+    if (t41_native_awb) return t41_native_awb_refresh(a0, 1);
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
     uint32_t ra = 0;
@@ -80630,6 +80703,7 @@ tisp_awb_dn_params_refresh0x88:
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003226c origin=fragment_seed original=tisp_awb_get_global_statis */
 int32_t tisp_awb_get_global_statis(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_GLOBAL, (void *)a1, 16, 1);
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
@@ -80669,6 +80743,13 @@ int32_t tisp_awb_get_global_statis(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000322cc origin=fragment_seed original=tisp_awb_param_array_get */
 int32_t tisp_awb_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+    if (t41_native_awb) {
+        int ret;
+        if (!t41_kernel_data_ptr((void *)a2)) return -EINVAL;
+        ret = t41_native_awb_control(a0, T41_AWB_PARAMS, (void *)(uintptr_t)a1, T41_AWB_ARRAY_BYTES, 1);
+        if (!ret) *(uint32_t *)a2 = T41_AWB_ARRAY_BYTES;
+        return ret;
+    }
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -80730,6 +80811,7 @@ tisp_awb_param_array_get0xb0:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000323a0 origin=fragment_seed original=tisp_awb_param_array_set */
 int32_t tisp_awb_param_array_set(uint32_t a0, uint32_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_PARAMS, (void *)(uintptr_t)a1, T41_AWB_PARAM_BYTES, 0);
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -80801,6 +80883,7 @@ tisp_awb_param_array_set0x9c:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032478 origin=fragment_seed original=tisp_awb_get_attr */
 int64_t tisp_awb_get_attr(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_ATTR, (void *)a1, 76, 1);
     uint32_t a2 = 0;
     uint32_t *a3 = 0;
     uint32_t ra = 0;
@@ -80900,6 +80983,7 @@ tisp_awb_get_attr0xd8:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032578 origin=fragment_seed original=tisp_awb_set_weight */
 void* tisp_awb_set_weight(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return (void *)(long)t41_native_awb_control(a0, T41_AWB_WEIGHT, (void *)a1, 225, 0);
     uint32_t a2 = 0;
     uintptr_t *a3 = 0;
     uint32_t ra = 0;
@@ -80943,6 +81027,7 @@ tisp_awb_set_weight0x1c:
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000325c4 origin=model_output original=tisp_awb_get_weight */
 int32_t tisp_awb_get_weight(int32_t arg1, void *arg2)
 {
+    if (t41_native_awb) return t41_native_awb_control(arg1, T41_AWB_WEIGHT, arg2, 225, 1);
     int32_t *a3 = _awb_base + arg1;
     int32_t *i;
 
@@ -80957,6 +81042,7 @@ int32_t tisp_awb_get_weight(int32_t arg1, void *arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032604 origin=fragment_seed original=tisp_awb_get_zone */
 int32_t tisp_awb_get_zone(uint32_t a0, uint32_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_ZONE, (void *)(uintptr_t)a1, 2700, 1);
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -81003,6 +81089,7 @@ int32_t tisp_awb_get_zone(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032698 origin=fragment_seed original=tisp_awb_set_start */
 int32_t tisp_awb_set_start(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_start_gain(a0, (const unsigned int *)a1);
     uintptr_t a2 = 0;
     uint32_t *a3 = 0;
     uint32_t *t9 = 0;
@@ -81055,6 +81142,7 @@ int32_t tisp_awb_set_start(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032718 origin=reference_derived original=tisp_awb_get_mode */
 int32_t tisp_awb_get_mode(int32_t arg1, int32_t arg2)
 {
+    if (t41_native_awb) return t41_native_awb_control(arg1, T41_AWB_MODE, (void *)(uintptr_t)(uint32_t)arg2, 28, 1);
     uint8_t *a1;
     uint8_t *v0;
     uint32_t tmp_a1_hi, tmp_a1_lo, tmp_v0_hi, tmp_v0_lo;
@@ -81134,6 +81222,7 @@ int32_t tisp_awb_get_mode(int32_t arg1, int32_t arg2)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000327d4 origin=fragment_seed original=tisp_awb_set_mode */
 int tisp_awb_set_mode(uint32_t arg1, uint32_t *arg2)
 {
+    if (t41_native_awb) return t41_native_awb_control(arg1, T41_AWB_MODE, arg2, 12, 0);
     uint32_t mode = *arg2;
     uint32_t *s1;
     uint32_t *s0;
@@ -81223,6 +81312,10 @@ mmio_write:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032984 origin=fragment_seed original=tisp_awb_set_frz */
 void* tisp_awb_set_frz(uint32_t a0, uint32_t a1)
 {
+    if (t41_native_awb) {
+        uint8_t value = a1;
+        return (void *)(long)t41_native_awb_control(a0, T41_AWB_FREEZE, &value, 1, 0);
+    }
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
@@ -81248,6 +81341,7 @@ void* tisp_awb_set_frz(uint32_t a0, uint32_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000329ac origin=fragment_seed original=tisp_awb_get_frz */
 int32_t tisp_awb_get_frz(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_FREEZE, (void *)a1, 1, 1);
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
@@ -81274,6 +81368,7 @@ int32_t tisp_awb_get_frz(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000329d8 origin=fragment_seed original=tisp_awb_set_ct */
 int64_t tisp_awb_set_ct(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_CT, (void *)a1, 4, 0);
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uint32_t *v1 = 0;
@@ -81300,6 +81395,7 @@ int64_t tisp_awb_set_ct(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032a04 origin=fragment_seed original=tisp_awb_set_statis_localtion */
 void* tisp_awb_set_statis_localtion(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return (void *)(long)t41_native_awb_control(a0, T41_AWB_LOCATION, (void *)a1, 10, 0);
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
@@ -81346,6 +81442,7 @@ int32_t tisp_awb_algo_deinit_internal(int32_t arg1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032a88 origin=fragment_seed original=tisp_awb_api_set_ct_trend_offset */
 int64_t tisp_awb_api_set_ct_trend_offset(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_TREND, (void *)a1, 28, 0);
     uintptr_t a2 = 0;
     uint32_t *a3 = 0;
     uint32_t ra = 0;
@@ -81401,6 +81498,7 @@ tisp_awb_api_set_ct_trend_offset0x20:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032afc origin=fragment_seed original=tisp_awb_api_get_ct_trend_offset */
 int16_t tisp_awb_api_get_ct_trend_offset(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_TREND, (void *)a1, 28, 1);
     uintptr_t a2 = 0;
     uint32_t *a3 = 0;
     uint32_t ra = 0;
@@ -81450,6 +81548,7 @@ tisp_awb_api_get_ct_trend_offset0x20:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032b5c origin=fragment_seed original=tisp_awb_get_converge_step */
 int32_t tisp_awb_get_converge_step(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_CONVERGE, (void *)a1, 20, 1);
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
@@ -81488,6 +81587,7 @@ int32_t tisp_awb_get_converge_step(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000032bb8 origin=fragment_seed original=tisp_awb_set_converge_step */
 int32_t tisp_awb_set_converge_step(uint32_t a0, uintptr_t a1)
 {
+    if (t41_native_awb) return t41_native_awb_control(a0, T41_AWB_CONVERGE, (void *)a1, 20, 0);
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
     uintptr_t *v1 = 0;
@@ -150614,6 +150714,7 @@ static void t41_tmo_workfn(struct work_struct *work)
     linear = tisp_math_exp2(gain, 16, 10);
     exposure = (uint64_t)integration * linear >> 10;
     ev = min_t(uint64_t, exposure, UINT_MAX);
+    if (t41_native_awb) t41_native_awb_exposure(gain, ev);
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_gamma_error = t41_gamma_update(ev);
@@ -150651,6 +150752,7 @@ done:
 static void t41_tmo_stream_stop(void)
 {
     unsigned long flags;
+    t41_native_awb_stop();
     /* Pair scheduling and the gate under one lock, before draining work. */
     spin_lock_irqsave(&t41_tmo_state_lock, flags);
     t41_tmo_state.live = -1;
@@ -150673,6 +150775,7 @@ static void t41_tmo_stream_start(void)
         t41_tmo_state.live = 1;
     spin_unlock_irqrestore(&t41_tmo_state_lock, flags);
     mutex_unlock(&t41_tmo_map_lock);
+    if (t41_native_awb) t41_native_awb_start();
 }
 
 static int t41_tmo_map_set(const char *value, const struct kernel_param *kp)
@@ -167135,7 +167238,9 @@ int64_t ispcore_interrupt_service_routine(uintptr_t a0)
          * the bounded controller above.  AE retains its repaired histogram
          * callback.  Other recovered statistic handlers remain gated.
          */
-        if ((status0 & BIT(3)) && t41_safe_awb_controller < 0) {
+        if ((status0 & BIT(3)) && t41_native_awb) {
+            t41_native_awb_queue();
+        } else if ((status0 & BIT(3)) && t41_safe_awb_controller < 0) {
             /* DMA cache maintenance and the 32 KiB packed-stat scan are not
              * hard-IRQ work.  T23 uses the same IRQ-to-workqueue split; AWB
              * is one-shot, so the worker rearms capture after it finishes. */

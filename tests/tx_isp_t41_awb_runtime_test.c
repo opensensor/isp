@@ -20,6 +20,7 @@ struct work_struct { void (*fn)(struct work_struct *); int queued; };
 static unsigned int locks,spins,allocations,drained,fail_alloc,allocation_calls,writes,cache_syncs;
 static uint32_t tparamsP_storage[2],tpm_cb_storage[32],awb_info[2],t41_ccm_ct,t41_awb_last_rgain,t41_awb_last_bgain;
 static int t41_awb_ready[2];
+static uint32_t day_night_storage[2];
 static uint32_t registers[0x180c0/4];
 static unsigned char calibration[0x978+T41_AWB_PARAM_BYTES],saved_calibration[sizeof(calibration)];
 static struct t41_awb_owned before;
@@ -116,6 +117,10 @@ int main(void)
     assert(t41_native_awb_deinit(0)==-EBUSY && allocations==2);
     for (i=0;i<100;++i) { registers[0x18050/4]=i&3; t41_native_awb_queue(); pump(); assert(!t41_native_awb_error); }
     assert(t41_native_awb_frames==100 && !t41_native_awb_dropped);
+    before=s->saved; n=writes;
+    assert(!t41_native_awb_observe(0,values) && values[0]==1365 && values[1]==819);
+    assert(!t41_native_awb_observe(1,values));
+    assert(!memcmp(&before,&s->saved,sizeof(before)) && writes==n);
     assert(!t41_native_awb_control(0,T41_AWB_FREEZE,&freeze,1,0)); n=writes;
     values[0]=registers[0x4004/4]; values[1]=registers[0x4008/4];
     t41_native_awb_queue(); pump(); assert(writes==n+7); /* six region controls and rearm, no WB */
@@ -133,7 +138,23 @@ int main(void)
     assert(!memcmp(&before,&s->saved,sizeof(before)) && writes==n);
     assert(!t41_native_awb_exposure(65536,2000)); n=writes;
     assert(!t41_native_awb_exposure(65536,2000) && writes==n);
+    for (i=0;i<4;++i) assert(!t41_native_awb_writer(0,i));
+    assert(!t41_native_awb_compat(0,1501,2403,0,NULL));
+    assert(!t41_native_awb_compat(0,0,0,1,values));
+    assert(!values[0] && values[1]==1501 && values[2]==2403);
+    t41_native_awb_queue(); pump();
+    assert(registers[0x4004/4]==(0x04000000|1501) && registers[0x4008/4]==(0x04000000|2403));
+    assert(!t41_native_awb_compat(1,1501,2403,0,NULL));
+    t41_native_awb_queue(); pump(); assert(!t41_native_awb_error && !s->saved.s[0xeaa1]);
     assert(!t41_native_awb_refresh(0,1)); assert(!memcmp(saved_calibration,calibration,sizeof(calibration)));
+    values[0]=1200; values[1]=1400;
+    assert(!t41_native_awb_start_gain(0,values));
+    assert(s->has_day_start && t41_tmo_le32(s->saved.p+0xc)==1200);
+    day_night_storage[0]=1; assert(!t41_native_awb_refresh(0,1));
+    assert(t41_tmo_le32(s->saved.p+0xc)==1024);
+    day_night_storage[0]=0; assert(!t41_native_awb_refresh(0,1));
+    assert(t41_tmo_le32(s->saved.p+0xc)==1200 && t41_tmo_le32(s->saved.p+0x18)==1400);
+    assert(!memcmp(saved_calibration,calibration,sizeof(calibration)));
     t41_native_awb_queue(); t41_native_awb_queue(); pump(); assert(t41_native_awb_dropped==1);
     before=s->saved; s->saved.p[0xcd2]=0; n=writes;
     t41_native_awb_queue(); pump(); assert(t41_native_awb_error==-ERANGE && writes==n+1);
