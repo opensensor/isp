@@ -48,7 +48,8 @@ height, current/minimum fixed-point FPS and mains frequency. The latter
 returns the last useful **index**, then replicates the final node into the
 unused tail. Neither contains a measured sensor line count or gain preset.
 The multiply helper also preserves the OEM MIPS precision-zero mask behavior.
-Both routines match 10,000 synthetic cases under QEMU, including fractional
+Both routines match 10,000 synthetic cases under QEMU and on the physical
+T41 in private userspace, including fractional
 minimum FPS, table saturation, overflow and precision boundaries; host and
 ASan/UBSan checks pass. They are not yet substituted into the live controller:
 the surrounding convergence policy and exposure/gain allocator remain work
