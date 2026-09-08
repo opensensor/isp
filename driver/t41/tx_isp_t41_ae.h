@@ -80,10 +80,71 @@ static inline unsigned int t41_ae_fixed_div(unsigned int shift,
 static inline unsigned int t41_ae_fixed_mul(unsigned int shift,
 		unsigned int a, unsigned int b)
 {
-	unsigned int mask = (1U << shift) - 1;
+	/* OEM constructs this with ~0U >> (-shift & 31). At precision zero
+	 * the MIPS variable shift is zero, not 32: all four terms survive. */
+	unsigned int mask = shift ? (1U << shift) - 1 : ~0U;
 	return (a & mask) * (b >> shift) + (a >> shift) * (b & mask) +
 		((a >> shift) * (b >> shift) << shift) +
 		(((a & mask) * (b & mask)) >> shift);
+}
+
+/* H20250310a's convergence-speed ramp. The two calibrated deltas are
+ * squared independently, with a truncation after EACH fixed-point product.
+ * Keep the wrapped u32 limit arithmetic and the final u16 stores: replacing
+ * these with one wide multiply changes the controller's transition curve.
+ * This is arithmetic only; no sensor limits, scene samples or MMIO here. */
+static inline int t41_ae_convergence_speed(const unsigned int delta[2],
+		unsigned int speed, unsigned int precision, unsigned int limit,
+		unsigned short *down, unsigned short *up, unsigned int *last_sum)
+{
+	unsigned int a, b, scale, denominator, d, u;
+	if (!delta || !down || !up || down == up || !last_sum || precision > 24)
+		return -1;
+	a = delta[0]; b = delta[1];
+	if (limit < a + *down) a = limit - *down;
+	if (limit < b + *up) b = limit - *up;
+	scale = speed << precision;
+	denominator = 128U << precision;
+	d = *down + t41_ae_fixed_div(precision,
+		t41_ae_fixed_mul(precision,
+			t41_ae_fixed_mul(precision, scale, a), a), denominator);
+	u = *up + t41_ae_fixed_div(precision,
+		t41_ae_fixed_mul(precision,
+			t41_ae_fixed_mul(precision, scale, b), b), denominator);
+	*down = (unsigned short)d;
+	*up = (unsigned short)u;
+	*last_sum = u;
+	return 0;
+}
+
+/* OEM anti-flicker lattice: sensor frame height/current FPS establish line
+ * timing, while minimum FPS establishes the number of useful periods.
+ * The cache uses calibrated fixed-point FPS, not an integer FPS guess.
+ * 'last' is the final useful INDEX; the remaining table repeats that node. */
+static inline int t41_ae_deflicker(unsigned int frequency,
+		unsigned int precision, unsigned int fps_q, unsigned int min_fps_q,
+		unsigned int frame_height, unsigned short nodes[120], unsigned int *last)
+{
+	unsigned short result[120];
+	unsigned int i, count, denominator, line_ratio, half;
+	if (!nodes || !last || !precision || precision > 16 || !frequency ||
+	    frequency > (~0U >> (precision + 1)) || !fps_q || !min_fps_q ||
+	    !frame_height || frame_height > 65535)
+		return -1;
+	denominator = (frequency * 2U) << precision;
+	count = (t41_ae_fixed_div(precision, denominator, min_fps_q) >> precision) & 255;
+	if (count > 120) count = 120;
+	if (!count) count = 1;
+	line_ratio = t41_ae_fixed_div(precision, frame_height << precision, denominator);
+	half = 1U << (precision - 1);
+	for (i = 0; i < count; ++i)
+		result[i] = (unsigned short)((t41_ae_fixed_mul(precision,
+			t41_ae_fixed_mul(precision, (i + 1) << precision, fps_q),
+			line_ratio) + half) >> precision);
+	for (; i < 120; ++i) result[i] = result[count - 1];
+	for (i = 0; i < 120; ++i) nodes[i] = result[i];
+	*last = count - 1;
+	return 0;
 }
 
 struct t41_ae_meter {

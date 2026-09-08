@@ -13,6 +13,29 @@ int main(void)
 	unsigned long long knots[15], adjusted[15];
 	unsigned short targets[15], values[15];
 	struct t41_ae_meter meter, before;
+	assert(t41_ae_fixed_mul(0, 3, 7) == 84);
+	{
+		unsigned short nodes[120], previous[120];
+		unsigned int last = 999;
+		assert(!t41_ae_deflicker(50, 10, 25 << 10, 5 << 10, 1800, nodes, &last));
+		assert(last == 19 && nodes[0] == 450 && nodes[19] == 9000 && nodes[119] == 9000);
+		memcpy(previous, nodes, sizeof(nodes));
+		assert(t41_ae_deflicker(0, 10, 25 << 10, 5 << 10, 1800, nodes, &last));
+		assert(t41_ae_deflicker(50, 0, 25 << 10, 5 << 10, 1800, nodes, &last));
+		assert(t41_ae_deflicker(50, 10, 25 << 10, 0, 1800, nodes, &last));
+		assert(t41_ae_deflicker(~0U, 10, 25 << 10, 5 << 10, 1800, nodes, &last));
+		assert(last == 19 && !memcmp(previous, nodes, sizeof(nodes)));
+	}
+	{
+		unsigned int delta[2] = {1024, 2048}, sum = 999;
+		unsigned short down = 64, up = 128;
+		assert(!t41_ae_convergence_speed(delta, 128, 10, 65535, &down, &up, &sum));
+		assert(down == 1088 && up == 4224 && sum == 4224);
+		assert(t41_ae_convergence_speed(delta, 128, 25, 65535, &down, &up, &sum));
+		assert(t41_ae_convergence_speed(0, 128, 10, 65535, &down, &up, &sum));
+		assert(t41_ae_convergence_speed(delta, 128, 10, 65535, &down, &down, &sum));
+		assert(down == 1088 && up == 4224 && sum == 4224);
+	}
 	memset(dma,255,sizeof(dma)); memset(s,0xa5,sizeof(s)); memcpy(saved,s,sizeof(s));
 	assert(t41_ae_statistics(dma,15,1,1,s,sizeof(s)));
 	assert(t41_ae_statistics(dma,sizeof(dma),0,15,s,sizeof(s)));

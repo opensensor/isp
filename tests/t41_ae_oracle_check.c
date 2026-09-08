@@ -12,6 +12,9 @@ extern int oracle_statistics(unsigned int, const void *);
 extern void oracle_adjust(void *, unsigned long long *, unsigned short *);
 extern int oracle_mean(unsigned int, unsigned int *, unsigned int *,
 	unsigned int, unsigned int, unsigned int *);
+extern unsigned int oracle_convergence(const unsigned int *, unsigned short *,
+	unsigned short *, unsigned int, unsigned short, unsigned int);
+extern unsigned int oracle_deflicker(unsigned int);
 static unsigned char p[T41_AE_PARAM_BYTES], state[T41_AE_STATE_BYTES],
 	scalar[T41_AE_STATE_BYTES], cache[0x688], dma[4096];
 static uint32_t info[4], seed = 7894;
@@ -32,6 +35,42 @@ int main(void)
 		unsigned int shift = rng()%24, target, expected, rows = 1+rng()%15, cols = 1+rng()%15;
 		unsigned int weights[2], fg[2], mean;
 		struct t41_ae_meter meter;
+		{
+			unsigned short nodes[120];
+			unsigned int precision = 1 + f % 16, frequency = (f & 1) ? 50 : 60;
+			unsigned int fps = (1 + rng() % 120) << precision;
+			unsigned int min_fps = 1 + rng() % fps, height = 1 + rng() % 8192;
+			unsigned int last, reference;
+			put16(p + 0x6c0, precision); t41_ae_put32(p + 0x674, frequency);
+			t41_ae_put32(cache + 0x4ec, fps); t41_ae_put32(cache + 0x4f0, min_fps);
+			put16(state + 0x216a, height); memset(scalar, 0xa5, sizeof(scalar));
+			memcpy(state + 0x2438, scalar + 0x2438, 240);
+			reference = oracle_deflicker(0);
+			if (t41_ae_deflicker(frequency, precision, fps, min_fps, height,
+					nodes, &last)) return 2;
+			if (last != reference || state[0x2612] != last ||
+					memcmp(nodes, state + 0x2438, sizeof(nodes))) {
+				if (fail++ < 20) printf("deflicker case %u mismatch last=%u OEM=%u\n",
+					f, last, reference);
+			}
+		}
+		{
+			unsigned int delta[2] = {rng(), rng()}, sum, reference;
+			unsigned int precision = f % 25, speed = rng(), limit = rng();
+			unsigned short down = rng(), up = rng(), od = down, ou = up;
+			/* Mix normal small calibrated ramps with wrap/precision edges. */
+			if (f & 1) {
+				precision = 10; speed &= 255; limit = 65535;
+				delta[0] &= 4095; delta[1] &= 4095;
+			}
+			reference = oracle_convergence(delta, &od, &ou, speed, precision, limit);
+			if (t41_ae_convergence_speed(delta, speed, precision, limit,
+					&down, &up, &sum)) return 2;
+			if (down != od || up != ou || sum != reference) {
+				if (fail++ < 20) printf("convergence case %u scalar=%u/%u/%u OEM=%u/%u/%u\n",
+					f, down, up, sum, od, ou, reference);
+			}
+		}
 		for (i = 0; i < 15; ++i) { knots[i] = base; base += 1+rng()%10000000; targets[i] = rng()%65536; }
 		x = (knots[0]-10 + rng()%(knots[14]-knots[0]+20)) << shift;
 		x += rng() & ((1U<<shift)-1);
@@ -89,6 +128,6 @@ int main(void)
 				mean,fg[0],fg[1],weights[0],weights[1]);
 		}
 	}
-	printf("10000 synthetic AE targets, DMA pages and weighted means: %u mismatches\n",fail);
+	printf("10000 synthetic AE deflicker lattices, convergence ramps, targets, DMA pages and weighted means: %u mismatches\n",fail);
 	return fail ? 1 : 0;
 }

@@ -40,6 +40,20 @@ The bounded exposure controller still has separate limitations: conservative
 step/deadband policy and no full OEM digital-gain allocation or convergence.
 Calibrated metering is not full OEM AE parity.
 
+The next pure-C building blocks are now independently checked against the
+OEM routines: `t41_ae_convergence_speed` applies both squared-delta ramps,
+preserving each fixed-point truncation and the final packed-u16 stores;
+`t41_ae_deflicker` generates the full 120-node anti-flicker lattice from frame
+height, current/minimum fixed-point FPS and mains frequency. The latter
+returns the last useful **index**, then replicates the final node into the
+unused tail. Neither contains a measured sensor line count or gain preset.
+The multiply helper also preserves the OEM MIPS precision-zero mask behavior.
+Both routines match 10,000 synthetic cases under QEMU, including fractional
+minimum FPS, table saturation, overflow and precision boundaries; host and
+ASan/UBSan checks pass. They are not yet substituted into the live controller:
+the surrounding convergence policy and exposure/gain allocator remain work
+in progress, including removal of its hard-coded 369-line ceiling.
+
 The sensor adapter now calls the registered module's `alloc_again` callback
 with log2-Q16 and uses the returned realized gain and opaque register code.
 It does not assume OS04D10 Q4 encoding. Integration allocation, limits,

@@ -54,9 +54,12 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_ae_long_target', 'tisp_ae_lib_bilinear_intp',
             'tisp_ae_lib_div_64', 'tisp_ae_get_statistics',
             'tisp_ae_weight_mean', 'fix_point_div_32', 'fix_point_mult2_32',
+            'fix_point_mult3_32', 'tisp_ae_calc_convergence_speed',
+            'tisp_ae_clac_deflicker_cfg',
         ], ['oracle_target', 'oracle_interpolate', 'oracle_divide',
             'oracle_statistics', 'oracle_mean', 'oracle_fixed_div',
-            'oracle_fixed_mul']))
+            'oracle_fixed_mul', 'oracle_fixed_mul3', 'oracle_convergence',
+            'oracle_deflicker']))
     if gib:
         functions = dict(zip(['tisp_gib_calc_self_gain', 'tisp_gib_ae_write_dgain',
             'tisp_round_int64', 'tisp_max'],
