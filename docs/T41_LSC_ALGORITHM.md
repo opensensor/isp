@@ -1,9 +1,9 @@
 # T41 lens-shading algorithm recovery
 
 The native kernel adapter owns calibration and history, receives live CT/gain
-from the drained frame worker and replaces the captured CT/gain seeds. Device
-validation is still pending for this adapter; arithmetic tests alone do not
-establish image-quality parity.
+from the drained frame worker and replaces the captured CT/gain seeds. The
+adapter has passed physical T41 testing and is deployed in the surgical
+`/opt` stack; this does not establish full AWB/AE or image-quality parity.
 
 `tx_isp_t41_lsc.h` implements temperature selection/history, gain selection
 and register packing for the T41 calibration format. It supports both mesh
@@ -74,5 +74,31 @@ failure unwinding, staged transfers, CT/gain hysteresis, complete RAM commits,
 PM save/restore and stop-before-free ordering. No LSC RAM writes occur in the
 hard IRQ path. Repeated unchanged inputs avoid copying/interpolating state.
 
-Still required: stock/open device comparisons. Calibration tables remain
-legitimate sensor inputs; a measured scene's CT/gain is not a default.
+## Live validation
+
+Source `0fec0835` (LSC adapter `94679abb`) produces the tested stripped module
+SHA256 `a6a84b2b9b4ce1df6e445589becd331896e93fedb5da18fff011fd2dbd9abf95`.
+Both candidates pass three TCP and three UDP H.264/AAC reconnects and a clean
+120-second decode, with zero reported duplicate/drop frames or timestamp
+warnings. Native LSC follows live CT and gain: the temporary exposure ceiling
+test reaches log2-Q16 gain 259142 with LSC/LCE/TMO errors zero, then returns
+to calibrated exposure. The final build suppresses normal gain-fanout debug
+MMIO/logging; explicit tracing and rate-limited failures remain available.
+
+Promotion ran before S10 bind mounts, with the preceding module and complete
+manifest retained in `/opt/t41-iq/generic-rollback-8d`. A fresh boot verifies
+all twenty artifacts, unchanged sensor calibration and saved Raptor config,
+day mode, advancing tuning work and another six passing reconnects. Neo
+audio and the other deployed libraries/binaries are unchanged. No firmware
+partition was flashed.
+
+The adjacent OEM/open scene captures show paper luma 221.84/221.50 and bark
+luma 84.59/85.64. Paper R/G is 0.9821/0.9761 and B/G 1.0672/1.0233. Lighting,
+exposure and white balance are not locked, so these are observational
+regression checks, not correction coefficients or color-parity evidence.
+Physical ring/IR and sensor WDR operation are not proven by this OS04D10 run;
+those mathematical paths are covered by the synthetic OEM oracles.
+
+Calibration tables remain legitimate sensor inputs; a measured scene's
+CT/gain is not a default. Full AWB/AE convergence and long-stream reliability
+remain separate outstanding work.
