@@ -25,6 +25,8 @@ extern int oracle_tisp_lsc_mirror_flip(unsigned int,unsigned int,unsigned int,un
 extern int oracle_tisp_lsc_init(unsigned int,const unsigned int *);
 extern int oracle_tisp_lsc_wdr_en(unsigned int,unsigned int);
 extern int oracle_tisp_lsc_dn_params_refresh(unsigned int);
+extern int oracle_tisp_lsc_param_array_set(unsigned int,unsigned int,const void *);
+extern unsigned int oracle_lsc_set_cases[5];
 extern int oracle_tisp_lsc_lut_valid_judge(unsigned int,unsigned int,unsigned int,unsigned int,unsigned int,unsigned int);
 static unsigned char p[T41_LSC_PARAM_BYTES],actual[T41_LSC_STATE_BYTES],expected[T41_LSC_STATE_BYTES];
 static unsigned char reference_p[T41_LSC_PARAM_BYTES],original_p[T41_LSC_PARAM_BYTES];
@@ -50,6 +52,7 @@ static void compare(unsigned int frame,const char *which,int a,int b)
 int main(void)
 {
     unsigned int f,i,rejected=0;
+    memcpy(oracle_rodata+0x1e80,oracle_lsc_set_cases,sizeof(oracle_lsc_set_cases));
     t41_lsc_put32(oracle_bss+0x4140,(uintptr_t)expected);
     for(f=0;f<10000;++f) {
         unsigned int ct,force,wdr=f&1,gain,mode=f%4; int a,b,n;
@@ -153,8 +156,21 @@ int main(void)
             if(memcmp(p,oracle_parameter_buffer+0x4178,sizeof(p))) {
                 if(failures++<20) printf("LSC refresh parameter mismatch f=%u j=%u\n",f,j);
             }
+            {
+                static const unsigned int offsets[5]={0,0x68,0x3680,0x6c80,0xa280};
+                static const unsigned int sizes[5]={0x68,0x3618,0x3600,0x3600,0x3600};
+                unsigned int part;
+                for(part=0;part<5;++part) {
+                    a=t41_lsc_replace(p,sizeof(p),actual,sizeof(actual),part,original_p+offsets[part],sizes[part],wdr,0);
+                    oracle_count=0; b=oracle_tisp_lsc_param_array_set(0,part,original_p+offsets[part]);
+                    compare(f*40+j*5+part,"parameter set",a,b);
+                    if(memcmp(p,oracle_parameter_buffer+0x4178,sizeof(p))) {
+                        if(failures++<20) printf("LSC setter parameter mismatch f=%u j=%u part=%u\n",f,j,part);
+                    }
+                }
+            }
         }
     }
-    printf("40 LSC cold starts and 320 linear/WDR, flip and day/night replacements: %u cumulative mismatches, %u unexpected writes\n",failures,oracle_bad);
+    printf("40 LSC cold starts, 320 linear/WDR/flip/day-night replacements and 1600 tuning parts: %u cumulative mismatches, %u unexpected writes\n",failures,oracle_bad);
     return failures || oracle_bad ? 1:0;
 }

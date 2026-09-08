@@ -1409,17 +1409,6 @@ static unsigned int t41_bcsh_color_model = ~0U;
 module_param(t41_bcsh_color_model, uint, 0444);
 MODULE_PARM_DESC(t41_bcsh_color_model,
 		 "active stock-derived BCSH color model (0=day, 1=low-light)");
-/* Exact stock state from the current pristine H20240401a Ingenic OS04D10
- * module.  The safe event gate does not run the unrecovered AWB fanout yet,
- * so seed LSC from that matched oracle instead of its init placeholders. */
-static unsigned int t41_stock_lsc_ct = 2798U;
-module_param(t41_stock_lsc_ct, uint, 0644);
-MODULE_PARM_DESC(t41_stock_lsc_ct,
-		 "Initial OS04D10 LSC color temperature measured from stock");
-static unsigned int t41_stock_lsc_gain = 0x0002cc9cU;
-module_param(t41_stock_lsc_gain, uint, 0644);
-MODULE_PARM_DESC(t41_stock_lsc_gain,
-		 "Initial OS04D10 LSC log2 total gain in Q16 measured from stock");
 MODULE_PARM_DESC(t41_checkpoint_start, "first zero-based TISP init checkpoint to delay");
 
 #define T41_MAX_IRQS_PER_DEVICE 4
@@ -4642,7 +4631,7 @@ int32_t tisp_lsc_pm_suspend(uint32_t a0, uintptr_t a1);
 int32_t lsc_exchange_data_constprop_1(uintptr_t a0, uint32_t a1, uint32_t a2) __asm__("lsc_exchange_data.constprop.1");
 #endif
 int32_t lsc_exchange_data_constprop_1(uintptr_t a0, uint32_t a1, uint32_t a2);
-int32_t tisp_lsc_lut_valid_judge(uint32_t arg1, uint32_t arg2, uint32_t arg3, int32_t arg4, int16_t arg5);
+int32_t tisp_lsc_lut_valid_judge(uint32_t arg1, uint32_t arg2, uint32_t arg3, int32_t arg4, int16_t arg5, int16_t arg6);
 int32_t tisp_lsc_prepare_write_lut(int32_t arg1);
 int tisp_lsc_real_write_lut(int arg1);
 int32_t tisp_lsc_pm_resume(uint32_t a0);
@@ -32843,6 +32832,8 @@ done:
     mutex_unlock(&t41_lce_lock);
 }
 
+#include "tx_isp_t41_lsc_runtime.inc"
+
 static void t41_apply_stock_spatial_profile(void)
 {
     uint32_t gain = READ_ONCE(t41_safe_ae_gain_q16);
@@ -32854,6 +32845,7 @@ static void t41_apply_stock_spatial_profile(void)
         t41_top_restore_bypass(BIT(14));
     if (t41_stock_spatial_profile <= 0)
         t41_apply_stock_lce_ram_profile();
+    t41_native_lsc_reapply();
 }
 
 #include "tx_isp_t41_adr_runtime.inc"
@@ -82751,6 +82743,12 @@ tisp_gib_api_get_blc0x50:
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033db0 origin=fragment_seed original=tisp_lsc_pm_get_regsize */
 int32_t tisp_lsc_pm_get_regsize(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    uint32_t *size = (void *)a1;
+    if (a0 || !t41_kernel_data_ptr(size)) return -EINVAL;
+    *size += 64;
+    return 0;
+#else
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
 
@@ -82766,11 +82764,15 @@ int32_t tisp_lsc_pm_get_regsize(uint32_t a0, uintptr_t a1)
     v0 = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033dc4 origin=fragment_seed original=tisp_lsc_pm_suspend */
 int32_t tisp_lsc_pm_suspend(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_suspend(a0, (void *)a1);
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -82824,6 +82826,7 @@ tisp_lsc_pm_suspend0x30:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033e48 origin=fragment_seed original=lsc_exchange_data.constprop.1 */
@@ -82857,8 +82860,11 @@ int32_t lsc_exchange_data_constprop_1(uintptr_t a0, uint32_t a1, uint32_t a2)
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000033e6c origin=fragment_seed original=tisp_lsc_lut_valid_judge */
-int32_t tisp_lsc_lut_valid_judge(uint32_t arg1, uint32_t arg2, uint32_t arg3, int32_t arg4, int16_t arg5)
+int32_t tisp_lsc_lut_valid_judge(uint32_t arg1, uint32_t arg2, uint32_t arg3, int32_t arg4, int16_t arg5, int16_t arg6)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_geometry(arg1, arg2, arg3, arg4, (uint16_t)arg5, (uint16_t)arg6);
+#else
     uint32_t *lut_base = (uint32_t *)0x1c181410;
     uint32_t s4 = (uint32_t)(int16_t)arg5;
     uint32_t s1 = *(uint16_t *)((char *)&arg5 + 2);
@@ -82940,6 +82946,7 @@ second_loop:
     }
 
     return -1;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034084 origin=model_output original=tisp_lsc_prepare_write_lut */
@@ -83032,16 +83039,23 @@ static uint32_t t41_lsc_lut_count(const uint8_t *info)
 
 int32_t tisp_lsc_prepare_write_lut(int32_t channel)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_prepare(channel);
+#else
 	uint8_t *info = t41_lsc_info(channel);
 
 	if (!info)
 		return -EINVAL;
 	info[27691]++;
 	return tisp_lsc_real_write_lut(channel);
+#endif
 }
 
 int tisp_lsc_real_write_lut(int channel)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_writer(channel, 3, 1);
+#else
 	uint8_t *info = t41_lsc_info(channel);
 	uint8_t *data;
 	uint32_t count;
@@ -83071,11 +83085,15 @@ int tisp_lsc_real_write_lut(int channel)
 	system_reg_write(0x50020, ((count - 1) << 16) | 0x102);
 	info[27691] = 0;
 	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000341f8 origin=fragment_seed original=tisp_lsc_pm_resume */
 int32_t tisp_lsc_pm_resume(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_writer(a0, 0, 1);
+#else
     uint32_t local_14 = 0;
     uint32_t a1 = 0;
     uint32_t ra = 0;
@@ -83100,6 +83118,7 @@ int32_t tisp_lsc_pm_resume(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000034234 origin=fragment_seed original=tisp_lsc_write_reg */
@@ -83244,6 +83263,9 @@ tisp_lsc_write_reg0x214:
 
 int32_t tisp_lsc_write_reg(uint32_t channel, uint32_t mode)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_writer(channel, mode, 0);
+#else
 	uint8_t *info = t41_lsc_info(channel);
 	uint8_t *params;
 	uint32_t value;
@@ -83299,11 +83321,16 @@ int32_t tisp_lsc_write_reg(uint32_t channel, uint32_t mode)
 	}
 	system_reg_write(0x3100, 1);
 	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003447c origin=fragment_seed original=tisp_lsc_fra_down_interrupt */
 int32_t tisp_lsc_fra_down_interrupt(void)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    /* LUT uploads belong to the drained process-context frame worker. */
+    return 1;
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *a0 = 0;
@@ -83348,6 +83375,7 @@ tisp_lsc_fra_down_interrupt0x50:
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000344dc origin=fragment_seed original=tisp_lsc_itp */
@@ -84490,6 +84518,9 @@ static uint16_t t41_lsc_ct_blend(uint16_t a, uint8_t a_shift,
 
 int64_t tisp_lsc_ct_interp(uint32_t channel, uint32_t ct, uint32_t force)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_interpolate(channel, ct, force, 0);
+#else
 	uint8_t *info = t41_lsc_info(channel);
 	uint8_t *params;
 	static const uint32_t table_offset[3] = {
@@ -84621,6 +84652,7 @@ int64_t tisp_lsc_ct_interp(uint32_t channel, uint32_t ct, uint32_t force)
 		dest[2] = sample[5] >> 4;
 	}
 	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003530c origin=fragment_seed original=tisp_lsc_ct_update */
@@ -84664,9 +84696,10 @@ tisp_lsc_ct_update0x40:
 }
 #endif
 
-int32_t tisp_lsc_ct_update(uint32_t channel, uint32_t ct, uint32_t force)
+int32_t tisp_lsc_ct_update(uint32_t channel, uint32_t unused, uint32_t ct)
 {
-	int ret = (int)tisp_lsc_ct_interp(channel, ct, force);
+	int ret = (int)tisp_lsc_ct_interp(channel, ct, 0);
+	(void)unused;
 
 	if (ret < 0)
 		return ret;
@@ -84763,6 +84796,9 @@ tisp_lsc_gain_interp0xa8:
 int32_t tisp_lsc_gain_interp(uint32_t channel, uint32_t gain,
 			     uint32_t force)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_interpolate(channel, gain, force, 1);
+#else
 	uint8_t *info = t41_lsc_info(channel);
 	uint32_t previous;
 	uint32_t threshold;
@@ -84789,6 +84825,7 @@ int32_t tisp_lsc_gain_interp(uint32_t channel, uint32_t gain,
 						      *(uint32_t *)(void *)
 						      (info + 13860));
 	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035428 origin=fragment_seed original=tisp_lsc_gain_update */
@@ -84927,6 +84964,10 @@ tisp_lsc_wdr_en0xc0:
 
 int64_t tisp_lsc_wdr_en(uint32_t channel, uint32_t enabled)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    if (enabled > 1) return -EINVAL;
+    return t41_native_lsc_refresh(channel, enabled);
+#else
 	uint8_t *info = t41_lsc_info(channel);
 	uint8_t *params;
 	int ret;
@@ -84952,6 +84993,7 @@ int64_t tisp_lsc_wdr_en(uint32_t channel, uint32_t enabled)
 	if (ret)
 		return ret;
 	return tisp_lsc_real_write_lut(channel);
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035554 origin=fragment_seed original=tisp_lsc_init */
@@ -85027,6 +85069,9 @@ int tisp_lsc_init(uint32_t arg1, uint32_t *arg2)
 
 int tisp_lsc_init(uint32_t channel, uint32_t *par)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_init(channel, par);
+#else
 	uint8_t *info;
 	uint8_t *params;
 	uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
@@ -85050,10 +85095,10 @@ int tisp_lsc_init(uint32_t channel, uint32_t *par)
 	*(uint32_t *)(void *)(info + 0) = (uint32_t)(uintptr_t)params;
 	*(uint32_t *)(void *)(info + 4) = par[1];
 	*(uint32_t *)(void *)(info + 8) = par[0];
-	*(uint32_t *)(void *)(info + 12) = t41_stock_lsc_ct;
+	*(uint32_t *)(void *)(info + 12) = 5000;
 	*(uint32_t *)(void *)(info + 16) = 5;
 	*(uint32_t *)(void *)(info + 20) = 16;
-	*(uint32_t *)(void *)(info + 24) = t41_stock_lsc_gain;
+	*(uint32_t *)(void *)(info + 24) = 0;
 	*(uint32_t *)(void *)(info + 28) = 256;
 	info[27688] = ((par[2] & 0x1f) < 4) ? 0 : 1;
 	info[27689] = 0xff;
@@ -85069,10 +85114,10 @@ int tisp_lsc_init(uint32_t channel, uint32_t *par)
 	private_spin_lock_init((int32_t *)(void *)
 				(lsc_slock_storage + channel * sizeof(uint32_t)));
 
-	ret = tisp_lsc_gain_interp(channel, t41_stock_lsc_gain, 1);
+	ret = tisp_lsc_gain_interp(channel, 0, 1);
 	if (ret)
 		goto free_info;
-	ret = (int)tisp_lsc_ct_interp(channel, t41_stock_lsc_ct, 1);
+	ret = (int)tisp_lsc_ct_interp(channel, 5000, 1);
 	if (ret)
 		goto free_info;
 	ret = tisp_lsc_write_reg(channel, 0);
@@ -85092,6 +85137,7 @@ free_info:
 	private_kfree(info);
 	lsc_info[channel] = 0;
 	return ret;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000357d8 origin=fragment_seed original=tisp_lsc_deinit */
@@ -85130,6 +85176,9 @@ int32_t tisp_lsc_deinit(uint32_t a0)
 
 int32_t tisp_lsc_deinit(uint32_t channel)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_deinit(channel);
+#else
 	uint32_t *callbacks = (uint32_t *)(void *)tpm_cb_storage;
 
 	if (channel >= ARRAY_SIZE(lsc_info))
@@ -85142,11 +85191,15 @@ int32_t tisp_lsc_deinit(uint32_t channel)
 	callbacks[13] = 0;
 	callbacks[14] = 0;
 	return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000003585c origin=fragment_seed original=tisp_lsc_param_array_get */
 int32_t tisp_lsc_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_get(a0, (void *)(uintptr_t)a1, (void *)a2);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -85183,6 +85236,7 @@ int32_t tisp_lsc_param_array_get(uint32_t a0, uint32_t a1, uintptr_t a2)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000358f0 origin=fragment_seed original=lsc_exchange_data */
@@ -85215,6 +85269,9 @@ int32_t lsc_exchange_data(uintptr_t a0, uint32_t a1, uint32_t a2)
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035914 origin=fragment_seed original=tisp_lsc_mirror_flip */
 int64_t tisp_lsc_mirror_flip(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_flip(a0, a1, a2, a3);
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -85731,11 +85788,15 @@ tisp_lsc_mirror_flip0x5ec:
     goto tisp_lsc_mirror_flip0x5d0;
 
     return ((int64_t)(uint32_t)v1 << 32) | (uint32_t)v0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035f1c origin=fragment_seed original=tisp_lsc_dn_params_refresh */
 int32_t tisp_lsc_dn_params_refresh(uint32_t a0)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_refresh(a0, -1);
+#else
     uint32_t *local_10 = 0;
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
@@ -85782,11 +85843,15 @@ int32_t tisp_lsc_dn_params_refresh(uint32_t a0)
     /* function epilogue: restore registers and return */
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000035fe4 origin=fragment_seed original=tisp_lsc_param_array_set */
 int32_t tisp_lsc_param_array_set(uint32_t a0, uint32_t a1, uint32_t a2)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_set(a0, a1, (void *)(uintptr_t)a2);
+#else
     uint32_t local_14 = 0;
     uint32_t *local_18 = 0;
     uint32_t local_1c = 0;
@@ -85909,11 +85974,15 @@ tisp_lsc_param_array_set0x194:
     v0 = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_0000000000036180 origin=fragment_seed original=tisp_get_lsc_error */
 int32_t tisp_get_lsc_error(uint32_t a0, uintptr_t a1)
 {
+#ifdef REGTRACE_KERNEL_TREE_BUILD
+    return t41_native_lsc_diagnostic(a0, (void *)a1);
+#else
     uint32_t ra = 0;
     uintptr_t *v0 = 0;
 
@@ -85932,6 +86001,7 @@ int32_t tisp_get_lsc_error(uint32_t a0, uintptr_t a1)
     v0 = 0;
 
     return 0;
+#endif
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_00000000000361b0 origin=fragment_seed original=tisp_blc_pm_get_regsize */
@@ -150544,6 +150614,7 @@ static void t41_tmo_workfn(struct work_struct *work)
     t41_ccm_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_bcsh_update(READ_ONCE(t41_ccm_ct), ev, 0);
     t41_gamma_error = t41_gamma_update(ev);
+    t41_native_lsc_frame(READ_ONCE(t41_ccm_ct), gain);
     t41_native_adr_frame(exposure);
     t41_lce_frame(gain);
     if (gain != t41_ysp_gain)
@@ -157083,26 +157154,7 @@ int32_t tisp_set_scaler_level(uint32_t a0, uintptr_t a1)
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006e294 origin=fragment_seed original=tisp_lsc_hvflip */
 int32_t tisp_lsc_hvflip(uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3)
 {
-    uint32_t local_14 = 0;
-    uint32_t ra = 0;
-    uintptr_t *v0 = 0;
-
-    /* fragment 0: Prologue */
-    /* function prologue: stack frame and callee-saved register setup */
-
-    /* fragment 1: CallSetup */
-    v0 = (unsigned int *)((uintptr_t (*)(uintptr_t))(uintptr_t)tisp_lsc_mirror_flip)(a0); /* jalr target resolved by relocation */
-
-    /* fragment 2: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    /* fragment 3: Arithmetic */
-    v0 = 0;
-
-    /* fragment 4: Epilogue */
-    /* function epilogue: restore registers and return */
-
-    return 0;
+    return (int32_t)tisp_lsc_mirror_flip(a0, a1, a2, a3);
 }
 
 /* WHOLE_DRIVER_CANDIDATE fn_000000000006e2bc origin=fragment_seed original=tisp_g_csccr_mode */

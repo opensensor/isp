@@ -121,7 +121,8 @@ with open(sys.argv[1], 'rb') as source:
             'tisp_lsc_ring_itp', 'tisp_lsc_itp', 'tisp_simple_intp_int8',
             'tisp_max', 'tisp_lsc_write_reg', 'tisp_lsc_lut_valid_judge',
             'tisp_lsc_mirror_flip', 'lsc_exchange_data.constprop.1', 'tisp_lsc_real_write_lut',
-            'tisp_lsc_init', 'tisp_lsc_wdr_en', 'tisp_lsc_dn_params_refresh']}
+            'tisp_lsc_init', 'tisp_lsc_wdr_en', 'tisp_lsc_dn_params_refresh',
+            'tisp_lsc_param_array_set', 'tisp_lsc_prepare_write_lut']}
     names = dict(functions, **{'.bss': 'oracle_bss', 'memcpy': 'oracle_copy',
         'memset': 'oracle_fill', '__ashrdi3': 'oracle_signed_shift',
         'system_reg_write': 'oracle_write', '.rodata': 'oracle_rodata',
@@ -235,6 +236,15 @@ with open(sys.argv[1], 'rb') as source:
             else:
                 raise ValueError((hex(pc), kind))
         print(f'.size {name}, .-{name}')
+    if lsc:
+        # Relocate the setter's five-entry switch table, not its branch logic.
+        symbol, = symbols.get_symbol_by_name('tisp_lsc_param_array_set')
+        rodata = elf.get_section_by_name('.rodata').data()
+        print('.section .rodata\n.balign 4\n.globl oracle_lsc_set_cases\noracle_lsc_set_cases:')
+        for target in struct.unpack_from('<5I', rodata, 0x1e80):
+            offset = target - symbol['st_value']
+            assert 0 <= offset < symbol['st_size']
+            print(f'.word oracle_tisp_lsc_param_array_set+{offset}')
     if ae:
         # The target-table adjustment is inlined in tisp_ae_tune. This exact
         # bounded, call-free loop gets private caller-owned arrays, a private

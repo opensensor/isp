@@ -200,4 +200,28 @@ static inline int t41_lsc_refresh(unsigned char *p,unsigned int bytes,unsigned c
        t41_lsc_ct(p,bytes,s,state_bytes,t41_tmo_le32(s+12),1)<0) return -1;
     return 0;
 }
+/* OEM tuning transfers controls separately, then stages ring/mesh banks 1..3.
+ * Bank 4 completes the table transfer and reapplies the saved orientation. */
+static inline int t41_lsc_replace(unsigned char *p,unsigned int bytes,unsigned char *s,
+        unsigned int state_bytes,unsigned int part,const unsigned char *source,
+        unsigned int source_bytes,unsigned int wdr,unsigned int bypass)
+{
+    static const unsigned int offsets[5]={0,0x68,0x3680,0x6c80,0xa280};
+    static const unsigned int sizes[5]={0x68,0x3618,0x3600,0x3600,0x3600};
+    unsigned int i;
+    if(!p || !s || !source || bytes<T41_LSC_PARAM_BYTES || state_bytes<T41_LSC_STATE_BYTES ||
+       part>=5 || source_bytes<sizes[part] || wdr>1) return -1;
+    for(i=0;i<sizes[part];++i) p[offsets[part]+i]=source[i];
+    if(part && part<4) return 0;
+    if(part==4) {
+        if(t41_lsc_refresh(p,bytes,s,state_bytes,wdr,bypass)<0) return -1;
+    } else {
+        if(t41_lsc_geometry(s,state_bytes,t41_tmo_le32(s+4),t41_tmo_le32(s+8),p[78],p[79],p[80])<0 ||
+           (!p[26] && !t41_tmo_le16(p+24))) return -1;
+        if(t41_lsc_gain(p,bytes,s,state_bytes,t41_tmo_le32(s+24),1,wdr)<0 ||
+           t41_lsc_ct(p,bytes,s,state_bytes,t41_tmo_le32(s+12),1)<0) return -1;
+    }
+    ++s[0x6c2b];
+    return 0;
+}
 #endif

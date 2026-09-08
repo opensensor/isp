@@ -1,9 +1,9 @@
 # T41 lens-shading algorithm recovery
 
-This is an offline checkpoint, not a deployed LSC replacement. The existing
-kernel path still needs its captured CT/gain seed removed and its lifecycle
-and live CT/gain fanout replaced. Do not claim image-quality parity from these
-arithmetic tests.
+The native kernel adapter owns calibration and history, receives live CT/gain
+from the drained frame worker and replaces the captured CT/gain seeds. Device
+validation is still pending for this adapter; arithmetic tests alone do not
+establish image-quality parity.
 
 `tx_isp_t41_lsc.h` implements temperature selection/history, gain selection
 and register packing for the T41 calibration format. It supports both mesh
@@ -18,8 +18,8 @@ The temperature update threshold is inclusive; the gain threshold is strict.
 Constant-table zones suppress redundant temperature updates.
 
 The format has two distinct exponent groups: mesh planes use bytes
-`0x5f..0x67`; ring planes use `0x53..0x5e`. The existing kernel mesh path
-incorrectly uses ring exponents. Other exposed differences are the 23-bit
+`0x5f..0x67`; ring planes use `0x53..0x5e`. The replaced kernel mesh path
+incorrectly used ring exponents. Other corrected differences are the 23-bit
 mask on register `0x3018`, the lack of a gain-register write for CT-only
 updates, and complete hardware-bank packing even when the interpolation
 count is smaller. Unused scratch must retain history in that last case.
@@ -63,5 +63,16 @@ padding column. Day/night refresh starts from replacement calibration and
 reapplies the saved orientation. These are algorithm/lifecycle tests, not
 physical sensor WDR validation.
 
-Still required: native kernel ownership/fanout and stock/open device comparisons. Calibration tables
-remain legitimate sensor inputs; a measured scene's CT/gain is not a default.
+The setter oracle adds 1,600 parameter-part transfers, including flipped
+tables. OEM parts 1..3 only stage data; part 4 completes the transfer and
+reapplies orientation. Controls (part 0) are a separate immediate operation.
+The native adapter preserves that transaction boundary while allowing frame
+updates against the last committed calibration. Bad pointers or geometry do
+not replace the active map. A host harness includes the actual kernel adapter
+with private memory and MMIO recording, checking ownership, allocation/restore
+failure unwinding, staged transfers, CT/gain hysteresis, complete RAM commits,
+PM save/restore and stop-before-free ordering. No LSC RAM writes occur in the
+hard IRQ path. Repeated unchanged inputs avoid copying/interpolating state.
+
+Still required: stock/open device comparisons. Calibration tables remain
+legitimate sensor inputs; a measured scene's CT/gain is not a default.

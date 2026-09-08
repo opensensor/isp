@@ -11,6 +11,10 @@ all check: tx_isp_t41_mdns_test
 all check: tx_isp_t41_lce_test
 all check: tx_isp_t41_adr_test
 all check: tx_isp_t41_lsc_test
+all check: tx_isp_t41_lsc_runtime_test
+
+tx_isp_t41_lsc_runtime_test: tx_isp_t41_lsc_runtime_test.c ../driver/t41/tx_isp_t41_lsc_runtime.inc ../driver/t41/tx_isp_t41_lsc.h ../driver/t41/tx_isp_t41_dpc.h ../driver/t41/tx_isp_t41_tmo.h ../driver/include/tx_isp/tx_isp_math.h
+	$(CC) $(CFLAGS) -no-pie -o $@ $<
 
 tx_isp_t41_lsc_test: tx_isp_t41_lsc_test.c ../driver/t41/tx_isp_t41_lsc.h ../driver/t41/tx_isp_t41_dpc.h ../driver/t41/tx_isp_t41_tmo.h ../driver/include/tx_isp/tx_isp_math.h
 	$(CC) $(CFLAGS) -o $@ $<
@@ -277,6 +281,7 @@ check: tx_isp_math_test tx_isp_modulation_test tx_isp_daynight_test tx_isp_awb_m
 	./tx_isp_t41_lce_test
 	./tx_isp_t41_adr_test
 	./tx_isp_t41_lsc_test
+	./tx_isp_t41_lsc_runtime_test
 	./tx_isp_t41_color_route_test
 	./tx_isp_t41_awb_test
 	./tx_isp_modulation_test
