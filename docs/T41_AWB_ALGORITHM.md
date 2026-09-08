@@ -2,7 +2,7 @@
 
 This is a partial algorithm boundary, **not full AWB parity**. The live driver
 still uses its bounded neutral-mesh estimator. The portable primitives below
-are not connected to its frame lifecycle until clustering, history and
+are not connected to its frame lifecycle until ownership, policy and
 calibration replacement are recovered and checked together.
 
 The reference is H20250310a `tx-isp-t41.ko`, SHA256
@@ -23,6 +23,7 @@ into them. Calibration and statistics are explicit caller inputs.
 | `ISPAWBInterpolation1/2`, `Tiziano_Awb_Ct_Cal` | `0x1a570`, `0x1a624`, `0x1a774` | `t41_awb_ct_lerp`, `t41_awb_ct_calculate` |
 | `Tiziano_Awb_Ct_Detect_GrayWorld_mode` | `0x1aaac` | `t41_awb_grayworld_mode` |
 | `tisp_awb_long_alogrithm` | `0x31238` | `t41_awb_long` (explicit detector callback) |
+| `tisp_awb_ct_detect` | `0x1b210` | `t41_awb_detect`, cluster and refinement helpers |
 
 AWB parameters start at active calibration +`0x978`; runtime state is `0xf54c`
 bytes. This is a format boundary shared by T41 sensor calibrations, not a
@@ -102,6 +103,27 @@ The entry point takes aligned, privately owned working state; callers must
 discard that working state on error, not publish partial changes. This is
 not yet the live ownership adapter or freeze/manual/day-night policy.
 
+The full detector has three calibrated modes: base zone weighting, cluster
+reweighting, and ranked-illuminant selection. It consumes the supplied ratio
+planes, count/saturation weights, spatial weights, inclusion/exclusion
+centres, CT priors and distance LUT. It builds a 14x14 histogram on the
+15-knot axes, preserves first-scanned ties, then selects twelve occupied
+cells. Mode 1 seeds five points per cell, iterates centroids, merges nearby
+ones and reweights zones by calibrated support. Mode 2 uses cell means,
+merges/ranks twelve clusters and selects/blends up to six illuminants using
+calibrated temperature and count curves. Optional variance refinement and
+gray-world fallback retain their separate control paths.
+
+Details that affect parity include the upper/upper zone prior's **unrounded**
+integer reciprocal (final CT publication rounds), dense ratio/count inputs
+versus 15-stride scratch and some spatial-weight passes, fixed Q6 cluster
+report rounding, and separate original support counts versus compacted
+centroids during selection. Mode-2 special exclusions must not inherit the
+mode-1 hard-radius rule from retained cluster scratch. The standalone
+detector preserves supplied scratch between calls; its lifecycle is not
+assumed to clear it every frame. These are generic format/arithmetic rules,
+not corrections for a particular sensor or scene.
+
 ## Validation and reproduction
 
 10,000 randomized combined cases match all changed parameter/state bytes,
@@ -154,9 +176,31 @@ cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
 /tmp/awb-long-test
 ```
 
+The detector oracle includes the actual OEM detector and all of its math
+callees, **not a synthetic detector callback**. An initial 10,000 cold-state
+run passes, followed by 10,000 frames with scratch retained in 500 twenty-frame
+sequences. The final warm-state run matches every parameter/state byte,
+ratio, failure flag and cluster report on QEMU and the physical T41: zero
+mismatches or unexpected accesses. It includes 2,803/1,487/2,616 successful
+results in modes 0/1/2, 3,094 failed results and 1,154 nonempty cluster reports.
+Precision, axes, maps, dimensions, modes, exclusions, refinement and blending
+policies vary. The 10,000-frame native-only host build passes ASan/UBSan,
+calibration-write checks and malformed length/alignment/axis rejection. The
+earlier 10,000-case statistics/CT/gray oracle still passes after sharing the
+surface interpolation helper. Full host suite passes.
+
+```sh
+bash tools/build_t41_awb_detect_oracle.sh CROSS_PREFIX STOCK_OBJECT OUTPUT_DIR
+qemu-mipsel OUTPUT_DIR/awb-detect-oracle-check
+cc -std=c99 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -fno-sanitize-recover=all tests/tx_isp_t41_awb_detect_test.c -o /tmp/awb-detect-test
+/tmp/awb-detect-test
+```
+
 ## Still required
 
-Full CT clustering, freeze/manual/day-night policy, and owned frame-safe runtime with lifecycle
+Combined full-frame pipeline validation, universal distance-LUT initialization,
+freeze/manual/day-night policy, and owned frame-safe runtime with lifecycle
 and calibration replacement tests. Existing gain packing and CT-offset
 history are separately validated in `T41_AE_GIB_AWB_GAIN.md`; that does not
 establish correctness of the estimator feeding them.
