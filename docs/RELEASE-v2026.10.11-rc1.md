@@ -16,7 +16,7 @@
 |---|---|
 | open-tx-isp | `v2026.10.11-rc1` = `191be6c5` (soaked agg-35 code `6e464ac7` + documentation only) |
 | OpenIMP | `v2026.10.11-rc1` = `fe9307c` (agg-35 `687a68e4` + documentation) |
-| Recommended streamer · firmware | timps **v1.10.0** (tag `4432fa8`; the soaked images used `f1565f7`, source identical) · thingino `aperto`, package `open-tx-isp` pinned to `v2026.10.11-rc1` |
+| Recommended streamer · firmware | timps **v1.10.0** (tag `4432fa8`; the soaked images used `f1565f7`, source identical) · thingino `aperto` (pin of package `open-tx-isp` to `v2026.10.11-rc1` pending as a pull request) |
 
 Scope: all driver changes since `e92166b9` (last commit before 2026-09-29 19:00), 568 commits; about 194 of them are new since the previous `aperto` state (2026-10-06). **RC1** is exactly the soaked code; if no blocking problem is reported, it becomes the first dated release on `aperto`.
 
