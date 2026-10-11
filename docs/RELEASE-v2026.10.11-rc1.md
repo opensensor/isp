@@ -16,13 +16,13 @@
 |---|---|
 | open-tx-isp | `v2026.10.11-rc1` = `191be6c5` (soaked agg-35 code `6e464ac7` + documentation only) |
 | OpenIMP | `v2026.10.11-rc1` = `fe9307c` (agg-35 `687a68e4` + documentation) |
-| Recommended streamer · firmware | timps **v1.10.0** · thingino `aperto`, package `open-tx-isp` pinned to `v2026.10.11-rc1` |
+| Recommended streamer · firmware | timps **v1.10.0** (tag `4432fa8`; the soaked images used `f1565f7`, source identical) · thingino `aperto`, package `open-tx-isp` pinned to `v2026.10.11-rc1` |
 
 Scope: all driver changes since `e92166b9` (last commit before 2026-09-29 19:00), 568 commits; about 194 of them are new since the previous `aperto` state (2026-10-06). **RC1** is exactly the soaked code; if no blocking problem is reported, it becomes the first dated release on `aperto`.
 
-SoCs: **release** T10, T20, T21, T23, T31; **experimental** T30 (builds against a real T30 kernel, no device in our lab), T40 (vendor kernel driver used in the first OpenIMP device run; the open T40 driver was not part of this campaign), T41 (open driver runs, sub-stream and reload issues open).
+SoCs: **release** T10, T20, T21, T23, T31; **experimental** T30 (builds against a real T30 kernel; no T30 device in our lab, an external contributor reported a live gate on a T30X, see OpenIMP `docs/T30_STATUS.md`; test kit in OpenIMP `tools/testkit/t30`), T40 (vendor kernel driver used in the first OpenIMP device run; the open T40 driver was not part of this campaign), T41 (open driver runs, sub-stream and reload issues open).
 
-**Completeness** of the vendor API per SoC (done = device-tested + host-tested + audited; details and gap lists in the [OpenIMP notes](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/RELEASE-v2026.10.11-rc1.md) and the [feature matrix](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/FEATURE_MATRIX.md#progress-per-soc)): T10 89.2 %, T20 90.5 %, T21 93.2 %, T23 93.8 %, T31 96.4 % (release SoCs: 0 gaps in functions a known streamer imports); T41 59.3 %, T40 25.4 %, T30 not audited on a device (experimental).
+**Completeness** of the vendor API per SoC (done = device-tested + host-tested + audited; details and gap lists in the [OpenIMP notes](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/RELEASE-v2026.10.11-rc1.md) and the [feature matrix](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/FEATURE_MATRIX.md#progress-per-soc)): T10 89.2 %, T20 90.5 %, T21 93.2 %, T23 93.8 %, T31 96.4 % (release SoCs: 0 gaps in functions a known streamer imports); T41 59.3 %, T40 25.4 %, T30 not audited on a device (experimental). Streamer-used gaps: T30 2, T40 7 (raptor), T41 22 (prudynt 6, raptor 19); agg-36 closes most of them.
 
 ## 2. Release evidence
 
@@ -65,7 +65,7 @@ Below, **[host]** marks items without a device test; everything else was device-
 - Reload oops (statistics DMA into freed buffers) fixed; open/release refcounting; `.bss` 259 to 106 KB.
 
 **T20 / T10** (T10 builds the T20 sources)
-- **`isp-m0` "MAX SENSOR analog gain"** reports the cap the AE really reaches (minimum of sensor maximum and `SetMaxAgain` ceiling; T10 the stepped gain plateau, 142 instead of 144): fixes the T20 Day-in-the-dark regression together with timps v1.10.0.
+- **`isp-m0` "MAX SENSOR analog gain"** reports the cap the AE really reaches (minimum of sensor maximum and `SetMaxAgain` ceiling; T10 the stepped gain plateau, 142 instead of 144): fixes the T20 Day-in-the-dark regression together with timps v1.10.0 (confirmed on a T20 camera: Night at dusk, Day in the morning, ISP confirmed; both T20 cameras correct through the RC1 soak).
 - Front crop: a window is kept while no downscaled channel is open and applied at stream on; released with the tuning session.
 - Max analog gain and user max integration time honoured by the AE; AE re-armed on every streamer start (5/5 restarts converge); vertical-flip chroma overrun (pink band) and sharpness fixed; simple AWB with manual WB and presets (vendor chain selectable); Sinter/Temper strength acts; CCM/LSC readable.
 - Unused 8 MiB V4L2 MMAP pool off by default (`isp_mmap_pool_kb=0`): about 8 MB more free RAM (T10 1.9 to about 9.7 MB).
