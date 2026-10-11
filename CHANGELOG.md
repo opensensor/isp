@@ -75,23 +75,21 @@ marked otherwise. Release tags `vYYYY.MM.DD` on the `aperto` branch are planned 
 
 open-tx-isp 191be6c5 (tag v2026.10.11-rc1 = soaked agg-35 6e464ac7 + docs), paired with OpenIMP fe9307c (agg-35 687a68e4 + docs). The tag adds documentation only.
 
-**Soak evidence:** agg-35 ran on 10 cameras from 2026-10-10 18:04 to 2026-10-11 08:00 (about 14 h): 0 kernel oopses, 0 unexplained reboots, 0 streamer (`timpsd`) restarts, VA-API decode check 54/54. The soaked images carry timps f1565f7 (the source of the timps tag v1.10.0) plus the timps firmware package patches, on thingino `aperto` base a4bcc1c86.
+**Soak evidence:** agg-35 ran on 10 cameras from 2026-10-10 18:04 to 2026-10-11 08:00 (about 14 h): 0 kernel oopses, 0 unexplained reboots, 0 application restarts, VA-API decode check 54/54. The soaked images ran a streaming application on thingino `aperto` base a4bcc1c86.
 
 **Supported SoCs:** release: T10, T20, T21, T23, T31. Experimental (not part of the release promise): T30 (no device in the lab, host/build evidence only), T40 (first device run only, see the matrix) and T41 (channel 1 and night colour open).
-
-**Recommended streamer:** timps v1.10.0.
 
 **Highlights since the last `aperto` state (ca9cbf0e):** about 190 commits.
 - **Front crop:** T31 refuses a window smaller than a channel's scaler output (-EINVAL) instead of stalling the MSCA, drops a crop a larger main stream cannot fit and releases the window with the ISP session; T23 crop hang fixed; T20/T10 keep the window until a downscaled channel opens; module parameter `fcrop_upscale_pct`.
 - **T20/T10 day/night:** `isp-m0` reports the analog gain cap the AE really plateaus on (also for stepped gain tables).
-- **T41 driver controls** the streamers call: frame drop, sensor register, WDR enable/disable, AF weight (device-tested on the lab T41).
+- **T41 driver controls** applications call: frame drop, sensor register, WDR enable/disable, AF weight (device-tested on the lab T41).
 - Robustness: reload/stop cycles without an oops, checked inputs, sensor module pinned while streaming.
 
 **Known issues (RC1):**
 - **T41 channel 1 (sub-stream) colour at night** differs from channel 0 (picture soak finding); T41 stays experimental.
-- **T31, black picture of about 80 s** seen once during a streamer-driven day/night probe; not understood yet.
-- **T23, dusk flapping:** with one streamer (raptor) a T23 camera switched between day and night several times at dusk. The day/night decision is streamer logic; the driver and OpenIMP only report the sensor values.
-- **Day/night in a poorly lit location** also follows the streamer's logic; tune the streamer thresholds, not the driver.
+- **T31, black picture of about 80 s** seen once during an application-driven day/night probe; not understood yet.
+- **T23, dusk flapping:** on one T23 camera it switched between day and night several times at dusk. Day/night switching is decided by the application; the driver and OpenIMP report sensor values.
+- **Day/night in a poorly lit location** also follows the application's thresholds; the driver and OpenIMP report sensor values.
 - T40: CBR delivers only about 20 % of the target rate, H.265 not supported yet. T41: no audio hardware on the test board (API level only).
 
 **Next (after RC1, agg-36):** work that is not in agg-35 and therefore not part of this release candidate: T40 rate control and H.265, T40 ISP-drawn OSD, further vendor-API gap work (T30, T1x, T23/T31), T41 mask/zoom, log level default, IVS result ordering and review fixes.

@@ -26,8 +26,7 @@ OEM driver: same ioctl and `libimp` ABI, same register sequencing, same image be
 with cleaner unload/reload, checked inputs and less memory.
 
 It works with Ingenic's unmodified `libimp.so` and with the open replacement
-[OpenIMP](https://github.com/opensensor/openimp). Open stack = open-tx-isp + OpenIMP + a streamer
-([timps](https://github.com/Lu-Fi/timps)). The `aperto` branch carries the released open stack on top of the original `main` line; see
+[OpenIMP](https://github.com/opensensor/openimp). Open stack = open-tx-isp + OpenIMP + a camera application. The `aperto` branch carries the released open stack on top of the original `main` line; see
 [Branches and releases](#branches-and-releases).
 
 This is a reverse-engineering and compatibility effort, not a greenfield pipeline: OEM binary
@@ -35,14 +34,14 @@ analysis, `libimp` ABI work and recovery of tuning data.
 
 ## Status
 
-**State: RC1 v2026.10.11-rc1: openimp fe9307c (agg-35 687a68e4 + docs), open-tx-isp 191be6c5 (agg-35 6e464ac7 + docs).** Release SoCs: T10, T20, T21, T23, T31; T30, T40 and T41 are experimental. The agg-35 soak of 2026-10-10/11 on 10 cameras was clean (0 oopses, 0 unexplained reboots, 0 application restarts). Release notes and known issues: [CHANGELOG.md](CHANGELOG.md). The per-SoC table below dates from 2026-10-04. "Fully open" = open driver, OpenIMP and streamer run from a flashed image.
+**State: RC1 v2026.10.11-rc1: openimp fe9307c (agg-35 687a68e4 + docs), open-tx-isp 191be6c5 (agg-35 6e464ac7 + docs).** Release SoCs: T10, T20, T21, T23, T31; T30, T40 and T41 are experimental. The agg-35 soak of 2026-10-10/11 on 10 cameras was clean (0 oopses, 0 unexplained reboots, 0 application restarts). Release notes and known issues: [CHANGELOG.md](CHANGELOG.md). The per-SoC table below dates from 2026-10-04. "Fully open" = open driver, OpenIMP and the camera application run from a flashed image.
 
-Earlier state: the release candidate (`claude/agg-28` on top of `next`, 2026-10-06 evening). "Fully open" = open driver, OpenIMP and streamer run from a flashed image. Release plan: `next` goes to `aperto` (fast-forward) after the long soak and is tagged `vYYYY.MM.DD`; the first release covers T10 (not re-tested on the open stack today), T20, T21, T23 and T31; T41 is not part of it.
+Earlier state: the release candidate (`claude/agg-28` on top of `next`, 2026-10-06 evening). "Fully open" = open driver, OpenIMP and the camera application run from a flashed image. Release plan: `next` goes to `aperto` (fast-forward) after the long soak and is tagged `vYYYY.MM.DD`; the first release covers T10 (not re-tested on the open stack today), T20, T21, T23 and T31; T41 is not part of it.
 
 | SoC | Status |
 |---|---|
 | T10 | Fully open; day/night, reload (5 cycles) and boot guard verified. Image controls partly documented. Module 731 KB. **Not re-tested** on 2026-10-06 (shares the T20 firmware base). Front crop window kept while no downscaled channel is open and released with the tuning session (agg-34, device-tested). |
-| T20 | Fully open; 1 h 44 min soak without errors, 10x stop/start and reload without an oops, `rmmod` during streaming refused. Module 736 KB. apitest of the release candidate: 212 PASS / 0 FAIL on two cameras. Same front-crop fix as T10 (agg-34); `isp-m0` reports the reachable analog gain cap (smaller of the sensor maximum and the `SetMaxAgain` ceiling), which the streamer needs for day/night (agg-34, host-tested). |
+| T20 | Fully open; 1 h 44 min soak without errors, 10x stop/start and reload without an oops, `rmmod` during streaming refused. Module 736 KB. apitest of the release candidate: 212 PASS / 0 FAIL on two cameras. Same front-crop fix as T10 (agg-34); `isp-m0` reports the reachable analog gain cap (smaller of the sensor maximum and the `SetMaxAgain` ceiling), which the application needs for day/night (agg-34, host-tested). |
 | T21 | First open bring-up, now fully open; AE/ADR/defog/AWB lifted from the vendor module. Module 452 KB (vendor 616). `SetBrightness` acts and sepia works (beyond vendor). apitest of the release candidate: 228 PASS / 0 FAIL on two cameras. |
 | T23 | Fully open (native encoder in OpenIMP); module 622 KB (vendor 857); vendor AE default. Frequent Helix frame drops fixed (residual interrupt, kernel patch merged upstream); stock-like release defaults, MSCA scratch buffer, AF statistics on by default (see "T23 module parameters"). Open: **a FrameSource crop change stops the pipeline (under investigation, release blocker)**, a rare single Helix encode error (errno 5), no real WDR. Front crop (agg-34, device-tested): crop off unlocks the window, a window that does not fit is dropped instead of hanging the MSCA (the 2026-10-06 crop hang), the lock is released with the ISP session, module parameter `fcrop_upscale_pct`. |
 | T30 | Builds against a real T30 kernel; earlier bring-up on hardware. Not exercised in the latest campaign. |
@@ -58,7 +57,7 @@ History: [CHANGELOG.md](CHANGELOG.md).
 
 ## T23 module parameters (release candidate defaults)
 
-Defaults of `tx-isp-t23.ko` in the release candidate. The switches are `0644` module parameters (changeable at run time through `/sys/module/tx_isp_t23/parameters/`) except where noted; the stock-like set is the one that ran 7 h overnight plus many streamer restarts. Parameters marked "debug" exist for bisecting and are not needed in normal operation.
+Defaults of `tx-isp-t23.ko` in the release candidate. The switches are `0644` module parameters (changeable at run time through `/sys/module/tx_isp_t23/parameters/`) except where noted; the stock-like set is the one that ran 7 h overnight plus many stream restarts. Parameters marked "debug" exist for bisecting and are not needed in normal operation.
 
 | Parameter | Default | Meaning |
 |---|---|---|
@@ -81,13 +80,13 @@ Defaults of `tx-isp-t23.ko` in the release candidate. The switches are `0644` mo
 ## Better than the vendor driver
 
 - Reload and stop: 10 stop/start and rmmod/insmod cycles without an oops on T20/T21/T23/T31/T41 (T10: 5 cycles).
-- T20/T10 give back about 8 MB RAM (unused 8 MiB V4L2 frame pool off by default); on a T20 the open stack measured 10.5 % streamer CPU against 25.2 % with the vendor stack, snapshots 0.20 s against 0.45 s.
+- T20/T10 give back about 8 MB RAM (unused 8 MiB V4L2 frame pool off by default); on a T20 the open stack measured 10.5 % application CPU against 25.2 % with the vendor stack, snapshots 0.20 s against 0.45 s.
 - Smaller modules than the vendor on T21, T23 and T31.
 - Checked inputs (all user copies, QBUF window, bounded waits), sensor module pinned while streaming.
 - T21 controls and noise reduction act (the vendor ignores them), T10/T20 noise-reduction strength acts.
 - Shortfall logging with a concrete parameter value when reserved memory is too small.
 
-Details and streamer integration notes:
+Details and application integration notes:
 [OPENIMP_BEYOND_VENDOR](https://github.com/opensensor/openimp/blob/aperto/docs/OPENIMP_BEYOND_VENDOR.md).
 
 ## Build
@@ -146,7 +145,7 @@ interfaces, `docs/` notes, `tests/` host tests and oracle checks, `tools/` on-de
 
 ## Reporting problems
 
-Open an issue at [opensensor/open-tx-isp](https://github.com/opensensor/open-tx-isp/issues) (kernel driver, ISP, memory) or [opensensor/openimp](https://github.com/opensensor/openimp/issues) when unsure. Please include the SoC and sensor, the revisions of open-tx-isp, OpenIMP and the streamer, `dmesg` (including any shortfall line such as `set ispmem >= N KB`), the streamer log, the stream set and the `rmem`/`ispmem` values. Do not post addresses, credentials or location names. Details: [Troubleshooting](https://github.com/opensensor/openimp/wiki/Troubleshooting#reporting-a-problem).
+Open an issue at [opensensor/open-tx-isp](https://github.com/opensensor/open-tx-isp/issues) (kernel driver, ISP, memory) or [opensensor/openimp](https://github.com/opensensor/openimp/issues) when unsure. Please include the SoC and sensor, the revisions of open-tx-isp, OpenIMP and the camera application, `dmesg` (including any shortfall line such as `set ispmem >= N KB`), the application log, the stream set and the `rmem`/`ispmem` values. Do not post addresses, credentials or location names. Details: [Troubleshooting](https://github.com/opensensor/openimp/wiki/Troubleshooting#reporting-a-problem).
 
 ## Contributing
 
