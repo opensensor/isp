@@ -35,7 +35,7 @@ analysis, `libimp` ABI work and recovery of tuning data.
 
 ## Status
 
-**State: RC1 v2026.10.11-rc1: openimp fe9307c (agg-35 687a68e4 + docs), open-tx-isp 191be6c5 (agg-35 6e464ac7 + docs).** Release SoCs: T10, T20, T21, T23, T31; T30, T40 and T41 are experimental. The agg-35 soak of 2026-10-10/11 on 10 cameras was clean (0 oopses, 0 unexplained reboots, 0 streamer restarts); recommended streamer: timps v1.10.0. Release notes and known issues: [CHANGELOG.md](CHANGELOG.md). The per-SoC table below dates from 2026-10-04. "Fully open" = open driver, OpenIMP and streamer run from a flashed image.
+**State: RC1 v2026.10.11-rc1: openimp fe9307c (agg-35 687a68e4 + docs), open-tx-isp 191be6c5 (agg-35 6e464ac7 + docs).** Release SoCs: T10, T20, T21, T23, T31; T30, T40 and T41 are experimental. The agg-35 soak of 2026-10-10/11 on 10 cameras was clean (0 oopses, 0 unexplained reboots, 0 application restarts). Release notes and known issues: [CHANGELOG.md](CHANGELOG.md). The per-SoC table below dates from 2026-10-04. "Fully open" = open driver, OpenIMP and streamer run from a flashed image.
 
 Earlier state: the release candidate (`claude/agg-28` on top of `next`, 2026-10-06 evening). "Fully open" = open driver, OpenIMP and streamer run from a flashed image. Release plan: `next` goes to `aperto` (fast-forward) after the long soak and is tagged `vYYYY.MM.DD`; the first release covers T10 (not re-tested on the open stack today), T20, T21, T23 and T31; T41 is not part of it.
 
@@ -50,7 +50,7 @@ Earlier state: the release candidate (`claude/agg-28` on top of `next`, 2026-10-
 | T40 | Device-tested earlier (T40XP/GC4653); statistics restart stability is a known limitation. Not in the latest campaign. |
 | T41 | **Not part of the first release (experimental).** Fully open from a flashed image (H.264, H.265); reload verified (10/10); module 80 KB smaller than before. Open: MSCA channel 1 scaling registers are staged (fix in branch `claude/t41-ch1-fix`, not merged), an output restart can hang the SoC, 38 tuning IDs missing, flip, night column noise. |
 
-**Completeness** of the vendor API at RC1 (done = device-tested + host-tested + audited): T10 89.2 %, T20 90.5 %, T21 93.2 %, T23 93.8 %, T31 96.4 % (release; 0 gaps in functions timps/prudynt/raptor import), T41 59.3 %, T40 25.4 %, T30 not device-audited (experimental). Table: [OpenIMP README, Completeness](https://github.com/opensensor/openimp/blob/aperto/README.md#completeness). Release notes: [docs/RELEASE-v2026.10.11-rc1.md](docs/RELEASE-v2026.10.11-rc1.md).
+**Completeness** of the vendor API at RC1 (done = device-tested + host-tested + audited): T10 89.2 %, T20 90.5 %, T21 93.2 %, T23 93.8 %, T31 96.4 % (release), T41 59.3 %, T40 25.4 %, T30 not device-audited (experimental). Table: [OpenIMP README, Completeness](https://github.com/opensensor/openimp/blob/aperto/README.md#completeness). Release notes: [docs/RELEASE-v2026.10.11-rc1.md](docs/RELEASE-v2026.10.11-rc1.md).
 
 Per feature and SoC:
 [FEATURE_MATRIX](https://github.com/opensensor/openimp/blob/aperto/docs/FEATURE_MATRIX.md).
