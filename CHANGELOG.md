@@ -73,7 +73,7 @@ marked otherwise. Release tags `vYYYY.MM.DD` on the `aperto` branch are planned 
 
 ## RC1 (v2026.10.11-rc1, 2026-10-11)
 
-open-tx-isp 6e464ac7 (= `claude/agg-35`, soaked), paired with OpenIMP agg-35 687a68e4. The branch `claude/rc1` adds documentation only.
+open-tx-isp 191be6c5 (tag v2026.10.11-rc1 = soaked agg-35 6e464ac7 + docs), paired with OpenIMP fe9307c (agg-35 687a68e4 + docs). The tag adds documentation only.
 
 **Soak evidence:** agg-35 ran on 10 cameras from 2026-10-10 18:04 to 2026-10-11 08:00 (about 14 h): 0 kernel oopses, 0 unexplained reboots, 0 streamer (`timpsd`) restarts, VA-API decode check 54/54. The soaked images carry timps f1565f7 (the source of the timps tag v1.10.0) plus the timps firmware package patches, on thingino `aperto` base a4bcc1c86.
 
