@@ -1,6 +1,6 @@
 # open-tx-isp v2026.10.11-rc1: first release candidate
 
-**open-tx-isp** is an open replacement for Ingenic's proprietary ISP kernel driver (`tx-isp-<soc>.ko`: sensor input, VIC/CSI, ISP core and tuning, MSCA scaler/frame channels, statistics). Together with **OpenIMP** (the open `libimp`) it forms a fully open camera stack for Ingenic T-series SoCs. Release together with [OpenIMP v2026.10.11-rc1](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/RELEASE-v2026.10.11-rc1.md); the shared parts (soak, release gate, streamers, beyond-vendor list, upgrade notes) are described there in full. Always use matching tags.
+**open-tx-isp** is an open replacement for Ingenic's proprietary ISP kernel driver (`tx-isp-<soc>.ko`: sensor input, VIC/CSI, ISP core and tuning, MSCA scaler/frame channels, statistics). Together with **OpenIMP** (the open `libimp`) it forms a fully open camera stack for Ingenic T-series SoCs. Release together with [OpenIMP v2026.10.11-rc1](https://github.com/Lu-Fi/openimp/releases/tag/v2026.10.11-rc1); the shared parts (soak, release gate, streamers, beyond-vendor list, upgrade notes) are described there in full. Always use matching tags.
 
 | Read more (pinned to this tag) | |
 |---|---|
@@ -22,7 +22,7 @@ Scope: all driver changes since `e92166b9` (last commit before 2026-09-29 19:00)
 
 SoCs: **release** T10, T20, T21, T23, T31; **experimental** T30 (builds against a real T30 kernel; no T30 device in our lab, an external contributor reported a live gate on a T30X, see OpenIMP `docs/T30_STATUS.md`; test kit in OpenIMP `tools/testkit/t30`), T40 (vendor kernel driver used in the first OpenIMP device run; the open T40 driver was not part of this campaign), T41 (open driver runs, sub-stream and reload issues open).
 
-**Completeness** of the vendor API per SoC (done = device-tested + host-tested + audited; details and gap lists in the [OpenIMP notes](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/RELEASE-v2026.10.11-rc1.md) and the [feature matrix](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/FEATURE_MATRIX.md#progress-per-soc)): T10 89.2 %, T20 90.5 %, T21 93.2 %, T23 93.8 %, T31 96.4 % (release SoCs: 0 gaps in functions a known streamer imports); T41 59.3 %, T40 25.4 %, T30 not audited on a device (experimental). Streamer-used gaps: T30 2, T40 7 (raptor), T41 22 (prudynt 6, raptor 19); agg-36 closes most of them.
+**Completeness** of the vendor API per SoC (done = device-tested + host-tested + audited; details and gap lists in the [OpenIMP notes](https://github.com/Lu-Fi/openimp/releases/tag/v2026.10.11-rc1) and the [feature matrix](https://github.com/Lu-Fi/openimp/blob/v2026.10.11-rc1/docs/FEATURE_MATRIX.md#progress-per-soc)): T10 89.2 %, T20 90.5 %, T21 93.2 %, T23 93.8 %, T31 96.4 % (release SoCs: 0 gaps in functions a known streamer imports); T41 59.3 %, T40 25.4 %, T30 not audited on a device (experimental). Streamer-used gaps: T30 2, T40 7 (raptor), T41 22 (prudynt 6, raptor 19); agg-36 closes most of them.
 
 ## 2. Release evidence
 
